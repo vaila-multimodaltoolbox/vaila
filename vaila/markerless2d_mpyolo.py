@@ -911,7 +911,7 @@ def save_person_data_to_csv(
     }
 
     if landmarks_norm and landmarks_px:
-        for idx, (norm, px) in enumerate(zip(landmarks_norm, landmarks_px)):
+        for idx, (norm, px) in enumerate(zip(landmarks_norm, landmarks_px, strict=False)):
             prefix = f"landmark_{idx}"
             # Save normalized coordinates
             row_data[f"{prefix}_x_norm"] = norm["x"]
@@ -966,7 +966,7 @@ def process_yolo_tracking(video_path, output_dir, model, params):
             clss = result.boxes.cls.cpu().numpy()
             confs = result.boxes.conf.cpu().numpy()
 
-            for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs):
+            for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs, strict=False):
                 class_id = int(cls_id)
                 object_id = int(track_id)
 
@@ -1224,8 +1224,8 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
     print("\nCreating visualization video...")
 
     cap = cv2.VideoCapture(video_path)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -1247,7 +1247,6 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                 print(f"Error loading pose data for person ID:{object_id}: {e}")
 
     mp_pose = mp.solutions.pose
-    mp_drawing = mp.solutions.drawing_utils
 
     try:
         frame_idx = 0
@@ -1483,7 +1482,7 @@ def save_pose_to_csv(csv_path, frame_idx, person_id, landmarks_px):
         "person_id": person_id,
     }
     # Add landmarks data
-    for idx, (key, value) in enumerate(landmarks_px.items()):
+    for _idx, (key, value) in enumerate(landmarks_px.items()):
         row_data[key] = value
 
     df = pd.DataFrame([row_data])
@@ -1533,7 +1532,7 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, output_dir, 
             clss = result.boxes.cls.cpu().numpy()
             confs = result.boxes.conf.cpu().numpy()
 
-            for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs):
+            for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs, strict=False):
                 class_id = int(cls_id)
                 object_id = int(track_id)
 
@@ -1637,7 +1636,6 @@ def run_multithreaded_tracking():
 
     # Default tracker configuration (change as needed: e.g. "botsort.yaml" or "bytetrack.yaml")
     tracker_config = "botsort.yaml"
-    save_output = True
 
     # Update the model path construction
     model_name = "yolo11x.pt"
@@ -1770,7 +1768,7 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
                 if not ret:
                     break
 
-                for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs):
+                for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs, strict=False):
                     class_id = int(cls_id)
                     object_id = int(track_id)
 
@@ -1946,7 +1944,7 @@ def save_enhanced_person_data(
     }
 
     if landmarks_norm and landmarks_px:
-        for idx, (norm, px) in enumerate(zip(landmarks_norm, landmarks_px)):
+        for idx, (norm, px) in enumerate(zip(landmarks_norm, landmarks_px, strict=False)):
             prefix = f"landmark_{idx}"
             # Save normalized coordinates
             row_data[f"{prefix}_x_norm"] = norm["x"]

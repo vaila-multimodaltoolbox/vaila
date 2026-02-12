@@ -196,7 +196,7 @@ def analyze_mocap_fullbody_data():
     pelvis_headers = selected_headers[12:]
 
     matplotlib_figs = []  # List to store matplotlib figures
-    for idx, file_name in enumerate(file_names):
+    for _idx, file_name in enumerate(file_names):
         file_path = os.path.join(directory_path, file_name)
         data = read_mocap_csv(file_path)
         time = np.linspace(0, len(data) / sample_rate, len(data))

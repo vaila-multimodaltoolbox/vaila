@@ -51,6 +51,7 @@ License:
 
 from __future__ import annotations
 
+import contextlib
 import time
 import tkinter as tk
 import webbrowser
@@ -896,10 +897,8 @@ class ScoutApp(tk.Tk):
         # Update clock label periodically
         if hasattr(self, "clock_var"):
             self.clock_var.set(self._format_time(self._get_current_time_s()))
-        try:
+        with contextlib.suppress(Exception):
             self._tick_after_id = self.after(200, self._tick_timer)
-        except Exception:
-            pass
 
     def _get_current_time_s(self) -> float:
         if getattr(self, "manual_time_var", None) and self.manual_time_var.get():
@@ -1523,7 +1522,7 @@ class ScoutApp(tk.Tk):
                 va="top",
                 fontsize=player_name_size,
                 zorder=8,
-                bbox=dict(boxstyle="round,pad=0.2", fc="black", ec="none", alpha=0.6),
+                bbox={"boxstyle": "round,pad=0.2", "fc": "black", "ec": "none", "alpha": 0.6},
             )
 
         # Action symbol - always show for better distinction
@@ -1587,7 +1586,7 @@ class ScoutApp(tk.Tk):
                     zorder=8,
                     ha="center",
                     va="center",
-                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8),
+                    bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "black", "alpha": 0.8},
                 )
 
     # --- Actions helpers
@@ -1968,9 +1967,8 @@ class ScoutApp(tk.Tk):
         team_key = self._team_key_from_name(self.team_var.get())
         values = self._players_display_list(team_key)
         self.player_cb.config(values=values)
-        if values:
-            if self.player_var.get() not in values:
-                self.player_var.set(values[0])
+        if values and self.player_var.get() not in values:
+            self.player_var.set(values[0])
 
     def _set_player_selection_by_number(self, team_key: str, number: str):
         disp = self._display_for(team_key, number)

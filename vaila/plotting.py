@@ -145,7 +145,7 @@ def plot_orthonormal_bases_matplotlib(
     vector_length = 0.2
 
     # Plot global coordinate system axes
-    for i, (axis, color) in enumerate(zip(global_coordinate_system, axis_colors)):
+    for _i, (axis, color) in enumerate(zip(global_coordinate_system, axis_colors, strict=False)):
         ax.plot(
             [0, axis[0] * vector_length],
             [0, axis[1] * vector_length],
@@ -155,7 +155,7 @@ def plot_orthonormal_bases_matplotlib(
         )
 
     # Iterate through bases, points, and labels for plotting
-    for i, (bases, pm, points, label) in enumerate(zip(bases_list, pm_list, points_list, labels)):
+    for _i, (bases, pm, points, label) in enumerate(zip(bases_list, pm_list, points_list, labels, strict=False)):
         if "cluster1" in label.lower():
             # Use Jacksonville Jaguars colors for Cluster 1 (Trunk)
             axis_colors = trunk_axis_colors
@@ -170,7 +170,7 @@ def plot_orthonormal_bases_matplotlib(
             marker_colors = trunk_marker_colors
 
         # Plot markers for each point in the cluster
-        for point_set, color in zip(points, marker_colors):
+        for point_set, color in zip(points, marker_colors, strict=False):
             ax.scatter(
                 point_set[:, 0],
                 point_set[:, 1],
@@ -183,7 +183,7 @@ def plot_orthonormal_bases_matplotlib(
         # Plot axes for each frame
         for j in range(0, len(pm), 10):
             origin = pm[j]
-            for k, (axis, color) in enumerate(zip(bases[j], axis_colors)):
+            for _k, (axis, color) in enumerate(zip(bases[j], axis_colors, strict=False)):
                 ax.plot(
                     [origin[0], origin[0] + axis[0] * vector_length],
                     [origin[1], origin[1] + axis[1] * vector_length],
@@ -222,8 +222,8 @@ def plot_orthonormal_bases_plotly(
     for frame in range(len(pm_list[0])):
         data = []
 
-        for i, (bases, pm, points, label) in enumerate(
-            zip(bases_list, pm_list, points_list, labels)
+        for _idx, (bases, pm, points, label) in enumerate(
+            zip(bases_list, pm_list, points_list, labels, strict=False)
         ):
             if "trunk" in label.lower() or "cluster1" in label.lower():
                 # Use Jacksonville Jaguars colors for Cluster 1 (Trunk)
@@ -238,8 +238,8 @@ def plot_orthonormal_bases_plotly(
                 axis_colors = trunk_axis_colors
                 marker_colors = trunk_marker_colors
 
-            for j, (point_set, color, marker_label) in enumerate(
-                zip(points, marker_colors, marker_labels)
+            for _j, (point_set, color, marker_label) in enumerate(
+                zip(points, marker_colors, marker_labels, strict=False)
             ):
                 data.append(
                     go.Scatter3d(
@@ -247,34 +247,34 @@ def plot_orthonormal_bases_plotly(
                         y=point_set[: frame + 1, 1],
                         z=point_set[: frame + 1, 2],
                         mode="lines+markers",
-                        line=dict(color=color, width=4),
-                        marker=dict(color=color, size=4),
+                        line={"color": color, "width": 4},
+                        marker={"color": color, "size": 4},
                         name=f"{label} - {marker_label}",
                     )
                 )
 
             origin = pm[frame]
-            for k, (axis, color) in enumerate(zip(bases[frame], axis_colors)):
+            for k, (axis, color) in enumerate(zip(bases[frame], axis_colors, strict=False)):
                 data.append(
                     go.Scatter3d(
                         x=[origin[0], origin[0] + axis[0] * axis_length],
                         y=[origin[1], origin[1] + axis[1] * axis_length],
                         z=[origin[2], origin[2] + axis[2] * axis_length],
                         mode="lines",
-                        line=dict(color=color, width=6),
+                        line={"color": color, "width": 6},
                         name=f"{label} Axis {['X', 'Y', 'Z'][k]}",
                     )
                 )
 
         # Global coordinate system (red, green, blue)
-        for i, (axis, color) in enumerate(zip(global_coordinate_system, ["red", "green", "blue"])):
+        for i, (axis, color) in enumerate(zip(global_coordinate_system, ["red", "green", "blue"], strict=False)):
             data.append(
                 go.Scatter3d(
                     x=[0, axis[0] * axis_length],
                     y=[0, axis[1] * axis_length],
                     z=[0, axis[2] * axis_length],
                     mode="lines",
-                    line=dict(color=color, width=4),
+                    line={"color": color, "width": 4},
                     name=f"Global Axis {['X', 'Y', 'Z'][i]}",
                 )
             )
@@ -285,58 +285,58 @@ def plot_orthonormal_bases_plotly(
     fig.add_traces(frames[0].data)
 
     sliders = [
-        dict(
-            steps=[
-                dict(
-                    method="animate",
-                    args=[
+        {
+            "steps": [
+                {
+                    "method": "animate",
+                    "args": [
                         [str(k)],
-                        dict(
-                            mode="immediate",
-                            frame=dict(duration=100, redraw=True),
-                            transition=dict(duration=0),
-                        ),
+                        {
+                            "mode": "immediate",
+                            "frame": {"duration": 100, "redraw": True},
+                            "transition": {"duration": 0},
+                        },
                     ],
-                    label=str(k),
-                )
+                    "label": str(k),
+                }
                 for k in range(len(pm_list[0]))
             ],
-            transition=dict(duration=0),
-            x=0,
-            y=0,
-            currentvalue=dict(font=dict(size=14), prefix="Frame: ", visible=True, xanchor="center"),
-            len=1.0,
-        )
+            "transition": {"duration": 0},
+            "x": 0,
+            "y": 0,
+            "currentvalue": {"font": {"size": 14}, "prefix": "Frame: ", "visible": True, "xanchor": "center"},
+            "len": 1.0,
+        }
     ]
 
     fig.update_layout(
         sliders=sliders,
-        scene=dict(
-            xaxis=dict(
-                range=[-1, 1],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-            ),
-            yaxis=dict(
-                range=[-1, 1],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-            ),
-            zaxis=dict(
-                range=[0, 2],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-            ),
-            aspectratio=dict(x=2, y=2, z=4),
-            aspectmode="cube",
-        ),
-        margin=dict(l=0, r=0, b=0, t=40),
+        scene={
+            "xaxis": {
+                "range": [-1, 1],
+                "autorange": False,
+                "showgrid": True,
+                "zeroline": True,
+                "showline": True,
+            },
+            "yaxis": {
+                "range": [-1, 1],
+                "autorange": False,
+                "showgrid": True,
+                "zeroline": True,
+                "showline": True,
+            },
+            "zaxis": {
+                "range": [0, 2],
+                "autorange": False,
+                "showgrid": True,
+                "zeroline": True,
+                "showline": True,
+            },
+            "aspectratio": {"x": 2, "y": 2, "z": 4},
+            "aspectmode": "cube",
+        },
+        margin={"l": 0, "r": 0, "b": 0, "t": 40},
     )
 
     fig.show()
@@ -368,7 +368,7 @@ def plot_orthonormal_bases_4points_matplotlib(
     axis_colors = ["r", "g", "b"]
     vector_length = 0.2
 
-    for i, (axis, color) in enumerate(zip(global_coordinate_system, axis_colors)):
+    for _i, (axis, color) in enumerate(zip(global_coordinate_system, axis_colors, strict=False)):
         ax.plot(
             [0, axis[0] * vector_length],
             [0, axis[1] * vector_length],
@@ -377,7 +377,7 @@ def plot_orthonormal_bases_4points_matplotlib(
             linewidth=1,
         )
 
-    for i, (bases, pm, points, label) in enumerate(zip(bases_list, pm_list, points_list, labels)):
+    for _i, (bases, pm, points, label) in enumerate(zip(bases_list, pm_list, points_list, labels, strict=False)):
         if "trunk" in label.lower():
             axis_colors = trunk_axis_colors
             marker_colors = trunk_marker_colors
@@ -385,7 +385,7 @@ def plot_orthonormal_bases_4points_matplotlib(
             axis_colors = pelvis_axis_colors
             marker_colors = pelvis_marker_colors
 
-        for point_set, color in zip(points, marker_colors):
+        for point_set, color in zip(points, marker_colors, strict=False):
             ax.scatter(
                 point_set[:, 0],
                 point_set[:, 1],
@@ -397,7 +397,7 @@ def plot_orthonormal_bases_4points_matplotlib(
 
         for j in range(0, len(pm), 10):
             origin = pm[j]
-            for k, (axis, color) in enumerate(zip(bases[j], axis_colors)):
+            for _k, (axis, color) in enumerate(zip(bases[j], axis_colors, strict=False)):
                 ax.plot(
                     [origin[0], origin[0] + axis[0] * vector_length],
                     [origin[1], origin[1] + axis[1] * vector_length],
@@ -435,8 +435,8 @@ def plot_orthonormal_bases_4points_plotly(
     for frame in range(len(pm_list[0])):
         data = []
 
-        for i, (bases, pm, points, label) in enumerate(
-            zip(bases_list, pm_list, points_list, labels)
+        for _idx, (bases, pm, points, label) in enumerate(
+            zip(bases_list, pm_list, points_list, labels, strict=False)
         ):
             if "trunk" in label.lower():
                 axis_colors = trunk_axis_colors
@@ -445,8 +445,8 @@ def plot_orthonormal_bases_4points_plotly(
                 axis_colors = pelvis_axis_colors
                 marker_colors = pelvis_marker_colors
 
-            for j, (point_set, color, marker_label) in enumerate(
-                zip(points, marker_colors, marker_labels)
+            for _j, (point_set, color, marker_label) in enumerate(
+                zip(points, marker_colors, marker_labels, strict=False)
             ):
                 data.append(
                     go.Scatter3d(
@@ -454,33 +454,33 @@ def plot_orthonormal_bases_4points_plotly(
                         y=point_set[: frame + 1, 1],
                         z=point_set[: frame + 1, 2],
                         mode="lines+markers",
-                        line=dict(color=color, width=4),
-                        marker=dict(color=color, size=1),
+                        line={"color": color, "width": 4},
+                        marker={"color": color, "size": 1},
                         name=f"{label} - {marker_label}",
                     )
                 )
 
             origin = pm[frame]
-            for k, (axis, color) in enumerate(zip(bases[frame], axis_colors)):
+            for k, (axis, color) in enumerate(zip(bases[frame], axis_colors, strict=False)):
                 data.append(
                     go.Scatter3d(
                         x=[origin[0], origin[0] + axis[0] * axis_length],
                         y=[origin[1], origin[1] + axis[1] * axis_length],
                         z=[origin[2], origin[2] + axis[2] * axis_length],
                         mode="lines",
-                        line=dict(color=color, width=4),
+                        line={"color": color, "width": 4},
                         name=f"{label} Axis {['X', 'Y', 'Z'][k]}",
                     )
                 )
 
-        for i, (axis, color) in enumerate(zip(global_coordinate_system, ["red", "green", "blue"])):
+        for i, (axis, color) in enumerate(zip(global_coordinate_system, ["red", "green", "blue"], strict=False)):
             data.append(
                 go.Scatter3d(
                     x=[0, axis[0] * axis_length],
                     y=[0, axis[1] * axis_length],
                     z=[0, axis[2] * axis_length],
                     mode="lines",
-                    line=dict(color=color, width=4),
+                    line={"color": color, "width": 4},
                     name=f"Global Axis {['X', 'Y', 'Z'][i]}",
                 )
             )
@@ -491,60 +491,60 @@ def plot_orthonormal_bases_4points_plotly(
     fig.add_traces(frames[0].data)
 
     sliders = [
-        dict(
-            steps=[
-                dict(
-                    method="animate",
-                    args=[
+        {
+            "steps": [
+                {
+                    "method": "animate",
+                    "args": [
                         [str(k)],
-                        dict(
-                            mode="immediate",
-                            frame=dict(duration=100, redraw=True),
-                            transition=dict(duration=0),
-                        ),
+                        {
+                            "mode": "immediate",
+                            "frame": {"duration": 100, "redraw": True},
+                            "transition": {"duration": 0},
+                        },
                     ],
-                    label=str(k),
-                )
+                    "label": str(k),
+                }
                 for k in range(len(pm_list[0]))
             ],
-            transition=dict(duration=0),
-            x=0,
-            y=0,
-            currentvalue=dict(
-                font=dict(size=1.52), prefix="Frame: ", visible=True, xanchor="center"
-            ),
-            len=1.0,
-        )
+            "transition": {"duration": 0},
+            "x": 0,
+            "y": 0,
+            "currentvalue": {
+                "font": {"size": 1.52}, "prefix": "Frame: ", "visible": True, "xanchor": "center"
+            },
+            "len": 1.0,
+        }
     ]
 
     fig.update_layout(
         sliders=sliders,
-        scene=dict(
-            xaxis=dict(
-                range=[-1, 1],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-            ),
-            yaxis=dict(
-                range=[-1, 1],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-            ),
-            zaxis=dict(
-                range=[0, 2],
-                autorange=False,
-                showgrid=True,
-                zeroline=True,
-                showline=True,
-            ),
-            aspectratio=dict(x=2, y=2, z=4),
-            aspectmode="cube",
-        ),
-        margin=dict(l=0, r=0, b=0, t=40),
+        scene={
+            "xaxis": {
+                "range": [-1, 1],
+                "autorange": False,
+                "showgrid": True,
+                "zeroline": True,
+                "showline": True,
+            },
+            "yaxis": {
+                "range": [-1, 1],
+                "autorange": False,
+                "showgrid": True,
+                "zeroline": True,
+                "showline": True,
+            },
+            "zaxis": {
+                "range": [0, 2],
+                "autorange": False,
+                "showgrid": True,
+                "zeroline": True,
+                "showline": True,
+            },
+            "aspectratio": {"x": 2, "y": 2, "z": 4},
+            "aspectmode": "cube",
+        },
+        margin={"l": 0, "r": 0, "b": 0, "t": 40},
     )
 
     fig.show()

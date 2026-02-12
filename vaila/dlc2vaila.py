@@ -100,7 +100,7 @@ def process_csv_files_with_numpy(directory, save_directory):
             lines = f.readlines()
 
         # Retain only the third header line
-        header_line = lines[2].strip()
+        lines[2].strip()
 
         # Load the data, skipping the first three lines
         data = np.genfromtxt(file_path, delimiter=",", skip_header=3)

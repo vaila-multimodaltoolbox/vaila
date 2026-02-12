@@ -70,7 +70,11 @@ from tkinter import filedialog, messagebox, ttk
 import cv2
 import numpy as np
 import pandas as pd
-import pkg_resources
+
+try:
+    import pkg_resources  # type: ignore[import-not-found]
+except ImportError:
+    pkg_resources = None  # setuptools not installed; use importlib.resources only
 import torch
 import ultralytics
 import yaml
@@ -3589,10 +3593,11 @@ def run_yolov11track():
                         ultralytics_path = str(files("ultralytics") / "cfg" / "trackers")
                     except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
                         # Fallback: try pkg_resources (deprecated but still works)
-                        with contextlib.suppress(Exception):
-                            ultralytics_path = pkg_resources.resource_filename(
-                                "ultralytics", "cfg/trackers"
-                            )
+                        if pkg_resources is not None:
+                            with contextlib.suppress(Exception):
+                                ultralytics_path = pkg_resources.resource_filename(
+                                    "ultralytics", "cfg/trackers"
+                                )
                 except Exception:
                     pass
                 # If we couldn't find the path, skip to Option 2 (create from scratch)

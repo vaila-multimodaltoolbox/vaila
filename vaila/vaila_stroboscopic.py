@@ -146,15 +146,14 @@ def generate_stroboscopic_image(
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.get(cv2.CAP_PROP_FPS)
+    int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Check simple normalization heuristic (values <= 1.2)
     # We check a sample column
     is_normalized = False
 
     # Try to find a coordinate column
-    sample_col = None
     cols = [str(c) for c in df.columns]
 
     pixel_vaila_format = "p1_x" in cols  # check for p1_x
@@ -204,7 +203,7 @@ def generate_stroboscopic_image(
             break
 
     total_frames_data = len(df)
-    max_frame_idx = df[frame_col].max() if frame_col else total_frames_data
+    df[frame_col].max() if frame_col else total_frames_data
 
     print("Generating Stroboscopic Image...")
     print(f"Video Resolution: {width}x{height}")
@@ -397,7 +396,6 @@ def generate_stroboscopic_image(
         dline(pts["right_hip"], pts["left_hip"], c_skel, thick)
 
         # Joints (White or Green? Let's use White for clean high contrast)
-        C_JOINT = (255, 255, 255)
         for name, pt in pts.items():
             if "mid" in name:
                 continue

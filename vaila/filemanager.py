@@ -41,6 +41,7 @@ This script is distributed under the AGPL3 License
 ================================================================================
 """
 
+import contextlib
 import fnmatch
 import os
 import platform  # Add this import at the top with other imports
@@ -161,9 +162,7 @@ def process_copy(src_directory, file_extension, patterns):
     def matches(file_name: str, pattern: str) -> bool:
         if ext_filter and not file_name.endswith(ext_filter):
             return False
-        if pattern and pattern not in file_name:
-            return False
-        return True
+        return not (pattern and pattern not in file_name)
 
     copied = 0
     errors = []
@@ -177,7 +176,7 @@ def process_copy(src_directory, file_extension, patterns):
             )
             os.makedirs(copy_directory, exist_ok=True)
 
-            for root, dirs, files in os.walk(src_directory):
+            for root, _dirs, files in os.walk(src_directory):
                 for file in files:
                     if matches(file, file_pattern):
                         src_path = os.path.join(root, file)
@@ -299,7 +298,7 @@ def process_move(src_directory, file_extension, patterns):
             os.makedirs(move_directory, exist_ok=True)  # Create the move directory
 
             # Walk through the source directory and move matching files to the new directory structure
-            for root, dirs, files in os.walk(src_directory):
+            for root, _dirs, files in os.walk(src_directory):
                 for file in files:
                     # Check if the file matches the specified extension and pattern
                     if file.endswith(file_extension) and file_pattern in file:
@@ -403,21 +402,21 @@ def remove_file():
     try:
         if removal_type == "ext":
             # Walk through directories and remove files matching the extension
-            for root, dirs, files in os.walk(root_directory):
+            for root, _dirs, files in os.walk(root_directory):
                 for file in files:
                     if file.endswith(pattern):
                         os.remove(os.path.join(root, file))
 
         elif removal_type == "dir":
             # Walk through directories and remove folders matching the name pattern
-            for root, dirs, files in os.walk(root_directory):
+            for root, dirs, _files in os.walk(root_directory):
                 for dir_name in dirs:
                     if pattern in dir_name:
                         shutil.rmtree(os.path.join(root, dir_name))
 
         elif removal_type == "name":
             # Walk through directories and remove files matching the file name pattern
-            for root, dirs, files in os.walk(root_directory):
+            for root, _dirs, files in os.walk(root_directory):
                 for file in files:
                     if fnmatch.fnmatch(file, pattern):
                         os.remove(os.path.join(root, file))
@@ -571,7 +570,7 @@ def rename_files():
 
     try:
         # Walk through the directory and its subdirectories
-        for root, dirs, files in os.walk(directory):
+        for root, _dirs, files in os.walk(directory):
             for filename in files:
                 # Check if the file has the specified extension and contains the text to replace
                 if filename.endswith(file_extension) and text_to_replace in filename:
@@ -747,7 +746,7 @@ def tree_file():
     try:
         with open(output_file_path, "w") as output_file:
             # Walk through the source directory and list matching files
-            for root, dirs, files in os.walk(src_directory):
+            for root, _dirs, files in os.walk(src_directory):
                 for file in files:
                     if file.endswith(file_extension):
                         # Write the relative file path to the output file
@@ -943,7 +942,6 @@ def _transfer_file_gui():
     # Determine which tool to use
     use_rsync = rsync_path is not None
     transfer_method = "RSYNC" if use_rsync else "SCP"
-    tool_path = rsync_path if use_rsync else scp_path
 
     # Ensure root is properly initialized before creating Toplevel
     if root is None:
@@ -951,10 +949,8 @@ def _transfer_file_gui():
         return
 
     # Update root window to ensure it's ready
-    try:
+    with contextlib.suppress(BaseException):
         root.update_idletasks()
-    except:
-        pass
 
     # Create GUI window for transfer configuration
     try:
@@ -1095,7 +1091,7 @@ def _transfer_file_gui():
         remote_host = remote_host_var.get().strip()
         remote_port = remote_port_var.get().strip() or "22"
         remote_dir = remote_dir_var.get().strip()
-        ssh_password = ssh_password_var.get()  # Get password from GUI
+        ssh_password_var.get()  # Get password from GUI
 
         if not local_dir:
             messagebox.showerror("Error", "Please specify local directory.", parent=transfer_window)

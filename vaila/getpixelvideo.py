@@ -53,6 +53,7 @@ Options:
   -f FILE, --file FILE  specify the video file to process
   -k KEYPOINT, --keypoint KEYPOINT  specify the keypoint file to load
   -l, --labeling        label images in video frames for Machine Learning training
+  --dataset DIR         set dataset folder (next Save appends; multi-video)
   -s, --save            save the results in CSV format
   -p, --persistence     show persistence mode
   -a, --auto            show auto-marking mode
@@ -61,8 +62,10 @@ Options:
 
 Key Bindings (Labeling Mode Only - Press 'L' to toggle):
   N                     Rename current object label
-  F5                    Save Labeling Project (JSON)
+  F5                    Save Labeling Project (JSON) / export dataset (dataset_YYYYMMDD_HHMMSS or append)
   F6                    Load Labeling Project (JSON)
+  F7                    Load dataset folder (next Save appends; multi-video)
+  F8                    Open another video (keep dataset; no need to close app)
   -v, --version         show version information and exit
 
 License:
@@ -83,8 +86,10 @@ import os
 import platform
 import re
 import shutil
+import subprocess
+import sys
 import urllib.request
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, suppress
 from pathlib import Path
 
 from rich import print
@@ -1029,7 +1034,9 @@ def pygame_file_dialog(
     return selected_file
 
 
-def play_video_with_controls(video_path, coordinates=None, labels=None):
+def play_video_with_controls(
+    video_path, coordinates=None, labels=None, initial_dataset_dir=None, initial_labeling_mode=None
+):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error opening video file.")
@@ -1081,6 +1088,10 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
     pygame.display.set_caption("Video Player with Controls")
     clock = pygame.time.Clock()
 
+    # Initialize pygame.scrap for Ctrl+V clipboard paste support
+    with suppress(Exception):
+        pygame.scrap.init()
+
     # Control variables
     zoom_level = 1.0
     offset_x, offset_y = 0, 0
@@ -1114,13 +1125,22 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
     # Add auto-marking mode variable
     auto_marking_mode = False
 
-    # Bounding box labeling mode variables
-    labeling_mode = False
+    # Bounding box labeling mode variables (preserved when switching video via F8)
+    labeling_mode = False if initial_labeling_mode is None else initial_labeling_mode
     bboxes = {}  # Structure: {frame_index: [{'x': int, 'y': int, 'w': int, 'h': int, 'label': str}, ...]}
     drawing_box = False
     box_start_pos = None  # (x, y) in video coordinates
     current_box_rect = None  # pygame.Rect for preview
     current_label = "object"  # Default class label
+    current_dataset_dir = (
+        os.path.abspath(initial_dataset_dir)
+        if initial_dataset_dir and os.path.isdir(initial_dataset_dir)
+        else None
+    )  # When set, Save (F5) appends to this dataset (multi-video)
+
+    # When opening with a dataset (e.g. after F8 switch or --dataset), auto-load project for this video
+    switch_to_video = None  # If set, exit and run_getpixelvideo will reopen with this path
+    auto_load_project_done = False
 
     # Feature: Click & Pass
     click_pass_mode = False
@@ -1136,7 +1156,6 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
     def export_video_with_annotations():
         """Export video with all annotations (markers, tracking boxes, labeling boxes) preserving audio"""
         nonlocal save_message_text, showing_save_message, save_message_timer
-        import subprocess
         import tempfile
 
         # Determine output filename
@@ -1408,10 +1427,8 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
 
                 if result.returncode == 0:
                     # Success - remove temp file
-                    try:
+                    with suppress(BaseException):
                         os.remove(temp_video)
-                    except:
-                        pass
                     save_message_text = f"Video exported: {os.path.basename(output_path)}"
                     showing_save_message = True
                     save_message_timer = 120
@@ -1463,10 +1480,8 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
         finally:
             # Clean up temp file if it still exists
             if temp_video and os.path.exists(temp_video):
-                try:
+                with suppress(BaseException):
                     os.remove(temp_video)
-                except:
-                    pass
 
     def load_tracking_csv():
         """Load YOLO tracking CSV file (all_id_detection.csv format)"""
@@ -1705,10 +1720,8 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                                             and id_col in df.columns
                                             and pd.notna(row.get(id_col))
                                         ):
-                                            try:
+                                            with suppress(ValueError, TypeError):
                                                 tracker_id = int(float(row[id_col]))
-                                            except (ValueError, TypeError):
-                                                pass
 
                                         # If ID not found in column, try to extract from suffix
                                         if tracker_id is None and suffix:
@@ -1716,10 +1729,8 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                                                 r"id[_\s]*(\d+)", suffix, re.IGNORECASE
                                             )
                                             if id_match:
-                                                try:
+                                                with suppress(ValueError, TypeError):
                                                     tracker_id = int(id_match.group(1))
-                                                except (ValueError, TypeError):
-                                                    pass
 
                                         box = {
                                             "x1": int(float(x_min_val)),
@@ -1797,10 +1808,8 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                                         and id_col in df.columns
                                         and pd.notna(row.get(id_col))
                                     ):
-                                        try:
+                                        with suppress(ValueError, TypeError):
                                             tracker_id = int(float(row[id_col]))
-                                        except (ValueError, TypeError):
-                                            pass
 
                                     # If ID not found in column, try to extract from suffix
                                     if tracker_id is None and suffix:
@@ -1808,10 +1817,8 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                                             r"id[_\s]*(\d+)", suffix, re.IGNORECASE
                                         )
                                         if id_match:
-                                            try:
+                                            with suppress(ValueError, TypeError):
                                                 tracker_id = int(id_match.group(1))
-                                            except (ValueError, TypeError):
-                                                pass
 
                                     box = {
                                         "x1": int(float(row[x_min_col])),
@@ -2141,6 +2148,18 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
         save_text = font.render("Save", True, (255, 255, 255))
         control_surface.blit(save_text, save_text.get_rect(center=save_button_rect.center))
 
+        # 10b. Dataset button (Load dataset folder; next Save appends - multi-video)
+        dataset_button_rect = pygame.Rect(
+            current_x,
+            cluster_y,
+            button_width,
+            button_height,
+        )
+        current_x += button_width + button_gap
+        pygame.draw.rect(control_surface, (80, 120, 80), dataset_button_rect)
+        dataset_text = font.render("Dataset", True, (255, 255, 255))
+        control_surface.blit(dataset_text, dataset_text.get_rect(center=dataset_button_rect.center))
+
         # 11. Help button (Moved here)
         help_button_rect = pygame.Rect(
             current_x,
@@ -2216,6 +2235,7 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
             help_web_button_rect,  # Add help web button to return
+            dataset_button_rect,  # Load dataset folder (multi-video)
             slider_margin_left,
             slider_y,
             slider_width,
@@ -2322,8 +2342,10 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
             "    * labels/ (JSON annotations)",
             "",
             "Project Management:",
-            "  - F5: Save Labeling Project (JSON)",
+            "  - F5: Save Project & export dataset (dataset_YYYYMMDD_HHMMSS or append)",
             "  - F6: Load Labeling Project (JSON)",
+            "  - F7: Load dataset folder (next Save appends; multi-video)",
+            "  - F8: Open another video (keep dataset; no need to close app)",
             "  - N:  Rename Object Class",
             "",
             "Swap Markers:",
@@ -2659,7 +2681,7 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
                     # Check fields
-                    for i, key in enumerate(order):
+                    for i, _ in enumerate(order):
                         by = start_y + i * (box_height + margin)
                         bx = dx + 180
                         rect = pygame.Rect(bx, by, box_width - 40, box_height)
@@ -2727,7 +2749,6 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
         BG = (30, 30, 30)
         PANEL = (50, 50, 50)
         TEXT = (220, 220, 220)
-        HIGHLIGHT = (70, 130, 180)  # Selection Blue
         BTN_GREEN = (50, 150, 50)
         BTN_RED = (150, 50, 50)
         BTN_BLUE = (50, 80, 150)
@@ -3002,13 +3023,18 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
     def save_labeling_project():
         """
         Save the current labeling state to a JSON file INSIDE the dataset directory.
-        This unifies the export and project saving.
+        If current_dataset_dir is set (e.g. after Load dataset folder), appends to that dataset.
         """
         nonlocal save_message_text, showing_save_message, save_message_timer
 
-        # First, export the dataset (images and labels)
+        # Export (new dataset next to video, or append to current_dataset_dir)
         dataset_dir, msg = export_labeling_dataset(
-            video_path, bboxes, total_frames, original_width, original_height
+            video_path,
+            bboxes,
+            total_frames,
+            original_width,
+            original_height,
+            output_dataset_dir=current_dataset_dir,
         )
 
         if not dataset_dir:
@@ -3035,7 +3061,9 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
             with open(project_file, "w") as f:
                 json.dump(project_data, f, indent=4)
 
-            save_message_text = "Project & Dataset Saved!"
+            save_message_text = "Project & Dataset Saved!" + (
+                " (appended to dataset)" if current_dataset_dir else ""
+            )
             showing_save_message = True
             save_message_timer = 90
             print(f"Project JSON saved to: {project_file}")
@@ -3044,21 +3072,431 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
             showing_save_message = True
             save_message_timer = 120
 
+    def show_file_browser(start_dir, title="Select a file", extensions=None):
+        """Pygame-based file browser with mouse navigation, Ctrl+V paste, and scroll.
+        Returns selected file path or None on cancel (Escape).
+        *extensions*: list of lowercase extensions to highlight, e.g. ['.yaml']
+        """
+        current_w, current_h = pygame.display.get_surface().get_size()
+        font = pygame.font.SysFont("verdana", 14)
+        small_font = pygame.font.SysFont("verdana", 12)
+        title_font = pygame.font.SysFont("verdana", 15, bold=True)
+
+        if extensions is None:
+            extensions = []
+        extensions = [e.lower() for e in extensions]
+
+        # --- state ---
+        cur_dir = (
+            os.path.abspath(start_dir) if os.path.isdir(start_dir) else os.path.expanduser("~")
+        )
+        scroll_offset = 0
+        selected_idx = -1  # hovered / clicked index
+        input_text = cur_dir  # editable path bar
+        input_active = False  # whether the path bar is focused
+        entries = []  # list of (display_name, full_path, is_dir)
+        filter_yaml_only = bool(extensions)  # toggle
+
+        # Geometry constants
+        margin = 12
+        top_area = 90  # title + path bar
+        bottom_area = 40  # status bar
+        row_h = 24
+        path_bar_h = 28
+        scrollbar_w = 14
+
+        def list_dir(d):
+            """Return sorted entries: dirs first (alpha), then files (alpha)."""
+            nonlocal entries, scroll_offset, selected_idx
+            scroll_offset = 0
+            selected_idx = -1
+            dirs = []
+            files = []
+            try:
+                for name in os.listdir(d):
+                    full = os.path.join(d, name)
+                    if os.path.isdir(full):
+                        dirs.append((name + "/", full, True))
+                    else:
+                        if filter_yaml_only and extensions:
+                            if not any(name.lower().endswith(ext) for ext in extensions):
+                                continue
+                        files.append((name, full, False))
+            except PermissionError:
+                pass
+            dirs.sort(key=lambda x: x[0].lower())
+            files.sort(key=lambda x: x[0].lower())
+            # ".." entry to go up
+            parent = os.path.dirname(d)
+            entries = [("..", parent, True)] + dirs + files if parent != d else dirs + files
+
+        list_dir(cur_dir)
+
+        # Colors
+        BG = (30, 30, 30)
+        DIR_CLR = (100, 180, 255)
+        FILE_CLR = (210, 210, 210)
+        YAML_CLR = (120, 255, 120)
+        HOVER_BG = (60, 60, 80)
+        SEL_BG = (50, 80, 120)
+        BAR_BG = (45, 45, 45)
+        BAR_ACTIVE = (55, 55, 70)
+        BORDER = (80, 80, 80)
+        TITLE_CLR = (255, 255, 255)
+        HINT_CLR = (160, 160, 160)
+
+        clock = pygame.time.Clock()
+        browsing = True
+        result_path = None
+
+        while browsing:
+            clock.tick(30)
+            current_w, current_h = pygame.display.get_surface().get_size()
+            visible_rows = max(1, (current_h - top_area - bottom_area) // row_h)
+            max_scroll = max(0, len(entries) - visible_rows)
+            scroll_offset = max(0, min(scroll_offset, max_scroll))
+
+            # ---- DRAW ----
+            screen.fill(BG)
+
+            # Title
+            t_surf = title_font.render(title, True, TITLE_CLR)
+            screen.blit(t_surf, (margin, margin))
+
+            # Filter toggle hint
+            filt_text = "[F] Filter: .yaml only" if filter_yaml_only else "[F] Filter: show all"
+            filt_surf = small_font.render(filt_text, True, HINT_CLR)
+            screen.blit(filt_surf, (current_w - filt_surf.get_width() - margin, margin + 4))
+
+            # Path bar
+            bar_y = margin + 30
+            bar_rect = pygame.Rect(margin, bar_y, current_w - 2 * margin, path_bar_h)
+            pygame.draw.rect(screen, BAR_ACTIVE if input_active else BAR_BG, bar_rect)
+            pygame.draw.rect(screen, BORDER, bar_rect, 1)
+            # Render path text (clip to bar)
+            clip_w = bar_rect.width - 8
+            display_path = input_text
+            path_surf = font.render(
+                display_path + ("_" if input_active else ""),
+                True,
+                (255, 255, 0) if input_active else (200, 200, 200),
+            )
+            # If text wider than bar, show end
+            offset_x = path_surf.get_width() - clip_w if path_surf.get_width() > clip_w else 0
+            screen.blit(
+                path_surf,
+                (bar_rect.x + 4 - offset_x, bar_rect.y + 5),
+                area=pygame.Rect(offset_x, 0, clip_w, path_bar_h),
+            )
+
+            # File list area
+            list_y = top_area
+            list_h = current_h - top_area - bottom_area
+            list_rect = pygame.Rect(0, list_y, current_w - scrollbar_w, list_h)
+
+            mouse_pos = pygame.mouse.get_pos()
+
+            for i in range(visible_rows):
+                idx = i + scroll_offset
+                if idx >= len(entries):
+                    break
+                name, full, is_dir = entries[idx]
+                row_rect = pygame.Rect(0, list_y + i * row_h, current_w - scrollbar_w, row_h)
+
+                # Hover highlight
+                if row_rect.collidepoint(mouse_pos) and not input_active:
+                    pygame.draw.rect(screen, HOVER_BG, row_rect)
+                if idx == selected_idx:
+                    pygame.draw.rect(screen, SEL_BG, row_rect)
+
+                # Choose color
+                if is_dir:
+                    clr = DIR_CLR
+                elif extensions and any(name.lower().endswith(ext) for ext in extensions):
+                    clr = YAML_CLR
+                else:
+                    clr = FILE_CLR
+
+                name_surf = font.render(name, True, clr)
+                screen.blit(name_surf, (margin + 8, list_y + i * row_h + 3))
+
+            # Scrollbar
+            if len(entries) > visible_rows:
+                sb_x = current_w - scrollbar_w
+                sb_total_h = list_h
+                sb_thumb_h = max(20, int(sb_total_h * visible_rows / len(entries)))
+                sb_thumb_y = (
+                    list_y + int((sb_total_h - sb_thumb_h) * scroll_offset / max_scroll)
+                    if max_scroll
+                    else list_y
+                )
+                pygame.draw.rect(screen, (50, 50, 50), (sb_x, list_y, scrollbar_w, sb_total_h))
+                pygame.draw.rect(
+                    screen, (120, 120, 120), (sb_x + 2, sb_thumb_y, scrollbar_w - 4, sb_thumb_h)
+                )
+
+            # Bottom status bar
+            status_y = current_h - bottom_area
+            pygame.draw.line(screen, BORDER, (0, status_y), (current_w, status_y))
+            hint = "Click file to select | Enter=confirm path bar | Esc=cancel | Ctrl+V=paste | Scroll=mouse wheel"
+            hint_surf = small_font.render(hint, True, HINT_CLR)
+            screen.blit(hint_surf, (margin, status_y + 10))
+
+            pygame.display.flip()
+
+            # ---- EVENTS ----
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    browsing = False
+                    global running
+                    running = False
+                    return None
+
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # Click on path bar?
+                    if bar_rect.collidepoint(event.pos):
+                        input_active = True
+                        selected_idx = -1
+                        continue
+                    else:
+                        if input_active:
+                            input_active = False
+
+                    # Click on file list?
+                    if list_rect.collidepoint(event.pos):
+                        row_i = (event.pos[1] - list_y) // row_h
+                        idx = row_i + scroll_offset
+                        if 0 <= idx < len(entries):
+                            name, full, is_dir = entries[idx]
+                            if is_dir:
+                                # Navigate into directory
+                                cur_dir = os.path.abspath(full)
+                                input_text = cur_dir
+                                list_dir(cur_dir)
+                            else:
+                                # Select file → return it
+                                result_path = full
+                                browsing = False
+
+                    # Scroll wheel
+                    if event.button == 4:  # scroll up
+                        scroll_offset = max(0, scroll_offset - 3)
+                    elif event.button == 5:  # scroll down
+                        scroll_offset = min(max_scroll, scroll_offset + 3)
+
+                elif event.type == pygame.MOUSEWHEEL:
+                    scroll_offset = max(0, min(max_scroll, scroll_offset - event.y * 3))
+
+                elif event.type == pygame.KEYDOWN:
+                    mods = pygame.key.get_mods()
+
+                    # Ctrl+V paste (works whether path bar is active or not)
+                    if event.key == pygame.K_v and (mods & pygame.KMOD_CTRL):
+                        try:
+                            clip = pygame.scrap.get(pygame.SCRAP_TEXT)
+                            if clip:
+                                pasted = (
+                                    clip.decode("utf-8", errors="ignore").rstrip("\x00").strip()
+                                )
+                                if pasted:
+                                    input_text = pasted
+                                    input_active = True
+                        except Exception:
+                            pass
+                        continue
+
+                    if event.key == pygame.K_ESCAPE:
+                        browsing = False
+                        result_path = None
+
+                    elif event.key == pygame.K_F5 or (
+                        event.key == pygame.K_r and (mods & pygame.KMOD_CTRL)
+                    ):
+                        # Refresh
+                        list_dir(cur_dir)
+
+                    elif event.key == pygame.K_f and not input_active:
+                        # Toggle filter
+                        filter_yaml_only = not filter_yaml_only
+                        list_dir(cur_dir)
+
+                    elif input_active:
+                        if event.key == pygame.K_RETURN:
+                            # Confirm typed path
+                            typed = input_text.strip()
+                            if os.path.isfile(typed):
+                                result_path = typed
+                                browsing = False
+                            elif os.path.isdir(typed):
+                                cur_dir = os.path.abspath(typed)
+                                input_text = cur_dir
+                                list_dir(cur_dir)
+                                input_active = False
+                            else:
+                                # Try parent dir if partial
+                                parent = os.path.dirname(typed)
+                                if os.path.isdir(parent):
+                                    cur_dir = os.path.abspath(parent)
+                                    input_text = cur_dir
+                                    list_dir(cur_dir)
+                                    input_active = False
+                        elif event.key == pygame.K_TAB:
+                            # Tab autocomplete
+                            typed = input_text.strip()
+                            if os.path.isdir(typed):
+                                base_dir = typed
+                                prefix = ""
+                            else:
+                                base_dir = os.path.dirname(typed)
+                                prefix = os.path.basename(typed).lower()
+                            if os.path.isdir(base_dir):
+                                try:
+                                    matches = [
+                                        n
+                                        for n in os.listdir(base_dir)
+                                        if n.lower().startswith(prefix)
+                                    ]
+                                except PermissionError:
+                                    matches = []
+                                if len(matches) == 1:
+                                    completed = os.path.join(base_dir, matches[0])
+                                    if os.path.isdir(completed):
+                                        completed += os.sep
+                                    input_text = completed
+                                elif len(matches) > 1:
+                                    # Find common prefix
+                                    common = os.path.commonprefix(matches)
+                                    if common and len(common) > len(prefix):
+                                        input_text = os.path.join(base_dir, common)
+                        elif event.key == pygame.K_BACKSPACE:
+                            if mods & pygame.KMOD_CTRL:
+                                # Delete last path component
+                                input_text = os.path.dirname(input_text.rstrip(os.sep))
+                            else:
+                                input_text = input_text[:-1]
+                        elif event.key == pygame.K_a and (mods & pygame.KMOD_CTRL):
+                            pass  # select all – no-op for now
+                        elif event.unicode and event.unicode.isprintable():
+                            input_text += event.unicode
+
+        return result_path
+
+    def load_dataset_folder():
+        """Select dataset by choosing its data.yaml file; future Saves (F5) will append (multi-video).
+        On Linux uses the pygame file browser to avoid tk/zenity freezing."""
+        nonlocal \
+            current_dataset_dir, \
+            current_label, \
+            save_message_text, \
+            showing_save_message, \
+            save_message_timer
+
+        initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+        start_browse = current_dataset_dir or initial_dir
+        folder = ""
+        yaml_path = None
+        if sys.platform == "linux":
+            # On Linux use the pygame file browser (tk/zenity freeze the app)
+            yaml_path = show_file_browser(
+                start_browse,
+                title="Select data.yaml of the dataset",
+                extensions=[".yaml"],
+            )
+        else:
+            # On Windows/macOS use tkinter file dialog
+            try:
+                from tkinter import Tk, filedialog
+
+                root = Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                root.update_idletasks()
+                yaml_path = filedialog.askopenfilename(
+                    title="Select data.yaml of the dataset (folder will be used)",
+                    initialdir=initial_dir,
+                    filetypes=[
+                        ("YAML files", "*.yaml"),
+                        ("data.yaml", "data.yaml"),
+                        ("All files", "*.*"),
+                    ],
+                )
+                root.destroy()
+            except Exception:
+                pass
+        if yaml_path and os.path.isfile(yaml_path):
+            folder = os.path.dirname(yaml_path)
+        elif yaml_path and os.path.isdir(yaml_path):
+            folder = yaml_path
+        if not folder or not os.path.isdir(folder):
+            if folder:
+                save_message_text = "Invalid or missing path."
+            showing_save_message = True
+            save_message_timer = 60
+            return
+        train_img = os.path.join(folder, "train", "images")
+        classes_file = os.path.join(folder, "classes.txt")
+        if not os.path.isdir(train_img):
+            save_message_text = "Folder must contain train/images/ (YOLO dataset)."
+            showing_save_message = True
+            save_message_timer = 90
+            return
+        current_dataset_dir = os.path.abspath(folder)
+        if os.path.exists(classes_file):
+            try:
+                with open(classes_file, encoding="utf-8") as f:
+                    lines = [line.strip() for line in f if line.strip()]
+                if lines:
+                    current_label = lines[0]
+            except Exception:
+                pass
+
+        # Auto-load the project JSON for the current video (if it exists in this dataset)
+        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        project_file = os.path.join(current_dataset_dir, f"{base_name}_labeling_project.json")
+        if os.path.exists(project_file):
+            load_labeling_project()  # will use current_dataset_dir we just set
+        else:
+            save_message_text = (
+                f"Dataset set: {os.path.basename(folder)}. No previous labels for this video."
+            )
+            showing_save_message = True
+            save_message_timer = 120
+
     def load_labeling_project():
-        """Load labeling state from a JSON file inside the dataset directory"""
-        nonlocal bboxes, current_label, save_message_text, showing_save_message, save_message_timer
+        """Load labeling state from a JSON file inside the dataset directory.
+        Uses current_dataset_dir when set (multi-video workflow); otherwise
+        falls back to the default <videoname>_dataset/ beside the video."""
+        nonlocal \
+            bboxes, \
+            current_label, \
+            current_dataset_dir, \
+            save_message_text, \
+            showing_save_message, \
+            save_message_timer
 
         base_name = os.path.splitext(os.path.basename(video_path))[0]
         video_dir = os.path.dirname(video_path)
-        dataset_dir = os.path.join(video_dir, f"{base_name}_dataset")
+
+        # Determine dataset directory: prefer current_dataset_dir if already set
+        if current_dataset_dir and os.path.isdir(current_dataset_dir):
+            dataset_dir = current_dataset_dir
+        else:
+            dataset_dir = os.path.join(video_dir, f"{base_name}_dataset")
+
+        # Project file: <dataset_dir>/<video_base_name>_labeling_project.json
         project_file = os.path.join(dataset_dir, f"{base_name}_labeling_project.json")
 
         if not os.path.exists(project_file):
-            save_message_text = "No project file found in dataset."
-            showing_save_message = True
-            save_message_timer = 60
-            print(f"Tried loading: {project_file}")
-            return
+            # Also try without video prefix (legacy: frame_XXXXXX naming)
+            alt_project = os.path.join(dataset_dir, "labeling_project.json")
+            if os.path.exists(alt_project):
+                project_file = alt_project
+            else:
+                save_message_text = "No project file for this video in dataset."
+                showing_save_message = True
+                save_message_timer = 60
+                print(f"Tried loading: {project_file}")
+                return
 
         try:
             with open(project_file) as f:
@@ -3071,8 +3509,13 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                 bboxes[int(k)] = v
 
             current_label = project_data.get("current_label", "object")
+            # So next Save appends to same dataset when continuing from another video
+            if "dataset_root" in project_data and os.path.isdir(project_data["dataset_root"]):
+                current_dataset_dir = project_data["dataset_root"]
 
-            save_message_text = f"Project Loaded: {len(bboxes)} frames"
+            save_message_text = (
+                f"Project Loaded: {len(bboxes)} frames from {os.path.basename(dataset_dir)}"
+            )
             showing_save_message = True
             save_message_timer = 90
         except Exception as e:
@@ -3159,10 +3602,7 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                 if idx not in deleted_markers:
                     visible_markers.append(idx)
 
-            if visible_markers:
-                new_idx = max(visible_markers) + 1
-            else:
-                new_idx = 0
+            new_idx = max(visible_markers) + 1 if visible_markers else 0
 
             # Add empty marker at the current frame (using None instead of 0,0)
             one_line_markers.append((frame_count, None, None))
@@ -3380,10 +3820,8 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                 result = None
             finally:
                 # Clean up Tkinter
-                try:
+                with suppress(BaseException):
                     root.destroy()
-                except:
-                    pass
 
                 # Re-enable Pygame events
                 pygame.event.set_allowed(
@@ -3608,6 +4046,14 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
             showing_save_message = True
             save_message_timer = 90
 
+    # --- Key binding reference (main window only; check for overlaps when adding new keys) ---
+    # ESC=quit | Space=play/pause | Left/Right/Up/Down=seek (when paused) | -=zoom out
+    # C=1-line mode | M=auto-marking | D=remove last marker | L=labeling mode
+    # Z=remove last bbox (labeling) | N=rename label (labeling) | F5=Save project | F6=Load project
+    # F7=Load dataset folder | F8=Open another video | Tab=next marker | P=persistence
+    # 1/2/3=persistence frames | H=help | A=add marker | R or D=remove last marker
+    # ]=speed x2 | [=speed /2 | J=pose (MediaPipe) | W=swap dialog | O or S=sequential mode
+    # (Save/Load coordinates = buttons only; no key overlap)
     running = True
     saved = False
     showing_save_message = False
@@ -3616,6 +4062,11 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
 
     last_valid_frame = None
     while running:
+        # Once per run: if we have a dataset dir, load project for this video
+        if current_dataset_dir and not auto_load_project_done:
+            auto_load_project_done = True
+            load_labeling_project()
+
         if paused:
             # When paused, we'll use the set method to position exactly on the frame
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
@@ -3650,7 +4101,6 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                 # Let's try controlling the actual frame position
                 # This is safer for consistency
 
-                frames_to_advance = playback_speed  # e.g. 0.5
                 # We need to accumulate this... but we don't have a persistent accumulator easily here
                 # without restructuring.
 
@@ -4005,6 +4455,7 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
             help_web_button_rect,  # Add help web button to return
+            dataset_button_rect,  # Load dataset folder (multi-video)
             slider_x,
             slider_y,
             slider_width,
@@ -4191,6 +4642,51 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                         save_message_text = "Enable Labeling Mode to load project"
                         showing_save_message = True
                         save_message_timer = 60
+                elif event.key == pygame.K_F7:
+                    # Load dataset folder (next Save will append to it; multi-video)
+                    if labeling_mode:
+                        load_dataset_folder()
+                    else:
+                        save_message_text = "Enable Labeling Mode to set dataset folder"
+                        showing_save_message = True
+                        save_message_timer = 60
+                elif event.key == pygame.K_F8:
+                    # Open another video (keep dataset if set; no need to close app)
+                    start_dir = (
+                        os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+                    )
+                    if sys.platform == "linux":
+                        new_path = show_file_browser(
+                            start_dir,
+                            title="Select another video",
+                            extensions=[".mp4", ".avi", ".mkv", ".mov", ".webm"],
+                        )
+                    else:
+                        new_path = None
+                        try:
+                            from tkinter import Tk, filedialog
+
+                            root = Tk()
+                            root.withdraw()
+                            root.attributes("-topmost", True)
+                            new_path = filedialog.askopenfilename(
+                                title="Select another video",
+                                initialdir=start_dir,
+                                filetypes=[
+                                    ("Video", "*.mp4 *.avi *.mkv *.mov *.webm"),
+                                    ("All files", "*.*"),
+                                ],
+                            )
+                            root.destroy()
+                        except Exception:
+                            pass
+                    if new_path and os.path.isfile(new_path) and new_path != video_path:
+                        switch_to_video = new_path
+                        running = False
+                    elif new_path:
+                        save_message_text = "Select a different video file."
+                        showing_save_message = True
+                        save_message_timer = 60
                 elif event.key == pygame.K_TAB:
                     # Completely revamped marker navigation
                     if one_line_mode:
@@ -4271,10 +4767,7 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                                 else:
                                     # Wrap around to first marker
                                     all_markers = frame_marker_indices + deleted_frame_markers
-                                    if all_markers:
-                                        selected_marker_idx = min(all_markers)
-                                    else:
-                                        selected_marker_idx = 0
+                                    selected_marker_idx = min(all_markers) if all_markers else 0
                     else:
                         # Regular mode navigation
                         # Get indices of all markers in current frame
@@ -4352,10 +4845,7 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                                 else:
                                     # Wrap around to first marker
                                     all_markers = visible_markers + deleted_markers_in_frame
-                                    if all_markers:
-                                        selected_marker_idx = min(all_markers)
-                                    else:
-                                        selected_marker_idx = 0
+                                    selected_marker_idx = min(all_markers) if all_markers else 0
 
                 # Add persistence toggle with 'p' key
                 elif event.key == pygame.K_p:
@@ -4531,7 +5021,7 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                                     restore_size=(window_width, window_height),
                                 )
                                 # IMMEDIATE FIX: Restore Dialog Size because we are still in the loop!
-                                d_surf = pygame.display.set_mode((900, 600), pygame.RESIZABLE)
+                                pygame.display.set_mode((900, 600), pygame.RESIZABLE)
 
                                 if fpath and os.path.exists(fpath):
                                     loaded = load_swap_toml(fpath)
@@ -4663,6 +5153,9 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
                     elif export_video_button_rect.collidepoint(x, rel_y):
                         # Export video with annotations
                         export_video_with_annotations()
+                    elif dataset_button_rect.collidepoint(x, rel_y):
+                        # Load dataset folder (next Save appends; multi-video). Same as F7.
+                        load_dataset_folder()
                     elif help_web_button_rect.collidepoint(x, rel_y):
                         # Open documentation in browser
                         import webbrowser
@@ -4934,6 +5427,11 @@ def play_video_with_controls(video_path, coordinates=None, labels=None):
             # Se em reprodução, limitamos à taxa de FPS do vídeo
             clock.tick(fps)
 
+    if switch_to_video:
+        cap.release()
+        # Do not pygame.quit() so run_getpixelvideo can reopen with new video
+        return ("switch_video", switch_to_video, current_dataset_dir, labeling_mode)
+
     cap.release()
     pygame.quit()
 
@@ -5027,7 +5525,7 @@ def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video
             print(f"  Warning: Could not read classes.txt: {e}")
 
     # Get video base name to match with label files
-    video_basename = os.path.splitext(os.path.basename(video_path))[0]
+    os.path.splitext(os.path.basename(video_path))[0]
 
     # Initialize coordinates dictionary
     coordinates = {i: [] for i in range(total_frames)}
@@ -5074,10 +5572,8 @@ def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video
 
         # Pattern 3: Just a number
         if frame_num is None:
-            try:
+            with suppress(ValueError):
                 frame_num = int(base_name)
-            except ValueError:
-                pass
 
         # If still no match, try to match by image filename
         if frame_num is None:
@@ -5117,217 +5613,11 @@ def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video
                     continue
 
                 try:
-                    class_id = int(parts[0])
+                    int(parts[0])
                     center_x_norm = float(parts[1])  # Normalized 0-1
                     center_y_norm = float(parts[2])  # Normalized 0-1
-                    width_norm = float(parts[3])  # Normalized 0-1
-                    height_norm = float(parts[4])  # Normalized 0-1
-
-                    # Convert normalized coordinates to pixel coordinates
-                    center_x = center_x_norm * video_width
-                    center_y = center_y_norm * video_height
-
-                    # Add center point as marker
-                    frame_points.append((center_x, center_y))
-
-                except (ValueError, IndexError) as e:
-                    print(f"  Warning: Skipping invalid line in {label_file}: {line} ({e})")
-                    continue
-
-            if frame_points:
-                coordinates[frame_num] = frame_points
-                matched_frames += 1
-
-        except Exception as e:
-            print(f"  Warning: Error reading {label_file}: {e}")
-            continue
-
-    print(f"  Successfully loaded {matched_frames} frames with annotations")
-    total_annotations = sum(len(coords) for coords in coordinates.values())
-    print(f"  Total bounding boxes converted: {total_annotations}")
-
-    return coordinates
-
-
-def is_yolo_dataset(path):
-    """
-    Check if a path is a YOLO dataset directory (AnyLabeling format).
-
-    Expected structure:
-    - images/ (or train/images/, val/images/, test/images/)
-    - labels/ (or train/labels/, val/labels/, test/labels/)
-    - classes.txt (optional)
-
-    Args:
-        path: Path to check
-
-    Returns:
-        tuple: (is_yolo_dataset, images_dir, labels_dir, classes_file) or (False, None, None, None)
-    """
-    if not os.path.isdir(path):
-        return False, None, None, None
-
-    # Check for standard YOLO structure
-    images_dir = None
-    labels_dir = None
-    classes_file = None
-
-    # Check for root-level images/labels
-    if os.path.isdir(os.path.join(path, "images")) and os.path.isdir(os.path.join(path, "labels")):
-        images_dir = os.path.join(path, "images")
-        labels_dir = os.path.join(path, "labels")
-    # Check for train/val/test structure
-    elif os.path.isdir(os.path.join(path, "train", "images")) and os.path.isdir(
-        os.path.join(path, "train", "labels")
-    ):
-        # Use train set by default
-        images_dir = os.path.join(path, "train", "images")
-        labels_dir = os.path.join(path, "train", "labels")
-
-    if images_dir and labels_dir:
-        # Check for classes.txt
-        classes_file = os.path.join(path, "classes.txt")
-        if not os.path.exists(classes_file):
-            classes_file = None
-        return True, images_dir, labels_dir, classes_file
-
-    return False, None, None, None
-
-
-def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video_height):
-    """
-    Load YOLO dataset labels and convert bounding boxes to point coordinates.
-
-    YOLO format: class_id center_x center_y width height (all normalized 0-1)
-    Converts to: center points of bounding boxes as markers
-
-    Args:
-        dataset_path: Path to YOLO dataset directory
-        video_path: Path to video file (to match frame names)
-        total_frames: Total number of frames in video
-        video_width: Video width in pixels
-        video_height: Video height in pixels
-
-    Returns:
-        dict: Coordinates dictionary {frame_index: [(x, y), ...]}
-    """
-    is_yolo, images_dir, labels_dir, classes_file = is_yolo_dataset(dataset_path)
-
-    if not is_yolo:
-        return None
-
-    print("Detected YOLO dataset structure:")
-    print(f"  Images directory: {images_dir}")
-    print(f"  Labels directory: {labels_dir}")
-    if classes_file:
-        print(f"  Classes file: {classes_file}")
-
-    # Load class names if available
-    class_names = []
-    if classes_file and os.path.exists(classes_file):
-        try:
-            with open(classes_file, encoding="utf-8") as f:
-                class_names = [line.strip() for line in f if line.strip()]
-            print(f"  Found {len(class_names)} classes: {class_names}")
-        except Exception as e:
-            print(f"  Warning: Could not read classes.txt: {e}")
-
-    # Get video base name to match with label files
-    video_basename = os.path.splitext(os.path.basename(video_path))[0]
-
-    # Initialize coordinates dictionary
-    coordinates = {i: [] for i in range(total_frames)}
-
-    # Get list of label files
-    label_files = [f for f in os.listdir(labels_dir) if f.endswith(".txt")]
-
-    if not label_files:
-        print(f"  Warning: No .txt label files found in {labels_dir}")
-        return coordinates
-
-    print(f"  Found {len(label_files)} label files")
-
-    # Process each label file
-    matched_frames = 0
-    for label_file in label_files:
-        label_path = os.path.join(labels_dir, label_file)
-
-        # Try to match label file with video frame
-        # Label files might be named: frame_000001.txt, image001.txt, etc.
-        frame_num = None
-
-        # Try to extract frame number from filename
-        # Remove extension and try different patterns
-        base_name = os.path.splitext(label_file)[0]
-
-        # Pattern 1: frame_XXXXXX or frame_XXX
-        if "frame_" in base_name.lower():
-            try:
-                frame_str = base_name.lower().split("frame_")[-1]
-                frame_num = int(frame_str)
-            except ValueError:
-                pass
-
-        # Pattern 2: imageXXX or imgXXX
-        if frame_num is None:
-            numbers = re.findall(r"\d+", base_name)
-            if numbers:
-                try:
-                    # Use the last number found (usually the frame number)
-                    frame_num = int(numbers[-1])
-                except ValueError:
-                    pass
-
-        # Pattern 3: Just a number
-        if frame_num is None:
-            try:
-                frame_num = int(base_name)
-            except ValueError:
-                pass
-
-        # If still no match, try to match by image filename
-        if frame_num is None:
-            # Check if corresponding image exists
-            image_extensions = [".jpg", ".jpeg", ".png", ".bmp"]
-            for ext in image_extensions:
-                image_file = base_name + ext
-                image_path = os.path.join(images_dir, image_file)
-                if os.path.exists(image_path):
-                    # Try to extract frame number from image filename
-                    img_base = os.path.splitext(image_file)[0]
-                    numbers = re.findall(r"\d+", img_base)
-                    if numbers:
-                        try:
-                            frame_num = int(numbers[-1])
-                            break
-                        except ValueError:
-                            pass
-
-        if frame_num is None or frame_num < 0 or frame_num >= total_frames:
-            # Skip if we can't determine frame number or it's out of range
-            continue
-
-        # Read YOLO label file
-        try:
-            with open(label_path, encoding="utf-8") as f:
-                lines = f.readlines()
-
-            frame_points = []
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-
-                parts = line.split()
-                if len(parts) < 5:
-                    continue
-
-                try:
-                    class_id = int(parts[0])
-                    center_x_norm = float(parts[1])  # Normalized 0-1
-                    center_y_norm = float(parts[2])  # Normalized 0-1
-                    width_norm = float(parts[3])  # Normalized 0-1
-                    height_norm = float(parts[4])  # Normalized 0-1
+                    float(parts[3])  # Normalized 0-1
+                    float(parts[4])  # Normalized 0-1
 
                     # Convert normalized coordinates to pixel coordinates
                     center_x = center_x_norm * video_width
@@ -5727,44 +6017,90 @@ def save_coordinates(
     return output_file
 
 
-def export_labeling_dataset(video_path, bboxes, total_frames, original_width, original_height):
+def export_labeling_dataset(
+    video_path,
+    bboxes,
+    total_frames,
+    original_width,
+    original_height,
+    output_dataset_dir=None,
+):
     """
     Export bounding boxes to structured dataset format.
-    Creates train/val/test split with images and JSON annotations.
+    Creates train/val/test split with images, JSON annotations, and YOLO .txt labels
+    plus classes.txt and data.yaml so the dataset works with yolotrain.py / Ultralytics.
+
+    If output_dataset_dir is set, appends to that dataset (multi-video): uses video
+    base name as prefix for filenames and merges class names with existing classes.txt.
     """
     import json
     import random
 
     # Collect all annotated frames
-    annotated_frames = [f for f in bboxes.keys() if bboxes[f]]
+    annotated_frames = [f for f in bboxes if bboxes[f]]
     if not annotated_frames:
         return None, "No bounding boxes to export"
 
-    # Create split indices
+    base_name = os.path.splitext(os.path.basename(video_path))[0]
+    video_dir = os.path.dirname(video_path)
+    is_append = output_dataset_dir is not None and os.path.isdir(output_dataset_dir)
+
+    if is_append:
+        dataset_dir = os.path.abspath(output_dataset_dir)
+        # Load existing classes and merge with new labels
+        existing_classes = []
+        classes_file = os.path.join(dataset_dir, "classes.txt")
+        if os.path.exists(classes_file):
+            try:
+                with open(classes_file, encoding="utf-8") as f:
+                    existing_classes = [line.strip() for line in f if line.strip()]
+            except Exception:
+                pass
+        new_labels = set()
+        for frame_num in annotated_frames:
+            for bbox in bboxes[frame_num]:
+                new_labels.add(bbox.get("label", "object"))
+        class_names = sorted(set(existing_classes) | new_labels)
+        # Prefix for filenames to avoid collisions across videos
+        file_prefix = f"{base_name}_"
+    else:
+        # Single shared dataset dir per export: dataset_<timestamp> (reuse by loading it)
+        dataset_dir = os.path.join(video_dir, f"dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        all_labels = set()
+        for frame_num in annotated_frames:
+            for bbox in bboxes[frame_num]:
+                all_labels.add(bbox.get("label", "object"))
+        class_names = sorted(all_labels)
+        file_prefix = ""
+
+    label_to_id = {name: i for i, name in enumerate(class_names)}
+
+    # Create split indices (70/20/10 for this export only)
     random.shuffle(annotated_frames)
     n_total = len(annotated_frames)
     n_train = int(n_total * 0.7)
     n_val = int(n_total * 0.2)
-    # remaining for test
-
     splits = {
         "train": annotated_frames[:n_train],
         "val": annotated_frames[n_train : n_train + n_val],
         "test": annotated_frames[n_train + n_val :],
     }
 
-    # Create output directory
-    base_name = os.path.splitext(os.path.basename(video_path))[0]
-    video_dir = os.path.dirname(video_path)
-    dataset_dir = os.path.join(video_dir, f"{base_name}_dataset")
-
     # Create directory structure
     for split in ["train", "val", "test"]:
         os.makedirs(os.path.join(dataset_dir, split, "images"), exist_ok=True)
         os.makedirs(os.path.join(dataset_dir, split, "labels"), exist_ok=True)
 
+    # Write or update classes.txt
+    classes_file = os.path.join(dataset_dir, "classes.txt")
+    with open(classes_file, "w", encoding="utf-8") as f:
+        for name in class_names:
+            f.write(name + "\n")
+
     # Open video to extract frames
     cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None, "Could not open video"
 
     # Process each split
     for split_name, frames in splits.items():
@@ -5775,12 +6111,12 @@ def export_labeling_dataset(video_path, bboxes, total_frames, original_width, or
             if not ret:
                 continue
 
-            # Save image
-            img_filename = f"frame_{frame_num:06d}.jpg"
+            # Save image (with optional prefix for multi-video append)
+            img_filename = f"{file_prefix}frame_{frame_num:06d}.jpg"
             img_path = os.path.join(dataset_dir, split_name, "images", img_filename)
             cv2.imwrite(img_path, frame)
 
-            # Create JSON annotation
+            # Create JSON annotation (kept for compatibility)
             annotation = {
                 "image": img_filename,
                 "width": original_width,
@@ -5788,28 +6124,85 @@ def export_labeling_dataset(video_path, bboxes, total_frames, original_width, or
                 "annotations": [],
             }
 
+            # YOLO .txt lines: class_id x_center y_center width height (normalized 0-1)
+            yolo_lines = []
             for bbox in bboxes[frame_num]:
+                x = int(bbox["x"])
+                y = int(bbox["y"])
+                w = int(bbox["w"])
+                h = int(bbox["h"])
                 annotation["annotations"].append(
-                    {
-                        "x": int(bbox["x"]),
-                        "y": int(bbox["y"]),
-                        "w": int(bbox["w"]),
-                        "h": int(bbox["h"]),
-                        "label": bbox.get("label", "object"),
-                    }
+                    {"x": x, "y": y, "w": w, "h": h, "label": bbox.get("label", "object")}
+                )
+                # Normalize: center and size relative to image dimensions
+                x_center = (x + w / 2.0) / original_width
+                y_center = (y + h / 2.0) / original_height
+                w_norm = w / original_width
+                h_norm = h / original_height
+                cls_id = label_to_id.get(bbox.get("label", "object"), 0)
+                yolo_lines.append(
+                    f"{cls_id} {x_center:.6f} {y_center:.6f} {w_norm:.6f} {h_norm:.6f}"
                 )
 
             # Save JSON
-            json_filename = f"frame_{frame_num:06d}.json"
+            json_filename = f"{file_prefix}frame_{frame_num:06d}.json"
             json_path = os.path.join(dataset_dir, split_name, "labels", json_filename)
-            with open(json_path, "w") as f:
+            with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(annotation, f, indent=2)
 
+            # Save YOLO .txt (same base name as image; required by Ultralytics)
+            txt_filename = f"{file_prefix}frame_{frame_num:06d}.txt"
+            txt_path = os.path.join(dataset_dir, split_name, "labels", txt_filename)
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(yolo_lines))
+
     cap.release()
+
+    # Write data.yaml so yolotrain can use the dataset directly
+    _write_data_yaml(dataset_dir)
+
     return (
         dataset_dir,
         f"Dataset exported: {len(annotated_frames)} frames (train: {len(splits['train'])}, val: {len(splits['val'])}, test: {len(splits['test'])})",
     )
+
+
+def _write_data_yaml(dataset_dir):
+    """Write data.yaml (YOLO/Ultralytics format) into dataset_dir. Reads classes from classes.txt."""
+    classes_file = os.path.join(dataset_dir, "classes.txt")
+    if not os.path.exists(classes_file):
+        return
+    class_names = []
+    try:
+        with open(classes_file, encoding="utf-8") as f:
+            class_names = [line.strip() for line in f if line.strip()]
+    except Exception:
+        return
+    if not class_names:
+        return
+    train_path = os.path.join(dataset_dir, "train", "images")
+    val_path = os.path.join(dataset_dir, "val", "images")
+    train_path = os.path.abspath(train_path).replace("\\", "/")
+    val_path = os.path.abspath(val_path).replace("\\", "/")
+    test_path = os.path.join(dataset_dir, "test", "images")
+    test_line = (
+        f"\ntest: {os.path.abspath(test_path).replace(os.sep, '/')}"
+        if os.path.isdir(test_path)
+        else ""
+    )
+    yaml_content = f"""# YOLO dataset - generated by vailá getpixelvideo
+path: .
+train: {train_path}
+val: {val_path}{test_line}
+nc: {len(class_names)}
+names: {class_names}
+"""
+    yaml_path = os.path.join(dataset_dir, "data.yaml")
+    try:
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            f.write(yaml_content)
+    except Exception:
+        pass
 
 
 def get_video_path():
@@ -5852,7 +6245,7 @@ def get_video_path():
 # The main load_coordinates_from_file function is defined above
 
 
-def run_getpixelvideo():
+def run_getpixelvideo(initial_dataset_dir=None):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
@@ -5900,8 +6293,33 @@ def run_getpixelvideo():
         coordinates = None
         labels = []
 
-    play_video_with_controls(video_path, coordinates, labels)
+    while True:
+        initial_labeling_mode = getattr(run_getpixelvideo, "_initial_labeling_mode", None)
+        result = play_video_with_controls(
+            video_path,
+            coordinates,
+            labels,
+            initial_dataset_dir=initial_dataset_dir,
+            initial_labeling_mode=initial_labeling_mode,
+        )
+        # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
+        if result and len(result) >= 3 and result[0] == "switch_video":
+            video_path = result[1]
+            initial_dataset_dir = result[2]
+            run_getpixelvideo._initial_labeling_mode = result[3] if len(result) > 3 else False
+            coordinates = None
+            labels = []
+            continue
+        break
 
 
 if __name__ == "__main__":
-    run_getpixelvideo()
+    initial_dataset_dir = None
+    if "--dataset" in sys.argv:
+        idx = sys.argv.index("--dataset")
+        if idx + 1 < len(sys.argv):
+            initial_dataset_dir = sys.argv[idx + 1]
+            if not os.path.isdir(initial_dataset_dir):
+                print(f"Error: --dataset path is not a directory: {initial_dataset_dir}")
+                initial_dataset_dir = None
+    run_getpixelvideo(initial_dataset_dir=initial_dataset_dir)

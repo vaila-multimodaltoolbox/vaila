@@ -158,7 +158,6 @@ except ImportError:
 
 import cv2
 import numpy as np
-import pandas as pd
 from rich import print as rprint
 from rich.console import Console
 from rich.progress import (
@@ -176,11 +175,36 @@ def load_distortion_parameters(toml_path):
     """
     with open(toml_path, "rb") as f:
         data = tomllib.load(f)
-    params = {k: float(v) for k, v in data.items() if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")}
+    params = {
+        k: float(v)
+        for k, v in data.items()
+        if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")
+    }
     # #region agent log
     try:
-        with open("/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a") as _f:
-            _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "lensdistort_load_toml", "timestamp": int(time.time() * 1000), "location": "vaila_lensdistortvideo.load_distortion_parameters", "message": "TOML params loaded", "data": {"script": "vaila_lensdistortvideo", "path": toml_path, "ext": os.path.splitext(toml_path)[1], "keys_count": len(params)}, "runId": "distort", "hypothesisId": "A"}) + "\n")
+        with open(
+            "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a"
+        ) as _f:
+            _f.write(
+                json.dumps(
+                    {
+                        "sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8",
+                        "id": "lensdistort_load_toml",
+                        "timestamp": int(time.time() * 1000),
+                        "location": "vaila_lensdistortvideo.load_distortion_parameters",
+                        "message": "TOML params loaded",
+                        "data": {
+                            "script": "vaila_lensdistortvideo",
+                            "path": toml_path,
+                            "ext": os.path.splitext(toml_path)[1],
+                            "keys_count": len(params),
+                        },
+                        "runId": "distort",
+                        "hypothesisId": "A",
+                    }
+                )
+                + "\n"
+            )
     except Exception:
         pass
     # #endregion
@@ -204,7 +228,7 @@ def get_precise_video_metadata(video_path):
             str(video_path),
         ]
         result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+            cmd, capture_output=True, text=True, check=True
         )
         data = json.loads(result.stdout)
 
@@ -484,7 +508,9 @@ def run_distortvideo():
 
     # Determine parameters file
     # #region agent log
-    _log_path_lens = "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+    _log_path_lens = (
+        "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+    )
     # #endregion
     if args.params_file:
         parameters_path = args.params_file
@@ -495,7 +521,25 @@ def run_distortvideo():
         # #region agent log
         try:
             with open(_log_path_lens, "a") as _f:
-                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "lensdistort_mode", "timestamp": int(time.time() * 1000), "location": "vaila_lensdistortvideo.run_distortvideo", "message": "Params source", "data": {"script": "vaila_lensdistortvideo", "mode": "cli", "params_path": parameters_path}, "runId": "distort", "hypothesisId": "B"}) + "\n")
+                _f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8",
+                            "id": "lensdistort_mode",
+                            "timestamp": int(time.time() * 1000),
+                            "location": "vaila_lensdistortvideo.run_distortvideo",
+                            "message": "Params source",
+                            "data": {
+                                "script": "vaila_lensdistortvideo",
+                                "mode": "cli",
+                                "params_path": parameters_path,
+                            },
+                            "runId": "distort",
+                            "hypothesisId": "B",
+                        }
+                    )
+                    + "\n"
+                )
         except Exception:
             pass
         # #endregion
@@ -512,7 +556,25 @@ def run_distortvideo():
         # #region agent log
         try:
             with open(_log_path_lens, "a") as _f:
-                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "lensdistort_mode", "timestamp": int(time.time() * 1000), "location": "vaila_lensdistortvideo.run_distortvideo", "message": "Params source", "data": {"script": "vaila_lensdistortvideo", "mode": "gui", "params_path": parameters_path}, "runId": "distort", "hypothesisId": "B"}) + "\n")
+                _f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8",
+                            "id": "lensdistort_mode",
+                            "timestamp": int(time.time() * 1000),
+                            "location": "vaila_lensdistortvideo.run_distortvideo",
+                            "message": "Params source",
+                            "data": {
+                                "script": "vaila_lensdistortvideo",
+                                "mode": "gui",
+                                "params_path": parameters_path,
+                            },
+                            "runId": "distort",
+                            "hypothesisId": "B",
+                        }
+                    )
+                    + "\n"
+                )
         except Exception:
             pass
         # #endregion

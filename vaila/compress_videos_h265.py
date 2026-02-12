@@ -528,7 +528,7 @@ GPU ACCELERATION:
 1 = Yes: Use NVIDIA GPU for encoding (faster)
 2 = No: Use CPU for encoding (works on all systems)
 
-NOTE: H.265 encoding is significantly slower than H.264 but produces smaller files 
+NOTE: H.265 encoding is significantly slower than H.264 but produces smaller files
 at the same quality level. Expect longer encoding times, especially with CPU encoding.
         """
 

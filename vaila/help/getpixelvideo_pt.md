@@ -147,9 +147,11 @@ frame,p1_x,p1_y,p2_x,p2_y
   - Clique e arraste para desenhar caixas delimitadoras
   - Pressione Z ou Clique com Botão Direito para remover a última caixa no frame atual
   - Pressione N para renomear o label do objeto atual
-  - Pressione F5 para salvar o projeto de labeling (JSON)
-  - Pressione F6 para carregar um projeto de labeling (JSON)
-  - Salvar exporta dataset estruturado (train/val/test)
+  - F5: Salvar projeto e exportar dataset (cria `dataset_YYYYMMDD_HHMMSS/` ou anexa se dataset carregado via F7)
+  - F6: Carregar projeto de labeling (JSON)
+  - F7: Carregar pasta do dataset (próximo F5 anexa; multi-vídeo)
+  - F8: Abrir outro vídeo sem fechar o app (mantém dataset)
+  - Botão Salvar ou F5 exporta dataset estruturado (train/val/test)
 - **Exportação:** Gera estrutura de pastas com imagens e anotações JSON
 
 ## Comandos do Teclado
@@ -184,33 +186,33 @@ frame,p1_x,p1_y,p2_x,p2_y
 | **SHIFT+TAB**       | Marcador anterior no quadro atual        |
 | **DELETE**          | Excluir marcador selecionado             |
 | **A**               | Adicionar novo marcador vazio ao arquivo |
-| **R**               | Remover último marcador do arquivo       |
+| **R** ou **D**       | Remover último marcador do arquivo       |
 
 ### Controles de Modo
 
 | Tecla           | Ação                                                       |
 | --------------- | ---------------------------------------------------------- |
 | **C**           | Alternar modo "1 Line"                                     |
-| **S**           | Alternar modo Sequencial (apenas no modo Normal)           |
-| **P**           | Alternar modo Persistência                                 |
+| **O** ou **S**  | Alternar modo Sequencial (apenas no modo Normal)          |
+| **P**           | Alternar modo Persistência                                |
 | **L**           | Alternar modo Labeling (Bounding Boxes)                    |
 | **Z / R-Click** | Remover última caixa delimitadora (modo Labeling)          |
 | **N**           | Renomear label do objeto (Apenas Modo Labeling)            |
-| **F5**          | Salvar Projeto de Labeling (JSON) (Apenas Modo Labeling)   |
+| **F5**          | Salvar Projeto e exportar dataset (Apenas Modo Labeling)  |
 | **F6**          | Carregar Projeto de Labeling (JSON) (Apenas Modo Labeling) |
+| **F7**          | Carregar pasta do dataset – próximo Save anexa (Modo Labeling) |
+| **F8**          | Abrir outro vídeo (mantém dataset; não precisa fechar o app) |
 | **1**           | Diminuir quadros de persistência                           |
 | **2**           | Aumentar quadros de persistência                           |
 | **3**           | Alternar persistência completa                             |
 
-### Operações de Arquivo
+### Operações de Arquivo (botões e teclas)
 
-| Tecla | Ação                                  |
-| ----- | ------------------------------------- |
-| **S** | Salvar marcadores atuais              |
-| **B** | Fazer backup dos dados atuais         |
-| **L** | Recarregar coordenadas do arquivo     |
-| **H** | Mostrar diálogo de ajuda              |
-| **D** | Abrir documentação completa (no help) |
+| Tecla | Ação                                                |
+| ----- | --------------------------------------------------- |
+| **H** | Mostrar diálogo de ajuda                            |
+| **R** ou **D** | Remover último marcador do arquivo            |
+| **Salvar/Carregar** | Use os botões do painel inferior (sem tecla dedicada) |
 
 ### Outros
 
@@ -329,10 +331,10 @@ Cada arquivo JSON contém:
 #### Salvamento Labeling (Modo de Caixas Delimitadoras)
 
 - **Formato:** Dataset estruturado com imagens e anotações JSON
-- **Diretório:** `{nome_do_video}_dataset/`
+- **Diretório:** Novo: `dataset_YYYYMMDD_HHMMSS/` (mesma pasta do vídeo). Para reutilizar: F7 → selecione o `data.yaml` existente → próximo F5 anexa.
 - **Estrutura:** train/val/test com images/ e labels/
 - **Uso:** Para criação de datasets de Machine Learning (detecção de objetos)
-- **Ativação:** Salvar quando o modo Labeling estiver ativo
+- **Ativação:** Salvar quando o modo Labeling estiver ativo (F5). Use F8 para abrir outro vídeo sem fechar o app.
 
 ### Carregando Coordenadas
 
@@ -425,15 +427,15 @@ Sistema de backup integrado para segurança dos dados:
 
 - Adicionado Modo de Labeling (Bounding Boxes) para criação de datasets de Machine Learning
 - Implementada exportação de datasets estruturados (train/val/test)
-- Adicionado suporte para anotações JSON com formato customizado
-- Criada função de exportação automática com divisão 70/20/10
+- Nome do dataset: novos exports usam `dataset_YYYYMMDD_HHMMSS/`; use F7 para carregar um existente e anexar (multi-vídeo)
+- Adicionado F8: Abrir outro vídeo sem fechar o app (mantém dataset; carrega project se existir)
 - Adicionado botão "Labeling" na interface
 - Melhorado help dialog com instruções detalhadas do modo labeling
 - **Melhorias:**
-  - Adicionado Salvar/Carregar Projeto (F5/F6) para sessões de labeling (formato JSON)
+  - F5/F6: Salvar/Carregar Projeto de Labeling. F7: Carregar pasta do dataset (próximo Save anexa). F8: Abrir outro vídeo.
   - Adicionada habilidade de Renomear labels de objetos (tecla N)
   - Adicionado Scroll no Diálogo de Ajuda
-  - Compatibilidade Linux melhorada (movido Tkinter para CLI)
+  - Compatibilidade Linux: browser de ficheiros em pygame para Dataset/Abrir vídeo (sem Tkinter)
 
 ### Versão 0.0.8 (27 de Julho de 2025)
 

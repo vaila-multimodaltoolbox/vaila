@@ -602,7 +602,7 @@ class FileSelectionWindow:
 def select_plot_type():
     """Create the main GUI window and start the application"""
     root = Tk()
-    app = PlotGUI(root)
+    PlotGUI(root)
     root.mainloop()
 
 
@@ -713,10 +713,7 @@ def plot_time_scatter():
                 if file_ext == "csv":
                     first_file_data = read_csv_with_encoding(selected_files[0], skipfooter=1)
                 elif file_ext == "xlsx":
-                    if EXCEL_SUPPORT:
-                        first_file_data = pd.read_excel(selected_files[0])
-                    else:
-                        first_file_data = None
+                    first_file_data = pd.read_excel(selected_files[0]) if EXCEL_SUPPORT else None
                 elif file_ext == "ods":
                     if ODS_SUPPORT:
                         first_file_data = pd.read_excel(selected_files[0], engine="odf")
@@ -926,7 +923,7 @@ def plot_boxplot():
         plt.figure()
 
     data_dict = {}
-    for file_idx, file_path in enumerate(selected_files):
+    for _file_idx, file_path in enumerate(selected_files):
         # Use cached data if available
         if file_path in loaded_data_cache:
             data = loaded_data_cache[file_path]
@@ -965,7 +962,7 @@ def plot_boxplot():
 
     plt.boxplot(data_dict.values(), notch=True, patch_artist=True)
     colors_list = [predefined_colors[i % len(predefined_colors)] for i in range(len(data_dict))]
-    for patch, color in zip(plt.gca().artists, colors_list):
+    for patch, color in zip(plt.gca().artists, colors_list, strict=False):
         patch.set_facecolor(color)
 
     # Format x-tick labels for better readability
@@ -1349,7 +1346,7 @@ def read_c3d_file(file_path):
             analog_labels = c3d_data["parameters"]["ANALOG"]["LABELS"]["value"]
             if isinstance(analog_labels[0], list):
                 analog_labels = analog_labels[0]
-            analog_units = (
+            (
                 c3d_data["parameters"]["ANALOG"]
                 .get("UNITS", {})
                 .get("value", ["Unknown"] * len(analog_labels))
@@ -1362,7 +1359,6 @@ def read_c3d_file(file_path):
             # Create empty analog data if not present
             analogs = np.array([]).reshape(0, 0)
             analog_labels = []
-            analog_units = []
             print("No analog data found, continuing with marker data only")
 
         # Get frequencies

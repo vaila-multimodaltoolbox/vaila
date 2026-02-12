@@ -1,8 +1,12 @@
 import platform
 
 import torch
-from diffusers import StableDiffusionUpscalePipeline
 from PIL import Image
+
+try:
+    from diffusers import StableDiffusionUpscalePipeline  # type: ignore[import-untyped]
+except ImportError:
+    StableDiffusionUpscalePipeline = None  # type: ignore[misc, assignment]
 
 
 def check_device():
@@ -15,11 +19,12 @@ def check_device():
 
 
 def load_pipeline(device):
+    if StableDiffusionUpscalePipeline is None:
+        raise ImportError(
+            "Package 'diffusers' is required for upscaling. Install it with: uv sync --extra upscaler"
+        )
     # Ajustar o tipo de dado conforme o dispositivo
-    if device == "cuda":
-        torch_dtype = torch.float16
-    else:
-        torch_dtype = torch.float32
+    torch_dtype = torch.float16 if device == "cuda" else torch.float32
 
     # Carregar o modelo pré-treinado
     pipeline = StableDiffusionUpscalePipeline.from_pretrained(

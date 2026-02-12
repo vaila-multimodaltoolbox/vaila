@@ -105,10 +105,10 @@ def calculate_feet_metrics(
     # Extract basic coordinates
     left_x = df["left_foot_index_x"].astype(float).values
     left_y = df["left_foot_index_y"].astype(float).values
-    left_z = df["left_foot_index_z"].astype(float).values
+    df["left_foot_index_z"].astype(float).values
     right_x = df["right_foot_index_x"].astype(float).values
     right_y = df["right_foot_index_y"].astype(float).values
-    right_z = df["right_foot_index_z"].astype(float).values
+    df["right_foot_index_z"].astype(float).values
 
     # Extract heel coordinates for improved foot strike detection
     left_heel_z = df["left_heel_z"].astype(float).values
@@ -516,7 +516,7 @@ def detect_foot_strikes_heel_z(
     current_side = first_side
 
     # For each position crossover, find the precise foot strike frame
-    for i, cross_idx in enumerate(crossovers):
+    for _i, cross_idx in enumerate(crossovers):
         # Switch the active foot side
         current_side = "right" if current_side == "left" else "left"
 
@@ -867,7 +867,7 @@ def count_steps(
             plt.plot(metrics["right_heel_z_depth"], "b-", label="Right Heel")
 
             # Mark the foot strikes on heel Z depths
-            for i, (frame, side) in enumerate(foot_strikes["all_strikes"]):
+            for _idx, (frame, side) in enumerate(foot_strikes["all_strikes"]):
                 if 0 <= frame < len(metrics["left_heel_z_depth"]):
                     if side == "left":
                         plt.plot(
@@ -894,7 +894,7 @@ def count_steps(
             plt.axhline(y=0, color="r", linestyle="--")
 
             # Mark foot strikes on velocity
-            for i, (frame, side) in enumerate(foot_strikes["all_strikes"]):
+            for _idx, (frame, side) in enumerate(foot_strikes["all_strikes"]):
                 if side == "left" and 0 <= frame < len(metrics["left_heel_z_velocity"]):
                     plt.plot(
                         frame,

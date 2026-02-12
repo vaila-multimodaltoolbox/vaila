@@ -72,6 +72,7 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 ===============================================================================
 """
 
+import contextlib
 import datetime
 import os
 import sys
@@ -163,7 +164,7 @@ def _hampel_numba(arr, window_size=5, n=3, parallel=True):
 
     Returns indices of outliers detected.
     """
-    if isinstance(arr, pd.Series) or isinstance(arr, pd.DataFrame):
+    if isinstance(arr, (pd.Series, pd.DataFrame)):
         arr = arr.values
 
     arr = np.asarray(arr, dtype=np.float64)
@@ -1331,113 +1332,6 @@ class InterpolationConfigDialog:
         # Move the focus to the next widget
         widget.tk_focusNext().focus()
 
-    def validate(self):
-        try:
-            interp_num = int(self.interp_entry.get())
-            smooth_num = int(self.smooth_entry.get())
-
-            if not (1 <= interp_num <= 6):
-                messagebox.showerror("Error", "Gap filling method must be between 1 and 6")
-                return False
-
-            if not (1 <= smooth_num <= 9):
-                messagebox.showerror("Error", "Smoothing method must be between 1 and 9")
-                return False
-
-            # Validate parameters specifically
-            if smooth_num == 2:  # Savitzky-Golay
-                if not self.savgol_window.get() or not self.savgol_poly.get():
-                    messagebox.showerror("Error", "Savitzky-Golay parameters are required")
-                    return False
-
-                window = int(self.savgol_window.get())
-                poly = int(self.savgol_poly.get())
-                if window % 2 == 0:
-                    messagebox.showerror("Error", "Window length must be an odd number")
-                    return False
-                if poly >= window:
-                    messagebox.showerror(
-                        "Error", "Polynomial order must be less than window length"
-                    )
-                    return False
-
-            elif smooth_num == 3:  # LOWESS
-                if not self.lowess_frac.get() or not self.lowess_it.get():
-                    messagebox.showerror("Error", "LOWESS parameters are required")
-                    return False
-
-                frac = float(self.lowess_frac.get())
-                if not (0 < frac <= 1):
-                    messagebox.showerror("Error", "Fraction must be between 0 and 1")
-                    return False
-
-            elif smooth_num == 4:  # Kalman
-                if not self.kalman_iterations.get():
-                    messagebox.showerror("Error", "Kalman filter iterations are required")
-                    return False
-
-                n_iter = int(self.kalman_iterations.get())
-                if n_iter <= 0:
-                    messagebox.showerror("Error", "Number of iterations must be positive")
-                    return False
-
-            elif smooth_num == 5:  # Butterworth
-                if not self.butter_cutoff.get() or not self.butter_fs.get():
-                    messagebox.showerror(
-                        "Error",
-                        "Butterworth filter requires both cutoff and sampling frequencies",
-                    )
-                    return False
-
-                cutoff = float(self.butter_cutoff.get())
-                fs = float(self.butter_fs.get())
-                if cutoff <= 0 or fs <= 0:
-                    messagebox.showerror("Error", "Frequencies must be positive")
-                    return False
-                if cutoff >= fs / 2:
-                    messagebox.showerror(
-                        "Error",
-                        "Cutoff frequency must be less than half of sampling frequency (Nyquist frequency)",
-                    )
-                    return False
-
-            # Validate general parameters
-            if not self.padding_entry.get():
-                messagebox.showerror("Error", "Padding percentage is required")
-                return False
-
-            padding = float(self.padding_entry.get())
-
-            if not self.max_gap_entry.get():
-                messagebox.showerror("Error", "Maximum gap size is required")
-                return False
-
-            max_gap = int(self.max_gap_entry.get())
-
-            if not (0 <= padding <= 100):
-                messagebox.showerror("Error", "Padding must be between 0 and 100%")
-                return False
-
-            if max_gap < 0:
-                messagebox.showerror("Error", "Maximum gap size must be non-negative")
-                return False
-
-            if smooth_num == 6:  # Splines
-                if not self.spline_smoothing.get():
-                    messagebox.showerror("Error", "Spline smoothing factor is required")
-                    return False
-
-                s = float(self.spline_smoothing.get())
-                if s < 0:
-                    messagebox.showerror("Error", "Smoothing factor must be non-negative")
-                return False
-
-            return True
-
-        except ValueError as e:
-            print(f"Error: Please enter valid numeric values: {str(e)}")
-            return False
-
     def confirm_parameters(self):
         """Confirm and update parameters before processing"""
         try:
@@ -1550,7 +1444,7 @@ class InterpolationConfigDialog:
 
             # Show confirmation message with current values
             confirmation = f"""Current Parameters:
-            
+
 Interpolation Method: {self.interp_entry.get()}
 Smoothing Method: {self.smooth_entry.get()}
 Max Gap Size: {self.max_gap_entry.get()}
@@ -2183,11 +2077,13 @@ Parameters have been confirmed and will be used for processing.
             width=max(20, min(35, max(len(c) for c in numeric_cols))),
         )
         column_combo.pack(side=tk.LEFT, padx=5)
+
         # Keep StringVar in sync when user selects (readonly Combobox may not update it on all platforms)
         def _on_column_selected(_event=None):
             val = column_combo.get()
             if val and val in numeric_cols:
                 selected_column.set(val)
+
         column_combo.bind("<<ComboboxSelected>>", _on_column_selected)
 
         tk.Label(selection_frame, text="fs (Hz):").pack(side=tk.LEFT, padx=(15, 2))
@@ -2199,7 +2095,9 @@ Parameters have been confirmed and will be used for processing.
         tk.Button(
             selection_frame,
             text="Analyze Column",
-            command=lambda: self.perform_analysis(analysis_window, column_combo.get() or numeric_cols[0]),
+            command=lambda: self.perform_analysis(
+                analysis_window, column_combo.get() or numeric_cols[0]
+            ),
             bg="#4CAF50",
             fg="white",
         ).pack(side=tk.LEFT, padx=5)
@@ -2255,11 +2153,19 @@ Parameters have been confirmed and will be used for processing.
         ax.plot(fc_list, rms_list, "b.-", linewidth=2, markersize=6)
         if suggested_fc is not None:
             idx = np.argmin(np.abs(fc_list - suggested_fc))
-            ax.axvline(suggested_fc, color="red", linestyle="--", label=f"Suggested fc = {suggested_fc:.1f} Hz")
+            ax.axvline(
+                suggested_fc,
+                color="red",
+                linestyle="--",
+                label=f"Suggested fc = {suggested_fc:.1f} Hz",
+            )
             ax.plot(fc_list[idx], rms_list[idx], "ro", markersize=10)
         ax.set_xlabel("Cutoff frequency (Hz)", fontweight="bold")
         ax.set_ylabel("RMS residual (raw - filtered)", fontweight="bold")
-        ax.set_title(f"Winter residual analysis — {column_name} (fs={fs} Hz, Butterworth 4th order)", fontweight="bold")
+        ax.set_title(
+            f"Winter residual analysis — {column_name} (fs={fs} Hz, Butterworth 4th order)",
+            fontweight="bold",
+        )
         ax.legend()
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
@@ -2267,6 +2173,7 @@ Parameters have been confirmed and will be used for processing.
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+
         toolbar = NavigationToolbar2Tk(canvas, self.plot_frame)
         toolbar.update()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -2439,7 +2346,7 @@ Parameters have been confirmed and will be used for processing.
             f"RMS Error: {rms_error:.4f}",
             transform=ax2.transAxes,
             va="top",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.5},
         )
 
         # Plot 3: First Derivative (Velocity) - mantém linha
@@ -2566,39 +2473,27 @@ Parameters have been confirmed and will be used for processing.
             # Force explicit update from param_entries so Entry values are used (avoid stale StringVar)
             if hasattr(self, "param_entries"):
                 if "cutoff" in self.param_entries:
-                    try:
+                    with contextlib.suppress(Exception):
                         self.butter_cutoff.set(self.param_entries["cutoff"].get())
-                    except Exception:
-                        pass
 
                 if "fs" in self.param_entries:
-                    try:
+                    with contextlib.suppress(Exception):
                         self.butter_fs.set(self.param_entries["fs"].get())
-                    except Exception:
-                        pass
 
                 if "frac" in self.param_entries:
-                    try:
+                    with contextlib.suppress(Exception):
                         self.lowess_frac.set(self.param_entries["frac"].get())
-                    except Exception:
-                        pass
 
                 if "it" in self.param_entries:
-                    try:
+                    with contextlib.suppress(Exception):
                         self.lowess_it.set(self.param_entries["it"].get())
-                    except Exception:
-                        pass
 
                 if "window_length" in self.param_entries:
-                    try:
+                    with contextlib.suppress(Exception):
                         self.savgol_window.set(self.param_entries["window_length"].get())
-                    except Exception:
-                        pass
                 if "polyorder" in self.param_entries:
-                    try:
+                    with contextlib.suppress(Exception):
                         self.savgol_poly.set(self.param_entries["polyorder"].get())
-                    except Exception:
-                        pass
 
             interp_map = {
                 1: "linear",
@@ -2764,10 +2659,7 @@ Parameters have been confirmed and will be used for processing.
                 print(f"Error in smoothing: {str(e)}")
 
         # Remove padding
-        if pad_len > 0:
-            processed_data = padded_data[pad_len:-pad_len]
-        else:
-            processed_data = padded_data
+        processed_data = padded_data[pad_len:-pad_len] if pad_len > 0 else padded_data
 
         return processed_data, padded_data
 
@@ -3523,7 +3415,6 @@ def process_file(file_path, dest_dir, config):
                 # Calculate time based on sample rate
                 df[first_col] = np.arange(len(df)) / sample_rate
                 # Store original time values for reference
-                original_time_values = original_first_col.values
             else:
                 print("Using original time values from file")
                 # Use original time values
@@ -3713,7 +3604,7 @@ def process_file(file_path, dest_dir, config):
                         pass
 
                     # Restore NaN values for gaps larger than max_gap
-                    for start, end in zip(gap_starts, gap_ends):
+                    for start, end in zip(gap_starts, gap_ends, strict=False):
                         interpolated.iloc[start:end] = np.nan
 
                     # Update the column with interpolated values
@@ -4178,17 +4069,19 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
                     print(f"Warning: No information returned for file {filename}")
             except Exception as e:
                 print(f"Error processing file {filename}: {str(e)}")
-                processed_files.append({
-                    "original_path": os.path.join(source_dir, filename),
-                    "original_filename": filename,
-                    "warnings": [f"Error: {str(e)}"],
-                    "error": True,
-                    "original_size": 0,
-                    "original_columns": 0,
-                    "total_missing": 0,
-                    "columns_with_missing": {},
-                    "output_path": None,
-                })
+                processed_files.append(
+                    {
+                        "original_path": os.path.join(source_dir, filename),
+                        "original_filename": filename,
+                        "warnings": [f"Error: {str(e)}"],
+                        "error": True,
+                        "original_size": 0,
+                        "original_columns": 0,
+                        "total_missing": 0,
+                        "columns_with_missing": {},
+                        "output_path": None,
+                    }
+                )
     processed_files = [pf for pf in processed_files if pf is not None]
 
     report_path = None
@@ -4197,8 +4090,7 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
         if use_messagebox:
             messagebox.showinfo(
                 "Complete",
-                f"Processing complete. Results saved in {dest_dir}\n"
-                f"Report: {report_path}",
+                f"Processing complete. Results saved in {dest_dir}\nReport: {report_path}",
             )
         else:
             print(f"Processing complete. Results saved in {dest_dir}")
@@ -4214,6 +4106,7 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
 def _cli_run():
     """CLI entry: argparse for --input, --output, --config (TOML)."""
     import argparse
+
     parser = argparse.ArgumentParser(
         description="Interpolate/smooth CSV data (or split). Config from TOML or smooth_config.toml in input/cwd.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -4226,8 +4119,18 @@ Examples:
         """,
     )
     parser.add_argument("-i", "--input", metavar="DIR", help="Input directory containing CSV files")
-    parser.add_argument("-o", "--output", metavar="DIR", help="Output directory (default: timestamped subdir inside input)")
-    parser.add_argument("-c", "--config", metavar="TOML", help="Path to smooth_config.toml (default: smooth_config.toml in input dir or cwd)")
+    parser.add_argument(
+        "-o",
+        "--output",
+        metavar="DIR",
+        help="Output directory (default: timestamped subdir inside input)",
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
+        metavar="TOML",
+        help="Path to smooth_config.toml (default: smooth_config.toml in input dir or cwd)",
+    )
     parser.add_argument("--gui", action="store_true", help="Launch GUI instead of CLI")
     args = parser.parse_args()
 
@@ -4259,7 +4162,9 @@ Examples:
                 config = load_smooth_config_for_analysis(path_cwd)
                 print(f"Using config from {path_cwd}")
     if config is None:
-        print("Error: No configuration found. Create smooth_config.toml (e.g. via GUI Apply) or pass --config PATH.")
+        print(
+            "Error: No configuration found. Create smooth_config.toml (e.g. via GUI Apply) or pass --config PATH."
+        )
         sys.exit(1)
 
     dest_dir = os.path.abspath(args.output) if args.output else None

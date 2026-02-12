@@ -1633,7 +1633,6 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         for i in range(num_ranges):
             # Determine start frame default and min value based on previous range
             default_start = 0
-            min_start = 0
             if i > 0 and self.bounding_box_ranges:
                 last_end = self.bounding_box_ranges[-1].get("frame_end", 0)
                 if last_end == float("inf"):
@@ -1641,10 +1640,8 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                     # We'll just default to Total Frames or 0, but user likely made a mistake or wants to override?
                     # Let's set it to total_frames - 1 as a placeholder or just 0 if robust.
                     default_start = total_frames
-                    min_start = 0  # Allow overlap if user insists? Or just fail?
                 else:
                     default_start = int(last_end) + 1
-                    min_start = 0  # We don't strictly enforce > previous end here to allow flexibility/overlaps if needed,
                     # though typically sequential. minvalue=min_start in prompt enforces it if we want.
 
             frame_start = simpledialog.askinteger(
@@ -4158,7 +4155,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Output files
-    output_video_path = output_dir / f"{video_path.stem}_mp.mp4"
+    output_dir / f"{video_path.stem}_mp.mp4"
     output_file_path = output_dir / f"{video_path.stem}_mp_norm.csv"
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
 
@@ -4213,7 +4210,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     # Initialize results containers
     normalized_landmarks_list = []
     pixel_landmarks_list = []
-    last_frames_for_padding = deque(maxlen=30)
+    deque(maxlen=30)
 
     print(f"Starting analysis loop... (Total frames: {total_frames})")
 

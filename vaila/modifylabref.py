@@ -332,7 +332,7 @@ def process_files(input_dir, labcoord_angles, suffix, ordem):
 
         # Store precision info for each column before processing
         column_precision = {}
-        for i, col in enumerate(data.columns):
+        for i, _col in enumerate(data.columns):
             precision = detect_column_precision(data_str, i)
             column_precision[i] = precision
 

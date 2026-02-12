@@ -85,34 +85,34 @@ Python Version: 3.11
 
 Description:
 ------------
-This script processes biomechanical data from force platforms, analyzing 
+This script processes biomechanical data from force platforms, analyzing
 the vertical ground reaction force (VGRF) to compute key metrics, including:
-- Peak forces, time intervals, impulse, rate of force development (RFD), 
+- Peak forces, time intervals, impulse, rate of force development (RFD),
   and stiffness parameters.
-The results are visualized through interactive plots and saved to CSV files for 
-further analysis. The script allows batch processing of multiple files and provides 
+The results are visualized through interactive plots and saved to CSV files for
+further analysis. The script allows batch processing of multiple files and provides
 descriptive statistics for all analyzed data.
 
 Key Functionalities:
 ---------------------
-1. Data Selection: 
+1. Data Selection:
    - Allows the user to select input CSV files containing biomechanical data.
    - Prompts the user to specify output directories.
    - Prompts the user for input parameters (sampling frequency, thresholds, etc.).
-2. Data Processing: 
+2. Data Processing:
    - Normalizes data, applies Butterworth filters, and computes key biomechanical metrics.
    - Computes metrics such as peak force, impulse, and rate of force development.
-3. Visualization: 
+3. Visualization:
    - Generates and saves plots for force-time curves with relevant markers and highlighted regions.
-4. Statistical Analysis: 
+4. Statistical Analysis:
    - Provides descriptive statistics and optional profiling reports using pandas and ydata_profiling.
-5. Batch Processing: 
+5. Batch Processing:
    - Processes all CSV files in the selected source directory.
 
 Input:
 ------
-- CSV Files: 
-   Each CSV file should contain biomechanical data, specifically force data recorded 
+- CSV Files:
+   Each CSV file should contain biomechanical data, specifically force data recorded
    from a force platform. The file must include a column for vertical ground reaction force (VGRF).
    Example format:
    Sample, Force (N)
@@ -121,7 +121,7 @@ Input:
    2, 49.80
    ...
 
-- User Input: 
+- User Input:
    The user will input various parameters through a graphical interface, including:
    - Sidefoot (R/L)
    - Dominance (R/L)
@@ -132,7 +132,7 @@ Input:
 
 Output:
 -------
-- CSV Files: 
+- CSV Files:
    A CSV file for each input file, containing results for key metrics such as:
    * Peak force at 40 ms and 100 ms
    * Impulse over different time intervals
@@ -140,17 +140,17 @@ Output:
    * Stiffness parameters
    * Total contact time and time to reach peak forces
 
-- Plot Files: 
-   PNG and SVG plots of force-time curves, highlighting important events such as peak forces, 
+- Plot Files:
+   PNG and SVG plots of force-time curves, highlighting important events such as peak forces,
    rate of force development, and impact transient.
 
-- Statistical Report: 
+- Statistical Report:
    A summary CSV file containing descriptive statistics for the processed files.
    Optionally, a profiling report in HTML format for each file.
 
 How to Run:
 -----------
-1. Ensure that all dependencies are installed, including numpy, pandas, matplotlib, scipy, 
+1. Ensure that all dependencies are installed, including numpy, pandas, matplotlib, scipy,
    ydata_profiling, rich, and tkinter. You can install these using pip.
 2. Run the script from the terminal:
    python force_cube_fig.py
@@ -158,19 +158,19 @@ How to Run:
    - Select the source directory containing CSV files.
    - Select the output directory where results will be saved.
    - Specify input parameters such as sampling frequency, sidefoot, and dominance.
-4. The script will process all files in the selected directory and generate CSV results 
+4. The script will process all files in the selected directory and generate CSV results
    and plots for each file.
 
 License:
 --------
-This script is licensed under the GNU General Public License v3.0 (GPLv3). 
-You may redistribute and modify the script under these terms. See the LICENSE file 
+This script is licensed under the GNU General Public License v3.0 (GPLv3).
+You may redistribute and modify the script under these terms. See the LICENSE file
 or visit https://www.gnu.org/licenses/gpl-3.0.html for more details.
 
 Disclaimer:
 -----------
-This script is provided "as is" without warranty of any kind. It is intended for 
-academic and research purposes only. The author is not liable for any damage or 
+This script is provided "as is" without warranty of any kind. It is intended for
+academic and research purposes only. The author is not liable for any damage or
 loss resulting from its use.
 
 Changelog:
@@ -467,7 +467,7 @@ def select_headers_and_load_data(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [header for header, var in zip(headers, header_vars) if var.get()]
+        selected_headers = [header for header, var in zip(headers, header_vars, strict=False) if var.get()]
         selection_window.quit()  # Ends the main Tkinter loop
         selection_window.destroy()  # Closes the selection window
 
@@ -828,14 +828,14 @@ def calculate_cube_values(signal, Fs):
     t100ms = 0.1  # 100 ms
     index_40ms = int(t40ms * Fs)
     index_100ms = int(t100ms * Fs)
-    index_20ms = int(0.02 * Fs)  # 20 ms index
+    int(0.02 * Fs)  # 20 ms index
 
     vpeak_40ms = signal[index_40ms]
-    area_until_40ms = np.trapz(signal[:index_40ms], time_interval[:index_40ms])
+    area_until_40ms = np.trapezoid(signal[:index_40ms], time_interval[:index_40ms])
     rfd_40ms = vpeak_40ms / t40ms
 
     vpeak_100ms = signal[index_100ms]
-    area_until_100ms = np.trapz(signal[:index_100ms], time_interval[:index_100ms])
+    area_until_100ms = np.trapezoid(signal[:index_100ms], time_interval[:index_100ms])
     rfd_100ms = vpeak_100ms / t100ms
 
     # Search for peakmax after 100 ms
@@ -856,7 +856,7 @@ def calculate_cube_values(signal, Fs):
     vpeak_poi = vip_value
     time_poi = time_interval[vip_index]
 
-    area_impact_transient = np.trapz(
+    area_impact_transient = np.trapezoid(
         signal[:index_impact_transient], time_interval[:index_impact_transient]
     )
     rfd_impact_transient = (
@@ -871,11 +871,11 @@ def calculate_cube_values(signal, Fs):
 
     vpeakmax = signal[index_peakmax]
     time_peakmax = time_interval[index_peakmax]
-    area_peakmax = np.trapz(signal[:index_peakmax], time_interval[:index_peakmax])
+    area_peakmax = np.trapezoid(signal[:index_peakmax], time_interval[:index_peakmax])
     rfd_peakmax = vpeakmax / time_peakmax if time_peakmax and time_peakmax != 0 else float("inf")
 
-    total_area = np.trapz(signal, time_interval)
-    area_propulsion = np.trapz(
+    total_area = np.trapezoid(signal, time_interval)
+    area_propulsion = np.trapezoid(
         signal[index_peakmax:],
         time_interval[index_peakmax:] - time_interval[index_peakmax],
     )

@@ -43,10 +43,10 @@ KEYS = ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")
 
 def read_params_csv(path):
     """Read first data row from a distortion parameters CSV. Returns dict of float or None."""
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         first = f.readline()
     sep = ";" if ";" in first and "," not in first else ","
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         r = csv.DictReader(f, delimiter=sep)
         row = next(r, None)
     if not row:

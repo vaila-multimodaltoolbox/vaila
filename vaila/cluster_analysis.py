@@ -298,7 +298,7 @@ def analyze_cluster_data():
     print(f"Anatomical data: {anatomical_data}")
     matplotlib_figs = []  # List to store matplotlib figures
 
-    for idx, file_name in enumerate(file_names):
+    for _idx, file_name in enumerate(file_names):
         print(f"Processing file: {file_name}")
         file_path = os.path.join(selected_path, file_name)
         data = pd.read_csv(file_path, usecols=selected_headers).values

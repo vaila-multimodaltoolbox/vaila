@@ -38,36 +38,30 @@ import cv2
 import mediapipe as mp
 import requests
 
-# Tenta importar os labels oficiais do MediaPipe Hands
-try:
-    from mediapipe.python.solutions.hands import HandLandmark
-
-    # Garante que os landmarks estejam ordenados de acordo com o valor numérico
-    LANDMARK_NAMES = [landmark.name for landmark in sorted(HandLandmark, key=lambda x: x.value)]
-except ImportError:
-    LANDMARK_NAMES = [
-        "WRIST",
-        "THUMB_CMC",
-        "THUMB_MCP",
-        "THUMB_IP",
-        "THUMB_TIP",
-        "INDEX_FINGER_MCP",
-        "INDEX_FINGER_PIP",
-        "INDEX_FINGER_DIP",
-        "INDEX_FINGER_TIP",
-        "MIDDLE_FINGER_MCP",
-        "MIDDLE_FINGER_PIP",
-        "MIDDLE_FINGER_DIP",
-        "MIDDLE_FINGER_TIP",
-        "RING_FINGER_MCP",
-        "RING_FINGER_PIP",
-        "RING_FINGER_DIP",
-        "RING_FINGER_TIP",
-        "PINKY_MCP",
-        "PINKY_PIP",
-        "PINKY_DIP",
-        "PINKY_TIP",
-    ]
+# Lista manual dos nomes dos landmarks (Tasks API 0.10+ não expõe HandLandmark; igual a markerless_2d_analysis)
+LANDMARK_NAMES = [
+    "WRIST",
+    "THUMB_CMC",
+    "THUMB_MCP",
+    "THUMB_IP",
+    "THUMB_TIP",
+    "INDEX_FINGER_MCP",
+    "INDEX_FINGER_PIP",
+    "INDEX_FINGER_DIP",
+    "INDEX_FINGER_TIP",
+    "MIDDLE_FINGER_MCP",
+    "MIDDLE_FINGER_PIP",
+    "MIDDLE_FINGER_DIP",
+    "MIDDLE_FINGER_TIP",
+    "RING_FINGER_MCP",
+    "RING_FINGER_PIP",
+    "RING_FINGER_DIP",
+    "RING_FINGER_TIP",
+    "PINKY_MCP",
+    "PINKY_PIP",
+    "PINKY_DIP",
+    "PINKY_TIP",
+]
 
 # Define the local directory to store models (same standard as used in other modules)
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
@@ -289,7 +283,7 @@ def run_mphands():
                         row.extend([""] * (len(LANDMARK_NAMES) * 5))
             else:
                 # If no hand is detected, fill with empty fields for all hand slots.
-                for hand_slot in range(max_hands):
+                for _ in range(max_hands):
                     row.extend([""] * (len(LANDMARK_NAMES) * 5))
             csv_writer.writerow(row)
             # Write the processed frame to the output video file

@@ -349,7 +349,7 @@ def build_config_toml(
         "[teams.home]",
         f'name = "{team_home}"',
         'color = "#1f77b4"',
-        "players = [" + ", ".join('"%s"' % p for p in player_ids) + "]",
+        "players = [" + ", ".join(f'"{p}"' for p in player_ids) + "]",
         "",
         "[teams.home.players_names]",
     ]

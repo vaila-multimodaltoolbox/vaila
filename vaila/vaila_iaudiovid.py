@@ -28,6 +28,7 @@ Requirements:
 ================================================================================
 """
 
+import contextlib
 import math
 import os
 import shutil
@@ -116,8 +117,7 @@ class AudioVideoProcessor:
 
             result = subprocess.run(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=False,
             )
@@ -146,8 +146,7 @@ class AudioVideoProcessor:
 
             result = subprocess.run(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=False,
             )
@@ -200,7 +199,7 @@ class AudioVideoProcessor:
 
                 # Build a complex filter that concatenates the audio file with itself multiple times
                 concat_parts = []
-                for i in range(loops_needed):
+                for _i in range(loops_needed):
                     concat_parts.append("[0:a]")
 
                 filter_complex = f"{' '.join(concat_parts)}concat=n={loops_needed}:v=0:a=1[aout]"
@@ -224,8 +223,7 @@ class AudioVideoProcessor:
 
                 loop_process = subprocess.run(
                     loop_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     text=True,
                     check=False,
                 )
@@ -249,7 +247,7 @@ class AudioVideoProcessor:
 
                     # Create a temporary file listing
                     with open(temp_list_file, "w") as f:
-                        for i in range(loops_needed):
+                        for _i in range(loops_needed):
                             f.write(f"file '{self.audio_file}'\n")
 
                     # Use the concat demuxer which is more reliable
@@ -271,8 +269,7 @@ class AudioVideoProcessor:
 
                     fallback_process = subprocess.run(
                         fallback_cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True,
                         check=False,
                     )
@@ -359,10 +356,8 @@ class AudioVideoProcessor:
         except Exception as e:
             # Clean up temporary file if it exists
             if temp_audio_file and os.path.exists(temp_audio_file):
-                try:
+                with contextlib.suppress(BaseException):
                     os.remove(temp_audio_file)
-                except:
-                    pass
 
             if self.status_callback:
                 self.status_callback(f"Error: {str(e)}")
@@ -741,7 +736,7 @@ def run_iaudiovid():
     style.configure("TLabel", font=("Arial", 10))
     style.configure("TLabelframe.Label", font=("Arial", 10, "bold"))
 
-    app = AudioVideoGUI(root)
+    AudioVideoGUI(root)
     root.mainloop()
 
 

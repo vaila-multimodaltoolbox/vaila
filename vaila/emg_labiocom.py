@@ -44,6 +44,7 @@ Install via: pip install numpy scipy matplotlib pandas PyWavelets
 """
 
 import os
+import re
 from datetime import datetime
 from tkinter import Tk, filedialog, messagebox, simpledialog
 
@@ -247,22 +248,22 @@ HTML_REPORT_TEMPLATE = """<!DOCTYPE html>
 <body>
     <h1>Advanced EMG Analysis Report</h1>
     <p class="abstract">
-        This report presents a comprehensive analysis of Electromyography (EMG) signals using advanced signal processing techniques. 
-        The analysis was performed using the EMG module of the vailá (Versatile Anarcho Integrated Liberation Ánalysis) Multimodal Toolbox, 
+        This report presents a comprehensive analysis of Electromyography (EMG) signals using advanced signal processing techniques.
+        The analysis was performed using the EMG module of the vailá (Versatile Anarcho Integrated Liberation Ánalysis) Multimodal Toolbox,
         a Python-based platform designed for human movement analysis across multiple biomechanical systems.
         Sampling Rate: <span class="sampling-frequency">2000</span> Hz.
     </p>
 
     <h2>1. Introduction</h2>
     <p>
-        Electromyography (EMG) is a technique for evaluating and recording the electrical activity produced by skeletal muscles. 
+        Electromyography (EMG) is a technique for evaluating and recording the electrical activity produced by skeletal muscles.
         EMG signals are complex and non-stationary, requiring sophisticated signal processing methods to extract meaningful information.
         This report details the analysis performed on EMG data using time-domain, frequency-domain, and time-frequency domain methods.
     </p>
-    
+
     <h2>2. Time Domain Analysis</h2>
     <p>
-        The time domain analysis focuses on the amplitude characteristics of the EMG signal. After band-pass filtering 
+        The time domain analysis focuses on the amplitude characteristics of the EMG signal. After band-pass filtering
         (10-450 Hz) to remove noise, the signal is processed using the following techniques:
     </p>
     <ul>
@@ -270,81 +271,81 @@ HTML_REPORT_TEMPLATE = """<!DOCTYPE html>
         <li>Linear envelope: Low-pass filtering (10 Hz cutoff) of the rectified signal</li>
         <li>Root Mean Square (RMS): Calculating the RMS value in sliding windows</li>
     </ul>
-    
+
     <h3>2.1. Raw and Filtered EMG</h3>
     <div class="figure">
         <img src="PLACEHOLDER_filtered_emg.png" alt="Raw and Filtered EMG Signal">
         <p class="figure-caption">Top: Raw EMG signal with selected segments highlighted. Bottom: Band-pass filtered EMG signal from selected segment.</p>
     </div>
-    
+
     <h3>2.2. Rectified EMG and Linear Envelope</h3>
     <div class="figure">
         <img src="PLACEHOLDER_rectified_emg.png" alt="Rectified EMG and Linear Envelope">
         <p class="figure-caption">Full-wave rectified EMG signal (blue) and linear envelope (red). The integral value represents overall muscle activity.</p>
     </div>
-    
+
     <h3>2.3. Root Mean Square (RMS)</h3>
     <div class="figure">
         <img src="PLACEHOLDER_rms.png" alt="RMS of EMG Signal">
         <p class="figure-caption">RMS values calculated using a 250ms window with 50% overlap. The red dashed line represents a polynomial fit.</p>
     </div>
-    
+
     <h2>3. Frequency Domain Analysis</h2>
     <p>
-        Frequency domain analysis reveals the power distribution across different frequencies, providing insights into 
+        Frequency domain analysis reveals the power distribution across different frequencies, providing insights into
         muscle fiber composition, fatigue, and motor unit recruitment strategies.
     </p>
-    
+
     <h3>3.1. Median Frequency</h3>
     <div class="figure">
         <img src="PLACEHOLDER_median_frequency.png" alt="Median Frequency Analysis">
         <p class="figure-caption">Median frequency over time. A decreasing trend can indicate muscle fatigue.</p>
     </div>
-    
+
     <h3>3.2. Power Spectral Density</h3>
     <div class="figure">
         <img src="PLACEHOLDER_pwelch.png" alt="Power Spectral Density">
         <p class="figure-caption">Power spectral density using Welch's method. The red dot indicates the frequency with maximum power.</p>
     </div>
-    
+
     <h2>4. Time-Frequency Analysis</h2>
     <p>
         Time-frequency analysis provides insights into how the frequency content of the EMG signal changes over time,
         which is particularly useful for non-stationary signals like EMG during dynamic contractions.
     </p>
-    
+
     <h3>4.1. Spectrogram (STFT)</h3>
     <div class="figure">
         <img src="PLACEHOLDER_spectrogram.png" alt="EMG Spectrogram">
         <p class="figure-caption">Short-time Fourier transform (STFT) showing frequency content over time.</p>
     </div>
-    
+
     <h3>4.2. Wavelet Analysis</h3>
     <div class="figure">
         <img src="PLACEHOLDER_wavelet.png" alt="Wavelet Analysis">
         <p class="figure-caption">Continuous wavelet transform using Morlet wavelets, providing multi-resolution analysis of the EMG signal.</p>
     </div>
-    
+
     <h2>5. Statistical Summary</h2>
     <p>
         The table below presents statistical metrics calculated from the EMG signal analysis. These metrics include standard
         statistical measures (mean, median, standard deviation) as well as specialized EMG parameters.
     </p>
-    
+
     <h2>References</h2>
     <div class="references">
         <p class="reference">
-            [1] Merletti, R., & Parker, P. A. (2004). <em>Electromyography: Physiology, Engineering, and Non-Invasive Applications</em>. 
+            [1] Merletti, R., & Parker, P. A. (2004). <em>Electromyography: Physiology, Engineering, and Non-Invasive Applications</em>.
             IEEE Press. <a href="https://doi.org/10.1002/0471678384">https://doi.org/10.1002/0471678384</a>
         </p>
         <p class="reference">
-            [2] De Luca, C. J. (1997). The use of surface electromyography in biomechanics. 
-            <em>Journal of Applied Biomechanics</em>, 13(2), 135-163. 
+            [2] De Luca, C. J. (1997). The use of surface electromyography in biomechanics.
+            <em>Journal of Applied Biomechanics</em>, 13(2), 135-163.
             <a href="https://doi.org/10.1123/jab.13.2.135">https://doi.org/10.1123/jab.13.2.135</a>
         </p>
         <p class="reference">
-            [3] Cifrek, M., Medved, V., Tonković, S., & Ostojić, S. (2009). Surface EMG based muscle fatigue evaluation in biomechanics. 
-            <em>Clinical Biomechanics</em>, 24(4), 327-340. 
+            [3] Cifrek, M., Medved, V., Tonković, S., & Ostojić, S. (2009). Surface EMG based muscle fatigue evaluation in biomechanics.
+            <em>Clinical Biomechanics</em>, 24(4), 327-340.
             <a href="https://doi.org/10.1016/j.clinbiomech.2009.01.010">https://doi.org/10.1016/j.clinbiomech.2009.01.010</a>
         </p>
         <p class="reference">
@@ -525,7 +526,7 @@ def full_wave_rectification(emg_signal):
 def linear_envelope(emg_abs, cutoff, fs):
     emg_envelope = butter_lowpass_filter(emg_abs, cutoff, fs)
     time = np.linspace(0, (len(emg_abs) - 1) / fs, len(emg_abs))
-    signal_integ = np.trapz(emg_envelope, time)
+    signal_integ = np.trapezoid(emg_envelope, time)
     return emg_envelope, signal_integ
 
 
@@ -559,10 +560,7 @@ def calculate_median_frequency_for_window(window, fs):
     nfft = 1024
     freqs, psd = welch(window, fs, window="hann", nperseg=nperseg, noverlap=noverlap, nfft=nfft)
     median_freq_idx = np.where(np.cumsum(psd) >= np.sum(psd) / 2)
-    if median_freq_idx[0].size > 0:
-        median_freq = freqs[median_freq_idx[0][0]]
-    else:
-        median_freq = np.nan
+    median_freq = freqs[median_freq_idx[0][0]] if median_freq_idx[0].size > 0 else np.nan
     return median_freq
 
 
@@ -761,7 +759,7 @@ def plot_and_save_figures(
         xytext=(+10, +30),
         textcoords="offset points",
         fontsize=12,
-        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2"),
+        arrowprops={"arrowstyle": "->", "connectionstyle": "arc3,rad=.2"},
     )
 
     for fmt in save_formats:
@@ -1311,7 +1309,7 @@ def calculate_fatigue_indices(median_freq_values):
     fi = slope / intercept if intercept != 0 else 0
 
     # Modified Fatigue Index (MFI) - area under MF curve
-    mfi = np.trapz(median_freq_values) / len(median_freq_values)
+    mfi = np.trapezoid(median_freq_values) / len(median_freq_values)
 
     # New: Dimitrov Fatigue Index (DFI)
     # Based on ratio between low and high frequency powers
@@ -1378,7 +1376,7 @@ def calculate_frequency_domain_features(emg_filtered, fs):
     peak_freq = freqs[np.argmax(psd)]
 
     # Spectral Moments
-    moment1 = (
+    (
         np.sum(freqs * psd) / np.sum(psd) if np.sum(psd) > 0 else 0
     )  # First moment (mean freq)
     moment2 = (
@@ -1395,7 +1393,7 @@ def calculate_frequency_domain_features(emg_filtered, fs):
 
     # Novo: Média Modificada da Frequência de Potência (MMFP)
     # Mais robusta ao ruído que a média tradicional
-    total_power = np.sum(psd)
+    np.sum(psd)
     mmfp = np.sum(freqs * np.sqrt(psd)) / np.sum(np.sqrt(psd)) if np.sum(np.sqrt(psd)) > 0 else 0
 
     return {
@@ -1438,16 +1436,10 @@ def calculate_advanced_statistics(signal):
     # Skewness (assimetria)
     mean = np.mean(signal)
     std = np.std(signal)
-    if std == 0:
-        skewness = 0
-    else:
-        skewness = np.mean(((signal - mean) / std) ** 3)
+    skewness = 0 if std == 0 else np.mean(((signal - mean) / std) ** 3)
 
     # Kurtosis (curtose)
-    if std == 0:
-        kurtosis = 0
-    else:
-        kurtosis = np.mean(((signal - mean) / std) ** 4) - 3
+    kurtosis = 0 if std == 0 else np.mean(((signal - mean) / std) ** 4) - 3
 
     # Hjorth Parameters (mobility and complexity)
     # Utils parameters for EEG/EMG characterization
@@ -1514,7 +1506,7 @@ def detect_muscle_activation(emg_envelope, threshold_factor=0.3):
         activation_starts = start_indices[:min_length]
         activation_ends = end_indices[:min_length]
 
-    return list(zip(activation_starts, activation_ends))
+    return list(zip(activation_starts, activation_ends, strict=False))
 
 
 def generate_html_report(output_dir, filename_prefix, summary_df, fs):

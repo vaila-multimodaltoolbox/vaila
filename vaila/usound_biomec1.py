@@ -315,7 +315,7 @@ def adjust_edge_parameters(img1, img2):
 
         # Add parameter text at bottom
         text = f"Lower: {params['threshold1']} Upper: {params['threshold2']} Blur: {params['blur']}"
-        text_y = h + 30
+        h + 30
 
         # Create a text area below the images
         text_area = np.zeros((40, display.shape[1], 3), dtype=np.uint8)
@@ -604,7 +604,7 @@ def run_usound():
 
     # Step 2: Measure widths in each cropped image
     csv_path = os.path.join(out_dir, f"usound_{ts}.csv")
-    measurements = process_images(crop_dir, csv_path, scale)
+    process_images(crop_dir, csv_path, scale)
 
     # Step 3: Create comparison images after all measurements
     create_comparison_images(cropped_paths, out_dir)
