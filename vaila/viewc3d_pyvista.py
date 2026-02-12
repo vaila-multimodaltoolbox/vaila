@@ -76,7 +76,6 @@ import ezc3d
 import numpy as np
 import pyvista as pv
 
-
 # ---------------------------------------------------------------------------
 #  Colors: same palette as viewc3d (Open3D viewer) for C key cycle
 # ---------------------------------------------------------------------------
@@ -283,7 +282,11 @@ class MokkaLikeViewer:
         # Apply marker visibility filter
         if self._visible_markers is not None:
             for i in range(len(self.labels)):
-                if i < len(valid_mask) and valid_mask[i] and self.labels[i] not in self._visible_markers:
+                if (
+                    i < len(valid_mask)
+                    and valid_mask[i]
+                    and self.labels[i] not in self._visible_markers
+                ):
                     valid_mask[i] = False
         self._valid_indices = np.where(valid_mask)[0]  # Bug fix #1
         valid_points = current_points[valid_mask]
@@ -614,7 +617,9 @@ class MokkaLikeViewer:
         vars_by_name = {}
         inner = tk.Frame(win, padx=10, pady=10)
         inner.pack(fill=tk.BOTH, expand=True)
-        tk.Label(inner, text="Check markers to display (uncheck to hide):", font=("", 10)).pack(anchor=tk.W)
+        tk.Label(inner, text="Check markers to display (uncheck to hide):", font=("", 10)).pack(
+            anchor=tk.W
+        )
         scroll_frame = tk.Frame(inner)
         scroll_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         scrollbar = tk.Scrollbar(scroll_frame)
@@ -625,11 +630,15 @@ class MokkaLikeViewer:
         cb_frame = tk.Frame(canvas)
         canvas.create_window((0, 0), window=cb_frame, anchor=tk.NW)
         for name in self.labels:
-            var = tk.BooleanVar(value=self._visible_markers is None or name in self._visible_markers)
+            var = tk.BooleanVar(
+                value=self._visible_markers is None or name in self._visible_markers
+            )
             vars_by_name[name] = var
             tk.Checkbutton(cb_frame, text=name, variable=var).pack(anchor=tk.W)
+
         def on_configure(_event):
             canvas.configure(scrollregion=canvas.bbox("all"))
+
         cb_frame.bind("<Configure>", on_configure)
 
         def all_none(all_checked):
@@ -651,7 +660,9 @@ class MokkaLikeViewer:
         btn_frame = tk.Frame(inner)
         btn_frame.pack(pady=10)
         tk.Button(btn_frame, text="All", command=lambda: all_none(True)).pack(side=tk.LEFT, padx=4)
-        tk.Button(btn_frame, text="None", command=lambda: all_none(False)).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text="None", command=lambda: all_none(False)).pack(
+            side=tk.LEFT, padx=4
+        )
         tk.Button(btn_frame, text="OK", command=apply_and_close).pack(side=tk.LEFT, padx=4)
         tk.Button(btn_frame, text="Cancel", command=win.destroy).pack(side=tk.LEFT, padx=4)
 
@@ -1111,7 +1122,11 @@ class MokkaLikeViewer:
         # Windows: use low-level key observer and timer (add_timer_event often does not fire)
         if sys.platform == "win32":
             iren = getattr(self.plotter, "iren", None)
-            if iren is None and hasattr(self.plotter, "render_window") and self.plotter.render_window is not None:
+            if (
+                iren is None
+                and hasattr(self.plotter, "render_window")
+                and self.plotter.render_window is not None
+            ):
                 try:
                     iren = self.plotter.render_window.GetInteractor()
                 except Exception:
@@ -1125,7 +1140,9 @@ class MokkaLikeViewer:
         print("\n--- Controls (press H for full help) ---")
         print("Space Play | ←→ ±1 | ↑↓ ±10 | PgUp/Dn ±100 | S Start | End End")
         print("1-4 Views | R Reset | B Bg | G Grid | X Labels | C Colors | T Trail")
-        print("{ } Trail len | [ ] Speed | +− Size | M Markers | J Skeleton | K Shot | Z PNGs | V MP4")
+        print(
+            "{ } Trail len | [ ] Speed | +− Size | M Markers | J Skeleton | K Shot | Z PNGs | V MP4"
+        )
         print("I Info | A Stats | D Distance | Escape Clear | H Help\n")
 
         # Timer (Linux/macOS; on Windows we use TimerEvent observer above)

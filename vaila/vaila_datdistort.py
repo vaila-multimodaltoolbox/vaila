@@ -93,13 +93,13 @@ def _infer_float_precision(file_path, columns_of_interest, sep=",", max_rows=100
     Infer decimal places from the raw file for given columns.
     Returns a dict: column -> max decimal places (0 = int, 1 = .1f, etc.).
     """
-    prec = {c: 0 for c in columns_of_interest}
+    prec = dict.fromkeys(columns_of_interest, 0)
     try:
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             first = f.readline()
         if sep not in first and ";" in first:
             sep = ";"
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(file_path, encoding="utf-8", errors="replace") as f:
             df_raw = pd.read_csv(f, sep=sep, dtype=str, nrows=max_rows)
     except Exception:
         return prec
@@ -119,11 +119,36 @@ def load_distortion_parameters(toml_path):
     """Load distortion parameters from a TOML file (fx, fy, cx, cy, k1, k2, k3, p1, p2)."""
     with open(toml_path, "rb") as f:
         data = tomllib.load(f)
-    params = {k: float(v) for k, v in data.items() if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")}
+    params = {
+        k: float(v)
+        for k, v in data.items()
+        if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")
+    }
     # #region agent log
     try:
-        with open("/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a") as _f:
-            _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "datdistort_load_toml", "timestamp": int(time.time() * 1000), "location": "vaila_datdistort.load_distortion_parameters", "message": "TOML params loaded", "data": {"script": "vaila_datdistort", "path": toml_path, "ext": os.path.splitext(toml_path)[1], "keys_count": len(params)}, "runId": "distort", "hypothesisId": "A"}) + "\n")
+        with open(
+            "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a"
+        ) as _f:
+            _f.write(
+                json.dumps(
+                    {
+                        "sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8",
+                        "id": "datdistort_load_toml",
+                        "timestamp": int(time.time() * 1000),
+                        "location": "vaila_datdistort.load_distortion_parameters",
+                        "message": "TOML params loaded",
+                        "data": {
+                            "script": "vaila_datdistort",
+                            "path": toml_path,
+                            "ext": os.path.splitext(toml_path)[1],
+                            "keys_count": len(params),
+                        },
+                        "runId": "distort",
+                        "hypothesisId": "A",
+                    }
+                )
+                + "\n"
+            )
     except Exception:
         pass
     # #endregion
@@ -349,7 +374,25 @@ def run_datdistort():
         # #region agent log
         try:
             with open(_log_path, "a") as _f:
-                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "datdistort_mode", "timestamp": int(time.time() * 1000), "location": "vaila_datdistort.run_datdistort", "message": "Params source", "data": {"script": "vaila_datdistort", "mode": "cli", "params_path": parameters_path}, "runId": "distort", "hypothesisId": "B"}) + "\n")
+                _f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8",
+                            "id": "datdistort_mode",
+                            "timestamp": int(time.time() * 1000),
+                            "location": "vaila_datdistort.run_datdistort",
+                            "message": "Params source",
+                            "data": {
+                                "script": "vaila_datdistort",
+                                "mode": "cli",
+                                "params_path": parameters_path,
+                            },
+                            "runId": "distort",
+                            "hypothesisId": "B",
+                        }
+                    )
+                    + "\n"
+                )
         except Exception:
             pass
         # #endregion
@@ -366,7 +409,25 @@ def run_datdistort():
         # #region agent log
         try:
             with open(_log_path, "a") as _f:
-                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "datdistort_mode", "timestamp": int(time.time() * 1000), "location": "vaila_datdistort.run_datdistort", "message": "Params source", "data": {"script": "vaila_datdistort", "mode": "gui", "params_path": parameters_path}, "runId": "distort", "hypothesisId": "B"}) + "\n")
+                _f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8",
+                            "id": "datdistort_mode",
+                            "timestamp": int(time.time() * 1000),
+                            "location": "vaila_datdistort.run_datdistort",
+                            "message": "Params source",
+                            "data": {
+                                "script": "vaila_datdistort",
+                                "mode": "gui",
+                                "params_path": parameters_path,
+                            },
+                            "runId": "distort",
+                            "hypothesisId": "B",
+                        }
+                    )
+                    + "\n"
+                )
         except Exception:
             pass
         # #endregion
@@ -376,7 +437,11 @@ def run_datdistort():
         input_path = os.path.abspath(args.input)
         if os.path.isfile(input_path):
             input_dir = os.path.dirname(input_path)
-            file_list = [os.path.basename(input_path)] if input_path.lower().endswith((".csv", ".dat")) else []
+            file_list = (
+                [os.path.basename(input_path)]
+                if input_path.lower().endswith((".csv", ".dat"))
+                else []
+            )
         elif os.path.isdir(input_path):
             input_dir = input_path
             file_list = [f for f in os.listdir(input_dir) if f.lower().endswith((".csv", ".dat"))]

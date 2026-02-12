@@ -383,7 +383,6 @@ For more info: https://github.com/vietanhdev/anylabeling
         train_images = os.path.join(dataset_path, "train", "images")
         val_images = os.path.join(dataset_path, "val", "images")
         test_images = os.path.join(dataset_path, "test", "images")
-
         if not os.path.exists(train_images) or not os.path.exists(val_images):
             messagebox.showerror(
                 "Error",

@@ -65,12 +65,17 @@ import subprocess
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
+from typing import Any, cast
 
 import cv2
 import numpy as np
 import pandas as pd
-import pkg_resources
+
+try:
+    import pkg_resources  # type: ignore[import-not-found]
+except ImportError:
+    pkg_resources = None  # setuptools not installed; use importlib.resources only
 import torch
 import ultralytics
 import yaml
@@ -970,7 +975,7 @@ def select_bbox_roi(video_path):
         return None
 
 
-class TrackerConfigDialog(tk.simpledialog.Dialog):
+class TrackerConfigDialog(simpledialog.Dialog):
     def __init__(self, parent, title=None):
         self.tooltip = None
         self.hardware_info = get_hardware_info()
@@ -1356,7 +1361,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         self.result = self.result
 
 
-class ModelSelectorDialog(tk.simpledialog.Dialog):
+class ModelSelectorDialog(simpledialog.Dialog):
     def body(self, master):
         # Create main frame
         main_frame = tk.Frame(master)
@@ -1507,7 +1512,7 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
             self.result = self.custom_path_var.get().strip()
 
 
-class TrackerSelectorDialog(tk.simpledialog.Dialog):
+class TrackerSelectorDialog(simpledialog.Dialog):
     def body(self, master):
         trackers = [
             ("bytetrack", "ByteTrack - YOLO's default tracker"),
@@ -1532,7 +1537,7 @@ class TrackerSelectorDialog(tk.simpledialog.Dialog):
         self.result = selection.split(" - ")[0]
 
 
-class ReidModelSelectorDialog(tk.simpledialog.Dialog):
+class ReidModelSelectorDialog(simpledialog.Dialog):
     def body(self, master):
         reid_models = list(REID_MODELS.items())
 
@@ -1563,7 +1568,7 @@ class ReidModelSelectorDialog(tk.simpledialog.Dialog):
         self.result = selection.split(" - ")[0]
 
 
-class ClassSelectorDialog(tk.simpledialog.Dialog):
+class ClassSelectorDialog(simpledialog.Dialog):
     def body(self, master):
         # Default COCO classes used by YOLO
         self.coco_classes = {
@@ -1874,7 +1879,7 @@ def create_combined_detection_csv(output_dir):
     max_frame = 0
     for csv_file in detection_csv_files:
         try:
-            df = pd.read_csv(csv_file, usecols=["Frame"])  # faster
+            df = pd.read_csv(csv_file, usecols=("Frame",))  # type: ignore[call-overload]  # faster
             if not df.empty and df["Frame"].notna().any():
                 max_frame = max(max_frame, int(df["Frame"].max()))
         except Exception:
@@ -2302,7 +2307,7 @@ def select_id_and_run_pose():
     """
     # Prefer existing Tk root to avoid multiple roots (pyimage errors); create only if needed
     created_root = False
-    root = tk._default_root
+    root = getattr(tk, "_default_root", None)
     if root is None or not isinstance(root, tk.Tk):
         root = tk.Tk()
         root.withdraw()
@@ -2439,7 +2444,7 @@ def select_id_and_run_pose():
     x = canvas_width // 2
     y = canvas_height // 2
     canvas.create_image(x, y, image=img, anchor="center")
-    canvas.image = img  # Keep a reference
+    canvas.image = img  # Keep a reference (dynamic attr for gc)
 
     cap.release()
 
@@ -2987,7 +2992,7 @@ def _process_pose_from_csv(
         "right_ankle",
     ]
 
-    pose_headers = ["Frame", "Tracker_ID", "Label"]
+    pose_headers: list[str] = ["Frame", "Tracker_ID", "Label"]
     for kp_name in keypoint_names:
         pose_headers.extend([f"{kp_name}_x", f"{kp_name}_y", f"{kp_name}_conf"])
 
@@ -3037,9 +3042,9 @@ def _process_pose_from_csv(
                     kp_data = results[0].keypoints.data
                     if kp_data is not None and len(kp_data) > 0:
                         if hasattr(kp_data, "cpu"):
-                            kp_data = kp_data.cpu().numpy()
+                            kp_data = cast(Any, kp_data).cpu().numpy()
                         elif hasattr(kp_data, "numpy"):
-                            kp_data = kp_data.numpy()
+                            kp_data = cast(Any, kp_data).numpy()
 
                         keypoints = kp_data[0]
 
@@ -3095,8 +3100,8 @@ def _process_pose_from_csv(
     cap.release()
     writer.release()
 
-    # Save pose CSV
-    pose_df = pd.DataFrame(pose_data, columns=pose_headers)
+    # Save pose CSV (columns: list[str] is valid at runtime; cast for strict stubs)
+    pose_df = pd.DataFrame(pose_data, columns=cast(Any, pose_headers))
     pose_df.to_csv(pose_csv, index=False)
     print(f"\nPose data saved: {os.path.basename(pose_csv)}")
     print(f"Pose video saved: {os.path.basename(pose_video)}")
@@ -3246,7 +3251,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
                 "right_ankle",
             ]
 
-            pose_headers = ["Frame", "Tracker_ID", "Label"]
+            pose_headers = ["Frame", "Tracker_ID", "Label"]  # type: list[str]
             for kp_name in keypoint_names:
                 pose_headers.extend([f"{kp_name}_x", f"{kp_name}_y", f"{kp_name}_conf"])
 
@@ -3300,9 +3305,9 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
                             if kp_data is not None and len(kp_data) > 0:
                                 # Convert tensor to numpy if needed
                                 if hasattr(kp_data, "cpu"):
-                                    kp_data = kp_data.cpu().numpy()
+                                    kp_data = cast(Any, kp_data).cpu().numpy()
                                 elif hasattr(kp_data, "numpy"):
-                                    kp_data = kp_data.numpy()
+                                    kp_data = cast(Any, kp_data).numpy()
 
                                 keypoints = kp_data[0]  # First person detected
 
@@ -3362,8 +3367,8 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
                     print(f"  Frame {frame_idx}/{total_frames}", end="\r")
                 writer.write(frame)
 
-            # Save pose CSV
-            pose_df = pd.DataFrame(pose_data, columns=pose_headers)
+            # Save pose CSV (columns: list[str] valid at runtime; cast for strict stubs)
+            pose_df = pd.DataFrame(pose_data, columns=cast(Any, pose_headers))
             pose_df.to_csv(pose_csv, index=False)
             print(f"\n  Pose data saved: {os.path.basename(pose_csv)}")
             print(f"  Pose video saved: {os.path.basename(pose_video)}")
@@ -3549,7 +3554,7 @@ def run_yolov26track():
             # Load ROI from saved TOML file if available
             roi_poly = None
             roi_file_path = config.get("roi_file")
-            if roi_file_path and os.path.exists(roi_file_path):
+            if isinstance(roi_file_path, (str, Path)) and os.path.exists(roi_file_path):
                 print(f"Loading ROI from file: {os.path.basename(roi_file_path)}")
                 try:
                     roi_poly = load_roi_from_toml(roi_file_path)
@@ -3589,10 +3594,11 @@ def run_yolov26track():
                         ultralytics_path = str(files("ultralytics") / "cfg" / "trackers")
                     except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
                         # Fallback: try pkg_resources (deprecated but still works)
-                        with contextlib.suppress(Exception):
-                            ultralytics_path = pkg_resources.resource_filename(
-                                "ultralytics", "cfg/trackers"
-                            )
+                        if pkg_resources is not None:
+                            with contextlib.suppress(Exception):
+                                ultralytics_path = pkg_resources.resource_filename(
+                                    "ultralytics", "cfg/trackers"
+                                )
                 except Exception:
                     pass
                 # If we couldn't find the path, skip to Option 2 (create from scratch)
@@ -3716,7 +3722,7 @@ def run_yolov26track():
                     if mask_img is not None:
                         cx = (x_min + x_max) // 2
                         cy = (y_min + y_max) // 2
-                        inside = cv2.pointPolygonTest(roi_poly, (cx, cy), False)
+                        inside = cv2.pointPolygonTest(cast(Any, roi_poly), [float(cx), float(cy)], False)
                         if inside < 0:
                             continue
 

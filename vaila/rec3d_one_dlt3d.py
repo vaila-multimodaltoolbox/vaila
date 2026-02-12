@@ -192,6 +192,7 @@ def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui
     Returns:
         (new_dir, file_base) on success, None on failure.
     """
+
     def _err(msg):
         if gui:
             messagebox.showerror("Error", msg)
@@ -350,7 +351,9 @@ def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui
             conversion_factor=mm_conversion,
         )
         if gui:
-            messagebox.showinfo("Success", f"C3D file (millimeters) saved at:\n{c3d_output_path_mm}")
+            messagebox.showinfo(
+                "Success", f"C3D file (millimeters) saved at:\n{c3d_output_path_mm}"
+            )
         print("C3D file (millimeters) created successfully")
     except Exception as e:
         if gui:

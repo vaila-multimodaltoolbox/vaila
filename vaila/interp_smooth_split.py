@@ -2183,11 +2183,13 @@ Parameters have been confirmed and will be used for processing.
             width=max(20, min(35, max(len(c) for c in numeric_cols))),
         )
         column_combo.pack(side=tk.LEFT, padx=5)
+
         # Keep StringVar in sync when user selects (readonly Combobox may not update it on all platforms)
         def _on_column_selected(_event=None):
             val = column_combo.get()
             if val and val in numeric_cols:
                 selected_column.set(val)
+
         column_combo.bind("<<ComboboxSelected>>", _on_column_selected)
 
         tk.Label(selection_frame, text="fs (Hz):").pack(side=tk.LEFT, padx=(15, 2))
@@ -2199,7 +2201,9 @@ Parameters have been confirmed and will be used for processing.
         tk.Button(
             selection_frame,
             text="Analyze Column",
-            command=lambda: self.perform_analysis(analysis_window, column_combo.get() or numeric_cols[0]),
+            command=lambda: self.perform_analysis(
+                analysis_window, column_combo.get() or numeric_cols[0]
+            ),
             bg="#4CAF50",
             fg="white",
         ).pack(side=tk.LEFT, padx=5)
@@ -2255,11 +2259,19 @@ Parameters have been confirmed and will be used for processing.
         ax.plot(fc_list, rms_list, "b.-", linewidth=2, markersize=6)
         if suggested_fc is not None:
             idx = np.argmin(np.abs(fc_list - suggested_fc))
-            ax.axvline(suggested_fc, color="red", linestyle="--", label=f"Suggested fc = {suggested_fc:.1f} Hz")
+            ax.axvline(
+                suggested_fc,
+                color="red",
+                linestyle="--",
+                label=f"Suggested fc = {suggested_fc:.1f} Hz",
+            )
             ax.plot(fc_list[idx], rms_list[idx], "ro", markersize=10)
         ax.set_xlabel("Cutoff frequency (Hz)", fontweight="bold")
         ax.set_ylabel("RMS residual (raw - filtered)", fontweight="bold")
-        ax.set_title(f"Winter residual analysis — {column_name} (fs={fs} Hz, Butterworth 4th order)", fontweight="bold")
+        ax.set_title(
+            f"Winter residual analysis — {column_name} (fs={fs} Hz, Butterworth 4th order)",
+            fontweight="bold",
+        )
         ax.legend()
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
@@ -2267,6 +2279,7 @@ Parameters have been confirmed and will be used for processing.
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+
         toolbar = NavigationToolbar2Tk(canvas, self.plot_frame)
         toolbar.update()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -4178,17 +4191,19 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
                     print(f"Warning: No information returned for file {filename}")
             except Exception as e:
                 print(f"Error processing file {filename}: {str(e)}")
-                processed_files.append({
-                    "original_path": os.path.join(source_dir, filename),
-                    "original_filename": filename,
-                    "warnings": [f"Error: {str(e)}"],
-                    "error": True,
-                    "original_size": 0,
-                    "original_columns": 0,
-                    "total_missing": 0,
-                    "columns_with_missing": {},
-                    "output_path": None,
-                })
+                processed_files.append(
+                    {
+                        "original_path": os.path.join(source_dir, filename),
+                        "original_filename": filename,
+                        "warnings": [f"Error: {str(e)}"],
+                        "error": True,
+                        "original_size": 0,
+                        "original_columns": 0,
+                        "total_missing": 0,
+                        "columns_with_missing": {},
+                        "output_path": None,
+                    }
+                )
     processed_files = [pf for pf in processed_files if pf is not None]
 
     report_path = None
@@ -4197,8 +4212,7 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
         if use_messagebox:
             messagebox.showinfo(
                 "Complete",
-                f"Processing complete. Results saved in {dest_dir}\n"
-                f"Report: {report_path}",
+                f"Processing complete. Results saved in {dest_dir}\nReport: {report_path}",
             )
         else:
             print(f"Processing complete. Results saved in {dest_dir}")
@@ -4214,6 +4228,7 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
 def _cli_run():
     """CLI entry: argparse for --input, --output, --config (TOML)."""
     import argparse
+
     parser = argparse.ArgumentParser(
         description="Interpolate/smooth CSV data (or split). Config from TOML or smooth_config.toml in input/cwd.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -4226,8 +4241,18 @@ Examples:
         """,
     )
     parser.add_argument("-i", "--input", metavar="DIR", help="Input directory containing CSV files")
-    parser.add_argument("-o", "--output", metavar="DIR", help="Output directory (default: timestamped subdir inside input)")
-    parser.add_argument("-c", "--config", metavar="TOML", help="Path to smooth_config.toml (default: smooth_config.toml in input dir or cwd)")
+    parser.add_argument(
+        "-o",
+        "--output",
+        metavar="DIR",
+        help="Output directory (default: timestamped subdir inside input)",
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
+        metavar="TOML",
+        help="Path to smooth_config.toml (default: smooth_config.toml in input dir or cwd)",
+    )
     parser.add_argument("--gui", action="store_true", help="Launch GUI instead of CLI")
     args = parser.parse_args()
 
@@ -4259,7 +4284,9 @@ Examples:
                 config = load_smooth_config_for_analysis(path_cwd)
                 print(f"Using config from {path_cwd}")
     if config is None:
-        print("Error: No configuration found. Create smooth_config.toml (e.g. via GUI Apply) or pass --config PATH.")
+        print(
+            "Error: No configuration found. Create smooth_config.toml (e.g. via GUI Apply) or pass --config PATH."
+        )
         sys.exit(1)
 
     dest_dir = os.path.abspath(args.output) if args.output else None

@@ -126,6 +126,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff",
+    "ty>=0.0.16",
 ]
 
 [project.scripts]
@@ -155,13 +156,14 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-# Enable specific rule sets
+# Enable specific rule sets (NPY = NumPy deprecations/legacy, ideal para código científico)
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
     "F",   # pyflakes
     "I",   # isort
     "N",   # pep8-naming
+    "NPY", # NumPy: deprecated functions, legacy random, numpy2 deprecations
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
     "C4",  # flake8-comprehensions
@@ -183,3 +185,20 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.0",
+    "ty>=0.0.16",
+]
+
+# https://docs.astral.sh/ty/ — type checker (Astral). Para "strict": use [tool.ty.rules] all = "error" quando o projeto estiver limpo.
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+exclude = [".git", ".venv", "__pycache__", "*.pyc", "build", "dist", ".uv", "uv.lock"]
+
+# Regras por severidade (error = falha do ty check). Quando reduzir diagnósticos, pode ativar: all = "error"
+# [tool.ty.rules]
+# all = "warn"

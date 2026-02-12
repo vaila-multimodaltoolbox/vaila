@@ -147,9 +147,11 @@ frame,p1_x,p1_y,p2_x,p2_y
   - Click and drag to draw bounding boxes
   - Press Z or Right Click to remove last box in current frame
   - Press N to rename the current object label
-  - Press F5 to save the labeling project (JSON)
-  - Press F6 to load a labeling project (JSON)
-  - Save (ESC or S) exports structured dataset (train/val/test)
+  - F5: Save project & export dataset (creates `dataset_YYYYMMDD_HHMMSS/` or appends if dataset loaded via F7)
+  - F6: Load labeling project (JSON)
+  - F7: Load dataset folder (next F5 appends; multi-video)
+  - F8: Open another video without closing the app (keeps dataset)
+  - Save button or F5 exports structured dataset (train/val/test)
 - **Export:** Generates folder structure with images and JSON annotations
 
 ## Keyboard Commands
@@ -184,33 +186,33 @@ frame,p1_x,p1_y,p2_x,p2_y
 | **SHIFT+TAB**   | Previous marker in current frame |
 | **DELETE**      | Delete selected marker           |
 | **A**           | Add new empty marker to file     |
-| **R**           | Remove last marker from file     |
+| **R** or **D**  | Remove last marker from file     |
 
 ### Mode Controls
 
 | Key             | Action                                            |
 | --------------- | ------------------------------------------------- |
 | **C**           | Toggle "1 Line" mode                              |
-| **S**           | Toggle Sequential mode (Normal mode only)         |
+| **O** or **S**  | Toggle Sequential mode (Normal mode only)        |
 | **P**           | Toggle Persistence mode                           |
 | **L**           | Toggle Labeling mode (Bounding Boxes)             |
 | **Z / R-Click** | Remove last bounding box (Labeling mode)          |
 | **N**           | Rename object label (Labeling Mode Only)          |
-| **F5**          | Save Labeling Project (JSON) (Labeling Mode Only) |
+| **F5**          | Save Labeling Project & export dataset (Labeling Mode Only) |
 | **F6**          | Load Labeling Project (JSON) (Labeling Mode Only) |
+| **F7**          | Load dataset folder – next Save appends (Labeling Mode Only) |
+| **F8**          | Open another video (keeps dataset; no need to close app) |
 | **1**           | Decrease persistence frames                       |
-| **2**           | Increase persistence frames                       |
+| **2**           | Increase persistence frames                      |
 | **3**           | Toggle full persistence                           |
 
-### File Operations
+### File Operations (buttons and keys)
 
-| Key   | Action                            |
-| ----- | --------------------------------- |
-| **S** | Save current markers              |
-| **B** | Make backup of current data       |
-| **L** | Reload coordinates from file      |
-| **H** | Show help dialog                  |
-| **D** | Open full documentation (in help) |
+| Key   | Action                                            |
+| ----- | ------------------------------------------------- |
+| **H** | Show help dialog                                  |
+| **R** or **D** | Remove last marker from file                 |
+| **Save/Load**  | Use bottom panel buttons (no dedicated key)  |
 
 ### Other
 
@@ -285,10 +287,10 @@ Persistence mode shows markers from previous frames, creating a visual "trail":
 #### Labeling Save (Bounding Box Mode)
 
 - **Format:** Structured dataset with images and JSON annotations
-- **Directory:** `{video_name}_dataset/`
+- **Directory:** New dataset: `dataset_YYYYMMDD_HHMMSS/` (same folder as video). To reuse one dataset for multiple videos: F7 → select existing `data.yaml` → next F5 appends.
 - **Structure:** train/val/test with images/ and labels/
 - **Use:** For creating Machine Learning datasets (object detection)
-- **Activation:** Save when Labeling mode is active
+- **Activation:** Save when Labeling mode is active (F5). Use F8 to open another video without closing the app.
 
 ### Loading Coordinates
 
@@ -381,15 +383,15 @@ Built-in backup system for data safety:
 
 - Added Labeling Mode (Bounding Boxes) for creating Machine Learning datasets
 - Implemented structured dataset export (train/val/test)
-- Added support for JSON annotations with custom format
-- Created automatic export function with 70/20/10 split
+- Dataset naming: new exports use `dataset_YYYYMMDD_HHMMSS/`; load existing via F7 to append (multi-video)
+- Added F8: Open another video without closing the app (keeps dataset; auto-loads project when present)
 - Added "Labeling" button to interface
 - Enhanced help dialog with detailed labeling mode instructions
 - **Improvements:**
-  - Added Save/Load Project (F5/F6) for labeling sessions (JSON format)
+  - F5/F6: Save/Load Labeling Project (JSON). F7: Load dataset folder (next Save appends). F8: Open another video.
   - Added ability to Rename object labels (N key)
   - Added Scrolling to Help Dialog
-  - Improved Linux compatibility (removed Tkinter dependency)
+  - Improved Linux compatibility (pygame file browser for Dataset/Open video; no Tkinter for dialogs on Linux)
 
 ### Version 0.0.8 (27 July 2025)
 

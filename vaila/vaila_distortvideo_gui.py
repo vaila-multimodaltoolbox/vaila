@@ -52,7 +52,11 @@ def load_distortion_parameters(toml_path):
     """
     with open(toml_path, "rb") as f:
         data = tomllib.load(f)
-    return {k: float(v) for k, v in data.items() if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")}
+    return {
+        k: float(v)
+        for k, v in data.items()
+        if k in ("fx", "fy", "cx", "cy", "k1", "k2", "k3", "p1", "p2")
+    }
 
 
 def process_video(input_path, output_path, parameters):
@@ -751,8 +755,30 @@ def run_distortvideo_gui():
         rprint(f"\n[blue]Parameters saved to: {params_toml}[/blue]")
         # #region agent log
         try:
-            with open("/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a") as _f:
-                _f.write(json.dumps({"sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8", "id": "distortvideo_gui_save_toml", "timestamp": int(time.time() * 1000), "location": "vaila_distortvideo_gui.run_distortvideo_gui", "message": "Params saved as TOML", "data": {"script": "vaila_distortvideo_gui", "mode": "gui", "params_path": params_toml, "ext": ".toml"}, "runId": "distort", "hypothesisId": "C"}) + "\n")
+            with open(
+                "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log",
+                "a",
+            ) as _f:
+                _f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a5f5a000-975d-4bfc-9676-f9748629bda8",
+                            "id": "distortvideo_gui_save_toml",
+                            "timestamp": int(time.time() * 1000),
+                            "location": "vaila_distortvideo_gui.run_distortvideo_gui",
+                            "message": "Params saved as TOML",
+                            "data": {
+                                "script": "vaila_distortvideo_gui",
+                                "mode": "gui",
+                                "params_path": params_toml,
+                                "ext": ".toml",
+                            },
+                            "runId": "distort",
+                            "hypothesisId": "C",
+                        }
+                    )
+                    + "\n"
+                )
         except Exception:
             pass
         # #endregion
