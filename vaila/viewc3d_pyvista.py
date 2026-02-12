@@ -12,7 +12,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.2.0
 Created: 06 February 2025
-Last Updated: 10 February 2026
+Last Updated: 11 February 2026
 
 To run:
   uv run viewc3d_pyvista.py [path/to/file.c3d]
@@ -141,6 +141,7 @@ class MokkaLikeViewer:
         self._last_trail_frame = -1  # Bug fix #2: cache guard
         self.play_speed = 1.0
         self._speed_accumulator = 0.0
+        self._timer_step = 0  # for Windows TimerEvent observer
         self._feedback_actor = None
         self._point_size = 10
         self._plotter_title = "Vaila - PyVista Viewer"
@@ -344,6 +345,11 @@ class MokkaLikeViewer:
     def toggle_play(self, state):
         self.playing = state
 
+    def _win_timer_observer(self, _obj, _evt):
+        """TimerEvent observer for Windows when add_timer_event does not fire reliably."""
+        self._timer_step += 1
+        self.animation_callback(self._timer_step)
+
     def animation_callback(self, step):
         if not self.playing:
             return
@@ -466,6 +472,26 @@ class MokkaLikeViewer:
         with contextlib.suppress(Exception):
             self._play_checkbox.GetRepresentation().SetState(self.playing)
         self._show_feedback("Space: Play" if self.playing else "Space: Pause")
+
+    def _win_key_observer(self, obj, _evt):
+        """Low-level key observer for Windows: VTK may not forward Space/arrows to add_key_event.
+        On Windows we handle Space only here (add_key_event does not register Space) to avoid double-fire."""
+        try:
+            key_sym = obj.GetKeySym()
+            key_code = obj.GetKeyCode()
+        except Exception:
+            return
+        if key_sym in ("space", " ") or key_code == 32:
+            self._key_toggle_play()
+            return
+        if key_sym == "Left":
+            self._key_prev_frame()
+        elif key_sym == "Right":
+            self._key_next_frame()
+        elif key_sym == "Up":
+            self._key_back10()
+        elif key_sym == "Down":
+            self._key_fwd10()
 
     def _key_start(self, _key=None):
         self._goto_frame(0)
@@ -1016,9 +1042,10 @@ class MokkaLikeViewer:
         # Help
         ke("h", self.show_help)
         ke("H", self.show_help)
-        # Play
-        ke(" ", self._key_toggle_play)
-        ke("space", self._key_toggle_play)
+        # Play (on Windows only the observer handles Space to avoid double-fire when both fire)
+        if sys.platform != "win32":
+            ke(" ", self._key_toggle_play)
+            ke("space", self._key_toggle_play)
         # Navigation
         ke("Left", self._key_prev_frame)
         ke("Right", self._key_next_frame)
@@ -1081,18 +1108,33 @@ class MokkaLikeViewer:
         ke("m", self._key_marker_visibility)
         ke("M", self._key_marker_visibility)
 
+        # Windows: use low-level key observer and timer (add_timer_event often does not fire)
+        if sys.platform == "win32":
+            iren = getattr(self.plotter, "iren", None)
+            if iren is None and hasattr(self.plotter, "render_window") and self.plotter.render_window is not None:
+                try:
+                    iren = self.plotter.render_window.GetInteractor()
+                except Exception:
+                    pass
+            if iren is not None:
+                iren.add_observer("KeyPressEvent", self._win_key_observer)
+                duration_ms = max(1, int(1000 / self.frame_rate))
+                iren.create_timer(duration_ms, repeating=True)
+                iren.add_observer("TimerEvent", self._win_timer_observer)
+
         print("\n--- Controls (press H for full help) ---")
         print("Space Play | ←→ ±1 | ↑↓ ±10 | PgUp/Dn ±100 | S Start | End End")
         print("1-4 Views | R Reset | B Bg | G Grid | X Labels | C Colors | T Trail")
         print("{ } Trail len | [ ] Speed | +− Size | M Markers | J Skeleton | K Shot | Z PNGs | V MP4")
         print("I Info | A Stats | D Distance | Escape Clear | H Help\n")
 
-        # Timer
-        self.plotter.add_timer_event(
-            max_steps=100_000,
-            duration=int(1000 / self.frame_rate),
-            callback=self.animation_callback,
-        )
+        # Timer (Linux/macOS; on Windows we use TimerEvent observer above)
+        if sys.platform != "win32":
+            self.plotter.add_timer_event(
+                max_steps=100_000,
+                duration=max(1, int(1000 / self.frame_rate)),
+                callback=self.animation_callback,
+            )
 
         self.plotter.show()
 
