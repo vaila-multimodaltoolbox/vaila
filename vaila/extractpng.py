@@ -352,7 +352,7 @@ class VideoProcessor:
 
     def is_nvidia_gpu_available(self):
         try:
-            result = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(["nvidia-smi"], capture_output=True)
             return result.returncode == 0
         except FileNotFoundError:
             return False

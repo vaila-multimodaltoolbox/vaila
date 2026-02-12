@@ -103,6 +103,7 @@ except ImportError:
     if current_dir not in sys.path:
         sys.path.append(current_dir)
     from HardwareManager import HardwareManager
+import contextlib
 import webbrowser
 
 import toml
@@ -415,10 +416,8 @@ def select_free_polygon_roi(video_path):
 
     except Exception as e:
         print(f"Error in select_free_polygon_roi: {e}")
-        try:
+        with contextlib.suppress(BaseException):
             cv2.destroyAllWindows()
-        except:
-            pass
         return None
 
 
@@ -869,10 +868,8 @@ def get_pose_config(existing_root=None, input_dir=None):
     else:
         root = tk.Tk()
         root.withdraw()
-        try:
+        with contextlib.suppress(Exception):
             root.attributes("-topmost", True)
-        except Exception:
-            pass
     # Prepare root for dialog (for all platforms, but especially for Windows)
     try:
         # Ensure root is ready for dialogs on all platforms
@@ -938,10 +935,8 @@ def get_pose_config(existing_root=None, input_dir=None):
         # Clean up root if we created it (just hide, don't quit)
         # On Windows, keep root visible for subsequent dialogs if needed
         if existing_root is None and platform.system() != "Windows":
-            try:
+            with contextlib.suppress(Exception):
                 root.withdraw()
-            except Exception:
-                pass
 
 
 def download_yolo_model(model_name):
@@ -1136,7 +1131,7 @@ def download_or_load_yolo_model(model_name=None):
     # Use the models directory in the vaila project
     script_dir = Path(__file__).parent.resolve()
     models_dir = script_dir / "models"
-    model_path = models_dir / model_name
+    models_dir / model_name
 
     try:
         print(f"Loading YOLO model {model_name} for maximum accuracy...")
@@ -1824,7 +1819,7 @@ def apply_median_filter(landmarks_history, current_landmarks, window_size=3):
         try:
             # Transpose to get lists of x, y, z, vis
             # valid_coords shape: [n_frames, 4] -> transpose -> [4, n_frames]
-            transposed = list(zip(*valid_coords))
+            transposed = list(zip(*valid_coords, strict=False))
 
             x_median = np.median(transposed[0])
             y_median = np.median(transposed[1])
@@ -1889,16 +1884,13 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     VisionRunningMode = mp.tasks.vision.RunningMode
 
     # Check for GPU delegate override
-    delegate = BaseOptions.Delegate.CPU
     if device != "cpu" and torch.cuda.is_available():
         # Try to use GPU delegate if available
         # Note: MediaPipe GPU support on Linux Python can be limited
         try:
-            delegate = BaseOptions.Delegate.GPU
             print("Attempting to use MediaPipe GPU delegate...")
         except Exception:
             print("MediaPipe GPU delegate not available, using CPU.")
-            delegate = BaseOptions.Delegate.CPU
 
     # Create options for PoseLandmarker
     # Note: Using CPU delegate for MediaPipe to ensure stability
@@ -2178,25 +2170,6 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
     # Save CSVs
     # YOLO 17 keypoint names
-    yolo_kp_names = [
-        "nose",
-        "left_eye",
-        "right_eye",
-        "left_ear",
-        "right_ear",
-        "left_shoulder",
-        "right_shoulder",
-        "left_elbow",
-        "right_elbow",
-        "left_wrist",
-        "right_wrist",
-        "left_hip",
-        "right_hip",
-        "left_knee",
-        "right_knee",
-        "left_ankle",
-        "right_ankle",
-    ]
     # Prepare headers in vailá format (p1_x, p1_y, p1_z, p1_conf...)
     # MediaPipe has 33 landmarks
     headers = ["frame"]
@@ -2688,10 +2661,8 @@ def process_videos_in_directory(existing_root=None):
         import traceback
 
         traceback.print_exc()
-        try:
+        with contextlib.suppress(Exception):
             messagebox.showerror("Error", f"Failed to open directory dialog: {e}")
-        except Exception:
-            pass
         return
     finally:
         # Only hide root on macOS after dialog closes
@@ -2708,10 +2679,8 @@ def process_videos_in_directory(existing_root=None):
                 pass
     if not input_dir:
         print("No input directory selected.")
-        try:
+        with contextlib.suppress(Exception):
             messagebox.showerror("Error", "No input directory selected.")
-        except Exception:
-            pass
         return
     print(f"Input directory selected: {input_dir}")
 
@@ -2733,10 +2702,8 @@ def process_videos_in_directory(existing_root=None):
         import traceback
 
         traceback.print_exc()
-        try:
+        with contextlib.suppress(Exception):
             messagebox.showerror("Error", f"Failed to open output directory dialog: {e}")
-        except Exception:
-            pass
         return
     finally:
         # Only hide root on macOS after dialog closes
@@ -2753,10 +2720,8 @@ def process_videos_in_directory(existing_root=None):
                 pass
     if not output_base:
         print("No output directory selected.")
-        try:
+        with contextlib.suppress(Exception):
             messagebox.showerror("Error", "No output directory selected.")
-        except Exception:
-            pass
         return
     print(f"Output directory selected: {output_base}")
 
@@ -2777,10 +2742,8 @@ def process_videos_in_directory(existing_root=None):
     # Hide root again after configuration (only if we created it)
     if existing_root is None and platform.system() != "Windows":
         # On Windows, keep root visible for subsequent dialogs if needed
-        try:
+        with contextlib.suppress(Exception):
             root.withdraw()
-        except Exception:
-            pass
 
     if not pose_config:
         print("Pose configuration cancelled or failed.")

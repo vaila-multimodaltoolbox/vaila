@@ -71,7 +71,7 @@ def get_precise_video_metadata(video_path):
             str(video_path),
         ]
         result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+            cmd, capture_output=True, text=True, check=True
         )
         data = json.loads(result.stdout)
 

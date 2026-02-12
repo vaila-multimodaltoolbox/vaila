@@ -439,7 +439,7 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
 
     # Add point numbers to the field for reference (only if enabled)
     if show_reference_points:
-        for name, (x, y, num) in points.items():
+        for _name, (x, y, num) in points.items():
             # Adjust text offset based on field size for better visibility
             text_offset_x = field_width * 0.005
             text_offset_y = field_height * 0.005
@@ -453,7 +453,7 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
                 color="black",
                 fontsize=8,
                 weight="bold",
-                bbox=dict(facecolor="white", alpha=0.7, boxstyle="round", pad=0.2),  # added pad
+                bbox={"facecolor": "white", "alpha": 0.7, "boxstyle": "round", "pad": 0.2},  # added pad
                 zorder=10,
             )
 
@@ -518,7 +518,7 @@ def load_and_plot_markers(
         if col != "frame" and ("_x" in col or "_y" in col):
             marker_names.add(col.split("_")[0])
 
-    marker_names = sorted(list(marker_names))
+    marker_names = sorted(marker_names)
     print(f"Markers found: {len(marker_names)}")
 
     # Store all available markers for the selection dialog
@@ -586,13 +586,13 @@ def load_and_plot_markers(
                         fontsize=7,
                         color="black",
                         weight="bold",
-                        bbox=dict(
-                            facecolor=colors[idx],
-                            alpha=0.7,
-                            edgecolor="black",
-                            boxstyle="round",
-                            pad=0.1,
-                        ),
+                        bbox={
+                            "facecolor": colors[idx],
+                            "alpha": 0.7,
+                            "edgecolor": "black",
+                            "boxstyle": "round",
+                            "pad": 0.1,
+                        },
                         zorder=52,
                     )
 
@@ -826,7 +826,7 @@ def load_and_plot_scout_events(
                 fontsize=6,
                 ha="center",
                 va="center",
-                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="black", alpha=0.8),
+                bbox={"boxstyle": "round,pad=0.2", "fc": "white", "ec": "black", "alpha": 0.8},
                 zorder=53,
             )
 
@@ -1228,13 +1228,13 @@ def run_soccerfield():
                 fontsize=7,
                 color="black",
                 weight="bold",
-                bbox=dict(
-                    facecolor=plt.cm.tab10(marker_num % 10),
-                    alpha=0.7,
-                    edgecolor="black",
-                    boxstyle="round",
-                    pad=0.1,
-                ),
+                bbox={
+                    "facecolor": plt.cm.tab10(marker_num % 10),
+                    "alpha": 0.7,
+                    "edgecolor": "black",
+                    "boxstyle": "round",
+                    "pad": 0.1,
+                },
                 zorder=101,
             )
 
@@ -1332,7 +1332,7 @@ def run_soccerfield():
             # Encontrar o número máximo de marcadores
             max_marker_num = 0
             for frame_data in frame_markers.values():
-                for marker_num in frame_data.keys():
+                for marker_num in frame_data:
                     max_marker_num = max(max_marker_num, marker_num)
 
             # Encontrar o número máximo de frames

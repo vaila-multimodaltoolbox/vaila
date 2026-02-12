@@ -53,7 +53,7 @@ def update_spheres(spheres_list, points_frame):
     """
     Atualiza a posição das esferas de acordo com os dados do novo frame.
     """
-    for s, pt in zip(spheres_list, points_frame):
+    for s, pt in zip(spheres_list, points_frame, strict=False):
         s.pos = vector(pt[0], pt[1], pt[2])
 
 

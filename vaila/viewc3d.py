@@ -4147,7 +4147,9 @@ O - Manual swap markers (visual editing)
         vars_by_idx = {}
         inner = tk.Frame(root, padx=10, pady=10)
         inner.pack(fill=tk.BOTH, expand=True)
-        tk.Label(inner, text="Check markers to display (uncheck to hide):", font=("", 10)).pack(anchor=tk.W)
+        tk.Label(inner, text="Check markers to display (uncheck to hide):", font=("", 10)).pack(
+            anchor=tk.W
+        )
         scroll_frame = tk.Frame(inner)
         scroll_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         scrollbar = tk.Scrollbar(scroll_frame)
@@ -4158,7 +4160,9 @@ O - Manual swap markers (visual editing)
         cb_frame = tk.Frame(canvas)
         canvas.create_window((0, 0), window=cb_frame, anchor=tk.NW)
         for idx, name in enumerate(selected_marker_names):
-            var = tk.BooleanVar(value=visible_marker_indices is None or idx in visible_marker_indices)
+            var = tk.BooleanVar(
+                value=visible_marker_indices is None or idx in visible_marker_indices
+            )
             vars_by_idx[idx] = var
             tk.Checkbutton(cb_frame, text=name, variable=var).pack(anchor=tk.W)
 
@@ -4188,7 +4192,9 @@ O - Manual swap markers (visual editing)
         btn_frame = tk.Frame(inner)
         btn_frame.pack(pady=10)
         tk.Button(btn_frame, text="All", command=lambda: all_none(True)).pack(side=tk.LEFT, padx=4)
-        tk.Button(btn_frame, text="None", command=lambda: all_none(False)).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_frame, text="None", command=lambda: all_none(False)).pack(
+            side=tk.LEFT, padx=4
+        )
         tk.Button(btn_frame, text="OK", command=apply_and_close_wrapper).pack(side=tk.LEFT, padx=4)
         tk.Button(btn_frame, text="Cancel", command=root.destroy).pack(side=tk.LEFT, padx=4)
         root.mainloop()
@@ -4227,7 +4233,9 @@ O - Manual swap markers (visual editing)
     vis.register_key_callback(ord("Y"), change_ground_color)  # Ground color
     vis.register_key_callback(ord("G"), toggle_field_lines)  # Field lines
     vis.register_key_callback(ord("M"), toggle_grid)  # Grid visibility
-    vis.register_key_callback(ord("O"), open_marker_visibility_dialog)  # Marker visibility (show/hide)
+    vis.register_key_callback(
+        ord("O"), open_marker_visibility_dialog
+    )  # Marker visibility (show/hide)
     vis.register_key_callback(ord("L"), set_view_limits)  # View limits
     vis.register_key_callback(ord("R"), reset_camera_view)  # Reset camera
 

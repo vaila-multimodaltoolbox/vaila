@@ -327,7 +327,7 @@ def open_save_file_dialog(title="Save File", file_types=None, default_name=""):
 
         elif sys.platform == "darwin":
             # macOS - osascript
-            extensions = ",".join([pat.replace("*.", "") for pat, _ in file_types])
+            ",".join([pat.replace("*.", "") for pat, _ in file_types])
             script = f"""
             set theFile to choose file name with prompt "{title}" default name "{default_name}"
             return POSIX path of theFile

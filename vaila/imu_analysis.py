@@ -117,7 +117,7 @@ def plot_and_save_graphs(
 ):
     colors = ["red", "green", "blue"]
     plt.figure(figsize=(10, 6))
-    for i, (label, color) in enumerate(zip(labels, colors)):
+    for i, (label, color) in enumerate(zip(labels, colors, strict=False)):
         plt.plot(time, data[:, i], label=label, color=color)
     plt.title(f"{sensor_name} {title}")
     plt.xlabel(xlabel)
@@ -278,7 +278,6 @@ def analyze_imu_data():
             )
             selected_headers = select_headers_gui(df_analogs.columns)
 
-    filter_method = "fir"
     gravity = 9.81
 
     for file_name in os.listdir(directory_path):

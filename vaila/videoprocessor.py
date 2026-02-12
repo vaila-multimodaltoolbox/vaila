@@ -52,12 +52,12 @@ from tkinter import filedialog, messagebox, simpledialog
 import tqdm
 from rich import print
 
-# Try to import toml for TOML file support
+# Try to import toml for TOML file support (toml → tomli → tomllib)
 try:
     import toml
 except ImportError:
     try:
-        import tomli as toml
+        import tomli as toml  # type: ignore[import-untyped]
     except ImportError:
         try:
             import tomllib as toml
@@ -70,8 +70,7 @@ def check_ffmpeg_installed():
     try:
         subprocess.run(
             ["ffmpeg", "-version"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=True,
         )
         return True
@@ -85,8 +84,7 @@ def detect_hardware_encoder():
         # First check available encoders
         result = subprocess.run(
             ["ffmpeg", "-encoders"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
 
@@ -107,8 +105,7 @@ def detect_hardware_encoder():
                 ]
                 test_result = subprocess.run(
                     test_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     text=True,
                     timeout=3,
                 )
@@ -149,8 +146,7 @@ def detect_hardware_encoder():
                 ]
                 test_result = subprocess.run(
                     test_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     text=True,
                     timeout=3,
                 )
@@ -336,13 +332,12 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
             )
 
             # Verificar se já processou este vídeo anteriormente
-            if os.path.exists(output_video):
-                if not messagebox.askyesno(
-                    "File exists",
-                    f"Output file already exists:\n{output_video}\n\nOverwrite?",
-                ):
-                    print(f"Skipping {video_path} (output exists)")
-                    continue
+            if os.path.exists(output_video) and not messagebox.askyesno(
+                "File exists",
+                f"Output file already exists:\n{output_video}\n\nOverwrite?",
+            ):
+                print(f"Skipping {video_path} (output exists)")
+                continue
 
             # Initialize variables for logging
             reverse_frames = 0
@@ -364,8 +359,7 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 duration = float(
                     subprocess.run(
                         duration_cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True,
                     ).stdout.strip()
                 )
@@ -373,7 +367,6 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 # Calculate reverse duration based on percentage
                 reverse_duration = duration * (reverse_percent / 100.0)
                 reverse_duration_str = f"{reverse_duration:.6f}"
-                total_duration_str = f"{duration:.6f}"
 
                 print(
                     f"Video duration: {duration:.2f}s | Reverse portion: {reverse_duration:.2f}s ({reverse_percent}%)"
@@ -383,7 +376,6 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 print(f"Warning: Could not get video duration: {e}")
                 # Fallback: use full video reverse (original behavior)
                 reverse_duration_str = None
-                total_duration_str = None
                 duration = 0
 
             # Prepare command based on reverse percentage
@@ -434,8 +426,7 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 resolution = (
                     subprocess.run(
                         resolution_cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True,
                     )
                     .stdout.strip()
@@ -461,8 +452,7 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 total_frames = int(
                     subprocess.run(
                         frames_cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True,
                     ).stdout.strip()
                 )
@@ -481,7 +471,7 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                     video_path,
                 ]
                 fps_str = subprocess.run(
-                    fps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    fps_cmd, capture_output=True, text=True
                 ).stdout.strip()
                 frame_rate = eval(fps_str)  # Convert "30000/1001" to float
 
@@ -493,7 +483,6 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 else:
                     merged_frames = reverse_frames + total_frames
                     merged_duration = reverse_duration + duration
-                reverse_start_frame = reverse_frames
 
                 print(
                     f"Video info: {width}x{height}, {frame_rate} fps, {duration:.2f}s, {total_frames} frames"
@@ -510,7 +499,6 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 total_frames = 0
                 merged_frames = 0
                 merged_duration = 0
-                reverse_start_frame = 0
                 reverse_frames = 0
                 reverse_duration = 0
 
@@ -780,8 +768,7 @@ def process_videos_frame_reverse_merge(
                 total_frames = int(
                     subprocess.run(
                         frames_cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True,
                     ).stdout.strip()
                 )
@@ -810,13 +797,12 @@ def process_videos_frame_reverse_merge(
             )
 
             # Verificar se já processou este vídeo anteriormente
-            if os.path.exists(output_video):
-                if not messagebox.askyesno(
-                    "File exists",
-                    f"Output file already exists:\n{output_video}\n\nOverwrite?",
-                ):
-                    print(f"Skipping {video_path} (output exists)")
-                    continue
+            if os.path.exists(output_video) and not messagebox.askyesno(
+                "File exists",
+                f"Output file already exists:\n{output_video}\n\nOverwrite?",
+            ):
+                print(f"Skipping {video_path} (output exists)")
+                continue
 
             # Get video metadata for logging
             try:
@@ -836,8 +822,7 @@ def process_videos_frame_reverse_merge(
                 resolution = (
                     subprocess.run(
                         resolution_cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True,
                     )
                     .stdout.strip()
@@ -860,7 +845,7 @@ def process_videos_frame_reverse_merge(
                     video_path,
                 ]
                 fps_str = subprocess.run(
-                    fps_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    fps_cmd, capture_output=True, text=True
                 ).stdout.strip()
                 frame_rate = eval(fps_str)  # Convert "30000/1001" to float
 
@@ -878,8 +863,7 @@ def process_videos_frame_reverse_merge(
                 duration = float(
                     subprocess.run(
                         duration_cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        capture_output=True,
                         text=True,
                     ).stdout.strip()
                 )
@@ -1073,8 +1057,7 @@ def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_
             ]
             frames_result = subprocess.run(
                 ffprobe_frames_command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
             )
             total_frames = int(frames_result.stdout.strip())
@@ -1105,8 +1088,7 @@ def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_
             try:
                 video_info_result = subprocess.run(
                     ffprobe_info_command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     text=True,
                 )
                 video_info = json.loads(video_info_result.stdout)
@@ -1141,7 +1123,7 @@ def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_
                 second_half_duration = 0
 
             # Detect hardware encoder but FORCE libx264 for split operation
-            encoder_info = detect_hardware_encoder()
+            detect_hardware_encoder()
 
             # Force libx264 for split operation to avoid compatibility issues
             print("Split mode: forcing software encoder (libx264)")

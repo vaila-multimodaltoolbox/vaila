@@ -383,7 +383,6 @@ For more info: https://github.com/vietanhdev/anylabeling
         train_images = os.path.join(dataset_path, "train", "images")
         val_images = os.path.join(dataset_path, "val", "images")
         test_images = os.path.join(dataset_path, "test", "images")
-
         if not os.path.exists(train_images) or not os.path.exists(val_images):
             messagebox.showerror(
                 "Error",
@@ -1089,7 +1088,7 @@ names: {names_str}  # class names
         # List all files in the run directory
         if os.path.exists(run_output_dir):
             print("\nFILES IN RESULTS FOLDER:")
-            for root, dirs, files in os.walk(run_output_dir):
+            for root, _dirs, files in os.walk(run_output_dir):
                 level = root.replace(run_output_dir, "").count(os.sep)
                 indent = " " * 2 * level
                 print(f"{indent}{os.path.basename(root)}/")

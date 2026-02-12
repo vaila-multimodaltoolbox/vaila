@@ -24,6 +24,7 @@ Usage:
 3. Use the slider or Play/Pause button to control the animation.
 """
 
+import contextlib
 import os
 import tkinter as tk
 from tkinter import filedialog
@@ -214,10 +215,8 @@ def main():
             playing[0] = True
             btn_play.label.set_text("Pause")
             timer[0] = fig.canvas.new_timer(interval=1000 / fps)
-            try:
+            with contextlib.suppress(AttributeError):
                 timer[0].single_shot = False
-            except AttributeError:
-                pass
             timer[0].add_callback(timer_callback)
             timer[0].start()
         else:

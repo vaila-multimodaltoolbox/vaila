@@ -334,7 +334,7 @@ class ReidProcessor:
         print("Clustering similar IDs...")
 
         # Sort keys for deterministic processing
-        keys = sorted(list(self.id_features.keys()))
+        keys = sorted(self.id_features.keys())
         processed = set()
         next_new_id = 0
 

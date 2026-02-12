@@ -1232,7 +1232,7 @@ def checklist_select_files(file_paths, title="Select files to process"):
 
     def confirm():
         nonlocal chosen
-        chosen = [fp for fp, v in zip(file_paths, vars_) if v.get()]
+        chosen = [fp for fp, v in zip(file_paths, vars_, strict=False) if v.get()]
         win.quit()
         win.destroy()
 
@@ -1975,15 +1975,8 @@ def main_cop_balance():
 def select_headers_calculate(file_path):
     """Displays a GUI to select six (6) headers for force plate data analysis."""
 
-
-def select_headers_calculate(file_path):
-    """Displays a GUI to select six (6) headers for force plate data analysis."""
-
     def get_file_headers(path):
-        if path.lower().endswith(".c3d"):
-            df = read_c3d_analogs(path)
-        else:
-            df = pd.read_csv(path)
+        df = read_c3d_analogs(path) if path.lower().endswith(".c3d") else pd.read_csv(path)
         return list(df.columns), df
 
     headers, df = get_file_headers(file_path)
@@ -1998,7 +1991,6 @@ def select_headers_calculate(file_path):
             messagebox.showinfo("Info", "Please select exactly six (6) headers for analysis.")
             return
         selection_window.quit()
-        _cleanup_bindings()
 
     def select_all():
         for var in header_vars:
