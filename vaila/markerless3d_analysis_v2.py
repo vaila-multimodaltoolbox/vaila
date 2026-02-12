@@ -415,7 +415,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
                 if landmarks_norm:
                     # Aplicar filtragem para cada landmark
-                    for i, (norm, px) in enumerate(zip(landmarks_norm, landmarks_px)):
+                    for i, (norm, _px) in enumerate(zip(landmarks_norm, landmarks_px, strict=False)):
                         landmarks_history[person_id][i].append(norm)
 
                         max_history = 30
@@ -593,7 +593,7 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                 # Criar um objeto de landmarks para desenho
                 landmark_proto = landmark_pb2.NormalizedLandmarkList()
 
-                for i, lm in enumerate(landmarks_px):
+                for _idx, lm in enumerate(landmarks_px):
                     if not np.isnan(lm[0]):
                         landmark = landmark_proto.landmark.add()
                         landmark.x = lm[0] / width
@@ -920,7 +920,7 @@ def landmarks_to_mp_format(landmarks_px, width, height):
     landmark_list = landmark_pb2.NormalizedLandmarkList()
 
     # Preencher com os landmarks
-    for i, lm in enumerate(landmarks_px):
+    for _i, lm in enumerate(landmarks_px):
         landmark = landmark_list.landmark.add()
         landmark.x = lm[0] / width  # Normalizar para 0-1
         landmark.y = lm[1] / height  # Normalizar para 0-1

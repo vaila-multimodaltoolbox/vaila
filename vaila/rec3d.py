@@ -56,7 +56,7 @@ def rec3d_multicam(dlt_list, pixel_list):
     A_matrix = np.zeros((num_cameras * 2, 3))
     b_vector = np.zeros(num_cameras * 2)
 
-    for i, (A_params, (x, y)) in enumerate(zip(dlt_list, pixel_list)):
+    for i, (A_params, (x, y)) in enumerate(zip(dlt_list, pixel_list, strict=False)):
         a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11 = A_params
 
         # Equations for camera i:
@@ -135,7 +135,7 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
             frame_exists_in_all = True
             dlt_params_for_frame = []
 
-            for camera_idx, (dlt_params, frames) in enumerate(zip(dlt_params_list, frames_list)):
+            for _camera_idx, (dlt_params, frames) in enumerate(zip(dlt_params_list, frames_list, strict=False)):
                 if frame_num in frames:
                     A_index = np.where(frames == frame_num)[0][0]
                     A = dlt_params[A_index]
@@ -154,7 +154,7 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
                     pixel_obs_list = []
                     valid_marker = True
 
-                    for camera_idx in range(len(dlt_params_list)):
+                    for _camera_idx in range(len(dlt_params_list)):
                         try:
                             x_obs = float(row[f"p{marker}_x"])
                             y_obs = float(row[f"p{marker}_y"])

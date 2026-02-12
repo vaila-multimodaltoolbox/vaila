@@ -67,7 +67,7 @@ def check_ffmpeg_encoder(encoder):
             "-nostats",
             "-",
         ]
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(command, check=True, capture_output=True)
         return True
     except subprocess.CalledProcessError as e:
         if "Unknown encoder" in e.stderr.decode():

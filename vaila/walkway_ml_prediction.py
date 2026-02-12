@@ -248,7 +248,7 @@ def run_prediction(selected_metrics=None):
 
     print("Metrics selected for prediction:", selected_metrics)  # Print para depuração
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = filedialog.askdirectory(title="Select Output Directory for Results")
     if not output_dir:
         messagebox.showwarning("Warning", "No output directory selected.")

@@ -362,10 +362,7 @@ class VideoMergeApp:
                     line = line.strip()
                     if line:
                         # Check if it's a relative or absolute path
-                        if os.path.isabs(line):
-                            video_path = line
-                        else:
-                            video_path = os.path.join(base_dir, line)
+                        video_path = line if os.path.isabs(line) else os.path.join(base_dir, line)
 
                         # Verify the file exists
                         if os.path.exists(video_path):
@@ -2021,7 +2018,7 @@ def run_merge_multivideos():
         # Pequeno delay para garantir que a janela seja exibida corretamente
         root.after(100, lambda: root.attributes("-topmost", False))
 
-        app = VideoMergeApp(root)
+        VideoMergeApp(root)
         root.mainloop()
     except Exception as e:
         import traceback

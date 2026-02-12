@@ -67,7 +67,7 @@ def merge_headers(header1, header2):
     """Merge two header rows into a single header, ensuring unique header names."""
     header = []
     used_names = set()
-    for h1, h2 in zip(header1, header2):
+    for h1, h2 in zip(header1, header2, strict=False):
         h1 = clean_header(str(h1))
         h2 = clean_header(str(h2))
 

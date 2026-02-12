@@ -1000,7 +1000,7 @@ def save_short_info_file(
         for label in marker_labels:
             f.write(f"{label}\n")
         f.write("\nAnalog labels and units:\n")
-        for label, unit in zip(analog_labels, analog_units):
+        for label, unit in zip(analog_labels, analog_units, strict=False):
             f.write(f"{label} ({unit})\n")
 
     print(f"Short info file saved at: {short_info_file_path}")
@@ -1033,7 +1033,7 @@ def save_events(datac3d, file_name, output_dir):
 
     # Build the event data
     events_data = []
-    for context, label, time in zip(event_contexts, event_labels, event_times):
+    for context, label, time in zip(event_contexts, event_labels, event_times, strict=False):
         frame = int(round(time * marker_freq))
         events_data.append({"Context": context, "Label": label, "Time": time, "Frame": frame})
 
@@ -2030,7 +2030,7 @@ def batch_convert_c3d_to_csv():
         print("Most common errors:")
 
         error_counts = {}
-        for file, error in error_details:
+        for _file, error in error_details:
             error_msg = str(error)
             if error_msg not in error_counts:
                 error_counts[error_msg] = 0

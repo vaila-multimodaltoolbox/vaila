@@ -111,7 +111,7 @@ def plot_metrics(metrics_df, target_name, save_dir):
     """Plots the metrics for each model in a bar chart with different colors and similar scales, and saves them as PNG files."""
 
     metrics = metrics_df.columns.drop("Model")
-    num_metrics = len(metrics)
+    len(metrics)
     model_names = metrics_df["Model"].unique()
     num_models = len(model_names)
 

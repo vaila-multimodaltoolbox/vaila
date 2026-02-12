@@ -37,6 +37,7 @@ Change History:
     - v0.0.1: First version
 """
 
+import contextlib
 import datetime
 import json
 import os
@@ -71,7 +72,7 @@ def get_precise_video_metadata(video_path):
             str(video_path),
         ]
         result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+            cmd, capture_output=True, text=True, check=True
         )
         data = json.loads(result.stdout)
 
@@ -196,9 +197,9 @@ def extract_frames(video_path, frames_dir):
         ]
 
         if os.name == "nt":
-            result = subprocess.run(command, check=True, capture_output=True, text=True, shell=True)
+            subprocess.run(command, check=True, capture_output=True, text=True, shell=True)
         else:
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            subprocess.run(command, check=True, capture_output=True, text=True)
 
         # Count extracted frames
         frame_files = [
@@ -276,7 +277,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             continue
 
         # Apply boxes to frame
-        for coords, selection, color in zip(coordinates, selections, colors):
+        for coords, selection, color in zip(coordinates, selections, colors, strict=False):
             mode = selection[0]
             shape_type = selection[1]
             # Converter cor de matplotlib (0-1) para OpenCV (0-255) BGR
@@ -322,17 +323,15 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
     # Verify frame count preservation
     if frames_written != total_frames:
         print(f"Warning: Frame count mismatch! Expected {total_frames}, wrote {frames_written}")
-        try:
+        with contextlib.suppress(BaseException):
             os.remove(temp_video_path)
-        except:
-            pass
         return False
 
     # Now use ffmpeg to combine processed video with original audio and preserve metadata
     try:
         # Check if ffmpeg is available
         subprocess.run(
-            ["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
+            ["ffmpeg", "-version"], capture_output=True, check=True
         )
 
         fps_str = f"{fps:.6f}"
@@ -351,7 +350,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             str(input_path),
         ]
         probe_result = subprocess.run(
-            probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            probe_cmd, capture_output=True, text=True
         )
         has_audio = probe_result.returncode == 0 and probe_result.stdout.strip() == "audio"
 
@@ -393,17 +392,15 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             ]
         )
 
-        result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+        subprocess.run(
+            cmd, capture_output=True, text=True, check=True
         )
 
         print(f"Combined video with audio and metadata: {os.path.basename(output_path)}")
 
         # Clean up temporary file
-        try:
+        with contextlib.suppress(BaseException):
             os.remove(temp_video_path)
-        except:
-            pass
 
         return True
 
@@ -418,10 +415,8 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             return True
         except Exception as e2:
             print(f"Error moving temp file: {e2}")
-            try:
+            with contextlib.suppress(BaseException):
                 os.remove(temp_video_path)
-            except:
-                pass
             return False
 
 
@@ -433,7 +428,7 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_int
                 frame_path = os.path.join(frames_dir, filename)
                 img = cv2.imread(frame_path)
 
-                for coords, selection, color in zip(coordinates, selections, colors):
+                for coords, selection, color in zip(coordinates, selections, colors, strict=False):
                     mode = selection[0]
                     shape_type = selection[1]
                     # Converter cor de matplotlib (0-1) para OpenCV (0-255) BGR
@@ -525,16 +520,14 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
     command.append(str(temp_video_path))
 
     try:
-        result = subprocess.run(
-            command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        subprocess.run(
+            command, check=True, capture_output=True, text=True
         )
         print(f"Created video from frames: {actual_frame_count} frames at {fps_str} fps")
     except subprocess.CalledProcessError as e:
         print(f"Error creating video from frames: {e.stderr}")
-        try:
+        with contextlib.suppress(BaseException):
             os.remove(temp_video_path)
-        except:
-            pass
         raise
 
     # If original video path is provided, combine with audio and metadata
@@ -554,7 +547,7 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
                 str(original_video_path),
             ]
             probe_result = subprocess.run(
-                probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                probe_cmd, capture_output=True, text=True
             )
             has_audio = probe_result.returncode == 0 and probe_result.stdout.strip() == "audio"
 
@@ -596,17 +589,15 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
                 ]
             )
 
-            result = subprocess.run(
-                combine_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            subprocess.run(
+                combine_cmd, check=True, capture_output=True, text=True
             )
 
             print(f"Combined with audio and metadata: {os.path.basename(output_path)}")
 
             # Clean up temporary file
-            try:
+            with contextlib.suppress(BaseException):
                 os.remove(temp_video_path)
-            except:
-                pass
 
             return True
 
@@ -621,10 +612,8 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
                 return True
             except Exception as e2:
                 print(f"Error moving temp file: {e2}")
-                try:
+                with contextlib.suppress(BaseException):
                     os.remove(temp_video_path)
-                except:
-                    pass
                 return False
     else:
         # No original video provided, just use the temp video
@@ -636,10 +625,8 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
             return True
         except Exception as e:
             print(f"Error moving temp file: {e}")
-            try:
+            with contextlib.suppress(BaseException):
                 os.remove(temp_video_path)
-            except:
-                pass
             return False
 
 
@@ -701,7 +688,7 @@ original_path = "{escaped_video_path}"
 # ================================================================
 # Define which frame ranges to process. If not specified, all frames will be processed.
 # Format: start_frame, end_frame (inclusive, 0-indexed)
-# 
+#
 # Example: To process frames 100-200 and 500-600, uncomment and modify:
 # [[frame_intervals]]
 # id = 1
@@ -723,7 +710,7 @@ original_path = "{escaped_video_path}"
             toml_content += f"start_frame = {start}\n"
             toml_content += f"end_frame = {end}\n\n"
 
-    for i, (coords, selection, color) in enumerate(zip(coordinates, selections, colors)):
+    for i, (coords, selection, color) in enumerate(zip(coordinates, selections, colors, strict=False)):
         toml_content += f"""
 # ================================================================
 # BOX {i + 1}: {selection[1].upper()} - {selection[0].upper()} MODE
@@ -1181,7 +1168,7 @@ DRAWBOXE - HELP
 
                     # Load saved shapes
                     for coords, selection, color in zip(
-                        loaded_coords, loaded_selections, loaded_colors
+                        loaded_coords, loaded_selections, loaded_colors, strict=False
                     ):
                         if selection[1] == "rectangle":
                             x1, y1 = coords[0]
@@ -1724,10 +1711,7 @@ def run_drawboxe():
     root.withdraw()
     root.attributes("-topmost", True)  # Keep dialog on top
 
-    if os.name == "nt" or os.name == "posix":
-        initial_dir = os.path.expanduser("~")
-    else:
-        initial_dir = os.getcwd()
+    initial_dir = os.path.expanduser("~") if os.name == "nt" or os.name == "posix" else os.getcwd()
     video_directory = filedialog.askdirectory(
         parent=root,
         title="Select the directory containing videos",

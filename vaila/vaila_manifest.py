@@ -100,7 +100,7 @@ def show_vaila_message():
     vindicate the vigilant and the virtuous in the field of motion analysis.
     Surely, this torrent of technology tends to be very innovative, so let me simply add that it is a great honor to have you with us
     and you may call this tool vailá.
-     
+
     ---------------------------------------------------------
     ― The vailá idea!
 
