@@ -103,7 +103,7 @@ def detect_column_precision_detailed(file_path):
 
         column_precision = {}
 
-        for col_idx, col_name in enumerate(df_str.columns):
+        for col_idx, _col_name in enumerate(df_str.columns):
             max_decimal_places = 0
 
             # Check multiple rows to get representative precision
@@ -744,7 +744,7 @@ class ColumnReorderGUI(tk.Tk):
                 if new_position is not None:
                     new_position -= 1  # Adjust for 0-based indexing
                     selected_headers = [self.current_order[i] for i in range(start, end + 1)]
-                    for i in range(start, end + 1):
+                    for _ in range(start, end + 1):
                         del self.current_order[start]
                     for i, header in enumerate(selected_headers):
                         self.current_order.insert(new_position + i, header)
@@ -1596,7 +1596,6 @@ class ColumnReorderGUI(tk.Tk):
 
             result_values = []
             for val in sample_values:
-                x = val  # Make 'x' available in expression
                 try:
                     result = eval(expression)
                     # Handle pandas Series results (e.g., from rolling operations)
@@ -1616,7 +1615,7 @@ class ColumnReorderGUI(tk.Tk):
             test_result += f"Column: {column_name}\n\n"
             test_result += "Sample Results (first 5 rows):\n"
             test_result += "-" * 50 + "\n"
-            for i, (orig, result) in enumerate(zip(sample_values, result_values), 1):
+            for i, (orig, result) in enumerate(zip(sample_values, result_values, strict=False), 1):
                 test_result += f"Row {i}: {orig} → {result}\n"
 
             messagebox.showinfo("Test Results", test_result)
@@ -1684,7 +1683,6 @@ class ColumnReorderGUI(tk.Tk):
                         new_values = []
 
                         for val in original_values:
-                            x = val  # Make 'x' available in expression
                             try:
                                 result = eval(expression)
                                 # Handle pandas Series results

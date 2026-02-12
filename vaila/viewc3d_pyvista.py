@@ -1127,10 +1127,8 @@ class MokkaLikeViewer:
                 and hasattr(self.plotter, "render_window")
                 and self.plotter.render_window is not None
             ):
-                try:
+                with contextlib.suppress(Exception):
                     iren = self.plotter.render_window.GetInteractor()
-                except Exception:
-                    pass
             if iren is not None:
                 iren.add_observer("KeyPressEvent", self._win_key_observer)
                 duration_ms = max(1, int(1000 / self.frame_rate))

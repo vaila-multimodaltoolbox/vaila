@@ -2047,16 +2047,16 @@ def analyze_sit_to_stand(data, config):
                 try:
                     # Get force plate dimensions from config
                     fp_config = config.get("force_plate", {})
-                    width_mm = fp_config.get("width_mm", 464.0)
-                    height_mm = fp_config.get("height_mm", 508.0)
+                    fp_config.get("width_mm", 464.0)
+                    fp_config.get("height_mm", 508.0)
 
                     # Extract raw components (ensure numpy arrays)
-                    Fx = data[component_cols["Fx"]].values
-                    Fy = data[component_cols["Fy"]].values
+                    data[component_cols["Fx"]].values
+                    data[component_cols["Fy"]].values
                     Fz = data[component_cols["Fz"]].values
                     Mx = data[component_cols["Mx"]].values
                     My = data[component_cols["My"]].values
-                    Mz = data[component_cols["Mz"]].values
+                    data[component_cols["Mz"]].values
 
                     # Prepare arguments for calc_cop
                     # calc_cop signature: (forces_moments, dimensions)
@@ -2379,10 +2379,10 @@ def detect_sit_to_stand_phases(
 
             # === IMPULSE METRICS ===
             # Total impulse (force-time integral)
-            total_impulse = np.trapz(segment_forces, segment_times)
+            total_impulse = np.trapezoid(segment_forces, segment_times)
 
             # Impulse above baseline (more clinically relevant)
-            impulse_above_baseline = np.trapz(segment_forces - baseline_force, segment_times)
+            impulse_above_baseline = np.trapezoid(segment_forces - baseline_force, segment_times)
 
             # Normalized impulse (per unit time)
             normalized_impulse = total_impulse / phase_duration if phase_duration > 0 else 0
@@ -2750,7 +2750,7 @@ def calculate_energy_expenditure(force_data, time_data, phases, config):
 
             # === MECHANICAL WORK CALCULATION ===
             # Method 1: Force-time integral (impulse)
-            impulse = np.trapz(phase_forces, phase_times)  # N⋅s
+            impulse = np.trapezoid(phase_forces, phase_times)  # N⋅s
 
             # Method 2: Work = Force × Distance (assuming vertical movement)
             # Average force during movement
@@ -4044,7 +4044,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
         .header-content h1 {{ font-size: 1.8em; color: #1a202c; margin-bottom: 5px; }}
         .header-content p {{ color: #718096; }}
         .content {{ padding: 30px; }}
-        
+
         .metrics-grid {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -4061,7 +4061,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
         .metric-value {{ font-size: 1.8em; font-weight: bold; color: #2d3748; }}
         .metric-unit {{ font-size: 0.5em; color: #718096; margin-left: 5px; font-weight: normal; vertical-align: middle; }}
         .metric-label {{ font-size: 0.9em; color: #718096; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }}
-        
+
         .chart-section {{
             margin-bottom: 30px;
             border: 1px solid #e2e8f0;
@@ -4071,17 +4071,17 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
         }}
         .chart-title {{ font-size: 1.2em; font-weight: 600; margin-bottom: 15px; color: #2d3748; display: flex; align-items: center; gap: 10px; }}
         .chart-container {{ width: 100%; height: 500px; }}
-        
+
         .two-col {{
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
         }}
-        
+
         @media (max-width: 1000px) {{
             .two-col {{ grid-template-columns: 1fr; }}
         }}
-        
+
         .footer {{
             text-align: center;
             padding: 20px;
@@ -4089,7 +4089,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             font-size: 0.9em;
             border-top: 1px solid #eee;
         }}
-        
+
         .badge {{
             display: inline-block;
             padding: 4px 8px;
@@ -4116,21 +4116,21 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             else ""
         }
         </div>
-        
+
         <div class="content">
             {metrics_html}
-            
+
             {
             f'<div class="chart-section"><div class="chart-title">📊 Force plot (PNG)</div><img src="data:image/png;base64,{force_plot_b64}" alt="Force plot" style="max-width:100%; height:auto; border-radius:8px;" /></div>'
             if force_plot_b64
             else ""
         }
-            
+
             <div class="chart-section">
                 <div class="chart-title">📊 Vertical Force & RFD Analysis</div>
                 <div id="forceChart" class="chart-container" style="height: 600px;"></div>
             </div>
-            
+
             {
             '''
             <div class="two-col">
@@ -4147,23 +4147,23 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             if has_cop
             else ""
         }
-            
+
         </div>
-        
+
         <div class="footer">
             Generated by vailá Multimodal Toolbox
         </div>
     </div>
-    
+
     <script>
         // Data
         const timeData = {json.dumps(time_data)};
         const forceData = {json.dumps(force_data)};
         const phases = {json.dumps(phases_data)};
         const peaks = {json.dumps(peaks_data)};
-        
+
         // --- FORCE CHART ---
-        
+
         // Calculate RFD (Force Rate) for subplot
         const rfdData = [];
         for(let i=1; i<forceData.length; i++) {{
@@ -4175,7 +4175,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             }}
         }}
         rfdData.push(0); // Pad last
-        
+
         const forceTrace = {{
             x: timeData,
             y: forceData,
@@ -4185,7 +4185,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             fill: 'tozeroy',
             fillcolor: 'rgba(66, 153, 225, 0.1)'
         }};
-        
+
         const rfdTrace = {{
             x: timeData,
             y: rfdData,
@@ -4195,7 +4195,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             line: {{ color: '#ed8936', width: 1.5, dash: 'dot' }},
             opacity: 0.7
         }};
-        
+
         // Phases Backgrounds
         const shapes = phases.map((p, i) => ({{
             type: 'rect',
@@ -4206,7 +4206,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             line: {{ width: 0 }},
             layer: 'below'
         }}));
-        
+
         const layoutForce = {{
             title: {{ text: 'Vertical Ground Reaction Force & RFD', font: {{size: 14}} }},
             font: {{ family: 'Segoe UI' }},
@@ -4224,9 +4224,9 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             legend: {{ orientation: 'h', y: 1.1 }},
             margin: {{ l: 50, r: 50, t: 50, b: 50 }}
         }};
-        
+
         Plotly.newPlot('forceChart', [forceTrace, rfdTrace], layoutForce, {{responsive: true}});
-        
+
         // --- CoP CHARTS ---
         {
             f'''
@@ -4234,7 +4234,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
         const copY = {json.dumps(cop_y)};
         const copEllipseX = {json.dumps(cop_ellipse_x)};
         const copEllipseY = {json.dumps(cop_ellipse_y)};
-        
+
         // CoP Path
         const copPathTrace = {{
             x: copX,
@@ -4256,7 +4256,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
                 line: {{ color: 'gray', width: 2, dash: 'dash' }}
             }});
         }}
-        
+
         const layoutCopPath = {{
             title: {{ text: 'Center of Pressure Path (mm)', font: {{size: 14}} }},
             xaxis: {{ title: 'CoP X (mm)', zeroline: true, zerolinecolor: '#cbd5e0' }},
@@ -4264,9 +4264,9 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             hovermode: 'closest',
             margin: {{ l: 40, r: 40, t: 40, b: 40 }}
         }};
-        
+
         Plotly.newPlot('copPathChart', copPathTraces, layoutCopPath, {{responsive: true}});
-        
+
         // CoP Time Series
         const copXTrace = {{
             x: timeData,
@@ -4280,7 +4280,7 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             name: 'CoP Y (AP)',
             line: {{ color: '#38a169' }}
         }};
-        
+
         const layoutCopTime = {{
             title: {{ text: 'CoP Components over Time', font: {{size: 14}} }},
             xaxis: {{ title: 'Time (s)' }},
@@ -4288,13 +4288,13 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             legend: {{ orientation: 'h', y: 1.1 }},
             margin: {{ l: 40, r: 40, t: 40, b: 40 }}
         }};
-        
+
         Plotly.newPlot('copTimeChart', [copXTrace, copYTrace], layoutCopTime, {{responsive: true}});
         '''
             if has_cop
             else ""
         }
-        
+
     </script>
 </body>
 </html>"""

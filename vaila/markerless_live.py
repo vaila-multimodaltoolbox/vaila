@@ -425,10 +425,7 @@ def download_model(model_name):
             import requests
 
             # URL for the model - updated to use the correct model name and version
-            if model_name.lower().startswith("yolo11"):
-                version_tag = "v11.0.0"
-            else:
-                version_tag = "v0.0.0"
+            version_tag = "v11.0.0" if model_name.lower().startswith("yolo11") else "v0.0.0"
             url = f"https://github.com/ultralytics/assets/releases/download/{version_tag}/{model_name}"
 
             # Download the file
@@ -998,7 +995,7 @@ class MovementAnalyzer:
                         cv2.line(processed_frame, start_point, end_point, (0, 255, 0), 2)
 
                 # Draw visible landmarks
-                for i, landmark in enumerate(pose_landmarks):
+                for _idx, landmark in enumerate(pose_landmarks):
                     if landmark.visibility > 0.5:
                         x = int(landmark.x * frame.shape[1])
                         y = int(landmark.y * frame.shape[0])
@@ -1120,7 +1117,7 @@ class MovementAnalyzer:
                     joint_names = set()
                     for data in self.angle_buffer:
                         joint_names.update(data["angles"].keys())
-                    joint_names = sorted(list(joint_names))
+                    joint_names = sorted(joint_names)
 
                     with open(csv_filename, "w", newline="") as f:
                         writer = csv.writer(f)
@@ -1150,7 +1147,7 @@ class MovementAnalyzer:
 
                         valid_times = []
                         valid_angles = []
-                        for t, a in zip(times, angles):
+                        for t, a in zip(times, angles, strict=False):
                             if a is not None:
                                 valid_times.append(t)
                                 valid_angles.append(a)
@@ -1339,10 +1336,7 @@ def run_markerless_live():
             initialvalue="1",
             parent=root,
         )
-        if model_choice == "1":
-            model_name = "yolo11n-pose.pt"
-        else:
-            model_name = "yolov8n-pose.pt"
+        model_name = "yolo11n-pose.pt" if model_choice == "1" else "yolov8n-pose.pt"
 
         # Initialize MediaPipe parameters with default values
         model_complexity = 1

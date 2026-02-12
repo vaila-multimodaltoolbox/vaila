@@ -89,7 +89,7 @@ import shutil
 import subprocess
 import sys
 import urllib.request
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, suppress
 from pathlib import Path
 
 from rich import print
@@ -1089,10 +1089,8 @@ def play_video_with_controls(
     clock = pygame.time.Clock()
 
     # Initialize pygame.scrap for Ctrl+V clipboard paste support
-    try:
+    with suppress(Exception):
         pygame.scrap.init()
-    except Exception:
-        pass
 
     # Control variables
     zoom_level = 1.0
@@ -1429,10 +1427,8 @@ def play_video_with_controls(
 
                 if result.returncode == 0:
                     # Success - remove temp file
-                    try:
+                    with suppress(BaseException):
                         os.remove(temp_video)
-                    except:
-                        pass
                     save_message_text = f"Video exported: {os.path.basename(output_path)}"
                     showing_save_message = True
                     save_message_timer = 120
@@ -1484,10 +1480,8 @@ def play_video_with_controls(
         finally:
             # Clean up temp file if it still exists
             if temp_video and os.path.exists(temp_video):
-                try:
+                with suppress(BaseException):
                     os.remove(temp_video)
-                except:
-                    pass
 
     def load_tracking_csv():
         """Load YOLO tracking CSV file (all_id_detection.csv format)"""
@@ -1726,10 +1720,8 @@ def play_video_with_controls(
                                             and id_col in df.columns
                                             and pd.notna(row.get(id_col))
                                         ):
-                                            try:
+                                            with suppress(ValueError, TypeError):
                                                 tracker_id = int(float(row[id_col]))
-                                            except (ValueError, TypeError):
-                                                pass
 
                                         # If ID not found in column, try to extract from suffix
                                         if tracker_id is None and suffix:
@@ -1737,10 +1729,8 @@ def play_video_with_controls(
                                                 r"id[_\s]*(\d+)", suffix, re.IGNORECASE
                                             )
                                             if id_match:
-                                                try:
+                                                with suppress(ValueError, TypeError):
                                                     tracker_id = int(id_match.group(1))
-                                                except (ValueError, TypeError):
-                                                    pass
 
                                         box = {
                                             "x1": int(float(x_min_val)),
@@ -1818,10 +1808,8 @@ def play_video_with_controls(
                                         and id_col in df.columns
                                         and pd.notna(row.get(id_col))
                                     ):
-                                        try:
+                                        with suppress(ValueError, TypeError):
                                             tracker_id = int(float(row[id_col]))
-                                        except (ValueError, TypeError):
-                                            pass
 
                                     # If ID not found in column, try to extract from suffix
                                     if tracker_id is None and suffix:
@@ -1829,10 +1817,8 @@ def play_video_with_controls(
                                             r"id[_\s]*(\d+)", suffix, re.IGNORECASE
                                         )
                                         if id_match:
-                                            try:
+                                            with suppress(ValueError, TypeError):
                                                 tracker_id = int(id_match.group(1))
-                                            except (ValueError, TypeError):
-                                                pass
 
                                     box = {
                                         "x1": int(float(row[x_min_col])),
@@ -2695,7 +2681,7 @@ def play_video_with_controls(
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
                     # Check fields
-                    for i, key in enumerate(order):
+                    for i, _ in enumerate(order):
                         by = start_y + i * (box_height + margin)
                         bx = dx + 180
                         rect = pygame.Rect(bx, by, box_width - 40, box_height)
@@ -2763,7 +2749,6 @@ def play_video_with_controls(
         BG = (30, 30, 30)
         PANEL = (50, 50, 50)
         TEXT = (220, 220, 220)
-        HIGHLIGHT = (70, 130, 180)  # Selection Blue
         BTN_GREEN = (50, 150, 50)
         BTN_RED = (150, 50, 50)
         BTN_BLUE = (50, 80, 150)
@@ -3143,10 +3128,7 @@ def play_video_with_controls(
             files.sort(key=lambda x: x[0].lower())
             # ".." entry to go up
             parent = os.path.dirname(d)
-            if parent != d:
-                entries = [("..", parent, True)] + dirs + files
-            else:
-                entries = dirs + files
+            entries = [("..", parent, True)] + dirs + files if parent != d else dirs + files
 
         list_dir(cur_dir)
 
@@ -3200,10 +3182,7 @@ def play_video_with_controls(
                 (255, 255, 0) if input_active else (200, 200, 200),
             )
             # If text wider than bar, show end
-            if path_surf.get_width() > clip_w:
-                offset_x = path_surf.get_width() - clip_w
-            else:
-                offset_x = 0
+            offset_x = path_surf.get_width() - clip_w if path_surf.get_width() > clip_w else 0
             screen.blit(
                 path_surf,
                 (bar_rect.x + 4 - offset_x, bar_rect.y + 5),
@@ -3623,10 +3602,7 @@ def play_video_with_controls(
                 if idx not in deleted_markers:
                     visible_markers.append(idx)
 
-            if visible_markers:
-                new_idx = max(visible_markers) + 1
-            else:
-                new_idx = 0
+            new_idx = max(visible_markers) + 1 if visible_markers else 0
 
             # Add empty marker at the current frame (using None instead of 0,0)
             one_line_markers.append((frame_count, None, None))
@@ -3844,10 +3820,8 @@ def play_video_with_controls(
                 result = None
             finally:
                 # Clean up Tkinter
-                try:
+                with suppress(BaseException):
                     root.destroy()
-                except:
-                    pass
 
                 # Re-enable Pygame events
                 pygame.event.set_allowed(
@@ -4127,7 +4101,6 @@ def play_video_with_controls(
                 # Let's try controlling the actual frame position
                 # This is safer for consistency
 
-                frames_to_advance = playback_speed  # e.g. 0.5
                 # We need to accumulate this... but we don't have a persistent accumulator easily here
                 # without restructuring.
 
@@ -4794,10 +4767,7 @@ def play_video_with_controls(
                                 else:
                                     # Wrap around to first marker
                                     all_markers = frame_marker_indices + deleted_frame_markers
-                                    if all_markers:
-                                        selected_marker_idx = min(all_markers)
-                                    else:
-                                        selected_marker_idx = 0
+                                    selected_marker_idx = min(all_markers) if all_markers else 0
                     else:
                         # Regular mode navigation
                         # Get indices of all markers in current frame
@@ -4875,10 +4845,7 @@ def play_video_with_controls(
                                 else:
                                     # Wrap around to first marker
                                     all_markers = visible_markers + deleted_markers_in_frame
-                                    if all_markers:
-                                        selected_marker_idx = min(all_markers)
-                                    else:
-                                        selected_marker_idx = 0
+                                    selected_marker_idx = min(all_markers) if all_markers else 0
 
                 # Add persistence toggle with 'p' key
                 elif event.key == pygame.K_p:
@@ -5054,7 +5021,7 @@ def play_video_with_controls(
                                     restore_size=(window_width, window_height),
                                 )
                                 # IMMEDIATE FIX: Restore Dialog Size because we are still in the loop!
-                                d_surf = pygame.display.set_mode((900, 600), pygame.RESIZABLE)
+                                pygame.display.set_mode((900, 600), pygame.RESIZABLE)
 
                                 if fpath and os.path.exists(fpath):
                                     loaded = load_swap_toml(fpath)
@@ -5558,7 +5525,7 @@ def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video
             print(f"  Warning: Could not read classes.txt: {e}")
 
     # Get video base name to match with label files
-    video_basename = os.path.splitext(os.path.basename(video_path))[0]
+    os.path.splitext(os.path.basename(video_path))[0]
 
     # Initialize coordinates dictionary
     coordinates = {i: [] for i in range(total_frames)}
@@ -5605,10 +5572,8 @@ def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video
 
         # Pattern 3: Just a number
         if frame_num is None:
-            try:
+            with suppress(ValueError):
                 frame_num = int(base_name)
-            except ValueError:
-                pass
 
         # If still no match, try to match by image filename
         if frame_num is None:
@@ -5648,217 +5613,11 @@ def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video
                     continue
 
                 try:
-                    class_id = int(parts[0])
+                    int(parts[0])
                     center_x_norm = float(parts[1])  # Normalized 0-1
                     center_y_norm = float(parts[2])  # Normalized 0-1
-                    width_norm = float(parts[3])  # Normalized 0-1
-                    height_norm = float(parts[4])  # Normalized 0-1
-
-                    # Convert normalized coordinates to pixel coordinates
-                    center_x = center_x_norm * video_width
-                    center_y = center_y_norm * video_height
-
-                    # Add center point as marker
-                    frame_points.append((center_x, center_y))
-
-                except (ValueError, IndexError) as e:
-                    print(f"  Warning: Skipping invalid line in {label_file}: {line} ({e})")
-                    continue
-
-            if frame_points:
-                coordinates[frame_num] = frame_points
-                matched_frames += 1
-
-        except Exception as e:
-            print(f"  Warning: Error reading {label_file}: {e}")
-            continue
-
-    print(f"  Successfully loaded {matched_frames} frames with annotations")
-    total_annotations = sum(len(coords) for coords in coordinates.values())
-    print(f"  Total bounding boxes converted: {total_annotations}")
-
-    return coordinates
-
-
-def is_yolo_dataset(path):
-    """
-    Check if a path is a YOLO dataset directory (AnyLabeling format).
-
-    Expected structure:
-    - images/ (or train/images/, val/images/, test/images/)
-    - labels/ (or train/labels/, val/labels/, test/labels/)
-    - classes.txt (optional)
-
-    Args:
-        path: Path to check
-
-    Returns:
-        tuple: (is_yolo_dataset, images_dir, labels_dir, classes_file) or (False, None, None, None)
-    """
-    if not os.path.isdir(path):
-        return False, None, None, None
-
-    # Check for standard YOLO structure
-    images_dir = None
-    labels_dir = None
-    classes_file = None
-
-    # Check for root-level images/labels
-    if os.path.isdir(os.path.join(path, "images")) and os.path.isdir(os.path.join(path, "labels")):
-        images_dir = os.path.join(path, "images")
-        labels_dir = os.path.join(path, "labels")
-    # Check for train/val/test structure
-    elif os.path.isdir(os.path.join(path, "train", "images")) and os.path.isdir(
-        os.path.join(path, "train", "labels")
-    ):
-        # Use train set by default
-        images_dir = os.path.join(path, "train", "images")
-        labels_dir = os.path.join(path, "train", "labels")
-
-    if images_dir and labels_dir:
-        # Check for classes.txt
-        classes_file = os.path.join(path, "classes.txt")
-        if not os.path.exists(classes_file):
-            classes_file = None
-        return True, images_dir, labels_dir, classes_file
-
-    return False, None, None, None
-
-
-def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video_height):
-    """
-    Load YOLO dataset labels and convert bounding boxes to point coordinates.
-
-    YOLO format: class_id center_x center_y width height (all normalized 0-1)
-    Converts to: center points of bounding boxes as markers
-
-    Args:
-        dataset_path: Path to YOLO dataset directory
-        video_path: Path to video file (to match frame names)
-        total_frames: Total number of frames in video
-        video_width: Video width in pixels
-        video_height: Video height in pixels
-
-    Returns:
-        dict: Coordinates dictionary {frame_index: [(x, y), ...]}
-    """
-    is_yolo, images_dir, labels_dir, classes_file = is_yolo_dataset(dataset_path)
-
-    if not is_yolo:
-        return None
-
-    print("Detected YOLO dataset structure:")
-    print(f"  Images directory: {images_dir}")
-    print(f"  Labels directory: {labels_dir}")
-    if classes_file:
-        print(f"  Classes file: {classes_file}")
-
-    # Load class names if available
-    class_names = []
-    if classes_file and os.path.exists(classes_file):
-        try:
-            with open(classes_file, encoding="utf-8") as f:
-                class_names = [line.strip() for line in f if line.strip()]
-            print(f"  Found {len(class_names)} classes: {class_names}")
-        except Exception as e:
-            print(f"  Warning: Could not read classes.txt: {e}")
-
-    # Get video base name to match with label files
-    video_basename = os.path.splitext(os.path.basename(video_path))[0]
-
-    # Initialize coordinates dictionary
-    coordinates = {i: [] for i in range(total_frames)}
-
-    # Get list of label files
-    label_files = [f for f in os.listdir(labels_dir) if f.endswith(".txt")]
-
-    if not label_files:
-        print(f"  Warning: No .txt label files found in {labels_dir}")
-        return coordinates
-
-    print(f"  Found {len(label_files)} label files")
-
-    # Process each label file
-    matched_frames = 0
-    for label_file in label_files:
-        label_path = os.path.join(labels_dir, label_file)
-
-        # Try to match label file with video frame
-        # Label files might be named: frame_000001.txt, image001.txt, etc.
-        frame_num = None
-
-        # Try to extract frame number from filename
-        # Remove extension and try different patterns
-        base_name = os.path.splitext(label_file)[0]
-
-        # Pattern 1: frame_XXXXXX or frame_XXX
-        if "frame_" in base_name.lower():
-            try:
-                frame_str = base_name.lower().split("frame_")[-1]
-                frame_num = int(frame_str)
-            except ValueError:
-                pass
-
-        # Pattern 2: imageXXX or imgXXX
-        if frame_num is None:
-            numbers = re.findall(r"\d+", base_name)
-            if numbers:
-                try:
-                    # Use the last number found (usually the frame number)
-                    frame_num = int(numbers[-1])
-                except ValueError:
-                    pass
-
-        # Pattern 3: Just a number
-        if frame_num is None:
-            try:
-                frame_num = int(base_name)
-            except ValueError:
-                pass
-
-        # If still no match, try to match by image filename
-        if frame_num is None:
-            # Check if corresponding image exists
-            image_extensions = [".jpg", ".jpeg", ".png", ".bmp"]
-            for ext in image_extensions:
-                image_file = base_name + ext
-                image_path = os.path.join(images_dir, image_file)
-                if os.path.exists(image_path):
-                    # Try to extract frame number from image filename
-                    img_base = os.path.splitext(image_file)[0]
-                    numbers = re.findall(r"\d+", img_base)
-                    if numbers:
-                        try:
-                            frame_num = int(numbers[-1])
-                            break
-                        except ValueError:
-                            pass
-
-        if frame_num is None or frame_num < 0 or frame_num >= total_frames:
-            # Skip if we can't determine frame number or it's out of range
-            continue
-
-        # Read YOLO label file
-        try:
-            with open(label_path, encoding="utf-8") as f:
-                lines = f.readlines()
-
-            frame_points = []
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-
-                parts = line.split()
-                if len(parts) < 5:
-                    continue
-
-                try:
-                    class_id = int(parts[0])
-                    center_x_norm = float(parts[1])  # Normalized 0-1
-                    center_y_norm = float(parts[2])  # Normalized 0-1
-                    width_norm = float(parts[3])  # Normalized 0-1
-                    height_norm = float(parts[4])  # Normalized 0-1
+                    float(parts[3])  # Normalized 0-1
+                    float(parts[4])  # Normalized 0-1
 
                     # Convert normalized coordinates to pixel coordinates
                     center_x = center_x_norm * video_width
@@ -6278,7 +6037,7 @@ def export_labeling_dataset(
     import random
 
     # Collect all annotated frames
-    annotated_frames = [f for f in bboxes.keys() if bboxes[f]]
+    annotated_frames = [f for f in bboxes if bboxes[f]]
     if not annotated_frames:
         return None, "No bounding boxes to export"
 

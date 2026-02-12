@@ -121,13 +121,12 @@ class FrameRemover:
             lines = f.readlines()
 
         # Extract values
-        original_fps = None
         original_frames = None
         modified_lines = []
 
         for line in lines:
             if line.startswith("FPS:"):
-                original_fps = float(line.split(":")[-1].strip())
+                float(line.split(":")[-1].strip())
                 # Keep original FPS line
                 modified_lines.append(line)
             elif line.startswith("Total frames:"):

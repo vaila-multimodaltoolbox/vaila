@@ -1088,7 +1088,7 @@ names: {names_str}  # class names
         # List all files in the run directory
         if os.path.exists(run_output_dir):
             print("\nFILES IN RESULTS FOLDER:")
-            for root, dirs, files in os.walk(run_output_dir):
+            for root, _dirs, files in os.walk(run_output_dir):
                 level = root.replace(run_output_dir, "").count(os.sep)
                 indent = " " * 2 * level
                 print(f"{indent}{os.path.basename(root)}/")

@@ -359,10 +359,7 @@ def distort_video_gui():
             except ValueError:
                 fval = 0
             # If the resolution is less than 1, use float formatting; otherwise, integer.
-            if resolution < 1:
-                entry_value = f"{fval:.3f}"
-            else:
-                entry_value = f"{int(round(fval))}"
+            entry_value = f"{fval:.3f}" if resolution < 1 else f"{int(round(fval))}"
             entry.delete(0, tk.END)
             entry.insert(0, entry_value)
 

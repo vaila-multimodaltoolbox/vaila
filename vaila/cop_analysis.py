@@ -154,7 +154,7 @@ def select2headers(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [header for header, var in zip(headers, header_vars) if var.get()]
+        selected_headers = [header for header, var in zip(headers, header_vars, strict=False) if var.get()]
         if len(selected_headers) != 2:
             messagebox.showinfo("Info", "Please select exactly two (2) headers for analysis.")
             return
@@ -374,7 +374,7 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     Y_n = cop_y_f - mean_AP
 
     # Radius and covariance
-    R_n = np.sqrt(X_n**2 + Y_n**2)
+    np.sqrt(X_n**2 + Y_n**2)
     COV = np.mean(X_n * Y_n)
 
     # Velocity components
@@ -401,8 +401,8 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
     power_freq_95_ap = power_frequency_95(freqs_ap, psd_ap)
     power_mode_ml = power_mode(freqs_ml, psd_ml)
     power_mode_ap = power_mode(freqs_ap, psd_ap)
-    centroid_freq_ml = centroid_frequency(freqs_ml, psd_ml)
-    centroid_freq_ap = centroid_frequency(freqs_ap, psd_ap)
+    centroid_frequency(freqs_ml, psd_ml)
+    centroid_frequency(freqs_ap, psd_ap)
     freq_dispersion_ml = frequency_dispersion(freqs_ml, psd_ml)
     freq_dispersion_ap = frequency_dispersion(freqs_ap, psd_ap)
     energy_below_0_5_ml = energy_content_below_0_5(freqs_ml, psd_ml)
@@ -437,8 +437,8 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
 
     # Compute sway density using centered data
     print("Computing sway density...")
-    sway_density_ml = compute_sway_density(X_n, fs, radius=0.3)
-    sway_density_ap = compute_sway_density(Y_n, fs, radius=0.3)
+    compute_sway_density(X_n, fs, radius=0.3)
+    compute_sway_density(Y_n, fs, radius=0.3)
 
     # Calculate and plot confidence ellipse
     print("Calculating confidence ellipse...")

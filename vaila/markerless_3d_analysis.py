@@ -45,6 +45,8 @@ try:
 except Exception:
     ezc3d = None
 
+import contextlib
+
 from scipy.optimize import least_squares
 
 try:
@@ -251,11 +253,11 @@ def sliding_windows(X: np.ndarray, receptive: int, pad: bool = True) -> np.ndarr
     half = receptive // 2
     if pad:
         Xpad = np.pad(X, ((half, half), (0, 0), (0, 0)), mode="edge")
-        starts = [i for i in range(T)]
+        starts = list(range(T))
         slices = [Xpad[i : i + receptive] for i in starts]
         return np.stack(slices, axis=0)
     else:
-        starts = [i for i in range(T - receptive + 1)]
+        starts = list(range(T - receptive + 1))
         return np.stack([X[i : i + receptive] for i in starts], axis=0)
 
 
@@ -510,10 +512,8 @@ def load_dlt3d_from_file(path: str) -> DLT3D:
         for line in f:
             parts = [p for p in line.replace(",", " ").split() if p.strip()]
             for p in parts:
-                try:
+                with contextlib.suppress(BaseException):
                     vals.append(float(p))
-                except:
-                    pass
     if len(vals) < 11:
         raise ValueError("DLT3D file must contain at least 11 numeric parameters")
     return DLT3D(np.asarray(vals[:11]))
@@ -624,7 +624,6 @@ def extract_mediapipe_csv(video_path: str, out_csv: str) -> tuple[int, int, floa
     rows = []
     i = 0
     t0 = time.time()
-    t_last = t0
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -828,10 +827,8 @@ def run_single_video(cfg: dict, video_path: str, out_dir: str, base_dir: Path | 
         with open(dlt2d_path, encoding="utf-8") as f:
             for line in f:
                 for p in line.replace(",", " ").split():
-                    try:
+                    with contextlib.suppress(ValueError):
                         vals.append(float(p))
-                    except ValueError:
-                        pass
         if len(vals) < 8:
             raise ValueError("DLT2D must contain at least 8 numeric parameters")
         _, Hinv = dlt8_to_H(vals[:8])
@@ -864,10 +861,7 @@ def run_single_video(cfg: dict, video_path: str, out_dir: str, base_dir: Path | 
     out = cfg.get("output", {})
     out_base = os.path.join(out_dir, f"{stem}_mono3d")
     # CSV in meters if units=="m", else mm
-    if units == "m":
-        Pw = Pw_mm / 1000.0
-    else:
-        Pw = Pw_mm
+    Pw = Pw_mm / 1000.0 if units == "m" else Pw_mm
     np.savetxt(out_base + ".csv", Pw.reshape(Pw.shape[0], -1), delimiter=",", fmt="%.6f")
     print(f"Saved CSV to {out_base}.csv")
 

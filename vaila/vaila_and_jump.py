@@ -125,6 +125,7 @@ This script is licensed under the GNU General Public License v3.0.
 """
 
 import base64
+import contextlib
 import math
 import os
 import webbrowser
@@ -243,10 +244,8 @@ def _get_or_ask_jump_context(
     # Ask once via dialogs
     root = Tk()
     root.withdraw()
-    try:
+    with contextlib.suppress(Exception):
         root.attributes("-topmost", True)
-    except Exception:
-        pass
     try:
         mass = simpledialog.askfloat(
             "Mass (kg)",
@@ -290,10 +289,8 @@ def _get_or_ask_jump_context(
             pass
         return _JUMP_CONTEXT
     finally:
-        try:
+        with contextlib.suppress(Exception):
             root.destroy()
-        except Exception:
-            pass
 
 
 def calculate_force(mass, gravity=9.81):
@@ -1656,7 +1653,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
 
         # Add textbox
         # Add textbox outside the plot
-        props = dict(boxstyle="round", facecolor="white", alpha=0.9)
+        props = {"boxstyle": "round", "facecolor": "white", "alpha": 0.9}
         ax.text(
             1.05,
             1.0,
@@ -1836,7 +1833,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
             all_x_global = []
             all_y_global = []
 
-            for title, frame_idx, phase_key in landing_moments:
+            for _title, frame_idx, _phase_key in landing_moments:
                 if frame_idx >= len(data):
                     continue
                 row = data.iloc[frame_idx]
@@ -2025,7 +2022,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
                 # The original legend call for ax_idx == 0 is removed as a new one is added outside the plot.
 
                 # Add textbox outside
-                props = dict(boxstyle="round", facecolor="white", alpha=0.9)
+                props = {"boxstyle": "round", "facecolor": "white", "alpha": 0.9}
                 ax.text(
                     1.05,
                     1.0,
@@ -2214,7 +2211,7 @@ def plot_jump_phases_analysis(
     velocity = calculate_velocity(max_height)
 
     # Add text annotations in boxes
-    bbox_props = dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.7)
+    bbox_props = {"boxstyle": "round,pad=0.5", "fc": "yellow", "alpha": 0.7}
     ax.text(
         max_height_time + 0.1,
         max_height * 0.8,
@@ -2444,7 +2441,7 @@ def draw_fppa_overlay(
         fontsize=10,
         color=color_angle,
         fontweight="bold",
-        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.8},
     )
 
 
@@ -2642,7 +2639,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
         <h1>Jump Analysis Report</h1>
         <p><strong>Subject ID:</strong> {base_name}</p>
         <p><strong>Date:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
-        
+
         <div class="note">
             <h3>Methodology & Coordinate System</h3>
             <p>This analysis utilizes a biomechanical coordinate system:</p>
@@ -2654,12 +2651,12 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 <li><strong>Units:</strong> Meters (m)</li>
             </ul>
             <p><strong>Height Calculation:</strong> Jump height is measured relative to the <em>initial center of gravity (CG) position</em> (averaged over the first 10-20 frames). This initial height is treated as the zero reference.</p>
-            
+
             <h3>Vertical Jump Power Estimation</h3>
             <p>
             Three power metrics are estimated based on Center of Mass (CG) kinematics:
             </p>
-            
+
             <h4>1. Instantaneous Power</h4>
             <p>
               Calculated at each time step <em>t</em> during propulsion:<br>
@@ -2670,19 +2667,19 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 <li><code>v(t)</code> : Vertical velocity of the CG</li>
               </ul>
             </p>
-            
+
             <h4>2. Takeoff Power</h4>
             <p>
               Power output at the precise moment of takeoff (toes leave ground).
             </p>
-            
+
             <h4>3. Average Propulsion Power</h4>
             <p>
               <code>P<sub>avg</sub> = (KE<sub>takeoff</sub> + PE<sub>max</sub>) / t<sub>propulsion</sub></code><br>
               Represents the average power output throughout the entire push-off phase.
             </p>
         </div>
-        
+
         <h2>Jump Metrics</h2>
         <table>
             <tr>
@@ -2776,7 +2773,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 <td>s</td>
             </tr>
         </table>
-        
+
         <h2>Bilateral Foot Analysis</h2>
         <table>
             <tr>
@@ -2804,9 +2801,9 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 <td>{round(abs(results.get("height_left_foot_m", 0) - results.get("height_right_foot_m", 0)), 3) if results.get("height_left_foot_m") and results.get("height_right_foot_m") else "N/A"}</td>
             </tr>
         </table>
-        
+
         <h2>Kinematics & Risk Screening</h2>
-        
+
         <h3>Stability at Landing (0.4s)</h3>
         <table>
             <tr>
@@ -2825,7 +2822,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
         <p>Reference values: <strong>Ratio < 0.8</strong> indicates excessive knee approximation (Valgus).</p>
         <p><strong>FPPA Risk Classification:</strong> &lt; 5° = Good alignment (Green), 5°-10° = Moderate risk (Yellow), &gt; 10° = High risk / Excessive dynamic valgus or varus (Red)</p>
         <p><strong>FPPA Convention:</strong> Positive = Varus (Abduction/Lateral collapse), Negative = Valgus (Adduction/Medial collapse)</p>
-        
+
         <table>
             <tr>
                 <th>Phase</th>
@@ -2862,7 +2859,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 </td>
             </tr>
         </table>
-        
+
         <h3>Landing Phase Analysis - Multiple Moments</h3>
         <p><em>Based on Mechanisms for Noncontact Anterior Cruciate Ligament Injury</em></p>
         <table>
@@ -2926,7 +2923,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 <td>{f"{results['landing_frame'] / results['fps']:.3f}" if results["landing_frame"] is not None else "N/A"}</td>
             </tr>
         </table>
-        
+
         <h2>Jump Analysis Visualizations</h2>
     """
 
@@ -3447,7 +3444,7 @@ def process_mediapipe_data(input_file, output_dir):
         plot_files.extend(other_plot_files)
 
         # 5. Generate compact animated GIF over the jump cycle (key frames + intermediates)
-        gif_path = generate_jump_animation_gif(
+        generate_jump_animation_gif(
             data,
             jump_phase_results,
             output_dir,
@@ -3611,7 +3608,7 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
             f"Using columns: Mass={mass_col}, {'Time' if use_time_of_flight else 'Height'}={value_col}, Contact={contact_col}"
         )
 
-        for index, row in data.iterrows():
+        for _index, row in data.iterrows():
             # Get values using detected column names
             mass = row[mass_col]
             second_value = row[value_col]
@@ -3966,7 +3963,7 @@ def generate_normalized_diagnostic_plot(
         f"Jump Height: {jump_height:.3f} m (from initial CG position)",
         xy=(max_height_time, jump_height),
         xytext=(max_height_time, jump_height * 0.8),
-        arrowprops=dict(facecolor="black", shrink=0.05),
+        arrowprops={"facecolor": "black", "shrink": 0.05},
         ha="center",
     )
 
@@ -4185,7 +4182,7 @@ def plot_jump_stickfigures_with_cg(
     plt.plot(df[cg_x_col], df[cg_y_col], "--", color="gray", label="CG Path", alpha=0.5)
 
     # Plot stick figures at key frames
-    for frame, label, color in zip(frames_plot, labels_plot, colors):
+    for frame, label, color in zip(frames_plot, labels_plot, colors, strict=False):
         if frame >= len(df):
             continue
 
@@ -4225,29 +4222,28 @@ def plot_jump_stickfigures_with_cg(
                 nose_x,
                 nose_y,
             ]
+        ) and not any(
+            pd.isna(row[col])
+            for col in [
+                left_shoulder_x,
+                left_shoulder_y,
+                right_shoulder_x,
+                right_shoulder_y,
+                nose_x,
+                nose_y,
+            ]
         ):
-            if not any(
-                pd.isna(row[col])
-                for col in [
-                    left_shoulder_x,
-                    left_shoulder_y,
-                    right_shoulder_x,
-                    right_shoulder_y,
-                    nose_x,
-                    nose_y,
-                ]
-            ):
-                # Calculate shoulders midpoint
-                mid_shoulder_x = (row[left_shoulder_x] + row[right_shoulder_x]) / 2
-                mid_shoulder_y = (row[left_shoulder_y] + row[right_shoulder_y]) / 2
+            # Calculate shoulders midpoint
+            mid_shoulder_x = (row[left_shoulder_x] + row[right_shoulder_x]) / 2
+            mid_shoulder_y = (row[left_shoulder_y] + row[right_shoulder_y]) / 2
 
-                # Plot line from midpoint to nose
-                plt.plot(
-                    [mid_shoulder_x, row[nose_x]],
-                    [mid_shoulder_y, row[nose_y]],
-                    color=color,
-                    lw=2,
-                )
+            # Plot line from midpoint to nose
+            plt.plot(
+                [mid_shoulder_x, row[nose_x]],
+                [mid_shoulder_y, row[nose_y]],
+                color=color,
+                lw=2,
+            )
 
         # Plot CG point
         if cg_x_col in row and cg_y_col in row:
@@ -4302,7 +4298,7 @@ def generate_jump_animation_gif(
     key_frames = [int(max(0, min(len(data) - 1, f))) for f in key_frames]
 
     frames = []
-    for a, b in zip(key_frames[:-1], key_frames[1:]):
+    for a, b in zip(key_frames[:-1], key_frames[1:], strict=False):
         if a > b:
             a, b = b, a
         frames.append(a)
@@ -4681,7 +4677,7 @@ def plot_jump_stickfigures_subplot(
         x_max += x_padding
 
     # Plot each phase in its own subplot
-    for i, (ax, frame, label, color) in enumerate(zip(axes, frames_plot, labels_plot, colors)):
+    for i, (ax, frame, label, color) in enumerate(zip(axes, frames_plot, labels_plot, colors, strict=False)):
         if frame >= len(df):
             ax.text(
                 0.5,
@@ -4729,29 +4725,28 @@ def plot_jump_stickfigures_subplot(
                 nose_x,
                 nose_y,
             ]
+        ) and not any(
+            pd.isna(row[col])
+            for col in [
+                left_shoulder_x,
+                left_shoulder_y,
+                right_shoulder_x,
+                right_shoulder_y,
+                nose_x,
+                nose_y,
+            ]
         ):
-            if not any(
-                pd.isna(row[col])
-                for col in [
-                    left_shoulder_x,
-                    left_shoulder_y,
-                    right_shoulder_x,
-                    right_shoulder_y,
-                    nose_x,
-                    nose_y,
-                ]
-            ):
-                # Calculate shoulders midpoint
-                mid_shoulder_x = (row[left_shoulder_x] + row[right_shoulder_x]) / 2
-                mid_shoulder_y = (row[left_shoulder_y] + row[right_shoulder_y]) / 2
+            # Calculate shoulders midpoint
+            mid_shoulder_x = (row[left_shoulder_x] + row[right_shoulder_x]) / 2
+            mid_shoulder_y = (row[left_shoulder_y] + row[right_shoulder_y]) / 2
 
-                # Plot line from midpoint to nose
-                ax.plot(
-                    [mid_shoulder_x, row[nose_x]],
-                    [mid_shoulder_y, row[nose_y]],
-                    color=color,
-                    lw=2,
-                )
+            # Plot line from midpoint to nose
+            ax.plot(
+                [mid_shoulder_x, row[nose_x]],
+                [mid_shoulder_y, row[nose_y]],
+                color=color,
+                lw=2,
+            )
 
         # Plot the CG with a distinct marker
         if cg_x_col in row and cg_y_col in row:

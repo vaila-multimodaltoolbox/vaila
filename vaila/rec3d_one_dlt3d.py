@@ -105,7 +105,7 @@ def rec3d_multicam(dlt_list, pixel_list):
     A_matrix = np.zeros((num_cameras * 2, 3))
     b_vector = np.zeros(num_cameras * 2)
 
-    for i, (A_params, (x, y)) in enumerate(zip(dlt_list, pixel_list)):
+    for i, (A_params, (x, y)) in enumerate(zip(dlt_list, pixel_list, strict=False)):
         a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11 = A_params
 
         # Equations for camera i:

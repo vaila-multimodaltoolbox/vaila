@@ -231,10 +231,7 @@ def process_files(pixel_file, real_file):
         pixel_row = pixel_df.iloc[i]
 
         # Get reference coordinates - either from the same row or from the single reference row
-        if single_ref_mode:
-            real_row = ref_row
-        else:
-            real_row = real_df.iloc[i]
+        real_row = ref_row if single_ref_mode else real_df.iloc[i]
 
         # Filter coordinates to keep only complete pairs
         L_coords = []

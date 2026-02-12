@@ -3722,7 +3722,9 @@ def run_yolov26track():
                     if mask_img is not None:
                         cx = (x_min + x_max) // 2
                         cy = (y_min + y_max) // 2
-                        inside = cv2.pointPolygonTest(cast(Any, roi_poly), [float(cx), float(cy)], False)
+                        inside = cv2.pointPolygonTest(
+                            cast(Any, roi_poly), [float(cx), float(cy)], False
+                        )
                         if inside < 0:
                             continue
 

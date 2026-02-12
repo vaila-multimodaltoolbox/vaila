@@ -128,6 +128,9 @@ dev = [
     "ruff",
     "ty>=0.0.16",
 ]
+upscaler = [
+    "diffusers",
+]
 
 [project.scripts]
 vaila = "vaila:main"
@@ -172,6 +175,8 @@ select = [
 
 ignore = [
     "E501",  # Line too long (handled by formatter)
+    "N806",  # Variable in function should be lowercase (scientific code uses X, Y, F, etc.)
+    "N803",  # Argument name should be lowercase (same)
 ]
 
 [tool.ruff.lint.per-file-ignores]

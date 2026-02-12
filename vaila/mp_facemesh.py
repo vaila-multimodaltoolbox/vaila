@@ -333,7 +333,7 @@ MAX_CPU_CHECK_INTERVAL = 100
 def generate_landmark_mapping():
     """Generate mapping from landmark index to descriptive name"""
     regions_indices = {
-        region: set(idx for connection in connections for idx in connection)
+        region: {idx for connection in connections for idx in connection}
         for region, connections in MEDIAPIPE_REGIONS.items()
     }
     tess_indices = regions_indices.get("tessellation", set())
@@ -787,8 +787,7 @@ def detect_nvidia_gpu():
                 "--query-gpu=name,driver_version,memory.total",
                 "--format=csv,noheader,nounits",
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=5,
             text=True,
         )
@@ -834,8 +833,7 @@ def detect_amd_gpu():
         # Try to detect AMD GPU using rocm-smi or clinfo
         result = subprocess.run(
             ["rocm-smi", "--showid", "--showproductname"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=5,
             text=True,
         )
@@ -858,8 +856,7 @@ def detect_amd_gpu():
     try:
         result = subprocess.run(
             ["lspci"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=5,
             text=True,
         )
@@ -2572,7 +2569,7 @@ def process_video(video_path, output_dir, face_config):
         # Process padding frames first if enabled
         if enable_padding and pad_start_frames > 0 and padding_frame is not None:
             print(f"Processing {pad_start_frames} padding frames...")
-            for pad_idx in range(pad_start_frames):
+            for _pad_idx in range(pad_start_frames):
                 if should_throttle_cpu(frame_count):
                     apply_cpu_throttling()
 
@@ -2852,7 +2849,7 @@ def process_video(video_path, output_dir, face_config):
                 break
 
         if frame_faces:
-            for face_idx, landmarks in frame_faces:
+            for _face_idx, landmarks in frame_faces:
                 # Draw landmarks
                 points = {}
                 for i, lm in enumerate(landmarks):

@@ -696,7 +696,7 @@ def batch_convert_csv_to_c3d():
         print("Most common errors:")
 
         error_counts = {}
-        for file, error in error_details:
+        for _file, error in error_details:
             error_msg = str(error)
             if error_msg not in error_counts:
                 error_counts[error_msg] = 0

@@ -432,7 +432,7 @@ def plot_pathway_with_quadrants(x, y, quadrants_df, time_vector):
             va="center",
             fontsize=12,
             fontweight="bold",
-            bbox=dict(boxstyle="circle", facecolor="white", alpha=0.8),
+            bbox={"boxstyle": "circle", "facecolor": "white", "alpha": 0.8},
         )
 
     # Create color gradient for pathway

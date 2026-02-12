@@ -247,7 +247,7 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
 
         # Collect valid points for this frame
         points = []
-        for x_col, y_col in zip(x_columns, y_columns):
+        for x_col, y_col in zip(x_columns, y_columns, strict=False):
             try:
                 x = float(row[x_col])
                 y = float(row[y_col])
@@ -273,7 +273,7 @@ def process_dat_file(input_path, output_path, parameters, image_size=(1920, 1080
             point_idx = 0
 
             # Update only the coordinate columns with undistorted values
-            for x_col, y_col in zip(x_columns, y_columns):
+            for x_col, y_col in zip(x_columns, y_columns, strict=False):
                 if point_idx < len(undistorted_points):
                     # Get original values
                     orig_x = row[x_col]
@@ -457,7 +457,6 @@ def run_datdistort():
             return
         input_dir = os.path.abspath(input_dir)
         file_list = [f for f in os.listdir(input_dir) if f.lower().endswith((".csv", ".dat"))]
-        single_file_mode = False
 
     # Load parameters once
     parameters = load_distortion_parameters(parameters_path)

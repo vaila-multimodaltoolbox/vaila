@@ -842,7 +842,7 @@ SHORTCUTS:
             rate = engine.getProperty("rate")
             engine.setProperty("rate", rate - 50)
 
-            volume = engine.getProperty("volume")
+            engine.getProperty("volume")
             engine.setProperty("volume", 0.9)
 
             engine.save_to_file(text, audio_file)
@@ -1371,17 +1371,6 @@ Files saved in: {batch_dir}
         """Generate music using OpenAI API."""
         try:
             # This would require API key setup
-            prompt = f"""
-            Create a Python script that generates music based on this description: "{text}"
-            
-            Use the midiutil library to create a MIDI file. Include:
-            1. A simple melody that reflects the mood of the text
-            2. Basic chord progression
-            3. Appropriate tempo and time signature
-            4. Save as a .mid file
-            
-            Make the code executable and well-commented.
-            """
 
             # Mock response for now (replace with actual OpenAI call)
             code = self._generate_mock_music_code(text)
@@ -1668,7 +1657,7 @@ text_words = "{text}".split()[:{note_count}]
 for i, word in enumerate(text_words):
     # Use word length to determine note duration
     duration = min(len(word) / 5.0, 2.0)
-    
+
     # Use word position for pitch selection
     if "{primary_mood}" in ["happy", "energetic"]:
         # Upward tendency for happy/energetic moods
@@ -1682,11 +1671,11 @@ for i, word in enumerate(text_words):
         # Random walk for neutral/other moods
         note_index = random.randint(0, len(base_notes) - 1)
         note = base_notes[note_index]
-    
+
     # Add note with dynamics variation
     volume = BASE_VOLUME + random.randint(-10, 10)
     midi.addNote(0, 0, note, melody_time, duration, volume)
-    
+
     # Add occasional rest
     if random.random() < 0.1:
         melody_time += duration + 0.5
@@ -1724,7 +1713,7 @@ bass_pattern = [0, 0, 4, 4, 5, 5, 0, 0]  # Simple bass pattern
 for i in range(int(melody_time / 2)):
     note_index = bass_pattern[i % len(bass_pattern)]
     bass_note = base_notes[note_index] - 24  # Two octaves lower
-    
+
     # Rhythm variation based on mood
     if "{primary_mood}" in ["energetic", "happy"]:
         duration = 0.5  # Faster bass for upbeat moods
@@ -1732,7 +1721,7 @@ for i in range(int(melody_time / 2)):
         duration = 2.0  # Slower bass for calm moods
     else:
         duration = 1.0
-    
+
     midi.addNote(2, 2, bass_note, bass_time, duration, BASE_VOLUME - 10)
     bass_time += duration
 
@@ -2263,7 +2252,7 @@ The MIDI file is ready for manual conversion!
 
     def open_image_url(self):
         """Open image URL if available."""
-        content = self.image_display.get("1.0", tk.END)
+        self.image_display.get("1.0", tk.END)
         # This would extract URLs from the content if they exist
         self.show_message(
             "info",
@@ -2445,11 +2434,7 @@ Next steps:
     def _try_convert_midi_to_mp3(self, midi_path, mp3_path):
         """Try to convert MIDI to MP3 using available tools."""
         # Try FluidSynth first
-        if self._try_fluidsynth_conversion(midi_path, mp3_path) or self._try_timidity_conversion(
-            midi_path, mp3_path
-        ):
-            return True
-        return False
+        return bool(self._try_fluidsynth_conversion(midi_path, mp3_path) or self._try_timidity_conversion(midi_path, mp3_path))
 
     def run(self):
         """Start the application."""
