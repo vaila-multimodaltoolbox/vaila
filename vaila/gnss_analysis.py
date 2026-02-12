@@ -445,7 +445,7 @@ def plot_gnss_data():
     # Interactive Map using Folium (see [Folium Getting Started](https://python-visualization.github.io/folium/latest/getting_started.html))
     if lats and lons:
         m = folium.Map(location=[lats[0], lons[0]], zoom_start=12)
-        folium.PolyLine(list(zip(lats, lons)), color="blue", weight=2.5, opacity=1).add_to(m)
+        folium.PolyLine(list(zip(lats, lons, strict=False)), color="blue", weight=2.5, opacity=1).add_to(m)
         folium.Marker([lats[0], lons[0]], popup="Start", icon=folium.Icon(color="green")).add_to(m)
         folium.Marker([lats[-1], lons[-1]], popup="End", icon=folium.Icon(color="red")).add_to(m)
         # Save the map in the same directory as the input file
@@ -781,7 +781,6 @@ def run_gnss_analysis_gui():
         ("Batch Processing", batch_processing),
     ]
 
-    rows = 5
     cols = 2
     for idx, (label, cmd) in enumerate(buttons):
         r = idx // cols

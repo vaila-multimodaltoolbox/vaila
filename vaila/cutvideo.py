@@ -67,6 +67,7 @@ License:
     This project is licensed under the terms of AGPLv3.
 """
 
+import contextlib
 import datetime
 import json
 import os
@@ -102,7 +103,7 @@ def get_precise_video_metadata(video_path):
             str(video_path),
         ]
         result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+            cmd, capture_output=True, text=True, check=True
         )
         data = json.loads(result.stdout)
 
@@ -198,7 +199,7 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
     try:
         # Check if ffmpeg is available
         subprocess.run(
-            ["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
+            ["ffmpeg", "-version"], capture_output=True, check=True
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Fallback to OpenCV if ffmpeg not available
@@ -239,8 +240,7 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
     try:
         subprocess.run(
             cmd_reencode,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=True,
         )
@@ -565,8 +565,7 @@ def extract_audio_data(video_path, target_sr=44100):
         print(f"Loading audio waveform for {Path(video_path).name}...")
         process = subprocess.run(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             bufsize=10**8,
         )
         if process.returncode != 0:
@@ -880,13 +879,13 @@ def play_video_with_cuts(video_path):
                             TimeElapsedColumn(),
                             transient=True,
                         ) as progress:
-                            task = progress.add_task(
+                            progress.add_task(
                                 f"Converting {Path(video_path).name}...", total=None
                             )
 
                             # Run subprocess
-                            process = subprocess.run(
-                                cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                            subprocess.run(
+                                cmd, check=True, capture_output=True
                             )
 
                         conversion_success = True
@@ -1092,10 +1091,8 @@ def play_video_with_cuts(video_path):
 
     def stop_audio_playback():
         if audio_ready:
-            try:
+            with contextlib.suppress(Exception):
                 pygame.mixer.music.stop()
-            except Exception:
-                pass
 
     def ensure_music_loaded():
         nonlocal audio_music_loaded
@@ -1255,7 +1252,7 @@ def play_video_with_cuts(video_path):
             markers.append(start)
             markers.append(end)
         # Remove duplicates and sort
-        markers = sorted(list(set(markers)))
+        markers = sorted(set(markers))
         return markers
 
     def find_next_marker(frame_pos):
@@ -2047,15 +2044,11 @@ def play_video_with_cuts(video_path):
     cap.release()
     stop_audio_playback()
     if audio_ready:
-        try:
+        with contextlib.suppress(Exception):
             pygame.mixer.quit()
-        except Exception:
-            pass
     if audio_wave_path:
-        try:
+        with contextlib.suppress(Exception):
             os.remove(audio_wave_path)
-        except Exception:
-            pass
     pygame.quit()
 
 

@@ -124,6 +124,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff",
+    "ty>=0.0.16",
 ]
 gpu = [
     "tensorrt",
@@ -195,3 +196,9 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+# https://docs.astral.sh/ty/
+[tool.ty.environment]
+python-version = "3.12"
+[tool.ty.src]
+exclude = [".git", ".venv", "__pycache__", "*.pyc", "build", "dist", ".uv", "uv.lock"]

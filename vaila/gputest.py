@@ -111,7 +111,7 @@ def test_yolo():
 
             # Dummy inference
             img = np.zeros((640, 640, 3), dtype=np.uint8)
-            results = model(img, verbose=False)
+            model(img, verbose=False)
             table.add_row("Inference on GPU", "✅ Success")
         else:
             table.add_row("Model Device", "CPU (CUDA not available)")
@@ -185,7 +185,7 @@ def test_mediapipe():
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_np)
 
             # Detect
-            detection_result = landmarker.detect(mp_image)
+            landmarker.detect(mp_image)
             table.add_row("Pose Inference", "✅ Success (Tasks API)")
 
             # Check for GPU delegate availability (indirectly)

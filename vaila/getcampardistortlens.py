@@ -26,7 +26,7 @@ def calibrate_camera_from_images(calib_files, pattern_size, square_size, show_im
     os.makedirs(detection_dir, exist_ok=True)
 
     objpoints, imgpoints = [], []
-    for idx, f in enumerate(calib_files):
+    for _idx, f in enumerate(calib_files):
         img = cv2.imread(f)
         if img is None:
             print(f"[WARN] could not read {f}")
@@ -157,9 +157,9 @@ def undistort_image(img_path, camera_matrix, dist_coeffs, alpha, output_dir=None
         # Aplicar recorte se ROI for válido
         if roi[2] > 0 and roi[3] > 0:
             x, y, w_roi, h_roi = roi
-            undistorted_roi = undistorted[y : y + h_roi, x : x + w_roi]
+            undistorted[y : y + h_roi, x : x + w_roi]
         else:
-            undistorted_roi = undistorted
+            pass
 
         results[a] = undistorted
 

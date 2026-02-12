@@ -491,8 +491,10 @@ def detect_markers_dynamic(df, coord_cols):
     return markers
 
 
-def get_marker_coords_dynamic(df, marker_info, coord_types=["x", "y", "z"]):
+def get_marker_coords_dynamic(df, marker_info, coord_types=None):
     """Get coordinates of a marker dynamically based on available coordinate types."""
+    if coord_types is None:
+        coord_types = ["x", "y", "z"]
     coords = {}
     for coord_type in coord_types:
         if coord_type in marker_info:
@@ -646,7 +648,7 @@ def visualize_markers_dynamic(df, frame_col, coord_cols, marker_ids=None):
     )  # Ajustar right para usar mais espaço
 
     # Dictionary to store plot lines
-    lines = {coord_type: {} for coord_type in coord_types}
+    {coord_type: {} for coord_type in coord_types}
 
     # Add frame range slider
     frames_slider_ax = plt.axes([0.3, 0.05, 0.5, 0.03])
@@ -1703,7 +1705,7 @@ def auto_fill_gaps_arima():
         return
 
     frame_col = df.columns[0]
-    frames = df[frame_col].values
+    df[frame_col].values
 
     markers = detect_markers(df)
     total_filled = 0

@@ -643,7 +643,7 @@ def batch_resize_videos():
     # Variables to store paths and settings
     input_dir_var = StringVar(value="No directory selected")
     output_dir_var = StringVar(value="No directory selected")
-    scale_var = tk.IntVar(value=2)
+    tk.IntVar(value=2)
 
     # Frame for directory selection
     dir_frame = Frame(root, padx=10, pady=10)
@@ -685,7 +685,7 @@ def batch_resize_videos():
     help_frame = Frame(root, padx=10, pady=5)
     help_frame.pack(fill=tk.X)
 
-    help_text = """Note: For cropped videos, a metadata file is saved that allows 
+    help_text = """Note: For cropped videos, a metadata file is saved that allows
 converting MediaPipe coordinates back to the original video dimensions."""
 
     Label(help_frame, text=help_text, justify=tk.LEFT, wraplength=500).pack(fill=tk.X)
@@ -817,7 +817,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
 
             # Reset all buttons to system default (no custom colors)
             buttons = format_buttons_frame.winfo_children()
-            for i, btn in enumerate(buttons):
+            for _i, btn in enumerate(buttons):
                 btn["bg"] = ""  # Empty string resets to system default
                 btn["fg"] = ""  # Empty string resets to system default
 

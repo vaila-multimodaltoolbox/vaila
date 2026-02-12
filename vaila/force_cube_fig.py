@@ -394,7 +394,7 @@ def select_headers_and_load_data(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [header for header, var in zip(headers, header_vars) if var.get()]
+        selected_headers = [header for header, var in zip(headers, header_vars, strict=False) if var.get()]
         selection_window.quit()  # Ends the main Tkinter loop
         selection_window.destroy()  # Closes the selection window
 
@@ -755,14 +755,14 @@ def calculate_cube_values(signal, Fs):
     t100ms = 0.1  # 100 ms
     index_40ms = int(t40ms * Fs)
     index_100ms = int(t100ms * Fs)
-    index_20ms = int(0.02 * Fs)  # 20 ms index
+    int(0.02 * Fs)  # 20 ms index
 
     vpeak_40ms = signal[index_40ms]
-    area_until_40ms = np.trapz(signal[:index_40ms], time_interval[:index_40ms])
+    area_until_40ms = np.trapezoid(signal[:index_40ms], time_interval[:index_40ms])
     rfd_40ms = vpeak_40ms / t40ms
 
     vpeak_100ms = signal[index_100ms]
-    area_until_100ms = np.trapz(signal[:index_100ms], time_interval[:index_100ms])
+    area_until_100ms = np.trapezoid(signal[:index_100ms], time_interval[:index_100ms])
     rfd_100ms = vpeak_100ms / t100ms
 
     # Search for peakmax after 100 ms
@@ -783,7 +783,7 @@ def calculate_cube_values(signal, Fs):
     vpeak_poi = vip_value
     time_poi = time_interval[vip_index]
 
-    area_impact_transient = np.trapz(
+    area_impact_transient = np.trapezoid(
         signal[:index_impact_transient], time_interval[:index_impact_transient]
     )
     rfd_impact_transient = (
@@ -798,11 +798,11 @@ def calculate_cube_values(signal, Fs):
 
     vpeakmax = signal[index_peakmax]
     time_peakmax = time_interval[index_peakmax]
-    area_peakmax = np.trapz(signal[:index_peakmax], time_interval[:index_peakmax])
+    area_peakmax = np.trapezoid(signal[:index_peakmax], time_interval[:index_peakmax])
     rfd_peakmax = vpeakmax / time_peakmax if time_peakmax and time_peakmax != 0 else float("inf")
 
-    total_area = np.trapz(signal, time_interval)
-    area_propulsion = np.trapz(
+    total_area = np.trapezoid(signal, time_interval)
+    area_propulsion = np.trapezoid(
         signal[index_peakmax:],
         time_interval[index_peakmax:] - time_interval[index_peakmax],
     )
