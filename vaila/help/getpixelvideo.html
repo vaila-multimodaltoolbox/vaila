@@ -376,7 +376,7 @@
                 <td>Add new empty marker to file</td>
               </tr>
               <tr>
-                <td><span class="key">R</span></td>
+                <td><span class="key">R</span> or <span class="key">D</span></td>
                 <td>Remove last marker from file</td>
               </tr>
               <tr>
@@ -384,42 +384,42 @@
                 <td>Toggle Labeling mode</td>
               </tr>
               <tr>
-                <td><span class="key">Z / R-Click</span></td>
+                <td><span class="key">Z</span> / <span class="key">R-Click</span></td>
                 <td>Remove last bounding box (Labeling mode)</td>
               </tr>
               <tr>
                 <td><span class="key">N</span></td>
                 <td>Rename object label (Labeling Mode Only)</td>
               </tr>
+              <tr>
+                <td><span class="key">F5</span></td>
+                <td>Save Labeling Project &amp; export dataset (Labeling Mode Only)</td>
+              </tr>
+              <tr>
+                <td><span class="key">F6</span></td>
+                <td>Load Labeling Project (Labeling Mode Only)</td>
+              </tr>
+              <tr>
+                <td><span class="key">F7</span></td>
+                <td>Load dataset folder – next Save appends (Labeling Mode Only)</td>
+              </tr>
+              <tr>
+                <td><span class="key">F8</span></td>
+                <td>Open another video (keeps dataset; no need to close app)</td>
+              </tr>
             </table>
           </div>
 
           <div class="control-section">
-            <h3>File Operations</h3>
+            <h3>File Operations &amp; Help</h3>
             <table>
-              <tr>
-                <td><span class="key">S</span></td>
-                <td>Save current markers</td>
-              </tr>
-              <tr>
-                <td><span class="key">B</span></td>
-                <td>Make backup of current data</td>
-              </tr>
-              <tr>
-                <td><span class="key">L</span></td>
-                <td>Reload coordinates from file</td>
-              </tr>
               <tr>
                 <td><span class="key">H</span></td>
                 <td>Show help dialog</td>
               </tr>
               <tr>
-                <td><span class="key">F5</span></td>
-                <td>Save Labeling Project (Labeling Mode Only)</td>
-              </tr>
-              <tr>
-                <td><span class="key">F6</span></td>
-                <td>Load Labeling Project (Labeling Mode Only)</td>
+                <td><span class="key">Save</span> / <span class="key">Load</span></td>
+                <td>Use bottom panel buttons (no dedicated key)</td>
               </tr>
             </table>
           </div>
@@ -649,11 +649,16 @@
             <strong>Export:</strong> Save exports structured dataset by split
           </li>
           <li>
-            <strong>Project Management:</strong> F5 to Save, F6 to Load labeling
-            projects
+            <strong>Project Management:</strong> F5 Save &amp; export dataset,
+            F6 Load project, F7 Load dataset folder (next Save appends),
+            F8 Open another video (keeps dataset)
           </li>
           <li><strong>Renaming:</strong> Press N to rename object labels</li>
-          <li><strong>Directory:</strong> {video_name}_dataset/</li>
+          <li>
+            <strong>Directory:</strong> New export creates
+            <code>dataset_YYYYMMDD_HHMMSS/</code>; use F7 to select existing
+            <code>data.yaml</code> to append (multi-video)
+          </li>
           <li>
             <strong>Structure:</strong> train/val/test folders with images/ and
             labels/
@@ -666,7 +671,8 @@
             (YOLO/COCO format)
           </li>
           <li>
-            <strong>Activation:</strong> Save when Labeling mode is active
+            <strong>Activation:</strong> Save when Labeling mode is active (F5 or
+            Save button)
           </li>
         </ul>
       </section>
@@ -716,11 +722,18 @@
             labels
           </li>
           <li>
-            <strong>Save Project:</strong> F5 to save current state to JSON
-            (allows resuming later)
+            <strong>Save Project:</strong> F5 to save and export dataset (creates
+            <code>dataset_YYYYMMDD_HHMMSS/</code> or appends if dataset loaded via F7)
           </li>
           <li>
             <strong>Load Project:</strong> F6 to load saved state from JSON
+          </li>
+          <li>
+            <strong>Load Dataset:</strong> F7 to select dataset folder (next F5 appends)
+          </li>
+          <li>
+            <strong>Open another video:</strong> F8 to switch video without closing
+            the app (keeps dataset; auto-loads project if present)
           </li>
           <li>
             <strong>Rename:</strong> Press N to rename the label (e.g., "ball",

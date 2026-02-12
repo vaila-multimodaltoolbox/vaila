@@ -97,7 +97,7 @@ def run_convert_ts_to_mp4(input_dir: str, output_dir: str):
 
             try:
                 print(f"[cyan]Converting:[/cyan] {os.path.basename(ts_path)} → {base}.mp4")
-                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                subprocess.run(cmd, check=True, capture_output=True)
                 success_count += 1
             except subprocess.CalledProcessError as e:
                 print(f"[red]Failed:[/red] {os.path.basename(ts_path)}")

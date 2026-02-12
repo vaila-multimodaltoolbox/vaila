@@ -105,7 +105,7 @@ def rec3d_multicam(dlt_list, pixel_list):
     A_matrix = np.zeros((num_cameras * 2, 3))
     b_vector = np.zeros(num_cameras * 2)
 
-    for i, (A_params, (x, y)) in enumerate(zip(dlt_list, pixel_list)):
+    for i, (A_params, (x, y)) in enumerate(zip(dlt_list, pixel_list, strict=False)):
         a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11 = A_params
 
         # Equations for camera i:
@@ -192,6 +192,7 @@ def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui
     Returns:
         (new_dir, file_base) on success, None on failure.
     """
+
     def _err(msg):
         if gui:
             messagebox.showerror("Error", msg)
@@ -350,7 +351,9 @@ def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui
             conversion_factor=mm_conversion,
         )
         if gui:
-            messagebox.showinfo("Success", f"C3D file (millimeters) saved at:\n{c3d_output_path_mm}")
+            messagebox.showinfo(
+                "Success", f"C3D file (millimeters) saved at:\n{c3d_output_path_mm}"
+            )
         print("C3D file (millimeters) created successfully")
     except Exception as e:
         if gui:

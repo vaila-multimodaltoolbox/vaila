@@ -115,9 +115,7 @@ def is_mpangles_output_file(filename):
         return True
     if "_rel.csv" in base.lower() or "_abs_180" in base.lower() or "_abs_360" in base.lower():
         return True
-    if base.endswith("_rel.csv") or "_abs" in base and ".csv" in base:
-        return True
-    return False
+    return bool(base.endswith("_rel.csv") or "_abs" in base and ".csv" in base)
 
 
 def validate_mediapipe_csv(file_path):
@@ -858,8 +856,7 @@ def process_absolute_angles(input_csv, output_csv):
         print(f"Reading input file: {input_csv}")
 
         # Get total number of frames
-        total_frames = len(df)
-        frame_count = 0
+        len(df)
 
         # Extract all landmarks
         # Right side landmarks
@@ -889,110 +886,83 @@ def process_absolute_angles(input_csv, output_csv):
         left_ear = get_vector_landmark(df, "left_ear")
 
         # Get landmarks and calculate midpoints
-        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)]
+        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)]
         mid_shoulder = [
-            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder)
+            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder, strict=False)
         ]
-        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)]
+        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)]
 
         # Calculate absolute angles for segments
         right_thigh_angles = np.array(
-            [compute_absolute_angle(hip, knee) for hip, knee in zip(right_hip, right_knee)]
+            [compute_absolute_angle(hip, knee) for hip, knee in zip(right_hip, right_knee, strict=False)]
         )
         right_shank_angles = np.array(
-            [compute_absolute_angle(knee, ankle) for knee, ankle in zip(right_knee, right_ankle)]
+            [compute_absolute_angle(knee, ankle) for knee, ankle in zip(right_knee, right_ankle, strict=False)]
         )
         right_foot_angles = np.array(
             [
                 compute_absolute_angle(heel, foot_index)
-                for heel, foot_index in zip(right_heel, right_foot_index)
+                for heel, foot_index in zip(right_heel, right_foot_index, strict=False)
             ]
         )
         right_upperarm_angles = np.array(
             [
                 compute_absolute_angle(shoulder, elbow)
-                for shoulder, elbow in zip(right_shoulder, right_elbow)
+                for shoulder, elbow in zip(right_shoulder, right_elbow, strict=False)
             ]
         )
         right_forearm_angles = np.array(
-            [compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(right_elbow, right_wrist)]
+            [compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(right_elbow, right_wrist, strict=False)]
         )
         right_hand_angles = np.array(
             [
                 compute_absolute_angle(wrist, mid_hand)
                 for wrist, mid_hand in zip(
                     right_wrist,
-                    [compute_midpoint(p, i) for p, i in zip(right_pinky, right_index)],
+                    [compute_midpoint(p, i) for p, i in zip(right_pinky, right_index, strict=False)], strict=False,
                 )
             ]
         )
 
         left_thigh_angles = np.array(
-            [compute_absolute_angle(hip, knee) for hip, knee in zip(left_hip, left_knee)]
+            [compute_absolute_angle(hip, knee) for hip, knee in zip(left_hip, left_knee, strict=False)]
         )
         left_shank_angles = np.array(
-            [compute_absolute_angle(knee, ankle) for knee, ankle in zip(left_knee, left_ankle)]
+            [compute_absolute_angle(knee, ankle) for knee, ankle in zip(left_knee, left_ankle, strict=False)]
         )
         left_foot_angles = np.array(
             [
                 compute_absolute_angle(heel, foot_index)
-                for heel, foot_index in zip(left_heel, left_foot_index)
+                for heel, foot_index in zip(left_heel, left_foot_index, strict=False)
             ]
         )
         left_upperarm_angles = np.array(
             [
                 compute_absolute_angle(shoulder, elbow)
-                for shoulder, elbow in zip(left_shoulder, left_elbow)
+                for shoulder, elbow in zip(left_shoulder, left_elbow, strict=False)
             ]
         )
         left_forearm_angles = np.array(
-            [compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(left_elbow, left_wrist)]
+            [compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(left_elbow, left_wrist, strict=False)]
         )
         left_hand_angles = np.array(
             [
                 compute_absolute_angle(wrist, mid)
                 for wrist, mid in zip(
                     left_wrist,
-                    [compute_midpoint(p, i) for p, i in zip(left_pinky, left_index)],
+                    [compute_midpoint(p, i) for p, i in zip(left_pinky, left_index, strict=False)], strict=False,
                 )
             ]
         )
 
         trunk_angles = np.array(
-            [compute_absolute_angle(shoulder, hip) for shoulder, hip in zip(mid_shoulder, mid_hip)]
+            [compute_absolute_angle(shoulder, hip) for shoulder, hip in zip(mid_shoulder, mid_hip, strict=False)]
         )
         neck_angles = np.array(
-            [compute_absolute_angle(ear, shoulder) for ear, shoulder in zip(mid_ear, mid_shoulder)]
+            [compute_absolute_angle(ear, shoulder) for ear, shoulder in zip(mid_ear, mid_shoulder, strict=False)]
         )
 
         # Create landmarks dictionary
-        landmarks = {
-            "right_ear": right_ear,
-            "left_ear": left_ear,
-            "mid_ear": mid_ear,
-            "mid_shoulder": mid_shoulder,
-            "mid_hip": mid_hip,
-            "right_shoulder": right_shoulder,
-            "right_elbow": right_elbow,
-            "right_wrist": right_wrist,
-            "right_hip": right_hip,
-            "right_knee": right_knee,
-            "right_ankle": right_ankle,
-            "right_heel": right_heel,
-            "right_foot_index": right_foot_index,
-            "right_pinky": right_pinky,
-            "right_index": right_index,
-            "left_shoulder": left_shoulder,
-            "left_elbow": left_elbow,
-            "left_wrist": left_wrist,
-            "left_hip": left_hip,
-            "left_knee": left_knee,
-            "left_ankle": left_ankle,
-            "left_heel": left_heel,
-            "left_foot_index": left_foot_index,
-            "left_pinky": left_pinky,
-            "left_index": left_index,
-        }
 
         # Calculate angles
         angles = {
@@ -1089,7 +1059,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
 
             # Simple iteration to scale
             for col_idx in range(start_col, len(df.columns)):
-                col_name = df.columns[col_idx]
+                df.columns[col_idx]
                 # Heuristic: ends with _x or is even/odd position?
                 # Using the logic from get_vector_landmark, x is col 1, 3, 5... (if 0 is frame)
                 # But here start_col handles the offset.
@@ -1136,11 +1106,11 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
         left_ear = get_vector_landmark(df, "left_ear")
 
         # Get landmarks and calculate midpoints
-        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)]
+        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)]
         mid_shoulder = [
-            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder)
+            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder, strict=False)
         ]
-        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)]
+        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)]
 
         # Calculate trunk vectors for all frames
         trunk_vectors = []
@@ -1376,6 +1346,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
         # Get total number of frames
         total_frames = len(df)
         frame_count = 0
+        format_360 = False  # Absolute angle format: False = [-180, 180), True = [0, 360)
 
         # Extract all landmarks needed for angle calculations
         # Right side landmarks
@@ -1405,11 +1376,11 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
         left_ear = get_vector_landmark(df, "left_ear")
 
         # Get landmarks and calculate midpoints
-        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear)]
+        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)]
         mid_shoulder = [
-            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder)
+            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder, strict=False)
         ]
-        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip)]
+        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)]
 
         # Calculate trunk vectors for all frames
         trunk_vectors = []
@@ -1452,6 +1423,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
         trunk_abs_angles = []
         neck_abs_angles = []
 
+        format_360 = False  # Absolute angle format: False = [-180, 180), True = [0, 360)
         # Process each frame
         for i in range(total_frames):
             try:
@@ -2289,10 +2261,7 @@ def plot_stick_sequence_mpangles(df, output_path, num_frames=8, rel_df=None, abs
     ncols = min(4, n_plot)
     nrows = (n_plot + ncols - 1) // ncols
     fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows))
-    if n_plot == 1:
-        axes = [axes]
-    else:
-        axes = axes.flatten()
+    axes = [axes] if n_plot == 1 else axes.flatten()
     for i, fi in enumerate(frames_idx):
         ax = axes[i]
         row = df.iloc[fi]
@@ -2437,7 +2406,7 @@ def generate_html_report(
                     <h1>MP Angles Analysis Report</h1>
                     <div class="meta">Generated on {date_str} | vailá Toolbox</div>
                 </header>
-                
+
                 <div class="section">
                     <h2>Analysis Overview</h2>
                     <p><strong>Processed Video:</strong> {video_name}</p>
@@ -2512,7 +2481,7 @@ def generate_html_report(
                     <p><strong>Relative Angles:</strong> Angles between adjacent segments (e.g., Elbow flexion).</p>
                     <p><strong>Absolute Angles:</strong> Angles of segments relative to the global horizontal (e.g., Thigh angle).</p>
                 </div>
-                
+
                 <div class="footer">
                     <p>Generated by vailá Multimodal Toolbox - MP Angles Module</p>
                 </div>
@@ -2726,7 +2695,7 @@ class MPAnglesApp:
                 # Directory mode: batch by video (match CSV by similar name), then skeleton+angles
                 results = process_directory_videos(input_path, filter_config)
                 if results:
-                    video_names = [r[0] for r in results]
+                    [r[0] for r in results]
                     generate_batch_html_report(input_path, results)
                     messagebox.showinfo(
                         "Success",
@@ -2736,7 +2705,7 @@ class MPAnglesApp:
                     # No videos in dir: fall back to CSV-only batch (angles only, no video overlay)
                     processed = process_directory(input_path, filter_config)
                     if processed:
-                        for fname, info in processed.items():
+                        for _fname, info in processed.items():
                             process_angles(info["input_path"], info["output_path"], filter_config)
                         messagebox.showinfo(
                             "Success", f"Processed {len(processed)} CSV(s) (angles only)."
@@ -2787,7 +2756,7 @@ def run_mp_angles():
     Launches the GUI application.
     """
     root = tk.Tk()
-    app = MPAnglesApp(root)
+    MPAnglesApp(root)
     root.mainloop()
 
 
@@ -2831,7 +2800,7 @@ def main():
                 # No videos: CSV-only batch
                 processed = process_directory(path, filter_config)
                 if processed:
-                    for fname, info in processed.items():
+                    for _fname, info in processed.items():
                         process_angles(info["input_path"], info["output_path"], filter_config)
                     print(f"Processed {len(processed)} CSV(s) (angles only).")
                 else:
@@ -2863,7 +2832,7 @@ def main():
     else:
         # GUI Mode
         root = tk.Tk()
-        app = MPAnglesApp(root)
+        MPAnglesApp(root)
         root.mainloop()
 
 
