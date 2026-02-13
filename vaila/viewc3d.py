@@ -544,6 +544,34 @@ class VailaModel:
         self._selected_names = [self._marker_labels[i] for i in self._selected_indices]
         self._num_frames, self._num_markers, _ = self._points.shape
 
+    @classmethod
+    def from_array(cls, points, marker_labels, fps, filepath=""):
+        """
+        Build a VailaModel from arrays (e.g. CSV data) without loading C3D.
+        points: (num_frames, num_markers, 3), marker_labels: list of marker names, fps: float.
+        """
+        points = np.asarray(points, dtype=np.float64)
+        n_frames, n_markers, _ = points.shape
+        if len(marker_labels) != n_markers:
+            raise ValueError(
+                f"marker_labels length ({len(marker_labels)}) must match points markers ({n_markers})"
+            )
+        self = cls.__new__(cls)
+        self._filepath = filepath or "CSV"
+        self._fps = float(fps)
+        self._marker_labels = list(marker_labels)
+        self._residuals = None
+        self._events = None
+        self._analog_info = {"labels": [], "freq": 0.0, "exists": False}
+        self._c3d_object = None
+        self._selected_indices = list(range(n_markers))
+        self._points_all = points
+        self._points = points
+        self._selected_names = list(marker_labels)
+        self._num_frames = n_frames
+        self._num_markers = n_markers
+        return self
+
     def _load_from_path(self, filepath):
         """Load C3D from a given path (same logic as load_c3d_file, no dialog)."""
         env_path = os.environ.get("VIEWC3D_FILE", "").strip()
@@ -4576,6 +4604,34 @@ O - Manual swap markers (visual editing)
     # Main loop (shared with Open3DMokkaViewer.run()); skip when called from init_vis via _run_open3d_body
     if run_loop:
         _run_open3d_loop(viewer)
+
+
+def run_viewc3d_from_array(points, marker_labels, fps, filepath=""):
+    """
+    Run the Open3D viewer with data from arrays (e.g. CSV).
+    points: (num_frames, num_markers, 3), marker_labels: list of names, fps: float.
+    """
+    global _setup_only_viewer
+    points = np.asarray(points, dtype=np.float64)
+    n_frames, n_markers, _ = points.shape
+    selected_indices = list(range(n_markers))
+    filepath = filepath or "CSV"
+    opengl_supported, error_msg = check_opengl_support()
+    if not opengl_supported:
+        from rich import print as rprint
+        rprint("[yellow] OpenGL/Open3D not supported on this system:[/yellow]")
+        rprint(f"[yellow]  {error_msg}[/yellow]")
+        rprint("[cyan] Switching to matplotlib fallback...[/cyan]")
+        success = run_viewc3d_fallback(points, filepath, fps, marker_labels, selected_indices)
+        return
+    model = VailaModel.from_array(points, marker_labels, fps, filepath)
+    viewer = Open3DMokkaViewer(model)
+    _setup_only_viewer = viewer
+    try:
+        run_viewc3d(None)
+    finally:
+        _setup_only_viewer = None
+    _run_open3d_loop(viewer)
 
 
 def load_field_lines_from_csv():
