@@ -144,11 +144,15 @@ def show_csv_optimized(file_path=None, *, use_cache=True, turbo=False, fps=30, s
     print("[bold green]Data ready for visualization![/bold green]")
     print(f"Shape: {points.shape}, FPS: {fps}")
 
-    from vaila.viewc3d_pyvista import MokkaLikeViewer
-
-    MokkaLikeViewer.from_array(
-        points, selected_markers, frame_rate=fps, title="Vaila - PyVista CSV Viewer"
-    )
+    viewer_choice = choose_visualizer()
+    if viewer_choice == "open3d":
+        from vaila.viewc3d import run_viewc3d_from_array
+        run_viewc3d_from_array(points, selected_markers, fps, file_path)
+    else:
+        from vaila.viewc3d_pyvista import MokkaLikeViewer
+        MokkaLikeViewer.from_array(
+            points, selected_markers, frame_rate=fps, title="Vaila - PyVista CSV Viewer"
+        )
 
 
 ###############################################################################
@@ -367,6 +371,46 @@ def select_markers_csv(marker_labels):
     root.destroy()
     # Return the marker names corresponding to the selected indices
     return [marker_labels[int(i)] for i in selected_indices]
+
+
+###############################################################################
+# Function: choose_visualizer
+# Dialog to choose between PyVista and Open3D 3D viewer for CSV data.
+###############################################################################
+def choose_visualizer():
+    """
+    Displays a dialog to choose the 3D viewer: PyVista or Open3D.
+
+    Returns:
+        str: "pyvista" or "open3d"
+    """
+    root = tk.Tk()
+    root.title("Choose 3D Viewer")
+    root.resizable(False, False)
+    result = [None]
+
+    def choose(which):
+        result[0] = which
+        root.quit()
+
+    tk.Label(
+        root,
+        text="Visualize CSV markers with:",
+        font=("", 11),
+    ).pack(pady=(14, 10))
+    tk.Button(root, text="PyVista viewer", command=lambda: choose("pyvista"), width=22).pack(
+        pady=4
+    )
+    tk.Button(root, text="Open3D viewer", command=lambda: choose("open3d"), width=22).pack(
+        pady=4
+    )
+    root.update_idletasks()
+    x = (root.winfo_screenwidth() - root.winfo_reqwidth()) // 2
+    y = (root.winfo_screenheight() - root.winfo_reqheight()) // 2
+    root.geometry(f"+{x}+{y}")
+    root.mainloop()
+    root.destroy()
+    return result[0] if result[0] else "pyvista"
 
 
 ###############################################################################
@@ -806,13 +850,16 @@ def show_csv(file_path=None):
         print(f"  Z: {first_frame_coords[2]:.6f}")
 
     print("Final coordinate ranges (see data above).")
-    # PyVista viewer (same logic as C3D viewer: timeline, play, trail, speed, picking)
-    from vaila.viewc3d_pyvista import MokkaLikeViewer
-
-    title = (
-        f"Vaila - CSV Viewer | {file_name} | {len(selected_markers)} markers | {num_frames} records"
-    )
-    MokkaLikeViewer.from_array(points, selected_markers, frame_rate=60.0, title=title)
+    viewer_choice = choose_visualizer()
+    if viewer_choice == "open3d":
+        from vaila.viewc3d import run_viewc3d_from_array
+        run_viewc3d_from_array(points, selected_markers, 60.0, file_path)
+    else:
+        from vaila.viewc3d_pyvista import MokkaLikeViewer
+        title = (
+            f"Vaila - CSV Viewer (PyVista) | {file_name} | {len(selected_markers)} markers | {num_frames} records"
+        )
+        MokkaLikeViewer.from_array(points, selected_markers, frame_rate=60.0, title=title)
 
 
 ###############################################################################

@@ -63,10 +63,13 @@ License:
 
 import argparse
 import contextlib
+import io
 import json
+import logging
 import os
 import sys
 import tempfile
+import time
 import tkinter as tk
 import webbrowser
 from pathlib import Path
@@ -75,6 +78,69 @@ from tkinter import filedialog
 import ezc3d
 import numpy as np
 import pyvista as pv
+
+# ---------------------------------------------------------------------------
+#  Suppress ALL VTK output (shader errors, warnings, etc.) — especially on
+#  window close where the GL context is already gone.  VTK writes directly to
+#  its own vtkOutputWindow (C++ level), NOT through Python logging/stderr.
+#  We must:
+#    1. Replace the global vtkOutputWindow with one that goes to /dev/null.
+#    2. Call GlobalWarningDisplayOff() so the C++ code skips the write entirely.
+#    3. Add a Python logging filter as a last-resort safety net.
+# ---------------------------------------------------------------------------
+_vtk_suppressed = False
+
+
+def _suppress_vtk_output():
+    """Silence all VTK error / warning output (call once, early)."""
+    global _vtk_suppressed
+    if _vtk_suppressed:
+        return
+    _vtk_suppressed = True
+
+    # --- 1. Replace vtkOutputWindow with file→NUL ---
+    try:
+        import vtkmodules.vtkCommonCore as _vtkCC
+
+        null_path = "NUL" if os.name == "nt" else "/dev/null"
+        ow = _vtkCC.vtkFileOutputWindow()
+        ow.SetFileName(null_path)
+        _vtkCC.vtkOutputWindow.SetInstance(ow)
+    except Exception:
+        try:
+            import vtk
+            null_path = "NUL" if os.name == "nt" else "/dev/null"
+            ow = vtk.vtkFileOutputWindow()
+            ow.SetFileName(null_path)
+            vtk.vtkOutputWindow.SetInstance(ow)
+        except Exception:
+            pass
+
+    # --- 2. Turn off global warning display at C++ level ---
+    try:
+        import vtkmodules.vtkCommonCore as _vtkCC
+        _vtkCC.vtkObject.GlobalWarningDisplayOff()
+    except Exception:
+        try:
+            import vtk
+            vtk.vtkObject.GlobalWarningDisplayOff()
+        except Exception:
+            pass
+
+    # --- 3. Python logging safety net ---
+    class _VTKFilter(logging.Filter):
+        _keywords = (
+            "vtkShaderProgram", "Could not create shader",
+            "Could not set shader program", "vtkOpenGLPolyDataMapper",
+            "Hardware does not support the number of textures",
+            "vtkOpenGLState",
+        )
+
+        def filter(self, record):
+            msg = record.getMessage() or ""
+            return not any(k in msg for k in self._keywords)
+
+    logging.getLogger().addFilter(_VTKFilter())
 
 # ---------------------------------------------------------------------------
 #  Colors: same palette as viewc3d (Open3D viewer) for C key cycle
@@ -140,7 +206,6 @@ class MokkaLikeViewer:
         self._last_trail_frame = -1  # Bug fix #2: cache guard
         self.play_speed = 1.0
         self._speed_accumulator = 0.0
-        self._timer_step = 0  # for Windows TimerEvent observer
         self._feedback_actor = None
         self._point_size = 10
         self._plotter_title = "Vaila - PyVista Viewer"
@@ -348,11 +413,6 @@ class MokkaLikeViewer:
     def toggle_play(self, state):
         self.playing = state
 
-    def _win_timer_observer(self, _obj, _evt):
-        """TimerEvent observer for Windows when add_timer_event does not fire reliably."""
-        self._timer_step += 1
-        self.animation_callback(self._timer_step)
-
     def animation_callback(self, step):
         if not self.playing:
             return
@@ -364,6 +424,47 @@ class MokkaLikeViewer:
                 idx = 0
             self.slider_widget.GetRepresentation().SetValue(idx)
             self.update_frame(idx)
+
+    def _run_win_event_loop(self):
+        """Manual event loop for Windows (VTK timers do not fire on Windows).
+
+        Uses plotter.show(interactive_update=True) + manual poll loop
+        instead of relying on VTK TimerEvent which never fires on Windows.
+        """
+        poll_hz = min(60.0, self.frame_rate)
+        dt = 1.0 / poll_hz
+        # Compensate for polling slower than data frame rate
+        frames_per_tick = self.frame_rate / poll_hz
+        step = 0
+        while True:
+            try:
+                if self.plotter.render_window is None:
+                    break
+                self.plotter.iren.process_events()
+                if self.playing:
+                    step += 1
+                    self._speed_accumulator += self.play_speed * frames_per_tick
+                    while self._speed_accumulator >= 1.0:
+                        self._speed_accumulator -= 1.0
+                        idx = (self.current_frame + 1) % self.n_frames
+                        self.slider_widget.GetRepresentation().SetValue(idx)
+                        self.update_frame(idx)
+                self.plotter.update()
+            except Exception:
+                break
+            time.sleep(dt)
+        # Ensure VTK output is silenced before teardown
+        _suppress_vtk_output()
+        try:
+            _stderr = sys.stderr
+            sys.stderr = io.StringIO()
+            try:
+                if self.plotter is not None and hasattr(self.plotter, "close"):
+                    self.plotter.close()
+            finally:
+                sys.stderr = _stderr
+        except Exception:
+            pass
 
     # ══════════════════════════════════════════════════════════════════════
     #  Picking  (Bug fix #1: use _valid_indices)
@@ -450,9 +551,11 @@ class MokkaLikeViewer:
 
     def _key_prev_frame(self, _key=None):
         self._goto_frame(self.current_frame - 1)
+        self._show_feedback("←: −1 frame")
 
     def _key_next_frame(self, _key=None):
         self._goto_frame(self.current_frame + 1)
+        self._show_feedback("→: +1 frame")
 
     def _key_back10(self, _key=None):
         self._goto_frame(self.current_frame - 10)
@@ -939,11 +1042,40 @@ class MokkaLikeViewer:
     #  GUI Initialization
     # ══════════════════════════════════════════════════════════════════════
     def init_gui(self):
+        # Silence all VTK error/warning output (shader teardown, etc.)
+        _suppress_vtk_output()
         pv.set_plot_theme("dark")
         self.plotter = pv.Plotter(
             window_size=(1280, 800),
             title=self._plotter_title,
         )
+        # Disable VTK interactor style default Up/Down = zoom behavior.
+        # We override OnKeyPress/OnKeyRelease so arrows are consumed by our
+        # own handlers instead of triggering the built-in dolly/pan.
+        try:
+            from vtkmodules.vtkInteractionStyle import vtkInteractorStyleTrackballCamera
+
+            class _NoArrowZoomStyle(vtkInteractorStyleTrackballCamera):
+                _BLOCKED = {"Up", "Down", "Left", "Right"}
+
+                def OnKeyPress(self):
+                    iren = self.GetInteractor()
+                    if iren and iren.GetKeySym() in self._BLOCKED:
+                        return  # swallow — our PyVista handlers deal with it
+                    super().OnKeyPress()
+
+                def OnKeyRelease(self):
+                    iren = self.GetInteractor()
+                    if iren and iren.GetKeySym() in self._BLOCKED:
+                        return
+                    super().OnKeyRelease()
+
+            iren = getattr(self.plotter, "iren", None)
+            if iren is not None:
+                style = _NoArrowZoomStyle()
+                iren.interactor.SetInteractorStyle(style)
+        except Exception:
+            pass  # fallback: arrows will zoom + step, acceptable
 
         # ── Adaptive ground plane ──
         (
@@ -1119,7 +1251,7 @@ class MokkaLikeViewer:
         ke("m", self._key_marker_visibility)
         ke("M", self._key_marker_visibility)
 
-        # Windows: use low-level key observer and timer (add_timer_event often does not fire)
+        # Windows: use low-level key observer for Space and arrows
         if sys.platform == "win32":
             iren = getattr(self.plotter, "iren", None)
             if (
@@ -1131,9 +1263,6 @@ class MokkaLikeViewer:
                     iren = self.plotter.render_window.GetInteractor()
             if iren is not None:
                 iren.add_observer("KeyPressEvent", self._win_key_observer)
-                duration_ms = max(1, int(1000 / self.frame_rate))
-                iren.create_timer(duration_ms, repeating=True)
-                iren.add_observer("TimerEvent", self._win_timer_observer)
 
         print("\n--- Controls (press H for full help) ---")
         print("Space Play | ←→ ±1 | ↑↓ ±10 | PgUp/Dn ±100 | S Start | End End")
@@ -1143,15 +1272,17 @@ class MokkaLikeViewer:
         )
         print("I Info | A Stats | D Distance | Escape Clear | H Help\n")
 
-        # Timer (Linux/macOS; on Windows we use TimerEvent observer above)
-        if sys.platform != "win32":
+        # Animation: on Windows VTK timers never fire, so use manual event loop
+        if sys.platform == "win32":
+            self.plotter.show(interactive_update=True, auto_close=False)
+            self._run_win_event_loop()
+        else:
             self.plotter.add_timer_event(
                 max_steps=100_000,
                 duration=max(1, int(1000 / self.frame_rate)),
                 callback=self.animation_callback,
             )
-
-        self.plotter.show()
+            self.plotter.show()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
