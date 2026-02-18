@@ -803,10 +803,10 @@ def pygame_file_dialog(
 
             # Draw icon (directory or file) - make directories more prominent
             if is_dir:
-                icon_text = "📁"
+                icon_text = "[DIR]"
                 color = (150, 220, 255)
             else:
-                icon_text = "📄"
+                icon_text = "[FILE]"
                 color = (200, 200, 200)
 
             # Try to render emoji, fallback to text if not supported
@@ -1335,10 +1335,10 @@ def play_video_with_controls(
                     pygame.event.pump()  # Keep UI responsive
 
             # Verify all frames were written
-            print(f"✓ Processed {frames_written} frames (expected {total_frames_video})")
+            print(f"[OK] Processed {frames_written} frames (expected {total_frames_video})")
             if frames_written != total_frames_video:
                 print(
-                    f"⚠ Warning: Frame count mismatch! Written: {frames_written}, Expected: {total_frames_video}"
+                    f"[WARNING] Warning: Frame count mismatch! Written: {frames_written}, Expected: {total_frames_video}"
                 )
 
             # Clean up video writers
@@ -1362,7 +1362,7 @@ def play_video_with_controls(
                 save_message_text = f"Video exported (no audio): {os.path.basename(output_path)}"
                 showing_save_message = True
                 save_message_timer = 120
-                print(f"⚠ ffmpeg not found. Video exported without audio: {output_path}")
+                print(f"[WARNING] ffmpeg not found. Video exported without audio: {output_path}")
                 return
 
             # Use ffmpeg to combine video with audio
@@ -1413,7 +1413,7 @@ def play_video_with_controls(
                         f"Temp video has {temp_frame_count} frames (expected {total_frames_video})"
                     )
                     if temp_frame_count != total_frames_video:
-                        print("⚠ Warning: Temp video frame count mismatch!")
+                        print("[WARNING] Warning: Temp video frame count mismatch!")
             except:
                 pass  # ffprobe not available or failed, continue anyway
 
@@ -1432,7 +1432,7 @@ def play_video_with_controls(
                     save_message_text = f"Video exported: {os.path.basename(output_path)}"
                     showing_save_message = True
                     save_message_timer = 120
-                    print(f"✓ Video exported successfully with audio to: {output_path}")
+                    print(f"[OK] Video exported successfully with audio to: {output_path}")
                 else:
                     # ffmpeg failed, but video was created - try without audio
                     import shutil
@@ -1445,7 +1445,7 @@ def play_video_with_controls(
                     showing_save_message = True
                     save_message_timer = 120
                     print(
-                        f"⚠ ffmpeg audio copy failed. Video exported without audio: {output_path}"
+                        f"[WARNING] ffmpeg audio copy failed. Video exported without audio: {output_path}"
                     )
                     print(f"ffmpeg error: {result.stderr}")
             except subprocess.TimeoutExpired:
@@ -1457,7 +1457,7 @@ def play_video_with_controls(
                 save_message_text = f"Video exported (timeout): {os.path.basename(output_path)}"
                 showing_save_message = True
                 save_message_timer = 120
-                print(f"⚠ ffmpeg timeout. Video exported without audio: {output_path}")
+                print(f"[WARNING] ffmpeg timeout. Video exported without audio: {output_path}")
             except Exception as e:
                 # Error - copy temp file
                 import shutil
@@ -1467,7 +1467,7 @@ def play_video_with_controls(
                 save_message_text = f"Video exported (error): {os.path.basename(output_path)}"
                 showing_save_message = True
                 save_message_timer = 120
-                print(f"⚠ Error adding audio: {e}. Video exported without audio: {output_path}")
+                print(f"[WARNING] Error adding audio: {e}. Video exported without audio: {output_path}")
 
         except Exception as e:
             save_message_text = f"Error exporting video: {str(e)}"
@@ -1595,7 +1595,7 @@ def play_video_with_controls(
 
             if has_individual_format:
                 # Individual file format detected
-                print("✓ Detected individual tracking CSV format (person_id_01.csv style)")
+                print("[OK] Detected individual tracking CSV format (person_id_01.csv style)")
                 print(
                     f"  Columns found: X_min={'X_min' in df.columns}, Y_min={'Y_min' in df.columns}, X_max={'X_max' in df.columns}, Y_max={'Y_max' in df.columns}"
                 )
@@ -1624,7 +1624,7 @@ def play_video_with_controls(
                 print("  Looking for: X_min, Y_min, X_max, Y_max")
                 return
 
-            print(f"✓ Found {len(object_suffixes)} object(s) in CSV")
+            print(f"[OK] Found {len(object_suffixes)} object(s) in CSV")
 
             # Process each row to build tracking_data dictionary
             rows_processed = 0
@@ -1878,7 +1878,7 @@ def play_video_with_controls(
             save_message_text = f"Tracking loaded: {len(tracking_data)} frames, {total_boxes} boxes"
             showing_save_message = True
             save_message_timer = 120
-            print("✓ Successfully loaded tracking data:")
+            print("[OK] Successfully loaded tracking data:")
             print(f"  - Frames with data: {len(tracking_data)}")
             print(f"  - Total boxes: {total_boxes}")
             print(f"  - Frame range: {frame_range}")

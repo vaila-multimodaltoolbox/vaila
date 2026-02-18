@@ -84,6 +84,30 @@ if [ ! -f "$PROJECT_DIR/pyproject.toml" ]; then
 fi
 
 # ============================================================================
+# INSTALL LOCATION
+# ============================================================================
+
+echo ""
+echo "---------------------------------------------"
+echo "Install Location Selection"
+echo "  [1] Default (~/vaila) - Recommended"
+echo "  [2] Current Directory ($(pwd)) - Local/Portable"
+echo "---------------------------------------------"
+printf "Choose an option [1-2] (default: 1): "
+read INSTALL_LOC_OPTION
+INSTALL_LOC_OPTION=${INSTALL_LOC_OPTION:-1}
+
+if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
+    VAILA_HOME="$(pwd)"
+    echo "Installing in current directory: $VAILA_HOME"
+else
+    VAILA_HOME="$USER_HOME/vaila"
+    echo "Installing in default location: $VAILA_HOME"
+fi
+
+DESKTOP_ENTRY_PATH="$HOME/.local/share/applications/vaila.desktop"
+
+# ============================================================================
 # COMMON FUNCTIONS (used by both methods)
 # ============================================================================
 
@@ -157,33 +181,41 @@ create_desktop_entry() {
     
     # Create icons directory in user's local share
     ICONS_DIR="$HOME/.local/share/icons"
+    PIXMAPS_DIR="$HOME/.local/share/pixmaps"
     mkdir -p "$ICONS_DIR"
+    mkdir -p "$PIXMAPS_DIR"
     
     # Copy icon to user's icons directory with a standard name
     ICON_NAME="vaila"
     ICON_DEST="$ICONS_DIR/${ICON_NAME}.png"
+    ICON_DEST_PIX="$PIXMAPS_DIR/${ICON_NAME}.png"
     
     # If source is PNG, copy directly; if ICO, try to convert or use as-is
     if [ -f "$ICON_SOURCE" ]; then
         if [[ "$ICON_SOURCE" == *.png ]]; then
             cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
-            echo "Icon copied to: $ICON_DEST"
+            cp "$ICON_SOURCE" "$ICON_DEST_PIX" 2>/dev/null || true
+            echo "Icon copied to: $ICON_DEST and $ICON_DEST_PIX"
         elif [[ "$ICON_SOURCE" == *.ico ]]; then
             # Try to convert ICO to PNG using ImageMagick if available
             if command -v convert &> /dev/null; then
-                convert "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null && echo "Icon converted and copied to: $ICON_DEST" || cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
+                convert "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null && cp "$ICON_DEST" "$ICON_DEST_PIX" && echo "Icon converted and copied to: $ICON_DEST" || cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
             else
                 # If no convert, try to use the ICO directly (some systems support it)
                 cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
+                cp "$ICON_SOURCE" "$ICON_DEST_PIX" 2>/dev/null || true
             fi
         else
             # For other formats, try to copy or convert
             cp "$ICON_SOURCE" "$ICON_DEST" 2>/dev/null || true
+            cp "$ICON_SOURCE" "$ICON_DEST_PIX" 2>/dev/null || true
         fi
     fi
     
-    # Use icon name without path for desktop entry (system will search in standard locations)
+    # Use generic name "vaila" which should be picked up from standard paths
     ICON_NAME_FOR_DESKTOP="vaila"
+    # Also define absolute path for desktop shortcut copying
+    ICON_PATH_FOR_SHORTCUT="$ICON_DEST"
     
     cat <<EOF > "$DESKTOP_ENTRY_PATH"
 [Desktop Entry]
@@ -193,7 +225,7 @@ Name=vaila
 GenericName=Multimodal Toolbox
 Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
 Exec=$RUN_SCRIPT
-Icon=$ICON_NAME_FOR_DESKTOP
+Icon=$ICON_DEST
 Terminal=true
 Categories=Science;Education;Utility;
 Keywords=biomechanics;motion;analysis;multimodal;
@@ -217,6 +249,14 @@ EOF
     # Make desktop entry executable (required for some desktop environments)
     chmod +x "$DESKTOP_ENTRY_PATH" 2>/dev/null || true
 
+    # Create a copy on the Desktop if it exists
+    if [ -d "$HOME/Desktop" ]; then
+        echo "Creating Desktop shortcut..."
+        cp "$DESKTOP_ENTRY_PATH" "$HOME/Desktop/vaila.desktop"
+        chmod +x "$HOME/Desktop/vaila.desktop" 2>/dev/null || true
+        echo "Desktop shortcut created at: $HOME/Desktop/vaila.desktop"
+    fi
+
     # For KDE Plasma, also create a .desktop file in the system applications directory
     if [ -d "/usr/share/applications" ]; then
         echo "Creating system-wide desktop entry for KDE compatibility..."
@@ -228,7 +268,7 @@ Name=vaila
 GenericName=Multimodal Toolbox
 Comment=Multimodal Toolbox for Biomechanics and Motion Analysis
 Exec=$RUN_SCRIPT
-Icon=$ICON_NAME_FOR_DESKTOP
+Icon=$ICON_DEST
 Terminal=true
 Categories=Science;Education;Utility;
 Keywords=biomechanics;motion;analysis;multimodal;
@@ -386,19 +426,25 @@ install_with_uv() {
         echo "Python 3.12.12 found."
     fi
 
-    # Clean destination directory and copy files
-    echo ""
-    if [ -d "$VAILA_HOME" ]; then
-        echo "Updating existing vaila installation in $VAILA_HOME..."
-        echo "Removing old files (keeping .venv to be recreated)..."
-        find "$VAILA_HOME" -mindepth 1 -maxdepth 1 ! -name '.venv' -exec rm -rf {} +
+    echo "Clean destination directory and copy files..."
+    
+    if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
+        echo "Local install selected. Skipping rsync file copy."
+        echo "Using current directory as VAILA_HOME."
     else
-        echo "Installing vaila to $VAILA_HOME..."
-        mkdir -p "$VAILA_HOME"
-    fi
+        echo ""
+        if [ -d "$VAILA_HOME" ]; then
+            echo "Updating existing vaila installation in $VAILA_HOME..."
+            echo "Removing old files (keeping .venv to be recreated)..."
+            find "$VAILA_HOME" -mindepth 1 -maxdepth 1 ! -name '.venv' -exec rm -rf {} +
+        else
+            echo "Installing vaila to $VAILA_HOME..."
+            mkdir -p "$VAILA_HOME"
+        fi
 
-    echo "Copying files..."
-    rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' --exclude='uv.lock' --exclude='.python-version' "$PROJECT_DIR/" "$VAILA_HOME/"
+        echo "Copying files..."
+        rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' --exclude='uv.lock' --exclude='.python-version' "$PROJECT_DIR/" "$VAILA_HOME/"
+    fi
 
     if [ -f "$VAILA_HOME/uv.lock" ]; then
         rm -f "$VAILA_HOME/uv.lock"
@@ -498,6 +544,34 @@ install_with_uv() {
         fi
     fi
     echo "Dependencies installed successfully."
+
+    # --- FFmpeg static binary (optional) ---
+    echo ""
+    echo "---------------------------------------------"
+    echo "FFmpeg installation options"
+    echo "  [1] Use system FFmpeg (apt) — default"
+    echo "  [2] Download static FFmpeg with NVENC/VVC support"
+    echo "      (Recommended if you want GPU acceleration"
+    echo "       or H.266/VVC compression)"
+    echo "---------------------------------------------"
+    printf "Choose an option [1-2]: "
+    read FFMPEG_OPTION
+    FFMPEG_OPTION=${FFMPEG_OPTION:-1}
+
+    if [[ "$FFMPEG_OPTION" == "2" ]]; then
+        echo ""
+        echo "Downloading static FFmpeg..."
+        if [ -f "$VAILA_HOME/bin/download_ffmpeg.sh" ]; then
+            bash "$VAILA_HOME/bin/download_ffmpeg.sh" --force
+        else
+            echo "Warning: bin/download_ffmpeg.sh not found. Skipping."
+            echo "You can download it later with: bash bin/download_ffmpeg.sh"
+        fi
+    else
+        echo ""
+        echo "Using system FFmpeg from apt."
+        echo "To download static FFmpeg later, run: bash bin/download_ffmpeg.sh"
+    fi
 
     # Detect NVIDIA GPU
     echo ""
@@ -772,15 +846,21 @@ install_with_conda() {
 
     # Clean destination directory and copy files
     echo ""
-    echo "Cleaning destination directory and copying vaila program to the user's home directory..."
-    if [ -d "$VAILA_HOME" ]; then
-        echo "Removing existing files from destination directory..."
-        rm -rf "$VAILA_HOME"/*
+    
+    if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
+        echo "Local install selected. Skipping file copy."
+        echo "Using current directory as VAILA_HOME."
     else
-        echo "Installing vaila to $VAILA_HOME..."
-        mkdir -p "$VAILA_HOME"
+        echo "Cleaning destination directory and copying vaila program to the user's home directory..."
+        if [ -d "$VAILA_HOME" ]; then
+            echo "Removing existing files from destination directory..."
+            rm -rf "$VAILA_HOME"/*
+        else
+            echo "Installing vaila to $VAILA_HOME..."
+            mkdir -p "$VAILA_HOME"
+        fi
+        cp -Rfa "$PROJECT_DIR/." "$VAILA_HOME/"
     fi
-    cp -Rfa "$PROJECT_DIR/." "$VAILA_HOME/"
 
     # Remove ffmpeg from the Conda environment if installed
     echo "Removing ffmpeg installed via Conda..."

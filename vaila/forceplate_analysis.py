@@ -1782,27 +1782,27 @@ def analyze_data_2d(data, output_dir, file_name, fs, plate_width, plate_height, 
 
     try:
         plot_heatmap_kde(X_n, Y_n, heatmap_base_path)
-        print("  ✓ KDE heatmap created")
+        print("  [OK] KDE heatmap created")
     except Exception as e:
-        print(f"  ✗ Error creating KDE heatmap: {e}")
+        print(f"  [FAIL] Error creating KDE heatmap: {e}")
 
     try:
         plot_heatmap_histogram(X_n, Y_n, heatmap_base_path)
-        print("  ✓ Histogram heatmap created")
+        print("  [OK] Histogram heatmap created")
     except Exception as e:
-        print(f"  ✗ Error creating histogram heatmap: {e}")
+        print(f"  [FAIL] Error creating histogram heatmap: {e}")
 
     try:
         plot_heatmap_with_contours(X_n, Y_n, heatmap_base_path, method="kde")
-        print("  ✓ KDE heatmap with contours created")
+        print("  [OK] KDE heatmap with contours created")
     except Exception as e:
-        print(f"  ✗ Error creating KDE heatmap with contours: {e}")
+        print(f"  [FAIL] Error creating KDE heatmap with contours: {e}")
 
     try:
         plot_heatmap_with_contours(X_n, Y_n, heatmap_base_path, method="histogram")
-        print("  ✓ Histogram heatmap with contours created")
+        print("  [OK] Histogram heatmap with contours created")
     except Exception as e:
-        print(f"  ✗ Error creating histogram heatmap with contours: {e}")
+        print(f"  [FAIL] Error creating histogram heatmap with contours: {e}")
 
     print(f"Analysis completed for file: {file_name}")
 

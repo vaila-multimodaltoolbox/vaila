@@ -4677,7 +4677,9 @@ def plot_jump_stickfigures_subplot(
         x_max += x_padding
 
     # Plot each phase in its own subplot
-    for i, (ax, frame, label, color) in enumerate(zip(axes, frames_plot, labels_plot, colors, strict=False)):
+    for i, (ax, frame, label, color) in enumerate(
+        zip(axes, frames_plot, labels_plot, colors, strict=False)
+    ):
         if frame >= len(df):
             ax.text(
                 0.5,

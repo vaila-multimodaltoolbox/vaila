@@ -25,10 +25,10 @@ $cmdArgs = @(
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""
-    Write-Host "✓ Transfer completed successfully!" -ForegroundColor Green
+    Write-Host "[OK] Transfer completed successfully!" -ForegroundColor Green
 } else {
     Write-Host ""
-    Write-Host "✗ Transfer failed! (Exit code: $LASTEXITCODE)" -ForegroundColor Red
+    Write-Host "[FAIL] Transfer failed! (Exit code: $LASTEXITCODE)" -ForegroundColor Red
     Write-Host "Please check your connection and credentials." -ForegroundColor Yellow
 }
 

@@ -80,7 +80,7 @@ if [ -e "$SYSTEM_APP_PATH" ] || [ -L "$SYSTEM_APP_PATH" ]; then
         sudo rm -rf "$SYSTEM_APP_PATH"
     fi
         if [ $? -eq 0 ]; then
-        echo "✓ System Applications app removed successfully."
+        echo "[OK] System Applications app removed successfully."
         else
         echo "Warning: Failed to remove system Applications app. You may need to remove it manually:"
         echo "  sudo rm -rf $SYSTEM_APP_PATH"
@@ -94,7 +94,7 @@ if [ -e "$USER_APP_PATH" ] || [ -L "$USER_APP_PATH" ]; then
     echo "Removing vaila app from ~/Applications..."
     rm -rf "$USER_APP_PATH"
     if [ $? -eq 0 ]; then
-        echo "✓ User Applications app removed successfully."
+        echo "[OK] User Applications app removed successfully."
     else
         echo "Warning: Failed to remove user Applications app. Continuing..."
     fi
@@ -107,7 +107,7 @@ if [ -d "$VAILA_HOME" ]; then
     echo "Removing vaila installation directory (including .venv)..."
     rm -rf "$VAILA_HOME"
     if [ $? -eq 0 ]; then
-        echo "✓ Installation directory removed successfully."
+        echo "[OK] Installation directory removed successfully."
     else
         echo "Error: Failed to remove installation directory."
         echo "You may need to remove it manually: rm -rf $VAILA_HOME"
@@ -120,7 +120,7 @@ fi
 # Remove the log file if it exists
 if [ -f "$LOG_FILE" ]; then
     echo "Removing vaila log file..."
-    rm -f "$LOG_FILE" && echo "✓ Log file removed." || echo "Warning: Failed to remove log file."
+    rm -f "$LOG_FILE" && echo "[OK] Log file removed." || echo "Warning: Failed to remove log file."
 else
     echo "Log file not found. Skipping."
 fi
@@ -136,7 +136,7 @@ echo "Cleaning up Launch Services database..."
 # Refresh Launchpad and Dock to remove any cached icons
 echo "Refreshing Dock and Launchpad..."
 killall Dock 2>/dev/null || true
-echo "✓ Dock refreshed."
+echo "[OK] Dock refreshed."
 
 # Force Finder to refresh
 echo "Refreshing Finder..."

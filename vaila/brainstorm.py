@@ -5,9 +5,9 @@ Script: brainstorm.py
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 18 February 2025
-Update Date: 18 February 2025
-Version: 0.3.1
+Create: 18 February 2025
+Update: 18 February 2026
+Version: 0.1.4
 
 Description:
     Record voice audio, transcribe it to text, and use LLM to generate:
@@ -43,66 +43,39 @@ import sounddevice as sd
 import soundfile as sf
 import speech_recognition as sr
 
-# Optional imports with fallbacks
-try:
-    import openai
+import importlib.util
 
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
+def is_package_available(package_name):
+    return importlib.util.find_spec(package_name) is not None
 
-try:
-    from midiutil import MIDIFile
+OPENAI_AVAILABLE = is_package_available("openai")
+MIDIUTIL_AVAILABLE = is_package_available("midiutil")
 
-    MIDIUTIL_AVAILABLE = True
-except ImportError:
-    MIDIUTIL_AVAILABLE = False
 
 # Optional imports for MP3 generation
-try:
-    import pygame.mixer
+PYGAME_AVAILABLE = is_package_available("pygame")
 
-    PYGAME_AVAILABLE = True
-except ImportError:
-    PYGAME_AVAILABLE = False
 
-try:
-    import subprocess
-    import tempfile
+# subprocess and tempfile are standard libraries, no need to check or they are always available
+# But ruff complained they were unused. They are used locally in methods.
+# We will remove the top level check if it's just for availability flags that aren't used, 
+# or just assume they are available (they are stdlib).
+SUBPROCESS_AVAILABLE = True
 
-    SUBPROCESS_AVAILABLE = True
-except ImportError:
-    SUBPROCESS_AVAILABLE = False
 
 # Optional imports for Text-to-Speech
-try:
-    import pyttsx3
+PYTTSX3_AVAILABLE = is_package_available("pyttsx3")
 
-    PYTTSX3_AVAILABLE = True
-except ImportError:
-    PYTTSX3_AVAILABLE = False
 
-try:
-    from gtts import gTTS
+GTTS_AVAILABLE = is_package_available("gtts")
 
-    GTTS_AVAILABLE = True
-except ImportError:
-    GTTS_AVAILABLE = False
 
 # Optional imports for audio conversion (fallbacks)
-try:
-    import librosa
+LIBROSA_AVAILABLE = is_package_available("librosa")
 
-    LIBROSA_AVAILABLE = True
-except ImportError:
-    LIBROSA_AVAILABLE = False
 
-try:
-    from pydub import AudioSegment
+PYDUB_AVAILABLE = is_package_available("pydub")
 
-    PYDUB_AVAILABLE = True
-except ImportError:
-    PYDUB_AVAILABLE = False
 
 # Global variables
 AUDIO_FILE = "audio.wav"
@@ -913,7 +886,7 @@ SHORTCUTS:
                         return True
                     else:
                         return True
-                except:
+                except Exception:
                     return True
 
             return False
@@ -952,7 +925,7 @@ Set objVoice = Nothing
                 )
                 os.unlink(vbs_file)
                 return result.returncode == 0 and os.path.exists(audio_file)
-            except:
+            except Exception:
                 if os.path.exists(vbs_file):
                     os.unlink(vbs_file)
                 return False
@@ -2434,7 +2407,10 @@ Next steps:
     def _try_convert_midi_to_mp3(self, midi_path, mp3_path):
         """Try to convert MIDI to MP3 using available tools."""
         # Try FluidSynth first
-        return bool(self._try_fluidsynth_conversion(midi_path, mp3_path) or self._try_timidity_conversion(midi_path, mp3_path))
+        return bool(
+            self._try_fluidsynth_conversion(midi_path, mp3_path)
+            or self._try_timidity_conversion(midi_path, mp3_path)
+        )
 
     def run(self):
         """Start the application."""

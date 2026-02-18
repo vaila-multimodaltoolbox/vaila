@@ -215,7 +215,7 @@ def check_video_size(video_path):
         if size_gb > 4:  # Limit of 4GB for example
             return False, f"Video is too large ({size_gb:.2f} GB)"
         return True, ""
-    except:
+    except Exception:
         return True, ""  # Proceed in case of error
 
 
@@ -470,10 +470,13 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                     "default=noprint_wrappers=1:nokey=1",
                     video_path,
                 ]
-                fps_str = subprocess.run(
-                    fps_cmd, capture_output=True, text=True
-                ).stdout.strip()
-                frame_rate = eval(fps_str)  # Convert "30000/1001" to float
+                fps_str = subprocess.run(fps_cmd, capture_output=True, text=True).stdout.strip()
+                # Safely parse fractional fps like "30000/1001"
+                if "/" in fps_str:
+                    num, den = fps_str.split("/")
+                    frame_rate = int(num) / int(den)
+                else:
+                    frame_rate = float(fps_str)
 
                 # Calcular informações do vídeo resultante baseado na porcentagem
                 reverse_frames = int(total_frames * (reverse_percent / 100.0))
@@ -844,10 +847,13 @@ def process_videos_frame_reverse_merge(
                     "default=noprint_wrappers=1:nokey=1",
                     video_path,
                 ]
-                fps_str = subprocess.run(
-                    fps_cmd, capture_output=True, text=True
-                ).stdout.strip()
-                frame_rate = eval(fps_str)  # Convert "30000/1001" to float
+                fps_str = subprocess.run(fps_cmd, capture_output=True, text=True).stdout.strip()
+                # Safely parse fractional fps like "30000/1001"
+                if "/" in fps_str:
+                    num, den = fps_str.split("/")
+                    frame_rate = int(num) / int(den)
+                else:
+                    frame_rate = float(fps_str)
 
                 # Get duration
                 duration_cmd = [

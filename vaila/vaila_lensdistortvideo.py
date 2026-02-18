@@ -227,9 +227,7 @@ def get_precise_video_metadata(video_path):
             "-show_streams",
             str(video_path),
         ]
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout)
 
         # Find video stream

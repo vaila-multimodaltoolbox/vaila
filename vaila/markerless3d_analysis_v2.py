@@ -415,7 +415,9 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
 
                 if landmarks_norm:
                     # Aplicar filtragem para cada landmark
-                    for i, (norm, _px) in enumerate(zip(landmarks_norm, landmarks_px, strict=False)):
+                    for i, (norm, _px) in enumerate(
+                        zip(landmarks_norm, landmarks_px, strict=False)
+                    ):
                         landmarks_history[person_id][i].append(norm)
 
                         max_history = 30

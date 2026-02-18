@@ -886,18 +886,29 @@ def process_absolute_angles(input_csv, output_csv):
         left_ear = get_vector_landmark(df, "left_ear")
 
         # Get landmarks and calculate midpoints
-        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)]
-        mid_shoulder = [
-            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder, strict=False)
+        mid_ear = [
+            compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)
         ]
-        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)]
+        mid_shoulder = [
+            compute_midpoint(left, right)
+            for left, right in zip(left_shoulder, right_shoulder, strict=False)
+        ]
+        mid_hip = [
+            compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)
+        ]
 
         # Calculate absolute angles for segments
         right_thigh_angles = np.array(
-            [compute_absolute_angle(hip, knee) for hip, knee in zip(right_hip, right_knee, strict=False)]
+            [
+                compute_absolute_angle(hip, knee)
+                for hip, knee in zip(right_hip, right_knee, strict=False)
+            ]
         )
         right_shank_angles = np.array(
-            [compute_absolute_angle(knee, ankle) for knee, ankle in zip(right_knee, right_ankle, strict=False)]
+            [
+                compute_absolute_angle(knee, ankle)
+                for knee, ankle in zip(right_knee, right_ankle, strict=False)
+            ]
         )
         right_foot_angles = np.array(
             [
@@ -912,23 +923,36 @@ def process_absolute_angles(input_csv, output_csv):
             ]
         )
         right_forearm_angles = np.array(
-            [compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(right_elbow, right_wrist, strict=False)]
+            [
+                compute_absolute_angle(elbow, wrist)
+                for elbow, wrist in zip(right_elbow, right_wrist, strict=False)
+            ]
         )
         right_hand_angles = np.array(
             [
                 compute_absolute_angle(wrist, mid_hand)
                 for wrist, mid_hand in zip(
                     right_wrist,
-                    [compute_midpoint(p, i) for p, i in zip(right_pinky, right_index, strict=False)], strict=False,
+                    [
+                        compute_midpoint(p, i)
+                        for p, i in zip(right_pinky, right_index, strict=False)
+                    ],
+                    strict=False,
                 )
             ]
         )
 
         left_thigh_angles = np.array(
-            [compute_absolute_angle(hip, knee) for hip, knee in zip(left_hip, left_knee, strict=False)]
+            [
+                compute_absolute_angle(hip, knee)
+                for hip, knee in zip(left_hip, left_knee, strict=False)
+            ]
         )
         left_shank_angles = np.array(
-            [compute_absolute_angle(knee, ankle) for knee, ankle in zip(left_knee, left_ankle, strict=False)]
+            [
+                compute_absolute_angle(knee, ankle)
+                for knee, ankle in zip(left_knee, left_ankle, strict=False)
+            ]
         )
         left_foot_angles = np.array(
             [
@@ -943,23 +967,33 @@ def process_absolute_angles(input_csv, output_csv):
             ]
         )
         left_forearm_angles = np.array(
-            [compute_absolute_angle(elbow, wrist) for elbow, wrist in zip(left_elbow, left_wrist, strict=False)]
+            [
+                compute_absolute_angle(elbow, wrist)
+                for elbow, wrist in zip(left_elbow, left_wrist, strict=False)
+            ]
         )
         left_hand_angles = np.array(
             [
                 compute_absolute_angle(wrist, mid)
                 for wrist, mid in zip(
                     left_wrist,
-                    [compute_midpoint(p, i) for p, i in zip(left_pinky, left_index, strict=False)], strict=False,
+                    [compute_midpoint(p, i) for p, i in zip(left_pinky, left_index, strict=False)],
+                    strict=False,
                 )
             ]
         )
 
         trunk_angles = np.array(
-            [compute_absolute_angle(shoulder, hip) for shoulder, hip in zip(mid_shoulder, mid_hip, strict=False)]
+            [
+                compute_absolute_angle(shoulder, hip)
+                for shoulder, hip in zip(mid_shoulder, mid_hip, strict=False)
+            ]
         )
         neck_angles = np.array(
-            [compute_absolute_angle(ear, shoulder) for ear, shoulder in zip(mid_ear, mid_shoulder, strict=False)]
+            [
+                compute_absolute_angle(ear, shoulder)
+                for ear, shoulder in zip(mid_ear, mid_shoulder, strict=False)
+            ]
         )
 
         # Create landmarks dictionary
@@ -1106,11 +1140,16 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
         left_ear = get_vector_landmark(df, "left_ear")
 
         # Get landmarks and calculate midpoints
-        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)]
-        mid_shoulder = [
-            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder, strict=False)
+        mid_ear = [
+            compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)
         ]
-        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)]
+        mid_shoulder = [
+            compute_midpoint(left, right)
+            for left, right in zip(left_shoulder, right_shoulder, strict=False)
+        ]
+        mid_hip = [
+            compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)
+        ]
 
         # Calculate trunk vectors for all frames
         trunk_vectors = []
@@ -1376,11 +1415,16 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
         left_ear = get_vector_landmark(df, "left_ear")
 
         # Get landmarks and calculate midpoints
-        mid_ear = [compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)]
-        mid_shoulder = [
-            compute_midpoint(left, right) for left, right in zip(left_shoulder, right_shoulder, strict=False)
+        mid_ear = [
+            compute_midpoint(left, right) for left, right in zip(left_ear, right_ear, strict=False)
         ]
-        mid_hip = [compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)]
+        mid_shoulder = [
+            compute_midpoint(left, right)
+            for left, right in zip(left_shoulder, right_shoulder, strict=False)
+        ]
+        mid_hip = [
+            compute_midpoint(left, right) for left, right in zip(left_hip, right_hip, strict=False)
+        ]
 
         # Calculate trunk vectors for all frames
         trunk_vectors = []
