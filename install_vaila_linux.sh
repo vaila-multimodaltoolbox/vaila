@@ -230,7 +230,7 @@ Terminal=true
 Categories=Science;Education;Utility;
 Keywords=biomechanics;motion;analysis;multimodal;
 StartupNotify=true
-StartupWMClass=vaila
+StartupWMClass=Vaila
 MimeType=
 EOF
 
@@ -273,7 +273,7 @@ Terminal=true
 Categories=Science;Education;Utility;
 Keywords=biomechanics;motion;analysis;multimodal;
 StartupNotify=true
-StartupWMClass=vaila
+StartupWMClass=Vaila
 MimeType=
 EOF
         sudo update-desktop-database 2>/dev/null || true

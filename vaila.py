@@ -260,16 +260,11 @@ class Vaila(tk.Tk):
         - Creates the widgets for the application.
 
         """
-        super().__init__()
+        super().__init__(className='vaila')
         self.title("vailá - 18.February.2026 v0.3.24 (Python 3.12.12)")
 
-        # Set WM_CLASS for Linux (needed for proper icon in taskbar/dock)
-        if platform.system() == "Linux":
-            # Set both class name and instance name to 'vaila' for proper desktop integration
-            # Use tk.call instead of wm_class method which may not exist in all Tkinter versions
-            # Silently ignore if WM_CLASS setting fails (not critical for functionality)
-            with contextlib.suppress(AttributeError, Exception):
-                self.tk.call("wm", "class", self._w, "vaila", "vaila")
+        # wm class is set via className above, which results in class "Vaila"
+        # This is needed for proper icon association in Linux docks/taskbars
 
         # Adjust dimensions and layout based on the operating system
         self.set_dimensions_based_on_os()

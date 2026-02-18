@@ -33,7 +33,17 @@ echo ""
 
 # Define paths
 USER_HOME="$HOME"
-VAILA_HOME="$USER_HOME/vaila"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Detect if running from the installation directory (Local Install or Default)
+if [ -f "$SCRIPT_DIR/vaila.py" ]; then
+    VAILA_HOME="$SCRIPT_DIR"
+    echo "Detected vaila installation in current directory: $VAILA_HOME"
+else
+    # Fallback to default location
+    VAILA_HOME="$USER_HOME/vaila"
+    echo "Using default vaila location: $VAILA_HOME"
+fi
 USER_APP_PATH="$USER_HOME/Applications/vaila.app"
 SYSTEM_APP_PATH="/Applications/vaila.app"
 RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
