@@ -693,49 +693,25 @@ install_with_uv() {
         echo "  2. Or use the system Python instead of uv's Python"
     fi
 
-    # Create run_vaila.sh script
-    RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
+    # Use generic run_vaila.sh from bin/
+    RUN_SCRIPT="$VAILA_HOME/bin/run_vaila.sh"
     echo ""
-    echo "Creating run_vaila.sh script..."
-    cat <<EOF > "$RUN_SCRIPT"
-#!/bin/bash
-cd "$VAILA_HOME" || {
-    echo "Error: Cannot change to directory $VAILA_HOME"
-    exit 1
-}
-
-export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH"
-
-if [ -d "/opt/homebrew/bin" ]; then
-    export PATH="/opt/homebrew/bin:\$PATH"
-fi
-if [ -d "/usr/local/bin" ]; then
-    export PATH="/usr/local/bin:\$PATH"
-fi
-
-if [ ! -f "pyproject.toml" ]; then
-    echo "Error: pyproject.toml not found in $VAILA_HOME"
-    exit 1
-fi
-
-    # Use venv Python directly to avoid uv run resolving project dependencies
-    # This prevents TensorRT resolution errors on macOS when pyproject.toml has gpu extra
-    if [ -f ".venv/bin/python" ]; then
-        # Activate venv and run directly - avoids project resolution
-        source .venv/bin/activate 2>/dev/null || true
-        .venv/bin/python vaila.py
+    echo "Setting up run script..."
+    if [ -f "$RUN_SCRIPT" ]; then
+        chmod +x "$RUN_SCRIPT"
+        echo "Using existing run script: $RUN_SCRIPT"
     else
-        # Fallback to uv run with --no-extra gpu to exclude TensorRT on macOS
-        # This prevents the extra gpu from being resolved even though it's in pyproject.toml
-        uv run --no-sync --no-extra gpu python vaila.py
-    fi
-
-echo
-echo "Program finished. Press Enter to close this window..."
-read
+        echo "Warning: $RUN_SCRIPT not found. Creating a fallback..."
+        RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
+        # Fallback creation if bin/run_vaila.sh is missing
+        cat <<EOF > "$RUN_SCRIPT"
+#!/bin/bash
+cd "$VAILA_HOME" || exit 1
+# Fallback to uv run with --no-extra gpu to exclude TensorRT on macOS
+uv run --no-sync --no-extra gpu vaila.py
 EOF
-
-    chmod +x "$RUN_SCRIPT"
+        chmod +x "$RUN_SCRIPT"
+    fi
     
     # Create a convenient 'vaila' command in venv bin directory
     # This allows running 'vaila' directly without 'uv run' which tries to resolve gpu extra

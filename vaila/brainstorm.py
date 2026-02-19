@@ -34,6 +34,7 @@ License:
 """
 
 import datetime
+import importlib.util
 import os
 import tkinter as tk
 from pathlib import Path
@@ -43,7 +44,6 @@ import sounddevice as sd
 import soundfile as sf
 import speech_recognition as sr
 
-import importlib.util
 
 def is_package_available(package_name):
     return importlib.util.find_spec(package_name) is not None
@@ -58,7 +58,7 @@ PYGAME_AVAILABLE = is_package_available("pygame")
 
 # subprocess and tempfile are standard libraries, no need to check or they are always available
 # But ruff complained they were unused. They are used locally in methods.
-# We will remove the top level check if it's just for availability flags that aren't used, 
+# We will remove the top level check if it's just for availability flags that aren't used,
 # or just assume they are available (they are stdlib).
 SUBPROCESS_AVAILABLE = True
 
