@@ -48,68 +48,74 @@ dependencies:
   - flask
   - pip
   - pip:
-      - absl-py
-      - bcrypt
-      - blinker
-      - dash
-      - dash-core-components
-      - dash-html-components
-      - dash-table
-      - mediapipe
-      - moviepy
       - plotly
-      - protobuf
-      - opencv-contrib-python
-      - Werkzeug
+      - pycairo
+      - h5py
+      - openpyxl
+      - matplotlib-inline
+      - dash
+      - werkzeug
       - itsdangerous
-      - jax
-      - jaxlib
+      - blinker
+      - ezc3d
+      - pyyaml
+      - opencv-contrib-python
       - imageio
       - imageio-ffmpeg
-      - openpyxl
-      - python-dotenv
-      - pygame
-      - imufusion
-      - PySide6
-      - tenacity
-      - retrying
-      - pycairo
-      - watchdog
-      - wordcloud
-      - matplotlib-inline
-      - rich
-      - ezc3d
-      - h5py
-      - paramiko
-      - scp
-      - spm1d
-      - pykalman
-      - ydata_profiling
-      - "xonsh[full]"
+      - moviepy
+      - jax
+      - jaxlib
+      - xgboost
+      - mediapipe>=0.10.32
+      - torch==2.9.1
+      - torchvision==0.24.1
+      - torchaudio==2.9.1
+      - ultralytics
       - boxmot
-      - intel-openmp
+      - requests
       - open3d
       - glfw
-      - xgboost
-      - gpxpy
-      - simplekml
-      - folium
-      - yt-dlp
+      - imufusion
       - neurokit2
       - biosppy
       - entropy
-      - SpeechRecognition
-      - sounddevice
-      - soundfile
-      - openai
-      - MIDIUtil
-      - mido
-      - pyttsx3
-      - gtts
+      - pykalman
+      - numba
+      - spm1d
       - librosa
       - pydub
+      - sounddevice
+      - soundfile
+      - SpeechRecognition
+      - pyttsx3
+      - gtts
+      - midiutil
+      - mido
+      - gpxpy
+      - simplekml
+      - folium
+      - paramiko
+      - scp
+      - einops
+      - absl-py
+      - bcrypt
+      - python-dotenv
+      - pygame
+      - PySide6
+      - tenacity
+      - retrying
+      - watchdog
+      - wordcloud
+      - rich
+      - ydata_profiling
+      - xonsh[full]
+      - intel-openmp; sys_platform != 'darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64')
+      - yt-dlp
+      - openai
       - odfpy
-      - tomli
       - psutil
-      - "ydata-sdk[text,docx]"
-      - ultralytics
+      - protobuf
+      - pyobjc-framework-Cocoa; sys_platform == 'darwin'
+      - ruff
+      - vpython
+      - pyvista

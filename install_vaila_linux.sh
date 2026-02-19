@@ -701,11 +701,18 @@ install_with_uv() {
         echo "Environment verification successful."
     fi
 
-    # Create run_vaila.sh script using uv
-    RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
+    # Use generic run_vaila.sh from bin/
+    RUN_SCRIPT="$VAILA_HOME/bin/run_vaila.sh"
     echo ""
-    echo "Creating run_vaila.sh script..."
-    cat <<EOF > "$RUN_SCRIPT"
+    echo "Setting up run script..."
+    if [ -f "$RUN_SCRIPT" ]; then
+        chmod +x "$RUN_SCRIPT"
+        echo "Using existing run script: $RUN_SCRIPT"
+    else
+        echo "Warning: $RUN_SCRIPT not found. Creating a fallback..."
+        # Fallback creation if bin/run_vaila.sh is missing for some reason
+        RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
+        cat <<EOF > "$RUN_SCRIPT"
 #!/bin/bash
 cd "$VAILA_HOME"
 uv run --no-sync "$VAILA_HOME/vaila.py"
@@ -714,8 +721,8 @@ echo
 echo "Program finished. Press Enter to close this window..."
 read
 EOF
-
-    chmod +x "$RUN_SCRIPT"
+        chmod +x "$RUN_SCRIPT"
+    fi
 }
 
 # ============================================================================

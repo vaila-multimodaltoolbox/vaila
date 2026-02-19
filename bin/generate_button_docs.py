@@ -10,7 +10,8 @@ from pathlib import Path
 
 def extract_button_info():
     """Extract all button information from vaila.py"""
-    vaila_path = Path("vaila.py")
+    # Look for vaila.py in the project root (one level up from bin/)
+    vaila_path = Path(__file__).resolve().parent.parent / "vaila.py"
 
     with open(vaila_path, encoding="utf-8") as f:
         content = f.read()
