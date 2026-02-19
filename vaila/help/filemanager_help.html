@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá – File Manager Help</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background-color: #f5f5f5; }
+        .container { max-width: 960px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 28px; border-left: 4px solid #3498db; padding-left: 12px; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .warn { background-color: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 12px; border-radius: 5px; margin: 12px 0; }
+        .section { background-color: #f8f9fa; padding: 16px; margin: 14px 0; border-radius: 8px; border-left: 4px solid #3498db; }
+        .key { display: inline-block; background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 2px 8px; font-family: 'Courier New', monospace; font-weight: bold; min-width: 28px; text-align: center; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #dee2e6; }
+        th { background-color: #e9ecef; font-weight: 600; }
+        tr:hover { background-color: #f1f3f5; }
+        ul { padding-left: 20px; }
+        li { margin: 6px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá – File Manager</h1>
+        <div class="info">
+            <strong>Script:</strong> vaila/filemanager.py · <strong>Version:</strong> Updated Feb 2026<br>
+            A graphical tool to manage files: copy, move, rename, remove, and normalize names across directories.
+            Part of <strong>vailá - Multimodal Toolbox</strong>.
+        </div>
+
+        <h2>Normalize Names (Rename)</h2>
+        <div class="section">
+        <p>This powerful feature automatically standardizes file and folder names in a selected directory. <strong>Warning: This action is irreversible!</strong></p>
+        
+        <h3>What it does:</h3>
+        <ul>
+            <li><strong>Lowercase:</strong> Converts all filenames and extensions to lowercase (e.g., <code>VIDEO.MP4</code> → <code>video.mp4</code>).</li>
+            <li><strong>Remove Accents:</strong> Removes accents from characters (e.g., <code>ação.txt</code> → <code>acao.txt</code>).</li>
+            <li><strong>Remove Dots:</strong> Removes dots from the filename itself to avoid confusion, keeping only the final dot for the extension (e.g., <code>my.file.name.csv</code> → <code>myfilename.csv</code>).</li>
+            <li><strong>Spaces to Underscores:</strong> Replaces spaces and hyphens with underscores (e.g., <code>my file-name.txt</code> → <code>my_file_name.txt</code>).</li>
+            <li><strong>Cleanup:</strong> Removes special characters and duplicate underscores.</li>
+        </ul>
+
+        <h3>Duplicate Safety:</h3>
+        <p>If renaming results in a duplicate filename (e.g., <code>file.txt</code> and <code>FILE.TXT</code> resolving to the same name), vailá will automatically append a counter (e.g., <code>file_1.txt</code>) to prevent overwriting or errors.</p>
+        </div>
+
+        <h2>Copy / Move Files</h2>
+        <div class="section">
+        <p>Easily organize your data by copying or moving files based on extensions and name patterns.</p>
+        <ul>
+            <li><strong>Source Directory:</strong> Select the folder containing your files.</li>
+            <li><strong>Extension:</strong> Specify the file type (e.g., <code>.c3d</code>, <code>.csv</code>). Leave blank for all files.</li>
+            <li><strong>Patterns:</strong> Enter keywords (one per line) to filter files. Only files containing these patterns will be processed.</li>
+        </ul>
+        <p>Files are organized into timestamped folders in the destination, preserving the original structure.</p>
+        </div>
+
+        <h2>Remove Files</h2>
+        <div class="section">
+        <div class="warn">
+            <strong>Safety Check:</strong> vailá prevents the deletion of critical system files and directories (e.g., Windows, System32, /etc, .git).
+        </div>
+        <p>Remove files or directories based on:</p>
+        <ul>
+            <li><strong>Extension:</strong> Deletes all files of a specific type (e.g., <code>.tmp</code>).</li>
+            <li><strong>Directory Name:</strong> Removes entire folders matching a name pattern.</li>
+            <li><strong>Filename Pattern:</strong> Removes specific files matching a wildcard pattern (e.g., <code>*backup*</code>).</li>
+        </ul>
+        </div>
+
+        <h2>Other Tools</h2>
+        <div class="section">
+        <ul>
+            <li><strong>Tree File:</strong> Generates a text file listing all files in a directory (filtered by extension), preserving the folder structure. Useful for cataloging datasets.</li>
+            <li><strong>Find File:</strong> Search for files matching a specific pattern. (Currently in development/CLI mode).</li>
+            <li><strong>Import/Export:</strong> A menu for converting data formats (e.g., TRC export, C3D import).</li>
+        </ul>
+        </div>
+
+        <div class="footer" style="margin-top: 2em; padding-top: 1em; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em;">
+            <p>🔗 Part of vailá - Multimodal Toolbox | 🌐 <a href="https://github.com/paulopreto/vaila-multimodaltoolbox">GitHub</a></p>
+        </div>
+    </div>
+</body>
+</html>
