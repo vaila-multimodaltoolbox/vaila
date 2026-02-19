@@ -75,7 +75,7 @@ dependencies = [
     "imufusion",
     "neurokit2",
     "biosppy",
-    "entropy",
+    "antropy",
     "pykalman",
     "numba",
     "spm1d",
