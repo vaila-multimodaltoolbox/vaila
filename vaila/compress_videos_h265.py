@@ -153,7 +153,7 @@ def is_nvidia_gpu_available():
         test_cmd = [
             FFMPEG,
             "-f", "lavfi",
-            "-i", "color=black:s=32x32:r=1:d=1",
+            "-i", "color=black:s=256x256:r=1:d=1",
             "-c:v", "hevc_nvenc",
             "-f", "null",
             "-hide_banner",
