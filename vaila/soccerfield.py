@@ -453,7 +453,12 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
                 color="black",
                 fontsize=8,
                 weight="bold",
-                bbox={"facecolor": "white", "alpha": 0.7, "boxstyle": "round", "pad": 0.2},  # added pad
+                bbox={
+                    "facecolor": "white",
+                    "alpha": 0.7,
+                    "boxstyle": "round",
+                    "pad": 0.2,
+                },  # added pad
                 zorder=10,
             )
 

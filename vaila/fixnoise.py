@@ -66,7 +66,9 @@ def select_headers_and_load_data(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [header for header, var in zip(headers, header_vars, strict=False) if var.get()]
+        selected_headers = [
+            header for header, var in zip(headers, header_vars, strict=False) if var.get()
+        ]
         selection_window.quit()
         selection_window.destroy()
 

@@ -1,5 +1,5 @@
 # vailá - Multimodal Toolbox
-# Last updated: 22 October 2025
+# Last updated: 15 February 2026
 # © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 # https://github.com/vaila-multimodaltoolbox/vaila
 # Please see AUTHORS for contributors.
@@ -8,7 +8,7 @@
 #
 # vailá - Multimodal Toolbox environment
 # This file sets up the conda environment for the vailá - Multimodal Toolbox.
-# 
+#
 # Install this environment with: conda env create -f vaila_win.yaml
 # Update this environment with: conda env update -f vaila_win.yaml
 #
@@ -17,7 +17,7 @@
 # Instructions:
 # If the h265 codec in ffmpeg does not work, please follow the steps below:
 # 1. Ensure that ffmpeg is installed correctly by running `ffmpeg -version` in your terminal.
-# 2. If ffmpeg is installed via conda, it might not support h265 codec. 
+# 2. If ffmpeg is installed via conda, it might not support h265 codec.
 # 3. Remove the conda-installed ffmpeg by running `conda remove ffmpeg`.
 # 4. Install ffmpeg with h265 support via Homebrew (macOS) or the system package manager on Linux.
 # 5. Run your vailá scripts again to verify the codec support.
@@ -85,7 +85,7 @@ dependencies:
       - spm1d
       - pykalman
       - ydata_profiling
-      - 'xonsh[full]'
+      - "xonsh[full]"
       - boxmot
       - intel-openmp
       - open3d

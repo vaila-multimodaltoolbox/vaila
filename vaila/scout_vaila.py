@@ -713,7 +713,7 @@ class ScoutApp(tk.Tk):
         # layout_btns = ttk.Frame(controls)
         # layout_btns.grid(row=5, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 6))
         # ttk.Button(layout_btns, text="Reset Layout", command=self._reset_layout).pack(side=tk.LEFT, padx=4)
-        # ttk.Label(layout_btns, text="💡 Drag separator to resize columns").pack(side=tk.LEFT, padx=8)
+        # ttk.Label(layout_btns, text="Tip: Drag separator to resize columns").pack(side=tk.LEFT, padx=8)
 
         # --- Field figure (left) - Much smaller fixed size
         self.field_fig, self.field_ax = plt.subplots(

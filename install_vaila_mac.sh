@@ -54,9 +54,28 @@ if [[ -z "$INSTALL_METHOD" || ( "$INSTALL_METHOD" != "1" && "$INSTALL_METHOD" !=
 fi
 INSTALL_METHOD=${INSTALL_METHOD:-1}
 
-# Define paths (common to both methods)
-USER_HOME="$HOME"
-VAILA_HOME="$USER_HOME/vaila"
+# ============================================================================
+# INSTALL LOCATION
+# ============================================================================
+
+echo ""
+echo "---------------------------------------------"
+echo "Install Location Selection"
+echo "  [1] Default (~/vaila) - Recommended"
+echo "  [2] Current Directory ($(pwd)) - Local/Portable"
+echo "---------------------------------------------"
+printf "Choose an option [1-2] (default: 1): "
+read INSTALL_LOC_OPTION
+INSTALL_LOC_OPTION=${INSTALL_LOC_OPTION:-1}
+
+if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
+    VAILA_HOME="$(pwd)"
+    echo "Installing in current directory: $VAILA_HOME"
+else
+    VAILA_HOME="$USER_HOME/vaila"
+    echo "Installing in default location: $VAILA_HOME"
+fi
+
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Check if pyproject.toml exists
@@ -494,19 +513,25 @@ install_with_uv() {
         echo "Python 3.12.12 found."
     fi
 
-    # Clean destination directory and copy files
-    echo ""
-    if [ -d "$VAILA_HOME" ]; then
-        echo "Updating existing vaila installation in $VAILA_HOME..."
-        echo "Removing old files (keeping .venv to be recreated)..."
-        find "$VAILA_HOME" -mindepth 1 -maxdepth 1 ! -name '.venv' -exec rm -rf {} +
+    echo "Clean destination directory and copy files..."
+    
+    if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
+        echo "Local install selected. Skipping rsync file copy."
+        echo "Using current directory as VAILA_HOME."
     else
-        echo "Installing vaila to $VAILA_HOME..."
-        mkdir -p "$VAILA_HOME"
-    fi
+        echo ""
+        if [ -d "$VAILA_HOME" ]; then
+            echo "Updating existing vaila installation in $VAILA_HOME..."
+            echo "Removing old files (keeping .venv to be recreated)..."
+            find "$VAILA_HOME" -mindepth 1 -maxdepth 1 ! -name '.venv' -exec rm -rf {} +
+        else
+            echo "Installing vaila to $VAILA_HOME..."
+            mkdir -p "$VAILA_HOME"
+        fi
 
-    echo "Copying files..."
-    rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' --exclude='uv.lock' --exclude='.python-version' "$PROJECT_DIR/" "$VAILA_HOME/"
+        echo "Copying files..."
+        rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' --exclude='uv.lock' --exclude='.python-version' "$PROJECT_DIR/" "$VAILA_HOME/"
+    fi
 
     if [ -f "$VAILA_HOME/uv.lock" ]; then
         rm -f "$VAILA_HOME/uv.lock"

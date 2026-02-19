@@ -734,9 +734,7 @@ def save_results_to_csv(results, center_border_results, zones_distance, fs, outp
             "distance_in_border_m",
         ]
         time_headers = ["time_stationary_seconds"]
-        speed_range_headers_frames = [
-            f"{k}_frames" for k in results["speed_range_counts_frames"]
-        ]
+        speed_range_headers_frames = [f"{k}_frames" for k in results["speed_range_counts_frames"]]
         speed_range_headers_seconds = [
             f"{k}_seconds" for k in results["speed_range_counts_seconds"]
         ]

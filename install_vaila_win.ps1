@@ -55,18 +55,39 @@ If ($installMethod -notin @("1", "2")) {
 }
 
 # Define paths (common to both methods)
-If ($isAdmin) {
-    $vailaProgramPath = "${env:ProgramFiles}\vaila"
-    Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Green
-    Write-Host "(Administrator privileges detected - using Program Files)" -ForegroundColor Green
+# ============================================================================
+# INSTALL LOCATION
+# ============================================================================
+
+Write-Host ""
+Write-Host "---------------------------------------------" -ForegroundColor Cyan
+Write-Host "Install Location Selection" -ForegroundColor Cyan
+Write-Host "  [1] Default (User Profile or Program Files) - Recommended" -ForegroundColor Yellow
+Write-Host "  [2] Current Directory ($PSScriptRoot) - Local/Portable" -ForegroundColor Yellow
+Write-Host "---------------------------------------------" -ForegroundColor Cyan
+$installLocOption = Read-Host "Choose an option [1-2] (default: 1)"
+If ([string]::IsNullOrWhiteSpace($installLocOption)) {
+    $installLocOption = "1"
+}
+
+If ($installLocOption -eq "2") {
+    $vailaProgramPath = $PSScriptRoot
+    Write-Host "Installing in current directory: $vailaProgramPath" -ForegroundColor Green
+    Write-Host "(Local/Portable mode)" -ForegroundColor Green
 } Else {
-    $vailaProgramPath = "$env:USERPROFILE\vaila"
-    Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Yellow
-    Write-Host "(No administrator privileges - using user directory)" -ForegroundColor Yellow
-    If ($installMethod -eq "1") {
-        Write-Host "Note: Some features (FFmpeg, Windows Terminal installation) may be skipped." -ForegroundColor Yellow
+    If ($isAdmin) {
+        $vailaProgramPath = "${env:ProgramFiles}\vaila"
+        Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Green
+        Write-Host "(Administrator privileges detected - using Program Files)" -ForegroundColor Green
+    } Else {
+        $vailaProgramPath = "$env:USERPROFILE\vaila"
+        Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Yellow
+        Write-Host "(No administrator privileges - using user directory)" -ForegroundColor Yellow
+        If ($installMethod -eq "1") {
+            Write-Host "Note: Some features (FFmpeg, Windows Terminal installation) may be skipped." -ForegroundColor Yellow
+        }
+        Write-Host "Run as administrator for installation to Program Files (recommended)." -ForegroundColor Yellow
     }
-    Write-Host "Run as administrator for installation to Program Files (recommended)." -ForegroundColor Yellow
 }
 Write-Host ""
 
@@ -374,8 +395,8 @@ function Install-WithUv {
     If (-Not $normalizedVailaPath) { $normalizedVailaPath = $vailaProgramPath }
     $isAlreadyInstalled = ($normalizedProjectDir -eq $normalizedVailaPath)
 
-    If ($isAlreadyInstalled) {
-        Write-Host "Script is running from installation directory. Files are already in place." -ForegroundColor Green
+    If ($isAlreadyInstalled -or ($installLocOption -eq "2")) {
+        Write-Host "Script is running from installation directory (or local install selected). Files are already in place." -ForegroundColor Green
         Write-Host "Skipping file copy step." -ForegroundColor Green
     } Else {
         # Clean destination directory and copy files
@@ -811,25 +832,32 @@ function Install-WithConda {
     }
 
     # Clean destination directory and copy files
+    # Clean destination directory and copy files
     Write-Host ""
-    Write-Host "Cleaning destination directory and copying vaila program..." -ForegroundColor Yellow
-    If (Test-Path $vailaProgramPath) {
-        Write-Host "Removing existing files from destination directory..." -ForegroundColor Yellow
-        Get-ChildItem -Path $vailaProgramPath -Recurse -Force | Remove-Item -Force -Recurse
+    
+    If ($installLocOption -eq "2") {
+        Write-Host "Local install selected. Skipping file copy." -ForegroundColor Green
+        Write-Host "Using current directory as vaila location." -ForegroundColor Green
     } Else {
-        New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
-    }
-    Get-ChildItem -Path $sourcePath -Recurse -Force | Where-Object {
-        -not ($_.PSIsContainer -and $_.Name -eq '__pycache__') -and
-        -not ($_.Extension -eq '.pyc')
-    } | ForEach-Object {
-        $target = $_.FullName.Replace($sourcePath, $vailaProgramPath)
-        if ($_.PSIsContainer) {
-            if (-not (Test-Path $target)) {
-                New-Item -ItemType Directory -Force -Path $target | Out-Null
+        Write-Host "Cleaning destination directory and copying vaila program..." -ForegroundColor Yellow
+        If (Test-Path $vailaProgramPath) {
+            Write-Host "Removing existing files from destination directory..." -ForegroundColor Yellow
+            Get-ChildItem -Path $vailaProgramPath -Recurse -Force | Remove-Item -Force -Recurse
+        } Else {
+            New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
+        }
+        Get-ChildItem -Path $sourcePath -Recurse -Force | Where-Object {
+            -not ($_.PSIsContainer -and $_.Name -eq '__pycache__') -and
+            -not ($_.Extension -eq '.pyc')
+        } | ForEach-Object {
+            $target = $_.FullName.Replace($sourcePath, $vailaProgramPath)
+            if ($_.PSIsContainer) {
+                if (-not (Test-Path $target)) {
+                    New-Item -ItemType Directory -Force -Path $target | Out-Null
+                }
+            } else {
+                Copy-Item -Path $_.FullName -Destination $target -Force
             }
-        } else {
-            Copy-Item -Path $_.FullName -Destination $target -Force
         }
     }
 
@@ -1077,9 +1105,9 @@ If ($isAdmin) {
     # Summary
     Write-Host ""
     If ($rsyncInstalled) {
-        Write-Host "✓ rsync is available for file transfers." -ForegroundColor Green
+        Write-Host "[OK] rsync is available for file transfers." -ForegroundColor Green
     } ElseIf ($scpInstalled) {
-        Write-Host "✓ scp is available for file transfers (rsync not installed)." -ForegroundColor Yellow
+        Write-Host "[OK] scp is available for file transfers (rsync not installed)." -ForegroundColor Yellow
         Write-Host "  Note: The transfer script will use scp as an alternative to rsync." -ForegroundColor Yellow
     } Else {
         Write-Warning "Neither rsync nor scp is available. File transfer feature may not work."
