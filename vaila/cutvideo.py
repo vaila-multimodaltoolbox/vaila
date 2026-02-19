@@ -102,9 +102,7 @@ def get_precise_video_metadata(video_path):
             "-show_streams",
             str(video_path),
         ]
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout)
 
         # Find video stream
@@ -198,9 +196,7 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
     """
     try:
         # Check if ffmpeg is available
-        subprocess.run(
-            ["ffmpeg", "-version"], capture_output=True, check=True
-        )
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Fallback to OpenCV if ffmpeg not available
         return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
@@ -879,14 +875,10 @@ def play_video_with_cuts(video_path):
                             TimeElapsedColumn(),
                             transient=True,
                         ) as progress:
-                            progress.add_task(
-                                f"Converting {Path(video_path).name}...", total=None
-                            )
+                            progress.add_task(f"Converting {Path(video_path).name}...", total=None)
 
                             # Run subprocess
-                            subprocess.run(
-                                cmd, check=True, capture_output=True
-                            )
+                            subprocess.run(cmd, check=True, capture_output=True)
 
                         conversion_success = True
                     except subprocess.CalledProcessError as e:

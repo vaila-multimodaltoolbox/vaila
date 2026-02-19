@@ -154,7 +154,9 @@ def select2headers(file_path):
 
     def on_select():
         nonlocal selected_headers
-        selected_headers = [header for header, var in zip(headers, header_vars, strict=False) if var.get()]
+        selected_headers = [
+            header for header, var in zip(headers, header_vars, strict=False) if var.get()
+        ]
         if len(selected_headers) != 2:
             messagebox.showinfo("Info", "Please select exactly two (2) headers for analysis.")
             return

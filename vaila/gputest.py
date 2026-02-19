@@ -23,7 +23,7 @@ def test_pytorch():
     table.add_row("PyTorch Version", torch.__version__)
 
     cuda_available = torch.cuda.is_available()
-    table.add_row("CUDA Available", "✅ Yes" if cuda_available else "❌ No")
+    table.add_row("CUDA Available", "[OK] Yes" if cuda_available else "[FAIL] No")
 
     if cuda_available:
         device_count = torch.cuda.device_count()
@@ -33,10 +33,10 @@ def test_pytorch():
 
         try:
             x = torch.rand(5, 3).cuda()
-            table.add_row("Tensor Test", "✅ Tensor moved to GPU successfully")
+            table.add_row("Tensor Test", "[OK] Tensor moved to GPU successfully")
             table.add_row("Current Device", str(x.device))
         except Exception as e:
-            table.add_row("Tensor Test", f"❌ Failed: {e}")
+            table.add_row("Tensor Test", f"[FAIL] Failed: {e}")
     else:
         table.add_row("CUDA", "Not detected.")
 
@@ -61,12 +61,12 @@ def test_yolo():
     if not os.path.exists(models_dir):
         try:
             os.makedirs(models_dir, exist_ok=True)
-            table.add_row("Models Directory", f"✅ Created: {models_dir}")
+            table.add_row("Models Directory", f"[OK] Created: {models_dir}")
         except Exception as e:
-            table.add_row("Models Directory", f"❌ Failed to create: {e}")
+            table.add_row("Models Directory", f"[FAIL] Failed to create: {e}")
             return
     else:
-        table.add_row("Models Directory", f"✅ Exists: {models_dir}")
+        table.add_row("Models Directory", f"[OK] Exists: {models_dir}")
 
     model_name = "yolo11n.pt"
     model_path = os.path.join(models_dir, model_name)
@@ -83,7 +83,7 @@ def test_yolo():
 
         if os.path.exists(model_path):
             model = YOLO(model_path)
-            table.add_row("Model Load", f"✅ Loaded from: {model_path}")
+            table.add_row("Model Load", f"[OK] Loaded from: {model_path}")
         else:
             rprint(f"[yellow]Downloading {model_name}...[/yellow]")
             # This will download to current dir usually
@@ -97,13 +97,13 @@ def test_yolo():
                     import shutil
 
                     shutil.move(downloaded_path, model_path)
-                    table.add_row("Model Download", f"✅ Downloaded & Moved to: {model_path}")
+                    table.add_row("Model Download", f"[OK] Downloaded & Moved to: {model_path}")
                     # Reload from new path to be sure
                     model = YOLO(model_path)
                 else:
-                    table.add_row("Model Download", f"✅ Downloaded to: {model_path}")
+                    table.add_row("Model Download", f"[OK] Downloaded to: {model_path}")
             else:
-                table.add_row("Model Download", "⚠️ Downloaded but path unclear")
+                table.add_row("Model Download", "[WARNING] Downloaded but path unclear")
 
         if torch.cuda.is_available():
             model.to("cuda")
@@ -112,12 +112,12 @@ def test_yolo():
             # Dummy inference
             img = np.zeros((640, 640, 3), dtype=np.uint8)
             model(img, verbose=False)
-            table.add_row("Inference on GPU", "✅ Success")
+            table.add_row("Inference on GPU", "[OK] Success")
         else:
             table.add_row("Model Device", "CPU (CUDA not available)")
 
     except Exception as e:
-        table.add_row("Error", f"❌ {str(e)}")
+        table.add_row("Error", f"[FAIL] {str(e)}")
 
     console.print(
         Panel(table, title="[bold red]Ultralytics YOLO (v11)[/bold red]", border_style="red")
@@ -133,10 +133,10 @@ def test_mediapipe():
 
     # Check for functions/modules
     has_tasks = hasattr(mp, "tasks")
-    table.add_row("mp.tasks", "✅ Available" if has_tasks else "❌ Missing")
+    table.add_row("mp.tasks", "[OK] Available" if has_tasks else "[FAIL] Missing")
 
     if not has_tasks:
-        table.add_row("Status", "❌ Tasks API missing. Update mediapipe.")
+        table.add_row("Status", "[FAIL] Tasks API missing. Update mediapipe.")
         console.print(
             Panel(table, title="[bold green]MediaPipe[/bold green]", border_style="green")
         )
@@ -159,15 +159,15 @@ def test_mediapipe():
             import urllib.request
 
             urllib.request.urlretrieve(url, model_path)
-            table.add_row("Model Download", f"✅ Downloaded to: {models_dir}")
+            table.add_row("Model Download", f"[OK] Downloaded to: {models_dir}")
         except Exception as e:
-            table.add_row("Model Download", f"❌ Failed: {e}")
+            table.add_row("Model Download", f"[FAIL] Failed: {e}")
             console.print(
                 Panel(table, title="[bold green]MediaPipe[/bold green]", border_style="green")
             )
             return
     else:
-        table.add_row("Model File", f"✅ Found: {model_name}")
+        table.add_row("Model File", f"[OK] Found: {model_name}")
 
     # Inference Test using Tasks API
     try:
@@ -186,17 +186,17 @@ def test_mediapipe():
 
             # Detect
             landmarker.detect(mp_image)
-            table.add_row("Pose Inference", "✅ Success (Tasks API)")
+            table.add_row("Pose Inference", "[OK] Success (Tasks API)")
 
             # Check for GPU delegate availability (indirectly)
             # MediaPipe Python GPU support is still experimental/limited in standard wheels
             if hasattr(mp, "gpu"):
-                table.add_row("GPU Module", "✅ mp.gpu present")
+                table.add_row("GPU Module", "[OK] mp.gpu present")
             else:
-                table.add_row("GPU Module", "ℹ️  Standard CPU build")
+                table.add_row("GPU Module", "[INFO] Standard CPU build")
 
     except Exception as e:
-        table.add_row("Inference Test", f"❌ Failed: {e}")
+        table.add_row("Inference Test", f"[FAIL] Failed: {e}")
 
     console.print(Panel(table, title="[bold green]MediaPipe[/bold green]", border_style="green"))
 

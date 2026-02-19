@@ -1,0 +1,4079 @@
+[
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 48,
+      "row": 15
+    },
+    "filename": "/home/preto/Preto/vaila/tests/vaila_and_jump/validate_metrics.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 15
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 15,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "N999",
+    "end_location": {
+      "column": 1,
+      "row": 1
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/HardwareManager.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 1
+    },
+    "message": "Invalid module name: 'HardwareManager'",
+    "noqa_row": 8,
+    "url": "https://docs.astral.sh/ruff/rules/invalid-module-name"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 18,
+      "row": 48
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 48
+    },
+    "message": "`openai` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 48,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 34,
+      "row": 55
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 26,
+      "row": 55
+    },
+    "message": "`midiutil.MIDIFile` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 55,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 24,
+      "row": 63
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 63
+    },
+    "message": "`pygame.mixer` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 63,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 22,
+      "row": 70
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 70
+    },
+    "message": "`subprocess` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 70,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 20,
+      "row": 71
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 71
+    },
+    "message": "`tempfile` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 71,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 19,
+      "row": 94
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 94
+    },
+    "message": "`librosa` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 94,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 35,
+      "row": 101
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 23,
+      "row": 101
+    },
+    "message": "`pydub.AudioSegment` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 101,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 916
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 916
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 916,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 19,
+      "row": 955
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 955
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 955,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 42,
+      "row": 1045
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/brainstorm.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 1045
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 1045,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 39,
+      "row": 141
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/compress_videos_h264.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 141
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 141,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 44,
+      "row": 149
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/compress_videos_h265.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 149
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 149,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 39,
+      "row": 90
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/compress_videos_h266.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 90
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 90,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 65,
+      "row": 141
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/cop_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 141
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 141,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 65,
+      "row": 54
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/cop_calculate.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 54
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 54,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 65,
+      "row": 81
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/cop_calculate.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 81
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 81,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 71,
+      "row": 331
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/cube2d_kinematics.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 331
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 331,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 38,
+      "row": 583
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/cutvideo.py",
+    "fix": null,
+    "location": {
+      "column": 11,
+      "row": 583
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 583,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 27,
+      "row": 833
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/cutvideo.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 833
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 833,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 45,
+      "row": 249
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/drawboxe.py",
+    "fix": null,
+    "location": {
+      "column": 18,
+      "row": 249
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 249,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 45,
+      "row": 479
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/drawboxe.py",
+    "fix": null,
+    "location": {
+      "column": 18,
+      "row": 479
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 479,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 32,
+      "row": 422
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/emg_labiocom.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 421
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 421,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "F823",
+    "end_location": {
+      "column": 38,
+      "row": 1635
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/emg_labiocom.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 1635
+    },
+    "message": "Local variable `re` referenced before assignment",
+    "noqa_row": 1635,
+    "url": "https://docs.astral.sh/ruff/rules/undefined-local"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 50
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 50
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 50,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 51
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 51
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 51,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 52
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 52
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 52,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 53
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 53
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 53,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 54
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 54
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 54,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 55
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 55
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 55,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 56
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 56
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 56,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 57
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 57
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 57,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 36,
+      "row": 58
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/example_batch_usage.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 58
+    },
+    "message": "Replace legacy `np.random.randn` call with `np.random.Generator`",
+    "noqa_row": 58,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 38,
+      "row": 808
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/filemanager.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 805
+    },
+    "message": "Use ternary operator `full_pattern = f\"*{pattern}*{file_extension}\" if pattern else file_extension` instead of `if`-`else`-block",
+    "noqa_row": 805,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 65,
+      "row": 56
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/fixnoise.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 56
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 56,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 10,
+      "row": 139
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 139
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 139,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 36,
+      "row": 140
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 140
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 140,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 28,
+      "row": 141
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 141
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 141,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 2,
+      "row": 156
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 142
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 142,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 13,
+      "row": 158
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 158
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 158,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 32,
+      "row": 159
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 159
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 159,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 19,
+      "row": 160
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 160
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 160,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 20,
+      "row": 161
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 161
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 161,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 65,
+      "row": 162
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 162
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 162,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 24,
+      "row": 163
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 163
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 163,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 39,
+      "row": 164
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 164
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 164,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 79,
+      "row": 165
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 165
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 165,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 38,
+      "row": 166
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/forceplate_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 166
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 166,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 55,
+      "row": 205
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 203
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 203,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "B025",
+    "end_location": {
+      "column": 21,
+      "row": 385
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 385
+    },
+    "message": "try-except block with duplicate exception `Exception`",
+    "noqa_row": 385,
+    "url": "https://docs.astral.sh/ruff/rules/duplicate-try-block-exception"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 40,
+      "row": 793
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 788
+    },
+    "message": "Use ternary operator `bg_color = (40, 60, 80) if is_dir else (30, 30, 30)` instead of `if`-`else`-block",
+    "noqa_row": 788,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 45,
+      "row": 800
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 797
+    },
+    "message": "Use ternary operator `bg_color = (80, 120, 200) if is_dir else (60, 60, 100)` instead of `if`-`else`-block",
+    "noqa_row": 797,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 19,
+      "row": 815
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 815
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 815,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 39,
+      "row": 915
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 913
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 913,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 68,
+      "row": 1246
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 29,
+      "row": 1245
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 1245,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 19,
+      "row": 1417
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 1417
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1417,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 54,
+      "row": 1683
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 37,
+      "row": 1680
+    },
+    "message": "Use ternary operator `id_col = f\"ID_{id_match.group(1)}\" if id_match else None` instead of `if`-`else`-block",
+    "noqa_row": 1680,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 84,
+      "row": 2952
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 2951
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 2951,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 63,
+      "row": 2975
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 29,
+      "row": 2973
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 2973,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 90,
+      "row": 3122
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 3121
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 3121,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 52,
+      "row": 3574
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 3572
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 3572,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 78,
+      "row": 4009
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 4008
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 4008,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 78,
+      "row": 4026
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 4025
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 4025,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 23,
+      "row": 4302
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 4298
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 4298,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 45,
+      "row": 4370
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 4368
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 4368,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM105",
+    "end_location": {
+      "column": 25,
+      "row": 5571
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 5567
+    },
+    "message": "Use `contextlib.suppress(ValueError)` instead of `try`-`except`-`pass`",
+    "noqa_row": 5567,
+    "url": "https://docs.astral.sh/ruff/rules/suppressible-exception"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 46,
+      "row": 5698
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 45,
+      "row": 5698
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 5698,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 19,
+      "row": 5699
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 5699
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 5699,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "B025",
+    "end_location": {
+      "column": 21,
+      "row": 5737
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 5737
+    },
+    "message": "try-except block with duplicate exception `Exception`",
+    "noqa_row": 5737,
+    "url": "https://docs.astral.sh/ruff/rules/duplicate-try-block-exception"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 52,
+      "row": 6009
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/getpixelvideo.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 6007
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 6007,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM117",
+    "end_location": {
+      "column": 56,
+      "row": 408
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/gnss_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 407
+    },
+    "message": "Use a single `with` statement with multiple contexts instead of nested `with` statements",
+    "noqa_row": 407,
+    "url": "https://docs.astral.sh/ruff/rules/multiple-with-statements"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 11,
+      "row": 182
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 182
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 182,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 10,
+      "row": 183
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 183
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 183,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 11,
+      "row": 184
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 184
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 184,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 30,
+      "row": 185
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 185
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 185,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 2,
+      "row": 198
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 186
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 186,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 32,
+      "row": 200
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 200
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 200,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 19,
+      "row": 201
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 201
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 201,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 20,
+      "row": 202
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 202
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 202,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 23,
+      "row": 203
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 203
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 203,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 37,
+      "row": 204
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 204
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 204,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 54,
+      "row": 205
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 205
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 205,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 42,
+      "row": 206
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/grf_gait.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 206
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 206,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 51,
+      "row": 356
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/imu_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 353
+    },
+    "message": "Use ternary operator `data = df_analogs[selected_headers] if selected_headers else df_analogs.iloc[:, :18]` instead of `if`-`else`-block",
+    "noqa_row": 353,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 23,
+      "row": 1514
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/interp_smooth_split.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1510
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 1510,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 38,
+      "row": 2595
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/interp_smooth_split.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 2591
+    },
+    "message": "Use ternary operator `padded_data = np.pad(data, pad_len, mode=\"edge\") if pad_len > 0 else data.copy()` instead of `if`-`else`-block",
+    "noqa_row": 2591,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 43,
+      "row": 3917
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/interp_smooth_split.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 3914
+    },
+    "message": "Use ternary operator `time_precision = len(time_str.split(\".\")[1]) if \".\" in time_str else 3` instead of `if`-`else`-block",
+    "noqa_row": 3914,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 16,
+      "row": 73
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 73
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 73,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 10,
+      "row": 74
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 74
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 74,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 16,
+      "row": 75
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 75
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 75,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 14,
+      "row": 76
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 76
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 76,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 12,
+      "row": 77
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 77
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 77,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 21,
+      "row": 78
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 78
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 78,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 22,
+      "row": 81
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 81
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 81,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 25,
+      "row": 82
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 82
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 82,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 62,
+      "row": 83
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 83
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 83,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 11,
+      "row": 85
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 85
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 85,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 23,
+      "row": 86
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 86
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 86,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 19,
+      "row": 87
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 87
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 87,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 13,
+      "row": 88
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 88
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 88,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 19,
+      "row": 91
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 91
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 91,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 29,
+      "row": 92
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 92
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 92,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 18,
+      "row": 106
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 106
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 106,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 18,
+      "row": 107
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 107
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 107,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 12,
+      "row": 109
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 109
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 109,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 70,
+      "row": 1116
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 1116
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 1116,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 93,
+      "row": 1214
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 1213
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 1213,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 94,
+      "row": 1811
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 1809
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 1809,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "B023",
+    "end_location": {
+      "column": 43,
+      "row": 2440
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 38,
+      "row": 2440
+    },
+    "message": "Function definition does not bind loop variable `frame`",
+    "noqa_row": 2440,
+    "url": "https://docs.astral.sh/ruff/rules/function-uses-loop-variable"
+  },
+  {
+    "cell": null,
+    "code": "B023",
+    "end_location": {
+      "column": 38,
+      "row": 2448
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 33,
+      "row": 2448
+    },
+    "message": "Function definition does not bind loop variable `frame`",
+    "noqa_row": 2448,
+    "url": "https://docs.astral.sh/ruff/rules/function-uses-loop-variable"
+  },
+  {
+    "cell": null,
+    "code": "B023",
+    "end_location": {
+      "column": 45,
+      "row": 2450
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 40,
+      "row": 2450
+    },
+    "message": "Function definition does not bind loop variable `frame`",
+    "noqa_row": 2450,
+    "url": "https://docs.astral.sh/ruff/rules/function-uses-loop-variable"
+  },
+  {
+    "cell": null,
+    "code": "SIM113",
+    "end_location": {
+      "column": 23,
+      "row": 1589
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless2d_mpyolo.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 1589
+    },
+    "message": "Use `enumerate()` for index variable `frame_idx` in `for` loop",
+    "noqa_row": 1589,
+    "url": "https://docs.astral.sh/ruff/rules/enumerate-for-loop"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 69,
+      "row": 334
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless3d_analysis_v2.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 333
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 333,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM105",
+    "end_location": {
+      "column": 21,
+      "row": 626
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_2d_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 623
+    },
+    "message": "Use `contextlib.suppress(Exception)` instead of `try`-`except`-`pass`",
+    "noqa_row": 623,
+    "url": "https://docs.astral.sh/ruff/rules/suppressible-exception"
+  },
+  {
+    "cell": null,
+    "code": "SIM105",
+    "end_location": {
+      "column": 21,
+      "row": 638
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_2d_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 635
+    },
+    "message": "Use `contextlib.suppress(Exception)` instead of `try`-`except`-`pass`",
+    "noqa_row": 635,
+    "url": "https://docs.astral.sh/ruff/rules/suppressible-exception"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 54,
+      "row": 1644
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_2d_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1638
+    },
+    "message": "Use ternary operator `default_start = total_frames if last_end == float(\"inf\") else int(last_end) + 1` instead of `if`-`else`-block",
+    "noqa_row": 1638,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "B023",
+    "end_location": {
+      "column": 45,
+      "row": 4389
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_2d_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 30,
+      "row": 4389
+    },
+    "message": "Function definition does not bind loop variable `annotated_frame`",
+    "noqa_row": 4389,
+    "url": "https://docs.astral.sh/ruff/rules/function-uses-loop-variable"
+  },
+  {
+    "cell": null,
+    "code": "B023",
+    "end_location": {
+      "column": 40,
+      "row": 4396
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_2d_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 4396
+    },
+    "message": "Function definition does not bind loop variable `annotated_frame`",
+    "noqa_row": 4396,
+    "url": "https://docs.astral.sh/ruff/rules/function-uses-loop-variable"
+  },
+  {
+    "cell": null,
+    "code": "B023",
+    "end_location": {
+      "column": 47,
+      "row": 4398
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_2d_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 32,
+      "row": 4398
+    },
+    "message": "Function definition does not bind loop variable `annotated_frame`",
+    "noqa_row": 4398,
+    "url": "https://docs.astral.sh/ruff/rules/function-uses-loop-variable"
+  },
+  {
+    "cell": null,
+    "code": "N802",
+    "end_location": {
+      "column": 14,
+      "row": 326
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_3d_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 326
+    },
+    "message": "Function name `dlt8_to_H` should be lowercase",
+    "noqa_row": 326,
+    "url": "https://docs.astral.sh/ruff/rules/invalid-function-name"
+  },
+  {
+    "cell": null,
+    "code": "N802",
+    "end_location": {
+      "column": 18,
+      "row": 531
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_3d_analysis.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 531
+    },
+    "message": "Function name `euler_to_Rxyz` should be lowercase",
+    "noqa_row": 531,
+    "url": "https://docs.astral.sh/ruff/rules/invalid-function-name"
+  },
+  {
+    "cell": null,
+    "code": "SIM113",
+    "end_location": {
+      "column": 25,
+      "row": 1077
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/markerless_live.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1077
+    },
+    "message": "Use `enumerate()` for index variable `col` in `for` loop",
+    "noqa_row": 1077,
+    "url": "https://docs.astral.sh/ruff/rules/enumerate-for-loop"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 27,
+      "row": 239
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 239
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 239,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 27,
+      "row": 263
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 263
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 263,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 31,
+      "row": 316
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 316
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 316,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 50,
+      "row": 781
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 49,
+      "row": 781
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 781,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 33,
+      "row": 832
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 32,
+      "row": 832
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 832,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 74,
+      "row": 1026
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 1026
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 1026,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 37,
+      "row": 1144
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 1144
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 1144,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 93,
+      "row": 1460
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 1460
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 1460,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 54,
+      "row": 1560
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 53,
+      "row": 1560
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 1560,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 93,
+      "row": 1615
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 1615
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 1615,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 33,
+      "row": 1666
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 32,
+      "row": 1666
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 1666,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 19,
+      "row": 1906
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 1906
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1906,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 15,
+      "row": 2030
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/merge_multivideos.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 2030
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 2030,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 10,
+      "row": 96
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/modifylabref.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 96
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 96,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 30,
+      "row": 97
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/modifylabref.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 97
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 97,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 20,
+      "row": 99
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/modifylabref.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 99
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 99,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 23,
+      "row": 100
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/modifylabref.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 100
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 100,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 50,
+      "row": 101
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/modifylabref.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 101
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 101,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "N817",
+    "end_location": {
+      "column": 50,
+      "row": 101
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/modifylabref.py",
+    "fix": null,
+    "location": {
+      "column": 37,
+      "row": 101
+    },
+    "message": "CamelCase `Rotation` imported as acronym `R`",
+    "noqa_row": 101,
+    "url": "https://docs.astral.sh/ruff/rules/camelcase-imported-as-acronym"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 58,
+      "row": 187
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/modifylabref.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 187
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 187,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B023",
+    "end_location": {
+      "column": 43,
+      "row": 291
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/modifylabref.py",
+    "fix": null,
+    "location": {
+      "column": 34,
+      "row": 291
+    },
+    "message": "Function definition does not bind loop variable `precision`",
+    "noqa_row": 291,
+    "url": "https://docs.astral.sh/ruff/rules/function-uses-loop-variable"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 42,
+      "row": 847
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mp_facemesh.py",
+    "fix": null,
+    "location": {
+      "column": 41,
+      "row": 847
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 847,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 84,
+      "row": 864
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mp_facemesh.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 863
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 863,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 92,
+      "row": 364
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 364
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 364,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 51,
+      "row": 494
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 491
+    },
+    "message": "Use ternary operator `absolute_angle = angle % 360 if format_360 else (angle + 180) % 360 - 180` instead of `if`-`else`-block",
+    "noqa_row": 491,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 1233
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1233
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1233,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 1260
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1260
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1260,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 1291
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1291
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1291,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 1297
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1297
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1297,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 1505
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1505
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1505,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 1532
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1532
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1532,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 1565
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1565
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1565,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 23,
+      "row": 1589
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mpangles.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 1589
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1589,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 20,
+      "row": 218
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/mphands.py",
+    "fix": null,
+    "location": {
+      "column": 16,
+      "row": 218
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 218,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "B018",
+    "end_location": {
+      "column": 49,
+      "row": 108
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/numstepsmp.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 108
+    },
+    "message": "Found useless attribute access. Either assign it to a variable or remove it.",
+    "noqa_row": 108,
+    "url": "https://docs.astral.sh/ruff/rules/useless-expression"
+  },
+  {
+    "cell": null,
+    "code": "B018",
+    "end_location": {
+      "column": 50,
+      "row": 111
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/numstepsmp.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 111
+    },
+    "message": "Found useless attribute access. Either assign it to a variable or remove it.",
+    "noqa_row": 111,
+    "url": "https://docs.astral.sh/ruff/rules/useless-expression"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 30,
+      "row": 551
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/numstepsmp.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 547
+    },
+    "message": "Use ternary operator `z_score = (active_z[frame] - z_min) / z_range if z_range > 0 else 0.5` instead of `if`-`else`-block",
+    "noqa_row": 547,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "N812",
+    "end_location": {
+      "column": 31,
+      "row": 59
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/pynalty.py",
+    "fix": null,
+    "location": {
+      "column": 19,
+      "row": 59
+    },
+    "message": "Lowercase `linalg` imported as non-lowercase `LA`",
+    "noqa_row": 59,
+    "url": "https://docs.astral.sh/ruff/rules/lowercase-imported-as-non-lowercase"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 68,
+      "row": 876
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/pynalty.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 874
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 874,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 44,
+      "row": 1473
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/pynalty.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 1472
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 1472,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 70,
+      "row": 148
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readc3d_export.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 148
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 148,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 14,
+      "row": 558
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readc3d_export.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 558
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 558,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 22,
+      "row": 864
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readc3d_export.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 864
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 864,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 22,
+      "row": 870
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readc3d_export.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 870
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 870,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 20,
+      "row": 1875
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readc3d_export.py",
+    "fix": null,
+    "location": {
+      "column": 16,
+      "row": 1875
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 1875,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 20,
+      "row": 519
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 16,
+      "row": 519
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 519,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 65,
+      "row": 750
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 750
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 750,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 71,
+      "row": 756
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 756
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 756,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 65,
+      "row": 769
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 769
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 769,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 68,
+      "row": 778
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 778
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 778,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 72,
+      "row": 794
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 794
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 794,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 78,
+      "row": 828
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 828
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 828,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 80,
+      "row": 830
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 830
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 830,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 69,
+      "row": 836
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 836
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 836,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 98,
+      "row": 869
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 869
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 869,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 100,
+      "row": 871
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 871
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 871,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 74,
+      "row": 888
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/readcsv_export.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 888
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 888,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B023",
+    "end_location": {
+      "column": 47,
+      "row": 149
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rearrange_data.py",
+    "fix": null,
+    "location": {
+      "column": 38,
+      "row": 149
+    },
+    "message": "Function definition does not bind loop variable `precision`",
+    "noqa_row": 149,
+    "url": "https://docs.astral.sh/ruff/rules/function-uses-loop-variable"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 15,
+      "row": 1263
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rearrange_data.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 1263
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1263,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 11,
+      "row": 1956
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rearrange_data.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 1956
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1956,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM113",
+    "end_location": {
+      "column": 29,
+      "row": 88
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rec2d.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 88
+    },
+    "message": "Use `enumerate()` for index variable `files_processed` in `for` loop",
+    "noqa_row": 88,
+    "url": "https://docs.astral.sh/ruff/rules/enumerate-for-loop"
+  },
+  {
+    "cell": null,
+    "code": "SIM113",
+    "end_location": {
+      "column": 29,
+      "row": 79
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rec2d_one_dlt2d.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 79
+    },
+    "message": "Use `enumerate()` for index variable `files_processed` in `for` loop",
+    "noqa_row": 79,
+    "url": "https://docs.astral.sh/ruff/rules/enumerate-for-loop"
+  },
+  {
+    "cell": null,
+    "code": "SIM113",
+    "end_location": {
+      "column": 29,
+      "row": 112
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rec3d.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 112
+    },
+    "message": "Use `enumerate()` for index variable `files_processed` in `for` loop",
+    "noqa_row": 112,
+    "url": "https://docs.astral.sh/ruff/rules/enumerate-for-loop"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 31,
+      "row": 167
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rec3d.py",
+    "fix": null,
+    "location": {
+      "column": 25,
+      "row": 167
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 167,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "B007",
+    "end_location": {
+      "column": 22,
+      "row": 231
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rec3d_one_dlt3d.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "_index",
+          "end_location": {
+            "column": 22,
+            "row": 231
+          },
+          "location": {
+            "column": 17,
+            "row": 231
+          }
+        }
+      ],
+      "message": "Rename unused `index` to `_index`"
+    },
+    "location": {
+      "column": 17,
+      "row": 231
+    },
+    "message": "Loop control variable `index` not used within loop body",
+    "noqa_row": 231,
+    "url": "https://docs.astral.sh/ruff/rules/unused-loop-control-variable"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 15,
+      "row": 1353
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reid_markers.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 1353
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 1353,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "B018",
+    "end_location": {
+      "column": 25,
+      "row": 1708
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reid_markers.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 1708
+    },
+    "message": "Found useless attribute access. Either assign it to a variable or remove it.",
+    "noqa_row": 1708,
+    "url": "https://docs.astral.sh/ruff/rules/useless-expression"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 18,
+      "row": 72
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reid_yolotrack.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 72
+    },
+    "message": "`boxmot` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 72,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 43,
+      "row": 92
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reid_yolotrack.py",
+    "fix": null,
+    "location": {
+      "column": 33,
+      "row": 92
+    },
+    "message": "`boxmot.deep.StrongSORT` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 92,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 18,
+      "row": 54
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 54
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 54,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 43,
+      "row": 59
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 59
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 59,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 80,
+      "row": 60
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 60
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 60,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 37,
+      "row": 61
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 61
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 61,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 38,
+      "row": 62
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 62
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 62,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 42,
+      "row": 63
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 63
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 63,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 2,
+      "row": 80
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 66
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 66,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "E402",
+    "end_location": {
+      "column": 2,
+      "row": 91
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 1,
+      "row": 83
+    },
+    "message": "Module level import not at top of file",
+    "noqa_row": 83,
+    "url": "https://docs.astral.sh/ruff/rules/module-import-not-at-top-of-file"
+  },
+  {
+    "cell": null,
+    "code": "N802",
+    "end_location": {
+      "column": 15,
+      "row": 133
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 133
+    },
+    "message": "Function name `initUI` should be lowercase",
+    "noqa_row": 133,
+    "url": "https://docs.astral.sh/ruff/rules/invalid-function-name"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 45,
+      "row": 506
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 505
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 505,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "N802",
+    "end_location": {
+      "column": 20,
+      "row": 704
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/reidvideogui.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 704
+    },
+    "message": "Function name `resizeEvent` should be lowercase",
+    "noqa_row": 704,
+    "url": "https://docs.astral.sh/ruff/rules/invalid-function-name"
+  },
+  {
+    "cell": null,
+    "code": "N817",
+    "end_location": {
+      "column": 50,
+      "row": 68
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/rotation.py",
+    "fix": null,
+    "location": {
+      "column": 37,
+      "row": 68
+    },
+    "message": "CamelCase `Rotation` imported as acronym `R`",
+    "noqa_row": 68,
+    "url": "https://docs.astral.sh/ruff/rules/camelcase-imported-as-acronym"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 45,
+      "row": 156
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/sit2stand.py",
+    "fix": null,
+    "location": {
+      "column": 37,
+      "row": 156
+    },
+    "message": "`vaila.cop_calculate.calc_cop` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 156,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 84,
+      "row": 627
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/sit2stand.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 626
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 626,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 36,
+      "row": 1631
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/sit2stand.py",
+    "fix": null,
+    "location": {
+      "column": 35,
+      "row": 1631
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 1631,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "E741",
+    "end_location": {
+      "column": 32,
+      "row": 1640
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/sit2stand.py",
+    "fix": null,
+    "location": {
+      "column": 31,
+      "row": 1640
+    },
+    "message": "Ambiguous variable name: `l`",
+    "noqa_row": 1640,
+    "url": "https://docs.astral.sh/ruff/rules/ambiguous-variable-name"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 39,
+      "row": 1663
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/sit2stand.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 1659
+    },
+    "message": "Use ternary operator `vals = analogs[0, idx, :] if analogs.ndim == 3 else analogs[idx, :]` instead of `if`-`else`-block",
+    "noqa_row": 1659,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "B018",
+    "end_location": {
+      "column": 54,
+      "row": 2054
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/sit2stand.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 2054
+    },
+    "message": "Found useless attribute access. Either assign it to a variable or remove it.",
+    "noqa_row": 2054,
+    "url": "https://docs.astral.sh/ruff/rules/useless-expression"
+  },
+  {
+    "cell": null,
+    "code": "B018",
+    "end_location": {
+      "column": 54,
+      "row": 2055
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/sit2stand.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 2055
+    },
+    "message": "Found useless attribute access. Either assign it to a variable or remove it.",
+    "noqa_row": 2055,
+    "url": "https://docs.astral.sh/ruff/rules/useless-expression"
+  },
+  {
+    "cell": null,
+    "code": "B018",
+    "end_location": {
+      "column": 54,
+      "row": 2059
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/sit2stand.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 2059
+    },
+    "message": "Found useless attribute access. Either assign it to a variable or remove it.",
+    "noqa_row": 2059,
+    "url": "https://docs.astral.sh/ruff/rules/useless-expression"
+  },
+  {
+    "cell": null,
+    "code": "SIM108",
+    "end_location": {
+      "column": 45,
+      "row": 756
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_and_jump.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 753
+    },
+    "message": "Use ternary operator `fppa_angle = abs(deviation) if cross_product > 0 else -abs(deviation)` instead of `if`-`else`-block",
+    "noqa_row": 753,
+    "url": "https://docs.astral.sh/ruff/rules/if-else-block-instead-of-if-exp"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 44,
+      "row": 858
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_and_jump.py",
+    "fix": null,
+    "location": {
+      "column": 17,
+      "row": 852
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 852,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 91,
+      "row": 4162
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_and_jump.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 4161
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 4161,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 91,
+      "row": 4199
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_and_jump.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 4198
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 4198,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 91,
+      "row": 4662
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_and_jump.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 4661
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 4661,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "SIM102",
+    "end_location": {
+      "column": 91,
+      "row": 4704
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_and_jump.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 4703
+    },
+    "message": "Use a single `if` statement instead of nested `if` statements",
+    "noqa_row": 4703,
+    "url": "https://docs.astral.sh/ruff/rules/collapsible-if"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 11,
+      "row": 4795
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_and_jump.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 4795
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 4795,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "SIM115",
+    "end_location": {
+      "column": 33,
+      "row": 304
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_datdistort.py",
+    "fix": null,
+    "location": {
+      "column": 29,
+      "row": 304
+    },
+    "message": "Use a context manager for opening files",
+    "noqa_row": 304,
+    "url": "https://docs.astral.sh/ruff/rules/open-file-with-context-handler"
+  },
+  {
+    "cell": null,
+    "code": "SIM105",
+    "end_location": {
+      "column": 29,
+      "row": 280
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_iaudiovid.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 277
+    },
+    "message": "Use `contextlib.suppress(BaseException)` instead of `try`-`except`-`pass`",
+    "noqa_row": 277,
+    "url": "https://docs.astral.sh/ruff/rules/suppressible-exception"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 27,
+      "row": 279
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_iaudiovid.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 279
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 279,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 61,
+      "row": 118
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_ytdown.py",
+    "fix": null,
+    "location": {
+      "column": 9,
+      "row": 118
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 118,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 39,
+      "row": 337
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_ytdown.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 337
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 337,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 39,
+      "row": 425
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_ytdown.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 425
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 425,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "B904",
+    "end_location": {
+      "column": 39,
+      "row": 515
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vaila_ytdown.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 515
+    },
+    "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+    "noqa_row": 515,
+    "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 20,
+      "row": 90
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vailaplot2d.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 90
+    },
+    "message": "`openpyxl` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 90,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "F401",
+    "end_location": {
+      "column": 33,
+      "row": 100
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vailaplot2d.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 100
+    },
+    "message": "`odf.opendocument` imported but unused; consider using `importlib.util.find_spec` to test for availability",
+    "noqa_row": 100,
+    "url": "https://docs.astral.sh/ruff/rules/unused-import"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 19,
+      "row": 726
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vailaplot2d.py",
+    "fix": null,
+    "location": {
+      "column": 13,
+      "row": 726
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 726,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 48,
+      "row": 873
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vailaplot2d.py",
+    "fix": null,
+    "location": {
+      "column": 32,
+      "row": 873
+    },
+    "message": "Replace legacy `np.random.choice` call with `np.random.Generator`",
+    "noqa_row": 873,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 37,
+      "row": 764
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vailasprint.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 764
+    },
+    "message": "Replace legacy `np.random.uniform` call with `np.random.Generator`",
+    "noqa_row": 764,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "NPY002",
+    "end_location": {
+      "column": 37,
+      "row": 801
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/vailasprint.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 801
+    },
+    "message": "Replace legacy `np.random.uniform` call with `np.random.Generator`",
+    "noqa_row": 801,
+    "url": "https://docs.astral.sh/ruff/rules/numpy-legacy-random"
+  },
+  {
+    "cell": null,
+    "code": "B007",
+    "end_location": {
+      "column": 10,
+      "row": 60
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/valida_bvh.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "_i",
+          "end_location": {
+            "column": 10,
+            "row": 60
+          },
+          "location": {
+            "column": 9,
+            "row": 60
+          }
+        }
+      ],
+      "message": "Rename unused `i` to `_i`"
+    },
+    "location": {
+      "column": 9,
+      "row": 60
+    },
+    "message": "Loop control variable `i` not used within loop body",
+    "noqa_row": 60,
+    "url": "https://docs.astral.sh/ruff/rules/unused-loop-control-variable"
+  },
+  {
+    "cell": null,
+    "code": "E722",
+    "end_location": {
+      "column": 11,
+      "row": 218
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/videoprocessor.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 218
+    },
+    "message": "Do not use bare `except`",
+    "noqa_row": 218,
+    "url": "https://docs.astral.sh/ruff/rules/bare-except"
+  },
+  {
+    "cell": null,
+    "code": "F841",
+    "end_location": {
+      "column": 16,
+      "row": 4626
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/viewc3d.py",
+    "fix": {
+      "applicability": "unsafe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 19,
+            "row": 4626
+          },
+          "location": {
+            "column": 9,
+            "row": 4626
+          }
+        }
+      ],
+      "message": "Remove assignment to unused variable `success`"
+    },
+    "location": {
+      "column": 9,
+      "row": 4626
+    },
+    "message": "Local variable `success` is assigned to but never used",
+    "noqa_row": 4626,
+    "url": "https://docs.astral.sh/ruff/rules/unused-variable"
+  },
+  {
+    "cell": null,
+    "code": "N802",
+    "end_location": {
+      "column": 31,
+      "row": 1067
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/viewc3d_pyvista.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 1067
+    },
+    "message": "Function name `OnKeyPress` should be lowercase",
+    "noqa_row": 1067,
+    "url": "https://docs.astral.sh/ruff/rules/invalid-function-name"
+  },
+  {
+    "cell": null,
+    "code": "N802",
+    "end_location": {
+      "column": 33,
+      "row": 1073
+    },
+    "filename": "/home/preto/Preto/vaila/vaila/viewc3d_pyvista.py",
+    "fix": null,
+    "location": {
+      "column": 21,
+      "row": 1073
+    },
+    "message": "Function name `OnKeyRelease` should be lowercase",
+    "noqa_row": 1073,
+    "url": "https://docs.astral.sh/ruff/rules/invalid-function-name"
+  }
+]

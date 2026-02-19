@@ -30,7 +30,14 @@ Write-Host ""
 # Define possible installation paths
 # Only check 64-bit Program Files (x86 is not used for vaila)
 # Always include Program Files so we find the path when uninstaller runs as current user (e.g. Inno [UninstallRun] runascurrentuser)
+# Also check if running from installation directory (Local Install)
+$scriptRoot = $PSScriptRoot
 $possiblePaths = @("${env:ProgramFiles}\vaila", "$env:USERPROFILE\vaila", "$env:LOCALAPPDATA\vaila")
+
+if (Test-Path "$scriptRoot\vaila.py") {
+    $possiblePaths = @($scriptRoot) + $possiblePaths
+    Write-Host "Detected execution from potential installation directory: $scriptRoot" -ForegroundColor Green
+}
 If ($isAdmin) {
     Write-Host "Checking system-wide installation locations (Administrator mode)..." -ForegroundColor Yellow
 }

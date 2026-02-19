@@ -155,7 +155,9 @@ def plot_orthonormal_bases_matplotlib(
         )
 
     # Iterate through bases, points, and labels for plotting
-    for _i, (bases, pm, points, label) in enumerate(zip(bases_list, pm_list, points_list, labels, strict=False)):
+    for _i, (bases, pm, points, label) in enumerate(
+        zip(bases_list, pm_list, points_list, labels, strict=False)
+    ):
         if "cluster1" in label.lower():
             # Use Jacksonville Jaguars colors for Cluster 1 (Trunk)
             axis_colors = trunk_axis_colors
@@ -267,7 +269,9 @@ def plot_orthonormal_bases_plotly(
                 )
 
         # Global coordinate system (red, green, blue)
-        for i, (axis, color) in enumerate(zip(global_coordinate_system, ["red", "green", "blue"], strict=False)):
+        for i, (axis, color) in enumerate(
+            zip(global_coordinate_system, ["red", "green", "blue"], strict=False)
+        ):
             data.append(
                 go.Scatter3d(
                     x=[0, axis[0] * axis_length],
@@ -304,7 +308,12 @@ def plot_orthonormal_bases_plotly(
             "transition": {"duration": 0},
             "x": 0,
             "y": 0,
-            "currentvalue": {"font": {"size": 14}, "prefix": "Frame: ", "visible": True, "xanchor": "center"},
+            "currentvalue": {
+                "font": {"size": 14},
+                "prefix": "Frame: ",
+                "visible": True,
+                "xanchor": "center",
+            },
             "len": 1.0,
         }
     ]
@@ -377,7 +386,9 @@ def plot_orthonormal_bases_4points_matplotlib(
             linewidth=1,
         )
 
-    for _i, (bases, pm, points, label) in enumerate(zip(bases_list, pm_list, points_list, labels, strict=False)):
+    for _i, (bases, pm, points, label) in enumerate(
+        zip(bases_list, pm_list, points_list, labels, strict=False)
+    ):
         if "trunk" in label.lower():
             axis_colors = trunk_axis_colors
             marker_colors = trunk_marker_colors
@@ -473,7 +484,9 @@ def plot_orthonormal_bases_4points_plotly(
                     )
                 )
 
-        for i, (axis, color) in enumerate(zip(global_coordinate_system, ["red", "green", "blue"], strict=False)):
+        for i, (axis, color) in enumerate(
+            zip(global_coordinate_system, ["red", "green", "blue"], strict=False)
+        ):
             data.append(
                 go.Scatter3d(
                     x=[0, axis[0] * axis_length],
@@ -511,7 +524,10 @@ def plot_orthonormal_bases_4points_plotly(
             "x": 0,
             "y": 0,
             "currentvalue": {
-                "font": {"size": 1.52}, "prefix": "Frame: ", "visible": True, "xanchor": "center"
+                "font": {"size": 1.52},
+                "prefix": "Frame: ",
+                "visible": True,
+                "xanchor": "center",
             },
             "len": 1.0,
         }

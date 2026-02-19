@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - compressvideo</title>
+    <title>vailá - compressvideo (Deprecated)</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -21,70 +21,48 @@
         }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
         h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #2c3e50; }
         .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
         .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .warning { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>vailá - compressvideo</h1>
+        <h1>vailá - compressvideo ⚠️ Deprecated</h1>
 
         <div class="module-info">
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Utils</p>
-            <p><strong>File:</strong> vaila\compressvideo.py</p>
-            <p><strong>Lines:</strong> 181</p>
-            <p><strong>Size:</strong> 5462 characters</p>
-            
-            
+            <p><strong>File:</strong> vaila/compressvideo.py</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>CLI Interface:</strong> ❌ No</p>
+            <p><strong>Status:</strong> ⚠️ <strong>DEPRECATED</strong></p>
         </div>
 
-        
-
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-# vailá - Multimodal Toolbox
-# © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-# https://github.com/paulopreto/vaila-multimodaltoolbox
-# Please see AUTHORS for contributors.
-#
-# Licensed under GNU Lesser General Public License v3.0
-#
-# compress_videos.py
-# This script compresses videos in a specified directory to either H.264 or H.265/HEVC format
-# using the FFmpeg tool. It provides a GUI for selecting the directory containing the videos,
-# allows the user to choose the desired codec, and then processes each video, saving the
-# compressed versions in a subdirectory named 'compressed_[codec]'.
-#
-# Usage:
-# Run the script to open the GUI, select the directory containing videos, choose the codec,
-# and the compression process will start automatically.
-#
-# Requirements:
-# - FFmpeg must be installed and accessible in the system PATH.
-# - This script is designed to work in a Conda environment where FFmpeg is
-#   installed via conda-forge.
-#
-# Dependencies:
-# - Python 3.12.9
-# -...</pre>
+        <div class="warning">
+            <h3>⚠️ Deprecation Notice</h3>
+            <p>This module is <strong>deprecated</strong>. Please use the newer scripts instead:</p>
+            <ul>
+                <li><strong>compress_videos_h264.py</strong> — H.264 with GPU, CLI, resolution control</li>
+                <li><strong>compress_videos_h265.py</strong> — H.265 with GPU, CLI, resolution control</li>
+            </ul>
         </div>
 
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 5</p>
-            <ul><li><code>check_ffmpeg_encoder</code></li><li><code>run_compress_videos</code></li><li><code>ask_codec_selection</code></li><li><code>compress_videos_gui</code></li><li><code>on_ok</code></li></ul>
+            <ul>
+                <li><code>check_ffmpeg_encoder</code> — Test encoder availability</li>
+                <li><code>run_compress_videos</code> — Basic compression</li>
+                <li><code>ask_codec_selection</code> — GUI codec picker</li>
+                <li><code>compress_videos_gui</code> — GUI entry point</li>
+            </ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Updated: 18/02/2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

@@ -135,7 +135,9 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
             frame_exists_in_all = True
             dlt_params_for_frame = []
 
-            for _camera_idx, (dlt_params, frames) in enumerate(zip(dlt_params_list, frames_list, strict=False)):
+            for _camera_idx, (dlt_params, frames) in enumerate(
+                zip(dlt_params_list, frames_list, strict=False)
+            ):
                 if frame_num in frames:
                     A_index = np.where(frames == frame_num)[0][0]
                     A = dlt_params[A_index]
