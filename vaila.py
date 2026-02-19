@@ -1816,7 +1816,7 @@ class Vaila(tk.Tk):
         """Runs the markerless2d_mpyolo analysis."""
         from vaila import markerless2d_mpyolo
 
-        markerless2d_mpyolo.run_markerless2d_mpyolo()
+        markerless2d_mpyolo.run_markerless2d_mpyolo(root=self)
 
     # B_r3_c5
     def animal_open_field(self):
