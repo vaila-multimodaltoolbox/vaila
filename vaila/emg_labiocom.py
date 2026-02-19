@@ -1286,7 +1286,7 @@ def create_index_html(output_dir):
 
 def calculate_entropy(signal, window_length, overlap):
     """Calculate Sample Entropy (SampEn) for EMG signal"""
-    from entropy import sample_entropy
+    from antropy import sample_entropy
 
     start = 0
     entropy_values = []
