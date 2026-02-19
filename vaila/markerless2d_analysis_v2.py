@@ -93,8 +93,10 @@ from ultralytics import YOLO
 
 # Handle imports for both package and script execution
 try:
-    from .HardwareManager import HardwareManager
-except ImportError:
+    from .hardware_manager import HardwareManager
+except ImportError as e:
+    # Fallback or debug print
+    pass
     import sys
     from pathlib import Path
 
@@ -603,13 +605,20 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             messagebox.showerror("Error", f"Failed to open help: {e}")
 
     def body(self, master):
-        # Available YOLO11-pose models
+        # Available YOLO pose models (v11 + v26)
         yolo_models = [
-            "yolo11n-pose.pt",  # Nano - fastest
-            "yolo11s-pose.pt",  # Small
-            "yolo11m-pose.pt",  # Medium
-            "yolo11l-pose.pt",  # Large
-            "yolo11x-pose.pt",  # Extra Large - most accurate
+            # --- YOLO v11 ---
+            "yolo11n-pose.pt",  # v11 Nano - fastest
+            "yolo11s-pose.pt",  # v11 Small
+            "yolo11m-pose.pt",  # v11 Medium
+            "yolo11l-pose.pt",  # v11 Large
+            "yolo11x-pose.pt",  # v11 Extra Large - most accurate
+            # --- YOLO v26 ---
+            "yolo26n-pose.pt",  # v26 Nano - fastest
+            "yolo26s-pose.pt",  # v26 Small
+            "yolo26m-pose.pt",  # v26 Medium
+            "yolo26l-pose.pt",  # v26 Large
+            "yolo26x-pose.pt",  # v26 Extra Large - most accurate
         ]
 
         tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
@@ -620,7 +629,7 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         tk.Label(master, text="Static image mode? (True/False):").grid(row=5)
         tk.Label(master, text="Use YOLO detection? (True/False):").grid(row=6)
         tk.Label(master, text="YOLO mode (yolo_only/yolo_mediapipe):").grid(row=7)
-        tk.Label(master, text="YOLO model (yolo11n-pose.pt, yolo11s-pose.pt, etc.):").grid(row=8)
+        tk.Label(master, text="YOLO model (v11 or v26 pose):").grid(row=8)
         tk.Label(master, text="YOLO confidence threshold (0.0 - 1.0):").grid(row=9)
         tk.Label(master, text="Apply filter? (none/kalman/savgol/median):").grid(row=10)
         self.filter_param_label = tk.Label(master, text="Filter Parameter:")
@@ -979,6 +988,17 @@ def download_yolo_model(model_name):
             # Copy the downloaded model to our models directory
             shutil.copy2(source_path, str(model_path))
             print(f"[OK] Successfully saved {model_name} to {model_path}")
+            
+            # Clean up the file from the original download location if it's in the CWD
+            # Ultralytics often downloads to CWD
+            try:
+                # check if source path is in CWD
+                if os.path.abspath(source_path).startswith(os.getcwd()) and os.path.basename(source_path) == model_name:
+                    print(f"Removing temporary file from {source_path}")
+                    os.remove(source_path)
+            except Exception as e:
+                print(f"Warning: Could not remove temporary file: {e}")
+                
             return str(model_path)
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")
@@ -1142,6 +1162,16 @@ def download_or_load_yolo_model(model_name=None):
 
         # Use auto_export to get the best model (Engine or PT) for this hardware
         optimized_model_path = hw.auto_export(model_name)
+
+        # Check if the optimized model exists (if not, it means the source PT is missing)
+        if not os.path.exists(optimized_model_path):
+            print(f"Model file not found: {optimized_model_path}")
+            print(f"Downloading {model_name} to vaila/models...")
+            # Use our robust download function
+            downloaded_path = download_yolo_model(model_name)
+            if downloaded_path:
+                # Re-run auto_export now that source file exists
+                optimized_model_path = hw.auto_export(model_name)
 
         print(f" OPTIMIZED MODEL: Loading tailored model from {optimized_model_path}")
         model = YOLO(str(optimized_model_path), task="pose")

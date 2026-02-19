@@ -51,6 +51,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, ttk
 
+import urllib.request
+
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -61,6 +63,84 @@ from ultralytics import YOLO
 # Configurações para evitar conflitos
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 torch.set_num_threads(1)
+
+# MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed in 0.10.32)
+POSE_CONNECTIONS = frozenset(
+    [
+        (0, 1), (1, 2), (2, 3), (3, 7),
+        (0, 4), (4, 5), (5, 6), (6, 8),
+        (9, 10),
+        (11, 12), (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+        (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20),
+        (11, 23), (12, 24), (23, 24),
+        (23, 25), (24, 26), (25, 27), (26, 28),
+        (27, 29), (28, 30), (29, 31), (30, 32),
+        (27, 31), (28, 32),
+    ]
+)
+
+
+def get_mediapipe_model_path(complexity=2):
+    """Download the correct MediaPipe Tasks model based on complexity (0=Lite, 1=Full, 2=Heavy)"""
+    models_dir = Path(__file__).parent / "models"
+    models_dir.mkdir(exist_ok=True)
+    models = {
+        0: "pose_landmarker_lite.task",
+        1: "pose_landmarker_full.task",
+        2: "pose_landmarker_heavy.task",
+    }
+    model_name = models.get(complexity, "pose_landmarker_full.task")
+    model_path = models_dir / model_name
+    if not model_path.exists():
+        print(f"Downloading MediaPipe Tasks model ({model_name})... please wait.")
+        model_urls = {
+            0: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+            1: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+            2: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
+        }
+        url = model_urls.get(complexity, model_urls[1])
+        try:
+            urllib.request.urlretrieve(url, str(model_path))
+            print("Download completed!")
+        except Exception as e:
+            print(f"Error downloading model: {e}")
+            raise RuntimeError("Failed to download MediaPipe model.")
+    return str(model_path.resolve())
+
+
+def create_pose_landmarker(complexity=2):
+    """Create a MediaPipe PoseLandmarker instance using the Tasks API."""
+    model_path = get_mediapipe_model_path(complexity)
+    BaseOptions = mp.tasks.BaseOptions
+    PoseLandmarker = mp.tasks.vision.PoseLandmarker
+    PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+    VisionRunningMode = mp.tasks.vision.RunningMode
+    options = PoseLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=model_path),
+        running_mode=VisionRunningMode.IMAGE,
+        num_poses=1,
+        min_pose_detection_confidence=0.1,
+        min_pose_presence_confidence=0.1,
+    )
+    return PoseLandmarker.create_from_options(options)
+
+
+def draw_landmarks_manual(image, landmarks_px, connections=None, color=(0, 255, 0), line_color=(255, 255, 255), radius=4, thickness=2):
+    """Draw pose landmarks and connections manually using OpenCV (replacement for mp_drawing)."""
+    if connections is None:
+        connections = POSE_CONNECTIONS
+    # Draw connections
+    for start_idx, end_idx in connections:
+        if start_idx < len(landmarks_px) and end_idx < len(landmarks_px):
+            pt1 = landmarks_px[start_idx]
+            pt2 = landmarks_px[end_idx]
+            if pt1 is not None and pt2 is not None:
+                if not (np.isnan(pt1[0]) or np.isnan(pt1[1]) or np.isnan(pt2[0]) or np.isnan(pt2[1])):
+                    cv2.line(image, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), line_color, thickness)
+    # Draw points
+    for pt in landmarks_px:
+        if pt is not None and not (np.isnan(pt[0]) or np.isnan(pt[1])):
+            cv2.circle(image, (int(pt[0]), int(pt[1])), radius, color, -1)
 
 # COCO classes dictionary
 COCO_CLASSES = {
@@ -369,9 +449,12 @@ def save_landmarks_to_csv(csv_path, frame_idx, person_id, landmarks):
         df.to_csv(csv_path, mode="a", header=False, index=False)
 
 
-def get_parameters_dialog():
+def get_parameters_dialog(parent=None):
     """Create a dialog for MediaPipe and YOLO parameters."""
-    dialog = tk.Tk()
+    if parent:
+        dialog = tk.Toplevel(parent)
+    else:
+        dialog = tk.Tk()
     dialog.title("Detection Parameters Yolo and MediaPipe")
 
     # Set a large initial size right after creating the dialog
@@ -658,11 +741,9 @@ Multithreaded Tracking:
 def process_person_with_mediapipe_enhanced(
     frame,
     bbox,
-    pose,
+    landmarker,
     width,
     height,
-    mp_drawing,
-    mp_pose,
     scale_factor=4,
     safety_margin=0.25,
 ):
@@ -672,7 +753,7 @@ def process_person_with_mediapipe_enhanced(
     Args:
         frame: Original video frame
         bbox: YOLO bounding box [x1, y1, x2, y2]
-        pose: MediaPipe pose estimator
+        landmarker: MediaPipe PoseLandmarker instance
         width: Frame width
         height: Frame height
         mp_drawing: MediaPipe drawing utils
@@ -730,12 +811,16 @@ def process_person_with_mediapipe_enhanced(
             person_crop, (new_width, new_height), interpolation=cv2.INTER_LINEAR
         )
 
-        # Process with MediaPipe on the scaled image
+        # Process with MediaPipe Tasks API on the scaled image
         crop_rgb = cv2.cvtColor(scaled_crop, cv2.COLOR_BGR2RGB)
-        results = pose.process(crop_rgb)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=crop_rgb)
+        results = landmarker.detect(mp_image)
 
-        if not results.pose_landmarks:
+        if not results.pose_landmarks or len(results.pose_landmarks) == 0:
             return None, None, None, None
+
+        # Tasks API returns list of NormalizedLandmark objects
+        detected_landmarks = results.pose_landmarks[0]
 
         # Convert landmarks back to original frame coordinates with validation
         landmarks_normalized = []
@@ -750,7 +835,7 @@ def process_person_with_mediapipe_enhanced(
 
         valid_landmarks_count = 0
 
-        for landmark in results.pose_landmarks.landmark:
+        for landmark in detected_landmarks:
             # Landmark coordinates are in the scaled crop (0-1)
             # Convert to pixel coordinates in the scaled crop
             scaled_x = landmark.x * new_width
@@ -821,30 +906,26 @@ def process_person_with_mediapipe_enhanced(
         # Create annotated crop from the scaled image for better visualization
         annotated_crop = scaled_crop.copy()
 
-        # Create a temporary landmarks object for drawing
-        temp_landmarks = type("", (), {})()
-        temp_landmarks.landmark = []
-
-        for i, landmark in enumerate(results.pose_landmarks.landmark):
+        # Build pixel points list for drawing on the scaled crop
+        crop_draw_pts = []
+        for i, landmark in enumerate(detected_landmarks):
             if not (np.isnan(landmarks_pixels[i]["x"]) or np.isnan(landmarks_pixels[i]["y"])):
-                temp_landmarks.landmark.append(landmark)
+                sx = landmark.x * new_width
+                sy = landmark.y * new_height
+                crop_draw_pts.append((sx, sy))
+            else:
+                crop_draw_pts.append(None)
 
-        # Draw landmarks on scaled crop if we have valid landmarks
-        if len(temp_landmarks.landmark) > 0:
-            mp_drawing.draw_landmarks(
-                annotated_crop,
-                results.pose_landmarks,  # Use original landmarks for drawing
-                mp_pose.POSE_CONNECTIONS,
-                landmark_drawing_spec=mp_drawing.DrawingSpec(
-                    color=(0, 255, 0),
-                    thickness=3,
-                    circle_radius=4,  # Green, larger for scaled image
-                ),
-                connection_drawing_spec=mp_drawing.DrawingSpec(
-                    color=(255, 255, 255),
-                    thickness=2,  # White connections
-                ),
-            )
+        # Draw landmarks on scaled crop using manual OpenCV drawing
+        draw_landmarks_manual(
+            annotated_crop,
+            crop_draw_pts,
+            POSE_CONNECTIONS,
+            color=(0, 255, 0),
+            line_color=(255, 255, 255),
+            radius=4,
+            thickness=2,
+        )
 
         # Resize annotated crop back to original size for consistency
         annotated_crop = cv2.resize(
@@ -864,16 +945,14 @@ def process_person_with_mediapipe_enhanced(
 
 
 # Keep the original function for backward compatibility
-def process_person_with_mediapipe(frame, bbox, pose, width, height, mp_drawing, mp_pose):
+def process_person_with_mediapipe(frame, bbox, landmarker, width, height):
     """Original function - now calls the enhanced version with default parameters"""
     return process_person_with_mediapipe_enhanced(
         frame,
         bbox,
-        pose,
+        landmarker,
         width,
         height,
-        mp_drawing,
-        mp_pose,
         scale_factor=4,
         safety_margin=0.25,
     )
@@ -1188,29 +1267,37 @@ def process_mediapipe_pose(video_path, output_dir, tracking_data, params):
     pose_manager.close_all()
 
 
-def process_single_pose(frame, bbox, pose, width, height):
+def process_single_pose(frame, bbox, landmarker, width, height):
     """
     Process the pose for a single frame, drawing landmarks using proper pixel scaling.
 
     Returns both normalized landmarks and pixel coordinates for saving to CSV files.
-    The pixel coordinates are calculated as:
-        x_px = int(landmark.x * frame_width)
-        y_px = int(landmark.y * frame_height)
+    Uses MediaPipe Tasks API (PoseLandmarker).
     """
-    results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    if not results.pose_landmarks:
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+    results = landmarker.detect(mp_image)
+    if not results.pose_landmarks or len(results.pose_landmarks) == 0:
         return None
 
+    detected = results.pose_landmarks[0]
+
     # Draw landmarks on the frame
-    for landmark in results.pose_landmarks.landmark:
+    pts = []
+    for landmark in detected:
         x_px = int(landmark.x * width)
         y_px = int(landmark.y * height)
-        # Draw a small circle at the landmark position
         cv2.circle(frame, (x_px, y_px), 2, (0, 255, 0), -1)
+        pts.append((x_px, y_px))
+
+    # Draw connections
+    for start_idx, end_idx in POSE_CONNECTIONS:
+        if start_idx < len(pts) and end_idx < len(pts):
+            cv2.line(frame, pts[start_idx], pts[end_idx], (255, 255, 255), 1)
 
     # Return the landmarks in normalized format
     landmarks = []
-    for landmark in results.pose_landmarks.landmark:
+    for landmark in detected:
         landmarks.append([landmark.x, landmark.y, landmark.z, landmark.visibility])
 
     return landmarks
@@ -1246,7 +1333,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
             except Exception as e:
                 print(f"Error loading pose data for person ID:{object_id}: {e}")
 
-    mp_pose = mp.solutions.pose
+    # Use local POSE_CONNECTIONS constant (mp.solutions removed in mediapipe 0.10.32)
 
     try:
         frame_idx = 0
@@ -1325,7 +1412,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
                                     landmarks.append(None)
 
                             # Draw connections between landmarks
-                            for connection in mp_pose.POSE_CONNECTIONS:
+                            for connection in POSE_CONNECTIONS:
                                 start_idx, end_idx = connection
                                 if (
                                     landmarks[start_idx] is not None
@@ -1404,7 +1491,7 @@ def create_visualization_video(video_path, output_dir, tracking_data, params):
 
 class MediaPipePoseManager:
     def __init__(self, params):
-        self.pose_estimators = []  # Lista de instâncias do MediaPipe Pose
+        self.pose_estimators = []  # Lista de instâncias do PoseLandmarker
         self.pose_dims = []  # Lista de dimensões (bbox) correspondentes
         self.params = params
 
@@ -1423,18 +1510,14 @@ class MediaPipePoseManager:
         return np.sqrt((center1_x - center2_x) ** 2 + (center1_y - center2_y) ** 2)
 
     def get_pose_estimator(self, bbox, object_id):
-        """Retorna o pose estimator apropriado para a bbox"""
+        """Retorna o pose estimator (PoseLandmarker) apropriado para a bbox"""
+        complexity = self.params.get("mp_complexity", 2)
         if len(self.pose_estimators) == 0:
             # Primeiro pose estimator
-            pose = mp.solutions.pose.Pose(
-                static_image_mode=self.params["mp_static_mode"],
-                model_complexity=self.params["mp_complexity"],
-                min_detection_confidence=self.params["mp_detection_conf"],
-                min_tracking_confidence=self.params["mp_tracking_conf"],
-            )
-            self.pose_estimators.append(pose)
+            landmarker = create_pose_landmarker(complexity)
+            self.pose_estimators.append(landmarker)
             self.pose_dims.append(bbox)
-            return pose, 0
+            return landmarker, 0
 
         elif object_id >= len(self.pose_estimators):
             # Verifica se precisa criar novo estimator
@@ -1451,15 +1534,10 @@ class MediaPipePoseManager:
 
             if best_score > threshold_for_new:
                 # Cria novo estimator
-                pose = mp.solutions.pose.Pose(
-                    static_image_mode=self.params["mp_static_mode"],
-                    model_complexity=self.params["mp_complexity"],
-                    min_detection_confidence=self.params["mp_detection_conf"],
-                    min_tracking_confidence=self.params["mp_tracking_conf"],
-                )
-                self.pose_estimators.append(pose)
+                landmarker = create_pose_landmarker(complexity)
+                self.pose_estimators.append(landmarker)
                 self.pose_dims.append(bbox)
-                return pose, len(self.pose_estimators) - 1
+                return landmarker, len(self.pose_estimators) - 1
             else:
                 # Usa o melhor match encontrado
                 self.pose_dims[best_idx] = bbox
@@ -1470,9 +1548,9 @@ class MediaPipePoseManager:
             return self.pose_estimators[object_id], object_id
 
     def close_all(self):
-        """Fecha todas as instâncias do MediaPipe"""
-        for pose in self.pose_estimators:
-            pose.close()
+        """Fecha todas as instâncias do PoseLandmarker"""
+        for landmarker in self.pose_estimators:
+            landmarker.close()
 
 
 def save_pose_to_csv(csv_path, frame_idx, person_id, landmarks_px):
@@ -1705,7 +1783,7 @@ def save_tracking_data_to_csv(tracking_data, output_dir):
     pass
 
 
-def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_drawing):
+def process_video_enhanced(video_path, output_dir, model, params):
     """
     Enhanced video processing pipeline with integrated YOLO tracking and MediaPipe pose estimation
     using 4x scaling and safety margins to prevent landmarks from exploding outside bbox.
@@ -1722,13 +1800,8 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
 
     print(f"Video info: {width}x{height}, {fps} fps, {total_frames} frames")
 
-    # Initialize MediaPipe pose estimator
-    pose = mp_pose.Pose(
-        static_image_mode=params["mp_static_mode"],
-        model_complexity=params["mp_complexity"],
-        min_detection_confidence=params["mp_detection_conf"],
-        min_tracking_confidence=params["mp_tracking_conf"],
-    )
+    # Initialize MediaPipe PoseLandmarker (Tasks API)
+    landmarker = create_pose_landmarker(params.get("mp_complexity", 2))
 
     # Storage for tracking data and CSV files
     tracking_data = {}
@@ -1833,11 +1906,9 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
                             process_person_with_mediapipe_enhanced(
                                 frame,
                                 box,
-                                pose,
+                                landmarker,
                                 width,
                                 height,
-                                mp_drawing,
-                                mp_pose,
                                 scale_factor=params["scale_factor"],
                                 safety_margin=params["safety_margin"],
                             )
@@ -1900,7 +1971,7 @@ def process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_dr
 
     finally:
         cap.release()
-        pose.close()
+        landmarker.close()
 
     print(f"\nEnhanced processing complete! Results saved to: {output_dir}")
     print("Key improvements applied:")
@@ -1999,7 +2070,7 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
             except Exception as e:
                 print(f"Error loading pose data for person ID:{object_id}: {e}")
 
-    mp_pose = mp.solutions.pose
+    # Use local POSE_CONNECTIONS constant (mp.solutions removed in mediapipe 0.10.32)
 
     try:
         frame_idx = 0
@@ -2098,7 +2169,7 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
                                     landmarks.append(None)
 
                             # Draw connections with enhanced styling
-                            for connection in mp_pose.POSE_CONNECTIONS:
+                            for connection in POSE_CONNECTIONS:
                                 start_idx, end_idx = connection
                                 if (
                                     landmarks[start_idx] is not None
@@ -2141,7 +2212,7 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
         out.release()
 
 
-def run_markerless2d_mpyolo():
+def run_markerless2d_mpyolo(root=None):
     print("markerless2d_mpyolo.py - Enhanced with scaling and safety margins")
     # Print the script version and directory
     print(f"Running script: {os.path.basename(__file__)}")
@@ -2158,12 +2229,18 @@ def run_markerless2d_mpyolo():
     model_path = os.path.join(models_dir, model_name)
 
     # Get parameters before downloading the model
-    root = tk.Tk()
-    root.withdraw()
+    # Only create a new root if one wasn't provided
+    created_root = False
+    if root is None:
+        root = tk.Tk()
+        root.withdraw()
+        created_root = True
 
-    params = get_parameters_dialog()
+    params = get_parameters_dialog(parent=root)
     if not params:
         print("No parameters set. Exiting...")
+        if created_root:
+            root.destroy()
         return
 
     # Download the model only after confirming that we will use it
@@ -2197,12 +2274,8 @@ def run_markerless2d_mpyolo():
     print(f"Loading YOLO model from {model_path}...")
     model = YOLO(model_path)
 
-    # Initialize MediaPipe
-    mp_pose = mp.solutions.pose
-    mp_drawing = mp.solutions.drawing_utils
-
-    # Process video with enhanced pipeline
-    process_video_enhanced(video_path, output_dir, model, params, mp_pose, mp_drawing)
+    # Process video with enhanced pipeline (MediaPipe Tasks API)
+    process_video_enhanced(video_path, output_dir, model, params)
 
     print(f"\nProcessing complete! All results saved to: {output_dir}")
 
@@ -2215,7 +2288,8 @@ def run_markerless2d_mpyolo():
     except Exception as e:
         print(f"Could not open the output directory: {e}")
 
-    root.destroy()
+    if created_root:
+        root.destroy()
 
 
 def write_nan_row(csv_path, frame_idx, num_landmarks):

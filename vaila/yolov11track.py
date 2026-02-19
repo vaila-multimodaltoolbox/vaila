@@ -81,7 +81,7 @@ import yaml
 from rich import print
 from ultralytics import YOLO
 
-from .HardwareManager import HardwareManager
+from .hardware_manager import HardwareManager
 
 # Import PIL for image display
 try:
@@ -131,6 +131,102 @@ REID_MODELS = {
     "clip_market1501.pt": "Heavy (CLIP Market1501)",
     "clip_vehicleid.pt": "Heavy (CLIP VehicleID)",
 }
+
+
+def get_model_path(model_name):
+    """
+    Get the absolute path for a model in the vaila/vaila/models directory.
+    If the model doesn't exist there, it will be downloaded by YOLO to the current
+    directory and we should move it, or we rely on YOLO to download it 
+    if we pass the full path (YOLOv8+ usually handles full paths quite well).
+    
+    Args:
+        model_name: Name of the model (e.g., "yolo11x.pt")
+        
+    Returns:
+        str: Absolute path to the model
+    """
+    # Define models directory: vaila/vaila/models
+    # Current script is in vaila/vaila/yolov11track.py (or similar depth)
+    # We want vaila/vaila/models
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Check if we are in vaila/vaila or just vaila
+    if os.path.basename(current_dir) == "vaila":
+        models_dir = os.path.join(current_dir, "models")
+    else:
+        # Fallback/Safety: try to find vaila package root
+        # If current_dir is .../vaila/vaila, then models is .../vaila/vaila/models
+        models_dir = os.path.join(current_dir, "models")
+        
+    os.makedirs(models_dir, exist_ok=True)
+    
+    model_path = os.path.join(models_dir, model_name)
+    return model_path
+
+
+def get_model_path(model_name):
+    """
+    Get the absolute path for a model in the vaila/vaila/models directory.
+    If the model doesn't exist there, it will be downloaded by YOLO to the current
+    directory and we should move it, or we rely on YOLO to download it 
+    if we pass the full path (YOLOv8+ usually handles full paths quite well).
+    
+    Args:
+        model_name: Name of the model (e.g., "yolo11x.pt")
+        
+    Returns:
+        str: Absolute path to the model
+    """
+    # Define models directory: vaila/vaila/models
+    # Current script is in vaila/vaila/yolov11track.py (or similar depth)
+    # We want vaila/vaila/models
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Check if we are in vaila/vaila or just vaila
+    if os.path.basename(current_dir) == "vaila":
+        models_dir = os.path.join(current_dir, "models")
+    else:
+        # Fallback/Safety: try to find vaila package root
+        # If current_dir is .../vaila/vaila, then models is .../vaila/vaila/models
+        models_dir = os.path.join(current_dir, "models")
+        
+    os.makedirs(models_dir, exist_ok=True)
+    
+    model_path = os.path.join(models_dir, model_name)
+    return model_path
+
+
+def get_model_path(model_name):
+    """
+    Get the absolute path for a model in the vaila/vaila/models directory.
+    If the model doesn't exist there, it will be downloaded by YOLO to the current
+    directory and we should move it, or we rely on YOLO to download it 
+    if we pass the full path (YOLOv8+ usually handles full paths quite well).
+    
+    Args:
+        model_name: Name of the model (e.g., "yolo11x.pt")
+        
+    Returns:
+        str: Absolute path to the model
+    """
+    # Define models directory: vaila/vaila/models
+    # Current script is in vaila/vaila/yolov11track.py (or similar depth)
+    # We want vaila/vaila/models
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Check if we are in vaila/vaila or just vaila
+    if os.path.basename(current_dir) == "vaila":
+        models_dir = os.path.join(current_dir, "models")
+    else:
+        # Fallback/Safety: try to find vaila package root
+        # If current_dir is .../vaila/vaila, then models is .../vaila/vaila/models
+        models_dir = os.path.join(current_dir, "models")
+        
+    os.makedirs(models_dir, exist_ok=True)
+    
+    model_path = os.path.join(models_dir, model_name)
+    return model_path
 
 
 def initialize_csv(output_dir, label, tracker_id, total_frames):
@@ -2917,19 +3013,30 @@ def _process_pose_from_csv(
 
     # Load pose model
     # Models are downloaded to vaila/models/ directory
-    models_dir = os.path.join(os.path.dirname(__file__), "models")
-    os.makedirs(models_dir, exist_ok=True)
-    pose_model_path = os.path.join(models_dir, pose_model_name)
+    # Load pose model
+    # Use get_model_path to ensure consistency
+    pose_model_path = get_model_path(pose_model_name)
+    models_dir = os.path.dirname(pose_model_path)
 
     # Download model if needed
     if not os.path.exists(pose_model_path):
         try:
             print(f"Downloading pose model {pose_model_name}...")
+            # Use standard YOLO download behavior but ensure it goes to models_dir
+            # We can use the same trick: chdir to models_dir
             current_dir = os.getcwd()
-            os.chdir(models_dir)
-            YOLO(pose_model_name)
-            os.chdir(current_dir)
-            print("Model downloaded successfully")
+            try:
+                os.chdir(models_dir)
+                YOLO(pose_model_name)
+                print("Model downloaded successfully")
+            finally:
+                os.chdir(current_dir)
+                
+            # Verify download
+            if not os.path.exists(pose_model_path):
+                 # Try moving if it downloaded to original CWD (unlikely due to chdir)
+                 pass
+                 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to download pose model: {str(e)}")
             return False
