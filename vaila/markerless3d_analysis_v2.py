@@ -238,6 +238,19 @@ def download_or_load_yolo_model():
 
                 shutil.copy2(source_path, model_path)
                 print(f"Downloaded model saved to {model_path}")
+
+                # Clean up the file from the original download location if it's in the CWD
+                try:
+                    # check if source path is in CWD (and is just filename or path relative to CWD)
+                    if os.path.exists(source_path) and os.path.basename(source_path) == model_name:
+                         # Extra check: assume it's in CWD if path is not absolute or starts with CWD
+                         abs_source = os.path.abspath(source_path)
+                         if abs_source.startswith(os.getcwd()):
+                            print(f"Removing temporary file from {source_path}")
+                            os.remove(source_path)
+                except Exception as e:
+                    print(f"Warning: Could not remove temporary file: {e}")
+
             else:
                 print(f"YOLO downloaded the model but couldn't find it at {source_path}")
                 return None
