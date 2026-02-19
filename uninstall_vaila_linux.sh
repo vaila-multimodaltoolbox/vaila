@@ -62,12 +62,17 @@ RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
 
 # Remove the vaila directory from the user's home
 if [ -d "$VAILA_HOME" ]; then
-    echo "Removing vaila directory from the user's home..."
-    rm -rf "$VAILA_HOME"
-    if [ $? -eq 0 ]; then
-        echo "vaila directory removed successfully."
+    if [ -d "$VAILA_HOME/.git" ]; then
+        echo "Detected git repository at $VAILA_HOME. Skipping directory removal to protect source code."
+        echo "Please delete manually if intended: rm -rf $VAILA_HOME"
     else
-        echo "Failed to remove vaila directory."
+        echo "Removing vaila directory from the user's home..."
+        rm -rf "$VAILA_HOME"
+        if [ $? -eq 0 ]; then
+            echo "vaila directory removed successfully."
+        else
+            echo "Failed to remove vaila directory."
+        fi
     fi
 else
     echo "vaila directory not found in the user's home. Skipping removal."

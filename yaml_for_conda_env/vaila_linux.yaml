@@ -48,67 +48,74 @@ dependencies:
   - flask
   - pip
   - pip:
+      - plotly
+      - pycairo
+      - h5py
+      - openpyxl
+      - matplotlib-inline
+      - dash
+      - werkzeug
+      - itsdangerous
+      - blinker
+      - ezc3d
+      - pyyaml
+      - opencv-contrib-python
+      - imageio
+      - imageio-ffmpeg
+      - moviepy
+      - jax
+      - jaxlib
+      - xgboost
+      - mediapipe>=0.10.32
+      - torch==2.9.1
+      - torchvision==0.24.1
+      - torchaudio==2.9.1
+      - ultralytics
+      - boxmot
+      - requests
+      - open3d
+      - glfw
+      - imufusion
+      - neurokit2
+      - biosppy
+      - entropy
+      - pykalman
+      - numba
+      - spm1d
+      - librosa
+      - pydub
+      - sounddevice
+      - soundfile
+      - SpeechRecognition
+      - pyttsx3
+      - gtts
+      - midiutil
+      - mido
+      - gpxpy
+      - simplekml
+      - folium
+      - paramiko
+      - scp
       - einops
       - absl-py
       - bcrypt
-      - blinker
-      - dash
-      - dash-core-components
-      - dash-html-components
-      - dash-table
-      - moviepy
-      - plotly
-      - protobuf
-      - opencv-contrib-python
-      - Werkzeug
-      - itsdangerous
-      - jax
-      - jaxlib
-      - imageio
-      - imageio-ffmpeg
       - python-dotenv
-      - openpyxl
       - pygame
-      - imufusion
       - PySide6
       - tenacity
       - retrying
       - watchdog
       - wordcloud
-      - matplotlib-inline
       - rich
-      - ezc3d
-      - h5py
-      - paramiko
-      - pykalman
-      - scp
-      - spm1d
       - ydata_profiling
-      - "xonsh[full]"
-      - boxmot
-      - intel-openmp
-      - open3d
-      - glfw
-      - xgboost
-      - gpxpy
-      - simplekml
-      - folium
+      - xonsh[full]
+      - intel-openmp; sys_platform != 'darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64')
       - yt-dlp
-      - mediapipe
-      - neurokit2
-      - biosppy
-      - entropy
-      - SpeechRecognition
-      - sounddevice
-      - soundfile
       - openai
-      - MIDIUtil
-      - mido
-      - pyttsx3
-      - gtts
-      - librosa
-      - pydub
       - odfpy
-      - tomli
       - psutil
-      - ultralytics
+      - protobuf
+      - pyobjc-framework-Cocoa; sys_platform == 'darwin'
+      - ruff
+      - vpython
+      - pyvista
