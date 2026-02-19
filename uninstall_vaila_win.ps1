@@ -115,12 +115,20 @@ If (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
 # Remove program files from installation location
 If ($vailaProgramPath -and (Test-Path $vailaProgramPath)) {
     Write-Host "Deleting vaila program files from $vailaProgramPath..." -ForegroundColor Yellow
-    Try {
-        Remove-Item -Recurse -Force -Path $vailaProgramPath -ErrorAction Stop
-        Write-Host "Program files deleted successfully." -ForegroundColor Green
-    } Catch {
-        Write-Warning "Failed to delete program files: $_"
-        Write-Host "You may need to manually delete: $vailaProgramPath" -ForegroundColor Yellow
+    
+    # SAFETY CHECK: Do not delete if .git directory exists (repository)
+    If (Test-Path "$vailaProgramPath\.git") {
+        Write-Warning "SAFETY CHECK: .git directory detected in $vailaProgramPath"
+        Write-Warning "Skipping deletion of program files to protect the source repository."
+        Write-Host "The virtual environment and shortcuts have been removed, but the source code was kept." -ForegroundColor Green
+    } Else {
+        Try {
+            Remove-Item -Recurse -Force -Path $vailaProgramPath -ErrorAction Stop
+            Write-Host "Program files deleted successfully." -ForegroundColor Green
+        } Catch {
+            Write-Warning "Failed to delete program files: $_"
+            Write-Host "You may need to manually delete: $vailaProgramPath" -ForegroundColor Yellow
+        }
     }
 } Else {
     Write-Host "vaila program files not found in standard installation locations." -ForegroundColor Yellow
