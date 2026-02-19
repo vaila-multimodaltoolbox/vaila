@@ -36,6 +36,7 @@
 
 import os
 import subprocess
+import warnings
 from tkinter import (
     Button,
     Label,
@@ -49,6 +50,14 @@ from tkinter import (
 )
 
 from rich import print
+from rich import print as rprint
+
+# Deprecation notice
+_DEPRECATION_MSG = (
+    "compressvideo.py is deprecated. "
+    "Use compress_videos_h264.py or compress_videos_h265.py instead, "
+    "which support GPU acceleration, resolution selection, and CLI mode."
+)
 
 
 def check_ffmpeg_encoder(encoder):
@@ -150,6 +159,8 @@ def ask_codec_selection(root):
 
 
 def compress_videos_gui():
+    warnings.warn(_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
+    rprint(f"[yellow][WARNING] {_DEPRECATION_MSG}[/yellow]")
     # Create the main window# Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")

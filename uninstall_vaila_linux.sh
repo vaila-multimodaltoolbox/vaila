@@ -45,7 +45,17 @@ fi
 
 # Define paths
 USER_HOME="$HOME"
-VAILA_HOME="$USER_HOME/vaila"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Detect if running from the installation directory (Local Install or Default)
+if [ -f "$SCRIPT_DIR/vaila.py" ]; then
+    VAILA_HOME="$SCRIPT_DIR"
+    echo "Detected vaila installation in current directory: $VAILA_HOME"
+else
+    # Fallback to default location
+    VAILA_HOME="$USER_HOME/vaila"
+    echo "Using default vaila location: $VAILA_HOME"
+fi
 DESKTOP_ENTRY_PATH="$HOME/.local/share/applications/vaila.desktop"
 SYSTEM_DESKTOP_ENTRY_PATH="/usr/share/applications/vaila.desktop"
 RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
@@ -88,6 +98,25 @@ if [ -f "$SYSTEM_DESKTOP_ENTRY_PATH" ]; then
 else
     echo "System desktop entry not found. Skipping removal."
 fi
+
+# Remove the Desktop shortcut
+if [ -f "$HOME/Desktop/vaila.desktop" ]; then
+    echo "Removing Desktop shortcut..."
+    rm -f "$HOME/Desktop/vaila.desktop"
+    if [ $? -eq 0 ]; then
+        echo "Desktop shortcut removed successfully."
+    else
+        echo "Failed to remove Desktop shortcut."
+    fi
+else
+    echo "Desktop shortcut not found. Skipping removal."
+fi
+
+# Remove icons
+echo "Removing icons..."
+rm -f "$HOME/.local/share/icons/vaila.png" 2>/dev/null || true
+rm -f "$HOME/.local/share/pixmaps/vaila.png" 2>/dev/null || true
+
 
 # Remove the run_vaila.sh script if it exists
 if [ -f "$RUN_SCRIPT" ]; then

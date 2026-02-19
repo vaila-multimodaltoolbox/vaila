@@ -1303,7 +1303,7 @@ def _transfer_file_gui():
 
             except Exception as e:
                 progress_text.config(state=tk.NORMAL)
-                progress_text.insert(tk.END, f"\n✗ Error: {e}\n", "error")
+                progress_text.insert(tk.END, f"\n[FAIL] Error: {e}\n", "error")
                 progress_text.config(state=tk.DISABLED)
                 progress_text.see(tk.END)
                 start_btn.config(state=tk.NORMAL)

@@ -1032,13 +1032,13 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
             is_valid, message = validate_device_choice(device)
             if is_valid:
                 if device == "cpu":
-                    self.device_status.config(text="✓ " + message, fg="blue")  # Blue for CPU
+                    self.device_status.config(text="[OK] " + message, fg="blue")  # Blue for CPU
                 elif device == "mps":
-                    self.device_status.config(text="✓ " + message, fg="purple")  # Purple for MPS
+                    self.device_status.config(text="[OK] " + message, fg="purple")  # Purple for MPS
                 else:  # cuda
-                    self.device_status.config(text="✓ " + message, fg="green")  # Green for CUDA
+                    self.device_status.config(text="[OK] " + message, fg="green")  # Green for CUDA
             else:
-                self.device_status.config(text="⚠ " + message, fg="orange")
+                self.device_status.config(text="[WARNING] " + message, fg="orange")
 
         self.device_var.trace_add("write", update_device_status)
         update_device_status()  # Initial update

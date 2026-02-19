@@ -1385,10 +1385,10 @@ def read_c3d_file(file_path):
         # Apply conversion
         if is_mm:
             pts = pts * 0.001  # Convert from millimeters to meters
-            print("[bold green]✓ Applied conversion: MILLIMETERS → METERS[/bold green]")
+            print("[bold green][OK] Applied conversion: MILLIMETERS → METERS[/bold green]")
             print(f"  Method: {detection_method}")
         else:
-            print("[bold green]✓ No conversion applied: Data already in METERS[/bold green]")
+            print("[bold green][OK] No conversion applied: Data already in METERS[/bold green]")
             print(f"  Method: {detection_method}")
 
         # Show data statistics after conversion

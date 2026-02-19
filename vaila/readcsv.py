@@ -147,9 +147,11 @@ def show_csv_optimized(file_path=None, *, use_cache=True, turbo=False, fps=30, s
     viewer_choice = choose_visualizer()
     if viewer_choice == "open3d":
         from vaila.viewc3d import run_viewc3d_from_array
+
         run_viewc3d_from_array(points, selected_markers, fps, file_path)
     else:
         from vaila.viewc3d_pyvista import MokkaLikeViewer
+
         MokkaLikeViewer.from_array(
             points, selected_markers, frame_rate=fps, title="Vaila - PyVista CSV Viewer"
         )
@@ -398,12 +400,8 @@ def choose_visualizer():
         text="Visualize CSV markers with:",
         font=("", 11),
     ).pack(pady=(14, 10))
-    tk.Button(root, text="PyVista viewer", command=lambda: choose("pyvista"), width=22).pack(
-        pady=4
-    )
-    tk.Button(root, text="Open3D viewer", command=lambda: choose("open3d"), width=22).pack(
-        pady=4
-    )
+    tk.Button(root, text="PyVista viewer", command=lambda: choose("pyvista"), width=22).pack(pady=4)
+    tk.Button(root, text="Open3D viewer", command=lambda: choose("open3d"), width=22).pack(pady=4)
     root.update_idletasks()
     x = (root.winfo_screenwidth() - root.winfo_reqwidth()) // 2
     y = (root.winfo_screenheight() - root.winfo_reqheight()) // 2
@@ -853,12 +851,12 @@ def show_csv(file_path=None):
     viewer_choice = choose_visualizer()
     if viewer_choice == "open3d":
         from vaila.viewc3d import run_viewc3d_from_array
+
         run_viewc3d_from_array(points, selected_markers, 60.0, file_path)
     else:
         from vaila.viewc3d_pyvista import MokkaLikeViewer
-        title = (
-            f"Vaila - CSV Viewer (PyVista) | {file_name} | {len(selected_markers)} markers | {num_frames} records"
-        )
+
+        title = f"Vaila - CSV Viewer (PyVista) | {file_name} | {len(selected_markers)} markers | {num_frames} records"
         MokkaLikeViewer.from_array(points, selected_markers, frame_rate=60.0, title=title)
 
 
