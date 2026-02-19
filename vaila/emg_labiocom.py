@@ -1376,9 +1376,7 @@ def calculate_frequency_domain_features(emg_filtered, fs):
     peak_freq = freqs[np.argmax(psd)]
 
     # Spectral Moments
-    (
-        np.sum(freqs * psd) / np.sum(psd) if np.sum(psd) > 0 else 0
-    )  # First moment (mean freq)
+    (np.sum(freqs * psd) / np.sum(psd) if np.sum(psd) > 0 else 0)  # First moment (mean freq)
     moment2 = (
         np.sum((freqs - mean_freq) ** 2 * psd) / np.sum(psd) if np.sum(psd) > 0 else 0
     )  # Second moment (variance)

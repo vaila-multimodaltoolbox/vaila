@@ -1,6 +1,6 @@
 # vailá - Multimodal Toolbox
 # Created: 21 March 2025
-# Last updated: 18 July 2025
+# Last updated: 15 February 2026
 # © Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 # https://github.com/vaila-multimodaltoolbox/vaila
 # Please see AUTHORS for contributors.
@@ -9,7 +9,7 @@
 #
 # vailá - Multimodal Toolbox environment
 # This file sets up the conda environment for the vailá - Multimodal Toolbox.
-# 
+#
 # Install this environment with: conda env create -f vaila_mac.yaml
 # Update this environment with: conda env update -f vaila_mac.yaml
 #
@@ -75,7 +75,7 @@ dependencies:
       - scp
       - spm1d
       - ydata_profiling
-      - 'xonsh[full]'
+      - "xonsh[full]"
       - boxmot
       - open3d
       - glfw

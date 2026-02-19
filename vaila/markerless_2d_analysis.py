@@ -2408,9 +2408,9 @@ class DeviceSelectionDialog(tk.simpledialog.Dialog):
                     if info.get("memory_total_mb", 0) > 0:
                         info_text += f"Memory: {info['memory_total_mb'] / 1024:.1f} GB\n"
                     if test_result[0]:
-                        info_text += "Status: ✓ GPU tested and working"
+                        info_text += "Status: [OK] GPU tested and working"
                     else:
-                        info_text += f"Status: ⚠ {test_result[1]}"
+                        info_text += f"Status: [WARNING] {test_result[1]}"
                     break
 
         if not info_text:
@@ -4643,13 +4643,13 @@ def process_videos_in_directory(existing_root=None):
                 available_backends[backend_name] = (available, info, error)
                 available_backends[f"{backend_name}_test"] = test_result
                 if test_result[0]:
-                    print(f"✓ {backend_name.upper()} backend test passed")
+                    print(f"[OK] {backend_name.upper()} backend test passed")
                 else:
-                    print(f"⚠ {backend_name.upper()} backend test failed: {test_result[1]}")
+                    print(f"[WARNING] {backend_name.upper()} backend test failed: {test_result[1]}")
                     # Mark as unavailable if test fails
                     available_backends[backend_name] = (False, info, test_result[1])
             else:
-                print(f"✗ {backend_name.upper()} not available: {error}")
+                print(f"[FAIL] {backend_name.upper()} not available: {error}")
                 available_backends[backend_name] = (False, info, error)
                 available_backends[f"{backend_name}_test"] = (False, error)
 
@@ -4675,9 +4675,9 @@ def process_videos_in_directory(existing_root=None):
     gpu_backend = selected_device if use_gpu else None
 
     if use_gpu:
-        print(f"✓ GPU processing selected ({selected_device.upper()})")
+        print(f"[OK] GPU processing selected ({selected_device.upper()})")
     else:
-        print("✓ CPU processing selected")
+        print("[OK] CPU processing selected")
 
     print()
 

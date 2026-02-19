@@ -473,7 +473,7 @@ def load_c3d_file():
 
         # Ask user for confirmation if detection is uncertain
         if uncertain_detection:
-            print(f"[yellow]⚠ Uncertain unit detection (method: {detection_method})[/yellow]")
+            print(f"[yellow][WARNING] Uncertain unit detection (method: {detection_method})[/yellow]")
             user_choice = ask_user_units_c3d()
 
             if user_choice == "mm":
@@ -487,10 +487,10 @@ def load_c3d_file():
         # Apply conversion
         if is_mm:
             pts = pts * 0.001  # Convert from millimeters to meters
-            print("[bold green]✓ Applied conversion: MILLIMETERS → METERS[/bold green]")
+            print("[bold green][OK] Applied conversion: MILLIMETERS → METERS[/bold green]")
             print(f"  Method: {detection_method}")
         else:
-            print("[bold green]✓ No conversion applied: Data already in METERS[/bold green]")
+            print("[bold green][OK] No conversion applied: Data already in METERS[/bold green]")
             print(f"  Method: {detection_method}")
 
         # Show data statistics after conversion
@@ -1727,7 +1727,7 @@ def run_viewc3d(c3d_path=None):
             if success:
                 return
             else:
-                print("[red]❌ Both Open3D and matplotlib visualization failed[/red]")
+                print("[red][FAIL] Both Open3D and matplotlib visualization failed[/red]")
                 print(
                     "[red]Please check your system's graphics drivers and Python environment[/red]"
                 )
@@ -4619,6 +4619,7 @@ def run_viewc3d_from_array(points, marker_labels, fps, filepath=""):
     opengl_supported, error_msg = check_opengl_support()
     if not opengl_supported:
         from rich import print as rprint
+
         rprint("[yellow] OpenGL/Open3D not supported on this system:[/yellow]")
         rprint(f"[yellow]  {error_msg}[/yellow]")
         rprint("[cyan] Switching to matplotlib fallback...[/cyan]")

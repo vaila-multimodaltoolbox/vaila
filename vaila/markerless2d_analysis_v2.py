@@ -102,7 +102,7 @@ except ImportError:
     current_dir = str(Path(__file__).parent.resolve())
     if current_dir not in sys.path:
         sys.path.append(current_dir)
-    from HardwareManager import HardwareManager
+    from vaila.hardware_manager import HardwareManager
 import contextlib
 import webbrowser
 
@@ -978,7 +978,7 @@ def download_yolo_model(model_name):
         if source_path and os.path.exists(source_path):
             # Copy the downloaded model to our models directory
             shutil.copy2(source_path, str(model_path))
-            print(f"✓ Successfully saved {model_name} to {model_path}")
+            print(f"[OK] Successfully saved {model_name} to {model_path}")
             return str(model_path)
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")
@@ -1055,7 +1055,7 @@ def download_yolo_model(model_name):
                                 f"  Downloaded: {percent:.1f}% ({downloaded / (1024 * 1024):.1f} MB)"
                             )
 
-        print(f"✓ Successfully downloaded {model_name} using requests")
+        print(f"[OK] Successfully downloaded {model_name} using requests")
         return str(model_path)
 
     except Exception as e2:
@@ -1074,7 +1074,7 @@ def download_yolo_model(model_name):
                 print(f"Found model in cache: {cache_path}")
                 try:
                     shutil.copy2(str(cache_path), str(model_path))
-                    print(f"✓ Copied model from cache to {model_path}")
+                    print(f"[OK] Copied model from cache to {model_path}")
                     return str(model_path)
                 except Exception as copy_err:
                     print(f"Warning: Could not copy from cache: {copy_err}")
@@ -1143,7 +1143,7 @@ def download_or_load_yolo_model(model_name=None):
         # Use auto_export to get the best model (Engine or PT) for this hardware
         optimized_model_path = hw.auto_export(model_name)
 
-        print(f"🚀 OPTIMIZED MODEL: Loading tailored model from {optimized_model_path}")
+        print(f" OPTIMIZED MODEL: Loading tailored model from {optimized_model_path}")
         model = YOLO(str(optimized_model_path), task="pose")
 
         # Only move to device if it's a PyTorch model (engines handle this internally)

@@ -3,8 +3,9 @@
 Video Audio Processing Tool - vaila_iaudiovid.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
-Date: March 2025
-Version: 1.3.0
+Create: 01 March 2025
+Update: 18 February 2026
+Version: 0.1.4
 
 Description:
 ------------
@@ -274,10 +275,8 @@ class AudioVideoProcessor:
                         check=False,
                     )
 
-                    try:
+                    with contextlib.suppress(OSError):
                         os.remove(temp_list_file)  # Clean up the temporary list file
-                    except:
-                        pass
 
                     if fallback_process.returncode == 0:
                         if self.status_callback:
