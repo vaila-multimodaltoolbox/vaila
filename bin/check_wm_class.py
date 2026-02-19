@@ -1,6 +1,5 @@
 
 import tkinter
-import sys
 
 try:
     root = tkinter.Tk(className='Vaila')
