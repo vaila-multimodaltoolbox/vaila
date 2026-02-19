@@ -1028,7 +1028,7 @@ class InterpolationConfigDialog:
         # Tooltip for window length
         tooltip1 = tk.Label(
             self.params_frame,
-            text="💡 Tip: Use 5-15 for smooth data, 15-31 for noisy data. Must be odd number.",
+            text="Tip: Tip: Use 5-15 for smooth data, 15-31 for noisy data. Must be odd number.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1044,7 +1044,7 @@ class InterpolationConfigDialog:
         # Tooltip for polynomial order
         tooltip2 = tk.Label(
             self.params_frame,
-            text="💡 Tip: Use 2-3 for most cases. Must be < window length. Higher = more flexible.",
+            text="Tip: Tip: Use 2-3 for most cases. Must be < window length. Higher = more flexible.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1066,7 +1066,7 @@ class InterpolationConfigDialog:
         # Tooltip for fraction
         tooltip1 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 0.1-0.3 for smooth data, 0.3-0.5 for noisy data. Higher = smoother.",
+            text="Tip: Tip: 0.1-0.3 for smooth data, 0.3-0.5 for noisy data. Higher = smoother.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1082,7 +1082,7 @@ class InterpolationConfigDialog:
         # Tooltip for iterations
         tooltip2 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 2-4 iterations usually sufficient. More iterations = more robust to outliers.",
+            text="Tip: Tip: 2-4 iterations usually sufficient. More iterations = more robust to outliers.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1104,7 +1104,7 @@ class InterpolationConfigDialog:
         # Tooltip for cutoff frequency
         tooltip1 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 4-10 Hz for biomechanics, 1-5 Hz for slow movements. Must be < fs/2.",
+            text="Tip: Tip: 4-10 Hz for biomechanics, 1-5 Hz for slow movements. Must be < fs/2.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1120,7 +1120,7 @@ class InterpolationConfigDialog:
         # Tooltip for sampling frequency
         tooltip2 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 30 Hz for video, 100-1000 Hz for motion capture. Must be > 2×cutoff.",
+            text="Tip: Tip: 30 Hz for video, 100-1000 Hz for motion capture. Must be > 2×cutoff.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1144,7 +1144,7 @@ class InterpolationConfigDialog:
         # Tooltip for EM iterations
         tooltip1 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 3-10 iterations. More iterations = better parameter estimation but slower.",
+            text="Tip: Tip: 3-10 iterations. More iterations = better parameter estimation but slower.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1162,7 +1162,7 @@ class InterpolationConfigDialog:
         # Tooltip for processing mode
         tooltip2 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 1=process each column independently, 2=process x,y pairs together.",
+            text="Tip: Tip: 1=process each column independently, 2=process x,y pairs together.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1184,7 +1184,7 @@ class InterpolationConfigDialog:
         # Tooltip for smoothing factor
         tooltip = tk.Label(
             self.params_frame,
-            text="💡 Tip: 0.1-1.0 for light smoothing, 1.0-10 for moderate, 10+ for strong smoothing.",
+            text="Tip: Tip: 0.1-1.0 for light smoothing, 1.0-10 for moderate, 10+ for strong smoothing.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1205,7 +1205,7 @@ class InterpolationConfigDialog:
         # Tooltip for AR order
         tooltip1 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 1-3 for most cases. Higher values for complex patterns.",
+            text="Tip: Tip: 1-3 for most cases. Higher values for complex patterns.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1221,7 +1221,7 @@ class InterpolationConfigDialog:
         # Tooltip for difference order
         tooltip2 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 0 for stationary data, 1-2 for trending data.",
+            text="Tip: Tip: 0 for stationary data, 1-2 for trending data.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1237,7 +1237,7 @@ class InterpolationConfigDialog:
         # Tooltip for MA order
         tooltip3 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 0-2 for most cases. Higher values for complex noise patterns.",
+            text="Tip: Tip: 0-2 for most cases. Higher values for complex noise patterns.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1272,7 +1272,7 @@ class InterpolationConfigDialog:
         # Tooltip for kernel size
         tooltip1 = tk.Label(
             self.params_frame,
-            text="💡 Tip: Use 3-7 for light noise, 7-15 for heavy impulsive noise. Must be odd.",
+            text="Tip: Tip: Use 3-7 for light noise, 7-15 for heavy impulsive noise. Must be odd.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1295,7 +1295,7 @@ class InterpolationConfigDialog:
         # Tooltip for window size
         tooltip1 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 5-11 for most cases. Larger windows detect larger-scale spikes.",
+            text="Tip: Tip: 5-11 for most cases. Larger windows detect larger-scale spikes.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1313,7 +1313,7 @@ class InterpolationConfigDialog:
         # Tooltip for sigma threshold
         tooltip2 = tk.Label(
             self.params_frame,
-            text="💡 Tip: 2.5-4.0 typical. Points > sigma*MAD from median are replaced.",
+            text="Tip: Tip: 2.5-4.0 typical. Points > sigma*MAD from median are replaced.",
             font=("Arial", 9),
             fg="#666666",
             wraplength=300,
@@ -1460,7 +1460,7 @@ Parameters have been confirmed and will be used for processing.
             messagebox.showinfo("Parameters Confirmed", confirmation)
 
             # Change the color of the button to indicate that the parameters have been confirmed
-            self.confirm_button.configure(bg="pale green", text="Parameters Confirmed ✓")
+            self.confirm_button.configure(bg="pale green", text="Parameters Confirmed [OK]")
 
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid parameter value: {str(e)}")
@@ -1507,7 +1507,7 @@ Parameters have been confirmed and will be used for processing.
         else:
             try:
                 # Check if the parameters have been confirmed
-                if self.confirm_button["text"] != "Parameters Confirmed ✓":
+                if self.confirm_button["text"] != "Parameters Confirmed [OK]":
                     if not messagebox.askyesno(
                         "Warning",
                         "Parameters have not been confirmed. Do you want to proceed anyway?",
@@ -2846,7 +2846,7 @@ def generate_report(dest_dir, config, processed_files):
                     f.write("\nSmoothing Effectiveness Summary:\n")
                     if mean_diff > 0.01:  # If there's significant change
                         f.write(
-                            "✓ Smoothing was effectively applied (significant changes detected)\n"
+                            "[OK] Smoothing was effectively applied (significant changes detected)\n"
                         )
                         if mean_diff < 1.0:
                             f.write("  - Light smoothing effect\n")
@@ -2856,7 +2856,7 @@ def generate_report(dest_dir, config, processed_files):
                             f.write("  - Strong smoothing effect\n")
                     else:
                         f.write(
-                            "⚠ Warning: Very small changes detected. Verify if smoothing was properly applied.\n"
+                            "[WARNING] Warning: Very small changes detected. Verify if smoothing was properly applied.\n"
                         )
 
                     f.write("\n" + "=" * 80 + "\n\n")

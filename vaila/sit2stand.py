@@ -4121,13 +4121,13 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             {metrics_html}
 
             {
-            f'<div class="chart-section"><div class="chart-title">📊 Force plot (PNG)</div><img src="data:image/png;base64,{force_plot_b64}" alt="Force plot" style="max-width:100%; height:auto; border-radius:8px;" /></div>'
+            f'<div class="chart-section"><div class="chart-title"> Force plot (PNG)</div><img src="data:image/png;base64,{force_plot_b64}" alt="Force plot" style="max-width:100%; height:auto; border-radius:8px;" /></div>'
             if force_plot_b64
             else ""
         }
 
             <div class="chart-section">
-                <div class="chart-title">📊 Vertical Force & RFD Analysis</div>
+                <div class="chart-title"> Vertical Force & RFD Analysis</div>
                 <div id="forceChart" class="chart-container" style="height: 600px;"></div>
             </div>
 
@@ -4135,11 +4135,11 @@ def generate_interactive_html_report(data, analysis_result, config, output_path,
             '''
             <div class="two-col">
                 <div class="chart-section">
-                    <div class="chart-title">👣 CoP Path (Top View)</div>
+                    <div class="chart-title"> CoP Path (Top View)</div>
                     <div id="copPathChart" class="chart-container" style="height: 450px;"></div>
                 </div>
                 <div class="chart-section">
-                    <div class="chart-title">📈 CoP Displacement vs Time</div>
+                    <div class="chart-title"> CoP Displacement vs Time</div>
                     <div id="copTimeChart" class="chart-container" style="height: 450px;"></div>
                 </div>
             </div>

@@ -109,6 +109,7 @@ def _suppress_vtk_output():
     except Exception:
         try:
             import vtk
+
             null_path = "NUL" if os.name == "nt" else "/dev/null"
             ow = vtk.vtkFileOutputWindow()
             ow.SetFileName(null_path)
@@ -119,10 +120,12 @@ def _suppress_vtk_output():
     # --- 2. Turn off global warning display at C++ level ---
     try:
         import vtkmodules.vtkCommonCore as _vtkCC
+
         _vtkCC.vtkObject.GlobalWarningDisplayOff()
     except Exception:
         try:
             import vtk
+
             vtk.vtkObject.GlobalWarningDisplayOff()
         except Exception:
             pass
@@ -130,8 +133,10 @@ def _suppress_vtk_output():
     # --- 3. Python logging safety net ---
     class _VTKFilter(logging.Filter):
         _keywords = (
-            "vtkShaderProgram", "Could not create shader",
-            "Could not set shader program", "vtkOpenGLPolyDataMapper",
+            "vtkShaderProgram",
+            "Could not create shader",
+            "Could not set shader program",
+            "vtkOpenGLPolyDataMapper",
             "Hardware does not support the number of textures",
             "vtkOpenGLState",
         )
@@ -141,6 +146,7 @@ def _suppress_vtk_output():
             return not any(k in msg for k in self._keywords)
 
     logging.getLogger().addFilter(_VTKFilter())
+
 
 # ---------------------------------------------------------------------------
 #  Colors: same palette as viewc3d (Open3D viewer) for C key cycle

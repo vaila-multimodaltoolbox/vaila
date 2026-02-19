@@ -3,9 +3,9 @@
 YouTube High Quality Downloader - vaila_ytdown.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
-Creation Date: 10 October 2025
-Update Date: 3 February 2026
-Version: 0.3.19
+Create: 10 October 2025
+Update: 18 February 2026
+Version: 0.1.4
 
 Description:
 ------------
@@ -115,7 +115,7 @@ def read_urls_from_file(file_path):
                     urls.append(url)
         return urls
     except Exception as e:
-        raise Exception(f"Error reading URL file: {str(e)}")
+        raise Exception(f"Error reading URL file: {str(e)}") from e
 
 
 class YTDownloader:
@@ -334,7 +334,7 @@ class YTDownloader:
             console.print(f"[red]{error_msg}[/red]")
             if self.status_callback:
                 self.status_callback(f"Error: {error_msg}")
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def download_audio(self, url, output_dir=None, filename_prefix=""):
         """Download audio only from a YouTube URL as MP3."""
@@ -422,7 +422,7 @@ class YTDownloader:
             console.print(f"[red]{error_msg}[/red]")
             if self.status_callback:
                 self.status_callback(f"Error: {error_msg}")
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def download_playlist(self, playlist_url, output_dir=None):
         """Download all videos in a YouTube playlist."""
@@ -512,7 +512,7 @@ class YTDownloader:
         except Exception as e:
             error_msg = f"Error downloading playlist: {str(e)}"
             console.print(f"[red]{error_msg}[/red]")
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def download_from_file(self, file_path, output_dir=None, audio_only=False):
         """Download all items listed in a text file (video or audio)."""
@@ -705,7 +705,7 @@ if TKINTER_AVAILABLE:
             # We will use styles to indicate state
             self.btn_video = ttk.Button(
                 btn_toggle_frame,
-                text="🎬 VIDEO (MP4)\nBest Quality",
+                text=" VIDEO (MP4)\nBest Quality",
                 command=lambda: self.set_download_mode("video"),
                 style="Accent.TButton",
                 width=20,
@@ -714,7 +714,7 @@ if TKINTER_AVAILABLE:
 
             self.btn_audio = ttk.Button(
                 btn_toggle_frame,
-                text="🎵 AUDIO (MP3)\nAudio Only",
+                text=" AUDIO (MP3)\nAudio Only",
                 command=lambda: self.set_download_mode("audio"),
                 style="TButton",
                 width=20,

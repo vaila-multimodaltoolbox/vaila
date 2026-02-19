@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.5
+Version: 0.0.6
 Created: 02 August 2025
-Last Updated: 11 February 2026
+Last Updated: 15 February 2026
 
 ================================================================================
 Description
@@ -123,14 +123,14 @@ def rec3d_multicam(dlt_list, pixel_list):
 
 def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, conversion_factor=1):
     """
-    Converte o DataFrame de reconstrução 3D para um arquivo C3D e o salva.
+    Converts the 3D reconstruction DataFrame to a C3D file and saves it.
 
     Args:
-        rec3d_df (pd.DataFrame): DataFrame com os resultados (colunas "frame", "p1_x", "p1_y", "p1_z", ..., "p25_x", "p25_y", "p25_z").
-        output_dir (str): Diretório onde o arquivo será salvo.
-        default_filename (str): Nome padrão para o arquivo C3D.
-        point_rate (int): Taxa de amostragem dos pontos (Hz).
-        conversion_factor (float): Fator de conversão para as coordenadas (se necessário).
+        rec3d_df (pd.DataFrame): DataFrame with results (columns "frame", "p1_x", "p1_y", "p1_z", ..., "p25_x", "p25_y", "p25_z").
+        output_dir (str): Directory where the file will be saved.
+        default_filename (str): Default name for the C3D file.
+        point_rate (int): Point sampling rate (Hz).
+        conversion_factor (float): Conversion factor for coordinates (if necessary).
     """
     from tkinter import filedialog, messagebox
 
@@ -140,7 +140,7 @@ def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, co
     num_markers = len(x_columns)
     marker_labels = [f"p{i}" for i in range(1, num_markers + 1)]
 
-    # Inicializa a matriz de pontos com shape (4, num_markers, num_frames)
+    # Initialize point matrix with shape (4, num_markers, num_frames)
     points_data = np.zeros((4, num_markers, num_frames))
     for i, marker in enumerate(marker_labels):
         try:
@@ -148,12 +148,12 @@ def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, co
             points_data[1, i, :] = rec3d_df[f"{marker}_y"].values * conversion_factor
             points_data[2, i, :] = rec3d_df[f"{marker}_z"].values * conversion_factor
         except KeyError as e:
-            messagebox.showerror("Error", f"Dados ausentes para o marcador {marker}: {e}")
+            messagebox.showerror("Error", f"Missing data for marker {marker}: {e}")
             return
-    points_data[3, :, :] = 1  # Coordenada homogênea
+    points_data[3, :, :] = 1  # Homogeneous coordinate
 
     c3d = ezc3d.c3d()
-    # Usar a estrutura POINT já existente no ezc3d (preserva __METADATA__ para write())
+    # Use existing POINT structure in ezc3d (preserves __METADATA__ for write())
     units_str = "mm" if conversion_factor == 1000 else "m"
     c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
     c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
@@ -162,7 +162,7 @@ def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, co
     c3d["data"]["points"] = points_data
 
     output_c3d = filedialog.asksaveasfilename(
-        title="Salvar arquivo C3D",
+        title="Save C3D file",
         initialdir=output_dir,
         initialfile=default_filename,
         defaultextension=".c3d",
@@ -171,14 +171,308 @@ def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, co
     if output_c3d:
         try:
             c3d.write(output_c3d)
-            messagebox.showinfo("Success", f"Arquivo C3D salvo em:\n{output_c3d}")
+            messagebox.showinfo("Success", f"C3D file saved at:\n{output_c3d}")
         except Exception as e:
-            messagebox.showerror("Error", f"Erro ao salvar arquivo C3D: {e}")
+            messagebox.showerror("Error", f"Error saving C3D file: {e}")
     else:
-        messagebox.showwarning("Warning", "Operação de salvamento do C3D cancelada.")
+        messagebox.showwarning("Warning", "C3D save operation cancelled.")
 
 
-def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui=True):
+def save_rec3d_as_bvh(rec3d_df, output_dir, file_base, point_rate, gui=True, swap_yz=True):
+    """
+    Exports reconstructed 3D data to BVH format (Biovision Hierarchy).
+    Since there is no pre-defined rigid skeleton model, each marker is
+    exported as an independent ROOT node in 3D space.
+
+    Args:
+        swap_yz (bool): If True, swaps Y and Z (Y_out = Z_in, Z_out = Y_in) for Z-up systems (Blender).
+    """
+    import os
+
+    import numpy as np
+
+    bvh_filepath = os.path.join(output_dir, f"{file_base}.bvh")
+
+    # Identifies markers from DataFrame columns
+    markers = []
+    for col in rec3d_df.columns:
+        if col.endswith("_x") and col.startswith("p"):
+            markers.append(col.replace("_x", ""))
+
+    num_frames = len(rec3d_df)
+    # Protection against division by zero, if point_rate is invalid
+    frame_time = 1.0 / point_rate if point_rate > 0 else 0.01
+
+    try:
+        with open(bvh_filepath, "w", encoding="utf-8") as f:
+            # ==========================================
+            # SEÇÃO 1: HIERARCHY
+            # ==========================================
+            f.write("HIERARCHY\n")
+            for marker in markers:
+                f.write(f"ROOT {marker}\n")
+                f.write("{\n")
+                f.write("\tOFFSET 0.000000 0.000000 0.000000\n")
+                f.write("\tCHANNELS 3 Xposition Yposition Zposition\n")
+                f.write("\tEnd Site\n")
+                f.write("\t{\n")
+                f.write("\t\tOFFSET 0.000000 0.000000 0.000000\n")
+                f.write("\t}\n")
+                f.write("}\n")
+
+            # ==========================================
+            # SECTION 2: MOTION
+            # ==========================================
+            f.write("MOTION\n")
+            f.write(f"Frames: {num_frames}\n")
+            f.write(f"Frame Time: {frame_time:.6f}\n")
+
+            # Format coordinates frame by frame
+            for index, row in rec3d_df.iterrows():
+                frame_data = []
+                for marker in markers:
+                    x = row.get(f"{marker}_x", 0.0)
+                    y = row.get(f"{marker}_y", 0.0)
+                    z = row.get(f"{marker}_z", 0.0)
+
+                    # BVH format does not accept "NaN". Replace with 0.0
+                    x = 0.0 if np.isnan(x) else x
+                    y = 0.0 if np.isnan(y) else y
+                    z = 0.0 if np.isnan(z) else z
+
+                    if swap_yz:
+                        # AXIS SWAP FOR BLENDER (Z-up vs Y-up)
+                        # DLT Z axis goes to BVH Y column, and Y axis goes to Z.
+                        # Reference: X=X, Y=Z, Z=Y (or -Y if needed, but default is Y)
+                        frame_data.extend([f"{x:.6f}", f"{z:.6f}", f"{y:.6f}"])
+                    else:
+                        frame_data.extend([f"{x:.6f}", f"{y:.6f}", f"{z:.6f}"])
+
+                f.write(" ".join(frame_data) + "\n")
+
+        print(f"BVH file (mocap/Blender) created successfully (Swap Y/Z: {swap_yz})")
+        return bvh_filepath
+
+    except Exception as e:
+        msg = f"Failed to save BVH file: {e}"
+        print(f"Error: {msg}")
+        if gui:
+            from tkinter import messagebox
+
+            messagebox.showerror("Error", msg)
+
+        return None
+
+
+def generate_blender_companion_script(output_dir, file_base, skeleton_json_path=None):
+    """
+    Generates a Python script to be run inside Blender.
+    Creates a second Armature with STICK display whose bones connect
+    the imported BVH markers via constraints (Copy Location + Stretch To).
+    Native Blender approach — "bones" are visible lines that follow
+    the animation automatically.
+    """
+    import json
+    import os
+
+    # Default connections (MediaPipe 33 keypoints) used if no JSON is provided
+    default_connections = [
+        ["p12", "p13"],
+        ["p24", "p25"],
+        ["p12", "p24"],
+        ["p13", "p25"],
+        ["p12", "p25"],
+        ["p13", "p24"],
+        ["p1", "p3"],
+        ["p1", "p6"],
+        ["p3", "p6"],
+        ["p3", "p8"],
+        ["p6", "p9"],
+        ["p10", "p11"],
+        ["p12", "p14"],
+        ["p14", "p16"],
+        ["p16", "p18"],
+        ["p16", "p20"],
+        ["p16", "p22"],
+        ["p13", "p15"],
+        ["p15", "p17"],
+        ["p17", "p19"],
+        ["p17", "p21"],
+        ["p17", "p23"],
+        ["p24", "p26"],
+        ["p26", "p28"],
+        ["p28", "p30"],
+        ["p30", "p32"],
+        ["p25", "p27"],
+        ["p27", "p29"],
+        ["p29", "p31"],
+        ["p31", "p33"],
+    ]
+
+    connections = default_connections
+
+    if skeleton_json_path and os.path.exists(skeleton_json_path):
+        try:
+            with open(skeleton_json_path, encoding="utf-8") as f:
+                skeleton_data = json.load(f)
+                connections = skeleton_data.get("connections", default_connections)
+        except Exception as e:
+            print(f"Error reading skeleton JSON: {e}. Using default connections.")
+
+    # Don't generate if no connections (shouldn't happen with default, but good check)
+    if not connections:
+        return None
+
+    script_content = f"""import bpy
+
+# =========================================================
+# Script automatically generated by vaila Toolbox
+# Skeleton Visualization — Armature STICK bones
+# =========================================================
+# How to use:
+#   1. Import the .bvh file into Blender (File > Import > BVH)
+#   2. Open this script in Blender's Text Editor
+#   3. Click "Run Script" (Play button)
+#   4. Press Space to play the animation and see the skeleton
+# =========================================================
+
+def create_skeleton_visualization():
+    print("=" * 60)
+    print("vaila — Skeleton Visualization (Armature STICK)")
+    print("=" * 60)
+
+    connections = {connections}
+
+    # ----------------------------------------------------------
+    # 1. Finds the imported BVH Armature
+    # ----------------------------------------------------------
+    bvh_armature = None
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'ARMATURE':
+            bvh_armature = obj
+            break
+
+    if not bvh_armature:
+        print("ERROR: No Armature found in scene!")
+        print("Import the .bvh file first (File > Import > BVH).")
+        return
+
+    available_bones = [b.name for b in bvh_armature.data.bones]
+    print(f"Armature found: '{{bvh_armature.name}}' with {{len(available_bones)}} bones")
+
+    # ----------------------------------------------------------
+    # 2. Removes previous Vaila_Skeleton (safe re-run)
+    # ----------------------------------------------------------
+    old_obj = bpy.data.objects.get("Vaila_Skeleton")
+    if old_obj:
+        bpy.data.objects.remove(old_obj, do_unlink=True)
+    old_arm = bpy.data.armatures.get("Vaila_Skeleton_Data")
+    if old_arm:
+        bpy.data.armatures.remove(old_arm)
+
+    # ----------------------------------------------------------
+    # 3. Creates new Armature with STICK display
+    # ----------------------------------------------------------
+    arm_data = bpy.data.armatures.new("Vaila_Skeleton_Data")
+    arm_obj = bpy.data.objects.new("Vaila_Skeleton", arm_data)
+    bpy.context.scene.collection.objects.link(arm_obj)
+
+    # Display as thin lines (STICK) and always visible in front
+    arm_data.display_type = 'STICK'
+    arm_obj.show_in_front = True
+
+    # ----------------------------------------------------------
+    # 4. Enters Edit mode and creates connection bones
+    # ----------------------------------------------------------
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = arm_obj
+    arm_obj.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    valid_connections = []
+    for idx, (start_name, end_name) in enumerate(connections):
+        if start_name not in available_bones or end_name not in available_bones:
+            print(f"  Skipping: {{start_name}} -> {{end_name}} (not found in Armature)")
+            continue
+
+        bone_name = f"link_{{start_name}}_{{end_name}}"
+        bone = arm_data.edit_bones.new(bone_name)
+        # Temporary position — will be overwritten by constraints
+        bone.head = (0.0, 0.0, idx * 0.001)
+        bone.tail = (0.0, 0.1, idx * 0.001)
+        bone.use_connect = False
+        valid_connections.append((start_name, end_name, bone_name))
+
+    print(f"Bones created: {{len(valid_connections)}} connections")
+
+    # ----------------------------------------------------------
+    # 5. Enters Pose mode and adds constraints
+    # ----------------------------------------------------------
+    bpy.ops.object.mode_set(mode='POSE')
+
+    for start_name, end_name, bone_name in valid_connections:
+        pbone = arm_obj.pose.bones[bone_name]
+
+        # Constraint 1: copy location of start marker
+        cloc = pbone.constraints.new('COPY_LOCATION')
+        cloc.target = bvh_armature
+        cloc.subtarget = start_name
+
+        # Constraint 2: stretch to end marker
+        stretch = pbone.constraints.new('STRETCH_TO')
+        stretch.target = bvh_armature
+        stretch.subtarget = end_name
+        try:
+            stretch.volume = 'NONE'
+        except TypeError:
+            stretch.volume = 'NO_VOLUME'
+
+        # Green color (neon) for the bone — Blender 4.0+
+        try:
+            pbone.color.palette = 'CUSTOM'
+            pbone.color.custom.normal = (0.0, 1.0, 0.3)
+            pbone.color.custom.select = (1.0, 1.0, 0.0)
+            pbone.color.custom.active = (1.0, 0.5, 0.0)
+        except Exception:
+            pass
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # ----------------------------------------------------------
+    # 6. Forces scene update
+    # ----------------------------------------------------------
+    bpy.context.view_layer.update()
+
+    print("=" * 60)
+    print(f"Done! {{len(valid_connections)}} skeleton connections created.")
+    print("Press SPACE to play animation and see the skeleton.")
+    print("=" * 60)
+
+create_skeleton_visualization()
+"""
+
+    script_filename = f"{file_base}_blender_skeleton_viz.py"
+    script_path = os.path.join(output_dir, script_filename)
+
+    try:
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        print(f"Blender companion script created: {script_filename}")
+        return script_path
+    except Exception as e:
+        print(f"Failed to create Blender script: {e}")
+        return None
+
+
+def run_reconstruction(
+    dlt_files,
+    pixel_files,
+    output_directory,
+    point_rate,
+    gui=True,
+    swap_yz=True,
+    skeleton_json_path=None,
+):
     """
     Run 3D reconstruction from DLT3D and pixel CSV paths. Used by both GUI and CLI.
 
@@ -188,6 +482,8 @@ def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui
         output_directory: directory where output subdir and files will be written
         point_rate: point data rate in Hz (e.g. 60, 100)
         gui: if True use messagebox for errors/success; if False use print only
+        swap_yz: if True, swap Y and Z axes in BVH export (for Blender)
+        skeleton_json_path: optional path to JSON file defining skeleton connections
 
     Returns:
         (new_dir, file_base) on success, None on failure.
@@ -361,6 +657,9 @@ def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui
         print("Error saving C3D file (millimeters):", e)
         return None
 
+    # ---> NEW: Call to save BVH file <---
+    save_rec3d_as_bvh(rec3d_df, new_dir, file_base, point_rate, gui=gui, swap_yz=swap_yz)
+
     print("\n=== Processing Complete ===")
     print(f"Processed {len(common_frames)} frames with {num_markers} markers")
     print(f"Output directory: {new_dir}")
@@ -369,8 +668,30 @@ def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui
     print(f"  - {file_base}.3d (3D format)")
     print(f"  - {file_base}_m.c3d (C3D in meters)")
     print(f"  - {file_base}_mm.c3d (C3D in millimeters)")
+    msg_bvh = f"  - {file_base}.bvh (Mocap format for Blender"
+    if swap_yz:
+        msg_bvh += ", axes swapped Y<->Z)"
+    else:
+        msg_bvh += ")"
+    print(msg_bvh)
+
+    # ---> NEW: Companion Script for Blender <---
+    # Always attempt to generate (will use default Body-33 connections if path is None)
+    blender_script = generate_blender_companion_script(new_dir, file_base, skeleton_json_path)
+    if blender_script:
+        print(f"  - {os.path.basename(blender_script)} (Run this in Blender to visualize skeleton)")
 
     if gui:
+        msg_bvh_gui = "• BVH file (natively opens in Blender"
+        if swap_yz:
+            msg_bvh_gui += ", axes Y<->Z)"
+        else:
+            msg_bvh_gui += ")"
+
+        extra_msg = ""
+        if blender_script:
+            extra_msg = "\n• Blender visualization script generated!"
+
         messagebox.showinfo(
             "Processing Complete",
             f"3D reconstruction completed successfully!\n\n"
@@ -378,7 +699,8 @@ def run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui
             f"Output directory: {os.path.basename(new_dir)}\n\n"
             f"Files created:\n"
             f"• CSV and 3D format files\n"
-            f"• C3D files (meters and millimeters)",
+            f"• C3D files (meters and millimeters)\n"
+            f"{msg_bvh_gui}{extra_msg}",
         )
 
     return (new_dir, file_base)
@@ -464,15 +786,49 @@ def run_rec3d_one_dlt3d():
         messagebox.showerror("Error", "Point data rate is required. Operation cancelled.")
         return
 
+    # Step 5: Ask if user wants to swap Y and Z axes for Blender
+    swap_yz = messagebox.askyesno(
+        "BVH Axis Export",
+        "Do you want to swap Y and Z axes for the BVH file?\n\n"
+        "Select YES if you plan to open this in Blender (Z-up).\n"
+        "Select NO to keep original DLT coordinates.",
+    )
+
+    # Step 6: (Optional) Select Skeleton Pose JSON
+    print("Step 6: (Optional) Selecting Skeleton Pose JSON for Blender visualization...")
+    skeleton_json_path = None
+    use_skeleton = messagebox.askyesno(
+        "Skeleton Visualization",
+        "Do you have a Skeleton Pose JSON file (e.g. MediaPipe)?\n"
+        "This allows generating a script to visualize connections in Blender.",
+    )
+    if use_skeleton:
+        skeleton_json_path = filedialog.askopenfilename(
+            title="Select Skeleton Pose JSON",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+
     # Configuration summary
     print("Configuration complete:")
     print(f"  - DLT3D files: {len(dlt_files)} cameras")
     print(f"  - Pixel files: {len(pixel_files)} cameras")
     print(f"  - Output directory: {output_directory}")
     print(f"  - Data rate: {point_rate} Hz")
+    print(f"  - Swap Y/Z for BVH: {swap_yz}")
+    print(
+        f"  - Skeleton JSON: {os.path.basename(skeleton_json_path) if skeleton_json_path else 'None'}"
+    )
     print("-" * 80)
 
-    run_reconstruction(dlt_files, pixel_files, output_directory, point_rate, gui=True)
+    run_reconstruction(
+        dlt_files,
+        pixel_files,
+        output_directory,
+        point_rate,
+        gui=True,
+        swap_yz=swap_yz,
+        skeleton_json_path=skeleton_json_path,
+    )
     root.destroy()
 
 
@@ -535,6 +891,16 @@ See also: vaila/help/rec3d_one_dlt3d.md
         action="store_true",
         help="Launch GUI (file dialogs) instead of CLI",
     )
+    parser.add_argument(
+        "--swap-yz",
+        action="store_true",
+        help="Swap Y and Z axes in BVH output (optimized for Blender Z-up)",
+    )
+    parser.add_argument(
+        "--skeleton",
+        metavar="FILE",
+        help="Path to Skeleton Pose JSON file (defines connections for Blender visualization)",
+    )
     args = parser.parse_args()
 
     if args.gui or (not args.dlt3d and not args.pixels and not args.output):
@@ -542,6 +908,10 @@ See also: vaila/help/rec3d_one_dlt3d.md
         return
 
     if not args.dlt3d or not args.pixels:
+        # Check if user only provided --gui (already handled) but maybe they provided partial args
+        if args.gui:
+            run_rec3d_one_dlt3d()
+            return
         print("Error: CLI mode requires --dlt3d and --pixels.", file=sys.stderr)
         sys.exit(1)
     if not args.output:
@@ -560,6 +930,8 @@ See also: vaila/help/rec3d_one_dlt3d.md
         os.path.abspath(args.output),
         args.fps,
         gui=False,
+        swap_yz=args.swap_yz,
+        skeleton_json_path=args.skeleton,
     )
     if result is None:
         sys.exit(1)

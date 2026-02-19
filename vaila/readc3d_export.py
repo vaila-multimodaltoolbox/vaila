@@ -1975,12 +1975,12 @@ def batch_convert_c3d_to_csv():
     if successful_files:
         log_file.write(f"\nSUCCESSFUL CONVERSIONS ({len(successful_files)}):\n")
         for file in successful_files:
-            log_file.write(f"  ✓ {file}\n")
+            log_file.write(f"  [OK] {file}\n")
 
     if failed_files:
         log_file.write(f"\nFAILED CONVERSIONS ({len(failed_files)}):\n")
         for file, error in error_details:
-            log_file.write(f"  ✗ {file} - Error: {error}\n")
+            log_file.write(f"  [FAIL] {file} - Error: {error}\n")
 
     # Analyze error patterns
     if error_details:

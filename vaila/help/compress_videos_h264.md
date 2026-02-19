@@ -3,64 +3,77 @@
 ## 📋 Module Information
 
 - **Category:** Tools
-- **File:** `vaila\compress_videos_h264.py`
-- **Lines:** 635
-- **Size:** 21986 characters
-
-
+- **File:** `vaila/compress_videos_h264.py`
+- **Version:** 0.3.24
 - **GUI Interface:** ✅ Yes
+- **CLI Interface:** ✅ Yes
 
 ## 📖 Description
 
+Compresses videos in a specified directory to **H.264 (AVC)** format using FFmpeg.
+Supports both a **GUI** (Tkinter dialog) and **CLI** (`argparse`) interface.
 
-vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
+### Key Features
 
-Licensed under GNU Lesser General Public License v3.0
+- **GPU acceleration** with NVIDIA NVENC (auto-detected via `nvidia-smi`)
+- **macOS VideoToolbox** hardware encoding support
+- **CPU fallback** to `libx264` when no GPU is available
+- **Resolution control**: keep original or downscale to common resolutions
+- **Preset and CRF** selection for quality/speed trade-off
+- **Cross-platform**: Windows, Linux, macOS
 
-compress_videos_h264.py
+## 🚀 Usage
 
-Description:
-This script compresses videos in a specified directory to H.264 format using the FFmpeg tool.
-It provides a GUI for selecting the directory containing the videos and processes each video,
-saving the compressed versions in a subdirectory named 'compressed_h264'.
-The script supports GPU acceleration using NVIDIA NVENC if available or falls back to CPU encoding
-with libx264.
+### GUI Mode (from vailá)
 
-Usage:
-- Run the script to open a GUI, select the directory containing the videos,
-  and the compression process will start automatically.
+Select **Compress → H.264 (AVC)** in the vailá toolbox.
 
-Requirements:
-- FFmpeg must be installed and accessible in the system PATH.
-- The script is designed to work on Windows, Linux, and macOS.
+### CLI Mode
 
-Dependencies:
-- Python 3.x
-- Tkinter (included with Python)
-- FFmpeg (...
+```bash
+# Basic usage (medium preset, CRF 23, original resolution)
+python -m vaila.compress_videos_h264 --dir /path/to/videos
+
+# With GPU acceleration
+python -m vaila.compress_videos_h264 --dir /path/to/videos --gpu
+
+# Custom quality and resolution
+python -m vaila.compress_videos_h264 --dir /path/to/videos --preset slow --crf 20 --resolution 1920x1080
+
+# Force CPU only
+python -m vaila.compress_videos_h264 --dir /path/to/videos --no-gpu
+```
+
+### CLI Options
+
+| Option               | Default    | Description                            |
+| -------------------- | ---------- | -------------------------------------- |
+| `--dir`              | (required) | Directory containing videos            |
+| `--preset`           | `medium`   | Encoding preset: ultrafast → veryslow  |
+| `--crf`              | `23`       | Quality (0-51). Lower = better quality |
+| `--resolution`       | `original` | Output resolution (e.g. `1920x1080`)   |
+| `--gpu` / `--no-gpu` | auto       | Force GPU or CPU encoding              |
 
 ## 🔧 Main Functions
 
-**Total functions found:** 9
+- `is_nvidia_gpu_available` — Detect NVIDIA GPU via `nvidia-smi`
+- `verify_nvenc_encoder` — Test that h264_nvenc actually works
+- `find_videos` — Find video files in a directory
+- `create_temp_file_with_videos` — Create temp file list for batch processing
+- `run_compress_videos_h264` — Core compression logic
+- `get_compression_parameters` — GUI parameter dialog
+- `compress_videos_h264_gui` — GUI entry point
+- `build_parser` — Build argparse CLI parser
+- `main` — CLI/GUI entry point
 
-- `is_nvidia_gpu_available`
-- `find_videos`
-- `create_temp_file_with_videos`
-- `run_compress_videos_h264`
-- `get_compression_parameters`
-- `compress_videos_h264_gui`
-- `on_ok`
-- `on_cancel`
-- `show_help`
+## 📋 Requirements
 
-
-
+- **FFmpeg** installed and in PATH
+- Python 3.x with Tkinter
+- Optional: NVIDIA GPU with NVENC-capable FFmpeg
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
+📅 **Updated:** 18/02/2026
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

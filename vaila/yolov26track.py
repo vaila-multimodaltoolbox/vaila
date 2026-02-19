@@ -82,7 +82,7 @@ import yaml
 from rich import print
 from ultralytics import YOLO
 
-from .HardwareManager import HardwareManager
+from .hardware_manager import HardwareManager
 
 # Import PIL for image display
 try:
@@ -1033,13 +1033,13 @@ class TrackerConfigDialog(simpledialog.Dialog):
             is_valid, message = validate_device_choice(device)
             if is_valid:
                 if device == "cpu":
-                    self.device_status.config(text="✓ " + message, fg="blue")  # Blue for CPU
+                    self.device_status.config(text="[OK] " + message, fg="blue")  # Blue for CPU
                 elif device == "mps":
-                    self.device_status.config(text="✓ " + message, fg="purple")  # Purple for MPS
+                    self.device_status.config(text="[OK] " + message, fg="purple")  # Purple for MPS
                 else:  # cuda
-                    self.device_status.config(text="✓ " + message, fg="green")  # Green for CUDA
+                    self.device_status.config(text="[OK] " + message, fg="green")  # Green for CUDA
             else:
-                self.device_status.config(text="⚠ " + message, fg="orange")
+                self.device_status.config(text="[WARNING] " + message, fg="orange")
 
         self.device_var.trace_add("write", update_device_status)
         update_device_status()  # Initial update
@@ -3001,7 +3001,7 @@ def _process_pose_from_csv(
     # Prepare video writer for skeleton overlay
     frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore
     writer = cv2.VideoWriter(pose_video, fourcc, fps if fps > 0 else 25.0, (frame_w, frame_h))
 
     # Process each frame
@@ -3262,7 +3262,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
             frame_idx = 0
             writer = cv2.VideoWriter(
                 pose_video,
-                cv2.VideoWriter_fourcc(*"mp4v"),
+                cv2.VideoWriter_fourcc(*"mp4v"),  # type: ignore
                 fps if fps > 0 else 25.0,
                 (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))),
             )
@@ -3538,14 +3538,15 @@ def run_yolov26track():
             # Use MJPG codec for AVI (highly compatible and reliable)
             # This ensures the video is written correctly without corruption
             writer = cv2.VideoWriter(
-                temp_avi_path, cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)
+                temp_avi_path, cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)  # type: ignore
             )
             if not writer.isOpened():
                 print(f"Error creating video file: {temp_avi_path}")
                 print("Trying alternative codec...")
                 # Fallback to XVID if MJPG fails
+                print("[WARNING] MJPG failed. Trying XVID...")
                 writer = cv2.VideoWriter(
-                    temp_avi_path, cv2.VideoWriter_fourcc(*"XVID"), fps, (width, height)
+                    temp_avi_path, cv2.VideoWriter_fourcc(*"XVID"), fps, (width, height)  # type: ignore
                 )
                 if not writer.isOpened():
                     print("Error: Could not create video writer with any codec")

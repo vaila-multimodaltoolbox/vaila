@@ -1039,12 +1039,12 @@ def generate_html_report(fig, csv_file, results_dict, output_file, baseline_init
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 Ground Reaction Force Analysis Report</h1>
+            <h1> Ground Reaction Force Analysis Report</h1>
             <p>Load Cell Analysis - Ground Reaction Force (GRF)</p>
         </div>
         <div class="content">
             <div class="info-section">
-                <h2>📁 File Information</h2>
+                <h2>[DIR] File Information</h2>
                 <div class="info-grid">
                     <div class="info-item">
                         <strong>Analyzed File:</strong>
@@ -1066,12 +1066,12 @@ def generate_html_report(fig, csv_file, results_dict, output_file, baseline_init
             </div>
 
             <div class="info-section">
-                <h2>📈 Main Statistics</h2>
+                <h2> Main Statistics</h2>
                 {stats_html}
             </div>
 
             <div class="info-section">
-                <h2>🔍 Analysis Details</h2>
+                <h2> Analysis Details</h2>
                 <div class="info-grid">
                     <div class="info-item">
                         <strong>Surge Start (First Negative):</strong>
@@ -1098,7 +1098,7 @@ def generate_html_report(fig, csv_file, results_dict, output_file, baseline_init
             </div>
 
             <div class="plot-section">
-                <h2 style="color: #667eea; margin-bottom: 20px;">📉 Analysis Plots</h2>
+                <h2 style="color: #667eea; margin-bottom: 20px;"> Analysis Plots</h2>
                 <img src="data:image/png;base64,{plot_data}" alt="Analysis Plots">
             </div>
         </div>
@@ -1182,18 +1182,18 @@ def batch_process_directory(
             )
             if result:
                 processed_count += 1
-                print(f"✓ Successfully processed: {csv_file.name}")
+                print(f"[OK] Successfully processed: {csv_file.name}")
             else:
                 failed_count += 1
-                print(f"✗ Failed to process: {csv_file.name}")
+                print(f"[FAIL] Failed to process: {csv_file.name}")
         except Exception as e:
             failed_count += 1
-            print(f"✗ Error processing {csv_file.name}: {e}")
+            print(f"[FAIL] Error processing {csv_file.name}: {e}")
 
     print(f"\n{'=' * 60}")
     print("Batch processing completed!")
-    print(f"  ✓ Successfully processed: {processed_count}")
-    print(f"  ✗ Failures: {failed_count}")
+    print(f"  [OK] Successfully processed: {processed_count}")
+    print(f"  [FAIL] Failures: {failed_count}")
     print(f"  Output directory: {main_output_dir}")
     print(f"{'=' * 60}\n")
 

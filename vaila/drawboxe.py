@@ -71,9 +71,7 @@ def get_precise_video_metadata(video_path):
             "-show_streams",
             str(video_path),
         ]
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout)
 
         # Find video stream
@@ -330,9 +328,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
     # Now use ffmpeg to combine processed video with original audio and preserve metadata
     try:
         # Check if ffmpeg is available
-        subprocess.run(
-            ["ffmpeg", "-version"], capture_output=True, check=True
-        )
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
 
         fps_str = f"{fps:.6f}"
 
@@ -349,9 +345,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             "csv=p=0",
             str(input_path),
         ]
-        probe_result = subprocess.run(
-            probe_cmd, capture_output=True, text=True
-        )
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
         has_audio = probe_result.returncode == 0 and probe_result.stdout.strip() == "audio"
 
         # Build ffmpeg command to combine video with audio and preserve metadata
@@ -392,9 +386,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             ]
         )
 
-        subprocess.run(
-            cmd, capture_output=True, text=True, check=True
-        )
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         print(f"Combined video with audio and metadata: {os.path.basename(output_path)}")
 
@@ -520,9 +512,7 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
     command.append(str(temp_video_path))
 
     try:
-        subprocess.run(
-            command, check=True, capture_output=True, text=True
-        )
+        subprocess.run(command, check=True, capture_output=True, text=True)
         print(f"Created video from frames: {actual_frame_count} frames at {fps_str} fps")
     except subprocess.CalledProcessError as e:
         print(f"Error creating video from frames: {e.stderr}")
@@ -546,9 +536,7 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
                 "csv=p=0",
                 str(original_video_path),
             ]
-            probe_result = subprocess.run(
-                probe_cmd, capture_output=True, text=True
-            )
+            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
             has_audio = probe_result.returncode == 0 and probe_result.stdout.strip() == "audio"
 
             # Build command to combine video with audio and metadata
@@ -589,9 +577,7 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
                 ]
             )
 
-            subprocess.run(
-                combine_cmd, check=True, capture_output=True, text=True
-            )
+            subprocess.run(combine_cmd, check=True, capture_output=True, text=True)
 
             print(f"Combined with audio and metadata: {os.path.basename(output_path)}")
 
@@ -710,7 +696,9 @@ original_path = "{escaped_video_path}"
             toml_content += f"start_frame = {start}\n"
             toml_content += f"end_frame = {end}\n\n"
 
-    for i, (coords, selection, color) in enumerate(zip(coordinates, selections, colors, strict=False)):
+    for i, (coords, selection, color) in enumerate(
+        zip(coordinates, selections, colors, strict=False)
+    ):
         toml_content += f"""
 # ================================================================
 # BOX {i + 1}: {selection[1].upper()} - {selection[0].upper()} MODE
@@ -1069,13 +1057,13 @@ def get_box_coordinates(image_path, video_path=None):
         help_text = """
 DRAWBOXE - HELP
 
-🎯 HOW TO USE:
+ HOW TO USE:
 1. Select mode (Inside/Outside) and shape (Rectangle/Trapezoid/Free)
 2. Choose a color using RGB sliders or "Pick Color" button
 3. Left-click on the image to add points
 4. Use keys or buttons to finalize shapes
 
-⌨️ KEYS:
+ KEYS:
 • e: Toggle mode (Inside/Outside)
 • t: Toggle shape (Rectangle/Trapezoid/Free)
 • c: Activate color picker
@@ -1088,12 +1076,12 @@ DRAWBOXE - HELP
 • Enter: Save and exit
 • Right-click: Undo last point/shape
 
-🖱️ MOUSE:
+ MOUSE:
 • Left-click: Add point (definition)
 • Right-click: Remove last point/shape
 • Drag with "Pick Color": Select area for color
 
-📋 MODES:
+ MODES:
 • Inside: Fills the selected area
 • Outside: Fills everything except the selected area
 
@@ -1102,11 +1090,11 @@ DRAWBOXE - HELP
 • Trapezoid: 4 clicks (trapezoid points)
 • Free: Multiple clicks + 'z' key to close
 
-💾 FILES:
+ FILES:
 • Configuration saved as: [video]_dbox.toml
 • Processed video: [video]_dbox.mp4
 
-⚠️ IMPORTANT:
+[WARNING] IMPORTANT:
 • Clicks outside the image are ignored
 • Free polygons need at least 3 points
 • Use "Help" button for more information

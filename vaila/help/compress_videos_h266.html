@@ -21,12 +21,17 @@
         }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
         h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #2c3e50; }
         .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
         .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
         .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .cli-section { background: #e8f4f8; padding: 15px; border-left: 4px solid #17a2b8; margin: 15px 0; }
+        .warning { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        pre { background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #dee2e6; padding: 8px 12px; text-align: left; }
+        th { background: #f8f9fa; }
         .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
     </style>
 </head>
@@ -37,55 +42,71 @@
         <div class="module-info">
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
-            <p><strong>File:</strong> vaila\compress_videos_h266.py</p>
-            <p><strong>Lines:</strong> 352</p>
-            <p><strong>Size:</strong> 12061 characters</p>
-            <p><strong>Version:</strong> 0.0.1</p>
-            
+            <p><strong>File:</strong> vaila/compress_videos_h266.py</p>
+            <p><strong>Version:</strong> 0.0.2</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>CLI Interface:</strong> ✅ Yes</p>
         </div>
 
-        
+        <div class="warning">
+            <h3>⚠️ Important Notes</h3>
+            <ul>
+                <li>H.266/VVC encoding is <strong>EXTREMELY SLOW</strong> and CPU-intensive</li>
+                <li><strong>No GPU acceleration</strong> available for VVC</li>
+                <li>Requires FFmpeg compiled with <code>libvvenc</code> support</li>
+                <li>Standard system FFmpeg usually does <strong>NOT</strong> include libvvenc</li>
+            </ul>
+        </div>
 
         <div class="docstring">
             <h3>📖 Description</h3>
+            <p>Compresses videos to <strong>H.266 (VVC)</strong> format using FFmpeg with <code>libvvenc</code>.</p>
+            <ul>
+                <li><strong>Encoder check</strong> before starting (graceful error if libvvenc missing)</li>
+                <li><strong>QP-based quality</strong> (Quantization Parameter 0-51)</li>
+                <li><strong>Resolution control</strong>: keep original or downscale</li>
+                <li><strong>Cross-platform</strong>: Windows, Linux, macOS</li>
+            </ul>
+            <h4>Getting FFmpeg with libvvenc</h4>
+            <ul>
+                <li><strong>Windows</strong>: <a href="https://www.gyan.dev/ffmpeg/builds/">gyan.dev full build</a></li>
+                <li><strong>Linux/macOS</strong>: <a href="https://johnvansickle.com/ffmpeg/">johnvansickle.com static build</a></li>
+            </ul>
+            <p>Verify: <code>ffmpeg -encoders | grep vvenc</code></p>
+        </div>
+
+        <div class="cli-section">
+            <h3>🚀 CLI Usage</h3>
             <pre>
-compress_videos_h266.py
+# Basic usage
+python -m vaila.compress_videos_h266 --dir /path/to/videos
 
-Created by Paulo Santiago
-Date: 06 September 2025
-Update: 06 September 2025
-Version: 0.0.1
-Python Version: 3.12.11
-
-Description:
-This script compresses videos in a specified directory to H.266/VVC format using the FFmpeg tool
-and the libvvenc encoder. It provides a GUI for selecting the directory and compression settings.
-The compressed versions are saved in a subdirectory named 'compressed_h266'.
-
-
-vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
-
-Description:
-This script compresses videos in a specified directory to H.266/VVC format using the FFmpeg tool
-and the libvvenc encoder. It provides a GUI for selecting the directory and compression settings.
-The compressed versions are saved in a subdirectory named 'compressed_h266'.
-
-!!! IMPORTANT !!!
-- H.266/VVC encoding is EXTREMELY SLOW and CPU-intensive. Expect long processing times....</pre>
+# Custom quality and resolution
+python -m vaila.compress_videos_h266 --dir /path/to/videos --preset slow --qp 28 --resolution 1920x1080</pre>
+            <table>
+                <tr><th>Option</th><th>Default</th><th>Description</th></tr>
+                <tr><td><code>--dir</code></td><td>(required)</td><td>Directory containing videos</td></tr>
+                <tr><td><code>--preset</code></td><td>medium</td><td>ultrafast → veryslow</td></tr>
+                <tr><td><code>--qp</code></td><td>32</td><td>Quality (0-51). Lower = better</td></tr>
+                <tr><td><code>--resolution</code></td><td>original</td><td>e.g. 1920x1080</td></tr>
+            </table>
         </div>
 
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 7</p>
-            <ul><li><code>find_videos</code></li><li><code>create_temp_file_with_videos</code></li><li><code>run_compress_videos_h266</code></li><li><code>get_compression_parameters</code></li><li><code>compress_videos_h266_gui</code></li><li><code>on_ok</code></li><li><code>on_cancel</code></li></ul>
+            <ul>
+                <li><code>check_libvvenc_available</code> — Check libvvenc support</li>
+                <li><code>find_videos</code> — Find video files</li>
+                <li><code>run_compress_videos_h266</code> — Core VVC compression</li>
+                <li><code>get_compression_parameters</code> — GUI dialog</li>
+                <li><code>compress_videos_h266_gui</code> — GUI entry point</li>
+                <li><code>build_parser</code> — CLI parser</li>
+                <li><code>main</code> — CLI/GUI entry point</li>
+            </ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Updated: 18/02/2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

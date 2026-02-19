@@ -131,7 +131,7 @@ class HardwareManager:
         engine_path = self.models_dir / engine_name
 
         if engine_path.exists():
-            print(f"🚀 OPTIMIZED MODEL: Loading tailored TensorRT engine: {engine_path.name}")
+            print(f"OPTIMIZED MODEL: Loading tailored TensorRT engine: {engine_path.name}")
             return str(engine_path)
 
         # Check if we should auto-export:
@@ -152,29 +152,29 @@ class HardwareManager:
             return str(pt_path)
 
         print(
-            f"\n⚡ Auto-Exporting {model_name} for {self.gpu_info['name']} ({self.profile} Profile)..."
+            f"\nAuto-Exporting {model_name} for {self.gpu_info['name']} ({self.profile} Profile)..."
         )
         print(f"   Config: {self.config['desc']}")
 
         # 1. Export to ONNX
         onnx_path = self.models_dir / f"{model_name}.onnx"
         if not onnx_path.exists():
-            print("📦 Step 1/2: Exporting to ONNX...")
+            print("Step 1/2: Exporting to ONNX...")
             try:
                 model = YOLO(str(pt_path))
                 model.export(format="onnx", dynamic=True, simplify=True)
                 # Ultralytics exports to same dir as pt usually
             except Exception as e:
-                print(f"❌ ONNX export failed: {e}")
+                print(f"[FAIL] ONNX export failed: {e}")
                 return str(pt_path)
 
         if not onnx_path.exists():
             # Sometimes export names slightly differently or fails silently
-            print("❌ ONNX file not found after export attempt.")
+            print("[FAIL] ONNX file not found after export attempt.")
             return str(pt_path)
 
         # 2. Convert to Engine
-        print("⚙️  Step 2/2: Building TensorRT Engine (this takes a few minutes)...")
+        print("Step 2/2: Building TensorRT Engine (this takes a few minutes)...")
         precision_flag = f"--{self.config['precision']}"
 
         cmd = [
@@ -195,11 +195,11 @@ class HardwareManager:
             # User said "Auto-Export", implied background or explicit.
             # Let's print a success message.
 
-            print(f"✨ SUCCESS! Optimized engine created: {engine_name}")
+            print(f"SUCCESS! Optimized engine created: {engine_name}")
             return str(engine_path)
 
         except subprocess.CalledProcessError as e:
-            print("❌ TensorRT optimization failed.")
+            print("[FAIL] TensorRT optimization failed.")
             print(f"   Error: {e.stderr.decode('utf-8')[-200:] if e.stderr else 'Unknown'}")
             return str(pt_path)
 
