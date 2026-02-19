@@ -7,8 +7,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 5 February 2026
-Version: 0.3.16
+Update Date: 19 February 2026
+Version: 0.3.26
 
 Description:
 This script is designed to manage files and directories through a graphical user
@@ -587,39 +587,46 @@ def rename_files():
         messagebox.showerror("Error", f"Error renaming files: {e}")
 
 
-def _clean_text(text):
+def _clean_filename(filename):
     """
-    Auxiliary function to normalize strings:
-    - Remove accents
-    - Lowercase
-    - Replace ç with c
-    - Replace spaces and hyphens with _
-    - Remove special characters
+    Normalize filename:
+    - Split name and extension
+    - Lowercase extension
+    - Normalize name (remove accents, spaces to underscores, remove special chars)
+    - Remove dots from name
     """
-    # 1. Convert to string and lowercase
-    text = str(text).lower()
+    # Split into name and extension
+    name, ext = os.path.splitext(filename)
+    
+    # 1. Lowercase extension
+    ext = ext.lower()
 
-    # 2. Manual substitutions
-    text = text.replace("ç", "c")
+    # 2. Normalize name
+    # Convert to string and lowercase
+    name = str(name).lower()
 
-    # 3. Unicode normalization (remove accents)
-    nfkd_form = unicodedata.normalize("NFKD", text)
-    text = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    # Manual substitutions
+    name = name.replace("ç", "c")
 
-    # 4. Replace spaces and hyphens with underscore
-    text = text.replace(" ", "_").replace("-", "_")
+    # Unicode normalization (remove accents)
+    nfkd_form = unicodedata.normalize("NFKD", name)
+    name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-    # 5. Remove non-alphanumeric characters (keep only letters, numbers, _ and .)
-    # This preserves file extensions (e.g., .mp4)
-    text = re.sub(r"[^a-z0-9_.]", "", text)
+    # Replace spaces and hyphens with underscore
+    name = name.replace(" ", "_").replace("-", "_")
 
-    # 6. Remove duplicate underscores
-    text = re.sub(r"_+", "_", text)
+    # Remove non-alphanumeric characters (keep only letters, numbers, and _)
+    # We explicitly remove dots here to avoid "file..name" issues
+    name = re.sub(r"[^a-z0-9_]", "", name)
 
-    # 7. Remove underscore at edges (aesthetic)
-    text = text.strip("_")
+    # Remove duplicate underscores
+    name = re.sub(r"_+", "_", name)
 
-    return text
+    # Remove underscore at edges
+    name = name.strip("_")
+
+    # Reassemble
+    return f"{name}{ext}"
 
 
 def normalize_names():
@@ -630,8 +637,9 @@ def normalize_names():
     - Convert to lowercase
     - Remove accents
     - Replace spaces and hyphens with underscores
-    - Remove special characters
-    - Preserve file extensions
+    - Remove special characters and dots from the name (keeping extension)
+    - Enforce lowercase file extensions
+    - Handle duplicates by appending counters (e.g., _1, _2)
 
     WARNING: This action is irreversible!
     """
@@ -652,7 +660,10 @@ def normalize_names():
         "WARNING: Irreversible Action",
         f"This will rename ALL files and folders inside:\n{directory}\n\n"
         "Changes applied:\n"
-        "- Lowercase\n- Remove accents\n- Spaces to underscores\n- Remove special chars\n\n"
+        "- Lowercase filenames and extensions\n"
+        "- Remove accents and special chars\n"
+        "- Remove dots (except extension)\n"
+        "- Spaces to underscores\n\n"
         "Do you want to proceed?",
     )
 
@@ -668,15 +679,23 @@ def normalize_names():
         # 1. Normalize Files
         for filename in files:
             original_path = os.path.join(root, filename)
-            new_filename = _clean_text(filename)
+            new_filename = _clean_filename(filename)
             new_path = os.path.join(root, new_filename)
 
             if original_path != new_path:
-                # Check for collision
+                # Check for collision and resolve
                 if os.path.exists(new_path):
-                    print(f"Skipped (exists): {filename} -> {new_filename}")
-                    continue
-
+                    base, ext = os.path.splitext(new_filename)
+                    counter = 1
+                    while True:
+                        test_filename = f"{base}_{counter}{ext}"
+                        test_path = os.path.join(root, test_filename)
+                        if not os.path.exists(test_path):
+                            new_filename = test_filename
+                            new_path = test_path
+                            break
+                        counter += 1
+                
                 try:
                     os.rename(original_path, new_path)
                     print(f"File Renamed: {filename} -> {new_filename}")
@@ -687,14 +706,41 @@ def normalize_names():
         # 2. Normalize Directories
         for dirname in dirs:
             original_path = os.path.join(root, dirname)
-            new_dirname = _clean_text(dirname)
+            # Directories don't have extensions in the same way, but we treat them as names
+            # Reuse _clean_filename logic but treat whole thing as name if no dot?
+            # Actually _clean_filename splits by last dot. For dirs, we usually want to keep it simple.
+            # Let's use a simpler logic for dirs or reuse _clean_filename if we accept . in dir names as separators?
+            # Standardizing: treat dirs as "names" without extensions for safety, 
+            # OR allow "v1.0" folders. 
+            # Given user request "Remove `.` no nome", we should probably remove dots from dir names too unless it looks like a version.
+            # For simplicity and consistency with "Remove `.` no nome", let's treat dir name as the "name" part.
+            
+            # Custom logic for directories: treat as name only (no extension)
+            # 1. Lowercase
+            # 2. Clean
+            d_name = str(dirname).lower()
+            d_name = d_name.replace("ç", "c")
+            d_nfkd = unicodedata.normalize("NFKD", d_name)
+            d_name = "".join([c for c in d_nfkd if not unicodedata.combining(c)])
+            d_name = d_name.replace(" ", "_").replace("-", "_")
+            d_name = re.sub(r"[^a-z0-9_]", "", d_name) # Remove dots too
+            d_name = re.sub(r"_+", "_", d_name)
+            new_dirname = d_name.strip("_")
+
             new_path = os.path.join(root, new_dirname)
 
             if original_path != new_path:
                 # Check for collision
                 if os.path.exists(new_path):
-                    print(f"Skipped (exists): {dirname} -> {new_dirname}")
-                    continue
+                     counter = 1
+                     while True:
+                        test_dirname = f"{new_dirname}_{counter}"
+                        test_path = os.path.join(root, test_dirname)
+                        if not os.path.exists(test_path):
+                            new_dirname = test_dirname
+                            new_path = test_path
+                            break
+                        counter += 1
 
                 try:
                     os.rename(original_path, new_path)

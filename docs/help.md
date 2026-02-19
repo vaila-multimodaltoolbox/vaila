@@ -11,7 +11,7 @@ vailá is an open-source multimodal toolbox for human movement analysis. It inte
 - **Data Integration:** Supports multiple data types (IMU, MoCap, markerless, face mesh, GNSS, EMG).
 - **Data Processing & Analysis:** Feature extraction, advanced analysis, and 2D/3D visualization.
 - **Machine Learning:** Modules for training, validation, and prediction using ML models.
-- **File Management:** Organization, renaming, copying, file movement, and file transfer (SSH).
+- **File Management:** Organization, smart renaming (normalization), copying, file movement, and file transfer (SSH).
 - **Video Processing:** Extraction of frames, compression (H.264 and H.265), and video trimming.
 
 ### Installation Instructions
@@ -106,7 +106,12 @@ The vailá toolbox comprises the following modules:
   - File Transfer (SSH - Upload/Download)
 - **Video Processing:**
   - DrawBoxe - Draw boxes and polygons on videos
+  - Stroboscopic Generator - Create chronophotography images
 - **Visualization**
+
+### File Manager Documentation
+
+- **[File Manager Help](../vaila/help/filemanager_help.html)** - Detailed guide on organizing, normalizing, and managing files with vailá.
 
 ### How to Use
 
@@ -161,7 +166,7 @@ vailá é uma ferramenta multimodal de código aberto para análise do movimento
 - **Integração de Dados:** Suporte a múltiplos tipos de dados (IMU, MoCap, markerless, face mesh, GNSS, EMG).
 - **Processamento & Análise de Dados:** Extração de características, análise avançada e visualização em 2D/3D.
 - **Machine Learning:** Módulos para treinamento, validação e predição utilizando modelos de ML.
-- **Gerenciamento de Arquivos:** Organização, renomeação, cópia, movimentação e transferência (SSH) de arquivos.
+- **Gerenciamento de Arquivos:** Organização, renomeação inteligente (normalização), cópia, movimentação e transferência (SSH) de arquivos.
 - **Processamento de Vídeo:** Extração de frames, compressão (H.264 e H.265) e corte de vídeos.
 
 ### Instruções de Instalação
@@ -244,6 +249,10 @@ O toolbox vailá é composto pelos seguintes módulos:
 - **Processamento de Vídeo:**
   - DrawBoxe - Desenhar caixas e polígonos em vídeos
 - **Visualização**
+
+### Documentação do Gerenciador de Arquivos
+
+- **[Help do Gerenciador de Arquivos](../vaila/help/filemanager_help.html)** - Guia detalhado sobre organização, normalização e gerenciamento de arquivos com o vailá.
 
 ### Ferramentas de Processamento de Vídeo
 
