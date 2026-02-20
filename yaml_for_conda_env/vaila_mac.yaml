@@ -72,7 +72,7 @@ dependencies:
       - imufusion
       - neurokit2
       - biosppy
-      - antropy
+      - entropy
       - pykalman
       - numba
       - spm1d
