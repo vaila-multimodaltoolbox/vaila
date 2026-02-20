@@ -2081,7 +2081,7 @@ class Vaila(tk.Tk):
             # Import and run with current window as parent
             from vaila.interp_smooth_split import run_fill_split_dialog
 
-            run_fill_split_dialog()
+            run_fill_split_dialog(parent=self)
         except Exception:
             # Fallback: try subprocess if direct import fails
             try:
