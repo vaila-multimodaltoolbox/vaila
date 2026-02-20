@@ -1669,6 +1669,7 @@ def run_viewc3d(c3d_path=None):
         edited_c3d_object = viewer.edited_c3d_object
         original_points = viewer.original_points
         original_residuals = viewer.original_residuals
+        model = viewer.model
         # Build window title and fall through to setup block
         window_title = (
             f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | Frames: {num_frames} | FPS: {fps} | "
