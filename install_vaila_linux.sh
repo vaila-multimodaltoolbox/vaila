@@ -249,13 +249,6 @@ EOF
     # Make desktop entry executable (required for some desktop environments)
     chmod +x "$DESKTOP_ENTRY_PATH" 2>/dev/null || true
 
-    # Create a copy on the Desktop if it exists
-    if [ -d "$HOME/Desktop" ]; then
-        echo "Creating Desktop shortcut..."
-        cp "$DESKTOP_ENTRY_PATH" "$HOME/Desktop/vaila.desktop"
-        chmod +x "$HOME/Desktop/vaila.desktop" 2>/dev/null || true
-        echo "Desktop shortcut created at: $HOME/Desktop/vaila.desktop"
-    fi
 
     # For KDE Plasma, also create a .desktop file in the system applications directory
     if [ -d "/usr/share/applications" ]; then

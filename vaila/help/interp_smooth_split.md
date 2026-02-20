@@ -4,7 +4,7 @@
 
 - **Category:** Processing
 - **File:** `vaila/interp_smooth_split.py`
-- **Version:** 0.1.0
+- **Version:** 0.2.0
 - **Author:** Paulo R. P. Santiago
 - **GUI:** ✅ | **CLI:** ✅
 
@@ -18,7 +18,7 @@ Ferramenta para preencher dados em falta em ficheiros CSV (interpolação), suav
    Linear, cúbica, nearest, Kalman, Hampel; ou nenhuma / skip.
 
 2. **Suavização**  
-   Nenhuma, Savitzky-Golay, LOWESS, Kalman, Butterworth, Splines, ARIMA, mediana móvel.
+   Nenhuma, Savitzky-Golay, LOWESS, Kalman, Butterworth, Splines, ARIMA, Mediana Móvel, Hampel.
 
 3. **Configuração em TOML**  
    `smooth_config.toml`: fonte única de verdade. Ao aplicar no diálogo o ficheiro é gravado; a análise de qualidade e o processamento (GUI ou CLI) usam estes valores quando o ficheiro existir. O diretório de output também recebe uma cópia do TOML usado.
@@ -57,24 +57,25 @@ Se não for encontrado nenhum config, o script termina com erro (pode criar um T
 
 **Argumentos:**
 
-| Argumento | Descrição |
-|-----------|-----------|
-| `-i`, `--input` | Diretório com ficheiros CSV (obrigatório em modo CLI) |
-| `-o`, `--output` | Diretório de saída (opcional; por defeito é criado um subdir com timestamp dentro de `--input`) |
-| `-c`, `--config` | Caminho para `smooth_config.toml` (opcional) |
-| `--gui` | Abre a interface gráfica em vez de correr em CLI |
+| Argumento          | Descrição                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| `positional_input` | Ficheiro CSV ou Diretório com ficheiros CSV (substitui o `-i`)                                  |
+| `-i`, `--input`    | Ficheiro CSV ou Diretório (alternativa ao argumento posicional)                                 |
+| `-o`, `--output`   | Diretório de saída (opcional; por defeito é criado um subdir com timestamp dentro de `--input`) |
+| `-c`, `--config`   | Caminho para `smooth_config.toml` (opcional)                                                    |
+| `--gui`            | Abre a interface gráfica em vez de correr em CLI                                                |
 
 **Exemplos:**
 
 ```bash
-# Usar smooth_config.toml no diretório de entrada ou no cwd
-python -m vaila.interp_smooth_split --input ./data
+# Usar smooth_config.toml no diretório de entrada ou no cwd para processar um ficheiro
+python -m vaila.interp_smooth_split ./data/meuarquivo.csv
 
 # Indicar diretório de saída e ficheiro de config
-python -m vaila.interp_smooth_split -i ./data -o ./results -c ./smooth_config.toml
+python -m vaila.interp_smooth_split ./data -o ./results -c ./smooth_config.toml
 
 # Só indicar entrada; output = subdir com timestamp dentro de ./data
-python -m vaila.interp_smooth_split -i ./data
+python -m vaila.interp_smooth_split ./data
 ```
 
 ---
@@ -93,7 +94,7 @@ python -m vaila.interp_smooth_split -i ./data
 ## 🔧 Funções principais
 
 - `run_fill_split_dialog` — Abre o diálogo GUI e, após Apply, processamento em batch.
-- `run_batch(source_dir, config, dest_dir=None, use_messagebox=True)` — Processa todos os CSV em `source_dir` com a config dada; usado pela GUI e pela CLI.
+- `run_batch(source_path, config, dest_dir=None, use_messagebox=True)` — Processa um CSV ou todos os CSV em `source_path` com a config dada; usado pela GUI e pela CLI.
 - `process_file` — Processa um CSV com a configuração fornecida.
 - `load_smooth_config_for_analysis` / `save_smooth_config_toml` — Leitura/gravação de `smooth_config.toml`.
 - `winter_residual_analysis` — Análise de resíduos Winter (Butterworth, RMS, sugestão de fc).
