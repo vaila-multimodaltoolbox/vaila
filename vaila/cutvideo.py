@@ -71,13 +71,23 @@ import contextlib
 import datetime
 import json
 import os
+import platform
+
+# Configure SDL environment variables BEFORE importing pygame
+# to prevent EGL/OpenGL warnings and window manager crashes on Linux systems
+if platform.system() == "Linux":
+    os.environ["SDL_VIDEODRIVER"] = "x11"
+    os.environ["SDL_RENDER_DRIVER"] = "software"
+    os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
+    os.environ["SDL_VIDEO_X11_FORCE_EGL"] = "0"
+    os.environ["QT_LOGGING_RULES"] = "*.debug=false;qt.qpa.*=false"
+
 import subprocess
 import tempfile
 import threading
 import tomllib
 import wave
 from pathlib import Path
-from tkinter import Tk, filedialog, messagebox, simpledialog, ttk
 
 import cv2
 import numpy as np
@@ -132,21 +142,29 @@ def get_precise_video_metadata(video_path):
         r_frame_rate_str = video_stream.get("r_frame_rate", "0/0")
         avg_frame_rate_str = video_stream.get("avg_frame_rate", "0/0")
 
-        # Convert fraction strings to float
-        def fraction_to_float(frac_str):
+        # Convert fraction strings to float and extract exact numerator/denominator components
+        fps_num, fps_den = None, None
+        
+        def parse_fraction(frac_str):
             try:
                 if "/" in frac_str:
-                    num, den = map(int, frac_str.split("/"))
-                    return float(num) / den if den != 0 else 0.0
-                return float(frac_str)
+                    n, d = map(int, frac_str.split("/"))
+                    return (n, d, float(n) / d if d != 0 else 0.0)
+                val = float(frac_str)
+                return (int(val * 1000), 1000, val)
             except (ValueError, ZeroDivisionError):
-                return None
+                return (None, None, None)
 
-        r_fps = fraction_to_float(r_frame_rate_str)
-        avg_fps = fraction_to_float(avg_frame_rate_str)
+        r_n, r_d, r_fps = parse_fraction(r_frame_rate_str)
+        a_n, a_d, avg_fps = parse_fraction(avg_frame_rate_str)
 
-        # Use avg_frame_rate if available, otherwise r_frame_rate
-        fps = avg_fps if avg_fps and avg_fps > 0 else (r_fps if r_fps and r_fps > 0 else 30.0)
+        # Use avg_frame_rate if available and valid, otherwise r_frame_rate
+        if avg_fps and avg_fps > 0:
+            fps, fps_num, fps_den = avg_fps, a_n, a_d
+        elif r_fps and r_fps > 0:
+            fps, fps_num, fps_den = r_fps, r_n, r_d
+        else:
+            fps, fps_num, fps_den = 30.0, 30, 1
 
         # Get frame count if available
         nb_frames = None
@@ -168,6 +186,8 @@ def get_precise_video_metadata(video_path):
             "codec": video_stream.get("codec_name", "unknown"),
             "r_frame_rate": r_frame_rate_str,
             "avg_frame_rate": avg_frame_rate_str,
+            "fps_num": fps_num,
+            "fps_den": fps_den,
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
         }
@@ -186,6 +206,8 @@ def get_precise_video_metadata(video_path):
             "codec": "unknown",
             "r_frame_rate": None,
             "avg_frame_rate": None,
+            "fps_num": int(fps) if fps else 30,
+            "fps_den": 1,
         }
 
 
@@ -281,6 +303,17 @@ def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outpu
     output_dir: optional Path/str for planned output directory.
     per_cut_outputs: optional list of filenames (one per cut) to record planned outputs.
     """
+    
+    fps_num, fps_den = 30, 1
+    original_fps = fps
+    try:
+        mm = get_precise_video_metadata(video_path)
+        if fps is None or abs(fps - mm["fps"]) < 0.001:
+            fps_num = mm.get("fps_num", 30)
+            fps_den = mm.get("fps_den", 1)
+            original_fps = mm["fps"]
+    except Exception:
+        pass
     try:
         video_name = Path(video_path).stem
         # Convert path to POSIX format (forward slashes) for universal compatibility
@@ -314,8 +347,12 @@ def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outpu
             frame_count = end - start + 1
             if fps is not None and fps > 0:
                 # Use frame-count-based duration to avoid losing the last frame in timing
-                start_time = start_frame_1based / fps
-                duration = frame_count / fps
+                if abs(fps - original_fps) < 0.001 and fps_num and fps_den:
+                    start_time = (start_frame_1based * fps_den) / fps_num
+                    duration = (frame_count * fps_den) / fps_num
+                else:
+                    start_time = start_frame_1based / fps
+                    duration = frame_count / fps
                 end_time = start_time + duration
             else:
                 start_time = None
@@ -371,8 +408,12 @@ def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outpu
                 frame_count = end - start + 1
                 if fps is not None and fps > 0:
                     # Use frame-count-based duration to avoid losing the last frame in timing
-                    start_time = start_frame_1based / fps
-                    duration = frame_count / fps
+                    if abs(fps - original_fps) < 0.001 and fps_num and fps_den:
+                        start_time = (start_frame_1based * fps_den) / fps_num
+                        duration = (frame_count * fps_den) / fps_num
+                    else:
+                        start_time = start_frame_1based / fps
+                        duration = frame_count / fps
                     end_time = start_time + duration
                 else:
                     start_time = None
@@ -666,6 +707,7 @@ def load_sync_file_from_dialog(video_path):
                 )
                 return [], False, None
         except Exception as e:
+            from tkinter import messagebox
             messagebox.showerror("Error", f"Error loading TOML file: {e}")
             return [], False, None
 
@@ -773,6 +815,7 @@ def batch_process_sync_videos(video_path, sync_data):
 
 
 def play_video_with_cuts(video_path):
+    from tkinter import Tk, filedialog, messagebox, simpledialog, ttk
     pygame.init()
 
     # Initialize video capture with fallback conversion logic
@@ -942,6 +985,15 @@ def play_video_with_cuts(video_path):
     # Get precise video metadata using ffprobe
     metadata = get_precise_video_metadata(video_path)
     fps = metadata["fps"]  # Use precise float FPS
+    fps_num = metadata.get("fps_num", 30)
+    fps_den = metadata.get("fps_den", 1)
+    original_fps = fps
+
+    def get_time_s(f_count, current_fps):
+        if current_fps == original_fps and fps_num and fps_den:
+            return (f_count * fps_den) / fps_num
+        return f_count / current_fps if current_fps > 0 else 0.0
+
     original_width = metadata["width"]
     original_height = metadata["height"]
 
@@ -1001,7 +1053,7 @@ def play_video_with_cuts(video_path):
 
     def update_caption():
         pygame.display.set_caption(
-            f"{video_filename} (FPS: {fps:.2f}) | A:Audio M:Mute 0:AutoFit | Space:Play/Pause | ←→:Frame | S:Start E:End R:Reset DEL/D:Remove | L:List | F:Load TOML | Home/End:Jump Cut | PgUp/PgDn:Next Marker | G:Frame T:Time I/P:FPS | H:Help ESC:Save"
+            f"{video_filename} (FPS: {fps:.2f}) | A:Audio M:Mute 0:AutoFit +/-:Zoom Wheel:Zoom MMB:Pan | Space:Play/Pause | ←→:Frame | S:Start E:End R:Reset DEL/D:Remove | L:List | F:Load TOML | Home/End:Jump Cut | PgUp/PgDn:Next Marker | G:Frame T:Time I/P:FPS | H:Help ESC:Save"
         )
 
     def auto_fit_window():
@@ -1042,6 +1094,26 @@ def play_video_with_cuts(video_path):
     current_start = None
     using_sync_file = False
     sync_data = None  # Store sync data for batch processing
+    zoom_level = 1.0
+    offset_x = 0.0
+    offset_y = 0.0
+    panning = False
+
+    def clamp_pan_offsets():
+        nonlocal offset_x, offset_y
+        scale_fit = min(window_width / original_width, window_height / original_height)
+        zoomed_width = max(1, int(original_width * scale_fit * zoom_level))
+        zoomed_height = max(1, int(original_height * scale_fit * zoom_level))
+        max_x = max(0, zoomed_width - window_width)
+        max_y = max(0, zoomed_height - window_height)
+        offset_x = max(0.0, min(float(max_x), offset_x))
+        offset_y = max(0.0, min(float(max_y), offset_y))
+
+    def reset_zoom_pan():
+        nonlocal zoom_level, offset_x, offset_y
+        zoom_level = 1.0
+        offset_x = 0.0
+        offset_y = 0.0
 
     # Load existing cuts if available
     cuts = load_cuts_from_toml(video_path)
@@ -1066,7 +1138,7 @@ def play_video_with_cuts(video_path):
         if not audio_ready or not audio_loaded or audio_muted:
             return
         try:
-            pos_seconds = (frame_idx / fps) if fps > 0 else 0.0
+            pos_seconds = get_time_s(frame_idx, fps)
             pygame.mixer.music.set_pos(pos_seconds)
         except Exception as e:
             print(f"Audio seek failed: {e}")
@@ -1075,7 +1147,7 @@ def play_video_with_cuts(video_path):
         if not audio_ready or not audio_loaded or audio_muted:
             return
         try:
-            pos_seconds = (frame_idx / fps) if fps > 0 else 0.0
+            pos_seconds = get_time_s(frame_idx, fps)
             # start playback; looping once is enough for single video
             pygame.mixer.music.play(loops=0, start=pos_seconds)
         except Exception as e:
@@ -1112,7 +1184,7 @@ def play_video_with_cuts(video_path):
 
         # Center line (playhead)
         center_x = w // 2
-        current_time = current_f / fps_val if fps_val > 0 else 0.0
+        current_time = get_time_s(current_f, fps_val)
         center_sample_idx = int(current_time * sr)
 
         # Display about 2 seconds of audio across the width
@@ -1179,8 +1251,8 @@ def play_video_with_cuts(video_path):
 
         # Draw frame information and cut markers
         font = pygame.font.Font(None, 24)
-        time_seconds = frame_count / fps if fps > 0 else 0.0
-        time_total = total_frames / fps if fps > 0 else 0.0
+        time_seconds = get_time_s(frame_count, fps)
+        time_total = get_time_s(total_frames, fps)
         frame_text = font.render(
             f"Frame: {frame_count + 1}/{total_frames} ({time_seconds:.6f}s/{time_total:.6f}s)",
             True,
@@ -1299,6 +1371,8 @@ def play_video_with_cuts(video_path):
             "- G: Go to Frame Number (enter frame number as int)",
             "- T: Go to Time (enter time in seconds as float)",
             "- 0: Auto-fit window to screen",
+            "- + or =: Zoom In",
+            "- -: Zoom Out",
             "",
             "Audio Controls:",
             "- A: Toggle Audio Waveform Panel",
@@ -1330,7 +1404,9 @@ def play_video_with_cuts(video_path):
             "- Click on slider: Jump to frame",
             "- Click 'Loop' button: Toggle looping",
             "- Click 'Help' button: Show this dialog",
-            "- Mouse Wheel: Scroll help text",
+            "- Mouse Wheel (video area): Zoom in/out",
+            "- Middle mouse drag (video area): Pan when zoomed",
+            "- Mouse Wheel in this help: Scroll help text",
             "- Arrow Up/Down: Scroll help text",
             "- Drag window edges: Resize window",
             "",
@@ -1427,6 +1503,7 @@ def play_video_with_cuts(video_path):
         nonlocal cuts, video_path, using_sync_file, sync_data, fps
 
         if not cuts:
+            from tkinter import messagebox
             messagebox.showinfo("Info", "No cuts were marked!")
             return False
 
@@ -1684,32 +1761,23 @@ def play_video_with_cuts(video_path):
         if not ret:
             break
 
-        # Calculate scaling factors for width and height
-        scale_w = window_width / original_width
-        scale_h = window_height / original_height
-        scale = min(scale_w, scale_h)  # Use the smaller scale to fit in window
-
-        # Calculate new dimensions
-        new_width = int(original_width * scale)
-        new_height = int(original_height * scale)
-
-        # Calculate position to center the frame
-        x_offset = (window_width - new_width) // 2
-        y_offset = (window_height - new_height) // 2
-
-        # Resize frame while maintaining aspect ratio
-        frame = cv2.resize(frame, (new_width, new_height))
-
-        # Convert frame to pygame surface
+        # Base scale so that at zoom_level=1.0 the whole video fits in the window
+        scale_fit = min(window_width / original_width, window_height / original_height)
+        zoomed_width = max(1, int(original_width * scale_fit * zoom_level))
+        zoomed_height = max(1, int(original_height * scale_fit * zoom_level))
+        clamp_pan_offsets()
+        zoomed_frame = cv2.resize(frame, (zoomed_width, zoomed_height))
+        crop_x = int(offset_x)
+        crop_y = int(offset_y)
+        visible_w = max(1, min(window_width, zoomed_width - crop_x))
+        visible_h = max(1, min(window_height, zoomed_height - crop_y))
+        cropped_frame = zoomed_frame[crop_y : crop_y + visible_h, crop_x : crop_x + visible_w]
         frame_surface = pygame.surfarray.make_surface(
-            cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).swapaxes(0, 1)
+            cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB).swapaxes(0, 1)
         )
 
-        # Fill screen with black
         screen.fill((0, 0, 0))
-
-        # Draw frame at centered position
-        screen.blit(frame_surface, (x_offset, y_offset))
+        screen.blit(frame_surface, (0, 0))
 
         # Draw audio waveform panel if enabled
         if show_audio:
@@ -1745,6 +1813,11 @@ def play_video_with_cuts(video_path):
                 new_w, new_h = event.w, event.h
                 min_total_h = control_height + (audio_height if show_audio else 0) + 100
                 if new_h > min_total_h:
+<<<<<<< Current (Your changes)
+                    window_width = new_w
+                    window_height = new_h - control_height - (audio_height if show_audio else 0)
+                    screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
+=======
                     # Determine available height for video region
                     target_video_h = new_h - control_height - (audio_height if show_audio else 0)
                     target_video_h = max(240, target_video_h)
@@ -1759,6 +1832,8 @@ def play_video_with_cuts(video_path):
                         window_height = video_h_from_width
 
                     screen = set_display_mode()
+                    clamp_pan_offsets()
+>>>>>>> Incoming (Background Agent changes)
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -1812,8 +1887,16 @@ def play_video_with_cuts(video_path):
                             )
                     update_caption()
                 elif event.key == pygame.K_0:
+                    reset_zoom_pan()
                     screen = auto_fit_window()
+                    clamp_pan_offsets()
                     update_caption()
+                elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+                    zoom_level = min(10.0, zoom_level * 1.2)
+                    clamp_pan_offsets()
+                elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                    zoom_level = max(0.1, zoom_level / 1.2)
+                    clamp_pan_offsets()
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                     if paused:
@@ -1940,22 +2023,42 @@ def play_video_with_cuts(video_path):
                     pygame.display.quit()
                     root_fps = Tk()
                     root_fps.withdraw()
-                    new_fps = simpledialog.askfloat(
+                    new_fps_str = simpledialog.askstring(
                         "Input FPS",
-                        f"Enter new FPS value (current: {fps:.6f}):",
-                        initialvalue=fps,
-                        minvalue=0.1,
-                        maxvalue=1000.0,
+                        f"Enter new FPS value (current: {fps:.6f}):\n(You can enter a float or a fraction like 60000/1001)",
+                        initialvalue=str(fps),
                     )
                     root_fps.destroy()
                     # Reinitialize pygame display
                     screen = set_display_mode()
-                    if new_fps is not None and new_fps > 0:
-                        fps = float(new_fps)
-                        print(f"FPS updated to: {fps:.6f}")
-                        # Update window title with new FPS
-                        update_caption()
-                        messagebox.showinfo("FPS Updated", f"FPS set to {fps:.6f}")
+                    if new_fps_str:
+                        try:
+                            val = None
+                            if "/" in new_fps_str:
+                                num, den = map(int, new_fps_str.split("/"))
+                                if den != 0:
+                                    val = float(num) / den
+                                    fps_num, fps_den = num, den
+                            else:
+                                val = float(new_fps_str)
+                                fps_num, fps_den = int(val * 1000), 1000
+                            
+                            if val is not None and val > 0:
+                                fps = val
+                                original_fps = fps # Force exact matching to get_time_s
+                                print(f"FPS updated to: {fps:.6f} ({fps_num}/{fps_den})")
+                                update_caption()
+                                
+                                # Spawn temporary root for messagebox to ensure it closes properly on Linux
+                                msg_root = Tk()
+                                msg_root.withdraw()
+                                messagebox.showinfo("FPS Updated", f"FPS set to {fps:.6f} ({fps_num}/{fps_den})", parent=msg_root)
+                                msg_root.destroy()
+                                
+                            else:
+                                print("Invalid FPS value entered.")
+                        except ValueError:
+                            print("Invalid FPS format entered.")
                     else:
                         # Keep original caption if FPS was not updated
                         update_caption()
@@ -1989,8 +2092,8 @@ def play_video_with_cuts(video_path):
                     pygame.display.quit()
                     root_time = Tk()
                     root_time.withdraw()
-                    current_time = frame_count / fps if fps > 0 else 0.0
-                    max_time = total_frames / fps if fps > 0 else 0.0
+                    current_time = get_time_s(frame_count, fps)
+                    max_time = get_time_s(total_frames, fps)
                     target_time = simpledialog.askfloat(
                         "Go to Time",
                         f"Enter time in seconds (current: {current_time:.2f}s, max: {max_time:.2f}s):",
@@ -2004,27 +2107,63 @@ def play_video_with_cuts(video_path):
                     update_caption()
                     if target_time is not None and fps > 0:
                         # Convert time to frame (0-based)
-                        target_frame_float = target_time * fps
+                        if fps == original_fps and fps_num and fps_den:
+                            target_frame_float = (target_time * fps_num) / fps_den
+                        else:
+                            target_frame_float = target_time * fps
                         frame_count = min(max(0, int(round(target_frame_float))), total_frames - 1)
-                        actual_time = frame_count / fps
+                        actual_time = get_time_s(frame_count, fps)
                         print(f"Jumped to time: {actual_time:.2f}s (frame: {frame_count + 1})")
                         paused = True  # Pause when jumping to time
                     pygame.display.flip()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
-                if help_button_rect.collidepoint(x, y - base_y):
-                    show_help_dialog()
-                elif loop_button_rect.collidepoint(x, y - base_y):
-                    loop_enabled = not loop_enabled
-                    if not loop_enabled:
-                        stop_audio_playback()
-                    screen = set_display_mode()
-                    update_caption()
-                elif slider_y <= y - base_y <= slider_y + slider_height:
-                    rel_x = x - slider_x
-                    frame_count = int((rel_x / slider_width) * total_frames)
-                    frame_count = max(0, min(frame_count, total_frames - 1))
-                    paused = True
+                if event.button == 2 and y < window_height:
+                    panning = True
+                    pygame.mouse.get_rel()
+                elif event.button == 1:
+                    if help_button_rect.collidepoint(x, y - base_y):
+                        show_help_dialog()
+                    elif loop_button_rect.collidepoint(x, y - base_y):
+                        loop_enabled = not loop_enabled
+                        if not loop_enabled:
+                            stop_audio_playback()
+                        screen = set_display_mode()
+                        clamp_pan_offsets()
+                        update_caption()
+                    elif slider_y <= y - base_y <= slider_y + slider_height:
+                        rel_x = x - slider_x
+                        frame_count = int((rel_x / slider_width) * total_frames)
+                        frame_count = max(0, min(frame_count, total_frames - 1))
+                        paused = True
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 2:
+                    panning = False
+            elif event.type == pygame.MOUSEMOTION:
+                if panning:
+                    rel_dx, rel_dy = pygame.mouse.get_rel()
+                    offset_x -= rel_dx
+                    offset_y -= rel_dy
+                    clamp_pan_offsets()
+            elif event.type == pygame.MOUSEWHEEL:
+                mx, my = pygame.mouse.get_pos()
+                if my < window_height and event.y != 0:
+                    scale_fit = min(window_width / original_width, window_height / original_height)
+                    old_zoom = zoom_level
+                    zoom_factor = 1.1
+                    if event.y > 0:
+                        zoom_level = min(10.0, zoom_level * zoom_factor)
+                    else:
+                        zoom_level = max(0.1, zoom_level / zoom_factor)
+
+                    if zoom_level != old_zoom:
+                        old_effective = scale_fit * old_zoom
+                        new_effective = scale_fit * zoom_level
+                        target_vx = (mx + offset_x) / old_effective
+                        target_vy = (my + offset_y) / old_effective
+                        offset_x = (target_vx * new_effective) - mx
+                        offset_y = (target_vy * new_effective) - my
+                        clamp_pan_offsets()
 
         if paused:
             # Se pausado, não limitamos a taxa de FPS para que a interface seja responsiva
@@ -2045,6 +2184,7 @@ def play_video_with_cuts(video_path):
 
 
 def get_video_path():
+    from tkinter import Tk, filedialog
     root = Tk()
     root.withdraw()
     video_path = filedialog.askopenfilename(
@@ -2080,21 +2220,11 @@ def run_cutvideo():
     print(f"Script directory: {Path(__file__).parent}")
     print("Starting cutvideo.py...")
 
-    # Platform-specific adjustments
     import platform
-
     if platform.system() == "Linux":
-        try:
-            # Check if we're on Linux and if NVIDIA drivers are present
-            has_nvidia = os.path.exists("/proc/driver/nvidia")
-            if has_nvidia:
-                print("NVIDIA GPU detected, applying OpenGL compatibility settings")
-
-            # Set OpenGL to software rendering as a fallback for Mesa/OpenGL issues on Linux
-            os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"
-            os.environ["SDL_VIDEODRIVER"] = "x11"
-        except Exception:
-            print("If you experience graphics issues, try running: export LIBGL_ALWAYS_SOFTWARE=1")
+        has_nvidia = os.path.exists("/proc/driver/nvidia")
+        if has_nvidia:
+            print("NVIDIA GPU detected, applying OpenGL compatibility settings")
 
     video_path = get_video_path()
     if not video_path:
