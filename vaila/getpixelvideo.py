@@ -159,6 +159,108 @@ except ImportError:
 # Removed native_file_dialog imports - now using Tkinter directly for all dialogs
 
 
+def get_precise_video_metadata(video_path):
+    """
+    Get precise video metadata using ffprobe to avoid rounding errors.
+    Returns dict with fps (float), width, height, codec, etc.
+    """
+    try:
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            str(video_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+
+        # Find video stream
+        video_stream = None
+        for stream in data.get("streams", []):
+            if stream.get("codec_type") == "video":
+                video_stream = stream
+                break
+
+        if not video_stream:
+            # Fallback to OpenCV if ffprobe fails
+            cap = cv2.VideoCapture(str(video_path))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
+            return {
+                "fps": fps,
+                "width": width,
+                "height": height,
+                "codec": "unknown",
+                "r_frame_rate": None,
+                "avg_frame_rate": None,
+            }
+
+        # Get precise FPS from r_frame_rate or avg_frame_rate
+        r_frame_rate_str = video_stream.get("r_frame_rate", "0/0")
+        avg_frame_rate_str = video_stream.get("avg_frame_rate", "0/0")
+
+        # Convert fraction strings to float
+        def fraction_to_float(frac_str):
+            try:
+                if "/" in frac_str:
+                    num, den = map(int, frac_str.split("/"))
+                    return float(num) / den if den != 0 else 0.0
+                return float(frac_str)
+            except (ValueError, ZeroDivisionError):
+                return None
+
+        r_fps = fraction_to_float(r_frame_rate_str)
+        avg_fps = fraction_to_float(avg_frame_rate_str)
+
+        # Use avg_frame_rate if available, otherwise r_frame_rate
+        fps = avg_fps if avg_fps and avg_fps > 0 else (r_fps if r_fps and r_fps > 0 else 30.0)
+
+        # Get frame count if available
+        nb_frames = None
+        try:
+            if "nb_frames" in video_stream and video_stream["nb_frames"] not in (None, "N/A", ""):
+                nb_frames = int(video_stream["nb_frames"])
+        except (ValueError, TypeError):
+            nb_frames = None
+
+        # Calculate frame count from duration and FPS if nb_frames not available
+        duration = float(data.get("format", {}).get("duration", 0))
+        if nb_frames is None and duration > 0 and fps > 0:
+            nb_frames = int(round(duration * fps))
+
+        return {
+            "fps": fps,
+            "width": video_stream.get("width"),
+            "height": video_stream.get("height"),
+            "codec": video_stream.get("codec_name", "unknown"),
+            "r_frame_rate": r_frame_rate_str,
+            "avg_frame_rate": avg_frame_rate_str,
+            "duration": duration if duration > 0 else None,
+            "nb_frames": nb_frames,
+        }
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+        # Fallback to OpenCV if ffprobe is not available
+        print(f"Warning: ffprobe not available or failed, using OpenCV fallback: {e}")
+        cap = cv2.VideoCapture(str(video_path))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+        return {
+            "fps": fps,
+            "width": width,
+            "height": height,
+            "codec": "unknown",
+            "r_frame_rate": None,
+            "avg_frame_rate": None,
+        }
+
 def get_color_for_id(marker_id):
     """Generate a consistent color for a given marker ID."""
     colors = [
@@ -1047,10 +1149,18 @@ def play_video_with_controls(
         labels = []
 
     # Video properties
-    original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    metadata = get_precise_video_metadata(video_path)
+    fps = metadata["fps"]
+    original_width = metadata["width"] or int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    original_height = metadata["height"] or int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    # Calculate total frames from metadata if available, otherwise use OpenCV
+    total_frames = metadata.get("nb_frames")
+    if total_frames is None:
+        if metadata.get("duration") and fps > 0:
+            total_frames = int(round(metadata["duration"] * fps))
+        else:
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Initialize coordinates if not provided
     if coordinates is None:
@@ -1178,17 +1288,15 @@ def play_video_with_controls(
                 save_message_timer = 90
                 return
 
-            # Get video properties
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
-            if fps == 0:
-                fps = 30  # Default FPS if not available
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            total_frames_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            # Get video properties (using the precise outer variables to ensure preservation)
+            fps_write = fps
+            width_write = original_width
+            height_write = original_height
+            total_frames_video = total_frames
 
             # Create video writer (temporary file without audio)
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            out = cv2.VideoWriter(temp_video, fourcc, fps, (width, height))
+            out = cv2.VideoWriter(temp_video, fourcc, fps_write, (width_write, height_write))
 
             if not out.isOpened():
                 save_message_text = "Error: Could not create output video"
@@ -1217,9 +1325,9 @@ def play_video_with_controls(
                         frame = np.zeros((height, width, 3), dtype=np.uint8)
 
                 # Verify frame dimensions
-                if frame.shape[0] != height or frame.shape[1] != width:
+                if frame.shape[0] != height_write or frame.shape[1] != width_write:
                     print(f"Warning: Frame {frame_idx} has wrong dimensions, resizing...")
-                    frame = cv2.resize(frame, (width, height))
+                    frame = cv2.resize(frame, (width_write, height_write))
 
                 # OpenCV uses BGR natively, so we work directly with the frame
 
@@ -1944,13 +2052,13 @@ def play_video_with_controls(
         display_total = (
             total_frames if total_frames and total_frames > 0 else max(1, frame_count + 1)
         )
-        frame_info = font.render(f"Frame: {frame_count + 1}/{display_total}", True, (255, 255, 255))
-        control_surface.blit(frame_info, (slider_margin_left, slider_y - 25))
-
-        # Draw auto-marking indicator if enabled
-        if auto_marking_mode:
-            auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
-            control_surface.blit(auto_indicator, (slider_margin_left + 300, slider_y - 25))
+        time_seconds = (frame_count / fps) if fps and fps > 0 else 0.0
+        time_total = (display_total / fps) if fps and fps > 0 else 0.0
+        frame_info = font.render(f"Frame: {frame_count + 1}/{display_total} ({time_seconds:.6f}s/{time_total:.6f}s)", True, (255, 255, 255))
+        
+        info_x = slider_margin_left
+        control_surface.blit(frame_info, (info_x, slider_y - 25))
+        info_x += frame_info.get_width() + 25
 
         # Draw marker navigation and persistence info
         if one_line_mode:
@@ -1964,7 +2072,17 @@ def play_video_with_controls(
             marker_info = font.render(
                 f"Marker: {marker_idx}/{total_markers}", True, (255, 255, 255)
             )
-            control_surface.blit(marker_info, (slider_margin_left + 200, slider_y - 25))
+            control_surface.blit(marker_info, (info_x, slider_y - 25))
+            info_x += marker_info.get_width() + 25
+
+        # Draw auto-marking indicator if enabled
+        if auto_marking_mode:
+            auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
+            control_surface.blit(auto_indicator, (info_x, slider_y - 25))
+            info_x += auto_indicator.get_width() + 25
+
+        # We save info_x so it can be picked up by labeling text further down
+        _global_info_x = info_x
 
         # Draw button cluster in the lower-right corner.
         button_width = 50
@@ -2207,14 +2325,15 @@ def play_video_with_controls(
         # Display current class label when in labeling mode
         if labeling_mode:
             class_info = font.render(f"Class: {current_label}", True, (255, 255, 0))
-            control_surface.blit(class_info, (slider_margin_left + 400, slider_y - 25))
+            control_surface.blit(class_info, (_global_info_x, slider_y - 25))
+            _global_info_x += class_info.get_width() + 25
 
         # Display tracking info when CSV is loaded
         if csv_loaded:
             tracking_info = font.render(
                 f"Tracking: {len(tracking_data)} frames", True, (150, 255, 150)
             )
-            control_surface.blit(tracking_info, (slider_margin_left + 200, slider_y - 45))
+            control_surface.blit(tracking_info, (slider_margin_left, slider_y - 45))
 
         # Display Speed Info
         speed_text = font.render(f"Speed: {playback_speed}X", True, (255, 255, 255))
@@ -4893,6 +5012,52 @@ def play_video_with_controls(
                 # Show help dialog with 'h'
                 elif event.key == pygame.K_h:
                     show_help_dialog()
+
+                # Input manual FPS
+                elif event.key == pygame.K_i or event.key == pygame.K_p:
+                    # Temporarily close pygame display to show tkinter dialog
+                    pygame.display.quit()
+                    import tkinter as tk
+                    from tkinter import Tk, simpledialog, messagebox
+                    
+                    root_fps = Tk()
+                    root_fps.withdraw()
+                    new_fps_str = simpledialog.askstring(
+                        "Input FPS",
+                        f"Enter new FPS value (current: {fps:.6f}):\n(You can enter a float or a fraction like 60000/1001)",
+                        initialvalue=str(fps),
+                    )
+                    root_fps.destroy()
+                    # Reinitialize pygame display
+                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+                    if new_fps_str:
+                        try:
+                            val = None
+                            if "/" in new_fps_str:
+                                num, den = map(int, new_fps_str.split("/"))
+                                if den != 0:
+                                    val = float(num) / den
+                                    fps_num, fps_den = num, den
+                            else:
+                                val = float(new_fps_str)
+                                fps_num, fps_den = int(val * 1000), 1000
+                            
+                            if val is not None and val > 0:
+                                fps = val
+                                original_fps = fps
+                                print(f"FPS updated to: {fps:.6f} ({fps_num}/{fps_den})")
+                                
+                                # Spawn temporary root for messagebox to ensure it closes properly on Linux
+                                msg_root = Tk()
+                                msg_root.withdraw()
+                                messagebox.showinfo("FPS Updated", f"FPS set to {fps:.6f} ({fps_num}/{fps_den})", parent=msg_root)
+                                msg_root.destroy()
+                                
+                            else:
+                                print("Invalid FPS value entered.")
+                        except ValueError:
+                            print("Invalid FPS format entered.")
+                    pygame.display.flip()
 
                 # Adicionar novo marcador
                 elif event.key == pygame.K_a:
