@@ -405,8 +405,14 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 "4",
                 f"-{quality_param}",
                 preset_value,
-                output_video,
+                "-bf", "0",
+                "-fps_mode", "passthrough"
             ]
+            if "nvenc" in encoder:
+                ffmpeg_command.extend(["-tune", "hq", "-rc", "constqp", "-qp", "18"])
+            elif "libx264" in encoder:
+                ffmpeg_command.extend(["-crf", "18"])
+            ffmpeg_command.append(output_video)
 
             # Continue getting metadata for logging
             try:
@@ -922,8 +928,14 @@ def process_videos_frame_reverse_merge(
                 "4",
                 f"-{quality_param}",
                 preset_value,
-                output_video,
+                "-bf", "0",
+                "-fps_mode", "passthrough"
             ]
+            if "nvenc" in encoder:
+                ffmpeg_command.extend(["-tune", "hq", "-rc", "constqp", "-qp", "18"])
+            elif "libx264" in encoder:
+                ffmpeg_command.extend(["-crf", "18"])
+            ffmpeg_command.append(output_video)
 
             # Process video
             start_time = time.time()
@@ -1146,12 +1158,13 @@ def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_
                 video_path,
                 "-vf",
                 f"select='gte(n,{half_frame})',setpts=N/FR/TB",
-                "-vsync",
-                "0",
                 "-c:v",
                 encoder,
                 f"-{quality_param}",
                 preset_value,
+                "-crf", "18",
+                "-bf", "0",
+                "-fps_mode", "passthrough",
                 "-pix_fmt",
                 "yuv420p",  # libx264 works well with yuv420p
                 "-threads",
@@ -1231,7 +1244,7 @@ def process_videos_gui():
     # Ask user to select one of the four options
     operation_input = simpledialog.askstring(
         "Operation",
-        "Enter operation:\n'm' for merge (original+reverse)\n's' for split (keep second half)\n'f' for frame-based reverse merge\n'multi' for multi-video merge",
+        "Enter operation:\n'm' or '1' for merge (original+reverse)\n's' or '2' for split (keep second half)\n'f' or '3' for frame-based reverse merge\n'multi' or '4' for multi-video merge",
     )
 
     # Check if user cancelled the dialog
@@ -1241,24 +1254,28 @@ def process_videos_gui():
 
     operation = operation_input.strip().lower()
 
-    if not operation or operation not in ["m", "s", "f", "multi"]:
+    if not operation or operation not in ["m", "1", "s", "2", "f", "3", "multi", "4"]:
         messagebox.showerror(
             "Error",
-            "Invalid operation selected. Please enter 'm', 's', 'f', or 'multi'.",
+            "Invalid operation selected. Please enter 'm' (1), 's' (2), 'f' (3), or 'multi' (4).",
         )
         return
 
     # Print selected operation method
     operation_names = {
         "m": "MERGE (original + reverse)",
+        "1": "MERGE (original + reverse)",
         "s": "SPLIT (keep second half)",
+        "2": "SPLIT (keep second half)",
         "f": "FRAME-BASED REVERSE MERGE",
+        "3": "FRAME-BASED REVERSE MERGE",
         "multi": "MULTI-VIDEO MERGE",
+        "4": "MULTI-VIDEO MERGE",
     }
     print(f"Selected operation: '{operation}' - {operation_names.get(operation, 'UNKNOWN')}")
 
     # For multi-video merge, call the new module
-    if operation == "multi":
+    if operation in ["multi", "4"]:
         try:
             from vaila import merge_multivideos
 
@@ -1303,11 +1320,11 @@ def process_videos_gui():
             return
 
     # Call the appropriate function based on the selected operation
-    if operation == "m":
+    if operation in ["m", "1"]:
         process_videos_merge(source_dir, target_dir, use_text_file, text_file_path)
-    elif operation == "s":
+    elif operation in ["s", "2"]:
         process_videos_split(source_dir, target_dir, use_text_file, text_file_path)
-    elif operation == "f":
+    elif operation in ["f", "3"]:
         process_videos_frame_reverse_merge(source_dir, target_dir, use_text_file, text_file_path)
 
 
