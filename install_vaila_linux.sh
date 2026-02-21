@@ -538,33 +538,7 @@ install_with_uv() {
     fi
     echo "Dependencies installed successfully."
 
-    # --- FFmpeg static binary (optional) ---
-    echo ""
-    echo "---------------------------------------------"
-    echo "FFmpeg installation options"
-    echo "  [1] Use system FFmpeg (apt) — default"
-    echo "  [2] Download static FFmpeg with NVENC/VVC support"
-    echo "      (Recommended if you want GPU acceleration"
-    echo "       or H.266/VVC compression)"
-    echo "---------------------------------------------"
-    printf "Choose an option [1-2]: "
-    read FFMPEG_OPTION
-    FFMPEG_OPTION=${FFMPEG_OPTION:-1}
 
-    if [[ "$FFMPEG_OPTION" == "2" ]]; then
-        echo ""
-        echo "Downloading static FFmpeg..."
-        if [ -f "$VAILA_HOME/bin/download_ffmpeg.sh" ]; then
-            bash "$VAILA_HOME/bin/download_ffmpeg.sh" --force
-        else
-            echo "Warning: bin/download_ffmpeg.sh not found. Skipping."
-            echo "You can download it later with: bash bin/download_ffmpeg.sh"
-        fi
-    else
-        echo ""
-        echo "Using system FFmpeg from apt."
-        echo "To download static FFmpeg later, run: bash bin/download_ffmpeg.sh"
-    fi
 
     # Detect NVIDIA GPU
     echo ""
