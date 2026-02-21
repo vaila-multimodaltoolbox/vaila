@@ -279,20 +279,24 @@ def run_compress_videos_h264(input_list, output_dir, preset, crf, resolution, us
                 cmd.extend(["-vf", scale_filter])
 
             # Add encoding settings based on GPU availability
+            cmd.extend(["-fps_mode", "passthrough"])
+            
             if use_gpu:
                 nvenc_preset = NVENC_PRESET_MAP.get(preset, "p5")
                 cmd.extend([
                     "-c:v", "h264_nvenc",
                     "-preset", nvenc_preset,
-                    "-b:v", "5M",
-                    "-maxrate", "5M",
-                    "-bufsize", "10M",
+                    "-tune", "hq",
+                    "-rc", "constqp",
+                    "-qp", str(crf),  # Use CRF value as QP for NVENC
+                    "-bf", "0",       # No B-frames for temporal accuracy in kinematics
                 ])
             else:
                 cmd.extend([
                     "-c:v", "libx264",
                     "-preset", preset,
                     "-crf", str(crf),
+                    "-bf", "0",       # No B-frames for temporal accuracy in kinematics
                 ])
 
             # Add audio settings and output path
