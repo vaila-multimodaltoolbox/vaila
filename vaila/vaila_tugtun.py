@@ -1072,7 +1072,19 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
         except Exception as e:
             print(f"Warning: Failed to load TOML metadata {toml_path.name} - {e}")
     
-    fps = metadata.get('FPS', 30.0)
+    raw_fps = metadata.get('FPS', 30.0)
+    if isinstance(raw_fps, str) and '/' in raw_fps:
+        try:
+            n, d = map(float, raw_fps.split('/'))
+            fps = n / d if d != 0 else 30.0
+        except ValueError:
+            fps = 30.0
+    else:
+        try:
+            fps = float(raw_fps)
+        except (ValueError, TypeError):
+            fps = 30.0
+            
     analyzer = TUGAnalyzer(df, fs=fps)
     analyzer.calculate_com_3d()
     analyzer.extract_kinematics()

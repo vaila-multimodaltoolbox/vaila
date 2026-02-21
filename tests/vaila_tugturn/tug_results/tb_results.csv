@@ -1,2 +1,0 @@
-File_ID,STS_Time_s,Walk_Fwd_Time_s,Freeze_Before_Turn_s,Turn_Time_s,Walk_Back_Time_s,Stand_to_Sit_Time_s,Total_Time_s,Turn_Direction,Velocity_m_s,Cadence,R_Step_Length,L_Step_Length,Steps_Walk_Forward,Steps_Walk_Back
-rec3d_m1_t1_s01_median_butterworth,0.8999999999999999,10.75,0,13.083333333333332,10.850000000000001,2.4499999999999957,43.583333333333336,Right,0.2602649578703885,64.501679731243,0.30094707963370443,0.285346961886685,17,15
