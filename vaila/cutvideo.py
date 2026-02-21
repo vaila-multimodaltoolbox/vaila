@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 11 January 2026
-Version: 0.1.1
+Update Date: 21 February 2026
+Version: 0.2.0
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -72,6 +72,7 @@ import datetime
 import json
 import os
 import platform
+import time
 
 # Configure SDL environment variables BEFORE importing pygame
 # to prevent EGL/OpenGL warnings and window manager crashes on Linux systems
@@ -94,6 +95,8 @@ import numpy as np
 import pygame
 from rich import print
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+MAX_RENDER_PIXELS = 4_000_000
 
 
 def get_precise_video_metadata(video_path):
@@ -1115,6 +1118,19 @@ def play_video_with_cuts(video_path):
         offset_x = 0.0
         offset_y = 0.0
 
+    def get_max_safe_zoom():
+        scale_fit_local = min(window_width / original_width, window_height / original_height)
+        base_w = max(1.0, float(original_width) * scale_fit_local)
+        base_h = max(1.0, float(original_height) * scale_fit_local)
+        max_by_pixels = (MAX_RENDER_PIXELS / (base_w * base_h)) ** 0.5
+        return max(1.0, min(10.0, max_by_pixels))
+
+    def clamp_zoom_level():
+        nonlocal zoom_level
+        safe_zoom = get_max_safe_zoom()
+        if zoom_level > safe_zoom:
+            zoom_level = safe_zoom
+
     # Load existing cuts if available
     cuts = load_cuts_from_toml(video_path)
     if len(cuts) > 0:
@@ -1762,6 +1778,7 @@ def play_video_with_cuts(video_path):
             break
 
         # Base scale so that at zoom_level=1.0 the whole video fits in the window
+        clamp_zoom_level()
         scale_fit = min(window_width / original_width, window_height / original_height)
         zoomed_width = max(1, int(original_width * scale_fit * zoom_level))
         zoomed_height = max(1, int(original_height * scale_fit * zoom_level))
@@ -1813,27 +1830,20 @@ def play_video_with_cuts(video_path):
                 new_w, new_h = event.w, event.h
                 min_total_h = control_height + (audio_height if show_audio else 0) + 100
                 if new_h > min_total_h:
-<<<<<<< Current (Your changes)
-                    window_width = new_w
-                    window_height = new_h - control_height - (audio_height if show_audio else 0)
-                    screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
-=======
-                    # Determine available height for video region
-                    target_video_h = new_h - control_height - (audio_height if show_audio else 0)
-                    target_video_h = max(240, target_video_h)
+                    requested_video_h = new_h - control_height - (audio_height if show_audio else 0)
+                    if requested_video_h <= 0:
+                        continue
 
-                    window_width = max(640, new_w)
-                    video_h_from_width = int(window_width / aspect_ratio)
+                    # Keep the window manager requested geometry to avoid resize feedback loops.
+                    next_window_width = max(1, int(new_w))
+                    next_window_height = max(1, int(requested_video_h))
 
-                    if video_h_from_width > target_video_h:
-                        window_height = target_video_h
-                        window_width = int(window_height * aspect_ratio)
-                    else:
-                        window_height = video_h_from_width
-
-                    screen = set_display_mode()
-                    clamp_pan_offsets()
->>>>>>> Incoming (Background Agent changes)
+                    if next_window_width != window_width or next_window_height != window_height:
+                        window_width = next_window_width
+                        window_height = next_window_height
+                        clamp_zoom_level()
+                        screen = set_display_mode()
+                        clamp_pan_offsets()
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -1889,13 +1899,16 @@ def play_video_with_cuts(video_path):
                 elif event.key == pygame.K_0:
                     reset_zoom_pan()
                     screen = auto_fit_window()
+                    clamp_zoom_level()
                     clamp_pan_offsets()
                     update_caption()
                 elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
                     zoom_level = min(10.0, zoom_level * 1.2)
+                    clamp_zoom_level()
                     clamp_pan_offsets()
                 elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
                     zoom_level = max(0.1, zoom_level / 1.2)
+                    clamp_zoom_level()
                     clamp_pan_offsets()
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
@@ -2155,6 +2168,7 @@ def play_video_with_cuts(video_path):
                         zoom_level = min(10.0, zoom_level * zoom_factor)
                     else:
                         zoom_level = max(0.1, zoom_level / zoom_factor)
+                    clamp_zoom_level()
 
                     if zoom_level != old_zoom:
                         old_effective = scale_fit * old_zoom

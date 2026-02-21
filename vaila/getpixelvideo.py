@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 3 February 2026
-Version: 0.3.19
+Update: 21 February 2026
+Version: 0.3.20
 Python Version: 3.12.12
 
 Description:
