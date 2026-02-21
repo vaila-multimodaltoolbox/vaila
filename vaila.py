@@ -196,7 +196,7 @@ B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
-B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - vailá
+B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - TUG and TURN
 B5_r6_c4 - vailá          B5_r6_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
@@ -880,11 +880,11 @@ class Vaila(tk.Tk):
             command=self.face_mesh_analysis,
         )
 
-        # B5_r6_c3 - vailá
-        vaila_btn_sprint2 = tk.Button(
+        # B5_r6_c3 - TUG and TURN
+        tug_turn_btn = tk.Button(
             row6_frame,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="TUG and TURN",
+            command=self.tug_and_turn,
             width=button_width,
         )
 
@@ -907,7 +907,7 @@ class Vaila(tk.Tk):
         # Pack row6 buttons
         sprint_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         face_mesh_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn_sprint2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        tug_turn_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn_sprint3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn_sprint4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
@@ -2776,6 +2776,14 @@ class Vaila(tk.Tk):
         print("=" * 60 + "\n")
         run_vaila_module("vaila.mp_facemesh", "vaila/mp_facemesh.py")
 
+    # B5_r6_c3 - TUG and TURN
+    def tug_and_turn(self):
+        """Runs the TUG and TURN analysis tool."""
+        print("\n" + "=" * 60)
+        print("Launching: vaila.vaila_tugtun")
+        print("Features: TUG and TURN 3D Analysis")
+        print("=" * 60 + "\n")
+        run_vaila_module("vaila.vaila_tugtun", "vaila/vaila_tugtun.py")
 
 if __name__ == "__main__":
     app = Vaila()

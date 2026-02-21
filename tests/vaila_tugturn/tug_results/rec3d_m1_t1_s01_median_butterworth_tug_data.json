@@ -1,0 +1,227 @@
+{
+    "Metadata": {
+        "SEX": "F",
+        "WEIGHT": 54.5,
+        "HEIGHT": 1.5,
+        "AGE": 77.0,
+        "FPS": 60.0
+    },
+    "Spatiotemporal": {
+        "Right": {
+            "Stride_Length_m": 0.4249821137943167,
+            "Stride_Length_sd": 0.1780627809375867,
+            "Step_Length_m": 0.30094707963370443,
+            "Step_Length_sd": 0.12642558108209262,
+            "Step_Width_m": 0.24996215193620439,
+            "Step_Width_sd": 0.04218659760702634,
+            "Stance_Time_s": 1.3372549019607842,
+            "Stance_Time_sd": 3.346867276874289,
+            "Swing_Time_s": 0.530952380952381,
+            "Swing_Time_sd": 0.2285094161910661
+        },
+        "Left": {
+            "Stride_Length_m": 0.47208929374635566,
+            "Stride_Length_sd": 0.10473351393892832,
+            "Step_Length_m": 0.285346961886685,
+            "Step_Length_sd": 0.06362965042086566,
+            "Step_Width_m": 0.23684952281815572,
+            "Step_Width_sd": 0.04215609369172261,
+            "Stance_Time_s": 1.4877777777777774,
+            "Stance_Time_sd": 3.7047140473779487,
+            "Swing_Time_s": 1.7249999999999999,
+            "Swing_Time_sd": 3.6018169466895893
+        },
+        "Global": {
+            "Cadence_steps_per_min": 64.501679731243,
+            "Velocity_m_s": 0.2602649578703885,
+            "Steps_Walk_Forward": 17,
+            "Steps_Walk_Back": 15
+        }
+    },
+    "Phases_Seconds": {
+        "Sit_to_Stand": [
+            1.5333333333333332,
+            2.433333333333333
+        ],
+        "Walk_Forward": [
+            2.433333333333333,
+            13.183333333333334
+        ],
+        "Turn": [
+            13.183333333333334,
+            26.266666666666666
+        ],
+        "Walk_Back": [
+            26.266666666666666,
+            37.11666666666667
+        ],
+        "Stand_to_Sit": [
+            37.11666666666667,
+            39.56666666666666
+        ],
+        "Total_TUG_Time": 43.583333333333336,
+        "Turn_Direction": "Right"
+    },
+    "Steps_Timeseries": [
+        {
+            "Time_s": 4.466666666666667,
+            "Side": "Left",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 4.933333333333334,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 5.5,
+            "Side": "Left",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 6.133333333333334,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 6.6,
+            "Side": "Left",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 6.833333333333333,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 7.783333333333333,
+            "Side": "Left",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 7.85,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 8.916666666666666,
+            "Side": "Left",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 9.05,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 9.45,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 9.8,
+            "Side": "Left",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 10.116666666666667,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 11.233333333333333,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 11.25,
+            "Side": "Left",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 12.466666666666667,
+            "Side": "Right",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 12.5,
+            "Side": "Left",
+            "Phase": "Walk_Forward"
+        },
+        {
+            "Time_s": 27.083333333333332,
+            "Side": "Right",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 27.183333333333334,
+            "Side": "Left",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 27.55,
+            "Side": "Right",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 28.35,
+            "Side": "Left",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 28.866666666666667,
+            "Side": "Right",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 29.4,
+            "Side": "Right",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 29.65,
+            "Side": "Left",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 30.15,
+            "Side": "Right",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 30.7,
+            "Side": "Left",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 31.283333333333335,
+            "Side": "Right",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 31.883333333333333,
+            "Side": "Left",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 32.416666666666664,
+            "Side": "Right",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 33.05,
+            "Side": "Left",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 33.63333333333333,
+            "Side": "Right",
+            "Phase": "Walk_Back"
+        },
+        {
+            "Time_s": 34.233333333333334,
+            "Side": "Left",
+            "Phase": "Walk_Back"
+        }
+    ]
+}
