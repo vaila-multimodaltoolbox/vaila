@@ -730,7 +730,8 @@ class TUGAnalyzer:
                 line_vec = p2 - p1
                 line_len = np.linalg.norm(line_vec)
                 if line_len == 0: return 0.0
-                cross_prod = np.abs(np.cross(line_vec, p1 - path))
+                diffs = p1 - path
+                cross_prod = np.abs(line_vec[0] * diffs[:, 1] - line_vec[1] * diffs[:, 0])
                 return float(np.mean(cross_prod / line_len))
                 
             xcom_dev_fwd = calc_dev(*phases.get('gait_forward', (0,0)))
@@ -836,21 +837,15 @@ class TUGAnalyzer:
             first_stand_idx = stand_indices[0]
             last_stand_idx  = stand_indices[-1]
 
-            sts_start = first_stand_idx
-            while sts_start > 0 and com_z_smooth[sts_start] > thresh_start:
-                sts_start -= 1
+            sts_start = 0
 
             sts_end = first_stand_idx
             while sts_end < N and com_z_smooth[sts_end] < thresh_end:
                 sts_end += 1
 
+            # Temporary assignment (will be overridden by foot spatial thresholds below)
             sit_start = last_stand_idx
-            while sit_start > 0 and com_z_smooth[sit_start] < thresh_end:
-                sit_start -= 1
-
-            sit_end = last_stand_idx
-            while sit_end < N - 1 and com_z_smooth[sit_end] > thresh_start:
-                sit_end += 1
+            sit_end = N - 1
 
         # ---------------------------------------------------------
         # 2. Horizontal Phases — primary: Y-axis spatial thresholds
@@ -865,11 +860,21 @@ class TUGAnalyzer:
         com_y_window = com_y_smooth[search_start:search_end]
         t_window     = np.arange(len(com_y_window))
 
-        # ── 2a. Forward gait start: first frame where Y crosses y_chair ─────────
+        # Use foot positions if available for spatial thresholds
+        if 'Med_Foot_Right_y' in self.df.columns and 'Med_Foot_Left_y' in self.df.columns:
+            f_r_y = self.df['Med_Foot_Right_y'].to_numpy()
+            f_l_y = self.df['Med_Foot_Left_y'].to_numpy()
+            foot_max_y = np.maximum(f_r_y, f_l_y)
+            foot_min_y = np.minimum(f_r_y, f_l_y)
+        else:
+            foot_max_y = com_y_smooth
+            foot_min_y = com_y_smooth
+
+        # ── 2a. Forward gait start: first frame where a foot crosses y_chair ─────────
         fwd_start_local = 0
-        for i, y_val in enumerate(com_y_window):
-            if y_val >= y_chair:
-                fwd_start_local = i
+        for i in range(search_start, search_end):
+            if foot_max_y[i] >= y_chair:
+                fwd_start_local = i - search_start
                 break
         fwd_start = search_start + fwd_start_local
 
@@ -972,14 +977,15 @@ class TUGAnalyzer:
             bck_start = turn_end
         turn_end = bck_start  # tie turn_end to back-gait start (contiguous)
 
-        # Back gait ends where CoM-Y crosses back below y_chair
-        bck_end = sit_start
+        # Back gait ends where a foot crosses back below y_chair
+        bck_end = sit_start  # Fallback
         for i in range(bck_start, search_end):
-            if com_y_smooth[i] <= y_chair:
+            if foot_min_y[i] <= y_chair:
                 bck_end = i
                 break
 
-        sit_start = max(bck_end, sit_start)
+        sit_start = bck_end
+        sit_end = N - 1
 
         # ── Sanity: enforce contiguous, non-negative durations ───────────────────
         fwd_stop   = max(fwd_stop,  sts_end)
@@ -998,7 +1004,7 @@ class TUGAnalyzer:
         # ---------------------------------------------------------
         phases = {
             'stand':        (sts_start * dt,  sts_end * dt),
-            'gait_forward': (sts_end * dt,    fwd_stop * dt),
+            'gait_forward': (fwd_start * dt,  fwd_stop * dt),
             'stop_5s':      (fwd_stop * dt,   turn_start * dt) if turn_start > fwd_stop else None,
             'turn180':      (turn_start * dt,  turn_end * dt),
             'gait_back':    (bck_start * dt,   sit_start * dt),
