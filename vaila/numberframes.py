@@ -283,11 +283,54 @@ def count_frames_in_videos(directory_path=None, video_files=None, show_gui=True)
                 info = {"file_name": os.path.basename(p), "error": f"{e}"}
             video_infos.append(info)
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_basic_file = os.path.join(directory_path, f"video_metadata_basic_{timestamp}.txt")
+    output_full_file = os.path.join(directory_path, f"video_metadata_full_{timestamp}.json")
+
     # Mantém ordem por nome de arquivo
     video_infos.sort(key=lambda d: d.get("file_name", ""))
 
-    print(f"\nBasic metadata saved to: {output_basic_file}")
-    print(f"Full metadata saved to: {output_full_file}")
+    try:
+        with open(output_basic_file, "w", encoding="utf-8") as f:
+            f.write(f"Video Metadata Summary\nDirectory: {directory_path}\n============================\n\n")
+            for info in video_infos:
+                f.write(f"File: {info.get('file_name')}\n")
+                if "error" in info:
+                    f.write(f"  Error: {info['error']}\n\n")
+                    continue
+                f.write(f"  Frames:        {info.get('frame_count')}\n")
+                f.write(f"  Duration:      {info.get('duration'):.3f} seconds\n")
+                f.write(f"  Resolution:    {info.get('resolution')}\n")
+                
+                disp_fps = info.get('display_fps')
+                if disp_fps:
+                    f.write(f"  Display FPS:   {disp_fps:.9f}\n")
+                else:
+                    f.write("  Display FPS:   N/A\n")
+                    
+                avg_fps = info.get('avg_fps')
+                if avg_fps:
+                    f.write(f"  Avg FPS:       {avg_fps:.9f}\n")
+                else:
+                    f.write("  Avg FPS:       N/A\n")
+                    
+                cap_fps = info.get('capture_fps')
+                if cap_fps:
+                    f.write(f"  Capture FPS:   {cap_fps:.9f}\n")
+                else:
+                    f.write("  Capture FPS:   N/A\n")
+                    
+                f.write(f"  Recommended Hz:{info.get('recommended_sampling_hz')}\n")
+                f.write(f"  Codec:         {info.get('codec_name')} ({info.get('codec_long_name')})\n")
+                f.write(f"  Container:     {info.get('container_format')} ({info.get('container_long_name')})\n\n")
+
+        with open(output_full_file, "w", encoding="utf-8") as f:
+            json.dump(video_infos, f, indent=4)
+            
+        print(f"\nBasic metadata saved to: {output_basic_file}")
+        print(f"Full metadata saved to: {output_full_file}")
+    except Exception as e:
+        print(f"\nError saving metadata files: {e}")
     
     print("\n--- Summary ---")
     for info in video_infos:

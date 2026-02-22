@@ -300,11 +300,12 @@ def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metad
     return True
 
 
-def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outputs=None):
+def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outputs=None, labels=None):
     """Save cuts information to a TOML file.
 
     output_dir: optional Path/str for planned output directory.
     per_cut_outputs: optional list of filenames (one per cut) to record planned outputs.
+    labels: optional list of string labels for each cut.
     """
     
     fps_num, fps_den = 30, 1
@@ -364,6 +365,9 @@ def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outpu
 
             toml_content += "[[cuts]]\n"
             toml_content += f"index = {i}\n"
+            if labels and i - 1 < len(labels):
+                safe_label = labels[i-1].replace('"', '\\"')
+                toml_content += f'label = "{safe_label}"\n'
             toml_content += f"start_frame = {start_frame_1based}\n"
             toml_content += f"end_frame = {end_frame_1based}\n"
             toml_content += f"frame_count = {frame_count}\n"
@@ -425,6 +429,9 @@ def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outpu
 
                 toml_content += "[[cuts]]\n"
                 toml_content += f"index = {i}\n"
+                if labels and i - 1 < len(labels):
+                    safe_label = labels[i-1].replace('"', '\\"')
+                    toml_content += f'label = "{safe_label}"\n'
                 toml_content += f"start_frame = {start_frame_1based}\n"
                 toml_content += f"end_frame = {end_frame_1based}\n"
                 toml_content += f"frame_count = {frame_count}\n"
@@ -843,7 +850,8 @@ def play_video_with_cuts(video_path):
             root.withdraw()
         except Exception:
             # If Tk is already initialized or fails, proceed with what we have
-            root = None
+            root.destroy()
+            return
 
         if messagebox.askyesno(
             "Video Load Error",
@@ -1094,6 +1102,7 @@ def play_video_with_cuts(video_path):
     frame_count = 0
     paused = True
     cuts = []  # List to store (start, end) frame pairs
+    cut_labels = []  # List to store labels for each cut
     current_start = None
     using_sync_file = False
     sync_data = None  # Store sync data for batch processing
@@ -1410,6 +1419,7 @@ def play_video_with_cuts(video_path):
             "",
             "File Operations:",
             "- F: Load Sync File or Cuts TOML File",
+            "- C: Load Cut Labels from CSV",
             "- I or P: Input Manual FPS",
             "- ESC: Save cuts to TOML file and optionally generate videos",
             "",
@@ -1516,10 +1526,10 @@ def play_video_with_cuts(video_path):
                     running = False
 
     def save_and_generate_videos():
-        nonlocal cuts, video_path, using_sync_file, sync_data, fps
+        nonlocal cuts, video_path, using_sync_file, sync_data, fps, cut_labels
+        from tkinter import messagebox
 
         if not cuts:
-            from tkinter import messagebox
             messagebox.showinfo("Info", "No cuts were marked!")
             return False
 
@@ -1536,7 +1546,7 @@ def play_video_with_cuts(video_path):
         per_cut_files = [f"{video_name}_frame_{start + 1}_to_{end + 1}.mp4" for start, end in cuts]
 
         save_cuts_to_toml(
-            video_path, cuts, fps, output_dir=planned_output_dir, per_cut_outputs=per_cut_files
+            video_path, cuts, fps, output_dir=planned_output_dir, per_cut_outputs=per_cut_files, labels=cut_labels
         )
 
         # Close pygame temporarily instead of fully quitting it
@@ -1956,15 +1966,47 @@ def play_video_with_cuts(video_path):
                         print("Last cut removed (D key)")
                 elif event.key == pygame.K_l:  # List all cuts
                     if cuts:
-                        cuts_info = "\n".join(
-                            [
-                                f"Cut {i + 1}: Frame {start + 1} to {end + 1}"
-                                for i, (start, end) in enumerate(cuts)
-                            ]
-                        )
-                        messagebox.showinfo("Cuts List", cuts_info)
+                        cuts_list_strs = []
+                        for i, (start, end) in enumerate(cuts):
+                            label_str = f" [{cut_labels[i]}]" if i < len(cut_labels) else ""
+                            cuts_list_strs.append(f"Cut {i + 1}{label_str}: Frame {start + 1} to {end + 1}")
+                        messagebox.showinfo("Cuts List", "\n".join(cuts_list_strs))
                     else:
                         messagebox.showinfo("Cuts List", "No cuts marked yet")
+                elif event.key == pygame.K_c:  # Load cut labels from CSV
+                    from tkinter import Tk, filedialog, messagebox
+                    temp_root = Tk()
+                    temp_root.withdraw()
+                    csv_file = filedialog.askopenfilename(
+                        title="Select Labels CSV/TXT",
+                        filetypes=[
+                            ("CSV files", "*.csv"), 
+                            ("TXT files", "*.txt"), 
+                            ("All files", "*.*")
+                        ]
+                    )
+                    temp_root.destroy()
+                    if csv_file:
+                        try:
+                            parsed_labels = []
+                            with open(csv_file, 'r', encoding='utf-8') as f:
+                                # Simple parsing: comma separated inline, or newline separated
+                                content = f.read().strip()
+                                if ',' in content and '\n' not in content:
+                                    parsed_labels = [label.strip() for label in content.split(',')]
+                                else:
+                                    parsed_labels = [line.strip().strip(',') for line in content.splitlines() if line.strip()]
+                            
+                            cut_labels.clear()
+                            cut_labels.extend(parsed_labels)
+                            
+                            info_root = Tk()
+                            info_root.withdraw()
+                            messagebox.showinfo("Cut Labels Loaded", f"Successfully loaded {len(cut_labels)} labels:\n" + ", ".join(cut_labels), parent=info_root)
+                            info_root.destroy()
+                            print(f"Cut labels loaded: {cut_labels}")
+                        except Exception as e:
+                            print(f"Error loading cut labels: {e}")
                 elif event.key == pygame.K_f:  # Load sync file or TOML cuts file
                     new_cuts, is_sync, new_sync_data = load_sync_file_from_dialog(video_path)
                     if new_cuts:
