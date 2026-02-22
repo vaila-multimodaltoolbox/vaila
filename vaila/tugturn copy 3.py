@@ -1428,7 +1428,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     steps_list = report_data.get('Steps_Timeseries', [])
     steps_html = ''.join([
         f"<tr><td>{i+1}</td><td style='color: {'red' if s['Side'] == 'Right' else 'green'}; font-weight: bold;'>{s['Side']}</td>"
-        f"<td>{s['Time_s']:.3f}</td><td>{s.get('Y_m', '')}</td><td>{s['Phase']}</td>"
+        f"<td>{s['Time_s']:.3f}</td><td>{s['Phase']}</td>"
         f"<td>{s.get('Stance_Time_s', '')}</td><td>{s.get('Step_Length_m', '')}</td>"
         f"<td>{s.get('Step_Width_m', '')}</td><td>{s.get('Stride_Length_m', '')}</td>"
         f"<td>{s.get('Swing_Time_s', '')}</td></tr>" 
@@ -1521,7 +1521,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
             <h3 class="section-title">Step-by-Step Timeseries (Gait Events / HS)</h3>
             <div class="table-container">
                 <table style="width: 100%;">
-                    <thead><tr><th>Step Index</th><th>Side</th><th>Time (s)</th><th>Y (m)</th><th>Phase</th><th>Stance Time (s)</th><th>Step Length (m)</th><th>Step Width (m)</th><th>Stride Length (m)</th><th>Swing Time (s)</th></tr></thead>
+                    <thead><tr><th>Step Index</th><th>Side</th><th>Time (s)</th><th>Phase</th><th>Stance Time (s)</th><th>Step Length (m)</th><th>Step Width (m)</th><th>Stride Length (m)</th><th>Swing Time (s)</th></tr></thead>
                     <tbody>{steps_html}</tbody>
                 </table>
             </div>
@@ -2027,7 +2027,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     steps_list = report_data.get('Steps_Timeseries', [])
     steps_html = ''.join([
         f"<tr><td>{i+1}</td><td style='color: {'red' if s['Side'] == 'Right' else 'green'}; font-weight: bold;'>{s['Side']}</td>"
-        f"<td>{s['Time_s']:.3f}</td><td>{s.get('Y_m', '')}</td><td>{s['Phase']}</td>"
+        f"<td>{s['Time_s']:.3f}</td><td>{s['Phase']}</td>"
         f"<td>{s.get('Stance_Time_s', '')}</td><td>{s.get('Step_Length_m', '')}</td>"
         f"<td>{s.get('Step_Width_m', '')}</td><td>{s.get('Stride_Length_m', '')}</td>"
         f"<td>{s.get('Swing_Time_s', '')}</td></tr>" 
@@ -2120,7 +2120,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
             <h3 class="section-title">Step-by-Step Timeseries (Gait Events / HS)</h3>
             <div class="table-container">
                 <table style="width: 100%;">
-                    <thead><tr><th>Step Index</th><th>Side</th><th>Time (s)</th><th>Y (m)</th><th>Phase</th><th>Stance Time (s)</th><th>Step Length (m)</th><th>Step Width (m)</th><th>Stride Length (m)</th><th>Swing Time (s)</th></tr></thead>
+                    <thead><tr><th>Step Index</th><th>Side</th><th>Time (s)</th><th>Phase</th><th>Stance Time (s)</th><th>Step Length (m)</th><th>Step Width (m)</th><th>Stride Length (m)</th><th>Swing Time (s)</th></tr></thead>
                     <tbody>{steps_html}</tbody>
                 </table>
             </div>
@@ -2430,41 +2430,24 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
     
     pause_s, pause_e = phases.get('stop_5s', (wf_e, turn_s))
     
-    y_chair = float(getattr(analyzer, '_meta_y_chair', 1.125))
-    y_turn  = float(getattr(analyzer, '_meta_y_turn', 4.5))
-    y_tol   = float(getattr(analyzer, '_meta_y_tol', 0.5))
-    y_max   = y_turn + y_tol
-    
     wf_steps = 0
     wb_steps = 0
     for leg in ['Right', 'Left']:
-        y_col = f'Med_Foot_{leg}_y'
-        
         for f in analyzer.gait_events.get(leg, {}).get('HS', []):
-            f_idx = int(f)
             t = f / fps
-            
-            # Extract Y coordinate for the foot at heel strike
-            y_pos = analyzer.df[y_col].iloc[f_idx] if f_idx < len(analyzer.df) else 0.0
-            valid_spatial = (y_chair <= y_pos <= y_max)
-            
             phase_label = "Other"
             
             if sts_s <= t < sts_e:
                 continue
             elif wf_s <= t < wf_e:
-                if not valid_spatial:
-                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Forward Gait (Y={y_pos:.2f}m outside [{y_chair}, {y_max}])")
-                    continue
+                wf_steps += 1
                 phase_label = "gait_forward"
             elif pause_s <= t < pause_e and pause_s < pause_e:
                 continue
             elif turn_s <= t < turn_e:
                 continue
             elif wb_s <= t < wb_e:
-                if not valid_spatial:
-                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Back Gait (Y={y_pos:.2f}m outside [{y_chair}, {y_max}])")
-                    continue
+                wb_steps += 1
                 phase_label = "gait_back"
             elif sit_s <= t <= sit_e:
                 continue
@@ -2474,7 +2457,6 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
             metrics = stats.get(leg, {}).get('per_step', {}).get(str(int(f)), {})
             step_data = {
                 'Time_s': t,
-                'Y_m': round(y_pos, 3),
                 'Side': leg,
                 'Phase': phase_label
             }
@@ -2485,39 +2467,6 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
             
     # Sort steps chronologically
     steps_list = sorted(steps_list, key=lambda x: x['Time_s'])
-    
-    # Deduplicate simultaneous steps (keep the one further along the path)
-    dedup_steps = []
-    for s in steps_list:
-        if not dedup_steps:
-            dedup_steps.append(s)
-            continue
-            
-        prev_s = dedup_steps[-1]
-        if abs(s['Time_s'] - prev_s['Time_s']) < 0.01:
-            if s['Phase'] == 'gait_forward':
-                if s['Y_m'] > prev_s['Y_m']:
-                    dedup_steps[-1] = s
-                    print(f"Notice: Removed simultaneous {prev_s['Side']} step at {prev_s['Time_s']:.3f}s (kept {s['Side']}, further ahead at Y={s['Y_m']:.2f})")
-                else:
-                    print(f"Notice: Removed simultaneous {s['Side']} step at {s['Time_s']:.3f}s (kept {prev_s['Side']}, further ahead at Y={prev_s['Y_m']:.2f})")
-            elif s['Phase'] == 'gait_back':
-                if s['Y_m'] < prev_s['Y_m']:
-                    dedup_steps[-1] = s
-                    print(f"Notice: Removed simultaneous {prev_s['Side']} step at {prev_s['Time_s']:.3f}s (kept {s['Side']}, further back at Y={s['Y_m']:.2f})")
-                else:
-                    print(f"Notice: Removed simultaneous {s['Side']} step at {s['Time_s']:.3f}s (kept {prev_s['Side']}, further back at Y={prev_s['Y_m']:.2f})")
-            else:
-                dedup_steps[-1] = s  # Default replace if other phase
-        else:
-            dedup_steps.append(s)
-            
-    steps_list = dedup_steps
-    
-    # Recalculate global step counts
-    wf_steps = sum(1 for s in steps_list if s['Phase'] == 'gait_forward')
-    wb_steps = sum(1 for s in steps_list if s['Phase'] == 'gait_back')
-
     
     print("Generating animated GIFs for each phase (this may take a moment)...")
     phase_videos = generate_phase_skeleton_gifs(analyzer, fps, {'Phases_Seconds': phases}, out_dir, csv_path.stem)
