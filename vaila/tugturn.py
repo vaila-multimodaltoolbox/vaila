@@ -1280,7 +1280,98 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     fig8.update_layout(title='Mid Trunk Kinematics Separated', height=1200, template='plotly_white')
     plots_html.append(fig8.to_html(full_html=False, include_plotlyjs=False))
 
+    # \u2500\u2500 Vector Coding: Trunk vs Pelvis (Turn phase) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    vc_data = report_data.get('Vector_Coding_Turn', [])
+    if vc_data:
+        vc_pct     = [row['Turn_Percent']                    for row in vc_data]
+        vc_gamma   = [row['Coupling_Angle_Trunk_Pelvis_deg'] for row in vc_data]
+        vc_pattern = [row['Coordination_Pattern']            for row in vc_data]
+
+        # Colour map for the 4 patterns
+        _vc_colours = {
+            'In_Phase':        'rgba(231,76,60,0.85)',   # red  — en-bloc risk
+            'Anti_Phase':      'rgba(46,204,113,0.85)',  # green — healthy
+            'Proximal_Phase':  'rgba(52,152,219,0.85)',  # blue  — trunk leads
+            'Distal_Phase':    'rgba(155,89,182,0.85)',  # purple — pelvis leads
+        }
+        _vc_labels = {
+            'In_Phase':       'In-Phase (en-bloc)',
+            'Anti_Phase':     'Anti-Phase (healthy)',
+            'Proximal_Phase': 'Proximal-Phase (Trunk leads)',
+            'Distal_Phase':   'Distal-Phase (Pelvis leads)',
+        }
+        marker_colours = [_vc_colours.get(p, 'grey') for p in vc_pattern]
+
+        # Fig 9 \u2014 Coupling angle time-series
+        fig9 = go.Figure()
+
+        # Background zone bands
+        for lo, hi, col, lbl in [
+            (0,   22.5, 'rgba(52,152,219,0.08)', 'Proximal'),
+            (22.5, 67.5, 'rgba(231,76,60,0.08)',  'In-Phase'),
+            (67.5,112.5, 'rgba(155,89,182,0.08)', 'Distal'),
+            (112.5,157.5,'rgba(46,204,113,0.08)', 'Anti-Phase'),
+            (157.5,202.5,'rgba(52,152,219,0.08)', 'Proximal'),
+            (202.5,247.5,'rgba(231,76,60,0.08)',  'In-Phase'),
+            (247.5,292.5,'rgba(155,89,182,0.08)', 'Distal'),
+            (292.5,337.5,'rgba(46,204,113,0.08)', 'Anti-Phase'),
+            (337.5,360,  'rgba(52,152,219,0.08)', 'Proximal'),
+        ]:
+            fig9.add_hrect(y0=lo, y1=hi, fillcolor=col, line_width=0, annotation_text=lbl if lo < 180 else '', annotation_position='right', annotation_font_size=9)
+
+        fig9.add_trace(go.Scatter(
+            x=vc_pct, y=vc_gamma,
+            mode='markers+lines',
+            marker=dict(color=marker_colours, size=7),
+            line=dict(color='rgba(100,100,100,0.4)', width=1),
+            name='\u03b3 Coupling Angle',
+            hovertemplate='%{x:.0f}%<br>\u03b3 = %{y:.1f}\u00b0<extra></extra>',
+        ))
+        fig9.update_layout(
+            title='Vector Coding \u2014 Trunk vs Pelvis Axial Coordination (Turn Phase)',
+            xaxis_title='Turn Progress (%)',
+            yaxis_title='Coupling Angle \u03b3 (\u00b0)',
+            yaxis=dict(range=[0, 360], dtick=45),
+            height=420,
+            template='plotly_white',
+            showlegend=False,
+        )
+        plots_html.append(fig9.to_html(full_html=False, include_plotlyjs=False))
+
+        # Fig 10 \u2014 Summary stacked bar
+        _pct_map = {}
+        for row in vc_data:
+            p = row['Coordination_Pattern']
+            _pct_map[p] = _pct_map.get(p, 0) + 1
+        _n = len(vc_data)
+        _pct_norm = {p: v / _n * 100 for p, v in _pct_map.items()}
+
+        fig10 = go.Figure()
+        for pattern in ('In_Phase', 'Anti_Phase', 'Proximal_Phase', 'Distal_Phase'):
+            pval = _pct_norm.get(pattern, 0)
+            fig10.add_trace(go.Bar(
+                name=_vc_labels[pattern],
+                x=[pval],
+                y=['Turn 180\u00b0'],
+                orientation='h',
+                marker_color=_vc_colours[pattern],
+                text=f'{pval:.1f}%',
+                textposition='inside',
+                insidetextanchor='middle',
+            ))
+        fig10.update_layout(
+            barmode='stack',
+            title='Vector Coding \u2014 Coordination Pattern Distribution (Turn Phase)',
+            xaxis_title='Percentage of Turn (%)',
+            xaxis=dict(range=[0, 100]),
+            height=200,
+            template='plotly_white',
+            legend=dict(orientation='h', y=-0.5),
+        )
+        plots_html.append(fig10.to_html(full_html=False, include_plotlyjs=False))
+
     # --- HTML Formatting ---
+
     plotly_js = '<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>'
     images_html = '\n'.join([f'<div style="margin-bottom: 40px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">{html}</div>' for html in plots_html])
     
@@ -2009,7 +2100,123 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     return report_file
 
 
+def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, turn_start_s: float, turn_end_s: float) -> dict:
+    """
+    Calculates the Vector Coding (Coupling Angle) of axial coordination between
+    Trunk and Pelvis during the Turn phase of the TUG test.
+
+    Method: Chang et al. (2008) — 4-bin classification on [0°, 360°].
+
+    Trunk yaw  : angle of the right-shoulder → left-shoulder vector in the XY plane
+    Pelvis yaw : angle of the right-hip       → left-hip        vector in the XY plane
+
+    Coupling angle γ = atan2(Δpelvis, Δtrunk)  →  normalised to [0°, 360°]
+
+    Coordination patterns (bins):
+        Proximal-Phase  (Trunk dominant)  : 0±22.5° and 180±22.5°
+        In-Phase        (en-bloc / both)  : 45±22.5° and 225±22.5°
+        Distal-Phase    (Pelvis dominant) : 90±22.5° and 270±22.5°
+        Anti-Phase      (opposite dirs)   : 135±22.5° and 315±22.5°
+    """
+    result: dict = {
+        'gamma_deg': [],
+        'Turn_Percent': [],
+        'Coordination_Pattern': [],
+        'In_Phase_pct': 0.0,
+        'Anti_Phase_pct': 0.0,
+        'Proximal_Phase_pct': 0.0,
+        'Distal_Phase_pct': 0.0,
+        'CAV_deg': 0.0,          # Coupling Angle Variability (circular SD)
+        'Dominant_Pattern': 'N/A',
+    }
+
+    # ── Extract yaw signals ─────────────────────────────────────────────────
+    try:
+        shoulder_l = analyzer._get_point_3d(11)
+        shoulder_r = analyzer._get_point_3d(12)
+        hip_l      = analyzer._get_point_3d(23)
+        hip_r      = analyzer._get_point_3d(24)
+    except ValueError as e:
+        print(f"  Vector Coding: could not extract landmark data — {e}")
+        return result
+
+    trunk_vec  = shoulder_r[:, :2] - shoulder_l[:, :2]   # XY only
+    pelvis_vec = hip_r[:, :2]      - hip_l[:, :2]
+
+    trunk_yaw  = np.degrees(np.arctan2(trunk_vec[:, 1],  trunk_vec[:, 0]))
+    pelvis_yaw = np.degrees(np.arctan2(pelvis_vec[:, 1], pelvis_vec[:, 0]))
+
+    # ── Slice the Turn phase ────────────────────────────────────────────────
+    s_idx = int(turn_start_s * fps)
+    e_idx = int(turn_end_s   * fps)
+    N     = len(trunk_yaw)
+
+    if e_idx <= s_idx or s_idx >= N:
+        print("  Vector Coding: turn phase too short or out of range.")
+        return result
+
+    e_idx = min(e_idx, N)
+    trunk_turn  = trunk_yaw[s_idx:e_idx]
+    pelvis_turn = pelvis_yaw[s_idx:e_idx]
+
+    if len(trunk_turn) < 3:
+        print("  Vector Coding: too few frames in turn phase.")
+        return result
+
+    # ── Interpolate to 101 points (0 → 100% of movement) ───────────────────
+    from scipy.ndimage import gaussian_filter1d
+    pct = np.linspace(0, 100, 101)
+    old_pct = np.linspace(0, 100, len(trunk_turn))
+
+    trunk_interp  = np.interp(pct, old_pct, trunk_turn)
+    pelvis_interp = np.interp(pct, old_pct, pelvis_turn)
+
+    # ── Coupling angle γ = atan2(Δpelvis, Δtrunk) ───────────────────────────
+    d_trunk  = np.diff(trunk_interp)
+    d_pelvis = np.diff(pelvis_interp)
+
+    gamma_rad = np.arctan2(d_pelvis, d_trunk)
+    gamma_deg = np.degrees(gamma_rad) % 360.0   # map to [0°, 360°]
+
+    # ── 4-bin classification (Chang et al. 2008) ────────────────────────────
+    def _classify(g: float) -> str:
+        g = g % 360.0
+        if (  0  <= g <  22.5) or (157.5 <= g < 202.5) or (337.5 <= g <= 360):
+            return 'Proximal_Phase'   # trunk dominates
+        elif (22.5 <= g <  67.5) or (202.5 <= g < 247.5):
+            return 'In_Phase'         # en-bloc
+        elif (67.5 <= g < 112.5) or (247.5 <= g < 292.5):
+            return 'Distal_Phase'     # pelvis dominates
+        else:
+            return 'Anti_Phase'       # opposite directions
+
+    patterns = [_classify(g) for g in gamma_deg]
+    n = len(patterns)
+
+    counts = {p: patterns.count(p) for p in ('In_Phase', 'Anti_Phase', 'Proximal_Phase', 'Distal_Phase')}
+    dominant = max(counts, key=counts.get)
+
+    # ── Circular SD (CAV) ────────────────────────────────────────────────────
+    gamma_rad_arr = np.radians(gamma_deg)
+    R = np.sqrt(np.mean(np.cos(gamma_rad_arr))**2 + np.mean(np.sin(gamma_rad_arr))**2)
+    cav_deg = float(np.degrees(np.sqrt(-2 * np.log(max(R, 1e-9)))))
+
+    result.update({
+        'gamma_deg': gamma_deg.tolist(),
+        'Turn_Percent': pct[:-1].tolist(),    # 100 points (diff reduces by 1)
+        'Coordination_Pattern': patterns,
+        'In_Phase_pct':       round(counts['In_Phase']       / n * 100, 2),
+        'Anti_Phase_pct':     round(counts['Anti_Phase']     / n * 100, 2),
+        'Proximal_Phase_pct': round(counts['Proximal_Phase'] / n * 100, 2),
+        'Distal_Phase_pct':   round(counts['Distal_Phase']   / n * 100, 2),
+        'CAV_deg':            round(cav_deg, 2),
+        'Dominant_Pattern':   dominant,
+    })
+    return result
+
+
 def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
+
     print(f"\nProcessing {csv_path.name}...")
     try:
         df = pd.read_csv(csv_path)
@@ -2132,14 +2339,41 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
     
     print("Generating animated GIFs for each phase (this may take a moment)...")
     phase_videos = generate_phase_skeleton_gifs(analyzer, fps, {'Phases_Seconds': phases}, out_dir, csv_path.stem)
-    
+
+    # ── Vector Coding: Trunk vs Pelvis axial coordination during Turn ────────
+    turn_s, turn_e = phases.get('turn180', (0, 0))
+    vc_result = calculate_axial_vector_coding(analyzer, fps, turn_s, turn_e)
+    if vc_result['gamma_deg']:
+        vc_ts_data = [
+            {
+                'File_ID': csv_path.stem,
+                'Turn_Percent': pct,
+                'Coupling_Angle_Trunk_Pelvis_deg': round(g, 4),
+                'Coordination_Pattern': pat,
+            }
+            for pct, g, pat in zip(
+                vc_result['Turn_Percent'],
+                vc_result['gamma_deg'],
+                vc_result['Coordination_Pattern'],
+            )
+        ]
+        vc_df = pd.DataFrame(vc_ts_data)
+        vc_df.to_csv(out_dir / f"{csv_path.stem}_bd_vector_coding_turn.csv", index=False)
+        print(f"  Vector Coding Turn: dominant={vc_result['Dominant_Pattern']}  "
+              f"CAV={vc_result['CAV_deg']:.1f}°  "
+              f"In-Phase={vc_result['In_Phase_pct']:.0f}%  "
+              f"Anti-Phase={vc_result['Anti_Phase_pct']:.0f}%")
+    else:
+        vc_ts_data = []
+
     # Render steps HTML
     report_data = {
         'Metadata': metadata,
         'Spatiotemporal': stats,
         'Phases_Seconds': phases,
         'Steps_Timeseries': steps_list,
-        'Phase_Videos': phase_videos
+        'Phase_Videos': phase_videos,
+        'Vector_Coding_Turn': vc_ts_data,
     }
     
     if 'Global' not in stats:
@@ -2195,7 +2429,13 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
             'Steps_Walk_Forward': stats.get('Global', {}).get('Steps_Walk_Forward', 0),
             'Steps_Walk_Back': stats.get('Global', {}).get('Steps_Walk_Back', 0),
             'XcoM_Dev_Fwd_m': stats.get('Global', {}).get('XcoM_Deviation_Fwd_m', 0),
-            'XcoM_Dev_Bwd_m': stats.get('Global', {}).get('XcoM_Deviation_Bwd_m', 0)
+            'XcoM_Dev_Bwd_m': stats.get('Global', {}).get('XcoM_Deviation_Bwd_m', 0),
+            'VC_Dominant_Pattern':   vc_result.get('Dominant_Pattern', 'N/A'),
+            'VC_In_Phase_pct':       vc_result.get('In_Phase_pct', 0),
+            'VC_Anti_Phase_pct':     vc_result.get('Anti_Phase_pct', 0),
+            'VC_Proximal_Phase_pct': vc_result.get('Proximal_Phase_pct', 0),
+            'VC_Distal_Phase_pct':   vc_result.get('Distal_Phase_pct', 0),
+            'VC_CAV_deg':            vc_result.get('CAV_deg', 0),
         })
     write_single_row_csv(out_dir / f"{csv_path.stem}_bd_results.csv", results_data)
     
