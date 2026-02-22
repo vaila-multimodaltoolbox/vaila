@@ -1313,46 +1313,58 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     fig8.update_layout(title='Mid Trunk Kinematics Separated', height=1200, template='plotly_white')
     plots_html.append(fig8.to_html(full_html=False, include_plotlyjs=False))
 
-    # \u2500\u2500 Vector Coding: Trunk vs Pelvis (Turn phase) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-    vc_data = report_data.get('Vector_Coding_Turn', [])
-    if vc_data:
-        vc_pct     = [row['Turn_Percent']                    for row in vc_data]
-        vc_gamma   = [row['Coupling_Angle_Trunk_Pelvis_deg'] for row in vc_data]
-        vc_pattern = [row['Coordination_Pattern']            for row in vc_data]
+    # ── Vector Coding: Timelines and Donut Charts ────────────────────────────
+    vc_summary = report_data.get('VC_Summary', {})
+    
+    # Colour map for the 4 patterns
+    _vc_colours = {
+        'In_Phase':        'rgba(90, 110, 250, 0.85)',   # Per screenshot: In-Phase is blue
+        'Anti_Phase':      'rgba(0, 200, 150, 0.85)',    # Anti-Phase is green
+        'Proximal_Phase':  'rgba(240, 80, 60, 0.85)',    # Proximal is red
+        'Distal_Phase':    'rgba(170, 80, 250, 0.85)',   # Distal is purple
+    }
+    _vc_labels = {
+        'In_Phase':       'In_Phase',
+        'Anti_Phase':     'Anti_Phase',
+        'Proximal_Phase': 'Proximal_Dominance',
+        'Distal_Phase':   'Distal_Dominance',
+    }
 
-        # Colour map for the 4 patterns
-        _vc_colours = {
-            'In_Phase':        'rgba(231,76,60,0.85)',   # red  — en-bloc risk
-            'Anti_Phase':      'rgba(46,204,113,0.85)',  # green — healthy
-            'Proximal_Phase':  'rgba(52,152,219,0.85)',  # blue  — trunk leads
-            'Distal_Phase':    'rgba(155,89,182,0.85)',  # purple — pelvis leads
-        }
-        _vc_labels = {
-            'In_Phase':       'In-Phase (en-bloc)',
-            'Anti_Phase':     'Anti-Phase (healthy)',
-            'Proximal_Phase': 'Proximal-Phase (Trunk leads)',
-            'Distal_Phase':   'Distal-Phase (Pelvis leads)',
-        }
+    vc_titles = {
+        'Axial_Turn': 'Trunk-Pelvis Vector Coding (Turn Phase)',
+        'Axial_Stand': 'Trunk-Pelvis Vector Coding (Sit-to-Stand Phase)',
+        'Limb_R_GaitFwd': 'Arm-Leg Vector Coding (Walk Forward Analysis)',
+        'Limb_R_GaitBack': 'Arm-Leg Vector Coding (Walk Back Analysis)',
+    }
+
+    for phase_key, title_suffix in vc_titles.items():
+        res = vc_summary.get(phase_key, {})
+        if not res.get('gamma_deg'):
+            continue
+            
+        vc_pct     = res['Movement_Percent']
+        vc_gamma   = res['gamma_deg']
+        vc_pattern = res['Coordination_Pattern']
         marker_colours = [_vc_colours.get(p, 'grey') for p in vc_pattern]
 
-        # Fig 9 \u2014 Coupling angle time-series
-        fig9 = go.Figure()
+        # ── Timeline Plot ──
+        fig_time = go.Figure()
 
         # Background zone bands
         for lo, hi, col, lbl in [
-            (0,   22.5, 'rgba(52,152,219,0.08)', 'Proximal'),
-            (22.5, 67.5, 'rgba(231,76,60,0.08)',  'In-Phase'),
-            (67.5,112.5, 'rgba(155,89,182,0.08)', 'Distal'),
-            (112.5,157.5,'rgba(46,204,113,0.08)', 'Anti-Phase'),
-            (157.5,202.5,'rgba(52,152,219,0.08)', 'Proximal'),
-            (202.5,247.5,'rgba(231,76,60,0.08)',  'In-Phase'),
-            (247.5,292.5,'rgba(155,89,182,0.08)', 'Distal'),
-            (292.5,337.5,'rgba(46,204,113,0.08)', 'Anti-Phase'),
-            (337.5,360,  'rgba(52,152,219,0.08)', 'Proximal'),
+            (0,   22.5, 'rgba(240, 80, 60, 0.08)',  'Proximal'),
+            (22.5, 67.5, 'rgba(90, 110, 250, 0.08)', 'In-Phase'),
+            (67.5,112.5, 'rgba(170, 80, 250, 0.08)', 'Distal'),
+            (112.5,157.5,'rgba(0, 200, 150, 0.08)',  'Anti-Phase'),
+            (157.5,202.5,'rgba(240, 80, 60, 0.08)',  'Proximal'),
+            (202.5,247.5,'rgba(90, 110, 250, 0.08)', 'In-Phase'),
+            (247.5,292.5,'rgba(170, 80, 250, 0.08)', 'Distal'),
+            (292.5,337.5,'rgba(0, 200, 150, 0.08)',  'Anti-Phase'),
+            (337.5,360,  'rgba(240, 80, 60, 0.08)',  'Proximal'),
         ]:
-            fig9.add_hrect(y0=lo, y1=hi, fillcolor=col, line_width=0, annotation_text=lbl if lo < 180 else '', annotation_position='right', annotation_font_size=9)
+            fig_time.add_hrect(y0=lo, y1=hi, fillcolor=col, line_width=0, annotation_text=lbl if lo < 180 else '', annotation_position='right', annotation_font_size=9)
 
-        fig9.add_trace(go.Scatter(
+        fig_time.add_trace(go.Scatter(
             x=vc_pct, y=vc_gamma,
             mode='markers+lines',
             marker=dict(color=marker_colours, size=7),
@@ -1360,48 +1372,43 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
             name='\u03b3 Coupling Angle',
             hovertemplate='%{x:.0f}%<br>\u03b3 = %{y:.1f}\u00b0<extra></extra>',
         ))
-        fig9.update_layout(
-            title='Vector Coding \u2014 Trunk vs Pelvis Axial Coordination (Turn Phase)',
-            xaxis_title='Turn Progress (%)',
+        fig_time.update_layout(
+            title=f'Coupling Angle Timeline \u2014 {title_suffix}',
+            xaxis_title='Movement Progress (%)',
             yaxis_title='Coupling Angle \u03b3 (\u00b0)',
             yaxis=dict(range=[0, 360], dtick=45),
             height=420,
             template='plotly_white',
             showlegend=False,
         )
-        plots_html.append(fig9.to_html(full_html=False, include_plotlyjs=False))
+        plots_html.append(fig_time.to_html(full_html=False, include_plotlyjs=False))
 
-        # Fig 10 \u2014 Summary stacked bar
-        _pct_map = {}
-        for row in vc_data:
-            p = row['Coordination_Pattern']
-            _pct_map[p] = _pct_map.get(p, 0) + 1
-        _n = len(vc_data)
-        _pct_norm = {p: v / _n * 100 for p, v in _pct_map.items()}
-
-        fig10 = go.Figure()
-        for pattern in ('In_Phase', 'Anti_Phase', 'Proximal_Phase', 'Distal_Phase'):
-            pval = _pct_norm.get(pattern, 0)
-            fig10.add_trace(go.Bar(
-                name=_vc_labels[pattern],
-                x=[pval],
-                y=['Turn 180\u00b0'],
-                orientation='h',
-                marker_color=_vc_colours[pattern],
-                text=f'{pval:.1f}%',
-                textposition='inside',
-                insidetextanchor='middle',
-            ))
-        fig10.update_layout(
-            barmode='stack',
-            title='Vector Coding \u2014 Coordination Pattern Distribution (Turn Phase)',
-            xaxis_title='Percentage of Turn (%)',
-            xaxis=dict(range=[0, 100]),
-            height=200,
+        # ── Donut Chart ──
+        labels = []
+        values = []
+        colors = []
+        for pat in ('In_Phase', 'Anti_Phase', 'Proximal_Phase', 'Distal_Phase'):
+            pct_val = res.get(f'{pat}_pct', 0)
+            if pct_val > 0:
+                labels.append(_vc_labels[pat])
+                values.append(pct_val)
+                colors.append(_vc_colours[pat])
+                
+        fig_donut = go.Figure(data=[go.Pie(
+            labels=labels, 
+            values=values, 
+            hole=0.4,
+            marker=dict(colors=colors),
+            textinfo='label+percent',
+            sort=False
+        )])
+        fig_donut.update_layout(
+            title=f'Coordination Pattern Distribution \u2014 {title_suffix}',
+            height=400,
             template='plotly_white',
-            legend=dict(orientation='h', y=-0.5),
+            showlegend=False
         )
-        plots_html.append(fig10.to_html(full_html=False, include_plotlyjs=False))
+        plots_html.append(fig_donut.to_html(full_html=False, include_plotlyjs=False))
 
     # --- HTML Formatting ---
 
@@ -2133,10 +2140,10 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     return report_file
 
 
-def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, turn_start_s: float, turn_end_s: float) -> dict:
+def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, start_s: float, end_s: float) -> dict:
     """
     Calculates the Vector Coding (Coupling Angle) of axial coordination between
-    Trunk and Pelvis during the Turn phase of the TUG test.
+    Trunk and Pelvis during a specific phase of the TUG test.
 
     Method: Chang et al. (2008) — 4-bin classification on [0°, 360°].
 
@@ -2153,7 +2160,7 @@ def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, turn_star
     """
     result: dict = {
         'gamma_deg': [],
-        'Turn_Percent': [],
+        'Movement_Percent': [],
         'Coordination_Pattern': [],
         'In_Phase_pct': 0.0,
         'Anti_Phase_pct': 0.0,
@@ -2179,13 +2186,13 @@ def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, turn_star
     trunk_yaw  = np.degrees(np.arctan2(trunk_vec[:, 1],  trunk_vec[:, 0]))
     pelvis_yaw = np.degrees(np.arctan2(pelvis_vec[:, 1], pelvis_vec[:, 0]))
 
-    # ── Slice the Turn phase ────────────────────────────────────────────────
-    s_idx = int(turn_start_s * fps)
-    e_idx = int(turn_end_s   * fps)
+    # ── Slice the phase ────────────────────────────────────────────────
+    s_idx = int(start_s * fps)
+    e_idx = int(end_s   * fps)
     N     = len(trunk_yaw)
 
     if e_idx <= s_idx or s_idx >= N:
-        print("  Vector Coding: turn phase too short or out of range.")
+        print("  Vector Coding: phase too short or out of range.")
         return result
 
     e_idx = min(e_idx, N)
@@ -2193,7 +2200,7 @@ def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, turn_star
     pelvis_turn = pelvis_yaw[s_idx:e_idx]
 
     if len(trunk_turn) < 3:
-        print("  Vector Coding: too few frames in turn phase.")
+        print("  Vector Coding: too few frames in phase.")
         return result
 
     # ── Interpolate to 101 points (0 → 100% of movement) ───────────────────
@@ -2236,7 +2243,96 @@ def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, turn_star
 
     result.update({
         'gamma_deg': gamma_deg.tolist(),
-        'Turn_Percent': pct[:-1].tolist(),    # 100 points (diff reduces by 1)
+        'Movement_Percent': pct[:-1].tolist(),    # 100 points (diff reduces by 1)
+        'Coordination_Pattern': patterns,
+        'In_Phase_pct':       round(counts['In_Phase']       / n * 100, 2),
+        'Anti_Phase_pct':     round(counts['Anti_Phase']     / n * 100, 2),
+        'Proximal_Phase_pct': round(counts['Proximal_Phase'] / n * 100, 2),
+        'Distal_Phase_pct':   round(counts['Distal_Phase']   / n * 100, 2),
+        'CAV_deg':            round(cav_deg, 2),
+        'Dominant_Pattern':   dominant,
+    })
+    return result
+
+
+def calculate_limb_vector_coding_y(analyzer: 'TUGAnalyzer', fps: float, start_s: float, end_s: float, joint_a_idx: int, joint_b_idx: int) -> dict:
+    """
+    Calculates the Y-axis (Anteroposterior) Vector Coding between two joints 
+    (e.g., Elbow vs Knee) relative to the mid-trunk during a specific phase.
+    """
+    result = {
+        'gamma_deg': [],
+        'Movement_Percent': [],
+        'Coordination_Pattern': [],
+        'In_Phase_pct': 0.0,
+        'Anti_Phase_pct': 0.0,
+        'Proximal_Phase_pct': 0.0,
+        'Distal_Phase_pct': 0.0,
+        'CAV_deg': 0.0,
+        'Dominant_Pattern': 'N/A',
+    }
+    
+    try:
+        pt_a = analyzer._get_point_3d(joint_a_idx)[:, 1]  # Y only
+        pt_b = analyzer._get_point_3d(joint_b_idx)[:, 1]  # Y only
+        mt_y = analyzer.df['Mid_Trunk_y'].to_numpy()
+    except ValueError as e:
+        print(f"  Limb VC: could not extract landmark data — {e}")
+        return result
+        
+    rel_a = pt_a - mt_y
+    rel_b = pt_b - mt_y
+    
+    s_idx = int(start_s * fps)
+    e_idx = int(end_s * fps)
+    N     = len(rel_a)
+    
+    if e_idx <= s_idx or s_idx >= N:
+        return result
+        
+    e_idx = min(e_idx, N)
+    a_phase = rel_a[s_idx:e_idx]
+    b_phase = rel_b[s_idx:e_idx]
+    
+    if len(a_phase) < 3:
+        return result
+        
+    pct = np.linspace(0, 100, 101)
+    old_pct = np.linspace(0, 100, len(a_phase))
+    
+    a_interp = np.interp(pct, old_pct, a_phase)
+    b_interp = np.interp(pct, old_pct, b_phase)
+    
+    d_a = np.diff(a_interp)
+    d_b = np.diff(b_interp)
+    
+    gamma_rad = np.arctan2(d_b, d_a)
+    gamma_deg = np.degrees(gamma_rad) % 360.0
+    
+    def _classify(g: float) -> str:
+        g = g % 360.0
+        if (  0  <= g <  22.5) or (157.5 <= g < 202.5) or (337.5 <= g <= 360):
+            return 'Proximal_Phase'   # Joint A dominates
+        elif (22.5 <= g <  67.5) or (202.5 <= g < 247.5):
+            return 'In_Phase'         # Both move same direction
+        elif (67.5 <= g < 112.5) or (247.5 <= g < 292.5):
+            return 'Distal_Phase'     # Joint B dominates
+        else:
+            return 'Anti_Phase'       # Opposite directions
+
+    patterns = [_classify(g) for g in gamma_deg]
+    n = len(patterns)
+
+    counts = {p: patterns.count(p) for p in ('In_Phase', 'Anti_Phase', 'Proximal_Phase', 'Distal_Phase')}
+    dominant = max(counts, key=counts.get)
+
+    gamma_rad_arr = np.radians(gamma_deg)
+    R = np.sqrt(np.mean(np.cos(gamma_rad_arr))**2 + np.mean(np.sin(gamma_rad_arr))**2)
+    cav_deg = float(np.degrees(np.sqrt(-2 * np.log(max(R, 1e-9)))))
+
+    result.update({
+        'gamma_deg': gamma_deg.tolist(),
+        'Movement_Percent': pct[:-1].tolist(),
         'Coordination_Pattern': patterns,
         'In_Phase_pct':       round(counts['In_Phase']       / n * 100, 2),
         'Anti_Phase_pct':     round(counts['Anti_Phase']     / n * 100, 2),
@@ -2373,31 +2469,44 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
     print("Generating animated GIFs for each phase (this may take a moment)...")
     phase_videos = generate_phase_skeleton_gifs(analyzer, fps, {'Phases_Seconds': phases}, out_dir, csv_path.stem)
 
-    # ── Vector Coding: Trunk vs Pelvis axial coordination during Turn ────────
+    # ── Vector Coding ────────────────────────────────────────────────────────
+    vc_ts_data = []
+
+    def _append_vc_ts(res, metric_name):
+        if res.get('gamma_deg'):
+            for pct, g, pat in zip(res['Movement_Percent'], res['gamma_deg'], res['Coordination_Pattern']):
+                vc_ts_data.append({
+                    'File_ID': csv_path.stem,
+                    'Phase_Metric': metric_name,
+                    'Movement_Percent': pct,
+                    'Coupling_Angle_deg': round(g, 4),
+                    'Coordination_Pattern': pat,
+                })
+
+    # 1. Axial (Trunk vs Pelvis) during Turn
     turn_s, turn_e = phases.get('turn180', (0, 0))
-    vc_result = calculate_axial_vector_coding(analyzer, fps, turn_s, turn_e)
-    if vc_result['gamma_deg']:
-        vc_ts_data = [
-            {
-                'File_ID': csv_path.stem,
-                'Turn_Percent': pct,
-                'Coupling_Angle_Trunk_Pelvis_deg': round(g, 4),
-                'Coordination_Pattern': pat,
-            }
-            for pct, g, pat in zip(
-                vc_result['Turn_Percent'],
-                vc_result['gamma_deg'],
-                vc_result['Coordination_Pattern'],
-            )
-        ]
+    vc_turn = calculate_axial_vector_coding(analyzer, fps, turn_s, turn_e)
+    _append_vc_ts(vc_turn, 'Axial_Turn')
+
+    # 2. Axial (Trunk vs Pelvis) during Stand (Sit-to-Stand)
+    sts_s, sts_e = phases.get('stand', (0, 0))
+    vc_stand = calculate_axial_vector_coding(analyzer, fps, sts_s, sts_e)
+    _append_vc_ts(vc_stand, 'Axial_Stand')
+
+    # 3. Limb Y-axis (Right Elbow 14 vs Right Knee 26) during Gait Forward
+    wf_s, wf_e = phases.get('gait_forward', (0, 0))
+    vc_wf = calculate_limb_vector_coding_y(analyzer, fps, wf_s, wf_e, 14, 26)
+    _append_vc_ts(vc_wf, 'Limb_R_GaitFwd')
+
+    # 4. Limb Y-axis (Right Elbow 14 vs Right Knee 26) during Gait Back
+    wb_s, wb_e = phases.get('gait_back', (0, 0))
+    vc_wb = calculate_limb_vector_coding_y(analyzer, fps, wb_s, wb_e, 14, 26)
+    _append_vc_ts(vc_wb, 'Limb_R_GaitBack')
+
+    if vc_ts_data:
         vc_df = pd.DataFrame(vc_ts_data)
-        vc_df.to_csv(out_dir / f"{csv_path.stem}_bd_vector_coding_turn.csv", index=False)
-        print(f"  Vector Coding Turn: dominant={vc_result['Dominant_Pattern']}  "
-              f"CAV={vc_result['CAV_deg']:.1f}°  "
-              f"In-Phase={vc_result['In_Phase_pct']:.0f}%  "
-              f"Anti-Phase={vc_result['Anti_Phase_pct']:.0f}%")
-    else:
-        vc_ts_data = []
+        vc_df.to_csv(out_dir / f"{csv_path.stem}_bd_vector_coding.csv", index=False)
+        print("  Vector Coding calculations complete.")
 
     # Render steps HTML
     report_data = {
@@ -2406,7 +2515,13 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
         'Phases_Seconds': phases,
         'Steps_Timeseries': steps_list,
         'Phase_Videos': phase_videos,
-        'Vector_Coding_Turn': vc_ts_data,
+        'Vector_Coding': vc_ts_data,
+        'VC_Summary': {
+            'Axial_Turn': vc_turn,
+            'Axial_Stand': vc_stand,
+            'Limb_R_GaitFwd': vc_wf,
+            'Limb_R_GaitBack': vc_wb,
+        }
     }
     
     if 'Global' not in stats:
@@ -2463,13 +2578,16 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
             'Steps_Walk_Back': stats.get('Global', {}).get('Steps_Walk_Back', 0),
             'XcoM_Dev_Fwd_m': stats.get('Global', {}).get('XcoM_Deviation_Fwd_m', 0),
             'XcoM_Dev_Bwd_m': stats.get('Global', {}).get('XcoM_Deviation_Bwd_m', 0),
-            'VC_Dominant_Pattern':   vc_result.get('Dominant_Pattern', 'N/A'),
-            'VC_In_Phase_pct':       vc_result.get('In_Phase_pct', 0),
-            'VC_Anti_Phase_pct':     vc_result.get('Anti_Phase_pct', 0),
-            'VC_Proximal_Phase_pct': vc_result.get('Proximal_Phase_pct', 0),
-            'VC_Distal_Phase_pct':   vc_result.get('Distal_Phase_pct', 0),
-            'VC_CAV_deg':            vc_result.get('CAV_deg', 0),
         })
+        for prefix, res in [('VCTurn', vc_turn), ('VCStand', vc_stand), ('VCWkFwd', vc_wf), ('VCWkBck', vc_wb)]:
+            results_data.update({
+                f'{prefix}_Dominant':   res.get('Dominant_Pattern', 'N/A'),
+                f'{prefix}_InPhase_%':  res.get('In_Phase_pct', 0),
+                f'{prefix}_AntiPh_%':   res.get('Anti_Phase_pct', 0),
+                f'{prefix}_ProxPh_%':   res.get('Proximal_Phase_pct', 0),
+                f'{prefix}_DistPh_%':   res.get('Distal_Phase_pct', 0),
+                f'{prefix}_CAV_deg':    res.get('CAV_deg', 0),
+            })
     write_single_row_csv(out_dir / f"{csv_path.stem}_bd_results.csv", results_data)
     
     # Kinematics summary (Max/Mean ranges)
