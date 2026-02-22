@@ -885,15 +885,42 @@ class TUGAnalyzer:
             y_peak_local = int(np.argmin(dist_to_turn))
             y_peak_abs   = search_start + y_peak_local
 
-        # ── 2c. Stop_5s (deceleration plateau before turn) ───────────────────────
-        # Walk backwards from peak until CoM-Y is still rising  (dY/dt > 0)
-        com_vy_smooth = np.gradient(com_y_smooth) / dt
-        stop_start_local = y_peak_local
-        while stop_start_local > 0 and com_vy_smooth[search_start + stop_start_local] > 0.05:
-            stop_start_local -= 1
-        fwd_stop = search_start + stop_start_local  # end of forward gait
+        # ── 2c. Stop_5s anchor: flattest speed window near the Y peak ───────────
+        # Use trunk speed (CoM XY) to find the speed plateau — same method as vaila_tugtunb.py
+        from scipy.ndimage import uniform_filter1d, gaussian_filter1d as _gf1d
+        com_vx_s = np.gradient(_gf1d(com_x, sigma=fs * 0.5)) / dt
+        com_vy_s = np.gradient(_gf1d(com_y, sigma=fs * 0.5)) / dt
 
-        # ── 2d. Turn180 boundaries — use shoulder yaw if available, else ±0.5 s ──
+        if 'Mid_Trunk_vel_y' in self.df.columns and 'Mid_Trunk_vel_x' in self.df.columns:
+            mid_trunk_vy = _gf1d(self.df['Mid_Trunk_vel_y'].to_numpy(), sigma=fs * 0.5)
+            mid_trunk_vx = _gf1d(self.df['Mid_Trunk_vel_x'].to_numpy(), sigma=fs * 0.5)
+            trunk_speed_xy = np.sqrt(mid_trunk_vx**2 + mid_trunk_vy**2)
+        else:
+            trunk_speed_xy = np.sqrt(com_vx_s**2 + com_vy_s**2)
+            mid_trunk_vy = com_vy_s
+
+        # Search for the speed plateau within the Y-spatial search window
+        spd_window = trunk_speed_xy[search_start:search_end]
+        win_len = min(int(fs * 3.5), len(spd_window))
+        if win_len > 0:
+            spd_smoothed   = uniform_filter1d(spd_window, size=win_len)
+            anchor_local   = int(np.argmin(spd_smoothed))
+            anchor_idx     = search_start + anchor_local
+        else:
+            anchor_idx = y_peak_abs  # fallback
+
+        speed_thresh = 0.15
+
+        # fwd_stop: walk backwards from anchor until speed > thresh (subject still moving)
+        stop_search = anchor_idx
+        while stop_search > sts_end and (
+            mid_trunk_vy[stop_search] < speed_thresh
+            and trunk_speed_xy[stop_search] < speed_thresh
+        ):
+            stop_search -= 1
+        fwd_stop = max(sts_end, stop_search)
+
+        # ── 2d. Turn180 boundaries — shoulder yaw within Y-spatial window ─────────
         try:
             shoulder_l = self._get_point_3d(11)
             shoulder_r = self._get_point_3d(12)
@@ -904,50 +931,55 @@ class TUGAnalyzer:
         except ValueError:
             sh_yaw_rate = np.zeros(N)
 
-        # Search for turn within Y-peak ± tolerance window
-        turn_zone_lo = max(fwd_stop, y_peak_abs - int(y_tol * fs))
-        turn_zone_hi = min(search_end, y_peak_abs + int(y_tol * fs * 3))
+        # Search for the yaw peak *after* the speed anchor (the pause comes first, then the turn)
+        turn_search_start = anchor_idx
+        turn_search_end   = min(anchor_idx + int(fs * 15), search_end)
 
-        zone_yaw   = sh_yaw_rate[turn_zone_lo:turn_zone_hi]
-        max_yaw    = np.max(zone_yaw) if len(zone_yaw) > 0 else 0.0
-        yaw_thresh = max(0.15, max_yaw * 0.15)
+        # Narrow the search window: stop once CoM_Y velocity is strongly negative (walking back)
+        for i in range(anchor_idx, turn_search_end):
+            if mid_trunk_vy[i] < -0.2:
+                turn_search_end = min(turn_search_end, i + int(fs * 1.5))
+                break
 
-        if max_yaw > 0.1 and len(zone_yaw) > 0:
-            peak_turn_idx = turn_zone_lo + int(np.argmax(zone_yaw))
+        if turn_search_end > turn_search_start:
+            zone_yaw   = sh_yaw_rate[turn_search_start:turn_search_end]
+            max_yaw    = np.max(zone_yaw) if len(zone_yaw) > 0 else 0.0
+            yaw_thresh = max(0.15, max_yaw * 0.15)
+            peak_turn_idx = turn_search_start + int(np.argmax(zone_yaw))
         else:
-            peak_turn_idx = y_peak_abs  # fallback: Y peak itself
+            peak_turn_idx = y_peak_abs
+            yaw_thresh    = 0.15
+            max_yaw       = 0.0
 
+        # turn_start: walk backwards from yaw peak until rate < threshold
         turn_start = peak_turn_idx
         while turn_start > fwd_stop and sh_yaw_rate[turn_start] > yaw_thresh:
             turn_start -= 1
 
+        # turn_end: walk forwards from yaw peak until rate < threshold
         turn_end = peak_turn_idx
         while turn_end < search_end and sh_yaw_rate[turn_end] > yaw_thresh:
             turn_end += 1
 
-        # ── 2e. Back gait start and end ──────────────────────────────────────────
-        # Back gait starts where CoM-Y begins to decrease consistently after the turn
+        # ── 2e. Back gait: start where CoM_Y velocity is consistently negative ────
         bck_start = turn_end
-        for i in range(turn_end, search_end):
-            if com_vy_smooth[i] < -0.05:
-                bck_start = i
-                break
-        if bck_start == turn_end:
-            bck_start = turn_end  # nothing found, keep at turn_end
+        while bck_start < search_end and mid_trunk_vy[bck_start] > -speed_thresh:
+            bck_start += 1
 
-        turn_end = bck_start  # tie turn_end to back-gait start (contiguous phases)
+        if bck_start >= search_end:
+            bck_start = turn_end
+        turn_end = bck_start  # tie turn_end to back-gait start (contiguous)
 
         # Back gait ends where CoM-Y crosses back below y_chair
-        bck_end = sit_start  # default: where CoM-Z starts descending
+        bck_end = sit_start
         for i in range(bck_start, search_end):
             if com_y_smooth[i] <= y_chair:
                 bck_end = i
                 break
 
-        # Prefer the CoM-Z derived sit_start if it's later (subject still walking)
         sit_start = max(bck_end, sit_start)
 
-        # Final sanity: enforce contiguous, non-negative durations
+        # ── Sanity: enforce contiguous, non-negative durations ───────────────────
         fwd_stop   = max(fwd_stop,  sts_end)
         turn_start = max(turn_start, fwd_stop)
         turn_end   = max(turn_end,   turn_start)
@@ -957,6 +989,7 @@ class TUGAnalyzer:
 
         stop_start = fwd_stop
         stop_end   = turn_start
+
 
         # ---------------------------------------------------------
         # 3. Packaging Results
