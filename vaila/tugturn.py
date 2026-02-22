@@ -543,7 +543,8 @@ class TUGAnalyzer:
         )
         
         # Threshold de marcha restaurado: ignorar passos minúsculos parados e no giro
-        is_walking_mask = is_standing_mask & (pelvis_vel_xy > 0.25)
+        # Reduzido para 0.15 para garantir que passos mais lentos perto do giro não sejam perdidos
+        is_walking_mask = is_standing_mask & (pelvis_vel_xy > 0.15)
 
         # 2. Vetor de Progressão Direcional para o Toe Off
         pelvis_smooth = gaussian_filter1d(pelvis_center, sigma=self.fs * 0.5, axis=0)
@@ -552,17 +553,17 @@ class TUGAnalyzer:
         dir_unit = dir_xy / (np.linalg.norm(dir_xy, axis=1, keepdims=True) + 1e-8)
 
         def find_events(heel, toe):
+            min_dist = int(self.fs * 0.3) # Passos não ocorrem em menos de 300ms
+
             # -----------------------------------------------------------------
-            # HEEL STRIKE (Mínimo da Trajetória Z - Calcanhar encosta no chão)
+            # HEEL STRIKE (Zeni - Calcanhar mais projetado à frente da pelve)
             # -----------------------------------------------------------------
-            z_heel = gaussian_filter1d(heel[:, 2], sigma=self.fs * 0.05)
-            inv_z_heel = -z_heel # Invertemos para usar find_peaks (que acha máximos)
+            rel_heel_xy = heel[:, [0, 1]] - pelvis_center[:, [0, 1]]
+            proj_heel = np.sum(rel_heel_xy * dir_unit, axis=1)
+            proj_heel_smooth = gaussian_filter1d(proj_heel, sigma=self.fs * 0.05)
             
-            # Zerar o sinal se não estiver andando (evita detectar passos sentado/girando)
-            inv_z_masked = np.where(is_walking_mask, inv_z_heel, np.min(inv_z_heel))
-            
-            min_dist = int(self.fs * 0.4) # Passos não ocorrem em menos de 400ms
-            hs_indices, _ = find_peaks(inv_z_masked, distance=min_dist, prominence=0.04)
+            proj_heel_masked = np.where(is_walking_mask, proj_heel_smooth, np.min(proj_heel_smooth))
+            hs_indices, _ = find_peaks(proj_heel_masked, distance=min_dist, prominence=0.015)
 
             # -----------------------------------------------------------------
             # TOE OFF (Zeni Modificado - Dedão mais esticado atrás da pelve)
@@ -575,7 +576,7 @@ class TUGAnalyzer:
             inv_proj_toe = -proj_toe_smooth
             inv_proj_masked = np.where(is_walking_mask, inv_proj_toe, np.min(inv_proj_toe))
             
-            to_indices, _ = find_peaks(inv_proj_masked, distance=min_dist, prominence=0.04)
+            to_indices, _ = find_peaks(inv_proj_masked, distance=min_dist, prominence=0.015)
 
             return hs_indices, to_indices
 
@@ -2587,6 +2588,23 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
         stats['Global'] = {}
     stats['Global']['Steps_Walk_Forward'] = wf_steps
     stats['Global']['Steps_Walk_Back'] = wb_steps
+
+    fwd_seq = [s['Side'][0] for s in steps_list if s['Phase'] == 'gait_forward']
+    bck_seq = [s['Side'][0] for s in steps_list if s['Phase'] == 'gait_back']
+    
+    if len(fwd_seq) > 0:
+        stats['Global']['Fwd_1st_strike_inside_zone'] = fwd_seq[0]
+        stats['Global']['Fwd_1st_complete_step_inside'] = fwd_seq[1] if len(fwd_seq) > 1 else None
+        stats['Global']['Fwd_Number_of_steps_inside'] = len(fwd_seq) - 1
+        stats['Global']['Fwd_Last_strike_inside_zone'] = fwd_seq[-1]
+        stats['Global']['Fwd_Sequence_steps_inside'] = str(fwd_seq)
+        
+    if len(bck_seq) > 0:
+        stats['Global']['Bck_1st_strike_inside_zone'] = bck_seq[0]
+        stats['Global']['Bck_1st_complete_step_inside'] = bck_seq[1] if len(bck_seq) > 1 else None
+        stats['Global']['Bck_Number_of_steps_inside'] = len(bck_seq) - 1
+        stats['Global']['Bck_Last_strike_inside_zone'] = bck_seq[-1]
+        stats['Global']['Bck_Sequence_steps_inside'] = str(bck_seq)
     
     # Export individual steps to CSV file (overwrite)
     if steps_list:
@@ -2637,6 +2655,18 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
             'Steps_Walk_Back': stats.get('Global', {}).get('Steps_Walk_Back', 0),
             'XcoM_Dev_Fwd_m': stats.get('Global', {}).get('XcoM_Deviation_Fwd_m', 0),
             'XcoM_Dev_Bwd_m': stats.get('Global', {}).get('XcoM_Deviation_Bwd_m', 0),
+            
+            'Fwd_1st_strike_inside_zone': stats.get('Global', {}).get('Fwd_1st_strike_inside_zone', ''),
+            'Fwd_1st_complete_step_inside': stats.get('Global', {}).get('Fwd_1st_complete_step_inside', ''),
+            'Fwd_Number_of_steps_inside': stats.get('Global', {}).get('Fwd_Number_of_steps_inside', ''),
+            'Fwd_Last_strike_inside_zone': stats.get('Global', {}).get('Fwd_Last_strike_inside_zone', ''),
+            'Fwd_Sequence_steps_inside': stats.get('Global', {}).get('Fwd_Sequence_steps_inside', ''),
+            
+            'Bck_1st_strike_inside_zone': stats.get('Global', {}).get('Bck_1st_strike_inside_zone', ''),
+            'Bck_1st_complete_step_inside': stats.get('Global', {}).get('Bck_1st_complete_step_inside', ''),
+            'Bck_Number_of_steps_inside': stats.get('Global', {}).get('Bck_Number_of_steps_inside', ''),
+            'Bck_Last_strike_inside_zone': stats.get('Global', {}).get('Bck_Last_strike_inside_zone', ''),
+            'Bck_Sequence_steps_inside': stats.get('Global', {}).get('Bck_Sequence_steps_inside', ''),
         })
         for prefix, res in [('VCTurn', vc_turn), ('VCStand', vc_stand), ('VCWkFwd', vc_wf), ('VCWkBck', vc_wb)]:
             results_data.update({
