@@ -4,8 +4,8 @@ vaila_tugtun.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Created: 20 February 2026
-Updated: 22 February 2026
-Version: 0.1.0
+Updated: 23 February 2026
+Version: 0.1.1
 Python Version: 3.12.12
 
 Description:
@@ -2099,6 +2099,105 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     
     plt.tight_layout()
     images_b64.append(get_base64_image(fig8))
+
+    # --- Plot 9+: Vector Coding (Timelines + Donut Charts) ---
+    vc_summary = report_data.get('VC_Summary', {})
+    vc_titles = {
+        'Axial_Turn': 'Trunk-Pelvis Vector Coding (Turn Phase)',
+        'Axial_Stand': 'Trunk-Pelvis Vector Coding (Sit-to-Stand Phase)',
+        'Limb_R_GaitFwd': 'Arm-Leg Vector Coding (Walk Forward Analysis)',
+        'Limb_R_GaitBack': 'Arm-Leg Vector Coding (Walk Back Analysis)',
+    }
+    vc_colours = {
+        'In_Phase': 'royalblue',
+        'Anti_Phase': 'mediumseagreen',
+        'Proximal_Phase': 'tomato',
+        'Distal_Phase': 'mediumpurple',
+    }
+    vc_labels = {
+        'In_Phase': 'In_Phase',
+        'Anti_Phase': 'Anti_Phase',
+        'Proximal_Phase': 'Proximal_Dominance',
+        'Distal_Phase': 'Distal_Dominance',
+    }
+
+    for phase_key, title_suffix in vc_titles.items():
+        res = vc_summary.get(phase_key, {}) or {}
+        gamma = res.get('gamma_deg') or []
+        movement_pct = res.get('Movement_Percent') or []
+        patterns = res.get('Coordination_Pattern') or []
+
+        # Keep static report resilient: skip empty/malformed VC slices.
+        n = min(len(gamma), len(movement_pct), len(patterns))
+        if n == 0:
+            continue
+
+        gamma = np.asarray(gamma[:n], dtype=float)
+        movement_pct = np.asarray(movement_pct[:n], dtype=float)
+        patterns = list(patterns[:n])
+
+        # Timeline chart
+        fig_vc_timeline = plt.figure(figsize=(14, 4.8))
+        ax_vc_timeline = fig_vc_timeline.add_subplot(111)
+
+        for lo, hi, col in [
+            (0, 22.5, 'mistyrose'),
+            (22.5, 67.5, 'aliceblue'),
+            (67.5, 112.5, 'lavender'),
+            (112.5, 157.5, 'honeydew'),
+            (157.5, 202.5, 'mistyrose'),
+            (202.5, 247.5, 'aliceblue'),
+            (247.5, 292.5, 'lavender'),
+            (292.5, 337.5, 'honeydew'),
+            (337.5, 360, 'mistyrose'),
+        ]:
+            ax_vc_timeline.axhspan(lo, hi, color=col, alpha=0.5, zorder=0)
+
+        point_colors = [vc_colours.get(p, 'gray') for p in patterns]
+        ax_vc_timeline.plot(movement_pct, gamma, color='gray', linewidth=1, alpha=0.5, zorder=1)
+        ax_vc_timeline.scatter(movement_pct, gamma, c=point_colors, s=18, edgecolors='none', zorder=2)
+        ax_vc_timeline.set_xlim(0, 100)
+        ax_vc_timeline.set_ylim(0, 360)
+        ax_vc_timeline.set_yticks(np.arange(0, 361, 45))
+        ax_vc_timeline.set_xlabel('Movement Progress (%)')
+        ax_vc_timeline.set_ylabel('Coupling Angle γ (°)')
+        ax_vc_timeline.set_title(f'Coupling Angle Timeline — {title_suffix}')
+        ax_vc_timeline.grid(True, alpha=0.2)
+        plt.tight_layout()
+        images_b64.append(get_base64_image(fig_vc_timeline))
+
+        # Donut chart
+        fig_vc_donut = plt.figure(figsize=(7, 5))
+        ax_vc_donut = fig_vc_donut.add_subplot(111)
+
+        labels = []
+        values = []
+        colors = []
+        for pat in ('In_Phase', 'Anti_Phase', 'Proximal_Phase', 'Distal_Phase'):
+            pct_val = float(res.get(f'{pat}_pct', 0) or 0)
+            if pct_val > 0:
+                labels.append(vc_labels[pat])
+                values.append(pct_val)
+                colors.append(vc_colours[pat])
+
+        if values:
+            ax_vc_donut.pie(
+                values,
+                labels=labels,
+                colors=colors,
+                startangle=90,
+                counterclock=False,
+                wedgeprops=dict(width=0.45, edgecolor='white'),
+                autopct=lambda p: f'{p:.1f}%',
+                pctdistance=0.78,
+                labeldistance=1.05,
+            )
+        else:
+            ax_vc_donut.text(0.5, 0.5, 'No Vector Coding data', ha='center', va='center')
+        ax_vc_donut.set_title(f'Coordination Pattern Distribution — {title_suffix}')
+        ax_vc_donut.axis('equal')
+        plt.tight_layout()
+        images_b64.append(get_base64_image(fig_vc_donut))
 
     # --- HTML Formatting ---
     images_html = '\n'.join([f'<img src="data:image/png;base64,{b64}" alt="TUG Chart" />' for b64 in images_b64])
