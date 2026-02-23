@@ -44,6 +44,7 @@ License:
 
 import colorsys  # Adicionar esta importação no topo do arquivo
 import datetime
+import json
 import os
 import subprocess
 import threading
@@ -70,14 +71,57 @@ POSE_CONNECTIONS = frozenset(
         (0, 1), (1, 2), (2, 3), (3, 7),
         (0, 4), (4, 5), (5, 6), (6, 8),
         (9, 10),
-        (11, 12), (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+        (11, 12), (11, 23), (12, 24), (23, 24),
+        (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
         (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20),
-        (11, 23), (12, 24), (23, 24),
         (23, 25), (24, 26), (25, 27), (26, 28),
-        (27, 29), (28, 30), (29, 31), (30, 32),
-        (27, 31), (28, 32),
+        (27, 29), (28, 30), (29, 31), (30, 32), (27, 31), (28, 32),
     ]
 )
+
+# #region agent log
+_DBG_PATH = "/home/preto/Preto/vaila/.cursor/debug-2d1fa6.log"
+_DBG_SESSION = "2d1fa6"
+_DBG_FACE_CONN_LOGGED = False
+_DBG_DRAW_LOGGED = False
+
+
+def _agent_debug_log(run_id, hypothesis_id, location, message, data=None):
+    payload = {
+        "sessionId": _DBG_SESSION,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+    }
+    try:
+        with open(_DBG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+
+
+_face_expected = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+_face_present = set()
+for _a, _b in POSE_CONNECTIONS:
+    if _a in _face_expected:
+        _face_present.add(_a)
+    if _b in _face_expected:
+        _face_present.add(_b)
+_agent_debug_log(
+    "face-skeleton-investigation",
+    "H1",
+    "markerless2d_mpyolo.py:POSE_CONNECTIONS",
+    "pose connection summary at import",
+    {
+        "total_connections": len(POSE_CONNECTIONS),
+        "face_indices_present": sorted(_face_present),
+        "missing_face_indices": sorted(_face_expected - _face_present),
+    },
+)
+# #endregion
 
 
 def get_mediapipe_model_path(complexity=2):
@@ -127,6 +171,7 @@ def create_pose_landmarker(complexity=2):
 
 def draw_landmarks_manual(image, landmarks_px, connections=None, color=(0, 255, 0), line_color=(255, 255, 255), radius=4, thickness=2):
     """Draw pose landmarks and connections manually using OpenCV (replacement for mp_drawing)."""
+    global _DBG_DRAW_LOGGED
     if connections is None:
         connections = POSE_CONNECTIONS
     # Draw connections
@@ -141,6 +186,20 @@ def draw_landmarks_manual(image, landmarks_px, connections=None, color=(0, 255, 
     for pt in landmarks_px:
         if pt is not None and not (np.isnan(pt[0]) or np.isnan(pt[1])):
             cv2.circle(image, (int(pt[0]), int(pt[1])), radius, color, -1)
+    if not _DBG_DRAW_LOGGED:
+        face_valid = 0
+        for idx in range(min(11, len(landmarks_px))):
+            pt = landmarks_px[idx]
+            if pt is not None and not (np.isnan(pt[0]) or np.isnan(pt[1])):
+                face_valid += 1
+        _agent_debug_log(
+            "face-skeleton-investigation",
+            "H2",
+            "markerless2d_mpyolo.py:draw_landmarks_manual",
+            "first draw face visibility snapshot",
+            {"face_valid_points_0_10": face_valid, "landmark_count": len(landmarks_px)},
+        )
+        _DBG_DRAW_LOGGED = True
 
 # COCO classes dictionary
 COCO_CLASSES = {

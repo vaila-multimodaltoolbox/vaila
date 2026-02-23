@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vailá Manual | TUG and TURN</title>
+    <style>
+      :root {
+        --primary: #2563eb;
+        --secondary: #475569;
+        --accent: #f59e0b;
+        --bg: #f8fafc;
+        --text: #1e293b;
+        --code-bg: #e2e8f0;
+      }
+
+      body {
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        line-height: 1.6;
+        color: var(--text);
+        background: var(--bg);
+        margin: 0;
+        padding: 0;
+      }
+
+      .sidebar {
+        width: 300px;
+        height: 100vh;
+        background: #fff;
+        position: fixed;
+        left: 0;
+        top: 0;
+        border-right: 1px solid #e2e8f0;
+        overflow-y: auto;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      .sidebar h2 {
+        font-size: 1.2rem;
+        color: var(--primary);
+        margin-top: 0;
+      }
+
+      .sidebar ul {
+        list-style: none;
+        padding: 0;
+      }
+
+      .sidebar a {
+        text-decoration: none;
+        color: var(--secondary);
+        font-weight: 500;
+        display: block;
+        padding: 5px 10px;
+        border-radius: 4px;
+        transition: all 0.2s;
+        font-size: 0.92rem;
+      }
+
+      .sidebar a:hover {
+        background: #f1f5f9;
+        color: var(--primary);
+      }
+
+      .main-content {
+        margin-left: 300px;
+        padding: 40px 60px;
+        max-width: 1000px;
+      }
+
+      header {
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 20px;
+        margin-bottom: 30px;
+      }
+
+      h1 {
+        font-size: 2.3rem;
+        color: var(--primary);
+        margin: 0;
+      }
+
+      .version-badge {
+        background: var(--accent);
+        color: #fff;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.9rem;
+        vertical-align: middle;
+        margin-left: 10px;
+      }
+
+      h2 {
+        color: var(--primary);
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 10px;
+        margin-top: 40px;
+      }
+
+      h3 {
+        color: #1d4ed8;
+        margin-top: 26px;
+      }
+
+      code {
+        background: var(--code-bg);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: "Consolas", monospace;
+        font-size: 0.9em;
+      }
+
+      pre {
+        background: #1e293b;
+        color: #f8fafc;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+      }
+
+      .callout {
+        padding: 16px;
+        border-radius: 6px;
+        margin: 20px 0;
+        background: #eff6ff;
+        border-left: 4px solid var(--primary);
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="sidebar">
+      <h2>vailá Docs</h2>
+      <ul>
+        <li><a href="#intro">Introduction</a></li>
+        <li><a href="#workflow">Pipeline and Segmentation</a></li>
+        <li><a href="#kinematics">Gait Kinematics</a></li>
+        <li><a href="#kin-magnitude">Kin Magnitude (2D)</a></li>
+        <li><a href="#coupling">Coupling Angle and Vector Coding</a></li>
+        <li><a href="#xcom">XCoM</a></li>
+        <li><a href="#config">Configuration</a></li>
+        <li><a href="#outputs">Outputs</a></li>
+        <li><a href="#usage">Usage</a></li>
+      </ul>
+    </nav>
+
+    <main class="main-content">
+      <header id="intro">
+        <h1>TUG and TURN <span class="version-badge">v0.0.4</span></h1>
+        <p>
+          Instrumented Timed Up and Go (TUG) analysis with 3D kinematics,
+          robust gait-event detection, phase segmentation, Vector Coding, and
+          XCoM-based stability metrics.
+        </p>
+      </header>
+
+      <section id="workflow">
+        <h2>Pipeline and Segmentation</h2>
+        <p>
+          <code>tugturn.py</code> processes MediaPipe 3D CSV files and segments
+          the trial into functional phases: <strong>Stand</strong>,
+          <strong>Gait Forward</strong>, <strong>Turn</strong>,
+          <strong>Gait Back</strong>, and <strong>Sit</strong>.
+        </p>
+        <p>
+          Segmentation combines temporal anchors and spatial thresholds from TOML
+          (<code>y_chair</code>, <code>y_turn</code>, and
+          <code>y_chair_tol</code>) for robust behavior in clinical data.
+        </p>
+        <div class="callout">
+          <strong>Gait events (HS/TO):</strong> heel-strike and toe-off are
+          estimated using a relative-distance method (Zeni-style approach), then
+          filtered against expected gait phases to reduce fictitious events.
+        </div>
+      </section>
+
+      <section id="kinematics">
+        <h2>Gait Kinematics</h2>
+        <p>
+          The script computes kinematic variables from landmark trajectories,
+          including:
+        </p>
+        <ul>
+          <li>Knee and ankle angles (right and left)</li>
+          <li>Trunk inclination</li>
+          <li>Trunk and foot position, velocity, and acceleration (Y/Z axes)</li>
+          <li>Spatiotemporal gait parameters by phase and globally</li>
+        </ul>
+      </section>
+
+      <section id="kin-magnitude">
+        <h2>Kin Magnitude (2D Kinematics Magnitude)</h2>
+        <p>
+          In TUG charts, <strong>Kin Magnitude</strong> means the
+          <strong>resultant scalar magnitude</strong> (Euclidean norm) of the
+          motion vector in the sagittal plane (Y and Z), not the separate axis
+          components.
+        </p>
+        <p>
+          For velocity:
+          <code>|V_yz| = sqrt(Vy^2 + Vz^2)</code><br />
+          For acceleration:
+          <code>|A_yz| = sqrt(Ay^2 + Az^2)</code>
+        </p>
+        <p>
+          This is useful because Y and Z components can be positive or negative.
+          The magnitude summarizes movement intensity independently of direction.
+        </p>
+      </section>
+
+      <section id="coupling">
+        <h2>Coupling Angle and Vector Coding</h2>
+
+        <h3>Axial Vector Coding (Trunk vs Pelvis)</h3>
+        <p>
+          During Turn/Stand phases, the script computes axial coordination using
+          Vector Coding:
+          <code>gamma = atan2(DeltaPelvis, DeltaTrunk)</code> (normalized to
+          0-360 degrees).
+        </p>
+        <p>
+          Coordination is classified into four patterns:
+          <strong>Proximal-Phase</strong>, <strong>In-Phase</strong>,
+          <strong>Distal-Phase</strong>, and <strong>Anti-Phase</strong>.
+          Outputs include time-normalized coupling-angle series, percentage per
+          pattern, and CAV (Coupling Angle Variability).
+        </p>
+
+        <h3>Limb and Sagittal Coupling</h3>
+        <p>
+          The script also computes coupling metrics from sagittal kinematics,
+          including side-specific hip-knee coupling-angle trajectories and
+          additional limb Vector Coding along the anteroposterior axis during
+          gait-forward and gait-back phases.
+        </p>
+      </section>
+
+      <section id="xcom">
+        <h2>XCoM (Extrapolated Center of Mass)</h2>
+        <p>
+          XCoM is computed from center-of-mass position and velocity:
+          <code>XCoM = CoM + CoM_vel / omega_0</code>, with
+          <code>omega_0 = sqrt(g / l)</code>.
+        </p>
+        <p>
+          Here, <code>l</code> is approximated by mean CoM height
+          (<code>CoM_z</code>). XCoM path deviation is then used as a dynamic
+          stability metric for gait forward and gait back.
+        </p>
+      </section>
+
+      <section id="config">
+        <h2>Configuration (TOML)</h2>
+        <p>
+          Configure spatial protocol thresholds in <code>[spatial]</code>:
+        </p>
+        <ul>
+          <li><code>y_chair</code>: chair position along Y</li>
+          <li><code>y_turn</code>: turn target position along Y</li>
+          <li><code>y_chair_tol</code>: tolerance near chair for phase/step logic</li>
+        </ul>
+      </section>
+
+      <section id="outputs">
+        <h2>Output Files</h2>
+        <p>The module exports clinical and research outputs per trial:</p>
+        <ul>
+          <li>
+            <strong>Reports:</strong> <code>*_tug_report.html</code> and
+            <code>*_tug_report_interactive.html</code>
+          </li>
+          <li>
+            <strong>Global database rows:</strong>
+            <code>*_bd_results.csv</code>, <code>*_bd_kinematics.csv</code>
+          </li>
+          <li>
+            <strong>Step-level rows:</strong> <code>*_bd_steps.csv</code>
+          </li>
+          <li>
+            <strong>Vector coding outputs:</strong> metrics and time-series CSVs
+          </li>
+          <li>
+            <strong>Phase GIFs:</strong> animated skeleton checks for segmented
+            phases
+          </li>
+        </ul>
+      </section>
+
+      <section id="usage">
+        <h2>Usage</h2>
+        <pre><code># CLI, explicit output directory
+uv run vaila/tugturn.py -i video_data.csv -c config.toml -o results/
+
+# CLI, without -o
+# Output directory auto-created next to each CSV:
+# result_tugturn_&lt;csv_basename&gt;
+uv run vaila/tugturn.py -i video_data.csv -c config.toml
+
+# Batch processing (all CSVs in folder)
+uv run vaila/tugturn.py -i tests/tugturn/ -c tests/tugturn/s26_m1_t1.toml</code></pre>
+      </section>
+
+      <footer>
+        <hr />
+        <p>© 2026 vailá - Multimodal Toolbox</p>
+      </footer>
+    </main>
+  </body>
+</html>
