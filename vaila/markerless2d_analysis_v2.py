@@ -71,6 +71,7 @@ warnings.filterwarnings(
 )
 
 import datetime
+import json
 import os
 import platform
 import shutil
@@ -152,6 +153,49 @@ POSE_CONNECTIONS = frozenset(
         (28, 32),
     ]
 )
+
+# #region agent log
+_DBG_PATH = "/home/preto/Preto/vaila/.cursor/debug-2d1fa6.log"
+_DBG_SESSION = "2d1fa6"
+_DBG_FACE_DRAW_ONCE = False
+
+
+def _agent_debug_log(run_id, hypothesis_id, location, message, data=None):
+    payload = {
+        "sessionId": _DBG_SESSION,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+    }
+    try:
+        with open(_DBG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+
+
+_face_expected = set(range(11))
+_face_present = set()
+for _a, _b in POSE_CONNECTIONS:
+    if _a in _face_expected:
+        _face_present.add(_a)
+    if _b in _face_expected:
+        _face_present.add(_b)
+_agent_debug_log(
+    "face-skeleton-investigation",
+    "H4",
+    "markerless2d_analysis_v2.py:POSE_CONNECTIONS",
+    "pose connection summary at import",
+    {
+        "total_connections": len(POSE_CONNECTIONS),
+        "face_indices_present": sorted(_face_present),
+        "missing_face_indices": sorted(_face_expected - _face_present),
+    },
+)
+# #endregion
 
 
 def get_hardware_info():
@@ -2507,12 +2551,42 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
                     dline(pts.get("right_hip"), pts.get("left_hip"), C_CENTER, 2)
 
                     # 6. Draw Joints
+                    # #region agent log
+                    global _DBG_FACE_DRAW_ONCE
+                    if not _DBG_FACE_DRAW_ONCE:
+                        face_names = [
+                            "nose",
+                            "left_eye_inner",
+                            "left_eye",
+                            "left_eye_outer",
+                            "right_eye_inner",
+                            "right_eye",
+                            "right_eye_outer",
+                            "left_ear",
+                            "right_ear",
+                            "mouth_left",
+                            "mouth_right",
+                        ]
+                        face_valid_points = 0
+                        for _fname in face_names:
+                            _pt = pts.get(_fname, np.array([np.nan, np.nan]))
+                            if isinstance(_pt, np.ndarray) and not np.isnan(_pt).any():
+                                face_valid_points += 1
+                        _agent_debug_log(
+                            "face-skeleton-investigation",
+                            "H10",
+                            "markerless2d_analysis_v2.py:draw_joints",
+                            "face points before manual joint drawing",
+                            {
+                                "face_valid_points": face_valid_points,
+                                "face_total_points": len(face_names),
+                                "nose_and_eye_skipped_by_code": False,
+                            },
+                        )
+                        _DBG_FACE_DRAW_ONCE = True
+                    # #endregion
                     for name, pt in pts.items():
                         if "mid" in name:
-                            continue
-                        if name == "nose":
-                            continue
-                        if "eye" in name:
                             continue
                         dcircle(pt, C_JOINT, 5)
 

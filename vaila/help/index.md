@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 113 | **Categories:** 7 | **Generated on:** 12/01/2026
+**Total documented modules:** 114 | **Categories:** 7 | **Generated on:** 22/02/2026
 
 ---
 
@@ -55,6 +55,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **mp_facemesh (Face Mesh Analysis)**
   - [📄 HTML](mp_facemesh_help.html)
   - [📝 Markdown](mp_facemesh_help.md)
+- **tugturn (TUG Analysis)**
+  - [📄 HTML](tugturn.html)
+  - [📝 Markdown](tugturn.md)
 
 ## Utils (19 modules)
 
@@ -364,7 +367,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 ## Uncategorized (2 modules)
 
-- **__init__**
+- ****init****
   - [📄 HTML](__init__.html)
   - [📝 Markdown](__init__.md)
 - **sit2stand**

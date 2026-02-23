@@ -348,9 +348,17 @@ class PlotGUI:
         # Update status
         self.status_var.set(f"Selected plot type: {ptype}")
 
-        # Reset all buttons to default (let Tkinter use system default)
+        # Reset all buttons to default (using SystemButtonFace for cross-platform support)
+        # Linux/X11 can throw an error if passed an empty string
         for btn in self.plot_buttons:
-            btn.config(bg="")  # Empty string resets to system default
+            try:
+                btn.config(bg="SystemButtonFace")
+            except Exception:
+                # Fallback for systems where SystemButtonFace isn't recognized
+                try:
+                    btn.config(bg="#d9d9d9")
+                except:
+                    pass
 
         # Start file selection in a separate window
         self.selection_window = FileSelectionWindow(self.root, ptype)

@@ -2780,10 +2780,10 @@ class Vaila(tk.Tk):
     def tug_and_turn(self):
         """Runs the TUG and TURN analysis tool."""
         print("\n" + "=" * 60)
-        print("Launching: vaila.vaila_tugtun")
+        print("Launching: vaila.tugturn")
         print("Features: TUG and TURN 3D Analysis")
         print("=" * 60 + "\n")
-        run_vaila_module("vaila.vaila_tugtun", "vaila/vaila_tugtun.py")
+        run_vaila_module("vaila.tugturn", "vaila/tugturn.py")
 
 if __name__ == "__main__":
     app = Vaila()
