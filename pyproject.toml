@@ -121,6 +121,7 @@ dependencies = [
     "ruff",
     "vpython",
     "pyvista",
+    "setuptools>=82.0.0",
 ]
 
 [project.optional-dependencies]
