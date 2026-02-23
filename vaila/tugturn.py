@@ -15,11 +15,11 @@ analysis with 3D kinematics.
 
 How to use:
 -----------
-python vaila_tugtun.py -i <input_path> -c <config_path> -o <output_path>
+python vaila_tugtun.py -i <input_path> -c <config_path> -o <output_path> -y_chair_tol <tolerance>
 
 or
 
-uv run vaila_tugtun.py -i <input_path> -c <config_path> -o <output_path>
+uv run vaila_tugtun.py -i <input_path> -c <config_path> -o <output_path> -y_chair_tol <tolerance>
 
 License:
 --------
@@ -685,17 +685,33 @@ class TUGAnalyzer:
             # Cadence (steps per minute) - approximation using all steps
             # We will calculate globally later
 
+            # ── Robust aggregation: trim outliers via IQR before mean/SD ────
+            def trim_iqr(vals, factor=1.5):
+                """Remove values outside Q1-factor*IQR .. Q3+factor*IQR."""
+                if len(vals) < 4:
+                    return vals
+                arr = np.array(vals)
+                q1, q3 = np.percentile(arr, 25), np.percentile(arr, 75)
+                iqr = q3 - q1
+                return arr[(arr >= q1 - factor * iqr) & (arr <= q3 + factor * iqr)].tolist()
+            
+            stance_times_clean  = trim_iqr(stance_times)
+            swing_times_clean   = trim_iqr(swing_times)
+            stride_lengths_clean = trim_iqr(stride_lengths)
+            step_lengths_clean  = trim_iqr(step_lengths)
+            step_widths_clean   = trim_iqr(step_widths)
+
             stats[side] = {
-                'Stride_Length_m': np.mean(stride_lengths) if stride_lengths else 0,
-                'Stride_Length_sd': np.std(stride_lengths) if stride_lengths else 0,
-                'Step_Length_m': np.mean(step_lengths) if step_lengths else 0,
-                'Step_Length_sd': np.std(step_lengths) if step_lengths else 0,
-                'Step_Width_m': np.mean(step_widths) if step_widths else 0,
-                'Step_Width_sd': np.std(step_widths) if step_widths else 0,
-                'Stance_Time_s': np.mean(stance_times) if stance_times else 0,
-                'Stance_Time_sd': np.std(stance_times) if stance_times else 0,
-                'Swing_Time_s': np.mean(swing_times) if swing_times else 0,
-                'Swing_Time_sd': np.std(swing_times) if swing_times else 0,
+                'Stride_Length_m': np.mean(stride_lengths_clean) if stride_lengths_clean else 0,
+                'Stride_Length_sd': np.std(stride_lengths_clean) if stride_lengths_clean else 0,
+                'Step_Length_m': np.mean(step_lengths_clean) if step_lengths_clean else 0,
+                'Step_Length_sd': np.std(step_lengths_clean) if step_lengths_clean else 0,
+                'Step_Width_m': np.mean(step_widths_clean) if step_widths_clean else 0,
+                'Step_Width_sd': np.std(step_widths_clean) if step_widths_clean else 0,
+                'Stance_Time_s': np.mean(stance_times_clean) if stance_times_clean else 0,
+                'Stance_Time_sd': np.std(stance_times_clean) if stance_times_clean else 0,
+                'Swing_Time_s': np.mean(swing_times_clean) if swing_times_clean else 0,
+                'Swing_Time_sd': np.std(swing_times_clean) if swing_times_clean else 0,
                 'per_step': step_metrics
             }
 
@@ -1493,7 +1509,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     </head>
     <body>
         <div class="container">
-            <h1>TUG Analysis Interactive Report</h1>
+            <h1><i>vailá</i> - TUG Analysis Interactive Report</h1>
             <h2>Subject: {name}</h2>
             
             {videos_html}
@@ -2092,7 +2108,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     </head>
     <body>
         <div class="container">
-            <h1>TUG Analysis Report</h1>
+            <h1><i>vailá</i> - TUG Analysis Report</h1>
             <h2>Subject: {name}</h2>
             
             {videos_html}
@@ -2353,7 +2369,7 @@ def calculate_limb_vector_coding_y(analyzer: 'TUGAnalyzer', fps: float, start_s:
     return result
 
 
-def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
+def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_chair_tol: float = 0.2):
 
     print(f"\nProcessing {csv_path.name}...")
     try:
@@ -2402,6 +2418,9 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
         if 'y_tol' in spatial_cfg:
             analyzer._meta_y_tol = float(spatial_cfg['y_tol'])
             print(f"  Spatial override: y_tol   = {analyzer._meta_y_tol} m")
+        if 'y_chair_tol' in spatial_cfg:
+            y_chair_tol = float(spatial_cfg['y_chair_tol'])
+            print(f"  Spatial override: y_chair_tol = {y_chair_tol} m")
 
     analyzer.detect_gait_events()
     phases = analyzer.segment_tug_phases()
@@ -2441,6 +2460,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
     y_turn  = float(getattr(analyzer, '_meta_y_turn', 4.5))
     y_tol   = float(getattr(analyzer, '_meta_y_tol', 0.5))
     y_max   = y_turn + y_tol
+    y_min_valid = y_chair - y_chair_tol
     
     wf_steps = 0
     wb_steps = 0
@@ -2453,7 +2473,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
             
             # Extract Y coordinate for the foot at heel strike
             y_pos = analyzer.df[y_col].iloc[f_idx] if f_idx < len(analyzer.df) else 0.0
-            valid_spatial = (y_chair <= y_pos <= y_max)
+            valid_spatial = (y_min_valid <= y_pos <= y_max)
             
             phase_label = "Other"
             
@@ -2461,7 +2481,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
                 continue
             elif wf_s <= t < wf_e:
                 if not valid_spatial:
-                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Forward Gait (Y={y_pos:.2f}m outside [{y_chair}, {y_max}])")
+                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Forward Gait (Y={y_pos:.2f}m outside [{y_min_valid}, {y_max}])")
                     continue
                 phase_label = "gait_forward"
             elif pause_s <= t < pause_e and pause_s < pause_e:
@@ -2470,7 +2490,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None):
                 continue
             elif wb_s <= t < wb_e:
                 if not valid_spatial:
-                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Back Gait (Y={y_pos:.2f}m outside [{y_chair}, {y_max}])")
+                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Back Gait (Y={y_pos:.2f}m outside [{y_min_valid}, {y_max}])")
                     continue
                 phase_label = "gait_back"
             elif sit_s <= t <= sit_e:
@@ -2715,6 +2735,8 @@ def main():
     parser.add_argument('-c', '--config', 
                         help="Path to a specific TOML config file (overrides automatic matching).\n"
                              "If not provided via CLI, the GUI will ask if you want to select one manually.")
+    parser.add_argument('-y', '--y_chair_tol', type=float, default=0.2, 
+                        help="Tolerance distance (in meters) before y_chair to start counting steps inside the zone (default 0.2m).")
     args = parser.parse_args()
     
     input_path = args.input
@@ -2807,7 +2829,7 @@ def main():
         
     print(f"Starting batch processing of {len(files_to_process)} files...")
     for f in files_to_process:
-        process_tug_file(f, output_path, config_path)
+        process_tug_file(f, output_path, config_path, args.y_chair_tol)
         
     print(f"\nAll processing complete. Results saved in {output_path}")
 
