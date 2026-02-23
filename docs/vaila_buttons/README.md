@@ -44,6 +44,7 @@ Each button in the vailá GUI has its own documentation file:
 | B_r5_c1 | Which conversion would you like to perform? | `ultrasound` | [ultrasound.md](ultrasound.md) |
 | B_r5_c2 | Which conversion would you like to perform? | `brainstorm` | [brainstorm.md](brainstorm.md) |
 | B_r5_c3 | Which conversion would you like to perform? | `scout` | [scout.md](scout.md) |
+| B5_r6_c3 | TUG and TURN | `run_tugturn` | [../../vaila/help/tugturn.md](../../vaila/help/tugturn.md) |
 | C_r1_c1 | Which conversion would you like to perform? | `reorder_csv_data` | [reorder-csv-data.md](reorder-csv-data.md) |
 
 ## Categories
