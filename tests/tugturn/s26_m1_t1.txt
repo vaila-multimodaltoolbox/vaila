@@ -1,0 +1,13 @@
+[[Forward gait]]
+1st strike inside 1.125m to ~4.5±0.5m = R
+1st complete step inside 1.125m to ~4.5±0.5m = R
+Number of steps inside = 12
+Last strike inside 1.125m to ~4.5±0.5m = L
+Sequence steps inside 1.125m to ~4.5±0.5m including 1st strike = R,L,R,L,R,L,R,L,R,L,R,L
+
+[[Back gait]]
+1st strike inside ~4.5±0.5m to 1.125m = L
+1st complete step inside ~4.5±0.5m to 1.125m = L
+Number of steps inside = 11
+Last strike inside ~4.5±0.5m to 1.125m = L
+Sequence steps inside ~4.5±0.5m to 1.125m including 1st strike = L,R,L,R,L,R,L,R,L,R,L
