@@ -49,6 +49,9 @@ except ModuleNotFoundError:
 import numpy as np
 import pandas as pd
 
+DEBUG_SESSION_ID = f"tugturn-{int(datetime.datetime.now().timestamp() * 1000)}"
+DEBUG_LOG_PATH = Path(__file__).resolve().parent / "tugturn_debug.jsonl"
+
 DEFAULT_SKELETON_JSON = (
     Path(__file__).resolve().parent.parent
     / "tests"
