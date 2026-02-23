@@ -5,21 +5,25 @@ vaila_tugtun.py
 Author: Paulo R. P. Santiago
 Created: 20 February 2026
 Updated: 22 February 2026
-Version: 0.0.3
+Version: 0.1.0
 Python Version: 3.12.12
 
 Description:
 ------------
 This script provides functionality for Timed Up and Go (TUG) instrumented
-analysis with 3D kinematics.
+analysis with 3D kinematics. It uses the Zeni relative-distance algorithm
+for robust heel-strike detection and implements spatial segmentation logic
+based on the LaBioCoM protocol.
 
 How to use:
 -----------
-python vaila_tugtun.py -i <input_path> -c <config_path> -o <output_path> -y_chair_tol <tolerance>
+    python tugturn.py -i <input_path> -c <config_path> -o <output_path> -y <tolerance>
 
-or
+    uv run vaila/tugturn.py -i <input_path> -c <config_path> -o <output_path> -y <tolerance>
 
-uv run vaila_tugtun.py -i <input_path> -c <config_path> -o <output_path> -y_chair_tol <tolerance>
+Example in terminal root directory vaila:
+-------
+    uv run vaila/tugturn.py -i tests/tugturn/s26_m1_t1.csv -c tests/tugturn/s26_m1_t1.toml -o tests/tugturn/results/ -y 0.15
 
 License:
 --------
@@ -48,7 +52,7 @@ import pandas as pd
 DEFAULT_SKELETON_JSON = (
     Path(__file__).resolve().parent.parent
     / "tests"
-    / "vaila_tugturn"
+    / "tugturn"
     / "skeleton_pose_mediapipe.json"
 )
 # ── TUG Spatial Protocol Constants (LaBioCoM) ────────────────────────────────
@@ -60,6 +64,52 @@ Y_CHAIR_THRESHOLD = 1.125   # m: chair boundary; end of STS / start of sit-to-si
 Y_TURN_APPROX    = 4.5      # m: approximate centre of the turn / pause zone
 Y_TURN_TOLERANCE = 0.5      # m: ± search window around the turn zone
 # ─────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_SKELETON_CONNECTIONS_JSON = {
+    "schema": "mediapipe_pose_33_pn",
+    "note": (
+        "pN is 1-based index mapping to MediaPipe: "
+        "p1=nose(0), p12=left_shoulder(11), p13=right_shoulder(12), "
+        "p24=left_hip(23), p25=right_hip(24)."
+    ),
+    "connections": [
+        ["p1", "p2"],
+        ["p2", "p3"],
+        ["p3", "p4"],
+        ["p4", "p8"],
+        ["p1", "p5"],
+        ["p5", "p6"],
+        ["p6", "p7"],
+        ["p7", "p9"],
+        ["p10", "p11"],
+        ["p12", "p13"],
+        ["p12", "p14"],
+        ["p14", "p16"],
+        ["p16", "p18"],
+        ["p16", "p20"],
+        ["p16", "p22"],
+        ["p18", "p20"],
+        ["p13", "p15"],
+        ["p15", "p17"],
+        ["p17", "p19"],
+        ["p17", "p21"],
+        ["p17", "p23"],
+        ["p19", "p21"],
+        ["p12", "p24"],
+        ["p13", "p25"],
+        ["p24", "p25"],
+        ["p24", "p26"],
+        ["p25", "p27"],
+        ["p26", "p28"],
+        ["p27", "p29"],
+        ["p28", "p30"],
+        ["p29", "p31"],
+        ["p30", "p32"],
+        ["p31", "p33"],
+        ["p28", "p32"],
+        ["p29", "p33"],
+    ],
+}
 
 
 FALLBACK_SKELETON_CONNECTIONS = [
@@ -124,29 +174,40 @@ MEDIAPIPE_LANDMARK_NAMES = [
 ]
 
 
+def _parse_pose_connections(conns):
+    parsed = []
+    for pair in conns:
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            continue
+        a, b = str(pair[0]).strip(), str(pair[1]).strip()
+        if not (a.lower().startswith("p") and b.lower().startswith("p")):
+            continue
+        if not (a[1:].isdigit() and b[1:].isdigit()):
+            continue
+        ia = int(a[1:]) - 1
+        ib = int(b[1:]) - 1
+        if 0 <= ia < 33 and 0 <= ib < 33:
+            parsed.append((ia, ib))
+    return parsed
+
+
 def load_mediapipe_pose_connections(json_path: Path = DEFAULT_SKELETON_JSON):
-    """Load mediapipe_pose_33_pn connections from JSON, fallback to defaults on any failure."""
+    """Load mediapipe_pose_33_pn connections from JSON, then embedded default, then tuple fallback."""
     try:
         with open(json_path, encoding="utf-8") as f:
             data = json.load(f)
-        conns = data.get("connections", [])
-        parsed = []
-        for pair in conns:
-            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
-                continue
-            a, b = str(pair[0]).strip(), str(pair[1]).strip()
-            if not (a.lower().startswith("p") and b.lower().startswith("p")):
-                continue
-            if not (a[1:].isdigit() and b[1:].isdigit()):
-                continue
-            ia = int(a[1:]) - 1
-            ib = int(b[1:]) - 1
-            if 0 <= ia < 33 and 0 <= ib < 33:
-                parsed.append((ia, ib))
+        parsed = _parse_pose_connections(data.get("connections", []))
         if parsed:
             return parsed
+        print(f"Warning: skeleton JSON '{json_path}' has no valid connections. Using embedded default.")
     except Exception as e:
-        print(f"Warning: could not load skeleton JSON '{json_path}': {e}. Using fallback.")
+        print(f"Warning: could not load skeleton JSON '{json_path}': {e}. Using embedded default.")
+
+    parsed_default = _parse_pose_connections(DEFAULT_SKELETON_CONNECTIONS_JSON.get("connections", []))
+    if parsed_default:
+        return parsed_default
+
+    print("Warning: embedded skeleton default invalid. Using tuple fallback.")
     return FALLBACK_SKELETON_CONNECTIONS
 
 
@@ -2730,8 +2791,9 @@ def main():
                              "If not provided, a GUI file dialog will open to select the input.")
     parser.add_argument('-o', '--output', 
                         help="Output directory to save results.\n"
-                             "If not provided, a GUI folder dialog will prompt you to choose one.\n"
-                             "If you cancel the prompt, it defaults to a 'tug_results' folder next to the input.")
+                             "CLI mode (when -i is provided): if omitted, each CSV is saved to\n"
+                             "result_tugturn_<basename> in the same directory as that CSV.\n"
+                             "GUI mode (when -i is omitted): a folder dialog can be shown.")
     parser.add_argument('-c', '--config', 
                         help="Path to a specific TOML config file (overrides automatic matching).\n"
                              "If not provided via CLI, the GUI will ask if you want to select one manually.")
@@ -2740,6 +2802,7 @@ def main():
     args = parser.parse_args()
     
     input_path = args.input
+    input_provided_cli = args.input is not None
     output_path = args.output
     config_path = Path(args.config) if args.config else None
     
@@ -2789,9 +2852,8 @@ def main():
                 
     input_path = Path(input_path)
     
-    # Prompt for explicit Output selection if running via GUI and not passed in CLI
-    
-    if not output_path:
+    # Prompt for explicit output selection only in GUI mode and when -o is not passed.
+    if not output_path and not input_provided_cli:
         # Ensure a root Tk instance exists and lies dormant in background to prevent ugly windows
         try:
             root = tk.Tk()
@@ -2802,36 +2864,51 @@ def main():
         ans = messagebox.askyesno(
             "Select Output Directory",
             "Do you want to manually select an Output folder for the reports and CSVs?\n\n"
-            "(If 'No', the script will automatically create a 'tug_results' folder next to your input)"
+            "(If 'No', for each CSV a folder result_tugturn_<basename> will be created in the same directory as the CSV)"
         )
         if ans:
             out_folder = filedialog.askdirectory(title="Select the Output directory for TUG results")
             if out_folder:
                 output_path = out_folder
 
-    if not output_path:
-        if input_path.is_file():
-            output_path = input_path.parent / "tug_results"
-        else:
-            output_path = input_path / "tug_results"
-            
-    output_path = Path(output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
-    
+    # When -o not informed: output dir = input dir + "result_tugturn_" + csv stem (per file).
+    output_path_explicit = None
+    if output_path:
+        output_path_explicit = Path(output_path)
+        # Avoid mixing outputs with input when -o equals input dir.
+        input_dir = input_path.parent if input_path.is_file() else input_path
+        try:
+            if output_path_explicit.resolve() == input_dir.resolve():
+                output_path_explicit = output_path_explicit / "tug_results"
+                print(
+                    f"Output dir equals input dir; redirecting to: {output_path_explicit}"
+                )
+        except Exception:
+            pass
+        output_path_explicit.mkdir(parents=True, exist_ok=True)
+
     if input_path.is_file():
         files_to_process = [input_path]
     else:
         files_to_process = list(input_path.glob("*.csv"))
-        
+
     if not files_to_process:
         print(f"No CSV files found in {input_path}")
         return
-        
+
     print(f"Starting batch processing of {len(files_to_process)} files...")
     for f in files_to_process:
-        process_tug_file(f, output_path, config_path, args.y_chair_tol)
-        
-    print(f"\nAll processing complete. Results saved in {output_path}")
+        if output_path_explicit is not None:
+            out_dir = output_path_explicit
+        else:
+            out_dir = f.parent / ("result_tugturn_" + f.stem)
+            out_dir.mkdir(parents=True, exist_ok=True)
+        process_tug_file(f, out_dir, config_path, args.y_chair_tol)
+
+    if output_path_explicit is not None:
+        print(f"\nAll processing complete. Results saved in {output_path_explicit}")
+    else:
+        print(f"\nAll processing complete. Results saved in per-trial dirs result_tugturn_<stem> under input.")
 
 if __name__ == "__main__":
     main()
