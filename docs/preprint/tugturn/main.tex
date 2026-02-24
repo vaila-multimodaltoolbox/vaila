@@ -1,0 +1,260 @@
+\documentclass{article}
+
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{arxiv}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{natbib}
+\usepackage{doi}
+\usepackage{xcolor}
+\usepackage{orcidlink}
+\usepackage{tikz}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{pdfpages}
+\usetikzlibrary{arrows.meta, positioning}
+\AtBeginDocument{\setlength{\headheight}{23pt}}
+
+\title{Automating Timed Up and Go Phase Segmentation and Gait Analysis via the tugturn Markerless 3D Pipeline}
+
+\author{
+  Abel Gon\c{c}alves Chinaglia\orcidlink{0000-0002-6955-7187}$^{1,2}$ \\
+  \texttt{abel.chinaglia@usp.br} \\
+  \And
+  Guilherme Manna Cesar\orcidlink{0000-0002-5596-9439}$^{3}$ \\
+  \texttt{g.cesar@unf.edu} \\
+  \And
+  Paulo Roberto Pereira Santiago\orcidlink{0000-0002-9460-8847}$^{1,2}$ \\
+  \texttt{paulosantiago@usp.br} \\
+}
+
+\date{
+  $^1$ Biomechanics and Motor Control Laboratory, School of Physical Education and Sport of Ribeirao Preto, University of Sao Paulo, Brazil \\
+  $^2$ Graduate Program in Rehabilitation and Functional Performance, Ribeirao Preto Medical School, University of Sao Paulo, Brazil \\
+  $^3$ Department of Physical Therapy, Brooks College of Health, University of North Florida, USA \\
+}
+
+\hypersetup{
+  pdftitle={tugturn: Markerless 3D TUG and Turn Analysis},
+  pdfsubject={biomechanics, markerless motion analysis, timed up and go},
+  pdfauthor={Abel Goncalves Chinaglia, Guilherme Manna Cesar, Paulo Roberto Pereira Santiago},
+  pdfkeywords={Timed Up and Go, markerless motion capture, gait events, vector coding, XCoM, biomechanics},
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Instrumented Timed Up and Go (TUG) analysis can support clinical and research decision-making, but robust and reproducible markerless pipelines are still limited. We present \textit{tugturn}, a Python-based workflow for 3D markerless TUG processing that combines phase segmentation, gait-event detection, spatiotemporal metrics, intersegmental coordination, and dynamic stability analysis. The pipeline uses spatial thresholds to segment each trial into stand, first gait, turning, second gait, and sit phases, and applies a relative-distance strategy to detect heel-strike and toe-off events within valid gait windows. In addition to conventional kinematics, \textit{tugturn} provides Vector Coding outputs and Extrapolated Center of Mass (XCoM)-based metrics. The software is configured through TOML files and produces reproducible artifacts, including HTML reports, CSV tables, and quality-assurance visual outputs. A complete runnable example is provided with test data and command-line instructions. This manuscript describes the implementation, outputs, and reproducibility workflow of \textit{tugturn} as a focused software contribution for markerless biomechanical TUG analysis.
+\end{abstract}
+
+\keywords{Timed Up and Go \and markerless 3D analysis \and gait event detection \and Vector Coding \and XCoM \and biomechanics software}
+
+\section{Introduction}
+Timed Up and Go (TUG) is widely used to evaluate mobility and functional performance in clinical populations because it integrates postural transition, walking, turning, and sitting in a single task \citep{podsiadlo1991}. Traditional motion-capture workflows provide high-fidelity biomechanical information, but they often depend on specialized infrastructure and time-consuming processing pipelines. Markerless approaches based on computer vision have expanded access to movement analysis and enabled broader deployment in rehabilitation and applied biomechanics \citep{lugaresi2019mediapipe, nath2019using}.
+
+Historically, gait events and turning metrics have been analyzed predominantly using standard optoelectronic kinematic systems, instrumented walkways, or force platforms \citep{khobkhun2022investigation, thanakamchokchai2025effects}. However, widely available full-body 3D-landmark frameworks custom-built for automated clinical phase segmentation remain scarce \citep{tahara2025predicting}. Without such specialized automated markerless tools, analyses in clinical or uncontrolled settings often resort to subjective visual recognition or labor-intensive manual frame-by-frame data processing. To overcome these limitations, the \textit{tugturn} method was developed to automate these demanding procedures, bridging the gap between raw video tracking and robust biomechanical endpoints.
+
+Despite this progress, many markerless pipelines still emphasize either pose extraction or generic gait summaries and do not provide a structured TUG-specific workflow with robust phase-aware event handling. In TUG, meaningful interpretation depends on correctly isolating movement phases (e.g., first gait versus second gait) and on reducing false event detections outside valid locomotor windows. This issue is particularly relevant in heterogeneous clinical recordings, where pauses, partial turns, and variable trajectories are common.
+
+The \textit{tugturn} module was designed to address this gap by integrating: (i) spatially constrained phase segmentation, (ii) gait-event detection based on relative-distance principles \citep{zeni2008}, (iii) phase-specific spatiotemporal metrics, (iv) Vector Coding for coordination analysis, and (v) Extrapolated Center of Mass (XCoM) indicators for dynamic stability assessment. The goal of this paper is to document the software architecture and reproducible processing flow of \textit{tugturn} as a practical tool for markerless 3D TUG analysis.
+
+\section{Software Architecture and Methodology}
+The \textit{tugturn} module is designed as a highly cohesive command-line interface (CLI) driven tool. It ingests 3D coordinate time-series (typically derived from MediaPipe and processed via the \textit{vail\'{a}} framework) and executes a multi-stage deterministic pipeline. 
+
+\subsection{Spatial Phase Segmentation (The Y-Axis Logic)}
+Traditional TUG assessments treat the movement as a temporal ``black box,'' providing only total completion time. To overcome this limitation and eliminate the ``blind stopwatch'' effect, \textit{tugturn} implements a deterministic spatial segmentation algorithm that tracks the estimated Center of Mass (pelvis) along the anteroposterior progression axis (Y-axis). By applying strict spatial thresholds --specifically $Y \le 1.125$ m for the chair setup zone and $Y \approx 4.5$ m for the turning zone --the pipeline automatically slices the continuous trial into five discrete functional sub-phases: Sit-to-Stand, Forward Gait, Turning, Backward Gait, and Stand-to-Sit. This approach transforms a subjective duration test into a precise topographical examination of movement.
+
+\subsection{Gait Event Detection (Dynamic Zeni Algorithm)}
+Extracting gait events from a bidirectional test poses a significant challenge for classical coordinate-based algorithms, which often generate false positives during turns. To address this, we implemented a robust adaptation of the Zeni relative-distance algorithm \cite{zeni2008two}, enhanced by rigorous spatial and kinetic filters:
+
+\begin{enumerate}
+    \item \textbf{Walking Mask (Posture and Movement Filter):} Before step detection, the algorithm verifies that the subject is standing (pelvic Z-axis height within the upper third of its range) and moving (XY-plane velocity $> 0.15$ m/s). This prevents false detections during turning or postural transitions.
+    \item \textbf{Dynamic Progression Vector:} Because the TUG involves both forward and return paths, we calculate the smoothed derivative of the pelvic center in the XY plane to generate a dynamic unit directional vector. This allows the detection to adapt frame-by-frame to the patient's actual walking direction.
+    \item \textbf{Heel Strike (HS) Detection:} Following Zeni's logic, we calculate the vector distance between the heel and the pelvic center, project it onto the dynamic progression vector via dot product, and apply a peak detection function (\texttt{find\_peaks}) to find local maxima. A physiological constraint ensures no two consecutive strikes of the same foot occur within a 300 ms window.
+    \item \textbf{Toe-Off (TO) Detection:} TO is identified by finding the local minima (negative peaks) of the toe marker's projection relative to the pelvis, representing the moment the trailing foot is maximally extended backwards.
+    \item \textbf{Spatial Restriction (Double-Check):} Finally, detected frames are cross-referenced with the spatial segmentation zones. Any event falling outside the strict ``First Gait'' or ``Second Gait'' boundaries is systematically discarded.
+\end{enumerate}
+
+\subsection{Advanced Kinematics and Intersegmental Coordination}
+Moving beyond basic spatiotemporal metrics, the \textit{tugturn} pipeline extracts deep biomechanical features through its Kinematics (KIN) module. This includes continuous monitoring of trunk inclination --vital for detecting postural abnormalities such as camptocormia --and lower limb joint excursions. Crucially, the system applies Vector Coding to quantify intersegmental coordination between the trunk and pelvis during the turning phase. By computing the continuous relative phase angle, the software categorizes turning behavior into In-Phase (indicative of Parkinsonian \textit{en bloc} turning) or Anti-Phase patterns. Previous Machine Learning implementations (XGBoost) on our clinical datasets have confirmed that these specific coordination metrics are among the top predictors of disease severity (e.g., modified Hoehn \& Yahr stages), establishing them as robust digital biomarkers.
+
+\section{Implementation and Usage (High-Throughput Architecture)}
+Traditional 3D biomechanical analysis often requires labor-intensive, frame-by-frame manual trajectory cleaning. In contrast, \textit{tugturn} is engineered for scalable, high-throughput batch processing. Written in pure Python and prioritizing minimal dependencies (NumPy, Pandas, SciPy, Matplotlib, Plotly), the software ensures cross-platform compatibility.
+
+Driven by a command-line interface and configurable \texttt{.toml} files, the pipeline can automatically process entire clinical databases in minutes. Automated output generation includes detailed JSON datasets, kinematic CSV spreadsheets ready for statistical analysis (\texttt{bd\_kinematics}, \texttt{bd \_vector\_coding}), and rich interactive HTML reports with embedded GIF visualizations. This architecture successfully bridges the gap between complex data engineering and accessible clinical diagnostics.
+
+\begin{lstlisting}[language=bash, caption=Example of CLI execution for a single trial or batch directory]
+# Run analysis on a single trial with a spatial tolerance of 0.15m
+python vaila/tugturn.py -i tests/s26_m1_t1.csv -c tests/s26_m1_t1.toml \
+    -o results/ -y 0.15
+
+# Batch process an entire directory of CSV files (e.g., hundreds of trials)
+python vaila/tugturn.py -i data/raw_kinematics/ -c config/default.toml \
+    -o data/processed/ -y 0.15
+\end{lstlisting}
+
+\section{Implementation and Usage (High-Throughput Architecture)}
+Traditional 3D biomechanical analysis often requires labor-intensive, frame-by-frame manual trajectory cleaning. In contrast, \textit{tugturn} is engineered for scalable, high-throughput batch processing. Written in pure Python and prioritizing minimal dependencies (NumPy, Pandas, SciPy, Matplotlib, Plotly), the software ensures cross-platform compatibility.
+
+Driven by a command-line interface and configurable \texttt{.toml} files, the pipeline can automatically process entire clinical databases in minutes. Automated output generation includes detailed JSON datasets, kinematic CSV spreadsheets ready for statistical analysis (\texttt{bd\_kinematics}, \texttt{bd\_vector\_coding}), and rich interactive HTML reports with embedded GIF visualizations. This architecture successfully bridges the gap between complex data engineering and accessible clinical diagnostics.
+
+\begin{lstlisting}[language=bash, caption=Example of CLI execution for a single trial or batch directory]
+# Run analysis on a single trial with a spatial tolerance of 0.15m
+python vaila/tugturn.py -i tests/s26_m1_t1.csv -c tests/s26_m1_t1.toml \
+    -o results/ -y 0.15
+
+# Batch process an entire directory of CSV files (e.g., hundreds of clinical trials)
+python vaila/tugturn.py -i data/raw_kinematics/ -c config/default.toml \
+    -o data/processed/ -y 0.15
+\end{lstlisting}
+
+\section{Results-Oriented Software Deliverables}
+Rather than presenting a new clinical trial in this manuscript, we report the software deliverables and processing scope demonstrated by the included test workflow. The pipeline provides:
+\begin{itemize}
+  \item deterministic phase segmentation with explicit spatial constraints,
+  \item phase-aware HS/TO event extraction,
+  \item kinematic and spatiotemporal summaries aligned with TUG sub-tasks,
+  \item coordination and stability metrics in machine-readable tables,
+  \item browser-ready reports for rapid quality control and interpretation.
+\end{itemize}
+
+Table~\ref{tab:deliverables} summarizes the core output families.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Core output families generated by \textit{tugturn}.}
+  \label{tab:deliverables}
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Output family} & \textbf{Purpose} \\
+    \midrule
+    HTML reports & Human-readable trial overview and plots \\
+    \texttt{bd\_results} CSV & Global and phase metrics for analysis \\
+    \texttt{bd\_steps} CSV & Step-level event and spatiotemporal values \\
+    \texttt{bd\_kinematics} CSV & Time-series kinematic variables \\
+    Vector Coding CSVs & Coupling-angle metrics and variability summaries \\
+    Phase GIFs & Segmentation quality assurance \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Example Run Output (HTML Reports)}
+To demonstrate a real execution artifact in this manuscript, we include the reference run
+\texttt{s26\_m1\_t1} generated in:
+\texttt{tugturn/results/}. The corresponding HTML outputs are:
+\begin{itemize}
+  \item \url{tugturn/results/s26_m1_t1_tug_report.html}
+  \item \url{tugturn/results/s26_m1_t1_tug_report_interactive.html}
+\end{itemize}
+
+From the same run, Table~\ref{tab:example_run_metrics} summarizes key values exported by
+\texttt{s26\_m1\_t1\_tug\_data.json} and\\
+\texttt{s26\_m1\_t1\_bd\_results.csv}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Selected metrics from the example run \texttt{s26\_m1\_t1}.}
+  \label{tab:example_run_metrics}
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Metric} & \textbf{Value} \\
+    \midrule
+    Turn direction & Right \\
+    Total TUG time & 26.93 s \\
+    Stand phase duration & 1.48 s \\
+    First gait duration & 5.81 s \\
+    Turn duration & 2.79 s \\
+    Second gait duration & 5.76 s \\
+    Sit phase duration & 3.85 s \\
+    Cadence & 67.91 steps/min \\
+    Velocity & 0.347 m/s \\
+    Steps (first gait/second gait) & 12 / 11 \\
+    XCoM deviation (first gait/second gait) & 0.027 / 0.041 m \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Because LaTeX does not natively render HTML pages as inline figures, the HTML reports are
+treated as supplementary digital artifacts in this version of the manuscript. They preserve
+interactive visual inspection while the paper reports the quantitative summary.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+    node distance=1.0cm and 0.5cm,
+    box/.style={draw, rounded corners, align=center, minimum width=2.4cm, minimum height=0.9cm},
+    >={Stealth}
+  ]
+    \node[box] (inputCsv) {Input\\3D CSV};
+    \node[box, right=of inputCsv] (phaseSeg) {Phase\\Segmentation};
+    \node[box, right=of phaseSeg] (gaitEvents) {HS/TO\\Events};
+    \node[box, right=of gaitEvents] (kinMetrics) {Kinematics\\and Metrics};
+    \node[box, right=of kinMetrics] (outputs) {HTML/CSV\\Artifacts};
+
+    \draw[->] (inputCsv) -- (phaseSeg);
+    \draw[->] (phaseSeg) -- (gaitEvents);
+    \draw[->] (gaitEvents) -- (kinMetrics);
+    \draw[->] (kinMetrics) -- (outputs);
+  \end{tikzpicture}
+  \caption{High-level \textit{tugturn} processing flow used in this study.}
+  \label{fig:pipeline}
+\end{figure}
+
+\section{Discussion}
+\textit{tugturn} contributes a targeted software layer for TUG-specific markerless analysis, emphasizing phase-aware processing rather than generic full-trial summaries. This focus is important for protocols where turning, sit-to-stand transitions, and return gait carry distinct clinical meaning.
+
+From a software-engineering perspective, the combination of CLI execution, TOML configuration, and structured outputs facilitates reproducibility, batch scaling, and downstream statistical workflows. The report stack (HTML plus CSV) supports both exploratory interpretation and scripted analysis.
+
+Current limitations include dependence on upstream pose-estimation quality, protocol-specific threshold tuning, and the absence of benchmarked agreement against instrumented laboratory gold standards in this manuscript. Future work should include cross-dataset validation, uncertainty quantification, and multicenter reproducibility studies.
+
+\section{Conclusion}
+This work presents \textit{tugturn} as a reproducible and practical software pipeline for markerless 3D TUG analysis. By combining spatial phase segmentation, phase-filtered gait events, Vector Coding, and XCoM metrics in a single workflow, \textit{tugturn} enables consistent extraction of clinically relevant biomechanical descriptors from routine video-derived data. The provided test workflow and command-line interface support transparent reuse and adaptation in biomechanics and rehabilitation research.
+
+\section*{Availability}
+The software, test files, and execution examples used in this manuscript are available in the project repository. The \texttt{tugturn.py} example dataset and TOML configuration support direct reproducibility of the documented command-line runs.
+
+\appendix
+\section{Example Run Reports in HTML}
+The complete result reports for the reference run (\texttt{s26\_m1\_t1}) are provided as HTML artifacts in
+\texttt{tugturn/results/}. These files are the primary run-level result outputs generated by the pipeline:
+
+\begin{itemize}
+  \item \texttt{tugturn/results/s26\_m1\_t1\_tug\_report.html}
+  \item \texttt{tugturn/results/s26\_m1\_t1\_tug\_report\_interactive.html}
+\end{itemize}
+
+Additional machine-readable outputs from the same run are:
+\begin{itemize}
+  \item \texttt{s26\_m1\_t1\_tug\_data.json}
+  \item \texttt{s26\_m1\_t1\_bd\_results.csv}
+  \item \texttt{s26\_m1\_t1\_bd\_steps.csv}
+  \item \texttt{s26\_m1\_t1\_bd\_kinematics.csv}
+  \item \texttt{s26\_m1\_t1\_bd\_vector\_coding.csv}
+  \item \texttt{s26\_m1\_t1\_bd\_participants.csv}
+\end{itemize}
+
+In this manuscript, quantitative summaries are reported in the main Results section, while the HTML reports
+are retained in the appendix as full visual and interactive evidence of the execution output.
+
+The full PDF report exported from this run is included below as appendix pages, preserving the complete
+clinical output view used for disability-focused cohorts (including Parkinson's disease):
+\texttt{images/TUG Report\_ s26\_m1\_t1.pdf}.
+
+\includepdf[pages=-,pagecommand={}]{images/TUG Report_ s26_m1_t1.pdf}
+
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+\end{document}
