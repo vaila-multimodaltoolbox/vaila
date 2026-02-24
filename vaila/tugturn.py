@@ -132,10 +132,10 @@ RIGHT_BODY_POINTS = {12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32}
 LEFT_BODY_POINTS = {11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31}
 PHASE_PLOT_ORDER = [
     "stand",
-    "gait_forward",
+    "first_gait",
     "stop_5s",
     "turn180",
-    "gait_back",
+    "second_gait",
     "sit",
 ]
 
@@ -254,6 +254,14 @@ def ordered_phase_ranges(phases_dict):
         val = phases_dict.get(phase_name)
         if isinstance(val, (list, tuple)) and len(val) == 2:
             yield phase_name, val
+
+
+def canonical_phase_name(phase_name: str) -> str:
+    return str(phase_name)
+
+
+def phase_display_name(phase_name: str) -> str:
+    return canonical_phase_name(phase_name).replace("_", " ").title()
 
 
 def write_single_row_csv(filepath: Path, data: dict):
@@ -571,10 +579,10 @@ class TUGAnalyzer:
 
     def detect_gait_events(self) -> dict:
         """
-        Detecção de Eventos da Marcha Híbrida (Baseada em Máscara de Fase).
-        - HS (Heel Strike): Mínimo local da altura vertical (Eixo Z) do calcanhar.
-        - TO (Toe Off): Pico negativo da projeção do dedão em relação à pelve.
-        - Aplica uma 'Walking Mask' para ignorar movimentos dos pés durante o STS, Turn e Sit.
+        Hybrid Gait Event Detection (Based on Phase Mask).
+        - HS (Heel Strike): Local minimum of the vertical height (Z axis) of the heel.
+        - TO (Toe Off): Negative peak of the projection of the hallux relative to the pelvis.
+        - Applies a 'Walking Mask' to ignore foot movements during STS, Turn and Sit.
         """
         from scipy.signal import find_peaks
         from scipy.ndimage import gaussian_filter1d
@@ -587,40 +595,40 @@ class TUGAnalyzer:
             toe_r = self._get_point_3d(32)
             toe_l = self._get_point_3d(31)
         except ValueError as e:
-            print(f"Erro ao obter marcadores: {e}")
+            print(f"Error getting markers: {e}")
             return {}
 
-        # 1. Criar a "Walking Mask" (O indivíduo está se deslocando no espaço?)
+        # 1. Create the "Walking Mask" (Is the subject moving in space?)
         pelvis_center = (pelvis_r + pelvis_l) / 2.0
         pelvis_xy = pelvis_center[:, [0, 1]]
         pelvis_z = pelvis_center[:, 2]
         
-        # Filtro de postura (apenas detecta passos se estiver de pé)
+        # Posture filter (only detects steps if standing)
         z_min = np.percentile(pelvis_z, 5)
         z_max = np.percentile(pelvis_z, 95)
         is_standing_mask = pelvis_z > (z_min + 0.4 * (z_max - z_min))
         
-        # Velocidade Macro da Pelve no plano XY
+        # Pelvis velocity in the XY plane
         pelvis_vel_xy = np.linalg.norm(
             np.gradient(gaussian_filter1d(pelvis_xy, sigma=self.fs*0.5, axis=0), self.dt, axis=0), 
             axis=1
         )
         
-        # Threshold de marcha restaurado: ignorar passos minúsculos parados e no giro
-        # Reduzido para 0.15 para garantir que passos mais lentos perto do giro não sejam perdidos
+        # Walking threshold restored: ignore small stationary and turning steps
+        # Reduced to 0.15 to ensure that slower steps near the turn are not missed
         is_walking_mask = is_standing_mask & (pelvis_vel_xy > 0.15)
 
-        # 2. Vetor de Progressão Direcional para o Toe Off
+        # 2. Directional Progression Vector for the Toe Off
         pelvis_smooth = gaussian_filter1d(pelvis_center, sigma=self.fs * 0.5, axis=0)
         direction_vector = np.gradient(pelvis_smooth, axis=0) / (self.dt if self.dt > 0 else 1/30.0)
         dir_xy = direction_vector[:, [0, 1]]
         dir_unit = dir_xy / (np.linalg.norm(dir_xy, axis=1, keepdims=True) + 1e-8)
 
         def find_events(heel, toe):
-            min_dist = int(self.fs * 0.3) # Passos não ocorrem em menos de 300ms
+            min_dist = int(self.fs * 0.3) # Steps do not occur in less than 300ms
 
             # -----------------------------------------------------------------
-            # HEEL STRIKE (Zeni - Calcanhar mais projetado à frente da pelve)
+            # HEEL STRIKE (Zeni - Heel more projected forward of the pelvis)
             # -----------------------------------------------------------------
             rel_heel_xy = heel[:, [0, 1]] - pelvis_center[:, [0, 1]]
             proj_heel = np.sum(rel_heel_xy * dir_unit, axis=1)
@@ -630,13 +638,13 @@ class TUGAnalyzer:
             hs_indices, _ = find_peaks(proj_heel_masked, distance=min_dist, prominence=0.015)
 
             # -----------------------------------------------------------------
-            # TOE OFF (Zeni Modificado - Dedão mais esticado atrás da pelve)
+            # TOE OFF (Zeni Modified - Hallux more stretched behind the pelvis)
             # -----------------------------------------------------------------
             rel_toe_xy = toe[:, [0, 1]] - pelvis_center[:, [0, 1]]
             proj_toe = np.sum(rel_toe_xy * dir_unit, axis=1)
             proj_toe_smooth = gaussian_filter1d(proj_toe, sigma=self.fs * 0.05)
             
-            # Inverter a projeção (queremos o pico negativo, quando o pé tá mais atrás)
+            # Invert the projection (we want the negative peak, when the foot is more behind)
             inv_proj_toe = -proj_toe_smooth
             inv_proj_masked = np.where(is_walking_mask, inv_proj_toe, np.min(inv_proj_toe))
             
@@ -644,17 +652,17 @@ class TUGAnalyzer:
 
             return hs_indices, to_indices
 
-        # Extração das duas pernas
+        # Extraction of the two legs
         hs_r, to_r = find_events(heel_r, toe_r)
         hs_l, to_l = find_events(heel_l, toe_l)
 
-        # Atualiza a estrutura da classe
+        # Update the class structure
         self.gait_events = {
             'Right': {'HS': hs_r, 'TO': to_r},
             'Left':  {'HS': hs_l, 'TO': to_l}
         }
         
-        # Injetar no DataFrame de saída para depuração/plotagem
+        # Inject into the output DataFrame for debugging/plotting
         self.df['Right_HS'] = 0
         self.df['Right_TO'] = 0
         self.df['Left_HS'] = 0
@@ -815,14 +823,14 @@ class TUGAnalyzer:
                 cross_prod = np.abs(line_vec[0] * diffs[:, 1] - line_vec[1] * diffs[:, 0])
                 return float(np.mean(cross_prod / line_len))
                 
-            xcom_dev_fwd = calc_dev(*phases.get('gait_forward', (0,0)))
-            xcom_dev_bwd = calc_dev(*phases.get('gait_back', (0,0)))
+            xcom_dev_fwd = calc_dev(*phases.get('first_gait', (0, 0)))
+            xcom_dev_bwd = calc_dev(*phases.get('second_gait', (0, 0)))
 
         stats['Global'] = {
             'Cadence_steps_per_min': cadence,
             'Velocity_m_s': velocity,
-            'XcoM_Deviation_Fwd_m': xcom_dev_fwd,
-            'XcoM_Deviation_Bwd_m': xcom_dev_bwd
+            'XcoM_Deviation_First_Gait_m': xcom_dev_fwd,
+            'XcoM_Deviation_Second_Gait_m': xcom_dev_bwd
         }
         
         self.spatiotemporal_params = stats
@@ -951,7 +959,7 @@ class TUGAnalyzer:
             foot_max_y = com_y_smooth
             foot_min_y = com_y_smooth
 
-        # ── 2a. Forward gait start: first frame where a foot crosses y_chair ─────────
+        # ── 2a. First gait start: first frame where a foot crosses y_chair ───────────
         fwd_start_local = 0
         for i in range(search_start, search_end):
             if foot_max_y[i] >= y_chair:
@@ -999,7 +1007,7 @@ class TUGAnalyzer:
 
         speed_thresh = 0.15
 
-        # fwd_stop: walk backwards from anchor until speed > thresh (subject still moving)
+        # fwd_stop: scan backward from anchor until speed > thresh (subject still moving)
         stop_search = anchor_idx
         while stop_search > sts_end and (
             mid_trunk_vy[stop_search] < speed_thresh
@@ -1039,17 +1047,17 @@ class TUGAnalyzer:
             yaw_thresh    = 0.15
             max_yaw       = 0.0
 
-        # turn_start: walk backwards from yaw peak until rate < threshold
+        # turn_start: scan backward from yaw peak until rate < threshold
         turn_start = peak_turn_idx
         while turn_start > fwd_stop and sh_yaw_rate[turn_start] > yaw_thresh:
             turn_start -= 1
 
-        # turn_end: walk forwards from yaw peak until rate < threshold
+        # turn_end: scan forward from yaw peak until rate < threshold
         turn_end = peak_turn_idx
         while turn_end < search_end and sh_yaw_rate[turn_end] > yaw_thresh:
             turn_end += 1
 
-        # ── 2e. Back gait: start where CoM_Y velocity is consistently negative ────
+        # ── 2e. Second gait: start where CoM_Y velocity is consistently negative ───
         bck_start = turn_end
         while bck_start < search_end and mid_trunk_vy[bck_start] > -speed_thresh:
             bck_start += 1
@@ -1058,7 +1066,7 @@ class TUGAnalyzer:
             bck_start = turn_end
         turn_end = bck_start  # tie turn_end to back-gait start (contiguous)
 
-        # Back gait ends where a foot crosses back below y_chair
+        # Second gait ends where a foot crosses below y_chair
         bck_end = sit_start  # Fallback
         for i in range(bck_start, search_end):
             if foot_min_y[i] <= y_chair:
@@ -1085,10 +1093,10 @@ class TUGAnalyzer:
         # ---------------------------------------------------------
         phases = {
             'stand':        (sts_start * dt,  sts_end * dt),
-            'gait_forward': (fwd_start * dt,  fwd_stop * dt),
+            'first_gait':   (fwd_start * dt,  fwd_stop * dt),
             'stop_5s':      (fwd_stop * dt,   turn_start * dt) if turn_start > fwd_stop else None,
             'turn180':      (turn_start * dt,  turn_end * dt),
-            'gait_back':    (bck_start * dt,   sit_start * dt),
+            'second_gait':  (bck_start * dt,   sit_start * dt),
             'sit':          (sit_start * dt,   sit_end * dt),
             'Total_TUG_Time': N * dt,
         }
@@ -1192,12 +1200,12 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     events.sort()
     
     phases = report_data.get('Phases_Seconds', {})
-    wf_s = phases.get('gait_forward', (0,0))[0]
-    wf_e = phases.get('gait_forward', (0,0))[1]
-    wb_s = phases.get('gait_back', (0,0))[0]
-    wb_e = phases.get('gait_back', (0,0))[1]
+    first_gait = phases.get('first_gait', (0, 0))
+    second_gait = phases.get('second_gait', (0, 0))
+    wf_s, wf_e = first_gait
+    wb_s, wb_e = second_gait
     
-    fig3 = make_subplots(rows=1, cols=2, subplot_titles=('Walk Forward Sagittal Events (Y-Z)', 'Walk Back Sagittal Events (Y-Z)'))
+    fig3 = make_subplots(rows=1, cols=2, subplot_titles=('First gait sagittal events (Y-Z)', 'Second gait sagittal events (Y-Z)'))
     add_stick_figures(fig3, [f for f in events if wf_s*fps <= f <= wf_e*fps], 1, 1)
     add_stick_figures(fig3, [f for f in events if wb_s*fps <= f <= wb_e*fps], 1, 2)
     fig3.update_yaxes(scaleanchor="x", scaleratio=1, row=1, col=1)
@@ -1208,8 +1216,8 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     # --- Plot 4: 3D Equal Aspect Plot ---
     fig4 = go.Figure()
     phase_colors = {
-        'stand': 'gray', 'gait_forward': 'blue', 'stop_5s': 'brown',
-        'turn180': 'orange', 'gait_back': 'green', 'sit': 'purple'
+        'stand': 'gray', 'first_gait': 'blue', 'stop_5s': 'brown',
+        'turn180': 'orange', 'second_gait': 'green', 'sit': 'purple'
     }
     
     last_idx = 0
@@ -1286,8 +1294,8 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         
         fwd_mask = vy > 0
         bwd_mask = vy <= 0
-        fig5.add_trace(go.Scatter(x=y[fwd_mask], y=z[fwd_mask], mode='markers', marker=dict(color=c_fwd, size=4), name=f'{side} Fwd (Vy > 0)'))
-        fig5.add_trace(go.Scatter(x=y[bwd_mask], y=z[bwd_mask], mode='markers', marker=dict(color=c_bwd, size=4, symbol='x'), name=f'{side} Bwd (Vy <= 0)'))
+        fig5.add_trace(go.Scatter(x=y[fwd_mask], y=z[fwd_mask], mode='markers', marker=dict(color=c_fwd, size=4), name=f'{side} Positive Vy'))
+        fig5.add_trace(go.Scatter(x=y[bwd_mask], y=z[bwd_mask], mode='markers', marker=dict(color=c_bwd, size=4, symbol='x'), name=f'{side} Negative Vy'))
         
         # Add Gait Events in 5
         hs_idx = analyzer.gait_events.get(side, {}).get('HS', [])
@@ -1303,14 +1311,14 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     # --- Plot 6: Mean Foot Kinematics (Split Y and Z Position/Velocity/Acceleration) vs Time ---
     fig6 = make_subplots(rows=5, cols=2, shared_xaxes=True,
                          subplot_titles=[
-                             'Right Position Y', 'Left Position Y',
-                             'Right Position Z', 'Left Position Z',
-                             'Right Velocity Y & Z', 'Left Velocity Y & Z',
-                             'Right Acceleration Y & Z', 'Left Acceleration Y & Z',
-                             'Right 2D Kin Magnitude', 'Left 2D Kin Magnitude'
+                             'Left Position Y', 'Right Position Y',
+                             'Left Position Z', 'Right Position Z',
+                             'Left Velocity Y & Z', 'Right Velocity Y & Z',
+                             'Left Acceleration Y & Z', 'Right Acceleration Y & Z',
+                             'Left 2D Kin Magnitude', 'Right 2D Kin Magnitude'
                          ], vertical_spacing=0.03)
     
-    for side, prefix, col in [('Right', 'Med_Foot_Right', 1), ('Left', 'Med_Foot_Left', 2)]:
+    for side, prefix, col in [('Left', 'Med_Foot_Left', 1), ('Right', 'Med_Foot_Right', 2)]:
         y = analyzer.df[f'{prefix}_y'].to_numpy()
         z = analyzer.df[f'{prefix}_z'].to_numpy()
         vy = analyzer.df[f'{prefix}_vel_y'].to_numpy()
@@ -1354,8 +1362,8 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     trunk_vy = analyzer.df['Mid_Trunk_vel_y'].to_numpy()
     
     fig7.add_trace(go.Scatter(x=trunk_y, y=trunk_z, mode='lines', line=dict(color='purple'), opacity=0.4, name='Mid Trunk Path'))
-    fig7.add_trace(go.Scatter(x=trunk_y[trunk_vy > 0], y=trunk_z[trunk_vy > 0], mode='markers', marker=dict(color='darkmagenta', size=4), name='Fwd (Vy > 0)'))
-    fig7.add_trace(go.Scatter(x=trunk_y[trunk_vy <= 0], y=trunk_z[trunk_vy <= 0], mode='markers', marker=dict(color='violet', size=4, symbol='x'), name='Bwd (Vy <= 0)'))
+    fig7.add_trace(go.Scatter(x=trunk_y[trunk_vy > 0], y=trunk_z[trunk_vy > 0], mode='markers', marker=dict(color='darkmagenta', size=4), name='Positive Vy'))
+    fig7.add_trace(go.Scatter(x=trunk_y[trunk_vy <= 0], y=trunk_z[trunk_vy <= 0], mode='markers', marker=dict(color='violet', size=4, symbol='x'), name='Negative Vy'))
     
     for leg, color_hs, color_to in [('Right', 'darkred', 'lightcoral'), ('Left', 'darkgreen', 'palegreen')]:
         hs_idx = analyzer.gait_events.get(leg, {}).get('HS', [])
@@ -1419,15 +1427,15 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         'Distal_Phase':   'Distal_Dominance',
     }
 
-    vc_titles = {
-        'Axial_Turn': 'Trunk-Pelvis Vector Coding (Turn Phase)',
-        'Axial_Stand': 'Trunk-Pelvis Vector Coding (Sit-to-Stand Phase)',
-        'Limb_R_GaitFwd': 'Arm-Leg Vector Coding (Walk Forward Analysis)',
-        'Limb_R_GaitBack': 'Arm-Leg Vector Coding (Walk Back Analysis)',
-    }
+    vc_titles = [
+        ('Axial_Turn', 'Trunk-Pelvis Vector Coding (Turn Phase)'),
+        ('Axial_Stand', 'Trunk-Pelvis Vector Coding (Sit-to-Stand Phase)'),
+        ('Limb_R_FirstGait', 'Arm-Leg Vector Coding (First gait analysis)'),
+        ('Limb_R_SecondGait', 'Arm-Leg Vector Coding (Second gait analysis)'),
+    ]
 
-    for phase_key, title_suffix in vc_titles.items():
-        res = vc_summary.get(phase_key, {})
+    for vc_key, title_suffix in vc_titles:
+        res = vc_summary.get(vc_key, {})
         if not res.get('gamma_deg'):
             continue
             
@@ -1510,12 +1518,17 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         report_data.get('Spatiotemporal', {}).get('Left', {}),
         report_data.get('Spatiotemporal', {}).get('Right', {}),
     )
-    phases_html = ''.join([f'<tr><th>{k.replace("_", " ")}</th><td>{round(v[0],2)}s to {round(v[1],2)}s (Dur: {round(v[1]-v[0],2)}s)</td></tr>' if isinstance(v, (list, tuple)) else f'<tr><th>{k.replace("_", " ")}</th><td>{v}</td></tr>' for k,v in report_data.get('Phases_Seconds', {}).items()])
+    phases_html = ''.join([
+        f'<tr><th>{k.replace("_", " ")}</th><td>{round(v[0],2)}s to {round(v[1],2)}s (Dur: {round(v[1]-v[0],2)}s)</td></tr>'
+        if isinstance(v, (list, tuple))
+        else f'<tr><th>{k.replace("_", " ")}</th><td>{v}</td></tr>'
+        for k, v in report_data.get('Phases_Seconds', {}).items()
+    ])
     
     steps_list = report_data.get('Steps_Timeseries', [])
     steps_html = ''.join([
         f"<tr><td>{i+1}</td><td style='color: {'red' if s['Side'] == 'Right' else 'green'}; font-weight: bold;'>{s['Side']}</td>"
-        f"<td>{s['Time_s']:.3f}</td><td>{s.get('Y_m', '')}</td><td>{s['Phase']}</td>"
+        f"<td>{s['Time_s']:.3f}</td><td>{s.get('Y_m', '')}</td><td>{phase_display_name(s['Phase'])}</td>"
         f"<td>{s.get('Stance_Time_s', '')}</td><td>{s.get('Step_Length_m', '')}</td>"
         f"<td>{s.get('Step_Width_m', '')}</td><td>{s.get('Stride_Length_m', '')}</td>"
         f"<td>{s.get('Swing_Time_s', '')}</td></tr>" 
@@ -1533,7 +1546,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                 videos_html += f"""
             <div class="video-card">
                 <img src="{path_url}" alt="{pv['Phase']}">
-                <h4>{pv['Phase'].replace('_', ' ')}</h4>
+                <h4>{phase_display_name(pv['Phase'])}</h4>
             </div>"""
             else:
                 videos_html += f"""
@@ -1541,7 +1554,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                 <video autoplay loop muted playsinline>
                     <source src="{path_url}" type="video/mp4">
                 </video>
-                <h4>{pv['Phase'].replace('_', ' ')}</h4>
+                <h4>{phase_display_name(pv['Phase'])}</h4>
             </div>"""
         videos_html += '</div>\n'
 
@@ -1550,7 +1563,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>TUG Report: {name}</title>
+        <title>TUGTURN Report: {name}</title>
         {plotly_js}
         <style>
             body {{ font-family: sans-serif; margin: 20px; background-color: #f9f9f9; color: #333; }}
@@ -1573,7 +1586,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     </head>
     <body>
         <div class="container">
-            <h1><i>vailá</i> - TUG Analysis Interactive Report</h1>
+            <h1><i>vailá</i> - TUGTURN Analysis Interactive Report</h1>
             <h2>Subject: {name}</h2>
             
             {videos_html}
@@ -1613,7 +1626,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                 </table>
             </div>
             
-            <h3 class="section-title">TUG Phases (Seconds)</h3>
+            <h3 class="section-title">TUGTURN Phases (Seconds)</h3>
             <div class="table-container">
                 <table>
                     <thead><tr><th>Phase</th><th>Range</th></tr></thead>
@@ -1625,7 +1638,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     </html>
     """
     
-    report_file = out_dir / f"{name}_tug_report_interactive.html"
+    report_file = out_dir / f"{name}_tugturn_report_interactive.html"
     report_file.write_text(html_content, encoding='utf-8')
     return report_file
 
@@ -1661,12 +1674,10 @@ def generate_phase_skeleton_gifs(analyzer: TUGAnalyzer, fps: float, report_data:
             x_min, x_max, y_min, y_max, z_min, z_max = 0,1,0,1,0,1
 
     phase_videos = []
-    for phase_name, val in phases.items():
-        if phase_name == "Global": continue
-        if not isinstance(val, (list, tuple)) or len(val) != 2: continue
-        
+    for phase_name, val in ordered_phase_ranges(phases):
         start_s, end_s = val
-        if end_s <= start_s: continue
+        if end_s <= start_s:
+            continue
         
         start_idx = int(start_s * fps)
         end_idx = int(end_s * fps)
@@ -1696,7 +1707,7 @@ def generate_phase_skeleton_gifs(analyzer: TUGAnalyzer, fps: float, report_data:
         if max_range > 0:
             ax.set_box_aspect([x_range/max_range, y_range/max_range, z_range/max_range])
             
-        ax.set_title(phase_name.replace('_', ' ').title(), pad=0)
+        ax.set_title(phase_display_name(phase_name), pad=0)
         ax.axis('off')
         
         def update(f):
@@ -1719,7 +1730,7 @@ def generate_phase_skeleton_gifs(analyzer: TUGAnalyzer, fps: float, report_data:
         plt.close(fig)
         
         phase_videos.append({
-            'Phase': phase_name,
+            'Phase': canonical_phase_name(phase_name),
             'Video_Path': str(gif_path.resolve())
         })
         
@@ -1833,14 +1844,14 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     events.sort()
     
     phases = report_data.get('Phases_Seconds', {})
-    wf_s = phases.get('gait_forward', (0,0))[0]
-    wf_e = phases.get('gait_forward', (0,0))[1]
-    wb_s = phases.get('gait_back', (0,0))[0]
-    wb_e = phases.get('gait_back', (0,0))[1]
+    first_gait = phases.get('first_gait', (0, 0))
+    second_gait = phases.get('second_gait', (0, 0))
+    wf_s, wf_e = first_gait
+    wb_s, wb_e = second_gait
     
     fig3 = plt.figure(figsize=(16, 5))
-    draw_stick_figures(fig3.add_subplot(1, 2, 1), [f for f in events if wf_s*fps <= f <= wf_e*fps], "Walk Forward Sagittal Events (Y-Z)")
-    draw_stick_figures(fig3.add_subplot(1, 2, 2), [f for f in events if wb_s*fps <= f <= wb_e*fps], "Walk Back Sagittal Events (Y-Z)")
+    draw_stick_figures(fig3.add_subplot(1, 2, 1), [f for f in events if wf_s*fps <= f <= wf_e*fps], "First gait sagittal events (Y-Z)")
+    draw_stick_figures(fig3.add_subplot(1, 2, 2), [f for f in events if wb_s*fps <= f <= wb_e*fps], "Second gait sagittal events (Y-Z)")
     plt.tight_layout()
     images_b64.append(get_base64_image(fig3))
     
@@ -1848,8 +1859,8 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     fig4 = plt.figure(figsize=(10, 8))
     ax4 = fig4.add_subplot(111, projection='3d')
     phase_colors_mpl = {
-        'stand': 'gray', 'gait_forward': 'blue', 'stop_5s': 'brown',
-        'turn180': 'orange', 'gait_back': 'green', 'sit': 'purple'
+        'stand': 'gray', 'first_gait': 'blue', 'stop_5s': 'brown',
+        'turn180': 'orange', 'second_gait': 'green', 'sit': 'purple'
     }
     phases = report_data.get('Phases_Seconds', {})
     legend_added = set()
@@ -1915,8 +1926,8 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     
     # Right Foot
     ax5.plot(med_r_y, med_r_z, color='red', alpha=0.3, label='Right Path')
-    ax5.scatter(med_r_y[med_r_vy > 0], med_r_z[med_r_vy > 0], color='darkred', s=15, label='Right Fwd (Vy > 0)')
-    ax5.scatter(med_r_y[med_r_vy <= 0], med_r_z[med_r_vy <= 0], color='lightcoral', marker='x', s=15, label='Right Bwd (Vy <= 0)')
+    ax5.scatter(med_r_y[med_r_vy > 0], med_r_z[med_r_vy > 0], color='darkred', s=15, label='Right Positive Vy')
+    ax5.scatter(med_r_y[med_r_vy <= 0], med_r_z[med_r_vy <= 0], color='lightcoral', marker='x', s=15, label='Right Negative Vy')
     
     hs_r_idx = analyzer.gait_events.get('Right', {}).get('HS', [])
     to_r_idx = analyzer.gait_events.get('Right', {}).get('TO', [])
@@ -1925,8 +1936,8 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
 
     # Left Foot
     ax5.plot(med_l_y, med_l_z, color='green', alpha=0.3, label='Left Path')
-    ax5.scatter(med_l_y[med_l_vy > 0], med_l_z[med_l_vy > 0], color='darkgreen', s=15, label='Left Fwd (Vy > 0)')
-    ax5.scatter(med_l_y[med_l_vy <= 0], med_l_z[med_l_vy <= 0], color='lightgreen', marker='x', s=15, label='Left Bwd (Vy <= 0)')
+    ax5.scatter(med_l_y[med_l_vy > 0], med_l_z[med_l_vy > 0], color='darkgreen', s=15, label='Left Positive Vy')
+    ax5.scatter(med_l_y[med_l_vy <= 0], med_l_z[med_l_vy <= 0], color='lightgreen', marker='x', s=15, label='Left Negative Vy')
     
     hs_l_idx = analyzer.gait_events.get('Left', {}).get('HS', [])
     to_l_idx = analyzer.gait_events.get('Left', {}).get('TO', [])
@@ -1946,8 +1957,8 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     fig6 = plt.figure(figsize=(16, 25))
     gs6 = gridspec.GridSpec(5, 2, figure=fig6)
     
-    for side, prefix, color in [('Right', 'Med_Foot_Right', 'red'), ('Left', 'Med_Foot_Left', 'green')]:
-        col = 0 if side == 'Right' else 1
+    for side, prefix, color in [('Left', 'Med_Foot_Left', 'green'), ('Right', 'Med_Foot_Right', 'red')]:
+        col = 0 if side == 'Left' else 1
         
         y = analyzer.df[f'{prefix}_y'].to_numpy()
         z = analyzer.df[f'{prefix}_z'].to_numpy()
@@ -2019,8 +2030,8 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     trunk_vy = analyzer.df['Mid_Trunk_vel_y'].to_numpy()
     
     ax7.plot(trunk_y, trunk_z, color='purple', alpha=0.3, label='Mid Trunk Path')
-    ax7.scatter(trunk_y[trunk_vy > 0], trunk_z[trunk_vy > 0], color='darkmagenta', s=15, label='Fwd (Vy > 0)')
-    ax7.scatter(trunk_y[trunk_vy <= 0], trunk_z[trunk_vy <= 0], color='violet', marker='x', s=15, label='Bwd (Vy <= 0)')
+    ax7.scatter(trunk_y[trunk_vy > 0], trunk_z[trunk_vy > 0], color='darkmagenta', s=15, label='Positive Vy')
+    ax7.scatter(trunk_y[trunk_vy <= 0], trunk_z[trunk_vy <= 0], color='violet', marker='x', s=15, label='Negative Vy')
     
     for leg, color_hs, color_to in [('Right', 'darkred', 'lightcoral'), ('Left', 'darkgreen', 'lightgreen')]:
         hs_idx = analyzer.gait_events.get(leg, {}).get('HS', [])
@@ -2102,12 +2113,12 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
 
     # --- Plot 9+: Vector Coding (Timelines + Donut Charts) ---
     vc_summary = report_data.get('VC_Summary', {})
-    vc_titles = {
-        'Axial_Turn': 'Trunk-Pelvis Vector Coding (Turn Phase)',
-        'Axial_Stand': 'Trunk-Pelvis Vector Coding (Sit-to-Stand Phase)',
-        'Limb_R_GaitFwd': 'Arm-Leg Vector Coding (Walk Forward Analysis)',
-        'Limb_R_GaitBack': 'Arm-Leg Vector Coding (Walk Back Analysis)',
-    }
+    vc_titles = [
+        ('Axial_Turn', 'Trunk-Pelvis Vector Coding (Turn Phase)'),
+        ('Axial_Stand', 'Trunk-Pelvis Vector Coding (Sit-to-Stand Phase)'),
+        ('Limb_R_FirstGait', 'Arm-Leg Vector Coding (First gait analysis)'),
+        ('Limb_R_SecondGait', 'Arm-Leg Vector Coding (Second gait analysis)'),
+    ]
     vc_colours = {
         'In_Phase': 'royalblue',
         'Anti_Phase': 'mediumseagreen',
@@ -2121,8 +2132,8 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
         'Distal_Phase': 'Distal_Dominance',
     }
 
-    for phase_key, title_suffix in vc_titles.items():
-        res = vc_summary.get(phase_key, {}) or {}
+    for vc_key, title_suffix in vc_titles:
+        res = vc_summary.get(vc_key, {}) or {}
         gamma = res.get('gamma_deg') or []
         movement_pct = res.get('Movement_Percent') or []
         patterns = res.get('Coordination_Pattern') or []
@@ -2208,12 +2219,17 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
         report_data.get('Spatiotemporal', {}).get('Left', {}),
         report_data.get('Spatiotemporal', {}).get('Right', {}),
     )
-    phases_html = ''.join([f'<tr><th>{k.replace("_", " ")}</th><td>{round(v[0],2)}s to {round(v[1],2)}s (Dur: {round(v[1]-v[0],2)}s)</td></tr>' if isinstance(v, (list, tuple)) else f'<tr><th>{k.replace("_", " ")}</th><td>{v}</td></tr>' for k,v in report_data.get('Phases_Seconds', {}).items()])
+    phases_html = ''.join([
+        f'<tr><th>{k.replace("_", " ")}</th><td>{round(v[0],2)}s to {round(v[1],2)}s (Dur: {round(v[1]-v[0],2)}s)</td></tr>'
+        if isinstance(v, (list, tuple))
+        else f'<tr><th>{k.replace("_", " ")}</th><td>{v}</td></tr>'
+        for k, v in report_data.get('Phases_Seconds', {}).items()
+    ])
     
     steps_list = report_data.get('Steps_Timeseries', [])
     steps_html = ''.join([
         f"<tr><td>{i+1}</td><td style='color: {'red' if s['Side'] == 'Right' else 'green'}; font-weight: bold;'>{s['Side']}</td>"
-        f"<td>{s['Time_s']:.3f}</td><td>{s.get('Y_m', '')}</td><td>{s['Phase']}</td>"
+        f"<td>{s['Time_s']:.3f}</td><td>{s.get('Y_m', '')}</td><td>{phase_display_name(s['Phase'])}</td>"
         f"<td>{s.get('Stance_Time_s', '')}</td><td>{s.get('Step_Length_m', '')}</td>"
         f"<td>{s.get('Step_Width_m', '')}</td><td>{s.get('Stride_Length_m', '')}</td>"
         f"<td>{s.get('Swing_Time_s', '')}</td></tr>" 
@@ -2231,7 +2247,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
                 videos_html += f"""
             <div class="video-card">
                 <img src="{path_url}" alt="{pv['Phase']}">
-                <h4>{pv['Phase'].replace('_', ' ')}</h4>
+                <h4>{phase_display_name(pv['Phase'])}</h4>
             </div>"""
             else:
                 videos_html += f"""
@@ -2239,7 +2255,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
                 <video autoplay loop muted playsinline>
                     <source src="{path_url}" type="video/mp4">
                 </video>
-                <h4>{pv['Phase'].replace('_', ' ')}</h4>
+                <h4>{phase_display_name(pv['Phase'])}</h4>
             </div>"""
         videos_html += '</div>\n'
 
@@ -2248,7 +2264,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>TUG Report: {name}</title>
+        <title>TUGTURN Report: {name}</title>
         <style>
             body {{ font-family: sans-serif; margin: 20px; background-color: #f9f9f9; color: #333; }}
             .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
@@ -2271,7 +2287,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     </head>
     <body>
         <div class="container">
-            <h1><i>vailá</i> - TUG Analysis Report</h1>
+            <h1><i>vailá</i> - TUGTURN Analysis Report</h1>
             <h2>Subject: {name}</h2>
             
             {videos_html}
@@ -2311,7 +2327,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
                 </table>
             </div>
             
-            <h3 class="section-title">TUG Phases (Seconds)</h3>
+            <h3 class="section-title">TUGTURN Phases (Seconds)</h3>
             <div class="table-container">
                 <table>
                     <thead><tr><th>Phase</th><th>Range</th></tr></thead>
@@ -2323,7 +2339,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     </html>
     """
     
-    report_file = out_dir / f"{name}_tug_report.html"
+    report_file = out_dir / f"{name}_tugturn_report.html"
     report_file.write_text(html_content, encoding='utf-8')
     return report_file
 
@@ -2589,9 +2605,9 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     phases = analyzer.segment_tug_phases()
 
     
-    # Strictly filter out any gait events that fall outside the Walk Forward and Walk Back phases
-    wf_s, wf_e = phases.get('gait_forward', (0,0))
-    wb_s, wb_e = phases.get('gait_back', (0,0))
+    # Strictly filter out any gait events that fall outside the First gait and Second gait phases
+    wf_s, wf_e = phases.get('first_gait', (0, 0))
+    wb_s, wb_e = phases.get('second_gait', (0, 0))
     
     for leg in ['Right', 'Left']:
         for ev in ['HS', 'TO']:
@@ -2612,9 +2628,9 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     steps_list = []
     
     sts_s, sts_e = phases.get('stand', (0,0))
-    wf_s, wf_e = phases.get('gait_forward', (0,0))
+    wf_s, wf_e = phases.get('first_gait', (0, 0))
     turn_s, turn_e = phases.get('turn180', (0,0))
-    wb_s, wb_e = phases.get('gait_back', (0,0))
+    wb_s, wb_e = phases.get('second_gait', (0, 0))
     sit_s, sit_e = phases.get('sit', (0,0))
     
     pause_s, pause_e = phases.get('stop_5s', (wf_e, turn_s))
@@ -2644,18 +2660,18 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
                 continue
             elif wf_s <= t < wf_e:
                 if not valid_spatial:
-                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Forward Gait (Y={y_pos:.2f}m outside [{y_min_valid}, {y_max}])")
+                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during First gait (Y={y_pos:.2f}m outside [{y_min_valid}, {y_max}])")
                     continue
-                phase_label = "gait_forward"
+                phase_label = "first_gait"
             elif pause_s <= t < pause_e and pause_s < pause_e:
                 continue
             elif turn_s <= t < turn_e:
                 continue
             elif wb_s <= t < wb_e:
                 if not valid_spatial:
-                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Back Gait (Y={y_pos:.2f}m outside [{y_min_valid}, {y_max}])")
+                    print(f"Notice: Filtered out {leg} HS at {t:.2f}s during Second gait (Y={y_pos:.2f}m outside [{y_min_valid}, {y_max}])")
                     continue
-                phase_label = "gait_back"
+                phase_label = "second_gait"
             elif sit_s <= t <= sit_e:
                 continue
             else:
@@ -2685,13 +2701,13 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
             
         prev_s = dedup_steps[-1]
         if abs(s['Time_s'] - prev_s['Time_s']) < 0.01:
-            if s['Phase'] == 'gait_forward':
+            if s['Phase'] == 'first_gait':
                 if s['Y_m'] > prev_s['Y_m']:
                     dedup_steps[-1] = s
                     print(f"Notice: Removed simultaneous {prev_s['Side']} step at {prev_s['Time_s']:.3f}s (kept {s['Side']}, further ahead at Y={s['Y_m']:.2f})")
                 else:
                     print(f"Notice: Removed simultaneous {s['Side']} step at {s['Time_s']:.3f}s (kept {prev_s['Side']}, further ahead at Y={prev_s['Y_m']:.2f})")
-            elif s['Phase'] == 'gait_back':
+            elif s['Phase'] == 'second_gait':
                 if s['Y_m'] < prev_s['Y_m']:
                     dedup_steps[-1] = s
                     print(f"Notice: Removed simultaneous {prev_s['Side']} step at {prev_s['Time_s']:.3f}s (kept {s['Side']}, further back at Y={s['Y_m']:.2f})")
@@ -2705,8 +2721,8 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     steps_list = dedup_steps
     
     # Recalculate global step counts
-    wf_steps = sum(1 for s in steps_list if s['Phase'] == 'gait_forward')
-    wb_steps = sum(1 for s in steps_list if s['Phase'] == 'gait_back')
+    wf_steps = sum(1 for s in steps_list if s['Phase'] == 'first_gait')
+    wb_steps = sum(1 for s in steps_list if s['Phase'] == 'second_gait')
 
     
     print("Generating animated GIFs for each phase (this may take a moment)...")
@@ -2736,15 +2752,15 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     vc_stand = calculate_axial_vector_coding(analyzer, fps, sts_s, sts_e)
     _append_vc_ts(vc_stand, 'Axial_Stand')
 
-    # 3. Limb Y-axis (Right Elbow 14 vs Right Knee 26) during Gait Forward
-    wf_s, wf_e = phases.get('gait_forward', (0, 0))
+    # 3. Limb Y-axis (Right Elbow 14 vs Right Knee 26) during First gait
+    wf_s, wf_e = phases.get('first_gait', (0, 0))
     vc_wf = calculate_limb_vector_coding_y(analyzer, fps, wf_s, wf_e, 14, 26)
-    _append_vc_ts(vc_wf, 'Limb_R_GaitFwd')
+    _append_vc_ts(vc_wf, 'Limb_R_FirstGait')
 
-    # 4. Limb Y-axis (Right Elbow 14 vs Right Knee 26) during Gait Back
-    wb_s, wb_e = phases.get('gait_back', (0, 0))
+    # 4. Limb Y-axis (Right Elbow 14 vs Right Knee 26) during Second gait
+    wb_s, wb_e = phases.get('second_gait', (0, 0))
     vc_wb = calculate_limb_vector_coding_y(analyzer, fps, wb_s, wb_e, 14, 26)
-    _append_vc_ts(vc_wb, 'Limb_R_GaitBack')
+    _append_vc_ts(vc_wb, 'Limb_R_SecondGait')
 
     if vc_ts_data:
         vc_df = pd.DataFrame(vc_ts_data)
@@ -2762,33 +2778,31 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
         'VC_Summary': {
             'Axial_Turn': vc_turn,
             'Axial_Stand': vc_stand,
-            'Limb_R_GaitFwd': vc_wf,
-            'Limb_R_GaitBack': vc_wb,
+            'Limb_R_FirstGait': vc_wf,
+            'Limb_R_SecondGait': vc_wb,
         }
     }
     
     if 'Global' not in stats:
         stats['Global'] = {}
-    stats['Global']['Steps_Walk_Forward'] = wf_steps
-    stats['Global']['Steps_Walk_Back'] = wb_steps
+    stats['Global']['Steps_First_Gait'] = wf_steps
+    stats['Global']['Steps_Second_Gait'] = wb_steps
 
-    fwd_seq = [s['Side'][0] for s in steps_list if s['Phase'] == 'gait_forward']
-    bck_seq = [s['Side'][0] for s in steps_list if s['Phase'] == 'gait_back']
+    fwd_seq = [s['Side'][0] for s in steps_list if s['Phase'] == 'first_gait']
+    bck_seq = [s['Side'][0] for s in steps_list if s['Phase'] == 'second_gait']
     
     if len(fwd_seq) > 0:
-        stats['Global']['Fwd_1st_strike_inside_zone'] = fwd_seq[0]
-        stats['Global']['Fwd_1st_complete_step_inside'] = fwd_seq[1] if len(fwd_seq) > 1 else None
-        stats['Global']['Fwd_Number_of_steps_inside'] = len(fwd_seq) - 1
-        stats['Global']['Fwd_Last_strike_inside_zone'] = fwd_seq[-1]
-        stats['Global']['Fwd_Sequence_steps_inside'] = str(fwd_seq)
-        
+        stats['Global']['First_1st_strike_inside_zone'] = fwd_seq[0]
+        stats['Global']['First_1st_complete_step_inside'] = fwd_seq[1] if len(fwd_seq) > 1 else None
+        stats['Global']['First_Number_of_steps_inside'] = len(fwd_seq) - 1
+        stats['Global']['First_Last_strike_inside_zone'] = fwd_seq[-1]
+        stats['Global']['First_Sequence_steps_inside'] = str(fwd_seq)
     if len(bck_seq) > 0:
-        stats['Global']['Bck_1st_strike_inside_zone'] = bck_seq[0]
-        stats['Global']['Bck_1st_complete_step_inside'] = bck_seq[1] if len(bck_seq) > 1 else None
-        stats['Global']['Bck_Number_of_steps_inside'] = len(bck_seq) - 1
-        stats['Global']['Bck_Last_strike_inside_zone'] = bck_seq[-1]
-        stats['Global']['Bck_Sequence_steps_inside'] = str(bck_seq)
-    
+        stats['Global']['Second_1st_strike_inside_zone'] = bck_seq[0]
+        stats['Global']['Second_1st_complete_step_inside'] = bck_seq[1] if len(bck_seq) > 1 else None
+        stats['Global']['Second_Number_of_steps_inside'] = len(bck_seq) - 1
+        stats['Global']['Second_Last_strike_inside_zone'] = bck_seq[-1]
+        stats['Global']['Second_Sequence_steps_inside'] = str(bck_seq)
     # Export individual steps to CSV file (overwrite)
     if steps_list:
         steps_df = pd.DataFrame(steps_list)
@@ -2798,7 +2812,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     
     # 1. JSON Report
     report = report_data
-    json_file = out_dir / f"{csv_path.stem}_tug_data.json"
+    json_file = out_dir / f"{csv_path.stem}_tugturn_data.json"
     with open(json_file, 'w', encoding='utf-8') as f:
         json.dump(report, f, indent=4)
         
@@ -2818,15 +2832,19 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
         if 'stop_5s' in phases:
             pause_dur = phases['stop_5s'][1] - phases['stop_5s'][0]
             
+        first_gait = phases.get('first_gait', [0, 0])
+        second_gait = phases.get('second_gait', [0, 0])
+        first_gait_time = first_gait[1] - first_gait[0]
+        second_gait_time = second_gait[1] - second_gait[0]
         results_data.update({
             'STS_Time_s': phases.get('stand', [0,0])[1] - phases.get('stand', [0,0])[0],
-            'Walk_Fwd_Time_s': phases.get('gait_forward', [0,0])[1] - phases.get('gait_forward', [0,0])[0],
+            'First_Gait_Time_s': first_gait_time,
             'Freeze_Before_Turn_s': pause_dur,
             'Turn_Time_s': phases.get('turn180', [0,0])[1] - phases.get('turn180', [0,0])[0],
-            'Walk_Back_Time_s': phases.get('gait_back', [0,0])[1] - phases.get('gait_back', [0,0])[0],
+            'Second_Gait_Time_s': second_gait_time,
             'Stand_to_Sit_Time_s': phases.get('sit', [0,0])[1] - phases.get('sit', [0,0])[0],
             'Total_Time_s': phases.get('Total_TUG_Time', 0),
-            'Turn_Direction': phases.get('Turn_Direction', 'Unknown')
+            'Turn_Direction': phases.get('Turn_Direction', 'Unknown'),
         })
     if stats:
         results_data.update({
@@ -2834,24 +2852,23 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
             'Cadence': stats.get('Global', {}).get('Cadence_steps_per_min', 0),
             'R_Step_Length': stats.get('Right', {}).get('Step_Length_m', 0),
             'L_Step_Length': stats.get('Left', {}).get('Step_Length_m', 0),
-            'Steps_Walk_Forward': stats.get('Global', {}).get('Steps_Walk_Forward', 0),
-            'Steps_Walk_Back': stats.get('Global', {}).get('Steps_Walk_Back', 0),
-            'XcoM_Dev_Fwd_m': stats.get('Global', {}).get('XcoM_Deviation_Fwd_m', 0),
-            'XcoM_Dev_Bwd_m': stats.get('Global', {}).get('XcoM_Deviation_Bwd_m', 0),
-            
-            'Fwd_1st_strike_inside_zone': stats.get('Global', {}).get('Fwd_1st_strike_inside_zone', ''),
-            'Fwd_1st_complete_step_inside': stats.get('Global', {}).get('Fwd_1st_complete_step_inside', ''),
-            'Fwd_Number_of_steps_inside': stats.get('Global', {}).get('Fwd_Number_of_steps_inside', ''),
-            'Fwd_Last_strike_inside_zone': stats.get('Global', {}).get('Fwd_Last_strike_inside_zone', ''),
-            'Fwd_Sequence_steps_inside': stats.get('Global', {}).get('Fwd_Sequence_steps_inside', ''),
-            
-            'Bck_1st_strike_inside_zone': stats.get('Global', {}).get('Bck_1st_strike_inside_zone', ''),
-            'Bck_1st_complete_step_inside': stats.get('Global', {}).get('Bck_1st_complete_step_inside', ''),
-            'Bck_Number_of_steps_inside': stats.get('Global', {}).get('Bck_Number_of_steps_inside', ''),
-            'Bck_Last_strike_inside_zone': stats.get('Global', {}).get('Bck_Last_strike_inside_zone', ''),
-            'Bck_Sequence_steps_inside': stats.get('Global', {}).get('Bck_Sequence_steps_inside', ''),
+            'Steps_First_Gait': stats.get('Global', {}).get('Steps_First_Gait', 0),
+            'Steps_Second_Gait': stats.get('Global', {}).get('Steps_Second_Gait', 0),
+            'XcoM_Dev_First_Gait_m': stats.get('Global', {}).get('XcoM_Deviation_First_Gait_m', 0),
+            'XcoM_Dev_Second_Gait_m': stats.get('Global', {}).get('XcoM_Deviation_Second_Gait_m', 0),
+            'First_1st_strike_inside_zone': stats.get('Global', {}).get('First_1st_strike_inside_zone', ''),
+            'First_1st_complete_step_inside': stats.get('Global', {}).get('First_1st_complete_step_inside', ''),
+            'First_Number_of_steps_inside': stats.get('Global', {}).get('First_Number_of_steps_inside', ''),
+            'First_Last_strike_inside_zone': stats.get('Global', {}).get('First_Last_strike_inside_zone', ''),
+            'First_Sequence_steps_inside': stats.get('Global', {}).get('First_Sequence_steps_inside', ''),
+
+            'Second_1st_strike_inside_zone': stats.get('Global', {}).get('Second_1st_strike_inside_zone', ''),
+            'Second_1st_complete_step_inside': stats.get('Global', {}).get('Second_1st_complete_step_inside', ''),
+            'Second_Number_of_steps_inside': stats.get('Global', {}).get('Second_Number_of_steps_inside', ''),
+            'Second_Last_strike_inside_zone': stats.get('Global', {}).get('Second_Last_strike_inside_zone', ''),
+            'Second_Sequence_steps_inside': stats.get('Global', {}).get('Second_Sequence_steps_inside', ''),
         })
-        for prefix, res in [('VCTurn', vc_turn), ('VCStand', vc_stand), ('VCWkFwd', vc_wf), ('VCWkBck', vc_wb)]:
+        for prefix, res in [('VCTurn', vc_turn), ('VCStand', vc_stand), ('VCFirstGait', vc_wf), ('VCSecondGait', vc_wb)]:
             results_data.update({
                 f'{prefix}_Dominant':   res.get('Dominant_Pattern', 'N/A'),
                 f'{prefix}_InPhase_%':  res.get('In_Phase_pct', 0),
@@ -2883,8 +2900,8 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     
 def main():
     parser = argparse.ArgumentParser(
-        description="TUG and TURN 3D Analysis Batch Processor\n"
-                    "Extracts spatiotemporal and kinematic parameters from TUG test CSV files (MediaPipe 3D).\n"
+            description="TUGTURN 3D Analysis Batch Processor\n"
+                    "Extracts spatiotemporal and kinematic parameters from TUGTURN test CSV files (MediaPipe 3D).\n"
                     "Uses a 5-second pause as a temporal anchor to robustly segment Walk, Turn, and STS phases.",
         formatter_class=argparse.RawTextHelpFormatter
     )
@@ -2914,7 +2931,7 @@ def main():
         root.withdraw()
         
         input_path = filedialog.askopenfilename(
-            title="Select the TUG CSV file to analyze",
+            title="Select the TUGTURN CSV file to analyze",
             filetypes=[("CSV files", "*.csv")]
         )
         if not input_path:
@@ -2969,7 +2986,7 @@ def main():
             "(If 'No', for each CSV a folder result_tugturn_<basename> will be created in the same directory as the CSV)"
         )
         if ans:
-            out_folder = filedialog.askdirectory(title="Select the Output directory for TUG results")
+            out_folder = filedialog.askdirectory(title="Select the Output directory for TUGTURN results")
             if out_folder:
                 output_path = out_folder
 
@@ -2981,7 +2998,7 @@ def main():
         input_dir = input_path.parent if input_path.is_file() else input_path
         try:
             if output_path_explicit.resolve() == input_dir.resolve():
-                output_path_explicit = output_path_explicit / "tug_results"
+                output_path_explicit = output_path_explicit / "tugturn_results"
                 print(
                     f"Output dir equals input dir; redirecting to: {output_path_explicit}"
                 )
@@ -3003,14 +3020,14 @@ def main():
         if output_path_explicit is not None:
             out_dir = output_path_explicit
         else:
-            out_dir = f.parent / ("result_tugturn_" + f.stem)
+            out_dir = f.parent / ("tugturn_result_" + f.stem)
             out_dir.mkdir(parents=True, exist_ok=True)
         process_tug_file(f, out_dir, config_path, args.y_chair_tol)
 
     if output_path_explicit is not None:
         print(f"\nAll processing complete. Results saved in {output_path_explicit}")
     else:
-        print(f"\nAll processing complete. Results saved in per-trial dirs result_tugturn_<stem> under input.")
+        print(f"\nAll processing complete. Results saved in per-trial dirs tugturn_result_<stem> under input.")
 
 if __name__ == "__main__":
     main()
