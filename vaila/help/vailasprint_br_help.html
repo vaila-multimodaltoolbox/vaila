@@ -73,10 +73,13 @@
         </ul>
 
         <h4>Analise Visual de Desempenho</h4>
+        <p>Dependendo do numero de corridas processadas, os graficos se adaptam para mostrar as informacoes mais relevantes:</p>
         <ul>
-            <li><strong>Grafico Dumbbell</strong>: Compare Corrida 1 vs Corrida 2. Verde = melhoria, Vermelho = queda.</li>
-            <li><strong>Grafico de Dispersao</strong>: Pontos acima da diagonal mostram melhoria.</li>
-            <li><strong>Mapa de Calor</strong>: Matriz completa de metricas com cores.</li>
+            <li><strong>Grafico Dumbbell</strong> (2 corridas): Compara a Corrida 1 vs Corrida 2 para cada atleta. Linhas verdes = melhoria, Linhas vermelhas = queda.</li>
+            <li><strong>Grafico de Pontos de Multiplas Corridas</strong> (3+ corridas): Mostra o intervalo de desempenho de um atleta em todas as corridas, destacando a consistencia.</li>
+            <li><strong>Grafico de Dispersao de Melhoria</strong> (2 corridas): Pontos acima da diagonal mostram melhoria da Corrida 1 para a Corrida 2.</li>
+            <li><strong>Dispersao de Melhoria Sequencial</strong> (3+ corridas): Visualiza o progresso passo a passo (Corrida 1 &rarr; 2, Corrida 2 &rarr; 3) com setas direcionais.</li>
+            <li><strong>Mapa de Calor de Desempenho</strong> (3+ corridas): Uma matriz completa de metricas com valores codificados por cores para analise aprofundada de conjuntos de dados maiores.</li>
         </ul>
 
         <h4>Analise de Clusters K-Means (3 Niveis)</h4>
