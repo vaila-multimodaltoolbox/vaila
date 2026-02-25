@@ -115,7 +115,9 @@ def get_precise_video_metadata(video_path):
             "-show_streams",
             str(video_path),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
+        if result.stdout is None or not result.stdout.strip():
+            raise ValueError("ffprobe returned no output")
         data = json.loads(result.stdout)
 
         # Find video stream
@@ -194,7 +196,7 @@ def get_precise_video_metadata(video_path):
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
         }
-    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError, ValueError, TypeError) as e:
         # Fallback to OpenCV if ffprobe is not available
         print(f"Warning: ffprobe not available or failed, using OpenCV fallback: {e}")
         cap = cv2.VideoCapture(str(video_path))
@@ -220,8 +222,15 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
     Uses frame-accurate cutting with copy codec when possible.
     """
     try:
-        # Check if ffmpeg is available
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        # Check if ffmpeg is available (use UTF-8 to avoid UnicodeDecodeError on Windows cp1252)
+        subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=True,
+        )
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Fallback to OpenCV if ffmpeg not available
         return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
@@ -263,6 +272,8 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
             cmd_reencode,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
         return True
@@ -589,7 +600,7 @@ def extract_audio_data(video_path, target_sr=44100):
             "csv=p=0",
             str(video_path),
         ]
-        has_audio = subprocess.run(probe_cmd, stdout=subprocess.PIPE, text=True).stdout.strip()
+        has_audio = subprocess.run(probe_cmd, stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace").stdout.strip()
         if not has_audio:
             return None, None
 
@@ -931,14 +942,20 @@ def play_video_with_cuts(video_path):
                         ) as progress:
                             progress.add_task(f"Converting {Path(video_path).name}...", total=None)
 
-                            # Run subprocess
-                            subprocess.run(cmd, check=True, capture_output=True)
+                            # Run subprocess (UTF-8 to avoid UnicodeDecodeError on Windows cp1252)
+                            subprocess.run(
+                                cmd,
+                                check=True,
+                                capture_output=True,
+                                text=True,
+                                encoding="utf-8",
+                                errors="replace",
+                            )
 
                         conversion_success = True
                     except subprocess.CalledProcessError as e:
-                        conversion_error = (
-                            f"FFmpeg failed: {e.stderr.decode() if e.stderr else 'Unknown error'}"
-                        )
+                        err_text = e.stderr if isinstance(e.stderr, str) else (e.stderr.decode("utf-8", errors="replace") if e.stderr else "Unknown error")
+                        conversion_error = f"FFmpeg failed: {err_text}"
                     except Exception as e:
                         conversion_error = str(e)
                     finally:
