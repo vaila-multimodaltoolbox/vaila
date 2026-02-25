@@ -20,29 +20,39 @@ Bem-vindo ao modulo **vaila Sprint Analysis**. Esta ferramenta fornece uma anali
 Todos os resultados sao organizados para facilitar tanto o feedback individual quanto a analise em grupo.
 
 ### 1. Painel Principal (`general_report.html`)
+
 **Publico-Alvo: Tecnico Principal, Preparador Fisico**
 
 O relatorio geral agora inclui analise completa da equipe:
 
 #### Banner de Estatisticas Principais
+
 - **Contagem de Atletas**: Numero total de atletas analisados
 - **Total de Corridas**: Numero de corridas processadas
 - **Velocidade Maxima**: Velocidade maxima alcancada com **nome do atleta e ID da corrida**
 - **Melhor Tempo**: Tempo mais rapido de 20m com **nome do atleta e ID da corrida**
 
 #### Secao de Estatisticas da Equipe
+
 - **Velocidade Media**: Velocidade media da equipe (km/h)
 - **Desvio Padrao de Velocidade**: Variabilidade no desempenho da equipe
 - **Tempo Medio**: Tempo medio da equipe (segundos)
 - **Desvio Padrao de Tempo**: Medida de consistencia
 
 #### Analise Visual de Desempenho
-- **Grafico Dumbbell**: Compare Corrida 1 vs Corrida 2 para cada atleta. Linhas verdes = melhoria, Linhas vermelhas = queda.
-- **Grafico de Dispersao de Melhoria**: Pontos acima da diagonal mostram melhoria da Corrida 1 para a Corrida 2.
-- **Mapa de Calor de Desempenho**: Matriz completa de metricas com valores codificados por cores.
+
+Dependendo do numero de corridas processadas, os graficos se adaptam para mostrar as informacoes mais relevantes:
+
+- **Grafico Dumbbell** (2 corridas): Compare Corrida 1 vs Corrida 2 para cada atleta. Linhas verdes = melhoria, Linhas vermelhas = queda.
+- **Grafico de Pontos de Multiplas Corridas** (3+ corridas): Mostra o intervalo de desempenho de um atleta em todas as corridas, destacando a consistencia.
+- **Grafico de Dispersao de Melhoria** (2 corridas): Pontos acima da diagonal mostram melhoria da Corrida 1 para a Corrida 2.
+- **Dispersao de Melhoria Sequencial** (3+ corridas): Visualiza o progresso passo a passo (Corrida 1 -> 2, Corrida 2 -> 3) com setas direcionais.
+- **Mapa de Calor de Desempenho** (3+ corridas): Matriz completa de metricas com valores codificados por cores para analise aprofundada de conjuntos de dados maiores.
 
 #### Analise de Clusters K-Means (3 Niveis)
+
 Os atletas sao automaticamente classificados em 3 grupos de desempenho:
+
 - **Alto Desempenho** (Verde): Atletas de elite
 - **Desempenho Medio** (Laranja): Atletas na media
 - **Baixo Desempenho** (Vermelho): Atletas que precisam de desenvolvimento
@@ -50,7 +60,9 @@ Os atletas sao automaticamente classificados em 3 grupos de desempenho:
 **Grafico Beeswarm**: Distribuicao visual dos atletas por cluster, mostrando pontos de dados individuais coloridos por nivel de desempenho.
 
 #### Analise de Z-Score
+
 Pontuacoes padronizadas mostrando como cada atleta se compara a media do grupo:
+
 - **Verde Escuro (Z > 1.5)**: Excelente - significativamente acima da media
 - **Verde (0.5 < Z < 1.5)**: Bom - acima da media
 - **Amarelo (-0.5 < Z < 0.5)**: Media
@@ -60,38 +72,47 @@ Pontuacoes padronizadas mostrando como cada atleta se compara a media do grupo:
 **Z-Score Composto**: Pontuacao combinada para classificacao geral de desempenho.
 
 #### Rankings de Desempenho
+
 - **Ranking por Velocidade Maxima**: Atletas mais rapidos primeiro
 - **Ranking por Tempo Total**: Tempos de conclusao mais rapidos primeiro
 
 #### Banco de Dados Global (`vaila_sprint_database.csv`)
+
 Arquivo mestre contendo todos os dados. **Uso Pratico**: Preparadores fisicos podem importar no Excel/PowerBI para monitorar o progresso ao longo da temporada ou comparar categorias (ex: Sub-17 vs Profissional).
 
 ### 2. Relatorios Individuais do Atleta
+
 **Publico-Alvo: O Atleta, Analista de Desempenho**
 Uma subpasta dedicada e criada para cada analise (ex: `Silva_analysis...`). Dentro dela, voce encontrara arquivos especificos:
 
 #### A. O Relatorio Interativo (`*_report_sprint20m.html`)
+
 **O que e?** Um arquivo unico contendo a analise visual completa da corrida.
 **O que tem dentro?**
-- **Curva de Velocidade**: Mostra *onde* a velocidade maxima foi atingida. No futebol, a aceleracao inicial e frequentemente mais importante que a final.
+
+- **Curva de Velocidade**: Mostra _onde_ a velocidade maxima foi atingida. No futebol, a aceleracao inicial e frequentemente mais importante que a final.
 - **Comparacao com Usain Bolt**: Ferramenta educacional para comparar o perfil com a elite.
 - **Evidencia em Video**: Frames extraidos aos 0m, 5m, 10m, 15m e 20m.
-    - **0m**: Verificacao da postura baixa de saida.
-    - **5m**: Angulo de ataque (aprox 45 graus).
-    - **20m**: Postura ereta e mecanica de velocidade maxima.
+  - **0m**: Verificacao da postura baixa de saida.
+  - **5m**: Angulo de ataque (aprox 45 graus).
+  - **20m**: Postura ereta e mecanica de velocidade maxima.
 
 #### B. Os Arquivos de Dados (`*_data.xlsx` / `*_data.csv`)
+
 **O que sao?** Dados numericos brutos de cada parcial calculada.
 **Colunas incluidas:**
+
 1.  **distance_cumulative**: Distancia da marcacao (ex: 5.0, 10.0, 15.0, 20.0 metros).
 2.  **duration**: Tempo gasto para cobrir aquele segmento especifico.
 3.  **speed_ms** e **speed_kmh**: Velocidade media naquele segmento.
 4.  **acceleration_ms2**: Aceleracao media naquele segmento.
-**Uso Pratico**:
+    **Uso Pratico**:
+
 - Importe no **Excel** para calcular metricas personalizadas como "Indice de Fadiga" (queda de velocidade).
 - Compare especificamente o **split de 0-10m**, crucial para esportes multidirecionais.
 
 #### C. As Imagens (`*.png`)
+
 - **Graficos**: Imagens em alta resolucao das curvas de velocidade e aceleracao (uteis para enviar via WhatsApp/Instagram).
 - **Frames**: As imagens individuais extraidas do video (0m, 5m, etc.).
 
@@ -100,30 +121,34 @@ Uma subpasta dedicada e criada para cada analise (ex: `Silva_analysis...`). Dent
 ## Entendendo as Metricas
 
 ### Velocidade (Speed)
+
 - **Unidade**: Reportada em **km/h** (padrao para comunicacao) e **m/s** (padrao cientifico).
 - **Interpretacao**:
-    - **Velocidade Maxima**: A maior velocidade momentanea alcancada. Em um sprint de 20m, isso geralmente ocorre perto do final.
-    - **Referencia**: A velocidade de pico de Usain Bolt foi ~44.72 km/h (12.42 m/s). Jogadores de futebol de elite frequentemente atingem 32-36 km/h.
+  - **Velocidade Maxima**: A maior velocidade momentanea alcancada. Em um sprint de 20m, isso geralmente ocorre perto do final.
+  - **Referencia**: A velocidade de pico de Usain Bolt foi ~44.72 km/h (12.42 m/s). Jogadores de futebol de elite frequentemente atingem 32-36 km/h.
 
 ### Aceleracao
+
 - **Unidade**: Metros por segundo ao quadrado (m/s2).
 - **Interpretacao**: Quao rapidamente o atleta ganha velocidade.
-    - **Fase de Partida (0-5m)**: deve mostrar os maiores valores de aceleracao (potencia explosiva).
-    - **Fase de Transicao**: A aceleracao diminui a medida que a velocidade aumenta.
-    - **Aceleracao Zero**: Significa que o atleta atingiu sua velocidade constante maxima.
+  - **Fase de Partida (0-5m)**: deve mostrar os maiores valores de aceleracao (potencia explosiva).
+  - **Fase de Transicao**: A aceleracao diminui a medida que a velocidade aumenta.
+  - **Aceleracao Zero**: Significa que o atleta atingiu sua velocidade constante maxima.
 
 ### Z-Score
+
 - **Unidade**: Desvios padrao da media.
 - **Interpretacao**: Como um individuo se compara ao grupo.
-    - **Z-Score Positivo**: Desempenho acima da media
-    - **Z-Score Negativo**: Desempenho abaixo da media
-    - **|Z| > 2**: Excepcional ou preocupante (outlier)
+  - **Z-Score Positivo**: Desempenho acima da media
+  - **Z-Score Negativo**: Desempenho abaixo da media
+  - **|Z| > 2**: Excepcional ou preocupante (outlier)
 
 ### Atribuicao de Cluster
+
 - **Metodo**: Clusterizacao K-means em velocidade maxima e tempo total
 - **Interpretacao**: Agrupamento baseado em dados de atletas similares
-    - Util para criar grupos de treinamento
-    - Identificar atletas prontos para promocao ou que precisam de suporte
+  - Util para criar grupos de treinamento
+  - Identificar atletas prontos para promocao ou que precisam de suporte
 
 ---
 
@@ -144,12 +169,14 @@ Uma subpasta dedicada e criada para cada analise (ex: `Silva_analysis...`). Dent
 ## Dependencias
 
 **Obrigatorias:**
+
 - pandas, numpy, matplotlib, seaborn
 - scipy (para calculos de Z-score)
 - toml (para leitura de arquivos TOML)
 - tkinter (para dialogos GUI)
 
 **Opcionais:**
+
 - opencv-python (cv2): Para extracao de frames de video
 - scikit-learn: Para analise de clusterizacao K-means
 - ydata-profiling: Para relatorios de perfil estatistico
