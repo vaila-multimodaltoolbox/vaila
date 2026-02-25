@@ -1,202 +1,454 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>vaila Sprint Analysis Help</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 40px; background-color: #f9f9f9; }
-        .container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 15px rgba(0,0,0,0.05); }
-        h1, h2, h3, h4 { color: #2c3e50; }
-        h1 { border-bottom: 3px solid #3498db; padding-bottom: 15px; text-align: center; }
-        h2 { margin-top: 40px; border-left: 5px solid #3498db; padding-left: 15px; }
-        .feature-box { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e9ecef; }
-        .feature-title { font-weight: bold; color: #d35400; margin-bottom: 10px; display: block; font-size: 1.1em; }
-        code { background: #eaeaea; padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; color: #c0392b; }
-        ul { padding-left: 20px; }
-        li { margin-bottom: 10px; }
-        .alert { background-color: #e8f4fd; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; color: #2c3e50; }
-        .cluster-high { background-color: #d5f5e3; border-left: 4px solid #27ae60; padding: 10px; margin: 5px 0; }
-        .cluster-medium { background-color: #fdebd0; border-left: 4px solid #f39c12; padding: 10px; margin: 5px 0; }
-        .cluster-low { background-color: #fadbd8; border-left: 4px solid #e74c3c; padding: 10px; margin: 5px 0; }
-        .zscore-legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 15px 0; }
-        .zscore-item { padding: 5px 10px; border-radius: 4px; font-size: 0.9em; }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 40px;
+        background-color: #f9f9f9;
+      }
+      .container {
+        background: white;
+        padding: 40px;
+        border-radius: 10px;
+        box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        color: #2c3e50;
+      }
+      h1 {
+        border-bottom: 3px solid #3498db;
+        padding-bottom: 15px;
+        text-align: center;
+      }
+      h2 {
+        margin-top: 40px;
+        border-left: 5px solid #3498db;
+        padding-left: 15px;
+      }
+      .feature-box {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+        border: 1px solid #e9ecef;
+      }
+      .feature-title {
+        font-weight: bold;
+        color: #d35400;
+        margin-bottom: 10px;
+        display: block;
+        font-size: 1.1em;
+      }
+      code {
+        background: #eaeaea;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: Consolas, monospace;
+        color: #c0392b;
+      }
+      ul {
+        padding-left: 20px;
+      }
+      li {
+        margin-bottom: 10px;
+      }
+      .alert {
+        background-color: #e8f4fd;
+        border-left: 4px solid #3498db;
+        padding: 15px;
+        margin: 20px 0;
+        color: #2c3e50;
+      }
+      .cluster-high {
+        background-color: #d5f5e3;
+        border-left: 4px solid #27ae60;
+        padding: 10px;
+        margin: 5px 0;
+      }
+      .cluster-medium {
+        background-color: #fdebd0;
+        border-left: 4px solid #f39c12;
+        padding: 10px;
+        margin: 5px 0;
+      }
+      .cluster-low {
+        background-color: #fadbd8;
+        border-left: 4px solid #e74c3c;
+        padding: 10px;
+        margin: 5px 0;
+      }
+      .zscore-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 15px 0;
+      }
+      .zscore-item {
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <div class="container">
+      <h1>vaila Sprint Analysis (20m)</h1>
 
-<div class="container">
-    <h1>vaila Sprint Analysis (20m)</h1>
+      <p>
+        Welcome to the <strong>vaila Sprint Analysis</strong> module. This tool
+        provides a comprehensive biomechanical and performance analysis of
+        20-meter linear sprints and Change of Direction (COD 180) tests using
+        data collected by the vaila Tracker. It is designed to automatically
+        process multiple runs, generate visual reports, and compile a database
+        for team-wide analysis.
+      </p>
 
-    <p>Welcome to the <strong>vaila Sprint Analysis</strong> module. This tool provides a comprehensive biomechanical and performance analysis of 20-meter linear sprints and Change of Direction (COD 180) tests using data collected by the vaila Tracker. It is designed to automatically process multiple runs, generate visual reports, and compile a database for team-wide analysis.</p>
-
-    <h2>Workflow</h2>
-    <ol>
-        <li><strong>Launch</strong>: Open <code>vaila.py</code>, verify your settings, and click the <strong>Sprint</strong> button (bottom left of the main interface).</li>
-        <li><strong>Select Mode</strong>:
-            <ul>
-                <li><strong>Time Sprint (20m)</strong>: Choose this for standard 20m linear sprints.</li>
-                <li><strong>2X COD 180 degree (20m)</strong>: Support for Change of Direction tests (2x10m with 180 turn).</li>
-            </ul>
+      <h2>Workflow</h2>
+      <ol>
+        <li>
+          <strong>Launch</strong>: Open <code>vaila.py</code>, verify your
+          settings, and click the <strong>Sprint</strong> button (bottom left of
+          the main interface).
         </li>
-        <li><strong>Select Data Folder</strong>: Choose the directory containing your <code>.toml</code> tracking files.
-            <div class="alert">
-                <strong>Crucial Tip:</strong> For automatic video frame extraction (0m, 5m, etc.), ensure the video files are located in the <strong>same folder</strong> as the <code>.toml</code> files, or at the path specified inside the TOML.
-            </div>
+        <li>
+          <strong>Select Mode</strong>:
+          <ul>
+            <li>
+              <strong>Time Sprint (20m)</strong>: Choose this for standard 20m
+              linear sprints.
+            </li>
+            <li>
+              <strong>2X COD 180 degree (20m)</strong>: Support for Change of
+              Direction tests (2x10m with 180 turn).
+            </li>
+          </ul>
         </li>
-        <li><strong>Processing</strong>: The script will iterate through every <code>.toml</code> file found, calculate kinematics, and generate reports.</li>
-        <li><strong>Output</strong>: Upon completion, the <code>vaila_sprint_reports</code> folder will open automatically.</li>
-    </ol>
+        <li>
+          <strong>Select Data Folder</strong>: Choose the directory containing
+          your <code>.toml</code> tracking files.
+          <div class="alert">
+            <strong>Crucial Tip:</strong> For automatic video frame extraction
+            (0m, 5m, etc.), ensure the video files are located in the
+            <strong>same folder</strong> as the <code>.toml</code> files, or at
+            the path specified inside the TOML.
+          </div>
+        </li>
+        <li>
+          <strong>Processing</strong>: The script will iterate through every
+          <code>.toml</code> file found, calculate kinematics, and generate
+          reports.
+        </li>
+        <li>
+          <strong>Output</strong>: Upon completion, the
+          <code>vaila_sprint_reports</code> folder will open automatically.
+        </li>
+      </ol>
 
-    <h2>Output Structure (<code>vaila_sprint_reports</code>)</h2>
-    <p>All results are organized in a structured manner to facilitate both individual feedback and group analysis.</p>
+      <h2>Output Structure (<code>vaila_sprint_reports</code>)</h2>
+      <p>
+        All results are organized in a structured manner to facilitate both
+        individual feedback and group analysis.
+      </p>
 
-    <div class="feature-box">
-        <span class="feature-title">1. Main Dashboard (<code>general_report.html</code>)</span>
+      <div class="feature-box">
+        <span class="feature-title"
+          >1. Main Dashboard (<code>general_report.html</code>)</span
+        >
         <p><strong>Target Audience: Head Coach, Physical Trainer</strong></p>
         <p>The general report includes comprehensive team analysis:</p>
-        
+
         <h4>Key Statistics Banner</h4>
         <ul>
-            <li><strong>Athletes Count</strong>: Total number of athletes analyzed</li>
-            <li><strong>Total Runs</strong>: Number of runs processed</li>
-            <li><strong>Top Speed</strong>: Maximum speed achieved with <strong>athlete name and run ID</strong></li>
-            <li><strong>Best Time</strong>: Fastest 20m time with <strong>athlete name and run ID</strong></li>
+          <li>
+            <strong>Athletes Count</strong>: Total number of athletes analyzed
+          </li>
+          <li><strong>Total Runs</strong>: Number of runs processed</li>
+          <li>
+            <strong>Top Speed</strong>: Maximum speed achieved with
+            <strong>athlete name and run ID</strong>
+          </li>
+          <li>
+            <strong>Best Time</strong>: Fastest 20m time with
+            <strong>athlete name and run ID</strong>
+          </li>
         </ul>
-        
+
         <h4>Team Statistics</h4>
         <ul>
-            <li><strong>Average Speed</strong>: Team mean speed (km/h)</li>
-            <li><strong>Speed Std Dev</strong>: Variability in team performance</li>
-            <li><strong>Average Time</strong>: Team mean time (seconds)</li>
-            <li><strong>Time Std Dev</strong>: Consistency measure</li>
+          <li><strong>Average Speed</strong>: Team mean speed (km/h)</li>
+          <li>
+            <strong>Speed Std Dev</strong>: Variability in team performance
+          </li>
+          <li><strong>Average Time</strong>: Team mean time (seconds)</li>
+          <li><strong>Time Std Dev</strong>: Consistency measure</li>
         </ul>
-        
+
         <h4>Visual Performance Analysis</h4>
+        <p>
+          Depending on the number of processed runs, the charts adapt to show
+          the most relevant information:
+        </p>
         <ul>
-            <li><strong>Dumbbell Chart</strong>: Compare Run 1 vs Run 2 for each athlete. Green = improved, Red = declined.</li>
-            <li><strong>Improvement Scatter Plot</strong>: Points above diagonal show improvement from Run 1 to Run 2.</li>
-            <li><strong>Performance Heatmap</strong>: Complete metrics matrix with color-coded values.</li>
+          <li>
+            <strong>Dumbbell Chart</strong> (2 runs): Compares Run 1 vs Run 2
+            for each athlete. Green lines = improved, Red lines = declined.
+          </li>
+          <li>
+            <strong>Multi-Run Dot Plot</strong> (3+ runs): Shows an athlete's
+            performance range across all runs, highlighting consistency.
+          </li>
+          <li>
+            <strong>Improvement Scatter Plot</strong> (2 runs): Points above the
+            diagonal show improvement from Run 1 to Run 2.
+          </li>
+          <li>
+            <strong>Sequential Improvement Scatter Plot</strong> (3+ runs):
+            Visualizes step-by-step progress (Run 1 &rarr; 2, Run 2 &rarr; 3)
+            with directional arrows.
+          </li>
+          <li>
+            <strong>Performance Heatmap</strong> (3+ runs): A complete metrics
+            matrix with color-coded values for in-depth analysis of larger
+            datasets.
+          </li>
         </ul>
-        
+
         <h4>K-Means Cluster Analysis (3 Levels)</h4>
         <p>Athletes are automatically classified into 3 performance groups:</p>
-        <div class="cluster-high"><strong>High Performers</strong> (Green): Top tier athletes</div>
-        <div class="cluster-medium"><strong>Medium Performers</strong> (Orange): Average performers</div>
-        <div class="cluster-low"><strong>Low Performers</strong> (Red): Athletes needing development</div>
-        <p><strong>Beeswarm Plot</strong>: Visual distribution of athletes by cluster.</p>
-        
-        <h4>Z-Score Analysis</h4>
-        <p>Standardized scores showing how each athlete compares to the group average:</p>
-        <div class="zscore-legend">
-            <span class="zscore-item" style="background:#1e8449;color:white;">Z &gt; 1.5: Excellent</span>
-            <span class="zscore-item" style="background:#27ae60;color:white;">0.5 &lt; Z &lt; 1.5: Good</span>
-            <span class="zscore-item" style="background:#f9e79f;">-0.5 &lt; Z &lt; 0.5: Average</span>
-            <span class="zscore-item" style="background:#e74c3c;color:white;">-1.5 &lt; Z &lt; -0.5: Below Avg</span>
-            <span class="zscore-item" style="background:#922b21;color:white;">Z &lt; -1.5: Low</span>
+        <div class="cluster-high">
+          <strong>High Performers</strong> (Green): Top tier athletes
         </div>
-        <p><strong>Composite Z-Score</strong>: Combined score for overall performance ranking.</p>
-        
+        <div class="cluster-medium">
+          <strong>Medium Performers</strong> (Orange): Average performers
+        </div>
+        <div class="cluster-low">
+          <strong>Low Performers</strong> (Red): Athletes needing development
+        </div>
+        <p>
+          <strong>Beeswarm Plot</strong>: Visual distribution of athletes by
+          cluster.
+        </p>
+
+        <h4>Z-Score Analysis</h4>
+        <p>
+          Standardized scores showing how each athlete compares to the group
+          average:
+        </p>
+        <div class="zscore-legend">
+          <span class="zscore-item" style="background: #1e8449; color: white"
+            >Z &gt; 1.5: Excellent</span
+          >
+          <span class="zscore-item" style="background: #27ae60; color: white"
+            >0.5 &lt; Z &lt; 1.5: Good</span
+          >
+          <span class="zscore-item" style="background: #f9e79f"
+            >-0.5 &lt; Z &lt; 0.5: Average</span
+          >
+          <span class="zscore-item" style="background: #e74c3c; color: white"
+            >-1.5 &lt; Z &lt; -0.5: Below Avg</span
+          >
+          <span class="zscore-item" style="background: #922b21; color: white"
+            >Z &lt; -1.5: Low</span
+          >
+        </div>
+        <p>
+          <strong>Composite Z-Score</strong>: Combined score for overall
+          performance ranking.
+        </p>
+
         <h4>Performance Rankings</h4>
         <ul>
-            <li><strong>Ranking by Max Speed</strong>: Fastest athletes first</li>
-            <li><strong>Ranking by Total Time</strong>: Quickest completion times first</li>
+          <li><strong>Ranking by Max Speed</strong>: Fastest athletes first</li>
+          <li>
+            <strong>Ranking by Total Time</strong>: Quickest completion times
+            first
+          </li>
         </ul>
-        
+
         <h4>Global Database (<code>vaila_sprint_database.csv</code>)</h4>
         <p>A master file for tracking season-long progress in Excel/PowerBI.</p>
-    </div>
+      </div>
 
-    <div class="feature-box">
+      <div class="feature-box">
         <span class="feature-title">2. Individual Athlete Reports</span>
-        <p><strong>Target Audience: The Athlete, Performance Analyst</strong></p>
-        <p>A dedicated subfolder is created for each analyzed file (e.g., <code>Silva_analysis...</code>). Inside, you will find:</p>
+        <p>
+          <strong>Target Audience: The Athlete, Performance Analyst</strong>
+        </p>
+        <p>
+          A dedicated subfolder is created for each analyzed file (e.g.,
+          <code>Silva_analysis...</code>). Inside, you will find:
+        </p>
 
-        <h4>A. The Interactive Report (<code>*_report_sprint20m.html</code>)</h4>
+        <h4>
+          A. The Interactive Report (<code>*_report_sprint20m.html</code>)
+        </h4>
         <p>A single file containing the complete visual analysis.</p>
         <ul>
-            <li><strong>Speed Curve</strong>: Shows <em>where</em> top speed was reached. In football, early acceleration is often key.</li>
-            <li><strong>Video Evidence (0m, 5m, 10m...)</strong>: 
-                <ul>
-                    <li><strong>0m (Set)</strong>: Check if Center of Gravity is low enough.</li>
-                    <li><strong>5m (Drive)</strong>: Check for forward lean (45 degrees) and head position.</li>
-                    <li><strong>20m (Max V)</strong>: Check for upright posture.</li>
-                </ul>
-            </li>
+          <li>
+            <strong>Speed Curve</strong>: Shows <em>where</em> top speed was
+            reached. In football, early acceleration is often key.
+          </li>
+          <li>
+            <strong>Video Evidence (0m, 5m, 10m...)</strong>:
+            <ul>
+              <li>
+                <strong>0m (Set)</strong>: Check if Center of Gravity is low
+                enough.
+              </li>
+              <li>
+                <strong>5m (Drive)</strong>: Check for forward lean (45 degrees)
+                and head position.
+              </li>
+              <li><strong>20m (Max V)</strong>: Check for upright posture.</li>
+            </ul>
+          </li>
         </ul>
 
-        <h4>B. The Data Files (<code>*_data.xlsx</code> / <code>*_data.csv</code>)</h4>
+        <h4>
+          B. The Data Files (<code>*_data.xlsx</code> / <code>*_data.csv</code>)
+        </h4>
         <p>Raw numerical data for every split. <strong>Columns:</strong></p>
         <ul>
-            <li><code>distance_cumulative</code>: 5.0, 10.0, 15.0, 20.0 m</li>
-            <li><code>duration</code>: Time for that segment</li>
-            <li><code>speed_kmh</code>: Speed in that segment</li>
-            <li><code>acceleration_ms2</code>: Acceleration in that segment</li>
+          <li><code>distance_cumulative</code>: 5.0, 10.0, 15.0, 20.0 m</li>
+          <li><code>duration</code>: Time for that segment</li>
+          <li><code>speed_kmh</code>: Speed in that segment</li>
+          <li><code>acceleration_ms2</code>: Acceleration in that segment</li>
         </ul>
-        <p><strong>Use Case:</strong> Import to Excel to compare strict 0-10m splits or calculate fatigue.</p>
-    </div>
+        <p>
+          <strong>Use Case:</strong> Import to Excel to compare strict 0-10m
+          splits or calculate fatigue.
+        </p>
+      </div>
 
-    <h2>Understanding the Metrics</h2>
+      <h2>Understanding the Metrics</h2>
 
-    <h3>Speed (Velocity)</h3>
-    <ul>
-        <li><strong>Unit</strong>: Reported in <strong>km/h</strong> (standard for communication) and <strong>m/s</strong> (scientific standard).</li>
-        <li><strong>Interpretation</strong>:
-            <ul>
-                <li><strong>Max Speed</strong>: The highest momentary velocity reached. In a 20m sprint, this typically occurs near the end.</li>
-                <li><strong>Reference</strong>: Usain Bolt's peak speed was ~44.72 km/h (12.42 m/s). Top soccer players often reach 32-36 km/h.</li>
-            </ul>
+      <h3>Speed (Velocity)</h3>
+      <ul>
+        <li>
+          <strong>Unit</strong>: Reported in <strong>km/h</strong> (standard for
+          communication) and <strong>m/s</strong> (scientific standard).
         </li>
-    </ul>
-
-    <h3>Acceleration</h3>
-    <ul>
-        <li><strong>Unit</strong>: Meters per second squared (m/s<sup>2</sup>).</li>
-        <li><strong>Interpretation</strong>: How quickly the athlete gains speed.
-            <ul>
-                <li><strong>Start Phase (0-5m)</strong>: should show the highest acceleration values (explosive power).</li>
-                <li><strong>Transition Phase</strong>: Acceleration decreases as speed increases.</li>
-                <li><strong>Zero Acceleration</strong>: Means the athlete has reached their maximum constant speed.</li>
-            </ul>
+        <li>
+          <strong>Interpretation</strong>:
+          <ul>
+            <li>
+              <strong>Max Speed</strong>: The highest momentary velocity
+              reached. In a 20m sprint, this typically occurs near the end.
+            </li>
+            <li>
+              <strong>Reference</strong>: Usain Bolt's peak speed was ~44.72
+              km/h (12.42 m/s). Top soccer players often reach 32-36 km/h.
+            </li>
+          </ul>
         </li>
-    </ul>
+      </ul>
 
-    <h3>Z-Score</h3>
-    <ul>
+      <h3>Acceleration</h3>
+      <ul>
+        <li>
+          <strong>Unit</strong>: Meters per second squared (m/s<sup>2</sup>).
+        </li>
+        <li>
+          <strong>Interpretation</strong>: How quickly the athlete gains speed.
+          <ul>
+            <li>
+              <strong>Start Phase (0-5m)</strong>: should show the highest
+              acceleration values (explosive power).
+            </li>
+            <li>
+              <strong>Transition Phase</strong>: Acceleration decreases as speed
+              increases.
+            </li>
+            <li>
+              <strong>Zero Acceleration</strong>: Means the athlete has reached
+              their maximum constant speed.
+            </li>
+          </ul>
+        </li>
+      </ul>
+
+      <h3>Z-Score</h3>
+      <ul>
         <li><strong>Unit</strong>: Standard deviations from the mean.</li>
-        <li><strong>Interpretation</strong>: How an individual compares to the group.
-            <ul>
-                <li><strong>Positive Z-Score</strong>: Above average performance</li>
-                <li><strong>Negative Z-Score</strong>: Below average performance</li>
-                <li><strong>|Z| &gt; 2</strong>: Exceptional or concerning (outlier)</li>
-            </ul>
+        <li>
+          <strong>Interpretation</strong>: How an individual compares to the
+          group.
+          <ul>
+            <li>
+              <strong>Positive Z-Score</strong>: Above average performance
+            </li>
+            <li>
+              <strong>Negative Z-Score</strong>: Below average performance
+            </li>
+            <li>
+              <strong>|Z| &gt; 2</strong>: Exceptional or concerning (outlier)
+            </li>
+          </ul>
         </li>
-    </ul>
+      </ul>
 
-    <h3>Cluster Assignment</h3>
-    <ul>
-        <li><strong>Method</strong>: K-means clustering on max speed and total time</li>
-        <li><strong>Interpretation</strong>: Data-driven grouping of similar performers
-            <ul>
-                <li>Useful for creating training groups</li>
-                <li>Identifying athletes ready for promotion or needing support</li>
-            </ul>
+      <h3>Cluster Assignment</h3>
+      <ul>
+        <li>
+          <strong>Method</strong>: K-means clustering on max speed and total
+          time
         </li>
-    </ul>
+        <li>
+          <strong>Interpretation</strong>: Data-driven grouping of similar
+          performers
+          <ul>
+            <li>Useful for creating training groups</li>
+            <li>Identifying athletes ready for promotion or needing support</li>
+          </ul>
+        </li>
+      </ul>
 
-    <h2>Troubleshooting</h2>
-    <ul>
-        <li><strong>"No video frames extracted"</strong>: The script looks for the video file name stored in the <code>.toml</code>. <br><strong>Fix</strong>: Copy the original video files (e.g., <code>run1.mp4</code>) into the same folder where your <code>.toml</code> files are located before running the analysis.</li>
-        <li><strong>Logo missing</strong>: The report looks for <code>vaila.png</code> in <code>docs/images/</code> or locally. Ensure the project structure is intact.</li>
-        <li><strong>K-means clustering disabled</strong>: Requires scikit-learn package. Install with: <code>pip install scikit-learn</code></li>
-        <li><strong>Statistical profiling disabled</strong>: Requires ydata-profiling package. Install with: <code>pip install ydata-profiling</code></li>
-    </ul>
+      <h2>Troubleshooting</h2>
+      <ul>
+        <li>
+          <strong>"No video frames extracted"</strong>: The script looks for the
+          video file name stored in the <code>.toml</code>. <br /><strong
+            >Fix</strong
+          >: Copy the original video files (e.g., <code>run1.mp4</code>) into
+          the same folder where your <code>.toml</code> files are located before
+          running the analysis.
+        </li>
+        <li>
+          <strong>Logo missing</strong>: The report looks for
+          <code>vaila.png</code> in <code>docs/images/</code> or locally. Ensure
+          the project structure is intact.
+        </li>
+        <li>
+          <strong>K-means clustering disabled</strong>: Requires scikit-learn
+          package. Install with: <code>pip install scikit-learn</code>
+        </li>
+        <li>
+          <strong>Statistical profiling disabled</strong>: Requires
+          ydata-profiling package. Install with:
+          <code>pip install ydata-profiling</code>
+        </li>
+      </ul>
 
-    <h2>Dependencies</h2>
-    <p><strong>Required:</strong> pandas, numpy, matplotlib, seaborn, scipy, toml, tkinter</p>
-    <p><strong>Optional:</strong> opencv-python (cv2), scikit-learn, ydata-profiling</p>
-
-</div>
-
-</body>
+      <h2>Dependencies</h2>
+      <p>
+        <strong>Required:</strong> pandas, numpy, matplotlib, seaborn, scipy,
+        toml, tkinter
+      </p>
+      <p>
+        <strong>Optional:</strong> opencv-python (cv2), scikit-learn,
+        ydata-profiling
+      </p>
+    </div>
+  </body>
 </html>
