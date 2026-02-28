@@ -268,9 +268,10 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
         str(output_path),
     ]
     try:
+        # Let ffmpeg print progress to terminal (no silent run)
         subprocess.run(
             cmd_reencode,
-            capture_output=True,
+            capture_output=False,
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -278,7 +279,8 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
         )
         return True
     except subprocess.CalledProcessError as e2:
-        print(f"Error with ffmpeg re-encoding: {e2.stderr}")
+        err = getattr(e2, "stderr", None) or str(e2)
+        print(f"Error with ffmpeg re-encoding: {err}")
         # Final fallback to OpenCV
         return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
 
@@ -1680,6 +1682,7 @@ def play_video_with_cuts(video_path):
                 save_cuts_to_toml(video_path, cuts, video_fps)
 
                 status_label.config(text=f"Processing: {video_name}")
+                print(f"\n--- Video {processed_count + 1}/{len(video_files)}: {video_name} ---")
 
                 try:
                     # Get precise video metadata
@@ -1691,20 +1694,14 @@ def play_video_with_cuts(video_path):
                     )
 
                     # Process each cut
-                    for i, (start_frame, end_frame) in enumerate(cuts):
-                        # Skip if end frame is beyond video length
-                        if start_frame >= total_frames:
-                            continue
-
-                        # Adjust end frame if needed
+                    valid_cuts = [(i, s, e) for i, (s, e) in enumerate(cuts) if s < total_frames]
+                    for idx, (i, start_frame, end_frame) in enumerate(valid_cuts):
                         actual_end_frame = min(end_frame, total_frames - 1)
-
                         output_path = (
                             output_dir
                             / f"{video_name}_frame_{start_frame}_to_{actual_end_frame}.mp4"
                         )
-
-                        # Use ffmpeg for precise cutting
+                        print(f"  Cut {idx + 1}/{len(valid_cuts)}: frames {start_frame}-{actual_end_frame} -> {output_path.name}")
                         success = cut_video_with_ffmpeg(
                             video_path, output_path, start_frame, actual_end_frame, metadata
                         )
@@ -1712,6 +1709,9 @@ def play_video_with_cuts(video_path):
                             status_label.config(
                                 text=f"Warning: Cut {i + 1} failed for {video_name}"
                             )
+                            print(f"  Warning: Cut {i + 1} failed")
+                        else:
+                            print(f"  Done: {output_path.name}")
 
                 except Exception as e:
                     status_label.config(text=f"Error processing {video_name}: {str(e)}")
@@ -1749,22 +1749,25 @@ def play_video_with_cuts(video_path):
             output_dir = Path(video_path).parent / f"{video_name}_vailacut_{timestamp}"
         output_dir.mkdir(exist_ok=True)
 
+        print(f"Saving {len(cuts)} cut(s) to {output_dir}")
         # Get precise video metadata
         metadata = get_precise_video_metadata(video_path)
 
         # Process each cut
+        n_cuts = len(cuts)
         for i, (start_frame, end_frame) in enumerate(cuts):
             # Use 1-based numbering in filenames to match TOML/UI and avoid off-by-one confusion
             output_path = (
                 output_dir / f"{video_name}_frame_{start_frame + 1}_to_{end_frame + 1}.mp4"
             )
-
-            # Use ffmpeg for precise cutting
+            print(f"Processing cut {i + 1}/{n_cuts}: frames {start_frame + 1}-{end_frame + 1} -> {output_path.name}")
             success = cut_video_with_ffmpeg(
                 video_path, output_path, start_frame, end_frame, metadata
             )
             if not success:
                 print(f"Warning: Failed to create cut {i + 1} for {video_name}")
+            else:
+                print(f"  Done: {output_path.name}")
 
         return True
 
@@ -2269,12 +2272,9 @@ def get_video_path():
 
 def cleanup_resources():
     """Ensure all resources are properly released without killing the main process."""
-    # Close OpenCV windows but don't destroy all windows globally
-    try:
-        cap = cv2.VideoCapture(0)  # Dummy capture to reset OpenCV state
-        cap.release()
-    except Exception:
-        pass
+    # Avoid opening camera (VideoCapture(0)): on machines without a camera or with
+    # no permission to /dev/video*, OpenCV would log V4L2/FFMPEG/obsensor errors.
+    # Closing pygame display is sufficient for cleanup here.
 
     # Close pygame display but don't fully quit pygame
     if pygame.get_init():
