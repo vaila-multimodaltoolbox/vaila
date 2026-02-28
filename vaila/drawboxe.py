@@ -180,6 +180,7 @@ def extract_frames(video_path, frames_dir):
         video_path = os.path.normpath(os.path.abspath(video_path))
         frames_dir = os.path.normpath(os.path.abspath(frames_dir))
 
+        print(f"  Extracting frames from {os.path.basename(video_path)} (ffmpeg)...")
         # Use ffmpeg with frame-accurate extraction
         # -vsync 0 ensures no frame dropping or duplication
         # -start_number 1 ensures frame numbering starts at 1
@@ -195,9 +196,9 @@ def extract_frames(video_path, frames_dir):
         ]
 
         if os.name == "nt":
-            subprocess.run(command, check=True, capture_output=True, text=True, shell=True)
+            subprocess.run(command, check=True, capture_output=False, text=True, shell=True)
         else:
-            subprocess.run(command, check=True, capture_output=True, text=True)
+            subprocess.run(command, check=True, capture_output=False, text=True)
 
         # Count extracted frames
         frame_files = [
@@ -206,7 +207,8 @@ def extract_frames(video_path, frames_dir):
         print(f"Extracted {len(frame_files)} frames from {os.path.basename(video_path)}")
 
     except subprocess.CalledProcessError as e:
-        print(f"Error running ffmpeg: {e.stderr}")
+        err = getattr(e, "stderr", None) or str(e)
+        print(f"Error running ffmpeg: {err}")
         raise
     except Exception as e:
         print(f"Error extracting frames: {str(e)}")
@@ -245,6 +247,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
     if total_frames is None:
         total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    print(f"Applying boxes to {total_frames} frames: {os.path.basename(input_path)} -> {os.path.basename(output_path)}")
     # Create temporary video file for processed frames (without audio)
     temp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     temp_video_path = temp_video.name
@@ -307,13 +310,14 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
         frames_written += 1
         frame_count += 1
 
-        if frame_count % 100 == 0 or frame_count == total_frames:
+        step = 10 if total_frames > 50 else 5
+        if frame_count % step == 0 or frame_count == total_frames:
             print(
-                f"Processed {frame_count}/{total_frames} frames for {os.path.basename(input_path)}",
+                f"  Processed {frame_count}/{total_frames} frames for {os.path.basename(input_path)}",
                 end="\r",
             )
 
-    print(f"\nCompleted processing frames: {frames_written}/{total_frames}")
+    print(f"\n  Completed processing frames: {frames_written}/{total_frames}")
 
     out.release()
     vidcap.release()
@@ -386,9 +390,10 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             ]
         )
 
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print(f"  Combining video with audio and metadata (ffmpeg)...")
+        subprocess.run(cmd, capture_output=False, text=True, check=True)
 
-        print(f"Combined video with audio and metadata: {os.path.basename(output_path)}")
+        print(f"  Done: {os.path.basename(output_path)}")
 
         # Clean up temporary file
         with contextlib.suppress(BaseException):
@@ -512,10 +517,12 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
     command.append(str(temp_video_path))
 
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
-        print(f"Created video from frames: {actual_frame_count} frames at {fps_str} fps")
+        print(f"  Creating video from {actual_frame_count} frames at {fps_str} fps (ffmpeg)...")
+        subprocess.run(command, check=True, capture_output=False, text=True)
+        print(f"  Created video from frames: {actual_frame_count} frames")
     except subprocess.CalledProcessError as e:
-        print(f"Error creating video from frames: {e.stderr}")
+        err = getattr(e, "stderr", None) or str(e)
+        print(f"Error creating video from frames: {err}")
         with contextlib.suppress(BaseException):
             os.remove(temp_video_path)
         raise
@@ -577,9 +584,10 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
                 ]
             )
 
-            subprocess.run(combine_cmd, check=True, capture_output=True, text=True)
+            print(f"  Combining with audio and metadata (ffmpeg)...")
+            subprocess.run(combine_cmd, check=True, capture_output=False, text=True)
 
-            print(f"Combined with audio and metadata: {os.path.basename(output_path)}")
+            print(f"  Done: {os.path.basename(output_path)}")
 
             # Clean up temporary file
             with contextlib.suppress(BaseException):
@@ -1778,12 +1786,13 @@ def run_drawboxe():
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
-    for video_file in video_files:
+    n_videos = len(video_files)
+    for idx, video_file in enumerate(video_files):
         input_path = os.path.join(video_directory, video_file)
         final_output_path = os.path.join(output_dir, f"{os.path.splitext(video_file)[0]}_dbox.mp4")
 
         # Get precise video metadata to preserve frame count and FPS
-        print(f"\nProcessing: {video_file}")
+        print(f"\n--- Video {idx + 1}/{n_videos}: {video_file} ---")
         metadata = get_precise_video_metadata(input_path)
         fps = metadata["fps"]
         total_frames = metadata.get("nb_frames")
@@ -1793,19 +1802,21 @@ def run_drawboxe():
             if os.path.exists(frames_dir):
                 shutil.rmtree(frames_dir)
             extract_frames(input_path, frames_dir)
+            print(f"  Applying boxes to extracted frames...")
             apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_intervals)
             # Pass precise FPS, total frame count, and original video path to preserve audio and metadata
             reassemble_video(
                 frames_dir, final_output_path, fps, total_frames, original_video_path=input_path
             )
             clean_up(frames_dir)
+            print(f"  Done: {os.path.basename(final_output_path)}")
         else:
             # apply_boxes_directly_to_video now uses precise metadata internally
             success = apply_boxes_directly_to_video(
                 input_path, final_output_path, coordinates, selections, colors
             )
             if not success:
-                print(f"Warning: Processing may have issues for {video_file}")
+                print(f"  Warning: Processing may have issues for {video_file}")
     show_feedback_message()
     print("All videos processed and saved to the output directory.")
     messagebox.showinfo("Completed", "All videos have been processed successfully!")
