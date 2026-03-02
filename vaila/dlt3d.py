@@ -32,6 +32,7 @@ Usage:
     with the .dlt3d extension.
 """
 
+import argparse
 import os
 from tkinter import Tk, filedialog, messagebox
 
@@ -190,20 +191,24 @@ def save_dlt_parameters(output_file, dlt_params):
     print(f"DLT3d parameters saved to {output_file}")
 
 
-def main():
+def main(pixel_file=None, real_file=None, create_ref=False):
     # Print the directory and name of the script being executed
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting DLT3D module...")
 
-    root = Tk()
-    root.withdraw()
-    pixel_file = filedialog.askopenfilename(
-        title="Select the pixel coordinate file", filetypes=[("CSV files", "*.csv")]
-    )
-    if not pixel_file:
-        print("Pixel file selection canceled.")
-        return
+    if pixel_file is None:
+        root = Tk()
+        root.withdraw()
+        pixel_file = filedialog.askopenfilename(
+            title="Select the pixel coordinate file", filetypes=[("CSV files", "*.csv")]
+        )
+        if not pixel_file:
+            print("Pixel file selection canceled.")
+            return
+
+        # Ask the user if they want to generate a REF3D template
+        create_ref = messagebox.askquestion("Mode", "Do you want to create a REF3D template?") == "yes"
 
     # Determine the number of points from the pixel file
     pixel_df = read_pixel_file(pixel_file)
@@ -222,11 +227,9 @@ def main():
 
     num_points = max(point_numbers) if point_numbers else 0
 
-    # Ask the user if they want to generate a REF3D template
-    mode = messagebox.askquestion("Mode", "Do you want to create a REF3D template?")
-    if mode == "yes":
+    if create_ref:
         real_file = os.path.splitext(pixel_file)[0] + ".ref3d"
-        # Create a template with header for 25 points with _x, _y, _z (default value 0.0)
+        # Create a template with header for points with _x, _y, _z (default value 0.0)
         template_data = {"frame": [0]}
         for i in range(1, num_points + 1):
             template_data[f"p{i}_x"] = [0]
@@ -234,18 +237,20 @@ def main():
             template_data[f"p{i}_z"] = [0]
         template_df = pd.DataFrame(template_data)
         template_df.to_csv(real_file, index=False)
-        messagebox.showinfo("Success", f"REF3D template created: {real_file}")
+        if pixel_file is None: # only show messagebox if GUI was used
+            messagebox.showinfo("Success", f"REF3D template created: {real_file}")
         print(f"REF3D template created: {real_file}")
         print("Please edit the REF3D file with the real coordinates and run the DLT process again.")
         return
     else:
-        real_file = filedialog.askopenfilename(
-            title="Select the real 3D coordinates file",
-            filetypes=[("REF3D files", "*.ref3d")],
-        )
-        if not real_file:
-            print("Real file selection canceled.")
-            return
+        if real_file is None:
+            real_file = filedialog.askopenfilename(
+                title="Select the real 3D coordinates file",
+                filetypes=[("REF3D files", "*.ref3d")],
+            )
+            if not real_file:
+                print("Real file selection canceled.")
+                return
 
     dlt_params = process_files(pixel_file, real_file)
     if dlt_params is None:
@@ -256,4 +261,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="DLT3D Reconstruction")
+    parser.add_argument("--pixel", help="Path to pixel coordinate CSV file")
+    parser.add_argument("--real", help="Path to real-world coordinate REF3D file")
+    parser.add_argument("--create-ref", action="store_true", help="Create a REF3D file from the pixel file")
+    args = parser.parse_args()
+
+    main(pixel_file=args.pixel, real_file=args.real, create_ref=args.create_ref)

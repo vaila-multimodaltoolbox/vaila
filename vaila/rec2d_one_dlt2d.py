@@ -29,6 +29,7 @@ Description:
     - Vectorized operations for better performance
 """
 
+import argparse
 import os
 from datetime import datetime
 from pathlib import Path
@@ -75,8 +76,8 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, da
     total_files = len(csv_files)
     files_processed = 0
 
-    for csv_file in csv_files:
-        files_processed += 1
+    for i_file, csv_file in enumerate(csv_files):
+        files_processed = i_file + 1
         progress = (files_processed / total_files) * 100
         print(f"Processing file {files_processed}/{total_files} ({progress:.1f}%): {csv_file}")
 
@@ -100,7 +101,7 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, da
             if not np.isnan(pixel_coords).all():
                 rec2d_coords = rec2d(dlt_params, pixel_coords)
                 # Fill the pre-allocated array directly
-                rec_coords_array[i, 1:] = rec2d_coords.flatten()
+                rec_coords_array[i, 1:] = np.array(rec2d_coords).flatten()  # type: ignore
             # NaN values already pre-allocated, so skip invalid data
 
         # Convert to DataFrame with original column names
@@ -125,54 +126,61 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, da
     print(f"Reconstructed 2D coordinates saved to {output_dir}")
 
 
-def run_rec2d_one_dlt2d():
+def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=None, data_rate=None):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
     print("Starting optimized rec2d_one_dlt2d.py...")
     print("-" * 80)
 
-    root = Tk()
-    root.withdraw()
+    if dlt_file is None:
+        root = Tk()
+        root.withdraw()
 
-    # Step 1: Select DLT parameters file
-    print("Step 1: Selecting DLT parameters file...")
-    dlt_file = filedialog.askopenfilename(
-        title="Select DLT Parameters File", filetypes=[("DLT2D files", "*.dlt2d")]
-    )
-    if not dlt_file:
-        print("DLT file selection cancelled.")
-        return
+        # Step 1: Select DLT parameters file
+        print("Step 1: Selecting DLT parameters file...")
+        dlt_file = filedialog.askopenfilename(
+            title="Select DLT Parameters File", filetypes=[("DLT2D files", "*.dlt2d")]
+        )
+        if not dlt_file:
+            print("DLT file selection cancelled.")
+            return
 
-    # Step 2: Select input directory with CSV files
-    print("Step 2: Selecting input directory...")
-    input_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
-    if not input_directory:
-        print("Input directory selection cancelled.")
-        return
+        # Step 2: Select input directory with CSV files
+        print("Step 2: Selecting input directory...")
+        input_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
+        if not input_directory:
+            print("Input directory selection cancelled.")
+            return
 
-    # Step 3: Select output directory
-    print("Step 3: Selecting output directory...")
-    output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
-    if not output_directory:
-        print("Output directory selection cancelled.")
-        return
+        # Step 3: Select output directory
+        print("Step 3: Selecting output directory...")
+        output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
+        if not output_directory:
+            print("Output directory selection cancelled.")
+            return
 
-    # Step 4: Ask for data frequency
-    print("Step 4: Setting data frequency...")
-    data_rate = simpledialog.askinteger(
-        "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
-    )
-    if data_rate is None:
-        messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
-        return
+        # Step 4: Ask for data frequency
+        print("Step 4: Setting data frequency...")
+        data_rate = simpledialog.askinteger(
+            "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
+        )
+        if data_rate is None:
+            messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
+            return
+        root.destroy()
+    else:
+        # Headless mode
+        if input_directory is None or output_directory is None or data_rate is None:
+            print("Error: dlt-file, input-dir, output-dir, and rate are required for headless mode.")
+            return
 
     # Load and validate DLT parameters
     print("Loading DLT parameters...")
     dlt_params_df = pd.read_csv(dlt_file)
 
     if dlt_params_df.shape[0] < 1:
-        messagebox.showerror("Error", "DLT file should contain at least one set of DLT parameters.")
+        print("Error: DLT file should contain at least one set of DLT parameters.")
         return
 
     # Use the first set of DLT parameters
@@ -188,8 +196,18 @@ def run_rec2d_one_dlt2d():
     # Process files
     process_files_in_directory(dlt_params, input_directory, output_directory, data_rate)
 
-    root.destroy()
-
 
 if __name__ == "__main__":
-    run_rec2d_one_dlt2d()
+    parser = argparse.ArgumentParser(description="Reconstruct 2D Coordinates using DLT2D")
+    parser.add_argument("--dlt-file", help="Path to DLT parameters file (*.dlt2d)")
+    parser.add_argument("--input-dir", help="Directory containing pixel coordinate CSV files")
+    parser.add_argument("--output-dir", help="Output directory for 2D results")
+    parser.add_argument("--rate", type=int, help="Data collection frequency in Hz")
+    args = parser.parse_args()
+
+    run_rec2d_one_dlt2d(
+        dlt_file=args.dlt_file,
+        input_directory=args.input_dir,
+        output_directory=args.output_dir,
+        data_rate=args.rate
+    )

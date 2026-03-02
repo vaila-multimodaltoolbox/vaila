@@ -32,19 +32,21 @@ For more details, visit: https://www.gnu.org/licenses/agpl-3.0.html
 ===============================================================================
 """
 
-import matplotlib.pyplot as plt
 import argparse
 import datetime
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from pathlib import Path
-import json
 import importlib
+import json
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox
+
+import matplotlib.pyplot as plt
+
 try:
     import tomllib
 except ModuleNotFoundError:
     _tomli = importlib.util.find_spec("tomli")
-    tomllib = importlib.import_module("tomli") if _tomli is not None else None
+    tomllib = importlib.import_module("tomli") if _tomli is not None else None  # type: ignore
 
 import numpy as np
 import pandas as pd
@@ -300,27 +302,29 @@ def calculate_angle_3d(p1, p2, p3):
     # Create vectors from vertex (p2)
     v1 = p1 - p2  # Vector Knee to Hip
     v2 = p3 - p2  # Vector Knee to Ankle
-    
+
     # Normalize vectors (magnitude = 1)
     # axis=1 calculates the norm for each frame independently
     v1_norm = np.linalg.norm(v1, axis=1, keepdims=True)
     v2_norm = np.linalg.norm(v2, axis=1, keepdims=True)
-    
-    # Add 1e-8 to avoid division by zero
-    v1_unit = v1 / (v1_norm + 1e-8)
-    v2_unit = v2 / (v2_norm + 1e-8)
+
+    # Handle division by zero carefully
+    v1_unit = np.divide(v1, v1_norm, out=np.zeros_like(v1, dtype=float), where=v1_norm!=0)
+    v2_unit = np.divide(v2, v2_norm, out=np.zeros_like(v2, dtype=float), where=v2_norm!=0)
     
     # Dot Product along X, Y, Z
     dot_product = np.sum(v1_unit * v2_unit, axis=1)
-    
+
     # Prevent floating point precision errors
     dot_product = np.clip(dot_product, -1.0, 1.0)
-    
+
     # Calculate angle in radians and convert to degrees
     angle_rad = np.arccos(dot_product)
     return np.degrees(angle_rad)
 
-def calculate_absolute_inclination_3d(p_top, p_bottom, vertical_vector=np.array([0, 0, 1])):
+def calculate_absolute_inclination_3d(p_top, p_bottom, vertical_vector=None):
+    if vertical_vector is None:
+        vertical_vector = np.array([0, 0, 1])
     """
     Calculates the inclination of a segment (e.g., Trunk) relative to the global vertical.
     Assumes vertical_vector points upwards in your coordinate system (e.g., Z = 1).
@@ -328,12 +332,12 @@ def calculate_absolute_inclination_3d(p_top, p_bottom, vertical_vector=np.array(
     # Segment vector (e.g., Pelvis to Thorax)
     v_seg = p_top - p_bottom
     v_seg_norm = np.linalg.norm(v_seg, axis=1, keepdims=True)
-    v_seg_unit = v_seg / (v_seg_norm + 1e-8)
+    v_seg_unit = np.divide(v_seg, v_seg_norm, out=np.zeros_like(v_seg, dtype=float), where=v_seg_norm!=0)
     
     # The vertical_vector is broadcasted to shape (N_frames, 3)
     dot_product = np.sum(v_seg_unit * vertical_vector, axis=1)
     dot_product = np.clip(dot_product, -1.0, 1.0)
-    
+
     angle_rad = np.arccos(dot_product)
     return np.degrees(angle_rad)
 
@@ -347,6 +351,9 @@ class TUGAnalyzer:
         self.df = df_3d.copy()
         self.fs = fs
         self.dt = 1.0 / fs if fs > 0 else 0.0
+        self._meta_y_chair = None
+        self._meta_y_turn = None
+        self._meta_y_tol = None
 
     def _get_point_3d(self, index: int) -> np.ndarray:
         """
@@ -424,7 +431,7 @@ class TUGAnalyzer:
         (MediaPipe 0-based: 15 to 22).
         This exclusion is used only for CoM estimation; skeleton drawing still uses
         the complete 33-landmark MediaPipe model and full connection set.
-        
+
         Uses simplified Dempster-based weights:
         - Head (0): 0.081
         - Trunk (means 11,12,23,24): 0.497
@@ -437,7 +444,7 @@ class TUGAnalyzer:
         """
         # Extract necessary points
         p = {i: self._get_point_3d(i) for i in [0, 11, 12, 13, 14, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]}
-        
+
         # Segments and their approximated CoMs
         head_com = p[0]
         trunk_com = (p[11] + p[12] + p[23] + p[24]) / 4.0
@@ -451,7 +458,7 @@ class TUGAnalyzer:
         shank_r = (p[26] + p[28]) / 2.0
         foot_l = (p[27] + p[29] + p[31]) / 3.0
         foot_r = (p[28] + p[30] + p[32]) / 3.0
-        
+
         # Weights (Adapted Dempster)
         w_head = 0.081
         w_trunk = 0.497
@@ -460,7 +467,7 @@ class TUGAnalyzer:
         w_thigh = 0.100
         w_shank = 0.0465
         w_foot = 0.0145
-        
+
         com_3d = (
             head_com * w_head +
             trunk_com * w_trunk +
@@ -470,14 +477,16 @@ class TUGAnalyzer:
             shank_l * w_shank + shank_r * w_shank +
             foot_l * w_foot + foot_r * w_foot
         )
-        
+
         self.df['CoM_x'] = com_3d[:, 0]
         self.df['CoM_y'] = com_3d[:, 1]
         self.df['CoM_z'] = com_3d[:, 2]
-        
+
         return com_3d
 
-    def extract_kinematics(self, vertical_vector=np.array([0, 0, 1])):
+    def extract_kinematics(self, vertical_vector=None):
+        if vertical_vector is None:
+            vertical_vector = np.array([0, 0, 1])
         """
         Calculates 3D joint angles and trunk inclination using dot product.
         Also calculates derivatives (velocity and acceleration) for CoM, heels and trunk.
@@ -495,19 +504,19 @@ class TUGAnalyzer:
         # Trunk
         shoulder_l = self._get_point_3d(11)
         shoulder_r = self._get_point_3d(12)
-        
+
         # Knee Angles (anatomical: 0° extended, positive flexed)
         knee_angle_r_raw = calculate_angle_3d(hip_r, knee_r, ankle_r)
         self.df['Knee_Angle_R'] = 180.0 - knee_angle_r_raw
-        
+
         knee_angle_l_raw = calculate_angle_3d(hip_l, knee_l, ankle_l)
         self.df['Knee_Angle_L'] = 180.0 - knee_angle_l_raw
-        
-        # Optional: Hip and Ankle angles can be calculated similarly if we have 
+
+        # Optional: Hip and Ankle angles can be calculated similarly if we have
         # additional points, e.g., shoulder->hip->knee
         self.df['Hip_Angle_R'] = 180.0 - calculate_angle_3d(shoulder_r, hip_r, knee_r)
         self.df['Hip_Angle_L'] = 180.0 - calculate_angle_3d(shoulder_l, hip_l, knee_l)
-        
+
         foot_index_r = self._get_point_3d(32)
         foot_index_l = self._get_point_3d(31)
         self.df['Ankle_Angle_R'] = 180.0 - calculate_angle_3d(knee_r, ankle_r, foot_index_r)
@@ -517,35 +526,35 @@ class TUGAnalyzer:
         mid_shoulder = (shoulder_l + shoulder_r) / 2.0
         mid_hip = (hip_l + hip_r) / 2.0
         self.df['Trunk_Inclination'] = calculate_absolute_inclination_3d(mid_shoulder, mid_hip, vertical_vector)
-        
+
         # Velocities and accelerations via np.gradient
         if not hasattr(self, 'dt') or self.dt == 0.0:
             return
-            
+
         # Vector Coding (Coupling Angle: Hip vs Knee Sagittal)
         for side in ['R', 'L']:
             d_hip = np.gradient(self.df[f'Hip_Angle_{side}'], self.dt)
             d_knee = np.gradient(self.df[f'Knee_Angle_{side}'], self.dt)
             # Coupling Angle in degrees [0, 360)
             self.df[f'Coupling_Angle_Hip_Knee_{side}'] = np.degrees(np.arctan2(d_knee, d_hip)) % 360
-            
+
         def calc_derivatives(series_3d, prefix):
             vel = np.gradient(series_3d, self.dt, axis=0)
             acc = np.gradient(vel, self.dt, axis=0)
             for i, axis in enumerate(['x', 'y', 'z']):
                 self.df[f'{prefix}_vel_{axis}'] = vel[:, i]
                 self.df[f'{prefix}_acc_{axis}'] = acc[:, i]
-                
+
         if 'CoM_x' in self.df.columns:
             com_3d = self.df[['CoM_x', 'CoM_y', 'CoM_z']].to_numpy()
             calc_derivatives(com_3d, 'CoM')
-            
-            # Extrapolated Center of Mass (XcoM) 
+
+            # Extrapolated Center of Mass (XcoM)
             omega_l = np.mean(self.df['CoM_z']) # Pendulum length approximated by CoM Z height
             omega_0 = np.sqrt(9.81 / omega_l) if omega_l > 0 else 1.0
             self.df['XcoM_x'] = self.df['CoM_x'] + self.df['CoM_vel_x'] / omega_0
             self.df['XcoM_y'] = self.df['CoM_y'] + self.df['CoM_vel_y'] / omega_0
-            
+
         heel_l = self._get_point_3d(29)
         heel_r = self._get_point_3d(30)
         calc_derivatives(heel_l, 'Heel_L')
@@ -584,8 +593,8 @@ class TUGAnalyzer:
         - TO (Toe Off): Negative peak of the projection of the hallux relative to the pelvis.
         - Applies a 'Walking Mask' to ignore foot movements during STS, Turn and Sit.
         """
-        from scipy.signal import find_peaks
         from scipy.ndimage import gaussian_filter1d
+        from scipy.signal import find_peaks
 
         try:
             pelvis_r = self._get_point_3d(24)
@@ -602,18 +611,18 @@ class TUGAnalyzer:
         pelvis_center = (pelvis_r + pelvis_l) / 2.0
         pelvis_xy = pelvis_center[:, [0, 1]]
         pelvis_z = pelvis_center[:, 2]
-        
+
         # Posture filter (only detects steps if standing)
         z_min = np.percentile(pelvis_z, 5)
         z_max = np.percentile(pelvis_z, 95)
         is_standing_mask = pelvis_z > (z_min + 0.4 * (z_max - z_min))
-        
+
         # Pelvis velocity in the XY plane
         pelvis_vel_xy = np.linalg.norm(
-            np.gradient(gaussian_filter1d(pelvis_xy, sigma=self.fs*0.5, axis=0), self.dt, axis=0), 
+            np.gradient(gaussian_filter1d(pelvis_xy, sigma=self.fs*0.5, axis=0), self.dt, axis=0),
             axis=1
         )
-        
+
         # Walking threshold restored: ignore small stationary and turning steps
         # Reduced to 0.15 to ensure that slower steps near the turn are not missed
         is_walking_mask = is_standing_mask & (pelvis_vel_xy > 0.15)
@@ -633,7 +642,7 @@ class TUGAnalyzer:
             rel_heel_xy = heel[:, [0, 1]] - pelvis_center[:, [0, 1]]
             proj_heel = np.sum(rel_heel_xy * dir_unit, axis=1)
             proj_heel_smooth = gaussian_filter1d(proj_heel, sigma=self.fs * 0.05)
-            
+
             proj_heel_masked = np.where(is_walking_mask, proj_heel_smooth, np.min(proj_heel_smooth))
             hs_indices, _ = find_peaks(proj_heel_masked, distance=min_dist, prominence=0.015)
 
@@ -643,11 +652,11 @@ class TUGAnalyzer:
             rel_toe_xy = toe[:, [0, 1]] - pelvis_center[:, [0, 1]]
             proj_toe = np.sum(rel_toe_xy * dir_unit, axis=1)
             proj_toe_smooth = gaussian_filter1d(proj_toe, sigma=self.fs * 0.05)
-            
+
             # Invert the projection (we want the negative peak, when the foot is more behind)
             inv_proj_toe = -proj_toe_smooth
             inv_proj_masked = np.where(is_walking_mask, inv_proj_toe, np.min(inv_proj_toe))
-            
+
             to_indices, _ = find_peaks(inv_proj_masked, distance=min_dist, prominence=0.015)
 
             return hs_indices, to_indices
@@ -661,20 +670,24 @@ class TUGAnalyzer:
             'Right': {'HS': hs_r, 'TO': to_r},
             'Left':  {'HS': hs_l, 'TO': to_l}
         }
-        
+
         # Inject into the output DataFrame for debugging/plotting
         self.df['Right_HS'] = 0
         self.df['Right_TO'] = 0
         self.df['Left_HS'] = 0
         self.df['Left_TO'] = 0
-        if len(hs_r) > 0: self.df.loc[hs_r, 'Right_HS'] = 1
-        if len(to_r) > 0: self.df.loc[to_r, 'Right_TO'] = 1
-        if len(hs_l) > 0: self.df.loc[hs_l, 'Left_HS'] = 1
-        if len(to_l) > 0: self.df.loc[to_l, 'Left_TO'] = 1
-        
+        if len(hs_r) > 0:
+            self.df.loc[hs_r, 'Right_HS'] = 1
+        if len(to_r) > 0:
+            self.df.loc[to_r, 'Right_TO'] = 1
+        if len(hs_l) > 0:
+            self.df.loc[hs_l, 'Left_HS'] = 1
+        if len(to_l) > 0:
+            self.df.loc[to_l, 'Left_TO'] = 1
+
         return self.gait_events
 
-    def calculate_spatiotemporal_params(self, fps: float = 30.0, phases: dict = None) -> dict:
+    def calculate_spatiotemporal_params(self, fps: float = 30.0, phases: dict | None = None) -> dict:
         """
         Phase 3: 3D Spatiotemporal Parameters.
         Calculates mean and SD metrics for both sides using detected gait events.
@@ -683,7 +696,7 @@ class TUGAnalyzer:
         """
         if not hasattr(self, 'gait_events'):
             self.detect_gait_events()
-            
+
         try:
             heel_r = self._get_point_3d(30)[:, [0, 1]]  # XY plane
             heel_l = self._get_point_3d(29)[:, [0, 1]]
@@ -697,9 +710,9 @@ class TUGAnalyzer:
             hs_idx = self.gait_events[side]['HS']
             to_idx = self.gait_events[side]['TO']
             opp_hs_idx = self.gait_events[opp_side]['HS']
-            
+
             step_metrics = {str(int(hs)): {} for hs in hs_idx}
-            
+
             # Stride Length (same foot successive)
             stride_lengths = []
             for i in range(len(hs_idx) - 1):
@@ -708,7 +721,7 @@ class TUGAnalyzer:
                 val = float(np.linalg.norm(p2 - p1))
                 stride_lengths.append(val)
                 step_metrics[str(int(hs_idx[i]))]['Stride_Length_m'] = val
-                
+
             # Step Length (opposite foot to this foot)
             step_lengths = []
             for hs in hs_idx:
@@ -730,11 +743,11 @@ class TUGAnalyzer:
                 val = float(np.linalg.norm(p2 - p1))
                 step_widths.append(val)
                 step_metrics[str(int(hs))]['Step_Width_m'] = val
-                
+
             # Times (Stance and Swing)
             stance_times = []
             swing_times = []
-            
+
             # Stance: HS to next TO of the same foot
             for hs in hs_idx:
                 next_to = to_idx[to_idx > hs]
@@ -742,7 +755,7 @@ class TUGAnalyzer:
                     val = float((next_to[0] - hs) * dt)
                     stance_times.append(val)
                     step_metrics[str(int(hs))]['Stance_Time_s'] = val
-                    
+
             # Swing: TO to next HS of the same foot
             for to in to_idx:
                 next_hs = hs_idx[hs_idx > to]
@@ -766,7 +779,7 @@ class TUGAnalyzer:
                 q1, q3 = np.percentile(arr, 25), np.percentile(arr, 75)
                 iqr = q3 - q1
                 return arr[(arr >= q1 - factor * iqr) & (arr <= q3 + factor * iqr)].tolist()
-            
+
             stance_times_clean  = trim_iqr(stance_times)
             swing_times_clean   = trim_iqr(swing_times)
             stride_lengths_clean = trim_iqr(stride_lengths)
@@ -794,7 +807,7 @@ class TUGAnalyzer:
             cadence = len(all_hs) / total_time_min if total_time_min > 0 else 0
         else:
             cadence = 0
-            
+
         # Average Velocity
         if 'CoM_x' in self.df.columns and len(all_hs) > 1:
             com = self.df[['CoM_x', 'CoM_y']].to_numpy() # XY plane
@@ -810,19 +823,23 @@ class TUGAnalyzer:
         xcom_dev_bwd = 0.0
         if phases and 'XcoM_x' in self.df.columns and 'XcoM_y' in self.df.columns:
             def calc_dev(start_s, end_s):
-                if end_s <= start_s: return 0.0
+                if end_s <= start_s:
+                    return 0.0
                 s_idx, e_idx = int(start_s * fps), int(end_s * fps)
-                if s_idx >= len(self.df) or e_idx >= len(self.df) or s_idx == e_idx: return 0.0
+                if s_idx >= len(self.df) or e_idx >= len(self.df) or s_idx == e_idx:
+                    return 0.0
                 path = self.df[['XcoM_x', 'XcoM_y']].iloc[s_idx:e_idx].to_numpy()
-                if len(path) < 2: return 0.0
+                if len(path) < 2:
+                    return 0.0
                 p1, p2 = path[0], path[-1]
                 line_vec = p2 - p1
                 line_len = np.linalg.norm(line_vec)
-                if line_len == 0: return 0.0
+                if line_len == 0:
+                    return 0.0
                 diffs = p1 - path
                 cross_prod = np.abs(line_vec[0] * diffs[:, 1] - line_vec[1] * diffs[:, 0])
                 return float(np.mean(cross_prod / line_len))
-                
+
             xcom_dev_fwd = calc_dev(*phases.get('first_gait', (0, 0)))
             xcom_dev_bwd = calc_dev(*phases.get('second_gait', (0, 0)))
 
@@ -832,7 +849,7 @@ class TUGAnalyzer:
             'XcoM_Deviation_First_Gait_m': xcom_dev_fwd,
             'XcoM_Deviation_Second_Gait_m': xcom_dev_bwd
         }
-        
+
         self.spatiotemporal_params = stats
         return stats
 
@@ -850,29 +867,29 @@ class TUGAnalyzer:
             com = self.df[['CoM_x', 'CoM_y', 'CoM_z']].to_numpy()
         except ValueError:
             return None, None, None
-            
+
         mid_shoulder = (sh_r + sh_l) / 2.0
-        
+
         # Z (Body vertical)
         Z = mid_shoulder - com
         Z_norm = np.linalg.norm(Z, axis=1, keepdims=True) + 1e-8
         Z = Z / Z_norm
-        
+
         # X_temp (Temporary Medio-Lateral: L - R = points to the Left)
         X_temp = sh_l - sh_r
         X_temp_norm = np.linalg.norm(X_temp, axis=1, keepdims=True) + 1e-8
         X_temp = X_temp / X_temp_norm
-        
+
         # Y (Anteroposterior)
         Y = np.cross(Z, X_temp, axis=1)
         Y_norm = np.linalg.norm(Y, axis=1, keepdims=True) + 1e-8
         Y = Y / Y_norm
-        
+
         # X (Final Orthogonal Medio-Lateral)
         X = np.cross(Y, Z, axis=1)
         X_norm = np.linalg.norm(X, axis=1, keepdims=True) + 1e-8
         X = X / X_norm
-        
+
         self.anatomical_X = X
         self.anatomical_Y = Y
         self.anatomical_Z = Z
@@ -885,11 +902,10 @@ class TUGAnalyzer:
         and the velocity orientation in the XY plane.
         """
         from scipy.ndimage import gaussian_filter1d
-        from scipy.signal import find_peaks
-        
+
         if 'CoM_y' not in self.df.columns or 'CoM_x' not in self.df.columns or 'CoM_z' not in self.df.columns:
             return {}
-            
+
         com_y = self.df['CoM_y'].to_numpy()
         com_x = self.df['CoM_x'].to_numpy()
         com_z = self.df['CoM_z'].to_numpy()
@@ -899,9 +915,9 @@ class TUGAnalyzer:
         fs = self.fs if hasattr(self, 'fs') and self.fs > 0 else 30.0
 
         # Allow TOML metadata to override the spatial protocol constants
-        y_chair = float(getattr(self, '_meta_y_chair', Y_CHAIR_THRESHOLD))
-        y_turn  = float(getattr(self, '_meta_y_turn',  Y_TURN_APPROX))
-        y_tol   = float(getattr(self, '_meta_y_tol',   Y_TURN_TOLERANCE))
+        y_chair = float(self._meta_y_chair if self._meta_y_chair is not None else Y_CHAIR_THRESHOLD)
+        y_turn  = float(self._meta_y_turn if self._meta_y_turn is not None else Y_TURN_APPROX)
+        y_tol   = float(self._meta_y_tol if self._meta_y_tol is not None else Y_TURN_TOLERANCE)
 
         # ---------------------------------------------------------
         # 1. Vertical Phase: Sit-to-Stand and Stand-to-Sit (CoM-Z)
@@ -912,7 +928,7 @@ class TUGAnalyzer:
         standing_z = np.percentile(com_z_smooth, 95)   # highest stable height
         amplitude_z = standing_z - sitting_z
 
-        thresh_start = sitting_z + 0.10 * amplitude_z
+        sitting_z + 0.10 * amplitude_z
         thresh_end   = sitting_z + 0.90 * amplitude_z
 
         is_standing   = com_z_smooth > (sitting_z + 0.50 * amplitude_z)
@@ -947,7 +963,7 @@ class TUGAnalyzer:
         search_end   = sit_start if sit_start > sts_end else N - 1
 
         com_y_window = com_y_smooth[search_start:search_end]
-        t_window     = np.arange(len(com_y_window))
+        np.arange(len(com_y_window))
 
         # Use foot positions if available for spatial thresholds
         if 'Med_Foot_Right_y' in self.df.columns and 'Med_Foot_Left_y' in self.df.columns:
@@ -983,7 +999,8 @@ class TUGAnalyzer:
 
         # ── 2c. Stop_5s anchor: flattest speed window near the Y peak ───────────
         # Use trunk speed (CoM XY) to find the speed plateau — same method as vaila_tugtunb.py
-        from scipy.ndimage import uniform_filter1d, gaussian_filter1d as _gf1d
+        from scipy.ndimage import gaussian_filter1d as _gf1d
+        from scipy.ndimage import uniform_filter1d
         com_vx_s = np.gradient(_gf1d(com_x, sigma=fs * 0.5)) / dt
         com_vy_s = np.gradient(_gf1d(com_y, sigma=fs * 0.5)) / dt
 
@@ -1084,8 +1101,6 @@ class TUGAnalyzer:
         sit_start  = max(sit_start,  bck_start)
         sit_end    = max(sit_end,    sit_start)
 
-        stop_start = fwd_stop
-        stop_end   = turn_start
 
 
         # ---------------------------------------------------------
@@ -1121,10 +1136,10 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     Generates a dynamic visual report with interactive Plotly plots,
     including XYZ overlay with gait events and sagittal stick figures.
     """
+    import numpy as np
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
-    import numpy as np
-    
+
     com = analyzer.df[['CoM_x', 'CoM_y', 'CoM_z']].to_numpy()
     t = np.arange(len(com)) / fps
     skeleton_connections = load_mediapipe_pose_connections()
@@ -1136,9 +1151,9 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
             skeleton_series[point_idx] = analyzer._get_point_3d(point_idx)
         except ValueError:
             continue
-    
+
     plots_html = []
-    
+
     def add_gait_events(fig, row=None, col=None):
         for leg, color in [('Right', 'red'), ('Left', 'green')]:
             for ev, ls in [('HS', 'dash'), ('TO', 'dot')]:
@@ -1152,23 +1167,23 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
 
     # --- Plot 1: CoM XYZ vs Time + Gait Events ---
     fig1 = go.Figure()
-    fig1.add_trace(go.Scatter(x=t, y=com[:, 0], mode='lines', name='X (Mediolateral)', line=dict(color='blue', width=2)))
-    fig1.add_trace(go.Scatter(x=t, y=com[:, 1], mode='lines', name='Y (Anteroposterior)', line=dict(color='orange', width=2)))
-    fig1.add_trace(go.Scatter(x=t, y=com[:, 2], mode='lines', name='Z (Vertical)', line=dict(color='purple', width=2)))
+    fig1.add_trace(go.Scatter(x=t, y=com[:, 0], mode='lines', name='X (Mediolateral)', line={"color": 'blue', "width": 2}))
+    fig1.add_trace(go.Scatter(x=t, y=com[:, 1], mode='lines', name='Y (Anteroposterior)', line={"color": 'orange', "width": 2}))
+    fig1.add_trace(go.Scatter(x=t, y=com[:, 2], mode='lines', name='Z (Vertical)', line={"color": 'purple', "width": 2}))
     add_gait_events(fig1)
-    
-    fig1.update_layout(title='CoM Trajectory (X, Y, Z) vs Time + Gait Events (Red=Right, Green=Left | Dashed=HS, Dotted=TO)', 
+
+    fig1.update_layout(title='CoM Trajectory (X, Y, Z) vs Time + Gait Events (Red=Right, Green=Left | Dashed=HS, Dotted=TO)',
                        xaxis_title='Time (s)', yaxis_title='Position (m)', height=500, template='plotly_white')
     plots_html.append(fig1.to_html(full_html=False, include_plotlyjs=False))
-    
+
     # --- Plot 2: Split XYZ ---
     fig2 = make_subplots(rows=1, cols=3, subplot_titles=('CoM X (Mediolateral)', 'CoM Y (Anteroposterior)', 'CoM Z (Vertical)'))
-    fig2.add_trace(go.Scatter(x=t, y=com[:, 0], mode='lines', line=dict(color='blue'), showlegend=False), row=1, col=1)
-    fig2.add_trace(go.Scatter(x=t, y=com[:, 1], mode='lines', line=dict(color='orange'), showlegend=False), row=1, col=2)
-    fig2.add_trace(go.Scatter(x=t, y=com[:, 2], mode='lines', line=dict(color='purple'), showlegend=False), row=1, col=3)
+    fig2.add_trace(go.Scatter(x=t, y=com[:, 0], mode='lines', line={"color": 'blue'}, showlegend=False), row=1, col=1)
+    fig2.add_trace(go.Scatter(x=t, y=com[:, 1], mode='lines', line={"color": 'orange'}, showlegend=False), row=1, col=2)
+    fig2.add_trace(go.Scatter(x=t, y=com[:, 2], mode='lines', line={"color": 'purple'}, showlegend=False), row=1, col=3)
     fig2.update_layout(height=400, template='plotly_white')
     plots_html.append(fig2.to_html(full_html=False, include_plotlyjs=False))
-    
+
     # --- Plot 3: Sagittal Plane Stick Figures ---
     def add_stick_figures(fig, frames, row, col, max_frames=12):
         for f in sample_frames(frames, max_frames=max_frames):
@@ -1184,7 +1199,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                         x=[pa[1], pb[1]],
                         y=[pa[2], pb[2]],
                         mode='lines',
-                        line=dict(color=get_connection_color(a_idx, b_idx), width=2),
+                        line={"color": get_connection_color(a_idx, b_idx), "width": 2},
                         opacity=0.45,
                         showlegend=False,
                     ),
@@ -1198,13 +1213,13 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
             for f in analyzer.gait_events.get(leg, {}).get(ev, []):
                 events.append(int(round(f)))
     events.sort()
-    
+
     phases = report_data.get('Phases_Seconds', {})
     first_gait = phases.get('first_gait', (0, 0))
     second_gait = phases.get('second_gait', (0, 0))
     wf_s, wf_e = first_gait
     wb_s, wb_e = second_gait
-    
+
     fig3 = make_subplots(rows=1, cols=2, subplot_titles=('First gait sagittal events (Y-Z)', 'Second gait sagittal events (Y-Z)'))
     add_stick_figures(fig3, [f for f in events if wf_s*fps <= f <= wf_e*fps], 1, 1)
     add_stick_figures(fig3, [f for f in events if wb_s*fps <= f <= wb_e*fps], 1, 2)
@@ -1212,14 +1227,14 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     fig3.update_yaxes(scaleanchor="x", scaleratio=1, row=1, col=2)
     fig3.update_layout(height=500, template='plotly_white')
     plots_html.append(fig3.to_html(full_html=False, include_plotlyjs=False))
-    
+
     # --- Plot 4: 3D Equal Aspect Plot ---
     fig4 = go.Figure()
     phase_colors = {
         'stand': 'gray', 'first_gait': 'blue', 'stop_5s': 'brown',
         'turn180': 'orange', 'second_gait': 'green', 'sit': 'purple'
     }
-    
+
     last_idx = 0
     legend_added = set()
     for phase_name, val in ordered_phase_ranges(phases):
@@ -1228,10 +1243,10 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         color = phase_colors.get(phase_name, 'darkred')
         show_leg = phase_name not in legend_added
         legend_added.add(phase_name)
-        
+
         fig4.add_trace(go.Scatter3d(
             x=com[s_idx:e_idx+1, 0], y=com[s_idx:e_idx+1, 1], z=com[s_idx:e_idx+1, 2],
-            mode='lines', line=dict(color=color, width=4), name=phase_name.replace('_', ' '), showlegend=show_leg
+            mode='lines', line={"color": color, "width": 4}, name=phase_name.replace('_', ' '), showlegend=show_leg
         ))
         last_idx = max(last_idx, e_idx)
 
@@ -1250,7 +1265,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                     y=[pa[1], pb[1]],
                     z=[pa[2], pb[2]],
                     mode='lines',
-                    line=dict(color=get_connection_color(a_idx, b_idx), width=2),
+                    line={"color": get_connection_color(a_idx, b_idx), "width": 2},
                     opacity=0.35,
                     showlegend=False,
                 )
@@ -1259,29 +1274,29 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     if last_idx < len(com) - 1:
         fig4.add_trace(go.Scatter3d(
             x=com[last_idx:, 0], y=com[last_idx:, 1], z=com[last_idx:, 2],
-            mode='lines', line=dict(color='black', width=2, dash='dot'), name='Remainder'
+            mode='lines', line={"color": 'black', "width": 2, "dash": 'dot'}, name='Remainder'
         ))
 
-    fig4.add_trace(go.Scatter3d(x=[com[0, 0]], y=[com[0, 1]], z=[com[0, 2]], mode='markers', marker=dict(size=8, color='green'), name='Start'))
-    fig4.add_trace(go.Scatter3d(x=[com[-1, 0]], y=[com[-1, 1]], z=[com[-1, 2]], mode='markers', marker=dict(size=8, color='red'), name='End'))
+    fig4.add_trace(go.Scatter3d(x=[com[0, 0]], y=[com[0, 1]], z=[com[0, 2]], mode='markers', marker={"size": 8, "color": 'green'}, name='Start'))
+    fig4.add_trace(go.Scatter3d(x=[com[-1, 0]], y=[com[-1, 1]], z=[com[-1, 2]], mode='markers', marker={"size": 8, "color": 'red'}, name='End'))
     max_range = np.array([com[:,0].max()-com[:,0].min(), com[:,1].max()-com[:,1].min(), com[:,2].max()-com[:,2].min()]).max() / 2.0
     mid_x, mid_y, mid_z = (com[:,0].max()+com[:,0].min())*0.5, (com[:,1].max()+com[:,1].min())*0.5, (com[:,2].max()+com[:,2].min())*0.5
     fig4.update_layout(
         title='3D CoM Trajectory (Colored by Phase)',
-        scene=dict(
-            xaxis_title='X (ML)', yaxis_title='Y (AP)', zaxis_title='Z (Vert)',
-            xaxis=dict(range=[mid_x - max_range, mid_x + max_range]),
-            yaxis=dict(range=[mid_y - max_range, mid_y + max_range]),
-            zaxis=dict(range=[mid_z - max_range, mid_z + max_range]),
-            aspectmode='cube'
-        ),
+        scene={
+            "xaxis_title": 'X (ML)', "yaxis_title": 'Y (AP)', "zaxis_title": 'Z (Vert)',
+            "xaxis": {"range": [mid_x - max_range, mid_x + max_range]},
+            "yaxis": {"range": [mid_y - max_range, mid_y + max_range]},
+            "zaxis": {"range": [mid_z - max_range, mid_z + max_range]},
+            "aspectmode": 'cube'
+        },
         height=800, template='plotly_white'
     )
     plots_html.append(fig4.to_html(full_html=False, include_plotlyjs=False))
 
     # --- Plot 5: Mean Foot Sagittal View (YZ) - Progressive vs Regressive ---
     fig5 = go.Figure()
-    
+
     for side, prefix, c_path, c_fwd, c_bwd, marker_hs, marker_to in [
         ('Right', 'Med_Foot_Right', 'lightsalmon', 'darkred', 'lightcoral', 'circle', 'square'),
         ('Left', 'Med_Foot_Left', 'lightgreen', 'darkgreen', 'palegreen', 'circle', 'square')
@@ -1289,25 +1304,25 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         y = analyzer.df[f'{prefix}_y'].to_numpy()
         z = analyzer.df[f'{prefix}_z'].to_numpy()
         vy = analyzer.df[f'{prefix}_vel_y'].to_numpy()
-        
-        fig5.add_trace(go.Scatter(x=y, y=z, mode='lines', line=dict(color=c_path), opacity=0.4, name=f'{side} Path'))
-        
+
+        fig5.add_trace(go.Scatter(x=y, y=z, mode='lines', line={"color": c_path}, opacity=0.4, name=f'{side} Path'))
+
         fwd_mask = vy > 0
         bwd_mask = vy <= 0
-        fig5.add_trace(go.Scatter(x=y[fwd_mask], y=z[fwd_mask], mode='markers', marker=dict(color=c_fwd, size=4), name=f'{side} Positive Vy'))
-        fig5.add_trace(go.Scatter(x=y[bwd_mask], y=z[bwd_mask], mode='markers', marker=dict(color=c_bwd, size=4, symbol='x'), name=f'{side} Negative Vy'))
-        
+        fig5.add_trace(go.Scatter(x=y[fwd_mask], y=z[fwd_mask], mode='markers', marker={"color": c_fwd, "size": 4}, name=f'{side} Positive Vy'))
+        fig5.add_trace(go.Scatter(x=y[bwd_mask], y=z[bwd_mask], mode='markers', marker={"color": c_bwd, "size": 4, "symbol": 'x'}, name=f'{side} Negative Vy'))
+
         # Add Gait Events in 5
         hs_idx = analyzer.gait_events.get(side, {}).get('HS', [])
         to_idx = analyzer.gait_events.get(side, {}).get('TO', [])
         if len(hs_idx) > 0:
-            fig5.add_trace(go.Scatter(x=y[hs_idx], y=z[hs_idx], mode='markers', marker=dict(color=c_fwd, size=10, symbol=marker_hs, line=dict(width=2, color='black')), name=f'{side} HS'))
+            fig5.add_trace(go.Scatter(x=y[hs_idx], y=z[hs_idx], mode='markers', marker={"color": c_fwd, "size": 10, "symbol": marker_hs, "line": {"width": 2, "color": 'black'}}, name=f'{side} HS'))
         if len(to_idx) > 0:
-            fig5.add_trace(go.Scatter(x=y[to_idx], y=z[to_idx], mode='markers', marker=dict(color=c_bwd, size=10, symbol=marker_to, line=dict(width=2, color='black')), name=f'{side} TO'))
+            fig5.add_trace(go.Scatter(x=y[to_idx], y=z[to_idx], mode='markers', marker={"color": c_bwd, "size": 10, "symbol": marker_to, "line": {"width": 2, "color": 'black'}}, name=f'{side} TO'))
 
     fig5.update_layout(title='Mean Foot Sagittal View (YZ) - Progressive vs Regressive w/ Gait Events', xaxis_title='Y (AP)', yaxis_title='Z (Vert)', height=600, template='plotly_white')
     plots_html.append(fig5.to_html(full_html=False, include_plotlyjs=False))
-    
+
     # --- Plot 6: Mean Foot Kinematics (Split Y and Z Position/Velocity/Acceleration) vs Time ---
     fig6 = make_subplots(rows=5, cols=2, shared_xaxes=True,
                          subplot_titles=[
@@ -1317,7 +1332,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                              'Left Acceleration Y & Z', 'Right Acceleration Y & Z',
                              'Left 2D Kin Magnitude', 'Right 2D Kin Magnitude'
                          ], vertical_spacing=0.03)
-    
+
     for side, prefix, col in [('Left', 'Med_Foot_Left', 1), ('Right', 'Med_Foot_Right', 2)]:
         y = analyzer.df[f'{prefix}_y'].to_numpy()
         z = analyzer.df[f'{prefix}_z'].to_numpy()
@@ -1325,25 +1340,25 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         vz = analyzer.df[f'{prefix}_vel_z'].to_numpy()
         ay = analyzer.df[f'{prefix}_acc_y'].to_numpy()
         az = analyzer.df[f'{prefix}_acc_z'].to_numpy()
-        
+
         v_yz = np.sqrt(vy**2 + vz**2)
         a_yz = np.sqrt(ay**2 + az**2)
-        
+
         # Pos Y & Z Separate Traces
-        fig6.add_trace(go.Scatter(x=t, y=y, name=f'{side} Y', line=dict(color='orange')), row=1, col=col)
-        fig6.add_trace(go.Scatter(x=t, y=z, name=f'{side} Z', line=dict(color='purple')), row=2, col=col)
-        
-        fig6.add_trace(go.Scatter(x=t, y=vy, name=f'{side} Vy', line=dict(color='orange')), row=3, col=col)
-        fig6.add_trace(go.Scatter(x=t, y=vz, name=f'{side} Vz', line=dict(color='purple')), row=3, col=col)
-        fig6.add_trace(go.Scatter(x=[t[0], t[-1]], y=[0, 0], mode='lines', line=dict(color='black', dash='dash'), showlegend=False), row=3, col=col)
-        
-        fig6.add_trace(go.Scatter(x=t, y=ay, name=f'{side} Ay', line=dict(color='orange')), row=4, col=col)
-        fig6.add_trace(go.Scatter(x=t, y=az, name=f'{side} Az', line=dict(color='purple')), row=4, col=col)
-        fig6.add_trace(go.Scatter(x=[t[0], t[-1]], y=[0, 0], mode='lines', line=dict(color='black', dash='dash'), showlegend=False), row=4, col=col)
-        
-        fig6.add_trace(go.Scatter(x=t, y=v_yz, name=f'{side} |V_yz|', line=dict(color='blue')), row=5, col=col)
-        fig6.add_trace(go.Scatter(x=t, y=a_yz, name=f'{side} |A_yz|', line=dict(color='red', dash='dot')), row=5, col=col)
-        
+        fig6.add_trace(go.Scatter(x=t, y=y, name=f'{side} Y', line={"color": 'orange'}), row=1, col=col)
+        fig6.add_trace(go.Scatter(x=t, y=z, name=f'{side} Z', line={"color": 'purple'}), row=2, col=col)
+
+        fig6.add_trace(go.Scatter(x=t, y=vy, name=f'{side} Vy', line={"color": 'orange'}), row=3, col=col)
+        fig6.add_trace(go.Scatter(x=t, y=vz, name=f'{side} Vz', line={"color": 'purple'}), row=3, col=col)
+        fig6.add_trace(go.Scatter(x=[t[0], t[-1]], y=[0, 0], mode='lines', line={"color": 'black', "dash": 'dash'}, showlegend=False), row=3, col=col)
+
+        fig6.add_trace(go.Scatter(x=t, y=ay, name=f'{side} Ay', line={"color": 'orange'}), row=4, col=col)
+        fig6.add_trace(go.Scatter(x=t, y=az, name=f'{side} Az', line={"color": 'purple'}), row=4, col=col)
+        fig6.add_trace(go.Scatter(x=[t[0], t[-1]], y=[0, 0], mode='lines', line={"color": 'black', "dash": 'dash'}, showlegend=False), row=4, col=col)
+
+        fig6.add_trace(go.Scatter(x=t, y=v_yz, name=f'{side} |V_yz|', line={"color": 'blue'}), row=5, col=col)
+        fig6.add_trace(go.Scatter(x=t, y=a_yz, name=f'{side} |A_yz|', line={"color": 'red', "dash": 'dot'}), row=5, col=col)
+
         # Add gait events
         for ev, ls in [('HS', 'dash'), ('TO', 'dot')]:
             frames = analyzer.gait_events.get(side, {}).get(ev, [])
@@ -1360,59 +1375,59 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     trunk_y = analyzer.df['Mid_Trunk_y'].to_numpy()
     trunk_z = analyzer.df['Mid_Trunk_z'].to_numpy()
     trunk_vy = analyzer.df['Mid_Trunk_vel_y'].to_numpy()
-    
-    fig7.add_trace(go.Scatter(x=trunk_y, y=trunk_z, mode='lines', line=dict(color='purple'), opacity=0.4, name='Mid Trunk Path'))
-    fig7.add_trace(go.Scatter(x=trunk_y[trunk_vy > 0], y=trunk_z[trunk_vy > 0], mode='markers', marker=dict(color='darkmagenta', size=4), name='Positive Vy'))
-    fig7.add_trace(go.Scatter(x=trunk_y[trunk_vy <= 0], y=trunk_z[trunk_vy <= 0], mode='markers', marker=dict(color='violet', size=4, symbol='x'), name='Negative Vy'))
-    
+
+    fig7.add_trace(go.Scatter(x=trunk_y, y=trunk_z, mode='lines', line={"color": 'purple'}, opacity=0.4, name='Mid Trunk Path'))
+    fig7.add_trace(go.Scatter(x=trunk_y[trunk_vy > 0], y=trunk_z[trunk_vy > 0], mode='markers', marker={"color": 'darkmagenta', "size": 4}, name='Positive Vy'))
+    fig7.add_trace(go.Scatter(x=trunk_y[trunk_vy <= 0], y=trunk_z[trunk_vy <= 0], mode='markers', marker={"color": 'violet', "size": 4, "symbol": 'x'}, name='Negative Vy'))
+
     for leg, color_hs, color_to in [('Right', 'darkred', 'lightcoral'), ('Left', 'darkgreen', 'palegreen')]:
         hs_idx = analyzer.gait_events.get(leg, {}).get('HS', [])
         to_idx = analyzer.gait_events.get(leg, {}).get('TO', [])
         if len(hs_idx) > 0:
-            fig7.add_trace(go.Scatter(x=trunk_y[hs_idx], y=trunk_z[hs_idx], mode='markers', marker=dict(color=color_hs, size=10, symbol='circle', line=dict(width=2, color='black')), name=f'{leg} HS (Trunk)'))
+            fig7.add_trace(go.Scatter(x=trunk_y[hs_idx], y=trunk_z[hs_idx], mode='markers', marker={"color": color_hs, "size": 10, "symbol": 'circle', "line": {"width": 2, "color": 'black'}}, name=f'{leg} HS (Trunk)'))
         if len(to_idx) > 0:
-            fig7.add_trace(go.Scatter(x=trunk_y[to_idx], y=trunk_z[to_idx], mode='markers', marker=dict(color=color_to, size=10, symbol='square', line=dict(width=2, color='black')), name=f'{leg} TO (Trunk)'))
+            fig7.add_trace(go.Scatter(x=trunk_y[to_idx], y=trunk_z[to_idx], mode='markers', marker={"color": color_to, "size": 10, "symbol": 'square', "line": {"width": 2, "color": 'black'}}, name=f'{leg} TO (Trunk)'))
 
     fig7.update_layout(title='Mid Trunk Sagittal View (YZ) w/ Gait Events', xaxis_title='Y (AP)', yaxis_title='Z (Vert)', height=600, template='plotly_white')
     plots_html.append(fig7.to_html(full_html=False, include_plotlyjs=False))
-    
+
     # --- Plot 8: Mid Trunk Kinematics Separated ---
     fig8 = make_subplots(rows=5, cols=1, shared_xaxes=True,
                          subplot_titles=[
                              'Trunk Position Y', 'Trunk Position Z', 'Trunk Velocity Y & Z',
                              'Trunk Acceleration Y & Z', 'Trunk 2D Kin Magnitude'
                          ], vertical_spacing=0.03)
-    
+
     vy_trunk = analyzer.df['Mid_Trunk_vel_y'].to_numpy()
     vz_trunk = analyzer.df['Mid_Trunk_vel_z'].to_numpy()
     ay_trunk = analyzer.df['Mid_Trunk_acc_y'].to_numpy()
     az_trunk = analyzer.df['Mid_Trunk_acc_z'].to_numpy()
     v_yz_trunk = np.sqrt(vy_trunk**2 + vz_trunk**2)
     a_yz_trunk = np.sqrt(ay_trunk**2 + az_trunk**2)
-    
-    fig8.add_trace(go.Scatter(x=t, y=trunk_y, name='Y (AP)', line=dict(color='orange')), row=1, col=1)
-    fig8.add_trace(go.Scatter(x=t, y=trunk_z, name='Z (Vert)', line=dict(color='purple')), row=2, col=1)
-    
-    fig8.add_trace(go.Scatter(x=t, y=vy_trunk, name='Vy', line=dict(color='orange')), row=3, col=1)
-    fig8.add_trace(go.Scatter(x=t, y=vz_trunk, name='Vz', line=dict(color='purple')), row=3, col=1)
-    fig8.add_trace(go.Scatter(x=[t[0], t[-1]], y=[0, 0], mode='lines', line=dict(color='black', dash='dash'), showlegend=False), row=3, col=1)
-    
-    fig8.add_trace(go.Scatter(x=t, y=ay_trunk, name='Ay', line=dict(color='orange')), row=4, col=1)
-    fig8.add_trace(go.Scatter(x=t, y=az_trunk, name='Az', line=dict(color='purple')), row=4, col=1)
-    fig8.add_trace(go.Scatter(x=[t[0], t[-1]], y=[0, 0], mode='lines', line=dict(color='black', dash='dash'), showlegend=False), row=4, col=1)
-    
-    fig8.add_trace(go.Scatter(x=t, y=v_yz_trunk, name='|V_yz|', line=dict(color='blue')), row=5, col=1)
-    fig8.add_trace(go.Scatter(x=t, y=a_yz_trunk, name='|A_yz|', line=dict(color='red', dash='dot')), row=5, col=1)
-    
+
+    fig8.add_trace(go.Scatter(x=t, y=trunk_y, name='Y (AP)', line={"color": 'orange'}), row=1, col=1)
+    fig8.add_trace(go.Scatter(x=t, y=trunk_z, name='Z (Vert)', line={"color": 'purple'}), row=2, col=1)
+
+    fig8.add_trace(go.Scatter(x=t, y=vy_trunk, name='Vy', line={"color": 'orange'}), row=3, col=1)
+    fig8.add_trace(go.Scatter(x=t, y=vz_trunk, name='Vz', line={"color": 'purple'}), row=3, col=1)
+    fig8.add_trace(go.Scatter(x=[t[0], t[-1]], y=[0, 0], mode='lines', line={"color": 'black', "dash": 'dash'}, showlegend=False), row=3, col=1)
+
+    fig8.add_trace(go.Scatter(x=t, y=ay_trunk, name='Ay', line={"color": 'orange'}), row=4, col=1)
+    fig8.add_trace(go.Scatter(x=t, y=az_trunk, name='Az', line={"color": 'purple'}), row=4, col=1)
+    fig8.add_trace(go.Scatter(x=[t[0], t[-1]], y=[0, 0], mode='lines', line={"color": 'black', "dash": 'dash'}, showlegend=False), row=4, col=1)
+
+    fig8.add_trace(go.Scatter(x=t, y=v_yz_trunk, name='|V_yz|', line={"color": 'blue'}), row=5, col=1)
+    fig8.add_trace(go.Scatter(x=t, y=a_yz_trunk, name='|A_yz|', line={"color": 'red', "dash": 'dot'}), row=5, col=1)
+
     add_gait_events(fig8, row=1, col=1)
     add_gait_events(fig8, row=2, col=1)
-    
+
     fig8.update_layout(title='Mid Trunk Kinematics Separated', height=1200, template='plotly_white')
     plots_html.append(fig8.to_html(full_html=False, include_plotlyjs=False))
 
     # ── Vector Coding: Timelines and Donut Charts ────────────────────────────
     vc_summary = report_data.get('VC_Summary', {})
-    
+
     # Colour map for the 4 patterns
     _vc_colours = {
         'In_Phase':        'rgba(90, 110, 250, 0.85)',   # Per screenshot: In-Phase is blue
@@ -1438,7 +1453,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         res = vc_summary.get(vc_key, {})
         if not res.get('gamma_deg'):
             continue
-            
+
         vc_pct     = res['Movement_Percent']
         vc_gamma   = res['gamma_deg']
         vc_pattern = res['Coordination_Pattern']
@@ -1464,8 +1479,8 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         fig_time.add_trace(go.Scatter(
             x=vc_pct, y=vc_gamma,
             mode='markers+lines',
-            marker=dict(color=marker_colours, size=7),
-            line=dict(color='rgba(100,100,100,0.4)', width=1),
+            marker={"color": marker_colours, "size": 7},
+            line={"color": 'rgba(100,100,100,0.4)', "width": 1},
             name='\u03b3 Coupling Angle',
             hovertemplate='%{x:.0f}%<br>\u03b3 = %{y:.1f}\u00b0<extra></extra>',
         ))
@@ -1473,7 +1488,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
             title=f'Coupling Angle Timeline \u2014 {title_suffix}',
             xaxis_title='Movement Progress (%)',
             yaxis_title='Coupling Angle \u03b3 (\u00b0)',
-            yaxis=dict(range=[0, 360], dtick=45),
+            yaxis={"range": [0, 360], "dtick": 45},
             height=420,
             template='plotly_white',
             showlegend=False,
@@ -1490,12 +1505,12 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                 labels.append(_vc_labels[pat])
                 values.append(pct_val)
                 colors.append(_vc_colours[pat])
-                
+
         fig_donut = go.Figure(data=[go.Pie(
-            labels=labels, 
-            values=values, 
+            labels=labels,
+            values=values,
             hole=0.4,
-            marker=dict(colors=colors),
+            marker={"colors": colors},
             textinfo='label+percent',
             sort=False
         )])
@@ -1511,7 +1526,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
 
     plotly_js = '<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>'
     images_html = '\n'.join([f'<div style="margin-bottom: 40px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">{html}</div>' for html in plots_html])
-    
+
     meta_html = ''.join([f'<tr><th>{k}</th><td>{v}</td></tr>' for k,v in report_data.get('Metadata', {}).items()])
     spat_global = ''.join([f'<tr><th>{k.replace("_", " ")}</th><td>{v:.3f}</td></tr>' if isinstance(v, (int, float)) else f'<tr><th>{k.replace("_", " ")}</th><td>{v}</td></tr>' for k,v in report_data.get('Spatiotemporal', {}).get('Global', {}).items()])
     spat_left_right = build_side_by_side_rows(
@@ -1524,14 +1539,14 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         else f'<tr><th>{k.replace("_", " ")}</th><td>{v}</td></tr>'
         for k, v in report_data.get('Phases_Seconds', {}).items()
     ])
-    
+
     steps_list = report_data.get('Steps_Timeseries', [])
     steps_html = ''.join([
         f"<tr><td>{i+1}</td><td style='color: {'red' if s['Side'] == 'Right' else 'green'}; font-weight: bold;'>{s['Side']}</td>"
         f"<td>{s['Time_s']:.3f}</td><td>{s.get('Y_m', '')}</td><td>{phase_display_name(s['Phase'])}</td>"
         f"<td>{s.get('Stance_Time_s', '')}</td><td>{s.get('Step_Length_m', '')}</td>"
         f"<td>{s.get('Step_Width_m', '')}</td><td>{s.get('Stride_Length_m', '')}</td>"
-        f"<td>{s.get('Swing_Time_s', '')}</td></tr>" 
+        f"<td>{s.get('Swing_Time_s', '')}</td></tr>"
         for i, s in enumerate(steps_list)
     ])
 
@@ -1588,12 +1603,12 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
         <div class="container">
             <h1><i>vailá</i> - TUGTURN Analysis Interactive Report</h1>
             <h2>Subject: {name}</h2>
-            
+
             {videos_html}
-            
+
             <h3 class="section-title">Visual Charts</h3>
             {images_html}
-            
+
             <h3 class="section-title">Metadata</h3>
             <div class="table-container">
                 <table>
@@ -1601,7 +1616,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                     <tbody>{meta_html}</tbody>
                 </table>
             </div>
-            
+
             <h3 class="section-title">Spatiotemporal Parameters</h3>
             <h4>Global</h4>
             <div class="table-container">
@@ -1617,7 +1632,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                     <tbody>{spat_left_right}</tbody>
                 </table>
             </div>
-            
+
             <h3 class="section-title">Step-by-Step Timeseries (Gait Events / HS)</h3>
             <div class="table-container">
                 <table style="width: 100%;">
@@ -1625,7 +1640,7 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
                     <tbody>{steps_html}</tbody>
                 </table>
             </div>
-            
+
             <h3 class="section-title">TUGTURN Phases (Seconds)</h3>
             <div class="table-container">
                 <table>
@@ -1637,16 +1652,14 @@ def generate_plotly_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps:
     </body>
     </html>
     """
-    
+
     report_file = out_dir / f"{name}_tugturn_report_interactive.html"
     report_file.write_text(html_content, encoding='utf-8')
     return report_file
 
 
 def generate_phase_skeleton_gifs(analyzer: TUGAnalyzer, fps: float, report_data: dict, out_dir: Path, name: str):
-    import matplotlib.pyplot as plt
     import matplotlib.animation as animation
-    from mpl_toolkits.mplot3d import Axes3D
     import numpy as np
 
     skeleton_connections = load_mediapipe_pose_connections()
@@ -1657,9 +1670,9 @@ def generate_phase_skeleton_gifs(analyzer: TUGAnalyzer, fps: float, report_data:
             skeleton_series[point_idx] = analyzer._get_point_3d(point_idx)
         except ValueError:
             continue
-            
+
     phases = report_data.get('Phases_Seconds', {})
-    
+
     all_pts = []
     for s in skeleton_series.values():
         all_pts.append(s)
@@ -1678,40 +1691,41 @@ def generate_phase_skeleton_gifs(analyzer: TUGAnalyzer, fps: float, report_data:
         start_s, end_s = val
         if end_s <= start_s:
             continue
-        
+
         start_idx = int(start_s * fps)
         end_idx = int(end_s * fps)
-        
+
         step = max(1, int(fps / 15))
         frames = list(range(start_idx, end_idx, step))
-        if not frames: continue
-        
+        if not frames:
+            continue
+
         fig = plt.figure(figsize=(4, 4))
         ax = fig.add_subplot(111, projection='3d')
         plt.subplots_adjust(left=0, right=1, bottom=0, top=1)
-        
+
         lines = []
         for a_idx, b_idx in skeleton_connections:
             line, = ax.plot([], [], [], color=get_connection_color(a_idx, b_idx), lw=2)
             lines.append((line, a_idx, b_idx))
-            
-        ax.set_xlim([x_min, x_max])
-        ax.set_ylim([y_min, y_max])
-        ax.set_zlim([z_min, z_max])
-        
+
+        ax.set_xlim((x_min, x_max))  # type: ignore
+        ax.set_ylim((y_min, y_max))  # type: ignore
+        ax.set_zlim((z_min, z_max))  # type: ignore
+
         # Set consistent 1:1:1 aspect ratio based on limits
         x_range = x_max - x_min
         y_range = y_max - y_min
         z_range = z_max - z_min
         max_range = max(x_range, y_range, z_range)
         if max_range > 0:
-            ax.set_box_aspect([x_range/max_range, y_range/max_range, z_range/max_range])
-            
+            ax.set_box_aspect((x_range/max_range, y_range/max_range, z_range/max_range))  # type: ignore
+
         ax.set_title(phase_display_name(phase_name), pad=0)
         ax.axis('off')
-        
-        def update(f):
-            for line, a_idx, b_idx in lines:
+
+        def update(f, lines_cache=lines):
+            for line, a_idx, b_idx in lines_cache:
                 if a_idx in skeleton_series and b_idx in skeleton_series:
                     pa = skeleton_series[a_idx][f]
                     pb = skeleton_series[b_idx][f]
@@ -1721,19 +1735,19 @@ def generate_phase_skeleton_gifs(analyzer: TUGAnalyzer, fps: float, report_data:
                     else:
                         line.set_data([], [])
                         line.set_3d_properties([])
-            return [l[0] for l in lines]
-            
+            return [l_obj[0] for l_obj in lines_cache]
+
         anim = animation.FuncAnimation(fig, update, frames=frames, blit=False)
         gif_name = f"{name}_{phase_name}.gif"
         gif_path = out_dir / gif_name
         anim.save(str(gif_path), writer=animation.PillowWriter(fps=15))
         plt.close(fig)
-        
+
         phase_videos.append({
             'Phase': canonical_phase_name(phase_name),
             'Video_Path': str(gif_path.resolve())
         })
-        
+
     return phase_videos
 
 def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, fps: float, report_data: dict):
@@ -1742,15 +1756,14 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     including XYZ overlay with gait events and sagittal stick figures.
     """
     import base64
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import matplotlib.gridspec as gridspec
-    from mpl_toolkits.mplot3d import Axes3D
-    from matplotlib.lines import Line2D
     from io import BytesIO
-    
+
+    import matplotlib.gridspec as gridspec
+    import numpy as np
+    from matplotlib.lines import Line2D
+
     plt.switch_backend('Agg') # Avoid Tkinter freezing in batch
-    
+
     com = analyzer.df[['CoM_x', 'CoM_y', 'CoM_z']].to_numpy()
     t = np.arange(len(com)) / fps
     skeleton_connections = load_mediapipe_pose_connections()
@@ -1763,37 +1776,37 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
             skeleton_series[point_idx] = analyzer._get_point_3d(point_idx)
         except ValueError:
             continue
-    
+
     def get_base64_image(fig):
         buf = BytesIO()
         fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
         plt.close(fig)
         buf.seek(0)
         return base64.b64encode(buf.read()).decode('utf-8')
-        
+
     images_b64 = []
-    
+
     # --- Plot 1: CoM XYZ vs Time + Gait Events ---
     fig1 = plt.figure(figsize=(16, 6))
     ax1 = fig1.add_subplot(111)
     ax1.plot(t, com[:, 0], label='X (Mediolateral)', color='blue', linewidth=2)
     ax1.plot(t, com[:, 1], label='Y (Anteroposterior)', color='orange', linewidth=2)
     ax1.plot(t, com[:, 2], label='Z (Vertical)', color='purple', linewidth=2)
-    
+
     for leg, color in [('Right', 'red'), ('Left', 'green')]:
         for ev, ls in [('HS', '--'), ('TO', ':')]:
             frames = analyzer.gait_events.get(leg, {}).get(ev, [])
             for i, f in enumerate(frames):
                 label = f"{leg} {ev}" if i == 0 else ""
                 ax1.axvline(x=f/fps, color=color, linestyle=ls, alpha=0.6, label=label)
-    
+
     ax1.set_title('CoM Trajectory (X, Y, Z) vs Time + Gait Events (Red=Right, Green=Left | Dashed=HS, Dotted=TO)')
     ax1.set_xlabel('Time (s)')
     ax1.set_ylabel('Position (m)')
     ax1.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     ax1.grid(True)
     images_b64.append(get_base64_image(fig1))
-    
+
     # --- Plot 2: Split XYZ ---
     fig2 = plt.figure(figsize=(16, 4))
     gs2 = gridspec.GridSpec(1, 3, figure=fig2)
@@ -1811,7 +1824,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     ax_z.grid(True)
     plt.tight_layout()
     images_b64.append(get_base64_image(fig2))
-    
+
     # --- Plot 3: Sagittal Plane Stick Figures ---
     def draw_stick_figures(ax, frames, title, max_frames=12):
         for f in sample_frames(frames, max_frames=max_frames):
@@ -1842,19 +1855,19 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
             for f in analyzer.gait_events.get(leg, {}).get(ev, []):
                 events.append(int(round(f)))
     events.sort()
-    
+
     phases = report_data.get('Phases_Seconds', {})
     first_gait = phases.get('first_gait', (0, 0))
     second_gait = phases.get('second_gait', (0, 0))
     wf_s, wf_e = first_gait
     wb_s, wb_e = second_gait
-    
+
     fig3 = plt.figure(figsize=(16, 5))
     draw_stick_figures(fig3.add_subplot(1, 2, 1), [f for f in events if wf_s*fps <= f <= wf_e*fps], "First gait sagittal events (Y-Z)")
     draw_stick_figures(fig3.add_subplot(1, 2, 2), [f for f in events if wb_s*fps <= f <= wb_e*fps], "Second gait sagittal events (Y-Z)")
     plt.tight_layout()
     images_b64.append(get_base64_image(fig3))
-    
+
     # --- Plot 4: 3D Equal Aspect Plot ---
     fig4 = plt.figure(figsize=(10, 8))
     ax4 = fig4.add_subplot(111, projection='3d')
@@ -1893,104 +1906,110 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
                 linewidth=1.3,
                 alpha=0.28,
             )
-    
+
     if last_idx < len(com) - 1:
         ax4.plot(com[last_idx:, 0], com[last_idx:, 1], com[last_idx:, 2], color='black', linestyle=':', linewidth=2, label='Remainder')
 
-    ax4.scatter(com[0, 0], com[0, 1], com[0, 2], color='green', s=100, label='Start')
-    ax4.scatter(com[-1, 0], com[-1, 1], com[-1, 2], color='red', s=100, label='End')
+    ax4.scatter(com[0, 0], com[0, 1], com[0, 2], color='green', s=100, label='Start')  # type: ignore
+    ax4.scatter(com[-1, 0], com[-1, 1], com[-1, 2], color='red', s=100, label='End')  # type: ignore
     max_range = np.array([com[:,0].max()-com[:,0].min(), com[:,1].max()-com[:,1].min(), com[:,2].max()-com[:,2].min()]).max() / 2.0
     mid_x, mid_y, mid_z = (com[:,0].max()+com[:,0].min())*0.5, (com[:,1].max()+com[:,1].min())*0.5, (com[:,2].max()+com[:,2].min())*0.5
     ax4.set_xlim(mid_x - max_range, mid_x + max_range)
     ax4.set_ylim(mid_y - max_range, mid_y + max_range)
-    ax4.set_zlim(mid_z - max_range, mid_z + max_range)
-    ax4.set_box_aspect([1, 1, 1])
+    ax4.set_zlim(mid_z - max_range, mid_z + max_range)  # type: ignore
+    ax4.set_box_aspect((1, 1, 1))  # type: ignore
     ax4.set_title('3D CoM Trajectory (Equal Aspect)')
     ax4.set_xlabel('X (ML)')
     ax4.set_ylabel('Y (AP)')
-    ax4.set_zlabel('Z (Vert)')
+    ax4.set_zlabel('Z (Vert)')  # type: ignore
     ax4.legend()
     images_b64.append(get_base64_image(fig4))
 
     # --- Plot 5: Mean Foot Sagittal View (YZ) - Progressive vs Regressive ---
     fig5 = plt.figure(figsize=(14, 8))
     ax5 = fig5.add_subplot(111)
-    
+
     med_r_y = analyzer.df['Med_Foot_Right_y'].to_numpy()
     med_r_z = analyzer.df['Med_Foot_Right_z'].to_numpy()
     med_r_vy = analyzer.df['Med_Foot_Right_vel_y'].to_numpy()
-    
+
     med_l_y = analyzer.df['Med_Foot_Left_y'].to_numpy()
     med_l_z = analyzer.df['Med_Foot_Left_z'].to_numpy()
     med_l_vy = analyzer.df['Med_Foot_Left_vel_y'].to_numpy()
-    
+
     # Right Foot
     ax5.plot(med_r_y, med_r_z, color='red', alpha=0.3, label='Right Path')
     ax5.scatter(med_r_y[med_r_vy > 0], med_r_z[med_r_vy > 0], color='darkred', s=15, label='Right Positive Vy')
     ax5.scatter(med_r_y[med_r_vy <= 0], med_r_z[med_r_vy <= 0], color='lightcoral', marker='x', s=15, label='Right Negative Vy')
-    
+
     hs_r_idx = analyzer.gait_events.get('Right', {}).get('HS', [])
     to_r_idx = analyzer.gait_events.get('Right', {}).get('TO', [])
-    if len(hs_r_idx) > 0: ax5.scatter(med_r_y[hs_r_idx], med_r_z[hs_r_idx], color='darkred', marker='o', edgecolors='black', s=50, label='Right HS')
-    if len(to_r_idx) > 0: ax5.scatter(med_r_y[to_r_idx], med_r_z[to_r_idx], color='lightcoral', marker='s', edgecolors='black', s=50, label='Right TO')
+    if len(hs_r_idx) > 0:
+        ax5.scatter(med_r_y[hs_r_idx], med_r_z[hs_r_idx], color='darkred', marker='o', edgecolors='black', s=50, label='Right HS')
+    if len(to_r_idx) > 0:
+        ax5.scatter(med_r_y[to_r_idx], med_r_z[to_r_idx], color='lightcoral', marker='s', edgecolors='black', s=50, label='Right TO')
 
     # Left Foot
     ax5.plot(med_l_y, med_l_z, color='green', alpha=0.3, label='Left Path')
     ax5.scatter(med_l_y[med_l_vy > 0], med_l_z[med_l_vy > 0], color='darkgreen', s=15, label='Left Positive Vy')
     ax5.scatter(med_l_y[med_l_vy <= 0], med_l_z[med_l_vy <= 0], color='lightgreen', marker='x', s=15, label='Left Negative Vy')
-    
+
     hs_l_idx = analyzer.gait_events.get('Left', {}).get('HS', [])
     to_l_idx = analyzer.gait_events.get('Left', {}).get('TO', [])
-    if len(hs_l_idx) > 0: ax5.scatter(med_l_y[hs_l_idx], med_l_z[hs_l_idx], color='darkgreen', marker='o', edgecolors='black', s=50, label='Left HS')
-    if len(to_l_idx) > 0: ax5.scatter(med_l_y[to_l_idx], med_l_z[to_l_idx], color='lightgreen', marker='s', edgecolors='black', s=50, label='Left TO')
-    
+    if len(hs_l_idx) > 0:
+        ax5.scatter(med_l_y[hs_l_idx], med_l_z[hs_l_idx], color='darkgreen', marker='o', edgecolors='black', s=50, label='Left HS')
+    if len(to_l_idx) > 0:
+        ax5.scatter(med_l_y[to_l_idx], med_l_z[to_l_idx], color='lightgreen', marker='s', edgecolors='black', s=50, label='Left TO')
+
     ax5.set_title('Sagittal View (YZ) - Progressive (Vy>0) vs Regressive (Vy<=0)')
     ax5.set_xlabel('Y (Anteroposterior) [m]')
     ax5.set_ylabel('Z (Vertical) [m]')
     ax5.legend()
     ax5.grid(True)
-    
+
     plt.tight_layout()
     images_b64.append(get_base64_image(fig5))
-    
+
     # --- Plot 6: Mean Foot YZ Kinematics (Position, Velocity, Acceleration, 2D Magnitude) vs Time ---
     fig6 = plt.figure(figsize=(16, 25))
     gs6 = gridspec.GridSpec(5, 2, figure=fig6)
-    
+
     for side, prefix, color in [('Left', 'Med_Foot_Left', 'green'), ('Right', 'Med_Foot_Right', 'red')]:
         col = 0 if side == 'Left' else 1
-        
+
         y = analyzer.df[f'{prefix}_y'].to_numpy()
         z = analyzer.df[f'{prefix}_z'].to_numpy()
         vy = analyzer.df[f'{prefix}_vel_y'].to_numpy()
         vz = analyzer.df[f'{prefix}_vel_z'].to_numpy()
         ay = analyzer.df[f'{prefix}_acc_y'].to_numpy()
         az = analyzer.df[f'{prefix}_acc_z'].to_numpy()
-        
+
         v_yz = np.sqrt(vy**2 + vz**2)
         a_yz = np.sqrt(ay**2 + az**2)
-        
+
         # Position Y
         ax_pos_y = fig6.add_subplot(gs6[0, col])
         ax_pos_y.plot(t, y, label='Y (AP)', color='orange')
         ax_pos_y.set_title(f'{side} Mean Foot Position Y')
         ax_pos_y.set_ylabel('Position (m)')
-        ax_pos_y.grid(True); ax_pos_y.legend()
+        ax_pos_y.grid(True)
+        ax_pos_y.legend()
 
         # Position Z
         ax_pos_z = fig6.add_subplot(gs6[1, col])
         ax_pos_z.plot(t, z, label='Z (Vert)', color='purple')
         ax_pos_z.set_title(f'{side} Mean Foot Position Z')
         ax_pos_z.set_ylabel('Position (m)')
-        ax_pos_z.grid(True); ax_pos_z.legend()
-        
+        ax_pos_z.grid(True)
+        ax_pos_z.legend()
+
         # Add gait events to Pos Y & Z plots
         for ev, ls in [('HS', '--'), ('TO', ':')]:
             frames = analyzer.gait_events.get(side, {}).get(ev, [])
             for f in frames:
                 ax_pos_y.axvline(x=f/fps, color='black', linestyle=ls, alpha=0.5)
                 ax_pos_z.axvline(x=f/fps, color='black', linestyle=ls, alpha=0.5)
-        
+
         # Velocity
         ax_vel = fig6.add_subplot(gs6[2, col])
         ax_vel.plot(t, vy, label='Vy', color='orange')
@@ -1998,8 +2017,9 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
         ax_vel.axhline(0, color='black', linewidth=1, linestyle='--')
         ax_vel.set_title(f'{side} Mean Foot Velocity (Vy, Vz)')
         ax_vel.set_ylabel('Velocity (m/s)')
-        ax_vel.grid(True); ax_vel.legend()
-        
+        ax_vel.grid(True)
+        ax_vel.legend()
+
         # Acceleration
         ax_acc = fig6.add_subplot(gs6[3, col])
         ax_acc.plot(t, ay, label='Ay', color='orange')
@@ -2007,8 +2027,9 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
         ax_acc.axhline(0, color='black', linewidth=1, linestyle='--')
         ax_acc.set_title(f'{side} Mean Foot Acceleration (Ay, Az)')
         ax_acc.set_ylabel('Acceleration (m/s²)')
-        ax_acc.grid(True); ax_acc.legend()
-        
+        ax_acc.grid(True)
+        ax_acc.legend()
+
         # 2D Magnitude
         ax_mag = fig6.add_subplot(gs6[4, col])
         ax_mag.plot(t, v_yz, label='|V_yz|', color='blue')
@@ -2016,71 +2037,76 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
         ax_mag.set_title(f'{side} Mean Foot 2D Kinematics Magnitude (YZ)')
         ax_mag.set_ylabel('Magnitude')
         ax_mag.set_xlabel('Time (s)')
-        ax_mag.grid(True); ax_mag.legend()
-        
+        ax_mag.grid(True)
+        ax_mag.legend()
+
     plt.tight_layout()
     images_b64.append(get_base64_image(fig6))
 
     # --- Plot 7: Mid Trunk Sagittal View (YZ) - Progressive vs Regressive ---
     fig7 = plt.figure(figsize=(14, 8))
     ax7 = fig7.add_subplot(111)
-    
+
     trunk_y = analyzer.df['Mid_Trunk_y'].to_numpy()
     trunk_z = analyzer.df['Mid_Trunk_z'].to_numpy()
     trunk_vy = analyzer.df['Mid_Trunk_vel_y'].to_numpy()
-    
+
     ax7.plot(trunk_y, trunk_z, color='purple', alpha=0.3, label='Mid Trunk Path')
     ax7.scatter(trunk_y[trunk_vy > 0], trunk_z[trunk_vy > 0], color='darkmagenta', s=15, label='Positive Vy')
     ax7.scatter(trunk_y[trunk_vy <= 0], trunk_z[trunk_vy <= 0], color='violet', marker='x', s=15, label='Negative Vy')
-    
+
     for leg, color_hs, color_to in [('Right', 'darkred', 'lightcoral'), ('Left', 'darkgreen', 'lightgreen')]:
         hs_idx = analyzer.gait_events.get(leg, {}).get('HS', [])
         to_idx = analyzer.gait_events.get(leg, {}).get('TO', [])
-        if len(hs_idx) > 0: ax7.scatter(trunk_y[hs_idx], trunk_z[hs_idx], color=color_hs, marker='o', edgecolors='black', s=50, label=f'{leg} HS (Trunk)')
-        if len(to_idx) > 0: ax7.scatter(trunk_y[to_idx], trunk_z[to_idx], color=color_to, marker='s', edgecolors='black', s=50, label=f'{leg} TO (Trunk)')
-    
+        if len(hs_idx) > 0:
+            ax7.scatter(trunk_y[hs_idx], trunk_z[hs_idx], color=color_hs, marker='o', edgecolors='black', s=50, label=f'{leg} HS (Trunk)')
+        if len(to_idx) > 0:
+            ax7.scatter(trunk_y[to_idx], trunk_z[to_idx], color=color_to, marker='s', edgecolors='black', s=50, label=f'{leg} TO (Trunk)')
+
     ax7.set_title('Mid Trunk Sagittal View (YZ) - Progressive (Vy>0) vs Regressive (Vy<=0)')
     ax7.set_xlabel('Y (Anteroposterior) [m]')
     ax7.set_ylabel('Z (Vertical) [m]')
     ax7.legend()
     ax7.grid(True)
-    
+
     plt.tight_layout()
     images_b64.append(get_base64_image(fig7))
-    
+
     # --- Plot 8: Mid Trunk Kinematics (Position, Velocity, Acceleration, 2D Magnitude) vs Time ---
     fig8 = plt.figure(figsize=(12, 25))
     gs8 = gridspec.GridSpec(5, 1, figure=fig8)
-    
+
     vy_trunk = analyzer.df['Mid_Trunk_vel_y'].to_numpy()
     vz_trunk = analyzer.df['Mid_Trunk_vel_z'].to_numpy()
     ay_trunk = analyzer.df['Mid_Trunk_acc_y'].to_numpy()
     az_trunk = analyzer.df['Mid_Trunk_acc_z'].to_numpy()
-    
+
     v_yz_trunk = np.sqrt(vy_trunk**2 + vz_trunk**2)
     a_yz_trunk = np.sqrt(ay_trunk**2 + az_trunk**2)
-    
+
     # Position Y
     ax_pos_trunk_y = fig8.add_subplot(gs8[0, 0])
     ax_pos_trunk_y.plot(t, trunk_y, label='Y (AP)', color='orange')
     ax_pos_trunk_y.set_title('Mid Trunk Position Y')
     ax_pos_trunk_y.set_ylabel('Position (m)')
-    ax_pos_trunk_y.grid(True); ax_pos_trunk_y.legend()
+    ax_pos_trunk_y.grid(True)
+    ax_pos_trunk_y.legend()
 
     # Position Z
     ax_pos_trunk_z = fig8.add_subplot(gs8[1, 0])
     ax_pos_trunk_z.plot(t, trunk_z, label='Z (Vert)', color='purple')
     ax_pos_trunk_z.set_title('Mid Trunk Position Z')
     ax_pos_trunk_z.set_ylabel('Position (m)')
-    ax_pos_trunk_z.grid(True); ax_pos_trunk_z.legend()
-    
-    for leg, color in [('Right', 'red'), ('Left', 'green')]:
+    ax_pos_trunk_z.grid(True)
+    ax_pos_trunk_z.legend()
+
+    for leg, _color in [('Right', 'red'), ('Left', 'green')]:
         for ev, ls in [('HS', '--'), ('TO', ':')]:
             frames = analyzer.gait_events.get(leg, {}).get(ev, [])
             for f in frames:
                 ax_pos_trunk_y.axvline(x=f/fps, color='black', linestyle=ls, alpha=0.5)
                 ax_pos_trunk_z.axvline(x=f/fps, color='black', linestyle=ls, alpha=0.5)
-    
+
     # Velocity
     ax_vel_trunk = fig8.add_subplot(gs8[2, 0])
     ax_vel_trunk.plot(t, vy_trunk, label='Vy', color='orange')
@@ -2088,8 +2114,9 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     ax_vel_trunk.axhline(0, color='black', linewidth=1, linestyle='--')
     ax_vel_trunk.set_title('Mid Trunk Velocity (Vy, Vz)')
     ax_vel_trunk.set_ylabel('Velocity (m/s)')
-    ax_vel_trunk.grid(True); ax_vel_trunk.legend()
-    
+    ax_vel_trunk.grid(True)
+    ax_vel_trunk.legend()
+
     # Acceleration
     ax_acc_trunk = fig8.add_subplot(gs8[3, 0])
     ax_acc_trunk.plot(t, ay_trunk, label='Ay', color='orange')
@@ -2097,8 +2124,9 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     ax_acc_trunk.axhline(0, color='black', linewidth=1, linestyle='--')
     ax_acc_trunk.set_title('Mid Trunk Acceleration (Ay, Az)')
     ax_acc_trunk.set_ylabel('Acceleration (m/s²)')
-    ax_acc_trunk.grid(True); ax_acc_trunk.legend()
-    
+    ax_acc_trunk.grid(True)
+    ax_acc_trunk.legend()
+
     # 2D Magnitude
     ax_mag_trunk = fig8.add_subplot(gs8[4, 0])
     ax_mag_trunk.plot(t, v_yz_trunk, label='|V_yz|', color='blue')
@@ -2106,8 +2134,9 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     ax_mag_trunk.set_title('Mid Trunk 2D Kinematics Magnitude (YZ)')
     ax_mag_trunk.set_ylabel('Magnitude')
     ax_mag_trunk.set_xlabel('Time (s)')
-    ax_mag_trunk.grid(True); ax_mag_trunk.legend()
-    
+    ax_mag_trunk.grid(True)
+    ax_mag_trunk.legend()
+
     plt.tight_layout()
     images_b64.append(get_base64_image(fig8))
 
@@ -2198,7 +2227,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
                 colors=colors,
                 startangle=90,
                 counterclock=False,
-                wedgeprops=dict(width=0.45, edgecolor='white'),
+                wedgeprops={"width": 0.45, "edgecolor": 'white'},
                 autopct=lambda p: f'{p:.1f}%',
                 pctdistance=0.78,
                 labeldistance=1.05,
@@ -2212,7 +2241,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
 
     # --- HTML Formatting ---
     images_html = '\n'.join([f'<img src="data:image/png;base64,{b64}" alt="TUG Chart" />' for b64 in images_b64])
-    
+
     meta_html = ''.join([f'<tr><th>{k}</th><td>{v}</td></tr>' for k,v in report_data.get('Metadata', {}).items()])
     spat_global = ''.join([f'<tr><th>{k.replace("_", " ")}</th><td>{v:.3f}</td></tr>' if isinstance(v, (int, float)) else f'<tr><th>{k.replace("_", " ")}</th><td>{v}</td></tr>' for k,v in report_data.get('Spatiotemporal', {}).get('Global', {}).items()])
     spat_left_right = build_side_by_side_rows(
@@ -2225,17 +2254,17 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
         else f'<tr><th>{k.replace("_", " ")}</th><td>{v}</td></tr>'
         for k, v in report_data.get('Phases_Seconds', {}).items()
     ])
-    
+
     steps_list = report_data.get('Steps_Timeseries', [])
     steps_html = ''.join([
         f"<tr><td>{i+1}</td><td style='color: {'red' if s['Side'] == 'Right' else 'green'}; font-weight: bold;'>{s['Side']}</td>"
         f"<td>{s['Time_s']:.3f}</td><td>{s.get('Y_m', '')}</td><td>{phase_display_name(s['Phase'])}</td>"
         f"<td>{s.get('Stance_Time_s', '')}</td><td>{s.get('Step_Length_m', '')}</td>"
         f"<td>{s.get('Step_Width_m', '')}</td><td>{s.get('Stride_Length_m', '')}</td>"
-        f"<td>{s.get('Swing_Time_s', '')}</td></tr>" 
+        f"<td>{s.get('Swing_Time_s', '')}</td></tr>"
         for i, s in enumerate(steps_list)
     ])
-    
+
     phase_videos = report_data.get('Phase_Videos', [])
     videos_html = ""
     if phase_videos:
@@ -2289,12 +2318,12 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
         <div class="container">
             <h1><i>vailá</i> - TUGTURN Analysis Report</h1>
             <h2>Subject: {name}</h2>
-            
+
             {videos_html}
-            
+
             <h3 class="section-title">Visual Charts</h3>
             {images_html}
-            
+
             <h3 class="section-title">Metadata</h3>
             <div class="table-container">
                 <table>
@@ -2302,7 +2331,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
                     <tbody>{meta_html}</tbody>
                 </table>
             </div>
-            
+
             <h3 class="section-title">Spatiotemporal Parameters</h3>
             <h4>Global</h4>
             <div class="table-container">
@@ -2318,7 +2347,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
                     <tbody>{spat_left_right}</tbody>
                 </table>
             </div>
-            
+
             <h3 class="section-title">Step-by-Step Timeseries (Gait Events / HS)</h3>
             <div class="table-container">
                 <table style="width: 100%;">
@@ -2326,7 +2355,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
                     <tbody>{steps_html}</tbody>
                 </table>
             </div>
-            
+
             <h3 class="section-title">TUGTURN Phases (Seconds)</h3>
             <div class="table-container">
                 <table>
@@ -2338,7 +2367,7 @@ def generate_matplotlib_report(analyzer: TUGAnalyzer, out_dir: Path, name: str, 
     </body>
     </html>
     """
-    
+
     report_file = out_dir / f"{name}_tugturn_report.html"
     report_file.write_text(html_content, encoding='utf-8')
     return report_file
@@ -2408,7 +2437,6 @@ def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, start_s: 
         return result
 
     # ── Interpolate to 101 points (0 → 100% of movement) ───────────────────
-    from scipy.ndimage import gaussian_filter1d
     pct = np.linspace(0, 100, 101)
     old_pct = np.linspace(0, 100, len(trunk_turn))
 
@@ -2438,7 +2466,7 @@ def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, start_s: 
     n = len(patterns)
 
     counts = {p: patterns.count(p) for p in ('In_Phase', 'Anti_Phase', 'Proximal_Phase', 'Distal_Phase')}
-    dominant = max(counts, key=counts.get)
+    dominant = max(counts.items(), key=lambda kv: kv[1])[0]
 
     # ── Circular SD (CAV) ────────────────────────────────────────────────────
     gamma_rad_arr = np.radians(gamma_deg)
@@ -2461,7 +2489,7 @@ def calculate_axial_vector_coding(analyzer: 'TUGAnalyzer', fps: float, start_s: 
 
 def calculate_limb_vector_coding_y(analyzer: 'TUGAnalyzer', fps: float, start_s: float, end_s: float, joint_a_idx: int, joint_b_idx: int) -> dict:
     """
-    Calculates the Y-axis (Anteroposterior) Vector Coding between two joints 
+    Calculates the Y-axis (Anteroposterior) Vector Coding between two joints
     (e.g., Elbow vs Knee) relative to the mid-trunk during a specific phase.
     """
     result = {
@@ -2475,7 +2503,7 @@ def calculate_limb_vector_coding_y(analyzer: 'TUGAnalyzer', fps: float, start_s:
         'CAV_deg': 0.0,
         'Dominant_Pattern': 'N/A',
     }
-    
+
     try:
         pt_a = analyzer._get_point_3d(joint_a_idx)[:, 1]  # Y only
         pt_b = analyzer._get_point_3d(joint_b_idx)[:, 1]  # Y only
@@ -2483,36 +2511,36 @@ def calculate_limb_vector_coding_y(analyzer: 'TUGAnalyzer', fps: float, start_s:
     except ValueError as e:
         print(f"  Limb VC: could not extract landmark data — {e}")
         return result
-        
+
     rel_a = pt_a - mt_y
     rel_b = pt_b - mt_y
-    
+
     s_idx = int(start_s * fps)
     e_idx = int(end_s * fps)
     N     = len(rel_a)
-    
+
     if e_idx <= s_idx or s_idx >= N:
         return result
-        
+
     e_idx = min(e_idx, N)
     a_phase = rel_a[s_idx:e_idx]
     b_phase = rel_b[s_idx:e_idx]
-    
+
     if len(a_phase) < 3:
         return result
-        
+
     pct = np.linspace(0, 100, 101)
     old_pct = np.linspace(0, 100, len(a_phase))
-    
+
     a_interp = np.interp(pct, old_pct, a_phase)
     b_interp = np.interp(pct, old_pct, b_phase)
-    
+
     d_a = np.diff(a_interp)
     d_b = np.diff(b_interp)
-    
+
     gamma_rad = np.arctan2(d_b, d_a)
     gamma_deg = np.degrees(gamma_rad) % 360.0
-    
+
     def _classify(g: float) -> str:
         g = g % 360.0
         if (  0  <= g <  22.5) or (157.5 <= g < 202.5) or (337.5 <= g <= 360):
@@ -2528,7 +2556,7 @@ def calculate_limb_vector_coding_y(analyzer: 'TUGAnalyzer', fps: float, start_s:
     n = len(patterns)
 
     counts = {p: patterns.count(p) for p in ('In_Phase', 'Anti_Phase', 'Proximal_Phase', 'Distal_Phase')}
-    dominant = max(counts, key=counts.get)
+    dominant = max(counts.items(), key=lambda kv: kv[1])[0]
 
     gamma_rad_arr = np.radians(gamma_deg)
     R = np.sqrt(np.mean(np.cos(gamma_rad_arr))**2 + np.mean(np.sin(gamma_rad_arr))**2)
@@ -2548,7 +2576,7 @@ def calculate_limb_vector_coding_y(analyzer: 'TUGAnalyzer', fps: float, start_s:
     return result
 
 
-def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_chair_tol: float = 0.2):
+def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path | None = None, y_chair_tol: float = 0.2):
 
     print(f"\nProcessing {csv_path.name}...")
     try:
@@ -2556,7 +2584,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     except Exception as e:
         print(f"Failed to load {csv_path.name}: {e}")
         return
-        
+
     # Metadata config
     toml_path = config_file if config_file and config_file.exists() else csv_path.with_suffix('.toml')
     metadata = {}
@@ -2567,7 +2595,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
                 print(f"Loaded metadata from {toml_path.name}: {metadata}")
         except Exception as e:
             print(f"Warning: Failed to load TOML metadata {toml_path.name} - {e}")
-    
+
     raw_fps = metadata.get('FPS', 30.0)
     if isinstance(raw_fps, str) and '/' in raw_fps:
         try:
@@ -2580,7 +2608,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
             fps = float(raw_fps)
         except (ValueError, TypeError):
             fps = 30.0
-            
+
     analyzer = TUGAnalyzer(df, fs=fps)
     analyzer.calculate_com_3d()
     analyzer.extract_kinematics()
@@ -2604,11 +2632,11 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     analyzer.detect_gait_events()
     phases = analyzer.segment_tug_phases()
 
-    
+
     # Strictly filter out any gait events that fall outside the First gait and Second gait phases
     wf_s, wf_e = phases.get('first_gait', (0, 0))
     wb_s, wb_e = phases.get('second_gait', (0, 0))
-    
+
     for leg in ['Right', 'Left']:
         for ev in ['HS', 'TO']:
             frames = analyzer.gait_events.get(leg, {}).get(ev, [])
@@ -2621,41 +2649,41 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
                     print(f"Notice: Removed fictitious {leg} {ev} step at time {t:.2f}s (outside gait phases).")
             if len(frames) > 0:
                 analyzer.gait_events[leg][ev] = np.array(valid_frames, dtype=int)
-    
+
     stats = analyzer.calculate_spatiotemporal_params(fps=fps, phases=phases)
-    
+
     # Calculate individual step times
     steps_list = []
-    
+
     sts_s, sts_e = phases.get('stand', (0,0))
     wf_s, wf_e = phases.get('first_gait', (0, 0))
     turn_s, turn_e = phases.get('turn180', (0,0))
     wb_s, wb_e = phases.get('second_gait', (0, 0))
     sit_s, sit_e = phases.get('sit', (0,0))
-    
+
     pause_s, pause_e = phases.get('stop_5s', (wf_e, turn_s))
-    
-    y_chair = float(getattr(analyzer, '_meta_y_chair', 1.125))
-    y_turn  = float(getattr(analyzer, '_meta_y_turn', 4.5))
-    y_tol   = float(getattr(analyzer, '_meta_y_tol', 0.5))
+
+    y_chair = float(analyzer._meta_y_chair if analyzer._meta_y_chair is not None else 1.125)
+    y_turn  = float(analyzer._meta_y_turn if analyzer._meta_y_turn is not None else 4.5)
+    y_tol   = float(analyzer._meta_y_tol if analyzer._meta_y_tol is not None else 0.5)
     y_max   = y_turn + y_tol
     y_min_valid = y_chair - y_chair_tol
-    
+
     wf_steps = 0
     wb_steps = 0
     for leg in ['Right', 'Left']:
         y_col = f'Med_Foot_{leg}_y'
-        
+
         for f in analyzer.gait_events.get(leg, {}).get('HS', []):
             f_idx = int(f)
             t = f / fps
-            
+
             # Extract Y coordinate for the foot at heel strike
             y_pos = analyzer.df[y_col].iloc[f_idx] if f_idx < len(analyzer.df) else 0.0
             valid_spatial = (y_min_valid <= y_pos <= y_max)
-            
+
             phase_label = "Other"
-            
+
             if sts_s <= t < sts_e:
                 continue
             elif wf_s <= t < wf_e:
@@ -2663,9 +2691,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
                     print(f"Notice: Filtered out {leg} HS at {t:.2f}s during First gait (Y={y_pos:.2f}m outside [{y_min_valid}, {y_max}])")
                     continue
                 phase_label = "first_gait"
-            elif pause_s <= t < pause_e and pause_s < pause_e:
-                continue
-            elif turn_s <= t < turn_e:
+            elif pause_s <= t < pause_e and pause_s < pause_e or turn_s <= t < turn_e:
                 continue
             elif wb_s <= t < wb_e:
                 if not valid_spatial:
@@ -2676,7 +2702,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
                 continue
             else:
                 continue
-            
+
             metrics = stats.get(leg, {}).get('per_step', {}).get(str(int(f)), {})
             step_data = {
                 'Time_s': t,
@@ -2686,19 +2712,19 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
             }
             for k in ['Stance_Time_s', 'Swing_Time_s', 'Step_Length_m', 'Stride_Length_m', 'Step_Width_m']:
                 step_data[k] = round(metrics[k], 4) if k in metrics else ""
-            
+
             steps_list.append(step_data)
-            
+
     # Sort steps chronologically
     steps_list = sorted(steps_list, key=lambda x: x['Time_s'])
-    
+
     # Deduplicate simultaneous steps (keep the one further along the path)
     dedup_steps = []
     for s in steps_list:
         if not dedup_steps:
             dedup_steps.append(s)
             continue
-            
+
         prev_s = dedup_steps[-1]
         if abs(s['Time_s'] - prev_s['Time_s']) < 0.01:
             if s['Phase'] == 'first_gait':
@@ -2717,14 +2743,14 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
                 dedup_steps[-1] = s  # Default replace if other phase
         else:
             dedup_steps.append(s)
-            
+
     steps_list = dedup_steps
-    
+
     # Recalculate global step counts
     wf_steps = sum(1 for s in steps_list if s['Phase'] == 'first_gait')
     wb_steps = sum(1 for s in steps_list if s['Phase'] == 'second_gait')
 
-    
+
     print("Generating animated GIFs for each phase (this may take a moment)...")
     phase_videos = generate_phase_skeleton_gifs(analyzer, fps, {'Phases_Seconds': phases}, out_dir, csv_path.stem)
 
@@ -2733,7 +2759,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
 
     def _append_vc_ts(res, metric_name):
         if res.get('gamma_deg'):
-            for pct, g, pat in zip(res['Movement_Percent'], res['gamma_deg'], res['Coordination_Pattern']):
+            for pct, g, pat in zip(res['Movement_Percent'], res['gamma_deg'], res['Coordination_Pattern'], strict=False):
                 vc_ts_data.append({
                     'File_ID': csv_path.stem,
                     'Phase_Metric': metric_name,
@@ -2782,7 +2808,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
             'Limb_R_SecondGait': vc_wb,
         }
     }
-    
+
     if 'Global' not in stats:
         stats['Global'] = {}
     stats['Global']['Steps_First_Gait'] = wf_steps
@@ -2790,7 +2816,7 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
 
     fwd_seq = [s['Side'][0] for s in steps_list if s['Phase'] == 'first_gait']
     bck_seq = [s['Side'][0] for s in steps_list if s['Phase'] == 'second_gait']
-    
+
     if len(fwd_seq) > 0:
         stats['Global']['First_1st_strike_inside_zone'] = fwd_seq[0]
         stats['Global']['First_1st_complete_step_inside'] = fwd_seq[1] if len(fwd_seq) > 1 else None
@@ -2809,13 +2835,13 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
         steps_df.insert(0, 'File_ID', csv_path.stem)
         steps_csv_path = out_dir / f"{csv_path.stem}_bd_steps.csv"
         steps_df.to_csv(steps_csv_path, index=False)
-    
+
     # 1. JSON Report
     report = report_data
     json_file = out_dir / f"{csv_path.stem}_tugturn_data.json"
     with open(json_file, 'w', encoding='utf-8') as f:
         json.dump(report, f, indent=4)
-        
+
     # 2. Database Export (CSV per input file, overwrite)
     # Participants
     participant_data = {
@@ -2824,14 +2850,14 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
     }
     participant_data.update(metadata)
     write_single_row_csv(out_dir / f"{csv_path.stem}_bd_participants.csv", participant_data)
-    
+
     # Results
     results_data = {'File_ID': csv_path.stem}
     if phases:
         pause_dur = 0
         if 'stop_5s' in phases:
             pause_dur = phases['stop_5s'][1] - phases['stop_5s'][0]
-            
+
         first_gait = phases.get('first_gait', [0, 0])
         second_gait = phases.get('second_gait', [0, 0])
         first_gait_time = first_gait[1] - first_gait[0]
@@ -2878,26 +2904,26 @@ def process_tug_file(csv_path: Path, out_dir: Path, config_file: Path = None, y_
                 f'{prefix}_CAV_deg':    res.get('CAV_deg', 0),
             })
     write_single_row_csv(out_dir / f"{csv_path.stem}_bd_results.csv", results_data)
-    
+
     # Kinematics summary (Max/Mean ranges)
     kin_data = {'File_ID': csv_path.stem}
     kin_data['Knee_R_Max'] = analyzer.df['Knee_Angle_R'].max() if 'Knee_Angle_R' in analyzer.df else 0
     kin_data['Knee_L_Max'] = analyzer.df['Knee_Angle_L'].max() if 'Knee_Angle_L' in analyzer.df else 0
     kin_data['Trunk_Inc_Mean'] = analyzer.df['Trunk_Inclination'].mean() if 'Trunk_Inclination' in analyzer.df else 0
-    
+
     kin_data['Coupling_Hip_Knee_R_SD'] = analyzer.df['Coupling_Angle_Hip_Knee_R'].std() if 'Coupling_Angle_Hip_Knee_R' in analyzer.df else 0
     kin_data['Coupling_Hip_Knee_L_SD'] = analyzer.df['Coupling_Angle_Hip_Knee_L'].std() if 'Coupling_Angle_Hip_Knee_L' in analyzer.df else 0
-    
+
     # Calculate Phase-specific kinematics (e.g. Max Trunk Velocity) if needed...
     write_single_row_csv(out_dir / f"{csv_path.stem}_bd_kinematics.csv", kin_data)
-    
+
     # 3. Visual Report (HTML)
     html_file_matplotlib = generate_matplotlib_report(analyzer, out_dir, csv_path.stem, fps, report)
     html_file_plotly = generate_plotly_report(analyzer, out_dir, csv_path.stem, fps, report)
-    
+
     print(f"Exported JSON, DB entries, and visual report HTMLs:\n  - {html_file_matplotlib.name}\n  - {html_file_plotly.name}")
     return report
-    
+
 def main():
     parser = argparse.ArgumentParser(
             description="TUGTURN 3D Analysis Batch Processor\n"
@@ -2905,31 +2931,31 @@ def main():
                     "Uses a 5-second pause as a temporal anchor to robustly segment Walk, Turn, and STS phases.",
         formatter_class=argparse.RawTextHelpFormatter
     )
-    parser.add_argument('-i', '--input', 
+    parser.add_argument('-i', '--input',
                         help="Input CSV file or directory containing CSVs.\n"
                              "If not provided, a GUI file dialog will open to select the input.")
-    parser.add_argument('-o', '--output', 
+    parser.add_argument('-o', '--output',
                         help="Output directory to save results.\n"
                              "CLI mode (when -i is provided): if omitted, each CSV is saved to\n"
                              "result_tugturn_<basename> in the same directory as that CSV.\n"
                              "GUI mode (when -i is omitted): a folder dialog can be shown.")
-    parser.add_argument('-c', '--config', 
+    parser.add_argument('-c', '--config',
                         help="Path to a specific TOML config file (overrides automatic matching).\n"
                              "If not provided via CLI, the GUI will ask if you want to select one manually.")
-    parser.add_argument('-y', '--y_chair_tol', type=float, default=0.2, 
+    parser.add_argument('-y', '--y_chair_tol', type=float, default=0.2,
                         help="Tolerance distance (in meters) before y_chair to start counting steps inside the zone (default 0.2m).")
     args = parser.parse_args()
-    
+
     input_path = args.input
     input_provided_cli = args.input is not None
     output_path = args.output
     config_path = Path(args.config) if args.config else None
-    
+
     if not input_path:
         print("No input specified. Opening GUI for selection...")
         root = tk.Tk()
         root.withdraw()
-        
+
         input_path = filedialog.askopenfilename(
             title="Select the TUGTURN CSV file to analyze",
             filetypes=[("CSV files", "*.csv")]
@@ -2939,7 +2965,7 @@ def main():
             if not input_path:
                 print("No file or directory selected. Exiting.")
                 return
-                
+
         # Prompt for explicit TOML selection if running via GUI
         input_path_obj = Path(input_path)
         if input_path_obj.is_file():
@@ -2968,9 +2994,9 @@ def main():
                 )
                 if cfg:
                     config_path = Path(cfg)
-                
+
     input_path = Path(input_path)
-    
+
     # Prompt for explicit output selection only in GUI mode and when -o is not passed.
     if not output_path and not input_provided_cli:
         # Ensure a root Tk instance exists and lies dormant in background to prevent ugly windows
@@ -2978,8 +3004,8 @@ def main():
             root = tk.Tk()
             root.withdraw()
         except tk.TclError:
-            pass # CLI only environment 
-            
+            pass # CLI only environment
+
         ans = messagebox.askyesno(
             "Select Output Directory",
             "Do you want to manually select an Output folder for the reports and CSVs?\n\n"
@@ -3006,10 +3032,7 @@ def main():
             pass
         output_path_explicit.mkdir(parents=True, exist_ok=True)
 
-    if input_path.is_file():
-        files_to_process = [input_path]
-    else:
-        files_to_process = list(input_path.glob("*.csv"))
+    files_to_process = [input_path] if input_path.is_file() else list(input_path.glob("*.csv"))
 
     if not files_to_process:
         print(f"No CSV files found in {input_path}")
@@ -3027,7 +3050,7 @@ def main():
     if output_path_explicit is not None:
         print(f"\nAll processing complete. Results saved in {output_path_explicit}")
     else:
-        print(f"\nAll processing complete. Results saved in per-trial dirs tugturn_result_<stem> under input.")
+        print("\nAll processing complete. Results saved in per-trial dirs tugturn_result_<stem> under input.")
 
 if __name__ == "__main__":
     main()

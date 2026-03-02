@@ -156,7 +156,7 @@ import pandas as pd
 from rich import print
 
 try:  # Python 3.11+
-    import tomllib as _toml_reader  # type: ignore[attr-defined]
+    import tomllib as _toml_reader
 except Exception:  # pragma: no cover
     _toml_reader = None  # type: ignore[assignment]
 
@@ -200,12 +200,12 @@ def _load_jump_context_from_toml(
         if p.exists():
             try:
                 if _toml_reader is None:
-                    import toml  # type: ignore
+                    import toml
 
                     data = toml.load(str(p))
                 else:
                     with open(p, "rb") as f:
-                        data = _toml_reader.load(f)  # type: ignore[attr-defined]
+                        data = _toml_reader.load(f)
                 cfg = data.get("jump_context", {})
                 mass = float(cfg.get("mass_kg", 0))
                 fps = float(cfg.get("fps", 0))
@@ -224,11 +224,11 @@ def _load_jump_context_from_file(config_path: str | Path) -> dict[str, float] | 
         return None
     try:
         if _toml_reader is None:
-            import toml  # type: ignore
+            import toml
             data = toml.load(str(p))
         else:
             with open(p, "rb") as f:
-                data = _toml_reader.load(f)  # type: ignore[attr-defined]
+                data = _toml_reader.load(f)
         cfg = data.get("jump_context", {})
         mass = float(cfg.get("mass_kg", 0))
         fps = float(cfg.get("fps", 0))
@@ -784,10 +784,8 @@ def calculate_kinematics(data, results):
         if abs(deviation) < 0.1:  # Essentially straight
             fppa_angle = 0.0
         else:
-            if cross_product > 0:
-                fppa_angle = -abs(deviation)  # Varus (lateral collapse) → negative
-            else:
-                fppa_angle = abs(deviation)   # Valgus (medial collapse) → positive
+            # Varus (lateral collapse) → negative; Valgus (medial collapse) → positive
+            fppa_angle = -abs(deviation) if cross_product > 0 else abs(deviation)
         return fppa_angle
 
     propulsion_frame = results.get("propulsion_start_frame")
@@ -878,15 +876,10 @@ def calculate_kinematics(data, results):
             ]
             for pt in needed_points:
                 px, py = get_coords(row, pt)
-                if px == 0 and py == 0:  # Assuming 0,0 is missing data return from get_coords
-                    # Check if it was really missing in source (using normalized check as proxy if needed,
-                    # but get_coords returns 0,0 for missing. Ideally we should check strict None but get_coords handles it using .get(...,0))
-                    # However, get_coords returns (0,0) if keys are missing.
-                    # Better to check if the columns exist and are not NaN?
+                if px == 0 and py == 0:
                     # heuristic: if hip/knee/ankle is exactly 0,0 it's likely invalid/missing
-                    if px == 0 and py == 0:
-                        valid_points = False
-                        break
+                    valid_points = False
+                    break
 
             if valid_points:
                 frame_idx = f_idx
@@ -2071,7 +2064,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
             fig.suptitle(
                 "Landing Phase Analysis - Multiple Moments", fontsize=14, fontweight="bold"
             )
-            plt.tight_layout(rect=[0, 0, 1, 0.96])
+            plt.tight_layout(rect=(0, 0, 1, 0.96))
 
             # Save figure
             # Use the same naming convention as the original landing plot
@@ -4266,10 +4259,11 @@ def plot_jump_stickfigures_with_cg(
             x_end = f"{end}_x{suffix}"
             y_end = f"{end}_y{suffix}"
 
-            if all(col in row.index for col in [x_start, y_start, x_end, y_end]):
-                if not any(pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]):
-                    all_x_values.extend([float(row[x_start]), float(row[x_end])])
-                    all_y_values.extend([float(row[y_start]), float(row[y_end])])
+            if all(col in row.index for col in [x_start, y_start, x_end, y_end]) and not any(
+                pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]
+            ):
+                all_x_values.extend([float(row[x_start]), float(row[x_end])])
+                all_y_values.extend([float(row[y_start]), float(row[y_end])])
 
     # Calculate plot limits with padding
     if all_y_values and all_x_values:
@@ -4303,14 +4297,15 @@ def plot_jump_stickfigures_with_cg(
             x_end = f"{end}_x{suffix}"
             y_end = f"{end}_y{suffix}"
 
-            if all(col in row.index for col in [x_start, y_start, x_end, y_end]):
-                if not any(pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]):
-                    plt.plot(
-                        [row[x_start], row[x_end]],
-                        [row[y_start], row[y_end]],
-                        color=color,
-                        lw=2,
-                    )
+            if all(col in row.index for col in [x_start, y_start, x_end, y_end]) and not any(
+                pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]
+            ):
+                plt.plot(
+                    [row[x_start], row[x_end]],
+                    [row[y_start], row[y_end]],
+                    color=color,
+                    lw=2,
+                )
 
         # Add neck segment from shoulders midpoint to nose
         left_shoulder_x = f"left_shoulder_x{suffix}"
@@ -4766,10 +4761,11 @@ def plot_jump_stickfigures_subplot(
             x_end = f"{end}_x{suffix}"
             y_end = f"{end}_y{suffix}"
 
-            if all(col in row.index for col in [x_start, y_start, x_end, y_end]):
-                if not any(pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]):
-                    all_x_values.extend([float(row[x_start]), float(row[x_end])])
-                    all_y_values.extend([float(row[y_start]), float(row[y_end])])
+            if all(col in row.index for col in [x_start, y_start, x_end, y_end]) and not any(
+                pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]
+            ):
+                all_x_values.extend([float(row[x_start]), float(row[x_end])])
+                all_y_values.extend([float(row[y_start]), float(row[y_end])])
 
     if all_y_values and all_x_values:
         y_min, y_max = min(all_y_values), max(all_y_values)
@@ -4808,14 +4804,15 @@ def plot_jump_stickfigures_subplot(
             x_end = f"{end}_x{suffix}"
             y_end = f"{end}_y{suffix}"
 
-            if all(col in row.index for col in [x_start, y_start, x_end, y_end]):
-                if not any(pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]):
-                    ax.plot(
-                        [row[x_start], row[x_end]],
-                        [row[y_start], row[y_end]],
-                        color=color,
-                        lw=2,
-                    )
+            if all(col in row.index for col in [x_start, y_start, x_end, y_end]) and not any(
+                pd.isna(row[col]) for col in [x_start, y_start, x_end, y_end]
+            ):
+                ax.plot(
+                    [row[x_start], row[x_end]],
+                    [row[y_start], row[y_end]],
+                    color=color,
+                    lw=2,
+                )
 
         # Add neck segment from shoulders midpoint to nose
         left_shoulder_x = f"left_shoulder_x{suffix}"
@@ -4900,7 +4897,7 @@ def plot_jump_stickfigures_subplot(
     # Calculate jump height relative to initial position (assuming normalized or relative coords)
     try:
         jump_height = df[cg_y_col].max()
-    except:
+    except Exception:
         jump_height = 0
 
     fig.suptitle(
@@ -4909,7 +4906,7 @@ def plot_jump_stickfigures_subplot(
     )
 
     # Adjust layout
-    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Leave space for suptitle
+    plt.tight_layout(rect=(0, 0, 1, 0.95))  # Leave space for suptitle
 
     # Save the figure
     plt.savefig(output_file, dpi=300)

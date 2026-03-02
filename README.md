@@ -635,53 +635,46 @@ After installation, you can launch _vailá_ from your applications menu or direc
 
 **uv** provides faster execution times and is the recommended method for all platforms.
 
-**Windows:**
-
-- Use the **Desktop** or **Start Menu shortcut** created by the installer
-- Or from **Windows Terminal** via the pre-configured _vailá_ profile
-- Or from command line:
+- Using the **Desktop shortcut** (with proper icon)
+- From the **Windows Start Menu** under _vailá_
+- From **Windows Terminal** via the pre-configured _vailá_ profile
+- Manually, by running:
 
   ```powershell
   cd path\to\vaila
   uv run vaila.py
   ```
 
-**Linux and macOS:**
+---
+
+## 🧪 Automated Testing
+
+_vailá_ includes an automated test suite to ensure the reliability of biomechanical calculations and data processing pipelines.
+
+### Running Tests
+
+To run the full test suite, use **uv**:
 
 ```bash
-cd ~/vaila
-uv run vaila.py
+uv run pytest
 ```
 
-### 🐍 Using Conda (Legacy)
+You can also run specific test files for more detailed output:
 
-If you installed using the legacy Conda method (slower execution):
+```bash
+# Unit tests for biomechanical formulas
+uv run pytest tests/test_vaila_and_jump.py -v
 
-**Linux and macOS: From the Terminal (bash or zsh)**
+# Integration tests for full data pipelines
+uv run pytest tests/test_vaila_and_jump_integration.py -v
+```
 
-1. Navigate to the `vaila` directory:
+The test suite covers:
 
-   ```bash
-   cd ~/vaila
-   ```
+- **Unit Tests:** Physics formulas (Force, Power, Energy), TOML configuration loading, and baseline calculations.
+- **Integration Tests:** End-to-end processing of Time-of-flight, Jump-height, and MediaPipe data using real sample files.
 
-2. Activate the Conda environment and run:
-   ```bash
-   conda activate vaila
-   python3 vaila.py
-   ```
-
-**Windows: From Windows Terminal or Anaconda/Miniconda PowerShell**
-
-1. Open Anaconda Prompt, Miniconda Prompt, or Anaconda/Miniconda PowerShell Prompt (PowerShell is recommended)
-
-2. Run:
-   ```powershell
-   conda activate vaila
-   python vaila.py
-   ```
-
-**Note:** You can also click on the `vailá` icon in the Applications menu or use the shortcut on desktop or Windows Terminal.
+---
 
 ---
 
