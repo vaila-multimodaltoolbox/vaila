@@ -84,6 +84,7 @@ License:
     If not, see <https://www.gnu.org/licenses/>.
 """
 
+import argparse
 import csv
 import os
 from tkinter import Tk, filedialog, messagebox
@@ -197,13 +198,21 @@ def process_files(pixel_file, real_file):
     pixel_df = pd.read_csv(pixel_file)
     real_df = pd.read_csv(real_file)
 
-    # Ensure both files have the same column structure
-    if len(pixel_df.columns) != len(real_df.columns):
-        print("The number of columns in the two files must match.")
-        return
+    # Find points present in both files (e.g., p1, p2)
+    pixel_points = {col.split("_")[0] for col in pixel_df.columns if "_" in col}
+    real_points = {col.split("_")[0] for col in real_df.columns if "_" in col}
+    common_points = sorted(pixel_points.intersection(real_points), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
 
-    # Extract coordinate column names (excluding 'frame')
-    coord_cols = [col for col in pixel_df.columns if col != "frame"]
+    if not common_points:
+        print("Error: No common points (e.g., p1_x, p1_y) found between pixel and reference files.")
+        return []
+
+    print(f"Detected {len(common_points)} common points: {', '.join(common_points)}")
+
+    # Extract coordinate column names for common points
+    coord_cols = []
+    for p in common_points:
+        coord_cols.extend([f"{p}_x", f"{p}_y"])
 
     # Check if we're using a single reference row for all frames
     single_ref_mode = len(real_df) == 1
@@ -225,7 +234,7 @@ def process_files(pixel_file, real_file):
     # Process each frame from the pixel file
     for i in range(len(pixel_df)):
         frame = pixel_df.iloc[i]["frame"]
-        print(f"Processing frame {frame}...")
+        # print(f"Processing frame {frame}...") # reduced noise for integration tests
 
         # Get pixel coordinates for this frame
         pixel_row = pixel_df.iloc[i]
@@ -237,31 +246,23 @@ def process_files(pixel_file, real_file):
         L_coords = []
         F_coords = []
 
-        # Process coordinates in pairs (x,y)
-        for j in range(0, len(coord_cols), 2):
-            if j + 1 < len(coord_cols):  # Ensure we have a complete pair
-                point_name = coord_cols[j].split("_")[0]  # Extract point name (e.g., p1 from p1_x)
-                px_x = pixel_row[coord_cols[j]]
-                px_y = pixel_row[coord_cols[j + 1]]
-                real_x = real_row[coord_cols[j]]
-                real_y = real_row[coord_cols[j + 1]]
+        # Process coordinates for common points
+        for p in common_points:
+            px_x = pixel_row.get(f"{p}_x")
+            px_y = pixel_row.get(f"{p}_y")
+            real_x = real_row.get(f"{p}_x")
+            real_y = real_row.get(f"{p}_y")
 
-                # Only use pairs where both pixel and real coordinates are valid
-                if (
-                    not pd.isna(px_x)
-                    and not pd.isna(px_y)
-                    and not pd.isna(real_x)
-                    and not pd.isna(real_y)
-                ):
-                    L_coords.append([px_x, px_y])
-                    F_coords.append([real_x, real_y])
-                    print(f"  Using point {point_name} for frame {frame}")
-                else:
-                    if single_ref_mode:
-                        note = "(missing in pixel or reference data)"
-                    else:
-                        note = "(missing in frame data)"
-                    print(f"  Skipping point {point_name} for frame {frame} {note}")
+            # Only use pairs where both pixel and real coordinates are valid
+            if (
+                px_x is not None and px_y is not None and real_x is not None and real_y is not None
+                and not pd.isna(px_x) and not pd.isna(px_y) and not pd.isna(real_x) and not pd.isna(real_y)
+            ):
+                L_coords.append([px_x, px_y])
+                F_coords.append([real_x, real_y])
+            # else:
+            #     print(f"  Skipping point {p} for frame {frame}")
+
 
         # Convert to numpy arrays
         L = np.array(L_coords)
@@ -305,39 +306,49 @@ def save_dlt_parameters(output_file, dlt_params):
     print(f"DLT parameters saved to {output_file}")
 
 
-def run_dlt2d():
+def run_dlt2d(pixel_file=None, real_file=None, create_ref=False):
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting DLT2D calculation...")
 
-    root = Tk()
-    root.withdraw()
-
-    pixel_file = filedialog.askopenfilename(
-        title="Select the PIXEL coordinate file to be used for calibration.",
-        filetypes=[("CSV files", "*.csv")],
-    )
-    if not pixel_file:
-        print("Pixel file selection cancelled.")
-        return
-
-    create_ref = messagebox.askyesno(
-        "Create REF2D File",
-        "Do you want to create a REF2D file based on the pixel file?",
-    )
-    if create_ref:
-        real_file = create_ref2d_template(pixel_file)
-        messagebox.showinfo("Success", f"Template REF2D file created: {real_file}")
-        print(f"Template REF2D file created: {real_file}")
-        print("Please edit the REF2D file with real coordinates and run the DLT process again.")
-        return
-    else:
-        real_file = filedialog.askopenfilename(
-            title="Select Real 2D Coordinates File",
-            filetypes=[("REF2D files", "*.ref2d")],
+    if pixel_file is None:
+        root = Tk()
+        root.withdraw()
+        pixel_file = filedialog.askopenfilename(
+            title="Select the PIXEL coordinate file to be used for calibration.",
+            filetypes=[("CSV files", "*.csv")],
         )
-        if not real_file:
-            print("Real file selection cancelled.")
+        if not pixel_file:
+            print("Pixel file selection cancelled.")
+            return
+
+        create_ref = messagebox.askyesno(
+            "Create REF2D File",
+            "Do you want to create a REF2D file based on the pixel file?",
+        )
+        if create_ref:
+            real_file = create_ref2d_template(pixel_file)
+            messagebox.showinfo("Success", f"Template REF2D file created: {real_file}")
+            print(f"Template REF2D file created: {real_file}")
+            print("Please edit the REF2D file with real coordinates and run the DLT process again.")
+            return
+        else:
+            real_file = filedialog.askopenfilename(
+                title="Select Real 2D Coordinates File",
+                filetypes=[("REF2D files", "*.ref2d")],
+            )
+            if not real_file:
+                print("Real file selection cancelled.")
+                return
+    else:
+        # Headless mode
+        if create_ref:
+            real_file = create_ref2d_template(pixel_file)
+            print(f"Template REF2D file created: {real_file}")
+            print("Please edit the REF2D file with real coordinates and run the DLT process again.")
+            return
+        if real_file is None:
+            print("Real file is required in headless mode if not creating a reference.")
             return
 
     dlt_params = process_files(pixel_file, real_file)
@@ -346,4 +357,10 @@ def run_dlt2d():
 
 
 if __name__ == "__main__":
-    run_dlt2d()
+    parser = argparse.ArgumentParser(description="DLT2D Reconstruction")
+    parser.add_argument("--pixel", help="Path to pixel coordinate CSV file")
+    parser.add_argument("--real", help="Path to real-world coordinate REF2D file")
+    parser.add_argument("--create-ref", action="store_true", help="Create a REF2D file from the pixel file")
+    args = parser.parse_args()
+
+    run_dlt2d(pixel_file=args.pixel, real_file=args.real, create_ref=args.create_ref)
