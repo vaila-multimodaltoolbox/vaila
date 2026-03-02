@@ -179,6 +179,18 @@ Based on "Mechanisms for Noncontact Anterior Cruciate Ligament Injury":
    - Shank length (m) for calibration
 5. The script processes all files and generates comprehensive reports
 
+### CLI (command line)
+Unified arguments for all modes. Use `-d` for data type:
+
+- `-i` — Input: CSV file (mode 3) or directory of CSVs (modes 1 and 2)
+- `-c` — Config TOML (required for mode 3 MediaPipe)
+- `-o` — Output directory (optional)
+- `-d` — Data type: 1 = Time of Flight, 2 = Jump Height, 3 = MediaPipe
+- `--gui` — Force GUI mode
+
+Example (MediaPipe): `python vaila_and_jump.py -i file.csv -c config.toml -o out/ -d 3`  
+Example (batch): `-i <dir> -o <out> -d 1` or `-d 2`
+
 ## 📁 Input File Formats
 
 ### 1. Time-of-flight based format:

@@ -82,11 +82,24 @@ shank_length_m = 0.40</pre>
       <li>Review outputs in the generated timestamped folder</li>
     </ol>
 
+    <h3>CLI (command line)</h3>
+    <p>Same options apply for all data types. Use <code>-d</code> to select the mode:</p>
+    <ul>
+      <li><code>-i</code> — Input: CSV file (mode 3) or directory of CSVs (modes 1 and 2)</li>
+      <li><code>-c</code> — Config TOML (required for mode 3 MediaPipe)</li>
+      <li><code>-o</code> — Output directory (optional; default: next to input, timestamped)</li>
+      <li><code>-d</code> — Data type: 1 = Time of Flight (directory), 2 = Jump Height (directory), 3 = MediaPipe (single CSV + config)</li>
+      <li><code>--gui</code> — Force GUI mode</li>
+    </ul>
+    <p>Example (MediaPipe, mode 3):</p>
+    <pre>python vaila_and_jump.py -i path/to/file.csv -c path/to/vaila_and_jump_config.toml -o path/to/output/ -d 3</pre>
+    <p>Example (Time of Flight batch, mode 1): <code>-i &lt;dir&gt; -o &lt;out&gt; -d 1</code>. Example (Jump Height batch, mode 2): <code>-i &lt;dir&gt; -o &lt;out&gt; -d 2</code>.</p>
+
     <h3>Outputs</h3>
     <ul>
-      <li>CSV: <code>&lt;name&gt;_jump_metrics_&lt;timestamp&gt;.csv</code></li>
+      <li>CSV: <code>&lt;name&gt;_jump_results_&lt;timestamp&gt;.csv</code> (scalars; mode 3)</li>
+      <li>CSV: <code>&lt;name&gt;_jump_timeseries_&lt;timestamp&gt;.csv</code> (one row per frame; mode 3)</li>
       <li>CSV: <code>&lt;name&gt;_calibrated_&lt;timestamp&gt;.csv</code></li>
-      <li>CSV: <code>&lt;name&gt;_jump_database_&lt;timestamp&gt;.csv</code></li>
       <li>PNG: diagnostic and phases plots; stick-figure visualizations (with Time/Height info)</li>
       <li>PNG: Valgus event analysis with risk metrics (text outside plot)</li>
       <li>HTML: <code>&lt;name&gt;_report_&lt;timestamp&gt;.html</code> — comprehensive report with risk table</li>
@@ -163,11 +176,22 @@ shank_length_m = 0.40</pre>
       <li>Confira as saídas na pasta com timestamp</li>
     </ol>
 
+    <h3>CLI (linha de comando)</h3>
+    <p>Mesmos argumentos para todos os modos. Use <code>-d</code> para o tipo de dado:</p>
+    <ul>
+      <li><code>-i</code> — Entrada: arquivo CSV (modo 3) ou diretório de CSVs (modos 1 e 2)</li>
+      <li><code>-c</code> — Config TOML (obrigatório para modo 3 MediaPipe)</li>
+      <li><code>-o</code> — Diretório de saída (opcional)</li>
+      <li><code>-d</code> — Tipo: 1 = Tempo de Voo, 2 = Altura, 3 = MediaPipe</li>
+      <li><code>--gui</code> — Forçar modo gráfico</li>
+    </ul>
+    <p>Exemplo (MediaPipe): <code>python vaila_and_jump.py -i ficheiro.csv -c config.toml -o saida/ -d 3</code></p>
+
     <h3>Saídas</h3>
     <ul>
-      <li>CSV: <code>&lt;nome&gt;_jump_metrics_&lt;timestamp&gt;.csv</code></li>
+      <li>CSV: <code>&lt;nome&gt;_jump_results_&lt;timestamp&gt;.csv</code> (escalares; modo 3)</li>
+      <li>CSV: <code>&lt;nome&gt;_jump_timeseries_&lt;timestamp&gt;.csv</code> (uma linha por frame; modo 3)</li>
       <li>CSV: <code>&lt;nome&gt;_calibrated_&lt;timestamp&gt;.csv</code></li>
-      <li>CSV: <code>&lt;nome&gt;_jump_database_&lt;timestamp&gt;.csv</code></li>
       <li>PNG: gráficos de diagnóstico e fases; figuras de bastão (com Tempo/Altura)</li>
       <li>PNG: análise de valgo com métricas de risco (texto fora do gráfico)</li>
       <li>HTML: <code>&lt;nome&gt;_report_&lt;timestamp&gt;.html</code> — relatório completo com tabela de riscos</li>
