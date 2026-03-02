@@ -30,6 +30,7 @@ Description:
     - Support for multiple cameras with different DLT3D parameters per frame
 """
 
+import argparse
 import os
 from datetime import datetime
 from pathlib import Path
@@ -108,13 +109,17 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
     total_files = len(csv_files)
     files_processed = 0
 
-    for csv_file in csv_files:
-        files_processed += 1
+    for i_file, csv_file in enumerate(csv_files):
+        files_processed = i_file + 1
         progress = (files_processed / total_files) * 100
         print(f"Processing file {files_processed}/{total_files} ({progress:.1f}%): {csv_file}")
 
-        pixel_file = os.path.join(input_directory, csv_file)
-        pixel_coords_df = pd.read_csv(pixel_file)
+        try:
+            pixel_file = os.path.join(input_directory, csv_file)
+            pixel_coords_df = pd.read_csv(pixel_file)
+        except Exception as e:
+            print(f"[red]Error reading {csv_file}: {e}. Skipping file.[/red]")
+            continue
 
         # Calculate number of coordinate pairs (excluding frame column)
         num_coords = (pixel_coords_df.shape[1] - 1) // 2
@@ -164,7 +169,7 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
                                 valid_marker = False
                                 break
                             pixel_obs_list.append((x_obs, y_obs))
-                        except:
+                        except Exception:
                             valid_marker = False
                             break
 
@@ -174,7 +179,7 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
 
                         # Fill the pre-allocated array directly
                         col_start = 1 + (marker - 1) * 3  # x, y, z columns for this marker
-                        rec_coords_array[i, col_start : col_start + 3] = point3d
+                        rec_coords_array[i, col_start:col_start+3] = np.array(point3d).flatten()  # type: ignore
                 # NaN values already pre-allocated for invalid frames/markers
 
         # Convert to DataFrame with original column names but with _z added
@@ -182,7 +187,7 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
         for marker in range(1, num_coords + 1):
             header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
 
-        rec_coords_df = pd.DataFrame(rec_coords_array, columns=header)
+        rec_coords_df = pd.DataFrame(rec_coords_array, columns=header) # type: ignore
 
         output_file = os.path.join(output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.3d")
         rec_coords_df.to_csv(output_file, index=False, float_format="%.6f")
@@ -202,48 +207,55 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
     print(f"Reconstructed 3D coordinates saved to {output_dir}")
 
 
-def run_rec3d():
+def run_rec3d(dlt_files=None, input_directory=None, output_directory=None, data_rate=None):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
     print("Starting optimized rec3d.py...")
     print("-" * 80)
 
-    root = Tk()
-    root.withdraw()
+    if dlt_files is None:
+        root = Tk()
+        root.withdraw()
 
-    # Step 1: Select DLT3D parameters files (multiple cameras)
-    print("Step 1: Selecting DLT3D parameters files...")
-    dlt_files = filedialog.askopenfilenames(
-        title="Select DLT3D Parameters Files (one per camera)",
-        filetypes=[("DLT3D files", "*.dlt3d"), ("CSV files", "*.csv")],
-    )
-    if not dlt_files:
-        print("DLT file selection cancelled.")
-        return
+        # Step 1: Select DLT3D parameters files (multiple cameras)
+        print("Step 1: Selecting DLT3D parameters files...")
+        dlt_files = filedialog.askopenfilenames(
+            title="Select DLT3D Parameters Files (one per camera)",
+            filetypes=[("DLT3D files", "*.dlt3d"), ("CSV files", "*.csv")],
+        )
+        if not dlt_files:
+            print("DLT file selection cancelled.")
+            return
 
-    # Step 2: Select input directory with CSV files
-    print("Step 2: Selecting input directory...")
-    input_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
-    if not input_directory:
-        print("Input directory selection cancelled.")
-        return
+        # Step 2: Select input directory with CSV files
+        print("Step 2: Selecting input directory...")
+        input_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
+        if not input_directory:
+            print("Input directory selection cancelled.")
+            return
 
-    # Step 3: Select output directory
-    print("Step 3: Selecting output directory...")
-    output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
-    if not output_directory:
-        print("Output directory selection cancelled.")
-        return
+        # Step 3: Select output directory
+        print("Step 3: Selecting output directory...")
+        output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
+        if not output_directory:
+            print("Output directory selection cancelled.")
+            return
 
-    # Step 4: Ask for data frequency
-    print("Step 4: Setting data frequency...")
-    data_rate = simpledialog.askinteger(
-        "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
-    )
-    if data_rate is None:
-        messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
-        return
+        # Step 4: Ask for data frequency
+        print("Step 4: Setting data frequency...")
+        data_rate = simpledialog.askinteger(
+            "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
+        )
+        if data_rate is None:
+            messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
+            return
+        root.destroy()
+    else:
+        # Headless mode
+        if input_directory is None or output_directory is None or data_rate is None:
+            print("Error: dlt-files, input-dir, output-dir, and rate are required for headless mode.")
+            return
 
     # Load and validate DLT parameters for each camera
     print("Loading DLT3D parameters...")
@@ -251,7 +263,7 @@ def run_rec3d():
     for dlt_file in dlt_files:
         df = pd.read_csv(dlt_file)
         if df.empty:
-            messagebox.showerror("Error", f"DLT3D file {os.path.basename(dlt_file)} is empty!")
+            print(f"Error: DLT3D file {os.path.basename(dlt_file)} is empty!")
             return
         dlt_params_dfs.append(df)
 
@@ -267,8 +279,18 @@ def run_rec3d():
     # Process files
     process_files_in_directory(dlt_params_dfs, input_directory, output_directory, data_rate)
 
-    root.destroy()
-
 
 if __name__ == "__main__":
-    run_rec3d()
+    parser = argparse.ArgumentParser(description="Reconstruct 3D Coordinates using multiple DLT3D cameras")
+    parser.add_argument("--dlt-files", nargs="+", help="Path to DLT3D parameter files (one per camera)")
+    parser.add_argument("--input-dir", help="Directory containing CSV files to process")
+    parser.add_argument("--output-dir", help="Output directory for results")
+    parser.add_argument("--rate", type=int, help="Data frequency in Hz")
+    args = parser.parse_args()
+
+    run_rec3d(
+        dlt_files=args.dlt_files,
+        input_directory=args.input_dir,
+        output_directory=args.output_dir,
+        data_rate=args.rate
+    )

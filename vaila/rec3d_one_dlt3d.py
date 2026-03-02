@@ -228,7 +228,7 @@ def save_rec3d_as_bvh(rec3d_df, output_dir, file_base, point_rate, gui=True, swa
             f.write(f"Frame Time: {frame_time:.6f}\n")
 
             # Format coordinates frame by frame
-            for index, row in rec3d_df.iterrows():
+            for _index, row in rec3d_df.iterrows():
                 frame_data = []
                 for marker in markers:
                     x = row.get(f"{marker}_x", 0.0)
@@ -584,7 +584,7 @@ def run_reconstruction(
     for marker in range(1, num_markers + 1):
         header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
 
-    rec3d_df = pd.DataFrame(reconstruction_array, columns=header)
+    rec3d_df = pd.DataFrame(reconstruction_array, columns=header) # type: ignore
     valid_frames_mask = ~rec3d_df.iloc[:, 1:].isna().all(axis=1)
     rec3d_df = rec3d_df[valid_frames_mask].reset_index(drop=True)
 

@@ -128,6 +128,7 @@ dependencies = [
 dev = [
     "ruff",
     "ty>=0.0.16",
+    "pytest>=8.0.0",
 ]
 upscaler = [
     "diffusers",
@@ -196,6 +197,7 @@ line-ending = "auto"
 dev = [
     "ruff>=0.15.0",
     "ty>=0.0.16",
+    "pytest>=8.0.0",
 ]
 
 # https://docs.astral.sh/ty/ — type checker (Astral). Para "strict": use [tool.ty.rules] all = "error" quando o projeto estiver limpo.
