@@ -27,15 +27,29 @@ uv run ty check vaila/
 # Run a single module standalone (some modules support CLI)
 uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
 
+# Run automated tests
+uv run pytest tests/                           # Run all tests
+uv run pytest tests/test_vaila_and_jump.py -v   # Run jump specific tests
+uv run pytest tests/test_tugturn.py -v          # Run TUG specific tests
+uv run pytest tests/test_dlt_rec.py -v          # Run DLT/Rec math tests
+uv run pytest tests/test_dlt_rec_integration.py -v # Run DLT/Rec pipeline tests
+
 # Install git hooks (pre-commit blocks files >24MB)
 bash install-hooks.sh
 ```
 
-There is no automated test suite (no pytest/unittest). The `tests/` directory contains **sample data files** (CSV, C3D, GPX, MP4, TOML) used as input for manual testing of analysis modules, not executable test scripts.
+The project uses `pytest` for automated testing.
+
+- `tests/test_vaila_and_jump.py` — Unit tests for biomechanical calculations.
+- `tests/test_vaila_and_jump_integration.py` — Integration tests for full analysis pipelines using sample data.
+- The `tests/vaila_and_jump/` directory contains the sample data (CSV, TOML) used by these tests.
+
+**Milestone (02 March 2026):** Refactored `vaila_and_jump.py` (v0.1.3), `vaila/tugturn.py`, and the DLT/Reconstruction suite (`dlt2d.py`, `dlt3d.py`, `rec2d_one_dlt2d.py`, `rec3d.py`, `rec3d_one_dlt3d.py`). Fixed all Ruff/Ty lint and type errors, added CLI/headless support, and established a comprehensive automated test suite across `tests/`.
 
 ## Platform-Specific Configuration
 
 The project uses a **template-based pyproject.toml system** for hardware-specific dependencies. Before creating a venv, the correct template must be copied to `pyproject.toml`:
+
 - `pyproject_win_cuda12.toml` — Windows NVIDIA CUDA 12.1
 - `pyproject_linux_cuda12.toml` — Linux NVIDIA CUDA 12.8
 - `pyproject_macos.toml` — macOS Metal/MPS (Apple Silicon)
@@ -48,23 +62,27 @@ The install scripts (`install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_
 ### Entry Point & GUI (`vaila.py`)
 
 `vaila.py` is the main entry point. It defines the `Vaila(tk.Tk)` class which builds the entire GUI. The interface is organized into three frames:
+
 - **Frame A (File Manager):** Rename, import, export, copy, move, remove, tree, find, transfer
 - **Frame B (Multimodal Analysis):** IMU, MoCap, Markerless 2D/3D, EMG, Force Plate, GNSS, etc.
 - **Frame C (Tools):** Data Files (CSV editing, C3D conversion, DLT reconstruction), Video/Image processing, Visualization
 
 Each GUI button dispatches to a function in `vaila/` using **lazy imports** — modules are imported inside handler methods to avoid loading the entire dependency graph at startup. Two dispatch patterns are used:
+
 1. **Direct import + call:** `from vaila import module; module.run_function()` — runs in the same process
 2. **Subprocess launch via `run_vaila_module()`:** Launches `python -m vaila.module_name` in a separate process — used when Tkinter conflicts could occur (e.g., modules that create their own Tk root)
 
 ### Package Structure (`vaila/`)
 
 The `vaila/` package contains ~100 self-contained analysis modules. Each module typically:
+
 - Has a `run_*()` or `analyze_*()` entry function called from the GUI
 - Uses Tkinter `filedialog` to prompt users for input directories/files
 - Reads CSV/C3D data using `pandas`/`numpy`/`ezc3d`
 - Processes data and writes results (CSV + PNG plots) to timestamped output subdirectories
 
 Key shared modules:
+
 - `data_processing.py` — CSV/C3D reading with auto-header detection
 - `filtering.py` / `filter_utils.py` — Butterworth and FIR filter implementations
 - `common_utils.py` — Header detection and data reshaping for CSV files
@@ -80,6 +98,7 @@ Modules use **relative imports** when imported as part of the package (`from .re
 ### Ruff Configuration
 
 Ruff is configured in `pyproject.toml` with:
+
 - Target: Python 3.12, line length 100
 - Enabled rule sets: E, W, F, I, N, NPY, UP, B, C4, SIM
 - Ignored: `E501` (line length handled by formatter), `N806`/`N803` (scientific code uses uppercase variable names like X, Y, F)
