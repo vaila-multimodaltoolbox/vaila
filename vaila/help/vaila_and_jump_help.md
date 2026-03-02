@@ -38,6 +38,22 @@ This guide explains how to use the Vertical Jump Analysis tool in vailá. It cov
      ```
 5) Review outputs in the generated timestamped folder
 
+### CLI (command line)
+Same options for all data types. Use `-d` to select the mode:
+
+- `-i` — Input: CSV file (mode 3) or directory of CSVs (modes 1 and 2)
+- `-c` — Config TOML (required for mode 3 MediaPipe)
+- `-o` — Output directory (optional; default: next to input, timestamped)
+- `-d` — Data type: 1 = Time of Flight (directory), 2 = Jump Height (directory), 3 = MediaPipe (single CSV + config)
+- `--gui` — Force GUI mode
+
+Example (MediaPipe, mode 3):
+```bash
+python vaila_and_jump.py -i path/to/file.csv -c path/to/vaila_and_jump_config.toml -o path/to/output/ -d 3
+```
+
+Example (Time of Flight batch): `-i <dir> -o <out> -d 1`. Example (Jump Height batch): `-i <dir> -o <out> -d 2`.
+
 ### Kinematic Analysis (Valgus/FPPA)
 - **Valgus Ratio**: Knee Separation / Hip Separation. (< 0.8 indicates risk)
 - **FPPA**: Frontal Plane Projection Angle (2D). (> 10° indicates risk)
@@ -45,9 +61,9 @@ This guide explains how to use the Vertical Jump Analysis tool in vailá. It cov
 - **Robustness**: Uses neighbor-frame search to handle occlusion during deep squat.
 
 ### Outputs
-- CSV: `<name>_jump_metrics_<timestamp>.csv` — summary metrics
+- CSV: `<name>_jump_results_<timestamp>.csv` — scalars (mode 3)
+- CSV: `<name>_jump_timeseries_<timestamp>.csv` — one row per frame (mode 3)
 - CSV: `<name>_calibrated_<timestamp>.csv` — calibrated (meters) and normalized series
-- CSV: `<name>_jump_database_<timestamp>.csv` — one-row database with all metrics
 - PNG: 
   - Normalized diagnostic plots
   - Stick-figure phases (with Time and Jump Height annotation)
