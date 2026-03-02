@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 11 January 2026
-Version: 0.1.2
+Update Date: 02 March 2026
+Version: 0.1.3
 Python Version: 3.12.12
 
 Description:
@@ -57,14 +57,31 @@ Dependencies:
 
 Usage:
 ------
-- Run the script, select the target directory containing .csv files, and specify
-  whether the data is based on time of flight, jump height, or MediaPipe data.
-- The script will process each .csv file, performing calculations and saving
-  the results in a new directory.
+- GUI: Run with no arguments or --gui; select directory and data type (1=Time of Flight,
+  2=Jump Height, 3=MediaPipe).
+- CLI: Use -i (input), -o (output dir), -d (data type). For mode 3 (MediaPipe), also pass -c (config TOML).
 
-Example:
---------
-$ python vaila_and_jump.py
+Arguments:
+  -i, --input    Input: CSV file (mode 3) or directory of CSVs (modes 1 and 2).
+  -c, --config   Path to vaila_and_jump_config.toml (required for mode 3).
+  -o, --output   Output directory (optional; default: next to input, timestamped).
+  -d, --data-type  1=Time of Flight, 2=Jump Height, 3=MediaPipe (default: 3 when -i and -c given).
+  --gui          Force GUI mode.
+
+Examples:
+---------
+GUI mode:
+  $ python vaila_and_jump.py
+  $ python vaila_and_jump.py --gui
+
+CLI mode 3 (MediaPipe; -d 3 can be omitted when -i and -c are both given):
+  $ python vaila_and_jump.py -i <path_to.csv> -c <path_to_config.toml> -o <output_dir> -d 3
+
+CLI mode 1 (Time of Flight, batch over directory):
+  $ python vaila_and_jump.py -i <path_to_directory_with_csvs> -o <output_dir> -d 1
+
+CLI mode 2 (Jump Height, batch over directory):
+  $ python vaila_and_jump.py -i <path_to_directory_with_csvs> -o <output_dir> -d 2
 
 Input File Format:
 -----------------
@@ -197,6 +214,29 @@ def _load_jump_context_from_toml(
                     return {"mass_kg": mass, "fps": float(fps), "shank_length_m": shank}
             except Exception:
                 pass
+    return None
+
+
+def _load_jump_context_from_file(config_path: str | Path) -> dict[str, float] | None:
+    """Load jump context from an explicit TOML config file path (for CLI)."""
+    p = Path(config_path)
+    if not p.exists():
+        return None
+    try:
+        if _toml_reader is None:
+            import toml  # type: ignore
+            data = toml.load(str(p))
+        else:
+            with open(p, "rb") as f:
+                data = _toml_reader.load(f)  # type: ignore[attr-defined]
+        cfg = data.get("jump_context", {})
+        mass = float(cfg.get("mass_kg", 0))
+        fps = float(cfg.get("fps", 0))
+        shank = float(cfg.get("shank_length_m", 0.0))
+        if mass > 0 and fps > 0 and shank > 0:
+            return {"mass_kg": mass, "fps": float(fps), "shank_length_m": shank}
+    except Exception:
+        pass
     return None
 
 
@@ -685,10 +725,10 @@ def calculate_kinematics(data, results):
             ankle_x, ankle_y: Ankle coordinates
 
         Returns:
-            float: FPPA angle in degrees
+            float: FPPA angle in degrees (unified convention for left and right)
             - 0° = straight alignment (180° internal angle)
-            - Positive = Varus (Abduction - knee collapses laterally/outward away from midline)
-            - Negative = Valgus (Adduction - knee collapses medially/inward toward midline)
+            - Positive = Valgus (adduction - knee collapses medially/inward toward midline)
+            - Negative = Varus (abduction - knee collapses laterally/outward away from midline)
         """
         # Vector v1: HIP -> KNEE (Femur vector, pointing from hip to knee)
         v1_x = knee_x - hip_x
@@ -737,24 +777,17 @@ def calculate_kinematics(data, results):
 
         # FPPA is the deviation from 180° (straight alignment)
         # Internal angle of 180° = straight leg = 0° FPPA
-        # Internal angle < 180° = valgus collapse (positive FPPA)
-        # Internal angle > 180° = varus collapse (negative FPPA)
         deviation = 180.0 - internal_angle_deg
 
-        # Use cross product sign to determine valgus/varus
-        # In biomechanical coordinates (Y up, X right):
-        # - For left leg: positive cross product → valgus (knee moves right/medial)
-        # - For right leg: negative cross product → valgus (knee moves left/medial)
-        # We use absolute deviation and apply sign based on cross product
+        # Use cross product sign to determine valgus/varus direction
+        # We then apply unified convention: positive = valgus, negative = varus (both sides)
         if abs(deviation) < 0.1:  # Essentially straight
             fppa_angle = 0.0
         else:
-            # Apply sign: positive = varus (abduction/lateral), negative = valgus (adduction/medial)
             if cross_product > 0:
-                fppa_angle = abs(deviation)  # Varus (positive) - Abduction/Lateral collapse
+                fppa_angle = -abs(deviation)  # Varus (lateral collapse) → negative
             else:
-                fppa_angle = -abs(deviation)  # Valgus (negative) - Adduction/Medial collapse
-
+                fppa_angle = abs(deviation)   # Valgus (medial collapse) → positive
         return fppa_angle
 
     propulsion_frame = results.get("propulsion_start_frame")
@@ -787,16 +820,12 @@ def calculate_kinematics(data, results):
             knee_sep_series.append(knee_sep)
             ankle_sep_series.append(ankle_sep)
 
-            # Calculate FPPA for time series
-            # For right side, we invert the sign to match left side convention
-            # Both sides: positive = varus (abduction), negative = valgus (adduction)
+            # Calculate FPPA for time series (unified: positive = valgus, negative = varus)
             fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-            fppa_right_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
-            # Invert right side to match left side convention (valgus = positive)
-            # This ensures both sides show valgus as positive values
+            fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
             fppa_right = (
-                -fppa_right_raw
-                if fppa_right_raw is not None and not math.isnan(fppa_right_raw)
+                fppa_right
+                if fppa_right is not None and not math.isnan(fppa_right)
                 else np.nan
             )
             fppa_left_series.append(
@@ -887,18 +916,15 @@ def calculate_kinematics(data, results):
         else:
             kinematics[f"valgus_ratio_{phase_name}"] = None
 
-        # FPPA (Frontal Plane Projection Angle) - Rigorous 2D vector calculation
-        # IMPORTANT: For right side, we invert the sign to match left side convention
-        # This ensures both sides show varus (lateral collapse) as positive values
-        # and valgus (medial collapse) as negative values, for consistent visualization
+        # FPPA (Frontal Plane Projection Angle) - unified convention: positive = valgus, negative = varus
         fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-        fppa_right_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
-        fppa_right = -fppa_right_raw if fppa_right_raw is not None else None
+        fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+        fppa_right = fppa_right if fppa_right is not None else None
 
         kinematics[f"fppa_left_{phase_name}_deg"] = fppa_left
         kinematics[f"fppa_right_{phase_name}_deg"] = fppa_right
 
-        # Knee Relative Angle (Hip-Knee-Ankle) - same as FPPA for consistency
+        # Frontal-plane knee angle (Hip-Knee-Ankle); same as FPPA (not sagittal flexion)
         kinematics[f"knee_angle_left_{phase_name}_deg"] = fppa_left
         kinematics[f"knee_angle_right_{phase_name}_deg"] = fppa_right
 
@@ -914,7 +940,7 @@ def calculate_kinematics(data, results):
         kinematics[f"ankle_sep_{phase_name}_m"] = ankle_sep
 
     # 3. Landing Phase Analysis (IC, +40ms, +100ms, Max Valgus)
-    # Based on Mechanisms for Noncontact Anterior Cruciate Ligament Injury
+    # Time windows aligned with ACL injury mechanism literature (Koga et al., Am J Sports Med 2010;38:2218-2225)
     if landing_frame is not None and landing_frame < len(data):
         # Calculate FPPA at specific time points after landing
         # IC + 40ms
@@ -929,9 +955,8 @@ def calculate_kinematics(data, results):
             ra_x, ra_y = get_coords(row_40ms, "right_ankle")
 
             fppa_left_40ms = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-            fppa_right_40ms_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
-            # Invert right side to match left side convention (valgus = positive)
-            fppa_right_40ms = -fppa_right_40ms_raw if fppa_right_40ms_raw is not None else None
+            fppa_right_40ms = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+            fppa_right_40ms = fppa_right_40ms if fppa_right_40ms is not None else None
             kinematics["fppa_left_landing_40ms_deg"] = fppa_left_40ms
             kinematics["fppa_right_landing_40ms_deg"] = fppa_right_40ms
             kinematics["landing_40ms_frame"] = frame_40ms
@@ -948,9 +973,8 @@ def calculate_kinematics(data, results):
             ra_x, ra_y = get_coords(row_100ms, "right_ankle")
 
             fppa_left_100ms = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-            fppa_right_100ms_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
-            # Invert right side to match left side convention (valgus = positive)
-            fppa_right_100ms = -fppa_right_100ms_raw if fppa_right_100ms_raw is not None else None
+            fppa_right_100ms = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+            fppa_right_100ms = fppa_right_100ms if fppa_right_100ms is not None else None
             kinematics["fppa_left_landing_100ms_deg"] = fppa_left_100ms
             kinematics["fppa_right_landing_100ms_deg"] = fppa_right_100ms
             kinematics["landing_100ms_frame"] = frame_100ms
@@ -979,13 +1003,12 @@ def calculate_kinematics(data, results):
                 la_x, la_y = get_coords(row, "left_ankle")
                 ra_x, ra_y = get_coords(row, "right_ankle")
 
-                # Calculate FPPA for this frame
+                # Calculate FPPA for this frame (positive = valgus)
                 fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-                fppa_right_raw = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
-                # Invert right side to match left side convention (valgus = positive)
-                fppa_right = -fppa_right_raw if fppa_right_raw is not None else None
+                fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+                fppa_right = fppa_right if fppa_right is not None else None
 
-                # Track maximum valgus (positive values indicate valgus)
+                # Track maximum valgus (positive = valgus in unified convention)
                 if max_valgus_left is None or (
                     fppa_left is not None and fppa_left > max_valgus_left
                 ):
@@ -1822,12 +1845,11 @@ def plot_valgus_event(data, results, output_dir, base_name):
             if max_valgus_frame < len(data):
                 landing_moments.append(("Max Valgus", max_valgus_frame, "max_valgus"))
 
-        # Create figure with subplots for each moment
+        # Create figure with subplots for each moment (2 rows x 2 cols for larger view)
         n_moments = len(landing_moments)
         if n_moments > 0:
-            fig, axes = plt.subplots(1, n_moments, figsize=(6 * n_moments, 8))
-            if n_moments == 1:
-                axes = [axes]
+            fig, axes = plt.subplots(2, 2, figsize=(12, 16))
+            axes_flat = axes.ravel()
 
             # Collect all points across all moments for consistent scaling
             all_x_global = []
@@ -1881,7 +1903,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
                 if frame_idx >= len(data):
                     continue
 
-                ax = axes[ax_idx]
+                ax = axes_flat[ax_idx]
                 row = data.iloc[frame_idx]
 
                 # Check validity
@@ -2018,10 +2040,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
                     status = "HIGH RISK" if valgus_ratio < 0.8 else "Normal"
                     metrics_text += f"Valgus Ratio: {valgus_ratio:.2f}\n({status})"
 
-                # Add legend for lines
-                # The original legend call for ax_idx == 0 is removed as a new one is added outside the plot.
-
-                # Add textbox outside
+                # Add textbox outside (no legend for Knee Sep / Ankle Sep)
                 props = {"boxstyle": "round", "facecolor": "white", "alpha": 0.9}
                 ax.text(
                     1.05,
@@ -2033,19 +2052,20 @@ def plot_valgus_event(data, results, output_dir, base_name):
                     bbox=props,
                 )
 
-                # Add legend outside
-                ax.legend(bbox_to_anchor=(1.05, 0.45), loc="upper left", borderaxespad=0.0)
-
                 # Set limits and aspect
                 ax.set_xlim(x_min_global - x_padding_global, x_max_global + x_padding_global)
                 ax.set_ylim(y_min_global - y_padding_global, y_max_global + y_padding_global)
                 ax.set_aspect("equal", adjustable="box")
 
                 ax.set_title(f"{title}", fontsize=11, fontweight="bold")
-                if ax_idx == 0:
+                if ax_idx in (0, 2):
                     ax.set_ylabel("Vertical (m)", fontsize=10)
                 ax.set_xlabel("Medial-Lateral (m)", fontsize=10)
                 ax.grid(True, alpha=0.3)
+
+            # Hide unused subplots when fewer than 4 moments
+            for i in range(n_moments, 4):
+                axes_flat[i].set_visible(False)
 
             # Overall title
             fig.suptitle(
@@ -2652,6 +2672,24 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </ul>
             <p><strong>Height Calculation:</strong> Jump height is measured relative to the <em>initial center of gravity (CG) position</em> (averaged over the first 10-20 frames). This initial height is treated as the zero reference.</p>
 
+            <h3>Outcome Variables and Clinical Metrics</h3>
+            <p>The following variables are derived from 2D frontal-plane kinematics and are commonly used for screening dynamic knee valgus and patellofemoral risk in landing and squat tasks.</p>
+
+            <h4>FPPA — Frontal Plane Projection Angle</h4>
+            <p><strong>FPPA</strong> is the angle at the knee in the frontal plane, formed by the projection of the hip–knee–ankle segment lines onto the 2D image. It quantifies the deviation from neutral alignment: <strong>positive values</strong> indicate <em>valgus</em> (knee moving inward / medial collapse), and <strong>negative values</strong> indicate <em>varus</em> (knee moving outward). It is computed here using a vector-based method from hip, knee, and ankle marker positions. FPPA has been validated for reliability in 2D video assessment during dynamic tasks (Munro et al., 2012), for differences between single-leg squat and landing in male and female populations (Herrington, 2011), for criterion validity when obtained with digital tools (Atkins et al., 2022), and as a reliable and valid measure of knee valgus during single-leg squat (Gwynne & Curran, 2014). It is widely used in patellofemoral pain and injury screening.</p>
+
+            <h4>Valgus Ratio (Knee–Hip Separation Ratio)</h4>
+            <p>The <strong>Valgus Ratio</strong> is the ratio of knee separation distance to hip separation distance in the frontal plane. Values below approximately 0.8 are often used as a screening threshold for high risk of dynamic valgus. It provides a simple 2D index of trunk–knee alignment without requiring angular calculation.</p>
+
+            <h4>KASR — Knee-to-Ankle Separation Ratio</h4>
+            <p><strong>KASR</strong> is the ratio of knee separation to ankle separation in the frontal plane. It complements the Valgus Ratio by relating knee position to the base of support and is used in the assessment of lower-limb alignment during landing and squatting.</p>
+
+            <h4>Knee and Ankle Separation Distances</h4>
+            <p><strong>Knee separation</strong> and <strong>ankle separation</strong> are the horizontal (frontal-plane) distances between left and right knee and ankle markers, respectively. They are reported in meters and used both as raw measures and to compute the ratios above.</p>
+
+            <h4>Sign Convention (FPPA)</h4>
+            <p>In this report, FPPA uses a unified convention for both legs: <strong>positive = valgus</strong> (medial collapse), <strong>negative = varus</strong> (lateral deviation). Maximum valgus angle within the first 200 ms after landing is often used for risk classification.</p>
+
             <h3>Vertical Jump Power Estimation</h3>
             <p>
             Three power metrics are estimated based on Center of Mass (CG) kinematics:
@@ -2675,8 +2713,8 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
 
             <h4>3. Average Propulsion Power</h4>
             <p>
-              <code>P<sub>avg</sub> = (KE<sub>takeoff</sub> + PE<sub>max</sub>) / t<sub>propulsion</sub></code><br>
-              Represents the average power output throughout the entire push-off phase.
+              <code>P<sub>avg</sub> = (KE<sub>takeoff</sub> + PE<sub>max</sub>) / t<sub>propulsion</sub></code> (energy method; reported as <code>power_avg_propulsion_W</code>).<br>
+              The CSV also exports <code>power_avg_propulsion_phase_W</code>: mean of instantaneous power over the propulsion phase.
             </p>
         </div>
 
@@ -2952,17 +2990,21 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
     except Exception:
         pass
 
-    # Add references section at the end
+    # Add single references section at the end (toolbox, jump power, landing windows, FPPA/valgus)
     html_content += """
         <div class="references">
             <h2>References</h2>
             <ul>
-              <li>Santiago, P. R. P., Chinaglia, A. G., Flanagan, K., Bedo, B. L., Mochida, L. Y., Aceros, J., ... & Cesar, G. M. (2024). vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. arXiv preprint arXiv:2410.07238. https://doi.org/10.48550/arXiv.2410.07238</li>
-              <li>Samozino, P., Morin, J. B., Hintzy, F., & Belli, A. (2008). A simple method for measuring force, velocity and power output during squat jump. Journal of Biomechanics, 41(14), 2940-2945.</li>
-              <li>Aragón-Vargas, L. F., & Gross, M. M. (1997). Kinesiological factors in vertical jump performance: differences among individuals. Journal of Applied Biomechanics, 13(1), 24-44.</li>
-              <li>Harman, E. A., Rosenstein, M. T., Frykman, P. N., & Rosenstein, R. M. (1991). Estimation of human power output from vertical jump. Journal of Applied Sport Science Research, 5(3), 116-120.</li>
-              <li>Sayers, S. P., Harackiewicz, D. V., Harman, E. A., Frykman, P. N., & Rosenstein, M. T. (1999). Cross-validation of three jump power equations. Medicine & Science in Sports & Exercise, 31(4), 572-577.</li>
-              <li>Koga H, Nakamae A, Shima Y, Iwasa J, Myklebust G, Engebretsen L, Bahr R & Krosshaug T. (2010). Mechanisms for noncontact anterior cruciate ligament injuries: knee joint kinematics in 10 injury situations from female team handball and basketball. Am J Sports Med. 2010 Nov;38(11):2218-25. doi: 10.1177/0363546510373570</li>
+              <li>Santiago, P. R. P., Chinaglia, A. G., Flanagan, K., Bedo, B. L., Mochida, L. Y., Aceros, J., ... &amp; Cesar, G. M. (2024). vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. arXiv preprint arXiv:2410.07238. <a href="https://doi.org/10.48550/arXiv.2410.07238" target="_blank" rel="noopener">https://doi.org/10.48550/arXiv.2410.07238</a></li>
+              <li>Samozino, P., Morin, J. B., Hintzy, F., &amp; Belli, A. (2008). A simple method for measuring force, velocity and power output during squat jump. <em>Journal of Biomechanics</em>, 41(14), 2940-2945.</li>
+              <li>Aragón-Vargas, L. F., &amp; Gross, M. M. (1997). Kinesiological factors in vertical jump performance: differences among individuals. <em>Journal of Applied Biomechanics</em>, 13(1), 24-44.</li>
+              <li>Harman, E. A., Rosenstein, M. T., Frykman, P. N., &amp; Rosenstein, R. M. (1991). Estimation of human power output from vertical jump. <em>Journal of Applied Sport Science Research</em>, 5(3), 116-120.</li>
+              <li>Sayers, S. P., Harackiewicz, D. V., Harman, E. A., Frykman, P. N., &amp; Rosenstein, M. T. (1999). Cross-validation of three jump power equations. <em>Medicine &amp; Science in Sports &amp; Exercise</em>, 31(4), 572-577.</li>
+              <li>Koga H, Nakamae A, Shima Y, Iwasa J, Myklebust G, Engebretsen L, Bahr R &amp; Krosshaug T. (2010). Mechanisms for noncontact anterior cruciate ligament injuries: knee joint kinematics in 10 injury situations from female team handball and basketball. <em>Am J Sports Med</em>, 38(11), 2218-2225. <a href="https://doi.org/10.1177/0363546510373570" target="_blank" rel="noopener">doi:10.1177/0363546510373570</a></li>
+              <li>Atkins, L. T., Van Bastian, B., et al. (2022). Criterion Validity and Reliability of Knee Frontal Plane Projection Angle Measures Obtained by Clinicians Using a Tablet Application. <em>Journal of Sport Rehabilitation</em>, 31(7), 915–920. <a href="https://doi.org/10.1123/jsr.2021-0356" target="_blank" rel="noopener">doi:10.1123/jsr.2021-0356</a></li>
+              <li>Gwynne, C. R., &amp; Curran, S. A. (2014). 2D real-time knee frontal plane projection angle (FPPA) during a single leg squat, a reliable and valid measure of knee valgus? <em>The Knee</em>, 21(1), 201–205. <a href="https://doi.org/10.1016/j.knee.2013.04.015" target="_blank" rel="noopener">doi:10.1016/j.knee.2013.04.015</a></li>
+              <li>Herrington, L. (2011). The difference in a 2D frontal plane projection angle between single leg squat and landing tasks in male and female populations. <em>The Knee</em>, 18(1), 27–30. <a href="https://doi.org/10.1016/j.knee.2010.01.005" target="_blank" rel="noopener">doi:10.1016/j.knee.2010.01.005</a></li>
+              <li>Munro, A., Herrington, L., &amp; Carolan, M. (2012). Reliability of 2-dimensional video assessment of frontal-plane knee projection angle during dynamic tasks. <em>Journal of Sport Rehabilitation</em>, 21(1), 56–64. <a href="https://doi.org/10.1123/jsr.21.1.56" target="_blank" rel="noopener">doi:10.1123/jsr.21.1.56</a> <a href="https://pubmed.ncbi.nlm.nih.gov/22104115/" target="_blank" rel="noopener">PubMed</a></li>
             </ul>
         </div>
     """
@@ -3152,15 +3194,20 @@ def process_mediapipe_data(input_file, output_dir):
         if takeoff_frame is not None and squat_frame is not None:
             propulsion_frames = range(squat_frame, takeoff_frame + 1)
             power_propulsion = power[propulsion_frames]
-            max_power = np.max(power) if len(power) > 0 else 0
+            # Max power restricted to propulsion phase only (not landing eccentric phase)
+            max_power = (
+                np.max(power_propulsion) if len(power_propulsion) > 0 else 0
+            )
             # Calculate average power during propulsion phase
             avg_power_propulsion = np.mean(power_propulsion) if len(power_propulsion) > 0 else 0
 
-            # Corrected: Find the index of the maximum value in the power series
-            idx_max_power = np.argmax(
-                power
-            )  # Now get the index of the maximum value in the power series
-            time_max_power = idx_max_power / fps  # Convert the index to time
+            # Index of max power within propulsion phase, then global frame index
+            idx_max_power = (
+                squat_frame + np.argmax(power_propulsion)
+                if len(power_propulsion) > 0
+                else squat_frame
+            )
+            time_max_power = idx_max_power / fps
 
             # Calculate takeoff power
             power_takeoff = power[takeoff_frame] if takeoff_frame < len(power) else 0
@@ -3393,11 +3440,6 @@ def process_mediapipe_data(input_file, output_dir):
             "max_power_W_per_kg": max_power / mass if max_power else None,
         }
 
-        # Save complete database CSV
-        output_db_file = os.path.join(output_dir, f"{base_name}_jump_database_{timestamp}.csv")
-        pd.DataFrame([db_row]).to_csv(output_db_file, index=False, float_format="%.3f")
-        print(f"Jump database row saved: {output_db_file}")
-
         # Generate plots
         plot_files = []
 
@@ -3534,11 +3576,53 @@ def process_mediapipe_data(input_file, output_dir):
         # Generate HTML report
         report_path = generate_html_report(data, results, plot_files, output_dir, base_name)
 
-        # Save summary metrics
-        output_metrics_file = os.path.join(output_dir, f"{base_name}_jump_metrics_{timestamp}.csv")
-        pd.DataFrame([results]).to_csv(output_metrics_file, index=False, float_format="%.6f")
+        # Save combined results CSV (scalars only; time series go to a separate file)
+        _SERIES_KEYS = (
+            "valgus_ratio_series",
+            "fppa_left_series",
+            "fppa_right_series",
+            "knee_sep_series",
+            "ankle_sep_series",
+        )
+        combined_row = {**db_row}
+        for k in results:
+            if k not in combined_row:
+                combined_row[k] = results[k]
+        # Remove time-series keys so they are not written to the main CSV
+        for k in _SERIES_KEYS:
+            combined_row.pop(k, None)
+        output_results_file = os.path.join(output_dir, f"{base_name}_jump_results_{timestamp}.csv")
+        pd.DataFrame([combined_row]).to_csv(output_results_file, index=False, float_format="%.6f")
+        print(f"Jump results (scalars) saved at: {output_results_file}")
 
-        print(f"Jump metrics saved at: {output_metrics_file}")
+        # Save time series in a separate CSV: one row per frame, columns = series names (same layout as calibrated CSV)
+        _SERIES_COLUMNS = [
+            "valgus_ratio_series",
+            "fppa_left_series",
+            "fppa_right_series",
+            "knee_sep_series",
+            "ankle_sep_series",
+        ]
+        series_arrays = {}
+        for key in _SERIES_COLUMNS:
+            vals = results.get(key)
+            if vals is not None and isinstance(vals, (list, np.ndarray)) and len(vals) > 0:
+                series_arrays[key] = np.asarray(vals, dtype=float)
+        if series_arrays:
+            max_len = max(len(arr) for arr in series_arrays.values())
+            ts_data = {"frame_index": np.arange(max_len)}
+            for key in _SERIES_COLUMNS:
+                arr = series_arrays.get(key)
+                if arr is not None:
+                    pad = np.full(max_len, np.nan, dtype=float)
+                    pad[: len(arr)] = arr
+                    ts_data[key] = pad
+                else:
+                    ts_data[key] = np.full(max_len, np.nan, dtype=float)
+            ts_df = pd.DataFrame(ts_data)
+            output_ts_file = os.path.join(output_dir, f"{base_name}_jump_timeseries_{timestamp}.csv")
+            ts_df.to_csv(output_ts_file, index=False, float_format="%.6f")
+            print(f"Jump time series (one row per frame) saved at: {output_ts_file}")
         print(f"Calibrated data (in meters) saved at: {output_calibrated_file}")
         print(f"Jump analysis plots saved in: {output_dir}")
         print(f"HTML report generated: {report_path}")
@@ -3684,18 +3768,39 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
 
 
 def calc_fator_convert_mediapipe(df, knee="right_knee", ankle="right_ankle", shank_length_real=0.4):
-    # frame 0
-    rkx, rky = df[f"{knee}_x"].iloc[0], df[f"{knee}_y"].iloc[0]
-    rax, ray = df[f"{ankle}_x"].iloc[0], df[f"{ankle}_y"].iloc[0]
-    normalized_length = np.sqrt((rkx - rax) ** 2 + (rky - ray) ** 2)
+    # Use median shank length over frames 5-30 to reduce sensitivity to bad tracking in frame 0
+    start_f, end_f = 5, min(31, len(df))
+    if end_f <= start_f:
+        start_f, end_f = 0, min(1, len(df))
+    lengths = []
+    for i in range(start_f, end_f):
+        rkx = df[f"{knee}_x"].iloc[i]
+        rky = df[f"{knee}_y"].iloc[i]
+        rax = df[f"{ankle}_x"].iloc[i]
+        ray = df[f"{ankle}_y"].iloc[i]
+        lengths.append(np.sqrt((rkx - rax) ** 2 + (rky - ray) ** 2))
+    normalized_length = float(np.median(lengths)) if lengths else (
+        np.sqrt((df[f"{knee}_x"].iloc[0] - df[f"{ankle}_x"].iloc[0]) ** 2
+                + (df[f"{knee}_y"].iloc[0] - df[f"{ankle}_y"].iloc[0]) ** 2)
+    )
     factor = shank_length_real / normalized_length
     return factor
 
 
 def calc_fator_convert_mediapipe_simple(df, shank_length_real):
-    rkx, rky = df["right_knee_x"].iloc[0], df["right_knee_y"].iloc[0]
-    rax, ray = df["right_ankle_x"].iloc[0], df["right_ankle_y"].iloc[0]
-    normalized_length = np.sqrt((rkx - rax) ** 2 + (rky - ray) ** 2)
+    # Use median over frames 5-30 for robustness (avoid single-frame noise)
+    start_f, end_f = 5, min(31, len(df))
+    if end_f <= start_f:
+        start_f, end_f = 0, min(1, len(df))
+    lengths = []
+    for i in range(start_f, end_f):
+        rkx, rky = df["right_knee_x"].iloc[i], df["right_knee_y"].iloc[i]
+        rax, ray = df["right_ankle_x"].iloc[i], df["right_ankle_y"].iloc[i]
+        lengths.append(np.sqrt((rkx - rax) ** 2 + (rky - ray) ** 2))
+    normalized_length = float(np.median(lengths)) if lengths else (
+        np.sqrt((df["right_knee_x"].iloc[0] - df["right_ankle_x"].iloc[0]) ** 2
+                + (df["right_knee_y"].iloc[0] - df["right_ankle_y"].iloc[0]) ** 2)
+    )
     factor = shank_length_real / normalized_length
     return factor
 
@@ -3705,7 +3810,7 @@ def midpoint(df, p1, p2):
 
 
 def calculate_cg_frame(df, factor):
-    # Locations of CGs in proportion to the segment
+    # Segment CG locations and relative masses (Winter, 2009: Biomechanics and Motor Control of Human Movement, 4th Ed.)
     locations = {
         "head": 0.5,
         "trunk": 0.5,
@@ -3839,17 +3944,20 @@ def jump_height_mediapipe(df, shank_length_real):
     return jump_height, cg_x, cg_y
 
 
-def process_all_files_in_directory(target_dir, use_time_of_flight):
+def process_all_files_in_directory(target_dir, use_time_of_flight, output_parent=None):
     """
     Process all .csv files in the specified directory and save the results in a new output directory.
 
     Args:
         target_dir (str): The path to the target directory containing .csv files.
         use_time_of_flight (bool): Whether to use time of flight data.
+        output_parent (str, optional): If set, results are written under this directory
+            (output_parent/vaila_verticaljump_<timestamp>). If None, output is under target_dir.
     """
     # Generate the output directory with the current timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(target_dir, f"vaila_verticaljump_{timestamp}")
+    parent = output_parent if output_parent is not None else target_dir
+    output_dir = os.path.join(parent, f"vaila_verticaljump_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
     # List all .csv files in the target directory
@@ -4865,5 +4973,100 @@ def vaila_and_jump():
     root.destroy()
 
 
+def _run_cli_mediapipe(args):
+    """Run MediaPipe jump analysis from CLI (single CSV + config TOML)."""
+    global _JUMP_CONTEXT
+    ctx = _load_jump_context_from_file(args.config)
+    if ctx is None:
+        print(f"Error: Could not load jump context from config file: {args.config}")
+        print("Expected [jump_context] with mass_kg, fps, shank_length_m.")
+        return 1
+    _JUMP_CONTEXT = ctx
+    print(f"Loaded config: mass={ctx['mass_kg']} kg, fps={ctx['fps']}, shank={ctx['shank_length_m']} m")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if args.output:
+        output_dir = os.path.join(args.output, f"vaila_mediapipejump_{timestamp}")
+    else:
+        output_dir = os.path.join(
+            os.path.dirname(os.path.abspath(args.input)),
+            f"vaila_mediapipejump_{timestamp}",
+        )
+    base_name = os.path.splitext(os.path.basename(args.input))[0]
+    per_file_dir = os.path.join(output_dir, base_name)
+    os.makedirs(per_file_dir, exist_ok=True)
+    ok = process_mediapipe_data(args.input, per_file_dir)
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
-    vaila_and_jump()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="vaila_and_jump: Vertical jump and MediaPipe jump analysis (GUI or CLI)."
+    )
+    parser.add_argument(
+        "-i", "--input",
+        type=str,
+        help="Input: CSV file (mode 3) or directory of CSVs (modes 1 and 2).",
+    )
+    parser.add_argument(
+        "-c", "--config",
+        type=str,
+        help="Path to vaila_and_jump_config.toml (required for mode 3 MediaPipe).",
+    )
+    parser.add_argument(
+        "-o", "--output",
+        type=str,
+        default=None,
+        help="Output directory for results (default: next to input, timestamped).",
+    )
+    parser.add_argument(
+        "-d", "--data-type",
+        type=int,
+        choices=[1, 2, 3],
+        default=None,
+        help="Data type: 1=Time of Flight, 2=Jump Height, 3=MediaPipe (default: 3 when -i and -c given).",
+    )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Force GUI mode (ignore -i/-c/-d).",
+    )
+    args = parser.parse_args()
+
+    if args.gui or (not args.input and not args.config):
+        vaila_and_jump()
+        exit(0)
+
+    # Infer data type when -i and -c given but -d omitted (backward compatible)
+    data_type = args.data_type
+    if data_type is None and args.input and args.config:
+        data_type = 3
+
+    if data_type == 3:
+        if not args.input or not args.config:
+            print("For mode 3 (MediaPipe), provide both -i (input CSV) and -c (config TOML).")
+            exit(1)
+        exit(_run_cli_mediapipe(args))
+    elif data_type == 1:
+        if not args.input:
+            print("For mode 1 (Time of Flight), provide -i (directory containing CSVs).")
+            exit(1)
+        if not os.path.isdir(args.input):
+            print(f"Error: -i must be a directory for mode 1, got: {args.input}")
+            exit(1)
+        process_all_files_in_directory(args.input, use_time_of_flight=True, output_parent=args.output)
+        exit(0)
+    elif data_type == 2:
+        if not args.input:
+            print("For mode 2 (Jump Height), provide -i (directory containing CSVs).")
+            exit(1)
+        if not os.path.isdir(args.input):
+            print(f"Error: -i must be a directory for mode 2, got: {args.input}")
+            exit(1)
+        process_all_files_in_directory(args.input, use_time_of_flight=False, output_parent=args.output)
+        exit(0)
+    else:
+        print("For CLI mode, use -d 1 (Time of Flight), -d 2 (Jump Height), or -d 3 (MediaPipe with -i and -c).")
+        print("Use --gui to run the graphical interface.")
+        exit(1)
