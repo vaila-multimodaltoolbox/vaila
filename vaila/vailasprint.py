@@ -2345,60 +2345,69 @@ def main():
     print(f"Script is file: {Path(__file__).is_file()}")
     print(f"Script is directory: {Path(__file__).is_dir()}")
 
-    root = tk.Tk()
-    root.withdraw()
+    import argparse
+    parser = argparse.ArgumentParser(description="vailá Sprint Analysis")
+    parser.add_argument("--mode", choices=["sprint", "cod"], help="Analysis mode: sprint or cod")
+    parser.add_argument("--dir", help="Directory containing TOML files")
+    args = parser.parse_args()
 
-    # --- Mode Selection ---
+    mode = args.mode
+    input_dir = args.dir
 
-    # Custom Dialog for clearer options
-    class ModeSelectionDialog(tk.Toplevel):
-        def __init__(self, parent):
-            super().__init__(parent)
-            self.title("Select Analysis Mode")
-            self.geometry("300x150")
-            self.result = None
+    if not mode or not input_dir:
+        root = tk.Tk()
+        root.withdraw()
 
-            tk.Label(self, text="Choose Sprint Analysis Mode:", font=("Arial", 12)).pack(pady=10)
+        if not mode:
+            # --- Mode Selection ---
+            class ModeSelectionDialog(tk.Toplevel):
+                def __init__(self, parent):
+                    super().__init__(parent)
+                    self.title("Select Analysis Mode")
+                    self.geometry("300x150")
+                    self.result = None
 
-            tk.Button(self, text="Time Sprint (20m)", width=25, command=self.set_sprint).pack(
-                pady=5
-            )
-            tk.Button(self, text="COD 180° (20m)", width=25, command=self.set_cod).pack(
-                pady=5
-            )
+                    tk.Label(self, text="Choose Sprint Analysis Mode:", font=("Arial", 12)).pack(pady=10)
 
-            self.protocol("WM_DELETE_WINDOW", self.on_close)
+                    tk.Button(self, text="Time Sprint (20m)", width=25, command=self.set_sprint).pack(
+                        pady=5
+                    )
+                    tk.Button(self, text="COD 180° (20m)", width=25, command=self.set_cod).pack(
+                        pady=5
+                    )
 
-        def set_sprint(self):
-            self.result = "sprint"
-            self.destroy()
+                    self.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        def set_cod(self):
-            self.result = "cod"
-            self.destroy()
+                def set_sprint(self):
+                    self.result = "sprint"
+                    self.destroy()
 
-        def on_close(self):
-            self.result = None
-            self.destroy()
+                def set_cod(self):
+                    self.result = "cod"
+                    self.destroy()
 
-    dialog = ModeSelectionDialog(root)
-    root.wait_window(dialog)
-    mode = dialog.result
+                def on_close(self):
+                    self.result = None
+                    self.destroy()
 
-    if not mode:
-        print("Operation cancelled.")
-        return
+            dialog = ModeSelectionDialog(root)
+            root.wait_window(dialog)
+            mode = dialog.result
 
-    # Removed "Coming Soon" block for COD
+            if not mode:
+                print("Operation cancelled.")
+                return
 
-    # --- Sprint Mode ---
+        if not input_dir:
+            print("Select a directory containing TOML files...")
+            input_dir = filedialog.askdirectory(title="Select Directory with TOML files")
 
-    print("Select a directory containing TOML files...")
-    input_dir = filedialog.askdirectory(title="Select Directory with TOML files")
-
-    if not input_dir:
-        print("No directory selected.")
-        return
+            if not input_dir:
+                print("No directory selected.")
+                return
+    else:
+        print(f"Mode running from CLI: {mode}")
+        print(f"Input directory: {input_dir}")
 
     toml_files = sorted(glob.glob(os.path.join(input_dir, "*.toml")), key=lambda p: os.path.basename(p).lower())
 
