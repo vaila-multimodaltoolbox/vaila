@@ -169,8 +169,9 @@
 
         <div class="docstring">
             <h3>📝 Usage</h3>
+            <h4>GUI</h4>
             <ol>
-                <li>Run the script: <code>python vaila_and_jump.py</code></li>
+                <li>Run the script: <code>python vaila_and_jump.py</code> or <code>python vaila_and_jump.py --gui</code></li>
                 <li>Select the target directory containing .csv files</li>
                 <li>Choose data type:
                     <ul>
@@ -188,6 +189,17 @@
                 </li>
                 <li>The script processes all files and generates comprehensive reports</li>
             </ol>
+            <h4>CLI (linha de comando)</h4>
+            <p>Argumentos unificados para todos os modos. Use <code>-d</code> para o tipo de dado:</p>
+            <ul>
+                <li><code>-i</code> — Entrada: arquivo CSV (modo 3) ou diretório de CSVs (modos 1 e 2)</li>
+                <li><code>-c</code> — Config TOML (obrigatório para modo 3 MediaPipe)</li>
+                <li><code>-o</code> — Diretório de saída (opcional)</li>
+                <li><code>-d</code> — Tipo: 1 = Tempo de Voo, 2 = Altura, 3 = MediaPipe</li>
+                <li><code>--gui</code> — Forçar modo gráfico</li>
+            </ul>
+            <p>Exemplo MediaPipe: <code>python vaila_and_jump.py -i ficheiro.csv -c config.toml -o saida/ -d 3</code></p>
+            <p>Exemplo batch (modo 1 ou 2): <code>-i &lt;dir&gt; -o &lt;out&gt; -d 1</code> ou <code>-d 2</code>.</p>
         </div>
 
         <div class="docstring">
