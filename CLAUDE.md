@@ -2,6 +2,8 @@
 
 Guidance for **Claude Code** when working with the **vailá** repository.
 
+> See also: [AGENTS.md](./AGENTS.md) — shared rules for all AI agents.
+
 ## Project Overview
 
 **vailá** (Versatile Anarcho Integrated Liberation Ánalysis) — open-source Python 3.12 multimodal toolbox for biomechanical data analysis. Integrates IMU, motion capture, markerless tracking (MediaPipe, YOLO), force plates, EMG, GNSS/GPS through a Tkinter-based GUI.
