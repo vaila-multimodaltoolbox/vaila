@@ -20,7 +20,6 @@ bin/ffmpeg/
 *.mov
 *.AVI
 *.avi
-*.AVI
 
 # YOLO models
 vaila/models/yolo11*.pt
@@ -95,8 +94,8 @@ site/
 
 # uv (Python package manager)
 .uv/
-uv.lock
-.python-version
+# uv.lock → NÃO ignorar, deve ser commitado (builds reproduzíveis)
+# .python-version → NÃO ignorar, gerado por `uv python pin`
 
 # Spyder project settings
 .spyderproject
