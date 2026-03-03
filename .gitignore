@@ -121,7 +121,6 @@ dmypy.json
 .cursor/
 
 # Claude
-CLAUDE.md
 CLAUDE.local.md
 .claude/
 
@@ -142,6 +141,12 @@ out/
 
 # Antigravity
 .antigravity/
+
+# AI Agents (generic workflow/skill folders)
+.agents/
+.agent/
+_agents/
+_agent/
 
 # Sublime Text
 *.sublime-project
@@ -175,4 +180,5 @@ hooks/*
 !install-hooks.sh
 
 # Ignore all .pt files at root level
-*.pttests/markerless_2d_analysis/temp/
+*.pt
+tests/markerless_2d_analysis/temp/
