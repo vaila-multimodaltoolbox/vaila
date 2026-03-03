@@ -117,8 +117,10 @@ dmypy.json
 .pyre/
 
 # IDEs and Editors
-# Cursor
+# Cursor (ignore IDE config, but track rules)
 .cursor/
+!.cursor/rules/
+!.cursor/rules/*.mdc
 
 # Claude
 CLAUDE.local.md
