@@ -210,3 +210,10 @@ exclude = [".git", ".venv", "__pycache__", "*.pyc", "build", "dist", ".uv", "uv.
 # Regras por severidade (error = falha do ty check). Quando reduzir diagnósticos, pode ativar: all = "error"
 # [tool.ty.rules]
 # all = "warn"
+
+[tool.pytest.ini_options]
+# Suppress third-party deprecation warnings (matplotlib, pyparsing, dash)
+filterwarnings = [
+    "ignore::pyparsing.warnings.PyparsingDeprecationWarning",
+    "ignore::pytest.PytestDeprecationWarning",
+]

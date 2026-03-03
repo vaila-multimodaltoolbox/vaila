@@ -49,15 +49,20 @@ def read_coordinates(file_path, usecols=None):
 
 def rec2d(A, cc2d):
     nlin = np.size(cc2d, 0)
-    H = np.matrix(np.zeros((nlin, 2)))
+    H = np.zeros((nlin, 2))
     for k in range(nlin):
         x = cc2d[k, 0]
         y = cc2d[k, 1]
-        cc2d1 = np.matrix([[A[0] - x * A[6], A[1] - x * A[7]], [A[3] - y * A[6], A[4] - y * A[7]]])
-        cc2d2 = np.matrix([[x - A[2]], [y - A[5]]])
-        G1 = inv(cc2d1) * cc2d2
-        H[k, :] = G1.transpose()
-    return np.asarray(H)
+        cc2d1 = np.array(
+            [
+                [A[0] - x * A[6], A[1] - x * A[7]],
+                [A[3] - y * A[6], A[4] - y * A[7]],
+            ]
+        )
+        cc2d2 = np.array([[x - A[2]], [y - A[5]]])
+        G1 = inv(cc2d1) @ cc2d2
+        H[k, :] = G1.ravel()
+    return H
 
 
 def process_files_in_directory(dlt_params, input_directory, output_directory, data_rate):

@@ -122,10 +122,10 @@ def dlt2d(F, L):
     Returns:
     np.array: DLT parameters.
     """
-    F = np.matrix(F)
-    L = np.matrix(L)
-    Lt = L.transpose()
-    C = Lt.flatten("F").transpose()
+    F = np.asarray(F)
+    L = np.asarray(L)
+    Lt = L.T
+    C = Lt.flatten(order="F").reshape(-1, 1)
     m = np.size(F, 0)
 
     B = np.zeros((2 * m, 8))
