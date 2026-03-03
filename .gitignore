@@ -20,7 +20,6 @@ bin/ffmpeg/
 *.mov
 *.AVI
 *.avi
-*.AVI
 
 # YOLO models
 vaila/models/yolo11*.pt
@@ -95,8 +94,8 @@ site/
 
 # uv (Python package manager)
 .uv/
-uv.lock
-.python-version
+# uv.lock → NÃO ignorar, deve ser commitado (builds reproduzíveis)
+# .python-version → NÃO ignorar, gerado por `uv python pin`
 
 # Spyder project settings
 .spyderproject
@@ -117,11 +116,12 @@ dmypy.json
 .pyre/
 
 # IDEs and Editors
-# Cursor
+# Cursor (ignore IDE config, but track rules)
 .cursor/
+!.cursor/rules/
+!.cursor/rules/*.mdc
 
 # Claude
-CLAUDE.md
 CLAUDE.local.md
 .claude/
 
@@ -142,6 +142,12 @@ out/
 
 # Antigravity
 .antigravity/
+
+# AI Agents (generic workflow/skill folders)
+.agents/
+.agent/
+_agents/
+_agent/
 
 # Sublime Text
 *.sublime-project
@@ -175,4 +181,5 @@ hooks/*
 !install-hooks.sh
 
 # Ignore all .pt files at root level
-*.pttests/markerless_2d_analysis/temp/
+*.pt
+tests/markerless_2d_analysis/temp/
