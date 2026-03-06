@@ -31,7 +31,12 @@ How to use:
 - GUI: Run without arguments; choose "Open Video/Image File" or "Open Image Sequence (Folder)".
 - CLI: -f FILE for video or single PNG; --sequence DIR for a folder of PNGs.
 
-python getpixelvideo.py
+    GUI:
+    python getpixelvideo.py
+
+    CLI:
+    python getpixelvideo.py -f FILE
+    python getpixelvideo.py --sequence DIR
 
 Help:
 ------------
