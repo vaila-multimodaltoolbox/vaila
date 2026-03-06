@@ -53,6 +53,7 @@ python -m vaila.compress_videos_h265 --dir /path/to/videos --no-gpu
 | `--crf`              | `28`       | Quality (0-51). Lower = better quality |
 | `--resolution`       | `original` | Output resolution (e.g. `1920x1080`)   |
 | `--gpu` / `--no-gpu` | auto       | Force GPU or CPU encoding              |
+| `--workers` / `-w`   | `1`        | Number of parallel workers             |
 
 ## 🔧 Main Functions
 

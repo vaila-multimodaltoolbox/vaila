@@ -16,6 +16,8 @@ Supports both a **GUI** (Tkinter dialog) and **CLI** (`argparse`) interface.
 ### Key Features
 
 - **GPU acceleration** with NVIDIA NVENC (auto-detected via `nvidia-smi`)
+- **Parallel processing**: speed up batch compression with multiple workers
+- **Adaptive compression**: automatically discard output files larger than input
 - **macOS VideoToolbox** hardware encoding support
 - **CPU fallback** to `libx264` when no GPU is available
 - **Resolution control**: keep original or downscale to common resolutions
@@ -53,6 +55,7 @@ python -m vaila.compress_videos_h264 --dir /path/to/videos --no-gpu
 | `--crf`              | `23`       | Quality (0-51). Lower = better quality |
 | `--resolution`       | `original` | Output resolution (e.g. `1920x1080`)   |
 | `--gpu` / `--no-gpu` | auto       | Force GPU or CPU encoding              |
+| `--workers` / `-w`   | `1`        | Number of parallel workers             |
 
 ## 🔧 Main Functions
 
@@ -74,6 +77,6 @@ python -m vaila.compress_videos_h264 --dir /path/to/videos --no-gpu
 
 ---
 
-📅 **Updated:** 18/02/2026
+📅 **Updated:** 05/03/2026
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

@@ -1,45 +1,40 @@
 """
-compress_videos_h266.py
-
+================================================================================
+Video Compression Tool (H.266/VVC) - compress_videos_h266.py
+================================================================================
 vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+Authors: Prof. Dr. Paulo R. P. Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
-
-Licensed under GNU Lesser General Public License v3.0
-
-Created by Paulo Santiago
 Date: 06 September 2025
-Update: 18 February 2026
-Version: 0.0.2
+Update: 05 March 2026
+Version: 0.1.1
 Python Version: 3.12
 
 Description:
+------------
 This script compresses videos in a specified directory to H.266/VVC format using the FFmpeg tool
 and the libvvenc encoder. It provides both a GUI and CLI for selecting the directory and
 compression settings. The compressed versions are saved in a subdirectory named
 'compressed_h266_<timestamp>'.
 
-!!! IMPORTANT !!!
-- H.266/VVC encoding is EXTREMELY SLOW and CPU-intensive. Expect long processing times.
-- GPU acceleration (like NVIDIA NVENC) is NOT available for VVC in common FFmpeg builds.
-  This script uses CPU-only encoding.
-
-Usage:
+How to use:
+------------
 - GUI: Run the script without arguments to open the GUI.
 - CLI: python compress_videos_h266.py --dir /path/to/videos --preset medium --qp 32
 
 Requirements:
+------------
 - A modern version of FFmpeg (version 7.1+ recommended) that was compiled with libvvenc support.
 - The script is designed to work on Windows, Linux, and macOS.
 
 Dependencies:
+------------
 - Python 3.x
 - Tkinter (included with Python)
 - FFmpeg with libvvenc (available in PATH)
 
 How to get FFmpeg with libvvenc support:
-
+----------------------------------------
 The version of FFmpeg from standard system repositories (like Ubuntu's apt) usually DOES NOT
 include libvvenc. You need to download a pre-compiled "full" or "git" build.
 
@@ -57,6 +52,11 @@ To verify your installation, run this command in your terminal:
   ffmpeg -encoders | grep vvenc   (Linux/macOS)
 
 You should see a line containing "libvvenc". If not, your FFmpeg build is not compatible.
+
+Note:
+- H.266/VVC encoding is EXTREMELY SLOW and CPU-intensive. Expect long processing times.
+- GPU acceleration (like NVIDIA NVENC) is NOT available for VVC in common FFmpeg builds.
+  This script uses CPU-only encoding.
 """
 
 import argparse
@@ -67,6 +67,8 @@ import tempfile
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog, messagebox
+import concurrent.futures
+import multiprocessing
 
 from rich import print
 
@@ -149,7 +151,95 @@ def create_temp_file_with_videos(video_files):
     return temp.name
 
 
-def run_compress_videos_h266(input_list, output_dir, preset, qp, resolution):
+def compress_video_worker_h266(video_info):
+    """Worker function to compress a single video using H.266/VVC.
+
+    Args:
+        video_info (dict): Contains video_path, output_dir, preset, qp, resolution, index, total.
+
+    Returns:
+        dict: Results including success (bool), error (str), output_path (str), skipped (bool), basename (str), original_size (int), output_size (int).
+    """
+    video_path = video_info["video_path"]
+    output_dir = video_info["output_dir"]
+    preset = video_info["preset"]
+    qp = video_info["qp"]
+    resolution = video_info["resolution"]
+    index = video_info["index"]
+    total = video_info["total"]
+
+    basename = os.path.basename(video_path)
+    output_path = os.path.join(output_dir, os.path.splitext(basename)[0] + "_h266.mp4")
+    original_size = os.path.getsize(video_path)
+
+    result_status = {
+        "success": False,
+        "error": None,
+        "output_path": output_path,
+        "skipped": False,
+        "basename": basename,
+        "original_size": original_size,
+        "output_size": 0,
+        "index": index,
+        "total": total,
+    }
+
+    try:
+        # Base command
+        cmd = [FFMPEG, "-y", "-i", video_path]
+
+        # Add scale filter if resolution is not original
+        if resolution != "original":
+            w, h = resolution.split("x")
+            scale_filter = (
+                f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
+            )
+            cmd.extend(["-vf", scale_filter])
+
+        # VVC CPU encoding settings using libvvenc
+        vvenc_params = f"preset={preset}:qp={qp}"
+        cmd.extend(
+            [
+                "-c:v",
+                "libvvenc",
+                "-vvenc-params",
+                vvenc_params,
+            ]
+        )
+
+        # Add audio settings and output path
+        cmd.extend(["-c:a", "copy", "-hide_banner", "-nostats", output_path])
+
+        # Run compression
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+        # Verify output and check for adaptive compression
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            output_size = os.path.getsize(output_path)
+            result_status["output_size"] = output_size
+            
+            # Adaptive compression
+            if output_size > original_size:
+                os.remove(output_path)
+                result_status["success"] = True
+                result_status["skipped"] = True
+                result_status["error"] = "Output file was larger than input (adaptive compression skip)"
+            else:
+                result_status["success"] = True
+        else:
+            result_status["error"] = "Output file empty or missing"
+
+    except subprocess.CalledProcessError as e:
+        stderr_text = e.stderr if e.stderr else "No stderr details available."
+        result_status["error"] = f"FFmpeg failed: {stderr_text[:200]}"
+    except Exception as e:
+        result_status["error"] = str(e)
+
+    return result_status
+
+
+def run_compress_videos_h266(input_list, output_dir, preset, qp, resolution, worker_count=1):
     """Run the actual H.266/VVC compression using libvvenc (CPU-only).
 
     Returns:
@@ -162,6 +252,7 @@ def run_compress_videos_h266(input_list, output_dir, preset, qp, resolution):
     print(f"  Preset: {preset}")
     print(f"  QP: {qp}")
     print(f"  Resolution: {resolution}")
+    print(f"  Workers: {worker_count}")
     print("  Encoder: libvvenc (CPU-only)")
 
     print(
@@ -181,54 +272,40 @@ def run_compress_videos_h266(input_list, output_dir, preset, qp, resolution):
 
     print(f"[bold]Processing {len(video_paths)} video(s)...[/bold]\n")
 
+    # Prepare video info for workers
+    video_infos = []
     for i, video_path in enumerate(video_paths, 1):
-        basename = os.path.basename(video_path)
-        output_path = os.path.join(
-            output_dir, os.path.splitext(basename)[0] + "_h266.mp4"
-        )
+        video_infos.append({
+            "video_path": video_path,
+            "output_dir": output_dir,
+            "preset": preset,
+            "qp": qp,
+            "resolution": resolution,
+            "index": i,
+            "total": len(video_paths)
+        })
 
-        try:
-            print(f"[{i}/{len(video_paths)}] {basename}")
-
-            # Base command
-            cmd = [FFMPEG, "-y", "-i", video_path]
-
-            # Add scale filter if resolution is not original
-            if resolution != "original":
-                w, h = resolution.split("x")
-                scale_filter = (
-                    f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                    f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
-                )
-                cmd.extend(["-vf", scale_filter])
-
-            # VVC CPU encoding settings using libvvenc
-            vvenc_params = f"preset={preset}:qp={qp}"
-            cmd.extend([
-                "-c:v", "libvvenc",
-                "-vvenc-params", vvenc_params,
-            ])
-
-            # Add audio settings and output path
-            cmd.extend(["-c:a", "copy", "-hide_banner", "-nostats", output_path])
-
-            print(f"  Command: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True)
-
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                output_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-                success_count += 1
-                print(f"  [green][OK] Done ({output_size_mb:.1f} MB)[/green]")
+    # Execute in parallel
+    with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
+        futures = {executor.submit(compress_video_worker_h266, info): info for info in video_infos}
+        
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            basename = res["basename"]
+            i = res["index"]
+            total = res["total"]
+            
+            if res["success"]:
+                if res["skipped"]:
+                    print(f"[{i}/{total}] {basename} [yellow][SKIPPED][/yellow] (Output larger than input)")
+                    failure_count += 1
+                else:
+                    output_size_mb = res["output_size"] / (1024 * 1024)
+                    print(f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB)")
+                    success_count += 1
             else:
+                print(f"[{i}/{total}] {basename} [red][FAIL][/red] {res['error']}")
                 failure_count += 1
-                print("  [red][FAIL] Output file is empty or missing[/red]")
-
-        except subprocess.CalledProcessError as e:
-            failure_count += 1
-            print(f"  [red][FAIL] Failed: {e}[/red]")
-            if e.stderr:
-                stderr_text = e.stderr if isinstance(e.stderr, str) else e.stderr.decode()
-                print(f"  [red]  ffmpeg stderr: {stderr_text[:200]}[/red]")
 
     print(f"\n[bold]Results: {success_count} succeeded, {failure_count} failed.[/bold]")
     return success_count, failure_count
@@ -264,24 +341,25 @@ def get_compression_parameters():
     main_frame = tk.Frame(dialog, padx=20, pady=15)
     main_frame.pack(fill="both", expand=True)
 
-    tk.Label(
-        main_frame, text="H.266/VVC Compression Settings", font=("Arial", 12, "bold")
-    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
+    tk.Label(main_frame, text="H.266/VVC Compression Settings", font=("Arial", 12, "bold")).grid(
+        row=0, column=0, columnspan=2, sticky="w", pady=(0, 15)
+    )
 
     # 1. Preset
     tk.Label(main_frame, text="Preset (enter number):", font=("Arial", 10, "bold")).grid(
         row=1, column=0, sticky="w", pady=5
     )
     preset_var = tk.StringVar(value="6")
-    tk.Entry(main_frame, textvariable=preset_var, width=5).grid(
-        row=1, column=1, sticky="w", pady=5
-    )
+    tk.Entry(main_frame, textvariable=preset_var, width=5).grid(row=1, column=1, sticky="w", pady=5)
     preset_help_text = "Options:\n" + "   ".join(
         [f"{i + 1}={p}" for i, p in enumerate(PRESET_OPTIONS)]
     )
     tk.Label(
-        main_frame, text=preset_help_text, font=("Arial", 8, "italic"),
-        justify="left", wraplength=400,
+        main_frame,
+        text=preset_help_text,
+        font=("Arial", 8, "italic"),
+        justify="left",
+        wraplength=400,
     ).grid(row=2, column=0, columnspan=2, sticky="w", padx=20)
 
     # 2. QP Value
@@ -289,9 +367,7 @@ def get_compression_parameters():
         row=3, column=0, sticky="w", pady=5
     )
     qp_var = tk.StringVar(value="23")
-    tk.Entry(main_frame, textvariable=qp_var, width=5).grid(
-        row=3, column=1, sticky="w", pady=5
-    )
+    tk.Entry(main_frame, textvariable=qp_var, width=5).grid(row=3, column=1, sticky="w", pady=5)
     tk.Label(
         main_frame,
         text="Lower = better quality. 32 is a good default.",
@@ -310,8 +386,11 @@ def get_compression_parameters():
         [f"{i + 1}={r}" for i, r in enumerate(RESOLUTION_OPTIONS)]
     )
     tk.Label(
-        main_frame, text=resolution_help_text, font=("Arial", 8, "italic"),
-        justify="left", wraplength=400,
+        main_frame,
+        text=resolution_help_text,
+        font=("Arial", 8, "italic"),
+        justify="left",
+        wraplength=400,
     ).grid(row=6, column=0, columnspan=2, sticky="w", padx=20)
 
     tk.Frame(main_frame, height=1, bg="gray").grid(
@@ -333,9 +412,7 @@ def get_compression_parameters():
 
             resolution_idx = int(resolution_var.get().strip())
             if not (1 <= resolution_idx <= len(RESOLUTION_OPTIONS)):
-                raise ValueError(
-                    f"Resolution must be between 1 and {len(RESOLUTION_OPTIONS)}"
-                )
+                raise ValueError(f"Resolution must be between 1 and {len(RESOLUTION_OPTIONS)}")
             resolution = RESOLUTION_OPTIONS[resolution_idx - 1]
 
             params["preset"] = preset
@@ -359,9 +436,7 @@ def get_compression_parameters():
         dialog.destroy()
 
     tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(side="left", padx=5)
-    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(
-        side="left", padx=5
-    )
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side="left", padx=5)
     dialog.wait_window()
     return params if params else None
 
@@ -444,9 +519,7 @@ Note: H.266/VVC encoding requires FFmpeg compiled with libvvenc.
       Standard FFmpeg packages usually do NOT include libvvenc.
         """,
     )
-    parser.add_argument(
-        "--dir", type=str, help="Directory containing videos to compress."
-    )
+    parser.add_argument("--dir", type=str, help="Directory containing videos to compress.")
     parser.add_argument(
         "--preset",
         type=str,
@@ -514,6 +587,7 @@ def main():
             preset=args.preset,
             qp=args.qp,
             resolution=args.resolution,
+            worker_count=args.workers,
         )
     finally:
         os.remove(temp_file_path)

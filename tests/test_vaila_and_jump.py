@@ -8,7 +8,6 @@ No GUI, no I/O, no external dependencies beyond numpy/pandas.
 
 import math
 import sys
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +30,6 @@ from vaila.vaila_and_jump import (
     calculate_power,
     calculate_time_of_flight,
     calculate_velocity,
-    identify_jump_phases,
 )
 
 
@@ -188,12 +186,7 @@ class TestCalculateTimeOfFlight:
 # ──────────────────────────────────────────────
 class TestTomlContextLoading:
     def _write_toml(self, path: Path, mass: float, fps: float, shank: float):
-        content = (
-            "[jump_context]\n"
-            f"mass_kg = {mass}\n"
-            f"fps = {fps}\n"
-            f"shank_length_m = {shank}\n"
-        )
+        content = f"[jump_context]\nmass_kg = {mass}\nfps = {fps}\nshank_length_m = {shank}\n"
         path.write_text(content, encoding="utf-8")
 
     def test_load_from_file_valid(self, tmp_path):

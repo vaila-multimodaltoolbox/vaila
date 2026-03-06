@@ -1,37 +1,40 @@
 """
+================================================================================
+Video Compression Tool (H.264) - compress_videos_h264.py
+================================================================================
 vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+Authors: Prof. Dr. Paulo R. P. Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
-
-Licensed under GNU Lesser General Public License v3.0
-
-compress_videos_h264.py
+Date: 05 March 2026
+Update: 05 March 2026
+Version: 0.1.1
+Python Version: 3.12
 
 Description:
+------------
 This script compresses videos in a specified directory to H.264 format using the FFmpeg tool.
 It provides both a GUI and CLI for selecting the directory containing the videos and processes
 each video, saving the compressed versions in a subdirectory named 'compressed_h264_<timestamp>'.
-The script supports GPU acceleration using NVIDIA NVENC if available or falls back to CPU encoding
-with libx264.
 
-Usage:
+How to use:
+------------
 - GUI: Run the script without arguments to open the GUI.
 - CLI: python compress_videos_h264.py --dir /path/to/videos --preset medium --crf 23
 
 Requirements:
+------------
 - FFmpeg must be installed and accessible in the system PATH.
 - The script is designed to work on Windows, Linux, and macOS.
 
 Dependencies:
+------------
 - Python 3.x
 - Tkinter (included with Python)
 - FFmpeg (available in PATH)
 
-NVIDIA GPU Installation and FFmpeg NVENC Support
-
-To use NVIDIA GPU acceleration for video encoding in FFmpeg, follow the steps below for your
-operating system:
+NVIDIA GPU Installation and FFmpeg NVENC Support:
+--------------------------------------------------
+To use NVIDIA GPU acceleration for video encoding in FFmpeg, follow the steps below for your operating system:
 
 ## Windows:
 1. **Install NVIDIA Drivers**:
@@ -92,6 +95,8 @@ import tempfile
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog, messagebox
+import concurrent.futures
+import multiprocessing
 
 from rich import print
 
@@ -163,10 +168,14 @@ def is_nvidia_gpu_available():
         # Verify h264_nvenc actually works with a quick test encode
         test_cmd = [
             FFMPEG,
-            "-f", "lavfi",
-            "-i", "color=black:s=32x32:r=1:d=1",
-            "-c:v", "h264_nvenc",
-            "-f", "null",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=black:s=32x32:r=1:d=1",
+            "-c:v",
+            "h264_nvenc",
+            "-f",
+            "null",
             "-hide_banner",
             "-nostats",
             "-",
@@ -214,7 +223,139 @@ def create_temp_file_with_videos(video_files):
     return temp.name
 
 
-def run_compress_videos_h264(input_list, output_dir, preset, crf, resolution, use_gpu):
+def compress_video_worker_h264(video_info):
+    """Worker function to compress a single video.
+
+    Args:
+        video_info (dict): Contains video_path, output_dir, preset, crf, resolution, use_gpu, index, total.
+
+    Returns:
+        dict: Results including success (bool), error (str), output_path (str), skipped (bool), basename (str), original_size (int), output_size (int).
+    """
+    video_path = video_info["video_path"]
+    output_dir = video_info["output_dir"]
+    preset = video_info["preset"]
+    crf = video_info["crf"]
+    resolution = video_info["resolution"]
+    use_gpu = video_info["use_gpu"]
+    index = video_info["index"]
+    total = video_info["total"]
+
+    basename = os.path.basename(video_path)
+    output_path = os.path.join(output_dir, os.path.splitext(basename)[0] + "_h264.mp4")
+    original_size = os.path.getsize(video_path)
+
+    result_status = {
+        "success": False,
+        "error": None,
+        "output_path": output_path,
+        "skipped": False,
+        "basename": basename,
+        "original_size": original_size,
+        "output_size": 0,
+        "index": index,
+        "total": total,
+    }
+
+    try:
+        # Get original video resolution for logging
+        original_res_str = "unknown"
+        try:
+            cmd_probe = [
+                FFPROBE,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=s=x:p=0",
+                video_path,
+            ]
+            original_res_str = subprocess.check_output(cmd_probe).decode().strip()
+        except Exception:
+            pass
+
+        # Base command
+        cmd = [FFMPEG, "-y", "-i", video_path]
+
+        # Add scale filter if resolution is not original
+        if resolution != "original":
+            w, h = resolution.split("x")
+            scale_filter = (
+                f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
+            )
+            cmd.extend(["-vf", scale_filter])
+
+        # Add encoding settings based on GPU availability
+        cmd.extend(["-fps_mode", "passthrough"])
+
+        if use_gpu:
+            nvenc_preset = NVENC_PRESET_MAP.get(preset, "p5")
+            cmd.extend(
+                [
+                    "-c:v",
+                    "h264_nvenc",
+                    "-preset",
+                    nvenc_preset,
+                    "-tune",
+                    "hq",
+                    "-rc",
+                    "constqp",
+                    "-qp",
+                    str(crf),
+                    "-bf",
+                    "0",
+                ]
+            )
+        else:
+            cmd.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    preset,
+                    "-crf",
+                    str(crf),
+                    "-bf",
+                    "0",
+                ]
+            )
+
+        # Add audio settings and output path
+        cmd.extend(["-c:a", "copy", "-hide_banner", "-nostats", output_path])
+
+        # Run compression
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+        # Verify output and check for adaptive compression
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            output_size = os.path.getsize(output_path)
+            result_status["output_size"] = output_size
+            
+            # Adaptive compression: if output is larger than input, delete output and mark as skipped
+            if output_size > original_size:
+                os.remove(output_path)
+                result_status["success"] = True
+                result_status["skipped"] = True
+                result_status["error"] = "Output file was larger than input (adaptive compression skip)"
+            else:
+                result_status["success"] = True
+        else:
+            result_status["error"] = "Output file empty or missing"
+
+    except subprocess.CalledProcessError as e:
+        stderr_text = e.stderr if e.stderr else "No stderr details available."
+        result_status["error"] = f"FFmpeg failed: {stderr_text[:200]}"
+    except Exception as e:
+        result_status["error"] = str(e)
+
+    return result_status
+
+
+def run_compress_videos_h264(input_list, output_dir, preset, crf, resolution, use_gpu, worker_count=1):
     """Run the actual H.264 compression.
 
     Returns:
@@ -228,6 +369,7 @@ def run_compress_videos_h264(input_list, output_dir, preset, crf, resolution, us
     print(f"  CRF: {crf}")
     print(f"  Resolution: {resolution}")
     print(f"  Use GPU: {use_gpu}")
+    print(f"  Workers: {worker_count}")
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -244,82 +386,44 @@ def run_compress_videos_h264(input_list, output_dir, preset, crf, resolution, us
         "and the size of your videos.[/yellow]\n"
     )
 
+    # Prepare video info for workers
+    video_infos = []
     for i, video_path in enumerate(video_paths, 1):
-        basename = os.path.basename(video_path)
-        output_path = os.path.join(
-            output_dir, os.path.splitext(basename)[0] + "_h264.mp4"
-        )
+        video_infos.append({
+            "video_path": video_path,
+            "output_dir": output_dir,
+            "preset": preset,
+            "crf": crf,
+            "resolution": resolution,
+            "use_gpu": use_gpu,
+            "index": i,
+            "total": len(video_paths)
+        })
 
-        try:
-            # Get original video resolution for logging
-            try:
-                cmd_probe = [
-                    FFPROBE,
-                    "-v", "error",
-                    "-select_streams", "v:0",
-                    "-show_entries", "stream=width,height",
-                    "-of", "csv=s=x:p=0",
-                    video_path,
-                ]
-                original_resolution = subprocess.check_output(cmd_probe).decode().strip()
-                print(f"[{i}/{len(video_paths)}] {basename} ({original_resolution})")
-            except Exception:
-                print(f"[{i}/{len(video_paths)}] {basename}")
-
-            # Base command
-            cmd = [FFMPEG, "-y", "-i", video_path]
-
-            # Add scale filter if resolution is not original
-            if resolution != "original":
-                w, h = resolution.split("x")
-                scale_filter = (
-                    f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                    f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
-                )
-                cmd.extend(["-vf", scale_filter])
-
-            # Add encoding settings based on GPU availability
-            cmd.extend(["-fps_mode", "passthrough"])
+    # Execute in parallel
+    with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
+        futures = {executor.submit(compress_video_worker_h264, info): info for info in video_infos}
+        
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            basename = res["basename"]
+            i = res["index"]
+            total = res["total"]
             
-            if use_gpu:
-                nvenc_preset = NVENC_PRESET_MAP.get(preset, "p5")
-                cmd.extend([
-                    "-c:v", "h264_nvenc",
-                    "-preset", nvenc_preset,
-                    "-tune", "hq",
-                    "-rc", "constqp",
-                    "-qp", str(crf),  # Use CRF value as QP for NVENC
-                    "-bf", "0",       # No B-frames for temporal accuracy in kinematics
-                ])
+            if res["success"]:
+                if res["skipped"]:
+                    print(f"[{i}/{total}] {basename} [yellow][SKIPPED][/yellow] (Output larger than input)")
+                    # Count skipped as failure or separate? Plan says "skip if larger", 
+                    # usually counts as success in terms of script execution but not in file production.
+                    # I'll count as failure for the final tally to be honest about file production.
+                    failure_count += 1
+                else:
+                    output_size_mb = res["output_size"] / (1024 * 1024)
+                    print(f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB)")
+                    success_count += 1
             else:
-                cmd.extend([
-                    "-c:v", "libx264",
-                    "-preset", preset,
-                    "-crf", str(crf),
-                    "-bf", "0",       # No B-frames for temporal accuracy in kinematics
-                ])
-
-            # Add audio settings and output path
-            cmd.extend(["-c:a", "copy", "-hide_banner", "-nostats", output_path])
-
-            print(f"  Command: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True)
-
-            # Verify output
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                output_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-                success_count += 1
-                print(f"  [green][OK] Done ({output_size_mb:.1f} MB)[/green]")
-            else:
+                print(f"[{i}/{total}] {basename} [red][FAIL][/red] {res['error']}")
                 failure_count += 1
-                print("  [red][FAIL] Output file is empty or missing[/red]")
-
-        except subprocess.CalledProcessError as e:
-            failure_count += 1
-            print(f"  [red][FAIL] Failed: {e}[/red]")
-            if e.stderr:
-                stderr_text = e.stderr if isinstance(e.stderr, str) else e.stderr.decode()
-                print(f"  [red]  ffmpeg stderr: {stderr_text[:200]}[/red]")
 
     print(f"\n[bold]Results: {success_count} succeeded, {failure_count} failed.[/bold]")
     return success_count, failure_count
@@ -358,18 +462,16 @@ def get_compression_parameters():
     main_frame.pack(fill="both", expand=True)
 
     # Title
-    tk.Label(
-        main_frame, text="H.264 Video Compression Settings", font=("Arial", 12, "bold")
-    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
+    tk.Label(main_frame, text="H.264 Video Compression Settings", font=("Arial", 12, "bold")).grid(
+        row=0, column=0, columnspan=2, sticky="w", pady=(0, 15)
+    )
 
     # 1. Preset field
     tk.Label(main_frame, text="Preset (enter number):", font=("Arial", 10, "bold")).grid(
         row=1, column=0, sticky="w", pady=5
     )
     preset_var = tk.StringVar(value="6")  # Default to medium
-    tk.Entry(main_frame, textvariable=preset_var, width=5).grid(
-        row=1, column=1, sticky="w", pady=5
-    )
+    tk.Entry(main_frame, textvariable=preset_var, width=5).grid(row=1, column=1, sticky="w", pady=5)
 
     preset_help_text = "Options:\n"
     for i, preset in enumerate(PRESET_OPTIONS, 1):
@@ -379,18 +481,16 @@ def get_compression_parameters():
             if i % 3 == 0:
                 preset_help_text += "\n"
 
-    tk.Label(
-        main_frame, text=preset_help_text, font=("Arial", 8, "italic"), justify="left"
-    ).grid(row=2, column=0, columnspan=2, sticky="w", padx=20)
+    tk.Label(main_frame, text=preset_help_text, font=("Arial", 8, "italic"), justify="left").grid(
+        row=2, column=0, columnspan=2, sticky="w", padx=20
+    )
 
     # 2. CRF field
     tk.Label(main_frame, text="CRF Value (0-51):", font=("Arial", 10, "bold")).grid(
         row=3, column=0, sticky="w", pady=5
     )
     crf_var = tk.StringVar(value="23")
-    tk.Entry(main_frame, textvariable=crf_var, width=5).grid(
-        row=3, column=1, sticky="w", pady=5
-    )
+    tk.Entry(main_frame, textvariable=crf_var, width=5).grid(row=3, column=1, sticky="w", pady=5)
     tk.Label(
         main_frame,
         text="Lower = better quality (0-51), 23 is default",
@@ -423,9 +523,7 @@ def get_compression_parameters():
         row=7, column=0, sticky="w", pady=5
     )
     gpu_var = tk.StringVar(value="2")
-    tk.Entry(main_frame, textvariable=gpu_var, width=5).grid(
-        row=7, column=1, sticky="w", pady=5
-    )
+    tk.Entry(main_frame, textvariable=gpu_var, width=5).grid(row=7, column=1, sticky="w", pady=5)
     tk.Label(
         main_frame,
         text="Options: 1 = Yes (NVIDIA GPUs only)   2 = No (CPU encoding)",
@@ -501,9 +599,7 @@ def get_compression_parameters():
         dialog.destroy()
 
     tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(side="left", padx=5)
-    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(
-        side="left", padx=5
-    )
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side="left", padx=5)
 
     # Help button
     def show_help():
@@ -698,6 +794,13 @@ Examples:
         default=False,
         help="Force CPU encoding (overrides --gpu).",
     )
+    parser.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=1,
+        help="Number of parallel workers (default: 1).",
+    )
     return parser
 
 
@@ -716,6 +819,14 @@ def main():
 
     if not os.path.isdir(args.dir):
         parser.error(f"Directory does not exist: {args.dir}")
+
+    if args.resolution != "original" and "x" not in args.resolution:
+        parser.error(
+            f"Invalid resolution format: {args.resolution}. Use WIDTHxHEIGHT or 'original'."
+        )
+
+    if not (0 <= args.crf <= 51):
+        parser.error(f"CRF must be between 0 and 51, got {args.crf}.")
 
     # Validate resolution
     if args.resolution != "original" and "x" not in args.resolution:
@@ -755,6 +866,7 @@ def main():
             crf=args.crf,
             resolution=args.resolution,
             use_gpu=use_gpu,
+            worker_count=args.workers,
         )
     finally:
         os.remove(temp_file_path)

@@ -77,6 +77,7 @@ except ImportError:
     SPM_SUPPORT = False
     stats = None
     print("Warning: spm1d not available. SPM plot support disabled.")
+import contextlib
 import gc  # For garbage collection
 import os
 from pathlib import Path
@@ -355,10 +356,8 @@ class PlotGUI:
                 btn.config(bg="SystemButtonFace")
             except Exception:
                 # Fallback for systems where SystemButtonFace isn't recognized
-                try:
+                with contextlib.suppress(BaseException):
                     btn.config(bg="#d9d9d9")
-                except:
-                    pass
 
         # Start file selection in a separate window
         self.selection_window = FileSelectionWindow(self.root, ptype)

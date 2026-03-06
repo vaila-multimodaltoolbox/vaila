@@ -115,6 +115,14 @@
             <strong>GPU acceleration</strong> with NVIDIA NVENC (auto-detected
             via <code>nvidia-smi</code>)
           </li>
+          <li>
+            <strong>Parallel processing</strong>: speed up batch compression
+            with multiple workers
+          </li>
+          <li>
+            <strong>Adaptive compression</strong>: automatically discard output
+            files larger than input
+          </li>
           <li><strong>macOS VideoToolbox</strong> hardware encoding support</li>
           <li>
             <strong>CPU fallback</strong> to <code>libx264</code> when no GPU is
@@ -170,6 +178,11 @@ python -m vaila.compress_videos_h264 --dir /path/to/videos --preset slow --crf 2
             <td>auto</td>
             <td>Force GPU or CPU</td>
           </tr>
+          <tr>
+            <td><code>--workers/-w</code></td>
+            <td>1</td>
+            <td>Number of parallel workers</td>
+          </tr>
         </table>
       </div>
 
@@ -188,7 +201,7 @@ python -m vaila.compress_videos_h264 --dir /path/to/videos --preset slow --crf 2
       </div>
 
       <div class="footer">
-        <p>📅 Updated: 18/02/2026</p>
+        <p>📅 Updated: 05/03/2026</p>
         <p>🔗 Part of vailá - Multimodal Toolbox</p>
         <p>
           🌐

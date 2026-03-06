@@ -260,7 +260,7 @@ class Vaila(tk.Tk):
         - Creates the widgets for the application.
 
         """
-        super().__init__(className='vaila')
+        super().__init__(className="vaila")
         self.title("vailá - 03.March.2026 v0.3.30 (Python 3.12.12)")
 
         # wm class is set via className above, which results in class "Vaila"
@@ -2784,6 +2784,7 @@ class Vaila(tk.Tk):
         print("Features: tugturn 3D Analysis")
         print("=" * 60 + "\n")
         run_vaila_module("vaila.tugturn", "vaila/tugturn.py")
+
 
 if __name__ == "__main__":
     app = Vaila()

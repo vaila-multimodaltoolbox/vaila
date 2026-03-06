@@ -1,0 +1,15 @@
+Video Metadata Summary
+Directory: /home/preto/Desktop/Preto/vaila/tests/extractpng
+============================
+
+File: camera_01_cube_test_png_196_190_446_dbox_h265.mp4
+  Frames:        257
+  Duration:      8.567 seconds
+  Resolution:    1920x1080
+  Display FPS:   30.000000000
+  Avg FPS:       30.000000000
+  Capture FPS:   N/A
+  Recommended Hz:30.0
+  Codec:         hevc (H.265 / HEVC (High Efficiency Video Coding))
+  Container:     mov,mp4,m4a,3gp,3g2,mj2 (QuickTime / MOV)
+

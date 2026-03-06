@@ -1,0 +1,5 @@
+Original video: camera_01_cube_test_png_196_190_446_dbox_h265.mp4
+FPS: 30.0
+Resolution: 1920x1080
+Total frames: 257
+Extraction timestamp: 20260305205523

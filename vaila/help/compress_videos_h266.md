@@ -22,8 +22,10 @@ with the `libvvenc` encoder. Supports both a **GUI** (Tkinter dialog) and **CLI*
 
 ### Key Features
 
+- **Parallel processing**: speed up batch compression with multiple workers
+- **Adaptive compression**: automatically discard output files larger than input
 - **Encoder availability check** before starting (graceful error if `libvvenc` missing)
-- **QP-based quality control** (Quantization Parameter 0-51)
+- **QP-based quality control** (Quantization Parameter 0-63)
 - **Resolution control**: keep original or downscale to common resolutions
 - **Cross-platform**: Windows, Linux, macOS
 
@@ -45,12 +47,13 @@ python -m vaila.compress_videos_h266 --dir /path/to/videos --preset slow --qp 28
 
 ### CLI Options
 
-| Option         | Default    | Description                                           |
-| -------------- | ---------- | ----------------------------------------------------- |
-| `--dir`        | (required) | Directory containing videos                           |
-| `--preset`     | `medium`   | Encoding preset: ultrafast → veryslow                 |
-| `--qp`         | `32`       | Quantization Parameter (0-51). Lower = better quality |
-| `--resolution` | `original` | Output resolution (e.g. `1920x1080`)                  |
+| Option             | Default    | Description                                           |
+| ------------------ | ---------- | ----------------------------------------------------- |
+| `--dir`            | (required) | Directory containing videos                           |
+| `--preset`         | `medium`   | Encoding preset: ultrafast → veryslow                 |
+| `--qp`             | `32`       | Quantization Parameter (0-63). Lower = better quality |
+| `--resolution`     | `original` | Output resolution (e.g. `1920x1080`)                  |
+| `--workers` / `-w` | `1`        | Number of parallel workers                            |
 
 ### Getting FFmpeg with libvvenc
 
@@ -77,6 +80,6 @@ Verify with: `ffmpeg -encoders | grep vvenc`
 
 ---
 
-📅 **Updated:** 18/02/2026
+📅 **Updated:** 05/03/2026
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
