@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 06 September 2025
-Update: 05 March 2026
-Version: 0.1.1
+Update: 06 March 2026
+Version: 0.1.2
 Python Version: 3.12
 
 Description:
@@ -15,12 +15,13 @@ Description:
 This script compresses videos in a specified directory to H.266/VVC format using the FFmpeg tool
 and the libvvenc encoder. It provides both a GUI and CLI for selecting the directory and
 compression settings. The compressed versions are saved in a subdirectory named
-'compressed_h266_<timestamp>'.
+'compressed_h266_<timestamp>'. Supports recursive directory search with configurable
+subdirectory depth (GUI and CLI).
 
 How to use:
 ------------
 - GUI: Run the script without arguments to open the GUI.
-- CLI: python compress_videos_h266.py --dir /path/to/videos --preset medium --qp 32
+- CLI: python compress_videos_h266.py --dir /path/to/videos [--recursive] [--depth N] --preset medium --qp 32
 
 Requirements:
 ------------
@@ -60,6 +61,7 @@ Note:
 """
 
 import argparse
+import concurrent.futures
 import os
 import subprocess
 import sys
@@ -67,8 +69,6 @@ import tempfile
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog, messagebox
-import concurrent.futures
-import multiprocessing
 
 from rich import print
 
@@ -132,22 +132,50 @@ def check_libvvenc_available():
         return False
 
 
+VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
+
+
 def find_videos(directory):
     """Find all video files in the specified directory (non-recursive)."""
-    video_extensions = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
     video_files = []
     for file in sorted(os.listdir(directory)):
-        if file.lower().endswith(video_extensions):
+        if file.lower().endswith(VIDEO_EXTENSIONS):
             video_files.append(os.path.join(directory, file))
     return video_files
 
 
+def find_videos_recursive(directory, max_depth=-1):
+    """Find all video files in directory and subdirectories, optionally limited by depth.
+
+    Args:
+        directory: Root directory to search.
+        max_depth: Maximum subdirectory depth (0 = only root, 1 = root + 1 level, etc.).
+            -1 or None = unlimited.
+
+    Returns:
+        list[tuple[str, str]]: List of (absolute_path, relative_subdir).
+    """
+    directory = os.path.abspath(directory)
+    results = []
+    for root, _dirs, files in os.walk(directory):
+        rel_root = os.path.relpath(root, directory)
+        if rel_root == ".":
+            rel_root = ""
+        depth = 0 if rel_root == "" else len(rel_root.split(os.sep))
+        if max_depth is not None and max_depth >= 0 and depth > max_depth:
+            continue
+        for file in sorted(files):
+            if file.lower().endswith(VIDEO_EXTENSIONS):
+                abs_path = os.path.join(root, file)
+                results.append((abs_path, rel_root))
+    return results
+
+
 def create_temp_file_with_videos(video_files):
     """Create temporary file with list of video paths."""
-    temp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt")
-    for video in video_files:
-        temp.write(f"{video}\n")
-    temp.close()
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as temp:
+        for video in video_files:
+            temp.write(f"{video}\n")
     return temp.name
 
 
@@ -155,13 +183,13 @@ def compress_video_worker_h266(video_info):
     """Worker function to compress a single video using H.266/VVC.
 
     Args:
-        video_info (dict): Contains video_path, output_dir, preset, qp, resolution, index, total.
+        video_info (dict): Contains video_path, output_path, preset, qp, resolution, index, total.
 
     Returns:
         dict: Results including success (bool), error (str), output_path (str), skipped (bool), basename (str), original_size (int), output_size (int).
     """
     video_path = video_info["video_path"]
-    output_dir = video_info["output_dir"]
+    output_path = video_info["output_path"]
     preset = video_info["preset"]
     qp = video_info["qp"]
     resolution = video_info["resolution"]
@@ -169,8 +197,9 @@ def compress_video_worker_h266(video_info):
     total = video_info["total"]
 
     basename = os.path.basename(video_path)
-    output_path = os.path.join(output_dir, os.path.splitext(basename)[0] + "_h266.mp4")
     original_size = os.path.getsize(video_path)
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     result_status = {
         "success": False,
@@ -218,13 +247,15 @@ def compress_video_worker_h266(video_info):
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             output_size = os.path.getsize(output_path)
             result_status["output_size"] = output_size
-            
+
             # Adaptive compression
             if output_size > original_size:
                 os.remove(output_path)
                 result_status["success"] = True
                 result_status["skipped"] = True
-                result_status["error"] = "Output file was larger than input (adaptive compression skip)"
+                result_status["error"] = (
+                    "Output file was larger than input (adaptive compression skip)"
+                )
             else:
                 result_status["success"] = True
         else:
@@ -239,8 +270,12 @@ def compress_video_worker_h266(video_info):
     return result_status
 
 
-def run_compress_videos_h266(input_list, output_dir, preset, qp, resolution, worker_count=1):
+def run_compress_videos_h266(video_list, preset, qp, resolution, worker_count=1):
     """Run the actual H.266/VVC compression using libvvenc (CPU-only).
+
+    Args:
+        video_list: List of (video_path, output_path) tuples.
+        preset, qp, resolution, worker_count: Encoding parameters.
 
     Returns:
         tuple: (success_count, failure_count)
@@ -261,43 +296,42 @@ def run_compress_videos_h266(input_list, output_dir, preset, qp, resolution, wor
         "This process may take many hours.[/yellow]\n"
     )
 
-    os.makedirs(output_dir, exist_ok=True)
-
-    with open(input_list) as f:
-        video_paths = [line.strip() for line in f if line.strip()]
-
-    if not video_paths:
-        print("[red]No video files found in input list.[/red]")
+    if not video_list:
+        print("[red]No video files found.[/red]")
         return 0, 0
 
-    print(f"[bold]Processing {len(video_paths)} video(s)...[/bold]\n")
+    print(f"[bold]Processing {len(video_list)} video(s)...[/bold]\n")
 
-    # Prepare video info for workers
+    # Prepare video info for workers (output_path precomputed; worker creates parent dirs)
     video_infos = []
-    for i, video_path in enumerate(video_paths, 1):
-        video_infos.append({
-            "video_path": video_path,
-            "output_dir": output_dir,
-            "preset": preset,
-            "qp": qp,
-            "resolution": resolution,
-            "index": i,
-            "total": len(video_paths)
-        })
+    for i, (video_path, output_path) in enumerate(video_list, 1):
+        video_infos.append(
+            {
+                "video_path": video_path,
+                "output_path": output_path,
+                "preset": preset,
+                "qp": qp,
+                "resolution": resolution,
+                "index": i,
+                "total": len(video_list),
+            }
+        )
 
     # Execute in parallel
     with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
         futures = {executor.submit(compress_video_worker_h266, info): info for info in video_infos}
-        
+
         for future in concurrent.futures.as_completed(futures):
             res = future.result()
             basename = res["basename"]
             i = res["index"]
             total = res["total"]
-            
+
             if res["success"]:
                 if res["skipped"]:
-                    print(f"[{i}/{total}] {basename} [yellow][SKIPPED][/yellow] (Output larger than input)")
+                    print(
+                        f"[{i}/{total}] {basename} [yellow][SKIPPED][/yellow] (Output larger than input)"
+                    )
                     failure_count += 1
                 else:
                     output_size_mb = res["output_size"] / (1024 * 1024)
@@ -320,7 +354,7 @@ def get_compression_parameters():
     """Create a dialog window for user to select VVC compression settings.
 
     Returns:
-        dict or None: Parameters dict with keys preset, qp, resolution.
+        dict or None: Parameters dict with keys preset, qp, resolution, max_depth.
     """
     params = {}
 
@@ -393,6 +427,20 @@ def get_compression_parameters():
         wraplength=400,
     ).grid(row=6, column=0, columnspan=2, sticky="w", padx=20)
 
+    # 4. Subdirectory depth (for recursive search)
+    tk.Label(
+        main_frame,
+        text="Subdir depth (enter number):",
+        font=("Arial", 10, "bold"),
+    ).grid(row=7, column=0, sticky="w", pady=5)
+    depth_var = tk.StringVar(value="0")
+    tk.Entry(main_frame, textvariable=depth_var, width=5).grid(row=7, column=1, sticky="w", pady=5)
+    tk.Label(
+        main_frame,
+        text="0 = only selected folder  1/2/3 = that many levels   -1 = unlimited",
+        font=("Arial", 8, "italic"),
+    ).grid(row=8, column=0, columnspan=2, sticky="w", padx=20)
+
     tk.Frame(main_frame, height=1, bg="gray").grid(
         row=9, column=0, columnspan=2, sticky="ew", pady=15
     )
@@ -415,15 +463,24 @@ def get_compression_parameters():
                 raise ValueError(f"Resolution must be between 1 and {len(RESOLUTION_OPTIONS)}")
             resolution = RESOLUTION_OPTIONS[resolution_idx - 1]
 
+            max_depth = int(depth_var.get().strip())
+            if max_depth < -1 or max_depth > 99:
+                raise ValueError(
+                    "Subdir depth must be -1 (unlimited), 0 (only selected folder), or 1–99."
+                )
+
             params["preset"] = preset
             params["qp"] = qp
             params["resolution"] = resolution
+            params["max_depth"] = max_depth
 
+            depth_str = "unlimited" if max_depth == -1 else str(max_depth)
             confirm_msg = (
                 f"Selected compression settings:\n\n"
                 f"• Preset: {preset}\n"
                 f"• QP: {qp}\n"
-                f"• Resolution: {resolution}\n\n"
+                f"• Resolution: {resolution}\n"
+                f"• Subdir depth: {depth_str}\n\n"
                 f"Remember: H.266 compression is VERY SLOW.\n\n"
                 f"Continue?"
             )
@@ -471,22 +528,45 @@ def compress_videos_h266_gui():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_directory = os.path.join(video_directory, f"compressed_h266_{timestamp}")
 
-    video_files = find_videos(video_directory)
-    if not video_files:
+    max_depth = compression_config.get("max_depth", 0)
+    if max_depth == 0:
+        video_files = find_videos(video_directory)
+        video_list = [
+            (
+                p,
+                os.path.join(
+                    output_directory,
+                    os.path.splitext(os.path.basename(p))[0] + "_h266.mp4",
+                ),
+            )
+            for p in video_files
+        ]
+    else:
+        pairs = find_videos_recursive(
+            video_directory, max_depth=-1 if max_depth == -1 else max_depth
+        )
+        video_list = [
+            (
+                path,
+                os.path.join(
+                    output_directory,
+                    rel_subdir,
+                    os.path.splitext(os.path.basename(path))[0] + "_h266.mp4",
+                ),
+            )
+            for path, rel_subdir in pairs
+        ]
+
+    if not video_list:
         messagebox.showerror("Error", "No video files found.")
         return
 
-    temp_file_path = create_temp_file_with_videos(video_files)
-
     success_count, failure_count = run_compress_videos_h266(
-        temp_file_path,
-        output_directory,
+        video_list,
         preset=compression_config["preset"],
         qp=compression_config["qp"],
         resolution=compression_config["resolution"],
     )
-
-    os.remove(temp_file_path)
 
     messagebox.showinfo(
         "Success",
@@ -509,6 +589,12 @@ Examples:
   # Compress with default settings (medium preset, QP 32, original resolution)
   python -m vaila.compress_videos_h266 --dir /path/to/videos
 
+  # Compress all videos in directory and subdirectories
+  python -m vaila.compress_videos_h266 --dir /path/to/videos --recursive
+
+  # Recursive with max depth 2
+  python -m vaila.compress_videos_h266 --dir /path/to/videos -r --depth 2
+
   # Compress to 1080p with slow preset
   python -m vaila.compress_videos_h266 --dir /path/to/videos --preset slow --qp 28 --resolution 1920x1080
 
@@ -520,6 +606,21 @@ Note: H.266/VVC encoding requires FFmpeg compiled with libvvenc.
         """,
     )
     parser.add_argument("--dir", type=str, help="Directory containing videos to compress.")
+    parser.add_argument(
+        "--recursive",
+        "-r",
+        action="store_true",
+        default=False,
+        help="Recurse into subdirectories (output mirrors folder structure).",
+    )
+    parser.add_argument(
+        "--depth",
+        "-d",
+        type=int,
+        default=-1,
+        metavar="N",
+        help="Max subdir depth when using --recursive (0=root only, 1/2/3=levels, -1=unlimited, default: -1).",
+    )
     parser.add_argument(
         "--preset",
         type=str,
@@ -538,6 +639,13 @@ Note: H.266/VVC encoding requires FFmpeg compiled with libvvenc.
         type=str,
         default="original",
         help="Output resolution WIDTHxHEIGHT or 'original' (default: original).",
+    )
+    parser.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=1,
+        help="Number of parallel workers (default: 1).",
     )
     return parser
 
@@ -569,28 +677,50 @@ def main():
     if not check_libvvenc_available():
         sys.exit(1)
 
-    video_files = find_videos(args.dir)
-    if not video_files:
-        print(f"[red]No video files found in {args.dir}[/red]")
-        sys.exit(1)
-
-    print(f"Found {len(video_files)} video(s) in {args.dir}")
-
-    temp_file_path = create_temp_file_with_videos(video_files)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_directory = os.path.join(args.dir, f"compressed_h266_{timestamp}")
 
-    try:
-        success_count, failure_count = run_compress_videos_h266(
-            temp_file_path,
-            output_directory,
-            preset=args.preset,
-            qp=args.qp,
-            resolution=args.resolution,
-            worker_count=args.workers,
-        )
-    finally:
-        os.remove(temp_file_path)
+    if args.recursive:
+        if args.depth < -1 or args.depth > 99:
+            parser.error("--depth must be -1 (unlimited), 0 (root only), or 1–99.")
+        pairs = find_videos_recursive(args.dir, max_depth=args.depth if args.depth >= 0 else -1)
+        video_list = [
+            (
+                path,
+                os.path.join(
+                    output_directory,
+                    rel_subdir,
+                    os.path.splitext(os.path.basename(path))[0] + "_h266.mp4",
+                ),
+            )
+            for path, rel_subdir in pairs
+        ]
+    else:
+        video_files = find_videos(args.dir)
+        video_list = [
+            (
+                p,
+                os.path.join(
+                    output_directory,
+                    os.path.splitext(os.path.basename(p))[0] + "_h266.mp4",
+                ),
+            )
+            for p in video_files
+        ]
+
+    if not video_list:
+        print(f"[red]No video files found in {args.dir}[/red]")
+        sys.exit(1)
+
+    print(f"Found {len(video_list)} video(s) in {args.dir}")
+
+    success_count, failure_count = run_compress_videos_h266(
+        video_list,
+        preset=args.preset,
+        qp=args.qp,
+        resolution=args.resolution,
+        worker_count=args.workers,
+    )
 
     if failure_count > 0:
         sys.exit(1)

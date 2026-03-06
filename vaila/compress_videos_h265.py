@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 05 March 2026
-Update: 05 March 2026
-Version: 0.1.1
+Update: 06 March 2026
+Version: 0.1.2
 Python Version: 3.12
 
 Description:
@@ -15,11 +15,12 @@ Description:
 This script compresses videos in a specified directory to H.265/HEVC format using the FFmpeg tool.
 It provides both a GUI and CLI for selecting the directory containing the videos and processes
 each video, saving the compressed versions in a subdirectory named 'compressed_h265_<timestamp>'.
+Supports recursive directory search with configurable subdirectory depth (GUI and CLI).
 
 How to use:
 ------------
 - GUI: Run the script without arguments to open the GUI.
-- CLI: python compress_videos_h265.py --dir /path/to/videos --preset medium --crf 28
+- CLI: python compress_videos_h265.py --dir /path/to/videos [--recursive] [--depth N] --preset medium --crf 28
 
 Requirements:
 ------------
@@ -78,6 +79,7 @@ Note:
 """
 
 import argparse
+import concurrent.futures
 import os
 import subprocess
 import sys
@@ -85,8 +87,6 @@ import tempfile
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog, messagebox
-import concurrent.futures
-import multiprocessing
 
 from rich import print
 
@@ -154,13 +154,17 @@ def is_nvidia_gpu_available():
 
         print(f"[bold green]Detected NVIDIA GPU: {gpu_name}[/bold green]")
 
-        # Verify hevc_nvenc actually works
+        # Verify hevc_nvenc actually works (testsrc + yuv420p more reliable on modern GPUs)
         test_cmd = [
             FFMPEG,
             "-f",
             "lavfi",
             "-i",
-            "color=black:s=256x256:r=1:d=1",
+            "testsrc=size=1280x720:rate=30",
+            "-pix_fmt",
+            "yuv420p",
+            "-t",
+            "1",
             "-c:v",
             "hevc_nvenc",
             "-f",
@@ -192,22 +196,50 @@ def is_nvidia_gpu_available():
         return False
 
 
+VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
+
+
 def find_videos(directory):
     """Find all video files in the specified directory (non-recursive)."""
-    video_extensions = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
     video_files = []
     for file in sorted(os.listdir(directory)):
-        if file.lower().endswith(video_extensions):
+        if file.lower().endswith(VIDEO_EXTENSIONS):
             video_files.append(os.path.join(directory, file))
     return video_files
 
 
+def find_videos_recursive(directory, max_depth=-1):
+    """Find all video files in directory and subdirectories, optionally limited by depth.
+
+    Args:
+        directory: Root directory to search.
+        max_depth: Maximum subdirectory depth (0 = only root, 1 = root + 1 level, etc.).
+            -1 or None = unlimited.
+
+    Returns:
+        list[tuple[str, str]]: List of (absolute_path, relative_subdir).
+    """
+    directory = os.path.abspath(directory)
+    results = []
+    for root, _dirs, files in os.walk(directory):
+        rel_root = os.path.relpath(root, directory)
+        if rel_root == ".":
+            rel_root = ""
+        depth = 0 if rel_root == "" else len(rel_root.split(os.sep))
+        if max_depth is not None and max_depth >= 0 and depth > max_depth:
+            continue
+        for file in sorted(files):
+            if file.lower().endswith(VIDEO_EXTENSIONS):
+                abs_path = os.path.join(root, file)
+                results.append((abs_path, rel_root))
+    return results
+
+
 def create_temp_file_with_videos(video_files):
     """Create temporary file with list of video paths."""
-    temp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt")
-    for video in video_files:
-        temp.write(f"{video}\n")
-    temp.close()
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as temp:
+        for video in video_files:
+            temp.write(f"{video}\n")
     return temp.name
 
 
@@ -215,13 +247,13 @@ def compress_video_worker_h265(video_info):
     """Worker function to compress a single video using H.265.
 
     Args:
-        video_info (dict): Contains video_path, output_dir, preset, crf, resolution, use_gpu, index, total.
+        video_info (dict): Contains video_path, output_path, preset, crf, resolution, use_gpu, index, total.
 
     Returns:
         dict: Results including success (bool), error (str), output_path (str), skipped (bool), basename (str), original_size (int), output_size (int).
     """
     video_path = video_info["video_path"]
-    output_dir = video_info["output_dir"]
+    output_path = video_info["output_path"]
     preset = video_info["preset"]
     crf = video_info["crf"]
     resolution = video_info["resolution"]
@@ -230,8 +262,9 @@ def compress_video_worker_h265(video_info):
     total = video_info["total"]
 
     basename = os.path.basename(video_path)
-    output_path = os.path.join(output_dir, os.path.splitext(basename)[0] + "_h265.mp4")
     original_size = os.path.getsize(video_path)
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     result_status = {
         "success": False,
@@ -300,13 +333,15 @@ def compress_video_worker_h265(video_info):
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             output_size = os.path.getsize(output_path)
             result_status["output_size"] = output_size
-            
+
             # Adaptive compression: if output is larger than input, delete output and mark as skipped
             if output_size > original_size:
                 os.remove(output_path)
                 result_status["success"] = True
                 result_status["skipped"] = True
-                result_status["error"] = "Output file was larger than input (adaptive compression skip)"
+                result_status["error"] = (
+                    "Output file was larger than input (adaptive compression skip)"
+                )
             else:
                 result_status["success"] = True
         else:
@@ -321,8 +356,12 @@ def compress_video_worker_h265(video_info):
     return result_status
 
 
-def run_compress_videos_h265(input_list, output_dir, preset, crf, resolution, use_gpu, worker_count=1):
+def run_compress_videos_h265(video_list, preset, crf, resolution, use_gpu, worker_count=1):
     """Run the actual H.265/HEVC compression.
+
+    Args:
+        video_list: List of (video_path, output_path) tuples.
+        preset, crf, resolution, use_gpu, worker_count: Encoding parameters.
 
     Returns:
         tuple: (success_count, failure_count)
@@ -337,48 +376,47 @@ def run_compress_videos_h265(input_list, output_dir, preset, crf, resolution, us
     print(f"  Use GPU: {use_gpu}")
     print(f"  Workers: {worker_count}")
 
-    os.makedirs(output_dir, exist_ok=True)
-
-    with open(input_list) as f:
-        video_paths = [line.strip() for line in f if line.strip()]
-
-    if not video_paths:
-        print("[red]No video files found in input list.[/red]")
+    if not video_list:
+        print("[red]No video files found.[/red]")
         return 0, 0
 
-    print(f"\n[bold]Processing {len(video_paths)} video(s)...[/bold]")
+    print(f"\n[bold]Processing {len(video_list)} video(s)...[/bold]")
     print(
         "[yellow]H.265 encoding is significantly slower than H.264. "
         "This process might take several hours.[/yellow]\n"
     )
 
-    # Prepare video info for workers
+    # Prepare video info for workers (output_path precomputed; worker creates parent dirs)
     video_infos = []
-    for i, video_path in enumerate(video_paths, 1):
-        video_infos.append({
-            "video_path": video_path,
-            "output_dir": output_dir,
-            "preset": preset,
-            "crf": crf,
-            "resolution": resolution,
-            "use_gpu": use_gpu,
-            "index": i,
-            "total": len(video_paths)
-        })
+    for i, (video_path, output_path) in enumerate(video_list, 1):
+        video_infos.append(
+            {
+                "video_path": video_path,
+                "output_path": output_path,
+                "preset": preset,
+                "crf": crf,
+                "resolution": resolution,
+                "use_gpu": use_gpu,
+                "index": i,
+                "total": len(video_list),
+            }
+        )
 
     # Execute in parallel
     with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
         futures = {executor.submit(compress_video_worker_h265, info): info for info in video_infos}
-        
+
         for future in concurrent.futures.as_completed(futures):
             res = future.result()
             basename = res["basename"]
             i = res["index"]
             total = res["total"]
-            
+
             if res["success"]:
                 if res["skipped"]:
-                    print(f"[{i}/{total}] {basename} [yellow][SKIPPED][/yellow] (Output larger than input)")
+                    print(
+                        f"[{i}/{total}] {basename} [yellow][SKIPPED][/yellow] (Output larger than input)"
+                    )
                     failure_count += 1
                 else:
                     output_size_mb = res["output_size"] / (1024 * 1024)
@@ -401,7 +439,7 @@ def get_compression_parameters():
     """Create a dialog window where user selects compression options.
 
     Returns:
-        dict or None: Parameters dict with keys preset, crf, resolution, use_gpu.
+        dict or None: Parameters dict with keys preset, crf, resolution, use_gpu, max_depth.
     """
     params = {}
 
@@ -490,12 +528,26 @@ def get_compression_parameters():
         font=("Arial", 8, "italic"),
     ).grid(row=8, column=0, columnspan=2, sticky="w", padx=20)
 
+    # 5. Subdirectory depth (for recursive search)
+    tk.Label(
+        main_frame,
+        text="Subdir depth (enter number):",
+        font=("Arial", 10, "bold"),
+    ).grid(row=9, column=0, sticky="w", pady=5)
+    depth_var = tk.StringVar(value="0")
+    tk.Entry(main_frame, textvariable=depth_var, width=5).grid(row=9, column=1, sticky="w", pady=5)
+    tk.Label(
+        main_frame,
+        text="0 = only selected folder  1/2/3 = that many levels   -1 = unlimited",
+        font=("Arial", 8, "italic"),
+    ).grid(row=10, column=0, columnspan=2, sticky="w", padx=20)
+
     tk.Frame(main_frame, height=1, bg="gray").grid(
-        row=9, column=0, columnspan=2, sticky="ew", pady=15
+        row=11, column=0, columnspan=2, sticky="ew", pady=15
     )
 
     button_frame = tk.Frame(main_frame)
-    button_frame.grid(row=10, column=0, columnspan=2, pady=10)
+    button_frame.grid(row=12, column=0, columnspan=2, pady=10)
 
     def on_ok():
         try:
@@ -527,17 +579,29 @@ def get_compression_parameters():
                 return
             use_gpu = gpu_choice == 1
 
+            # Validate subdir depth (0 = only folder, 1/2/3 = levels, -1 = unlimited)
+            max_depth = int(depth_var.get().strip())
+            if max_depth < -1 or max_depth > 99:
+                messagebox.showerror(
+                    "Error",
+                    "Subdir depth must be -1 (unlimited), 0 (only selected folder), or 1–99.",
+                )
+                return
+
             params["preset"] = preset
             params["crf"] = crf
             params["resolution"] = resolution
             params["use_gpu"] = use_gpu
+            params["max_depth"] = max_depth
 
+            depth_str = "unlimited" if max_depth == -1 else str(max_depth)
             confirm_msg = (
                 f"Selected compression settings:\n\n"
                 f"• Preset: {preset}\n"
                 f"• CRF: {crf}\n"
                 f"• Resolution: {resolution}\n"
-                f"• Use GPU: {'Yes' if use_gpu else 'No'}\n\n"
+                f"• Use GPU: {'Yes' if use_gpu else 'No'}\n"
+                f"• Subdir depth: {depth_str}\n\n"
                 f"Note: H.265 encoding is slower than H.264.\n\n"
                 f"Continue with these settings?"
             )
@@ -608,7 +672,7 @@ at the same quality level. Expect longer encoding times, especially with CPU enc
         tk.Button(help_dialog, text="Close", command=help_dialog.destroy).pack(pady=10)
 
     tk.Button(main_frame, text="Help", command=show_help).grid(
-        row=11, column=0, columnspan=2, pady=5
+        row=13, column=0, columnspan=2, pady=5
     )
 
     dialog.update_idletasks()
@@ -657,24 +721,46 @@ def compress_videos_h265_gui():
             "Compression will proceed using CPU (libx265) instead.",
         )
 
-    video_files = find_videos(video_directory)
+    max_depth = compression_config.get("max_depth", 0)
+    if max_depth == 0:
+        video_files = find_videos(video_directory)
+        video_list = [
+            (
+                p,
+                os.path.join(
+                    output_directory,
+                    os.path.splitext(os.path.basename(p))[0] + "_h265.mp4",
+                ),
+            )
+            for p in video_files
+        ]
+    else:
+        pairs = find_videos_recursive(
+            video_directory, max_depth=-1 if max_depth == -1 else max_depth
+        )
+        video_list = [
+            (
+                path,
+                os.path.join(
+                    output_directory,
+                    rel_subdir,
+                    os.path.splitext(os.path.basename(path))[0] + "_h265.mp4",
+                ),
+            )
+            for path, rel_subdir in pairs
+        ]
 
-    if not video_files:
+    if not video_list:
         messagebox.showerror("Error", "No video files found.")
         return
 
-    temp_file_path = create_temp_file_with_videos(video_files)
-
     success_count, failure_count = run_compress_videos_h265(
-        temp_file_path,
-        output_directory,
+        video_list,
         preset=compression_config["preset"],
         crf=compression_config["crf"],
         resolution=compression_config["resolution"],
         use_gpu=use_gpu,
     )
-
-    os.remove(temp_file_path)
 
     messagebox.showinfo(
         "Success",
@@ -697,6 +783,12 @@ Examples:
   # Compress with default settings (medium preset, CRF 28, original resolution, CPU)
   python -m vaila.compress_videos_h265 --dir /path/to/videos
 
+  # Compress all videos in directory and subdirectories with GPU
+  python -m vaila.compress_videos_h265 --dir /path/to/videos --recursive --gpu
+
+  # Recursive with max depth 2 (root + 2 levels of subdirs)
+  python -m vaila.compress_videos_h265 --dir /path/to/videos -r --depth 2 --gpu
+
   # Compress with GPU acceleration
   python -m vaila.compress_videos_h265 --dir /path/to/videos --gpu
 
@@ -708,6 +800,21 @@ Examples:
         """,
     )
     parser.add_argument("--dir", type=str, help="Directory containing videos to compress.")
+    parser.add_argument(
+        "--recursive",
+        "-r",
+        action="store_true",
+        default=False,
+        help="Recurse into subdirectories (output mirrors folder structure).",
+    )
+    parser.add_argument(
+        "--depth",
+        "-d",
+        type=int,
+        default=-1,
+        metavar="N",
+        help="Max subdir depth when using --recursive (0=root only, 1/2/3=levels, -1=unlimited, default: -1).",
+    )
     parser.add_argument(
         "--preset",
         type=str,
@@ -778,29 +885,51 @@ def main():
         if not use_gpu:
             print("[yellow]GPU requested but not available. Using CPU encoding.[/yellow]")
 
-    video_files = find_videos(args.dir)
-    if not video_files:
-        print(f"[red]No video files found in {args.dir}[/red]")
-        sys.exit(1)
-
-    print(f"Found {len(video_files)} video(s) in {args.dir}")
-
-    temp_file_path = create_temp_file_with_videos(video_files)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_directory = os.path.join(args.dir, f"compressed_h265_{timestamp}")
 
-    try:
-        success_count, failure_count = run_compress_videos_h265(
-            temp_file_path,
-            output_directory,
-            preset=args.preset,
-            crf=args.crf,
-            resolution=args.resolution,
-            use_gpu=use_gpu,
-            worker_count=args.workers,
-        )
-    finally:
-        os.remove(temp_file_path)
+    if args.recursive:
+        if args.depth < -1 or args.depth > 99:
+            parser.error("--depth must be -1 (unlimited), 0 (root only), or 1–99.")
+        pairs = find_videos_recursive(args.dir, max_depth=args.depth if args.depth >= 0 else -1)
+        video_list = [
+            (
+                path,
+                os.path.join(
+                    output_directory,
+                    rel_subdir,
+                    os.path.splitext(os.path.basename(path))[0] + "_h265.mp4",
+                ),
+            )
+            for path, rel_subdir in pairs
+        ]
+    else:
+        video_files = find_videos(args.dir)
+        video_list = [
+            (
+                p,
+                os.path.join(
+                    output_directory,
+                    os.path.splitext(os.path.basename(p))[0] + "_h265.mp4",
+                ),
+            )
+            for p in video_files
+        ]
+
+    if not video_list:
+        print(f"[red]No video files found in {args.dir}[/red]")
+        sys.exit(1)
+
+    print(f"Found {len(video_list)} video(s) in {args.dir}")
+
+    success_count, failure_count = run_compress_videos_h265(
+        video_list,
+        preset=args.preset,
+        crf=args.crf,
+        resolution=args.resolution,
+        use_gpu=use_gpu,
+        worker_count=args.workers,
+    )
 
     if failure_count > 0:
         sys.exit(1)
