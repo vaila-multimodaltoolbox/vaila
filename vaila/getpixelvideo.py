@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 21 February 2026
-Version: 0.3.20
+Update: 06 March 2026
+Version: 0.4.0
 Python Version: 3.12.12
 
 Description:
@@ -17,28 +17,19 @@ zoom functionality for precise annotations. The window can now be resized dynami
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
 
-New Features in This Version 0.3.17:
-- Swap landmarks using file basename_swap.toml or Shift+W to load external config.
-- Swap GUI to select start frame, end frame, marker 1 ID, and marker 2 ID.
-- ClickPass Mode: Auto-advance frame after marking
-- Zoom on Scroll: Use mouse wheel to zoom in/out
-- Playback Speed: Use [ and ] to adjust speed
-- Help Button: '?' button opens documentation
-GUI Pygame in Linux to avoid conflicts with Tkinter.
-
-New Features in This Version 0.3.14:
-------------------------------
-1. Button "Labeling" to label images in video frames for Machine Learning training.
-2. YOLO dataset directory support.
-3. YOLO tracking CSV visualization (all_id_detection.csv format) with bounding boxes overlay.
+New Features in This Version 0.4.0:
+- Load PNG Sequence from Folder
 
 How to use:
 ------------
-1. Select the video file to process.
+1. Select the video file, a single PNG image, or a directory of PNG sequence to process.
 2. Select the keypoint file to load.
 3. Mark points in the video frame.
 4. Save the results in CSV format.
 5. Labeling mode to label images in video frames for Machine Learning training.
+
+- GUI: Run without arguments; choose "Open Video/Image File" or "Open Image Sequence (Folder)".
+- CLI: -f FILE for video or single PNG; --sequence DIR for a folder of PNGs.
 
 python getpixelvideo.py
 
@@ -50,7 +41,8 @@ Usage: python getpixelvideo.py [options]
 Options:
   -h, --help            show this help message and exit
   -v, --version         show version information and exit
-  -f FILE, --file FILE  specify the video file to process
+  -f FILE, --file FILE  specify the video or single PNG file to process
+  --sequence DIR       specify a directory of PNG sequence (frames as images)
   -k KEYPOINT, --keypoint KEYPOINT  specify the keypoint file to load
   -l, --labeling        label images in video frames for Machine Learning training
   --dataset DIR         set dataset folder (next Save appends; multi-video)
@@ -59,7 +51,7 @@ Options:
   -a, --auto            show auto-marking mode
   -c, --sequential      show sequential mode
   -h, --help            show this help message and exit
-
+  
 Key Bindings (Labeling Mode Only - Press 'L' to toggle):
   N                     Rename current object label
   F5                    Save Labeling Project (JSON) / export dataset (dataset_YYYYMMDD_HHMMSS or append)
@@ -67,7 +59,7 @@ Key Bindings (Labeling Mode Only - Press 'L' to toggle):
   F7                    Load dataset folder (next Save appends; multi-video)
   F8                    Open another video (keep dataset; no need to close app)
   -v, --version         show version information and exit
-
+  
 License:
 --------
 This program is licensed under the GNU Affero General Public License v3.0.
@@ -157,6 +149,224 @@ except ImportError:
         print("Warning: tomllib/tomli not found. TOML configuration features will be disabled.")
 
 # Removed native_file_dialog imports - now using Tkinter directly for all dialogs
+
+
+# ---------------------------------------------------------------------------
+# Frame source abstraction (video, single PNG, PNG sequence)
+# ---------------------------------------------------------------------------
+
+
+class FrameSource:
+    """Abstract interface compatible with cv2.VideoCapture for frame access.
+
+    Implementations: video (VideoCapture), single PNG, PNG sequence directory.
+    """
+
+    def isOpened(self):  # noqa: N802 (match cv2.VideoCapture API)
+        raise NotImplementedError
+
+    def read(self):
+        """Return (ret: bool, frame: np.ndarray | None) in BGR."""
+        raise NotImplementedError
+
+    def set(self, prop, value):
+        raise NotImplementedError
+
+    def get(self, prop):
+        raise NotImplementedError
+
+    def release(self):
+        raise NotImplementedError
+
+
+class VideoFrameSource(FrameSource):
+    """Wraps cv2.VideoCapture; delegates all methods."""
+
+    def __init__(self, video_path):
+        self._cap = cv2.VideoCapture(str(video_path))
+
+    def isOpened(self):  # noqa: N802 (match cv2.VideoCapture API)
+        return self._cap.isOpened()
+
+    def read(self):
+        return self._cap.read()
+
+    def set(self, prop, value):
+        return self._cap.set(prop, value)
+
+    def get(self, prop):
+        return self._cap.get(prop)
+
+    def release(self):
+        self._cap.release()
+
+
+class SinglePngFrameSource(FrameSource):
+    """Single PNG file as one-frame source."""
+
+    def __init__(self, image_path):
+        self._path = Path(image_path)
+        self._frame = cv2.imread(str(self._path))
+        self._current = 0
+        self._opened = self._frame is not None
+
+    def isOpened(self):  # noqa: N802 (match cv2.VideoCapture API)
+        return self._opened
+
+    def read(self):
+        if not self._opened or self._frame is None:
+            return False, None
+        self._current = 0
+        return True, self._frame.copy()
+
+    def set(self, prop, value):
+        if prop == cv2.CAP_PROP_POS_FRAMES:
+            self._current = int(value) if value == 0 else 0
+
+    def get(self, prop):
+        if prop == cv2.CAP_PROP_FRAME_COUNT:
+            return 1
+        if prop == cv2.CAP_PROP_POS_FRAMES:
+            return self._current
+        if prop == cv2.CAP_PROP_FRAME_WIDTH and self._frame is not None:
+            return self._frame.shape[1]
+        if prop == cv2.CAP_PROP_FRAME_HEIGHT and self._frame is not None:
+            return self._frame.shape[0]
+        return 0
+
+    def release(self):
+        self._frame = None
+        self._opened = False
+
+
+def _natural_sort_key(s):
+    """Sort key for natural ordering (e.g. 000000001.png, 000000010.png)."""
+    parts = re.split(r"(\d+)", str(s))
+    return [int(p) if p.isdigit() else p.lower() for p in parts if p]
+
+
+class PngSequenceFrameSource(FrameSource):
+    """Directory of PNG files as a frame sequence."""
+
+    def __init__(self, directory):
+        self._dir = Path(directory)
+        paths = sorted(
+            [self._dir / f for f in os.listdir(self._dir) if f.lower().endswith(".png")],
+            key=_natural_sort_key,
+        )
+        self._paths = [str(p) for p in paths]
+        self._current = 0
+        self._opened = len(self._paths) > 0
+        self._width = 0
+        self._height = 0
+        if self._paths:
+            first = cv2.imread(self._paths[0])
+            if first is not None:
+                self._height, self._width = first.shape[:2]
+
+    def isOpened(self):  # noqa: N802 (match cv2.VideoCapture API)
+        return self._opened
+
+    def read(self):
+        if not self._opened or self._current >= len(self._paths):
+            return False, None
+        frame = cv2.imread(self._paths[self._current])
+        if frame is None:
+            return False, None
+        self._current += 1  # Advance so next read() returns next frame (like VideoCapture)
+        return True, frame
+
+    def set(self, prop, value):
+        if prop == cv2.CAP_PROP_POS_FRAMES:
+            idx = int(value)
+            self._current = max(0, min(idx, len(self._paths) - 1)) if self._paths else 0
+
+    def get(self, prop):
+        if prop == cv2.CAP_PROP_FRAME_COUNT:
+            return len(self._paths)
+        if prop == cv2.CAP_PROP_POS_FRAMES:
+            return self._current
+        if prop == cv2.CAP_PROP_FRAME_WIDTH:
+            return self._width
+        if prop == cv2.CAP_PROP_FRAME_HEIGHT:
+            return self._height
+        return 0
+
+    def release(self):
+        self._paths = []
+        self._opened = False
+
+
+def create_frame_source(path, source_type):
+    """Create a FrameSource from path and source_type.
+
+    source_type: "video" | "single_png" | "png_sequence"
+    """
+    if source_type == "video":
+        return VideoFrameSource(path)
+    if source_type == "single_png":
+        return SinglePngFrameSource(path)
+    if source_type == "png_sequence":
+        return PngSequenceFrameSource(path)
+    raise ValueError(f"Unknown source_type: {source_type}")
+
+
+def get_image_sequence_metadata(path, source_type):
+    """Get metadata dict for single PNG or PNG sequence (same shape as get_precise_video_metadata).
+
+    source_type: "single_png" | "png_sequence"
+    """
+    path = Path(path)
+    if source_type == "single_png":
+        img = cv2.imread(str(path))
+        if img is None:
+            return {"fps": 1.0, "width": 0, "height": 0, "nb_frames": 0}
+        h, w = img.shape[:2]
+        return {
+            "fps": 1.0,
+            "width": w,
+            "height": h,
+            "nb_frames": 1,
+            "duration": None,
+            "codec": "png",
+        }
+    # png_sequence: directory
+    paths = sorted(
+        [path / f for f in os.listdir(path) if f.lower().endswith(".png")],
+        key=_natural_sort_key,
+    )
+    nb_frames = len(paths)
+    width = height = 0
+    fps = 30.0
+    info_file = path / "video_info.txt"
+    if info_file.exists():
+        try:
+            with open(info_file, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("FPS:"):
+                        fps = float(line.split(":", 1)[1].strip())
+                    elif line.startswith("Resolution:"):
+                        part = line.split(":", 1)[1].strip()
+                        if "x" in part:
+                            w_s, h_s = part.split("x", 1)
+                            width, height = int(w_s.strip()), int(h_s.strip())
+                    elif line.startswith("Total frames:"):
+                        nb_frames = int(line.split(":", 1)[1].strip())
+        except (ValueError, OSError):
+            pass
+    if (width == 0 or height == 0) and paths:
+        first = cv2.imread(str(paths[0]))
+        if first is not None:
+            height, width = first.shape[:2]
+    return {
+        "fps": fps,
+        "width": width,
+        "height": height,
+        "nb_frames": nb_frames,
+        "duration": nb_frames / fps if fps > 0 else None,
+        "codec": "png",
+    }
 
 
 def get_precise_video_metadata(video_path):
@@ -1138,30 +1348,48 @@ def pygame_file_dialog(
 
 
 def play_video_with_controls(
-    video_path, coordinates=None, labels=None, initial_dataset_dir=None, initial_labeling_mode=None
+    video_path,
+    coordinates=None,
+    labels=None,
+    initial_dataset_dir=None,
+    initial_labeling_mode=None,
+    frame_source=None,
+    metadata=None,
 ):
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print("Error opening video file.")
-        return
+    if frame_source is not None:
+        cap = frame_source
+        if not cap.isOpened():
+            print("Error opening media.")
+            return
+        if metadata is None:
+            metadata = {}
+        fps = metadata.get("fps") or 30.0
+        original_width = metadata.get("width") or int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        original_height = metadata.get("height") or int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = metadata.get("nb_frames")
+        if total_frames is None:
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    else:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print("Error opening video file.")
+            return
+        metadata = get_precise_video_metadata(video_path)
+        fps = metadata["fps"]
+        original_width = metadata["width"] or int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        original_height = metadata["height"] or int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = metadata.get("nb_frames")
+        if total_frames is None:
+            if metadata.get("duration") and fps > 0:
+                total_frames = int(round(metadata["duration"] * fps))
+            else:
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    is_image_source = metadata is not None and metadata.get("codec") == "png"
 
     # Default labels if not provided
     if labels is None:
         labels = []
-
-    # Video properties
-    metadata = get_precise_video_metadata(video_path)
-    fps = metadata["fps"]
-    original_width = metadata["width"] or int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    original_height = metadata["height"] or int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    # Calculate total frames from metadata if available, otherwise use OpenCV
-    total_frames = metadata.get("nb_frames")
-    if total_frames is None:
-        if metadata.get("duration") and fps > 0:
-            total_frames = int(round(metadata["duration"] * fps))
-        else:
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Initialize coordinates if not provided
     if coordinates is None:
@@ -1269,9 +1497,13 @@ def play_video_with_controls(
         nonlocal save_message_text, showing_save_message, save_message_timer
         import tempfile
 
-        # Determine output filename
-        base_name = os.path.splitext(os.path.basename(video_path))[0]
-        video_dir = os.path.dirname(video_path)
+        # Determine output filename (video_path may be file or directory for PNG sequence)
+        if os.path.isdir(video_path):
+            video_dir = video_path
+            base_name = os.path.basename(video_path.rstrip(os.sep))
+        else:
+            video_dir = os.path.dirname(video_path)
+            base_name = os.path.splitext(os.path.basename(video_path))[0]
         output_path = os.path.join(video_dir, f"{base_name}_annotated.mp4")
 
         # Create temporary file for video without audio
@@ -1281,13 +1513,18 @@ def play_video_with_controls(
             temp_fd, temp_video = tempfile.mkstemp(suffix=".mp4", dir=video_dir)
             os.close(temp_fd)
 
-            # Open video
-            cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                save_message_text = "Error: Could not open video"
-                showing_save_message = True
-                save_message_timer = 90
-                return
+            # Use existing cap (FrameSource) for image/sequence; else open video file
+            if is_image_source:
+                cap_export = cap
+                release_cap_export = False
+            else:
+                cap_export = cv2.VideoCapture(video_path)
+                release_cap_export = True
+                if not cap_export.isOpened():
+                    save_message_text = "Error: Could not open video"
+                    showing_save_message = True
+                    save_message_timer = 90
+                    return
 
             # Get video properties (using the precise outer variables to ensure preservation)
             fps_write = fps
@@ -1303,7 +1540,8 @@ def play_video_with_controls(
                 save_message_text = "Error: Could not create output video"
                 showing_save_message = True
                 save_message_timer = 90
-                cap.release()
+                if release_cap_export:
+                    cap_export.release()
                 return
 
             # Process each frame - use frame-by-frame reading to ensure all frames are processed
@@ -1313,17 +1551,17 @@ def play_video_with_controls(
             # Process all frames explicitly by index
             for frame_idx in range(total_frames_video):
                 # Set frame position explicitly to ensure we read the correct frame
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-                ret, frame = cap.read()
+                cap_export.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ret, frame = cap_export.read()
 
                 if not ret:
                     print(f"Warning: Could not read frame {frame_idx}/{total_frames_video}")
                     # Try reading sequentially as fallback
-                    ret, frame = cap.read()
+                    ret, frame = cap_export.read()
                     if not ret:
                         print(f"Error: Could not read frame {frame_idx} even with sequential read")
                         # Create a black frame as last resort to maintain frame count
-                        frame = np.zeros((height, width, 3), dtype=np.uint8)
+                        frame = np.zeros((height_write, width_write, 3), dtype=np.uint8)
 
                 # Verify frame dimensions
                 if frame.shape[0] != height_write or frame.shape[1] != width_write:
@@ -1450,9 +1688,19 @@ def play_video_with_controls(
                     f"[WARNING] Warning: Frame count mismatch! Written: {frames_written}, Expected: {total_frames_video}"
                 )
 
-            # Clean up video writers
-            cap.release()
+            # Clean up video writers (only release if we opened a separate cap for export)
+            if release_cap_export:
+                cap_export.release()
             out.release()
+
+            # For image/PNG sequence there is no audio; for video use ffmpeg to add audio
+            if is_image_source:
+                import shutil
+                shutil.move(temp_video, output_path)
+                save_message_text = f"Video exported: {os.path.basename(output_path)}"
+                showing_save_message = True
+                save_message_timer = 120
+                return
 
             # Now use ffmpeg to combine video with audio from original
             save_message_text = "Adding audio to video..."
@@ -6381,60 +6629,244 @@ names: {class_names}
         pass
 
 
-def get_video_path():
-    # Use the same format as cutvideo.py which works on Linux
-    # Single tuple with all extensions in one string works better on Linux tkinter
-    file_types = [("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")]
+def _get_media_path_linux():
+    """Linux-native media selection using zenity to avoid Tkinter/Pygame conflicts.
+
+    Returns:
+        tuple: (path, source_type) or (None, None) if cancelled.
+    """
+    try:
+        subprocess.run(["zenity", "--version"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return _get_media_path_terminal()
+
+    # Step 1: Choose File or Folder
+    result = subprocess.run(
+        [
+            "zenity",
+            "--list",
+            "--radiolist",
+            "--title=Open Media",
+            "--text=Select video/image file or PNG sequence folder",
+            "--column=Pick",
+            "--column=Option",
+            "--print-column=2",
+            "TRUE",
+            "Open Video or Image File",
+            "FALSE",
+            "Open PNG Sequence (Folder)",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return (None, None)
+
+    choice = result.stdout.strip()
+    if choice == "Open PNG Sequence (Folder)":
+        result = subprocess.run(
+            [
+                "zenity",
+                "--file-selection",
+                "--directory",
+                "--title=Select Folder with PNG Sequence",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return (None, None)
+        path = result.stdout.strip()
+        count = sum(1 for f in os.listdir(path) if f.lower().endswith(".png"))
+        if count == 0:
+            print("Selected folder contains no .png files.")
+            return (None, None)
+        print(f"PNG sequence selected: {path} ({count} images)")
+        return (path, "png_sequence")
+
+    # choice == "Open Video or Image File"
+    result = subprocess.run(
+        [
+            "zenity",
+            "--file-selection",
+            "--title=Select Video or Image File",
+            "--file-filter=Video files|*.mp4 *.avi *.mov *.mkv *.MP4 *.AVI *.MOV *.MKV",
+            "--file-filter=PNG image|*.png *.PNG",
+            "--file-filter=All supported|*.mp4 *.avi *.mov *.mkv *.png",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return (None, None)
+    path = result.stdout.strip()
+    if path.lower().endswith(".png"):
+        print(f"Image selected: {path}")
+        return (path, "single_png")
+    print(f"Video selected: {path}")
+    return (path, "video")
+
+
+def _get_media_path_terminal():
+    """Terminal fallback when no GUI dialog is available."""
+    try:
+        print("\nOpen media - Terminal mode (zenity not available)")
+        print("  1. Open Video or Image File")
+        print("  2. Open PNG Sequence (Folder)")
+        print("  q. Cancel")
+        choice = input("Choice [1]: ").strip() or "1"
+    except EOFError:
+        print("No interactive terminal. Install zenity for GUI: sudo apt install zenity")
+        return (None, None)
+    if choice.lower() == "q":
+        return (None, None)
+    if choice == "2":
+        try:
+            path = input("Enter folder path: ").strip()
+        except EOFError:
+            return (None, None)
+        if not path or not os.path.isdir(path):
+            print("Invalid directory.")
+            return (None, None)
+        count = sum(1 for f in os.listdir(path) if f.lower().endswith(".png"))
+        if count == 0:
+            print("Folder contains no .png files.")
+            return (None, None)
+        return (path, "png_sequence")
+    try:
+        path = input("Enter video/image file path: ").strip()
+    except EOFError:
+        return (None, None)
+    if not path or not os.path.isfile(path):
+        print("Invalid file.")
+        return (None, None)
+    if path.lower().endswith(".png"):
+        return (path, "single_png")
+    return (path, "video")
+
+
+def get_media_path():
+    """Let user choose video, single PNG, or directory of PNG sequence.
+
+    On Linux, uses zenity to avoid Tkinter/Pygame display conflicts.
+
+    Returns:
+        tuple: (path, source_type) where source_type is "video" | "single_png" | "png_sequence",
+        or (None, None) if cancelled.
+    """
+    if platform.system() == "Linux":
+        return _get_media_path_linux()
 
     try:
         import tkinter as tk
-        from tkinter import filedialog
+        from tkinter import filedialog, messagebox
 
-        # Create a hidden root window
         root = tk.Tk()
-        root.withdraw()  # Hide the root window
-        root.attributes("-topmost", True)  # Bring to front
-        root.update_idletasks()  # Process any pending events
+        root.withdraw()
+        root.attributes("-topmost", True)
+        root.update_idletasks()
 
-        # Open file dialog - use same format as cutvideo.py (works on Linux)
-        video_path = filedialog.askopenfilename(title="Select Video File", filetypes=file_types)
+        result = [None, None]  # mutable holder for callback
 
-        if video_path:
-            print(f"Video selected: {video_path}")
+        def on_file():
+            file_types = [
+                ("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV"),
+                ("PNG Image", "*.png *.PNG"),
+                ("All supported", "*.mp4 *.avi *.mov *.mkv *.png"),
+            ]
+            path = filedialog.askopenfilename(
+                title="Select Video or Image File", filetypes=file_types
+            )
+            if path:
+                path = path.strip()
+                if path.lower().endswith(".png"):
+                    result[0], result[1] = path, "single_png"
+                    print(f"Image selected: {path}")
+                else:
+                    result[0], result[1] = path, "video"
+                    print(f"Video selected: {path}")
+            dialog.destroy()
 
-        root.destroy()  # Clean up
+        def on_sequence():
+            path = filedialog.askdirectory(title="Select Folder with PNG Sequence")
+            if path:
+                path = path.strip()
+                count = sum(
+                    1 for f in os.listdir(path) if f.lower().endswith(".png")
+                )
+                if count == 0:
+                    messagebox.showerror(
+                        "No PNGs",
+                        "Selected folder contains no .png files.",
+                    )
+                else:
+                    result[0], result[1] = path, "png_sequence"
+                    print(f"PNG sequence selected: {path} ({count} images)")
+            dialog.destroy()
 
-        # Convert to None if empty string
-        video_path = video_path if video_path else None
+        dialog = tk.Toplevel(root)
+        dialog.title("Open Media")
+        dialog.transient(root)
+        dialog.grab_set()
+        tk.Label(
+            dialog, text="Open video/image or PNG sequence folder", font=("Arial", 10)
+        ).pack(pady=10, padx=20)
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=10, padx=20)
+        tk.Button(btn_frame, text="Open Video / Image File", command=on_file, width=24).pack(
+            side="left", padx=5
+        )
+        tk.Button(
+            btn_frame, text="Open Image Sequence (Folder)", command=on_sequence, width=24
+        ).pack(side="left", padx=5)
+        tk.Button(dialog, text="Cancel", command=dialog.destroy).pack(pady=10)
+
+        dialog.wait_window()
+        root.destroy()
+
+        path, source_type = result[0], result[1]
+        return (path if path else None, source_type)
 
     except Exception as e:
         print(f"Error with file dialog: {e}")
         import traceback
 
         traceback.print_exc()
-        video_path = None
+        return (None, None)
 
-    return video_path
+
+def get_video_path():
+    """Return single path for backward compatibility; prefers video/single_png from get_media_path."""
+    path, source_type = get_media_path()
+    return path
 
 
 # This function is a duplicate/legacy version - keeping for compatibility
 # The main load_coordinates_from_file function is defined above
 
 
-def run_getpixelvideo(initial_dataset_dir=None):
+def run_getpixelvideo(initial_dataset_dir=None, initial_media_path=None, initial_source_type=None):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
     print("Starting GetPixelVideo...")
     print("-" * 80)
 
-    video_path = get_video_path()
-    if not video_path:
-        print("No video selected. Exiting.")
+    if initial_media_path and initial_source_type:
+        media_path, source_type = initial_media_path, initial_source_type
+        print(f"Using CLI media: {media_path} ({source_type})")
+    else:
+        media_path, source_type = get_media_path()
+    if not media_path or not source_type:
+        print("No media selected. Exiting.")
         return
 
+    video_path = media_path  # logical path for saving (file or dir)
+
     # User requested to remove the startup prompt since there is a Load button in the GUI.
-    # defaulting to False (starting fresh)
     print("\n" + "=" * 50)
     print("vailá - Pixel Coordinate Tool")
     print("=" * 50)
@@ -6442,14 +6874,17 @@ def run_getpixelvideo(initial_dataset_dir=None):
 
     load_existing = False
 
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print("Error opening video file.")
+    frame_source = create_frame_source(media_path, source_type)
+    if not frame_source.isOpened():
+        print("Error opening media.")
         return
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    vw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    vh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    cap.release()
+    if source_type == "video":
+        metadata = get_precise_video_metadata(media_path)
+    else:
+        metadata = get_image_sequence_metadata(media_path, source_type)
+    total_frames = metadata.get("nb_frames") or int(frame_source.get(cv2.CAP_PROP_FRAME_COUNT))
+    vw = metadata.get("width") or int(frame_source.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vh = metadata.get("height") or int(frame_source.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     if load_existing:
         loaded_data, labels = load_coordinates_from_file(total_frames, vw, vh)
@@ -6477,6 +6912,8 @@ def run_getpixelvideo(initial_dataset_dir=None):
             labels,
             initial_dataset_dir=initial_dataset_dir,
             initial_labeling_mode=initial_labeling_mode,
+            frame_source=frame_source,
+            metadata=metadata,
         )
         # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
         if result and len(result) >= 3 and result[0] == "switch_video":
@@ -6485,12 +6922,32 @@ def run_getpixelvideo(initial_dataset_dir=None):
             run_getpixelvideo._initial_labeling_mode = result[3] if len(result) > 3 else False
             coordinates = None
             labels = []
+            # Re-open media for next iteration (path may be video, single_png, or png_sequence dir)
+            frame_source.release()
+            media_path, source_type = get_media_path()
+            if not media_path or not source_type:
+                break
+            video_path = media_path
+            frame_source = create_frame_source(media_path, source_type)
+            if not frame_source.isOpened():
+                print("Error opening media.")
+                break
+            if source_type == "video":
+                metadata = get_precise_video_metadata(media_path)
+            else:
+                metadata = get_image_sequence_metadata(media_path, source_type)
+            total_frames = metadata.get("nb_frames") or int(frame_source.get(cv2.CAP_PROP_FRAME_COUNT))
+            vw = metadata.get("width") or int(frame_source.get(cv2.CAP_PROP_FRAME_WIDTH))
+            vh = metadata.get("height") or int(frame_source.get(cv2.CAP_PROP_FRAME_HEIGHT))
             continue
         break
 
 
 if __name__ == "__main__":
     initial_dataset_dir = None
+    initial_media_path = None
+    initial_source_type = None
+
     if "--dataset" in sys.argv:
         idx = sys.argv.index("--dataset")
         if idx + 1 < len(sys.argv):
@@ -6498,4 +6955,36 @@ if __name__ == "__main__":
             if not os.path.isdir(initial_dataset_dir):
                 print(f"Error: --dataset path is not a directory: {initial_dataset_dir}")
                 initial_dataset_dir = None
-    run_getpixelvideo(initial_dataset_dir=initial_dataset_dir)
+
+    if "--sequence" in sys.argv:
+        idx = sys.argv.index("--sequence")
+        if idx + 1 < len(sys.argv):
+            seq_dir = sys.argv[idx + 1]
+            if os.path.isdir(seq_dir) and any(
+                f.lower().endswith(".png") for f in os.listdir(seq_dir)
+            ):
+                initial_media_path = seq_dir
+                initial_source_type = "png_sequence"
+            else:
+                print(f"Error: --sequence path is not a directory with PNGs: {seq_dir}")
+
+    if initial_media_path is None and ("-f" in sys.argv or "--file" in sys.argv):
+        opt = "-f" if "-f" in sys.argv else "--file"
+        idx = sys.argv.index(opt)
+        if idx + 1 < len(sys.argv):
+            file_path = sys.argv[idx + 1]
+            if os.path.isfile(file_path):
+                if file_path.lower().endswith(".png"):
+                    initial_media_path = file_path
+                    initial_source_type = "single_png"
+                else:
+                    initial_media_path = file_path
+                    initial_source_type = "video"
+            else:
+                print(f"Error: --file path is not a file: {file_path}")
+
+    run_getpixelvideo(
+        initial_dataset_dir=initial_dataset_dir,
+        initial_media_path=initial_media_path,
+        initial_source_type=initial_source_type,
+    )
