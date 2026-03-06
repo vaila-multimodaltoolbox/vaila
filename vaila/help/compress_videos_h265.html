@@ -42,7 +42,7 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
             <p><strong>File:</strong> vaila/compress_videos_h265.py</p>
-            <p><strong>Version:</strong> 0.3.24</p>
+            <p><strong>Version:</strong> 0.1.2</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
             <p><strong>CLI Interface:</strong> ✅ Yes</p>
         </div>
@@ -52,10 +52,14 @@
             <p>Compresses videos in a specified directory to <strong>H.265 (HEVC)</strong> format using FFmpeg.</p>
             <ul>
                 <li><strong>GPU acceleration</strong> with NVIDIA NVENC (<code>hevc_nvenc</code>, auto-detected)</li>
+                <li><strong>Parallel processing</strong>: speed up batch compression with multiple workers</li>
+                <li><strong>Adaptive compression</strong>: automatically discard output files larger than input</li>
                 <li><strong>macOS VideoToolbox</strong> support (<code>hevc_videotoolbox</code>)</li>
                 <li><strong>CPU fallback</strong> to <code>libx265</code> when no GPU is available</li>
                 <li><strong>Better compression</strong> than H.264 — up to 50% smaller files</li>
                 <li><strong>Resolution control</strong>: keep original or downscale</li>
+                <li><strong>Recursive search</strong>: process subdirectories (CLI <code>--recursive</code>, GUI subdir depth)</li>
+                <li><strong>Subdir depth</strong>: limit recursion depth (0 = only folder, -1 = unlimited)</li>
                 <li><strong>Cross-platform</strong>: Windows, Linux, macOS</li>
             </ul>
         </div>
@@ -69,15 +73,24 @@ python -m vaila.compress_videos_h265 --dir /path/to/videos
 # With GPU acceleration
 python -m vaila.compress_videos_h265 --dir /path/to/videos --gpu
 
+# Recursive with GPU
+python -m vaila.compress_videos_h265 --dir /path/to/videos --recursive --gpu
+
+# Recursive with max depth 2
+python -m vaila.compress_videos_h265 --dir /path/to/videos -r --depth 2 --gpu
+
 # Custom quality and resolution
 python -m vaila.compress_videos_h265 --dir /path/to/videos --preset slow --crf 24 --resolution 1920x1080</pre>
             <table>
                 <tr><th>Option</th><th>Default</th><th>Description</th></tr>
                 <tr><td><code>--dir</code></td><td>(required)</td><td>Directory containing videos</td></tr>
+                <tr><td><code>--recursive</code> / <code>-r</code></td><td>off</td><td>Recurse into subdirectories</td></tr>
+                <tr><td><code>--depth</code> / <code>-d</code></td><td>-1</td><td>Max subdir depth when recursive (0=root, 1/2/3=levels, -1=unlimited)</td></tr>
                 <tr><td><code>--preset</code></td><td>medium</td><td>ultrafast → veryslow</td></tr>
                 <tr><td><code>--crf</code></td><td>28</td><td>Quality (0-51). Lower = better</td></tr>
                 <tr><td><code>--resolution</code></td><td>original</td><td>e.g. 1920x1080</td></tr>
                 <tr><td><code>--gpu/--no-gpu</code></td><td>auto</td><td>Force GPU or CPU</td></tr>
+                <tr><td><code>--workers/-w</code></td><td>1</td><td>Number of parallel workers</td></tr>
             </table>
         </div>
 
@@ -86,7 +99,8 @@ python -m vaila.compress_videos_h265 --dir /path/to/videos --preset slow --crf 2
             <ul>
                 <li><code>is_nvidia_gpu_available</code> — Detect NVIDIA GPU</li>
                 <li><code>verify_nvenc_encoder</code> — Test hevc_nvenc</li>
-                <li><code>find_videos</code> — Find video files</li>
+                <li><code>find_videos</code> — Find video files (non-recursive)</li>
+                <li><code>find_videos_recursive</code> — Find videos in dir and subdirs (optional max_depth)</li>
                 <li><code>run_compress_videos_h265</code> — Core compression</li>
                 <li><code>get_compression_parameters</code> — GUI dialog</li>
                 <li><code>compress_videos_h265_gui</code> — GUI entry point</li>
@@ -96,7 +110,7 @@ python -m vaila.compress_videos_h265 --dir /path/to/videos --preset slow --crf 2
         </div>
 
         <div class="footer">
-            <p>📅 Updated: 18/02/2026</p>
+            <p>📅 Updated: 06/03/2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
