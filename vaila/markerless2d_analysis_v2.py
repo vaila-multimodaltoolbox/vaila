@@ -95,7 +95,7 @@ from ultralytics import YOLO
 # Handle imports for both package and script execution
 try:
     from .hardware_manager import HardwareManager
-except ImportError as e:
+except ImportError:
     # Fallback or debug print
     pass
     import sys
@@ -1032,17 +1032,20 @@ def download_yolo_model(model_name):
             # Copy the downloaded model to our models directory
             shutil.copy2(source_path, str(model_path))
             print(f"[OK] Successfully saved {model_name} to {model_path}")
-            
+
             # Clean up the file from the original download location if it's in the CWD
             # Ultralytics often downloads to CWD
             try:
                 # check if source path is in CWD
-                if os.path.abspath(source_path).startswith(os.getcwd()) and os.path.basename(source_path) == model_name:
+                if (
+                    os.path.abspath(source_path).startswith(os.getcwd())
+                    and os.path.basename(source_path) == model_name
+                ):
                     print(f"Removing temporary file from {source_path}")
                     os.remove(source_path)
             except Exception as e:
                 print(f"Warning: Could not remove temporary file: {e}")
-                
+
             return str(model_path)
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")

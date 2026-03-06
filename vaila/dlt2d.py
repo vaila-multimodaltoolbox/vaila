@@ -201,7 +201,9 @@ def process_files(pixel_file, real_file):
     # Find points present in both files (e.g., p1, p2)
     pixel_points = {col.split("_")[0] for col in pixel_df.columns if "_" in col}
     real_points = {col.split("_")[0] for col in real_df.columns if "_" in col}
-    common_points = sorted(pixel_points.intersection(real_points), key=lambda x: int(x[1:]) if x[1:].isdigit() else x)
+    common_points = sorted(
+        pixel_points.intersection(real_points), key=lambda x: int(x[1:]) if x[1:].isdigit() else x
+    )
 
     if not common_points:
         print("Error: No common points (e.g., p1_x, p1_y) found between pixel and reference files.")
@@ -255,14 +257,19 @@ def process_files(pixel_file, real_file):
 
             # Only use pairs where both pixel and real coordinates are valid
             if (
-                px_x is not None and px_y is not None and real_x is not None and real_y is not None
-                and not pd.isna(px_x) and not pd.isna(px_y) and not pd.isna(real_x) and not pd.isna(real_y)
+                px_x is not None
+                and px_y is not None
+                and real_x is not None
+                and real_y is not None
+                and not pd.isna(px_x)
+                and not pd.isna(px_y)
+                and not pd.isna(real_x)
+                and not pd.isna(real_y)
             ):
                 L_coords.append([px_x, px_y])
                 F_coords.append([real_x, real_y])
             # else:
             #     print(f"  Skipping point {p} for frame {frame}")
-
 
         # Convert to numpy arrays
         L = np.array(L_coords)
@@ -360,7 +367,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DLT2D Reconstruction")
     parser.add_argument("--pixel", help="Path to pixel coordinate CSV file")
     parser.add_argument("--real", help="Path to real-world coordinate REF2D file")
-    parser.add_argument("--create-ref", action="store_true", help="Create a REF2D file from the pixel file")
+    parser.add_argument(
+        "--create-ref", action="store_true", help="Create a REF2D file from the pixel file"
+    )
     args = parser.parse_args()
 
     run_dlt2d(pixel_file=args.pixel, real_file=args.real, create_ref=args.create_ref)

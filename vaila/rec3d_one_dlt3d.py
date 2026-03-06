@@ -584,7 +584,7 @@ def run_reconstruction(
     for marker in range(1, num_markers + 1):
         header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
 
-    rec3d_df = pd.DataFrame(reconstruction_array, columns=header) # type: ignore
+    rec3d_df = pd.DataFrame(reconstruction_array, columns=header)  # type: ignore
     valid_frames_mask = ~rec3d_df.iloc[:, 1:].isna().all(axis=1)
     rec3d_df = rec3d_df[valid_frames_mask].reset_index(drop=True)
 

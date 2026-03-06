@@ -247,7 +247,9 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
     if total_frames is None:
         total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    print(f"Applying boxes to {total_frames} frames: {os.path.basename(input_path)} -> {os.path.basename(output_path)}")
+    print(
+        f"Applying boxes to {total_frames} frames: {os.path.basename(input_path)} -> {os.path.basename(output_path)}"
+    )
     # Create temporary video file for processed frames (without audio)
     temp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     temp_video_path = temp_video.name
@@ -390,7 +392,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
             ]
         )
 
-        print(f"  Combining video with audio and metadata (ffmpeg)...")
+        print("  Combining video with audio and metadata (ffmpeg)...")
         subprocess.run(cmd, capture_output=False, text=True, check=True)
 
         print(f"  Done: {os.path.basename(output_path)}")
@@ -584,7 +586,7 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
                 ]
             )
 
-            print(f"  Combining with audio and metadata (ffmpeg)...")
+            print("  Combining with audio and metadata (ffmpeg)...")
             subprocess.run(combine_cmd, check=True, capture_output=False, text=True)
 
             print(f"  Done: {os.path.basename(output_path)}")
@@ -1802,7 +1804,7 @@ def run_drawboxe():
             if os.path.exists(frames_dir):
                 shutil.rmtree(frames_dir)
             extract_frames(input_path, frames_dir)
-            print(f"  Applying boxes to extracted frames...")
+            print("  Applying boxes to extracted frames...")
             apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_intervals)
             # Pass precise FPS, total frame count, and original video path to preserve audio and metadata
             reassemble_video(
