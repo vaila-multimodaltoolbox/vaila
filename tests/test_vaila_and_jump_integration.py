@@ -6,7 +6,6 @@ using the real sample data from tests/vaila_and_jump/.
 No GUI, no Tkinter dialogs — only headless pipelines.
 """
 
-import os
 import sys
 from pathlib import Path
 

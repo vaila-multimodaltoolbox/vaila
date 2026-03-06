@@ -43,7 +43,7 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
             <p><strong>File:</strong> vaila/compress_videos_h266.py</p>
-            <p><strong>Version:</strong> 0.0.2</p>
+            <p><strong>Version:</strong> 0.1.2</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
             <p><strong>CLI Interface:</strong> ✅ Yes</p>
         </div>
@@ -62,9 +62,13 @@
             <h3>📖 Description</h3>
             <p>Compresses videos to <strong>H.266 (VVC)</strong> format using FFmpeg with <code>libvvenc</code>.</p>
             <ul>
+                <li><strong>Parallel processing</strong>: speed up batch compression with multiple workers</li>
+                <li><strong>Adaptive compression</strong>: automatically discard output files larger than input</li>
                 <li><strong>Encoder check</strong> before starting (graceful error if libvvenc missing)</li>
-                <li><strong>QP-based quality</strong> (Quantization Parameter 0-51)</li>
+                <li><strong>QP-based quality</strong> (Quantization Parameter 0-63)</li>
                 <li><strong>Resolution control</strong>: keep original or downscale</li>
+                <li><strong>Recursive search</strong>: process subdirectories (CLI <code>--recursive</code>, GUI subdir depth)</li>
+                <li><strong>Subdir depth</strong>: limit recursion depth (0 = only folder, -1 = unlimited)</li>
                 <li><strong>Cross-platform</strong>: Windows, Linux, macOS</li>
             </ul>
             <h4>Getting FFmpeg with libvvenc</h4>
@@ -81,14 +85,23 @@
 # Basic usage
 python -m vaila.compress_videos_h266 --dir /path/to/videos
 
+# Recursive (all subdirs)
+python -m vaila.compress_videos_h266 --dir /path/to/videos --recursive
+
+# Recursive with max depth 2
+python -m vaila.compress_videos_h266 --dir /path/to/videos -r --depth 2
+
 # Custom quality and resolution
 python -m vaila.compress_videos_h266 --dir /path/to/videos --preset slow --qp 28 --resolution 1920x1080</pre>
             <table>
                 <tr><th>Option</th><th>Default</th><th>Description</th></tr>
                 <tr><td><code>--dir</code></td><td>(required)</td><td>Directory containing videos</td></tr>
+                <tr><td><code>--recursive</code> / <code>-r</code></td><td>off</td><td>Recurse into subdirectories</td></tr>
+                <tr><td><code>--depth</code> / <code>-d</code></td><td>-1</td><td>Max subdir depth when recursive (0=root, 1/2/3=levels, -1=unlimited)</td></tr>
                 <tr><td><code>--preset</code></td><td>medium</td><td>ultrafast → veryslow</td></tr>
-                <tr><td><code>--qp</code></td><td>32</td><td>Quality (0-51). Lower = better</td></tr>
+                <tr><td><code>--qp</code></td><td>32</td><td>Quality (0-63). Lower = better</td></tr>
                 <tr><td><code>--resolution</code></td><td>original</td><td>e.g. 1920x1080</td></tr>
+                <tr><td><code>--workers/-w</code></td><td>1</td><td>Number of parallel workers</td></tr>
             </table>
         </div>
 
@@ -96,7 +109,8 @@ python -m vaila.compress_videos_h266 --dir /path/to/videos --preset slow --qp 28
             <h3>🔧 Main Functions</h3>
             <ul>
                 <li><code>check_libvvenc_available</code> — Check libvvenc support</li>
-                <li><code>find_videos</code> — Find video files</li>
+                <li><code>find_videos</code> — Find video files (non-recursive)</li>
+                <li><code>find_videos_recursive</code> — Find videos in dir and subdirs (optional max_depth)</li>
                 <li><code>run_compress_videos_h266</code> — Core VVC compression</li>
                 <li><code>get_compression_parameters</code> — GUI dialog</li>
                 <li><code>compress_videos_h266_gui</code> — GUI entry point</li>
@@ -106,7 +120,7 @@ python -m vaila.compress_videos_h266 --dir /path/to/videos --preset slow --qp 28
         </div>
 
         <div class="footer">
-            <p>📅 Updated: 18/02/2026</p>
+            <p>📅 Updated: 06/03/2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

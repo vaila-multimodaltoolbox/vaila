@@ -18,7 +18,7 @@ import psutil
 from ultralytics import YOLO
 
 try:
-    import pynvml
+    import pynvml  # type: ignore[import-not-found]
 except ImportError:
     pynvml = None
 

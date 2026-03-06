@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 03 March 2026
-Version: 0.3.30
+Update Date: 06 March 2026
+Version: 0.3.31
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -155,7 +155,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 03.March.2026 v0.3.30 (Python 3.12.12)
+vailá - 06.March.2026 v0.3.31 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -260,8 +260,8 @@ class Vaila(tk.Tk):
         - Creates the widgets for the application.
 
         """
-        super().__init__(className='vaila')
-        self.title("vailá - 03.March.2026 v0.3.30 (Python 3.12.12)")
+        super().__init__(className="vaila")
+        self.title("vailá - 06.March.2026 v0.3.31 (Python 3.12.12)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -2784,6 +2784,7 @@ class Vaila(tk.Tk):
         print("Features: tugturn 3D Analysis")
         print("=" * 60 + "\n")
         run_vaila_module("vaila.tugturn", "vaila/tugturn.py")
+
 
 if __name__ == "__main__":
     app = Vaila()

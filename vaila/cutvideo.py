@@ -72,7 +72,6 @@ import datetime
 import json
 import os
 import platform
-import time
 
 # Configure SDL environment variables BEFORE importing pygame
 # to prevent EGL/OpenGL warnings and window manager crashes on Linux systems
@@ -115,7 +114,9 @@ def get_precise_video_metadata(video_path):
             "-show_streams",
             str(video_path),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True
+        )
         if result.stdout is None or not result.stdout.strip():
             raise ValueError("ffprobe returned no output")
         data = json.loads(result.stdout)
@@ -149,7 +150,7 @@ def get_precise_video_metadata(video_path):
 
         # Convert fraction strings to float and extract exact numerator/denominator components
         fps_num, fps_den = None, None
-        
+
         def parse_fraction(frac_str):
             try:
                 if "/" in frac_str:
@@ -196,7 +197,13 @@ def get_precise_video_metadata(video_path):
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
         }
-    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError, ValueError, TypeError) as e:
+    except (
+        subprocess.CalledProcessError,
+        json.JSONDecodeError,
+        FileNotFoundError,
+        ValueError,
+        TypeError,
+    ) as e:
         # Fallback to OpenCV if ffprobe is not available
         print(f"Warning: ffprobe not available or failed, using OpenCV fallback: {e}")
         cap = cv2.VideoCapture(str(video_path))
@@ -313,14 +320,16 @@ def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metad
     return True
 
 
-def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outputs=None, labels=None):
+def save_cuts_to_toml(
+    video_path, cuts, fps=None, output_dir=None, per_cut_outputs=None, labels=None
+):
     """Save cuts information to a TOML file.
 
     output_dir: optional Path/str for planned output directory.
     per_cut_outputs: optional list of filenames (one per cut) to record planned outputs.
     labels: optional list of string labels for each cut.
     """
-    
+
     fps_num, fps_den = 30, 1
     original_fps = fps
     try:
@@ -379,7 +388,7 @@ def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outpu
             toml_content += "[[cuts]]\n"
             toml_content += f"index = {i}\n"
             if labels and i - 1 < len(labels):
-                safe_label = labels[i-1].replace('"', '\\"')
+                safe_label = labels[i - 1].replace('"', '\\"')
                 toml_content += f'label = "{safe_label}"\n'
             toml_content += f"start_frame = {start_frame_1based}\n"
             toml_content += f"end_frame = {end_frame_1based}\n"
@@ -443,7 +452,7 @@ def save_cuts_to_toml(video_path, cuts, fps=None, output_dir=None, per_cut_outpu
                 toml_content += "[[cuts]]\n"
                 toml_content += f"index = {i}\n"
                 if labels and i - 1 < len(labels):
-                    safe_label = labels[i-1].replace('"', '\\"')
+                    safe_label = labels[i - 1].replace('"', '\\"')
                     toml_content += f'label = "{safe_label}"\n'
                 toml_content += f"start_frame = {start_frame_1based}\n"
                 toml_content += f"end_frame = {end_frame_1based}\n"
@@ -468,11 +477,11 @@ def parse_sync_file_content(selected_file, video_path):
     video_path_obj = Path(video_path).absolute()
     video_name = video_path_obj.name
     video_stem = video_path_obj.stem
-    
+
     cuts = []
     sync_data = {}
     is_sync_file = False
-    
+
     try:
         with open(selected_file, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
@@ -481,7 +490,7 @@ def parse_sync_file_content(selected_file, video_path):
             line = line.strip()
             if not line:
                 continue
-                
+
             # Parse sync file format: video_file new_name initial_frame final_frame
             parts = line.split()
             if len(parts) >= 4:
@@ -490,7 +499,7 @@ def parse_sync_file_content(selected_file, video_path):
                     new_name = parts[1]
                     initial_frame_val = int(parts[2])
                     final_frame_val = int(parts[3])
-                    
+
                     # It's definitely a sync file format if it has 4+ parts and ints at the end
                     is_sync_file = True
 
@@ -501,31 +510,33 @@ def parse_sync_file_content(selected_file, video_path):
                         "final_frame": final_frame_val,
                     }
 
-                    # Matching logic: 
+                    # Matching logic:
                     # 1. Exact match (case-insensitive)
                     # 2. Stem match (case-insensitive)
                     # 3. Substring match
                     match_found = False
-                    if video_name.lower() == video_file.lower():
+                    if (
+                        video_name.lower() == video_file.lower()
+                        or video_stem.lower() == video_file.lower()
+                        or video_file.lower() == video_stem.lower()
+                        or video_name.lower() in video_file.lower()
+                        or video_file.lower() in video_name.lower()
+                    ):
                         match_found = True
-                    elif video_stem.lower() == video_file.lower():
-                        match_found = True
-                    elif video_file.lower() == video_stem.lower():
-                        match_found = True
-                    elif video_name.lower() in video_file.lower() or video_file.lower() in video_name.lower():
-                        match_found = True
-                    
+
                     if match_found:
                         # Use 1-based to 0-based conversion
                         # Safety clamp to 0
                         start = max(0, initial_frame_val - 1)
                         end = max(0, final_frame_val - 1)
                         cuts.append((start, end))
-                        print(f"  [green]Match found in sync file:[/] {video_file} -> {start+1} to {end+1}")
+                        print(
+                            f"  [green]Match found in sync file:[/] {video_file} -> {start + 1} to {end + 1}"
+                        )
 
                 except (ValueError, IndexError):
                     continue
-                    
+
         return cuts, is_sync_file, sync_data
     except Exception as e:
         print(f"  [red]Error parsing sync file {selected_file}:[/] {e}")
@@ -540,16 +551,16 @@ def load_sync_file(video_path):
         video_name = video_path_obj.name
 
         print(f"Searching for sync files for {video_name} in {video_dir}...")
-        
+
         # Look for sync files in the directory (*.txt)
         sync_files = list(video_dir.glob("*.txt")) + list(video_dir.glob("*.TXT"))
-        sync_files = list(set(sync_files)) # Deduplicate
+        sync_files = list(set(sync_files))  # Deduplicate
 
         for sync_file in sync_files:
             # Skip common non-sync files if they are huge or clearly irrelevant
             if sync_file.name.lower() in ["requirements.txt", "readme.txt"]:
                 continue
-                
+
             print(f"Trying sync file: {sync_file.name}")
             cuts, is_sync, sync_data = parse_sync_file_content(sync_file, video_path)
             if cuts:
@@ -660,7 +671,9 @@ def extract_audio_data(video_path, target_sr=44100):
             "csv=p=0",
             str(video_path),
         ]
-        has_audio = subprocess.run(probe_cmd, stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace").stdout.strip()
+        has_audio = subprocess.run(
+            probe_cmd, stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="replace"
+        ).stdout.strip()
         if not has_audio:
             return None, None
 
@@ -784,31 +797,35 @@ def load_sync_file_from_dialog(video_path):
                 return cuts, False, None
             else:
                 from tkinter import messagebox
+
                 messagebox.showwarning(
                     "No Cuts Found", "The selected TOML file does not contain any cuts."
                 )
                 return [], False, None
         except Exception as e:
             from tkinter import messagebox
+
             messagebox.showerror("Error", f"Error loading TOML file: {e}")
             return [], False, None
 
     # Otherwise, treat as sync file (TXT format)
     print(f"Manual loading sync file: {selected_file}")
     cuts, is_sync, sync_data = parse_sync_file_content(selected_file, video_path)
-    
+
     if is_sync:
         if not cuts:
             from tkinter import messagebox
+
             video_name = Path(video_path).name
             messagebox.showwarning(
-                "Video Not Found in Sync File", 
+                "Video Not Found in Sync File",
                 f"Sync file loaded, but video '{video_name}' was not found in it.\n\n"
-                "Check if the filename in the TXT matches exactly."
+                "Check if the filename in the TXT matches exactly.",
             )
         return cuts, True, sync_data
     else:
         from tkinter import messagebox
+
         messagebox.showerror("Error", "The selected file is not in a recognized sync file format.")
         return [], False, None
 
@@ -877,6 +894,7 @@ def batch_process_sync_videos(video_path, sync_data):
 
 def play_video_with_cuts(video_path):
     from tkinter import Tk, filedialog, messagebox, simpledialog, ttk
+
     pygame.init()
 
     # Initialize video capture with fallback conversion logic
@@ -994,7 +1012,15 @@ def play_video_with_cuts(video_path):
 
                         conversion_success = True
                     except subprocess.CalledProcessError as e:
-                        err_text = e.stderr if isinstance(e.stderr, str) else (e.stderr.decode("utf-8", errors="replace") if e.stderr else "Unknown error")
+                        err_text = (
+                            e.stderr
+                            if isinstance(e.stderr, str)
+                            else (
+                                e.stderr.decode("utf-8", errors="replace")
+                                if e.stderr
+                                else "Unknown error"
+                            )
+                        )
                         conversion_error = f"FFmpeg failed: {err_text}"
                     except Exception as e:
                         conversion_error = str(e)
@@ -1606,7 +1632,12 @@ def play_video_with_cuts(video_path):
         per_cut_files = [f"{video_name}_frame_{start + 1}_to_{end + 1}.mp4" for start, end in cuts]
 
         save_cuts_to_toml(
-            video_path, cuts, fps, output_dir=planned_output_dir, per_cut_outputs=per_cut_files, labels=cut_labels
+            video_path,
+            cuts,
+            fps,
+            output_dir=planned_output_dir,
+            per_cut_outputs=per_cut_files,
+            labels=cut_labels,
         )
 
         # Close pygame temporarily instead of fully quitting it
@@ -1742,7 +1773,9 @@ def play_video_with_cuts(video_path):
                             output_dir
                             / f"{video_name}_frame_{start_frame}_to_{actual_end_frame}.mp4"
                         )
-                        print(f"  Cut {idx + 1}/{len(valid_cuts)}: frames {start_frame}-{actual_end_frame} -> {output_path.name}")
+                        print(
+                            f"  Cut {idx + 1}/{len(valid_cuts)}: frames {start_frame}-{actual_end_frame} -> {output_path.name}"
+                        )
                         success = cut_video_with_ffmpeg(
                             video_path, output_path, start_frame, actual_end_frame, metadata
                         )
@@ -1801,7 +1834,9 @@ def play_video_with_cuts(video_path):
             output_path = (
                 output_dir / f"{video_name}_frame_{start_frame + 1}_to_{end_frame + 1}.mp4"
             )
-            print(f"Processing cut {i + 1}/{n_cuts}: frames {start_frame + 1}-{end_frame + 1} -> {output_path.name}")
+            print(
+                f"Processing cut {i + 1}/{n_cuts}: frames {start_frame + 1}-{end_frame + 1} -> {output_path.name}"
+            )
             success = cut_video_with_ffmpeg(
                 video_path, output_path, start_frame, end_frame, metadata
             )
@@ -2030,40 +2065,52 @@ def play_video_with_cuts(video_path):
                         cuts_list_strs = []
                         for i, (start, end) in enumerate(cuts):
                             label_str = f" [{cut_labels[i]}]" if i < len(cut_labels) else ""
-                            cuts_list_strs.append(f"Cut {i + 1}{label_str}: Frame {start + 1} to {end + 1}")
+                            cuts_list_strs.append(
+                                f"Cut {i + 1}{label_str}: Frame {start + 1} to {end + 1}"
+                            )
                         messagebox.showinfo("Cuts List", "\n".join(cuts_list_strs))
                     else:
                         messagebox.showinfo("Cuts List", "No cuts marked yet")
                 elif event.key == pygame.K_c:  # Load cut labels from CSV
                     from tkinter import Tk, filedialog, messagebox
+
                     temp_root = Tk()
                     temp_root.withdraw()
                     csv_file = filedialog.askopenfilename(
                         title="Select Labels CSV/TXT",
                         filetypes=[
-                            ("CSV files", "*.csv"), 
-                            ("TXT files", "*.txt"), 
-                            ("All files", "*.*")
-                        ]
+                            ("CSV files", "*.csv"),
+                            ("TXT files", "*.txt"),
+                            ("All files", "*.*"),
+                        ],
                     )
                     temp_root.destroy()
                     if csv_file:
                         try:
                             parsed_labels = []
-                            with open(csv_file, 'r', encoding='utf-8') as f:
+                            with open(csv_file, encoding="utf-8") as f:
                                 # Simple parsing: comma separated inline, or newline separated
                                 content = f.read().strip()
-                                if ',' in content and '\n' not in content:
-                                    parsed_labels = [label.strip() for label in content.split(',')]
+                                if "," in content and "\n" not in content:
+                                    parsed_labels = [label.strip() for label in content.split(",")]
                                 else:
-                                    parsed_labels = [line.strip().strip(',') for line in content.splitlines() if line.strip()]
-                            
+                                    parsed_labels = [
+                                        line.strip().strip(",")
+                                        for line in content.splitlines()
+                                        if line.strip()
+                                    ]
+
                             cut_labels.clear()
                             cut_labels.extend(parsed_labels)
-                            
+
                             info_root = Tk()
                             info_root.withdraw()
-                            messagebox.showinfo("Cut Labels Loaded", f"Successfully loaded {len(cut_labels)} labels:\n" + ", ".join(cut_labels), parent=info_root)
+                            messagebox.showinfo(
+                                "Cut Labels Loaded",
+                                f"Successfully loaded {len(cut_labels)} labels:\n"
+                                + ", ".join(cut_labels),
+                                parent=info_root,
+                            )
                             info_root.destroy()
                             print(f"Cut labels loaded: {cut_labels}")
                         except Exception as e:
@@ -2158,19 +2205,23 @@ def play_video_with_cuts(video_path):
                             else:
                                 val = float(new_fps_str)
                                 fps_num, fps_den = int(val * 1000), 1000
-                            
+
                             if val is not None and val > 0:
                                 fps = val
-                                original_fps = fps # Force exact matching to get_time_s
+                                original_fps = fps  # Force exact matching to get_time_s
                                 print(f"FPS updated to: {fps:.6f} ({fps_num}/{fps_den})")
                                 update_caption()
-                                
+
                                 # Spawn temporary root for messagebox to ensure it closes properly on Linux
                                 msg_root = Tk()
                                 msg_root.withdraw()
-                                messagebox.showinfo("FPS Updated", f"FPS set to {fps:.6f} ({fps_num}/{fps_den})", parent=msg_root)
+                                messagebox.showinfo(
+                                    "FPS Updated",
+                                    f"FPS set to {fps:.6f} ({fps_num}/{fps_den})",
+                                    parent=msg_root,
+                                )
                                 msg_root.destroy()
-                                
+
                             else:
                                 print("Invalid FPS value entered.")
                         except ValueError:
@@ -2302,6 +2353,7 @@ def play_video_with_cuts(video_path):
 
 def get_video_path():
     from tkinter import Tk, filedialog
+
     root = Tk()
     root.withdraw()
     video_path = filedialog.askopenfilename(
@@ -2335,6 +2387,7 @@ def run_cutvideo():
     print("Starting cutvideo.py...")
 
     import platform
+
     if platform.system() == "Linux":
         has_nvidia = os.path.exists("/proc/driver/nvidia")
         if has_nvidia:
