@@ -49,10 +49,9 @@ import os
 import subprocess
 import threading
 import tkinter as tk
+import urllib.request
 from pathlib import Path
 from tkinter import filedialog, ttk
-
-import urllib.request
 
 import cv2
 import mediapipe as mp
@@ -68,14 +67,41 @@ torch.set_num_threads(1)
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed in 0.10.32)
 POSE_CONNECTIONS = frozenset(
     [
-        (0, 1), (1, 2), (2, 3), (3, 7),
-        (0, 4), (4, 5), (5, 6), (6, 8),
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 7),
+        (0, 4),
+        (4, 5),
+        (5, 6),
+        (6, 8),
         (9, 10),
-        (11, 12), (11, 23), (12, 24), (23, 24),
-        (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
-        (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20),
-        (23, 25), (24, 26), (25, 27), (26, 28),
-        (27, 29), (28, 30), (29, 31), (30, 32), (27, 31), (28, 32),
+        (11, 12),
+        (11, 23),
+        (12, 24),
+        (23, 24),
+        (11, 13),
+        (13, 15),
+        (15, 17),
+        (15, 19),
+        (15, 21),
+        (17, 19),
+        (12, 14),
+        (14, 16),
+        (16, 18),
+        (16, 20),
+        (16, 22),
+        (18, 20),
+        (23, 25),
+        (24, 26),
+        (25, 27),
+        (26, 28),
+        (27, 29),
+        (28, 30),
+        (29, 31),
+        (30, 32),
+        (27, 31),
+        (28, 32),
     ]
 )
 
@@ -169,7 +195,15 @@ def create_pose_landmarker(complexity=2):
     return PoseLandmarker.create_from_options(options)
 
 
-def draw_landmarks_manual(image, landmarks_px, connections=None, color=(0, 255, 0), line_color=(255, 255, 255), radius=4, thickness=2):
+def draw_landmarks_manual(
+    image,
+    landmarks_px,
+    connections=None,
+    color=(0, 255, 0),
+    line_color=(255, 255, 255),
+    radius=4,
+    thickness=2,
+):
     """Draw pose landmarks and connections manually using OpenCV (replacement for mp_drawing)."""
     global _DBG_DRAW_LOGGED
     if connections is None:
@@ -179,9 +213,20 @@ def draw_landmarks_manual(image, landmarks_px, connections=None, color=(0, 255, 
         if start_idx < len(landmarks_px) and end_idx < len(landmarks_px):
             pt1 = landmarks_px[start_idx]
             pt2 = landmarks_px[end_idx]
-            if pt1 is not None and pt2 is not None:
-                if not (np.isnan(pt1[0]) or np.isnan(pt1[1]) or np.isnan(pt2[0]) or np.isnan(pt2[1])):
-                    cv2.line(image, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), line_color, thickness)
+            if (
+                pt1 is not None
+                and pt2 is not None
+                and not (
+                    np.isnan(pt1[0]) or np.isnan(pt1[1]) or np.isnan(pt2[0]) or np.isnan(pt2[1])
+                )
+            ):
+                cv2.line(
+                    image,
+                    (int(pt1[0]), int(pt1[1])),
+                    (int(pt2[0]), int(pt2[1])),
+                    line_color,
+                    thickness,
+                )
     # Draw points
     for pt in landmarks_px:
         if pt is not None and not (np.isnan(pt[0]) or np.isnan(pt[1])):
@@ -200,6 +245,7 @@ def draw_landmarks_manual(image, landmarks_px, connections=None, color=(0, 255, 
             {"face_valid_points_0_10": face_valid, "landmark_count": len(landmarks_px)},
         )
         _DBG_DRAW_LOGGED = True
+
 
 # COCO classes dictionary
 COCO_CLASSES = {
@@ -510,10 +556,7 @@ def save_landmarks_to_csv(csv_path, frame_idx, person_id, landmarks):
 
 def get_parameters_dialog(parent=None):
     """Create a dialog for MediaPipe and YOLO parameters."""
-    if parent:
-        dialog = tk.Toplevel(parent)
-    else:
-        dialog = tk.Tk()
+    dialog = tk.Toplevel(parent) if parent else tk.Tk()
     dialog.title("Detection Parameters Yolo and MediaPipe")
 
     # Set a large initial size right after creating the dialog

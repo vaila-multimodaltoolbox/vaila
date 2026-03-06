@@ -1,37 +1,41 @@
 """
+================================================================================
+Video Compression Tool (H.264) - compress_videos_h264.py
+================================================================================
 vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
+Authors: Prof. Dr. Paulo R. P. Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
-
-Licensed under GNU Lesser General Public License v3.0
-
-compress_videos_h264.py
+Date: 05 March 2026
+Update: 06 March 2026
+Version: 0.1.2
+Python Version: 3.12
 
 Description:
+------------
 This script compresses videos in a specified directory to H.264 format using the FFmpeg tool.
 It provides both a GUI and CLI for selecting the directory containing the videos and processes
 each video, saving the compressed versions in a subdirectory named 'compressed_h264_<timestamp>'.
-The script supports GPU acceleration using NVIDIA NVENC if available or falls back to CPU encoding
-with libx264.
+Supports recursive directory search with configurable subdirectory depth (GUI and CLI).
 
-Usage:
+How to use:
+------------
 - GUI: Run the script without arguments to open the GUI.
-- CLI: python compress_videos_h264.py --dir /path/to/videos --preset medium --crf 23
+- CLI: python compress_videos_h264.py --dir /path/to/videos [--recursive] [--depth N] --preset medium --crf 23
 
 Requirements:
+------------
 - FFmpeg must be installed and accessible in the system PATH.
 - The script is designed to work on Windows, Linux, and macOS.
 
 Dependencies:
+------------
 - Python 3.x
 - Tkinter (included with Python)
 - FFmpeg (available in PATH)
 
-NVIDIA GPU Installation and FFmpeg NVENC Support
-
-To use NVIDIA GPU acceleration for video encoding in FFmpeg, follow the steps below for your
-operating system:
+NVIDIA GPU Installation and FFmpeg NVENC Support:
+--------------------------------------------------
+To use NVIDIA GPU acceleration for video encoding in FFmpeg, follow the steps below for your operating system:
 
 ## Windows:
 1. **Install NVIDIA Drivers**:
@@ -85,6 +89,7 @@ Note:
 """
 
 import argparse
+import concurrent.futures
 import os
 import subprocess
 import sys
@@ -160,13 +165,22 @@ def is_nvidia_gpu_available():
 
         print(f"[bold green]Detected NVIDIA GPU: {gpu_name}[/bold green]")
 
-        # Verify h264_nvenc actually works with a quick test encode
+        # Verify h264_nvenc actually works with a quick test encode.
+        # testsrc at 1280x720 + yuv420p is more reliable than tiny color=black on modern GPUs.
         test_cmd = [
             FFMPEG,
-            "-f", "lavfi",
-            "-i", "color=black:s=32x32:r=1:d=1",
-            "-c:v", "h264_nvenc",
-            "-f", "null",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=1280x720:rate=30",
+            "-pix_fmt",
+            "yuv420p",
+            "-t",
+            "1",
+            "-c:v",
+            "h264_nvenc",
+            "-f",
+            "null",
             "-hide_banner",
             "-nostats",
             "-",
@@ -195,27 +209,190 @@ def is_nvidia_gpu_available():
         return False
 
 
+VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
+
+
 def find_videos(directory):
     """Find all video files in the specified directory (non-recursive)."""
-    video_extensions = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
     video_files = []
     for file in sorted(os.listdir(directory)):
-        if file.lower().endswith(video_extensions):
+        if file.lower().endswith(VIDEO_EXTENSIONS):
             video_files.append(os.path.join(directory, file))
     return video_files
 
 
+def find_videos_recursive(directory, max_depth=-1):
+    """Find all video files in directory and subdirectories, optionally limited by depth.
+
+    Args:
+        directory: Root directory to search.
+        max_depth: Maximum subdirectory depth (0 = only root, 1 = root + 1 level, etc.).
+            -1 or None = unlimited.
+
+    Returns:
+        list[tuple[str, str]]: List of (absolute_path, relative_subdir) where
+        relative_subdir is the path relative to directory (e.g. '' or 'subdir1').
+    """
+    directory = os.path.abspath(directory)
+    results = []
+    for root, _dirs, files in os.walk(directory):
+        rel_root = os.path.relpath(root, directory)
+        if rel_root == ".":
+            rel_root = ""
+        depth = 0 if rel_root == "" else len(rel_root.split(os.sep))
+        if max_depth is not None and max_depth >= 0 and depth > max_depth:
+            continue
+        for file in sorted(files):
+            if file.lower().endswith(VIDEO_EXTENSIONS):
+                abs_path = os.path.join(root, file)
+                results.append((abs_path, rel_root))
+    return results
+
+
 def create_temp_file_with_videos(video_files):
     """Create temporary file with list of video paths."""
-    temp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt")
-    for video in video_files:
-        temp.write(f"{video}\n")
-    temp.close()
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as temp:
+        for video in video_files:
+            temp.write(f"{video}\n")
     return temp.name
 
 
-def run_compress_videos_h264(input_list, output_dir, preset, crf, resolution, use_gpu):
+def compress_video_worker_h264(video_info):
+    """Worker function to compress a single video.
+
+    Args:
+        video_info (dict): Contains video_path, output_path, preset, crf, resolution, use_gpu, index, total.
+
+    Returns:
+        dict: Results including success (bool), error (str), output_path (str), skipped (bool), basename (str), original_size (int), output_size (int).
+    """
+    video_path = video_info["video_path"]
+    output_path = video_info["output_path"]
+    preset = video_info["preset"]
+    crf = video_info["crf"]
+    resolution = video_info["resolution"]
+    use_gpu = video_info["use_gpu"]
+    index = video_info["index"]
+    total = video_info["total"]
+
+    basename = os.path.basename(video_path)
+    original_size = os.path.getsize(video_path)
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    result_status = {
+        "success": False,
+        "error": None,
+        "output_path": output_path,
+        "skipped": False,
+        "basename": basename,
+        "original_size": original_size,
+        "output_size": 0,
+        "index": index,
+        "total": total,
+    }
+
+    try:
+        # Get original video resolution for logging
+        try:
+            cmd_probe = [
+                FFPROBE,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=s=x:p=0",
+                video_path,
+            ]
+            _ = subprocess.check_output(cmd_probe).decode().strip()
+        except Exception:
+            pass
+
+        # Base command
+        cmd = [FFMPEG, "-y", "-i", video_path]
+
+        # Add scale filter if resolution is not original
+        if resolution != "original":
+            w, h = resolution.split("x")
+            scale_filter = (
+                f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
+            )
+            cmd.extend(["-vf", scale_filter])
+
+        # Add encoding settings based on GPU availability
+        cmd.extend(["-fps_mode", "passthrough"])
+
+        if use_gpu:
+            nvenc_preset = NVENC_PRESET_MAP.get(preset, "p5")
+            cmd.extend(
+                [
+                    "-c:v",
+                    "h264_nvenc",
+                    "-preset",
+                    nvenc_preset,
+                    "-tune",
+                    "hq",
+                    "-rc",
+                    "vbr",
+                    "-cq",
+                    str(crf),
+                ]
+            )
+        else:
+            cmd.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    preset,
+                    "-crf",
+                    str(crf),
+                ]
+            )
+
+        # Add audio settings and output path
+        cmd.extend(["-c:a", "copy", "-hide_banner", "-nostats", output_path])
+
+        # Run compression
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+        # Verify output and check for adaptive compression
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            output_size = os.path.getsize(output_path)
+            result_status["output_size"] = output_size
+
+            # Adaptive compression: if output is larger than input, delete output and mark as skipped
+            if output_size > original_size:
+                os.remove(output_path)
+                result_status["success"] = True
+                result_status["skipped"] = True
+                result_status["error"] = (
+                    "Output file was larger than input (adaptive compression skip)"
+                )
+            else:
+                result_status["success"] = True
+        else:
+            result_status["error"] = "Output file empty or missing"
+
+    except subprocess.CalledProcessError as e:
+        stderr_text = e.stderr if e.stderr else "No stderr details available."
+        result_status["error"] = f"FFmpeg failed: {stderr_text[:200]}"
+    except Exception as e:
+        result_status["error"] = str(e)
+
+    return result_status
+
+
+def run_compress_videos_h264(video_list, preset, crf, resolution, use_gpu, worker_count=1):
     """Run the actual H.264 compression.
+
+    Args:
+        video_list: List of (video_path, output_path) tuples.
+        preset, crf, resolution, use_gpu, worker_count: Encoding parameters.
 
     Returns:
         tuple: (success_count, failure_count)
@@ -228,98 +405,60 @@ def run_compress_videos_h264(input_list, output_dir, preset, crf, resolution, us
     print(f"  CRF: {crf}")
     print(f"  Resolution: {resolution}")
     print(f"  Use GPU: {use_gpu}")
+    print(f"  Workers: {worker_count}")
 
-    os.makedirs(output_dir, exist_ok=True)
-
-    with open(input_list) as f:
-        video_paths = [line.strip() for line in f if line.strip()]
-
-    if not video_paths:
-        print("[red]No video files found in input list.[/red]")
+    if not video_list:
+        print("[red]No video files found.[/red]")
         return 0, 0
 
-    print(f"\n[bold]Processing {len(video_paths)} video(s)...[/bold]")
+    print(f"\n[bold]Processing {len(video_list)} video(s)...[/bold]")
     print(
         "[yellow]This process might take several hours depending on your computer "
         "and the size of your videos.[/yellow]\n"
     )
 
-    for i, video_path in enumerate(video_paths, 1):
-        basename = os.path.basename(video_path)
-        output_path = os.path.join(
-            output_dir, os.path.splitext(basename)[0] + "_h264.mp4"
+    # Prepare video info for workers (output_path precomputed; worker creates parent dirs)
+    video_infos = []
+    for i, (video_path, output_path) in enumerate(video_list, 1):
+        video_infos.append(
+            {
+                "video_path": video_path,
+                "output_path": output_path,
+                "preset": preset,
+                "crf": crf,
+                "resolution": resolution,
+                "use_gpu": use_gpu,
+                "index": i,
+                "total": len(video_list),
+            }
         )
 
-        try:
-            # Get original video resolution for logging
-            try:
-                cmd_probe = [
-                    FFPROBE,
-                    "-v", "error",
-                    "-select_streams", "v:0",
-                    "-show_entries", "stream=width,height",
-                    "-of", "csv=s=x:p=0",
-                    video_path,
-                ]
-                original_resolution = subprocess.check_output(cmd_probe).decode().strip()
-                print(f"[{i}/{len(video_paths)}] {basename} ({original_resolution})")
-            except Exception:
-                print(f"[{i}/{len(video_paths)}] {basename}")
+    # Execute in parallel
+    with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
+        futures = {executor.submit(compress_video_worker_h264, info): info for info in video_infos}
 
-            # Base command
-            cmd = [FFMPEG, "-y", "-i", video_path]
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            basename = res["basename"]
+            i = res["index"]
+            total = res["total"]
 
-            # Add scale filter if resolution is not original
-            if resolution != "original":
-                w, h = resolution.split("x")
-                scale_filter = (
-                    f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                    f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
-                )
-                cmd.extend(["-vf", scale_filter])
-
-            # Add encoding settings based on GPU availability
-            cmd.extend(["-fps_mode", "passthrough"])
-            
-            if use_gpu:
-                nvenc_preset = NVENC_PRESET_MAP.get(preset, "p5")
-                cmd.extend([
-                    "-c:v", "h264_nvenc",
-                    "-preset", nvenc_preset,
-                    "-tune", "hq",
-                    "-rc", "constqp",
-                    "-qp", str(crf),  # Use CRF value as QP for NVENC
-                    "-bf", "0",       # No B-frames for temporal accuracy in kinematics
-                ])
+            if res["success"]:
+                if res["skipped"]:
+                    print(
+                        f"[{i}/{total}] {basename} [yellow][SKIPPED][/yellow] (Output larger than input)"
+                    )
+                    # Count skipped as failure or separate? Plan says "skip if larger",
+                    # usually counts as success in terms of script execution but not in file production.
+                    # I'll count as failure for the final tally to be honest about file production.
+                    failure_count += 1
+                else:
+                    output_size_mb = res["output_size"] / (1024 * 1024)
+                    print(f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB)")
+                    success_count += 1
             else:
-                cmd.extend([
-                    "-c:v", "libx264",
-                    "-preset", preset,
-                    "-crf", str(crf),
-                    "-bf", "0",       # No B-frames for temporal accuracy in kinematics
-                ])
-
-            # Add audio settings and output path
-            cmd.extend(["-c:a", "copy", "-hide_banner", "-nostats", output_path])
-
-            print(f"  Command: {' '.join(cmd)}")
-            subprocess.run(cmd, check=True)
-
-            # Verify output
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                output_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-                success_count += 1
-                print(f"  [green][OK] Done ({output_size_mb:.1f} MB)[/green]")
-            else:
+                print(f"[{i}/{total}] {basename} [red][FAIL][/red] {res['error']}")
                 failure_count += 1
-                print("  [red][FAIL] Output file is empty or missing[/red]")
-
-        except subprocess.CalledProcessError as e:
-            failure_count += 1
-            print(f"  [red][FAIL] Failed: {e}[/red]")
-            if e.stderr:
-                stderr_text = e.stderr if isinstance(e.stderr, str) else e.stderr.decode()
-                print(f"  [red]  ffmpeg stderr: {stderr_text[:200]}[/red]")
 
     print(f"\n[bold]Results: {success_count} succeeded, {failure_count} failed.[/bold]")
     return success_count, failure_count
@@ -334,7 +473,7 @@ def get_compression_parameters():
     """Create a dialog window where user selects compression options.
 
     Returns:
-        dict or None: Parameters dict with keys preset, crf, resolution, use_gpu.
+        dict or None: Parameters dict with keys preset, crf, resolution, use_gpu, max_depth.
     """
     params = {}
 
@@ -358,18 +497,16 @@ def get_compression_parameters():
     main_frame.pack(fill="both", expand=True)
 
     # Title
-    tk.Label(
-        main_frame, text="H.264 Video Compression Settings", font=("Arial", 12, "bold")
-    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
+    tk.Label(main_frame, text="H.264 Video Compression Settings", font=("Arial", 12, "bold")).grid(
+        row=0, column=0, columnspan=2, sticky="w", pady=(0, 15)
+    )
 
     # 1. Preset field
     tk.Label(main_frame, text="Preset (enter number):", font=("Arial", 10, "bold")).grid(
         row=1, column=0, sticky="w", pady=5
     )
     preset_var = tk.StringVar(value="6")  # Default to medium
-    tk.Entry(main_frame, textvariable=preset_var, width=5).grid(
-        row=1, column=1, sticky="w", pady=5
-    )
+    tk.Entry(main_frame, textvariable=preset_var, width=5).grid(row=1, column=1, sticky="w", pady=5)
 
     preset_help_text = "Options:\n"
     for i, preset in enumerate(PRESET_OPTIONS, 1):
@@ -379,18 +516,16 @@ def get_compression_parameters():
             if i % 3 == 0:
                 preset_help_text += "\n"
 
-    tk.Label(
-        main_frame, text=preset_help_text, font=("Arial", 8, "italic"), justify="left"
-    ).grid(row=2, column=0, columnspan=2, sticky="w", padx=20)
+    tk.Label(main_frame, text=preset_help_text, font=("Arial", 8, "italic"), justify="left").grid(
+        row=2, column=0, columnspan=2, sticky="w", padx=20
+    )
 
     # 2. CRF field
     tk.Label(main_frame, text="CRF Value (0-51):", font=("Arial", 10, "bold")).grid(
         row=3, column=0, sticky="w", pady=5
     )
     crf_var = tk.StringVar(value="23")
-    tk.Entry(main_frame, textvariable=crf_var, width=5).grid(
-        row=3, column=1, sticky="w", pady=5
-    )
+    tk.Entry(main_frame, textvariable=crf_var, width=5).grid(row=3, column=1, sticky="w", pady=5)
     tk.Label(
         main_frame,
         text="Lower = better quality (0-51), 23 is default",
@@ -423,23 +558,35 @@ def get_compression_parameters():
         row=7, column=0, sticky="w", pady=5
     )
     gpu_var = tk.StringVar(value="2")
-    tk.Entry(main_frame, textvariable=gpu_var, width=5).grid(
-        row=7, column=1, sticky="w", pady=5
-    )
+    tk.Entry(main_frame, textvariable=gpu_var, width=5).grid(row=7, column=1, sticky="w", pady=5)
     tk.Label(
         main_frame,
         text="Options: 1 = Yes (NVIDIA GPUs only)   2 = No (CPU encoding)",
         font=("Arial", 8, "italic"),
     ).grid(row=8, column=0, columnspan=2, sticky="w", padx=20)
 
+    # 5. Subdirectory depth (for recursive search)
+    tk.Label(
+        main_frame,
+        text="Subdir depth (enter number):",
+        font=("Arial", 10, "bold"),
+    ).grid(row=9, column=0, sticky="w", pady=5)
+    depth_var = tk.StringVar(value="0")
+    tk.Entry(main_frame, textvariable=depth_var, width=5).grid(row=9, column=1, sticky="w", pady=5)
+    tk.Label(
+        main_frame,
+        text="0 = only selected folder  1/2/3 = that many levels   -1 = unlimited",
+        font=("Arial", 8, "italic"),
+    ).grid(row=10, column=0, columnspan=2, sticky="w", padx=20)
+
     # Separator
     tk.Frame(main_frame, height=1, bg="gray").grid(
-        row=9, column=0, columnspan=2, sticky="ew", pady=15
+        row=11, column=0, columnspan=2, sticky="ew", pady=15
     )
 
     # Button frame
     button_frame = tk.Frame(main_frame)
-    button_frame.grid(row=10, column=0, columnspan=2, pady=10)
+    button_frame.grid(row=12, column=0, columnspan=2, pady=10)
 
     def on_ok():
         try:
@@ -475,17 +622,29 @@ def get_compression_parameters():
                 return
             use_gpu = gpu_choice == 1
 
+            # Validate subdir depth (0 = only folder, 1/2/3 = levels, -1 = unlimited)
+            max_depth = int(depth_var.get().strip())
+            if max_depth < -1 or max_depth > 99:
+                messagebox.showerror(
+                    "Error",
+                    "Subdir depth must be -1 (unlimited), 0 (only selected folder), or 1–99.",
+                )
+                return
+
             params["preset"] = preset
             params["crf"] = crf
             params["resolution"] = resolution
             params["use_gpu"] = use_gpu
+            params["max_depth"] = max_depth
 
+            depth_str = "unlimited" if max_depth == -1 else str(max_depth)
             confirm_msg = (
                 f"Selected compression settings:\n\n"
                 f"• Preset: {preset}\n"
                 f"• CRF: {crf}\n"
                 f"• Resolution: {resolution}\n"
-                f"• Use GPU: {'Yes' if use_gpu else 'No'}\n\n"
+                f"• Use GPU: {'Yes' if use_gpu else 'No'}\n"
+                f"• Subdir depth: {depth_str}\n\n"
                 f"Continue with these settings?"
             )
 
@@ -501,9 +660,7 @@ def get_compression_parameters():
         dialog.destroy()
 
     tk.Button(button_frame, text="OK", command=on_ok, width=10).pack(side="left", padx=5)
-    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(
-        side="left", padx=5
-    )
+    tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side="left", padx=5)
 
     # Help button
     def show_help():
@@ -608,28 +765,47 @@ def compress_videos_h264_gui():
             "Compression will proceed using CPU (libx264) instead.",
         )
 
-    # Find all video files
-    video_files = find_videos(video_directory)
+    # Find video files (GUI: optional recursion up to max_depth)
+    max_depth = compression_config.get("max_depth", 0)
+    if max_depth == 0:
+        video_files = find_videos(video_directory)
+        video_list = [
+            (
+                p,
+                os.path.join(
+                    output_directory,
+                    os.path.splitext(os.path.basename(p))[0] + "_h264.mp4",
+                ),
+            )
+            for p in video_files
+        ]
+    else:
+        pairs = find_videos_recursive(
+            video_directory, max_depth=-1 if max_depth == -1 else max_depth
+        )
+        video_list = [
+            (
+                path,
+                os.path.join(
+                    output_directory,
+                    rel_subdir,
+                    os.path.splitext(os.path.basename(path))[0] + "_h264.mp4",
+                ),
+            )
+            for path, rel_subdir in pairs
+        ]
 
-    if not video_files:
+    if not video_list:
         messagebox.showerror("Error", "No video files found.")
         return
 
-    # Create a temporary file with the list of video files
-    temp_file_path = create_temp_file_with_videos(video_files)
-
-    # Run the compression
     success_count, failure_count = run_compress_videos_h264(
-        temp_file_path,
-        output_directory,
+        video_list,
         preset=compression_config["preset"],
         crf=compression_config["crf"],
         resolution=compression_config["resolution"],
         use_gpu=use_gpu,
     )
-
-    # Remove temporary file
-    os.remove(temp_file_path)
 
     messagebox.showinfo(
         "Success",
@@ -652,6 +828,12 @@ Examples:
   # Compress with default settings (medium preset, CRF 23, original resolution, CPU)
   python -m vaila.compress_videos_h264 --dir /path/to/videos
 
+  # Compress all videos in directory and subdirectories with GPU
+  python -m vaila.compress_videos_h264 --dir /path/to/videos --recursive --gpu
+
+  # Recursive with max depth 2 (root + 2 levels of subdirs)
+  python -m vaila.compress_videos_h264 --dir /path/to/videos -r --depth 2 --gpu
+
   # Compress with GPU acceleration
   python -m vaila.compress_videos_h264 --dir /path/to/videos --gpu
 
@@ -666,6 +848,21 @@ Examples:
         "--dir",
         type=str,
         help="Directory containing videos to compress.",
+    )
+    parser.add_argument(
+        "--recursive",
+        "-r",
+        action="store_true",
+        default=False,
+        help="Recurse into subdirectories and process all videos (output mirrors folder structure).",
+    )
+    parser.add_argument(
+        "--depth",
+        "-d",
+        type=int,
+        default=-1,
+        metavar="N",
+        help="Max subdirectory depth when using --recursive (0=root only, 1/2/3=levels, -1=unlimited, default: -1).",
     )
     parser.add_argument(
         "--preset",
@@ -698,6 +895,13 @@ Examples:
         default=False,
         help="Force CPU encoding (overrides --gpu).",
     )
+    parser.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=1,
+        help="Number of parallel workers (default: 1).",
+    )
     return parser
 
 
@@ -717,6 +921,14 @@ def main():
     if not os.path.isdir(args.dir):
         parser.error(f"Directory does not exist: {args.dir}")
 
+    if args.resolution != "original" and "x" not in args.resolution:
+        parser.error(
+            f"Invalid resolution format: {args.resolution}. Use WIDTHxHEIGHT or 'original'."
+        )
+
+    if not (0 <= args.crf <= 51):
+        parser.error(f"CRF must be between 0 and 51, got {args.crf}.")
+
     # Validate resolution
     if args.resolution != "original" and "x" not in args.resolution:
         parser.error(
@@ -734,30 +946,51 @@ def main():
         if not use_gpu:
             print("[yellow]GPU requested but not available. Using CPU encoding.[/yellow]")
 
-    # Find videos
-    video_files = find_videos(args.dir)
-    if not video_files:
-        print(f"[red]No video files found in {args.dir}[/red]")
-        sys.exit(1)
-
-    print(f"Found {len(video_files)} video(s) in {args.dir}")
-
-    # Create temp file and output dir
-    temp_file_path = create_temp_file_with_videos(video_files)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_directory = os.path.join(args.dir, f"compressed_h264_{timestamp}")
 
-    try:
-        success_count, failure_count = run_compress_videos_h264(
-            temp_file_path,
-            output_directory,
-            preset=args.preset,
-            crf=args.crf,
-            resolution=args.resolution,
-            use_gpu=use_gpu,
-        )
-    finally:
-        os.remove(temp_file_path)
+    if args.recursive:
+        if args.depth < -1 or args.depth > 99:
+            parser.error("--depth must be -1 (unlimited), 0 (root only), or 1–99.")
+        pairs = find_videos_recursive(args.dir, max_depth=args.depth if args.depth >= 0 else -1)
+        video_list = [
+            (
+                path,
+                os.path.join(
+                    output_directory,
+                    rel_subdir,
+                    os.path.splitext(os.path.basename(path))[0] + "_h264.mp4",
+                ),
+            )
+            for path, rel_subdir in pairs
+        ]
+    else:
+        video_files = find_videos(args.dir)
+        video_list = [
+            (
+                p,
+                os.path.join(
+                    output_directory,
+                    os.path.splitext(os.path.basename(p))[0] + "_h264.mp4",
+                ),
+            )
+            for p in video_files
+        ]
+
+    if not video_list:
+        print(f"[red]No video files found in {args.dir}[/red]")
+        sys.exit(1)
+
+    print(f"Found {len(video_list)} video(s) in {args.dir}")
+
+    success_count, failure_count = run_compress_videos_h264(
+        video_list,
+        preset=args.preset,
+        crf=args.crf,
+        resolution=args.resolution,
+        use_gpu=use_gpu,
+        worker_count=args.workers,
+    )
 
     if failure_count > 0:
         sys.exit(1)

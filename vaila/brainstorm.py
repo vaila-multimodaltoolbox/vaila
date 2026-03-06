@@ -48,6 +48,7 @@ import speech_recognition as sr
 def is_package_available(package_name):
     return importlib.util.find_spec(package_name) is not None
 
+
 OPENAI_AVAILABLE = is_package_available("openai")
 MIDIUTIL_AVAILABLE = is_package_available("midiutil")
 

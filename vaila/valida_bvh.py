@@ -57,7 +57,7 @@ def validate_vaila_bvh(filepath, gui=False):
     section = None
     primeira_linha_dados_ok = True
 
-    for i, line in enumerate(lines):
+    for _i, line in enumerate(lines):
         if not line:
             continue
 
@@ -119,7 +119,9 @@ def validate_vaila_bvh(filepath, gui=False):
     erros = 0
 
     if frames_declared != data_rows:
-        log(f"[FAIL] ERRO: Descompasso de frames. Cabeçalho = {frames_declared}, Dados = {data_rows}.")
+        log(
+            f"[FAIL] ERRO: Descompasso de frames. Cabeçalho = {frames_declared}, Dados = {data_rows}."
+        )
         erros += 1
     if not primeira_linha_dados_ok:
         log(

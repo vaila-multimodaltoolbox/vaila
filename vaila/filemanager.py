@@ -597,7 +597,7 @@ def _clean_filename(filename):
     """
     # Split into name and extension
     name, ext = os.path.splitext(filename)
-    
+
     # 1. Lowercase extension
     ext = ext.lower()
 
@@ -695,7 +695,7 @@ def normalize_names():
                             new_path = test_path
                             break
                         counter += 1
-                
+
                 try:
                     os.rename(original_path, new_path)
                     print(f"File Renamed: {filename} -> {new_filename}")
@@ -710,11 +710,11 @@ def normalize_names():
             # Reuse _clean_filename logic but treat whole thing as name if no dot?
             # Actually _clean_filename splits by last dot. For dirs, we usually want to keep it simple.
             # Let's use a simpler logic for dirs or reuse _clean_filename if we accept . in dir names as separators?
-            # Standardizing: treat dirs as "names" without extensions for safety, 
-            # OR allow "v1.0" folders. 
+            # Standardizing: treat dirs as "names" without extensions for safety,
+            # OR allow "v1.0" folders.
             # Given user request "Remove `.` no nome", we should probably remove dots from dir names too unless it looks like a version.
             # For simplicity and consistency with "Remove `.` no nome", let's treat dir name as the "name" part.
-            
+
             # Custom logic for directories: treat as name only (no extension)
             # 1. Lowercase
             # 2. Clean
@@ -723,7 +723,7 @@ def normalize_names():
             d_nfkd = unicodedata.normalize("NFKD", d_name)
             d_name = "".join([c for c in d_nfkd if not unicodedata.combining(c)])
             d_name = d_name.replace(" ", "_").replace("-", "_")
-            d_name = re.sub(r"[^a-z0-9_]", "", d_name) # Remove dots too
+            d_name = re.sub(r"[^a-z0-9_]", "", d_name)  # Remove dots too
             d_name = re.sub(r"_+", "_", d_name)
             new_dirname = d_name.strip("_")
 
@@ -732,8 +732,8 @@ def normalize_names():
             if original_path != new_path:
                 # Check for collision
                 if os.path.exists(new_path):
-                     counter = 1
-                     while True:
+                    counter = 1
+                    while True:
                         test_dirname = f"{new_dirname}_{counter}"
                         test_path = os.path.join(root, test_dirname)
                         if not os.path.exists(test_path):

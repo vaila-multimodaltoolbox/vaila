@@ -90,14 +90,12 @@ License:
 
 import base64
 import glob
-import json
 import os
 import re
-from pathlib import Path
 import tkinter as tk
-import time
 import warnings
 from datetime import datetime
+from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import matplotlib.pyplot as plt
@@ -163,34 +161,46 @@ def create_dumbbell_chart(run_stats, output_dir):
     r1 = run_ids[0]
     r2 = run_ids[-1] if len(run_ids) > 1 else run_ids[0]
     # Always show Run 1 vs Last Run dumbbell when we have at least 2 runs (same figure as COD).
-    at_least_two = len(run_ids) >= 2 and pivot_speed[r1].notna().any() and pivot_speed[r2].notna().any()
-    two_runs = len(run_ids) == 2 and at_least_two
+    at_least_two = (
+        len(run_ids) >= 2 and pivot_speed[r1].notna().any() and pivot_speed[r2].notna().any()
+    )
+    len(run_ids) == 2 and at_least_two
 
     if len(run_ids) > 2:
         # Multi-run Dot Plot: base line + colors for each run
         fig_height = max(8, len(pivot_speed) * 0.45 + 2)
         fig, ax = plt.subplots(figsize=(14, fig_height))
-        
+
         colors = sns.color_palette("husl", len(run_ids))
         y_pos = np.arange(len(pivot_speed))
-        
+
         for i, (athlete, row) in enumerate(pivot_speed.iterrows()):
             valid_speeds = row.dropna().values
             if len(valid_speeds) == 0:
                 continue
-            
+
             min_spd = np.min(valid_speeds)
             max_spd = np.max(valid_speeds)
-            
+
             # Base horizontal line segment for the athlete's speed amplitude
-            ax.plot([min_spd, max_spd], [y_pos[i], y_pos[i]], color="#bdc3c7", linewidth=3, zorder=1)
-            
+            ax.plot(
+                [min_spd, max_spd], [y_pos[i], y_pos[i]], color="#bdc3c7", linewidth=3, zorder=1
+            )
+
             # Points for each run
             for color_idx, rid in enumerate(run_ids):
                 spd = row.get(rid)
                 if pd.notna(spd):
-                    ax.scatter(spd, y_pos[i], s=120, c=[colors[color_idx]], 
-                               edgecolors="white", linewidths=1.5, zorder=3, label=None)
+                    ax.scatter(
+                        spd,
+                        y_pos[i],
+                        s=120,
+                        c=[colors[color_idx]],
+                        edgecolors="white",
+                        linewidths=1.5,
+                        zorder=3,
+                        label=None,
+                    )
 
         ax.set_yticks(y_pos)
         ax.set_yticklabels(pivot_speed.index, fontsize=9)
@@ -203,23 +213,36 @@ def create_dumbbell_chart(run_stats, output_dir):
             pad=18,
         )
         ax.grid(True, axis="x", linestyle="-", alpha=0.3)
-        
+
         # Build dynamic legend
         legend_elements = []
         for color_idx, rid in enumerate(run_ids):
             legend_elements.append(
-                plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=colors[color_idx], 
-                           markersize=10, label=f"Run {rid}")
+                plt.Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor=colors[color_idx],
+                    markersize=10,
+                    label=f"Run {rid}",
+                )
             )
-        ax.legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=9, framealpha=0.9)
+        ax.legend(
+            handles=legend_elements,
+            loc="center left",
+            bbox_to_anchor=(1.02, 0.5),
+            fontsize=9,
+            framealpha=0.9,
+        )
         fig.subplots_adjust(right=0.82)
-        
+
         output_path = os.path.join(output_dir, "dumbbell_chart_performance.png")
         fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="none")
         plt.close(fig)
         print(f"Multi-run dot plot saved: {output_path}")
-        
-        # Evolution path is now handled by this single multi-run chart, 
+
+        # Evolution path is now handled by this single multi-run chart,
         # so we don't need a separate evolution chart returned.
         return (output_path, None)
 
@@ -228,7 +251,6 @@ def create_dumbbell_chart(run_stats, output_dir):
         df2 = pivot_speed[[r1, r2]].dropna(how="any")
         if df2.empty:
             at_least_two = False
-            two_runs = False
         else:
             athletes = df2.index.tolist()
             speed1 = df2[r1].values
@@ -237,10 +259,40 @@ def create_dumbbell_chart(run_stats, output_dir):
             fig_height = max(8, len(athletes) * 0.45 + 2)
             fig, ax = plt.subplots(figsize=(14, fig_height))
             for i in range(len(athletes)):
-                color = "#2ecc71" if speed2[i] > speed1[i] else "#e74c3c" if speed2[i] < speed1[i] else "#95a5a6"
-                ax.plot([speed1[i], speed2[i]], [y_pos[i], y_pos[i]], color=color, linewidth=2.5, zorder=1)
-                ax.scatter(speed1[i], y_pos[i], s=80, c="#3498db", edgecolors="white", linewidths=1.5, zorder=2, label=None)
-                ax.scatter(speed2[i], y_pos[i], s=80, c="#e67e22", edgecolors="white", linewidths=1.5, zorder=2, label=None)
+                color = (
+                    "#2ecc71"
+                    if speed2[i] > speed1[i]
+                    else "#e74c3c"
+                    if speed2[i] < speed1[i]
+                    else "#95a5a6"
+                )
+                ax.plot(
+                    [speed1[i], speed2[i]],
+                    [y_pos[i], y_pos[i]],
+                    color=color,
+                    linewidth=2.5,
+                    zorder=1,
+                )
+                ax.scatter(
+                    speed1[i],
+                    y_pos[i],
+                    s=80,
+                    c="#3498db",
+                    edgecolors="white",
+                    linewidths=1.5,
+                    zorder=2,
+                    label=None,
+                )
+                ax.scatter(
+                    speed2[i],
+                    y_pos[i],
+                    s=80,
+                    c="#e67e22",
+                    edgecolors="white",
+                    linewidths=1.5,
+                    zorder=2,
+                    label=None,
+                )
             ax.set_yticks(y_pos)
             ax.set_yticklabels(athletes, fontsize=9)
             ax.set_xlabel("Max Speed (km/h)", fontsize=12, fontweight="bold")
@@ -255,13 +307,37 @@ def create_dumbbell_chart(run_stats, output_dir):
             legend_elements = [
                 plt.Line2D([0], [0], color="#2ecc71", linewidth=2.5, label="Improved"),
                 plt.Line2D([0], [0], color="#e74c3c", linewidth=2.5, label="Declined"),
-                plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#3498db", markersize=8, label=f"Run {r1}"),
-                plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#e67e22", markersize=8, label=f"Run {r2}"),
+                plt.Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor="#3498db",
+                    markersize=8,
+                    label=f"Run {r1}",
+                ),
+                plt.Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor="#e67e22",
+                    markersize=8,
+                    label=f"Run {r2}",
+                ),
             ]
-            ax.legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=9, framealpha=0.9)
+            ax.legend(
+                handles=legend_elements,
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),
+                fontsize=9,
+                framealpha=0.9,
+            )
             fig.subplots_adjust(right=0.82)
             output_path = os.path.join(output_dir, "dumbbell_chart_performance.png")
-            fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="none")
+            fig.savefig(
+                output_path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="none"
+            )
             plt.close(fig)
             print(f"Run evolution chart saved: {output_path}")
             return (output_path, None)
@@ -368,9 +444,33 @@ def _create_sequential_scatter(pivot_speed, run_ids, output_dir):
     ax.grid(True, linestyle="-", alpha=0.3)
     legend_elements = [
         plt.Line2D([0], [0], color="gray", linestyle="--", linewidth=2, label="No Change"),
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#27ae60", markersize=10, label="Improved"),
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#c0392b", markersize=10, label="Declined"),
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#7f8c8d", markersize=10, label="No Change"),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#27ae60",
+            markersize=10,
+            label="Improved",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#c0392b",
+            markersize=10,
+            label="Declined",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#7f8c8d",
+            markersize=10,
+            label="No Change",
+        ),
     ]
     ax.legend(handles=legend_elements, loc="upper right", fontsize=10, framealpha=0.95)
     n_total = len(transitions_df)
@@ -390,7 +490,12 @@ def _create_sequential_scatter(pivot_speed, run_ids, output_dir):
         transform=ax.transAxes,
         fontsize=10,
         verticalalignment="top",
-        bbox={"boxstyle": "round,pad=0.5", "facecolor": "white", "alpha": 0.92, "edgecolor": "#bdc3c7"},
+        bbox={
+            "boxstyle": "round,pad=0.5",
+            "facecolor": "white",
+            "alpha": 0.92,
+            "edgecolor": "#bdc3c7",
+        },
         family="monospace",
         zorder=4,
     )
@@ -432,12 +537,18 @@ def create_improvement_scatter(run_stats, output_dir):
             fig, ax = plt.subplots(figsize=(10, 10))
             # Shaded regions: improved (above diagonal), declined (below diagonal)
             x_fill = np.linspace(x_lo, x_hi, 200)
-            ax.fill_between(x_fill, x_fill, x_hi, alpha=0.22, color="#2ecc71", zorder=0, label="Improved")
-            ax.fill_between(x_fill, x_lo, x_fill, alpha=0.22, color="#e74c3c", zorder=0, label="Declined")
+            ax.fill_between(
+                x_fill, x_fill, x_hi, alpha=0.22, color="#2ecc71", zorder=0, label="Improved"
+            )
+            ax.fill_between(
+                x_fill, x_lo, x_fill, alpha=0.22, color="#e74c3c", zorder=0, label="Declined"
+            )
             # Diagonal (no change)
             ax.plot([x_lo, x_hi], [x_lo, x_hi], "k--", linewidth=1.5, alpha=0.6, zorder=1)
             # Points on top: solid green/red/gray
-            point_colors = np.where(y_speed > x_speed, "#27ae60", np.where(y_speed < x_speed, "#c0392b", "#7f8c8d"))
+            point_colors = np.where(
+                y_speed > x_speed, "#27ae60", np.where(y_speed < x_speed, "#c0392b", "#7f8c8d")
+            )
             ax.scatter(
                 x_speed,
                 y_speed,
@@ -478,15 +589,36 @@ def create_improvement_scatter(run_stats, output_dir):
                 transform=ax.transAxes,
                 fontsize=10,
                 verticalalignment="top",
-                bbox={"boxstyle": "round,pad=0.5", "facecolor": "white", "alpha": 0.92, "edgecolor": "#bdc3c7"},
+                bbox={
+                    "boxstyle": "round,pad=0.5",
+                    "facecolor": "white",
+                    "alpha": 0.92,
+                    "edgecolor": "#bdc3c7",
+                },
                 family="monospace",
                 zorder=4,
             )
             # Legend bottom-right (as in reference: diagonal = No Change, green = Improved, red = Declined)
             legend_elements = [
                 plt.Line2D([0], [0], color="gray", linestyle="--", linewidth=2, label="No Change"),
-                plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#27ae60", markersize=10, label="Improved"),
-                plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#c0392b", markersize=10, label="Declined"),
+                plt.Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor="#27ae60",
+                    markersize=10,
+                    label="Improved",
+                ),
+                plt.Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor="#c0392b",
+                    markersize=10,
+                    label="Declined",
+                ),
             ]
             ax.legend(handles=legend_elements, loc="lower right", fontsize=10, framealpha=0.95)
             fig.tight_layout()
@@ -498,7 +630,7 @@ def create_improvement_scatter(run_stats, output_dir):
     elif len(run_ids) > 2:
         sequential_path = _create_sequential_scatter(pivot_speed, run_ids, output_dir)
         return (None, sequential_path)
-    
+
     return (None, None)
 
 
@@ -605,12 +737,24 @@ def create_performance_heatmap(run_stats, output_dir):
             if pd.notna(delta_val):
                 if delta_val > 0:
                     rect = plt.Rectangle(
-                        (col_idx, row_idx), 1, 1, fill=True, facecolor="#2ecc71", alpha=0.3, zorder=0
+                        (col_idx, row_idx),
+                        1,
+                        1,
+                        fill=True,
+                        facecolor="#2ecc71",
+                        alpha=0.3,
+                        zorder=0,
                     )
                     ax.add_patch(rect)
                 elif delta_val < 0:
                     rect = plt.Rectangle(
-                        (col_idx, row_idx), 1, 1, fill=True, facecolor="#e74c3c", alpha=0.3, zorder=0
+                        (col_idx, row_idx),
+                        1,
+                        1,
+                        fill=True,
+                        facecolor="#e74c3c",
+                        alpha=0.3,
+                        zorder=0,
                     )
                     ax.add_patch(rect)
 
@@ -1320,7 +1464,9 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             ax.set_xlabel("Distance (m)", fontsize=12)
             ax.set_ylabel("Speed (km/h)", fontsize=12)
             ax.set_ylim(bottom=0)
-            ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), borderaxespad=0.0, framealpha=0.9)
+            ax.legend(
+                loc="center left", bbox_to_anchor=(1.02, 0.5), borderaxespad=0.0, framealpha=0.9
+            )
             fig.subplots_adjust(right=0.78)
             vel_plot_path = os.path.join(output_dir, f"{prefix}_speed.png")
             fig.savefig(vel_plot_path, bbox_inches="tight", dpi=150)
@@ -1626,18 +1772,26 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     # 8.1 Dumbbell Chart - Primary visualization (always Run 1 vs Run 2 when >=2 runs; + evolution if 3+)
     dumbbell_result = create_dumbbell_chart(run_stats, output_dir)
     dumbbell_path = dumbbell_result[0] if isinstance(dumbbell_result, tuple) else dumbbell_result
-    evolution_path = dumbbell_result[1] if isinstance(dumbbell_result, tuple) and len(dumbbell_result) > 1 else None
+    evolution_path = (
+        dumbbell_result[1]
+        if isinstance(dumbbell_result, tuple) and len(dumbbell_result) > 1
+        else None
+    )
 
     # 8.2 Improvement Scatter - Secondary (always Run 1 vs Run 2 when >=2 runs; + sequential if 3+)
     scatter_result = create_improvement_scatter(run_stats, output_dir)
     scatter_path = scatter_result[0] if isinstance(scatter_result, tuple) else scatter_result
-    sequential_path = scatter_result[1] if isinstance(scatter_result, tuple) and len(scatter_result) > 1 else None
+    sequential_path = (
+        scatter_result[1] if isinstance(scatter_result, tuple) and len(scatter_result) > 1 else None
+    )
 
     # 8.3 Performance Heatmap - Overview visualization
     heatmap_path = create_performance_heatmap(run_stats, output_dir)
 
     # 7.4 Beeswarm Plot - Cluster visualization
-    beeswarm_path = create_beeswarm_plot(run_stats_clustered, output_dir) if has_cluster_data else None
+    beeswarm_path = (
+        create_beeswarm_plot(run_stats_clustered, output_dir) if has_cluster_data else None
+    )
 
     # Build visualization HTML: first two cards always 2-run style (same as COD); then evolution/sequential if 3+ runs
     n_runs = int(run_stats["run_id"].nunique())
@@ -1646,11 +1800,13 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     r2_report = run_ids_report[-1] if len(run_ids_report) > 1 else 2
 
     charts_html = ""
-    
+
     if n_runs <= 2:
         if dumbbell_path:
             dumbbell_title = f"Performance Ranking: Run {r1_report} vs Run {r2_report}"
-            dumbbell_desc = "Athletes sorted by best speed. Green lines = improved, Red lines = declined."
+            dumbbell_desc = (
+                "Athletes sorted by best speed. Green lines = improved, Red lines = declined."
+            )
             charts_html += f'''
                 <div class="chart-card">
                     <h3>{dumbbell_title}</h3>
@@ -1658,10 +1814,12 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                     <img src="{os.path.basename(dumbbell_path)}" class="chart-img" alt="Dumbbell Chart">
                 </div>
             '''
-        
+
         if scatter_path:
             scatter_title = "Improvement Analysis"
-            scatter_desc = f"Points above diagonal = improved from Run {r1_report} to Run {r2_report}."
+            scatter_desc = (
+                f"Points above diagonal = improved from Run {r1_report} to Run {r2_report}."
+            )
             charts_html += f'''
                 <div class="chart-card">
                     <h3>{scatter_title}</h3>
@@ -1680,7 +1838,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                     <img src="{os.path.basename(dumbbell_path)}" class="chart-img" alt="Multi-Run Dot Plot">
                 </div>
             '''
-        
+
         if evolution_path:
             charts_html += f'''
                 <div class="chart-card">
@@ -1689,7 +1847,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                     <img src="{os.path.basename(evolution_path)}" class="chart-img" alt="Evolution Chart">
                 </div>
             '''
-            
+
         if sequential_path:
             charts_html += f'''
                 <div class="chart-card">
@@ -1698,7 +1856,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                     <img src="{os.path.basename(sequential_path)}" class="chart-img" alt="Sequential Scatter">
                 </div>
             '''
-            
+
     if heatmap_path:
         charts_html += f'''
             <div class="chart-card full-width">
@@ -2346,6 +2504,7 @@ def main():
     print(f"Script is directory: {Path(__file__).is_dir()}")
 
     import argparse
+
     parser = argparse.ArgumentParser(description="vailá Sprint Analysis")
     parser.add_argument("--mode", choices=["sprint", "cod"], help="Analysis mode: sprint or cod")
     parser.add_argument("--dir", help="Directory containing TOML files")
@@ -2367,11 +2526,13 @@ def main():
                     self.geometry("300x150")
                     self.result = None
 
-                    tk.Label(self, text="Choose Sprint Analysis Mode:", font=("Arial", 12)).pack(pady=10)
-
-                    tk.Button(self, text="Time Sprint (20m)", width=25, command=self.set_sprint).pack(
-                        pady=5
+                    tk.Label(self, text="Choose Sprint Analysis Mode:", font=("Arial", 12)).pack(
+                        pady=10
                     )
+
+                    tk.Button(
+                        self, text="Time Sprint (20m)", width=25, command=self.set_sprint
+                    ).pack(pady=5)
                     tk.Button(self, text="COD 180° (20m)", width=25, command=self.set_cod).pack(
                         pady=5
                     )
@@ -2409,7 +2570,9 @@ def main():
         print(f"Mode running from CLI: {mode}")
         print(f"Input directory: {input_dir}")
 
-    toml_files = sorted(glob.glob(os.path.join(input_dir, "*.toml")), key=lambda p: os.path.basename(p).lower())
+    toml_files = sorted(
+        glob.glob(os.path.join(input_dir, "*.toml")), key=lambda p: os.path.basename(p).lower()
+    )
 
     if not toml_files:
         messagebox.showinfo("vailá Sprint", "No .toml files found in the selected directory.")

@@ -405,8 +405,10 @@ def process_videos_merge(source_dir, target_dir, use_text_file=False, text_file_
                 "4",
                 f"-{quality_param}",
                 preset_value,
-                "-bf", "0",
-                "-fps_mode", "passthrough"
+                "-bf",
+                "0",
+                "-fps_mode",
+                "passthrough",
             ]
             if "nvenc" in encoder:
                 ffmpeg_command.extend(["-tune", "hq", "-rc", "constqp", "-qp", "18"])
@@ -928,8 +930,10 @@ def process_videos_frame_reverse_merge(
                 "4",
                 f"-{quality_param}",
                 preset_value,
-                "-bf", "0",
-                "-fps_mode", "passthrough"
+                "-bf",
+                "0",
+                "-fps_mode",
+                "passthrough",
             ]
             if "nvenc" in encoder:
                 ffmpeg_command.extend(["-tune", "hq", "-rc", "constqp", "-qp", "18"])
@@ -1162,9 +1166,12 @@ def process_videos_split(source_dir, target_dir, use_text_file=False, text_file_
                 encoder,
                 f"-{quality_param}",
                 preset_value,
-                "-crf", "18",
-                "-bf", "0",
-                "-fps_mode", "passthrough",
+                "-crf",
+                "18",
+                "-bf",
+                "0",
+                "-fps_mode",
+                "passthrough",
                 "-pix_fmt",
                 "yuv420p",  # libx264 works well with yuv420p
                 "-threads",

@@ -243,9 +243,9 @@ def download_or_load_yolo_model():
                 try:
                     # check if source path is in CWD (and is just filename or path relative to CWD)
                     if os.path.exists(source_path) and os.path.basename(source_path) == model_name:
-                         # Extra check: assume it's in CWD if path is not absolute or starts with CWD
-                         abs_source = os.path.abspath(source_path)
-                         if abs_source.startswith(os.getcwd()):
+                        # Extra check: assume it's in CWD if path is not absolute or starts with CWD
+                        abs_source = os.path.abspath(source_path)
+                        if abs_source.startswith(os.getcwd()):
                             print(f"Removing temporary file from {source_path}")
                             os.remove(source_path)
                 except Exception as e:

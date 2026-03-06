@@ -225,6 +225,7 @@ def _load_jump_context_from_file(config_path: str | Path) -> dict[str, float] | 
     try:
         if _toml_reader is None:
             import toml
+
             data = toml.load(str(p))
         else:
             with open(p, "rb") as f:
@@ -822,9 +823,7 @@ def calculate_kinematics(data, results):
             fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
             fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
             fppa_right = (
-                fppa_right
-                if fppa_right is not None and not math.isnan(fppa_right)
-                else np.nan
+                fppa_right if fppa_right is not None and not math.isnan(fppa_right) else np.nan
             )
             fppa_left_series.append(
                 fppa_left if fppa_left is not None and not math.isnan(fppa_left) else np.nan
@@ -3188,9 +3187,7 @@ def process_mediapipe_data(input_file, output_dir):
             propulsion_frames = range(squat_frame, takeoff_frame + 1)
             power_propulsion = power[propulsion_frames]
             # Max power restricted to propulsion phase only (not landing eccentric phase)
-            max_power = (
-                np.max(power_propulsion) if len(power_propulsion) > 0 else 0
-            )
+            max_power = np.max(power_propulsion) if len(power_propulsion) > 0 else 0
             # Calculate average power during propulsion phase
             avg_power_propulsion = np.mean(power_propulsion) if len(power_propulsion) > 0 else 0
 
@@ -3613,7 +3610,9 @@ def process_mediapipe_data(input_file, output_dir):
                 else:
                     ts_data[key] = np.full(max_len, np.nan, dtype=float)
             ts_df = pd.DataFrame(ts_data)
-            output_ts_file = os.path.join(output_dir, f"{base_name}_jump_timeseries_{timestamp}.csv")
+            output_ts_file = os.path.join(
+                output_dir, f"{base_name}_jump_timeseries_{timestamp}.csv"
+            )
             ts_df.to_csv(output_ts_file, index=False, float_format="%.6f")
             print(f"Jump time series (one row per frame) saved at: {output_ts_file}")
         print(f"Calibrated data (in meters) saved at: {output_calibrated_file}")
@@ -3772,9 +3771,15 @@ def calc_fator_convert_mediapipe(df, knee="right_knee", ankle="right_ankle", sha
         rax = df[f"{ankle}_x"].iloc[i]
         ray = df[f"{ankle}_y"].iloc[i]
         lengths.append(np.sqrt((rkx - rax) ** 2 + (rky - ray) ** 2))
-    normalized_length = float(np.median(lengths)) if lengths else (
-        np.sqrt((df[f"{knee}_x"].iloc[0] - df[f"{ankle}_x"].iloc[0]) ** 2
-                + (df[f"{knee}_y"].iloc[0] - df[f"{ankle}_y"].iloc[0]) ** 2)
+    normalized_length = (
+        float(np.median(lengths))
+        if lengths
+        else (
+            np.sqrt(
+                (df[f"{knee}_x"].iloc[0] - df[f"{ankle}_x"].iloc[0]) ** 2
+                + (df[f"{knee}_y"].iloc[0] - df[f"{ankle}_y"].iloc[0]) ** 2
+            )
+        )
     )
     factor = shank_length_real / normalized_length
     return factor
@@ -3790,9 +3795,15 @@ def calc_fator_convert_mediapipe_simple(df, shank_length_real):
         rkx, rky = df["right_knee_x"].iloc[i], df["right_knee_y"].iloc[i]
         rax, ray = df["right_ankle_x"].iloc[i], df["right_ankle_y"].iloc[i]
         lengths.append(np.sqrt((rkx - rax) ** 2 + (rky - ray) ** 2))
-    normalized_length = float(np.median(lengths)) if lengths else (
-        np.sqrt((df["right_knee_x"].iloc[0] - df["right_ankle_x"].iloc[0]) ** 2
-                + (df["right_knee_y"].iloc[0] - df["right_ankle_y"].iloc[0]) ** 2)
+    normalized_length = (
+        float(np.median(lengths))
+        if lengths
+        else (
+            np.sqrt(
+                (df["right_knee_x"].iloc[0] - df["right_ankle_x"].iloc[0]) ** 2
+                + (df["right_knee_y"].iloc[0] - df["right_ankle_y"].iloc[0]) ** 2
+            )
+        )
     )
     factor = shank_length_real / normalized_length
     return factor
@@ -4979,7 +4990,9 @@ def _run_cli_mediapipe(args):
         print("Expected [jump_context] with mass_kg, fps, shank_length_m.")
         return 1
     _JUMP_CONTEXT = ctx
-    print(f"Loaded config: mass={ctx['mass_kg']} kg, fps={ctx['fps']}, shank={ctx['shank_length_m']} m")
+    print(
+        f"Loaded config: mass={ctx['mass_kg']} kg, fps={ctx['fps']}, shank={ctx['shank_length_m']} m"
+    )
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if args.output:
         output_dir = os.path.join(args.output, f"vaila_mediapipejump_{timestamp}")
@@ -5002,23 +5015,27 @@ if __name__ == "__main__":
         description="vaila_and_jump: Vertical jump and MediaPipe jump analysis (GUI or CLI)."
     )
     parser.add_argument(
-        "-i", "--input",
+        "-i",
+        "--input",
         type=str,
         help="Input: CSV file (mode 3) or directory of CSVs (modes 1 and 2).",
     )
     parser.add_argument(
-        "-c", "--config",
+        "-c",
+        "--config",
         type=str,
         help="Path to vaila_and_jump_config.toml (required for mode 3 MediaPipe).",
     )
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         default=None,
         help="Output directory for results (default: next to input, timestamped).",
     )
     parser.add_argument(
-        "-d", "--data-type",
+        "-d",
+        "--data-type",
         type=int,
         choices=[1, 2, 3],
         default=None,
@@ -5052,7 +5069,9 @@ if __name__ == "__main__":
         if not os.path.isdir(args.input):
             print(f"Error: -i must be a directory for mode 1, got: {args.input}")
             exit(1)
-        process_all_files_in_directory(args.input, use_time_of_flight=True, output_parent=args.output)
+        process_all_files_in_directory(
+            args.input, use_time_of_flight=True, output_parent=args.output
+        )
         exit(0)
     elif data_type == 2:
         if not args.input:
@@ -5061,9 +5080,13 @@ if __name__ == "__main__":
         if not os.path.isdir(args.input):
             print(f"Error: -i must be a directory for mode 2, got: {args.input}")
             exit(1)
-        process_all_files_in_directory(args.input, use_time_of_flight=False, output_parent=args.output)
+        process_all_files_in_directory(
+            args.input, use_time_of_flight=False, output_parent=args.output
+        )
         exit(0)
     else:
-        print("For CLI mode, use -d 1 (Time of Flight), -d 2 (Jump Height), or -d 3 (MediaPipe with -i and -c).")
+        print(
+            "For CLI mode, use -d 1 (Time of Flight), -d 2 (Jump Height), or -d 3 (MediaPipe with -i and -c)."
+        )
         print("Use --gui to run the graphical interface.")
         exit(1)

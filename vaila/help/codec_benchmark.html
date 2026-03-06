@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vailá - codec_benchmark</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 40px;
+        line-height: 1.6;
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #2c3e50;
+        border-bottom: 3px solid #e74c3c;
+        padding-bottom: 10px;
+      }
+      h2 {
+        color: #34495e;
+        margin-top: 30px;
+      }
+      h3 {
+        color: #2c3e50;
+      }
+      .module-info {
+        background: #fdf2f2;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 20px 0;
+      }
+      .docstring {
+        background: #fff3cd;
+        padding: 15px;
+        border-left: 4px solid #f1c40f;
+        margin: 15px 0;
+      }
+      .cli-section {
+        background: #e8f4f8;
+        padding: 15px;
+        border-left: 4px solid #3498db;
+        margin: 15px 0;
+      }
+      pre {
+        background: #2d2d2d;
+        color: #f8f8f2;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 10px 0;
+      }
+      th, td {
+        border: 1px solid #dee2e6;
+        padding: 8px 12px;
+        text-align: left;
+      }
+      th {
+        background: #f8f9fa;
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #dee2e6;
+        color: #6c757d;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>vailá - codec_benchmark</h1>
+
+      <div class="module-info">
+        <h3>📋 Module Information</h3>
+        <p><strong>Category:</strong> Tools / Research</p>
+        <p><strong>File:</strong> vaila/codec_benchmark.py</p>
+        <p><strong>Version:</strong> 0.1.0</p>
+        <p><strong>GUI Interface:</strong> ❌ No</p>
+        <p><strong>CLI Interface:</strong> ✅ Yes</p>
+      </div>
+
+      <div class="docstring">
+        <h3>📖 Description</h3>
+        <p>
+          Systematically benchmarks <strong>H.264</strong>, <strong>H.265 (HEVC)</strong>, and <strong>H.266 (VVC)</strong> codecs on a dataset of videos.
+        </p>
+        <ul>
+          <li><strong>Automated comparison</strong>: Runs multiple codecs sequentially.</li>
+          <li><strong>Performance metrics</strong>: Time, size, ratio.</li>
+          <li><strong>Results storage</strong>: Saves to <code>results.json</code>.</li>
+          <li><strong>Parallel execution</strong>: Process multiple videos at once.</li>
+        </ul>
+      </div>
+
+      <div class="cli-section">
+        <h3>🚀 CLI Usage</h3>
+        <pre>
+# Basic usage
+python -m vaila.codec_benchmark --dir /path/to/videos
+
+# High performance mode
+python -m vaila.codec_benchmark --dir /path/to/videos --workers 4 --output experiment_1</pre>
+        <table>
+          <tr><th>Option</th><th>Default</th><th>Description</th></tr>
+          <tr><td><code>--dir</code></td><td>(required)</td><td>Source video directory</td></tr>
+          <tr><td><code>--workers</code></td><td>1</td><td>Parallel tasks</td></tr>
+          <tr><td><code>--output</code></td><td>benchmark_results</td><td>Output directory</td></tr>
+        </table>
+      </div>
+
+      <div class="footer">
+        <p>📅 Updated: 05/03/2026</p>
+        <p>🔗 Part of vailá - Multimodal Toolbox</p>
+      </div>
+    </div>
+  </body>
+</html>
