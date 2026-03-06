@@ -11,8 +11,8 @@ Contact: paulosantiago@usp.br
 Laboratory website: https://github.com/vaila-multimodaltoolbox/vaila
 
 Created: December 15, 2023
-Last Updated: January 27, 2025
-Version: 2.1.0
+Last Updated: March 05, 2026
+Version: 0.0.3
 
 Description:
 ------------
@@ -40,20 +40,6 @@ References:
 -----------
 FFmpeg Documentation: https://ffmpeg.org/documentation.html
 
-Changelog:
----------
-Version 2.1.0 (2025-01-27):
-- Added hardware acceleration support
-- Improved PNG extraction compatibility
-- Added detailed video information logging
-
-Version 2.0.0 (2024-08-25):
-- Added customizable PNG filename pattern
-- Improved error handling
-- Added batch processing support
-
-Version 1.0.0 (2023-12-15):
-- Initial release
 ================================================================================
 """
 

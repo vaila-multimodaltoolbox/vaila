@@ -261,6 +261,7 @@ def get_precise_video_metadata(video_path):
             "avg_frame_rate": None,
         }
 
+
 def get_color_for_id(marker_id):
     """Generate a consistent color for a given marker ID."""
     colors = [
@@ -1575,7 +1576,9 @@ def play_video_with_controls(
                 save_message_text = f"Video exported (error): {os.path.basename(output_path)}"
                 showing_save_message = True
                 save_message_timer = 120
-                print(f"[WARNING] Error adding audio: {e}. Video exported without audio: {output_path}")
+                print(
+                    f"[WARNING] Error adding audio: {e}. Video exported without audio: {output_path}"
+                )
 
         except Exception as e:
             save_message_text = f"Error exporting video: {str(e)}"
@@ -2054,8 +2057,12 @@ def play_video_with_controls(
         )
         time_seconds = (frame_count / fps) if fps and fps > 0 else 0.0
         time_total = (display_total / fps) if fps and fps > 0 else 0.0
-        frame_info = font.render(f"Frame: {frame_count + 1}/{display_total} ({time_seconds:.6f}s/{time_total:.6f}s)", True, (255, 255, 255))
-        
+        frame_info = font.render(
+            f"Frame: {frame_count + 1}/{display_total} ({time_seconds:.6f}s/{time_total:.6f}s)",
+            True,
+            (255, 255, 255),
+        )
+
         info_x = slider_margin_left
         control_surface.blit(frame_info, (info_x, slider_y - 25))
         info_x += frame_info.get_width() + 25
@@ -5017,9 +5024,8 @@ def play_video_with_controls(
                 elif event.key == pygame.K_i or event.key == pygame.K_p:
                     # Temporarily close pygame display to show tkinter dialog
                     pygame.display.quit()
-                    import tkinter as tk
-                    from tkinter import Tk, simpledialog, messagebox
-                    
+                    from tkinter import Tk, messagebox, simpledialog
+
                     root_fps = Tk()
                     root_fps.withdraw()
                     new_fps_str = simpledialog.askstring(
@@ -5029,7 +5035,9 @@ def play_video_with_controls(
                     )
                     root_fps.destroy()
                     # Reinitialize pygame display
-                    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+                    screen = pygame.display.set_mode(
+                        (window_width, window_height + 80), pygame.RESIZABLE
+                    )
                     if new_fps_str:
                         try:
                             val = None
@@ -5041,18 +5049,21 @@ def play_video_with_controls(
                             else:
                                 val = float(new_fps_str)
                                 fps_num, fps_den = int(val * 1000), 1000
-                            
+
                             if val is not None and val > 0:
                                 fps = val
-                                original_fps = fps
                                 print(f"FPS updated to: {fps:.6f} ({fps_num}/{fps_den})")
-                                
+
                                 # Spawn temporary root for messagebox to ensure it closes properly on Linux
                                 msg_root = Tk()
                                 msg_root.withdraw()
-                                messagebox.showinfo("FPS Updated", f"FPS set to {fps:.6f} ({fps_num}/{fps_den})", parent=msg_root)
+                                messagebox.showinfo(
+                                    "FPS Updated",
+                                    f"FPS set to {fps:.6f} ({fps_num}/{fps_den})",
+                                    parent=msg_root,
+                                )
                                 msg_root.destroy()
-                                
+
                             else:
                                 print("Invalid FPS value entered.")
                         except ValueError:

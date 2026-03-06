@@ -177,7 +177,9 @@ def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=No
     else:
         # Headless mode
         if input_directory is None or output_directory is None or data_rate is None:
-            print("Error: dlt-file, input-dir, output-dir, and rate are required for headless mode.")
+            print(
+                "Error: dlt-file, input-dir, output-dir, and rate are required for headless mode."
+            )
             return
 
     # Load and validate DLT parameters
@@ -214,5 +216,5 @@ if __name__ == "__main__":
         dlt_file=args.dlt_file,
         input_directory=args.input_dir,
         output_directory=args.output_dir,
-        data_rate=args.rate
+        data_rate=args.rate,
     )

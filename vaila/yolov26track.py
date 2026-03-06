@@ -3538,7 +3538,10 @@ def run_yolov26track():
             # Use MJPG codec for AVI (highly compatible and reliable)
             # This ensures the video is written correctly without corruption
             writer = cv2.VideoWriter(
-                temp_avi_path, cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)  # type: ignore
+                temp_avi_path,
+                cv2.VideoWriter_fourcc(*"MJPG"),
+                fps,
+                (width, height),  # type: ignore
             )
             if not writer.isOpened():
                 print(f"Error creating video file: {temp_avi_path}")
@@ -3546,7 +3549,10 @@ def run_yolov26track():
                 # Fallback to XVID if MJPG fails
                 print("[WARNING] MJPG failed. Trying XVID...")
                 writer = cv2.VideoWriter(
-                    temp_avi_path, cv2.VideoWriter_fourcc(*"XVID"), fps, (width, height)  # type: ignore
+                    temp_avi_path,
+                    cv2.VideoWriter_fourcc(*"XVID"),
+                    fps,
+                    (width, height),  # type: ignore
                 )
                 if not writer.isOpened():
                     print("Error: Could not create video writer with any codec")

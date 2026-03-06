@@ -14,10 +14,12 @@ from pathlib import Path
 # Try to import toml, otherwise use simple parsing
 try:
     import toml
+
     HAS_TOML = True
 except ImportError:
     HAS_TOML = False
     print("Warning: 'toml' module not found. Using simple regex parsing.")
+
 
 def load_toml_dependencies(toml_path):
     """Load dependencies from pyproject.toml"""
@@ -48,6 +50,7 @@ def load_toml_dependencies(toml_path):
                     if match:
                         deps.append(match.group(1))
         return deps
+
 
 def parse_yaml_dependencies(yaml_path):
     """Parse Conda YAML to get existing conda dependencies and the structure"""
@@ -87,6 +90,7 @@ def parse_yaml_dependencies(yaml_path):
 
     return lines, conda_deps, pip_deps_start_line
 
+
 def update_yaml(yaml_path, toml_deps):
     """Update the YAML file with dependencies from TOML"""
     lines, conda_deps, pip_start = parse_yaml_dependencies(yaml_path)
@@ -108,7 +112,7 @@ def update_yaml(yaml_path, toml_deps):
         new_pip_deps.append(dep)
 
     # Reconstruct file content
-    new_lines = lines[:pip_start+1]
+    new_lines = lines[: pip_start + 1]
 
     for dep in new_pip_deps:
         new_lines.append(f"      - {dep}\n")
@@ -123,7 +127,7 @@ def update_yaml(yaml_path, toml_deps):
     for i in range(pip_start + 1, len(lines)):
         line = lines[i]
         if not start_scanning:
-            if line.strip().startswith("-"): # pip dep
+            if line.strip().startswith("-"):  # pip dep
                 continue
             else:
                 start_scanning = True
@@ -135,6 +139,7 @@ def update_yaml(yaml_path, toml_deps):
         f.writelines(new_lines + rest_of_file)
 
     print(f"Updated {yaml_path} with {len(new_pip_deps)} pip dependencies.")
+
 
 def main():
     script_dir = Path(__file__).parent
@@ -159,6 +164,7 @@ def main():
     for yaml_file in yaml_dir.glob("*.yaml"):
         print(f"Updating {yaml_file.name}...")
         update_yaml(yaml_file, deps)
+
 
 if __name__ == "__main__":
     main()

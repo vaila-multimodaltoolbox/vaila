@@ -45,12 +45,10 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 
 import json
 import os
-from pathlib import Path
 import subprocess
-import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from tkinter import filedialog, messagebox, ttk
+from pathlib import Path
 
 from rich import print
 
@@ -186,11 +184,12 @@ def get_video_info(video_path):
 
         # Fraction to float helper inside get_video_info
         def frac_to_float(f_str):
-            if not f_str or f_str == "0/0": return None
+            if not f_str or f_str == "0/0":
+                return None
             try:
                 if "/" in f_str:
                     n, d = map(int, f_str.split("/"))
-                    return float(n)/d if d else 0.0
+                    return float(n) / d if d else 0.0
                 return float(f_str)
             except:
                 return None
@@ -234,8 +233,6 @@ def get_video_info(video_path):
         }
 
 
-
-
 def count_frames_in_videos(directory_path=None, video_files=None, show_gui=True):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
@@ -249,7 +246,7 @@ def count_frames_in_videos(directory_path=None, video_files=None, show_gui=True)
 
         import tkinter as tk
         from tkinter import filedialog, messagebox
-        
+
         root = tk.Tk()
         root.withdraw()
 
@@ -292,7 +289,9 @@ def count_frames_in_videos(directory_path=None, video_files=None, show_gui=True)
 
     try:
         with open(output_basic_file, "w", encoding="utf-8") as f:
-            f.write(f"Video Metadata Summary\nDirectory: {directory_path}\n============================\n\n")
+            f.write(
+                f"Video Metadata Summary\nDirectory: {directory_path}\n============================\n\n"
+            )
             for info in video_infos:
                 f.write(f"File: {info.get('file_name')}\n")
                 if "error" in info:
@@ -301,40 +300,46 @@ def count_frames_in_videos(directory_path=None, video_files=None, show_gui=True)
                 f.write(f"  Frames:        {info.get('frame_count')}\n")
                 f.write(f"  Duration:      {info.get('duration'):.3f} seconds\n")
                 f.write(f"  Resolution:    {info.get('resolution')}\n")
-                
-                disp_fps = info.get('display_fps')
+
+                disp_fps = info.get("display_fps")
                 if disp_fps:
                     f.write(f"  Display FPS:   {disp_fps:.9f}\n")
                 else:
                     f.write("  Display FPS:   N/A\n")
-                    
-                avg_fps = info.get('avg_fps')
+
+                avg_fps = info.get("avg_fps")
                 if avg_fps:
                     f.write(f"  Avg FPS:       {avg_fps:.9f}\n")
                 else:
                     f.write("  Avg FPS:       N/A\n")
-                    
-                cap_fps = info.get('capture_fps')
+
+                cap_fps = info.get("capture_fps")
                 if cap_fps:
                     f.write(f"  Capture FPS:   {cap_fps:.9f}\n")
                 else:
                     f.write("  Capture FPS:   N/A\n")
-                    
+
                 f.write(f"  Recommended Hz:{info.get('recommended_sampling_hz')}\n")
-                f.write(f"  Codec:         {info.get('codec_name')} ({info.get('codec_long_name')})\n")
-                f.write(f"  Container:     {info.get('container_format')} ({info.get('container_long_name')})\n\n")
+                f.write(
+                    f"  Codec:         {info.get('codec_name')} ({info.get('codec_long_name')})\n"
+                )
+                f.write(
+                    f"  Container:     {info.get('container_format')} ({info.get('container_long_name')})\n\n"
+                )
 
         with open(output_full_file, "w", encoding="utf-8") as f:
             json.dump(video_infos, f, indent=4)
-            
+
         print(f"\nBasic metadata saved to: {output_basic_file}")
         print(f"Full metadata saved to: {output_full_file}")
     except Exception as e:
         print(f"\nError saving metadata files: {e}")
-    
+
     print("\n--- Summary ---")
     for info in video_infos:
-        print(f"[{info.get('file_name')}]: {info.get('frame_count')} frames, {info.get('display_fps')} display fps")
+        print(
+            f"[{info.get('file_name')}]: {info.get('frame_count')} frames, {info.get('display_fps')} display fps"
+        )
 
 
 if __name__ == "__main__":
@@ -347,26 +352,26 @@ if __name__ == "__main__":
 Examples:
   # Launch GUI to select directory
   python numberframes.py
-  
+
   # Process a specific directory via CLI
   python numberframes.py --dir /path/to/videos
-  
+
   # Process specific video files
   python numberframes.py /path/to/video1.mp4 /path/to/video2.avi
         """,
-        formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("videos", nargs="*", help="Specific video files to process")
     parser.add_argument("--dir", "-d", help="Directory containing videos to process")
     parser.add_argument("--cli", action="store_true", help="Run without GUI display")
-    
+
     # If no arguments provided at all (except the script name), run default GUI mode
     if len(sys.argv) == 1:
         count_frames_in_videos(show_gui=True)
     else:
         args = parser.parse_args()
         show_gui_flag = not args.cli
-        
+
         if args.videos:
             count_frames_in_videos(video_files=args.videos, show_gui=show_gui_flag)
         elif args.dir:

@@ -179,7 +179,7 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
 
                         # Fill the pre-allocated array directly
                         col_start = 1 + (marker - 1) * 3  # x, y, z columns for this marker
-                        rec_coords_array[i, col_start:col_start+3] = np.array(point3d).flatten()  # type: ignore
+                        rec_coords_array[i, col_start : col_start + 3] = np.array(point3d).flatten()  # type: ignore
                 # NaN values already pre-allocated for invalid frames/markers
 
         # Convert to DataFrame with original column names but with _z added
@@ -187,7 +187,7 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
         for marker in range(1, num_coords + 1):
             header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
 
-        rec_coords_df = pd.DataFrame(rec_coords_array, columns=header) # type: ignore
+        rec_coords_df = pd.DataFrame(rec_coords_array, columns=header)  # type: ignore
 
         output_file = os.path.join(output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.3d")
         rec_coords_df.to_csv(output_file, index=False, float_format="%.6f")
@@ -254,7 +254,9 @@ def run_rec3d(dlt_files=None, input_directory=None, output_directory=None, data_
     else:
         # Headless mode
         if input_directory is None or output_directory is None or data_rate is None:
-            print("Error: dlt-files, input-dir, output-dir, and rate are required for headless mode.")
+            print(
+                "Error: dlt-files, input-dir, output-dir, and rate are required for headless mode."
+            )
             return
 
     # Load and validate DLT parameters for each camera
@@ -281,8 +283,12 @@ def run_rec3d(dlt_files=None, input_directory=None, output_directory=None, data_
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Reconstruct 3D Coordinates using multiple DLT3D cameras")
-    parser.add_argument("--dlt-files", nargs="+", help="Path to DLT3D parameter files (one per camera)")
+    parser = argparse.ArgumentParser(
+        description="Reconstruct 3D Coordinates using multiple DLT3D cameras"
+    )
+    parser.add_argument(
+        "--dlt-files", nargs="+", help="Path to DLT3D parameter files (one per camera)"
+    )
     parser.add_argument("--input-dir", help="Directory containing CSV files to process")
     parser.add_argument("--output-dir", help="Output directory for results")
     parser.add_argument("--rate", type=int, help="Data frequency in Hz")
@@ -292,5 +298,5 @@ if __name__ == "__main__":
         dlt_files=args.dlt_files,
         input_directory=args.input_dir,
         output_directory=args.output_dir,
-        data_rate=args.rate
+        data_rate=args.rate,
     )
