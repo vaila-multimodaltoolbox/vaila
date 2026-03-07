@@ -46,6 +46,24 @@ The project uses `pytest` for automated testing.
 
 **Milestone (02 March 2026):** Refactored `vaila_and_jump.py` (v0.1.3), `vaila/tugturn.py`, and the DLT/Reconstruction suite (`dlt2d.py`, `dlt3d.py`, `rec2d_one_dlt2d.py`, `rec3d.py`, `rec3d_one_dlt3d.py`). Fixed all Ruff/Ty lint and type errors, added CLI/headless support, and established a comprehensive automated test suite across `tests/`.
 
+## Repo structure
+
+```
+vaila/                 ← root
+├── vaila.py           ← Main Tkinter GUI entry point
+├── vaila/             ← All analysis modules (package)
+├── tests/             ← pytest test suite
+├── docs/              ← Documentation
+├── .claude/
+│   ├── agents/        ← Specialized agent roles (biomechanics, GUI, video, tests)
+│   ├── skills/        ← Step-by-step skills (new module, port MATLAB)
+│   └── commands/      ← Slash-command specs (/check, /new-module)
+├── .cursor/rules/     ← Cursor IDE rules
+├── pyproject.toml     ← Default (CPU)
+├── pyproject_*.toml   ← Platform-specific templates
+└── uv.lock
+```
+
 ## Platform-Specific Configuration
 
 The project uses a **template-based pyproject.toml system** for hardware-specific dependencies. Before creating a venv, the correct template must be copied to `pyproject.toml`:
