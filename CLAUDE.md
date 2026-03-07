@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for **Claude Code** when working with the **vailá** repository.
+Guidance for **AI Assistants** (Claude Code, Antigravity, Cursor, Windsurf, etc.) when working with the **vailá** repository.
 
 > See also: [AGENTS.md](./AGENTS.md) — shared rules for all AI agents.
 
@@ -280,10 +280,26 @@ uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
 
 ## Agents and skills
 
-Step-by-step workflows and specialized agent roles live under `.claude/`:
+Step-by-step workflows and specialized agent roles are stored in the `.claude/` directory. This structure is intended to be used by any AI assistant (Claude Code, Antigravity, Cursor, etc.).
 
-- **`.claude/skills/`** — Reusable how-to guides (e.g. [create a new analysis module](file:///home/preto/Preto/vaila/.claude/skills/create-analysis-module.md), [port a MATLAB algorithm](file:///home/preto/Preto/vaila/.claude/skills/port-matlab-algorithm.md)).
-- **`.claude/agents/`** — Role cards for domain experts (biomechanics, GUI, video, tests).
-- **`.claude/commands/`** — Slash-command specs (e.g. `/check`, `/new-module`).
+### Specialized Agents (`.claude/agents/`)
 
-When asked to "create a new module", follow `.claude/skills/create-analysis-module.md`.
+Role cards for domain experts. Use these when the task fits their specific domain:
+
+- [biomechanics-analyst.md](file:///home/preto/Preto/vaila/.claude/agents/biomechanics-analyst.md)
+- [gui-developer.md](file:///home/preto/Preto/vaila/.claude/agents/gui-developer.md)
+- [video-processor.md](file:///home/preto/Preto/vaila/.claude/agents/video-processor.md)
+- [test-writer.md](file:///home/preto/Preto/vaila/.claude/agents/test-writer.md)
+
+### Technical Skills (`.claude/skills/`)
+
+Reusable "how-to" guides for complex workflows:
+
+- **vailá Core**: [create a new analysis module](file:///home/preto/Preto/vaila/.claude/skills/create-analysis-module.md), [port a MATLAB algorithm](file:///home/preto/Preto/vaila/.claude/skills/port-matlab-algorithm.md).
+- **Reports**: [xlsx](file:///home/preto/Preto/vaila/.claude/skills/xlsx/SKILL.md) (Excel), [pdf](file:///home/preto/Preto/vaila/.claude/skills/pdf/SKILL.md), [pptx](file:///home/preto/Preto/vaila/.claude/skills/pptx/SKILL.md) (PowerPoint).
+- **Automation**: [mcp-builder](file:///home/preto/Preto/vaila/.claude/skills/mcp-builder/SKILL.md) (Model Context Protocol), [webapp-testing](file:///home/preto/Preto/vaila/.claude/skills/webapp-testing/SKILL.md).
+- **Visualization**: [web-artifacts-builder](file:///home/preto/Preto/vaila/.claude/skills/web-artifacts-builder/SKILL.md).
+
+### Slash Commands (`.claude/commands/`)
+
+Specs for common shortcuts like `/check` or `/new-module`.
