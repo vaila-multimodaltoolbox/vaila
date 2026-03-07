@@ -196,7 +196,8 @@ def is_nvidia_gpu_available():
         return False
 
 
-VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
+# Add all video extensions to the list MP4, AVI, MOV, MKV, WMV
+VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".wmv", ".MP4", ".AVI", ".MOV", ".MKV", ".WMV")
 
 
 def find_videos(directory):
@@ -333,15 +334,19 @@ def compress_video_worker_h265(video_info):
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             output_size = os.path.getsize(output_path)
             result_status["output_size"] = output_size
+            allow_larger = video_info.get("allow_larger_output", False)
 
-            # Adaptive compression: if output is larger than input, delete output and mark as skipped
             if output_size > original_size:
-                os.remove(output_path)
-                result_status["success"] = True
-                result_status["skipped"] = True
-                result_status["error"] = (
-                    "Output file was larger than input (adaptive compression skip)"
-                )
+                if allow_larger:
+                    result_status["success"] = True
+                    result_status["output_larger_than_input"] = True
+                else:
+                    os.remove(output_path)
+                    result_status["success"] = True
+                    result_status["skipped"] = True
+                    result_status["error"] = (
+                        "Output file was larger than input (adaptive compression skip)"
+                    )
             else:
                 result_status["success"] = True
         else:
@@ -356,12 +361,15 @@ def compress_video_worker_h265(video_info):
     return result_status
 
 
-def run_compress_videos_h265(video_list, preset, crf, resolution, use_gpu, worker_count=1):
+def run_compress_videos_h265(
+    video_list, preset, crf, resolution, use_gpu, worker_count=1, allow_larger_output=False
+):
     """Run the actual H.265/HEVC compression.
 
     Args:
         video_list: List of (video_path, output_path) tuples.
         preset, crf, resolution, use_gpu, worker_count: Encoding parameters.
+        allow_larger_output: If True, keep output even when larger than input.
 
     Returns:
         tuple: (success_count, failure_count)
@@ -375,6 +383,7 @@ def run_compress_videos_h265(video_list, preset, crf, resolution, use_gpu, worke
     print(f"  Resolution: {resolution}")
     print(f"  Use GPU: {use_gpu}")
     print(f"  Workers: {worker_count}")
+    print(f"  Allow larger output: {allow_larger_output}")
 
     if not video_list:
         print("[red]No video files found.[/red]")
@@ -397,6 +406,7 @@ def run_compress_videos_h265(video_list, preset, crf, resolution, use_gpu, worke
                 "crf": crf,
                 "resolution": resolution,
                 "use_gpu": use_gpu,
+                "allow_larger_output": allow_larger_output,
                 "index": i,
                 "total": len(video_list),
             }
@@ -420,7 +430,14 @@ def run_compress_videos_h265(video_list, preset, crf, resolution, use_gpu, worke
                     failure_count += 1
                 else:
                     output_size_mb = res["output_size"] / (1024 * 1024)
-                    print(f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB)")
+                    if res.get("output_larger_than_input"):
+                        print(
+                            f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB, larger than input - kept for compatibility)"
+                        )
+                    else:
+                        print(
+                            f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB)"
+                        )
                     success_count += 1
             else:
                 print(f"[{i}/{total}] {basename} [red][FAIL][/red] {res['error']}")
@@ -542,12 +559,26 @@ def get_compression_parameters():
         font=("Arial", 8, "italic"),
     ).grid(row=10, column=0, columnspan=2, sticky="w", padx=20)
 
+    # 6. Allow output larger than input
+    allow_larger_var = tk.BooleanVar(value=False)
+    tk.Checkbutton(
+        main_frame,
+        text="Allow output larger than input (e.g. for compatibility)",
+        variable=allow_larger_var,
+        font=("Arial", 9),
+    ).grid(row=11, column=0, columnspan=2, sticky="w", pady=5)
+    tk.Label(
+        main_frame,
+        text="When enabled, encoded files are kept even if larger than originals.",
+        font=("Arial", 8, "italic"),
+    ).grid(row=12, column=0, columnspan=2, sticky="w", padx=20)
+
     tk.Frame(main_frame, height=1, bg="gray").grid(
-        row=11, column=0, columnspan=2, sticky="ew", pady=15
+        row=13, column=0, columnspan=2, sticky="ew", pady=15
     )
 
     button_frame = tk.Frame(main_frame)
-    button_frame.grid(row=12, column=0, columnspan=2, pady=10)
+    button_frame.grid(row=14, column=0, columnspan=2, pady=10)
 
     def on_ok():
         try:
@@ -593,18 +624,23 @@ def get_compression_parameters():
             params["resolution"] = resolution
             params["use_gpu"] = use_gpu
             params["max_depth"] = max_depth
+            params["allow_larger_output"] = allow_larger_var.get()
 
             depth_str = "unlimited" if max_depth == -1 else str(max_depth)
+            allow_str = "Yes" if params["allow_larger_output"] else "No"
             confirm_msg = (
                 f"Selected compression settings:\n\n"
                 f"• Preset: {preset}\n"
                 f"• CRF: {crf}\n"
                 f"• Resolution: {resolution}\n"
                 f"• Use GPU: {'Yes' if use_gpu else 'No'}\n"
-                f"• Subdir depth: {depth_str}\n\n"
+                f"• Subdir depth: {depth_str}\n"
+                f"• Allow output larger than input: {allow_str}\n\n"
                 f"Note: H.265 encoding is slower than H.264.\n\n"
-                f"Continue with these settings?"
             )
+            if params["allow_larger_output"]:
+                confirm_msg += "Output may be larger than input. Files will be kept.\n\n"
+            confirm_msg += "Continue with these settings?"
 
             if messagebox.askyesno("Confirm Settings", confirm_msg):
                 dialog.destroy()
@@ -672,7 +708,7 @@ at the same quality level. Expect longer encoding times, especially with CPU enc
         tk.Button(help_dialog, text="Close", command=help_dialog.destroy).pack(pady=10)
 
     tk.Button(main_frame, text="Help", command=show_help).grid(
-        row=13, column=0, columnspan=2, pady=5
+        row=15, column=0, columnspan=2, pady=5
     )
 
     dialog.update_idletasks()
@@ -760,6 +796,7 @@ def compress_videos_h265_gui():
         crf=compression_config["crf"],
         resolution=compression_config["resolution"],
         use_gpu=use_gpu,
+        allow_larger_output=compression_config.get("allow_larger_output", False),
     )
 
     messagebox.showinfo(
@@ -853,6 +890,11 @@ Examples:
         default=1,
         help="Number of parallel workers (default: 1).",
     )
+    parser.add_argument(
+        "--allow-larger-output",
+        action="store_true",
+        help="Keep output even when larger than input (e.g. for compatibility).",
+    )
     return parser
 
 
@@ -929,6 +971,7 @@ def main():
         resolution=args.resolution,
         use_gpu=use_gpu,
         worker_count=args.workers,
+        allow_larger_output=args.allow_larger_output,
     )
 
     if failure_count > 0:
