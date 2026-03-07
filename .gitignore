@@ -124,6 +124,10 @@ dmypy.json
 # Claude
 CLAUDE.local.md
 .claude/
+!.claude/agents/
+!.claude/skills/
+!.claude/commands/
+get_anthropic_skills.sh
 
 # VSCode
 .vscode/
