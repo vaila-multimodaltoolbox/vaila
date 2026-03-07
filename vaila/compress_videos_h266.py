@@ -132,7 +132,8 @@ def check_libvvenc_available():
         return False
 
 
-VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
+# Add all video extensions to the list MP4, AVI, MOV, MKV, WMV
+VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv", ".wmv", ".MP4", ".AVI", ".MOV", ".MKV", ".WMV")
 
 
 def find_videos(directory):
@@ -247,15 +248,19 @@ def compress_video_worker_h266(video_info):
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             output_size = os.path.getsize(output_path)
             result_status["output_size"] = output_size
+            allow_larger = video_info.get("allow_larger_output", False)
 
-            # Adaptive compression
             if output_size > original_size:
-                os.remove(output_path)
-                result_status["success"] = True
-                result_status["skipped"] = True
-                result_status["error"] = (
-                    "Output file was larger than input (adaptive compression skip)"
-                )
+                if allow_larger:
+                    result_status["success"] = True
+                    result_status["output_larger_than_input"] = True
+                else:
+                    os.remove(output_path)
+                    result_status["success"] = True
+                    result_status["skipped"] = True
+                    result_status["error"] = (
+                        "Output file was larger than input (adaptive compression skip)"
+                    )
             else:
                 result_status["success"] = True
         else:
@@ -270,12 +275,15 @@ def compress_video_worker_h266(video_info):
     return result_status
 
 
-def run_compress_videos_h266(video_list, preset, qp, resolution, worker_count=1):
+def run_compress_videos_h266(
+    video_list, preset, qp, resolution, worker_count=1, allow_larger_output=False
+):
     """Run the actual H.266/VVC compression using libvvenc (CPU-only).
 
     Args:
         video_list: List of (video_path, output_path) tuples.
         preset, qp, resolution, worker_count: Encoding parameters.
+        allow_larger_output: If True, keep output even when larger than input.
 
     Returns:
         tuple: (success_count, failure_count)
@@ -288,6 +296,7 @@ def run_compress_videos_h266(video_list, preset, qp, resolution, worker_count=1)
     print(f"  QP: {qp}")
     print(f"  Resolution: {resolution}")
     print(f"  Workers: {worker_count}")
+    print(f"  Allow larger output: {allow_larger_output}")
     print("  Encoder: libvvenc (CPU-only)")
 
     print(
@@ -312,6 +321,7 @@ def run_compress_videos_h266(video_list, preset, qp, resolution, worker_count=1)
                 "preset": preset,
                 "qp": qp,
                 "resolution": resolution,
+                "allow_larger_output": allow_larger_output,
                 "index": i,
                 "total": len(video_list),
             }
@@ -335,7 +345,14 @@ def run_compress_videos_h266(video_list, preset, qp, resolution, worker_count=1)
                     failure_count += 1
                 else:
                     output_size_mb = res["output_size"] / (1024 * 1024)
-                    print(f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB)")
+                    if res.get("output_larger_than_input"):
+                        print(
+                            f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB, larger than input - kept for compatibility)"
+                        )
+                    else:
+                        print(
+                            f"[{i}/{total}] {basename} [green][OK][/green] ({output_size_mb:.1f} MB)"
+                        )
                     success_count += 1
             else:
                 print(f"[{i}/{total}] {basename} [red][FAIL][/red] {res['error']}")
@@ -441,11 +458,25 @@ def get_compression_parameters():
         font=("Arial", 8, "italic"),
     ).grid(row=8, column=0, columnspan=2, sticky="w", padx=20)
 
+    # 5. Allow output larger than input
+    allow_larger_var = tk.BooleanVar(value=False)
+    tk.Checkbutton(
+        main_frame,
+        text="Allow output larger than input (e.g. for compatibility)",
+        variable=allow_larger_var,
+        font=("Arial", 9),
+    ).grid(row=9, column=0, columnspan=2, sticky="w", pady=5)
+    tk.Label(
+        main_frame,
+        text="When enabled, encoded files are kept even if larger than originals.",
+        font=("Arial", 8, "italic"),
+    ).grid(row=10, column=0, columnspan=2, sticky="w", padx=20)
+
     tk.Frame(main_frame, height=1, bg="gray").grid(
-        row=9, column=0, columnspan=2, sticky="ew", pady=15
+        row=11, column=0, columnspan=2, sticky="ew", pady=15
     )
     button_frame = tk.Frame(main_frame)
-    button_frame.grid(row=10, column=0, columnspan=2, pady=10)
+    button_frame.grid(row=12, column=0, columnspan=2, pady=10)
 
     def on_ok():
         try:
@@ -473,17 +504,22 @@ def get_compression_parameters():
             params["qp"] = qp
             params["resolution"] = resolution
             params["max_depth"] = max_depth
+            params["allow_larger_output"] = allow_larger_var.get()
 
             depth_str = "unlimited" if max_depth == -1 else str(max_depth)
+            allow_str = "Yes" if params["allow_larger_output"] else "No"
             confirm_msg = (
                 f"Selected compression settings:\n\n"
                 f"• Preset: {preset}\n"
                 f"• QP: {qp}\n"
                 f"• Resolution: {resolution}\n"
-                f"• Subdir depth: {depth_str}\n\n"
+                f"• Subdir depth: {depth_str}\n"
+                f"• Allow output larger than input: {allow_str}\n\n"
                 f"Remember: H.266 compression is VERY SLOW.\n\n"
-                f"Continue?"
             )
+            if params["allow_larger_output"]:
+                confirm_msg += "Output may be larger than input. Files will be kept.\n\n"
+            confirm_msg += "Continue?"
             if messagebox.askyesno("Confirm Settings", confirm_msg):
                 dialog.destroy()
         except ValueError as e:
@@ -566,6 +602,7 @@ def compress_videos_h266_gui():
         preset=compression_config["preset"],
         qp=compression_config["qp"],
         resolution=compression_config["resolution"],
+        allow_larger_output=compression_config.get("allow_larger_output", False),
     )
 
     messagebox.showinfo(
@@ -647,6 +684,11 @@ Note: H.266/VVC encoding requires FFmpeg compiled with libvvenc.
         default=1,
         help="Number of parallel workers (default: 1).",
     )
+    parser.add_argument(
+        "--allow-larger-output",
+        action="store_true",
+        help="Keep output even when larger than input (e.g. for compatibility).",
+    )
     return parser
 
 
@@ -720,6 +762,7 @@ def main():
         qp=args.qp,
         resolution=args.resolution,
         worker_count=args.workers,
+        allow_larger_output=args.allow_larger_output,
     )
 
     if failure_count > 0:
