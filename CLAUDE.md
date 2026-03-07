@@ -263,3 +263,15 @@ uv run ruff check vaila/ --fix && uv run ruff format vaila/ && uv run ty check v
 ```bash
 uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
 ```
+
+---
+
+## Agents and skills
+
+Step-by-step workflows and specialized agent roles live under `.claude/`:
+
+- **`.claude/skills/`** — Reusable how-to guides (e.g. create a new analysis module, port a MATLAB algorithm). Follow the skill when asked to “create a new module” or “port this MATLAB code”.
+- **`.claude/agents/`** — Role cards for domain experts (biomechanics, GUI, video, tests). Use when the task fits that domain.
+- **`.claude/commands/`** — Slash-command specs (e.g. `/check`, `/new-module`). Run the steps described there when the user invokes the command.
+
+For “add a new analysis module”, use `.claude/skills/create-analysis-module.md`. For “convert MATLAB to Python”, use `.claude/skills/port-matlab-algorithm.md`.
