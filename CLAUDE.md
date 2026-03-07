@@ -19,11 +19,11 @@ Guidance for **Claude Code** when working with the **vailá** repository.
 
 The project uses the full [Astral](https://astral.sh) Rust-based toolchain:
 
-| Tool | Purpose | Replaces |
-|------|---------|---------|
-| [`uv`](https://docs.astral.sh/uv/) | Package manager, venv, Python installer | pip, poetry, pyenv, virtualenv |
-| [`ruff`](https://docs.astral.sh/ruff/) | Linter + formatter | flake8, black, isort, pyupgrade |
-| [`ty`](https://docs.astral.sh/ty/) | Static type checker (beta, Rust, 10-100x faster than mypy) | mypy, Pyright |
+| Tool                                   | Purpose                                                    | Replaces                        |
+| -------------------------------------- | ---------------------------------------------------------- | ------------------------------- |
+| [`uv`](https://docs.astral.sh/uv/)     | Package manager, venv, Python installer                    | pip, poetry, pyenv, virtualenv  |
+| [`ruff`](https://docs.astral.sh/ruff/) | Linter + formatter                                         | flake8, black, isort, pyupgrade |
+| [`ty`](https://docs.astral.sh/ty/)     | Static type checker (beta, Rust, 10-100x faster than mypy) | mypy, Pyright                   |
 
 > **Never use** bare `pip install`, `black`, `isort`, `flake8`, or `mypy` — always use the Astral equivalents via `uv run`.
 
@@ -85,12 +85,14 @@ uv run ruff format vaila/my_module.py
 ```
 
 **Inline suppression:**
+
 ```python
 x = some_var  # noqa: F841
 x = some_var  # noqa: F841, E501
 ```
 
 **Config in `pyproject.toml`:**
+
 ```toml
 [tool.ruff]
 target-version = "py312"
@@ -119,12 +121,14 @@ uv run ty check vaila/ --ignore division-by-zero
 ```
 
 **Inline suppression:**
+
 ```python
 x: int = "hello"  # ty: ignore[invalid-assignment]
 x: int = "hello"  # ty: ignore[invalid-assignment, unresolved-import]
 ```
 
 **Config in `pyproject.toml`:**
+
 ```toml
 [tool.ty.rules]
 unresolved-import  = "warn"   # "error" | "warn" | "ignore"
@@ -158,21 +162,23 @@ uv run pytest tests/ -v           # run tests
 
 `vaila.py` defines `Vaila(tk.Tk)`, organized into three frames:
 
-| Frame | Purpose |
-|-------|---------|
+| Frame       | Purpose                                                                             |
+| ----------- | ----------------------------------------------------------------------------------- |
 | **Frame A** | File Manager — rename, import, export, copy, move, remove, tree, find, SSH transfer |
-| **Frame B** | Multimodal Analysis — IMU, MoCap, Markerless 2D/3D, EMG, Force Plate, GNSS |
+| **Frame B** | Multimodal Analysis — IMU, MoCap, Markerless 2D/3D, EMG, Force Plate, GNSS          |
 | **Frame C** | Tools — CSV editing, C3D conversion, DLT reconstruction, video/image, visualization |
 
 **Lazy imports** are used in all handler methods to avoid loading the full dependency graph at startup.
 
 Two dispatch patterns:
+
 1. **Direct import + call** — runs in the same process
 2. **Subprocess via `run_vaila_module()`** — separate process (avoids Tkinter conflicts)
 
 ### Package Structure (`vaila/`)
 
 ~100 self-contained analysis modules. Each module:
+
 - Has a `run_*()` or `analyze_*()` entry point called from the GUI
 - Uses Tkinter `filedialog` for user input prompts
 - Reads CSV/C3D via `pandas` / `numpy` / `ezc3d`
@@ -180,15 +186,15 @@ Two dispatch patterns:
 
 **Key shared modules:**
 
-| Module | Role |
-|--------|------|
-| `data_processing.py` | CSV/C3D reading with auto-header detection |
-| `filtering.py` / `filter_utils.py` | Butterworth and FIR filter implementations |
-| `common_utils.py` | Header detection and data reshaping |
-| `dialogsuser.py` / `dialogsuser_cluster.py` | Reusable Tkinter input dialogs |
-| `filemanager.py` | File management (rename, copy, move, SSH transfer) |
-| `hardware_manager.py` | GPU/CPU detection, TensorRT export — **do not duplicate** |
-| `interp_smooth_split.py` | Interpolation, smoothing, splitting (GUI + CLI) |
+| Module                                      | Role                                                      |
+| ------------------------------------------- | --------------------------------------------------------- |
+| `data_processing.py`                        | CSV/C3D reading with auto-header detection                |
+| `filtering.py` / `filter_utils.py`          | Butterworth and FIR filter implementations                |
+| `common_utils.py`                           | Header detection and data reshaping                       |
+| `dialogsuser.py` / `dialogsuser_cluster.py` | Reusable Tkinter input dialogs                            |
+| `filemanager.py`                            | File management (rename, copy, move, SSH transfer)        |
+| `hardware_manager.py`                       | GPU/CPU detection, TensorRT export — **do not duplicate** |
+| `interp_smooth_split.py`                    | Interpolation, smoothing, splitting (GUI + CLI)           |
 
 ---
 
@@ -196,12 +202,12 @@ Two dispatch patterns:
 
 Copy the correct template to `pyproject.toml` **before** running `uv python pin` / `uv venv`:
 
-| Template | Target |
-|----------|--------|
-| `pyproject_win_cuda12.toml` | Windows + NVIDIA CUDA 12.1 |
-| `pyproject_linux_cuda12.toml` | Linux + NVIDIA CUDA 12.8 |
-| `pyproject_macos.toml` | macOS Apple Silicon (Metal/MPS) |
-| `pyproject_universal_cpu.toml` | CPU-only fallback |
+| Template                       | Target                          |
+| ------------------------------ | ------------------------------- |
+| `pyproject_win_cuda12.toml`    | Windows + NVIDIA CUDA 12.1      |
+| `pyproject_linux_cuda12.toml`  | Linux + NVIDIA CUDA 12.8        |
+| `pyproject_macos.toml`         | macOS Apple Silicon (Metal/MPS) |
+| `pyproject_universal_cpu.toml` | CPU-only fallback               |
 
 Install scripts handle this automatically: `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`.
 
@@ -210,7 +216,9 @@ Install scripts handle this automatically: `install_vaila_linux.sh`, `install_va
 ## Coding Conventions
 
 ### Mandatory dual-import pattern
+
 Every module must support both package import and standalone execution:
+
 ```python
 try:
     from .readcsv import read_csv_file      # package import
@@ -221,6 +229,7 @@ except ImportError:
 ```
 
 ### Rules
+
 - **GUI framework:** Tkinter only — never introduce Qt, wx, Dear PyGui, etc.
 - **Scientific variable names** (X, Y, Z, F, R, T, etc.) are valid — suppressed via ruff `N806`/`N803`
 - **Output dirs:** always timestamped → `processed_<type>_YYYYMMDD_HHMMSS/`
@@ -246,6 +255,7 @@ Sample data lives in `tests/vaila_and_jump/` (CSV + TOML).
 ## Common Task Recipes
 
 ### Add a new analysis module
+
 1. Create `vaila/my_module.py` with `run_my_module()` as entry point
 2. Apply dual-import pattern at the top
 3. Use helpers from `dialogsuser.py` for user prompts
@@ -255,11 +265,13 @@ Sample data lives in `tests/vaila_and_jump/` (CSV + TOML).
 7. Add unit test in `tests/`
 
 ### Fix all lint + type issues in one shot
+
 ```bash
 uv run ruff check vaila/ --fix && uv run ruff format vaila/ && uv run ty check vaila/
 ```
 
 ### Run a module standalone via CLI
+
 ```bash
 uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
 ```
@@ -270,8 +282,8 @@ uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
 
 Step-by-step workflows and specialized agent roles live under `.claude/`:
 
-- **`.claude/skills/`** — Reusable how-to guides (e.g. create a new analysis module, port a MATLAB algorithm). Follow the skill when asked to “create a new module” or “port this MATLAB code”.
-- **`.claude/agents/`** — Role cards for domain experts (biomechanics, GUI, video, tests). Use when the task fits that domain.
-- **`.claude/commands/`** — Slash-command specs (e.g. `/check`, `/new-module`). Run the steps described there when the user invokes the command.
+- **`.claude/skills/`** — Reusable how-to guides (e.g. [create a new analysis module](file:///home/preto/Preto/vaila/.claude/skills/create-analysis-module.md), [port a MATLAB algorithm](file:///home/preto/Preto/vaila/.claude/skills/port-matlab-algorithm.md)).
+- **`.claude/agents/`** — Role cards for domain experts (biomechanics, GUI, video, tests).
+- **`.claude/commands/`** — Slash-command specs (e.g. `/check`, `/new-module`).
 
-For “add a new analysis module”, use `.claude/skills/create-analysis-module.md`. For “convert MATLAB to Python”, use `.claude/skills/port-matlab-algorithm.md`.
+When asked to "create a new module", follow `.claude/skills/create-analysis-module.md`.
