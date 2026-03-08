@@ -78,38 +78,39 @@ if command -v conda &> /dev/null; then
     fi
 fi
 
-# Remove the system Applications symlink first (/Applications/vaila.app)
-# This should be done before removing the actual app bundle to avoid broken symlinks
+# Remove vaila from Applications first (before removing VAILA_HOME).
+# Try both system (/Applications) and user (~/Applications) locations.
+
+# 1. Remove /Applications/vaila.app (symlink or real bundle)
 if [ -e "$SYSTEM_APP_PATH" ] || [ -L "$SYSTEM_APP_PATH" ]; then
     echo "Removing vaila app from /Applications..."
     if [ -L "$SYSTEM_APP_PATH" ]; then
-        # It's a symlink, remove it with sudo
         sudo rm -f "$SYSTEM_APP_PATH"
     else
-        # It's a directory, remove recursively with sudo
         sudo rm -rf "$SYSTEM_APP_PATH"
     fi
-        if [ $? -eq 0 ]; then
-        echo "[OK] System Applications app removed successfully."
-        else
-        echo "Warning: Failed to remove system Applications app. You may need to remove it manually:"
-        echo "  sudo rm -rf $SYSTEM_APP_PATH"
-        fi
+    if [ $? -eq 0 ]; then
+        echo "[OK] /Applications/vaila.app removed successfully."
     else
-    echo "System Applications app not found. Skipping."
+        echo "Warning: Could not remove /Applications/vaila.app (sudo may have failed). You can remove it manually:"
+        echo "  sudo rm -rf $SYSTEM_APP_PATH"
+    fi
+else
+    echo "/Applications/vaila.app not found. Skipping."
 fi
 
-# Remove the user's Applications app bundle (~/Applications/vaila.app)
+# 2. Remove ~/Applications/vaila.app (actual app bundle when install used symlink in /Applications)
 if [ -e "$USER_APP_PATH" ] || [ -L "$USER_APP_PATH" ]; then
     echo "Removing vaila app from ~/Applications..."
     rm -rf "$USER_APP_PATH"
     if [ $? -eq 0 ]; then
-        echo "[OK] User Applications app removed successfully."
+        echo "[OK] ~/Applications/vaila.app removed successfully."
     else
-        echo "Warning: Failed to remove user Applications app. Continuing..."
+        echo "Warning: Could not remove ~/Applications/vaila.app. You can remove it manually:"
+        echo "  rm -rf $USER_APP_PATH"
     fi
 else
-    echo "User Applications app not found. Skipping."
+    echo "~/Applications/vaila.app not found. Skipping."
 fi
 
 # Remove the vaila installation directory (includes .venv, project files, run_vaila.sh)
@@ -133,6 +134,15 @@ if [ -f "$LOG_FILE" ]; then
     rm -f "$LOG_FILE" && echo "[OK] Log file removed." || echo "Warning: Failed to remove log file."
 else
     echo "Log file not found. Skipping."
+fi
+
+# Verify Applications are cleared; if not, tell user to remove manually
+if [ -e "$SYSTEM_APP_PATH" ] || [ -L "$SYSTEM_APP_PATH" ] || [ -e "$USER_APP_PATH" ] || [ -L "$USER_APP_PATH" ]; then
+    echo ""
+    echo "Note: vaila.app is still present in Applications. Remove it manually:"
+    [ -e "$SYSTEM_APP_PATH" ] || [ -L "$SYSTEM_APP_PATH" ] && echo "  sudo rm -rf $SYSTEM_APP_PATH"
+    [ -e "$USER_APP_PATH" ] || [ -L "$USER_APP_PATH" ] && echo "  rm -rf $USER_APP_PATH"
+    echo ""
 fi
 
 # Clean up Launch Services database to remove cached app references
