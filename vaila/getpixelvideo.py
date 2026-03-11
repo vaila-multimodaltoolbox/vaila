@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 06 March 2026
-Version: 0.4.0
+Update: 11 March 2026
+Version: 0.4.1
 Python Version: 3.12.12
 
 Description:
@@ -17,8 +17,8 @@ zoom functionality for precise annotations. The window can now be resized dynami
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
 
-New Features in This Version 0.4.0:
-- Load PNG Sequence from Folder
+New Features in This Version 0.4.1:
+- fix start GUI mode
 
 How to use:
 ------------
