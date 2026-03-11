@@ -6814,7 +6814,7 @@ def get_media_path():
 
         dialog = tk.Toplevel(root)
         dialog.title("Open Media")
-        dialog.transient(root)
+        dialog.attributes("-topmost", True)
         dialog.grab_set()
         tk.Label(
             dialog, text="Open video/image or PNG sequence folder", font=("Arial", 10)
