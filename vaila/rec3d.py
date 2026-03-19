@@ -188,9 +188,23 @@ def process_files_in_directory(dlt_params_dfs, input_directory, output_directory
             header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
 
         rec_coords_df = pd.DataFrame(rec_coords_array, columns=header)  # type: ignore
+        rec_coords_df["frame"] = rec_coords_df["frame"].astype(int)
 
         output_file = os.path.join(output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.3d")
-        rec_coords_df.to_csv(output_file, index=False, float_format="%.6f")
+
+        with open(output_file, "w") as fh:
+            fh.write(",".join(rec_coords_df.columns) + "\n")
+            for _, row in rec_coords_df.iterrows():
+                vals = []
+                for col in rec_coords_df.columns:
+                    v = row[col]
+                    if col == "frame":
+                        vals.append(str(int(v)))
+                    elif pd.isna(v):
+                        vals.append("")
+                    else:
+                        vals.append(f"{v:.6f}")
+                fh.write(",".join(vals) + "\n")
 
     print("\n=== Processing Complete ===")
     print(f"Processed {total_files} files")

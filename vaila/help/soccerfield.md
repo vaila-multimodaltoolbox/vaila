@@ -50,7 +50,7 @@ License:
 
 ## 🔧 Main Functions
 
-**Total functions found:** 20
+**Total functions found:** 22
 
 - `draw_line`
 - `draw_circle`
@@ -72,6 +72,8 @@ License:
 - `save_markers_csv`
 - `setup_manual_marker_events`
 - `clear_all_markers`
+- `show_heatmap`
+- `_draw_field_on_ax`
 
 
 
