@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 09 March 2026
-Version: 0.3.31
+Update Date: 19 March 2026
+Version: 0.3.32
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -155,7 +155,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 09.March.2026 v0.3.31 (Python 3.12.12)
+vailá - 19.March.2026 v0.3.32 (Python 3.12.12)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -261,7 +261,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 09.March.2026 v0.3.31 (Python 3.12.12)")
+        self.title("vailá - 19.March.2026 v0.3.32 (Python 3.12.12)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -1246,11 +1246,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r4_c1 - Visualization: vailá
-        vaila_btn18 = tk.Button(
+        # C_C_r4_c1 - Visualization: Draw Tennis Court
+        draw_tenniscourt_btn = tk.Button(
             tools_col3,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Draw Tennis Court",
+            command=self.draw_tennis_court,
             width=button_width,
         )
 
@@ -1285,7 +1285,7 @@ class Vaila(tk.Tk):
         plot_3d_btn.grid(row=1, column=1, padx=2, pady=2)
         draw_soccerfield_btn.grid(row=2, column=0, padx=2, pady=2)
         stroboscopic_btn.grid(row=2, column=1, padx=2, pady=2)
-        vaila_btn18.grid(row=3, column=0, padx=2, pady=2)
+        draw_tenniscourt_btn.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn19.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn20.grid(row=4, column=0, padx=2, pady=2)
         vaila_btn21.grid(row=4, column=1, padx=2, pady=2)
@@ -2613,15 +2613,21 @@ class Vaila(tk.Tk):
 
     # C_C_r3_c1
     def draw_soccerfield(self):
-        """Runs the soccer field drawing module.
-
-        This function runs the soccer field drawing module, which can be used to
-        visualize a soccer field using Matplotlib.
-
-        """
+        """Runs the soccer field drawing module."""
         from vaila import soccerfield
 
         soccerfield.run_soccerfield()
+
+    # C_C_r4_c1
+    def draw_tennis_court(self):
+        """Runs the tennis court visualization module.
+
+        Opens an ITF-standard tennis court with support for loading player
+        trajectories from vaila-format CSV files and manual marker creation.
+        """
+        from vaila import tennis_court
+
+        tennis_court.run_tenniscourt()
 
     # C_C_r3_c2
     def run_stroboscopic(self):
