@@ -30,15 +30,72 @@ Description:
 """
 
 import argparse
+import contextlib
 import os
+import tkinter as tk
 from datetime import datetime
 from pathlib import Path
-from tkinter import Tk, filedialog, messagebox, simpledialog
+from tkinter import Tk, filedialog, messagebox
 
 import numpy as np
 import pandas as pd
 from numpy.linalg import inv
 from rich import print
+
+
+def _askinteger_safe(
+    parent: tk.Tk,
+    title: str,
+    prompt: str,
+    *,
+    minvalue: int = 1,
+    initialvalue: int = 100,
+) -> int | None:
+    """Ask for an integer without crashing when Tk grabs are already taken."""
+    win = tk.Toplevel(parent)
+    win.title(title)
+    win.resizable(False, False)
+    win.transient(parent)
+
+    result: dict[str, int | None] = {"value": None}
+
+    tk.Label(win, text=prompt, font=("Arial", 10)).pack(padx=12, pady=(12, 6))
+    entry = tk.Entry(win, width=12)
+    entry.insert(0, str(initialvalue))
+    entry.pack(padx=12, pady=6)
+    entry.focus_set()
+    entry.select_range(0, tk.END)
+
+    btn_frame = tk.Frame(win)
+    btn_frame.pack(padx=12, pady=(8, 12))
+
+    def _ok() -> None:
+        try:
+            value = int(entry.get())
+        except Exception:
+            value = None
+        if value is None or value < minvalue:
+            messagebox.showerror("Error", f"Value must be >= {minvalue}.")
+            return
+        result["value"] = value
+        win.destroy()
+
+    def _cancel() -> None:
+        result["value"] = None
+        win.destroy()
+
+    tk.Button(btn_frame, text="OK", width=10, bg="#4CAF50", fg="white", command=_ok).pack(
+        side=tk.LEFT, padx=6
+    )
+    tk.Button(btn_frame, text="Cancel", width=10, bg="#B71C1C", fg="white", command=_cancel).pack(
+        side=tk.LEFT, padx=6
+    )
+
+    with contextlib.suppress(tk.TclError):
+        win.grab_set()
+
+    parent.wait_window(win)
+    return result["value"]
 
 
 def read_coordinates(file_path, usecols=None):
@@ -114,7 +171,30 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, da
 
         # Save with timestamp
         output_file = os.path.join(output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.2d")
-        rec_coords_df.to_csv(output_file, index=False, float_format="%.6f")
+        # Normalize output to vaila's convention: `Frame` integer + float coords with %.6f.
+        rec_coords_df["frame"] = rec_coords_df["frame"].astype(int)
+        rec_coords_df = rec_coords_df.rename(columns={"frame": "Frame"})
+
+        def _write_output(df: pd.DataFrame, out_path: str) -> None:
+            coord_cols_local = [c for c in df.columns if c != "Frame"]
+            with open(out_path, "w") as fh:
+                fh.write(",".join(df.columns) + "\n")
+                for _, row_ in df.iterrows():
+                    vals: list[str] = []
+                    for col in df.columns:
+                        v = row_[col]
+                        if col == "Frame":
+                            vals.append(str(int(v)))
+                        elif pd.isna(v):
+                            vals.append("")
+                        else:
+                            vals.append(f"{float(v):.6f}" if col in coord_cols_local else str(v))
+                    fh.write(",".join(vals) + "\n")
+
+        output_file_2d = output_file
+        output_file_csv = os.path.splitext(output_file_2d)[0] + ".csv"
+        _write_output(rec_coords_df, output_file_2d)
+        _write_output(rec_coords_df, output_file_csv)
 
     print("\n=== Processing Complete ===")
     print(f"Processed {total_files} files")
@@ -167,8 +247,12 @@ def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=No
 
         # Step 4: Ask for data frequency
         print("Step 4: Setting data frequency...")
-        data_rate = simpledialog.askinteger(
-            "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
+        data_rate = _askinteger_safe(
+            root,
+            "Data Frequency",
+            "Enter the data frequency (Hz):",
+            minvalue=1,
+            initialvalue=100,
         )
         if data_rate is None:
             messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")

@@ -4,8 +4,8 @@ vailaplot2d.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Created: 23 September 2024
-Updated: 03 June 2025
-Version: 0.0.2
+Updated: 19 March 2026
+Version: 0.0.3
 
 Description:
 ------------
@@ -27,6 +27,8 @@ Plot Types Supported:
 4. Boxplot: Generates boxplots for selected data columns.
 5. SPM (Statistical Parametric Mapping): Conducts SPM analysis using data from
    multiple headers.
+6. XY Plot: Cartesian 2D plot of X vs Y coordinates with equal aspect ratio,
+   auto-detects _x/_y column pairs or accepts manual pair selection.
 
 Functionalities:
 ----------------
@@ -279,9 +281,16 @@ class PlotGUI:
         btn_spm.grid(row=1, column=1, padx=8, pady=8, sticky="ew")
         self.plot_buttons.append(btn_spm)
 
-        # Empty cell in row 2, column 2 for symmetry
-        empty_label = Label(plot_type_frame, text="")
-        empty_label.grid(row=1, column=2, padx=8, pady=8)
+        btn_xy = Button(
+            plot_type_frame,
+            text="XY Plot",
+            command=lambda: self._set_plot_type("xy_plot"),
+            width=20,
+            height=2,
+            font=("Arial", 10),
+        )
+        btn_xy.grid(row=1, column=2, padx=8, pady=8, sticky="ew")
+        self.plot_buttons.append(btn_xy)
 
         # Control buttons frame
         control_frame = LabelFrame(main_frame, text="Plot Controls", padx=15, pady=15)
@@ -589,6 +598,8 @@ class FileSelectionWindow:
             plot_boxplot()
         elif self.plot_type == "spm":
             plot_spm()
+        elif self.plot_type == "xy_plot":
+            plot_xy()
 
         # Update parent status
         if hasattr(self.parent, "status_var"):
@@ -1059,6 +1070,109 @@ def plot_spm():
         messagebox.showwarning("Warning", "No valid SPM plots could be generated.")
         return
 
+    plt.tight_layout()
+    plt.show()
+
+
+def detect_coordinate_pairs(headers: list[str]) -> list[tuple[str, str]]:
+    """Find _x/_y column pairs from a list of headers (case-insensitive suffix)."""
+    lower_map: dict[str, str] = {h.lower(): h for h in headers}
+    pairs: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    for h in headers:
+        hl = h.lower()
+        if hl in seen:
+            continue
+        for sx, sy in [("_x", "_y"), (".x", ".y"), ("_X", "_Y")]:
+            sxl, syl = sx.lower(), sy.lower()
+            if hl.endswith(sxl):
+                stem = hl[: -len(sxl)]
+                partner = stem + syl
+                if partner in lower_map and lower_map[partner].lower() not in seen:
+                    pairs.append((lower_map[hl], lower_map[partner]))
+                    seen.add(hl)
+                    seen.add(partner)
+                    break
+    return pairs
+
+
+def plot_xy():
+    """Plot X vs Y in a 2D cartesian plane with equal aspect ratio.
+
+    Auto-detects _x/_y column pairs from selected headers.
+    Falls back to treating consecutive header pairs if no suffix matches are found.
+    """
+    if not plt.get_fignums():
+        plt.figure()
+
+    ax = plt.gca()
+    plot_count = 0
+
+    for file_idx, file_path in enumerate(selected_files):
+        if file_path in loaded_data_cache:
+            data = loaded_data_cache[file_path]
+        else:
+            file_ext = file_path.lower().split(".")[-1]
+            try:
+                if file_ext == "csv":
+                    data = read_csv_with_encoding(file_path, skipfooter=0)
+                elif file_ext == "xlsx":
+                    data = pd.read_excel(file_path)
+                elif file_ext == "ods":
+                    data = pd.read_excel(file_path, engine="odf")
+                elif file_ext == "c3d":
+                    data = read_c3d_file(file_path)
+                    if data is None:
+                        continue
+                else:
+                    data = read_csv_with_encoding(file_path, skipfooter=0)
+                loaded_data_cache[file_path] = data
+            except Exception as e:
+                print(f"Error reading {file_path}: {e}")
+                continue
+
+        available = [h for h in selected_headers if h in data.columns]
+        if not available:
+            continue
+
+        pairs = detect_coordinate_pairs(available)
+
+        if not pairs:
+            if len(available) >= 2 and len(available) % 2 == 0:
+                pairs = [(available[i], available[i + 1]) for i in range(0, len(available), 2)]
+            elif len(available) >= 2:
+                pairs = [(available[0], available[1])]
+            else:
+                print(f"[WARNING] Need at least 2 headers for XY plot, got {len(available)}")
+                continue
+
+        for pair_idx, (col_x, col_y) in enumerate(pairs):
+            color = predefined_colors[(file_idx * len(pairs) + pair_idx) % len(predefined_colors)]
+            ax.plot(
+                data[col_x],
+                data[col_y],
+                label=f"{os.path.basename(file_path)} — {col_x} vs {col_y}",
+                color=color,
+                linewidth=1.2,
+            )
+            plot_count += 1
+
+    if plot_count == 0:
+        messagebox.showwarning(
+            "Warning",
+            "No data was plotted. Select at least 2 headers (or _x/_y pairs).",
+        )
+        return
+
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.axhline(0, color="lightgray", linewidth=0.8, zorder=0)
+    ax.axvline(0, color="lightgray", linewidth=0.8, zorder=0)
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_title("XY Cartesian Plot (equal aspect)")
+    ax.legend(loc="best", fontsize="small")
+    ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
 
