@@ -6,17 +6,21 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 20 March 2025
-Updated: 08 August 2025
-Version: 0.0.5
+Updated: 19 March 2026
+Version: 0.0.6
 
 Description:
     This script draws a soccer field based on the coordinates in soccerfield_ref3d.csv.
     It uses matplotlib to create a visual representation with correct dimensions.
+    Supports overlaying marker trajectories, scout events, and KDE heatmaps.
 
 Usage:
-    Run the script from the command line:
+    GUI:
         python soccerfield.py
-
+    CLI:
+        python soccerfield.py --field <path_to_csv>
+        python soccerfield.py --markers <path_to_markers_csv>
+        python soccerfield.py --markers <path_to_markers_csv> --heatmap
     Or import the functions to use in other scripts:
         from soccerfield import plot_field
 
@@ -50,6 +54,7 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from rich import print
 
@@ -1498,6 +1503,10 @@ def run_soccerfield():
                 "Clear All Markers",
                 "Removes all manually created markers from the field.",
             ),
+            (
+                "Heatmap",
+                "Generates a KDE heatmap from loaded Markers CSV or Scout CSV trajectories.",
+            ),
         ]
 
         for button, desc in button_help:
@@ -1872,6 +1881,242 @@ def run_soccerfield():
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open filters dialog: {str(e)}")
 
+    def show_heatmap():
+        """Generate a KDE heatmap from loaded marker trajectories or scout events."""
+        if current_ax[0] is None or current_canvas[0] is None:
+            messagebox.showwarning("Warning", "Load the field first.")
+            return
+
+        has_markers = current_markers_csv[0] and os.path.exists(current_markers_csv[0])
+        has_scout = current_scout_csv[0] and os.path.exists(current_scout_csv[0])
+
+        if not has_markers and not has_scout:
+            messagebox.showwarning(
+                "No data",
+                "Load a Markers CSV or Scout CSV first to generate a heatmap.",
+            )
+            return
+
+        win = tk.Toplevel(root)
+        win.title("Heatmap — Soccer Field")
+        win.geometry("950x680")
+        win.resizable(True, True)
+
+        ctrl = Frame(win)
+        ctrl.pack(side=tk.TOP, fill=tk.X, padx=8, pady=6)
+
+        ALL = "All"
+
+        # Source selector
+        tk.Label(ctrl, text="Source:", font=("Arial", 9, "bold")).pack(side=tk.LEFT)
+        sources = []
+        if has_markers:
+            sources.append("Markers CSV")
+        if has_scout:
+            sources.append("Scout CSV")
+        source_var = tk.StringVar(value=sources[0])
+        src_cb = tk.OptionMenu(ctrl, source_var, *sources)
+        src_cb.pack(side=tk.LEFT, padx=4)
+
+        # Marker / player filter
+        tk.Label(ctrl, text="Filter:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(8, 0))
+        filter_var = tk.StringVar(value=ALL)
+        filter_cb = tk.OptionMenu(ctrl, filter_var, ALL)
+        filter_cb.pack(side=tk.LEFT, padx=4)
+
+        # Colormap
+        tk.Label(ctrl, text="Cmap:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(8, 0))
+        cmap_var = tk.StringVar(value="Reds")
+        cmap_cb = tk.OptionMenu(
+            ctrl,
+            cmap_var,
+            "Reds",
+            "Blues",
+            "Greens",
+            "Oranges",
+            "YlOrRd",
+            "viridis",
+            "plasma",
+            "inferno",
+        )
+        cmap_cb.pack(side=tk.LEFT, padx=4)
+
+        fig_hm, ax_hm = plt.subplots(figsize=(8.5, 5.5))
+        canvas_hm = FigureCanvasTkAgg(fig_hm, master=win)
+        canvas_hm.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        def refresh_filters(*_args):
+            src = source_var.get()
+            menu = filter_cb["menu"]
+            menu.delete(0, tk.END)
+            opts = [ALL]
+            if src == "Markers CSV" and has_markers:
+                mdf = pd.read_csv(current_markers_csv[0])
+                names = sorted(
+                    {
+                        c.rsplit("_", 1)[0]
+                        for c in mdf.columns
+                        if c != "frame" and (c.endswith("_x") or c.endswith("_y"))
+                    }
+                )
+                opts += names
+            elif src == "Scout CSV" and has_scout:
+                sdf = pd.read_csv(current_scout_csv[0])
+                if "team" in sdf.columns:
+                    opts += sorted(sdf["team"].dropna().unique().tolist())
+            for o in opts:
+                menu.add_command(label=o, command=lambda v=o: filter_var.set(v))
+            filter_var.set(ALL)
+
+        source_var.trace_add("write", refresh_filters)
+        refresh_filters()
+
+        def draw_heatmap():
+            try:
+                ax_hm.clear()
+
+                csv_path_for_field = current_field_csv[0] if current_field_csv[0] else None
+                if csv_path_for_field is None:
+                    models_dir = os.path.join(os.path.dirname(__file__), "models")
+                    csv_path_for_field = os.path.join(models_dir, "soccerfield_ref3d.csv")
+                field_df = pd.read_csv(csv_path_for_field)
+                plot_field.__wrapped__(field_df, ax=ax_hm) if hasattr(
+                    plot_field, "__wrapped__"
+                ) else _draw_field_on_ax(ax_hm, field_df)
+
+                src = source_var.get()
+                flt = filter_var.get()
+                xs, ys = [], []
+
+                if src == "Markers CSV" and has_markers:
+                    mdf = pd.read_csv(current_markers_csv[0]).replace("", np.nan)
+                    names = sorted(
+                        {
+                            c.rsplit("_", 1)[0]
+                            for c in mdf.columns
+                            if c != "frame" and (c.endswith("_x") or c.endswith("_y"))
+                        }
+                    )
+                    for nm in names:
+                        if flt != ALL and nm != flt:
+                            continue
+                        xc, yc = f"{nm}_x", f"{nm}_y"
+                        if xc in mdf.columns and yc in mdf.columns:
+                            sub = mdf[[xc, yc]].dropna()
+                            xs.extend(sub[xc].tolist())
+                            ys.extend(sub[yc].tolist())
+
+                elif src == "Scout CSV" and has_scout:
+                    sdf = pd.read_csv(current_scout_csv[0]).replace("", np.nan)
+                    if flt != ALL and "team" in sdf.columns:
+                        sdf = sdf[sdf["team"] == flt]
+                    if "pos_x_m" in sdf.columns and "pos_y_m" in sdf.columns:
+                        sub = sdf[["pos_x_m", "pos_y_m"]].dropna()
+                        xs = sub["pos_x_m"].tolist()
+                        ys = sub["pos_y_m"].tolist()
+
+                if len(xs) < 2:
+                    ax_hm.set_title("Not enough points for heatmap")
+                    canvas_hm.draw()
+                    return
+
+                hm_df = pd.DataFrame({"x": xs, "y": ys})
+                sns.kdeplot(
+                    data=hm_df,
+                    x="x",
+                    y="y",
+                    cmap=cmap_var.get(),
+                    fill=True,
+                    alpha=0.6,
+                    bw_method="scott",
+                    thresh=0.05,
+                    ax=ax_hm,
+                )
+
+                ax_hm.set_xlim(-5, 110)
+                ax_hm.set_ylim(-5, 73)
+                ax_hm.set_aspect("equal")
+
+                title = "Heatmap"
+                if flt != ALL:
+                    title += f" — {flt}"
+                ax_hm.set_title(title)
+                canvas_hm.draw()
+
+            except Exception as exc:
+                messagebox.showerror("Error", f"Heatmap failed: {exc}")
+
+        Button(
+            ctrl, text="Show", command=draw_heatmap, bg="#4CAF50", fg="white", padx=8, pady=2
+        ).pack(side=tk.LEFT, padx=8)
+
+        draw_heatmap()
+
+    def _draw_field_on_ax(ax, field_df):
+        """Minimal re-draw of the soccer field on a given axes (for heatmap overlay)."""
+        points = {}
+        for _, row in field_df.iterrows():
+            points[row["point_name"]] = (row["x"], row["y"], int(row["point_number"]))
+
+        field_w = points["top_right_corner"][0]
+        field_h = points["top_right_corner"][1]
+
+        ax.set_facecolor("#2e8b57")
+        ax.add_patch(
+            patches.Rectangle(
+                (0, 0),
+                field_w,
+                field_h,
+                facecolor="#2e8b57",
+                edgecolor="white",
+                linewidth=2,
+                zorder=0,
+            )
+        )
+        # Halfway line
+        mid_x = field_w / 2
+        ax.plot([mid_x, mid_x], [0, field_h], color="white", linewidth=2, zorder=1)
+        # Center circle
+        ax.add_patch(
+            patches.Circle(
+                (mid_x, field_h / 2),
+                9.15,
+                edgecolor="white",
+                facecolor="none",
+                linewidth=2,
+                zorder=1,
+            )
+        )
+        # Penalty areas
+        for x0, sign in [(0, 1), (field_w, -1)]:
+            ax.add_patch(
+                patches.Rectangle(
+                    (x0 + sign * min(0, -16.5), field_h / 2 - 20.16),
+                    16.5,
+                    40.32,
+                    edgecolor="white",
+                    facecolor="none",
+                    linewidth=2,
+                    zorder=1,
+                )
+            )
+            ax.add_patch(
+                patches.Rectangle(
+                    (x0 + sign * min(0, -5.5), field_h / 2 - 9.16),
+                    5.5,
+                    18.32,
+                    edgecolor="white",
+                    facecolor="none",
+                    linewidth=2,
+                    zorder=1,
+                )
+            )
+        ax.set_xlim(-5, field_w + 5)
+        ax.set_ylim(-5, field_h + 5)
+        ax.set_aspect("equal")
+        ax.set_xlabel("X (m)")
+        ax.set_ylabel("Y (m)")
+
     # Add buttons
     Button(
         button_frame,
@@ -1964,6 +2209,16 @@ def run_soccerfield():
     )
     scout_filters_button.pack(side=tk.LEFT, padx=5, pady=5)
 
+    Button(
+        button_frame,
+        text="Heatmap",
+        command=show_heatmap,
+        bg="#D84315",
+        fg="white",
+        padx=10,
+        pady=5,
+    ).pack(side=tk.LEFT, padx=5, pady=5)
+
     # Add manual marker mode button
     manual_marker_button = Button(
         button_frame,
@@ -2010,4 +2265,54 @@ def run_soccerfield():
 
 
 if __name__ == "__main__":
-    run_soccerfield()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="vailá — Soccer Field Visualization")
+    parser.add_argument("--field", type=str, help="Path to field model CSV")
+    parser.add_argument("--markers", type=str, help="Path to vaila-format markers CSV")
+    parser.add_argument(
+        "--heatmap",
+        action="store_true",
+        help="Generate a heatmap from --markers data (requires --markers)",
+    )
+    args = parser.parse_args()
+
+    if args.heatmap and args.markers:
+        _field_csv = args.field
+        if _field_csv is None:
+            _models = os.path.join(os.path.dirname(__file__), "models")
+            _field_csv = os.path.join(_models, "soccerfield_ref3d.csv")
+        _fdf = pd.read_csv(_field_csv)
+        _fig, _ax = plot_field(_fdf, show_reference_points=False, show_axis_values=False)
+        _mdf = pd.read_csv(args.markers).replace("", np.nan)
+        _names = sorted(
+            {
+                c.rsplit("_", 1)[0]
+                for c in _mdf.columns
+                if c != "frame" and (c.endswith("_x") or c.endswith("_y"))
+            }
+        )
+        _xs, _ys = [], []
+        for _nm in _names:
+            _xc, _yc = f"{_nm}_x", f"{_nm}_y"
+            if _xc in _mdf.columns and _yc in _mdf.columns:
+                _sub = _mdf[[_xc, _yc]].dropna()
+                _xs.extend(_sub[_xc].tolist())
+                _ys.extend(_sub[_yc].tolist())
+        if len(_xs) >= 2:
+            sns.kdeplot(
+                data=pd.DataFrame({"x": _xs, "y": _ys}),
+                x="x",
+                y="y",
+                cmap="Reds",
+                fill=True,
+                alpha=0.6,
+                bw_method="scott",
+                thresh=0.05,
+                ax=_ax,
+            )
+        _ax.set_title("Heatmap")
+        plt.tight_layout()
+        plt.show()
+    else:
+        run_soccerfield()
