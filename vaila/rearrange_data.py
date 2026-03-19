@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 15 Oct 2025
-Version: 0.0.7
+Update Date: 19 March 2026
+Version: 0.0.8
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -47,7 +47,7 @@ import os
 import pathlib
 import tkinter as tk
 from datetime import datetime
-from tkinter import Scrollbar, filedialog, messagebox, simpledialog
+from tkinter import Scrollbar, filedialog, messagebox, simpledialog, ttk
 
 import numpy as np
 import pandas as pd
@@ -1831,13 +1831,37 @@ def batch_convert_dvideo(directory_path):
     print(f"All files have been converted and saved to {save_directory}")
 
 
-def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None, chunk_size=10000):
+def extract_bbox_point(x_min, x_max, y_min, y_max, point):
+    """Calcular o ponto desejado da bounding box."""
+    if point == "center":
+        return (x_min + x_max) / 2, (y_min + y_max) / 2
+    elif point == "top-left":
+        return x_min, y_min
+    elif point == "top-middle":
+        return (x_min + x_max) / 2, y_min
+    elif point == "top-right":
+        return x_max, y_min
+    elif point == "middle-left":
+        return x_min, (y_min + y_max) / 2
+    elif point == "middle-right":
+        return x_max, (y_min + y_max) / 2
+    elif point == "bottom-left":
+        return x_min, y_max
+    elif point == "bottom-middle":
+        return (x_min + x_max) / 2, y_max
+    elif point == "bottom-right":
+        return x_max, y_max
+    else:
+        return (x_min + x_max) / 2, (y_min + y_max) / 2
+
+
+def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None, chunk_size=10000, point="center"):
     """Convert a YOLO tracker file to a Vaila CSV file."""
     # Print the directory and name of the script being executed
     print(f"Running script: {pathlib.Path(__file__).name}")
     print(f"Script directory: {pathlib.Path(__file__).parent}")
 
-    print(f"Converting YOLO tracker file: {tracker_file}")
+    print(f"Converting YOLO tracker file: {tracker_file} using point: {point}")
 
     try:
         # Configuração do diretório de saída
@@ -1849,51 +1873,93 @@ def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None, chun
         base_name = os.path.splitext(os.path.basename(tracker_file))[0]
         output_file = os.path.join(save_directory, f"{base_name}_pixelformat.csv")
 
-        # Primeira passagem: identificar IDs únicos
-        print("Analyzing file structure...")
-        column_names = pd.read_csv(tracker_file, nrows=1).columns
-        person_ids = sorted(
-            [int(col.split("_")[1]) for col in column_names if col.startswith("ID_")]
-        )
+        # Evaluate CSV format to pre-determine columns
+        sample_df = pd.read_csv(tracker_file, nrows=1)
+        columns = sample_df.columns
+        
+        is_long_format = "X_min" in columns and "Tracker ID" in columns
+        is_wide_format = any(col.startswith("X_min_") for col in columns)
+        
+        tracker_ids = []
+        if is_long_format:
+            print("Detected LONG format (e.g. YOLO track per-ID csv)")
+            tracker_ids = sorted(pd.read_csv(tracker_file, usecols=["Tracker ID"]).dropna()["Tracker ID"].unique().astype(int))
+        elif is_wide_format:
+            print("Detected WIDE format (e.g. merged YOLO track csv)")
+        else:
+            # Fallback legacy format (e.g. X_1, Y_1)
+            print("Detected LEGACY format (e.g. X_1, Y_1)")
+            tracker_ids = sorted([int(col.split("_")[1]) for col in columns if col.startswith("ID_")])
 
         # Processar o arquivo em chunks
         print(f"Processing file in chunks of {chunk_size} rows...")
         first_chunk = True
 
-        # Usar chunked reading para processar o arquivo
         for chunk_number, chunk in enumerate(pd.read_csv(tracker_file, chunksize=chunk_size)):
             print(f"Processing chunk {chunk_number + 1}...")
 
-            # Criar todos os dados em um dicionário primeiro
-            data = {"frame": chunk["Frame"]}
+            # Cast frame to int
+            chunk = chunk.dropna(subset=["Frame"])
+            chunk["Frame"] = chunk["Frame"].astype(int)
+            
+            new_chunk = pd.DataFrame()
+            
+            if is_long_format:
+                chunk["_X"], chunk["_Y"] = extract_bbox_point(
+                    chunk["X_min"], chunk["X_max"], chunk["Y_min"], chunk["Y_max"], point
+                )
+                # Pivot
+                pivot_df = chunk.pivot_table(index="Frame", columns="Tracker ID", values=["_X", "_Y"], aggfunc="first")
+                
+                expected_cols = []
+                for t_id in tracker_ids:
+                    expected_cols.append(("_X", t_id))
+                    expected_cols.append(("_Y", t_id))
+                
+                pivot_df = pivot_df.reindex(columns=pd.MultiIndex.from_tuples(expected_cols))
+                
+                new_cols = []
+                for col_type, t_id in pivot_df.columns:
+                    new_cols.append(f"p{t_id}_x" if col_type == "_X" else f"p{t_id}_y")
+                        
+                pivot_df.columns = new_cols
+                new_chunk = pivot_df.reset_index().rename(columns={"Frame": "frame"})
+                
+            elif is_wide_format:
+                new_chunk["frame"] = chunk["Frame"]
+                
+                wide_suffixes = [col[6:] for col in chunk.columns if col.startswith("X_min_")]
+                for suffix in wide_suffixes:
+                    try:
+                        t_id = int(suffix.split("_id_")[-1])
+                    except ValueError:
+                        t_id = suffix
+                        
+                    x, y = extract_bbox_point(
+                        chunk[f"X_min_{suffix}"], chunk[f"X_max_{suffix}"],
+                        chunk[f"Y_min_{suffix}"], chunk[f"Y_max_{suffix}"], point
+                    )
+                    new_chunk[f"p{t_id}_x"] = x
+                    new_chunk[f"p{t_id}_y"] = y
+                    
+            else:
+                new_chunk["frame"] = chunk["Frame"]
+                for idx, t_id in enumerate(tracker_ids):
+                    x_col = f"X_{t_id}"
+                    y_col = f"Y_{t_id}"
+                    if x_col in chunk.columns and y_col in chunk.columns:
+                        new_chunk[f"p{idx + 1}_x"] = chunk[x_col]
+                        new_chunk[f"p{idx + 1}_y"] = chunk[y_col]
+                    else:
+                        new_chunk[f"p{idx + 1}_x"] = np.nan
+                        new_chunk[f"p{idx + 1}_y"] = np.nan
 
-            # Processar dados de cada pessoa
-            for idx, person_id in enumerate(person_ids):
-                x_col = f"X_{person_id}"
-                y_col = f"Y_{person_id}"
-
-                if x_col in chunk.columns and y_col in chunk.columns:
-                    data[f"p{idx + 1}_x"] = chunk[x_col]
-                    data[f"p{idx + 1}_y"] = chunk[y_col]
-                else:
-                    data[f"p{idx + 1}_x"] = np.nan
-                    data[f"p{idx + 1}_y"] = np.nan
-
-            # Criar o DataFrame de uma vez só com todas as colunas
-            new_chunk = pd.DataFrame(data)
-
-            # Escrever chunk no arquivo
             mode = "w" if first_chunk else "a"
             header = first_chunk
-            new_chunk.to_csv(
-                output_file, mode=mode, header=header, index=False, float_format="%.3f"
-            )
-
+            new_chunk.to_csv(output_file, mode=mode, header=header, index=False, float_format="%.3f")
+            
             first_chunk = False
-
-            # Liberar memória
             del new_chunk
-            del data
             gc.collect()
 
         print(f"Conversion completed. File saved to: {output_file}")
@@ -1904,7 +1970,7 @@ def convert_yolo_tracker_to_pixel_format(tracker_file, save_directory=None, chun
         return None
 
 
-def batch_convert_yolo_tracker(directory_path=None):
+def batch_convert_yolo_tracker(directory_path=None, point=None, chunk_size=None):
     """
     Batch converts all YOLO tracker files in a directory to pixel format.
     """
@@ -1915,10 +1981,8 @@ def batch_convert_yolo_tracker(directory_path=None):
         print("No directory selected.")
         return
 
-    # Find all potential YOLO tracker files
     potential_files = [
-        f
-        for f in os.listdir(directory_path)
+        f for f in os.listdir(directory_path)
         if f.endswith(".csv") and ("all_persons_positions" in f or "person" in f)
     ]
 
@@ -1932,42 +1996,68 @@ def batch_convert_yolo_tracker(directory_path=None):
     save_directory = os.path.join(directory_path, f"Convert_YOLO_to_Pixel_{timestamp}")
     os.makedirs(save_directory, exist_ok=True)
 
-    # Process each file
+    points = [
+        "center", "top-left", "top-middle", "top-right",
+        "middle-left", "middle-right", "bottom-left",
+        "bottom-middle", "bottom-right"
+    ]
+
+    # Ask for point if not provided via CLI
+    if point is None:
+        try:
+            point_dialog = tk.Toplevel()
+            point_dialog.title("Select BBox Point")
+            point_dialog.geometry("300x150")
+            
+            tk.Label(point_dialog, text="Select point to extract from Bounding Box:").pack(pady=10)
+            
+            point_var = tk.StringVar(value="center")
+            point_menu = ttk.Combobox(point_dialog, textvariable=point_var, values=points, state="readonly")
+            point_menu.pack(pady=5)
+            
+            def on_confirm():
+                point_dialog.destroy()
+                
+            tk.Button(point_dialog, text="Confirm", command=on_confirm).pack(pady=10)
+            point_dialog.wait_window()
+            
+            point = point_var.get()
+        except:
+            point = "center"
+
+    # Ask for chunk size if not provided via CLI
+    if chunk_size is None:
+        try:
+            chunk_size = simpledialog.askinteger(
+                "Chunk Size",
+                "Enter chunk size for processing:\n"
+                + "- Small files: 10000\n"
+                + "- Medium: 5000\n"
+                + "- Large: 1000\n"
+                + "- Very large: 500",
+                initialvalue=5000,
+                minvalue=100,
+                maxvalue=50000,
+            )
+            if chunk_size is None:
+                chunk_size = 5000
+        except:
+            chunk_size = 5000
+
     converted_files = []
     errors = []
-
-    # Ask for chunk size
-    try:
-        chunk_size = simpledialog.askinteger(
-            "Chunk Size",
-            "Enter chunk size for processing (larger files need smaller chunks):\n"
-            + "Recommended:\n"
-            + "- Small files: 10000\n"
-            + "- Medium files: 5000\n"
-            + "- Large files: 1000\n"
-            + "- Very large files: 500",
-            initialvalue=5000,
-            minvalue=100,
-            maxvalue=50000,
-        )
-
-        if chunk_size is None:
-            chunk_size = 5000  # Default value if dialog is cancelled
-    except:
-        chunk_size = 5000  # Fallback value
-
     total_files = len(potential_files)
+    
     for idx, file_name in enumerate(potential_files, 1):
         try:
             print(f"\nProcessing file {idx}/{total_files}: {file_name}")
             file_path = os.path.join(directory_path, file_name)
 
-            # Get file size in MB
             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
             print(f"File size: {file_size_mb:.2f} MB")
 
             result_path = convert_yolo_tracker_to_pixel_format(
-                file_path, save_directory, chunk_size=chunk_size
+                file_path, save_directory, chunk_size=chunk_size, point=point
             )
 
             if result_path:
@@ -2051,4 +2141,21 @@ def rearrange_data_in_directory():
 
 
 if __name__ == "__main__":
-    rearrange_data_in_directory()
+    import argparse
+    parser = argparse.ArgumentParser(description="vailá - Rearrange Data and convert tracking files")
+    parser.add_argument("--yolo-tracker", type=str, help="Directory containing YOLO tracker CSVs to convert")
+    parser.add_argument("--point", type=str, default="center", 
+                        choices=["center", "top-left", "top-middle", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-middle", "bottom-right"], 
+                        help="Which point to extract from the bounding box (default: center)")
+    parser.add_argument("--chunk-size", type=int, default=5000, help="Chunk size for reading large CSV files (default: 5000)")
+    
+    args = parser.parse_args()
+    
+    if args.yolo_tracker:
+        print(f"CLI Mode: Processing YOLO tracker in {args.yolo_tracker} using point: {args.point}")
+        # Run conversion silently (pass parameters and avoid GUI dialogs)
+        dummy_root = tk.Tk()
+        dummy_root.withdraw()
+        batch_convert_yolo_tracker(directory_path=args.yolo_tracker, point=args.point, chunk_size=args.chunk_size)
+    else:
+        rearrange_data_in_directory()
