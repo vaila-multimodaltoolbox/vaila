@@ -56,8 +56,12 @@ or
 ```powershell
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
 ```
-
-or
+@article{chinaglia2026automating,
+  title={Automating Timed Up and Go Phase Segmentation and Gait Analysis via the tugturn Markerless 3D Pipeline},
+  author={Chinaglia, Abel Gon{\c{c}}alves and Cesar, Guilherme Manna and Santiago, Paulo Roberto Pereira},
+  journal={arXiv preprint arXiv:2602.21425},
+  year={2026}
+}
 
 If you use a one-liner that points to `https://vaila.io/install.ps1`, use the same TLS fix first:
 
@@ -910,6 +914,15 @@ If you use _vailá_ in your research or project, please consider citing our work
   pages = {e69604},
   doi = {10.3791/69604},
   url = {https://www.jove.com/t/69604/multimodal-motion-capture-toolbox-for-enhanced-analysis}
+}
+
+@article{chinaglia2026automating,
+  title={Automating Timed Up and Go Phase Segmentation and Gait Analysis via the tugturn Markerless 3D Pipeline},
+  author={Chinaglia, Abel Gon{\c{c}}alves and Cesar, Guilherme Manna and Santiago, Paulo Roberto Pereira},
+  journal={arXiv preprint arXiv:2602.21425},
+  year={2026}
+  doi = {10.48550/arXiv.2602.21425}
+  url = {https://arxiv.org/abs/2602.21425}
 }
 ```
 
