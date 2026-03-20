@@ -17,8 +17,8 @@
         - Can run without administrator privileges (some features may be skipped)
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 27 January 2026    
-    Version: 0.3.19
+    Updated: 20 March 2026
+    Version: 0.3.25
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
@@ -483,12 +483,6 @@ function Install-WithUv {
         Write-Host "No NVIDIA GPU detected. Using CPU-only configuration." -ForegroundColor Yellow
     }
     
-    # Backup current pyproject.toml
-    If (Test-Path "$vailaProgramPath\pyproject.toml") {
-        Copy-Item "$vailaProgramPath\pyproject.toml" "$vailaProgramPath\pyproject_universal_cpu.toml" -Force
-        Write-Host "Backed up pyproject.toml to pyproject_universal_cpu.toml" -ForegroundColor Green
-    }
-    
     # Choose template
     If ($useGPU) {
         If (Test-Path "$vailaProgramPath\pyproject_win_cuda12.toml") {
@@ -565,62 +559,8 @@ function Install-WithUv {
         Exit 1
     }
 
-    # Prompt user about installing PyTorch/YOLO stack
     Write-Host ""
-    Write-Host "---------------------------------------------" -ForegroundColor Cyan
-    Write-Host "PyTorch / YOLO installation options" -ForegroundColor Cyan
-    Write-Host "  [1] Skip (default)" -ForegroundColor Yellow
-    Write-Host "  [2] Install PyTorch + YOLO (ultralytics/boxmot)" -ForegroundColor Yellow
-    Write-Host "---------------------------------------------" -ForegroundColor Cyan
-    $installOption = Read-Host "Choose an option [1-2]"
-    If ([string]::IsNullOrWhiteSpace($installOption)) {
-        $installOption = "1"
-    }
-
-    If ($installOption -eq "2") {
-        $pytorchInstalled = $false
-        Write-Host ""
-        Write-Host "Select PyTorch build:" -ForegroundColor Cyan
-        Write-Host "  [1] CPU-only (default)" -ForegroundColor Yellow
-        Write-Host "  [2] CUDA (requires NVIDIA GPU + drivers)" -ForegroundColor Yellow
-        $pytorchOption = Read-Host "Choose an option [1-2]"
-        If ([string]::IsNullOrWhiteSpace($pytorchOption)) {
-            $pytorchOption = "1"
-        }
-
-        If ($pytorchOption -eq "2") {
-            Write-Host ""
-            Write-Host "Installing PyTorch with CUDA support..." -ForegroundColor Yellow
-            Try {
-                & uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-                $pytorchInstalled = $true
-                Write-Host "PyTorch with CUDA installed successfully." -ForegroundColor Green
-            } Catch {
-                Write-Warning "Failed to install CUDA-enabled PyTorch."
-            }
-        } Else {
-            Write-Host ""
-            Write-Host "Installing CPU-only PyTorch..." -ForegroundColor Yellow
-            Try {
-                & uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-                $pytorchInstalled = $true
-                Write-Host "CPU-only PyTorch installed successfully." -ForegroundColor Green
-            } Catch {
-                Write-Warning "Failed to install CPU-only PyTorch."
-            }
-        }
-
-        If ($pytorchInstalled) {
-            Write-Host ""
-            Write-Host "Installing YOLO dependencies (ultralytics, boxmot)..." -ForegroundColor Yellow
-            Try {
-                & uv pip install ultralytics boxmot
-                Write-Host "YOLO dependencies installed successfully." -ForegroundColor Green
-            } Catch {
-                Write-Warning "Failed to install YOLO dependencies."
-            }
-        }
-    }
+    Write-Host "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are already installed via uv sync from pyproject.toml." -ForegroundColor Green
 
     # Install pycairo
     Write-Host ""
@@ -647,7 +587,11 @@ function Install-WithUv {
             Write-Host "Environment verification successful." -ForegroundColor Green
         } Else {
             Write-Warning "Environment verification failed. PIL module not found. Running uv sync again..."
-            & uv sync
+            If ($useGPU) {
+                & uv sync --extra gpu
+            } Else {
+                & uv sync
+            }
             If ($LASTEXITCODE -ne 0) {
                 Write-Error "Failed to sync dependencies during verification."
                 Exit 1
