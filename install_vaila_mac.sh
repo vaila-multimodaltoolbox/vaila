@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                          #
-# Update: 27 January 2026                                                              #
-# Version: 0.3.19                                                                        #
+# Update: 20 March 2026                                                                #
+# Version: 0.3.25                                                                        #
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -53,6 +53,9 @@ if [[ -z "$INSTALL_METHOD" || ( "$INSTALL_METHOD" != "1" && "$INSTALL_METHOD" !=
     fi
 fi
 INSTALL_METHOD=${INSTALL_METHOD:-1}
+
+# Define paths
+USER_HOME="$HOME"
 
 # ============================================================================
 # INSTALL LOCATION
@@ -555,12 +558,6 @@ install_with_uv() {
         echo "Intel Mac detected. Using CPU-only configuration."
     fi
     
-    # Backup current pyproject.toml
-    if [ -f "$VAILA_HOME/pyproject.toml" ]; then
-        cp "$VAILA_HOME/pyproject.toml" "$VAILA_HOME/pyproject_universal_cpu.toml"
-        echo "Backed up pyproject.toml to pyproject_universal_cpu.toml"
-    fi
-    
     # Choose template
     if [[ "$USE_METAL" == true ]]; then
         if [ -f "$VAILA_HOME/pyproject_macos.toml" ]; then
@@ -605,66 +602,11 @@ install_with_uv() {
         exit 1
     fi
     echo "Dependencies installed successfully."
-
-    # Detect architecture for PyTorch
     echo ""
-    echo "Checking system architecture..."
+    echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are already installed via uv sync from pyproject.toml."
     ARCH=$(uname -m)
     if [[ "$ARCH" == "arm64" ]]; then
-        echo "Apple Silicon (ARM64) detected."
-        PYTORCH_CONFIG="PyTorch with MPS (GPU acceleration via Metal Performance Shaders)"
-        PYTORCH_NOTE="PyTorch will automatically use MPS (GPU) on Apple Silicon."
-        DEFAULT_PYTORCH_OPTION=2
-        DEFAULT_TEXT="(default: 2 - recommended for Apple Silicon)"
-    elif [[ "$ARCH" == "x86_64" ]]; then
-        echo "Intel Mac (x86_64) detected."
-        PYTORCH_CONFIG="PyTorch CPU-only (macOS Intel doesn't support MPS)"
-        PYTORCH_NOTE="PyTorch will run on CPU."
-        DEFAULT_PYTORCH_OPTION=1
-        DEFAULT_TEXT="(default: 1)"
-    else
-        echo "Architecture $ARCH detected."
-        PYTORCH_CONFIG="PyTorch (architecture: $ARCH)"
-        PYTORCH_NOTE="PyTorch will be installed for this architecture."
-        DEFAULT_PYTORCH_OPTION=1
-        DEFAULT_TEXT="(default: 1)"
-    fi
-    echo ""
-
-    # Prompt user about installing PyTorch/YOLO stack
-    echo "---------------------------------------------"
-    echo "PyTorch / YOLO installation options"
-    echo "  [1] Skip"
-    echo "  [2] Install $PYTORCH_CONFIG"
-    echo "      + YOLO (ultralytics, boxmot)"
-    echo "---------------------------------------------"
-    printf "Choose an option [1-2] $DEFAULT_TEXT: "
-    read INSTALL_OPTION
-    INSTALL_OPTION=${INSTALL_OPTION:-$DEFAULT_PYTORCH_OPTION}
-
-    if [[ "$INSTALL_OPTION" == "2" ]]; then
-        echo ""
-        echo "Installing PyTorch..."
-        if uv pip install torch torchvision torchaudio; then
-            echo "PyTorch installed successfully."
-            echo ""
-            echo "Note: $PYTORCH_NOTE"
-            if [[ "$ARCH" == "arm64" ]]; then
-                echo "      If MPS is unavailable, it will fall back to CPU."
-            fi
-            echo ""
-            echo "Installing YOLO dependencies (ultralytics, boxmot)..."
-            if ! uv pip install ultralytics boxmot; then
-                echo "Warning: Failed to install YOLO dependencies."
-            fi
-        else
-            echo "Warning: Failed to install PyTorch."
-        fi
-    else
-        echo ""
-        echo "Skipping PyTorch/YOLO installation. You can install later using:"
-        echo "  uv pip install torch torchvision torchaudio"
-        echo "  uv pip install ultralytics boxmot"
+        echo "Apple Silicon: PyTorch can use MPS (Metal) when available; otherwise it falls back to CPU."
     fi
 
     # Install pycairo
@@ -951,18 +893,9 @@ echo "============================================================"
 echo "vaila installation completed successfully!"
 echo "============================================================"
 echo ""
-echo "IMPORTANT: On macOS, do NOT use 'uv run vaila.py' directly!"
-echo "The 'gpu' extra in pyproject.toml includes TensorRT which doesn't support macOS."
-echo ""
-echo "You can run vaila by:"
+echo "Ways to run vaila:"
 echo "1. Recommended: $RUN_SCRIPT"
-echo "2. Recommended: cd ~/vaila && .venv/bin/vaila"
-echo "3. Alternative: cd ~/vaila && .venv/bin/python vaila.py"
-echo "4. Alternative: cd ~/vaila && .venv/bin/uv-run-vaila (wrapper that excludes gpu extra)"
-echo "5. Opening 'vaila' from your Applications folder"
-echo "   - Launchpad or /Applications/vaila.app (recommended)"
-echo "   - Or ~/Applications/vaila.app"
-echo ""
-echo "If you really need to use 'uv run', use:"
-echo "  uv run --no-sync --no-extra gpu python vaila.py"
+echo "2. Or: cd \"$VAILA_HOME\" && .venv/bin/python vaila.py"
+echo "3. Or: cd \"$VAILA_HOME\" && uv run vaila.py"
+echo "4. App bundle: Launchpad, /Applications/vaila.app, or ~/Applications/vaila.app"
 echo ""

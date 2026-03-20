@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 27 January 2026                                                              #
-# Version: 0.3.19                                                                        #
+# Updated: 20 March 2026                                                                #
+# Version: 0.3.25                                                                        #
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)             #
 #########################################################################################
 
@@ -458,16 +458,12 @@ install_with_uv() {
     USE_GPU=false
     if [[ "$HAS_NVIDIA_GPU" == true ]]; then
         echo "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
-        read gpu_choice
-        USE_GPU=$([[ "$gpu_choice" != "n" && "$gpu_choice" != "N" ]])
+        read -r gpu_choice
+        if [[ "$gpu_choice" != "n" && "$gpu_choice" != "N" ]]; then
+            USE_GPU=true
+        fi
     else
         echo "No NVIDIA GPU detected. Using CPU-only configuration."
-    fi
-    
-    # Backup current pyproject.toml
-    if [ -f "$VAILA_HOME/pyproject.toml" ]; then
-        cp "$VAILA_HOME/pyproject.toml" "$VAILA_HOME/pyproject_universal_cpu.toml"
-        echo "Backed up pyproject.toml to pyproject_universal_cpu.toml"
     fi
     
     # Choose template
@@ -537,101 +533,8 @@ install_with_uv() {
         fi
     fi
     echo "Dependencies installed successfully."
-
-
-
-    # Detect NVIDIA GPU
     echo ""
-    echo "Checking for NVIDIA GPU..."
-    NVIDIA_GPU_DETECTED=false
-    if command -v nvidia-smi &> /dev/null; then
-        if nvidia-smi &> /dev/null; then
-            NVIDIA_GPU_DETECTED=true
-            echo "NVIDIA GPU detected!"
-            nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | sed 's/^/  GPU: /'
-        else
-            echo "nvidia-smi found but no GPU detected (drivers may not be installed)."
-        fi
-    else
-        echo "No NVIDIA GPU detected (nvidia-smi not found)."
-    fi
-    echo ""
-
-    # Prepare GPU info for prompt
-    if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
-        GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
-        PYTORCH_DESC="PyTorch (CPU or CUDA/GPU) + YOLO"
-        PYTORCH_NOTE="NVIDIA GPU detected: $GPU_NAME"
-    else
-        PYTORCH_DESC="PyTorch (CPU or CUDA/GPU) + YOLO"
-        PYTORCH_NOTE="No NVIDIA GPU detected (CUDA option requires GPU)"
-    fi
-
-    # Prompt user about installing PyTorch/YOLO stack
-    echo "---------------------------------------------"
-    echo "PyTorch / YOLO installation options"
-    echo "  [1] Skip (default)"
-    echo "  [2] Install $PYTORCH_DESC"
-    if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
-        echo "      ($PYTORCH_NOTE)"
-    else
-        echo "      Note: $PYTORCH_NOTE"
-    fi
-    echo "---------------------------------------------"
-    printf "Choose an option [1-2]: "
-    read INSTALL_OPTION
-    INSTALL_OPTION=${INSTALL_OPTION:-1}
-
-    if [[ "$INSTALL_OPTION" == "2" ]]; then
-        PYTORCH_INSTALLED=false
-        echo ""
-        
-        # Show options based on GPU detection
-        if [[ "$NVIDIA_GPU_DETECTED" == true ]]; then
-            echo "Select PyTorch build:"
-            echo "  [1] CPU-only"
-            echo "  [2] CUDA/GPU (NVIDIA GPU detected: $GPU_NAME)"
-        else
-            echo "Select PyTorch build:"
-            echo "  [1] CPU-only"
-            echo "  [2] CUDA/GPU (requires NVIDIA GPU + drivers)"
-            echo "     Note: No NVIDIA GPU detected. CUDA will not work without GPU."
-        fi
-        
-        printf "Choose an option [1-2]: "
-        read PYTORCH_OPTION
-        PYTORCH_OPTION=${PYTORCH_OPTION:-1}
-
-        if [[ "$PYTORCH_OPTION" == "2" ]]; then
-            echo ""
-            echo "Installing PyTorch with CUDA support..."
-            if uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121; then
-                PYTORCH_INSTALLED=true
-                echo "PyTorch with CUDA installed successfully."
-            else
-                echo "Warning: Failed to install CUDA-enabled PyTorch."
-            fi
-        elif [[ "$PYTORCH_OPTION" == "1" ]]; then
-            echo ""
-            echo "Installing CPU-only PyTorch..."
-            if uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu; then
-                PYTORCH_INSTALLED=true
-                echo "CPU-only PyTorch installed successfully."
-            fi
-        fi
-
-        if [ "$PYTORCH_INSTALLED" = true ]; then
-            echo ""
-            echo "Installing YOLO dependencies (ultralytics, boxmot)..."
-            uv pip install ultralytics boxmot || echo "Warning: Failed to install YOLO dependencies."
-        fi
-    else
-        echo ""
-        echo "Skipping PyTorch/YOLO installation. You can install later using:"
-        echo "  CUDA PyTorch: uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121"
-        echo "  CPU PyTorch : uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu"
-        echo "  YOLO stack  : uv pip install ultralytics boxmot"
-    fi
+    echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are already installed via uv sync from pyproject.toml."
 
     # Verify pycairo installation
     echo ""
@@ -653,13 +556,13 @@ install_with_uv() {
     echo "Verifying environment setup..."
     if ! uv run python -c "import PIL; print('PIL OK')" 2>&1 | grep -q "PIL OK"; then
         echo "Warning: Environment verification failed. PIL module not found. Running uv sync again..."
-        if [ -z "$EXTRAS" ]; then
-            uv sync || {
+        if [[ "$USE_GPU" == true ]]; then
+            uv sync --extra gpu || {
                 echo "Error: Failed to sync dependencies during verification."
                 exit 1
             }
         else
-            uv sync $EXTRAS || {
+            uv sync || {
                 echo "Error: Failed to sync dependencies during verification."
                 exit 1
             }
