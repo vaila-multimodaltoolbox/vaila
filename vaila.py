@@ -66,7 +66,8 @@ import sys
 # Third-party imports
 import tkinter as tk
 import webbrowser
-from tkinter import Button, Label, Toplevel, messagebox, simpledialog, ttk
+from pathlib import Path
+from tkinter import Button, Label, Radiobutton, Toplevel, messagebox, simpledialog, ttk
 
 from PIL import Image, ImageTk
 from rich import print
@@ -1230,11 +1231,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r3_c1 - Visualization: Draw Soccer Field
-        draw_soccerfield_btn = tk.Button(
+        # C_C_r3_c1 - Visualization: Draw Sports (soccer, tennis, other CSV models)
+        draw_sports_fields_btn = tk.Button(
             tools_col3,
-            text="Draw Soccer Field",
-            command=self.draw_soccerfield,
+            text="Draw Sports",
+            command=self.draw_sports_fields_courts,
             width=button_width,
         )
 
@@ -1246,15 +1247,7 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r4_c1 - Visualization: Draw Tennis Court
-        draw_tenniscourt_btn = tk.Button(
-            tools_col3,
-            text="Draw Tennis Court",
-            command=self.draw_tennis_court,
-            width=button_width,
-        )
-
-        # C_C_r4_c2 - Visualization: vailá
+        # C_C_r4_c1 - Visualization: vailá
         vaila_btn19 = tk.Button(
             tools_col3,
             text="vailá",
@@ -1262,7 +1255,7 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r5_c1 - Visualization: vailá
+        # C_C_r4_c2 - Visualization: vailá
         vaila_btn20 = tk.Button(
             tools_col3,
             text="vailá",
@@ -1270,7 +1263,7 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r5_c2 - Visualization: vailá
+        # C_C_r5_c1 - Visualization: vailá
         vaila_btn21 = tk.Button(
             tools_col3,
             text="vailá",
@@ -1283,12 +1276,11 @@ class Vaila(tk.Tk):
         show_csv_btn.grid(row=0, column=1, padx=2, pady=2)
         plot_2d_btn.grid(row=1, column=0, padx=2, pady=2)
         plot_3d_btn.grid(row=1, column=1, padx=2, pady=2)
-        draw_soccerfield_btn.grid(row=2, column=0, padx=2, pady=2)
+        draw_sports_fields_btn.grid(row=2, column=0, padx=2, pady=2)
         stroboscopic_btn.grid(row=2, column=1, padx=2, pady=2)
-        draw_tenniscourt_btn.grid(row=3, column=0, padx=2, pady=2)
-        vaila_btn19.grid(row=3, column=1, padx=2, pady=2)
-        vaila_btn20.grid(row=4, column=0, padx=2, pady=2)
-        vaila_btn21.grid(row=4, column=1, padx=2, pady=2)
+        vaila_btn19.grid(row=3, column=0, padx=2, pady=2)
+        vaila_btn20.grid(row=3, column=1, padx=2, pady=2)
+        vaila_btn21.grid(row=4, column=0, padx=2, pady=2)
         tools_col3.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         # Help and Exit Buttons Frame
         bottom_frame = tk.Frame(scrollable_frame)
@@ -2612,22 +2604,80 @@ class Vaila(tk.Tk):
         vailaplot3d.run_plot_3d()
 
     # C_C_r3_c1
-    def draw_soccerfield(self):
-        """Runs the soccer field drawing module."""
-        from vaila import soccerfield
+    def draw_sports_fields_courts(self) -> None:
+        """Pick soccer, tennis, or another court model; Help opens HTML in the browser."""
+        models_dir = os.path.join(vaila_dir, "vaila", "models")
+        help_html = os.path.join(vaila_dir, "vaila", "help", "sports_fields_courts.html")
+        model_paths = {
+            "basketball": os.path.join(models_dir, "basketballcourt_ref3d.csv"),
+            "volleyball": os.path.join(models_dir, "volleyball_ref3d.csv"),
+            "futsal": os.path.join(models_dir, "futsal_ref3d.csv"),
+            "handball": os.path.join(models_dir, "handball_ref3d.csv"),
+        }
 
-        soccerfield.run_soccerfield()
+        dlg = tk.Toplevel(self)
+        dlg.title("Draw Sports")
+        dlg.geometry("480x360")
+        dlg.transient(self)
+        dlg.grab_set()
 
-    # C_C_r4_c1
-    def draw_tennis_court(self):
-        """Runs the tennis court visualization module.
+        choice = tk.StringVar(value="soccer")
 
-        Opens an ITF-standard tennis court with support for loading player
-        trajectories from vaila-format CSV files and manual marker creation.
-        """
-        from vaila import tennis_court
+        tk.Label(
+            dlg,
+            text="Select playing surface:",
+            font=("Arial", 10, "bold"),
+        ).pack(anchor=tk.W, padx=14, pady=(14, 4))
 
-        tennis_court.run_tenniscourt()
+        options = [
+            ("soccer", "Soccer field (FIFA 105 × 68 m)"),
+            ("tennis", "Tennis court (ITF 23.77 × 10.97 m)"),
+            ("basketball", "Basketball (FIBA 28 × 15 m)"),
+            ("volleyball", "Volleyball (FIVB 18 × 9 m)"),
+            ("futsal", "Futsal (FIFA 40 × 20 m)"),
+            ("handball", "Handball (IHF 40 × 20 m)"),
+        ]
+        for val, caption in options:
+            Radiobutton(dlg, text=caption, variable=choice, value=val).pack(
+                anchor=tk.W, padx=28, pady=2
+            )
+
+        btn_row = tk.Frame(dlg)
+        btn_row.pack(pady=18)
+
+        def on_help() -> None:
+            hp = Path(help_html)
+            if hp.is_file():
+                webbrowser.open_new_tab(hp.as_uri())
+            else:
+                messagebox.showwarning("Help", f"Help file not found:\n{help_html}")
+
+        def on_ok() -> None:
+            sel = choice.get()
+            dlg.destroy()
+            if sel == "soccer":
+                from vaila import soccerfield
+
+                soccerfield.run_soccerfield()
+            elif sel == "tennis":
+                from vaila import tennis_court
+
+                tennis_court.run_tenniscourt()
+            else:
+                csv_path = model_paths[sel]
+                if not os.path.isfile(csv_path):
+                    messagebox.showerror("Error", f"Model file missing:\n{csv_path}")
+                    return
+                from vaila import soccerfield
+
+                soccerfield.run_soccerfield(initial_field_csv=csv_path)
+
+        def on_cancel() -> None:
+            dlg.destroy()
+
+        tk.Button(btn_row, text="Help", width=10, command=on_help).pack(side=tk.LEFT, padx=6)
+        tk.Button(btn_row, text="OK", width=10, command=on_ok).pack(side=tk.LEFT, padx=6)
+        tk.Button(btn_row, text="Cancel", width=10, command=on_cancel).pack(side=tk.LEFT, padx=6)
 
     # C_C_r3_c2
     def run_stroboscopic(self):
