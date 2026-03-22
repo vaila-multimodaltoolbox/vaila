@@ -391,14 +391,14 @@ process_video(
 
 ### Minimum Requirements
 - **OS:** Windows 10+, macOS 10.15+, Linux (Ubuntu 20.04+)
-- **Python:** 3.12.12
+- **Python:** 3.12.13
 - **RAM:** 4 GB (8 GB recommended)
 - **Storage:** 500 MB for models + video storage
 - **CPU:** Multi-core processor (4+ cores recommended)
 
 ### Recommended Requirements
 - **OS:** Latest version of Windows/macOS/Linux
-- **Python:** 3.12.12
+- **Python:** 3.12.13
 - **RAM:** 16 GB or more
 - **GPU:** NVIDIA GPU with CUDA support (6 GB+ VRAM)
 - **Storage:** SSD with 10+ GB free space

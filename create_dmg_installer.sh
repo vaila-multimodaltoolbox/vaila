@@ -213,7 +213,7 @@ To install vaila (easy way):
 
 The installer will:
 - Install uv (if needed)
-- Install Python 3.12.12
+- Install Python 3.12.13
 - Create the environment and install dependencies
 - Create vaila.app in your Applications folder
 

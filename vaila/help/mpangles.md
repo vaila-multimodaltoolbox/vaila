@@ -9,7 +9,7 @@
 - **Email:** paulosantiago@usp.br
 - **Creation Date:** 31 March 2025
 - **Update Date:** 5 February 2026
-- **Python Version:** 3.12.12
+- **Python Version:** 3.12.13
 - **GUI Interface:** ✅ Yes
 - **License:** AGPL v3.0
 
@@ -156,7 +156,7 @@ process_video_with_visualization("video.mp4", csv_path="video_pixel_vaila.csv", 
 
 ## ⚠️ Requirements
 
-- **Python:** 3.12.12 or compatible.
+- **Python:** 3.12.13 or compatible.
 - **Libraries:** pandas, numpy, opencv-python, scipy, rich; tkinter (GUI). Optional: matplotlib (for stick figure sequence in report).
 
 ## 🐛 Troubleshooting

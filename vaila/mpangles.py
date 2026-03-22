@@ -8,7 +8,7 @@ GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 31 March 2025
 Update Date: 5 February 2026
 Version: 0.0.3
-Python Version: 3.12.12
+Python Version: 3.12.13
 
 Description:
 ------------
