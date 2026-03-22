@@ -39,7 +39,7 @@ Usage:
   specifying the cuts.
 
 Requirements:
-- Python 3.12.12
+- Python 3.12.13
 - OpenCV (`pip install opencv-python`)
 - pygame (`pip install pygame`)
 - Tkinter (usually included with Python installations)

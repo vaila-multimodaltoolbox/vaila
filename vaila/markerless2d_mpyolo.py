@@ -15,7 +15,7 @@ Usage example:
 python markerless2d_mpyolo.py -i input_directory -o output_directory -c config.toml
 
 Requirements:
-- Python 3.12.12
+- Python 3.12.13
 - OpenCV (`pip install opencv-python`)
 - MediaPipe (`pip install mediapipe`)
 - Tkinter (usually included with Python installations)
