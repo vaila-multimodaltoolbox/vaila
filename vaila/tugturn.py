@@ -6,7 +6,7 @@ Author: Paulo R. P. Santiago
 Created: 20 February 2026
 Updated: 23 February 2026
 Version: 0.1.1
-Python Version: 3.12.12
+Python Version: 3.12.13
 
 Description:
 ------------
