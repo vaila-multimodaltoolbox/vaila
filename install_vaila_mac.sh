@@ -17,7 +17,7 @@
 #   - uv method: Requires Homebrew (https://brew.sh/) for system dependencies          #
 #   - conda method: Requires Conda (Anaconda or Miniconda) to be installed             #
 #   - uv will be automatically installed if not present (uv method only)              #
-#   - Python 3.12.12 will be installed via uv or conda depending on method chosen     #
+#   - Python 3.12.13 will be installed via uv or conda depending on method chosen     #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                          #
@@ -507,13 +507,13 @@ install_with_uv() {
     fi
     echo ""
 
-    # Install Python 3.12.12 via uv if needed
+    # Install Python 3.12.13 via uv if needed
     echo "Checking Python version..."
-    if ! uv python list | grep -q "3.12.12"; then
-        echo "Python 3.12.12 not found. Installing via uv..."
-        uv python install 3.12.12
+    if ! uv python list | grep -q "3.12.13"; then
+        echo "Python 3.12.13 not found. Installing via uv..."
+        uv python install 3.12.13
     else
-        echo "Python 3.12.12 found."
+        echo "Python 3.12.13 found."
     fi
 
     echo "Clean destination directory and copy files..."
@@ -577,7 +577,7 @@ install_with_uv() {
     echo ""
     echo "Initializing uv project..."
     if [ ! -f ".python-version" ]; then
-        uv python pin 3.12.12
+        uv python pin 3.12.13
     fi
 
     # Create virtual environment
@@ -585,7 +585,7 @@ install_with_uv() {
     echo "Creating/updating virtual environment (.venv)..."
     if [ ! -d ".venv" ]; then
         echo "Creating new virtual environment..."
-        uv venv --python 3.12.12
+        uv venv --python 3.12.13
     else
         echo "Virtual environment already exists. uv sync will update it as needed."
     fi

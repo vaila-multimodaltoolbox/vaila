@@ -395,7 +395,7 @@ The installation script automatically:
 - **Detects your hardware** (NVIDIA GPU) and prompts for GPU support preference
 - **Selects the optimal configuration template** (`pyproject_win_cuda12.toml` or `pyproject_universal_cpu.toml`)
 - **Applies the template** to `pyproject.toml` **before** creating the virtual environment
-- Installs **Python 3.12.12** (via uv) securely isolated for _vailá_
+- Installs **Python 3.12.13** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync` (with `--extra gpu` if GPU support was selected)
 - Installs **FFmpeg** and **Windows Terminal** (if running as Administrator)
@@ -480,10 +480,10 @@ cd vaila
 # (or explicitly: cp pyproject_universal_cpu.toml pyproject.toml)
 
 # Initialize Python version (uses the pyproject.toml you just configured)
-uv python pin 3.12.12
+uv python pin 3.12.13
 
 # Create virtual environment (uses the pyproject.toml you just configured)
-uv venv --python 3.12.12
+uv venv --python 3.12.13
 
 # Generate lock file
 uv lock --upgrade
@@ -573,7 +573,7 @@ The installer will prompt you to choose your preferred installation method:
 The uv installer will automatically:
 
 - Install/update uv if needed
-- Install Python 3.12.12 via uv
+- Install Python 3.12.13 via uv
 - Create a virtual environment
 - Install all dependencies
 - Set up the macOS application bundle with icon

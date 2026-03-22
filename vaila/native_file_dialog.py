@@ -8,7 +8,7 @@ https://github.com/paulopreto/vaila-multimodaltoolbox
 Created: 17 November 2025
 Updated: 17 November 2025
 Version: 0.2.0
-Python Version: 3.12.12
+Python Version: 3.12.13
 
 Description:
 ------------

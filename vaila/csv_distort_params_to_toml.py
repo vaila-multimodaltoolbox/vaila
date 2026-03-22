@@ -7,7 +7,7 @@ Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 10 February 2026
 Version: 0.0.1
-Python Version: 3.12.12
+Python Version: 3.12.13
 
 Description:
 ------------

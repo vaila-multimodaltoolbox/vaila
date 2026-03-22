@@ -33,7 +33,7 @@ Features:
 - Saves a summary file with points residuals information.
 
 Dependencies:
-- Python 3.12.12
+- Python 3.12.13
 - ezc3d
 - Pandas
 - Tkinter
