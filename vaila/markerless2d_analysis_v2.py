@@ -35,7 +35,7 @@ Then run the markerless2d_analysis_v2.py script:
 python markerless2d_analysis_v2.py
 
 Requirements:
-- Python 3.12.12
+- Python 3.12.13
 - OpenCV (pip install opencv-python)
 - MediaPipe (pip install mediapipe>=0.10.32)
 - Ultralytics (pip install ultralytics)

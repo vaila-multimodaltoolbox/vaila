@@ -224,7 +224,7 @@ Video Input → Pose Detection → Coordinate Extraction → CSV Export
 ## Requirements
 
 ### System Requirements
-- **Python**: 3.12.12+
+- **Python**: 3.12.13+
 - **OS**: Linux, macOS, Windows
 - **RAM**: 4GB minimum (8GB+ recommended for large videos)
 - **GPU**: 

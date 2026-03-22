@@ -8,7 +8,7 @@ GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 05 December 2025
 Update Date: 12 January 2026
 Version: 0.1.1
-Python Version: 3.12.12
+Python Version: 3.12.13
 
 Description:
 ------------
@@ -75,7 +75,7 @@ For each processed file:
 
 Requirements:
 -------------
-- Python 3.12.12
+- Python 3.12.13
 - pandas: For CSV file handling
 - numpy: For numerical computations
 - matplotlib: For plotting and visualization

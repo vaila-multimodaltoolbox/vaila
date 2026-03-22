@@ -10,7 +10,7 @@
     Notes:
         - uv method: uv will be automatically installed if not present
         - conda method: Requires Conda (Anaconda or Miniconda) to be installed
-        - Python 3.12.12 will be installed via uv or conda depending on method chosen
+        - Python 3.12.13 will be installed via uv or conda depending on method chosen
         - Installation location:
           * With admin: C:\Program Files\vaila (Windows standard location)
           * Without admin: C:\Users\<user>\vaila (user directory)
@@ -373,19 +373,19 @@ function Install-WithUv {
     }
     Write-Host ""
 
-    # Install Python 3.12.12 via uv if needed
+    # Install Python 3.12.13 via uv if needed
     Write-Host "Checking Python version..." -ForegroundColor Yellow
     Try {
-        $pythonVersion = & uv python list 2>$null | Select-String "3.12.12"
+        $pythonVersion = & uv python list 2>$null | Select-String "3.12.13"
         If (-Not $pythonVersion) {
-            Write-Host "Python 3.12.12 not found. Installing via uv..." -ForegroundColor Yellow
-            & uv python install 3.12.12
-            Write-Host "Python 3.12.12 installed successfully." -ForegroundColor Green
+            Write-Host "Python 3.12.13 not found. Installing via uv..." -ForegroundColor Yellow
+            & uv python install 3.12.13
+            Write-Host "Python 3.12.13 installed successfully." -ForegroundColor Green
         } Else {
-            Write-Host "Python 3.12.12 found." -ForegroundColor Green
+            Write-Host "Python 3.12.13 found." -ForegroundColor Green
         }
     } Catch {
-        Write-Warning "Could not verify Python 3.12.12 installation. Continuing..."
+        Write-Warning "Could not verify Python 3.12.13 installation. Continuing..."
     }
 
     # Check if we're already in the installation directory
@@ -502,7 +502,7 @@ function Install-WithUv {
     Write-Host ""
     Write-Host "Initializing uv project..." -ForegroundColor Yellow
     If (-Not (Test-Path ".python-version")) {
-        & uv python pin 3.12.12
+        & uv python pin 3.12.13
     }
 
     # Create virtual environment
@@ -518,7 +518,7 @@ function Install-WithUv {
     }
 
     Try {
-        & uv venv --python 3.12.12
+        & uv venv --python 3.12.13
         If ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to create virtual environment."
             Exit 1
