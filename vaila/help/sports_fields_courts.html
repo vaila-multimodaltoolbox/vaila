@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá — Draw Sports Fields / Courts</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background-color: #f5f5f5; }
+        .container { max-width: 860px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 26px; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+        th, td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
+        th { background: #ecf0f1; }
+        .note { background: #fff3cd; padding: 12px; border-left: 4px solid #ffc107; margin: 16px 0; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        ul.ref { font-size: 0.95em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Draw Sports Fields / Courts</h1>
+        <p>Main GUI button: <strong>Draw Sports</strong> (Frame C, visualization column).
+        Choose a surface, then <strong>Help</strong> in that dialog opens this page in your browser (no extra Tk help window).</p>
+
+        <h2>Available models</h2>
+        <table>
+            <tr><th>Choice</th><th>Tool</th><th>Model file (<code>vaila/models/</code>)</th></tr>
+            <tr><td>Soccer</td><td><code>soccerfield.run_soccerfield()</code></td><td><code>soccerfield_ref3d.csv</code> (full FIFA markings)</td></tr>
+            <tr><td>Tennis</td><td><code>tennis_court.run_tenniscourt()</code></td><td><code>tenniscourt_ref3d.csv</code></td></tr>
+            <tr><td>Basketball</td><td>Soccerfield viewer (simple layout)</td><td><code>basketballcourt_ref3d.csv</code></td></tr>
+            <tr><td>Volleyball</td><td>Soccerfield viewer (simple layout + attack lines)</td><td><code>volleyball_ref3d.csv</code></td></tr>
+            <tr><td>Futsal</td><td>Soccerfield viewer (simple layout)</td><td><code>futsal_ref3d.csv</code></td></tr>
+            <tr><td>Handball</td><td>Soccerfield viewer (simple layout)</td><td><code>handball_ref3d.csv</code></td></tr>
+        </table>
+
+        <div class="note">
+            <strong>Note:</strong> Soccer uses the full <code>plot_field</code> pipeline. Basketball, volleyball, futsal, and handball use a
+            <strong>rectangular reference layout</strong> (perimeter, centre line, optional centre circle and volleyball attack lines) for
+            calibration-style visualisation — not every league line (e.g. three-point arc) is drawn. For publication-quality diagrams,
+            see dedicated libraries such as
+            <a href="https://github.com/sportsdataverse/sportypy">sportypy</a> or
+            <a href="https://pypi.org/project/mplbasketball/">mplbasketball</a> (basketball).
+        </div>
+
+        <h2>CSV format</h2>
+        <p>Columns: <code>point_name</code>, <code>point_number</code>, <code>x</code>, <code>y</code>, <code>z</code> (metres).
+        Soccer models must include all points required by <code>soccerfield_ref3d.csv</code>. Simpler models need at least the four corners
+        <code>bottom_left_corner</code>, <code>top_left_corner</code>, <code>bottom_right_corner</code>, <code>top_right_corner</code>.</p>
+
+        <h2>Module help (browser)</h2>
+        <ul class="ref">
+            <li><a href="soccerfield.html">Soccer field module</a> · <a href="tennis_court.html">Tennis court module</a></li>
+            <li>In each tool window, <strong>Help</strong> opens the matching HTML file under <code>vaila/help/</code>.</li>
+        </ul>
+
+        <h2>Further reading</h2>
+        <ul class="ref">
+            <li><a href="https://github.com/mmmmmm44/tennis_court_detection">Tennis court detection (research implementation)</a></li>
+            <li><a href="https://github.com/sportsdataverse/sportypy">sportypy</a> — regulation surfaces for several sports</li>
+        </ul>
+
+        <div class="footer">
+            <p><a href="index.html">Help index</a> · <a href="https://github.com/vaila-multimodaltoolbox/vaila">vailá on GitHub</a></p>
+        </div>
+    </div>
+</body>
+</html>

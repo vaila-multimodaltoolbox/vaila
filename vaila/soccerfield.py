@@ -48,6 +48,8 @@ License:
 import math
 import os
 import tkinter as tk
+import webbrowser
+from pathlib import Path
 from tkinter import Button, Frame, filedialog, messagebox
 
 import matplotlib.patches as patches
@@ -57,6 +59,49 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from rich import print
+
+# Full FIFA layout reference names required by plot_field() (see models/soccerfield_ref3d.csv)
+_SOCCER_FIELD_POINT_NAMES = frozenset(
+    {
+        "bottom_left_corner",
+        "top_left_corner",
+        "bottom_right_corner",
+        "top_right_corner",
+        "midfield_left",
+        "midfield_right",
+        "center_field",
+        "center_circle_top_intersection",
+        "center_circle_bottom_intersection",
+        "left_goal_bottom_post",
+        "left_goal_top_post",
+        "right_goal_bottom_post",
+        "right_goal_top_post",
+        "left_penalty_area_top_left",
+        "left_penalty_area_top_right",
+        "left_penalty_area_bottom_left",
+        "left_penalty_area_bottom_right",
+        "left_goal_area_top_left",
+        "left_goal_area_top_right",
+        "left_goal_area_bottom_left",
+        "left_goal_area_bottom_right",
+        "left_penalty_spot",
+        "left_penalty_arc_top",
+        "left_penalty_arc_left_intersection",
+        "left_penalty_arc_right_intersection",
+        "right_penalty_area_top_left",
+        "right_penalty_area_top_right",
+        "right_penalty_area_bottom_left",
+        "right_penalty_area_bottom_right",
+        "right_goal_area_top_left",
+        "right_goal_area_top_right",
+        "right_goal_area_bottom_left",
+        "right_goal_area_bottom_right",
+        "right_penalty_spot",
+        "right_penalty_arc_top",
+        "right_penalty_arc_left_intersection",
+        "right_penalty_arc_right_intersection",
+    }
+)
 
 
 def draw_line(ax, point1, point2, **kwargs):
@@ -470,6 +515,147 @@ def plot_field(df, show_reference_points=True, show_axis_values=False):
     return fig, ax
 
 
+def plot_simple_field(
+    df: pd.DataFrame,
+    *,
+    show_reference_points: bool = True,
+    show_axis_values: bool = False,
+    title: str = "Sports field (reference layout)",
+    playing_facecolor: str = "forestgreen",
+    outer_facecolor: str = "darkgreen",
+):
+    """Draw a rectangular pitch from CSV corners (non-soccer models).
+
+    Expects at least ``bottom_left_corner``, ``top_left_corner``, ``bottom_right_corner``,
+    ``top_right_corner``. Optionally ``midfield_left`` / ``midfield_right`` for a centre line,
+    ``center_field`` + ``center_circle_top`` + ``center_circle_bottom`` for a centre circle,
+    and volleyball-style ``attack_line_*`` pairs for vertical attack lines.
+    """
+    min_x, max_x = df["x"].min(), df["x"].max()
+    min_y, max_y = df["y"].min(), df["y"].max()
+    field_width = max_x - min_x
+    field_height = max_y - min_y
+    margin = 2
+
+    fig, ax = plt.subplots(figsize=(10.5 + 0.4, 6.8 + 0.4))
+    ax.set_xlim(min_x - margin - 1, max_x + margin + 1)
+    ax.set_ylim(min_y - margin - 1, max_y + margin + 1)
+    ax.set_aspect("equal")
+
+    if show_axis_values:
+        ax.grid(True, alpha=0.3, color="gray", linestyle="-", linewidth=0.5)
+        ax.set_xlabel("X (meters)", fontsize=10)
+        ax.set_ylabel("Y (meters)", fontsize=10)
+        ax.tick_params(axis="both", which="major", labelsize=8)
+    else:
+        ax.axis("off")
+
+    draw_rectangle(
+        ax,
+        (min_x - margin, min_y - margin),
+        field_width + 2 * margin,
+        field_height + 2 * margin,
+        edgecolor="none",
+        facecolor=outer_facecolor,
+        zorder=0,
+    )
+    draw_rectangle(
+        ax,
+        (min_x, min_y),
+        field_width,
+        field_height,
+        edgecolor="none",
+        facecolor=playing_facecolor,
+        zorder=0.5,
+    )
+
+    points = {
+        row["point_name"]: (row["x"], row["y"], row["point_number"]) for _, row in df.iterrows()
+    }
+
+    req = ("bottom_left_corner", "top_left_corner", "bottom_right_corner", "top_right_corner")
+    if not all(k in points for k in req):
+        missing = [k for k in req if k not in points]
+        raise ValueError(f"Simple field CSV missing required points: {missing}")
+
+    lw = 2
+    bl, tl, br, tr = (points[k][:2] for k in req)
+    draw_line(ax, bl, tl, color="white", linewidth=lw, zorder=1)
+    draw_line(ax, br, tr, color="white", linewidth=lw, zorder=1)
+    draw_line(ax, bl, br, color="white", linewidth=lw, zorder=1)
+    draw_line(ax, tl, tr, color="white", linewidth=lw, zorder=1)
+
+    if "midfield_left" in points and "midfield_right" in points:
+        draw_line(
+            ax,
+            points["midfield_left"][:2],
+            points["midfield_right"][:2],
+            color="white",
+            linewidth=lw,
+            zorder=1,
+        )
+
+    if (
+        "center_field" in points
+        and "center_circle_top" in points
+        and "center_circle_bottom" in points
+    ):
+        cf = points["center_field"][:2]
+        r = math.hypot(
+            points["center_circle_top"][0] - cf[0], points["center_circle_top"][1] - cf[1]
+        )
+        if r > 0:
+            draw_circle(ax, cf, r, edgecolor="white", facecolor="none", linewidth=lw, zorder=1)
+
+    # Volleyball-style attack lines (vertical, full playing height)
+    for prefix in ("attack_line_near", "attack_line_far"):
+        k1, k2 = f"{prefix}_left", f"{prefix}_right"
+        if k1 in points and k2 in points:
+            xv = points[k1][0]
+            if abs(points[k2][0] - xv) < 1e-6:
+                draw_line(
+                    ax,
+                    (xv, min_y),
+                    (xv, max_y),
+                    color="white",
+                    linewidth=lw,
+                    linestyle="--",
+                    zorder=1,
+                )
+
+    if show_reference_points:
+        for _name, (x, y, num) in points.items():
+            ox = max(field_width * 0.005, 0.15)
+            oy = max(field_height * 0.005, 0.15)
+            ax.text(
+                x + ox,
+                y + oy,
+                str(num),
+                color="black",
+                fontsize=8,
+                weight="bold",
+                bbox={"facecolor": "white", "alpha": 0.7, "boxstyle": "round", "pad": 0.2},
+                zorder=10,
+            )
+
+    ax.set_title(title, fontsize=11, pad=8)
+    return fig, ax
+
+
+def _simple_field_style_for_path(csv_path: str) -> tuple[str, str, str]:
+    """Return (playing_color, outer_color, title_suffix) from model filename."""
+    base = Path(csv_path).stem.lower()
+    if "basketball" in base:
+        return "#d4a574", "#b8895c", "Basketball (FIBA 28×15 m)"
+    if "volleyball" in base:
+        return "#f0e6d2", "#dcc9a8", "Volleyball (FIVB 18×9 m)"
+    if "futsal" in base:
+        return "#2d6b3a", "#1e4a28", "Futsal (FIFA 40×20 m)"
+    if "handball" in base:
+        return "#3d7a4a", "#2a5233", "Handball (IHF 40×20 m)"
+    return "forestgreen", "darkgreen", "Sports field"
+
+
 def load_and_plot_markers(
     field_ax,
     csv_path,
@@ -853,8 +1039,14 @@ def load_and_plot_scout_events(
     print(f"Actions: {list(filtered_df['action'].unique())}")
 
 
-def run_soccerfield():
-    """Main function to run the soccerfield.py script with GUI controls"""
+def run_soccerfield(initial_field_csv: str | None = None):
+    """Main function to run the soccerfield.py script with GUI controls.
+
+    Parameters
+    ----------
+    initial_field_csv
+        If set, load this field model on startup (e.g. basketball / volleyball CSV).
+    """
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
@@ -906,12 +1098,26 @@ def run_soccerfield():
             print(f"Reading field data from {csv_path}")
             print(f"Number of reference points: {len(df)}")
 
+            names = set(df["point_name"].astype(str))
+            is_soccer_layout = _SOCCER_FIELD_POINT_NAMES.issubset(names)
+
             # Create figure and embed in Tkinter
-            fig, ax = plot_field(
-                df,
-                show_reference_points=show_reference_points[0],
-                show_axis_values=show_axis_values[0],
-            )
+            if is_soccer_layout:
+                fig, ax = plot_field(
+                    df,
+                    show_reference_points=show_reference_points[0],
+                    show_axis_values=show_axis_values[0],
+                )
+            else:
+                play_c, out_c, title_sfx = _simple_field_style_for_path(csv_path)
+                fig, ax = plot_simple_field(
+                    df,
+                    show_reference_points=show_reference_points[0],
+                    show_axis_values=show_axis_values[0],
+                    title=title_sfx,
+                    playing_facecolor=play_c,
+                    outer_facecolor=out_c,
+                )
 
             # Save current axis for later use
             current_ax[0] = ax
@@ -1437,172 +1643,16 @@ def run_soccerfield():
 
             traceback.print_exc()
 
-    def show_help_dialog():
-        """Show a help dialog with instructions on how to use the application"""
-        help_window = tk.Toplevel(root)
-        help_window.title("Soccer Field Visualization - Help")
-        help_window.geometry("750x650")  # Increased width from 700 to 750
-
-        # Create a frame with scrollbar
-        main_frame = Frame(help_window)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        # Add scrollbar
-        scrollbar = tk.Scrollbar(main_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Create canvas for scrolling
-        canvas = tk.Canvas(main_frame, yscrollcommand=scrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        scrollbar.config(command=canvas.yview)
-
-        # Create frame for content
-        content_frame = Frame(canvas)
-        canvas.create_window((0, 0), window=content_frame, anchor=tk.NW)
-
-        # Add help text content
-        tk.Label(content_frame, text="Soccer Field Visualization", font=("Arial", 16, "bold")).pack(
-            anchor=tk.W, pady=(0, 10)
-        )
-
-        # Introduction
-        tk.Label(
-            content_frame,
-            text="This tool allows you to visualize a soccer field and create or load marker paths.",
-            font=("Arial", 10),
-            justify=tk.LEFT,
-            wraplength=650,
-        ).pack(anchor=tk.W, pady=(0, 10))
-
-        # Section: Buttons
-        tk.Label(content_frame, text="Button Functions:", font=("Arial", 12, "bold")).pack(
-            anchor=tk.W, pady=(10, 5)
-        )
-
-        button_help = [
-            ("Load Default Field", "Opens the standard soccer field visualization."),
-            (
-                "Load Custom Field",
-                "Allows you to select a custom field definition file (.csv).",
-            ),
-            ("Load Markers CSV", "Loads and displays marker paths from a CSV file."),
-            (
-                "Hide/Show Reference Points",
-                "Toggles field reference points visibility.",
-            ),
-            (
-                "Select Markers",
-                "Choose which markers to display when multiple markers are loaded.",
-            ),
-            (
-                "Create/Disable Manual Markers",
-                "Enables or disables manual marker creation mode.",
-            ),
-            (
-                "Clear All Markers",
-                "Removes all manually created markers from the field.",
-            ),
-            (
-                "Heatmap",
-                "Generates a KDE heatmap from loaded Markers CSV or Scout CSV trajectories.",
-            ),
-        ]
-
-        for button, desc in button_help:
-            frame = Frame(content_frame)
-            frame.pack(fill=tk.X, pady=2, anchor=tk.W)
-            tk.Label(
-                frame,
-                text=f"• {button}: ",
-                font=("Arial", 10, "bold"),
-                width=30,
-                anchor=tk.W,
-            ).pack(side=tk.LEFT)  # Increased width from 25 to 30
-            tk.Label(frame, text=desc, font=("Arial", 10), justify=tk.LEFT, wraplength=430).pack(
-                side=tk.LEFT, fill=tk.X, expand=True
+    def open_soccerfield_help():
+        """Open bundled HTML help in the default browser (no extra Tk window)."""
+        html_path = Path(__file__).resolve().parent / "help" / "soccerfield.html"
+        if html_path.is_file():
+            webbrowser.open_new_tab(html_path.as_uri())
+        else:
+            messagebox.showinfo(
+                "Help",
+                f"Help file not found:\n{html_path}\n\nSee vaila/help/sports_fields_courts.html for overview.",
             )
-
-        # Section: Creating markers
-        tk.Label(content_frame, text="Creating Markers:", font=("Arial", 12, "bold")).pack(
-            anchor=tk.W, pady=(20, 5)
-        )
-
-        marker_help = [
-            ("1. Enable marker mode by clicking 'Create Manual Markers'"),
-            ("2. Left-click on the field to place a marker"),
-            ("3. Hold Shift + left-click to create a marker with the next number"),
-            ("4. Right-click on a marker to delete it"),
-            ("5. Use Ctrl+S to save all markers to a CSV file"),
-            ("6. Click 'Clear All Markers' to remove all markers"),
-        ]
-
-        for step in marker_help:
-            tk.Label(content_frame, text=step, font=("Arial", 10), justify=tk.LEFT).pack(
-                anchor=tk.W, pady=2
-            )
-
-        # Section: Toolbar
-        tk.Label(content_frame, text="Field Navigation Toolbar:", font=("Arial", 12, "bold")).pack(
-            anchor=tk.W, pady=(20, 5)
-        )
-
-        toolbar_help = [
-            ("Home", "Reset the view to the original zoom level"),
-            ("Pan", "Click and drag to move around the field"),
-            ("Zoom", "Zoom in/out of a rectangular region"),
-            ("Save", "Save the current field view as a PNG image"),
-        ]
-
-        for tool, desc in toolbar_help:
-            frame = Frame(content_frame)
-            frame.pack(fill=tk.X, pady=2, anchor=tk.W)
-            tk.Label(
-                frame,
-                text=f"• {tool}: ",
-                font=("Arial", 10, "bold"),
-                width=15,
-                anchor=tk.W,
-            ).pack(side=tk.LEFT)  # Increased width from 10 to 15
-            tk.Label(frame, text=desc, font=("Arial", 10), justify=tk.LEFT, wraplength=500).pack(
-                side=tk.LEFT, fill=tk.X, expand=True
-            )
-
-        # Tips and keyboard shortcuts
-        tk.Label(content_frame, text="Tips & Shortcuts:", font=("Arial", 12, "bold")).pack(
-            anchor=tk.W, pady=(20, 5)
-        )
-
-        tips = [
-            "• When saving manually created markers (Ctrl+S), the CSV will be saved in the same location and with the same name as your PNG file.",
-            "• For precise marker placement, you can zoom in using the navigation toolbar.",
-            "• When loading a markers CSV, you can select which markers to display using the 'Select Markers' button.",
-            "• The field size follows official FIFA regulations (105m × 68m).",
-        ]
-
-        for tip in tips:
-            tk.Label(
-                content_frame,
-                text=tip,
-                font=("Arial", 10),
-                justify=tk.LEFT,
-                wraplength=650,
-            ).pack(anchor=tk.W, pady=5)
-
-        # Update canvas scroll region
-        content_frame.update_idletasks()
-        canvas.config(scrollregion=canvas.bbox(tk.ALL))
-
-        # Add a Close button at the bottom
-        tk.Button(
-            help_window,
-            text="Close",
-            command=help_window.destroy,
-            bg="white",
-            fg="black",
-            padx=20,
-            pady=5,
-        ).pack(pady=10)
 
     def load_scout_csv():
         """Opens dialog to select scout_vaila CSV and plot it"""
@@ -2246,7 +2296,7 @@ def run_soccerfield():
     Button(
         button_frame,
         text="Help",
-        command=lambda: show_help_dialog(),
+        command=open_soccerfield_help,
         bg="white",
         fg="black",
         padx=10,
@@ -2258,7 +2308,10 @@ def run_soccerfield():
     plot_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
     # Load field initially
-    load_field()
+    if initial_field_csv and os.path.isfile(initial_field_csv):
+        load_field(custom_file=initial_field_csv)
+    else:
+        load_field()
 
     # Start Tkinter loop
     root.mainloop()

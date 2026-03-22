@@ -40,6 +40,8 @@ License:
 
 import os
 import tkinter as tk
+import webbrowser
+from pathlib import Path
 from tkinter import Frame, filedialog, messagebox
 
 import matplotlib.patches as patches
@@ -685,47 +687,16 @@ def run_tenniscourt():
         w.bind("<Button-3>", delete_marker)
         root.bind("<Control-s>", save_markers_csv)
 
-    def show_help():
-        win = tk.Toplevel(root)
-        win.title("Tennis Court Visualization — Help")
-        win.geometry("600x500")
-        txt = tk.Text(win, wrap=tk.WORD, font=("Arial", 10), padx=10, pady=10)
-        txt.pack(fill=tk.BOTH, expand=True)
-        help_text = """TENNIS COURT VISUALIZATION — vailá
-═══════════════════════════════════════════════════
-
-COURT DIMENSIONS (ITF Standard)
-  • Total length:     23.77 m
-  • Doubles width:    10.97 m
-  • Singles width:     8.23 m
-  • Service box length: 6.40 m (net to service line)
-
-BUTTONS
-  Load Default Court   — Renders the ITF tennis court
-  Load Custom Court    — Load a custom court model CSV
-  Change Surface       — Cycle through court colours (Hard blue, Hard green, Clay, Grass)
-  Load Markers CSV     — Overlay player trajectories from a vaila-format CSV
-                         (columns: frame, p1_x, p1_y, p2_x, p2_y, …)
-  Select Markers       — Choose which players/markers to show
-  Heatmap              — Generate a KDE heatmap from loaded marker trajectories
-  Show/Hide Ref Points — Toggle numbered reference markers
-  Show/Hide Axis       — Toggle numeric X/Y axes
-  Create Manual Markers— Click on the court to place markers manually
-  Clear All Markers    — Remove all overlaid data
-  Save Markers (Ctrl+S)— Export manually placed markers to CSV
-
-MANUAL MARKERS
-  Left-click          — Place marker at current frame
-  Shift + Left-click  — Place next marker number
-  Right-click         — Delete nearest marker
-  Ctrl+S              — Save markers to CSV
-
-TOOLBAR (bottom of plot)
-  Home / Pan / Zoom / Save image
-"""
-        txt.insert(tk.END, help_text)
-        txt.config(state=tk.DISABLED)
-        tk.Button(win, text="Close", command=win.destroy, padx=20).pack(pady=8)
+    def open_tennis_court_help():
+        """Open bundled HTML help in the default browser (no extra Tk window)."""
+        html_path = Path(__file__).resolve().parent / "help" / "tennis_court.html"
+        if html_path.is_file():
+            webbrowser.open_new_tab(html_path.as_uri())
+        else:
+            messagebox.showinfo(
+                "Help",
+                f"Help file not found:\n{html_path}\n\nSee vaila/help/tennis_court.md",
+            )
 
     def show_heatmap():
         """Generate a KDE heatmap from loaded marker trajectories on the court."""
@@ -925,7 +896,7 @@ TOOLBAR (bottom of plot)
         btn_bar, text="Clear All Markers", bg="#B71C1C", command=clear_all_markers, **btn_kw
     ).pack(side=tk.LEFT, padx=3)
 
-    tk.Button(btn_bar, text="Help", bg="#37474F", command=show_help, **btn_kw).pack(
+    tk.Button(btn_bar, text="Help", bg="#37474F", command=open_tennis_court_help, **btn_kw).pack(
         side=tk.RIGHT, padx=3
     )
 
