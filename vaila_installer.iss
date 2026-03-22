@@ -2,7 +2,7 @@
 ; vaila Installer Script
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.3.19"
+#define MyAppVersion "0.3.31"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 
@@ -48,11 +48,14 @@ Source: "vaila\*"; DestDir: "{app}\vaila"; Flags: ignoreversion recursesubdirs c
 Source: "docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "tests\*"; DestDir: "{app}\tests"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
-; Note: pyproject.toml is already replaced with the OS-specific template (pyproject_win_cuda12.toml
-; or pyproject_universal_cpu.toml) before creating the installer. The template files (pyproject_*.toml)
-; are not needed in the installer as the correct configuration is already in pyproject.toml.
+; Template pyproject files — the install script selects the right one at runtime based on GPU detection
+Source: "pyproject_win_cuda12.toml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "pyproject_universal_cpu.toml"; DestDir: "{app}"; Flags: ignoreversion
+; Conda environment YAML (needed if user chooses legacy Conda installation method)
+Source: "yaml_for_conda_env\*"; DestDir: "{app}\yaml_for_conda_env"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: ".python-version"; DestDir: "{app}"; Flags: ignoreversion
 
 
 
