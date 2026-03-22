@@ -31,7 +31,7 @@ Usage:
   coordinates in original video dimensions.
 
 Requirements:
-- Python 3.12.12
+- Python 3.12.13
 - OpenCV (`pip install opencv-python`)
 - MediaPipe (`pip install mediapipe`)
 - Tkinter (usually included with Python installations)
