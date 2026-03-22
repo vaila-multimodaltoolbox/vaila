@@ -18,12 +18,25 @@
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
     Updated: 20 March 2026
-    Version: 0.3.25
+    Version: 0.3.31
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
 
 $ErrorActionPreference = "Stop"
+
+trap {
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Red
+    Write-Host "ERROR: An error occurred during installation!" -ForegroundColor Red
+    Write-Host "============================================================" -ForegroundColor Red
+    Write-Host "Details: $_" -ForegroundColor Red
+    Write-Host "Line: $($_.InvocationInfo.ScriptLineNumber)" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Press Enter to close this window..." -ForegroundColor Yellow
+    Read-Host
+    exit 1
+}
 
 # Enable TLS 1.2 (and 1.3 if available) for HTTPS; avoids "could not establish trust relationship" on some Windows setups
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
