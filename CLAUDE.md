@@ -278,6 +278,12 @@ uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
 
 ---
 
+## Security
+
+Open-source under **AGPL-3.0** — never commit API keys, tokens, or local credential files. See **[SECURITY.md](SECURITY.md)** and **[CONTRIBUTING.md](CONTRIBUTING.md)**. Use `.env` locally (gitignored); see `.env.example` for a safe template.
+
+---
+
 ## Agents and skills
 
 Step-by-step workflows and specialized agent roles are stored in the `.claude/` directory. This structure is intended to be used by any AI assistant (Claude Code, Antigravity, Cursor, etc.).
