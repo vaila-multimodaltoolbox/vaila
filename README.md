@@ -56,12 +56,6 @@ or
 ```powershell
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
 ```
-@article{chinaglia2026automating,
-  title={Automating Timed Up and Go Phase Segmentation and Gait Analysis via the tugturn Markerless 3D Pipeline},
-  author={Chinaglia, Abel Gon{\c{c}}alves and Cesar, Guilherme Manna and Santiago, Paulo Roberto Pereira},
-  journal={arXiv preprint arXiv:2602.21425},
-  year={2026}
-}
 
 If you use a one-liner that points to `https://vaila.io/install.ps1`, use the same TLS fix first:
 
@@ -920,8 +914,8 @@ If you use _vailá_ in your research or project, please consider citing our work
   title={Automating Timed Up and Go Phase Segmentation and Gait Analysis via the tugturn Markerless 3D Pipeline},
   author={Chinaglia, Abel Gon{\c{c}}alves and Cesar, Guilherme Manna and Santiago, Paulo Roberto Pereira},
   journal={arXiv preprint arXiv:2602.21425},
-  year={2026}
-  doi = {10.48550/arXiv.2602.21425}
+  year={2026},
+  doi = {10.48550/arXiv.2602.21425},
   url = {https://arxiv.org/abs/2602.21425}
 }
 ```
@@ -934,6 +928,8 @@ If you use _vailá_ in your research or project, please consider citing our work
 ## Contribution
 
 We encourage creativity and innovation to enhance and expand the functionality of this toolbox. You can make a difference by contributing to the project! To get involved, feel free to fork the repository, experiment with new ideas, and create a branch for your changes. When you're ready, submit a pull request so we can review and potentially integrate your contributions.
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for workflow, style, and tests. For **security** (secrets, reporting vulnerabilities), see **[SECURITY.md](SECURITY.md)**.
 
 Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid to make mistakes—every attempt is a step towards improvement!
 
