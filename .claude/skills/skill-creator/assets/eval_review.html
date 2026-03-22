@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trigger Eval Review</title>
+<style>
+:root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2d3348;
+    --text: #e4e7ef;
+    --text-muted: #8b8fa3;
+    --accent: #7c6af7;
+    --pass: #4ade80;
+    --fail: #f87171;
+    --tab-bg: #242836;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem;
+}
+h1 { font-size: 1.3rem; margin-bottom: 0.5rem; }
+.desc-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+.desc-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.4rem; }
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+.btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.btn:hover { background: var(--border); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { opacity: 0.9; }
+.add-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.add-form h3 { font-size: 0.9rem; margin-bottom: 1rem; }
+.add-form input[type="text"], .add-form textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 0.75rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+    resize: vertical;
+}
+.add-form input[type="text"]:focus, .add-form textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.toggle-label { font-size: 0.8rem; color: var(--text-muted); }
+.toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+}
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--border);
+    border-radius: 24px;
+    transition: 0.2s;
+}
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+.toggle input:checked + .toggle-slider { background: var(--pass); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+.eval-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+.eval-item.should-trigger { border-left: 3px solid var(--pass); }
+.eval-item.should-not-trigger { border-left: 3px solid var(--fail); }
+.eval-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+.eval-query {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text);
+}
+.eval-query:focus { outline: none; border-color: var(--accent); }
+.eval-footer {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+.eval-notes {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    min-width: 200px;
+}
+.eval-notes:focus { outline: none; border-color: var(--accent); color: var(--text); }
+.badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+.badge-true { background: rgba(74,222,128,0.15); color: var(--pass); }
+.badge-false { background: rgba(248,113,113,0.15); color: var(--fail); }
+.del-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+}
+.del-btn:hover { background: rgba(248,113,113,0.1); border-color: var(--fail); color: var(--fail); }
+.footer {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+.stats {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+</style>
+</head>
+<body>
+<h1>Trigger Eval Review</h1>
+<p class="desc-label">Current Description</p>
+<div class="desc-box">__SKILL_DESCRIPTION_PLACEHOLDER__</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="toolbar">
+    <button class="btn" onclick="addItem(true)">+ Should Trigger</button>
+    <button class="btn" onclick="addItem(false)">+ Should NOT Trigger</button>
+    <button class="btn btn-primary" onclick="exportSet()">Export Eval Set</button>
+</div>
+
+<div id="items"></div>
+
+<div class="footer">
+    <button class="btn btn-primary" onclick="exportSet()">Export Eval Set</button>
+</div>
+
+<script>
+const INITIAL_DATA = __EVAL_DATA_PLACEHOLDER__;
+const SKILL_NAME = "__SKILL_NAME_PLACEHOLDER__";
+let items = INITIAL_DATA.map((d, i) => ({...d, _id: i}));
+let nextId = items.length;
+
+function render() {
+    const el = document.getElementById('items');
+    const triggerCount = items.filter(i => i.should_trigger).length;
+    const noTriggerCount = items.filter(i => !i.should_trigger).length;
+    document.getElementById('stats').textContent =
+        `${items.length} total — ${triggerCount} should trigger, ${noTriggerCount} should not trigger`;
+
+    el.innerHTML = items.map((item, idx) => `
+        <div class="eval-item ${item.should_trigger ? 'should-trigger' : 'should-not-trigger'}">
+            <div class="eval-header">
+                <textarea class="eval-query" rows="2"
+                    oninput="items[${idx}].query = this.value">${escapeHtml(item.query)}</textarea>
+            </div>
+            <div class="eval-footer">
+                <label class="toggle">
+                    <input type="checkbox" ${item.should_trigger ? 'checked' : ''}
+                        onchange="items[${idx}].should_trigger = this.checked; render();">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label">Should trigger</span>
+                <span class="badge ${item.should_trigger ? 'badge-true' : 'badge-false'}">
+                    ${item.should_trigger ? 'TRIGGER' : 'NO TRIGGER'}
+                </span>
+                <input type="text" class="eval-notes" placeholder="Notes (optional)"
+                    value="${escapeHtml(item.notes || '')}"
+                    oninput="items[${idx}].notes = this.value">
+                <button class="del-btn" onclick="deleteItem(${idx})">Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function addItem(shouldTrigger) {
+    items.push({query: '', should_trigger: shouldTrigger, notes: '', _id: nextId++});
+    render();
+}
+
+function deleteItem(idx) {
+    items.splice(idx, 1);
+    render();
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function exportSet() {
+    const clean = items.map(({query, should_trigger, notes}) => ({query, should_trigger, notes}));
+    const blob = new Blob([JSON.stringify(clean, null, 2)], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'eval_set.json';
+    a.click();
+}
+
+render();
+</script>
+</body>
+</html>
