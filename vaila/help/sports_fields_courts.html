@@ -28,18 +28,18 @@
         <h2>Available models</h2>
         <table>
             <tr><th>Choice</th><th>Tool</th><th>Model file (<code>vaila/models/</code>)</th></tr>
-            <tr><td>Soccer</td><td><code>soccerfield.run_soccerfield()</code></td><td><code>soccerfield_ref3d.csv</code> (full FIFA markings)</td></tr>
-            <tr><td>Tennis</td><td><code>tennis_court.run_tenniscourt()</code></td><td><code>tenniscourt_ref3d.csv</code></td></tr>
-            <tr><td>Basketball</td><td><code>basketball_court.run_basketball_court()</code></td><td><code>basketballcourt_ref3d.csv</code></td></tr>
-            <tr><td>Volleyball</td><td><code>volleyball_court.run_volleyball_court()</code></td><td><code>volleyball_ref3d.csv</code></td></tr>
-            <tr><td>Futsal</td><td><code>futsal_court.run_futsal_court()</code></td><td><code>futsal_ref3d.csv</code></td></tr>
-            <tr><td>Handball</td><td><code>handball_court.run_handball_court()</code></td><td><code>handball_ref3d.csv</code></td></tr>
+            <tr><td>Soccer</td><td><code>drawsportsfields.run_drawsportsfields("soccer")</code></td><td><code>soccerfield_ref3d.csv</code> (full FIFA markings)</td></tr>
+            <tr><td>Tennis</td><td><code>drawsportsfields.run_drawsportsfields("tennis")</code></td><td><code>tenniscourt_ref3d.csv</code></td></tr>
+            <tr><td>Basketball</td><td><code>drawsportsfields.run_drawsportsfields("basketball")</code></td><td><code>basketballcourt_ref3d.csv</code></td></tr>
+            <tr><td>Volleyball</td><td><code>drawsportsfields.run_drawsportsfields("volleyball")</code></td><td><code>volleyball_ref3d.csv</code></td></tr>
+            <tr><td>Futsal</td><td><code>drawsportsfields.run_drawsportsfields("futsal")</code></td><td><code>futsal_ref3d.csv</code></td></tr>
+            <tr><td>Handball</td><td><code>drawsportsfields.run_drawsportsfields("handball")</code></td><td><code>handball_ref3d.csv</code></td></tr>
         </table>
 
         <div class="note">
-            <strong>Note:</strong> Soccer uses the full <code>plot_field</code> pipeline. Basketball, volleyball, futsal, and handball use a
-            <strong>rectangular reference layout</strong> (perimeter, centre line, optional centre circle and volleyball attack lines) for
-            calibration-style visualisation — not every league line (e.g. three-point arc) is drawn. For publication-quality diagrams,
+            <strong>Note:</strong> The Draw Sports dialog is now unified under <code>vaila/drawsportsfields.py</code>.
+            Soccer and tennis keep their dedicated pipelines, while basketball, volleyball, futsal and handball are routed through the
+            sports-field engine with sport-specific drawings and model CSVs. For publication-quality diagrams and alternative styles,
             see dedicated libraries such as
             <a href="https://github.com/sportsdataverse/sportypy">sportypy</a> or
             <a href="https://pypi.org/project/mplbasketball/">mplbasketball</a> (basketball).
