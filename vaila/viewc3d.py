@@ -4373,7 +4373,7 @@ O - Manual swap markers (visual editing)
     # Quit (ESC)
     vis.register_key_callback(256, lambda _v: (vis.destroy_window(), False)[1])
 
-    # --- Field Drawing Logic from soccerfield.py ---
+    # --- Field Drawing Logic from drawsportsfields.py ---
 
     def draw_line_3d(vis, p1, p2, color=None, width=0.02):
         if color is None:
