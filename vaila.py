@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 22 March 2026
-Version: 0.3.31
+Update Date: 23 March 2026
+Version: 0.3.32
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -156,7 +156,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 22.March.2026 v0.3.31 (Python 3.12.13)
+vailá - 23.March.2026 v0.3.32 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -216,7 +216,7 @@ C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 
 -> C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
-C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Soccer Field   C_C_r3_c2 - vailá
+C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Draw Sports    C_C_r3_c2 - Stroboscopic
 C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
 C_C_r5_c1 - vailá         C_C_r5_c2 - vailá          C_C_r5_c3 - vailá
 
@@ -262,7 +262,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 22.March.2026 v0.3.31 (Python 3.12.13)")
+        self.title("vailá - 23.March.2026 v0.3.32 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -2663,6 +2663,22 @@ class Vaila(tk.Tk):
                 from vaila import tennis_court
 
                 tennis_court.run_tenniscourt()
+            elif sel == "basketball":
+                from vaila import basketball_court
+
+                basketball_court.run_basketball_court()
+            elif sel == "volleyball":
+                from vaila import volleyball_court
+
+                volleyball_court.run_volleyball_court()
+            elif sel == "futsal":
+                from vaila import futsal_court
+
+                futsal_court.run_futsal_court()
+            elif sel == "handball":
+                from vaila import handball_court
+
+                handball_court.run_handball_court()
             else:
                 csv_path = model_paths[sel]
                 if not os.path.isfile(csv_path):
