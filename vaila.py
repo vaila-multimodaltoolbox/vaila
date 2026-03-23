@@ -2606,15 +2606,7 @@ class Vaila(tk.Tk):
     # C_C_r3_c1
     def draw_sports_fields_courts(self) -> None:
         """Pick soccer, tennis, or another court model; Help opens HTML in the browser."""
-        models_dir = os.path.join(vaila_dir, "vaila", "models")
         help_html = os.path.join(vaila_dir, "vaila", "help", "sports_fields_courts.html")
-        model_paths = {
-            "basketball": os.path.join(models_dir, "basketballcourt_ref3d.csv"),
-            "volleyball": os.path.join(models_dir, "volleyball_ref3d.csv"),
-            "futsal": os.path.join(models_dir, "futsal_ref3d.csv"),
-            "handball": os.path.join(models_dir, "handball_ref3d.csv"),
-        }
-
         dlg = tk.Toplevel(self)
         dlg.title("Draw Sports")
         dlg.geometry("480x360")
@@ -2655,38 +2647,12 @@ class Vaila(tk.Tk):
         def on_ok() -> None:
             sel = choice.get()
             dlg.destroy()
-            if sel == "soccer":
-                from vaila import soccerfield
+            from vaila import drawsportsfields
 
-                soccerfield.run_soccerfield()
-            elif sel == "tennis":
-                from vaila import tennis_court
-
-                tennis_court.run_tenniscourt()
-            elif sel == "basketball":
-                from vaila import basketball_court
-
-                basketball_court.run_basketball_court()
-            elif sel == "volleyball":
-                from vaila import volleyball_court
-
-                volleyball_court.run_volleyball_court()
-            elif sel == "futsal":
-                from vaila import futsal_court
-
-                futsal_court.run_futsal_court()
-            elif sel == "handball":
-                from vaila import handball_court
-
-                handball_court.run_handball_court()
-            else:
-                csv_path = model_paths[sel]
-                if not os.path.isfile(csv_path):
-                    messagebox.showerror("Error", f"Model file missing:\n{csv_path}")
-                    return
-                from vaila import soccerfield
-
-                soccerfield.run_soccerfield(initial_field_csv=csv_path)
+            try:
+                drawsportsfields.run_drawsportsfields(sel)
+            except Exception as exc:
+                messagebox.showerror("Draw Sports", str(exc))
 
         def on_cancel() -> None:
             dlg.destroy()
