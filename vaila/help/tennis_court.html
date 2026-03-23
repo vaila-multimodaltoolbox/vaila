@@ -3,67 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá — Tennis court visualization</title>
+    <title>vailá — Tennis court (drawsportsfields)</title>
+    <meta http-equiv="refresh" content="0; url=sports_fields_courts.html">
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background-color: #f5f5f5; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 24px; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-        th, td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
-        th { background: #ecf0f1; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>vailá — Tennis court visualization</h1>
-        <p><strong>Module:</strong> <code>vaila/tennis_court.py</code></p>
-        <p>ITF-standard tennis court drawing with trajectory overlays and KDE heatmaps. Default reference CSV:
-            <code>vaila/models/tenniscourt_ref3d.csv</code> (labels only; geometry is metric-accurate in code).</p>
-
-        <h2>Court dimensions (ITF)</h2>
-        <ul>
-            <li>Length: 23.77 m</li>
-            <li>Doubles width: 10.97 m</li>
-            <li>Singles width: 8.23 m (1.37 m alley each side)</li>
-            <li>Service box length: 6.40 m (net to service line)</li>
-        </ul>
-
-        <h2>Buttons</h2>
-        <table>
-            <tr><th>Button</th><th>Action</th></tr>
-            <tr><td>Load Default Court</td><td>ITF court from bundled CSV</td></tr>
-            <tr><td>Load Custom Court</td><td>Custom model CSV (<code>point_name,point_number,x,y,z</code>)</td></tr>
-            <tr><td>Surface</td><td>Cycle surface colours (hard blue/green, clay, grass)</td></tr>
-            <tr><td>Load Markers CSV</td><td>Overlay trajectories (<code>frame</code>, <code>pN_x</code>, <code>pN_y</code>, …)</td></tr>
-            <tr><td>Select Markers</td><td>Filter which markers to show</td></tr>
-            <tr><td>Heatmap</td><td>KDE heatmap from loaded markers</td></tr>
-            <tr><td>Show/Hide Ref Points</td><td>Toggle numbered references</td></tr>
-            <tr><td>Show/Hide Axis</td><td>Toggle axes</td></tr>
-            <tr><td>Create Manual Markers</td><td>Click to place markers</td></tr>
-            <tr><td>Clear All Markers</td><td>Remove overlays</td></tr>
-            <tr><td>Help</td><td>Opens this page in your browser</td></tr>
-        </table>
-
-        <h2>Manual markers</h2>
-        <ul>
-            <li>Left-click: place marker</li>
-            <li>Shift + left-click: next marker number</li>
-            <li>Right-click: delete nearest</li>
-            <li>Ctrl+S: save CSV</li>
-        </ul>
-
-        <h2>CLI</h2>
-        <pre>uv run python -m vaila.tennis_court --court &lt;path&gt; --markers &lt;path&gt; --heatmap</pre>
-
-        <div class="footer">
-            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">vailá on GitHub</a> ·
-            <a href="sports_fields_courts.html">Sports fields / courts overview</a></p>
-        </div>
-    </div>
+    <p>This module has been merged into <code>vaila/drawsportsfields.py</code>.
+    Redirecting to <a href="sports_fields_courts.html">sports_fields_courts.html</a>.</p>
 </body>
 </html>
