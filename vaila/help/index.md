@@ -352,9 +352,8 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **showc3d**
   - [📄 HTML](showc3d.html)
   - [📝 Markdown](showc3d.md)
-- **soccerfield**
-  - [📄 HTML](soccerfield.html)
-  - [📝 Markdown](soccerfield.md)
+- **drawsportsfields**
+  - [📄 HTML](sports_fields_courts.html)
 - **vailaplot2d**
   - [📄 HTML](vailaplot2d.html)
   - [📝 Markdown](vailaplot2d.md)

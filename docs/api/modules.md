@@ -1,4 +1,4 @@
-﻿# API Reference - Modules
+# API Reference - Modules
 
 ## Overview
 
@@ -68,7 +68,7 @@ This page provides a comprehensive reference of all modules available in the vai
 
 ### 2D Plotting
 - **`vailaplot2d`**: Comprehensive 2D plotting with multiple chart types
-- **`soccerfield`**: Soccer field visualization tools
+- **`drawsportsfields`**: Unified sports field/court visualization (soccer, tennis, basketball, volleyball, futsal, handball)
 
 ### 3D Visualization
 - **`vailaplot3d`**: 3D data plotting and visualization

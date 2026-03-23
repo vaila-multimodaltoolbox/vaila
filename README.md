@@ -257,7 +257,7 @@ vaila
 │   ├── scout_vaila.py              # Scout analysis tool
 │   ├── showc3d.py                  # Visualize C3D data
 │   ├── sit2stand.py                # Sit-to-Stand analysis
-│   ├── soccerfield.py              # Soccer field analysis
+│   ├── drawsportsfields.py          # Unified sports field/court visualization
 │   ├── spectral_features.py        # Spectral feature extraction
 │   ├── stabilogram_analysis.py     # Stabilogram analysis tools
 │   ├── startblock.py               # Sprint start block analysis
