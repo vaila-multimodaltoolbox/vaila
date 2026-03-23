@@ -531,6 +531,9 @@ def plot_simple_field(
     ``center_field`` + ``center_circle_top`` + ``center_circle_bottom`` for a centre circle,
     and volleyball-style ``attack_line_*`` pairs for vertical attack lines.
     """
+    for col in ("x", "y", "z"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     min_x, max_x = df["x"].min(), df["x"].max()
     min_y, max_y = df["y"].min(), df["y"].max()
     field_width = max_x - min_x
@@ -640,6 +643,590 @@ def plot_simple_field(
 
     ax.set_title(title, fontsize=11, pad=8)
     return fig, ax
+
+
+def _ref_label(
+    ax,
+    points: dict,
+    field_w: float,
+    field_h: float,
+    *,
+    show: bool = True,
+):
+    """Draw numbered reference-point labels on *ax* when *show* is True."""
+    if not show:
+        return
+    ox = max(field_w * 0.005, 0.15)
+    oy = max(field_h * 0.005, 0.15)
+    for _name, vals in points.items():
+        x, y = vals[0], vals[1]
+        num = vals[2] if len(vals) > 2 else ""
+        ax.text(
+            x + ox,
+            y + oy,
+            str(num),
+            color="black",
+            fontsize=8,
+            weight="bold",
+            bbox={"facecolor": "white", "alpha": 0.7, "boxstyle": "round", "pad": 0.2},
+            zorder=10,
+        )
+
+
+def _setup_axes(ax, min_x, max_x, min_y, max_y, margin, *, show_axis_values: bool):
+    """Common axes configuration for sport plot functions."""
+    ax.set_xlim(min_x - margin - 1, max_x + margin + 1)
+    ax.set_ylim(min_y - margin - 1, max_y + margin + 1)
+    ax.set_aspect("equal")
+    if show_axis_values:
+        ax.grid(True, alpha=0.3, color="gray", linestyle="-", linewidth=0.5)
+        ax.set_xlabel("X (meters)", fontsize=10)
+        ax.set_ylabel("Y (meters)", fontsize=10)
+        ax.tick_params(axis="both", which="major", labelsize=8)
+    else:
+        ax.axis("off")
+
+
+def _parse_points(df: pd.DataFrame) -> dict[str, tuple[float, float, int]]:
+    """Build ``{name: (x, y, number)}`` dict from *df*."""
+    for col in ("x", "y", "z"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return {
+        row["point_name"]: (float(row["x"]), float(row["y"]), int(row["point_number"]))
+        for _, row in df.iterrows()
+    }
+
+
+# ---------------------------------------------------------------------------
+# Basketball — FIBA 28 × 15 m
+# ---------------------------------------------------------------------------
+
+def plot_basketball_court(
+    df: pd.DataFrame,
+    *,
+    show_reference_points: bool = True,
+    show_axis_values: bool = False,
+    title: str = "Basketball (FIBA 28×15 m)",
+):
+    """Draw a FIBA basketball court with paint, 3-point arcs and free-throw circles."""
+    points = _parse_points(df)
+    min_x, max_x = df["x"].min(), df["x"].max()
+    min_y, max_y = df["y"].min(), df["y"].max()
+    court_w = max_x - min_x
+    court_h = max_y - min_y
+    cx = min_x + court_w / 2
+    cy = min_y + court_h / 2
+    margin = 2
+    lw = 2
+    lc = "white"
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+    _setup_axes(ax, min_x, max_x, min_y, max_y, margin, show_axis_values=show_axis_values)
+
+    draw_rectangle(
+        ax, (min_x - margin, min_y - margin),
+        court_w + 2 * margin, court_h + 2 * margin,
+        edgecolor="none", facecolor="#b8895c", zorder=0,
+    )
+    draw_rectangle(
+        ax, (min_x, min_y), court_w, court_h,
+        edgecolor="none", facecolor="#d4a574", zorder=0.5,
+    )
+
+    # Boundary
+    for p1, p2 in (
+        ((min_x, min_y), (min_x, max_y)),
+        ((max_x, min_y), (max_x, max_y)),
+        ((min_x, min_y), (max_x, min_y)),
+        ((min_x, max_y), (max_x, max_y)),
+    ):
+        draw_line(ax, p1, p2, color=lc, linewidth=lw, zorder=1)
+
+    # Center line
+    draw_line(ax, (cx, min_y), (cx, max_y), color=lc, linewidth=lw, zorder=1)
+
+    # Center circle (r = 1.80 m)
+    draw_circle(ax, (cx, cy), 1.80, edgecolor=lc, facecolor="none", linewidth=lw, zorder=1)
+
+    # FIBA constants
+    paint_half_w = 2.45
+    paint_depth = 5.80
+    basket_offset = 1.575
+    ft_radius = 1.80
+    three_r = 6.75
+    corner_y_dist = 0.90
+    no_charge_r = 1.25
+    backboard_offset = 1.20
+    backboard_half = 0.90
+
+    for side in ("left", "right"):
+        if side == "left":
+            end_x = min_x
+            sign = 1
+            basket_x = end_x + basket_offset
+            ft_x = end_x + paint_depth
+        else:
+            end_x = max_x
+            sign = -1
+            basket_x = end_x - basket_offset
+            ft_x = end_x - paint_depth
+
+        # Paint area
+        px = min(end_x, ft_x)
+        draw_rectangle(
+            ax, (px, cy - paint_half_w), abs(paint_depth), 2 * paint_half_w,
+            edgecolor=lc, facecolor="#c49464", linewidth=lw, zorder=0.8,
+        )
+
+        # Free-throw semi-circle
+        if side == "left":
+            theta1, theta2 = 270, 90
+        else:
+            theta1, theta2 = 90, 270
+        draw_arc(
+            ax, (ft_x, cy), ft_radius, theta1, theta2,
+            edgecolor=lc, linewidth=lw, zorder=1,
+        )
+        # Dashed back half of free-throw circle
+        back_t1, back_t2 = (90, 270) if side == "left" else (270, 90 + 360)
+        draw_arc(
+            ax, (ft_x, cy), ft_radius, back_t1, back_t2,
+            edgecolor=lc, linewidth=1, linestyle="--", zorder=1,
+        )
+
+        # Backboard
+        bb_x = end_x + sign * backboard_offset
+        draw_line(
+            ax, (bb_x, cy - backboard_half), (bb_x, cy + backboard_half),
+            color=lc, linewidth=3, zorder=2,
+        )
+
+        # Basket ring
+        draw_circle(
+            ax, (basket_x, cy), 0.225,
+            edgecolor="#ff6600", facecolor="none", linewidth=2, zorder=2,
+        )
+
+        # No-charge zone (dashed semi-circle)
+        draw_arc(
+            ax, (basket_x, cy), no_charge_r, theta1, theta2,
+            edgecolor=lc, linewidth=1, linestyle="--", zorder=1,
+        )
+
+        # 3-point arc
+        dy = cy - (min_y + corner_y_dist)
+        dx_arc = math.sqrt(max(three_r**2 - dy**2, 0))
+        phi = math.atan2(dy, dx_arc)
+        if side == "left":
+            angles = np.linspace(-phi, phi, 200)
+        else:
+            # Right side must open to the court interior (towards -x).
+            angles = np.linspace(math.pi + phi, math.pi - phi, 200)
+        arc_x = basket_x + three_r * np.cos(angles)
+        arc_y = cy + three_r * np.sin(angles)
+        ax.plot(arc_x, arc_y, color=lc, linewidth=lw, zorder=1)
+
+        # Corner straight sections
+        arc_start_x = float(arc_x[0])
+        arc_end_x = float(arc_x[-1])
+        bottom_corner_y = min_y + corner_y_dist
+        top_corner_y = max_y - corner_y_dist
+        draw_line(ax, (end_x, bottom_corner_y), (arc_start_x, bottom_corner_y),
+                  color=lc, linewidth=lw, zorder=1)
+        draw_line(ax, (end_x, top_corner_y), (arc_end_x, top_corner_y),
+                  color=lc, linewidth=lw, zorder=1)
+
+    _ref_label(ax, points, court_w, court_h, show=show_reference_points)
+    ax.set_title(title, fontsize=11, pad=8)
+    return fig, ax
+
+
+# ---------------------------------------------------------------------------
+# Volleyball — FIVB 18 × 9 m
+# ---------------------------------------------------------------------------
+
+def plot_volleyball_court(
+    df: pd.DataFrame,
+    *,
+    show_reference_points: bool = True,
+    show_axis_values: bool = False,
+    title: str = "Volleyball (FIVB 18×9 m)",
+):
+    """Draw a FIVB volleyball court with attack lines and net."""
+    points = _parse_points(df)
+    min_x, max_x = df["x"].min(), df["x"].max()
+    min_y, max_y = df["y"].min(), df["y"].max()
+    court_w = max_x - min_x
+    court_h = max_y - min_y
+    cx = min_x + court_w / 2
+    margin = 2
+    lw = 2
+    lc = "white"
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+    _setup_axes(ax, min_x, max_x, min_y, max_y, margin, show_axis_values=show_axis_values)
+
+    draw_rectangle(
+        ax, (min_x - margin, min_y - margin),
+        court_w + 2 * margin, court_h + 2 * margin,
+        edgecolor="none", facecolor="#c9b896", zorder=0,
+    )
+    draw_rectangle(
+        ax, (min_x, min_y), court_w, court_h,
+        edgecolor="none", facecolor="#f0e6d2", zorder=0.5,
+    )
+
+    # Boundary
+    for p1, p2 in (
+        ((min_x, min_y), (min_x, max_y)),
+        ((max_x, min_y), (max_x, max_y)),
+        ((min_x, min_y), (max_x, min_y)),
+        ((min_x, max_y), (max_x, max_y)),
+    ):
+        draw_line(ax, p1, p2, color=lc, linewidth=lw, zorder=1)
+
+    # Center line / net
+    draw_line(ax, (cx, min_y), (cx, max_y), color=lc, linewidth=lw + 1, zorder=1)
+    ax.plot(
+        [cx, cx], [min_y - 0.5, max_y + 0.5],
+        color="black", linewidth=1, linestyle="-", zorder=1.5, alpha=0.6,
+    )
+    ax.text(cx, max_y + 0.7, "NET", ha="center", fontsize=8, color="black", zorder=10)
+
+    # Net posts
+    ax.plot(cx, min_y - 0.3, "k^", markersize=6, zorder=2)
+    ax.plot(cx, max_y + 0.3, "k^", markersize=6, zorder=2)
+
+    # Attack lines (3 m from center line)
+    attack_dist = 3.0
+    for x_off in (cx - attack_dist, cx + attack_dist):
+        draw_line(
+            ax, (x_off, min_y), (x_off, max_y),
+            color=lc, linewidth=lw, linestyle="-", zorder=1,
+        )
+
+    # Half-court shading
+    draw_rectangle(
+        ax, (min_x, min_y), court_w / 2, court_h,
+        edgecolor="none", facecolor="#e8dcc4", zorder=0.6,
+    )
+
+    # Service zone marks (small dashes behind end lines)
+    sz_len = 0.15
+    for end_x in (min_x, max_x):
+        sgn = -1 if end_x == min_x else 1
+        draw_line(
+            ax, (end_x + sgn * sz_len, min_y), (end_x + sgn * sz_len * 4, min_y),
+            color=lc, linewidth=1, zorder=1,
+        )
+        draw_line(
+            ax, (end_x + sgn * sz_len, max_y), (end_x + sgn * sz_len * 4, max_y),
+            color=lc, linewidth=1, zorder=1,
+        )
+
+    _ref_label(ax, points, court_w, court_h, show=show_reference_points)
+    ax.set_title(title, fontsize=11, pad=8)
+    return fig, ax
+
+
+# ---------------------------------------------------------------------------
+# Handball — IHF 40 × 20 m
+# ---------------------------------------------------------------------------
+
+def plot_handball_court(
+    df: pd.DataFrame,
+    *,
+    show_reference_points: bool = True,
+    show_axis_values: bool = False,
+    title: str = "Handball (IHF 40×20 m)",
+):
+    """Draw an IHF handball court with 6 m / 9 m arcs and goals."""
+    points = _parse_points(df)
+    min_x, max_x = df["x"].min(), df["x"].max()
+    min_y, max_y = df["y"].min(), df["y"].max()
+    court_w = max_x - min_x
+    court_h = max_y - min_y
+    cx = min_x + court_w / 2
+    cy = min_y + court_h / 2
+    margin = 2
+    lw = 2
+    lc = "white"
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+    _setup_axes(ax, min_x, max_x, min_y, max_y, margin, show_axis_values=show_axis_values)
+
+    draw_rectangle(
+        ax, (min_x - margin, min_y - margin),
+        court_w + 2 * margin, court_h + 2 * margin,
+        edgecolor="none", facecolor="#2a5233", zorder=0,
+    )
+    draw_rectangle(
+        ax, (min_x, min_y), court_w, court_h,
+        edgecolor="none", facecolor="#3d7a4a", zorder=0.5,
+    )
+
+    # Boundary
+    for p1, p2 in (
+        ((min_x, min_y), (min_x, max_y)),
+        ((max_x, min_y), (max_x, max_y)),
+        ((min_x, min_y), (max_x, min_y)),
+        ((min_x, max_y), (max_x, max_y)),
+    ):
+        draw_line(ax, p1, p2, color=lc, linewidth=lw, zorder=1)
+
+    # Center line
+    draw_line(ax, (cx, min_y), (cx, max_y), color=lc, linewidth=lw, zorder=1)
+
+    # Goal & area dimensions
+    goal_half = 1.5
+    goal_area_r = 6.0
+    free_throw_r = 9.0
+    seven_m = 7.0
+    four_m = 4.0
+    gk_mark_half = 0.15
+
+    for side in ("left", "right"):
+        end_x = min_x if side == "left" else max_x
+        sign = 1 if side == "left" else -1
+        post_bottom = cy - goal_half
+        post_top = cy + goal_half
+
+        # Goal (thick red line on end line)
+        draw_line(
+            ax, (end_x, post_bottom), (end_x, post_top),
+            color="#cc0000", linewidth=5, zorder=2,
+        )
+        # Goal depth indicator
+        goal_depth = 1.0
+        gd_x = end_x - sign * goal_depth
+        draw_line(ax, (end_x, post_bottom), (gd_x, post_bottom),
+                  color="#cc0000", linewidth=2, zorder=2)
+        draw_line(ax, (end_x, post_top), (gd_x, post_top),
+                  color="#cc0000", linewidth=2, zorder=2)
+        draw_line(ax, (gd_x, post_bottom), (gd_x, post_top),
+                  color="#cc0000", linewidth=2, zorder=2)
+
+        # 6 m goal-area line (two quarter-circle arcs + connecting segment)
+        bottom_arc_center = (end_x, post_bottom)
+        top_arc_center = (end_x, post_top)
+
+        if side == "left":
+            # Bottom post arc: from y going down along goal line to x going out
+            t_b = np.linspace(-math.pi / 2, 0, 80)
+            t_t = np.linspace(0, math.pi / 2, 80)
+        else:
+            t_b = np.linspace(-math.pi / 2, -math.pi, 80)
+            t_t = np.linspace(math.pi, math.pi / 2, 80)
+
+        arc_bx = bottom_arc_center[0] + goal_area_r * np.cos(t_b)
+        arc_by = bottom_arc_center[1] + goal_area_r * np.sin(t_b)
+        arc_tx = top_arc_center[0] + goal_area_r * np.cos(t_t)
+        arc_ty = top_arc_center[1] + goal_area_r * np.sin(t_t)
+
+        seg_x = end_x + sign * goal_area_r
+        full_x = np.concatenate([arc_bx, [seg_x, seg_x], arc_tx])
+        full_y = np.concatenate([arc_by, [post_bottom, post_top], arc_ty])
+        ax.plot(full_x, full_y, color=lc, linewidth=lw, zorder=1)
+
+        # 9 m free-throw line (dashed, same shape)
+        if side == "left":
+            t_b9 = np.linspace(-math.pi / 2, 0, 80)
+            t_t9 = np.linspace(0, math.pi / 2, 80)
+        else:
+            t_b9 = np.linspace(-math.pi / 2, -math.pi, 80)
+            t_t9 = np.linspace(math.pi, math.pi / 2, 80)
+
+        arc_bx9 = bottom_arc_center[0] + free_throw_r * np.cos(t_b9)
+        arc_by9 = bottom_arc_center[1] + free_throw_r * np.sin(t_b9)
+        arc_tx9 = top_arc_center[0] + free_throw_r * np.cos(t_t9)
+        arc_ty9 = top_arc_center[1] + free_throw_r * np.sin(t_t9)
+
+        seg9_x = end_x + sign * free_throw_r
+        full9_x = np.concatenate([arc_bx9, [seg9_x, seg9_x], arc_tx9])
+        full9_y = np.concatenate([arc_by9, [post_bottom, post_top], arc_ty9])
+        # Clip to court boundaries
+        mask = (full9_y >= min_y) & (full9_y <= max_y)
+        ax.plot(
+            full9_x[mask], full9_y[mask],
+            color=lc, linewidth=lw, linestyle="--", zorder=1,
+        )
+
+        # 7 m penalty mark
+        mark_x = end_x + sign * seven_m
+        draw_line(
+            ax, (mark_x, cy - 0.5), (mark_x, cy + 0.5),
+            color=lc, linewidth=lw + 1, zorder=1,
+        )
+
+        # 4 m goalkeeper line
+        gk_x = end_x + sign * four_m
+        draw_line(
+            ax, (gk_x, cy - gk_mark_half), (gk_x, cy + gk_mark_half),
+            color=lc, linewidth=lw + 1, zorder=1,
+        )
+
+    _ref_label(ax, points, court_w, court_h, show=show_reference_points)
+    ax.set_title(title, fontsize=11, pad=8)
+    return fig, ax
+
+
+# ---------------------------------------------------------------------------
+# Futsal — FIFA 40 × 20 m
+# ---------------------------------------------------------------------------
+
+def plot_futsal_court(
+    df: pd.DataFrame,
+    *,
+    show_reference_points: bool = True,
+    show_axis_values: bool = False,
+    title: str = "Futsal (FIFA 40×20 m)",
+):
+    """Draw a FIFA futsal court with penalty arcs, center circle and goals."""
+    points = _parse_points(df)
+    min_x, max_x = df["x"].min(), df["x"].max()
+    min_y, max_y = df["y"].min(), df["y"].max()
+    court_w = max_x - min_x
+    court_h = max_y - min_y
+    cx = min_x + court_w / 2
+    cy = min_y + court_h / 2
+    margin = 2
+    lw = 2
+    lc = "white"
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+    _setup_axes(ax, min_x, max_x, min_y, max_y, margin, show_axis_values=show_axis_values)
+
+    draw_rectangle(
+        ax, (min_x - margin, min_y - margin),
+        court_w + 2 * margin, court_h + 2 * margin,
+        edgecolor="none", facecolor="#123b6f", zorder=0,
+    )
+    draw_rectangle(
+        ax, (min_x, min_y), court_w, court_h,
+        edgecolor="none", facecolor="#1f5fa8", zorder=0.5,
+    )
+
+    # Boundary
+    for p1, p2 in (
+        ((min_x, min_y), (min_x, max_y)),
+        ((max_x, min_y), (max_x, max_y)),
+        ((min_x, min_y), (max_x, min_y)),
+        ((min_x, max_y), (max_x, max_y)),
+    ):
+        draw_line(ax, p1, p2, color=lc, linewidth=lw, zorder=1)
+
+    # Center line
+    draw_line(ax, (cx, min_y), (cx, max_y), color=lc, linewidth=lw, zorder=1)
+
+    # Center circle (r = 3 m)
+    draw_circle(ax, (cx, cy), 3.0, edgecolor=lc, facecolor="none", linewidth=lw, zorder=1)
+
+    # Center spot
+    draw_circle(ax, (cx, cy), 0.10, edgecolor=lc, facecolor=lc, linewidth=1, zorder=2)
+
+    # Goal & penalty area constants
+    goal_half = 1.5
+    penalty_r = 6.0
+    penalty_mark = 6.0
+    second_penalty = 10.0
+    corner_r = 0.25
+
+    for side in ("left", "right"):
+        end_x = min_x if side == "left" else max_x
+        sign = 1 if side == "left" else -1
+        post_bottom = cy - goal_half
+        post_top = cy + goal_half
+
+        # Goal (red)
+        draw_line(
+            ax, (end_x, post_bottom), (end_x, post_top),
+            color="#cc0000", linewidth=5, zorder=2,
+        )
+        goal_depth = 0.80
+        gd_x = end_x - sign * goal_depth
+        draw_line(ax, (end_x, post_bottom), (gd_x, post_bottom),
+                  color="#cc0000", linewidth=2, zorder=2)
+        draw_line(ax, (end_x, post_top), (gd_x, post_top),
+                  color="#cc0000", linewidth=2, zorder=2)
+        draw_line(ax, (gd_x, post_bottom), (gd_x, post_top),
+                  color="#cc0000", linewidth=2, zorder=2)
+
+        # Penalty area (quarter circles from each post + connecting line)
+        if side == "left":
+            t_b = np.linspace(-math.pi / 2, 0, 80)
+            t_t = np.linspace(0, math.pi / 2, 80)
+        else:
+            t_b = np.linspace(-math.pi / 2, -math.pi, 80)
+            t_t = np.linspace(math.pi, math.pi / 2, 80)
+
+        arc_bx = end_x + penalty_r * np.cos(t_b)
+        arc_by = post_bottom + penalty_r * np.sin(t_b)
+        arc_tx = end_x + penalty_r * np.cos(t_t)
+        arc_ty = post_top + penalty_r * np.sin(t_t)
+
+        seg_x = end_x + sign * penalty_r
+        full_x = np.concatenate([arc_bx, [seg_x, seg_x], arc_tx])
+        full_y = np.concatenate([arc_by, [post_bottom, post_top], arc_ty])
+        ax.plot(full_x, full_y, color=lc, linewidth=lw, zorder=1)
+
+        # Penalty mark (6 m)
+        pm_x = end_x + sign * penalty_mark
+        draw_circle(ax, (pm_x, cy), 0.10, edgecolor=lc, facecolor=lc, linewidth=1, zorder=2)
+
+        # Second penalty mark (10 m)
+        sp_x = end_x + sign * second_penalty
+        draw_circle(ax, (sp_x, cy), 0.10, edgecolor=lc, facecolor=lc, linewidth=1, zorder=2)
+
+        # Substitution zone (5 m each side of center line)
+        sub_len = 0.80
+        for sub_y in (min_y, max_y):
+            y_sign = -1 if sub_y == min_y else 1
+            for dx in (-5, 5):
+                sx = cx + dx
+                draw_line(
+                    ax, (sx, sub_y), (sx, sub_y + y_sign * sub_len),
+                    color=lc, linewidth=1, zorder=1,
+                )
+
+    # Corner arcs
+    for corner_x, corner_y in (
+        (min_x, min_y), (min_x, max_y), (max_x, min_y), (max_x, max_y),
+    ):
+        t1 = 0 if corner_x == min_x else 180
+        if corner_y == min_y:
+            t1_adj = t1
+            t2_adj = t1 + 90
+        else:
+            t1_adj = t1 - 90 if corner_x == min_x else t1
+            t2_adj = t1_adj + 90
+        if corner_x == min_x and corner_y == min_y:
+            t1_adj, t2_adj = 0, 90
+        elif corner_x == max_x and corner_y == min_y:
+            t1_adj, t2_adj = 90, 180
+        elif corner_x == max_x and corner_y == max_y:
+            t1_adj, t2_adj = 180, 270
+        else:
+            t1_adj, t2_adj = 270, 360
+        draw_arc(
+            ax, (corner_x, corner_y), corner_r, t1_adj, t2_adj,
+            edgecolor=lc, linewidth=1, zorder=1,
+        )
+
+    _ref_label(ax, points, court_w, court_h, show=show_reference_points)
+    ax.set_title(title, fontsize=11, pad=8)
+    return fig, ax
+
+
+# ---------------------------------------------------------------------------
+
+def _sport_type_from_path(csv_path: str) -> str | None:
+    """Identify sport type from CSV filename.  Returns None for unknown."""
+    base = Path(csv_path).stem.lower()
+    for sport in ("basketball", "volleyball", "futsal", "handball"):
+        if sport in base:
+            return sport
+    return None
 
 
 def _simple_field_style_for_path(csv_path: str) -> tuple[str, str, str]:
@@ -1039,20 +1626,33 @@ def load_and_plot_scout_events(
     print(f"Actions: {list(filtered_df['action'].unique())}")
 
 
-def run_soccerfield(initial_field_csv: str | None = None):
+def run_soccerfield(
+    initial_field_csv: str | None = None,
+    *,
+    default_field_csv: str | None = None,
+    window_title: str = "Sports Field Visualization",
+    help_html: str = "sports_fields_courts.html",
+):
     """Main function to run the soccerfield.py script with GUI controls.
 
     Parameters
     ----------
     initial_field_csv
         If set, load this field model on startup (e.g. basketball / volleyball CSV).
+    default_field_csv
+        Default model loaded when ``initial_field_csv`` is not provided.
+        Falls back to ``models/soccerfield_ref3d.csv``.
+    window_title
+        Tk window title.
+    help_html
+        Help HTML filename from ``vaila/help`` opened by the Help button.
     """
-    print(f"Running script: {os.path.basename(__file__)}")
+    print(f"Running script: {os.path.basename(__file__)} — {window_title}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     # Create main Tkinter window
     root = tk.Tk()
-    root.title("Soccer Field Visualization")
+    root.title(window_title)
     root.geometry("1200x800")
 
     # Create frame for buttons
@@ -1065,6 +1665,7 @@ def run_soccerfield(initial_field_csv: str | None = None):
     show_reference_points = [True]  # Boolean state for reference points visibility
     show_axis_values = [False]  # Boolean state for axis values visibility
     current_field_csv = [None]  # Store the current field CSV path
+    current_field_title = ["Sports field"]  # Active field title for UI labels
     current_markers_csv = [None]  # Store the current markers CSV path
     current_scout_csv = [None]  # Store the current scout CSV path
     selected_markers = [None]  # Store currently selected markers
@@ -1086,9 +1687,11 @@ def run_soccerfield(initial_field_csv: str | None = None):
             if custom_file:
                 csv_path = custom_file
             else:
-                # Check if models directory exists
                 models_dir = os.path.join(os.path.dirname(__file__), "models")
-                csv_path = os.path.join(models_dir, "soccerfield_ref3d.csv")
+                if default_field_csv and os.path.isfile(default_field_csv):
+                    csv_path = default_field_csv
+                else:
+                    csv_path = os.path.join(models_dir, "soccerfield_ref3d.csv")
 
             # Store the current CSV path for later redraws
             current_field_csv[0] = csv_path
@@ -1102,12 +1705,42 @@ def run_soccerfield(initial_field_csv: str | None = None):
             is_soccer_layout = _SOCCER_FIELD_POINT_NAMES.issubset(names)
 
             # Create figure and embed in Tkinter
+            sport = _sport_type_from_path(csv_path)
             if is_soccer_layout:
                 fig, ax = plot_field(
                     df,
                     show_reference_points=show_reference_points[0],
                     show_axis_values=show_axis_values[0],
                 )
+                current_field_title[0] = "Soccer field (FIFA 105×68 m)"
+            elif sport == "basketball":
+                fig, ax = plot_basketball_court(
+                    df,
+                    show_reference_points=show_reference_points[0],
+                    show_axis_values=show_axis_values[0],
+                )
+                current_field_title[0] = "Basketball (FIBA 28×15 m)"
+            elif sport == "volleyball":
+                fig, ax = plot_volleyball_court(
+                    df,
+                    show_reference_points=show_reference_points[0],
+                    show_axis_values=show_axis_values[0],
+                )
+                current_field_title[0] = "Volleyball (FIVB 18×9 m)"
+            elif sport == "handball":
+                fig, ax = plot_handball_court(
+                    df,
+                    show_reference_points=show_reference_points[0],
+                    show_axis_values=show_axis_values[0],
+                )
+                current_field_title[0] = "Handball (IHF 40×20 m)"
+            elif sport == "futsal":
+                fig, ax = plot_futsal_court(
+                    df,
+                    show_reference_points=show_reference_points[0],
+                    show_axis_values=show_axis_values[0],
+                )
+                current_field_title[0] = "Futsal (FIFA 40×20 m)"
             else:
                 play_c, out_c, title_sfx = _simple_field_style_for_path(csv_path)
                 fig, ax = plot_simple_field(
@@ -1118,6 +1751,7 @@ def run_soccerfield(initial_field_csv: str | None = None):
                     playing_facecolor=play_c,
                     outer_facecolor=out_c,
                 )
+                current_field_title[0] = title_sfx
 
             # Save current axis for later use
             current_ax[0] = ax
@@ -1645,7 +2279,7 @@ def run_soccerfield(initial_field_csv: str | None = None):
 
     def open_soccerfield_help():
         """Open bundled HTML help in the default browser (no extra Tk window)."""
-        html_path = Path(__file__).resolve().parent / "help" / "soccerfield.html"
+        html_path = Path(__file__).resolve().parent / "help" / help_html
         if html_path.is_file():
             webbrowser.open_new_tab(html_path.as_uri())
         else:
@@ -1948,7 +2582,7 @@ def run_soccerfield(initial_field_csv: str | None = None):
             return
 
         win = tk.Toplevel(root)
-        win.title("Heatmap — Soccer Field")
+        win.title(f"Heatmap — {current_field_title[0]}")
         win.geometry("950x680")
         win.resizable(True, True)
 
