@@ -9,10 +9,11 @@ This script recursively walks through a root directory, finds .txt sync files,
 and processes videos in each directory using the logic from vaila/cutvideo.py.
 """
 
-import sys
-import os
 import argparse
+import os
+import sys
 from pathlib import Path
+
 from rich import print
 
 # Add the root directory to sys.path to ensure vaila modules can be found
@@ -22,10 +23,10 @@ if str(root_dir) not in sys.path:
 
 # Import needed functions from cutvideo
 try:
-    from vaila.cutvideo import parse_sync_file_content, batch_process_sync_videos
+    from vaila.cutvideo import batch_process_sync_videos, parse_sync_file_content
 except ImportError as e:
     print(f"[red]Error importing vaila.cutvideo: {e}[/]")
-    print(f"Make sure you are running this from the vaila root directory or it is in your PYTHONPATH.")
+    print("Make sure you are running this from the vaila root directory or it is in your PYTHONPATH.")
     sys.exit(1)
 
 def recursive_batch_cut(target_root, dry_run=False):
@@ -44,7 +45,7 @@ def recursive_batch_cut(target_root, dry_run=False):
     for root, dirs, files in os.walk(target_root):
         # Look for .txt files that might be sync files
         for file in files:
-            if file.lower().endswith(".txt") and not file.lower() in ["requirements.txt", "readme.txt", "license.txt"]:
+            if file.lower().endswith(".txt") and file.lower() not in ["requirements.txt", "readme.txt", "license.txt"]:
                 sync_file_path = Path(root) / file
                 sync_files_found.append(sync_file_path)
 
@@ -62,7 +63,7 @@ def recursive_batch_cut(target_root, dry_run=False):
         # cutvideo.batch_process_sync_videos uses Path(video_path).parent to find the directory
         video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.MP4', '.AVI', '.MOV', '.MKV']
         local_videos = [f for f in os.listdir(sync_file.parent) if any(f.endswith(ext) for ext in video_extensions)]
-        
+
         if not local_videos:
             print(f"  [yellow]No video files found in {sync_file.parent}. Skipping.[/]")
             continue
@@ -101,7 +102,7 @@ def main():
     parser = argparse.ArgumentParser(description="Recursively apply vaila/cutvideo.py batch processing.")
     parser.add_argument("directory", help="The root directory to search for videos and sync files.")
     parser.add_argument("--dry-run", action="store_true", help="Find sync files and show what would be processed without cutting.")
-    
+
     args = parser.parse_args()
 
     recursive_batch_cut(args.directory, dry_run=args.dry_run)

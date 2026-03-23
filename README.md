@@ -80,6 +80,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - [Documentation](#documentation)
 - [Citing _vailá_](#citing-vailá)
 - [Contribution](#contribution)
+- [Releases and versioning](#releases-and-versioning)
 - [License](#license)
 
 ---
@@ -932,6 +933,14 @@ We encourage creativity and innovation to enhance and expand the functionality o
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** for workflow, style, and tests. For **security** (secrets, reporting vulnerabilities), see **[SECURITY.md](SECURITY.md)**.
 
 Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid to make mistakes—every attempt is a step towards improvement!
+
+## Releases and versioning
+
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI).
+
+**GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
+
+Maintainership policy (semver tag vs `rp` tag, and what to write in release notes) is documented in **[CONTRIBUTING.md — Versioning and GitHub releases](CONTRIBUTING.md#versioning-and-github-releases)**.
 
 ## License
 
