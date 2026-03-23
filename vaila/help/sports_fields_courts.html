@@ -37,12 +37,13 @@
         </table>
 
         <div class="note">
-            <strong>Note:</strong> The Draw Sports dialog is now unified under <code>vaila/drawsportsfields.py</code>.
-            Soccer and tennis keep their dedicated pipelines, while basketball, volleyball, futsal and handball are routed through the
-            sports-field engine with sport-specific drawings and model CSVs. For publication-quality diagrams and alternative styles,
-            see dedicated libraries such as
+            <strong>Note:</strong> All sports are unified under <code>vaila/drawsportsfields.py</code>.
+            Each surface has a dedicated <code>plot_*</code> function registered in
+            <code>SPORT_REGISTRY</code>.  To add a new sport, write a plot function,
+            add a model CSV to <code>vaila/models/</code>, and register one entry.
+            For publication-quality diagrams and alternative styles see
             <a href="https://github.com/sportsdataverse/sportypy">sportypy</a> or
-            <a href="https://pypi.org/project/mplbasketball/">mplbasketball</a> (basketball).
+            <a href="https://pypi.org/project/mplbasketball/">mplbasketball</a>.
         </div>
 
         <h2>CSV format</h2>
@@ -50,11 +51,12 @@
         Soccer models must include all points required by <code>soccerfield_ref3d.csv</code>. Simpler models need at least the four corners
         <code>bottom_left_corner</code>, <code>top_left_corner</code>, <code>bottom_right_corner</code>, <code>top_right_corner</code>.</p>
 
-        <h2>Module help (browser)</h2>
-        <ul class="ref">
-            <li><a href="sports_fields_courts.html">Sports fields/courts overview</a> · <a href="tennis_court.html">Tennis court module</a></li>
-            <li>In each tool window, <strong>Help</strong> opens the matching HTML file under <code>vaila/help/</code>.</li>
-        </ul>
+        <h2>CLI usage</h2>
+        <pre><code>uv run vaila/drawsportsfields.py -t soccer
+uv run vaila/drawsportsfields.py -t tennis
+uv run vaila/drawsportsfields.py -t basketball
+uv run vaila/drawsportsfields.py --field path/to/custom.csv
+uv run vaila/drawsportsfields.py --markers data.csv --heatmap</code></pre>
 
         <h2>Further reading</h2>
         <ul class="ref">
