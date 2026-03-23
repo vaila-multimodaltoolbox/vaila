@@ -1,0 +1,25 @@
+"""Basketball court launcher using the sports field viewer."""
+from __future__ import annotations
+
+from pathlib import Path
+
+try:
+    from . import soccerfield
+except ImportError:
+    import soccerfield
+
+
+def run_basketball_court() -> None:
+    """Open the basketball court model in the field viewer."""
+    models_dir = Path(__file__).resolve().parent / "models"
+    model_csv = models_dir / "basketballcourt_ref3d.csv"
+    soccerfield.run_soccerfield(
+        initial_field_csv=str(model_csv),
+        default_field_csv=str(model_csv),
+        window_title="Basketball Court Visualization",
+        help_html="sports_fields_courts.html",
+    )
+
+
+if __name__ == "__main__":
+    run_basketball_court()
