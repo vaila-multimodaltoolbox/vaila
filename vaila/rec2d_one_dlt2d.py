@@ -25,12 +25,11 @@ Description:
     - Pre-allocated NumPy arrays to eliminate dynamic memory allocation
     - Progress tracking for large datasets
     - Reduced debug output for cleaner processing feedback
-    - User-defined output directory and data frequency upfront
+    - User-defined output directory upfront
     - Vectorized operations for better performance
 """
 
 import argparse
-import contextlib
 import os
 import tkinter as tk
 from datetime import datetime
@@ -41,62 +40,6 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import inv
 from rich import print
-
-
-def _askinteger_safe(
-    parent: tk.Tk,
-    title: str,
-    prompt: str,
-    *,
-    minvalue: int = 1,
-    initialvalue: int = 100,
-) -> int | None:
-    """Ask for an integer without crashing when Tk grabs are already taken."""
-    win = tk.Toplevel(parent)
-    win.title(title)
-    win.resizable(False, False)
-    win.transient(parent)
-
-    result: dict[str, int | None] = {"value": None}
-
-    tk.Label(win, text=prompt, font=("Arial", 10)).pack(padx=12, pady=(12, 6))
-    entry = tk.Entry(win, width=12)
-    entry.insert(0, str(initialvalue))
-    entry.pack(padx=12, pady=6)
-    entry.focus_set()
-    entry.select_range(0, tk.END)
-
-    btn_frame = tk.Frame(win)
-    btn_frame.pack(padx=12, pady=(8, 12))
-
-    def _ok() -> None:
-        try:
-            value = int(entry.get())
-        except Exception:
-            value = None
-        if value is None or value < minvalue:
-            messagebox.showerror("Error", f"Value must be >= {minvalue}.")
-            return
-        result["value"] = value
-        win.destroy()
-
-    def _cancel() -> None:
-        result["value"] = None
-        win.destroy()
-
-    tk.Button(btn_frame, text="OK", width=10, bg="#4CAF50", fg="white", command=_ok).pack(
-        side=tk.LEFT, padx=6
-    )
-    tk.Button(btn_frame, text="Cancel", width=10, bg="#B71C1C", fg="white", command=_cancel).pack(
-        side=tk.LEFT, padx=6
-    )
-
-    with contextlib.suppress(tk.TclError):
-        win.grab_set()
-
-    parent.wait_window(win)
-    return result["value"]
-
 
 def read_coordinates(file_path, usecols=None):
     df = pd.read_csv(file_path, usecols=usecols)
@@ -122,7 +65,7 @@ def rec2d(A, cc2d):
     return H
 
 
-def process_files_in_directory(dlt_params, input_directory, output_directory, data_rate):
+def process_files_in_directory(dlt_params, input_directory, output_directory):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_directory, f"vaila_rec2d_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
@@ -198,20 +141,18 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, da
 
     print("\n=== Processing Complete ===")
     print(f"Processed {total_files} files")
-    print(f"Data rate used: {data_rate} Hz")
     print(f"Output directory: {output_dir}")
 
     messagebox.showinfo(
         "Processing Complete",
         f"2D reconstruction completed successfully!\n\n"
         f"Processed: {total_files} files\n"
-        f"Data rate: {data_rate} Hz\n"
         f"Output directory: {os.path.basename(output_dir)}",
     )
     print(f"Reconstructed 2D coordinates saved to {output_dir}")
 
 
-def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=None, data_rate=None):
+def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=None):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
@@ -245,25 +186,11 @@ def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=No
             print("Output directory selection cancelled.")
             return
 
-        # Step 4: Ask for data frequency
-        print("Step 4: Setting data frequency...")
-        data_rate = _askinteger_safe(
-            root,
-            "Data Frequency",
-            "Enter the data frequency (Hz):",
-            minvalue=1,
-            initialvalue=100,
-        )
-        if data_rate is None:
-            messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
-            return
         root.destroy()
     else:
         # Headless mode
-        if input_directory is None or output_directory is None or data_rate is None:
-            print(
-                "Error: dlt-file, input-dir, output-dir, and rate are required for headless mode."
-            )
+        if input_directory is None or output_directory is None:
+            print("Error: dlt-file, input-dir, and output-dir are required for headless mode.")
             return
 
     # Load and validate DLT parameters
@@ -281,11 +208,10 @@ def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=No
     print(f"  - DLT file: {os.path.basename(dlt_file)}")
     print(f"  - Input directory: {input_directory}")
     print(f"  - Output directory: {output_directory}")
-    print(f"  - Data rate: {data_rate} Hz")
     print("-" * 80)
 
     # Process files
-    process_files_in_directory(dlt_params, input_directory, output_directory, data_rate)
+    process_files_in_directory(dlt_params, input_directory, output_directory)
 
 
 if __name__ == "__main__":
@@ -293,12 +219,10 @@ if __name__ == "__main__":
     parser.add_argument("--dlt-file", help="Path to DLT parameters file (*.dlt2d)")
     parser.add_argument("--input-dir", help="Directory containing pixel coordinate CSV files")
     parser.add_argument("--output-dir", help="Output directory for 2D results")
-    parser.add_argument("--rate", type=int, help="Data collection frequency in Hz")
     args = parser.parse_args()
 
     run_rec2d_one_dlt2d(
         dlt_file=args.dlt_file,
         input_directory=args.input_dir,
         output_directory=args.output_dir,
-        data_rate=args.rate,
     )
