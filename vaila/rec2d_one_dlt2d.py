@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.3
+Version: 0.0.4
 Created: August 9, 2024
-Last Updated: August 02, 2025
+Last Updated: March 24, 2026
 
 Description:
     Optimized batch processing of 2D coordinates reconstruction using corresponding DLT parameters for each frame.
