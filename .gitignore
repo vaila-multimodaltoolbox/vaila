@@ -1,7 +1,17 @@
 # Project specific
 datasets/
-vaila/models/
 bin/ffmpeg/
+
+# vaila/models: track small reference files (e.g. *.csv). Ignore downloaded / large weights.
+vaila/models/**/*.pt
+vaila/models/**/*.onnx
+vaila/models/**/*.engine
+vaila/models/**/*.task
+vaila/models/**/*.pth
+vaila/models/**/*.bin
+
+# Stray weight files at repository root (use vaila/models/ instead)
+/*.pt
 
 # General temporary files
 .DS_Store
@@ -20,10 +30,6 @@ bin/ffmpeg/
 *.mov
 *.AVI
 *.avi
-
-# YOLO models
-vaila/models/yolo11*.pt
-vaila/models/yolo11*-pose.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -186,6 +192,4 @@ hooks/*
 !hooks/pre-commit
 !install-hooks.sh
 
-# Ignore all .pt files at root level
-*.pt
 tests/markerless_2d_analysis/temp/
