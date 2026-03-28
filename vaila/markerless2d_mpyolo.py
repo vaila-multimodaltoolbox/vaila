@@ -4,15 +4,34 @@ Script: markerless2d_mpyolo.py
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Created: 18 February 2025
-Last Updated: 10 November 2025
-Version: 0.0.2
+Created: February 18 2025
+Last Updated: March 27 2026
+Version: 0.0.4
 
 Description:
-This script combines YOLOv11 for person detection/tracking with MediaPipe for pose estimation.
+This script combines YOLO26 for person detection/tracking with MediaPipe for pose estimation.
+YOLO26 is end-to-end (NMS-free) and up to 43% faster on CPU than previous YOLO versions.
 
-Usage example:
-python markerless2d_mpyolo.py -i input_directory -o output_directory -c config.toml
+Usage (GUI mode — default):
+    uv run vaila/markerless2d_mpyolo.py
+    uv run vaila/markerless2d_mpyolo.py --gui
+
+Usage (CLI mode — headless batch processing):
+    uv run vaila/markerless2d_mpyolo.py -i /path/to/video.mp4
+    uv run vaila/markerless2d_mpyolo.py -i /path/to/video.mp4 -o /path/to/output --model yolo26x
+    uv run vaila/markerless2d_mpyolo.py -i /path/to/video.mp4 --conf 0.3 --complexity 1
+
+CLI Arguments:
+    -i, --input       Input video file path (required for CLI mode)
+    -o, --output      Output directory (default: timestamped subdir next to video)
+    --model           YOLO26 model variant: yolo26n|s|m|l|x (default: yolo26x)
+    --conf            YOLO confidence threshold (default: 0.25)
+    --iou             YOLO IOU threshold (default: 0.7)
+    --complexity      MediaPipe model complexity 0=Lite 1=Full 2=Heavy (default: 2)
+    --scale-factor    Bbox scale factor for MediaPipe (default: 4)
+    --safety-margin   Landmark containment margin (default: 0.25)
+    --mode            Processing mode: sequential|multithreaded (default: sequential)
+    --gui             Force GUI mode even when -i is provided
 
 Requirements:
 - Python 3.12.13
@@ -44,7 +63,6 @@ License:
 
 import colorsys  # Adicionar esta importação no topo do arquivo
 import datetime
-import json
 import os
 import subprocess
 import threading
@@ -105,49 +123,6 @@ POSE_CONNECTIONS = frozenset(
     ]
 )
 
-# #region agent log
-_DBG_PATH = "/home/preto/Preto/vaila/.cursor/debug-2d1fa6.log"
-_DBG_SESSION = "2d1fa6"
-_DBG_FACE_CONN_LOGGED = False
-_DBG_DRAW_LOGGED = False
-
-
-def _agent_debug_log(run_id, hypothesis_id, location, message, data=None):
-    payload = {
-        "sessionId": _DBG_SESSION,
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data or {},
-        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-    }
-    try:
-        with open(_DBG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
-    except Exception:
-        pass
-
-
-_face_expected = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-_face_present = set()
-for _a, _b in POSE_CONNECTIONS:
-    if _a in _face_expected:
-        _face_present.add(_a)
-    if _b in _face_expected:
-        _face_present.add(_b)
-_agent_debug_log(
-    "face-skeleton-investigation",
-    "H1",
-    "markerless2d_mpyolo.py:POSE_CONNECTIONS",
-    "pose connection summary at import",
-    {
-        "total_connections": len(POSE_CONNECTIONS),
-        "face_indices_present": sorted(_face_present),
-        "missing_face_indices": sorted(_face_expected - _face_present),
-    },
-)
-# #endregion
 
 
 def get_mediapipe_model_path(complexity=2):
@@ -205,7 +180,6 @@ def draw_landmarks_manual(
     thickness=2,
 ):
     """Draw pose landmarks and connections manually using OpenCV (replacement for mp_drawing)."""
-    global _DBG_DRAW_LOGGED
     if connections is None:
         connections = POSE_CONNECTIONS
     # Draw connections
@@ -231,20 +205,6 @@ def draw_landmarks_manual(
     for pt in landmarks_px:
         if pt is not None and not (np.isnan(pt[0]) or np.isnan(pt[1])):
             cv2.circle(image, (int(pt[0]), int(pt[1])), radius, color, -1)
-    if not _DBG_DRAW_LOGGED:
-        face_valid = 0
-        for idx in range(min(11, len(landmarks_px))):
-            pt = landmarks_px[idx]
-            if pt is not None and not (np.isnan(pt[0]) or np.isnan(pt[1])):
-                face_valid += 1
-        _agent_debug_log(
-            "face-skeleton-investigation",
-            "H2",
-            "markerless2d_mpyolo.py:draw_landmarks_manual",
-            "first draw face visibility snapshot",
-            {"face_valid_points_0_10": face_valid, "landmark_count": len(landmarks_px)},
-        )
-        _DBG_DRAW_LOGGED = True
 
 
 # COCO classes dictionary
@@ -670,25 +630,39 @@ Multithreaded Tracking:
     help_button.bind("<Button-1>", show_help_tooltip)
 
     # YOLO parameters with explanations
-    tk.Label(yolo_frame, text="Confidence (0-1):").grid(row=0, column=0, sticky="e")
+    # Model selection
+    tk.Label(yolo_frame, text="YOLO26 Model:").grid(row=0, column=0, sticky="e")
+    yolo_model_var = tk.StringVar(value="yolo26x")
+    yolo_model_dropdown = ttk.Combobox(
+        yolo_frame, textvariable=yolo_model_var, state="readonly", width=15
+    )
+    yolo_model_dropdown["values"] = ("yolo26n", "yolo26s", "yolo26m", "yolo26l", "yolo26x")
+    yolo_model_dropdown.grid(row=0, column=1)
+    tk.Label(
+        yolo_frame,
+        text="n=fastest/smallest  →  x=most accurate/slowest",
+        font=("Arial", 8, "italic"),
+    ).grid(row=1, column=0, columnspan=2)
+
+    tk.Label(yolo_frame, text="Confidence (0-1):").grid(row=2, column=0, sticky="e")
     yolo_conf = tk.Entry(yolo_frame)
     yolo_conf.insert(0, "0.25")  # Increased default for better quality detections
-    yolo_conf.grid(row=0, column=1)
+    yolo_conf.grid(row=2, column=1)
     tk.Label(
         yolo_frame,
         text="Confidence threshold for detections (higher = more selective)",
         font=("Arial", 8, "italic"),
-    ).grid(row=1, column=0, columnspan=2)
+    ).grid(row=3, column=0, columnspan=2)
 
-    tk.Label(yolo_frame, text="IOU (0-1):").grid(row=2, column=0, sticky="e")
+    tk.Label(yolo_frame, text="IOU (0-1):").grid(row=4, column=0, sticky="e")
     yolo_iou = tk.Entry(yolo_frame)
     yolo_iou.insert(0, "0.7")
-    yolo_iou.grid(row=2, column=1)
+    yolo_iou.grid(row=4, column=1)
     tk.Label(
         yolo_frame,
         text="Intersection over Union threshold for overlap (higher = more overlapping allowed)",
         font=("Arial", 8, "italic"),
-    ).grid(row=3, column=0, columnspan=2)
+    ).grid(row=5, column=0, columnspan=2)
 
     # Classes display in grid
     classes_frame = tk.LabelFrame(
@@ -709,15 +683,15 @@ Multithreaded Tracking:
         )
 
     # Class selection entry
-    tk.Label(yolo_frame, text="Selected Classes:").grid(row=4, column=0, sticky="e")
+    tk.Label(yolo_frame, text="Selected Classes:").grid(row=6, column=0, sticky="e")
     class_entry = tk.Entry(yolo_frame)
     class_entry.insert(0, "0")  # Default to person class
-    class_entry.grid(row=4, column=1)
+    class_entry.grid(row=6, column=1)
     tk.Label(
         yolo_frame,
         text="Enter class numbers separated by commas (e.g., '0,1,2')",
         font=("Arial", 8, "italic"),
-    ).grid(row=5, column=0, columnspan=2)
+    ).grid(row=7, column=0, columnspan=2)
 
     # MediaPipe parameters
     # Adiciona combobox para static_image_mode
@@ -776,6 +750,7 @@ Multithreaded Tracking:
                 f"Selected processing mode: {mode_display.get(params['selected_mode'], params['selected_mode'])}"
             )
 
+            params["yolo_model"] = yolo_model_var.get()
             params["yolo_conf"] = float(yolo_conf.get())
             params["yolo_iou"] = float(yolo_iou.get())
 
@@ -1785,17 +1760,21 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, output_dir, 
             print(f"    ID:{object_id} - {frames} frames")
 
 
-def run_multithreaded_tracking():
+def run_multithreaded_tracking(params=None):
     """
     Spawns a separate thread for each video in a chosen directory to run YOLO tracking concurrently.
     Inspired by the multithreaded tracking example at:
     https://docs.ultralytics.com/modes/track/#multithreaded-tracking
+
+    Args:
+        params: Optional pre-built params dict. If None, shows parameter dialog.
     """
     root = tk.Tk()
     root.withdraw()
     video_dir = filedialog.askdirectory(title="Select Directory with Videos for Tracking")
     if not video_dir:
         print("No directory selected for tracking. Exiting.")
+        root.destroy()
         return
 
     video_extensions = (".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")
@@ -1806,6 +1785,7 @@ def run_multithreaded_tracking():
     ]
     if not video_files:
         print("No video files found in the selected directory.")
+        root.destroy()
         return
 
     # Create output directory with timestamp
@@ -1814,16 +1794,21 @@ def run_multithreaded_tracking():
     os.makedirs(output_dir, exist_ok=True)
     print(f"Output directory: {output_dir}")
 
-    # Default tracker configuration (change as needed: e.g. "botsort.yaml" or "bytetrack.yaml")
+    # Get parameters if not already provided
+    if params is None:
+        params = get_parameters_dialog()
+    if not params:
+        print("No parameters set. Exiting...")
+        root.destroy()
+        return
+
+    # Default tracker configuration
     tracker_config = "botsort.yaml"
 
-    # Update the model path construction
-    model_name = "yolo11x.pt"
-
-    # Correct path to vaila/vaila/models
+    # Derive model name from params
+    model_name = params.get("yolo_model", "yolo26x") + ".pt"
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    vaila_dir = os.path.dirname(script_dir)
-    models_dir = os.path.join(vaila_dir, "vaila", "models")
+    models_dir = os.path.join(script_dir, "models")
     model_path = os.path.join(models_dir, model_name)
 
     # Check if the model exists, download only if necessary
@@ -1831,12 +1816,6 @@ def run_multithreaded_tracking():
         model_path = download_model(model_name)
     else:
         print(f"Found local model for tracking: {model_path}")
-
-    # Get parameters for YOLO
-    params = get_parameters_dialog()
-    if not params:
-        print("No parameters set. Exiting...")
-        return
 
     threads = []
     for video_file in video_files:
@@ -2314,23 +2293,12 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
         out.release()
 
 
-def run_markerless2d_mpyolo(root=None):
-    print("markerless2d_mpyolo.py - Enhanced with scaling and safety margins")
-    # Print the script version and directory
+def run_markerless2d_mpyolo(root=None, params=None):
+    """Main GUI entry point. If params is None, shows the parameter dialog."""
+    print("markerless2d_mpyolo.py - YOLO26 + MediaPipe pose estimation")
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
-    # Update model path
-    model_name = "yolo11x.pt"
-
-    # Correct path to vaila/vaila/models
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    vaila_dir = os.path.dirname(script_dir)
-    models_dir = os.path.join(vaila_dir, "vaila", "models")
-    os.makedirs(models_dir, exist_ok=True)
-    model_path = os.path.join(models_dir, model_name)
-
-    # Get parameters before downloading the model
     # Only create a new root if one wasn't provided
     created_root = False
     if root is None:
@@ -2338,12 +2306,30 @@ def run_markerless2d_mpyolo(root=None):
         root.withdraw()
         created_root = True
 
-    params = get_parameters_dialog(parent=root)
+    # Show parameter dialog only if params were not provided externally
+    if params is None:
+        params = get_parameters_dialog(parent=root)
     if not params:
         print("No parameters set. Exiting...")
         if created_root:
             root.destroy()
         return
+
+    # Dispatch to multithreaded mode if selected (avoids calling dialog a second time)
+    selected_mode = params.get("selected_mode", "sequential")
+    if selected_mode == "multithreaded":
+        print("Dispatching to Multithreaded Tracking mode...")
+        run_multithreaded_tracking(params=params)
+        if created_root:
+            root.destroy()
+        return
+
+    # --- Sequential mode ---
+    model_name = params.get("yolo_model", "yolo26x") + ".pt"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    models_dir = os.path.join(script_dir, "models")
+    os.makedirs(models_dir, exist_ok=True)
+    model_path = os.path.join(models_dir, model_name)
 
     # Download the model only after confirming that we will use it
     if not os.path.exists(model_path):
@@ -2359,6 +2345,8 @@ def run_markerless2d_mpyolo(root=None):
 
     if not video_path:
         print("No video file selected. Exiting...")
+        if created_root:
+            root.destroy()
         return
 
     print(f"Selected video: {video_path}")
@@ -2367,13 +2355,13 @@ def run_markerless2d_mpyolo(root=None):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     output_dir = os.path.join(
-        os.path.dirname(video_path), f"{video_name}_enhanced_analysis_{timestamp}"
+        os.path.dirname(video_path), f"{video_name}_mpyolo_{timestamp}"
     )
     os.makedirs(output_dir, exist_ok=True)
     print(f"Output directory: {output_dir}")
 
-    # Initialize YOLO model
-    print(f"Loading YOLO model from {model_path}...")
+    # Initialize YOLO26 model
+    print(f"Loading YOLO26 model from {model_path}...")
     model = YOLO(model_path)
 
     # Process video with enhanced pipeline (MediaPipe Tasks API)
@@ -2404,22 +2392,85 @@ def write_nan_row(csv_path, frame_idx, num_landmarks):
 
 
 if __name__ == "__main__":
-    # Print the script version and directory
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="markerless2d_mpyolo - YOLO26 + MediaPipe 2D pose estimation pipeline",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-i", "--input", type=str, default=None,
+                        help="Input video file path (activates CLI/headless mode)")
+    parser.add_argument("-o", "--output", type=str, default=None,
+                        help="Output directory (default: timestamped subdir next to video)")
+    parser.add_argument("--model", type=str, default="yolo26x",
+                        choices=["yolo26n", "yolo26s", "yolo26m", "yolo26l", "yolo26x"],
+                        help="YOLO26 model variant (default: yolo26x)")
+    parser.add_argument("--conf", type=float, default=0.25,
+                        help="YOLO confidence threshold (default: 0.25)")
+    parser.add_argument("--iou", type=float, default=0.7,
+                        help="YOLO IOU threshold (default: 0.7)")
+    parser.add_argument("--complexity", type=int, default=2, choices=[0, 1, 2],
+                        help="MediaPipe model complexity 0=Lite 1=Full 2=Heavy (default: 2)")
+    parser.add_argument("--scale-factor", type=int, default=4,
+                        help="Bbox scale factor for MediaPipe (2-8, default: 4)")
+    parser.add_argument("--safety-margin", type=float, default=0.25,
+                        help="Landmark containment margin (0.1-0.5, default: 0.25)")
+    parser.add_argument("--mode", type=str, default="sequential",
+                        choices=["sequential", "multithreaded"],
+                        help="Processing mode (default: sequential)")
+    parser.add_argument("--gui", action="store_true",
+                        help="Force GUI mode even when -i is provided")
+
+    args = parser.parse_args()
+
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
 
-    # Get parameters first
-    params = get_parameters_dialog()
-    if not params:
-        print("No parameters set. Exiting...")
-        exit()
+    if args.input and not args.gui:
+        # ---- CLI / headless mode ----
+        video_path = args.input
+        if not os.path.exists(video_path):
+            print(f"Error: Input video not found: {video_path}")
+            raise SystemExit(1)
 
-    # Execute the selected processing mode
-    selected_mode = params.get("selected_mode", "sequential")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        output_dir = args.output or os.path.join(
+            os.path.dirname(video_path), f"{video_name}_mpyolo_{timestamp}"
+        )
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"Output directory: {output_dir}")
 
-    if selected_mode == "sequential":
-        print("Starting Sequential Processing mode...")
+        # Build params dict from CLI arguments
+        cli_params = {
+            "selected_mode": args.mode,
+            "yolo_model": args.model,
+            "yolo_conf": args.conf,
+            "yolo_iou": args.iou,
+            "yolo_classes": [0],  # person class
+            "mp_static_mode": False,
+            "mp_complexity": args.complexity,
+            "mp_detection_conf": 0.15,
+            "mp_tracking_conf": 0.15,
+            "scale_factor": args.scale_factor,
+            "safety_margin": args.safety_margin,
+        }
+
+        # Resolve model path
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        models_dir = os.path.join(script_dir, "models")
+        os.makedirs(models_dir, exist_ok=True)
+        model_name = args.model + ".pt"
+        model_path = os.path.join(models_dir, model_name)
+        if not os.path.exists(model_path):
+            model_path = download_model(model_name)
+        else:
+            print(f"Found YOLO26 model: {model_path}")
+
+        print(f"Loading YOLO26 model: {model_path}")
+        model = YOLO(model_path)
+        process_video_enhanced(video_path, output_dir, model, cli_params)
+        print(f"\nDone! Results saved to: {output_dir}")
+    else:
+        # ---- GUI mode ----
         run_markerless2d_mpyolo()
-    else:  # multithreaded
-        print("Starting Multithreaded Tracking mode...")
-        run_multithreaded_tracking()

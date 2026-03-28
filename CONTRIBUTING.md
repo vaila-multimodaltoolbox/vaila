@@ -50,13 +50,24 @@ See [AGENTS.md](AGENTS.md) for the full QA pipeline and project layout.
 ## Security reminders
 
 - Do not commit `.env`, secrets, or real API examples. See [SECURITY.md](SECURITY.md).
-- Large files: the repo enforces a **24MB** limit via git hooks (`install-hooks.sh`).
+- Large files: the repo enforces a **24MB** limit via git hooks (`install-hooks.sh`); staging a file **≥ 24MB** fails the pre-commit hook.
+
+## vaila models directory
+
+- **Tracked in Git:** small reference data such as **`.csv`** field/court models and similar lightweight assets under `vaila/models/`.
+- **Not tracked:** downloaded weights and heavy binaries — **`.pt`**, **`.onnx`**, **`.engine`**, **`.task`** (MediaPipe), **`.pth`**, **`.bin`** — are listed in [`.gitignore`](.gitignore). They are created under `vaila/models/` on **first run** when a module needs them (e.g. Ultralytics YOLO in `markerless2d_mpyolo.py`, `yolov11track.py`, `yolov26track.py`, `yolotrain.py`, `markerless_live.py`).
+- **Repository root:** do not leave **`*.pt`** at the project root; use `vaila/models/` (root `*.pt` is gitignored).
+- Anything **≥ 24MB** must not be committed; the hook blocks it even if a pattern were wrong.
 
 ---
 
 ## Como contribuir
 
 Obrigado por contribuir para o **vailá**. Este ficheiro complementa [AGENTS.md](AGENTS.md).
+
+### Modelos em `vaila/models`
+
+- **No Git:** ficheiros pequenos de referência (ex. **`.csv`**). **Fora do Git:** pesos grandes (**.pt**, **.engine**, etc.) — descarregados na primeira execução; ver [vaila models directory](#vaila-models-directory). **Pre-commit:** ficheiros **≥ 24 MB** ao stage falham.
 
 ### Versões e releases no GitHub
 
