@@ -400,11 +400,11 @@
 
             <h1 id="overview">📖 Overview</h1>
             
-            <p><code>markerless2d_analysis_v2.py</code> is an advanced 2D pose estimation tool that combines state-of-the-art computer vision models (YOLOv11 and MediaPipe) to extract human pose landmarks from video sequences. This module is specifically designed for biomechanics and motion analysis applications, providing robust multi-person detection, temporal filtering, and comprehensive data export capabilities.</p>
+            <p><code>markerless2d_analysis_v2.py</code> is an advanced 2D pose estimation tool that combines Ultralytics YOLO (detection + optional pose) with MediaPipe to extract human pose landmarks from video. Person boxes come from a dedicated <strong>detection</strong> model (default <code>yolo26x.pt</code>) with multi-object tracking (default BoT-SORT). Pose runs on an <strong>upscaled crop</strong> inside that box; coordinates are remapped to the full frame. This improves small or distant subjects compared to full-frame MediaPipe when upscale was previously skipped.</p>
 
             <div class="info-box">
                 <strong>What Makes This Version Special?</strong><br>
-                This is an enhanced version that addresses limitations of traditional MediaPipe-only approaches with YOLOv11 pre-detection, dual processing modes, advanced temporal filtering, ROI support, modern MediaPipe Tasks API, and GPU acceleration.
+                Dual processing modes, YOLO detection + tracking for stable boxes, automatic minimum crop resolution (<code>min_pose_crop_short_side_px</code>), advanced temporal filtering, ROI support, MediaPipe Tasks API, and GPU acceleration for YOLO.
             </div>
 
             <h1 id="features">🎯 Key Features</h1>
@@ -414,24 +414,30 @@
             <div class="feature-box">
                 <h3>YOLO-Only Mode (<code>yolo_only</code>)</h3>
                 <ul>
-                    <li>Uses YOLOv11-pose models exclusively</li>
-                    <li>Provides 17 keypoints (COCO format)</li>
-                    <li>Faster processing, lower memory footprint</li>
-                    <li><strong>Ideal for:</strong> Single-person scenarios, real-time applications, resource-constrained environments</li>
+                    <li>YOLO <strong>detector</strong> + tracker for the person box, then YOLO <strong>pose</strong> on an upscaled crop</li>
+                    <li>17 keypoints (COCO-style) mapped into the 33-landmark export layout where applicable</li>
+                    <li><strong>Ideal for:</strong> When you want a pure YOLO pose stack with consistent crop-based resolution</li>
                 </ul>
             </div>
 
             <div class="feature-box">
                 <h3>YOLO+MediaPipe Mode (<code>yolo_mediapipe</code>)</h3>
                 <ul>
-                    <li>YOLOv11 detects persons, MediaPipe refines pose estimation</li>
-                    <li>Provides 33 landmarks (full MediaPipe format)</li>
-                    <li>Higher accuracy, better occlusion handling</li>
-                    <li><strong>Ideal for:</strong> Multi-person scenarios, research applications, detailed biomechanical analysis</li>
+                    <li>YOLO detector + tracker for the person box; MediaPipe pose on the same upscaled crop</li>
+                    <li>33 landmarks (full MediaPipe format) with better detail on small subjects</li>
+                    <li>Tracker options include <code>botsort</code> and <code>bytetrack</code> (Ultralytics YAML)</li>
+                    <li><strong>Ideal for:</strong> Research and detailed biomechanical analysis with ROI filtering</li>
                 </ul>
             </div>
 
-            <h2>2. YOLOv11-Pose Model Selection</h2>
+            <h2>2. Detector, tracker, and crop settings</h2>
+            <ul>
+                <li><strong>Detector weights</strong> (e.g. <code>yolo26x.pt</code>): person class only; not the pose head.</li>
+                <li><strong>Pose weights</strong> (e.g. <code>yolo11x-pose.pt</code>): used only in <code>yolo_only</code>.</li>
+                <li><strong><code>min_pose_crop_short_side_px</code></strong>: ensures the crop is upscaled so the shorter side reaches at least this many pixels (effective upscale = max(user factor, auto)).</li>
+            </ul>
+
+            <h2>3. YOLO pose model selection (<code>yolo_only</code>)</h2>
 
             <p>Five model sizes available, balancing speed and accuracy:</p>
 
@@ -490,7 +496,7 @@
                 </tbody>
             </table>
 
-            <h2>3. Advanced Temporal Filtering</h2>
+            <h2>4. Advanced Temporal Filtering</h2>
 
             <div class="feature-box">
                 <h3>Kalman Filter (<code>kalman</code>)</h3>
@@ -522,7 +528,7 @@
                 </ul>
             </div>
 
-            <h2>4. Region of Interest (ROI) Support</h2>
+            <h2>5. Region of Interest (ROI) Support</h2>
 
             <div class="info-box">
                 <strong>Polygon ROI Selection:</strong>
@@ -680,34 +686,38 @@ python markerless2d_analysis_v2.py</code></pre>
             <h2>Programmatic Usage</h2>
 
             <div class="code-block">
-                <pre><code>from vaila.markerless2d_analysis_v2 import (
+                <pre><code>from pathlib import Path
+
+from vaila.markerless2d_analysis_v2 import (
+    load_yolo_detector,
+    load_yolo_pose_model,
     process_video,
-    download_or_load_yolo_model
 )
-from pathlib import Path
 
-# Load YOLO model
-yolo_model = download_or_load_yolo_model("yolo11x-pose.pt")
+yolo_detector = load_yolo_detector("yolo26x.pt")
+yolo_pose = None  # set with load_yolo_pose_model(...) for yolo_only
 
-# Define configuration
 config = {
     'min_detection_confidence': 0.5,
     'min_tracking_confidence': 0.5,
     'model_complexity': 2,
     'use_yolo': True,
     'yolo_mode': 'yolo_mediapipe',
+    'yolo_detector_model': 'yolo26x.pt',
     'yolo_model': 'yolo11x-pose.pt',
+    'yolo_tracker': 'botsort',
+    'min_pose_crop_short_side_px': 384,
     'yolo_conf': 0.5,
     'filter_type': 'kalman',
     'bbox_upscale_factor': 4,
 }
 
-# Process video
 process_video(
     Path('input_video.mp4'),
     Path('output_directory'),
     config,
-    yolo_model
+    yolo_detector,
+    yolo_pose,
 )</code></pre>
             </div>
 
@@ -847,6 +857,13 @@ toml>=0.10.2</code></pre>
             </ul>
 
             <h1>📝 Version History</h1>
+
+            <h2>v0.3.17 (March 2026)</h2>
+            <ul>
+                <li>Separate YOLO <strong>detection</strong> weights (e.g. <code>yolo26x.pt</code>) with <code>model.track(..., persist=True)</code> and BoT-SORT / ByteTrack</li>
+                <li>MediaPipe and YOLO-pose always run on an upscaled person crop when a box exists; <code>min_pose_crop_short_side_px</code> enforces minimum resolution</li>
+                <li><code>yolo_only</code> uses detector + pose on crop with full-frame coordinate remap</li>
+            </ul>
 
             <h2>v0.3.16 (January 2026)</h2>
             <ul>

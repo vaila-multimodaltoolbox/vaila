@@ -64,6 +64,8 @@ vaila/                 ← root
 └── uv.lock
 ```
 
+**`vaila/models/`:** Reference **`.csv`** (and similar small files) are **tracked**. Downloaded weights (**`.pt`**, **`.onnx`**, **`.engine`**, **`.task`**, etc.) are **gitignored** and fetched on first use by YOLO/MediaPipe code paths. Pre-commit blocks staged files **≥ 24MB**. Details: [CONTRIBUTING.md](CONTRIBUTING.md#vaila-models-directory).
+
 ## Platform-Specific Configuration
 
 The project uses a **template-based pyproject.toml system** for hardware-specific dependencies. Before creating a venv, the correct template must be copied to `pyproject.toml`:
