@@ -72,6 +72,7 @@ warnings.filterwarnings(
 
 import datetime
 import json
+import math
 import os
 import platform
 import shutil
@@ -111,7 +112,7 @@ import webbrowser
 
 import toml
 
-__version__ = "0.3.16"
+__version__ = "0.3.17"
 
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
 POSE_CONNECTIONS = frozenset(
@@ -519,8 +520,18 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             if "yolo_mode" in config:
                 self.yolo_mode_var.set(config["yolo_mode"])
 
+            if "yolo_detector_model" in config:
+                self.yolo_detector_var.set(config["yolo_detector_model"])
+
             if "yolo_model" in config:
                 self.yolo_model_var.set(config["yolo_model"])
+
+            if "yolo_tracker" in config:
+                self.yolo_tracker_var.set(config["yolo_tracker"])
+
+            if "min_pose_crop_short_side_px" in config:
+                self.min_pose_crop_entry.delete(0, tk.END)
+                self.min_pose_crop_entry.insert(0, str(config["min_pose_crop_short_side_px"]))
 
             if "yolo_conf" in config:
                 self.yolo_conf_entry.delete(0, tk.END)
@@ -575,7 +586,10 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
                 "use_yolo": self.use_yolo_entry.get().lower() == "true",
                 "yolo_mode": self.yolo_mode_var.get(),
+                "yolo_detector_model": self.yolo_detector_var.get(),
                 "yolo_model": self.yolo_model_var.get(),
+                "yolo_tracker": self.yolo_tracker_var.get(),
+                "min_pose_crop_short_side_px": int(self.min_pose_crop_entry.get()),
                 "yolo_conf": float(self.yolo_conf_entry.get()),
                 "filter_type": self.filter_type_entry.get().lower(),
                 "filter_param": self.filter_param_entry.get(),  # Save as string, will be converted based on type
@@ -620,7 +634,11 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             self.use_yolo_entry.delete(0, tk.END)
             self.use_yolo_entry.insert(0, "True")
             self.yolo_mode_var.set("yolo_mediapipe")
+            self.yolo_detector_var.set("yolo26x.pt")
             self.yolo_model_var.set("yolo11x-pose.pt")
+            self.yolo_tracker_var.set("botsort")
+            self.min_pose_crop_entry.delete(0, tk.END)
+            self.min_pose_crop_entry.insert(0, "384")
             self.yolo_conf_entry.delete(0, tk.END)
             self.yolo_conf_entry.insert(0, "0.3")
             self.filter_type_entry.delete(0, tk.END)
@@ -649,21 +667,31 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             messagebox.showerror("Error", f"Failed to open help: {e}")
 
     def body(self, master):
-        # Available YOLO pose models (v11 + v26)
-        yolo_models = [
-            # --- YOLO v11 ---
-            "yolo11n-pose.pt",  # v11 Nano - fastest
-            "yolo11s-pose.pt",  # v11 Small
-            "yolo11m-pose.pt",  # v11 Medium
-            "yolo11l-pose.pt",  # v11 Large
-            "yolo11x-pose.pt",  # v11 Extra Large - most accurate
-            # --- YOLO v26 ---
-            "yolo26n-pose.pt",  # v26 Nano - fastest
-            "yolo26s-pose.pt",  # v26 Small
-            "yolo26m-pose.pt",  # v26 Medium
-            "yolo26l-pose.pt",  # v26 Large
-            "yolo26x-pose.pt",  # v26 Extra Large - most accurate
+        yolo_detector_models = [
+            "yolo11n.pt",
+            "yolo11s.pt",
+            "yolo11m.pt",
+            "yolo11l.pt",
+            "yolo11x.pt",
+            "yolo26n.pt",
+            "yolo26s.pt",
+            "yolo26m.pt",
+            "yolo26l.pt",
+            "yolo26x.pt",
         ]
+        yolo_models = [
+            "yolo11n-pose.pt",
+            "yolo11s-pose.pt",
+            "yolo11m-pose.pt",
+            "yolo11l-pose.pt",
+            "yolo11x-pose.pt",
+            "yolo26n-pose.pt",
+            "yolo26s-pose.pt",
+            "yolo26m-pose.pt",
+            "yolo26l-pose.pt",
+            "yolo26x-pose.pt",
+        ]
+        tracker_options = ["botsort", "bytetrack"]
 
         tk.Label(master, text="Enter minimum detection confidence (0.0 - 1.0):").grid(row=0)
         tk.Label(master, text="Enter minimum tracking confidence (0.0 - 1.0):").grid(row=1)
@@ -673,13 +701,16 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         tk.Label(master, text="Static image mode? (True/False):").grid(row=5)
         tk.Label(master, text="Use YOLO detection? (True/False):").grid(row=6)
         tk.Label(master, text="YOLO mode (yolo_only/yolo_mediapipe):").grid(row=7)
-        tk.Label(master, text="YOLO model (v11 or v26 pose):").grid(row=8)
-        tk.Label(master, text="YOLO confidence threshold (0.0 - 1.0):").grid(row=9)
-        tk.Label(master, text="Apply filter? (none/kalman/savgol/median):").grid(row=10)
+        tk.Label(master, text="YOLO detector (person box, e.g. yolo26x.pt):").grid(row=8)
+        tk.Label(master, text="YOLO pose weights (yolo_only only):").grid(row=9)
+        tk.Label(master, text="YOLO tracker (Ultralytics):").grid(row=10)
+        tk.Label(master, text="YOLO confidence threshold (0.0 - 1.0):").grid(row=11)
+        tk.Label(master, text="Min pose crop short side (px):").grid(row=12)
+        tk.Label(master, text="BBox upscale factor (integer ≥1):").grid(row=13)
+        tk.Label(master, text="Apply filter? (none/kalman/savgol/median):").grid(row=14)
         self.filter_param_label = tk.Label(master, text="Filter Parameter:")
-        self.filter_param_label.grid(row=11)
-        tk.Label(master, text="BBox Upscale Factor (2-8):").grid(row=12)
-        tk.Label(master, text="Polygon ROI:").grid(row=13)
+        self.filter_param_label.grid(row=15)
+        tk.Label(master, text="Polygon ROI:").grid(row=16)
 
         self.min_detection_entry = tk.Entry(master)
         self.min_detection_entry.insert(0, "0.1")
@@ -696,7 +727,6 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.use_yolo_entry = tk.Entry(master)
         self.use_yolo_entry.insert(0, "True")
 
-        # YOLO mode selection (yolo_only or yolo_mediapipe)
         yolo_modes = ["yolo_only", "yolo_mediapipe"]
         self.yolo_mode_var = tk.StringVar(value="yolo_mediapipe")
         self.yolo_mode_combo = ttk.Combobox(
@@ -708,7 +738,16 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         )
         self.yolo_mode_combo.grid(row=7, column=1, sticky="ew")
 
-        # YOLO model selection with dropdown
+        self.yolo_detector_var = tk.StringVar(value="yolo26x.pt")
+        self.yolo_detector_combo = ttk.Combobox(
+            master,
+            textvariable=self.yolo_detector_var,
+            values=yolo_detector_models,
+            state="readonly",
+            width=30,
+        )
+        self.yolo_detector_combo.grid(row=8, column=1, sticky="ew")
+
         self.yolo_model_var = tk.StringVar(value="yolo11x-pose.pt")
         self.yolo_model_combo = ttk.Combobox(
             master,
@@ -717,10 +756,22 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             state="readonly",
             width=30,
         )
-        self.yolo_model_combo.grid(row=8, column=1, sticky="ew")
+        self.yolo_model_combo.grid(row=9, column=1, sticky="ew")
+
+        self.yolo_tracker_var = tk.StringVar(value="botsort")
+        self.yolo_tracker_combo = ttk.Combobox(
+            master,
+            textvariable=self.yolo_tracker_var,
+            values=tracker_options,
+            state="readonly",
+            width=30,
+        )
+        self.yolo_tracker_combo.grid(row=10, column=1, sticky="ew")
 
         self.yolo_conf_entry = tk.Entry(master)
         self.yolo_conf_entry.insert(0, "0.3")
+        self.min_pose_crop_entry = tk.Entry(master)
+        self.min_pose_crop_entry.insert(0, "384")
         self.filter_type_entry = tk.Entry(master)
         self.filter_type_entry.insert(0, "none")
 
@@ -771,9 +822,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.polygon_btn = tk.Button(
             master, text="Select Polygon ROI", command=self.select_polygon_roi
         )
-        self.polygon_btn.grid(row=13, column=1)
+        self.polygon_btn.grid(row=16, column=1)
         self.polygon_status_label = tk.Label(master, text="None selected", fg="gray")
-        self.polygon_status_label.grid(row=13, column=2)
+        self.polygon_status_label.grid(row=16, column=2)
 
         # Dynamic help button for filter parameter
         def show_filter_help():
@@ -827,11 +878,11 @@ class ConfidenceInputDialog(simpledialog.Dialog):
 
         # Help button
         filter_help_btn = tk.Button(master, text="?", command=show_filter_help, width=2)
-        filter_help_btn.grid(row=11, column=2, padx=5)
+        filter_help_btn.grid(row=15, column=2, padx=5)
 
         # Config Buttons Frame
         btn_frame = tk.Frame(master)
-        btn_frame.grid(row=14, column=0, columnspan=3, pady=10)
+        btn_frame.grid(row=17, column=0, columnspan=3, pady=10)
 
         tk.Button(btn_frame, text="Save Config", command=self.save_config_to_file).pack(
             side=tk.LEFT, padx=5
@@ -851,10 +902,11 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         self.smooth_segmentation_entry.grid(row=4, column=1)
         self.static_image_mode_entry.grid(row=5, column=1)
         self.use_yolo_entry.grid(row=6, column=1)
-        self.yolo_conf_entry.grid(row=9, column=1)
-        self.filter_type_entry.grid(row=10, column=1)
-        self.filter_param_entry.grid(row=11, column=1)
-        self.upscale_factor_entry.grid(row=12, column=1)
+        self.yolo_conf_entry.grid(row=11, column=1)
+        self.min_pose_crop_entry.grid(row=12, column=1)
+        self.filter_type_entry.grid(row=14, column=1)
+        self.filter_param_entry.grid(row=15, column=1)
+        self.upscale_factor_entry.grid(row=13, column=1)
 
         return self.min_detection_entry
 
@@ -904,8 +956,11 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
             "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
             "use_yolo": self.use_yolo_entry.get().lower() == "true",
-            "yolo_mode": self.yolo_mode_var.get(),  # yolo_only or yolo_mediapipe
-            "yolo_model": self.yolo_model_var.get(),  # Get selected model
+            "yolo_mode": self.yolo_mode_var.get(),
+            "yolo_detector_model": self.yolo_detector_var.get(),
+            "yolo_model": self.yolo_model_var.get(),
+            "yolo_tracker": self.yolo_tracker_var.get(),
+            "min_pose_crop_short_side_px": int(self.min_pose_crop_entry.get()),
             "yolo_conf": float(self.yolo_conf_entry.get()),
             "filter_type": self.filter_type_entry.get().lower(),
             "filter_param": self.filter_param_entry.get(),  # Save as string, will be converted based on type
@@ -1184,317 +1239,358 @@ def get_mediapipe_model_path(complexity):
     return str(model_path.resolve())
 
 
-def download_or_load_yolo_model(model_name=None):
-    """Download or load YOLO model for pose detection
+def _normalize_yolo_tracker(tracker: str) -> str:
+    """Map short names to Ultralytics tracker YAML filenames."""
+    t = (tracker or "botsort").strip().lower()
+    if t.endswith(".yaml"):
+        return t
+    if t == "botsort":
+        return "botsort.yaml"
+    if t in ("bytetrack", "byte"):
+        return "bytetrack.yaml"
+    return f"{t}.yaml"
 
-    Args:
-        model_name: Name of the model to load (e.g., "yolo11x-pose.pt")
-                   If None, defaults to "yolo11x-pose.pt"
-    """
-    # Default to pose model if not specified
+
+def reset_yolo_tracker_state(model) -> None:
+    """Clear cross-video tracker state when reusing the same YOLO model instance."""
+    if model is None:
+        return
+    pred = getattr(model, "predictor", None)
+    if pred is not None:
+        with contextlib.suppress(Exception):
+            pred.trackers = []
+
+
+def load_yolo_detector(model_name: str | None = None):
+    """Load a YOLO **detection** checkpoint for person boxes + tracking (no TensorRT auto_export)."""
     if model_name is None:
-        model_name = "yolo11x-pose.pt"  # Extra large pose model for maximum accuracy
+        model_name = "yolo26x.pt"
+    script_dir = Path(__file__).parent.resolve()
+    models_dir = script_dir / "models"
+    model_path = models_dir / model_name
+    try:
+        print(f"Loading YOLO detector {model_name} (task=detect)...")
+        print(f"Models directory: {models_dir}")
+        if not model_path.exists():
+            print(f"Detector weights not found at {model_path}, downloading...")
+            downloaded = download_yolo_model(model_name)
+            if not downloaded:
+                return None
+            model_path = Path(downloaded)
+        model = YOLO(str(model_path), task="detect")
+        if str(model_path).endswith(".pt"):
+            model.to(device)
+        print(f"YOLO detector loaded on {device}")
+        return model
+    except Exception as e:
+        print(f"Error loading YOLO detector: {e}")
+        return None
 
-    # Use the models directory in the vaila project
+
+def load_yolo_pose_model(model_name: str | None = None):
+    """Load a YOLO **pose** checkpoint (optional TensorRT via HardwareManager)."""
+    if model_name is None:
+        model_name = "yolo11x-pose.pt"
     script_dir = Path(__file__).parent.resolve()
     models_dir = script_dir / "models"
     models_dir / model_name
-
     try:
-        print(f"Loading YOLO model {model_name} for maximum accuracy...")
+        print(f"Loading YOLO pose model {model_name}...")
         print(f"Models directory: {models_dir}")
-
-        # Initialize HardwareManager for dynamic optimization
         hw = HardwareManager()
-
-        # Use auto_export to get the best model (Engine or PT) for this hardware
         optimized_model_path = hw.auto_export(model_name)
-
-        # Check if the optimized model exists (if not, it means the source PT is missing)
         if not os.path.exists(optimized_model_path):
             print(f"Model file not found: {optimized_model_path}")
             print(f"Downloading {model_name} to vaila/models...")
-            # Use our robust download function
             downloaded_path = download_yolo_model(model_name)
             if downloaded_path:
-                # Re-run auto_export now that source file exists
                 optimized_model_path = hw.auto_export(model_name)
-
         print(f" OPTIMIZED MODEL: Loading tailored model from {optimized_model_path}")
         model = YOLO(str(optimized_model_path), task="pose")
-
-        # Only move to device if it's a PyTorch model (engines handle this internally)
         if str(optimized_model_path).endswith(".pt"):
             model.to(device)
-            print(f"YOLO model loaded successfully on {device}")
+            print(f"YOLO pose model loaded successfully on {device}")
         else:
             print("TensorRT Engine loaded successfully (Auto-Device)")
-
         return model
     except Exception as e:
-        print(f"Error loading YOLO model: {e}")
-        # Try fallback to a lighter model
+        print(f"Error loading YOLO pose model: {e}")
         try:
-            print("Trying fallback to yolo11n-pose.pt (nano - smaller model)...")
+            print("Trying fallback to yolo11n-pose.pt...")
+            hw = HardwareManager()
             fallback_name = "yolo11n-pose.pt"
-            # Attempt auto-export on fallback too
             optimized_fallback = hw.auto_export(fallback_name)
             model = YOLO(str(optimized_fallback), task="pose")
-
             if str(optimized_fallback).endswith(".pt"):
                 model.to(device)
-            print("Fallback YOLO model loaded successfully")
+            print("Fallback YOLO pose model loaded successfully")
             return model
         except Exception as e2:
-            print(f"Failed to load any YOLO model: {e2}")
-            print("Note: YOLO is used only for person detection (bounding boxes).")
-            print("MediaPipe will still work for pose estimation without YOLO.")
+            print(f"Failed to load any YOLO pose model: {e2}")
             return None
 
 
-def detect_persons_with_yolo(frame, model, conf_threshold=0.5):
-    """Detect persons in a frame using YOLO with maximum accuracy"""
-    # Use higher resolution for better detection quality
-    h, w = frame.shape[:2]
+def download_or_load_yolo_model(model_name=None):
+    """Backward-compatible alias: load a **pose** model (same as load_yolo_pose_model)."""
+    return load_yolo_pose_model(model_name)
 
-    # Use 1280 for maximum quality (or original size if smaller)
-    target_size = 1280
-    scale = target_size / max(h, w)
 
-    if scale < 1:
-        new_h, new_w = int(h * scale), int(w * scale)
-        resized_frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    else:
-        resized_frame = frame
-        scale = 1
-
-    # Detection with optimized settings for maximum accuracy
-    results = model(
-        resized_frame,
+def track_persons_with_yolo(
+    frame,
+    model,
+    conf_threshold=0.5,
+    tracker="botsort.yaml",
+    imgsz=1280,
+):
+    """Track persons with YOLO; boxes are in **original frame** pixel coordinates."""
+    tracker_yaml = _normalize_yolo_tracker(tracker)
+    results = model.track(
+        frame,
+        persist=True,
+        tracker=tracker_yaml,
         conf=conf_threshold,
-        classes=0,  # only persons
+        classes=[0],
         device=device,
-        imgsz=target_size,
+        imgsz=imgsz,
         verbose=False,
-        max_det=10,  # Maximum 10 detections per image
-        agnostic_nms=True,  # Class-agnostic NMS for better results
-        retina_masks=True,
-    )  # High quality masks if using segmentation
-
+        max_det=10,
+        agnostic_nms=True,
+    )
     persons = []
-    if results and len(results) > 0 and results[0].boxes is not None:
-        boxes = results[0].boxes.data.cpu().numpy()
-
-        # Check for keypoints
-        keypoints = None
-        if hasattr(results[0], "keypoints") and results[0].keypoints is not None:
-            if hasattr(results[0].keypoints, "data") and len(results[0].keypoints.data) > 0:
-                keypoints = results[0].keypoints.data.cpu().numpy()
-
-        for i, box in enumerate(boxes):
-            x1, y1, x2, y2, conf, cls = box
-            if cls == 0:  # person class
-                person_data = {
-                    "bbox": [
-                        int(x1 / scale),
-                        int(y1 / scale),
-                        int(x2 / scale),
-                        int(y2 / scale),
-                    ],
-                    "conf": float(conf),
-                    "keypoints": None,
-                }
-
-                # Add keypoints if available
-                if keypoints is not None and i < len(keypoints):
-                    # Scale keypoints back
-                    kps = keypoints[i].copy()
-                    # kps shape is (17, 3) -> [x, y, conf]
-                    kps[:, 0] /= scale
-                    kps[:, 1] /= scale
-                    person_data["keypoints"] = kps
-
-                persons.append(person_data)
-
+    if not results or len(results) == 0 or results[0].boxes is None:
+        return persons
+    boxes = results[0].boxes
+    xyxy = boxes.xyxy.cpu().numpy()
+    confs = boxes.conf.cpu().numpy() if boxes.conf is not None else np.ones(len(xyxy))
+    cls_arr = boxes.cls.cpu().numpy() if boxes.cls is not None else np.zeros(len(xyxy))
+    track_ids = None
+    if boxes.id is not None:
+        track_ids = boxes.id.cpu().numpy()
+    for i in range(len(xyxy)):
+        x1, y1, x2, y2 = xyxy[i]
+        c = float(confs[i])
+        cl = int(cls_arr[i])
+        if cl != 0:
+            continue
+        tid = None
+        if track_ids is not None and i < len(track_ids):
+            tid = int(track_ids[i])
+        persons.append(
+            {
+                "bbox": [int(x1), int(y1), int(x2), int(y2)],
+                "conf": c,
+                "track_id": tid,
+                "keypoints": None,
+            }
+        )
     return persons
 
 
-def process_frame_with_yolo_pose_only(frame, yolo_model, conf_threshold=0.5, frame_count=0):
-    """
-    Process frame using YOLO11-pose only (no MediaPipe)
-    Returns landmarks in MediaPipe format (33 landmarks, with YOLO's 17 mapped)
+def _effective_bbox_upscale(bbox_upscale_factor: int, crop_w: int, crop_h: int, min_short_side_px: int) -> int:
+    """max(user factor, ceil(min_short / min(crop dims)), 1)."""
+    short = min(crop_w, crop_h)
+    if short <= 0:
+        return max(1, int(bbox_upscale_factor))
+    auto = int(math.ceil(min_short_side_px / short))
+    return max(int(bbox_upscale_factor), auto, 1)
 
-    Args:
-        frame: Input frame (BGR format)
-        yolo_model: YOLO pose model
-        conf_threshold: Confidence threshold for detection
-        frame_count: Current frame number (for debugging)
+
+def _yolo_crop_from_bbox(best_person_bbox, width: int, height: int):
+    """Expand bbox by ~20% margin; return crop rect and dimensions."""
+    x1, y1, x2, y2 = best_person_bbox
+    w_bbox = x2 - x1
+    h_bbox = y2 - y1
+    margin_w = int(w_bbox * 0.2)
+    margin_h = int(h_bbox * 0.2)
+    crop_x1 = max(0, x1 - margin_w)
+    crop_y1 = max(0, y1 - margin_h)
+    crop_x2 = min(width, x2 + margin_w)
+    crop_y2 = min(height, y2 + margin_h)
+    crop_w = crop_x2 - crop_x1
+    crop_h = crop_y2 - crop_y1
+    return crop_x1, crop_y1, crop_x2, crop_y2, crop_w, crop_h
+
+
+def process_frame_with_yolo_pose_only(
+    frame,
+    yolo_pose_model,
+    yolo_detector_model,
+    conf_threshold=0.5,
+    frame_count=0,
+    *,
+    roi_polygon_points=None,
+    bbox_upscale_factor=1,
+    yolo_tracker="botsort",
+    min_pose_crop_short_side_px=384,
+):
+    """
+    YOLO detector + BoT-SORT (or chosen tracker) for the person box, then YOLO-pose on an
+    upscaled crop; keypoints remapped to full-frame pixels (same scale/offset as MediaPipe crop path).
     """
     height, width = frame.shape[:2]
+    if yolo_detector_model is None or yolo_pose_model is None:
+        return None, None, None, None
 
-    # Run YOLO pose detection
-    results = yolo_model(
+    persons = track_persons_with_yolo(
         frame,
+        yolo_detector_model,
+        conf_threshold,
+        tracker=yolo_tracker,
+    )
+    filtered_persons = []
+    if persons:
+        if roi_polygon_points is not None and len(roi_polygon_points) >= 3:
+            poly_pts = np.array(roi_polygon_points, dtype=np.int32)
+            for p in persons:
+                bbox = p["bbox"]
+                center_x = (bbox[0] + bbox[2]) / 2
+                center_y = (bbox[1] + bbox[3]) / 2
+                if cv2.pointPolygonTest(poly_pts, (center_x, center_y), False) >= 0:
+                    filtered_persons.append(p)
+        else:
+            filtered_persons = persons
+
+    if not filtered_persons:
+        return None, None, None, None
+
+    filtered_persons.sort(
+        key=lambda p: (p["bbox"][2] - p["bbox"][0]) * (p["bbox"][3] - p["bbox"][1]) * p["conf"],
+        reverse=True,
+    )
+    best_person_bbox = filtered_persons[0]["bbox"]
+    crop_x1, crop_y1, crop_x2, crop_y2, crop_w, crop_h = _yolo_crop_from_bbox(
+        best_person_bbox, width, height
+    )
+    if crop_w <= 0 or crop_h <= 0:
+        return None, None, None, best_person_bbox
+
+    eff_up = _effective_bbox_upscale(bbox_upscale_factor, crop_w, crop_h, min_pose_crop_short_side_px)
+    crop_img = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+    new_w = crop_w * eff_up
+    new_h = crop_h * eff_up
+    upscaled_crop = cv2.resize(crop_img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+
+    results = yolo_pose_model(
+        upscaled_crop,
         conf=conf_threshold,
-        classes=0,  # only persons
+        classes=0,
         device=device,
         verbose=False,
-        max_det=1,  # Get only the best detection
+        max_det=1,
     )
-
     if not results or len(results) == 0:
-        return None, None, None
-
+        return None, None, None, best_person_bbox
     result = results[0]
-
-    # Check if keypoints are available
     if not hasattr(result, "keypoints") or result.keypoints is None:
-        return None, None, None
-
+        return None, None, None, best_person_bbox
     if len(result.keypoints.data) == 0:
-        return None, None, None
+        return None, None, None, best_person_bbox
 
-    # Get keypoints from YOLO (shape: [num_persons, num_keypoints, 3] where 3 = [x, y, confidence])
     try:
-        keypoints = result.keypoints.data[0].cpu().numpy()  # Get first person
-        # Debug: print keypoints shape
-        if frame_count == 0:  # Only print for first frame
-            print(f"\n  YOLO keypoints shape: {keypoints.shape}")
-            print(f"  YOLO keypoints dtype: {keypoints.dtype}")
+        keypoints = result.keypoints.data[0].cpu().numpy()
+        if frame_count == 0:
+            print(f"\n  YOLO crop-pose keypoints shape: {keypoints.shape}")
     except (IndexError, AttributeError) as e:
         print(f"\n  Warning: Could not extract keypoints: {e}")
-        return None, None, None
+        return None, None, None, best_person_bbox
 
-    # YOLO11-pose has 17 keypoints
-    # Map YOLO keypoints to MediaPipe format (33 landmarks)
-    # YOLO keypoints order (17):
-    # 0: nose, 1: left_eye, 2: right_eye, 3: left_ear, 4: right_ear,
-    # 5: left_shoulder, 6: right_shoulder, 7: left_elbow, 8: right_elbow,
-    # 9: left_wrist, 10: right_wrist, 11: left_hip, 12: right_hip,
-    # 13: left_knee, 14: right_knee, 15: left_ankle, 16: right_ankle
-
-    # MediaPipe landmarks (33) - we'll map YOLO's 17 to closest MediaPipe indices
-    # and fill the rest with NaN
     landmarks_norm = [[np.nan, np.nan, np.nan, 0.0] for _ in range(33)]
     landmarks_px = [[np.nan, np.nan, np.nan, 0.0] for _ in range(33)]
 
-    # Mapping from YOLO keypoint index to MediaPipe landmark index
     yolo_to_mediapipe = {
-        0: 0,  # nose -> nose
-        1: 2,  # left_eye -> left_eye
-        2: 5,  # right_eye -> right_eye
-        3: 7,  # left_ear -> left_ear
-        4: 8,  # right_ear -> right_ear
-        5: 11,  # left_shoulder -> left_shoulder
-        6: 12,  # right_shoulder -> right_shoulder
-        7: 13,  # left_elbow -> left_elbow
-        8: 14,  # right_elbow -> right_elbow
-        9: 15,  # left_wrist -> left_wrist
-        10: 16,  # right_wrist -> right_wrist
-        11: 23,  # left_hip -> left_hip
-        12: 24,  # right_hip -> right_hip
-        13: 25,  # left_knee -> left_knee
-        14: 26,  # right_knee -> right_knee
-        15: 27,  # left_ankle -> left_ankle
-        16: 28,  # right_ankle -> right_ankle
+        0: 0,
+        1: 2,
+        2: 5,
+        3: 7,
+        4: 8,
+        5: 11,
+        6: 12,
+        7: 13,
+        8: 14,
+        9: 15,
+        10: 16,
+        11: 23,
+        12: 24,
+        13: 25,
+        14: 26,
+        15: 27,
+        16: 28,
     }
 
-    # Convert YOLO keypoints to MediaPipe format
-    # YOLO keypoints are in pixel coordinates (x, y, confidence)
     for yolo_idx, mp_idx in yolo_to_mediapipe.items():
-        if yolo_idx < len(keypoints):
-            kp = keypoints[yolo_idx]
-            # YOLO keypoints: [x_pixel, y_pixel, confidence]
-            try:
-                x_px = float(kp[0])
-                y_px = float(kp[1])
-                conf = float(kp[2]) if len(kp) > 2 else 1.0
-            except (ValueError, IndexError, TypeError):
-                # Skip invalid keypoints
-                continue
+        if yolo_idx >= len(keypoints):
+            continue
+        kp = keypoints[yolo_idx]
+        try:
+            x_crop = float(kp[0])
+            y_crop = float(kp[1])
+            conf = float(kp[2]) if len(kp) > 2 else 1.0
+        except (ValueError, IndexError, TypeError):
+            continue
+        x_px = x_crop / eff_up + crop_x1
+        y_px = y_crop / eff_up + crop_y1
+        if (
+            np.isnan(x_px)
+            or np.isnan(y_px)
+            or np.isnan(conf)
+            or conf < 0.3
+            or x_px < 0
+            or y_px < 0
+            or x_px >= width
+            or y_px >= height
+        ):
+            continue
+        landmarks_norm[mp_idx] = [x_px / width, y_px / height, 0.0, conf]
+        try:
+            landmarks_px[mp_idx] = [int(round(x_px)), int(round(y_px)), 0.0, conf]
+        except (ValueError, OverflowError):
+            continue
 
-            # Check for NaN or invalid values
-            if (
-                np.isnan(x_px)
-                or np.isnan(y_px)
-                or np.isnan(conf)
-                or conf < 0.3
-                or x_px <= 0
-                or y_px <= 0
-                or x_px >= width
-                or y_px >= height
-            ):
-                continue
-
-            # Normalized coordinates (0-1) for MediaPipe format
-            landmarks_norm[mp_idx] = [x_px / width, y_px / height, 0.0, conf]
-            # Pixel coordinates - ensure valid integers
-            try:
-                landmarks_px[mp_idx] = [int(round(x_px)), int(round(y_px)), 0.0, conf]
-            except (ValueError, OverflowError):
-                # Skip if conversion fails
-                continue
-
-    return landmarks_norm, landmarks_px, keypoints
+    kps_full = keypoints.copy()
+    kps_full[:, 0] = kps_full[:, 0] / eff_up + crop_x1
+    kps_full[:, 1] = kps_full[:, 1] / eff_up + crop_y1
+    return landmarks_norm, landmarks_px, kps_full, best_person_bbox
 
 
 def process_frame_with_mediapipe_tasks(
     frame,
     landmarker,
     timestamp_ms,
-    yolo_model=None,
+    yolo_detector=None,
     yolo_conf=0.4,
     use_yolo=True,
     roi_polygon_points=None,
     bbox_upscale_factor=1,
+    yolo_tracker="botsort",
+    min_pose_crop_short_side_px=384,
 ):
     """
-    Process a frame with MediaPipe Tasks API, optionally using YOLO for better detection.
+    Process a frame with MediaPipe Tasks API, optionally using YOLO **detection+tracking** for the box.
 
-    Args:
-        frame: Input frame (BGR format)
-        landmarker: MediaPipe PoseLandmarker object
-        timestamp_ms: Timestamp in milliseconds for video mode
-        yolo_model: YOLO model for person detection
-        yolo_conf: YOLO confidence threshold
-        use_yolo: Whether to use YOLO for person detection
-        roi_polygon_points: Optional polygon points for ROI filtering
-        bbox_upscale_factor: Factor to upscale the YOLO bbox crop before inference
-    Returns:
-        landmarks_norm: Normalized landmarks (0-1)
-        landmarks_px: Pixel landmarks
-        best_person_bbox: Bounding box if YOLO was used
-        best_person_keypoints: Raw YOLO keypoints if available
+    When a person box exists, MediaPipe always runs on an **upscaled crop** (effective upscale is
+    max(user factor, auto from min short side)).
     """
     height, width = frame.shape[:2]
 
-    # If using YOLO, detect persons first
     best_person_bbox = None
     best_person_keypoints = None
-    if use_yolo and yolo_model is not None:
-        persons = detect_persons_with_yolo(frame, yolo_model, yolo_conf)
+    if use_yolo and yolo_detector is not None:
+        persons = track_persons_with_yolo(frame, yolo_detector, yolo_conf, tracker=yolo_tracker)
 
         filtered_persons = []
         if persons:
             if roi_polygon_points is not None and len(roi_polygon_points) >= 3:
-                # Filter by polygon ROI
-                # Convert points to correct format for pointPolygonTest
                 poly_pts = np.array(roi_polygon_points, dtype=np.int32)
                 for p in persons:
-                    # Check if center of bbox is inside polygon
                     bbox = p["bbox"]
                     center_x = (bbox[0] + bbox[2]) / 2
                     center_y = (bbox[1] + bbox[3]) / 2
-
-                    # pointPolygonTest returns > 0 if inside, 0 if on edge, < 0 if outside
                     if cv2.pointPolygonTest(poly_pts, (center_x, center_y), False) >= 0:
                         filtered_persons.append(p)
             else:
                 filtered_persons = persons
 
-        # Select the person with highest confidence or largest bbox from filtered list
         if filtered_persons:
-            # Sort by bbox area (largest first) and confidence
             filtered_persons.sort(
                 key=lambda p: (
                     (p["bbox"][2] - p["bbox"][0]) * (p["bbox"][3] - p["bbox"][1]) * p["conf"]
@@ -1504,88 +1600,43 @@ def process_frame_with_mediapipe_tasks(
             best_person_bbox = filtered_persons[0]["bbox"]
             best_person_keypoints = filtered_persons[0].get("keypoints")
 
-    # --- INFERENCE LOGIC ---
-
-    # Check if we should use crop & upscale strategy
-    if best_person_bbox and bbox_upscale_factor > 1 and use_yolo:
-        # 1. Extract and Upscale Crop
-        x1, y1, x2, y2 = best_person_bbox
-
-        # Add margin (20%)
-        w_bbox = x2 - x1
-        h_bbox = y2 - y1
-        margin_w = int(w_bbox * 0.2)
-        margin_h = int(h_bbox * 0.2)
-
-        crop_x1 = max(0, x1 - margin_w)
-        crop_y1 = max(0, y1 - margin_h)
-        crop_x2 = min(width, x2 + margin_w)
-        crop_y2 = min(height, y2 + margin_h)
-
-        # Calculate actual crop dimensions
-        crop_w = crop_x2 - crop_x1
-        crop_h = crop_y2 - crop_y1
-
+    # --- Upscaled crop whenever YOLO supplied a bbox ---
+    if best_person_bbox and use_yolo:
+        crop_x1, crop_y1, crop_x2, crop_y2, crop_w, crop_h = _yolo_crop_from_bbox(
+            best_person_bbox, width, height
+        )
         if crop_w > 0 and crop_h > 0:
+            eff_up = _effective_bbox_upscale(
+                bbox_upscale_factor, crop_w, crop_h, min_pose_crop_short_side_px
+            )
             crop_img = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-
-            # Upscale
-            new_w = crop_w * bbox_upscale_factor
-            new_h = crop_h * bbox_upscale_factor
-
+            new_w = crop_w * eff_up
+            new_h = crop_h * eff_up
             try:
                 upscaled_crop = cv2.resize(crop_img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-
-                # 2. Run MediaPipe on Upscaled Crop
                 rgb_frame = cv2.cvtColor(upscaled_crop, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
                 pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-                # 3. Process Results
-                if (
-                    not pose_landmarker_result.pose_landmarks
-                    or len(pose_landmarker_result.pose_landmarks) == 0
-                ):
-                    return None, None, best_person_bbox, best_person_keypoints
-
-                raw_landmarks = pose_landmarker_result.pose_landmarks[0]
-
-                # 4. Map Coordinates Back to Original Frame
-                landmarks_norm = []
-                landmarks_px = []
-
-                for landmark in raw_landmarks:
-                    # Helper lambda to map coordinates
-                    # Input: normalized coord in upscaled crop (0-1)
-                    # Output: normalized coord in original frame (0-1)
-
-                    # 1. Un-normalize to get pixel in upscaled crop
-                    px_crop_x = landmark.x * new_w
-                    px_crop_y = landmark.y * new_h
-
-                    # 2. Downscale to get pixel in original crop
-                    px_orig_crop_x = px_crop_x / bbox_upscale_factor
-                    px_orig_crop_y = px_crop_y / bbox_upscale_factor
-
-                    # 3. Add offset to get pixel in original frame
-                    px_final_x = px_orig_crop_x + crop_x1
-                    px_final_y = px_orig_crop_y + crop_y1
-
-                    # 4. Normalize to original frame
-                    norm_final_x = px_final_x / width
-                    norm_final_y = px_final_y / height
-
-                    visibility = 1.0  # Tasks API default
-
-                    landmarks_norm.append([norm_final_x, norm_final_y, landmark.z, visibility])
-                    landmarks_px.append([int(px_final_x), int(px_final_y), landmark.z, visibility])
-
-                return landmarks_norm, landmarks_px, best_person_bbox, best_person_keypoints
-
+                if pose_landmarker_result.pose_landmarks and len(pose_landmarker_result.pose_landmarks) > 0:
+                    raw_landmarks = pose_landmarker_result.pose_landmarks[0]
+                    landmarks_norm = []
+                    landmarks_px = []
+                    for landmark in raw_landmarks:
+                        px_crop_x = landmark.x * new_w
+                        px_crop_y = landmark.y * new_h
+                        px_orig_crop_x = px_crop_x / eff_up
+                        px_orig_crop_y = px_crop_y / eff_up
+                        px_final_x = px_orig_crop_x + crop_x1
+                        px_final_y = px_orig_crop_y + crop_y1
+                        norm_final_x = px_final_x / width
+                        norm_final_y = px_final_y / height
+                        visibility = 1.0
+                        landmarks_norm.append([norm_final_x, norm_final_y, landmark.z, visibility])
+                        landmarks_px.append([int(px_final_x), int(px_final_y), landmark.z, visibility])
+                    return landmarks_norm, landmarks_px, best_person_bbox, best_person_keypoints
             except Exception as e:
                 print(f"Error in upscale inference: {e}")
-                # Fallback to full frame inference below
-                pass
 
     # Fallback / Standard Inference (Full Frame)
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -1915,10 +1966,13 @@ def apply_median_filter(landmarks_history, current_landmarks, window_size=3):
     return filtered
 
 
-def process_video(video_path, output_dir, pose_config, yolo_model=None):
-    """Process a video file with optimized YOLO + MediaPipe Tasks API pipeline"""
+def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_pose=None):
+    """Process a video with YOLO detection/tracking + MediaPipe or YOLO-pose on upscaled crops."""
     print(f"Processing video: {video_path}")
     start_time = time.time()
+
+    reset_yolo_tracker_state(yolo_detector)
+    reset_yolo_tracker_state(yolo_pose)
 
     # Open the video
     cap = cv2.VideoCapture(str(video_path))
@@ -2014,32 +2068,37 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
     # Hardware/Pipeline Status
     print("-" * 60)
     print("PIPELINE EXECUTION STATUS:")
-    if yolo_model is not None and pose_config.get("use_yolo", False):
-        yolo_model_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
+    if pose_config.get("use_yolo", False) and (yolo_detector is not None or yolo_pose is not None):
         yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
-
-        # Determine YOLO device
+        det_name = pose_config.get("yolo_detector_model", "yolo26x.pt")
+        pose_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
+        yolo_dev_model = yolo_detector if yolo_mode == "yolo_mediapipe" else yolo_pose
+        if yolo_dev_model is None:
+            yolo_dev_model = yolo_detector or yolo_pose
         yolo_device = "Unknown"
-        if hasattr(yolo_model, "device"):
-            yolo_device = str(yolo_model.device)
-        elif hasattr(yolo_model, "predictor") and hasattr(yolo_model.predictor, "device"):
-            yolo_device = str(yolo_model.predictor.device)
-        else:
-            # Fallback check
-            yolo_device = str(device)  # From global variable
+        if yolo_dev_model is not None:
+            if hasattr(yolo_dev_model, "device"):
+                yolo_device = str(yolo_dev_model.device)
+            elif hasattr(yolo_dev_model, "predictor") and hasattr(yolo_dev_model.predictor, "device"):
+                yolo_device = str(yolo_dev_model.predictor.device)
+            else:
+                yolo_device = str(device)
 
         if yolo_mode == "yolo_only":
-            print("Pipeline: YOLOv11-pose only")
+            print("Pipeline: YOLO detector + track + YOLO-pose (upscaled crop)")
+            print(f"YOLO detector: {det_name} | pose: {pose_name}")
         else:
-            print("Pipeline: YOLOv11 + MediaPipe")
+            print("Pipeline: YOLO detector + track + MediaPipe (upscaled crop)")
+            print(f"YOLO detector: {det_name}")
 
-        print(f"YOLO Model: {yolo_model_name}")
         print(
             f"YOLO Device: {yolo_device.upper()} (GPU)"
-            if "cuda" in yolo_device
+            if "cuda" in yolo_device.lower()
             else f"YOLO Device: {yolo_device.upper()} (CPU)"
         )
+        print(f"Tracker: {pose_config.get('yolo_tracker', 'botsort')}")
         print(f"YOLO Confidence: {pose_config.get('yolo_conf', 0.5)}")
+        print(f"Min pose crop short side (px): {pose_config.get('min_pose_crop_short_side_px', 384)}")
     else:
         print("Pipeline: MediaPipe only")
 
@@ -2091,47 +2150,36 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
         yolo_kps = None
 
-        if yolo_mode == "yolo_only" and yolo_model is not None:
-            # Use YOLO pose only
-            landmarks_norm, landmarks_px, yolo_kps = process_frame_with_yolo_pose_only(
-                frame, yolo_model, pose_config["yolo_conf"], frame_count
+        if yolo_mode == "yolo_only" and yolo_pose is not None:
+            landmarks_norm, landmarks_px, yolo_kps, bbox = process_frame_with_yolo_pose_only(
+                frame,
+                yolo_pose,
+                yolo_detector,
+                pose_config["yolo_conf"],
+                frame_count,
+                roi_polygon_points=pose_config.get("roi_polygon_points"),
+                bbox_upscale_factor=pose_config.get("bbox_upscale_factor", 1),
+                yolo_tracker=pose_config.get("yolo_tracker", "botsort"),
+                min_pose_crop_short_side_px=int(
+                    pose_config.get("min_pose_crop_short_side_px", 384)
+                ),
             )
-            bbox = None
-            # If no landmarks detected, set to None
             if landmarks_norm is None or landmarks_px is None:
                 landmarks_norm = None
                 landmarks_px = None
         else:
-            # Use MediaPipe Tasks API (with or without YOLO for detection)
             landmarks_norm, landmarks_px, bbox, yolo_kps = process_frame_with_mediapipe_tasks(
                 frame,
                 landmarker,
                 timestamp_ms,
-                yolo_model,
+                yolo_detector,
                 pose_config["yolo_conf"],
                 pose_config["use_yolo"] and yolo_mode == "yolo_mediapipe",
                 pose_config.get("roi_polygon_points"),
                 pose_config.get("bbox_upscale_factor", 1),
+                pose_config.get("yolo_tracker", "botsort"),
+                int(pose_config.get("min_pose_crop_short_side_px", 384)),
             )
-
-            # Extract YOLO landmarks if available (via a hack, or we need to update process_frame_with_mediapipe_tasks)
-            # Actually, let's update process_frame_with_mediapipe_tasks to return the full person dict or just the landmarks
-            # For now, let's look at how process_frame_with_mediapipe_tasks is implemented.
-            # It calls detect_persons_with_yolo and picks the best one.
-            # I need to modify process_frame_with_mediapipe_tasks to return the yolo keypoints too.
-            # But since I can't easily see the signature change in this chunk,
-            # I will modify process_frame_with_mediapipe_tasks separately.
-            # Assuming I will modify it to return (landmarks_norm, landmarks_px, bbox, yolo_kps)
-
-            # Wait, I cannot change the unpacking here before changing the function definition.
-            # I will assume I change the function definition in the next step.
-            # For now, let's handle the extraction here assuming the function returns 4 values.
-            # BUT: I am in the middle of a multi_replace.
-            # I'll stick to 3 values here and modify the function `process_frame_with_mediapipe_tasks` to stash the yolo kps
-            # in a way I can retrieve, or better: I'll accept that I need to edit `process_frame_with_mediapipe_tasks`
-            # AND the call site simultaneously.
-
-            pass  # Placeholder, edited in next chunk logic
 
         # Apply temporal filter if configured
         if landmarks_norm and pose_config["filter_type"] != "none":
@@ -2634,15 +2682,19 @@ def process_video(video_path, output_dir, pose_config, yolo_model=None):
         log_file.write("=" * 60 + "\n")
         log_file.write("PIPELINE CONFIGURATION:\n")
         log_file.write("=" * 60 + "\n")
-        if yolo_model is not None and pose_config.get("use_yolo", False):
-            yolo_model_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
+        if pose_config.get("use_yolo", False) and (yolo_detector is not None or yolo_pose is not None):
             yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
+            det_name = pose_config.get("yolo_detector_model", "yolo26x.pt")
+            pose_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
             if yolo_mode == "yolo_only":
-                log_file.write("Pipeline: YOLOv11-pose only\n")
+                log_file.write("Pipeline: YOLO detector + track + YOLO-pose (crop)\n")
             else:
-                log_file.write("Pipeline: YOLOv11 + MediaPipe\n")
-            log_file.write(f"YOLO Model: {yolo_model_name} (loaded successfully)\n")
+                log_file.write("Pipeline: YOLO detector + track + MediaPipe (crop)\n")
+            log_file.write(f"YOLO detector: {det_name}\n")
+            if yolo_mode == "yolo_only":
+                log_file.write(f"YOLO pose weights: {pose_name}\n")
             log_file.write("YOLO Confidence: {}\n".format(pose_config.get("yolo_conf", 0.5)))
+            log_file.write(f"Tracker: {pose_config.get('yolo_tracker', 'botsort')}\n")
         else:
             log_file.write("Pipeline: MediaPipe only\n")
             log_file.write("YOLO: Not used\n")
@@ -2858,28 +2910,32 @@ def process_videos_in_directory(existing_root=None):
 
     print("Pose configuration completed successfully.")
 
-    # Load YOLO model if necessary
-    yolo_model = None
+    yolo_detector = None
+    yolo_pose = None
     use_yolo_successfully = False
     if pose_config["use_yolo"]:
-        # Get the selected model name from config, default to yolo11x-pose.pt
-        selected_model = pose_config.get("yolo_model", "yolo11x-pose.pt")
-        print(f"Loading YOLO model: {selected_model}")
-        yolo_model = download_or_load_yolo_model(selected_model)
-        if yolo_model is not None:
+        det_name = pose_config.get("yolo_detector_model", "yolo26x.pt")
+        print(f"Loading YOLO detector: {det_name}")
+        yolo_detector = load_yolo_detector(det_name)
+        yolo_mode_ld = pose_config.get("yolo_mode", "yolo_mediapipe")
+        if yolo_mode_ld == "yolo_only":
+            pose_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
+            print(f"Loading YOLO pose model: {pose_name}")
+            yolo_pose = load_yolo_pose_model(pose_name)
+        if yolo_detector is not None and (yolo_mode_ld != "yolo_only" or yolo_pose is not None):
             use_yolo_successfully = True
-            print(
-                f"YOLO model '{selected_model}' loaded successfully - using YOLOv11 + MediaPipe pipeline"
-            )
+            print("YOLO weights loaded successfully.")
         else:
-            print("Warning: Could not load YOLO model, proceeding without it")
+            print("Warning: Could not load required YOLO weights, proceeding without YOLO")
             pose_config["use_yolo"] = False
+            yolo_detector = None
+            yolo_pose = None
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     # Use different directory names based on whether YOLO is being used
     if use_yolo_successfully and pose_config.get("use_yolo", False):
         output_base = Path(output_base) / f"yolov_{timestamp}"
-        print(f"Output directory: yolov_{timestamp} (YOLOv11 + MediaPipe)")
+        print(f"Output directory: yolov_{timestamp} (YOLO detector/track + pose pipeline)")
     else:
         output_base = Path(output_base) / f"mediapipe_{timestamp}"
         print(f"Output directory: mediapipe_{timestamp} (MediaPipe only)")
@@ -2903,7 +2959,7 @@ def process_videos_in_directory(existing_root=None):
         output_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            process_video(video_file, output_dir, pose_config, yolo_model)
+            process_video(video_file, output_dir, pose_config, yolo_detector, yolo_pose)
         except Exception as e:
             print(f"\nError processing {video_file.name}: {e}")
             continue
