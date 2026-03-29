@@ -557,6 +557,14 @@ install_with_uv() {
     else
         echo "Intel Mac detected. Using CPU-only configuration."
     fi
+
+    USE_SAM_EXTRA=false
+    echo ""
+    echo "Install optional SAM 3 (Meta) segmentation stack (extra 'sam')? [y/N]"
+    read -r sam_choice
+    if [[ "$sam_choice" == "y" || "$sam_choice" == "Y" ]]; then
+        USE_SAM_EXTRA=true
+    fi
     
     # Choose template
     if [[ "$USE_METAL" == true ]]; then
@@ -595,7 +603,11 @@ install_with_uv() {
     echo "Installing vaila dependencies with uv..."
     echo "This may take a few minutes on first run..."
     
-    if ! uv sync; then
+    UV_SYNC_CMD=(uv sync)
+    if [[ "$USE_SAM_EXTRA" == true ]]; then
+        UV_SYNC_CMD+=(--extra sam)
+    fi
+    if ! "${UV_SYNC_CMD[@]}"; then
         echo "Error: uv sync failed. Restoring universal CPU configuration..."
         cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
         echo "Installation failed. Please check the error messages above."
@@ -604,6 +616,21 @@ install_with_uv() {
     echo "Dependencies installed successfully."
     echo ""
     echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are already installed via uv sync from pyproject.toml."
+
+    if [[ "$USE_SAM_EXTRA" == true ]]; then
+        echo ""
+        echo "------------------------------------------------------------"
+        echo "SAM 3: accept https://huggingface.co/facebook/sam3 then run:"
+        echo "  cd \"$VAILA_HOME\" && uv run hf auth login"
+        echo "------------------------------------------------------------"
+        read -r -p "Run 'uv run hf auth login' now? [y/N] " hf_login_now
+        if [[ "$hf_login_now" == "y" || "$hf_login_now" == "Y" ]]; then
+            (cd "$VAILA_HOME" && uv run hf auth login) || {
+                echo "Warning: hf auth login failed or was cancelled."
+            }
+        fi
+    fi
+
     ARCH=$(uname -m)
     if [[ "$ARCH" == "arm64" ]]; then
         echo "Apple Silicon: PyTorch can use MPS (Metal) when available; otherwise it falls back to CPU."
