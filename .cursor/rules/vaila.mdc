@@ -30,8 +30,9 @@ The project uses the full Astral Rust-based stack. **Never use** bare `pip`, `bl
 
 ```bash
 uv run vaila.py                  # run the app
-uv sync                          # install deps (CPU)
-uv sync --extra gpu              # install deps (GPU)
+uv sync                          # default universal CPU pyproject
+uv sync --extra gpu              # after CUDA template (`bin/use_pyproject_linux_cuda.sh` etc.)
+uv sync --extra sam              # optional SAM 3; see AGENTS.md Hybrid
 uv sync --frozen                 # CI mode: strict lock
 uv add <pkg>                     # add runtime dep
 uv add --dev <pkg>               # add dev dep

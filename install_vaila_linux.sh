@@ -465,6 +465,18 @@ install_with_uv() {
     else
         echo "No NVIDIA GPU detected. Using CPU-only configuration."
     fi
+
+    USE_SAM_EXTRA=false
+    echo ""
+    if [[ "$USE_GPU" != true ]]; then
+        echo "Note: SAM 3 video in vailá uses NVIDIA CUDA at runtime. On this CPU-only profile you can skip (N)"
+        echo "      or install the extra for use after switching to a CUDA pyproject (see AGENTS.md, Hybrid)."
+    fi
+    echo "Install optional SAM 3 (Meta) segmentation stack (extra 'sam', CUDA-oriented)? [y/N]"
+    read -r sam_choice
+    if [[ "$sam_choice" == "y" || "$sam_choice" == "Y" ]]; then
+        USE_SAM_EXTRA=true
+    fi
     
     # Choose template
     if [[ "$USE_GPU" == true ]]; then
@@ -517,24 +529,42 @@ install_with_uv() {
     echo "Installing vaila dependencies with uv..."
     echo "This may take a few minutes on first run..."
     
+    UV_SYNC_CMD=(uv sync)
     if [[ "$USE_GPU" == true ]]; then
-        if ! uv sync --extra gpu; then
-            echo "Error: uv sync failed. Restoring universal CPU configuration..."
-            cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
-            echo "Installation failed. Please check the error messages above."
-            exit 1
-        fi
-    else
-        if ! uv sync; then
-            echo "Error: uv sync failed. Restoring universal CPU configuration..."
-            cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
-            echo "Installation failed. Please check the error messages above."
-            exit 1
-        fi
+        UV_SYNC_CMD+=(--extra gpu)
+    fi
+    if [[ "$USE_SAM_EXTRA" == true ]]; then
+        UV_SYNC_CMD+=(--extra sam)
+    fi
+    if ! "${UV_SYNC_CMD[@]}"; then
+        echo "Error: uv sync failed. Restoring universal CPU configuration..."
+        cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+        echo "Installation failed. Please check the error messages above."
+        exit 1
     fi
     echo "Dependencies installed successfully."
     echo ""
     echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are already installed via uv sync from pyproject.toml."
+
+    if [[ "$USE_SAM_EXTRA" == true ]]; then
+        echo ""
+        echo "------------------------------------------------------------"
+        echo "SAM 3 (optional): weights are gated on Hugging Face (facebook/sam3)."
+        echo "  1) In a browser, log in and accept the model license:"
+        echo "       https://huggingface.co/facebook/sam3"
+        echo "  2) Store a token on this machine (Read access):"
+        echo "       cd \"$VAILA_HOME\" && uv run hf auth login"
+        echo "     Use --force if a different HF account is already cached."
+        echo "  3) Optional: download weights into the repo"
+        echo "       uv run vaila/vaila_sam.py --download-weights"
+        echo "------------------------------------------------------------"
+        read -r -p "Run 'uv run hf auth login' now from $VAILA_HOME? [y/N] " hf_login_now
+        if [[ "$hf_login_now" == "y" || "$hf_login_now" == "Y" ]]; then
+            (cd "$VAILA_HOME" && uv run hf auth login) || {
+                echo "Warning: hf auth login failed or was cancelled. You can run it later."
+            }
+        fi
+    fi
 
     # Verify pycairo installation
     echo ""
@@ -556,16 +586,9 @@ install_with_uv() {
     echo "Verifying environment setup..."
     if ! uv run python -c "import PIL; print('PIL OK')" 2>&1 | grep -q "PIL OK"; then
         echo "Warning: Environment verification failed. PIL module not found. Running uv sync again..."
-        if [[ "$USE_GPU" == true ]]; then
-            uv sync --extra gpu || {
-                echo "Error: Failed to sync dependencies during verification."
-                exit 1
-            }
-        else
-            uv sync || {
-                echo "Error: Failed to sync dependencies during verification."
-                exit 1
-            }
+        if ! "${UV_SYNC_CMD[@]}"; then
+            echo "Error: Failed to sync dependencies during verification."
+            exit 1
         fi
     else
         echo "Environment verification successful."

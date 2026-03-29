@@ -38,9 +38,11 @@ The project uses the full [Astral](https://astral.sh) Rust-based toolchain:
 uv run vaila.py
 
 # Sync dependencies (reads uv.lock + pyproject.toml)
-uv sync                        # CPU-only
-uv sync --extra gpu            # With GPU support
+uv sync                        # default: universal CPU pyproject
+uv sync --extra gpu            # only after CUDA template is active (see AGENTS.md Hybrid)
+uv sync --extra sam            # SAM 3 optional stack; video still needs NVIDIA CUDA
 uv sync --frozen               # CI mode: fail if lock is outdated
+# Switch templates: bin/use_pyproject_universal_cpu.sh | use_pyproject_linux_cuda.sh (etc.)
 
 # Manage dependencies
 uv add <package>               # Add runtime dependency

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 23 March 2026
-Version: 0.3.32
+Update Date: 28 March 2026
+Version: 0.3.33
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -57,6 +57,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 
 # Standard library imports
 import contextlib
+import importlib.util
 import os
 import platform
 import signal
@@ -79,13 +80,14 @@ if vaila_dir not in sys.path:
     sys.path.insert(0, vaila_dir)
 
 
-def run_vaila_module(module_name, script_path=None):
+def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
     """
     Helper function to run vaila modules with proper path configuration.
 
     Args:
         module_name (str): The module name to run (e.g., "vaila.markerless_2d_analysis")
         script_path (str, optional): Alternative script path if module import fails
+        extra_py_flags: Extra flags after ``sys.executable`` (e.g. ``("-u",)`` for unbuffered SAM subprocess logs)
     """
     # If script_path is provided, try to run it directly first (avoids __init__.py import issues)
     if script_path:
@@ -97,7 +99,7 @@ def run_vaila_module(module_name, script_path=None):
             if os.path.exists(full_script_path):
                 print(f"Running script directly: {full_script_path}")
                 subprocess.Popen(
-                    [sys.executable, full_script_path],
+                    [sys.executable, *extra_py_flags, full_script_path],
                     cwd=vaila_dir,
                     env={**os.environ, "PYTHONPATH": vaila_dir},
                 )
@@ -111,7 +113,7 @@ def run_vaila_module(module_name, script_path=None):
         # Try to run the module directly (will import __init__.py)
         print(f"Running module: {module_name}")
         subprocess.Popen(
-            [sys.executable, "-m", module_name],
+            [sys.executable, *extra_py_flags, "-m", module_name],
             cwd=vaila_dir,
             env={**os.environ, "PYTHONPATH": vaila_dir},
         )
@@ -124,7 +126,7 @@ def run_vaila_module(module_name, script_path=None):
                 if not os.path.exists(full_script_path):
                     full_script_path = os.path.join(vaila_dir, script_path)
                 subprocess.Popen(
-                    [sys.executable, full_script_path],
+                    [sys.executable, *extra_py_flags, full_script_path],
                     cwd=vaila_dir,
                     env={**os.environ, "PYTHONPATH": vaila_dir},
                 )
@@ -156,7 +158,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 23.March.2026 v0.3.32 (Python 3.12.13)
+vailá - 28.March.2026 v0.3.33 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -198,7 +200,7 @@ B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
 B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - TUG and TURN
-B5_r6_c4 - vailá          B5_r6_c5 - vailá
+B5_r6_c4 - SAM            B5_r6_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -262,7 +264,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 23.March.2026 v0.3.32 (Python 3.12.13)")
+        self.title("vailá - 28.March.2026 v0.3.33 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -889,11 +891,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # B5_r6_c4 - vailá
-        vaila_btn_sprint3 = tk.Button(
+        # B5_r6_c4 - SAM (Segment Anything Model 3 video)
+        sam_btn = tk.Button(
             row6_frame,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="SAM",
+            command=self.sam_video,
             width=button_width,
         )
 
@@ -909,7 +911,7 @@ class Vaila(tk.Tk):
         sprint_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         face_mesh_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         tugturn_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn_sprint3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        sam_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_btn_sprint4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
@@ -1000,7 +1002,7 @@ class Vaila(tk.Tk):
             tools_col1, text="Rec3D MultiDLT", command=self.rec3d, width=button_width
         )
 
-        # Avaliable blank (vailá) buttons for future tools
+        # Available blank (vailá) buttons for future tools
         # C_A_r4_c1 - Data Files: vailá
         reid_marker_btn = tk.Button(
             tools_col1,
@@ -2822,6 +2824,51 @@ class Vaila(tk.Tk):
         print("Features: tugturn 3D Analysis")
         print("=" * 60 + "\n")
         run_vaila_module("vaila.tugturn", "vaila/tugturn.py")
+
+    # B5_r6_c4 - SAM 3 video segmentation
+    def sam_video(self):
+        """Runs SAM 3 text-prompt video segmentation (optional extra: sam)."""
+        if importlib.util.find_spec("sam3") is None:
+            messagebox.showerror(
+                "SAM 3 not installed",
+                "Install the optional stack, then restart vailá:\n"
+                "  uv sync --extra sam\n\n"
+                "Workstation (NVIDIA CUDA template):\n"
+                "  uv sync --extra gpu --extra sam\n\n"
+                "See AGENTS.md — Hybrid CPU vs NVIDIA workstation.",
+                parent=self,
+            )
+            return
+
+        pre = messagebox.askyesnocancel(
+            "SAM 3 — requirements",
+            "SAM 3 video needs:\n"
+            "• NVIDIA GPU + CUDA on this machine\n"
+            "• Hugging Face: accept the license for facebook/sam3, then in a terminal:\n"
+            "    uv run hf auth login\n"
+            "  (same account that has access; use --force if the wrong user is cached)\n"
+            "• Or download weights: uv run vaila/vaila_sam.py --download-weights\n"
+            "  into vaila/models/sam3/sam3.pt\n\n"
+            "Quick test (terminal):\n"
+            "  uv run vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person\n\n"
+            "Yes = open the Hugging Face model page in your browser\n"
+            "No = continue to the SAM window\n"
+            "Cancel = stop",
+            parent=self,
+        )
+        if pre is None:
+            return
+        if pre:
+            webbrowser.open("https://huggingface.co/facebook/sam3")
+
+        print("\n" + "=" * 60)
+        print("Launching: vaila.vaila_sam")
+        print("Features: SAM 3 video masks (CUDA + Hugging Face auth)")
+        print(
+            "A separate SAM window opens; if you do not see it, check the task bar / other workspace."
+        )
+        print("=" * 60 + "\n")
+        run_vaila_module("vaila.vaila_sam", "vaila/vaila_sam.py", extra_py_flags=("-u",))
 
 
 if __name__ == "__main__":

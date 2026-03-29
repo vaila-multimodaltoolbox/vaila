@@ -8,13 +8,33 @@ This file provides guidance to **AI Agents** (Antigravity, Cursor, Claude Code, 
 
 ## Build & Run Commands
 
+### Hybrid CPU laptop vs NVIDIA workstation
+
+The repo ships **several `pyproject_*.toml` templates**. The checked-in **`pyproject.toml` matches `pyproject_universal_cpu.toml`**: portable **CPU** PyTorch (laptops / no CUDA). That manifest defines optional extras `dev`, `upscaler`, and `sam` — it does **not** define `gpu` (so `uv sync --extra gpu` fails until you switch templates).
+
+**Workstation with NVIDIA CUDA** — copy the platform template, regenerate the lock, then sync:
+
+| Platform | Switch (from repo root) | Then |
+|----------|-------------------------|------|
+| Linux CUDA 12.8 | `bash bin/use_pyproject_linux_cuda.sh` | `uv sync --extra gpu` and optionally `--extra sam` |
+| Windows CUDA 12.1 | `pwsh bin/use_pyproject_win_cuda.ps1` | same |
+| macOS (Metal) | `bash bin/use_pyproject_macos_metal.sh` | `uv sync` |
+
+**Back to portable CPU** (e.g. same clone on a laptop): `bash bin/use_pyproject_universal_cpu.sh` (Linux/macOS) or `pwsh bin/use_pyproject_universal_cpu.ps1` (Windows), then `uv sync`.
+
+Each switch runs `uv lock` and rewrites `uv.lock` for that hardware matrix. The default lock in git targets **CPU**; CUDA users regenerate locally after switching.
+
+SAM 3 video (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime even if the `sam` extra is installed.
+
 ```bash
 # Run the application (recommended)
 uv run vaila.py
 
-# Install dependencies
-uv sync                    # CPU-only
-uv sync --extra gpu        # With GPU support
+# Install dependencies (after choosing the right pyproject.toml as above)
+uv sync                          # default / universal CPU template
+uv sync --extra sam              # optional SAM 3 deps (HF gated weights; CUDA at runtime)
+uv sync --extra gpu              # only after Linux/Windows CUDA template is active
+uv sync --extra gpu --extra sam  # CUDA template + SAM
 
 # Lint and format
 uv run ruff check vaila/           # Lint
@@ -33,6 +53,7 @@ uv run pytest tests/test_vaila_and_jump.py -v   # Run jump specific tests
 uv run pytest tests/test_tugturn.py -v          # Run TUG specific tests
 uv run pytest tests/test_dlt_rec.py -v          # Run DLT/Rec math tests
 uv run pytest tests/test_dlt_rec_integration.py -v # Run DLT/Rec pipeline tests
+uv run pytest tests/test_vaila_sam.py -v           # SAM helpers; GPU smoke: tests/SAM/README.md
 
 # Install git hooks (pre-commit blocks files >24MB)
 bash install-hooks.sh
