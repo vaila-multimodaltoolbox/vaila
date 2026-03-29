@@ -13,6 +13,9 @@ vaila/models/**/*.bin
 # Stray weight files at repository root (use vaila/models/ instead)
 /*.pt
 
+# Legacy SAM3 download folder at repo root (use vaila/models/sam3/; see vaila_sam.py)
+sam3_weights/
+
 # General temporary files
 .DS_Store
 .AppleDouble
