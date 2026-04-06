@@ -1,15 +1,17 @@
 #!/bin/bash
 
-# Maximum allowed size in bytes (24MB = 24 * 1024 * 1024)
-max_size=25165824
+# Maximum allowed size in bytes (20 MiB = 20 * 1024 * 1024). Staged files this size or larger fail.
+max_size=$((20 * 1024 * 1024))
 
-# Check if any file exceeds the maximum size
-for file in $(git diff --cached --name-only); do
+# Only check Added/Copied/Modified/Renamed — never Deleted (D): removed paths can still exist
+# on disk and would falsely fail the size check. Use ACMR, not --diff-filter=d (Git differs by version).
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
   if [ -f "$file" ]; then
     file_size=$(wc -c <"$file")
-    if [ $file_size -ge $max_size ]; then
-      echo "Error: The file '$file' is $(($file_size / 1024 / 1024))MB, which exceeds the 24MB limit."
+    if [ "$file_size" -ge "$max_size" ]; then
+      echo "Error: The file '$file' is $(($file_size / 1024 / 1024)) MiB, which exceeds the 20 MiB limit."
       exit 1
     fi
   fi
-done
+done < <(git diff --cached --name-only --diff-filter=ACMR)

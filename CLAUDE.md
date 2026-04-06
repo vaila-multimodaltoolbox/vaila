@@ -236,7 +236,7 @@ except ImportError:
 - **Scientific variable names** (X, Y, Z, F, R, T, etc.) are valid — suppressed via ruff `N806`/`N803`
 - **Output dirs:** always timestamped → `processed_<type>_YYYYMMDD_HHMMSS/`
 - **No hard-coded absolute paths**
-- **No files >24MB** (git hook enforced)
+- **No files ≥20 MiB** (git hook enforced)
 
 ---
 
