@@ -55,7 +55,7 @@ uv run pytest tests/test_dlt_rec.py -v          # Run DLT/Rec math tests
 uv run pytest tests/test_dlt_rec_integration.py -v # Run DLT/Rec pipeline tests
 uv run pytest tests/test_vaila_sam.py -v           # SAM helpers; GPU smoke: tests/SAM/README.md
 
-# Install git hooks (pre-commit blocks files >24MB)
+# Install git hooks (pre-commit blocks files ≥20 MiB)
 bash install-hooks.sh
 ```
 
@@ -85,7 +85,7 @@ vaila/                 ← root
 └── uv.lock
 ```
 
-**`vaila/models/`:** Reference **`.csv`** (and similar small files) are **tracked**. Downloaded weights (**`.pt`**, **`.onnx`**, **`.engine`**, **`.task`**, etc.) are **gitignored** and fetched on first use by YOLO/MediaPipe code paths. Pre-commit blocks staged files **≥ 24MB**. Details: [CONTRIBUTING.md](CONTRIBUTING.md#vaila-models-directory).
+**`vaila/models/`:** Reference **`.csv`** (and similar small files) are **tracked**. Downloaded weights (**`.pt`**, **`.ckpt`**, **`.onnx`**, **`.engine`**, **`.task`**, **`.safetensors`**, etc.) and **`vaila/models/**/.cache/`** are **gitignored**; fetch via first run or **`hf download`** (e.g. [facebook/sam3](https://huggingface.co/facebook/sam3), `facebook/sam-3d-body-dinov3`). Small default **`.pkl`** (walkway ML) may stay tracked if **< 20 MiB**. Pre-commit blocks staged files **≥ 20 MiB**. Details: [CONTRIBUTING.md](CONTRIBUTING.md#vaila-models-directory). **`tests/SAM/*.mp4`** is gitignored (place sample locally; see `tests/SAM/README.md`).
 
 ## Platform-Specific Configuration
 

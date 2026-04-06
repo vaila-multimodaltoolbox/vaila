@@ -130,7 +130,7 @@ vaila/                          ← repository root
 ├── pyproject_linux_cuda12.toml ← template: Linux + NVIDIA CUDA 12.8
 ├── pyproject_macos.toml        ← template: macOS Apple Silicon (Metal/MPS)
 ├── pyproject_universal_cpu.toml← template: CPU-only fallback
-├── install-hooks.sh            ← installs pre-commit git hook (blocks >24MB files)
+├── install-hooks.sh            ← installs pre-commit git hook (blocks ≥20 MiB files)
 ├── hooks/pre-commit            ← the actual hook script
 ├── vaila.py                    ← main GUI entry point (97KB, Tkinter)
 ├── vaila/                      ← ~100 analysis modules
@@ -150,7 +150,7 @@ vaila/                          ← repository root
 5. **Output directories** are always timestamped: `processed_<type>_YYYYMMDD_HHMMSS/`
 6. **`hardware_manager.py`** handles all GPU/CPU detection — never duplicate this logic
 7. **`ty` is in beta** — use it as a complement to ruff, not as a strict hard gate
-8. **No files >24MB** — the pre-commit hook installed by `bash install-hooks.sh` enforces this
+8. **No files ≥20 MiB** — the pre-commit hook installed by `bash install-hooks.sh` enforces this
 
 ---
 
