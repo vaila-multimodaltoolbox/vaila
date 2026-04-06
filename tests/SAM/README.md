@@ -1,6 +1,6 @@
 # SAM 3 smoke tests
 
-Place a short MP4 here as `test1000.mp4` (or any name — adjust the CLI). Prefer a small file (under 24 MB) so it stays compatible with the repo pre-commit hook.
+Place a short MP4 here as `test1000.mp4` (or any name — adjust the CLI). Prefer a small file (under 20 MiB) so it stays compatible with the repo pre-commit hook.
 
 ## Hugging Face
 
@@ -19,12 +19,13 @@ Place a short MP4 here as `test1000.mp4` (or any name — adjust the CLI). Prefe
    uv run vaila/vaila_sam.py --download-weights
    ```
 
-## VRAM (8GB cards)
+## VRAM (8 GiB cards)
 
-SAM3 loads **all session frames** onto the GPU at once. Long clips (e.g. 1000 frames) can exceed VRAM. By default vailá caps to **256 frames** (evenly subsampled) via `SAM3_MAX_FRAMES`. Override:
+SAM3 loads **all session frames** for a session onto the GPU. Long clips exceed VRAM easily.
 
-- Full length (if you have enough VRAM): `SAM3_MAX_FRAMES=0` or `--max-frames 0`
-- Custom cap: `--max-frames 400`
+- **Default:** vailá picks a frame cap from your GPU size (see `[SAM3 VRAM]` in the terminal). It also sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to reduce fragmentation OOMs.
+- **Override:** `SAM3_MAX_FRAMES=80` or `--max-frames 80` if you still hit CUDA OOM.
+- **Full clip (large VRAM only):** `SAM3_MAX_FRAMES=0` or `--max-frames 0`
 
 Weights belong under **`vaila/models/sam3/`** as `sam3.pt` (flat), or inside **`vaila/models/sam3/sam3_weights/`** if you moved the whole HF folder — both are auto-detected. Repo root `./sam3_weights/` is still a fallback but deprecated.
 
@@ -40,7 +41,7 @@ uv run vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person
 With an explicit frame cap:
 
 ```bash
-uv run vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person --max-frames 256
+uv run vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person --max-frames 80
 ```
 
 With an explicit checkpoint:

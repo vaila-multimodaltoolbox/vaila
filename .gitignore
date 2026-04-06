@@ -2,19 +2,35 @@
 datasets/
 bin/ffmpeg/
 
-# vaila/models: track small reference files (e.g. *.csv). Ignore downloaded / large weights.
+# vaila/models: track small reference files (e.g. *.csv, *.json <20MB). Ignore weight-like
+# binaries (Git cannot ignore by size; pre-commit rejects staged files ≥20MB — hooks/pre-commit).
 vaila/models/**/*.pt
+vaila/models/**/*.ckpt
 vaila/models/**/*.onnx
 vaila/models/**/*.engine
 vaila/models/**/*.task
 vaila/models/**/*.pth
 vaila/models/**/*.bin
+# Small sklearn/joblib *.pkl (e.g. walkway_ml_prediction defaults) stay tracked if <20 MiB; hook blocks larger.
+vaila/models/**/*.safetensors
+# Hugging Face hub cache under models (e.g. facebook/sam3 downloads)
+vaila/models/**/.cache/
 
 # Stray weight files at repository root (use vaila/models/ instead)
 /*.pt
+/*.ckpt
+/*.onnx
+/*.pkl
+/*.safetensors
 
 # Legacy SAM3 download folder at repo root (use vaila/models/sam3/; see vaila_sam.py)
 sam3_weights/
+
+# SAM 3 Hugging Face tree (tokenizer, config, sam3.pt, safetensors); use vaila_sam.py --download-weights
+vaila/models/sam3/
+
+# SAM GPU smoke sample (often >20 MiB; see tests/SAM/README.md)
+tests/SAM/*.mp4
 
 # General temporary files
 .DS_Store
@@ -196,3 +212,4 @@ hooks/*
 !install-hooks.sh
 
 tests/markerless_2d_analysis/temp/
+tests/SAM/test1000.mp4

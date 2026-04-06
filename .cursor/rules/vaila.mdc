@@ -117,7 +117,7 @@ uv run pytest tests/ -v
 - Scientific variable names (X, Y, Z, F, R, T, etc.) are **valid** — suppressed in ruff
 - Output dirs: always timestamped → `processed_<type>_YYYYMMDD_HHMMSS/`
 - No hard-coded absolute paths
-- No files >24MB (git hook enforced via `install-hooks.sh`)
+- No files ≥20 MiB (git hook enforced via `install-hooks.sh`)
 
 ---
 
@@ -247,4 +247,4 @@ Copy the correct template **before** `uv python pin` / `uv venv`:
 ❌ Other GUI frameworks (Qt, wx, Dear PyGui, etc.)
 ❌ Duplicate GPU detection (use `hardware_manager.py`)
 ❌ Hard-coded absolute paths
-❌ Files >24MB in the repo
+❌ Files ≥20 MiB in the repo
