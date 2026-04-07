@@ -26,8 +26,16 @@ vaila/models/**/.cache/
 # Legacy SAM3 download folder at repo root (use vaila/models/sam3/; see vaila_sam.py)
 sam3_weights/
 
-# SAM 3 Hugging Face tree (tokenizer, config, sam3.pt, safetensors); use vaila_sam.py --download-weights
-vaila/models/sam3/
+# Keep the model directories in GitHub, but track only *.txt instructions inside them.
+# (Weights and other large artifacts must remain local; see instruction_to_download_models.txt)
+vaila/models/sam3/*
+!vaila/models/sam3/*.txt
+
+vaila/models/sam-3d-dinov3/*
+!vaila/models/sam-3d-dinov3/*.txt
+
+vaila/models/trackers/*
+!vaila/models/trackers/*.txt
 
 # SAM GPU smoke sample (often >20 MiB; see tests/SAM/README.md)
 tests/SAM/*.mp4

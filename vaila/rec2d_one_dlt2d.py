@@ -31,7 +31,6 @@ Description:
 
 import argparse
 import os
-import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import Tk, filedialog, messagebox
@@ -40,6 +39,7 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import inv
 from rich import print
+
 
 def read_coordinates(file_path, usecols=None):
     df = pd.read_csv(file_path, usecols=usecols)

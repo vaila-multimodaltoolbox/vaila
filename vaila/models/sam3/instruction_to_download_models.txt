@@ -1,0 +1,11 @@
+SAM 3 (facebook/sam3) — gated on Hugging Face / Meta license.
+
+1. Create a Hugging Face account, accept the SAM 3 license on the model card:
+   https://huggingface.co/facebook/sam3
+2. Log in locally (token with read access):
+   uv run hf auth login
+3. Download weights and config into this folder:
+   uv run hf download facebook/sam3 --local-dir vaila/models/sam3
+   (checkpoint is expected as vaila/models/sam3/sam3.pt after download — see vaila/vaila_sam.py)
+
+Dependencies: uv sync --extra sam  |  NVIDIA CUDA at runtime for video.
