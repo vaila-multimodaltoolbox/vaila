@@ -16,7 +16,18 @@ GPU: CUDA only (sam3 video predictor loads on .cuda()).
 
 Usage:
     uv run vaila/vaila_sam.py
+    uv run vaila/vaila_sam.py --open-help          # SAM 3 setup (HTML in browser)
     uv run vaila/vaila_sam.py --download-weights   # HF_TOKEN or hf auth login
+
+FIFA Skeletal Tracking Light (optional ``--extra fifa``): subcommand ``fifa`` delegates to
+``vaila.fifa_skeletal_pipeline`` (prepare, boxes, preprocess, baseline, pack). Example::
+
+    uv sync --extra fifa --extra sam --extra gpu   # CUDA template + deps
+    uv run vaila/vaila_sam.py fifa prepare --video-source DIR --data-root data/
+    uv run vaila/vaila_sam.py fifa boxes --data-root data/ --sequences data/sequences_val.txt
+    uv run vaila/vaila_sam.py fifa preprocess --data-root data/ --sequences data/sequences_val.txt
+    uv run vaila/vaila_sam.py fifa baseline --data-root data/ --sequences data/sequences_val.txt -o out/npz
+    uv run vaila/vaila_sam.py fifa pack --submission-full out/npz --data-root data/ --output-dir out/ --split val
 """
 
 from __future__ import annotations
@@ -27,7 +38,9 @@ import datetime as dt
 import importlib.util
 import os
 import platform
+import sys
 import tkinter as tk
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -45,6 +58,32 @@ def _repo_root() -> Path:
 
 def _package_sam3_dir() -> Path:
     return Path(__file__).resolve().parent / "models" / "sam3"
+
+
+def sam3_install_help_html_path() -> Path:
+    """Browser help page: SAM 3 / optional extras (same content as README section)."""
+    return Path(__file__).resolve().parent / "help" / "vaila_sam.html"
+
+
+def open_sam3_install_help_in_browser() -> None:
+    path = sam3_install_help_html_path()
+    if path.is_file():
+        webbrowser.open_new_tab(path.resolve().as_uri())
+    else:
+        webbrowser.open_new_tab(
+            "https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/vaila/help/vaila_sam.html"
+        )
+
+
+def _print_sam3_install_instructions() -> None:
+    msg = (
+        "SAM 3 is not installed.\n"
+        "  Standard:  uv sync --extra sam\n"
+        "  CUDA host: uv sync --extra gpu --extra sam   (after CUDA pyproject template)\n"
+        "Opening setup instructions in your browser…\n"
+        "See also: AGENTS.md (Hybrid CPU vs NVIDIA workstation).\n"
+    )
+    print(msg, file=sys.stderr)
 
 
 def _package_sam3_ckpt_path() -> Path:
@@ -709,14 +748,8 @@ class SamVideoDialog(tk.Toplevel):
 def run_sam_video(existing_root: tk.Tk | None = None) -> None:
     """GUI entry: configure and run SAM3 on a directory of videos (batch) or a single file."""
     if importlib.util.find_spec("sam3") is None:
-        root_e = tk.Tk()
-        root_e.withdraw()
-        messagebox.showerror(
-            "SAM 3 not installed",
-            "Install optional dependencies:\n  uv sync --extra sam",
-            parent=root_e,
-        )
-        root_e.destroy()
+        _print_sam3_install_instructions()
+        open_sam3_install_help_in_browser()
         return
 
     root = existing_root
@@ -787,6 +820,12 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "fifa":
+        from vaila.fifa_skeletal_pipeline import main_fifa_cli
+
+        main_fifa_cli(sys.argv[2:])
+        return
+
     parser = argparse.ArgumentParser(description="SAM 3 video segmentation (vailá)")
     parser.add_argument(
         "-i",
@@ -820,7 +859,16 @@ def main() -> None:
         help="Download facebook/sam3 (config.json + sam3.pt) into vaila/models/sam3/. "
         "Needs HF access to the repo; use HF_TOKEN or: uv run hf auth login",
     )
+    parser.add_argument(
+        "--open-help",
+        action="store_true",
+        help="Open SAM 3 setup instructions (HTML) in the default browser and exit.",
+    )
     args = parser.parse_args()
+
+    if args.open_help:
+        open_sam3_install_help_in_browser()
+        return
 
     if args.download_weights:
         out_ckpt = download_sam3_weights_to_vaila_models()
@@ -828,6 +876,10 @@ def main() -> None:
         return
 
     if args.input and args.output:
+        if importlib.util.find_spec("sam3") is None:
+            _print_sam3_install_instructions()
+            open_sam3_install_help_in_browser()
+            raise SystemExit(1)
         inp = args.input.resolve()
         if inp.is_dir():
             video_files = _find_videos(inp)

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá — SAM 3 setup</title>
+    <style>
+        body { font-family: system-ui, Arial, sans-serif; margin: 0; background: #f0f2f5; color: #1a1a1a; line-height: 1.55; }
+        .wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 48px; }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            padding: 28px 32px;
+            margin-bottom: 20px;
+        }
+        h1 { font-size: 1.45rem; margin: 0 0 8px; color: #c0392b; }
+        .lead { color: #555; margin-bottom: 20px; }
+        h2 { font-size: 1.05rem; margin: 24px 0 10px; color: #2c3e50; }
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 14px 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+        }
+        code { font-family: ui-monospace, monospace; }
+        .note { background: #e8f4fc; border-left: 4px solid #3498db; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fdeaea; border-left: 4px solid #e74c3c; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0; }
+        a { color: #2980b9; }
+        .footer { font-size: 0.85rem; color: #666; margin-top: 24px; }
+        hr { border: none; border-top: 1px solid #e0e0e0; margin: 28px 0; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <h1>SAM 3 not installed</h1>
+            <p class="lead">Install the optional stack, then restart <strong>vailá</strong>.</p>
+
+            <h2>Standard (CPU <code>pyproject</code> template)</h2>
+            <pre><code>uv sync --extra sam</code></pre>
+
+            <h2>Workstation (NVIDIA CUDA template)</h2>
+            <p>After switching to the Linux/Windows CUDA <code>pyproject</code> (see install scripts or <code>bin/use_pyproject_*</code>):</p>
+            <pre><code>uv sync --extra gpu --extra sam</code></pre>
+
+            <div class="warn">
+                <strong>Runtime:</strong> SAM 3 video inference needs an <strong>NVIDIA GPU with CUDA</strong>, even if the <code>sam</code> extra is installed.
+            </div>
+
+            <div class="note">
+                <strong>Docs:</strong> Hybrid CPU laptop vs NVIDIA workstation — see <a href="https://github.com/vaila-multimodaltoolbox/vaila/blob/main/AGENTS.md"><code>AGENTS.md</code></a> in the repository root.
+            </div>
+
+            <h2>Weights (Hugging Face, gated)</h2>
+            <p>Accept the model on Hugging Face, then authenticate and download, for example:</p>
+            <pre><code>uv run hf auth login
+uv run vaila/vaila_sam.py --download-weights</code></pre>
+            <p>Or: <code>uv run hf download facebook/sam3 sam3.pt --local-dir vaila/models/sam3</code></p>
+
+            <hr>
+
+            <h2>FIFA Skeletal pipeline (optional)</h2>
+            <p>For the FIFA Skeletal Tracking Light tools (<code>vaila_sam.py fifa …</code>):</p>
+            <pre><code>uv sync --extra fifa
+# With CUDA template:
+uv sync --extra gpu --extra fifa</code></pre>
+            <p>SAM 3D Body weights: <code>vaila/models/sam-3d-dinov3/instruction_to_download_models.txt</code></p>
+
+            <p class="footer">vailá · <code>vaila/vaila_sam.py</code> · help file: <code>vaila/help/vaila_sam.html</code></p>
+        </div>
+    </div>
+</body>
+</html>

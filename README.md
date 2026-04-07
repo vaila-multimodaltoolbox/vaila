@@ -75,6 +75,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - [Description](#description)
 - [_vailá_ Structure and Interface](#vailá-structure-and-interface)
 - [Installation and Setup](#installation-and-setup)
+  - [Optional: SAM 3 (video segmentation)](#optional-sam-3-video-segmentation)
 - [Running the Application](#running-the-application)
 - [Uninstallation Instructions](#uninstallation-instructions)
 - [Documentation](#documentation)
@@ -344,6 +345,36 @@ This ensures that:
 - ✅ Automatic fallback to CPU-only if GPU installation fails
 
 For more information about uv, visit: [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+
+### Optional: SAM 3 (video segmentation)
+
+The **Segment Anything Model 3** stack is not installed by default. If the GUI shows **“SAM 3 not installed”** (or the CLI exits when you run batch mode without the package), install the optional dependencies and restart _vailá_.
+
+**Standard installation** (universal CPU `pyproject` template):
+
+```bash
+uv sync --extra sam
+```
+
+**Workstation with NVIDIA CUDA** (after you have switched to the Linux/Windows CUDA `pyproject` template — see install scripts or `bin/use_pyproject_*.sh` / `.ps1`):
+
+```bash
+uv sync --extra gpu --extra sam
+```
+
+**Note:** SAM 3 **video** inference still requires an **NVIDIA GPU with CUDA** at runtime, even when the `sam` extra is installed. For choosing between a CPU laptop and a CUDA workstation, see **[AGENTS.md](AGENTS.md)** (“Hybrid CPU vs NVIDIA workstation”).
+
+**Weights** (Hugging Face, gated): accept the model on Hugging Face, then e.g. `uv run hf auth login` and `uv run vaila/vaila_sam.py --download-weights`, or use `hf download` into `vaila/models/sam3/`.
+
+**In-browser setup page** (same instructions): open the local help file after install, or run:
+
+```bash
+uv run vaila/vaila_sam.py --open-help
+```
+
+That opens [vaila/help/vaila_sam.html](vaila/help/vaila_sam.html) in your default browser.
+
+**FIFA Skeletal Tracking Light** (separate optional stack): `uv sync --extra fifa` (often together with `--extra gpu` on CUDA templates). See `AGENTS.md` and `vaila_sam.py fifa --help`.
 
 ---
 
