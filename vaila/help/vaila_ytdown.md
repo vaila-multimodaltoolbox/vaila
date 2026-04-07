@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/vaila_ytdown.py`
-- **Version:** 0.3.31
+- **Version:** 0.3.34
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **HTML Help:** [vaila_ytdown.html](vaila_ytdown.html) (open in browser or use **? Help** in the GUI)

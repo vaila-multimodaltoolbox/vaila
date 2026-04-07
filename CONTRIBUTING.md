@@ -38,14 +38,14 @@ See [AGENTS.md](AGENTS.md) for the full QA pipeline and project layout.
 
 **vailá** uses two related labels: a **package version** (for installers) and an optional **GitHub release codename** (for project milestones).
 
-- **Package version** — Source of truth is [`pyproject.toml`](pyproject.toml) under `[project].version` (PEP 621). This is what **`uv`** and **`pip`** report and what must match **wheels / sdist** metadata. Example form: `0.3.31` (often written as **v0.3.31** in prose).
+- **Package version** — Source of truth is [`pyproject.toml`](pyproject.toml) under `[project].version` (PEP 621). This is what **`uv`** and **`pip`** report and what must match **wheels / sdist** metadata. Example form: `0.3.34` (often written as **v0.3.34** in prose).
 - **GitHub release codename** — Human-facing name for a milestone: **`rp`** stands for **Ribeirão Preto**, followed by the date as **day + abbreviated English month + two-digit year**, e.g. **`rp23mar26`** = 23 Mar 2026. This does not replace the package version.
 - **Release notes** — Prefer stating **both** so installers and GitHub readers stay aligned, for example:
-  - `Package version: v0.3.31`
+  - `Package version: v0.3.34`
   - `Release codename: rp23mar26 (Ribeirão Preto — 23 Mar 2026)`
 - **Git tags** — Pick **one** convention and use it consistently:
-  - **Option A:** Git tag = **`v0.3.31`** (semver); GitHub **release title** = **`rp23mar26`** or **`rp23mar26 — v0.3.31`**.
-  - **Option B:** Git tag = **`rp23mar26`**; the release description **must** clearly state the **package version** (e.g. **v0.3.31**).
+  - **Option A:** Git tag = **`v0.3.34`** (semver); GitHub **release title** = **`rp23mar26`** or **`rp23mar26 — v0.3.34`**.
+  - **Option B:** Git tag = **`rp23mar26`**; the release description **must** clearly state the **package version** (e.g. **v0.3.34**).
 
 ## Security reminders
 
@@ -73,10 +73,10 @@ Obrigado por contribuir para o **vailá**. Este ficheiro complementa [AGENTS.md]
 
 ### Versões e releases no GitHub
 
-- **Versão do pacote:** definida em `pyproject.toml` (`[project].version`); é a versão que **`uv`** / **`pip`** mostram (ex.: `0.3.31`).
+- **Versão do pacote:** definida em `pyproject.toml` (`[project].version`); é a versão que **`uv`** / **`pip`** mostram (ex.: `0.3.34`).
 - **Codename de release (GitHub):** formato **`rp` + data** — **rp** = Ribeirão Preto; data = dia + mês abreviado (inglês) + ano com dois dígitos, ex.: **`rp23mar26`** = 23 mar 2026.
 - **Notas de release:** indiquem sempre as duas coisas (versão do pacote + codename) quando usarem codenames.
-- **Tags Git:** ou tag semântica **`v0.3.31`** com título da release **`rp...`**, ou tag **`rp...`** com a versão do pacote explícita no texto — ver [Versioning and GitHub releases](#versioning-and-github-releases) (inglês).
+- **Tags Git:** ou tag semântica **`v0.3.34`** com título da release **`rp...`**, ou tag **`rp...`** com a versão do pacote explícita no texto — ver [Versioning and GitHub releases](#versioning-and-github-releases) (inglês).
 
 - **Licença:** as contribuições são aceites sob [AGPL-3.0](LICENSE).
 - **Segurança:** leia [SECURITY.md](SECURITY.md) — não commite chaves nem credenciais.
