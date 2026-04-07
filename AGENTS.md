@@ -10,7 +10,7 @@ This file provides guidance to **AI Agents** (Antigravity, Cursor, Claude Code, 
 
 ### Hybrid CPU laptop vs NVIDIA workstation
 
-The repo ships **several `pyproject_*.toml` templates**. The checked-in **`pyproject.toml` matches `pyproject_universal_cpu.toml`**: portable **CPU** PyTorch (laptops / no CUDA). That manifest defines optional extras `dev`, `upscaler`, and `sam` — it does **not** define `gpu` (so `uv sync --extra gpu` fails until you switch templates).
+The repo ships **several `pyproject_*.toml` templates**. The checked-in **`pyproject.toml` matches `pyproject_universal_cpu.toml`**: portable **CPU** PyTorch (laptops / no CUDA). That manifest defines optional extras `dev`, `upscaler`, `sam`, and **`fifa`** (FIFA Skeletal Tracking Light pipeline: vendored `sam_3d_body` + PyTorch Lightning stack) — it does **not** define `gpu` (so `uv sync --extra gpu` fails until you switch templates).
 
 **Workstation with NVIDIA CUDA** — copy the platform template, regenerate the lock, then sync:
 
@@ -26,6 +26,8 @@ Each switch runs `uv lock` and rewrites `uv.lock` for that hardware matrix. The 
 
 SAM 3 video (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime even if the `sam` extra is installed.
 
+**FIFA Skeletal Tracking Light (optional):** `uv sync --extra fifa` (workstation: combine with CUDA template + `--extra gpu`). Top-level package **`sam_3d_body/`** is vendored from Meta (see `sam_3d_body/VENDOR_vaila.txt`). Weights: `vaila/models/sam-3d-dinov3/` via `hf download` (see `instruction_to_download_models.txt`). CLI: `uv run vaila/vaila_sam.py fifa <subcommand> --help` with subcommands `prepare`, `boxes`, `preprocess`, `baseline`, `pack`. Tests: `uv run pytest tests/test_fifa_skeletal_pipeline.py -v`. Full `data/` layout (`cameras/`, `boxes/`, `pitch_points.txt`, …) still comes from the official starter kit / Hugging Face dataset.
+
 ```bash
 # Run the application (recommended)
 uv run vaila.py
@@ -35,6 +37,7 @@ uv sync                          # default / universal CPU template
 uv sync --extra sam              # optional SAM 3 deps (HF gated weights; CUDA at runtime)
 uv sync --extra gpu              # only after Linux/Windows CUDA template is active
 uv sync --extra gpu --extra sam  # CUDA template + SAM
+uv sync --extra fifa             # FIFA skeletal pipeline (SAM 3D Body + Lightning; use with GPU template for CUDA)
 
 # Lint and format
 uv run ruff check vaila/           # Lint
@@ -54,6 +57,7 @@ uv run pytest tests/test_tugturn.py -v          # Run TUG specific tests
 uv run pytest tests/test_dlt_rec.py -v          # Run DLT/Rec math tests
 uv run pytest tests/test_dlt_rec_integration.py -v # Run DLT/Rec pipeline tests
 uv run pytest tests/test_vaila_sam.py -v           # SAM helpers; GPU smoke: tests/SAM/README.md
+uv run pytest tests/test_fifa_skeletal_pipeline.py -v  # FIFA layout/packaging unit tests (no GPU)
 
 # Install git hooks (pre-commit blocks files ≥20 MiB)
 bash install-hooks.sh
@@ -73,6 +77,7 @@ The project uses `pytest` for automated testing.
 vaila/                 ← root
 ├── vaila.py           ← Main Tkinter GUI entry point
 ├── vaila/             ← All analysis modules (package)
+├── sam_3d_body/       ← Vendored SAM 3D Body (wheel + `fifa` extra); not the Scout “FIFA field” docs
 ├── tests/             ← pytest test suite
 ├── docs/              ← Documentation
 ├── .claude/
