@@ -48,7 +48,11 @@ import cv2
 import numpy as np
 
 SAM3_DEFAULT_CKPT_NAME = "sam3.pt"
+SAM3_MULTIPLEX_CKPT_NAME = "sam3.1_multiplex.pt"
 SAM3_HF_REPO_ID = "facebook/sam3"
+
+# All recognised checkpoint file names (tried in order during auto-detection)
+SAM3_CKPT_CANDIDATES: tuple[str, ...] = (SAM3_DEFAULT_CKPT_NAME, SAM3_MULTIPLEX_CKPT_NAME)
 
 
 def _repo_root() -> Path:
@@ -160,12 +164,32 @@ def _hf_access_help() -> str:
     )
 
 
+def _assert_sam3_video_checkpoint_not_3d_body_weights(path: Path) -> None:
+    """SAM 3 *video* (facebook/sam3, ``sam3.pt``) is a different model than SAM 3D Body / FIFA."""
+    lowered = [x.lower() for x in path.parts]
+    if "sam-3d-dinov3" in lowered or "sam_3d_body" in lowered:
+        raise ValueError(
+            "This path is under SAM 3D Body / FIFA weights, not SAM 3 *video* (facebook/sam3).\n\n"
+            'Clear "sam3.pt (optional)" to use vaila/models/sam3/sam3.pt, or run:\n'
+            "  uv run vaila/vaila_sam.py --download-weights\n\n"
+            f"Refused: {path}"
+        )
+    name = path.name.lower()
+    if name == "mhr_model.pt" or (name == "model.ckpt" and path.suffix.lower() == ".ckpt"):
+        raise ValueError(
+            "That file is a SAM 3D Body / Lightning checkpoint, not SAM 3 video (sam3.pt).\n"
+            "Use weights from https://huggingface.co/facebook/sam3\n\n"
+            f"Refused: {path}"
+        )
+
+
 def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
     """
-    Return path to sam3.pt, or None to let sam3 download from Hub (needs auth + access).
+    Return path to sam3.pt / sam3.1_multiplex.pt, or None to let sam3 download from Hub.
 
     Order: argument → env SAM3_CHECKPOINT / VAILA_SAM3_CHECKPOINT →
-    ``vaila/models/sam3/sam3.pt`` → ``vaila/models/sam3/sam3_weights/sam3.pt`` →
+    ``vaila/models/sam3/{sam3.pt, sam3.1_multiplex.pt}`` →
+    ``vaila/models/sam3/sam3_weights/{sam3.pt, sam3.1_multiplex.pt}`` →
     legacy ``<repo>/sam3_weights/sam3.pt``.
     """
     raw: str | None = None
@@ -174,24 +198,41 @@ def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
     if not raw:
         raw = os.environ.get("SAM3_CHECKPOINT") or os.environ.get("VAILA_SAM3_CHECKPOINT")
     if not raw or not raw.strip():
-        pkg_ckpt = _package_sam3_ckpt_path()
-        if pkg_ckpt.is_file():
-            return pkg_ckpt
-        nested_ckpt = _package_sam3_nested_weights_ckpt_path()
-        if nested_ckpt.is_file():
-            return nested_ckpt
+        # Auto-detect: try each candidate name in the package dir
+        pkg_dir = _package_sam3_dir()
+        for cname in SAM3_CKPT_CANDIDATES:
+            p = pkg_dir / cname
+            if p.is_file():
+                return p
+        # Nested weights dir (HF local-dir layout)
+        for cname in SAM3_CKPT_CANDIDATES:
+            p = pkg_dir / "sam3_weights" / cname
+            if p.is_file():
+                return p
+        # Legacy repo root fallback
         legacy_ckpt = _repo_root() / "sam3_weights" / SAM3_DEFAULT_CKPT_NAME
         if legacy_ckpt.is_file():
             return legacy_ckpt
         return None
     p = Path(raw).expanduser().resolve()
     if p.is_dir():
-        p = p / SAM3_DEFAULT_CKPT_NAME
+        # If a directory was given, look for any candidate inside it
+        for cname in SAM3_CKPT_CANDIDATES:
+            candidate = p / cname
+            if candidate.is_file():
+                _assert_sam3_video_checkpoint_not_3d_body_weights(candidate)
+                return candidate
+        raise FileNotFoundError(
+            f"SAM3 checkpoint not found in directory: {p}\n"
+            f"Expected one of: {', '.join(SAM3_CKPT_CANDIDATES)}"
+        )
     if not p.is_file():
         raise FileNotFoundError(
             f"SAM3 checkpoint not found: {p}\n"
-            f"Expected a file named {SAM3_DEFAULT_CKPT_NAME} (or pass the full path to sam3.pt)."
+            f"Expected a file named {SAM3_DEFAULT_CKPT_NAME} or {SAM3_MULTIPLEX_CKPT_NAME} "
+            f"(or pass the full path)."
         )
+    _assert_sam3_video_checkpoint_not_3d_body_weights(p)
     return p
 
 
@@ -319,7 +360,7 @@ def _maybe_subsample_video_for_vram(
     indices = np.unique(np.linspace(0, n - 1, num=max_frames, dtype=np.int64))
     out_path = output_dir / "_sam3_subsample_input.mp4"
     cap = cv2.VideoCapture(vp)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
     writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (w, h))
     if not writer.isOpened():
         cap.release()
@@ -389,11 +430,12 @@ def _setup_cuda_for_sam3() -> None:
     """
     import torch
 
-    key = "PYTORCH_CUDA_ALLOC_CONF"
-    cur = os.environ.get(key, "")
-    if "expandable_segments" not in cur:
-        new_val = f"{cur},expandable_segments:True" if cur else "expandable_segments:True"
-        os.environ[key] = new_val
+    # PyTorch 2.9+ renamed the env var; set both for compat
+    alloc_val = "expandable_segments:True"
+    for key in ("PYTORCH_ALLOC_CONF", "PYTORCH_CUDA_ALLOC_CONF"):
+        cur = os.environ.get(key, "")
+        if "expandable_segments" not in cur:
+            os.environ[key] = f"{cur},{alloc_val}" if cur else alloc_val
 
     torch.cuda.empty_cache()
 
@@ -408,6 +450,7 @@ def run_sam3_on_video(
     max_input_frames: int | None = None,
     save_overlay_mp4: bool = True,
     save_mask_png: bool = True,
+    frame_by_frame_fallback: bool = False,
 ) -> None:
     import torch
     from sam3.model_builder import build_sam3_video_predictor
@@ -434,53 +477,210 @@ def run_sam3_on_video(
         pred_kw["checkpoint_path"] = str(ckpt_file)
 
     try:
-        try:
-            predictor = build_sam3_video_predictor(**pred_kw)
-        except Exception as e:
-            if _is_gated_repo_error(e):
-                raise RuntimeError(_hf_access_help()) from e
-            raise
+        from typing import Any
 
-        torch.cuda.empty_cache()
-
-        try:
-            start = predictor.handle_request(
-                {"type": "start_session", "resource_path": vp},
-            )
-        except Exception as e:
-            if type(e).__name__ == "OutOfMemoryError" or "CUDA out of memory" in str(e):
-                raise RuntimeError(
-                    _sam3_cuda_oom_help(max_input_frames=mf, session_frames=n_sess)
-                ) from e
-            raise
-        session_id = start["session_id"]
-
-        prompt_resp = predictor.handle_request(
-            {
-                "type": "add_prompt",
-                "session_id": session_id,
-                "frame_index": fi_run,
-                "text": text_prompt,
-            }
-        )
+        predictor: Any = None
         outputs_by_frame: dict[int, dict] = {}
-        fi0 = int(prompt_resp["frame_index"])
-        outputs_by_frame[fi0] = prompt_resp["outputs"]
+        _autocast: contextlib.AbstractContextManager[object] = contextlib.nullcontext()
 
-        stream_req = {
-            "type": "propagate_in_video",
-            "session_id": session_id,
-            "propagation_direction": "both",
-            "start_frame_index": fi_run,
-            "max_frame_num_to_track": None,
-        }
-        for chunk in predictor.handle_stream_request(stream_req):
-            outputs_by_frame[int(chunk["frame_index"])] = chunk["outputs"]
+        if not frame_by_frame_fallback:
+            try:
+                predictor = build_sam3_video_predictor(**pred_kw)
+            except Exception as e:
+                if _is_gated_repo_error(e):
+                    raise RuntimeError(_hf_access_help()) from e
+                raise
 
-        with contextlib.suppress(Exception):
-            predictor.handle_request({"type": "close_session", "session_id": session_id})
-        with contextlib.suppress(Exception):
-            predictor.shutdown()
+            # On low-VRAM cards (< 10 GiB), FP32 model (~6.8 GiB) leaves almost no
+            # room for inference tensors.  Use autocast to run matmuls in bfloat16
+            # while keeping input tensors in float32 (avoids dtype mismatch errors).
+            props = torch.cuda.get_device_properties(torch.cuda.current_device())
+            _use_bf16 = props.total_memory / (1024**3) < 10.0
+            if _use_bf16:
+                print(
+                    f"[SAM3] Low-VRAM GPU ({props.total_memory / (1024**3):.1f} GiB) — "
+                    "using bfloat16 autocast for inference"
+                )
+
+            import gc
+
+            gc.collect()
+            torch.cuda.empty_cache()
+            _autocast = torch.autocast("cuda", dtype=torch.bfloat16, enabled=_use_bf16)
+
+        if frame_by_frame_fallback:
+            print(
+                "[SAM3] Frame-by-frame fallback activated: processing each frame via isolated subprocesses."
+            )
+            import subprocess
+            import sys
+
+            cap = cv2.VideoCapture(vp)
+            if not cap.isOpened():
+                raise OSError(f"Could not open video: {vp}")
+            nframes_sess = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps_sess = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            w_sess = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h_sess = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+            for fi_eval in range(nframes_sess):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, fi_eval)
+                ok, bgr = cap.read()
+                if not ok or bgr is None:
+                    continue
+
+                scale = 1.0
+                max_dim = 640
+                if max(w_sess, h_sess) > max_dim:
+                    scale = max_dim / max(w_sess, h_sess)
+                    new_w = max(1, int(round(w_sess * scale)))
+                    new_h = max(1, int(round(h_sess * scale)))
+                    bgr_small = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                else:
+                    new_w, new_h = w_sess, h_sess
+                    bgr_small = bgr
+
+                temp_dir = output_dir / f"_fallback_tmp_{fi_eval}"
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                temp_vid = temp_dir / f"frame_{fi_eval}.mp4"
+
+                fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
+                tmp_writer = cv2.VideoWriter(str(temp_vid), fourcc, float(fps_sess), (new_w, new_h))
+                tmp_writer.write(bgr_small)
+                tmp_writer.release()
+
+                print(f"  [SAM3] Isolating frame {fi_eval + 1}/{nframes_sess} in fresh process...")
+                cmd = [
+                    sys.executable,
+                    __file__,
+                    "-i",
+                    str(temp_vid),
+                    "-o",
+                    str(temp_dir),
+                    "-t",
+                    text_prompt,
+                    "--max-frames",
+                    "1",
+                    "--no-overlay",
+                ]
+                if checkpoint is not None:
+                    cmd.extend(["-w", str(checkpoint)])
+
+                try:
+                    subprocess.run(cmd, check=True, capture_output=True, text=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"  [SAM3] Process failed for frame {fi_eval}:\n{e.stderr}")
+                    continue
+
+                # Parse output to rebuild the tracker dictionary
+                found_masks = []
+                found_oids = []
+                found_probs = []
+                found_boxes = []
+
+                meta_csvs = list(temp_dir.rglob("sam_frames_meta.csv"))
+                if meta_csvs:
+                    meta_path = meta_csvs[0]
+                    masks_dir = meta_path.parent / "masks"
+                    try:
+                        lines = meta_path.read_text(encoding="utf-8").strip().split("\n")
+                        if len(lines) > 1:
+                            header = lines[0].split(",")
+                            data = lines[1].split(",")
+                            for col_idx in range(1, len(header), 5):
+                                if col_idx + 4 < len(data):
+                                    col_name = header[col_idx]
+                                    oid_str = col_name.split("_")[-1]
+                                    try:
+                                        oid = int(oid_str)
+                                    except ValueError:
+                                        continue
+
+                                    if not data[col_idx]:
+                                        continue
+
+                                    bx, by, bw, bh = map(float, data[col_idx : col_idx + 4])
+                                    prob = float(data[col_idx + 4])
+
+                                    png_file = masks_dir / f"frame_{fi_eval:06d}_obj_{oid}.png"
+                                    if png_file.is_file():
+                                        mask_img = cv2.imread(str(png_file), cv2.IMREAD_GRAYSCALE)
+                                        if mask_img is not None:
+                                            if scale != 1.0:
+                                                mask_img = cv2.resize(
+                                                    mask_img,
+                                                    (w_sess, h_sess),
+                                                    interpolation=cv2.INTER_NEAREST,
+                                                )
+                                            found_masks.append(mask_img > 127)
+                                            found_oids.append(oid)
+                                            found_probs.append(prob)
+                                            found_boxes.append([bx, by, bw, bh])
+
+                        if found_masks:
+                            outputs_by_frame[fi_eval] = {
+                                "out_binary_masks": np.stack(found_masks),
+                                "out_obj_ids": np.array(found_oids, dtype=np.int32),
+                                "out_probs": np.array(found_probs, dtype=np.float32),
+                                "out_boxes_xywh": np.array(found_boxes, dtype=np.float32),
+                            }
+                    except Exception as e:
+                        print(f"  [SAM3] Failed to parse mask for frame {fi_eval}: {e}")
+
+                with contextlib.suppress(OSError):
+                    pass
+                    # shutil.rmtree(temp_dir, ignore_errors=True)
+
+            cap.release()
+
+        else:
+            if predictor is None:
+                raise RuntimeError("SAM3 predictor failed to initialize.")
+            try:
+                with _autocast:
+                    start = predictor.handle_request(
+                        {"type": "start_session", "resource_path": vp},
+                    )
+            except Exception as e:
+                if type(e).__name__ == "OutOfMemoryError" or "CUDA out of memory" in str(e):
+                    raise RuntimeError(
+                        _sam3_cuda_oom_help(max_input_frames=mf, session_frames=n_sess)
+                    ) from e
+                raise
+            session_id = start["session_id"]
+
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            with _autocast:
+                prompt_resp = predictor.handle_request(
+                    {
+                        "type": "add_prompt",
+                        "session_id": session_id,
+                        "frame_index": fi_run,
+                        "text": text_prompt,
+                    }
+                )
+            fi0 = int(prompt_resp["frame_index"])
+            outputs_by_frame[fi0] = prompt_resp["outputs"]
+
+            stream_req = {
+                "type": "propagate_in_video",
+                "session_id": session_id,
+                "propagation_direction": "both",
+                "start_frame_index": fi_run,
+                "max_frame_num_to_track": None,
+            }
+            with _autocast:
+                for chunk in predictor.handle_stream_request(stream_req):
+                    outputs_by_frame[int(chunk["frame_index"])] = chunk["outputs"]
+
+            with contextlib.suppress(Exception):
+                predictor.handle_request({"type": "close_session", "session_id": session_id})
+
+        if predictor is not None:
+            with contextlib.suppress(Exception):
+                predictor.shutdown()
 
         cap = cv2.VideoCapture(vp)
         if not cap.isOpened():
@@ -494,7 +694,7 @@ def run_sam3_on_video(
         writer = None
         overlay_path = output_dir / f"{video_path.stem}_sam_overlay.mp4"
         if save_overlay_mp4:
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
             writer = cv2.VideoWriter(str(overlay_path), fourcc, float(fps), (w, h))
             if not writer.isOpened():
                 writer = None
@@ -503,15 +703,37 @@ def run_sam3_on_video(
         if save_mask_png:
             masks_dir.mkdir(parents=True, exist_ok=True)
 
-        meta_rows: list[str] = []
+        all_unique_oids = set()
+        for idx_eval in outputs_by_frame:
+            out = outputs_by_frame[idx_eval]
+            oids = out.get("out_obj_ids")
+            if oids is not None:
+                for oid in oids:
+                    all_unique_oids.add(int(oid))
+
+        sorted_oids = sorted(all_unique_oids)
+        header_cols = ["frame"]
+        for oid in sorted_oids:
+            header_cols.extend(
+                [f"box_x_{oid}", f"box_y_{oid}", f"box_w_{oid}", f"box_h_{oid}", f"prob_{oid}"]
+            )
+
+        meta_rows_wide: list[str] = []
 
         cap = cv2.VideoCapture(vp)
-        for frame_idx in sorted(outputs_by_frame.keys()):
-            out = outputs_by_frame[frame_idx]
+        nframes_to_write = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        for frame_idx in range(nframes_to_write):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ok, bgr = cap.read()
             if not ok or bgr is None:
                 continue
+
+            out = outputs_by_frame.get(frame_idx)
+            if out is None:
+                if writer is not None:
+                    writer.write(bgr)
+                continue
+
             masks = out.get("out_binary_masks")
             oids = out.get("out_obj_ids")
             probs = out.get("out_probs")
@@ -523,6 +745,7 @@ def run_sam3_on_video(
             comp = _composite_masks_bgr(bgr, masks, oids)
             if writer is not None:
                 writer.write(comp)
+            frame_data = {}
             for i in range(masks.shape[0]):
                 oid = int(oids[i])
                 if save_mask_png:
@@ -532,7 +755,19 @@ def run_sam3_on_video(
                 bx = by = bw = bh = float("nan")
                 if boxes is not None and i < len(boxes):
                     bx, by, bw, bh = (float(x) for x in boxes[i])
-                meta_rows.append(f"{frame_idx},{oid},{pr:.6f},{bx:.6f},{by:.6f},{bw:.6f},{bh:.6f}")
+                frame_data[oid] = (bx, by, bw, bh, pr)
+
+            row_cols = [str(frame_idx)]
+            for oid in sorted_oids:
+                if oid in frame_data:
+                    bx, by, bw, bh, pr = frame_data[oid]
+                    row_cols.extend(
+                        [f"{bx:.6f}", f"{by:.6f}", f"{bw:.6f}", f"{bh:.6f}", f"{pr:.6f}"]
+                    )
+                else:
+                    row_cols.extend(["", "", "", "", ""])
+
+            meta_rows_wide.append(",".join(row_cols))
 
         cap.release()
         if writer is not None:
@@ -540,7 +775,7 @@ def run_sam3_on_video(
 
         meta_path = output_dir / "sam_frames_meta.csv"
         meta_path.write_text(
-            "frame,obj_id,prob,box_x,box_y,box_w,box_h\n" + "\n".join(meta_rows) + "\n",
+            ",".join(header_cols) + "\n" + "\n".join(meta_rows_wide) + "\n",
             encoding="utf-8",
         )
 
@@ -582,7 +817,7 @@ class SamVideoDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
         self.title("SAM 3 — video segmentation")
-        self.result: tuple[Path, Path, Path | None, str, int, bool, bool] | None = None
+        self.result: tuple[Path, Path, Path | None, str, int, bool, bool, bool] | None = None
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -594,7 +829,9 @@ class SamVideoDialog(tk.Toplevel):
             text=(
                 "Select an input directory with videos (batch) or a single video file.\n"
                 "Requires: uv sync --extra sam  |  NVIDIA CUDA  |  HF: accept facebook/sam3 + hf auth login\n"
-                "Checkpoint: auto-detected in vaila/models/sam3/ or browse below.\n"
+                "Checkpoint: video weights only (facebook/sam3 → sam3.pt / sam3.1_multiplex.pt).\n"
+                "Not FIFA / sam-3d-dinov3. CLI equivalent: -w / --weights / --checkpoint.\n"
+                "Results folder: <output>/processed_sam_YYYYMMDD_HHMMSS/ (created under Output folder).\n"
                 "VRAM: frame cap auto-sized to GPU; override with SAM3_MAX_FRAMES or --max-frames."
             ),
             wraplength=520,
@@ -618,7 +855,7 @@ class SamVideoDialog(tk.Toplevel):
         )
         ttk.Button(frm, text="Browse…", command=self._browse_out).grid(row=2, column=2, padx=4)
 
-        ttk.Label(frm, text="sam3.pt (optional):").grid(row=3, column=0, sticky="nw", pady=4)
+        ttk.Label(frm, text="sam3.pt / weights (-w):").grid(row=3, column=0, sticky="nw", pady=4)
         self.ckpt_var = tk.StringVar(value=os.environ.get("SAM3_CHECKPOINT", ""))
         ttk.Entry(frm, textvariable=self.ckpt_var, width=52).grid(
             row=3, column=1, sticky="ew", pady=4
@@ -639,15 +876,23 @@ class SamVideoDialog(tk.Toplevel):
 
         self.overlay_var = tk.BooleanVar(value=True)
         self.png_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frm, text="Save overlay MP4", variable=self.overlay_var).grid(
-            row=6, column=1, sticky="w"
-        )
+        self.fallback_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            frm,
+            text="Save overlay MP4 (video with colored masks on top of frames)",
+            variable=self.overlay_var,
+        ).grid(row=6, column=1, sticky="w")
         ttk.Checkbutton(frm, text="Save mask PNGs (per object)", variable=self.png_var).grid(
             row=7, column=1, sticky="w"
         )
+        ttk.Checkbutton(
+            frm,
+            text="Fallback: Frame-by-Frame mode (slower, ignores tracking, prevents OOM on 8GB VRAM)",
+            variable=self.fallback_var,
+        ).grid(row=8, column=1, sticky="w")
 
         btns = ttk.Frame(frm)
-        btns.grid(row=8, column=0, columnspan=3, pady=12)
+        btns.grid(row=9, column=0, columnspan=3, pady=12)
         ttk.Button(btns, text="Run", command=self._on_ok).pack(side=tk.LEFT, padx=4)
         ttk.Button(btns, text="Cancel", command=self._on_cancel).pack(side=tk.LEFT, padx=4)
 
@@ -734,6 +979,7 @@ class SamVideoDialog(tk.Toplevel):
             fi,
             self.overlay_var.get(),
             self.png_var.get(),
+            self.fallback_var.get(),
         )
         self.grab_release()
         self.destroy()
@@ -759,7 +1005,9 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         root.withdraw()
         owns_root = True
     try:
-        if platform.system() == "Windows":
+        # Windows + Linux: a fully withdrawn root can prevent the Toplevel from mapping
+        # reliably under some compositors (invisible / wrong workspace).
+        if platform.system() in ("Windows", "Linux"):
             root.deiconify()
             root.geometry("1x1+100+100")
             root.update_idletasks()
@@ -774,7 +1022,9 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
             root.destroy()
         return
 
-    input_path, out_parent, ckpt_opt, prompt, frame_idx, save_ov, save_png = dlg.result
+    input_path, out_parent, ckpt_opt, prompt, frame_idx, save_ov, save_png, frame_fallback = (
+        dlg.result
+    )
 
     video_files = _find_videos(input_path) if input_path.is_dir() else [input_path]
 
@@ -802,6 +1052,7 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
                 checkpoint=ckpt_opt,
                 save_overlay_mp4=save_ov,
                 save_mask_png=save_png,
+                frame_by_frame_fallback=frame_fallback,
             )
             print(f"  Done: {output_dir}")
         except Exception as e:
@@ -820,6 +1071,13 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
 
 
 def main() -> None:
+    # Must be set BEFORE the first ``import torch`` for the allocator to honor it
+    _alloc_val = "expandable_segments:True"
+    for _key in ("PYTORCH_ALLOC_CONF", "PYTORCH_CUDA_ALLOC_CONF"):
+        _cur = os.environ.get(_key, "")
+        if "expandable_segments" not in _cur:
+            os.environ[_key] = f"{_cur},{_alloc_val}" if _cur else _alloc_val
+
     if len(sys.argv) > 1 and sys.argv[1] == "fifa":
         from vaila.fifa_skeletal_pipeline import main_fifa_cli
 
@@ -839,11 +1097,21 @@ def main() -> None:
     parser.add_argument("--no-overlay", action="store_true", help="Skip overlay MP4")
     parser.add_argument("--no-png", action="store_true", help="Skip mask PNGs")
     parser.add_argument(
+        "--frame-by-frame",
+        action="store_true",
+        help="Fallback: process each frame individually. Prevents OOM on low VRAM GPUs, but loses temporal tracking.",
+    )
+    parser.add_argument(
+        "-w",
+        "--weights",
         "--checkpoint",
+        dest="checkpoint",
         type=Path,
         default=None,
-        help="Path to sam3.pt (or folder containing it). Skips Hub download. "
-        "Default: env SAM3_CHECKPOINT / VAILA_SAM3_CHECKPOINT, else vaila/models/sam3/sam3.pt "
+        help="Path to SAM 3 video weights (sam3.pt or sam3.1_multiplex.pt), or a "
+        "folder containing them. Skips Hub download. "
+        "Default: env SAM3_CHECKPOINT / VAILA_SAM3_CHECKPOINT, else "
+        "vaila/models/sam3/{sam3.pt,sam3.1_multiplex.pt} "
         "(legacy: repo sam3_weights/sam3.pt).",
     )
     parser.add_argument(
@@ -916,6 +1184,7 @@ def main() -> None:
                     max_input_frames=args.max_frames,
                     save_overlay_mp4=not args.no_overlay,
                     save_mask_png=not args.no_png,
+                    frame_by_frame_fallback=args.frame_by_frame,
                 )
                 print(f"  Done: {out_dir}")
             except Exception as e:
