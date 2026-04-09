@@ -20,6 +20,16 @@ def test_resolve_bpe_path_exists() -> None:
     assert p.is_file()
 
 
+def test_resolve_checkpoint_rejects_sam3d_body_path(tmp_path: Path) -> None:
+    from vaila.vaila_sam import _resolve_sam3_checkpoint_file
+
+    p = tmp_path / "vaila" / "models" / "sam-3d-dinov3" / "assets" / "mhr_model.pt"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"")
+    with pytest.raises(ValueError, match="SAM 3D Body"):
+        _resolve_sam3_checkpoint_file(p)
+
+
 def test_composite_masks_bgr_empty() -> None:
     from vaila.vaila_sam import _composite_masks_bgr
 
