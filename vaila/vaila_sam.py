@@ -20,7 +20,8 @@ Description:
         - Or set env SAM3_CHECKPOINT=/path/to/sam3.pt
         - Default weights: vaila/models/sam3/sam3.pt (flat) or vaila/models/sam3/sam3_weights/sam3.pt (nested)
         - Legacy repo root: ./sam3_weights/sam3.pt — prefer flat layout under vaila/models/sam3/
-        - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
+        - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames.
+          Full HD needs much more VRAM per frame than the auto heuristic; use --max-input-long-side 720 (or 640) on 8GB cards.
         - GPU: CUDA only (sam3 video predictor loads on .cuda()).
 
 Usage:
@@ -38,7 +39,8 @@ Auth: the repo facebook/sam3 is gated. Either:
   - Or set env SAM3_CHECKPOINT=/path/to/sam3.pt
   - Default weights: vaila/models/sam3/sam3.pt (flat) or vaila/models/sam3/sam3_weights/sam3.pt (nested)
   - Legacy repo root: ./sam3_weights/sam3.pt — prefer flat layout under vaila/models/sam3/
-  - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
+  - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames.
+    Full HD needs much more VRAM per frame than the auto heuristic; use --max-input-long-side 720 (or 640) on 8GB cards.
 GPU: CUDA only (sam3 video predictor loads on .cuda()).
 
 FIFA Skeletal Tracking Light (optional ``--extra fifa``): subcommand ``fifa`` delegates to
@@ -445,21 +447,33 @@ def _video_frame_count(video_path: str) -> int:
     return max(0, n)
 
 
+def _resize_bgr_max_long_side(bgr: np.ndarray, max_side: int) -> np.ndarray:
+    """Downscale *bgr* so max(width, height) <= *max_side* (area interpolation)."""
+    if max_side <= 0:
+        return bgr
+    hh, ww = bgr.shape[:2]
+    m = max(ww, hh)
+    if m <= max_side:
+        return bgr
+    scale = max_side / m
+    nw = max(1, int(round(ww * scale)))
+    nh = max(1, int(round(hh * scale)))
+    return cv2.resize(bgr, (nw, nh), interpolation=cv2.INTER_AREA)
+
+
 def _maybe_subsample_video_for_vram(
     video_path: Path,
     output_dir: Path,
     max_frames: int,
+    max_long_side: int = 0,
 ) -> tuple[Path, Path | None, int]:
-    """If the clip has more than ``max_frames``, write a temp MP4 with evenly spaced frames.
+    """Optionally subsample and/or downscale so SAM3 session tensors fit in VRAM.
 
     Returns ``(path_for_sam3, temp_path_or_none, num_frames_in_that_path)``.
-    SAM3 loads the full tensor to GPU in ``init_state``; capping frames avoids OOM on 8GB cards.
+    SAM3 loads the full session tensor to GPU; subsampling caps length; resizing
+    caps spatial size (1080p needs far more VRAM per frame than the auto heuristic assumes).
     """
     vp = str(video_path.resolve())
-    if max_frames <= 0:
-        n = _video_frame_count(vp)
-        return video_path.resolve(), None, n
-
     cap = cv2.VideoCapture(vp)
     if not cap.isOpened():
         raise OSError(f"Could not open video: {vp}")
@@ -470,30 +484,50 @@ def _maybe_subsample_video_for_vram(
     cap.release()
     if n <= 0:
         n = _video_frame_count(vp)
-    if n <= max_frames:
+    need_resize = max_long_side > 0 and max(w, h) > max_long_side
+
+    if max_frames <= 0:
+        indices = np.arange(n, dtype=np.int64) if n > 0 else np.array([], dtype=np.int64)
+    elif n <= max_frames:
+        indices = np.arange(n, dtype=np.int64) if n > 0 else np.array([], dtype=np.int64)
+    else:
+        indices = np.unique(np.linspace(0, max(0, n - 1), num=max_frames, dtype=np.int64))
+
+    use_original = len(indices) == n and not need_resize
+    if use_original:
         return video_path.resolve(), None, n
 
-    indices = np.unique(np.linspace(0, n - 1, num=max_frames, dtype=np.int64))
-    out_path = output_dir / "_sam3_subsample_input.mp4"
+    out_path = output_dir / "_sam3_session_input.mp4"
     cap = cv2.VideoCapture(vp)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
-    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (w, h))
-    if not writer.isOpened():
-        cap.release()
-        raise OSError("Could not open VideoWriter for SAM3 subsample (try another codec/OS path)")
+    writer: cv2.VideoWriter | None = None
     written = 0
-    for fi in indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, int(fi))
-        ok, frame = cap.read()
-        if ok and frame is not None:
+    out_wh: tuple[int, int] | None = None
+    try:
+        for fi in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(fi))
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                continue
+            frame = _resize_bgr_max_long_side(frame, max_long_side)
+            if writer is None:
+                out_wh = (int(frame.shape[1]), int(frame.shape[0]))
+                writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), out_wh)
+                if not writer.isOpened():
+                    raise OSError("Could not open VideoWriter for SAM3 session prep (try another codec/OS path)")
+            if (int(frame.shape[1]), int(frame.shape[0])) != out_wh:
+                frame = cv2.resize(frame, out_wh, interpolation=cv2.INTER_AREA)
             writer.write(frame)
             written += 1
-    cap.release()
-    writer.release()
+    finally:
+        cap.release()
+        if writer is not None:
+            writer.release()
+
     if written == 0:
         with contextlib.suppress(OSError):
             out_path.unlink(missing_ok=True)
-        raise OSError("Subsampled zero frames; check video path/codec")
+        raise OSError("Prepared zero frames for SAM3; check video path/codec")
     return out_path.resolve(), out_path.resolve(), written
 
 
@@ -526,14 +560,25 @@ def _composite_masks_bgr(
 
 
 def _sam3_cuda_oom_help(*, max_input_frames: int, session_frames: int) -> str:
-    return (
+    intro = (
         "CUDA out of memory while loading the video into SAM3. "
-        "The library puts the whole session on GPU at once (~few GB per hundred frames at 1008²).\n\n"
+        "The library puts the whole session on GPU at once; internal features scale with resolution "
+        "(1080p costs far more VRAM per frame than the auto max-frames heuristic assumes).\n\n"
         f"This run used session_frames={session_frames} (max_input_frames_cap={max_input_frames}; "
         "0 means no subsampling).\n\n"
-        "Fix: unset SAM3_MAX_FRAMES (auto-sizes to GPU VRAM), or set SAM3_MAX_FRAMES=64, or pass "
-        "--max-frames 64. Lower values use less VRAM. Keep weights under vaila/models/sam3/."
     )
+    if max_input_frames > 0 and session_frames <= 48:
+        fix = (
+            "You already capped frames — try spatial downscale: "
+            "`--max-input-long-side 720` or `640`, or `--frame-by-frame`. "
+            "Otherwise lower `--max-frames` further. Weights: `vaila/models/sam3/`."
+        )
+    else:
+        fix = (
+            "Try: smaller `--max-frames` (or `SAM3_MAX_FRAMES`), plus `--max-input-long-side 720` on Full HD sources, "
+            "or `--frame-by-frame` on very tight VRAM. Weights: `vaila/models/sam3/`."
+        )
+    return intro + fix
 
 
 def _is_cuda_oom_error(exc: Exception) -> bool:
@@ -569,6 +614,7 @@ def run_sam3_on_video(
     *,
     checkpoint: Path | None = None,
     max_input_frames: int | None = None,
+    max_input_long_side: int = 0,
     save_overlay_mp4: bool = True,
     save_mask_png: bool = True,
     frame_by_frame_fallback: bool = False,
@@ -586,7 +632,15 @@ def run_sam3_on_video(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     mf = _read_max_input_frames(max_input_frames)
-    session_path, temp_clip, n_sess = _maybe_subsample_video_for_vram(video_path, output_dir, mf)
+    mls = max(0, int(max_input_long_side))
+    session_path, temp_clip, n_sess = _maybe_subsample_video_for_vram(
+        video_path, output_dir, mf, mls
+    )
+    if temp_clip is not None:
+        extra = f", max long side {mls}px" if mls > 0 else ""
+        print(f"[SAM3] Prepared session clip for GPU ({n_sess} frames{extra})")
+    elif mls > 0:
+        print(f"[SAM3] Native resolution already ≤{mls}px long side — using original file")
     vp = str(session_path)
     vp_orig = str(video_path.resolve())
     fi_run = min(max(0, int(frame_index)), max(0, n_sess - 1))
@@ -686,6 +740,8 @@ def run_sam3_on_video(
                     "1",
                     "--no-overlay",
                 ]
+                if mls > 0:
+                    cmd.extend(["--max-input-long-side", str(mls)])
                 if checkpoint is not None:
                     cmd.extend(["-w", str(checkpoint)])
 
@@ -800,11 +856,9 @@ def run_sam3_on_video(
                         outputs_by_frame[int(chunk["frame_index"])] = chunk["outputs"]
             except Exception as e:
                 if _is_cuda_oom_error(e):
-                    msg = (
+                    raise RuntimeError(
                         _sam3_cuda_oom_help(max_input_frames=mf, session_frames=n_sess)
-                        + "\n\nTip: rerun with --max-frames 128 (or lower)."
-                    )
-                    raise RuntimeError(msg) from e
+                    ) from e
                 raise
 
             with contextlib.suppress(Exception):
@@ -919,7 +973,8 @@ def run_sam3_on_video(
             f"SAM 3 video export\n"
             f"source_original={vp_orig}\n"
             f"session_resource={vp}\n"
-            f"subsampled_to_disk={temp_clip is not None} max_input_frames_cap={mf} session_frames={n_sess}\n"
+            f"subsampled_to_disk={temp_clip is not None} max_input_frames_cap={mf} "
+            f"max_input_long_side={mls} session_frames={n_sess}\n"
             f"checkpoint={ckpt_note}\n"
             f"prompt={text_prompt!r}\n"
             f"prompt_frame_requested={frame_index} prompt_frame_used={fi_run}\n"
@@ -1254,6 +1309,14 @@ def main() -> None:
         help="Max frames passed to SAM3 on GPU (VRAM). Overrides SAM3_MAX_FRAMES; 0 = full clip.",
     )
     parser.add_argument(
+        "--max-input-long-side",
+        type=int,
+        default=None,
+        metavar="PX",
+        help="Resize frames before SAM3 so max(width,height)<=PX (saves VRAM on Full HD). "
+        "Overrides SAM3_MAX_INPUT_LONG_SIDE; 0 = native resolution.",
+    )
+    parser.add_argument(
         "--download-weights",
         action="store_true",
         help="Download facebook/sam3 (config.json + sam3.pt) into vaila/models/sam3/. "
@@ -1265,6 +1328,14 @@ def main() -> None:
         help="Open SAM 3 setup instructions (HTML) in the default browser and exit.",
     )
     args = parser.parse_args()
+
+    max_input_long_side = 0
+    if args.max_input_long_side is not None:
+        max_input_long_side = max(0, int(args.max_input_long_side))
+    else:
+        raw_mls = os.environ.get("SAM3_MAX_INPUT_LONG_SIDE", "").strip()
+        if raw_mls:
+            max_input_long_side = max(0, int(raw_mls))
 
     if args.open_help:
         open_sam3_install_help_in_browser()
@@ -1314,6 +1385,7 @@ def main() -> None:
                     frame_index=args.frame,
                     checkpoint=args.checkpoint,
                     max_input_frames=args.max_frames,
+                    max_input_long_side=max_input_long_side,
                     save_overlay_mp4=not args.no_overlay,
                     save_mask_png=not args.no_png,
                     frame_by_frame_fallback=args.frame_by_frame,
