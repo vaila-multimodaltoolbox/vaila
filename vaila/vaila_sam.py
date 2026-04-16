@@ -81,6 +81,93 @@ SAM3_HF_REPO_ID = "facebook/sam3"
 # All recognised checkpoint file names (tried in order during auto-detection)
 SAM3_CKPT_CANDIDATES: tuple[str, ...] = (SAM3_DEFAULT_CKPT_NAME, SAM3_MULTIPLEX_CKPT_NAME)
 
+_SAM3_PERPETUAL_TRACKER_AUTOCAST_PATCHED = False
+_SAM3_BACKBONE_FPN_FP32_PATCHED = False
+
+
+def _patch_sam3_disable_perpetual_tracker_autocast() -> None:
+    """Exit SAM3's permanent bfloat16 autocast on the video tracker.
+
+    ``Sam3TrackerPredictor`` calls ``bf16_context.__enter__()`` in ``__init__`` and never
+    balances it with ``__exit__``, so the whole video stack runs under autocast.  Some
+    PyTorch/cuDNN builds then fail with::
+
+        Input type (c10::BFloat16) and bias type (float) should be the same
+
+    Exiting the context after the upstream ``__init__`` restores stable float32 for those
+    ops.  Set ``SAM3_KEEP_TRACKER_BF16_AUTOCAST=1`` to keep upstream behavior.
+    """
+    global _SAM3_PERPETUAL_TRACKER_AUTOCAST_PATCHED
+    if _SAM3_PERPETUAL_TRACKER_AUTOCAST_PATCHED:
+        return
+    if os.environ.get("SAM3_KEEP_TRACKER_BF16_AUTOCAST", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        _SAM3_PERPETUAL_TRACKER_AUTOCAST_PATCHED = True
+        return
+    try:
+        from sam3.model import sam3_tracking_predictor as _stp
+    except ImportError:
+        return
+
+    _orig_init = _stp.Sam3TrackerPredictor.__init__
+
+    def _init_no_perpetual_autocast(self, *args, **kwargs):
+        _orig_init(self, *args, **kwargs)
+        ctx = getattr(self, "bf16_context", None)
+        if ctx is not None:
+            ctx.__exit__(None, None, None)
+            self.bf16_context = contextlib.nullcontext()
+
+    _stp.Sam3TrackerPredictor.__init__ = _init_no_perpetual_autocast  # ty: ignore[invalid-assignment]
+    _SAM3_PERPETUAL_TRACKER_AUTOCAST_PATCHED = True
+
+
+def _patch_sam3_force_fp32_tracker_backbone_features() -> None:
+    """Coerce SAM3 tracker backbone FPN outputs to float32.
+
+    On some CUDA/PyTorch builds, detector FPN features arrive as bfloat16 while
+    ``sam_mask_decoder.conv_s0/conv_s1`` biases remain float32, producing:
+
+        Input type (c10::BFloat16) and bias type (float) should be the same
+
+    This patch normalizes ``tracker_backbone_fpn_{0,1,2}`` to float32 at the
+    detector output boundary.
+    """
+    global _SAM3_BACKBONE_FPN_FP32_PATCHED
+    if _SAM3_BACKBONE_FPN_FP32_PATCHED:
+        return
+    if os.environ.get("SAM3_ALLOW_BF16_BACKBONE_FPN", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        _SAM3_BACKBONE_FPN_FP32_PATCHED = True
+        return
+    try:
+        from sam3.model.sam3_image import Sam3ImageOnVideoMultiGPU as _Sam3ImageOnVideoMultiGPU
+    except ImportError:
+        return
+
+    _orig_forward = _Sam3ImageOnVideoMultiGPU.forward_video_grounding_multigpu
+
+    def _forward_with_fp32_tracker_fpn(self, *args, **kwargs):
+        out = _orig_forward(self, *args, **kwargs)
+        if not (isinstance(out, tuple) and len(out) >= 1 and isinstance(out[0], dict)):
+            return out
+
+        sam3_image_out = out[0]
+        for key in ("tracker_backbone_fpn_0", "tracker_backbone_fpn_1", "tracker_backbone_fpn_2"):
+            t = sam3_image_out.get(key)
+            if t is not None and hasattr(t, "dtype"):
+                sam3_image_out[key] = t.float()
+        return out
+
+    _Sam3ImageOnVideoMultiGPU.forward_video_grounding_multigpu = _forward_with_fp32_tracker_fpn  # ty: ignore[invalid-assignment]
+    _SAM3_BACKBONE_FPN_FP32_PATCHED = True
+
 
 def _repo_root() -> Path:
     """Project root (parent of the ``vaila`` package directory)."""
@@ -324,7 +411,9 @@ def _auto_max_frames_for_vram() -> int:
     per_frame_mib = 3.6
     available_gib = max(0.0, total_gib - model_gib - processing_gib - headroom_gib)
     safe_frames = int(available_gib * 1024 / per_frame_mib)
-    safe_frames = max(16, min(safe_frames, 2048))
+    # Even with large VRAM, propagation memory grows with timeline length.
+    # Cap the auto value conservatively to avoid late-stage OOM on long clips.
+    safe_frames = max(16, min(safe_frames, 128))
     print(
         f"[SAM3 VRAM] GPU {total_gib:.1f} GiB → auto max_frames={safe_frames} "
         f"(model ~6.3 GiB, available ~{available_gib:.1f} GiB for frames)"
@@ -447,6 +536,11 @@ def _sam3_cuda_oom_help(*, max_input_frames: int, session_frames: int) -> str:
     )
 
 
+def _is_cuda_oom_error(exc: Exception) -> bool:
+    msg = str(exc)
+    return type(exc).__name__ == "OutOfMemoryError" or "CUDA out of memory" in msg
+
+
 def _setup_cuda_for_sam3() -> None:
     """Configure PyTorch CUDA allocator for SAM3's large contiguous allocations.
 
@@ -480,6 +574,9 @@ def run_sam3_on_video(
     frame_by_frame_fallback: bool = False,
 ) -> None:
     import torch
+
+    _patch_sam3_disable_perpetual_tracker_autocast()
+    _patch_sam3_force_fp32_tracker_backbone_features()
     from sam3.model_builder import build_sam3_video_predictor
 
     if not torch.cuda.is_available():
@@ -540,7 +637,6 @@ def run_sam3_on_video(
                 "[SAM3] Frame-by-frame fallback activated: processing each frame via isolated subprocesses."
             )
             import subprocess
-            import sys
 
             cap = cv2.VideoCapture(vp)
             if not cap.isOpened():
@@ -679,28 +775,37 @@ def run_sam3_on_video(
             gc.collect()
             torch.cuda.empty_cache()
 
-            with _autocast:
-                prompt_resp = predictor.handle_request(
-                    {
-                        "type": "add_prompt",
-                        "session_id": session_id,
-                        "frame_index": fi_run,
-                        "text": text_prompt,
-                    }
-                )
-            fi0 = int(prompt_resp["frame_index"])
-            outputs_by_frame[fi0] = prompt_resp["outputs"]
+            try:
+                with _autocast:
+                    prompt_resp = predictor.handle_request(
+                        {
+                            "type": "add_prompt",
+                            "session_id": session_id,
+                            "frame_index": fi_run,
+                            "text": text_prompt,
+                        }
+                    )
+                fi0 = int(prompt_resp["frame_index"])
+                outputs_by_frame[fi0] = prompt_resp["outputs"]
 
-            stream_req = {
-                "type": "propagate_in_video",
-                "session_id": session_id,
-                "propagation_direction": "both",
-                "start_frame_index": fi_run,
-                "max_frame_num_to_track": None,
-            }
-            with _autocast:
-                for chunk in predictor.handle_stream_request(stream_req):
-                    outputs_by_frame[int(chunk["frame_index"])] = chunk["outputs"]
+                stream_req = {
+                    "type": "propagate_in_video",
+                    "session_id": session_id,
+                    "propagation_direction": "both",
+                    "start_frame_index": fi_run,
+                    "max_frame_num_to_track": None,
+                }
+                with _autocast:
+                    for chunk in predictor.handle_stream_request(stream_req):
+                        outputs_by_frame[int(chunk["frame_index"])] = chunk["outputs"]
+            except Exception as e:
+                if _is_cuda_oom_error(e):
+                    msg = (
+                        _sam3_cuda_oom_help(max_input_frames=mf, session_frames=n_sess)
+                        + "\n\nTip: rerun with --max-frames 128 (or lower)."
+                    )
+                    raise RuntimeError(msg) from e
+                raise
 
             with contextlib.suppress(Exception):
                 predictor.handle_request({"type": "close_session", "session_id": session_id})
