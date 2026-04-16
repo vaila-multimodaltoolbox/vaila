@@ -1,5 +1,32 @@
 """
-SAM 3 video segmentation (Meta) — text-prompt masks via Hugging Face checkpoints.
+Project: vailá
+Script: vaila_sam.py
+Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 16 April 2026
+Update Date: 16 April 2026
+Version: 0.0.2
+
+Description:
+    This script performs video segmentation using the SAM 3 model from Meta.
+    It supports text-prompt masks via Hugging Face checkpoints.
+    Requires: uv sync --extra sam (works on the universal CPU pyproject; inference still needs NVIDIA CUDA).
+    Hybrid installs: see AGENTS.md (bin/use_pyproject_* to switch laptop CPU vs workstation CUDA).
+    Auth: the repo facebook/sam3 is gated. Either:
+        - Accept the model on Hugging Face, then: uv run hf auth login
+        - Or download into the repo: uv run vaila/vaila_sam.py --download-weights
+        - Or: uv run hf download facebook/sam3 sam3.pt --local-dir DIR
+        - Or set env SAM3_CHECKPOINT=/path/to/sam3.pt
+        - Default weights: vaila/models/sam3/sam3.pt (flat) or vaila/models/sam3/sam3_weights/sam3.pt (nested)
+        - Legacy repo root: ./sam3_weights/sam3.pt — prefer flat layout under vaila/models/sam3/
+        - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
+        - GPU: CUDA only (sam3 video predictor loads on .cuda()).
+
+Usage:
+    uv run vaila/vaila_sam.py
+    uv run vaila/vaila_sam.py --open-help          # SAM 3 setup (HTML in browser)
+    uv run vaila/vaila_sam.py --download-weights   # HF_TOKEN or hf auth login
 
 Requires: ``uv sync --extra sam`` (works on the universal CPU ``pyproject``; inference still needs NVIDIA CUDA).
 Hybrid installs: see ``AGENTS.md`` (``bin/use_pyproject_*`` to switch laptop CPU vs workstation CUDA).
@@ -14,11 +41,6 @@ Auth: the repo facebook/sam3 is gated. Either:
   - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
 GPU: CUDA only (sam3 video predictor loads on .cuda()).
 
-Usage:
-    uv run vaila/vaila_sam.py
-    uv run vaila/vaila_sam.py --open-help          # SAM 3 setup (HTML in browser)
-    uv run vaila/vaila_sam.py --download-weights   # HF_TOKEN or hf auth login
-
 FIFA Skeletal Tracking Light (optional ``--extra fifa``): subcommand ``fifa`` delegates to
 ``vaila.fifa_skeletal_pipeline`` (prepare, boxes, preprocess, baseline, pack). Example::
 
@@ -28,6 +50,11 @@ FIFA Skeletal Tracking Light (optional ``--extra fifa``): subcommand ``fifa`` de
     uv run vaila/vaila_sam.py fifa preprocess --data-root data/ --sequences data/sequences_val.txt
     uv run vaila/vaila_sam.py fifa baseline --data-root data/ --sequences data/sequences_val.txt -o out/npz
     uv run vaila/vaila_sam.py fifa pack --submission-full out/npz --data-root data/ --output-dir out/ --split val
+
+License:
+    This program is licensed under the GNU Affero General Public License v3.0.
+    For more details, visit: https://www.gnu.org/licenses/agpl-3.0.html
+    Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 from __future__ import annotations
