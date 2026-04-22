@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 16 April 2026
-Version: 0.0.2
+Update Date: 19 April 2026
+Version: 0.0.4
 
 Description:
     This script performs video segmentation using the SAM 3 model from Meta.
@@ -21,7 +21,7 @@ Description:
         - Default weights: vaila/models/sam3/sam3.pt (flat) or vaila/models/sam3/sam3_weights/sam3.pt (nested)
         - Legacy repo root: ./sam3_weights/sam3.pt — prefer flat layout under vaila/models/sam3/
         - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
-        - GPU: CUDA only (sam3 video predictor loads on .cuda()).
+        - GPU: CUDA only (sam3 video predictor loads on .cuda()). No CPU or macOS MPS path; ``--frame-by-frame`` only lowers VRAM on CUDA.
 
 Usage:
     uv run vaila/vaila_sam.py
@@ -39,16 +39,17 @@ Auth: the repo facebook/sam3 is gated. Either:
   - Default weights: vaila/models/sam3/sam3.pt (flat) or vaila/models/sam3/sam3_weights/sam3.pt (nested)
   - Legacy repo root: ./sam3_weights/sam3.pt — prefer flat layout under vaila/models/sam3/
   - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
-GPU: CUDA only (sam3 video predictor loads on .cuda()).
+GPU: CUDA only (sam3 video predictor loads on .cuda()). No CPU or macOS MPS; ``--frame-by-frame`` is CUDA VRAM-only (not a CPU mode).
 
 FIFA Skeletal Tracking Light (optional ``--extra fifa``): subcommand ``fifa`` delegates to
-``vaila.fifa_skeletal_pipeline`` (prepare, boxes, preprocess, baseline, pack). Example::
+``vaila.fifa_skeletal_pipeline`` (prepare, boxes, preprocess, baseline, dlt-export, pack). Example::
 
     uv sync --extra fifa --extra sam --extra gpu   # CUDA template + deps
     uv run vaila/vaila_sam.py fifa prepare --video-source DIR --data-root data/
     uv run vaila/vaila_sam.py fifa boxes --data-root data/ --sequences data/sequences_val.txt
     uv run vaila/vaila_sam.py fifa preprocess --data-root data/ --sequences data/sequences_val.txt
     uv run vaila/vaila_sam.py fifa baseline --data-root data/ --sequences data/sequences_val.txt -o out/npz
+    uv run vaila/vaila_sam.py fifa dlt-export --cameras-dir data/cameras --output-dir out/dlt
     uv run vaila/vaila_sam.py fifa pack --submission-full out/npz --data-root data/ --output-dir out/ --split val
 
 License:
@@ -63,11 +64,15 @@ import argparse
 import contextlib
 import datetime as dt
 import importlib.util
+import json
 import os
 import platform
 import sys
+import threading
+import time
 import tkinter as tk
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -108,7 +113,7 @@ def _patch_sam3_disable_perpetual_tracker_autocast() -> None:
         _SAM3_PERPETUAL_TRACKER_AUTOCAST_PATCHED = True
         return
     try:
-        from sam3.model import sam3_tracking_predictor as _stp
+        from sam3.model import sam3_tracking_predictor as _stp  # type: ignore[reportMissingImports]
     except ImportError:
         return
 
@@ -147,7 +152,9 @@ def _patch_sam3_force_fp32_tracker_backbone_features() -> None:
         _SAM3_BACKBONE_FPN_FP32_PATCHED = True
         return
     try:
-        from sam3.model.sam3_image import Sam3ImageOnVideoMultiGPU as _Sam3ImageOnVideoMultiGPU
+        from sam3.model.sam3_image import (  # type: ignore[reportMissingImports]
+            Sam3ImageOnVideoMultiGPU as _Sam3ImageOnVideoMultiGPU,
+        )
     except ImportError:
         return
 
@@ -178,6 +185,11 @@ def _package_sam3_dir() -> Path:
     return Path(__file__).resolve().parent / "models" / "sam3"
 
 
+def _repo_models_sam3_dir() -> Path:
+    """Alternate SAM3 dir under repository root (``<repo>/models/sam3``)."""
+    return _repo_root() / "models" / "sam3"
+
+
 def sam3_install_help_html_path() -> Path:
     """Browser help page: SAM 3 / optional extras (same content as README section)."""
     return Path(__file__).resolve().parent / "help" / "vaila_sam.html"
@@ -202,6 +214,40 @@ def _print_sam3_install_instructions() -> None:
         "See also: AGENTS.md (Hybrid CPU vs NVIDIA workstation).\n"
     )
     print(msg, file=sys.stderr)
+
+
+_SAM3_CUDA_REQUIRED_BODY = (
+    "SAM 3 video in vailá requires an NVIDIA GPU with CUDA "
+    "(PyTorch must see torch.cuda.is_available()).\n\n"
+    "Not supported for this script:\n"
+    "  • CPU-only (e.g. Windows without an NVIDIA CUDA GPU)\n"
+    "  • macOS Metal/MPS — the SAM 3 video stack targets CUDA\n\n"
+    "The --frame-by-frame / GUI “frame-by-frame” option only reduces VRAM on CUDA; "
+    "it is not a CPU fallback.\n\n"
+    "Without CUDA, use other vailá tools (Markerless 2D, YOLO trackers, etc.) "
+    "or run SAM 3 video on a Linux/Windows NVIDIA workstation or cloud GPU."
+)
+
+
+def _sam3_video_cuda_available() -> bool:
+    import torch
+
+    return bool(torch.cuda.is_available())
+
+
+def _sam3_guard_cuda_cli() -> None:
+    if _sam3_video_cuda_available():
+        return
+    print("SAM 3 video requires CUDA (NVIDIA GPU).", file=sys.stderr)
+    print(_SAM3_CUDA_REQUIRED_BODY, file=sys.stderr)
+    raise SystemExit(2)
+
+
+def _sam3_guard_cuda_gui(parent: tk.Tk) -> bool:
+    if _sam3_video_cuda_available():
+        return True
+    messagebox.showerror("SAM 3 — CUDA required", _SAM3_CUDA_REQUIRED_BODY, parent=parent)
+    return False
 
 
 def _package_sam3_ckpt_path() -> Path:
@@ -304,6 +350,8 @@ def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
     Order: argument → env SAM3_CHECKPOINT / VAILA_SAM3_CHECKPOINT →
     ``vaila/models/sam3/{sam3.pt, sam3.1_multiplex.pt}`` →
     ``vaila/models/sam3/sam3_weights/{sam3.pt, sam3.1_multiplex.pt}`` →
+    ``models/sam3/{sam3.pt, sam3.1_multiplex.pt}`` (repo root) →
+    ``models/sam3/sam3_weights/{sam3.pt, sam3.1_multiplex.pt}`` (repo root) →
     legacy ``<repo>/sam3_weights/sam3.pt``.
     """
     raw: str | None = None
@@ -321,6 +369,16 @@ def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
         # Nested weights dir (HF local-dir layout)
         for cname in SAM3_CKPT_CANDIDATES:
             p = pkg_dir / "sam3_weights" / cname
+            if p.is_file():
+                return p
+        # Alternate repo-root models dir fallback
+        repo_models_dir = _repo_models_sam3_dir()
+        for cname in SAM3_CKPT_CANDIDATES:
+            p = repo_models_dir / cname
+            if p.is_file():
+                return p
+        for cname in SAM3_CKPT_CANDIDATES:
+            p = repo_models_dir / "sam3_weights" / cname
             if p.is_file():
                 return p
         # Legacy repo root fallback
@@ -352,7 +410,14 @@ def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
 
 def _resolve_bpe_path() -> Path:
     """SAM3 PyPI wheel may omit site-packages/assets; fall back to boxmot's CLIP BPE."""
-    import sam3
+    try:
+        import sam3  # type: ignore[reportMissingImports]
+    except ModuleNotFoundError as e:
+        raise RuntimeError(
+            "Optional dependency 'sam3' is not installed. Install the SAM 3 stack with "
+            "`uv sync --extra sam` (and on NVIDIA workstations also switch to the CUDA "
+            "pyproject template + `uv sync --extra gpu`)."
+        ) from e
 
     candidates = [
         Path(sam3.__file__).resolve().parent.parent / "assets" / "bpe_simple_vocab_16e6.txt.gz",
@@ -382,7 +447,7 @@ def _resolve_bpe_path() -> Path:
 
 
 def _auto_max_frames_for_vram() -> int:
-    """Estimate a safe frame cap based on available GPU VRAM.
+    """Estimate a safe frame cap based on **currently free** GPU VRAM.
 
     Empirical data on RTX 5050 Laptop (7.53 GiB):
       - 256 frames → 7.23 GiB PyTorch allocated, OOM at +12 MiB
@@ -390,35 +455,85 @@ def _auto_max_frames_for_vram() -> int:
       - Per-frame cost: ~3.6 MiB  |  Model base: ~6.3 GiB
       - Processing peak: ~0.9 GiB contiguous allocation
 
-    Budget: model_base + N*per_frame + processing_peak + headroom < total_vram
+    Budget: model_base + N*per_frame + processing_peak + headroom < free_vram
     With ``expandable_segments:True`` the 0.9 GiB processing allocation can
-    reuse freed memory, so we only reserve 0.5 GiB processing overhead here
-    (the allocator config is set in ``_setup_cuda_for_sam3``).
+    reuse freed memory, so we only reserve 0.5 GiB processing overhead here.
+
+    Using **free** VRAM (not total) is critical in batch mode: even after
+    ``predictor.shutdown()`` the previous run leaves reserved memory behind.
+    Sizing for ``total_memory`` then OOMs from video #2 onwards.
     """
     try:
         import torch
 
         if not torch.cuda.is_available():
             return 32
-        props = torch.cuda.get_device_properties(torch.cuda.current_device())
+        dev = torch.cuda.current_device()
+        props = torch.cuda.get_device_properties(dev)
         total_gib = props.total_memory / (1024**3)
+        free_bytes, _ = torch.cuda.mem_get_info(dev)
+        free_gib = free_bytes / (1024**3)
     except Exception:
         return 32
 
     model_gib = 6.3
     processing_gib = 0.5
-    headroom_gib = 0.3
+    headroom_gib = 0.5
     per_frame_mib = 3.6
-    available_gib = max(0.0, total_gib - model_gib - processing_gib - headroom_gib)
-    safe_frames = int(available_gib * 1024 / per_frame_mib)
+    budget_gib = max(0.0, free_gib - model_gib - processing_gib - headroom_gib)
+    safe_frames = int(budget_gib * 1024 / per_frame_mib)
     # Even with large VRAM, propagation memory grows with timeline length.
     # Cap the auto value conservatively to avoid late-stage OOM on long clips.
     safe_frames = max(16, min(safe_frames, 128))
     print(
-        f"[SAM3 VRAM] GPU {total_gib:.1f} GiB → auto max_frames={safe_frames} "
-        f"(model ~6.3 GiB, available ~{available_gib:.1f} GiB for frames)"
+        f"[SAM3 VRAM] GPU {total_gib:.1f} GiB total, {free_gib:.1f} GiB free → "
+        f"auto max_frames={safe_frames} "
+        f"(model ~6.3 GiB, budget ~{budget_gib:.1f} GiB for frames)"
     )
+    # #region agent log
+    _agent_dbg_sam3(
+        hypothesis_id="H2",
+        location="vaila_sam.py:_auto_max_frames_for_vram",
+        message="auto_max_frames",
+        data={
+            "total_gib": round(total_gib, 3),
+            "free_gib": round(free_gib, 3),
+            "budget_gib": round(budget_gib, 3),
+            "safe_frames": safe_frames,
+        },
+    )
+    # #endregion
     return safe_frames
+
+
+def _release_sam3_gpu_memory() -> None:
+    """Best-effort GPU memory release between SAM3 batch items.
+
+    SAM3's video predictor (and its shadow allocations) keeps memory reserved
+    even after ``predictor.shutdown()``.  Without an explicit gc + empty_cache,
+    the next ``build_sam3_video_predictor`` allocates on top of the previous
+    state and OOMs even on 24 GiB cards.
+
+    Note (debug session 42b4a5, Apr 2026): this helper clears only what Python's
+    gc can reach.  A failed ``predictor.handle_request("start_session")`` leaves
+    ~13 GiB of orphan tensors in SAM3's C++ workspace pools that only a process
+    death can release — hence the subprocess-per-video isolation in ``main()``.
+    See ``.claude/skills/sam3-video/SKILL.md`` § *Why subprocess-per-video*.
+    """
+    import gc
+
+    try:
+        import torch
+    except ImportError:
+        return
+    gc.collect()
+    if torch.cuda.is_available():
+        with contextlib.suppress(Exception):
+            torch.cuda.empty_cache()
+        with contextlib.suppress(Exception):
+            torch.cuda.ipc_collect()
+        with contextlib.suppress(Exception):
+            torch.cuda.reset_peak_memory_stats()
 
 
 def _read_max_input_frames(cli_value: int | None) -> int:
@@ -577,7 +692,16 @@ def run_sam3_on_video(
 
     _patch_sam3_disable_perpetual_tracker_autocast()
     _patch_sam3_force_fp32_tracker_backbone_features()
-    from sam3.model_builder import build_sam3_video_predictor
+    try:
+        from sam3.model_builder import (  # type: ignore[reportMissingImports]
+            build_sam3_video_predictor,
+        )
+    except ModuleNotFoundError as e:
+        raise RuntimeError(
+            "Optional dependency 'sam3' is not installed. Install the SAM 3 stack with "
+            "`uv sync --extra sam` (and on NVIDIA workstations also switch to the CUDA "
+            "pyproject template + `uv sync --extra gpu`)."
+        ) from e
 
     if not torch.cuda.is_available():
         raise RuntimeError("SAM 3 video predictor requires CUDA. No GPU available.")
@@ -800,9 +924,10 @@ def run_sam3_on_video(
                         outputs_by_frame[int(chunk["frame_index"])] = chunk["outputs"]
             except Exception as e:
                 if _is_cuda_oom_error(e):
+                    tip_n = max(8, mf // 2) if mf > 0 else 64
                     msg = (
                         _sam3_cuda_oom_help(max_input_frames=mf, session_frames=n_sess)
-                        + "\n\nTip: rerun with --max-frames 128 (or lower)."
+                        + f"\n\nTip: rerun with --max-frames {tip_n} (or another lower value until it fits)."
                     )
                     raise RuntimeError(msg) from e
                 raise
@@ -813,6 +938,8 @@ def run_sam3_on_video(
         if predictor is not None:
             with contextlib.suppress(Exception):
                 predictor.shutdown()
+            predictor = None
+            _release_sam3_gpu_memory()
 
         cap = cv2.VideoCapture(vp)
         if not cap.isOpened():
@@ -930,9 +1057,190 @@ def run_sam3_on_video(
         if temp_clip is not None and Path(temp_clip).is_file():
             with contextlib.suppress(OSError):
                 Path(temp_clip).unlink(missing_ok=True)
+        # Last-line GPU cleanup: even if the run raised, drop the predictor
+        # and reset CUDA caches so the next batch item starts from a clean slate.
+        with contextlib.suppress(Exception):
+            if "predictor" in locals() and locals().get("predictor") is not None:
+                predictor = None  # type: ignore[assignment]
+        with contextlib.suppress(Exception):
+            outputs_by_frame.clear()
+        _release_sam3_gpu_memory()
 
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+
+
+# SAM 3 is open-vocabulary — any free-text prompt is valid. These presets only
+# populate the GUI combobox for convenience; ``state="normal"`` lets the user
+# type anything.  Update this list when adding domain-specific scenarios.
+SAM3_PROMPT_PRESETS: tuple[str, ...] = (
+    "person",
+    "player",
+    "goalkeeper",
+    "referee",
+    "ball",
+    "soccer ball",
+    "basketball",
+    "volleyball",
+    "coach",
+    "crowd",
+    "car",
+    "bike",
+    "dog",
+    "cat",
+)
+
+
+def _agent_dbg_sam3(*, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    # #region agent log
+    try:
+        line = (
+            json.dumps(
+                {
+                    "sessionId": "42b4a5",
+                    "hypothesisId": hypothesis_id,
+                    "location": location,
+                    "message": message,
+                    "data": data,
+                    "timestamp": int(time.time() * 1000),
+                },
+                default=str,
+            )
+            + "\n"
+        )
+        with Path("/home/preto/data/vaila/.cursor/debug-42b4a5.log").open(
+            "a", encoding="utf-8"
+        ) as _lf:
+            _lf.write(line)
+    except OSError:
+        pass
+    # #endregion
+
+
+def _sam3_build_oom_retry_attempts(max_input_frames: int | None) -> list[int | None]:
+    """Caps to try on CUDA OOM (high → low). Includes 24…8 when initial cap is 32 (bugfix)."""
+    attempts: list[int | None] = [max_input_frames]
+    if max_input_frames is None or max_input_frames > 64:
+        attempts.append(64)
+    if max_input_frames is None or max_input_frames > 32:
+        attempts.append(32)
+    positives = [x for x in attempts if isinstance(x, int) and x > 0]
+    floor = min(positives) if positives else 2**30
+    for step in (24, 16, 12, 8):
+        if step < floor and step not in attempts:
+            attempts.append(step)
+    seen: set[int | None] = set()
+    uniq: list[int | None] = []
+    for a in attempts:
+        if a not in seen:
+            seen.add(a)
+            uniq.append(a)
+    return uniq
+
+
+def _write_failure_marker(output_dir: Path, video_path: Path, reason: str) -> None:
+    """Mark a video as failed inside its (otherwise empty) output dir."""
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        marker = output_dir / "FAILED_sam.txt"
+        marker.write_text(
+            f"SAM 3 video FAILED\n"
+            f"video={video_path.resolve()}\n"
+            f"timestamp={dt.datetime.now().isoformat(timespec='seconds')}\n"
+            f"reason={reason}\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def _process_one_video_with_oom_retry(
+    video_file: Path,
+    output_dir: Path,
+    *,
+    text_prompt: str,
+    frame_index: int,
+    checkpoint: Path | None,
+    max_input_frames: int | None,
+    save_overlay_mp4: bool,
+    save_mask_png: bool,
+    frame_by_frame_fallback: bool,
+    log: Callable[[str], None] | None = None,
+) -> tuple[bool, str]:
+    """Run one video; on CUDA OOM retry with descending frame caps (e.g. auto→64→32→24→8).
+
+    Returns ``(success, message)``.  ``message`` is empty on success.
+
+    Note (debug session 42b4a5, Apr 2026): ``_release_sam3_gpu_memory()`` is
+    called at the top of each attempt, NOT inside the ``except`` block.  Runtime
+    logs proved the ``except``-block call is a no-op while ``e`` is alive — its
+    traceback pins ~7 GiB of inner SAM3 tensors that Python's gc cannot reach
+    until ``e`` is auto-deleted at the end of the except scope.  An additional
+    ~13 GiB of C++-side orphan tensors on OOM is unrecoverable in-process, which
+    is why the CLI batch loop spawns one subprocess per video.  See
+    ``.claude/skills/sam3-video/SKILL.md`` § *Why subprocess-per-video*.
+    """
+
+    def _log(s: str) -> None:
+        if log is not None:
+            log(s)
+        else:
+            print(s)
+
+    attempts = _sam3_build_oom_retry_attempts(max_input_frames)
+    # #region agent log
+    _agent_dbg_sam3(
+        hypothesis_id="H1",
+        location="vaila_sam.py:_process_one_video_with_oom_retry",
+        message="oom_retry_attempts_built",
+        data={"max_input_frames": max_input_frames, "attempts": attempts, "n": len(attempts)},
+    )
+    # #endregion
+
+    last_err: str = ""
+    for attempt_idx, mf_try in enumerate(attempts, start=1):
+        _release_sam3_gpu_memory()
+        try:
+            run_sam3_on_video(
+                video_file,
+                output_dir,
+                text_prompt,
+                frame_index=frame_index,
+                checkpoint=checkpoint,
+                max_input_frames=mf_try,
+                save_overlay_mp4=save_overlay_mp4,
+                save_mask_png=save_mask_png,
+                frame_by_frame_fallback=frame_by_frame_fallback,
+            )
+            return True, ""
+        except Exception as e:
+            last_err = str(e)
+            if not _is_cuda_oom_error(e):
+                _write_failure_marker(output_dir, video_file, last_err)
+                return False, last_err
+            if attempt_idx >= len(attempts):
+                _write_failure_marker(output_dir, video_file, "CUDA OOM: " + last_err)
+                return False, last_err
+            next_mf = attempts[attempt_idx]
+            # #region agent log
+            _agent_dbg_sam3(
+                hypothesis_id="H1",
+                location="vaila_sam.py:_process_one_video_with_oom_retry",
+                message="cuda_oom_retrying",
+                data={
+                    "attempt_idx": attempt_idx,
+                    "len_attempts": len(attempts),
+                    "mf_try": mf_try,
+                    "next_mf": next_mf,
+                    "video": str(video_file),
+                },
+            )
+            # #endregion
+            _log(
+                f"  [SAM3] CUDA OOM at max_frames={mf_try!r}; retrying with max_frames={next_mf}..."
+            )
+    _write_failure_marker(output_dir, video_file, last_err or "unknown failure")
+    return False, last_err or "unknown failure"
 
 
 def _find_videos(directory: Path) -> list[Path]:
@@ -996,9 +1304,15 @@ class SamVideoDialog(tk.Toplevel):
 
         ttk.Label(frm, text="Text prompt:").grid(row=4, column=0, sticky="w", pady=4)
         self.prompt_var = tk.StringVar(value="person")
-        ttk.Entry(frm, textvariable=self.prompt_var, width=52).grid(
-            row=4, column=1, columnspan=2, sticky="ew", pady=4
+        # Open-vocabulary: these are *examples* — any free-text prompt is valid.
+        self.prompt_combo = ttk.Combobox(
+            frm,
+            textvariable=self.prompt_var,
+            values=SAM3_PROMPT_PRESETS,
+            width=50,
+            state="normal",  # editable — type your own prompt
         )
+        self.prompt_combo.grid(row=4, column=1, columnspan=2, sticky="ew", pady=4)
 
         ttk.Label(frm, text="Prompt frame index:").grid(row=5, column=0, sticky="w", pady=4)
         self.frame_var = tk.StringVar(value="0")
@@ -1019,7 +1333,7 @@ class SamVideoDialog(tk.Toplevel):
         )
         ttk.Checkbutton(
             frm,
-            text="Fallback: Frame-by-Frame mode (slower, ignores tracking, prevents OOM on 8GB VRAM)",
+            text="Fallback: Frame-by-Frame (CUDA only; lower VRAM, slower, no temporal tracking)",
             variable=self.fallback_var,
         ).grid(row=8, column=1, sticky="w")
 
@@ -1027,6 +1341,11 @@ class SamVideoDialog(tk.Toplevel):
         btns.grid(row=9, column=0, columnspan=3, pady=12)
         ttk.Button(btns, text="Run", command=self._on_ok).pack(side=tk.LEFT, padx=4)
         ttk.Button(btns, text="Cancel", command=self._on_cancel).pack(side=tk.LEFT, padx=4)
+        ttk.Button(
+            btns,
+            text="Help",
+            command=open_sam3_install_help_in_browser,
+        ).pack(side=tk.LEFT, padx=4)
 
         frm.columnconfigure(1, weight=1)
         self.protocol("WM_DELETE_WINDOW", self._on_cancel)
@@ -1123,6 +1442,397 @@ class SamVideoDialog(tk.Toplevel):
         self.destroy()
 
 
+class SamBatchProgress(tk.Toplevel):
+    """Modal-ish progress window for SAM3 GUI batch (per-video status + log + cancel).
+
+    The actual SAM3 work runs on a background thread; this window only mirrors
+    log lines from the worker via ``schedule_log`` (thread-safe through ``after``).
+    """
+
+    def __init__(self, parent: tk.Misc, total: int, *, output_base: Path | None = None) -> None:
+        super().__init__(parent)
+        self.title("SAM 3 — batch progress")
+        self.geometry("760x560")
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.cancelled = False
+        self._total = max(1, total)
+        self._output_base = output_base
+        self._parent = parent
+
+        frm = ttk.Frame(self, padding=8)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        self.status_var = tk.StringVar(value=f"0 / {total} processed")
+        ttk.Label(frm, textvariable=self.status_var, font=("TkDefaultFont", 10, "bold")).pack(
+            anchor="w", pady=(0, 4)
+        )
+
+        self.progress = ttk.Progressbar(frm, maximum=self._total, value=0)
+        self.progress.pack(fill=tk.X, pady=(0, 6))
+
+        ttk.Label(frm, text="Log:").pack(anchor="w")
+        log_frame = ttk.Frame(frm)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        self.log_text = tk.Text(log_frame, height=18, wrap="none", state="disabled")
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.config(yscrollcommand=sb.set)
+
+        post_frame = ttk.LabelFrame(frm, text="Post-processing (enabled after batch finishes)")
+        post_frame.pack(fill=tk.X, pady=(6, 0))
+        self.postproc_btn = ttk.Button(
+            post_frame,
+            text="Build sam_points.csv (foot+center+mask)",
+            command=self._on_build_points,
+            state="disabled",
+        )
+        self.postproc_btn.pack(side=tk.LEFT, padx=4, pady=4)
+        self.calib_btn = ttk.Button(
+            post_frame,
+            text="Calibrate field (DLT2D)",
+            command=self._on_calibrate,
+            state="disabled",
+        )
+        self.calib_btn.pack(side=tk.LEFT, padx=4, pady=4)
+
+        btns = ttk.Frame(frm)
+        btns.pack(fill=tk.X, pady=(6, 0))
+        self.cancel_btn = ttk.Button(btns, text="Request cancel", command=self._on_cancel)
+        self.cancel_btn.pack(side=tk.LEFT)
+        self.help_btn = ttk.Button(btns, text="Help", command=open_sam3_install_help_in_browser)
+        self.help_btn.pack(side=tk.LEFT, padx=4)
+        self.close_btn = ttk.Button(btns, text="Close", command=self._on_close, state="disabled")
+        self.close_btn.pack(side=tk.RIGHT)
+
+        self.transient(parent)  # ty: ignore[no-matching-overload]
+        self.lift()
+
+    def schedule_log(self, line: str) -> None:
+        self.after(0, lambda s=line: self._append_log(s))
+
+    def schedule_progress(self, done: int) -> None:
+        self.after(0, lambda d=done: self._set_progress(d))
+
+    def schedule_finish(self) -> None:
+        self.after(0, self._finish)
+
+    def _append_log(self, line: str) -> None:
+        self.log_text.config(state="normal")
+        self.log_text.insert("end", line.rstrip() + "\n")
+        self.log_text.see("end")
+        self.log_text.config(state="disabled")
+
+    def _set_progress(self, done: int) -> None:
+        self.progress["value"] = done
+        self.status_var.set(f"{done} / {self._total} processed")
+
+    def _on_cancel(self) -> None:
+        self.cancelled = True
+        self.cancel_btn.config(state="disabled")
+        self._append_log("[GUI] Cancel requested — waiting for current video to end...")
+
+    def _finish(self) -> None:
+        self.cancel_btn.config(state="disabled")
+        self.close_btn.config(state="normal")
+        if self._output_base is not None and self._output_base.is_dir():
+            self.postproc_btn.config(state="normal")
+            self.calib_btn.config(state="normal")
+
+    def set_output_base(self, output_base: Path) -> None:
+        self._output_base = output_base
+
+    def _on_build_points(self) -> None:
+        if self._output_base is None or not self._output_base.is_dir():
+            messagebox.showwarning(
+                "Post-processing", "Output directory not available.", parent=self
+            )
+            return
+        self.postproc_btn.config(state="disabled")
+        self._append_log("[postprocess] Building sam_points.csv (mode=all)...")
+
+        def _worker() -> None:
+            try:
+                from vaila.sam_postprocess import extract_points_for_batch
+
+                outs = extract_points_for_batch(self._output_base, mode="all")
+                msg = f"Wrote {len(outs)} sam_points.csv file(s) under {self._output_base}"
+                self.after(
+                    0,
+                    lambda: (
+                        self._append_log(f"[postprocess] {msg}"),
+                        self.postproc_btn.config(state="normal"),
+                        messagebox.showinfo("Post-processing done", msg, parent=self),
+                    ),
+                )
+            except Exception as exc:
+                err = str(exc)
+                self.after(
+                    0,
+                    lambda: (
+                        self._append_log(f"[postprocess] FAILED: {err}"),
+                        self.postproc_btn.config(state="normal"),
+                        messagebox.showerror("Post-processing failed", err, parent=self),
+                    ),
+                )
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_calibrate(self) -> None:
+        if self._output_base is None or not self._output_base.is_dir():
+            messagebox.showwarning(
+                "Calibrate field", "Output directory not available.", parent=self
+            )
+            return
+        try:
+            from vaila.soccerfield_calib import launch_calibrate_dialog
+
+            launch_calibrate_dialog(self, self._output_base)
+        except Exception as exc:
+            messagebox.showerror("Calibrate field — error", str(exc), parent=self)
+
+    def _on_close(self) -> None:
+        if self.close_btn["state"] == "disabled":
+            self._on_cancel()
+            return
+        with contextlib.suppress(tk.TclError):
+            self.destroy()
+
+
+def _run_sam_batch_in_thread(
+    progress: SamBatchProgress,
+    *,
+    video_files: list[Path],
+    output_base: Path,
+    prompt: str,
+    frame_idx: int,
+    ckpt_opt: Path | None,
+    save_ov: bool,
+    save_png: bool,
+    frame_fallback: bool,
+    on_done: Callable[[int, int, list[str], Path], None],
+) -> None:
+    """Background worker for the GUI batch (started from a Thread)."""
+
+    def log(line: str) -> None:
+        progress.schedule_log(line)
+
+    failed: list[str] = []
+    succeeded = 0
+
+    log(f"SAM 3 batch — {len(video_files)} video(s); output: {output_base}")
+    for idx, video_file in enumerate(video_files, start=1):
+        if progress.cancelled:
+            log(f"[GUI] Cancelled before {video_file.name}; stopping.")
+            failed.append(f"{video_file.name}: cancelled by user")
+            break
+        log(f"\n=== {idx}/{len(video_files)}: {video_file.name} ===")
+        out_dir = output_base / video_file.stem
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ok, err = _process_one_video_with_oom_retry(
+            video_file,
+            out_dir,
+            text_prompt=prompt,
+            frame_index=frame_idx,
+            checkpoint=ckpt_opt,
+            max_input_frames=None,
+            save_overlay_mp4=save_ov,
+            save_mask_png=save_png,
+            frame_by_frame_fallback=frame_fallback,
+            log=log,
+        )
+        if ok:
+            succeeded += 1
+            log(f"  Done: {out_dir}")
+        else:
+            failed.append(f"{video_file.name}: {err}")
+            log(f"  ERROR on {video_file.name}: {err}")
+        progress.schedule_progress(idx)
+        _release_sam3_gpu_memory()
+
+    progress.schedule_finish()
+    on_done(succeeded, len(video_files), failed, output_base)
+
+
+def _start_sam_batch_subprocess(
+    *,
+    progress: SamBatchProgress,
+    input_path: Path,
+    out_parent: Path,
+    output_base: Path,
+    prompt: str,
+    frame_idx: int,
+    ckpt_opt: Path | None,
+    save_ov: bool,
+    save_png: bool,
+    frame_fallback: bool,
+    on_done: Callable[[int, int, list[str], Path], None],
+) -> None:
+    """Run SAM3 batch in an isolated child process; reader threads stream stdout.
+
+    Why a subprocess instead of ``threading.Thread``:
+        Running the SAM3 video predictor (CUDA + torch.compile + Triton + OpenCV)
+        in a worker thread of the same Python process as the Tk mainloop reliably
+        triggers ``terminate called without an active exception`` (SIGABRT) — the
+        Tcl event loop in MainThread interferes with the C++ destructors of CUDA /
+        torch / Triton background workers spawned by the worker thread. Verified
+        experimentally: same workload via the CLI (no Tk) completes cleanly, but
+        the moment a Tcl mainloop runs in MainThread, the worker process aborts
+        partway. Isolating the GPU work in a subprocess fully decouples it from
+        the Tk interpreter and resolves the abort.
+    """
+    import re
+    import shlex
+    import subprocess
+    import tempfile
+
+    cmd: list[str] = [
+        sys.executable,
+        "-u",
+        str(Path(__file__).resolve()),
+        "-i",
+        str(input_path.resolve()),
+        "-o",
+        str(out_parent.resolve()),
+        "-t",
+        prompt,
+        "-f",
+        str(frame_idx),
+    ]
+    if ckpt_opt is not None:
+        cmd += ["-w", str(ckpt_opt.resolve())]
+    if not save_ov:
+        cmd.append("--no-overlay")
+    if not save_png:
+        cmd.append("--no-png")
+    if frame_fallback:
+        cmd.append("--frame-by-frame")
+
+    progress.schedule_log(f"[GUI] launching subprocess: {shlex.join(cmd)}")
+
+    env = os.environ.copy()
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    # tqdm bars use carriage returns and would clutter the GUI log; disable them.
+    env["TQDM_DISABLE"] = "1"
+
+    log_fd, log_path = tempfile.mkstemp(prefix="vaila_sam_batch_", suffix=".log", text=True)
+    log_handle = os.fdopen(log_fd, "w", buffering=1)
+
+    try:
+        proc = subprocess.Popen(  # noqa: S603 — args list is built locally
+            cmd,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=env,
+        )
+    except Exception as e:
+        log_handle.close()
+        progress.schedule_log(f"[GUI] FAILED to launch subprocess: {e!r}")
+        progress.schedule_finish()
+        on_done(0, 0, [f"subprocess launch failed: {e!r}"], output_base)
+        return
+
+    state: dict[str, object] = {
+        "succeeded": 0,
+        "failed": [],
+        "actual_output": output_base,
+        "total_videos": 0,
+        "current_idx": 0,
+        "read_pos": 0,
+        "buffer": "",
+        "finished": False,
+    }
+    re_processing = re.compile(r"^Processing video\s+(\d+)\s*/\s*(\d+)\s*:")
+    re_done_line = re.compile(r"^\s*Done:\s+(.+)$")
+    re_error_line = re.compile(r"^\s*ERROR on\s+(.+):\s*(.*)$")
+    re_output_dir = re.compile(r"^All done\.\s*Output:\s*(.+)$")
+
+    def _process_line(line: str) -> None:
+        progress._append_log(line)
+        if (m := re_processing.match(line)) is not None:
+            idx = int(m.group(1))
+            total = int(m.group(2))
+            state["current_idx"] = idx
+            state["total_videos"] = max(int(state["total_videos"] or 0), total)
+            progress._set_progress(idx - 1)
+        elif (m := re_done_line.match(line)) is not None:
+            state["succeeded"] = int(state["succeeded"] or 0) + 1
+            idx = int(state["current_idx"] or 0)
+            if idx > 0:
+                progress._set_progress(idx)
+        elif (m := re_error_line.match(line)) is not None:
+            fname = m.group(1).strip()
+            err_text = m.group(2).strip()
+            failed_list = state["failed"]
+            if isinstance(failed_list, list):
+                failed_list.append(f"{fname}: {err_text}")
+        elif (m := re_output_dir.match(line)) is not None:
+            state["actual_output"] = Path(m.group(1).strip())
+
+    def _drain_log_file() -> None:
+        try:
+            with open(log_path, encoding="utf-8", errors="replace") as fh:
+                fh.seek(int(state["read_pos"] or 0))
+                chunk = fh.read()
+                state["read_pos"] = fh.tell()
+        except FileNotFoundError:
+            chunk = ""
+        if chunk:
+            buf = str(state["buffer"] or "") + chunk
+            *complete_lines, remainder = buf.split("\n")
+            state["buffer"] = remainder
+            for ln in complete_lines:
+                if ln.strip():
+                    with contextlib.suppress(tk.TclError):
+                        _process_line(ln)
+
+    def _poll() -> None:
+        if progress.cancelled and proc.poll() is None:
+            with contextlib.suppress(Exception):
+                proc.terminate()
+        _drain_log_file()
+        rc = proc.poll()
+        if rc is None:
+            with contextlib.suppress(tk.TclError):
+                progress.after(150, _poll)
+            return
+        # Subprocess finished — final drain + finalize.
+        _drain_log_file()
+        remainder = str(state["buffer"] or "")
+        if remainder.strip():
+            with contextlib.suppress(tk.TclError):
+                _process_line(remainder)
+        state["buffer"] = ""
+        if state["finished"]:
+            return
+        state["finished"] = True
+        with contextlib.suppress(Exception):
+            log_handle.close()
+        with contextlib.suppress(tk.TclError):
+            progress._append_log(f"[GUI] subprocess exited with code {rc}")
+        if rc != 0:
+            failed_list = state["failed"]
+            if isinstance(failed_list, list) and not failed_list:
+                failed_list.append(f"subprocess exit code {rc}")
+        with contextlib.suppress(tk.TclError):
+            progress._finish()
+        try:
+            actual_out = state["actual_output"]
+            succ = int(state["succeeded"] or 0)
+            total_default = len(_find_videos(input_path)) if input_path.is_dir() else 1
+            total = int(state["total_videos"] or 0) or total_default
+            failed_obj = state["failed"]
+            failed_list = failed_obj if isinstance(failed_obj, list) else []
+            out_path = actual_out if isinstance(actual_out, Path) else output_base
+            on_done(succ, total, failed_list, out_path)
+        except Exception as e:
+            with contextlib.suppress(tk.TclError):
+                progress._append_log(f"[GUI] on_done callback error: {e!r}")
+
+    progress.after(50, _poll)
+
+
 def run_sam_video(existing_root: tk.Tk | None = None) -> None:
     """GUI entry: configure and run SAM3 on a directory of videos (batch) or a single file."""
     if importlib.util.find_spec("sam3") is None:
@@ -1154,49 +1864,60 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
             root.destroy()
         return
 
+    if not _sam3_guard_cuda_gui(root):
+        if owns_root:
+            root.destroy()
+        return
+
     input_path, out_parent, ckpt_opt, prompt, frame_idx, save_ov, save_png, frame_fallback = (
         dlg.result
     )
 
     video_files = _find_videos(input_path) if input_path.is_dir() else [input_path]
+    if not video_files:
+        messagebox.showinfo(
+            "SAM 3 — nothing to do", "No video files found at the input path.", parent=root
+        )
+        if owns_root:
+            root.destroy()
+        return
 
     ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_base = out_parent / f"processed_sam_{ts}"
     output_base.mkdir(parents=True, exist_ok=True)
 
-    print(f"\nSAM 3 batch — {len(video_files)} video(s) to process")
-    for i, vf in enumerate(video_files, 1):
-        print(f"  {i}. {vf.name}")
+    progress = SamBatchProgress(root, total=len(video_files), output_base=output_base)
 
-    failed: list[str] = []
-    for i, video_file in enumerate(video_files, 1):
-        print(f"\n{'=' * 60}")
-        print(f"Processing video {i}/{len(video_files)}: {video_file.name}")
-        print(f"{'=' * 60}")
-        output_dir = output_base / video_file.stem
-        output_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            run_sam3_on_video(
-                video_file,
-                output_dir,
-                prompt,
-                frame_index=frame_idx,
-                checkpoint=ckpt_opt,
-                save_overlay_mp4=save_ov,
-                save_mask_png=save_png,
-                frame_by_frame_fallback=frame_fallback,
+    def _on_done(succeeded: int, total: int, failed: list[str], out_base: Path) -> None:
+        summary = f"Processed {succeeded}/{total} video(s).\nOutput: {out_base}"
+        if failed:
+            summary += f"\n\nFailed ({len(failed)}):\n" + "\n".join(failed[:20])
+            if len(failed) > 20:
+                summary += f"\n…and {len(failed) - 20} more (see FAILED_sam.txt in each folder)."
+            root.after(
+                0,
+                lambda: messagebox.showwarning(
+                    "SAM 3 — finished with errors", summary, parent=root
+                ),
             )
-            print(f"  Done: {output_dir}")
-        except Exception as e:
-            print(f"  ERROR on {video_file.name}: {e}")
-            failed.append(f"{video_file.name}: {e}")
+        else:
+            root.after(0, lambda: messagebox.showinfo("SAM 3 — done", summary, parent=root))
 
-    summary = f"Processed {len(video_files) - len(failed)}/{len(video_files)} video(s).\nOutput: {output_base}"
-    if failed:
-        summary += f"\n\nFailed ({len(failed)}):\n" + "\n".join(failed)
-        messagebox.showwarning("SAM 3 — finished with errors", summary, parent=root)
-    else:
-        messagebox.showinfo("SAM 3 — done", summary, parent=root)
+    _start_sam_batch_subprocess(
+        progress=progress,
+        input_path=input_path,
+        out_parent=out_parent,
+        output_base=output_base,
+        prompt=prompt,
+        frame_idx=frame_idx,
+        ckpt_opt=ckpt_opt,
+        save_ov=save_ov,
+        save_png=save_png,
+        frame_fallback=frame_fallback,
+        on_done=_on_done,
+    )
+
+    root.wait_window(progress)
 
     if owns_root:
         root.destroy()
@@ -1224,14 +1945,25 @@ def main() -> None:
         help="Input video file OR directory containing videos (batch)",
     )
     parser.add_argument("-o", "--output", type=Path, help="Output base directory")
-    parser.add_argument("-t", "--text", type=str, default="person", help="Text prompt")
+    parser.add_argument(
+        "-t",
+        "--text",
+        type=str,
+        default="person",
+        help=(
+            "Open-vocabulary text prompt (SAM 3). Examples: 'person', 'player', "
+            "'goalkeeper', 'referee', 'ball', 'soccer ball', 'basketball', "
+            "'crowd', 'car', 'dog'. Any free-text description works."
+        ),
+    )
     parser.add_argument("-f", "--frame", type=int, default=0, help="Frame index for prompt")
     parser.add_argument("--no-overlay", action="store_true", help="Skip overlay MP4")
     parser.add_argument("--no-png", action="store_true", help="Skip mask PNGs")
     parser.add_argument(
         "--frame-by-frame",
         action="store_true",
-        help="Fallback: process each frame individually. Prevents OOM on low VRAM GPUs, but loses temporal tracking.",
+        help="CUDA only: process each frame individually to reduce VRAM (not CPU inference). "
+        "Loses temporal tracking.",
     )
     parser.add_argument(
         "-w",
@@ -1264,6 +1996,29 @@ def main() -> None:
         action="store_true",
         help="Open SAM 3 setup instructions (HTML) in the default browser and exit.",
     )
+    parser.add_argument(
+        "--postprocess-points",
+        choices=["none", "foot", "center", "mask", "all"],
+        default="none",
+        help="After the batch finishes, build vailá-format pixel CSVs (sam_points.csv) "
+        "per video subdirectory. 'foot' = bottom-center of bbox (best for soccer-field "
+        "homography rec2d); 'center' = bbox center; 'mask' = real centroid of the mask "
+        "PNG; 'all' = canonical foot pair plus extra cx/cy/mx/my columns. Default: none.",
+    )
+    parser.add_argument(
+        "--no-isolate-batch",
+        action="store_true",
+        help="Disable subprocess-per-video isolation in batch mode. "
+        "Default: each video runs in its own subprocess so a CUDA OOM in one video "
+        "cannot leak GPU state into the next (SAM3's start_session leaves ~13 GiB "
+        "of orphan tensors on OOM that no in-process gc can free).",
+    )
+    parser.add_argument(
+        "--video-output-dir",
+        type=Path,
+        default=None,
+        help=argparse.SUPPRESS,  # internal: used by subprocess-per-video isolation
+    )
     args = parser.parse_args()
 
     if args.open_help:
@@ -1275,11 +2030,46 @@ def main() -> None:
         print(f"SAM3 weights ready: {out_ckpt}")
         return
 
+    # Internal isolated single-video mode: skip CUDA guard / processed_sam_TS wrapper
+    # and write outputs directly to the parent-supplied dir.  Used by the subprocess-
+    # per-video isolation in batch mode so a CUDA OOM in one video cannot leak ~13 GiB
+    # of orphan SAM3 tensors into the next video (proven by debug-mode runtime logs:
+    # H4+H7 — CUDA state corruption at start_session is irrecoverable in-process).
+    if args.input and args.video_output_dir is not None:
+        if importlib.util.find_spec("sam3") is None:
+            _print_sam3_install_instructions()
+            open_sam3_install_help_in_browser()
+            raise SystemExit(1)
+        _sam3_guard_cuda_cli()
+        single = args.input.resolve()
+        if not single.is_file():
+            print(f"--video-output-dir requires --input to be a single file: {single}")
+            raise SystemExit(2)
+        out_dir = args.video_output_dir.resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ok, err = _process_one_video_with_oom_retry(
+            single,
+            out_dir,
+            text_prompt=args.text,
+            frame_index=args.frame,
+            checkpoint=args.checkpoint,
+            max_input_frames=args.max_frames,
+            save_overlay_mp4=not args.no_overlay,
+            save_mask_png=not args.no_png,
+            frame_by_frame_fallback=args.frame_by_frame,
+        )
+        if ok:
+            print(f"  Done: {out_dir}")
+            raise SystemExit(0)
+        print(f"  ERROR on {single.name}: {err}")
+        raise SystemExit(3)
+
     if args.input and args.output:
         if importlib.util.find_spec("sam3") is None:
             _print_sam3_install_instructions()
             open_sam3_install_help_in_browser()
             raise SystemExit(1)
+        _sam3_guard_cuda_cli()
         inp = args.input.resolve()
         if inp.is_dir():
             video_files = _find_videos(inp)
@@ -1300,17 +2090,74 @@ def main() -> None:
         for idx, vf in enumerate(video_files, 1):
             print(f"  {idx}. {vf.name}")
 
-        for idx, video_file in enumerate(video_files, 1):
-            print(f"\n{'=' * 60}")
-            print(f"Processing video {idx}/{len(video_files)}: {video_file.name}")
-            print(f"{'=' * 60}")
-            out_dir = output_base / video_file.stem
-            out_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                run_sam3_on_video(
+        # Subprocess-per-video isolation is the ONLY reliable fix for the SAM3
+        # CUDA OOM cascade.  Runtime evidence (debug session 42b4a5):
+        #   - Without OOM: post-cleanup alloc=0.009 GiB → batch works.
+        #   - With OOM: ~13 GiB orphan C++ tensors persist; gc.collect / empty_cache
+        #     cannot reach them → next video starts with leaked state → cascade.
+        # Killing the Python process is the only way to release SAM3's internal
+        # C++ workspace pools after a failed start_session.
+        use_isolation = (not args.no_isolate_batch) and len(video_files) > 1
+        failed_cli: list[str] = []
+
+        if use_isolation:
+            import subprocess as _sp
+
+            print("[batch] subprocess-per-video isolation: ENABLED (each video in fresh process)")
+            for idx, video_file in enumerate(video_files, 1):
+                print(f"\n{'=' * 60}")
+                print(f"Processing video {idx}/{len(video_files)}: {video_file.name} (isolated)")
+                print(f"{'=' * 60}")
+                out_dir = output_base / video_file.stem
+                out_dir.mkdir(parents=True, exist_ok=True)
+                cmd = [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "--input",
+                    str(video_file),
+                    "--video-output-dir",
+                    str(out_dir),
+                    "--text",
+                    args.text,
+                    "--frame",
+                    str(args.frame),
+                ]
+                if args.max_frames is not None:
+                    cmd += ["--max-frames", str(args.max_frames)]
+                if args.checkpoint is not None:
+                    cmd += ["--checkpoint", str(args.checkpoint)]
+                if args.no_overlay:
+                    cmd.append("--no-overlay")
+                if args.no_png:
+                    cmd.append("--no-png")
+                if args.frame_by_frame:
+                    cmd.append("--frame-by-frame")
+                env = os.environ.copy()
+                env.setdefault("TQDM_DISABLE", "1")
+                env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+                try:
+                    rc = _sp.call(cmd, env=env)
+                except KeyboardInterrupt:
+                    print(f"  INTERRUPTED on {video_file.name}")
+                    failed_cli.append(f"{video_file.name}: interrupted")
+                    raise
+                if rc == 0:
+                    print(f"  Done: {out_dir}")
+                else:
+                    err_msg = f"subprocess exit={rc}"
+                    print(f"  ERROR on {video_file.name}: {err_msg}")
+                    failed_cli.append(f"{video_file.name}: {err_msg}")
+        else:
+            for idx, video_file in enumerate(video_files, 1):
+                print(f"\n{'=' * 60}")
+                print(f"Processing video {idx}/{len(video_files)}: {video_file.name}")
+                print(f"{'=' * 60}")
+                out_dir = output_base / video_file.stem
+                out_dir.mkdir(parents=True, exist_ok=True)
+                ok, err = _process_one_video_with_oom_retry(
                     video_file,
                     out_dir,
-                    args.text,
+                    text_prompt=args.text,
                     frame_index=args.frame,
                     checkpoint=args.checkpoint,
                     max_input_frames=args.max_frames,
@@ -1318,10 +2165,27 @@ def main() -> None:
                     save_mask_png=not args.no_png,
                     frame_by_frame_fallback=args.frame_by_frame,
                 )
-                print(f"  Done: {out_dir}")
-            except Exception as e:
-                print(f"  ERROR on {video_file.name}: {e}")
+                if ok:
+                    print(f"  Done: {out_dir}")
+                else:
+                    print(f"  ERROR on {video_file.name}: {err}")
+                    failed_cli.append(f"{video_file.name}: {err}")
+                _release_sam3_gpu_memory()
         print(f"\nAll done. Output: {output_base}")
+        if failed_cli:
+            print(f"Failed ({len(failed_cli)}/{len(video_files)}):")
+            for line in failed_cli:
+                print(f"  - {line}")
+
+        if args.postprocess_points != "none":
+            try:
+                from vaila.sam_postprocess import extract_points_for_batch
+
+                print(f"\n[postprocess] mode={args.postprocess_points}")
+                outs = extract_points_for_batch(output_base, mode=args.postprocess_points)
+                print(f"[postprocess] wrote {len(outs)} sam_points.csv file(s).")
+            except Exception as exc:
+                print(f"[postprocess] FAILED: {exc}")
         return
 
     run_sam_video()

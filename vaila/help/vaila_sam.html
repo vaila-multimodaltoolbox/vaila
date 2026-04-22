@@ -48,7 +48,7 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.0.2</p>
+            <p><strong>Version:</strong> 0.0.4</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
             <p><strong>CLI Interface:</strong> Yes (<code>-i</code>, <code>-o</code>, <code>-t</code>, ...)</p>
@@ -99,6 +99,15 @@ uv sync --extra gpu --extra fifa --extra sam</code></pre>
             <strong>Docs:</strong> Hybrid CPU laptop vs NVIDIA workstation — see <a href="https://github.com/vaila-multimodaltoolbox/vaila/blob/main/AGENTS.md"><code>AGENTS.md</code></a> in the repository root.
         </div>
 
+        <h3>Platform: CUDA, CPU-only, Windows, macOS</h3>
+        <table>
+            <tr><th>Environment</th><th>SAM 3 <em>video</em> in vailá</th></tr>
+            <tr><td>Linux / Windows + NVIDIA + CUDA PyTorch</td><td>Supported</td></tr>
+            <tr><td>Windows without NVIDIA CUDA (CPU / iGPU only)</td><td><strong>Not supported</strong> — use Markerless 2D, YOLO, or a remote CUDA machine</td></tr>
+            <tr><td>macOS (Apple Silicon / MPS)</td><td><strong>Not supported</strong> for SAM 3 video (CUDA stack). Use other vailá workflows where applicable, or run SAM 3 on a CUDA host</td></tr>
+        </table>
+        <p><code>--frame-by-frame</code> / GUI frame-by-frame lowers <strong>VRAM on CUDA</strong> only; it is <strong>not</strong> CPU inference.</p>
+
         <!-- ============================================================ -->
         <h2>Weights / Checkpoints</h2>
 
@@ -118,6 +127,9 @@ uv run vaila/vaila_sam.py --download-weights</code></pre>
             <li><code>vaila/models/sam3/sam3.pt</code> (flat layout)</li>
             <li><code>vaila/models/sam3/sam3.1_multiplex.pt</code> (SAM 3.1)</li>
             <li><code>vaila/models/sam3/sam3_weights/sam3.pt</code> (nested HF local-dir layout)</li>
+            <li><code>models/sam3/sam3.pt</code> (repo-root models layout)</li>
+            <li><code>models/sam3/sam3.1_multiplex.pt</code> (repo-root models layout)</li>
+            <li><code>models/sam3/sam3_weights/sam3.pt</code> (repo-root nested HF layout)</li>
             <li>Legacy: <code>&lt;repo&gt;/sam3_weights/sam3.pt</code> (deprecated)</li>
             <li>If none found: auto-download from Hugging Face Hub at runtime</li>
         </ol>
@@ -175,7 +187,7 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td><code>-t</code></td>
                 <td>str</td>
                 <td><code>person</code></td>
-                <td>Text prompt for segmentation</td>
+                <td>Open-vocabulary text prompt for segmentation (no fixed class list)</td>
             </tr>
             <tr>
                 <td><code>--frame</code></td>
@@ -250,7 +262,7 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
   processed_sam_YYYYMMDD_HHMMSS/
     video_name/
       masks/           (PNG per frame, unless --no-png)
-      overlay.mp4      (unless --no-overlay)
+      &lt;video_stem&gt;_sam_overlay.mp4   (unless --no-overlay)
       sam_frames_meta.csv
       README_sam.txt</div>
 
@@ -288,6 +300,79 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
             <code>expandable_segments:True</code> to reduce CUDA OOM from memory fragmentation.
         </div>
 
+        <h3>Batch behaviour (CLI and GUI)</h3>
+        <ul>
+            <li>Between videos vailá <strong>drops the predictor</strong> and runs <code>gc.collect()</code> + <code>torch.cuda.empty_cache()</code> so video N+1 starts from a clean GPU state.</li>
+            <li>If a video still hits <strong>CUDA OOM</strong>, vailá <strong>auto-retries</strong> the same clip with <code>max_frames=64</code> and then <code>max_frames=32</code> before failing.</li>
+            <li>A failed video keeps a small <code>FAILED_sam.txt</code> in its output folder describing the reason &mdash; empty/missing dirs are no longer silent.</li>
+            <li>The GUI shows a <strong>progress window</strong> with per-video status, a scrollable log and a <strong>Cancel</strong> button.</li>
+        </ul>
+
+        <!-- ============================================================ -->
+        <h2>Text Prompt Classes</h2>
+        <p>SAM 3 in this module uses <strong>open-vocabulary text prompts</strong>. There is no fixed closed class list beyond <code>person</code>.</p>
+
+        <h3>Prompt presets (GUI combobox)</h3>
+        <p>The GUI dialog exposes the following presets in the <strong>Text prompt</strong> combobox.
+        The combobox is editable (<code>state="normal"</code>), so you can also type any free-text prompt:</p>
+        <ul>
+            <li><code>person</code>, <code>player</code>, <code>goalkeeper</code>, <code>referee</code>, <code>coach</code></li>
+            <li><code>ball</code>, <code>soccer ball</code>, <code>basketball</code>, <code>volleyball</code></li>
+            <li><code>crowd</code>, <code>car</code>, <code>bike</code>, <code>dog</code>, <code>cat</code></li>
+        </ul>
+        <p>From the CLI, pass your prompt with <code>-t "…"</code>:</p>
+        <pre><code>uv run vaila/vaila_sam.py -i match.mp4 -o out/ -t "goalkeeper" -f 0</code></pre>
+
+        <h3>Prompt tips</h3>
+        <ul>
+            <li>Use short nouns (1-3 words), lowercase. Commas or <code>.</code> are ignored.</li>
+            <li>If a generic prompt fails, try a <strong>more specific synonym</strong>
+                (<code>player</code> instead of <code>person</code>;
+                <code>soccer ball</code> instead of <code>ball</code>) or use a
+                <strong>scene-specific role</strong>
+                (<code>goalkeeper</code>, <code>referee</code>, <code>coach</code>).</li>
+            <li>Sport-specific scenarios tested in vailá:
+                <ul>
+                    <li>Soccer broadcasts &rarr; <code>player</code>, <code>goalkeeper</code>, <code>referee</code>, <code>soccer ball</code></li>
+                    <li>Basketball &rarr; <code>player</code>, <code>basketball</code>, <code>referee</code></li>
+                    <li>Volleyball &rarr; <code>player</code>, <code>volleyball</code></li>
+                </ul>
+            </li>
+            <li>Keep the <strong>prompt frame</strong> on a clean, well-exposed moment (no occlusion, steady lens).
+                Use <code>-f</code> (CLI) or the "Prompt frame index" field (GUI) to change it.</li>
+        </ul>
+
+        <!-- ============================================================ -->
+        <h2>GUI overview</h2>
+        <p>When you launch <code>vaila_sam</code> without CLI args (or from the vailá main window), up to two Tk windows appear:</p>
+        <ol>
+            <li><strong><code>SamVideoDialog</code></strong> — configuration modal:
+                <ul>
+                    <li><code>Input (dir or file)</code> + <code>Output folder</code> + <code>sam3.pt / weights (-w)</code> browsers.</li>
+                    <li><strong>Text prompt combobox</strong> with the presets listed above (editable).</li>
+                    <li><code>Prompt frame index</code>, <code>Save overlay MP4</code>, <code>Save mask PNGs</code>, optional frame-by-frame CUDA fallback.</li>
+                    <li>Buttons: <code>Run</code>, <code>Cancel</code>, <strong><code>Help</code></strong> (opens this page in your browser).</li>
+                </ul>
+            </li>
+            <li><strong><code>SamBatchProgress</code></strong> — per-video status window (batch only):
+<pre><code>+-----------------------------------------------------------+
+| SAM 3 - batch progress                                   |
++-----------------------------------------------------------+
+| 2 / 24 processed                                          |
+| [==========--------------------------------------------]  |
+| Log:                                                      |
+|  [14:21:03] Starting video 3/24: ARG_CRO_000737.mp4       |
+|  ...                                                      |
+|  [Request cancel]  [Help]            [Close (disabled)]   |
++-----------------------------------------------------------+</code></pre>
+                <ul>
+                    <li><code>Request cancel</code> finishes the current video cleanly, then stops.</li>
+                    <li><code>Help</code> opens this reference page.</li>
+                    <li><code>Close</code> enables when all videos are done.</li>
+                </ul>
+            </li>
+        </ol>
+
         <!-- ============================================================ -->
         <h2>FIFA Skeletal Tracking Light</h2>
 
@@ -315,12 +400,20 @@ bash bin/use_pyproject_linux_cuda.sh
 # 2. Install extras
 uv sync --extra gpu --extra fifa --extra sam
 
-# 3. Download SAM 3D Body weights (gated; accept license first)
-uv run hf download facebook/sam-3d-body-dinov3 --local-dir vaila/models/sam-3d-dinov3
+# 3. Clone sam_3d_body + download gated SAM 3D Body weights
+#    (accept the license on https://huggingface.co/facebook/sam-3d-body-dinov3 first,
+#     then `uv run hf auth login`).
+bash bin/setup_fifa_sam3d.sh                # Linux / macOS
+# pwsh bin/setup_fifa_sam3d.ps1            # Windows
 
 # 4. Download challenge data (cameras, boxes, skel_2d, skel_3d, etc.)
 #    Accept access at: https://huggingface.co/datasets/tijiang13/FIFA-Skeletal-Tracking-Light-2026
-#    Videos come separately from FIFA (not on HF)</code></pre>
+#    Videos come separately from FIFA (not on HF)
+
+# 5. Bootstrap the data layout (symlink videos + sequences_*.txt + pitch_points.txt)
+uv run vaila/vaila_sam.py fifa bootstrap \
+  --videos-dir /path/to/FIFA_Challenge_2026_Video_Data/Videos \
+  --data-root  /path/to/FIFA/data</code></pre>
 
         <h3>Data Layout</h3>
         <p>The pipeline expects the following <code>data/</code> structure (from the starter kit):</p>
@@ -344,6 +437,23 @@ uv run hf download facebook/sam-3d-body-dinov3 --local-dir vaila/models/sam-3d-d
   sequences_test.txt</div>
 
         <h3>FIFA Subcommands</h3>
+
+        <h4>0. <code>bootstrap</code> — symlink videos + sequences_*.txt + pitch_points.txt</h4>
+        <table>
+            <tr><th>Argument</th><th>Required</th><th>Description</th></tr>
+            <tr><td><code>--videos-dir</code></td><td>Yes</td><td>Source folder with raw *.mp4</td></tr>
+            <tr><td><code>--data-root</code></td><td>Yes</td><td>Target FIFA data root</td></tr>
+            <tr><td><code>--val-sequences</code></td><td>No</td><td>Text file with official val split</td></tr>
+            <tr><td><code>--test-sequences</code></td><td>No</td><td>Text file with official test split</td></tr>
+            <tr><td><code>--no-copy-fallback</code></td><td>No</td><td>Fail when symlinks are denied</td></tr>
+            <tr><td><code>--overwrite-pitch-points</code></td><td>No</td><td>Refresh pitch_points.txt</td></tr>
+        </table>
+        <pre><code>uv run vaila/vaila_sam.py fifa bootstrap \
+  --videos-dir /data/FIFA/FIFA_Challenge_2026_Video_Data/Videos \
+  --data-root  /data/FIFA/data</code></pre>
+        <div class="info-box">Run this <strong>before</strong> <code>fifa prepare</code> when
+        your videos are not yet copied into <code>data/videos/</code> and when the official splits
+        have not been written.</div>
 
         <h4>1. <code>prepare</code> — Videos to data/videos + data/images</h4>
         <table>
@@ -402,8 +512,22 @@ uv run hf download facebook/sam-3d-body-dinov3 --local-dir vaila/models/sam-3d-d
   --data-root data/ \
   --sequences data/sequences_val.txt \
   --output outputs/submission_full.npz</code></pre>
+        <p>Use <code>--export-camera</code> (and <code>--calibration-dir</code>) on <code>baseline</code> when you need updated per-frame <code>cameras/&lt;seq&gt;.npz</code> on disk for DLT export.</p>
 
-        <h4>5. <code>pack</code> — Split &rarr; submission ZIP</h4>
+        <h4>5. <code>dlt-export</code> — <code>cameras/*.npz</code> &rarr; per-frame <code>.dlt2d</code> / <code>.dlt3d</code></h4>
+        <table>
+            <tr><th>Argument</th><th>Required</th><th>Default</th><th>Description</th></tr>
+            <tr><td><code>--cameras-dir</code></td><td>Yes</td><td>—</td><td>Folder of NPZ files with <code>K</code>, <code>R</code>, <code>t</code>, <code>k</code></td></tr>
+            <tr><td><code>--output-dir</code></td><td>Yes</td><td>—</td><td>Output folder for <code>&lt;stem&gt;.dlt2d</code> / <code>.dlt3d</code></td></tr>
+            <tr><td><code>--mode</code></td><td>No</td><td><code>both</code></td><td><code>2d</code>, <code>3d</code>, or <code>both</code></td></tr>
+            <tr><td><code>--undistort-pixels-dir</code></td><td>No</td><td>—</td><td>Optional CSV folder; writes <code>pixels_undistorted/</code> under output</td></tr>
+        </table>
+        <pre><code>uv run vaila/vaila_sam.py fifa dlt-export \
+  --cameras-dir data/cameras \
+  --output-dir outputs/dlt_per_frame \
+  --mode both</code></pre>
+
+        <h4>6. <code>pack</code> — Split &rarr; submission ZIP</h4>
         <table>
             <tr><th>Argument</th><th>Required</th><th>Description</th></tr>
             <tr><td><code>--submission-full</code></td><td>Yes</td><td>Full submission NPZ from <code>baseline</code></td></tr>
@@ -474,6 +598,17 @@ uv run vaila/vaila_sam.py fifa pack \
             of shape <code>(n_frames, n_persons, 15, 3)</code> — 15 keypoints with X, Y, Z coordinates in world space.
         </div>
 
+        <h2>Full broadcast pipeline (moving camera)</h2>
+        <p>For a <strong>moving broadcast camera</strong>, use <code>vaila/rec2d.py</code> and <code>vaila/rec3d.py</code> with DLT files that have <strong>one row per frame</strong>. Use <code>rec2d_one_dlt2d.py</code> / <code>rec3d_one_dlt3d.py</code> only for <strong>fixed</strong> cameras (single DLT row).</p>
+        <ol>
+            <li>SAM 3 batch: <code>uv run vaila/vaila_sam.py -i Videos/ -o sam_out/ -t player --postprocess-points</code></li>
+            <li>FIFA: <code>bootstrap</code> / <code>prepare</code>, then <code>boxes</code>, <code>preprocess</code>, <code>baseline</code> with <code>--export-camera</code> when you need saved per-frame cameras.</li>
+            <li><code>uv run vaila/vaila_sam.py fifa dlt-export --cameras-dir data/cameras --output-dir dlt_out/ --mode both</code></li>
+            <li>2D: <code>uv run python vaila/rec2d.py --dlt-file dlt_out/&lt;SEQ&gt;.dlt2d --input-dir pixels/ --output-dir rec2d_out/ --rate 30</code></li>
+            <li>3D (multi-cam): one <code>.dlt3d</code> per camera + synchronized pixel CSVs — see markdown help for caveats on <code>rec3d.py</code> vs per-camera CSVs.</li>
+        </ol>
+        <p>GUI: main window button <strong>FIFA cams&rarr;DLT</strong> runs the same flow as <code>vaila.fifa_to_dlt.run_gui_flow()</code>.</p>
+
         <!-- ============================================================ -->
         <h2>Main Functions</h2>
         <div class="functions">
@@ -493,8 +628,9 @@ uv run vaila/vaila_sam.py fifa pack \
                 <li><code>fifa_generate_boxes()</code> — YOLO or SAM3 bounding box generation</li>
                 <li><code>fifa_preprocess()</code> — SAM 3D Body &rarr; skel_2d / skel_3d</li>
                 <li><code>fifa_baseline()</code> — Camera tracker + LBFGS + smoothen &rarr; NPZ</li>
+                <li><code>fifa_to_dlt.run_cli()</code> — <code>fifa dlt-export</code>: cameras NPZ &rarr; per-frame DLT CSV</li>
                 <li><code>fifa_pack()</code> — Split full NPZ &rarr; submission ZIP</li>
-                <li><code>main_fifa_cli()</code> — CLI dispatcher for FIFA subcommands</li>
+                <li><code>main_fifa_cli()</code> — CLI dispatcher for FIFA subcommands (includes <code>dlt-export</code>)</li>
             </ul>
         </div>
 
@@ -527,6 +663,7 @@ uv run vaila/vaila_sam.py fifa pack \
         <pre><code># Fast unit tests (no GPU, no weights)
 uv run pytest tests/test_vaila_sam.py -v
 uv run pytest tests/test_fifa_skeletal_pipeline.py -v
+uv run pytest tests/test_fifa_to_dlt.py -v
 
 # GPU smoke test (needs CUDA + sam3 + test1000.mp4)
 export VAILA_TEST_SAM_GPU=1
@@ -536,12 +673,14 @@ uv run pytest tests/test_vaila_sam.py -v -k sam3_smoke</code></pre>
         <!-- ============================================================ -->
         <h2>Version History</h2>
         <ul>
+            <li><strong>v0.0.4 (April 2026):</strong> <code>fifa dlt-export</code> / <code>vaila.fifa_to_dlt</code> — per-frame <code>.dlt2d</code> / <code>.dlt3d</code> for <code>rec2d.py</code> / <code>rec3d.py</code>; broadcast pipeline section; GUI <strong>FIFA cams&rarr;DLT</strong></li>
+            <li><strong>v0.0.3 (17 April 2026):</strong> <code>SamVideoDialog</code> Help button + editable prompt combobox (14 presets); <code>SamBatchProgress</code> Help button; <code>fifa bootstrap</code> subcommand; <code>bin/setup_fifa_sam3d.sh/ps1</code>; vendored <code>vaila/fifa_starter_lib/</code> (MIT); companion <strong>Soccer-field DLT2D calibration</strong> in <code>vaila/soccerfield_calib.py</code></li>
             <li><strong>v0.0.2 (April 2026):</strong> FIFA Skeletal Tracking Light pipeline integration; SAM 3.1 Multiplex support; BFloat16 patches; VRAM auto-sizing</li>
             <li><strong>v0.0.1:</strong> Initial SAM 3 video segmentation with text prompts</li>
         </ul>
 
         <div class="footer">
-            <p>Generated: April 16, 2026</p>
+            <p>Generated: April 17, 2026</p>
             <p>Part of vailá - Multimodal Toolbox</p>
             <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
             <p>Contact: paulosantiago@usp.br</p>

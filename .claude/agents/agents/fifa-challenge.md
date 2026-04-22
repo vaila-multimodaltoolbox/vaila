@@ -23,19 +23,27 @@ Delegate to this agent when:
 ## Key Modules
 ```
 vaila/vaila_sam.py                    — SAM 3 video + fifa CLI dispatch
-vaila/fifa_skeletal_pipeline.py       — Pipeline orchestration (prepare/boxes/preprocess/baseline/pack)
-vaila/fifa_starter_lib/camera_tracker.py — Camera tracking (MIT-ported from starter kit)
-vaila/fifa_starter_lib/postprocess.py — Smoothing (smoothen)
-sam_3d_body/                          — Vendored Meta SAM 3D Body (repo root)
+vaila/fifa_skeletal_pipeline.py       — Pipeline orchestration (bootstrap/prepare/boxes/preprocess/baseline/pack)
+vaila/fifa_bootstrap.py               — prepare_fifa_data_layout (symlinks + sequences + pitch_points)
+vaila/fifa_starter_lib/camera_tracker.py — Camera tracking (vendored MIT from starter kit)
+vaila/fifa_starter_lib/postprocess.py — Smoothing (smoothen) — vendored MIT
+vaila/fifa_starter_lib/pitch_points.txt — Vendored MIT FIFA pitch reference
+vaila/soccerfield_calib.py            — Companion DLT2D homography (29 FIFA keypoints)
+bin/setup_fifa_sam3d.sh/ps1           — Clones sam_3d_body + downloads gated weights
+sam_3d_body/                          — Cloned by setup script (NOT committed)
 vaila/models/sam-3d-dinov3/           — SAM 3D Body weights (model.ckpt, mhr_model.pt)
-vaila/models/sam3/                    — SAM 3 video weights (sam3.pt, sam3.1_multiplex.pt)
-tests/test_fifa_skeletal_pipeline.py  — Unit tests (no GPU)
-tests/test_vaila_sam.py               — SAM helpers + GPU smoke
+vaila/models/sam3/ and models/sam3/   — SAM 3 video weights (sam3.pt, sam3.1_multiplex.pt)
+tests/test_fifa_skeletal_pipeline.py  — Pipeline unit tests (no GPU)
+tests/test_fifa_bootstrap.py          — Bootstrap layout tests
+tests/test_soccerfield_calib.py       — DLT2D calibration tests
+tests/test_vaila_sam.py               — SAM helpers + GUI Help smoke
 ```
 
 ## Pipeline Flow
 ```
 raw videos
+    │
+    ▼ bootstrap (symlink → data/videos + sequences_*.txt + pitch_points.txt)
     │
     ▼ prepare (ffmpeg → data/videos + data/images)
     │
@@ -49,6 +57,11 @@ raw videos
     │
     ▼ Upload to Codabench → MPJPE score
 ```
+
+Companion tool (not on the critical path): `vaila/soccerfield_calib.py`
+fits a DLT2D homography from 29 FIFA keypoints and — when given
+`--data-root` — drops `cameras/<stem>_homography.npz` as a fallback for
+sequences that lack an official `cameras/*.npz`.
 
 ## Data Layout
 ```
@@ -69,9 +82,22 @@ data/
 1. CUDA pyproject template: `bash bin/use_pyproject_linux_cuda.sh`
 2. Install extras: `uv sync --extra gpu --extra fifa --extra sam`
 3. HF login: `uv run hf auth login`
-4. SAM 3D Body weights: `uv run hf download facebook/sam-3d-body-dinov3 --local-dir vaila/models/sam-3d-dinov3`
+4. Clone + install SAM 3D Body + download gated weights:
+   - Linux/macOS: `bash bin/setup_fifa_sam3d.sh`
+   - Windows PowerShell: `pwsh bin/setup_fifa_sam3d.ps1`
 5. Challenge data: accept HF dataset access, download cameras/boxes/skel, get videos from FIFA
-6. Verify: `uv run pytest tests/test_fifa_skeletal_pipeline.py -v`
+6. Bootstrap the data layout (symlinks + sequences + pitch_points):
+   ```bash
+   uv run vaila/vaila_sam.py fifa bootstrap \
+     --videos-dir /data/FIFA/FIFA_Challenge_2026_Video_Data/Videos \
+     --data-root  /data/FIFA/data
+   ```
+7. Verify:
+   ```bash
+   uv run pytest tests/test_fifa_skeletal_pipeline.py \
+                 tests/test_fifa_bootstrap.py \
+                 tests/test_soccerfield_calib.py -v
+   ```
 
 ## Submission Portals
 - Validation: https://codabench.org/competitions/11681/

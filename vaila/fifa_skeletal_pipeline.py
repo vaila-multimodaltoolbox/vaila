@@ -454,7 +454,9 @@ def process_sequence(
             x, y = skel_2d[idx]
             kk = cameras["K"][frame_idx]
             dist_k = cameras["k"][frame_idx]
-            o, d = ray_from_xy(np.array([x, y], dtype=np.float64), kk, r_mat, t_vec, dist_k[0], dist_k[1])
+            o, d = ray_from_xy(
+                np.array([x, y], dtype=np.float64), kk, r_mat, t_vec, dist_k[0], dist_k[1]
+            )
             inter = intersection_over_plane(o, d)
 
             skel_3d = skels_3d[frame_idx, person]
@@ -691,6 +693,17 @@ def build_fifa_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="FIFA Skeletal Tracking Light — vailá pipeline")
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    pb0 = sub.add_parser(
+        "bootstrap",
+        help="Symlink videos + write sequences_full/val/test.txt + pitch_points.txt",
+    )
+    pb0.add_argument("--videos-dir", type=Path, required=True)
+    pb0.add_argument("--data-root", type=Path, required=True)
+    pb0.add_argument("--val-sequences", type=Path, default=None)
+    pb0.add_argument("--test-sequences", type=Path, default=None)
+    pb0.add_argument("--no-copy-fallback", action="store_true")
+    pb0.add_argument("--overwrite-pitch-points", action="store_true")
+
     pr = sub.add_parser("prepare", help="Videos → data/videos + data/images (+ sequences file)")
     pr.add_argument("--video-source", type=Path, required=True)
     pr.add_argument("--data-root", type=Path, required=True)
@@ -726,12 +739,37 @@ def build_fifa_argparser() -> argparse.ArgumentParser:
     pk.add_argument("--output-dir", type=Path, required=True)
     pk.add_argument("--split", choices=("val", "test"), required=True)
 
+    dk = sub.add_parser(
+        "dlt-export",
+        help="cameras/*.npz (K,R,t,k per frame) -> .dlt2d / .dlt3d for rec2d.py / rec3d.py",
+    )
+    dk.add_argument("--cameras-dir", type=Path, required=True)
+    dk.add_argument("--output-dir", type=Path, required=True)
+    dk.add_argument("--mode", choices=("2d", "3d", "both"), default="both")
+    dk.add_argument("--undistort-pixels-dir", type=Path, default=None)
+
     return p
 
 
 def main_fifa_cli(argv: list[str] | None = None) -> None:
     args = build_fifa_argparser().parse_args(argv)
-    if args.cmd == "prepare":
+    if args.cmd == "bootstrap":
+        try:
+            from .fifa_bootstrap import prepare_fifa_data_layout
+        except ImportError:
+            from fifa_bootstrap import (  # ty: ignore[unresolved-import]
+                prepare_fifa_data_layout,
+            )
+        res = prepare_fifa_data_layout(
+            videos_dir=args.videos_dir,
+            data_root=args.data_root,
+            val_sequences=args.val_sequences,
+            test_sequences=args.test_sequences,
+            copy_fallback=not args.no_copy_fallback,
+            overwrite_pitch_points=args.overwrite_pitch_points,
+        )
+        print(res.as_summary())
+    elif args.cmd == "prepare":
         fifa_prepare(
             args.video_source,
             args.data_root,
@@ -762,6 +800,20 @@ def main_fifa_cli(argv: list[str] | None = None) -> None:
         )
     elif args.cmd == "pack":
         fifa_pack(args.submission_full, args.data_root, args.output_dir, args.split)
+    elif args.cmd == "dlt-export":
+        try:
+            from .fifa_to_dlt import run_cli as _fifa_dlt_run
+        except ImportError:
+            from fifa_to_dlt import run_cli as _fifa_dlt_run  # ty: ignore[unresolved-import]
+
+        raise SystemExit(
+            _fifa_dlt_run(
+                input_path=args.cameras_dir,
+                output_dir=args.output_dir,
+                mode=args.mode,
+                undistort_pixels_dir=args.undistort_pixels_dir,
+            )
+        )
     else:
         raise SystemExit(2)
 

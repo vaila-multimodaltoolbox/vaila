@@ -1,5 +1,7 @@
 # _vailá_ - Multimodal Toolbox
 
+**Package version:** `0.3.36` (see `[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
 </p>
@@ -119,22 +121,25 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
+vailá - 17.April.2026 v0.3.36 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
                            \/  \/|_/|/|_/\/|_/
 ##########################################################################
-Mocap fullbody_c3d           Markerless_3D       Markerless_2D_MP
+Mocap fullbody_c3d           Markerless_3D      Markerless_2D_MP and YOLO
                   \                |                /
                    v               v               v
    CUBE2D  --> +---------------------------------------+ <-- Vector Coding
-   IMU_csv --> |       vailá - multimodal toolbox      | <-- Cluster_csv
-Open Field --> +---------------------------------------+ <-- Force Plate
-              ^                   |                    ^ <-- YOLOv11 and MediaPipe
-        EMG__/                    v                     \__Tracker YOLOv11
-                    +--------------------------+
-                    | Results: Data and Figure |
-                    +--------------------------+
+   IMU_csv --> |                                       | <-- Cluster_csv
+Open Field --> |       vailá - multimodal toolbox      | <-- Force Plate
+ StartBlock -->|                                       | <-- GRF Analysis
+ etc, etc. --> +---------------------------------------+ <-- etc, etc, etc.
+                                 |
+                                 V
+        +---------------------------------------------------+
+        | Processed Data, Figures and Reports etc, etc, etc.|
+        +---------------------------------------------------+
 
 ============================ File Manager (Frame A) ========================
 A_r1_c1 - Rename          A_r1_c2 - Import           A_r1_c3 - Export
@@ -157,8 +162,8 @@ B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
-B5_r6_c1 - Sprint         B5_r6_c2 - vailá           B5_r6_c3 - vailá
-B5_r6_c4 - vailá          B5_r6_c5 - vailá
+B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - TUG and TURN
+B5_r6_c4 - SAM            B5_r6_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -176,7 +181,7 @@ C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 
 -> C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
-C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Soccer Field   C_C_r3_c2 - vailá
+C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Draw Sports    C_C_r3_c2 - Stroboscopic
 C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
 C_C_r5_c1 - vailá         C_C_r5_c2 - vailá          C_C_r5_c3 - vailá
 
@@ -193,95 +198,34 @@ An overview of the project file structure:
 
 ```bash
 vaila
-├── vaila.py                        # Main Entry Point
-├── install_vaila_linux.sh           # Linux Installer (uv or Conda)
-├── install_vaila_mac_uv.sh         # macOS Installer (unified: uv)
-├── install_vaila_win.ps1            # Windows Installer (uv or Conda)
-├── pyproject.toml                  # Project Dependencies (uv/poetry)
-├── uv.lock                         # Dependency Lock File
-├── vaila                           # Package Source Directory
-│   ├── __init__.py
-│   ├── animal_open_field.py        # Animal Open Field analysis
-│   ├── backup_markerless.py        # Backup tools for markerless data
-│   ├── batchcut.py                 # Batch video cutting tools
-│   ├── brainstorm.py               # Brainstorming/Notes tool
-│   ├── cluster_analysis.py         # Cluster analysis for motion capture
-│   ├── common_utils.py             # Common utility functions
-│   ├── compress_videos_h264.py     # H.264 video compression
-│   ├── compress_videos_h265.py     # H.265 (HEVC) video compression
-│   ├── compress_videos_h266.py     # H.266 (VVC) video compression
-│   ├── cop_analysis.py             # Center of Pressure (CoP) analysis
-│   ├── cube2d_kinematics.py        # 2D kinematics analysis tools
-│   ├── cutvideo.py                 # Video cutting tools
-│   ├── dlc2vaila.py                # DeepLabCut to vailá converter
-│   ├── dlt2d.py                    # 2D Direct Linear Transformation
-│   ├── dlt3d.py                    # 3D Direct Linear Transformation
-│   ├── drawboxe.py                 # Draw box in video frames
-│   ├── emg_labiocom.py             # EMG signal analysis tools
-│   ├── extractpng.py               # Extract PNG frames from videos
-│   ├── filemanager.py              # File management utilities
-│   ├── force_cube_fig.py           # 3D force data visualization
-│   ├── forceplate_analysis.py      # Force plate analysis tools
-│   ├── getpixelvideo.py            # Extract pixel coordinates from video
-│   ├── gnss_analysis.py            # GNSS/GPS data analysis tools
-│   ├── grf_gait.py                 # Ground Reaction Force (GRF) gait analysis
-│   ├── images/                     # GUI assets and images
-│   ├── imu_analysis.py             # IMU sensor data analysis
-│   ├── interp_smooth_split.py      # Interpolation and smoothing tools
-│   ├── markerless2d_mpyolo.py      # Markerless 2D tracking (MP-YOLO)
-│   ├── markerless2d_analysis_v2.py # Advanced Markerless 2D analysis
-│   ├── markerless3d_analysis_v2.py # Advanced Markerless 3D analysis
-│   ├── markerless_live.py          # Live markerless tracking
-│   ├── merge_multivideos.py        # Merge multiple videos
-│   ├── ml_models_training.py       # ML models training
-│   ├── mocap_analysis.py           # Motion capture full body analysis
-│   ├── models/                     # Trained models (YOLO, etc.)
-│   ├── modifylabref.py             # Modify laboratory references
-│   ├── mpangles.py                 # MediaPipe angles calculation
-│   ├── mphands.py                  # MediaPipe hands analysis
-│   ├── numberframes.py             # Frame counting utility
-│   ├── numstepsmp.py               # Step counting with MediaPipe
-│   ├── plotting.py                 # Data plotting tools
-│   ├── process_gait_features.py    # Gait feature extraction
-│   ├── pynalty.py                  # Penalty kick analysis tool
-│   ├── readc3d_export.py           # Read and export C3D files
-│   ├── readcsv.py                  # Read CSV data
-│   ├── rec2d.py                    # 2D Reconstruction (MultiDLT)
-│   ├── rec2d_one_dlt2d.py          # 2D Reconstruction (Single DLT)
-│   ├── rec3d.py                    # 3D Reconstruction (MultiDLT)
-│   ├── rec3d_one_dlt3d.py          # 3D Reconstruction (Single DLT)
-│   ├── reid_markers.py             # Re-identification of markers
-│   ├── reid_yolotrack.py           # Re-ID with YOLO tracking
-│   ├── resize_video.py             # Video resizing tool
-│   ├── rm_duplicateframes.py       # Remove duplicate frames
-│   ├── rotation.py                 # Rotation analysis tools
-│   ├── run_vector_coding.py        # Vector coding analysis
-│   ├── scout_vaila.py              # Scout analysis tool
-│   ├── showc3d.py                  # Visualize C3D data
-│   ├── sit2stand.py                # Sit-to-Stand analysis
-│   ├── drawsportsfields.py          # Unified sports field/court visualization
-│   ├── spectral_features.py        # Spectral feature extraction
-│   ├── stabilogram_analysis.py     # Stabilogram analysis tools
-│   ├── startblock.py               # Sprint start block analysis
-│   ├── syncvid.py                  # Synchronize video files
-│   ├── usound_biomec1.py           # Ultrasound biomechanics tool
-│   ├── utils.py                    # General utility scripts
-│   ├── vaila_and_jump.py           # Vertical jump analysis tool
-│   ├── vaila_distortvideo_gui.py   # Lens distortion correction GUI
-│   ├── vaila_iaudiovid.py          # Audio insertion tool
-│   ├── vaila_manifest.py           # Manifest file for vailá
-│   ├── vaila_ytdown.py             # YouTube downloader
-│   ├── vailaplot2d.py              # Plot 2D biomechanical data
-│   ├── vailaplot3d.py              # Plot 3D biomechanical data
-│   ├── vailasprint.py              # Sprint analysis
-│   ├── vector_coding.py            # Joint vector coding analysis
-│   ├── videoprocessor.py           # Video processing tools
-│   ├── viewc3d.py                  # Visualize C3D files
-│   ├── walkway_ml_prediction.py    # ML prediction for walkway
-│   ├── yolotrain.py                # YOLO training utility
-│   ├── yolov11track.py             # YOLOv11 based tracking
-│   └── yolov12track.py             # YOLOv12 based tracking
+├── AGENTS.md                     # Hybrid CPU vs CUDA workstation, SAM/FIFA notes
+├── CLAUDE.md                     # AI assistant tooling (Ruff, ty, uv)
+├── CONTRIBUTING.md               # PR workflow, versioning, models policy
+├── vaila.py                      # Main Tkinter GUI entry point
+├── pyproject.toml                # Active manifest (default: universal CPU; Hatchling + uv)
+├── pyproject_*.toml              # Platform templates (Linux/Windows CUDA, macOS, CPU)
+├── uv.lock                       # Locked deps (re-run uv lock after template switch)
+├── bin/                          # use_pyproject_linux_cuda.sh, universal_cpu, macOS, Windows
+├── install_vaila_linux.sh        # Linux installer (uv primary; Conda legacy)
+├── install_vaila_mac.sh          # macOS installer (uv primary; Conda legacy)
+├── install_vaila_win.ps1         # Windows installer
+├── uninstall_vaila_linux.sh
+├── uninstall_vaila_mac.sh
+├── uninstall_vaila_win.ps1
+├── create_dmg_installer.sh       # macOS .dmg builder (optional)
+├── vaila_installer.iss           # Windows Inno Setup spec
+├── vaila/                        # Python package (~100+ analysis modules)
+│   ├── help/                     # Per-module HTML/Markdown help (e.g. vaila_sam.html)
+│   ├── models/                   # Reference CSV/JSON; large weights are gitignored
+│   ├── vaila_sam.py              # SAM 3 video CLI/GUI + FIFA subcommands
+│   ├── fifa_skeletal_pipeline.py # FIFA Skeletal Tracking Light orchestration
+│   └── ...                       # See vaila/help/index.md for the full map
+├── sam_3d_body/                  # Vendored SAM 3D Body (optional fifa extra)
+├── tests/                        # pytest suite
+└── docs/                         # MkDocs site, button docs, images
 ```
+
+**Developer quick reference:** [AGENTS.md](AGENTS.md) (build commands, `uv run`, optional extras `sam` / `gpu` / `fifa`, SAM 3 CUDA limits).
 
 ---
 
@@ -299,7 +243,7 @@ _vailá_ has migrated to **[uv](https://github.com/astral-sh/uv)**, an extremely
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
 - **Dynamic Hardware Optimization**: Automatically detects hardware (NVIDIA GPU, Apple Silicon) and selects the optimized configuration template for your system.
-- **Cross-Platform**: Full support for **Windows** (CUDA 12.1), **Linux** (CUDA 12.8), and **macOS** (Metal/MPS).
+- **Cross-Platform**: **Windows** (CUDA 12.1 + TensorRT where applicable), **Linux** (CUDA 12.8 + TensorRT), and **macOS** (Metal/MPS for the general PyTorch stack). **Exception:** [SAM 3 video](#optional-sam-3-video-segmentation) (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime — it does not use MPS and has no CPU-only path.
 
 **Note:** Conda installation methods are still available but are now considered legacy due to slower installation and execution times.
 
@@ -312,6 +256,8 @@ _vailá_ uses a **template-based configuration system** that automatically selec
 - **`pyproject_linux_cuda12.toml`**: Linux with NVIDIA CUDA 12.8 support (TensorRT, GPU acceleration)
 - **`pyproject_macos.toml`**: macOS with Metal/MPS acceleration (Apple Silicon optimized)
 - **`pyproject_universal_cpu.toml`**: Universal CPU-only fallback (backup template)
+
+**Manual template switch (developers / second machine):** from the repo root, use `bin/use_pyproject_linux_cuda.sh`, `bin/use_pyproject_universal_cpu.sh`, `bin/use_pyproject_macos_metal.sh`, or the Windows PowerShell equivalents — then `uv lock` and `uv sync`. See **[AGENTS.md](AGENTS.md)** for the full hybrid workflow.
 
 **How it works (step-by-step):**
 
@@ -362,9 +308,19 @@ uv sync --extra sam
 uv sync --extra gpu --extra sam
 ```
 
-**Note:** SAM 3 **video** inference still requires an **NVIDIA GPU with CUDA** at runtime, even when the `sam` extra is installed. For choosing between a CPU laptop and a CUDA workstation, see **[AGENTS.md](AGENTS.md)** (“Hybrid CPU vs NVIDIA workstation”).
+**Runtime (important):** SAM 3 **video** uses `torch.cuda` in this integration. It requires an **NVIDIA GPU with CUDA** (`torch.cuda.is_available()`), even when the `sam` extra is installed on a CPU-only or macOS machine.
 
-**Weights** (Hugging Face, gated): accept the model on Hugging Face, then e.g. `uv run hf auth login` and `uv run vaila/vaila_sam.py --download-weights`, or use `hf download` into `vaila/models/sam3/`.
+| Situation | SAM 3 *video* |
+|-----------|----------------|
+| Linux / Windows + NVIDIA + CUDA PyTorch | Supported |
+| Windows **without** NVIDIA CUDA | **Not supported** — CLI/GUI stop with a clear message; use Markerless 2D / YOLO or a CUDA host |
+| macOS (Metal / Apple Silicon) | **Not supported** for SAM 3 *video* (not an MPS code path); use other vailá modules or run SAM 3 on a CUDA workstation / cloud GPU |
+
+`--frame-by-frame` only reduces **VRAM on CUDA**; it is **not** CPU inference.
+
+For laptop vs workstation installs, see **[AGENTS.md](AGENTS.md)** (“Hybrid CPU vs NVIDIA workstation”).
+
+**Weights** (Hugging Face, gated): accept the model on Hugging Face, then e.g. `uv run hf auth login` and `uv run vaila/vaila_sam.py --download-weights`, or `hf download` into `vaila/models/sam3/` **or** repo-root `models/sam3/` (both are auto-detected).
 
 **In-browser setup page** (same instructions): open the local help file after install, or run:
 
@@ -900,6 +856,7 @@ The help documentation includes detailed information about:
 
 ### 📖 Additional Documentation
 
+- **[AGENTS.md](AGENTS.md)** - `uv run` recipes, hybrid CPU vs CUDA `pyproject` templates, SAM 3 / FIFA pointers
 - **[Project Documentation](docs/index.md)** - Overview and module documentation
 - **[Help Guide](docs/help.md)** - User guide and installation instructions
 - **[GUI Button Documentation](docs/vaila_buttons/README.md)** - Complete documentation for all GUI buttons
@@ -967,7 +924,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI).
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current line in the checked-in tree: **`0.3.36`** (see also the `vaila.py` window title string).
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 
