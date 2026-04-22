@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 14 January 2026
-Version: 0.8.1
+Update Date: 22 April 2026
+Version: 0.8.2
 
 Example of usage:
 First activate the vaila environment:
@@ -34,7 +34,7 @@ whether to enable segmentation and smooth segmentation. The default settings
 prioritize the highest detection accuracy and tracking precision, which may
 increase computational cost.
 
-New Features (v0.8.1):
+New Features (v0.8.2):
 - Unified CPU and GPU processing in single script
 - Multi-GPU backend support (NVIDIA/CUDA, ROCm/AMD, MPS/Apple Silicon)
 - Automatic GPU detection and testing
@@ -3212,6 +3212,16 @@ def detect_nvidia_gpu():
                         else 0,
                         "count": len(lines),
                     }
+                    # --- Force NVIDIA EGL ICD on Linux so MediaPipe uses the
+                    # real GPU and not Mesa/llvmpipe -------------------------
+                    if platform.system() == "Linux":
+                        nvidia_egl_json = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
+                        if os.path.exists(nvidia_egl_json):
+                            os.environ["__EGL_VENDOR_LIBRARY_FILENAMES"] = nvidia_egl_json
+                            os.environ["EGL_PLATFORM"] = "device"
+                        # Disable Mesa DRI3 warning that pollutes stderr
+                        os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "0")
+                    # -------------------------------------------------------
                     return True, gpu_info, None
         else:
             error_message = "nvidia-smi found but no GPU detected"
@@ -4230,13 +4240,77 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         num_poses=1,
     )
 
-    # Setup Video Writer for annotated output
+    # Setup Video Writer for annotated output via FFmpeg pipe
+    # cv2.VideoWriter with mp4v/avc1 fails when the source video has a
+    # non-standard timebase (e.g. 1000/239621). We pipe raw BGR frames
+    # directly into FFmpeg with libx264 and a normalised FPS, which is
+    # completely independent of the source container's timebase.
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps <= 0:
         fps = 30.0
+    fps_out = max(1.0, round(fps))  # normalise to integer FPS for MP4 timebase
     annotated_output_path = output_dir / f"{video_path.stem}_annotated.mp4"
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out_video = cv2.VideoWriter(str(annotated_output_path), fourcc, fps, (width, height))
+
+    _ffmpeg_proc = None
+    _use_ffmpeg_pipe = False
+
+    # Helper class so the rest of the code can call out_video.write(frame)
+    class _FFmpegWriter:
+        def __init__(self, proc):
+            self._proc = proc
+
+        def write(self, frame_bgr: np.ndarray) -> None:
+            try:
+                self._proc.stdin.write(frame_bgr.tobytes())
+            except BrokenPipeError:
+                pass
+
+        def release(self) -> None:
+            try:
+                self._proc.stdin.close()
+                self._proc.wait(timeout=60)
+            except Exception:
+                pass
+
+        def isOpened(self) -> bool:  # noqa: N802
+            return self._proc is not None and self._proc.poll() is None
+
+    # First try FFmpeg pipe (most robust, avoids all timebase issues)
+    _ffmpeg_cmd = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-s", f"{width}x{height}",
+        "-pix_fmt", "bgr24",
+        "-r", str(fps_out),
+        "-i", "pipe:0",
+        "-vcodec", "libx264",
+        "-preset", "fast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        str(annotated_output_path),
+    ]
+    try:
+        import subprocess as _sp
+        _ffmpeg_proc = _sp.Popen(
+            _ffmpeg_cmd,
+            stdin=_sp.PIPE,
+            stdout=_sp.DEVNULL,
+            stderr=_sp.DEVNULL,
+        )
+        out_video = _FFmpegWriter(_ffmpeg_proc)
+        _use_ffmpeg_pipe = True
+        print(f"[VIDEO] Using FFmpeg libx264 pipe @ {fps_out} fps → {annotated_output_path.name}")
+    except Exception as _e:
+        print(f"[WARNING] FFmpeg pipe failed ({_e}), falling back to cv2.VideoWriter...")
+        _use_ffmpeg_pipe = False
+        fourcc = cv2.VideoWriter_fourcc(*"XVID")
+        _avi_path = output_dir / f"{video_path.stem}_annotated.avi"
+        out_video = cv2.VideoWriter(str(_avi_path), fourcc, fps_out, (width, height))
+        if not out_video.isOpened():
+            print("[WARNING] XVID also failed — video output disabled.")
+            out_video = type("NullWriter", (), {"write": lambda self, f: None, "release": lambda self: None})()
 
     # Initialize results containers
     normalized_landmarks_list = []
@@ -4257,33 +4331,31 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         pad_frames_count = pose_config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)
 
         if enable_padding and pad_frames_count > 0:
-            print(f"Applying initial padding: {pad_frames_count} frames to stabilize model...")
-            success, first_frame = cap.read()
-            if success:
-                # Create MediaPipe Image from the first frame
-                mp_first_frame = mp.Image(
-                    image_format=mp.ImageFormat.SRGB,
-                    data=cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB),
-                )
-
-                # Check for ROI to apply consistent cropping logic if needed
-                # However, for pure stabilization, feeding the full frame or consistent ROI is key.
-                # Simplest approach: Feed full frame or valid crop if static.
-                # Ideally we mimic the first frame processing.
-                # For now, we will simply feed the image to warm up the internal state.
-
-                # Note: If crop is dynamic, we might need more complex logic, but usually first frame ROI is static or None.
-
-                for _ in range(pad_frames_count):
-                    # We just run detection to update internal state (recurrence)
-                    landmarker.detect_for_video(mp_first_frame, current_timestamp_ms)
+            print(f"Applying initial padding: {pad_frames_count} frames (reverse bounce) to stabilize model...")
+            
+            # Read the first N frames for padding
+            pad_frames = []
+            for _ in range(pad_frames_count):
+                success, frame = cap.read()
+                if not success:
+                    break
+                pad_frames.append(frame)
+                
+            if pad_frames:
+                # Feed them in reverse order (N-1, N-2, ..., 0) to provide smooth motion context
+                for pad_frame in reversed(pad_frames):
+                    mp_pad_frame = mp.Image(
+                        image_format=mp.ImageFormat.SRGB,
+                        data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
+                    )
+                    landmarker.detect_for_video(mp_pad_frame, current_timestamp_ms)
                     current_timestamp_ms += frame_duration_ms
 
                 # Reset video to start
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 print("Padding complete. Starting main analysis...")
             else:
-                print("Warning: Could not read first frame for padding. Skipping.")
+                print("Warning: Could not read frames for padding. Skipping.")
         # -------------------------------
 
         while cap.isOpened():
@@ -4529,6 +4601,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     cap.release()
     out_video.release()
     cv2.destroyAllWindows()
+    if _use_ffmpeg_pipe:
+        print(f"[VIDEO] Annotated video saved → {annotated_output_path}")
 
     print("\nAnalysis loop completed.")
 
@@ -4695,6 +4769,19 @@ def process_videos_in_directory(existing_root=None):
     """
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
+
+    # --- Pre-emptively force NVIDIA EGL on Linux before any MediaPipe init ---
+    # MediaPipe uses EGL for GPU acceleration. On Linux with both NVIDIA and
+    # Mesa installed, EGL can pick Mesa/llvmpipe instead of the real GPU.
+    # Setting __EGL_VENDOR_LIBRARY_FILENAMES to the NVIDIA ICD JSON forces the
+    # correct EGL implementation before the first MediaPipe call.
+    if platform.system() == "Linux":
+        nvidia_egl_json = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
+        if os.path.exists(nvidia_egl_json):
+            os.environ["__EGL_VENDOR_LIBRARY_FILENAMES"] = nvidia_egl_json
+            os.environ["EGL_PLATFORM"] = "device"
+            print("[EGL] Forcing NVIDIA EGL ICD for GPU delegate...")
+    # -------------------------------------------------------------------------
 
     # Detect GPU backends availability
     print("\n=== Detecting GPU Backends Availability ===")

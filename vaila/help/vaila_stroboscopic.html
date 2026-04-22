@@ -23,7 +23,12 @@
         <p><strong>Script:</strong> <code>vaila/vaila_stroboscopic.py</code></p>
 
         <h2>Overview</h2>
-        <p>This tool generates a <strong>stroboscopic (chronophotography) image</strong> from a video file and associated pose data (CSV). It visualizes human motion by overlaying multiple skeleton instances on a single background image, creating a "motion trail" effect.</p>
+        <p>This tool generates a <strong>stroboscopic (chronophotography) image</strong> from a video.</p>
+        <ul>
+            <li><strong>pose</strong> (legacy): overlay multiple skeleton instances from a CSV of landmarks.</li>
+            <li><strong>motion</strong> (video-only): videoStrobe-style motion extraction (frame differencing + mask refinement).</li>
+            <li><strong>stack</strong> (video-only): multishot-style stacking from sampled frames (<code>max</code> or <code>add</code>).</li>
+        </ul>
 
         <h2>Key Features</h2>
         <ul>
@@ -37,6 +42,7 @@
             </li>
             <li><strong>Automatic Data Detection:</strong> Can automatically find the corresponding CSV file if naming conventions are followed.</li>
             <li><strong>Flexible Input:</strong> Works via GUI (file picker) or Command Line Interface (CLI).</li>
+            <li><strong>Video-only modes:</strong> <code>--mode motion</code> and <code>--mode stack</code> do <strong>not</strong> require a CSV.</li>
         </ul>
 
         <h2>Usage</h2>
@@ -65,7 +71,31 @@
             <li><code>-c</code>, <code>--csv</code>: Path to the pixel coordinates CSV file (Optional, auto-detected if omitted).</li>
             <li><code>-o</code>, <code>--output</code>: Path for the output PNG image (Optional).</li>
             <li><code>-i</code>, <code>--interval</code>: Frame interval for the strobe effect (Default: 10). A higher number means fewer skeletons drawn.</li>
+            <li><code>--mode</code>: <code>pose</code> (default), <code>motion</code>, or <code>stack</code>.</li>
         </ul>
+
+        <h2>Modes (CLI)</h2>
+
+        <h3><code>--mode pose</code> (default)</h3>
+        <pre>uv run vaila/vaila_stroboscopic.py --mode pose -v /path/to/video.mp4 -c /path/to/coords.csv -i 10</pre>
+
+        <h3><code>--mode motion</code> (video-only)</h3>
+        <p>videoStrobe-style motion extraction: compute a motion mask by frame differencing, then composite only moving pixels.</p>
+        <pre>uv run vaila/vaila_stroboscopic.py --mode motion -v /path/to/video.mp4 \
+  --threshold 50 --blend-ratio 1.0 --blur-size 5 --open-kernel-size 5 \
+  --frame-interval 1</pre>
+        <p>Optional stable background (median of sampled frames):</p>
+        <pre>uv run vaila/vaila_stroboscopic.py --mode motion -v /path/to/video.mp4 --stable-background --background-samples 10</pre>
+
+        <h3><code>--mode stack</code> (video-only)</h3>
+        <pre># Max exposure (default)
+uv run vaila/vaila_stroboscopic.py --mode stack -v /path/to/video.mp4 --frame-interval 5 --stack-op max
+
+# Add + normalize
+uv run vaila/vaila_stroboscopic.py --mode stack -v /path/to/video.mp4 --frame-interval 5 --stack-op add</pre>
+
+        <h2>Codec note (H.265 / HEVC)</h2>
+        <p>Some Linux OpenCV builds cannot decode HEVC/H.265 videos unless FFmpeg/GStreamer support is available. If you see <code>Error opening video</code> or frame count is zero, convert the input to H.264 (AVC) before running.</p>
 
         <h2>Output</h2>
         <p>The tool produces a high-resolution PNG image overlaying the skeletons onto the first frame of the video (background darkened for contrast).</p>

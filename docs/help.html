@@ -3,399 +3,254 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>vailá - Versatile Anarcho Integrated Multimodal Toolbox Help</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá — Help &amp; documentation hub</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 0;
       line-height: 1.6;
+      color: #1a1a1a;
+      background: #f0f2f5;
+    }
+
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 28px 20px 48px;
     }
 
     h1,
     h2,
     h3 {
-      color: #2c3e50;
+      color: #1e3a5f;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      margin-bottom: 0.35em;
+    }
+
+    .tagline {
+      font-size: 1.05rem;
+      color: #444;
+      margin-top: 0;
+    }
+
+    .hero-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 22px 24px;
+      margin: 22px 0;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      border: 1px solid #dde3ea;
+    }
+
+    .hero-card h2 {
+      margin-top: 0;
+      font-size: 1.15rem;
+      color: #1e3a5f;
+    }
+
+    .primary-link {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 12px 20px;
+      background: #1e3a5f;
+      color: #fff !important;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: bold;
+    }
+
+    .primary-link:hover {
+      background: #2c5282;
+    }
+
+    .secondary-links {
+      margin-top: 14px;
+      font-size: 0.95rem;
+    }
+
+    .secondary-links a {
+      color: #1e3a5f;
     }
 
     pre {
-      background-color: #f4f4f4;
-      padding: 10px;
+      background: #f4f4f4;
+      padding: 12px 14px;
       overflow: auto;
+      border-radius: 6px;
+      border: 1px solid #e0e0e0;
     }
 
     code {
-      background-color: #f4f4f4;
-      padding: 3px 6px;
+      background: #eee;
+      padding: 2px 6px;
+      border-radius: 4px;
     }
 
     .section {
-      margin-bottom: 40px;
+      margin-bottom: 36px;
+      background: #fff;
+      padding: 20px 22px;
+      border-radius: 8px;
+      border: 1px solid #e5e5e5;
+    }
+
+    ul.tight li {
+      margin-bottom: 0.35em;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #ccc;
+      margin: 36px 0;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #666;
     }
   </style>
 </head>
 
 <body>
-  <h1>vailá - Versatile Anarcho Integrated Multimodal Toolbox Help</h1>
-
-  <div class="section" id="english">
-    <h2>English Version</h2>
-
-    <h3>Overview</h3>
-    <p>
-      vailá is an open-source multimodal toolbox for human movement analysis. It integrates data from various sources –
-      including IMU, MoCap, markerless tracking, face mesh detection, GNSS/GPS, EMG, and more – enabling advanced and
-      customizable analysis.
+  <main>
+    <h1>vailá</h1>
+    <p class="tagline">
+      <strong>Versatile Anarcho Integrated Liberation Ánalysis</strong> — open-source Python&nbsp;3.12 toolbox for
+      multimodal biomechanical and movement analysis (IMU, MoCap, markerless 2D/3D, EMG, force plates, GNSS/GPS, and
+      more), with a Tkinter-based desktop GUI.
     </p>
 
-    <h3>Key Features</h3>
-    <ul>
-      <li><strong>Data Integration:</strong> Supports multiple data types (IMU, MoCap, markerless, face mesh, GNSS,
-        EMG).</li>
-      <li><strong>Data Processing & Analysis:</strong> Feature extraction, advanced analysis, and 2D/3D visualization.
-      </li>
-      <li><strong>Machine Learning:</strong> Modules for training, validation, and prediction using ML models.</li>
-      <li><strong>File Management:</strong> Organization, renaming, copying, file movement, and file transfer (SSH).
-      </li>
-      <li><strong>Video Processing:</strong> Extraction of frames, compression (H.264 and H.265), and video trimming.
-      </li>
-    </ul>
+    <div class="hero-card" id="start-here">
+      <h2>Start here — in-app module &amp; tool help</h2>
+      <p>
+        Per-module HTML help (SAM, stroboscopic, DLT/reconstruction, video tools, etc.) lives under
+        <code>vaila/help/</code>. Open the index to browse every linked topic from one place.
+      </p>
+      <a class="primary-link" href="../vaila/help/index.html">Open vailá Help Index →</a>
+      <p class="secondary-links">
+        Same path on disk: <code>vaila/help/index.html</code>
+      </p>
+    </div>
 
-    <h3>Installation Instructions</h3>
-    <h4>⚡ Powered by <em>uv</em> (Recommended)</h4>
-    <p>
-      <em>vailá</em> now uses <strong><a href="https://github.com/astral-sh/uv">uv</a></strong>, an extremely fast
-      Python package installer.
-      <strong>uv is the recommended installation method</strong> for all platforms due to its <strong>10-100x faster
-        installation</strong>
-      and <strong>faster execution times</strong> compared to Conda.
-    </p>
-    <h4>Prerequisites</h4>
-    <ul>
-      <li><strong>uv:</strong> Will be automatically installed by the installation scripts, or install manually from <a
-          href="https://github.com/astral-sh/uv">https://github.com/astral-sh/uv</a></li>
-      <li><strong>FFmpeg:</strong> Required for video processing functionalities (installed automatically on Windows)
-      </li>
-    </ul>
-    <h4>Steps</h4>
-    <ol>
-      <li>
-        <strong>Clone the repository:</strong>
-        <pre><code>git clone https://github.com/vaila-multimodaltoolbox/vaila.git
-cd vaila</code></pre>
-      </li>
-      <li>
-        <strong>Set up the environment:</strong>
-        <ul>
-          <li><strong>Windows (Recommended):</strong> Run <code>.\install_vaila_win.ps1</code>
-            <br>The script will prompt you to choose between:
-            <ul>
-              <li><strong>uv</strong> (recommended - modern, fast)</li>
-              <li><strong>Conda</strong> (legacy - for compatibility)</li>
-            </ul>
-          </li>
-          <li><strong>Linux and macOS (Using uv):</strong>
-            <pre><code># Install uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
+    <div class="section" id="english">
+      <h2>English — project overview</h2>
 
-# Sync dependencies
-uv sync</code></pre>
-          </li>
-          <li><strong>Legacy Conda Method (slower):</strong>
-            <ul>
-              <li><strong>Linux:</strong> Run <code>./install_vaila_linux.sh</code></li>
-              <li><strong>macOS:</strong> Run <code>./install_vaila_mac.sh</code></li>
-              <li><strong>Windows:</strong> Run <code>.\install_vaila_win.ps1</code></li>
-            </ul>
-          </li>
-        </ul>
-      </li>
-      <li>
-        <strong>Run vailá:</strong>
-        <p><strong>Using uv (Recommended):</strong></p>
-        <pre><code>uv run vaila.py</code></pre>
-        <p><strong>Using Conda (Legacy):</strong></p>
-        <pre><code>conda activate vaila
-python vaila.py</code></pre>
-      </li>
-    </ol>
+      <h3>What you get</h3>
+      <ul class="tight">
+        <li><strong>Frame A — File manager:</strong> rename, import/export, copy/move, tree, find, SSH transfer.</li>
+        <li><strong>Frame B — Multimodal analysis:</strong> IMU, MoCap, markerless, EMG, force plates, GNSS, and related
+          pipelines.</li>
+        <li><strong>Frame C — Tools:</strong> CSV/C3D workflows, DLT 2D/3D reconstruction, video and image utilities,
+          plots and visualization.</li>
+      </ul>
+      <p>
+        Optional stacks (CUDA/GPU templates, extras) are documented in the repository README and in AGENTS.md; the
+        <a href="../vaila/help/index.html">Help Index</a> focuses on what each tool does and how to open it from the GUI.
+      </p>
 
-    <h3>GUI Button Documentation</h3>
-    <p>
-      All buttons in the vailá GUI are documented. See the <a href="vaila_buttons/README.md">Button Documentation</a>
-      for complete details.
-    </p>
-    <ul>
-      <li><strong><a href="vaila_buttons/markerless-2d-button.html">Markerless 2D Analysis</a></strong> - Advanced pose
-        estimation</li>
-      <li><strong><a href="vaila_buttons/README.md">All Button Documentation</a></strong> - Complete list of all GUI
-        buttons</li>
-    </ul>
+      <h3>GUI button reference (Markdown)</h3>
+      <p>
+        Long-form descriptions of individual GUI buttons live under <code>docs/vaila_buttons/</code>:
+        <a href="vaila_buttons/README.md">Button documentation index</a>.
+      </p>
 
-    <h3>Script Help Documentation</h3>
-    <p>
-      Comprehensive documentation for all Python scripts and modules in vailá:
-    </p>
-    <ul>
-      <li><strong><a href="../vaila/help/index.html">Script Help Index</a></strong> - Complete documentation for all
-        Python modules and scripts</li>
-    </ul>
+      <h3>Quick run (after install)</h3>
+      <pre><code>uv run vaila.py</code></pre>
+      <p>
+        One-line installers and platform notes: see
+        <a href="https://github.com/vaila-multimodaltoolbox/vaila">the project on GitHub</a> or the root
+        <code>README.md</code> in your clone.
+      </p>
 
-    <h3>Video Processing Tools</h3>
-    <ul>
-      <li><strong><a href="../vaila/help/tools/drawboxe.html">DrawBoxe</a></strong> - Draw boxes and polygons on videos
-        with frame interval support</li>
-      <li><strong><a href="../vaila/help/vaila_stroboscopic.html">Stroboscopic Generator</a></strong> - Create "chronophotography" images by overlaying multiple skeletons.</li>
-    </ul>
+      <h3>Contributing</h3>
+      <p>
+        Pull requests and issues are welcome on GitHub. See <code>CONTRIBUTING.md</code> in the repository.
+      </p>
 
-    <h3>Modules and Tools</h3>
-    <p>
-      The vailá toolbox comprises the following modules:
-    </p>
-    <ul>
-      <li><strong>IMU Analysis</strong></li>
-      <li><strong>MoCap Analysis</strong> (Cluster, Full Body)</li>
-      <li><strong>Markerless Analysis</strong> (2D/3D)</li>
-      <li><strong>Face Mesh Analysis</strong> - Face and iris landmark detection (478 landmarks)</li>
-      <li><strong>Force Plate Analysis</strong></li>
-      <li><strong>GNSS/GPS Analysis</strong></li>
-      <li><strong>EEG/EMG Analysis</strong></li>
-      <li>
-        <strong>ML Walkway:</strong>
-        <ul>
-          <li>Model Training</li>
-          <li>Model Validation</li>
-          <li>Prediction with Pre-trained Models</li>
-        </ul>
-      </li>
-      <li>
-        <strong>File Management:</strong>
-        <ul>
-          <li>File Transfer (SSH - Upload/Download)</li>
-        </ul>
-      </li>
-      <li>
-        <strong>Video Processing:</strong>
-        <ul>
-          <li>DrawBoxe - Draw boxes and polygons on videos</li>
-        </ul>
-      </li>
-      <li><strong>Visualization</strong></li>
-    </ul>
+      <h3>License</h3>
+      <p>
+        Licensed under the <strong>GNU Affero General Public License v3.0</strong> (AGPL-3.0). See the
+        <code>LICENSE</code> file in the repository.
+      </p>
 
-    <h3>How to Use</h3>
-    <p>
-      After setting up the environment, run vailá using:
-    </p>
-    <p><strong>Using uv (Recommended):</strong></p>
-    <pre><code>uv run vaila.py</code></pre>
-    <p><strong>Using Conda (Legacy):</strong></p>
-    <pre><code>conda activate vaila
-python vaila.py</code></pre>
-    <p>
-      The graphical interface allows you to select the desired module. For example, when selecting "ML Walkway," a
-      window with options for model training, validation, or prediction will open.
-    </p>
-
-    <h3>Contributing</h3>
-    <p>
-      Contributions are welcome! If you encounter issues or have suggestions, please submit a pull request or open an
-      issue on GitHub.
-    </p>
-
-    <h3>License</h3>
-    <p>
-      This project is licensed under the <strong>GNU Lesser General Public License v3.0</strong>. See the
-      <code>LICENSE</code> file for more details.
-    </p>
-
-    <h3>How to Cite</h3>
-    <p>
-      If vailá is useful for your research, please cite:
-    </p>
-    <pre><code>@misc{vaila2024,
+      <h3>How to cite</h3>
+      <pre><code>@misc{vaila2024,
   title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
   author={Paulo R. P. Santiago and Abel G. Chinaglia and others},
   year={2024},
   url={https://github.com/vaila-multimodaltoolbox/vaila}
 }</code></pre>
-  </div>
+    </div>
 
-  <hr>
+    <hr>
 
-  <div class="section" id="portuguese">
-    <h2>Versão em Português</h2>
+    <div class="section" id="portuguese">
+      <h2>Português — visão geral do projeto</h2>
 
-    <h3>Visão Geral</h3>
-    <p>
-      vailá é uma ferramenta multimodal de código aberto para análise do movimento humano. Ela integra dados de diversas
-      fontes – como IMU, MoCap, rastreamento markerless, detecção de face mesh, GNSS/GPS, EMG e mais – permitindo uma
-      análise avançada e customizável.
-    </p>
+      <div class="hero-card" style="margin-top:0;">
+        <h2 style="margin-top:0;">Índice de ajuda dos módulos</h2>
+        <p>
+          A documentação HTML por ferramenta (SAM, estroboscópio, DLT/reconstrução, vídeo, etc.) está em
+          <code>vaila/help/</code>. Use o índice para navegar a partir de um único lugar.
+        </p>
+        <a class="primary-link" href="../vaila/help/index.html">Abrir índice de ajuda do vailá →</a>
+      </div>
 
-    <h3>Principais Funcionalidades</h3>
-    <ul>
-      <li><strong>Integração de Dados:</strong> Suporte a múltiplos tipos de dados (IMU, MoCap, markerless, face mesh,
-        GNSS, EMG).</li>
-      <li><strong>Processamento & Análise de Dados:</strong> Extração de características, análise avançada e
-        visualização em 2D/3D.</li>
-      <li><strong>Machine Learning:</strong> Módulos para treinamento, validação e predição utilizando modelos de ML.
-      </li>
-      <li><strong>Gerenciamento de Arquivos:</strong> Organização, renomeação, cópia, movimentação e transferência (SSH)
-        de arquivos.</li>
-      <li><strong>Processamento de Vídeo:</strong> Extração de frames, compressão (H.264 e H.265) e corte de vídeos.
-      </li>
-    </ul>
+      <h3>O que é o vailá</h3>
+      <p>
+        Caixa de ferramentas multimodal em Python&nbsp;3.12 para análise do movimento e biomecânica, com interface
+        desktop em Tkinter, integrando IMU, MoCap, rastreamento markerless 2D/3D, EMG, plataformas de força, GNSS/GPS e
+        outros fluxos de dados.
+      </p>
+      <ul class="tight">
+        <li><strong>Quadro A — Arquivos:</strong> renomear, importar/exportar, copiar/mover, árvore, busca, SSH.</li>
+        <li><strong>Quadro B — Análise multimodal:</strong> IMU, MoCap, markerless, EMG, força, GNSS, etc.</li>
+        <li><strong>Quadro C — Ferramentas:</strong> CSV/C3D, DLT 2D/3D, vídeo/imagem, visualização.</li>
+      </ul>
+      <p>
+        Detalhes de cada módulo: <a href="../vaila/help/index.html">índice em <code>vaila/help/index.html</code></a>.
+      </p>
 
-    <h3>Instruções de Instalação</h3>
-    <h4>⚡ Powered by <em>uv</em> (Recomendado)</h4>
-    <p>
-      <em>vailá</em> agora usa <strong><a href="https://github.com/astral-sh/uv">uv</a></strong>, um instalador de
-      pacotes Python extremamente rápido.
-      <strong>uv é o método de instalação recomendado</strong> para todas as plataformas devido à sua <strong>instalação
-        10-100x mais rápida</strong>
-      e <strong>tempos de execução mais rápidos</strong> em comparação com Conda.
-    </p>
-    <h4>Pré-requisitos</h4>
-    <ul>
-      <li><strong>uv:</strong> Será instalado automaticamente pelos scripts de instalação, ou instale manualmente em <a
-          href="https://github.com/astral-sh/uv">https://github.com/astral-sh/uv</a></li>
-      <li><strong>FFmpeg:</strong> Necessário para funcionalidades de processamento de vídeo (instalado automaticamente
-        no Windows)</li>
-    </ul>
-    <h4>Passos</h4>
-    <ol>
-      <li>
-        <strong>Clone o repositório:</strong>
-        <pre><code>git clone https://github.com/vaila-multimodaltoolbox/vaila.git
-cd vaila</code></pre>
-      </li>
-      <li>
-        <strong>Configurar o ambiente:</strong>
-        <ul>
-          <li><strong>Windows (Recomendado):</strong> Execute <code>.\install_vaila_win.ps1</code>
-            <br>O script solicitará que você escolha entre:
-            <ul>
-              <li><strong>uv</strong> (recomendado - moderno, rápido)</li>
-              <li><strong>Conda</strong> (legado - para compatibilidade)</li>
-            </ul>
-          </li>
-          <li><strong>Linux e macOS (Usando uv):</strong>
-            <pre><code># Instalar uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
+      <h3>Documentação dos botões da GUI</h3>
+      <p>
+        Textos por botão: <a href="vaila_buttons/README.md">índice em <code>docs/vaila_buttons/</code></a>.
+      </p>
 
-# Sincronizar dependências
-uv sync</code></pre>
-          </li>
-          <li><strong>Método Conda Legacy (mais lento):</strong>
-            <ul>
-              <li><strong>Linux:</strong> Execute <code>./install_vaila_linux.sh</code></li>
-              <li><strong>macOS:</strong> Execute <code>./install_vaila_mac.sh</code></li>
-              <li><strong>Windows:</strong> Execute <code>.\install_vaila_win.ps1</code></li>
-            </ul>
-          </li>
-        </ul>
-      </li>
-      <li>
-        <strong>Inicie o vailá:</strong>
-        <p><strong>Usando uv (Recomendado):</strong></p>
-        <pre><code>uv run vaila.py</code></pre>
-        <p><strong>Usando Conda (Legacy):</strong></p>
-        <pre><code>conda activate vaila
-python vaila.py</code></pre>
-      </li>
-    </ol>
+      <h3>Executar após instalação</h3>
+      <pre><code>uv run vaila.py</code></pre>
+      <p>
+        Instalação em uma linha e requisitos por sistema: veja o README no GitHub ou na raiz do repositório clonado.
+      </p>
 
-    <h3>Documentação de Help dos Scripts</h3>
-    <p>
-      Documentação completa para todos os scripts e módulos Python em vailá:
-    </p>
-    <ul>
-      <li><strong><a href="../vaila/help/index.html">Índice de Help dos Scripts</a></strong> - Documentação completa
-        para todos os módulos e scripts Python</li>
-    </ul>
+      <h3>Contribuição</h3>
+      <p>
+        Contribuições são bem-vindas via pull request ou issue no GitHub; veja <code>CONTRIBUTING.md</code>.
+      </p>
 
-    <h3>Módulos e Ferramentas</h3>
-    <p>
-      O toolbox vailá é composto pelos seguintes módulos:
-    </p>
-    <ul>
-      <li><strong>Análise IMU</strong></li>
-      <li><strong>Análise MoCap</strong> (Cluster, Full Body)</li>
-      <li><strong>Análise Markerless</strong> (2D/3D)</li>
-      <li><strong>Análise Face Mesh</strong> - Detecção de landmarks faciais e íris (478 landmarks)</li>
-      <li><strong>Análise de Force Plate</strong></li>
-      <li><strong>Análise GNSS/GPS</strong></li>
-      <li><strong>Análise EEG/EMG</strong></li>
-      <li>
-        <strong>ML Walkway:</strong>
-        <ul>
-          <li>Treinamento de Modelos</li>
-          <li>Validação de Modelos</li>
-          <li>Predição com Modelos Pré-treinados</li>
-        </ul>
-      </li>
-      <li>
-        <strong>Gerenciamento de Arquivos:</strong>
-        <ul>
-          <li>Transferência de Arquivos (SSH - Upload/Download)</li>
-        </ul>
-      </li>
-      <li>
-        <strong>Processamento de Vídeo:</strong>
-        <ul>
-          <li>DrawBoxe - Desenhar caixas e polígonos em vídeos</li>
-        </ul>
-      </li>
-      <li><strong>Visualização</strong></li>
-    </ul>
+      <h3>Licença</h3>
+      <p>
+        Licenciado sob <strong>GNU Affero General Public License v3.0</strong> (AGPL-3.0). Consulte o arquivo
+        <code>LICENSE</code>.
+      </p>
 
-    <h3>Ferramentas de Processamento de Vídeo</h3>
-    <ul>
-      <li><strong><a href="../vaila/help/tools/drawboxe.html">DrawBoxe</a></strong> - Desenhar caixas e polígonos em
-        vídeos com suporte a intervalos de frames</li>
-      <li><strong><a href="../vaila/help/vaila_stroboscopic.html">Gerador Estroboscópico</a></strong> - Cria imagens "chronophotography" sobrepondo múltiplos esqueletos.</li>
-    </ul>
-
-    <h3>Como Utilizar</h3>
-    <p>
-      Após configurar o ambiente, inicie o vailá com o comando:
-    </p>
-    <p><strong>Usando uv (Recomendado):</strong></p>
-    <pre><code>uv run vaila.py</code></pre>
-    <p><strong>Usando Conda (Legacy):</strong></p>
-    <pre><code>conda activate vaila
-python vaila.py</code></pre>
-    <p>
-      A interface gráfica permitirá que você selecione o módulo desejado. Por exemplo, ao selecionar "ML Walkway", uma
-      janela com opções para treinamento, validação ou predição de modelos será aberta.
-    </p>
-
-    <h3>Contribuição</h3>
-    <p>
-      Suas contribuições são bem-vindas! Caso encontre problemas ou tenha sugestões, por favor, envie um pull request ou
-      abra uma issue no GitHub.
-    </p>
-
-    <h3>Licença</h3>
-    <p>
-      Este projeto está licenciado sob a <strong>GNU Lesser General Public License v3.0</strong>. Consulte o arquivo
-      <code>LICENSE</code> para mais detalhes.
-    </p>
-
-    <h3>Como Citar</h3>
-    <p>
-      Se o vailá for útil na sua pesquisa, por favor, cite:
-    </p>
-    <pre><code>@misc{vaila2024,
+      <h3>Como citar</h3>
+      <pre><code>@misc{vaila2024,
   title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
   author={Paulo R. P. Santiago and Abel G. Chinaglia and outros},
   year={2024},
   url={https://github.com/vaila-multimodaltoolbox/vaila}
 }</code></pre>
-  </div>
+    </div>
 
-  <hr>
-  <p>&copy; 2024 vailá. Todos os direitos reservados.</p>
+    <footer>
+      <p>&copy; 2026 vailá — documentation entry: <code>docs/help.html</code></p>
+    </footer>
+  </main>
 </body>
 
 </html>

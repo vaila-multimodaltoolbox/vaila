@@ -1,0 +1,14 @@
+BoTSORT / multi-object tracking use YOLO weights and optional ReID checkpoints under vaila/models/.
+
+YOLO (Ultralytics): first run downloads into vaila/models/ or use the API, e.g.:
+  uv run python -c "from ultralytics import YOLO; YOLO('yolo26x.pt')"
+  uv run python -c "from ultralytics import YOLO; YOLO('yolo11x-pose.pt')"
+
+ReID (torchreid OSNet, used by some tracker flows): place osnet_x0_25_msmt17.pt next to other
+vaila/models/*.pt weights or follow reid_yolotrack.py defaults.
+
+MediaPipe Pose Landmarker *.task files are fetched automatically on first use from Google
+storage URLs in markerless2d_mpyolo.py / markerless2d_analysis_v2.py (or download manually from
+the MediaPipe pose landmarker documentation).
+
+This folder keeps only small configs (e.g. botsort_custom.yaml); *.pt / *.onnx / *.task stay local.
