@@ -17,8 +17,8 @@
         - Can run without administrator privileges (some features may be skipped)
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 20 March 2026
-    Version: 0.3.31
+    Updated: 22 April 2026
+    Version: 0.3.38
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
@@ -495,6 +495,14 @@ function Install-WithUv {
     } Else {
         Write-Host "No NVIDIA GPU detected. Using CPU-only configuration." -ForegroundColor Yellow
     }
+
+    $useSamExtra = $false
+    Write-Host ""
+    Write-Host "Install optional SAM 3 (Meta) segmentation stack (extra 'sam')? [y/N]" -ForegroundColor Cyan
+    $samChoice = Read-Host
+    if ($samChoice -eq "y" -or $samChoice -eq "Y") {
+        $useSamExtra = $true
+    }
     
     # Choose template
     If ($useGPU) {
@@ -554,8 +562,12 @@ function Install-WithUv {
 
     # Execute uv sync with appropriate extras
     Try {
-        if ($useGPU) {
+        if ($useGPU -and $useSamExtra) {
+            & uv sync --extra gpu --extra sam
+        } elseif ($useGPU) {
             & uv sync --extra gpu
+        } elseif ($useSamExtra) {
+            & uv sync --extra sam
         } else {
             & uv sync
         }
@@ -565,6 +577,23 @@ function Install-WithUv {
             throw "uv sync failed with exit code $syncExitCode"
         }
         Write-Host "Dependencies installed successfully." -ForegroundColor Green
+
+        if ($useSamExtra) {
+            Write-Host ""
+            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+            Write-Host "SAM 3: accept https://huggingface.co/facebook/sam3 then run:" -ForegroundColor Cyan
+            Write-Host "  cd `"$vailaProgramPath`" ; uv run hf auth login" -ForegroundColor Cyan
+            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+            $hfNow = Read-Host "Run 'uv run hf auth login' now? [y/N]"
+            if ($hfNow -eq "y" -or $hfNow -eq "Y") {
+                Set-Location $vailaProgramPath
+                try {
+                    & uv run hf auth login
+                } catch {
+                    Write-Warning "hf auth login failed or was cancelled."
+                }
+            }
+        }
     } Catch {
         Write-Warning "uv sync failed. Restoring universal CPU configuration..."
         Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
@@ -600,8 +629,12 @@ function Install-WithUv {
             Write-Host "Environment verification successful." -ForegroundColor Green
         } Else {
             Write-Warning "Environment verification failed. PIL module not found. Running uv sync again..."
-            If ($useGPU) {
+            If ($useGPU -and $useSamExtra) {
+                & uv sync --extra gpu --extra sam
+            } ElseIf ($useGPU) {
                 & uv sync --extra gpu
+            } ElseIf ($useSamExtra) {
+                & uv sync --extra sam
             } Else {
                 & uv sync
             }

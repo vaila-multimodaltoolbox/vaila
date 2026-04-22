@@ -31,9 +31,6 @@ Requirements:
     - FFmpeg (for video conversion)
     - Additional dependencies as imported (numpy, csv, etc.)
 
-License:
-    This project is licensed under the terms of the AGPL-3.0 License.
-
 Change History:
     - 2026-01: Added ROI selection with improved visibility on macOS.
     - 2023-10: Initial version implemented, integrating detection and tracking with various configurable options.

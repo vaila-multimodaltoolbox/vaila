@@ -3,9 +3,17 @@
 # get_anthropic_skills.sh
 # Download Anthropic skills directly from GitHub into .claude/skills/
 #
+# Created by: Paulo Roberto Pereira Santiago
+# Date: 17 April 2026
+# Version: 1.0.0
+# Description: This script downloads Anthropic skills directly from GitHub into .claude/skills/
+#
 # Usage:
 #   chmod +x get_anthropic_skills.sh
 #   ./get_anthropic_skills.sh
+#
+# Description:
+# This script downloads Anthropic skills directly from GitHub into .claude/skills/
 #
 # Run from the ROOT of your vaila project.
 # =============================================================================
