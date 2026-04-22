@@ -207,22 +207,34 @@ def _on_my_analysis(self) -> None:
 ## SAM 3 & FIFA Skeletal Tracking
 
 ### SAM 3 Video Segmentation (`vaila/vaila_sam.py`)
-- Extra: `uv sync --extra sam` (CUDA required at runtime)
+- Extra: `uv sync --extra sam` (CUDA required at runtime; no CPU/MPS path; `--frame-by-frame` is VRAM-only on CUDA)
 - Weights: `vaila/models/sam3/sam3.pt` or `sam3.1_multiplex.pt` (gitignored; `--download-weights` or HF Hub)
 - CLI: `uv run vaila/vaila_sam.py -i VIDEO -o OUT -t person`
-- GUI: `uv run vaila/vaila_sam.py` (no args → Tkinter dialog)
+- GUI: `uv run vaila/vaila_sam.py` (no args → Tkinter dialog); the dialog has a
+  **Help** button and an editable combobox of prompt presets (person, player,
+  goalkeeper, referee, football, ball, team in red, team in blue, …).
 - Help: `vaila/help/vaila_sam.html` / `vaila/help/vaila_sam.md`
 - Skill: `.claude/skills/sam3-video/SKILL.md`
 
 ### FIFA Skeletal Tracking Light (`vaila_sam.py fifa`)
 - Extra: `uv sync --extra fifa` (combine with `--extra gpu` on CUDA template)
-- Subcommands: `prepare`, `boxes`, `preprocess`, `baseline`, `pack`
+- Subcommands: `bootstrap`, `prepare`, `boxes`, `preprocess`, `baseline`, **`dlt-export`**, `pack`
+- Per-frame DLT for moving broadcast cameras: `vaila/fifa_to_dlt.py` (CLI + GUI **FIFA cams→DLT**); feeds **`rec2d.py` / `rec3d.py`**. Fixed-camera-only: `rec2d_one_dlt2d.py` / `rec3d_one_dlt3d.py`
 - Pipeline: `vaila/fifa_skeletal_pipeline.py`
-- Starter lib: `vaila/fifa_starter_lib/camera_tracker.py`, `postprocess.py`
-- SAM 3D Body: vendored `sam_3d_body/` (repo root); weights: `vaila/models/sam-3d-dinov3/`
+- Bootstrap helper: `vaila/fifa_bootstrap.py` (symlinks + `sequences_*.txt` + `pitch_points.txt`)
+- Starter lib (vendored MIT): `vaila/fifa_starter_lib/camera_tracker.py`,
+  `postprocess.py`, `pitch_points.txt` (see `vaila/fifa_starter_lib/VENDOR.md`)
+- SAM 3D Body: **not committed** — run `bash bin/setup_fifa_sam3d.sh` or
+  `pwsh bin/setup_fifa_sam3d.ps1` to clone `sam_3d_body/` and download the
+  gated `facebook/sam-3d-body-dinov3` weights into `vaila/models/sam-3d-dinov3/`.
+- Companion tool: `vaila/soccerfield_calib.py` (button **Soccer-Field Calib** in
+  Frame C of `vaila.py`) — DLT2D homography from 29 FIFA keypoints; can emit
+  `cameras/<stem>_homography.npz` as a fallback when a sequence has no official
+  `cameras/*.npz`.
 - Skill: `.claude/skills/fifa-skeletal-tracking/SKILL.md`
 - Agent: `.claude/agents/fifa-challenge.md`
-- Tests: `tests/test_fifa_skeletal_pipeline.py`, `tests/test_vaila_sam.py`
+- Tests: `tests/test_fifa_skeletal_pipeline.py`, `tests/test_fifa_bootstrap.py`,
+  `tests/test_fifa_to_dlt.py`, `tests/test_soccerfield_calib.py`, `tests/test_vaila_sam.py`
 
 > **Never confuse SAM 3 video** (`sam3.pt`, `vaila/models/sam3/`) **with SAM 3D Body** (`model.ckpt`, `vaila/models/sam-3d-dinov3/`). They are different models.
 
@@ -240,6 +252,9 @@ uv run pytest tests/test_dlt_rec.py -v
 uv run pytest tests/test_dlt_rec_integration.py -v
 uv run pytest tests/test_vaila_sam.py -v
 uv run pytest tests/test_fifa_skeletal_pipeline.py -v
+uv run pytest tests/test_fifa_bootstrap.py -v
+uv run pytest tests/test_fifa_to_dlt.py -v
+uv run pytest tests/test_soccerfield_calib.py -v
 ```
 
 Sample data: `tests/vaila_and_jump/` (CSV + TOML). SAM smoke tests: `tests/SAM/` (see `tests/SAM/README.md`).

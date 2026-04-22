@@ -304,9 +304,36 @@ Role cards for domain experts. Use these when the task fits their specific domai
 Reusable "how-to" guides for complex workflows:
 
 - **vailá Core**: [create a new analysis module](file:///home/preto/Preto/vaila/.claude/skills/create-analysis-module.md), [port a MATLAB algorithm](file:///home/preto/Preto/vaila/.claude/skills/port-matlab-algorithm.md).
+- **Sports AI**:
+  - [sam3-video](.claude/skills/sam3-video/SKILL.md) — SAM 3 text-prompt video segmentation, GUI help button, prompt presets.
+  - [fifa-skeletal-tracking](.claude/skills/fifa-skeletal-tracking/SKILL.md) — FIFA 2026 pipeline (`fifa bootstrap` / `prepare` / `boxes` / `preprocess` / `baseline` / **`dlt-export`** / `pack`), `vaila/fifa_to_dlt.py` (per-frame DLT for **`rec2d.py`/`rec3d.py`** vs fixed-cam **`rec2d_one_dlt2d.py`**), vendored `fifa_starter_lib`, gated SAM 3D Body setup, soccer-field DLT2D calibration.
 - **Reports**: [xlsx](file:///home/preto/Preto/vaila/.claude/skills/xlsx/SKILL.md) (Excel), [pdf](file:///home/preto/Preto/vaila/.claude/skills/pdf/SKILL.md), [pptx](file:///home/preto/Preto/vaila/.claude/skills/pptx/SKILL.md) (PowerPoint).
 - **Automation**: [mcp-builder](file:///home/preto/Preto/vaila/.claude/skills/mcp-builder/SKILL.md) (Model Context Protocol), [webapp-testing](file:///home/preto/Preto/vaila/.claude/skills/webapp-testing/SKILL.md).
 - **Visualization**: [web-artifacts-builder](file:///home/preto/Preto/vaila/.claude/skills/web-artifacts-builder/SKILL.md).
+
+### FIFA Skeletal Tracking Light 2026
+
+vailá ships a complete pipeline for the
+[FIFA Skeletal Tracking Light 2026](https://inside.fifa.com/innovation/innovation-programme/skeletal-tracking)
+challenge. The one-line setup is:
+
+```bash
+bash bin/setup_fifa_sam3d.sh              # clone sam_3d_body + gated HF weights
+uv run vaila/vaila_sam.py fifa bootstrap \
+  --videos-dir /data/FIFA/.../Videos \
+  --data-root  /data/FIFA/data
+uv run vaila/vaila_sam.py fifa prepare    --data-root data/ --video-source /data/FIFA/.../Videos
+uv run vaila/vaila_sam.py fifa boxes      --data-root data/ --sequences data/sequences_val.txt
+uv run vaila/vaila_sam.py fifa preprocess --data-root data/ --sequences data/sequences_val.txt  # CUDA
+uv run vaila/vaila_sam.py fifa baseline   --data-root data/ --sequences data/sequences_full.txt --output outputs/submission_full.npz  # add --export-camera to refresh cameras/*.npz
+uv run vaila/vaila_sam.py fifa dlt-export --cameras-dir data/cameras --output-dir outputs/dlt_per_frame
+uv run vaila/vaila_sam.py fifa pack       --submission-full outputs/submission_full.npz --data-root data/ --output-dir outputs/ --split val
+```
+
+Companion tool `vaila/soccerfield_calib.py` (button **Soccer-Field Calib** in
+Frame C of `vaila.py`) fits a DLT2D homography from 29 FIFA keypoints and can
+emit `cameras/<stem>_homography.npz` as a fallback when a sequence has no
+official `cameras/*.npz`.
 
 ### Slash Commands (`.claude/commands/`)
 

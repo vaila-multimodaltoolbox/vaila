@@ -45,13 +45,18 @@ Broadcasting videos come **separately from FIFA** (not on Hugging Face). Follow 
 
 ### 3. Pitch Points
 
-`pitch_points.txt` is included in the starter kit `data/` directory.
+`pitch_points.txt` is vendored inside `vaila/fifa_starter_lib/pitch_points.txt`
+(MIT, from the official starter kit). The `fifa bootstrap` subcommand copies
+it into `<data_root>/pitch_points.txt` automatically.
 
 ### 4. Sequence Lists
 
 - `sequences_full.txt` — all sequences
-- `sequences_val.txt` — validation split
+- `sequences_val.txt` — validation split (populate from the Codabench split!)
 - `sequences_test.txt` — test split (no GT; submit to Codabench)
+
+`fifa bootstrap` also generates these files from the available videos
+(defaults: `val = full` with a warning, `test = empty`).
 
 ---
 
@@ -65,9 +70,12 @@ bash bin/use_pyproject_linux_cuda.sh
 # 2. Install FIFA + SAM + GPU extras
 uv sync --extra gpu --extra fifa --extra sam
 
-# 3. Download SAM 3D Body weights (gated; accept license on HF first)
+# 3. Clone sam_3d_body + download gated SAM 3D Body weights
+#    Accept license on https://huggingface.co/facebook/sam-3d-body-dinov3 first,
+#    then authenticate:
 uv run hf auth login
-uv run hf download facebook/sam-3d-body-dinov3 --local-dir vaila/models/sam-3d-dinov3
+bash bin/setup_fifa_sam3d.sh                # Linux / macOS
+# pwsh bin/setup_fifa_sam3d.ps1            # Windows
 
 # 4. (Optional) Download SAM 3 video weights for box generation via sam3
 uv run vaila/vaila_sam.py --download-weights
@@ -75,13 +83,20 @@ uv run vaila/vaila_sam.py --download-weights
 # 5. Download challenge data
 #    HF dataset: cameras, boxes, skel_2d, skel_3d
 #    Videos: from FIFA (separate access)
-#    Place everything under data/ following the layout below
+
+# 6. Bootstrap the data layout (symlinks + sequences_*.txt + pitch_points.txt)
+uv run vaila/vaila_sam.py fifa bootstrap \
+  --videos-dir /path/to/FIFA_Challenge_2026_Video_Data/Videos \
+  --data-root  /path/to/FIFA/data
 ```
 
 ### Vendored Code
 
-- `sam_3d_body/` at repo root — vendored Meta SAM 3D Body (see `sam_3d_body/VENDOR_vaila.txt`)
-- `vaila/fifa_starter_lib/` — MIT-ported `camera_tracker.py` + `postprocess.py` from the official starter kit
+- `vaila/fifa_starter_lib/` — **vendored MIT** `camera_tracker.py`, `postprocess.py`,
+  and `pitch_points.txt` from the official starter kit. Updated via the steps in
+  `vaila/fifa_starter_lib/VENDOR.md`.
+- `sam_3d_body/` at repo root — cloned by `bin/setup_fifa_sam3d.sh` (NOT committed);
+  installed into the uv environment with `uv pip install -e sam_3d_body/`.
 
 ---
 
@@ -122,6 +137,30 @@ data/
 ## Full Pipeline CLI
 
 All FIFA subcommands are invoked through `vaila_sam.py fifa`:
+
+### bootstrap — symlink videos + sequences_*.txt + pitch_points.txt
+
+```bash
+uv run vaila/vaila_sam.py fifa bootstrap \
+  --videos-dir /data/FIFA/FIFA_Challenge_2026_Video_Data/Videos \
+  --data-root  /data/FIFA/data \
+  [--val-sequences /path/to/val.txt] \
+  [--test-sequences /path/to/test.txt] \
+  [--overwrite-pitch-points]
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--videos-dir` | Yes | Source folder with raw `*.mp4` |
+| `--data-root`  | Yes | Target FIFA data root |
+| `--val-sequences` | No | Text file with Codabench val split |
+| `--test-sequences` | No | Text file with Codabench test split |
+| `--no-copy-fallback` | No | Fail when symlinks are denied instead of copying |
+| `--overwrite-pitch-points` | No | Replace any existing `pitch_points.txt` |
+
+Creates `data_root/videos/*.mp4` symlinks (copies on Windows without dev mode),
+writes `sequences_full/val/test.txt`, and copies the vendored `pitch_points.txt`.
+Run this **before `fifa prepare`** when the data root is empty.
 
 ### prepare — Videos to data/videos + data/images
 
@@ -187,6 +226,21 @@ uv run vaila/vaila_sam.py fifa baseline \
 ```
 
 Loads `pitch_points.txt`, per-sequence `cameras/*.npz`, `skel_*`, `boxes/*.npy`; runs `CameraTracker` + `process_sequence`; writes compressed NPZ.
+
+### dlt-export — `cameras/*.npz` → per-frame `.dlt2d` / `.dlt3d` (vailá DLT)
+
+After **`baseline --export-camera`** (or using starter-kit `cameras/*.npz`), export **one DLT row per frame** so **`vaila/rec2d.py`** and **`vaila/rec3d.py`** work on **moving** broadcast cameras. Fixed-tripod workflows stay on **`rec2d_one_dlt2d.py` / `rec3d_one_dlt3d.py`** (single DLT row).
+
+```bash
+uv run vaila/vaila_sam.py fifa dlt-export \
+  --cameras-dir data/cameras \
+  --output-dir outputs/dlt_per_frame \
+  [--mode both|2d|3d] \
+  [--undistort-pixels-dir path/to/sam_csvs]
+# Or: uv run python -m vaila.fifa_to_dlt --input data/cameras --output outputs/dlt_per_frame
+```
+
+See **`vaila/help/vaila_sam.md`** section *Full broadcast pipeline (moving camera)*.
 
 ### pack — Split full NPZ to submission ZIP
 
@@ -263,14 +317,22 @@ Same process with `--split test` and the [Test Portal](https://www.codabench.org
 | File | Role |
 |------|------|
 | `vaila/vaila_sam.py` | SAM 3 video segmentation + `fifa` CLI dispatch |
-| `vaila/fifa_skeletal_pipeline.py` | FIFA pipeline orchestration (prepare/boxes/preprocess/baseline/pack) |
-| `vaila/fifa_starter_lib/camera_tracker.py` | MIT-ported camera tracker from starter kit |
-| `vaila/fifa_starter_lib/postprocess.py` | MIT-ported smoothing (`smoothen`) |
-| `sam_3d_body/` | Vendored Meta SAM 3D Body (repo root) |
+| `vaila/fifa_skeletal_pipeline.py` | FIFA pipeline orchestration (bootstrap/prepare/boxes/preprocess/baseline/dlt-export/pack) |
+| `vaila/fifa_to_dlt.py` | FIFA `cameras/*.npz` (K,R,t,k) → per-frame `.dlt2d` / `.dlt3d` |
+| `vaila/fifa_bootstrap.py` | `prepare_fifa_data_layout` — symlinks + sequences + pitch_points |
+| `vaila/fifa_starter_lib/camera_tracker.py` | Vendored MIT camera tracker from starter kit |
+| `vaila/fifa_starter_lib/postprocess.py` | Vendored MIT smoothing (`smoothen`) |
+| `vaila/fifa_starter_lib/pitch_points.txt` | Vendored MIT FIFA pitch reference |
+| `vaila/soccerfield_calib.py` | Companion DLT2D homography from 29 FIFA keypoints |
+| `bin/setup_fifa_sam3d.sh` / `.ps1` | Clones sam_3d_body + downloads gated weights |
+| `sam_3d_body/` | Cloned by the setup script (NOT committed) |
 | `vaila/models/sam-3d-dinov3/` | SAM 3D Body weights (model.ckpt, mhr_model.pt) |
 | `vaila/models/sam3/` | SAM 3 video weights (sam3.pt, sam3.1_multiplex.pt) |
-| `tests/test_vaila_sam.py` | SAM helpers + optional GPU smoke test |
+| `tests/test_vaila_sam.py` | SAM helpers + GUI Help smoke test |
 | `tests/test_fifa_skeletal_pipeline.py` | FIFA layout/packaging unit tests (no GPU) |
+| `tests/test_fifa_bootstrap.py` | Bootstrap layout tests (symlinks + sequences) |
+| `tests/test_soccerfield_calib.py` | DLT2D calibration smoke tests |
+| `tests/test_fifa_to_dlt.py` | FIFA→DLT math + IO + undistort (needs `cv2`) |
 
 ---
 
@@ -279,8 +341,15 @@ Same process with `--split test` and the [Test Portal](https://www.codabench.org
 - **BFloat16 type mismatch:** SAM 3 can produce `Input type (c10::BFloat16) and bias type (float) should be the same` — vailá patches autocast and forces FP32 on the tracker backbone; edge cases may persist on some PyTorch builds
 - **VRAM limits:** SAM 3 loads all frames onto GPU; use `--max-frames` or `SAM3_MAX_FRAMES` to cap
 - **Gated HF repos:** Both `facebook/sam3` and `facebook/sam-3d-body-dinov3` require license acceptance; 403 means the account is not authorized — use `uv run hf auth login --force` with the correct account
-- **Missing `fifa_starter_lib/`:** If the directory is absent, the camera tracker and postprocess imports will fail — ensure the starter kit code was ported
-- **No `cameras/` or `pitch_points.txt`:** These are not created by `prepare` — download from HF dataset or starter kit
+- **Missing `fifa_starter_lib/`:** The MIT starter kit code is vendored at
+  `vaila/fifa_starter_lib/`; update it with the steps in
+  `vaila/fifa_starter_lib/VENDOR.md` if upstream changes.
+- **Missing `sam_3d_body/`:** Run `bash bin/setup_fifa_sam3d.sh` (or the `.ps1`)
+  to clone the Meta repo and `uv pip install -e` it.
+- **No `cameras/` or `pitch_points.txt`:** `fifa bootstrap` seeds
+  `pitch_points.txt` from the vendored copy; `cameras/*.npz` must come from the
+  HF dataset or from `vaila/soccerfield_calib.py` (companion tool — drops
+  `cameras/<stem>_homography.npz` when `--data-root` is passed).
 
 ---
 

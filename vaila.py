@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 16 April 2026
-Version: 0.3.35
+Update Date: 22 April 2026
+Version: 0.3.38
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -158,7 +158,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 16.April.2026 v0.3.35 (Python 3.12.13)
+vailá - 22.April.2026 v0.3.38 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -200,7 +200,10 @@ B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
 B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - TUG and TURN
-B5_r6_c4 - SAM            B5_r6_c5 - vailá
+B5_r6_c4 - SAM            B5_r6_c5 - Soccer-Field Calib
+
+B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - vailá
+B6_r7_c4 - vailá          B6_r7_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -264,7 +267,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 16.April.2026 v0.3.35 (Python 3.12.13)")
+        self.title("vailá - 22.April.2026 v0.3.38 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -581,8 +584,16 @@ class Vaila(tk.Tk):
             - Ultrasound
             - Brainstorm
             - Scout
-            - vailá
-            - vailá
+            - Start Block
+            - Pynalty
+            B6:
+            - Sprint
+            - Face Mesh
+            - tugturn
+            - SAM
+            - Soccer-Field Calib
+            B6_r7:
+            - vailá (×5 placeholders)
         """
         # B - Multimodal Analysis FRAME
         analysis_frame = tk.LabelFrame(
@@ -899,11 +910,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # B5_r6_c5 - vailá
-        vaila_btn_sprint4 = tk.Button(
+        # B5_r6_c5 - Soccer-Field Calib (DLT2D homography from pitch keypoints)
+        soccerfield_calib_btn = tk.Button(
             row6_frame,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Soccer-Field Calib",
+            command=self.soccerfield_calib,
             width=button_width,
         )
 
@@ -912,7 +923,46 @@ class Vaila(tk.Tk):
         face_mesh_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         tugturn_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         sam_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_btn_sprint4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        soccerfield_calib_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+
+        # B6_r7 — seventh row: generic vailá placeholders (B6_r7_c1 .. B6_r7_c5)
+        row7_frame = tk.Frame(analysis_frame)
+        row7_frame.pack(fill="x")
+        vaila_b6_r7_c1 = tk.Button(
+            row7_frame,
+            text="FIFA cams→DLT",
+            width=button_width,
+            command=self.fifa_cams_to_dlt_per_frame,
+        )
+        vaila_b6_r7_c2 = tk.Button(
+            row7_frame,
+            text="vailá",
+            width=button_width,
+            command=self.show_vaila_message,
+        )
+        vaila_b6_r7_c3 = tk.Button(
+            row7_frame,
+            text="vailá",
+            width=button_width,
+            command=self.show_vaila_message,
+        )
+        vaila_b6_r7_c4 = tk.Button(
+            row7_frame,
+            text="vailá",
+            width=button_width,
+            command=self.show_vaila_message,
+        )
+        vaila_b6_r7_c5 = tk.Button(
+            row7_frame,
+            text="vailá",
+            width=button_width,
+            command=self.show_vaila_message,
+        )
+        vaila_b6_r7_c1.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b6_r7_c2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b6_r7_c3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b6_r7_c4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b6_r7_c5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         ## VVVVVVVVVVVVVVV TOOLS BUTTONS VVVVVVVVVVVVVVVV
         # Tools Frame
@@ -2869,6 +2919,37 @@ class Vaila(tk.Tk):
         )
         print("=" * 60 + "\n")
         run_vaila_module("vaila.vaila_sam", "vaila/vaila_sam.py", extra_py_flags=("-u",))
+
+    # B5_r6_c5 - Soccer-Field Calibration (DLT2D)
+    def soccerfield_calib(self):
+        """Launches DLT2D calibration of a broadcast soccer-field plane.
+
+        Wraps :mod:`vaila.soccerfield_calib` (uses ``getpixelvideo`` + ``dlt2d`` +
+        ``rec2d`` with ``models/soccerfield_ref3d.csv``). CLI flags can be
+        provided through the subprocess when the module is launched from a
+        terminal (see ``vaila/help/vaila_sam.html`` for details).
+        """
+        print("\n" + "=" * 60)
+        print("Launching: vaila.soccerfield_calib")
+        print("Features: Soccer-field DLT2D homography from FIFA 29-keypoint reference")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.soccerfield_calib",
+            "vaila/soccerfield_calib.py",
+            extra_py_flags=("-u",),
+        )
+
+    def fifa_cams_to_dlt_per_frame(self):
+        """FIFA ``cameras/*.npz`` -> per-frame ``.dlt2d`` / ``.dlt3d`` for rec2d/rec3d."""
+        try:
+            from vaila.fifa_to_dlt import run_gui_flow
+        except ImportError:
+            from fifa_to_dlt import run_gui_flow  # ty: ignore[unresolved-import]
+
+        print("\n" + "=" * 60)
+        print("FIFA cameras -> DLT (per frame): Tk dialogs")
+        print("=" * 60 + "\n")
+        run_gui_flow()
 
 
 if __name__ == "__main__":
