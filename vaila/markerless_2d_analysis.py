@@ -4240,13 +4240,77 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         num_poses=1,
     )
 
-    # Setup Video Writer for annotated output
+    # Setup Video Writer for annotated output via FFmpeg pipe
+    # cv2.VideoWriter with mp4v/avc1 fails when the source video has a
+    # non-standard timebase (e.g. 1000/239621). We pipe raw BGR frames
+    # directly into FFmpeg with libx264 and a normalised FPS, which is
+    # completely independent of the source container's timebase.
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps <= 0:
         fps = 30.0
+    fps_out = max(1.0, round(fps))  # normalise to integer FPS for MP4 timebase
     annotated_output_path = output_dir / f"{video_path.stem}_annotated.mp4"
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out_video = cv2.VideoWriter(str(annotated_output_path), fourcc, fps, (width, height))
+
+    _ffmpeg_proc = None
+    _use_ffmpeg_pipe = False
+
+    # Helper class so the rest of the code can call out_video.write(frame)
+    class _FFmpegWriter:
+        def __init__(self, proc):
+            self._proc = proc
+
+        def write(self, frame_bgr: np.ndarray) -> None:
+            try:
+                self._proc.stdin.write(frame_bgr.tobytes())
+            except BrokenPipeError:
+                pass
+
+        def release(self) -> None:
+            try:
+                self._proc.stdin.close()
+                self._proc.wait(timeout=60)
+            except Exception:
+                pass
+
+        def isOpened(self) -> bool:  # noqa: N802
+            return self._proc is not None and self._proc.poll() is None
+
+    # First try FFmpeg pipe (most robust, avoids all timebase issues)
+    _ffmpeg_cmd = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-s", f"{width}x{height}",
+        "-pix_fmt", "bgr24",
+        "-r", str(fps_out),
+        "-i", "pipe:0",
+        "-vcodec", "libx264",
+        "-preset", "fast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        str(annotated_output_path),
+    ]
+    try:
+        import subprocess as _sp
+        _ffmpeg_proc = _sp.Popen(
+            _ffmpeg_cmd,
+            stdin=_sp.PIPE,
+            stdout=_sp.DEVNULL,
+            stderr=_sp.DEVNULL,
+        )
+        out_video = _FFmpegWriter(_ffmpeg_proc)
+        _use_ffmpeg_pipe = True
+        print(f"[VIDEO] Using FFmpeg libx264 pipe @ {fps_out} fps → {annotated_output_path.name}")
+    except Exception as _e:
+        print(f"[WARNING] FFmpeg pipe failed ({_e}), falling back to cv2.VideoWriter...")
+        _use_ffmpeg_pipe = False
+        fourcc = cv2.VideoWriter_fourcc(*"XVID")
+        _avi_path = output_dir / f"{video_path.stem}_annotated.avi"
+        out_video = cv2.VideoWriter(str(_avi_path), fourcc, fps_out, (width, height))
+        if not out_video.isOpened():
+            print("[WARNING] XVID also failed — video output disabled.")
+            out_video = type("NullWriter", (), {"write": lambda self, f: None, "release": lambda self: None})()
 
     # Initialize results containers
     normalized_landmarks_list = []
@@ -4537,6 +4601,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     cap.release()
     out_video.release()
     cv2.destroyAllWindows()
+    if _use_ffmpeg_pipe:
+        print(f"[VIDEO] Annotated video saved → {annotated_output_path}")
 
     print("\nAnalysis loop completed.")
 

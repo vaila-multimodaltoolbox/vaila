@@ -151,8 +151,16 @@ def generate_stromotion(
         
     vwriter = None
     if save_video:
+        # Try primary codec (mp4v)
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         vwriter = cv2.VideoWriter(str(out_video_path), fourcc, fps, (width, height))
+        if not vwriter.isOpened():
+            # Fallback to H.264 (if available)
+            fourcc = cv2.VideoWriter_fourcc(*'avc1')
+            vwriter = cv2.VideoWriter(str(out_video_path), fourcc, fps, (width, height))
+        if not vwriter.isOpened():
+            print("[WARNING] Could not open video writer with mp4v or avc1. Video output will be disabled.")
+            vwriter = None
 
     mp_selfie_segmentation = mp.solutions.selfie_segmentation
     
