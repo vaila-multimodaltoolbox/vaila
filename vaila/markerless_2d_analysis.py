@@ -1484,7 +1484,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
 
     def _build_scientific_tab(self):
         # Frame 1: Kalman & Tracking
-        frame = ttk.LabelFrame(self.tab_scientific, text="Scientific Robustness (Kalman & Optical Flow)", padding=15)
+        frame = ttk.LabelFrame(
+            self.tab_scientific, text="Scientific Robustness (Kalman & Optical Flow)", padding=15
+        )
         frame.pack(fill="x", padx=10, pady=5)
 
         params = [
@@ -1925,7 +1927,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                     "track_measurement_noise": float(self.track_measurement_noise_entry.get()),
                     "max_pred_gap": int(self.max_pred_gap_entry.get()),
                     "optical_flow_threshold": float(self.optical_flow_threshold_entry.get()),
-                    "enable_gap_reconstruction": self.enable_gap_reconstruction_entry.get().lower() == "true",
+                    "enable_gap_reconstruction": self.enable_gap_reconstruction_entry.get().lower()
+                    == "true",
                     "max_reconstruction_gap": int(self.max_reconstruction_gap_entry.get()),
                 },
             }
@@ -2387,7 +2390,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                     self.optical_flow_threshold_entry.insert(0, str(sr["optical_flow_threshold"]))
                 if "enable_gap_reconstruction" in sr:
                     self.enable_gap_reconstruction_entry.delete(0, tk.END)
-                    self.enable_gap_reconstruction_entry.insert(0, str(sr["enable_gap_reconstruction"]))
+                    self.enable_gap_reconstruction_entry.insert(
+                        0, str(sr["enable_gap_reconstruction"])
+                    )
                 if "max_reconstruction_gap" in sr:
                     self.max_reconstruction_gap_entry.delete(0, tk.END)
                     self.max_reconstruction_gap_entry.insert(0, str(sr["max_reconstruction_gap"]))
@@ -2435,12 +2440,14 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                     "track_measurement_noise": float(self.track_measurement_noise_entry.get()),
                     "max_pred_gap": int(self.max_pred_gap_entry.get()),
                     "optical_flow_threshold": float(self.optical_flow_threshold_entry.get()),
-                    "enable_gap_reconstruction": self.enable_gap_reconstruction_entry.get().lower() == "true",
+                    "enable_gap_reconstruction": self.enable_gap_reconstruction_entry.get().lower()
+                    == "true",
                     "max_reconstruction_gap": int(self.max_reconstruction_gap_entry.get()),
                 },
             }
         except Exception as e:
             from tkinter import messagebox
+
             messagebox.showerror("Validation Error", f"Please check your inputs:\n{e}")
             self.result = None
 

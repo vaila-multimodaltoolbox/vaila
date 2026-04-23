@@ -124,7 +124,6 @@ POSE_CONNECTIONS = frozenset(
 )
 
 
-
 def get_mediapipe_model_path(complexity=2):
     """Download the correct MediaPipe Tasks model based on complexity (0=Lite, 1=Full, 2=Heavy)"""
     models_dir = Path(__file__).parent / "models"
@@ -2354,9 +2353,7 @@ def run_markerless2d_mpyolo(root=None, params=None):
     # Create output directory with timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    output_dir = os.path.join(
-        os.path.dirname(video_path), f"{video_name}_mpyolo_{timestamp}"
-    )
+    output_dir = os.path.join(os.path.dirname(video_path), f"{video_name}_mpyolo_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
     print(f"Output directory: {output_dir}")
 
@@ -2398,28 +2395,60 @@ if __name__ == "__main__":
         description="markerless2d_mpyolo - YOLO26 + MediaPipe 2D pose estimation pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-i", "--input", type=str, default=None,
-                        help="Input video file path (activates CLI/headless mode)")
-    parser.add_argument("-o", "--output", type=str, default=None,
-                        help="Output directory (default: timestamped subdir next to video)")
-    parser.add_argument("--model", type=str, default="yolo26x",
-                        choices=["yolo26n", "yolo26s", "yolo26m", "yolo26l", "yolo26x"],
-                        help="YOLO26 model variant (default: yolo26x)")
-    parser.add_argument("--conf", type=float, default=0.25,
-                        help="YOLO confidence threshold (default: 0.25)")
-    parser.add_argument("--iou", type=float, default=0.7,
-                        help="YOLO IOU threshold (default: 0.7)")
-    parser.add_argument("--complexity", type=int, default=2, choices=[0, 1, 2],
-                        help="MediaPipe model complexity 0=Lite 1=Full 2=Heavy (default: 2)")
-    parser.add_argument("--scale-factor", type=int, default=4,
-                        help="Bbox scale factor for MediaPipe (2-8, default: 4)")
-    parser.add_argument("--safety-margin", type=float, default=0.25,
-                        help="Landmark containment margin (0.1-0.5, default: 0.25)")
-    parser.add_argument("--mode", type=str, default="sequential",
-                        choices=["sequential", "multithreaded"],
-                        help="Processing mode (default: sequential)")
-    parser.add_argument("--gui", action="store_true",
-                        help="Force GUI mode even when -i is provided")
+    parser.add_argument(
+        "-i",
+        "--input",
+        type=str,
+        default=None,
+        help="Input video file path (activates CLI/headless mode)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default=None,
+        help="Output directory (default: timestamped subdir next to video)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="yolo26x",
+        choices=["yolo26n", "yolo26s", "yolo26m", "yolo26l", "yolo26x"],
+        help="YOLO26 model variant (default: yolo26x)",
+    )
+    parser.add_argument(
+        "--conf", type=float, default=0.25, help="YOLO confidence threshold (default: 0.25)"
+    )
+    parser.add_argument("--iou", type=float, default=0.7, help="YOLO IOU threshold (default: 0.7)")
+    parser.add_argument(
+        "--complexity",
+        type=int,
+        default=2,
+        choices=[0, 1, 2],
+        help="MediaPipe model complexity 0=Lite 1=Full 2=Heavy (default: 2)",
+    )
+    parser.add_argument(
+        "--scale-factor",
+        type=int,
+        default=4,
+        help="Bbox scale factor for MediaPipe (2-8, default: 4)",
+    )
+    parser.add_argument(
+        "--safety-margin",
+        type=float,
+        default=0.25,
+        help="Landmark containment margin (0.1-0.5, default: 0.25)",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="sequential",
+        choices=["sequential", "multithreaded"],
+        help="Processing mode (default: sequential)",
+    )
+    parser.add_argument(
+        "--gui", action="store_true", help="Force GUI mode even when -i is provided"
+    )
 
     args = parser.parse_args()
 

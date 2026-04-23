@@ -56,7 +56,7 @@ Options:
   -a, --auto            show auto-marking mode
   -c, --sequential      show sequential mode
   -h, --help            show this help message and exit
-  
+
 Key Bindings (Labeling Mode Only - Press 'L' to toggle):
   N                     Rename current object label
   F5                    Save Labeling Project (JSON) / export dataset (dataset_YYYYMMDD_HHMMSS or append)
@@ -64,7 +64,7 @@ Key Bindings (Labeling Mode Only - Press 'L' to toggle):
   F7                    Load dataset folder (next Save appends; multi-video)
   F8                    Open another video (keep dataset; no need to close app)
   -v, --version         show version information and exit
-  
+
 License:
 --------
 This program is licensed under the GNU Affero General Public License v3.0.
@@ -1701,6 +1701,7 @@ def play_video_with_controls(
             # For image/PNG sequence there is no audio; for video use ffmpeg to add audio
             if is_image_source:
                 import shutil
+
                 shutil.move(temp_video, output_path)
                 save_message_text = f"Video exported: {os.path.basename(output_path)}"
                 showing_save_message = True
@@ -6799,9 +6800,7 @@ def get_media_path():
             path = filedialog.askdirectory(title="Select Folder with PNG Sequence")
             if path:
                 path = path.strip()
-                count = sum(
-                    1 for f in os.listdir(path) if f.lower().endswith(".png")
-                )
+                count = sum(1 for f in os.listdir(path) if f.lower().endswith(".png"))
                 if count == 0:
                     messagebox.showerror(
                         "No PNGs",
@@ -6816,9 +6815,9 @@ def get_media_path():
         dialog.title("Open Media")
         dialog.attributes("-topmost", True)
         dialog.grab_set()
-        tk.Label(
-            dialog, text="Open video/image or PNG sequence folder", font=("Arial", 10)
-        ).pack(pady=10, padx=20)
+        tk.Label(dialog, text="Open video/image or PNG sequence folder", font=("Arial", 10)).pack(
+            pady=10, padx=20
+        )
         btn_frame = tk.Frame(dialog)
         btn_frame.pack(pady=10, padx=20)
         tk.Button(btn_frame, text="Open Video / Image File", command=on_file, width=24).pack(
@@ -6941,7 +6940,9 @@ def run_getpixelvideo(initial_dataset_dir=None, initial_media_path=None, initial
                 metadata = get_precise_video_metadata(media_path)
             else:
                 metadata = get_image_sequence_metadata(media_path, source_type)
-            total_frames = metadata.get("nb_frames") or int(frame_source.get(cv2.CAP_PROP_FRAME_COUNT))
+            total_frames = metadata.get("nb_frames") or int(
+                frame_source.get(cv2.CAP_PROP_FRAME_COUNT)
+            )
             vw = metadata.get("width") or int(frame_source.get(cv2.CAP_PROP_FRAME_WIDTH))
             vh = metadata.get("height") or int(frame_source.get(cv2.CAP_PROP_FRAME_HEIGHT))
             continue
