@@ -1386,7 +1386,9 @@ def track_persons_with_yolo(
     return persons
 
 
-def _effective_bbox_upscale(bbox_upscale_factor: int, crop_w: int, crop_h: int, min_short_side_px: int) -> int:
+def _effective_bbox_upscale(
+    bbox_upscale_factor: int, crop_w: int, crop_h: int, min_short_side_px: int
+) -> int:
     """max(user factor, ceil(min_short / min(crop dims)), 1)."""
     short = min(crop_w, crop_h)
     if short <= 0:
@@ -1464,7 +1466,9 @@ def process_frame_with_yolo_pose_only(
     if crop_w <= 0 or crop_h <= 0:
         return None, None, None, best_person_bbox
 
-    eff_up = _effective_bbox_upscale(bbox_upscale_factor, crop_w, crop_h, min_pose_crop_short_side_px)
+    eff_up = _effective_bbox_upscale(
+        bbox_upscale_factor, crop_w, crop_h, min_pose_crop_short_side_px
+    )
     crop_img = frame[crop_y1:crop_y2, crop_x1:crop_x2]
     new_w = crop_w * eff_up
     new_h = crop_h * eff_up
@@ -1618,7 +1622,10 @@ def process_frame_with_mediapipe_tasks(
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
                 pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-                if pose_landmarker_result.pose_landmarks and len(pose_landmarker_result.pose_landmarks) > 0:
+                if (
+                    pose_landmarker_result.pose_landmarks
+                    and len(pose_landmarker_result.pose_landmarks) > 0
+                ):
                     raw_landmarks = pose_landmarker_result.pose_landmarks[0]
                     landmarks_norm = []
                     landmarks_px = []
@@ -1633,7 +1640,9 @@ def process_frame_with_mediapipe_tasks(
                         norm_final_y = px_final_y / height
                         visibility = 1.0
                         landmarks_norm.append([norm_final_x, norm_final_y, landmark.z, visibility])
-                        landmarks_px.append([int(px_final_x), int(px_final_y), landmark.z, visibility])
+                        landmarks_px.append(
+                            [int(px_final_x), int(px_final_y), landmark.z, visibility]
+                        )
                     return landmarks_norm, landmarks_px, best_person_bbox, best_person_keypoints
             except Exception as e:
                 print(f"Error in upscale inference: {e}")
@@ -2079,7 +2088,9 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
         if yolo_dev_model is not None:
             if hasattr(yolo_dev_model, "device"):
                 yolo_device = str(yolo_dev_model.device)
-            elif hasattr(yolo_dev_model, "predictor") and hasattr(yolo_dev_model.predictor, "device"):
+            elif hasattr(yolo_dev_model, "predictor") and hasattr(
+                yolo_dev_model.predictor, "device"
+            ):
                 yolo_device = str(yolo_dev_model.predictor.device)
             else:
                 yolo_device = str(device)
@@ -2098,7 +2109,9 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
         )
         print(f"Tracker: {pose_config.get('yolo_tracker', 'botsort')}")
         print(f"YOLO Confidence: {pose_config.get('yolo_conf', 0.5)}")
-        print(f"Min pose crop short side (px): {pose_config.get('min_pose_crop_short_side_px', 384)}")
+        print(
+            f"Min pose crop short side (px): {pose_config.get('min_pose_crop_short_side_px', 384)}"
+        )
     else:
         print("Pipeline: MediaPipe only")
 
@@ -2682,7 +2695,9 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
         log_file.write("=" * 60 + "\n")
         log_file.write("PIPELINE CONFIGURATION:\n")
         log_file.write("=" * 60 + "\n")
-        if pose_config.get("use_yolo", False) and (yolo_detector is not None or yolo_pose is not None):
+        if pose_config.get("use_yolo", False) and (
+            yolo_detector is not None or yolo_pose is not None
+        ):
             yolo_mode = pose_config.get("yolo_mode", "yolo_mediapipe")
             det_name = pose_config.get("yolo_detector_model", "yolo26x.pt")
             pose_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
