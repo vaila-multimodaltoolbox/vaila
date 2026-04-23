@@ -60,7 +60,7 @@ dependencies:
       - jax
       - jaxlib
       - xgboost
-      - mediapipe>=0.10.32
+      - mediapipe>=0.10.33
       - torch==2.9.1
       - torchvision==0.24.1
       - torchaudio==2.9.1
