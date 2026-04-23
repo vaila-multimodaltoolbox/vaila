@@ -463,32 +463,17 @@ def _auto_max_frames_for_vram() -> int:
     ``predictor.shutdown()`` the previous run leaves reserved memory behind.
     Sizing for ``total_memory`` then OOMs from video #2 onwards.
     """
-    try:
-        import torch
-
-        if not torch.cuda.is_available():
-            return 32
-        dev = torch.cuda.current_device()
-        props = torch.cuda.get_device_properties(dev)
-        total_gib = props.total_memory / (1024**3)
-        free_bytes, _ = torch.cuda.mem_get_info(dev)
-        free_gib = free_bytes / (1024**3)
-    except Exception:
+    profile = _sam3_vram_profile()
+    if profile is None:
         return 32
-
-    model_gib = 6.3
-    processing_gib = 0.5
-    headroom_gib = 0.5
-    per_frame_mib = 3.6
-    budget_gib = max(0.0, free_gib - model_gib - processing_gib - headroom_gib)
-    safe_frames = int(budget_gib * 1024 / per_frame_mib)
-    # Even with large VRAM, propagation memory grows with timeline length.
-    # Cap the auto value conservatively to avoid late-stage OOM on long clips.
-    safe_frames = max(16, min(safe_frames, 128))
+    safe_frames = int(profile["safe_frames"])
+    total_gib = float(profile["total_gib"])
+    free_gib = float(profile["free_gib"])
+    budget_gib = float(profile["budget_gib"])
     print(
         f"[SAM3 VRAM] GPU {total_gib:.1f} GiB total, {free_gib:.1f} GiB free → "
         f"auto max_frames={safe_frames} "
-        f"(model ~6.3 GiB, budget ~{budget_gib:.1f} GiB for frames)"
+        f"(model ~{profile['model_gib']:.1f} GiB, budget ~{budget_gib:.1f} GiB for frames)"
     )
     # #region agent log
     _agent_dbg_sam3(
@@ -504,6 +489,40 @@ def _auto_max_frames_for_vram() -> int:
     )
     # #endregion
     return safe_frames
+
+
+def _sam3_vram_profile() -> dict[str, float] | None:
+    """Collect non-throwing CUDA/VRAM stats used by SAM3 planning helpers."""
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return None
+        dev = torch.cuda.current_device()
+        props = torch.cuda.get_device_properties(dev)
+        total_gib = props.total_memory / (1024**3)
+        free_bytes, _ = torch.cuda.mem_get_info(dev)
+        free_gib = free_bytes / (1024**3)
+    except Exception:
+        return None
+
+    model_gib = 6.3
+    processing_gib = 0.5
+    headroom_gib = 0.5
+    per_frame_mib = 3.6
+    budget_gib = max(0.0, free_gib - model_gib - processing_gib - headroom_gib)
+    safe_frames = int(budget_gib * 1024 / per_frame_mib)
+    safe_frames = max(16, min(safe_frames, 128))
+    return {
+        "total_gib": total_gib,
+        "free_gib": free_gib,
+        "budget_gib": budget_gib,
+        "safe_frames": float(safe_frames),
+        "model_gib": model_gib,
+        "processing_gib": processing_gib,
+        "headroom_gib": headroom_gib,
+        "per_frame_mib": per_frame_mib,
+    }
 
 
 def _release_sam3_gpu_memory() -> None:
@@ -543,12 +562,147 @@ def _read_max_input_frames(cli_value: int | None) -> int:
     """
     if cli_value is not None:
         return max(0, int(cli_value))
+    return _resolve_max_input_frames_value(cli_value)
+
+
+def _resolve_max_input_frames_value(
+    cli_value: int | None, *, auto_profile: dict[str, float] | None = None
+) -> int:
+    """Resolve max_input_frames value from CLI/env without repeating VRAM probes."""
+    if cli_value is not None:
+        return max(0, int(cli_value))
     raw = os.environ.get("SAM3_MAX_FRAMES", "").strip().lower()
     if raw in ("0", "none", "unlimited", "off"):
         return 0
     if raw:
         return max(0, int(raw))
-    return _auto_max_frames_for_vram()
+    profile = _sam3_vram_profile() if auto_profile is None else auto_profile
+    if profile is None:
+        return 32
+    return int(profile["safe_frames"])
+
+
+def _sam3_dry_run_report(
+    input_path: Path,
+    output_parent: Path,
+    *,
+    ckpt_opt: Path | None,
+    text_prompt: str,
+    frame_index: int,
+    max_input_frames: int | None,
+    save_overlay_mp4: bool,
+    save_mask_png: bool,
+    frame_by_frame_fallback: bool,
+    per_video_output: bool,
+    max_videos_to_show: int = 8,
+) -> list[str]:
+    """Build a dry-run plan for SAM3 without importing/training heavy dependencies."""
+    lines: list[str] = []
+    lines.append("[SAM3] Dry-run / smoke mode (no inference will run)")
+    lines.append(f"input={input_path}")
+    lines.append(f"prompt='{text_prompt}' | frame_index={frame_index}")
+    lines.append(
+        f"frame_by_frame_fallback={'enabled' if frame_by_frame_fallback else 'disabled'}"
+        f" | save_overlay_mp4={save_overlay_mp4} | save_mask_png={save_mask_png}"
+    )
+
+    vram_profile = _sam3_vram_profile()
+    if vram_profile is None:
+        lines.append("VRAM profile: CUDA unavailable or not accessible; auto fallback uses 32.")
+    else:
+        lines.append(
+            "VRAM profile: "
+            f"total={vram_profile['total_gib']:.2f} GiB, "
+            f"free={vram_profile['free_gib']:.2f} GiB, "
+            f"safe_auto={int(vram_profile['safe_frames'])} frames"
+        )
+
+    try:
+        ckpt_file = _resolve_sam3_checkpoint_file(ckpt_opt)
+        lines.append(f"checkpoint: {ckpt_file}")
+    except Exception as e:
+        lines.append(f"checkpoint: unresolved ({e})")
+
+    resolved_initial = _resolve_max_input_frames_value(max_input_frames, auto_profile=vram_profile)
+    if max_input_frames is None:
+        src = "env SAM3_MAX_FRAMES / auto"
+    elif max_input_frames == 0:
+        src = "explicit full-clip mode (0)"
+    else:
+        src = f"CLI value (--max-frames {max_input_frames})"
+    lines.append(f"max_input_frames source: {src} (resolved initial={resolved_initial})")
+
+    attempts = _sam3_build_oom_retry_attempts(max_input_frames)
+    attempts_display = ", ".join(
+        f"{'auto' if cap is None else cap}->"
+        f"{_resolve_max_input_frames_value(cap, auto_profile=vram_profile)}"
+        for cap in attempts
+    )
+    lines.append(f"OOM retry ladder (raw->resolved): {attempts_display}")
+
+    video_files = _find_videos(input_path) if input_path.is_dir() else [input_path]
+    if not video_files:
+        lines.append(f"No video files found under {input_path}")
+        return lines
+
+    lines.append(f"Detected videos: {len(video_files)}")
+    for idx, vf in enumerate(video_files, start=1):
+        if idx > max_videos_to_show:
+            lines.append(
+                f"... {len(video_files) - max_videos_to_show} additional video(s) not expanded."
+            )
+            break
+        n_frames = _video_frame_count(str(vf))
+        if n_frames <= 0:
+            lines.append(f"- {vf.name}: frame_count=unknown")
+            continue
+        retry_frames = [
+            n_frames if resolved <= 0 else min(n_frames, resolved)
+            for resolved in (
+                _resolve_max_input_frames_value(cap, auto_profile=vram_profile) for cap in attempts
+            )
+        ]
+        retry_text = ", ".join(
+            f"{'auto' if cap is None else cap}=>{retry_frames[idx2]}"
+            for idx2, cap in enumerate(attempts)
+        )
+        out_dir = output_parent / vf.stem if per_video_output else output_parent
+        lines.append(f"- {vf.name}: frame_count={n_frames}, planned_out={out_dir}")
+        lines.append(f"  sessions (by retry): {retry_text}")
+
+    lines.append("Checks: no SAM3 initialization, no torch checkpoint load, no predictor start.")
+    return lines
+
+
+def _write_sam3_dry_run_report(lines: list[str], output_parent: Path) -> Path | None:
+    """Persist dry-run plan and return report path when possible."""
+    report_path = output_parent / "SAM3_DRY_RUN.txt"
+    try:
+        output_parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except OSError:
+        return None
+    return report_path
+
+
+_SAM3_OOM_FALLBACK_FRAMES: tuple[int, ...] = (64, 32, 24, 16, 12, 8, 4, 2, 1)
+
+
+def _sam3_next_oom_caps(max_input_frames: int | None) -> tuple[int, ...]:
+    """Suggested lower frame caps to try after a CUDA OOM."""
+    if max_input_frames is None:
+        return _SAM3_OOM_FALLBACK_FRAMES
+    if max_input_frames <= 0:
+        return _SAM3_OOM_FALLBACK_FRAMES
+    return tuple(frame for frame in _SAM3_OOM_FALLBACK_FRAMES if frame < max_input_frames)
+
+
+def _sam3_next_oom_tip(max_input_frames: int | None, *, fallback_to_one: bool = True) -> int:
+    """Smallest recommended cap after a failed attempt."""
+    caps = _sam3_next_oom_caps(max_input_frames)
+    if caps:
+        return caps[0]
+    return 1 if fallback_to_one else max_input_frames or 1
 
 
 def _video_frame_count(video_path: str) -> int:
@@ -641,13 +795,34 @@ def _composite_masks_bgr(
 
 
 def _sam3_cuda_oom_help(*, max_input_frames: int, session_frames: int) -> str:
+    followups = _sam3_next_oom_caps(max_input_frames)
+    if followups:
+        followup_hint = ", ".join(map(str, followups[:4]))
+        followup_text = (
+            "Lower values use less VRAM. If this keeps failing, try in this order: "
+            f"{followup_hint}..."
+        )
+    else:
+        followup_text = "Lower values use less VRAM."
+
+    if max_input_frames > 0:
+        max_hint = f"or pass --max-frames with a smaller value than {max_input_frames}"
+    elif max_input_frames == 0:
+        max_hint = (
+            "or pass an explicit --max-frames (for example 64, then 32, then 24...) "
+            "instead of keeping the full clip in memory"
+        )
+    else:
+        max_hint = "or pass a smaller --max-frames value"
+
     return (
         "CUDA out of memory while loading the video into SAM3. "
         "The library puts the whole session on GPU at once (~few GB per hundred frames at 1008²).\n\n"
         f"This run used session_frames={session_frames} (max_input_frames_cap={max_input_frames}; "
         "0 means no subsampling).\n\n"
-        "Fix: unset SAM3_MAX_FRAMES (auto-sizes to GPU VRAM), or set SAM3_MAX_FRAMES=64, or pass "
-        "--max-frames 64. Lower values use less VRAM. Keep weights under vaila/models/sam3/."
+        "Fix: unset SAM3_MAX_FRAMES (auto-sizes to GPU VRAM), "
+        f"{max_hint}. "
+        f"{followup_text} Keep weights under vaila/models/sam3/."
     )
 
 
@@ -924,7 +1099,7 @@ def run_sam3_on_video(
                         outputs_by_frame[int(chunk["frame_index"])] = chunk["outputs"]
             except Exception as e:
                 if _is_cuda_oom_error(e):
-                    tip_n = max(8, mf // 2) if mf > 0 else 64
+                    tip_n = _sam3_next_oom_tip(mf)
                     msg = (
                         _sam3_cuda_oom_help(max_input_frames=mf, session_frames=n_sess)
                         + f"\n\nTip: rerun with --max-frames {tip_n} (or another lower value until it fits)."
@@ -1118,16 +1293,12 @@ def _agent_dbg_sam3(*, hypothesis_id: str, location: str, message: str, data: di
 
 
 def _sam3_build_oom_retry_attempts(max_input_frames: int | None) -> list[int | None]:
-    """Caps to try on CUDA OOM (high → low). Includes 24…8 when initial cap is 32 (bugfix)."""
+    """Caps to try on CUDA OOM (high → low). Includes low caps like 8→4→2→1."""
     attempts: list[int | None] = [max_input_frames]
-    if max_input_frames is None or max_input_frames > 64:
-        attempts.append(64)
-    if max_input_frames is None or max_input_frames > 32:
-        attempts.append(32)
-    positives = [x for x in attempts if isinstance(x, int) and x > 0]
-    floor = min(positives) if positives else 2**30
-    for step in (24, 16, 12, 8):
-        if step < floor and step not in attempts:
+    for step in _SAM3_OOM_FALLBACK_FRAMES:
+        if max_input_frames is None or max_input_frames <= 0:
+            attempts.append(step)
+        elif max_input_frames > step:
             attempts.append(step)
     seen: set[int | None] = set()
     uniq: list[int | None] = []
@@ -1167,7 +1338,8 @@ def _process_one_video_with_oom_retry(
     frame_by_frame_fallback: bool,
     log: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
-    """Run one video; on CUDA OOM retry with descending frame caps (e.g. auto→64→32→24→8).
+    """Run one video; on CUDA OOM retry with descending frame caps
+    (e.g. auto→64→32→24→16→12→8→4→2→1).
 
     Returns ``(success, message)``.  ``message`` is empty on success.
 
@@ -1200,6 +1372,7 @@ def _process_one_video_with_oom_retry(
     last_err: str = ""
     for attempt_idx, mf_try in enumerate(attempts, start=1):
         _release_sam3_gpu_memory()
+        mf_try_resolved = _read_max_input_frames(mf_try)
         try:
             run_sam3_on_video(
                 video_file,
@@ -1222,6 +1395,11 @@ def _process_one_video_with_oom_retry(
                 _write_failure_marker(output_dir, video_file, "CUDA OOM: " + last_err)
                 return False, last_err
             next_mf = attempts[attempt_idx]
+            next_tip = (
+                next_mf
+                if isinstance(next_mf, int) and next_mf > 0
+                else _sam3_next_oom_tip(mf_try_resolved)
+            )
             # #region agent log
             _agent_dbg_sam3(
                 hypothesis_id="H1",
@@ -1237,7 +1415,8 @@ def _process_one_video_with_oom_retry(
             )
             # #endregion
             _log(
-                f"  [SAM3] CUDA OOM at max_frames={mf_try!r}; retrying with max_frames={next_mf}..."
+                f"  [SAM3] CUDA OOM at max_frames={mf_try_resolved}; "
+                f"retrying with max_frames={next_tip}..."
             )
     _write_failure_marker(output_dir, video_file, last_err or "unknown failure")
     return False, last_err or "unknown failure"
@@ -1257,7 +1436,9 @@ class SamVideoDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
         self.title("SAM 3 — video segmentation")
-        self.result: tuple[Path, Path, Path | None, str, int, bool, bool, bool] | None = None
+        self.result: (
+            tuple[Path, Path, Path | None, str, int, bool, bool, bool, bool] | None
+        ) = None
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -1336,9 +1517,15 @@ class SamVideoDialog(tk.Toplevel):
             text="Fallback: Frame-by-Frame (CUDA only; lower VRAM, slower, no temporal tracking)",
             variable=self.fallback_var,
         ).grid(row=8, column=1, sticky="w")
+        self.dry_run_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            frm,
+            text="Dry-run / smoke (show plan only, do not run SAM3)",
+            variable=self.dry_run_var,
+        ).grid(row=9, column=1, sticky="w")
 
         btns = ttk.Frame(frm)
-        btns.grid(row=9, column=0, columnspan=3, pady=12)
+        btns.grid(row=10, column=0, columnspan=3, pady=12)
         ttk.Button(btns, text="Run", command=self._on_ok).pack(side=tk.LEFT, padx=4)
         ttk.Button(btns, text="Cancel", command=self._on_cancel).pack(side=tk.LEFT, padx=4)
         ttk.Button(
@@ -1431,6 +1618,7 @@ class SamVideoDialog(tk.Toplevel):
             self.overlay_var.get(),
             self.png_var.get(),
             self.fallback_var.get(),
+            self.dry_run_var.get(),
         )
         self.grab_release()
         self.destroy()
@@ -1835,11 +2023,6 @@ def _start_sam_batch_subprocess(
 
 def run_sam_video(existing_root: tk.Tk | None = None) -> None:
     """GUI entry: configure and run SAM3 on a directory of videos (batch) or a single file."""
-    if importlib.util.find_spec("sam3") is None:
-        _print_sam3_install_instructions()
-        open_sam3_install_help_in_browser()
-        return
-
     root = existing_root
     owns_root = False
     if root is None:
@@ -1864,12 +2047,7 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
             root.destroy()
         return
 
-    if not _sam3_guard_cuda_gui(root):
-        if owns_root:
-            root.destroy()
-        return
-
-    input_path, out_parent, ckpt_opt, prompt, frame_idx, save_ov, save_png, frame_fallback = (
+    input_path, out_parent, ckpt_opt, prompt, frame_idx, save_ov, save_png, frame_fallback, dry_run = (
         dlg.result
     )
 
@@ -1885,6 +2063,47 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
     ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_base = out_parent / f"processed_sam_{ts}"
     output_base.mkdir(parents=True, exist_ok=True)
+
+    if dry_run:
+        report = _sam3_dry_run_report(
+            input_path,
+            output_base,
+            ckpt_opt=ckpt_opt,
+            text_prompt=prompt,
+            frame_index=frame_idx,
+            max_input_frames=None,
+            save_overlay_mp4=save_ov,
+            save_mask_png=save_png,
+            frame_by_frame_fallback=frame_fallback,
+            per_video_output=True,
+        )
+        for line in report:
+            print(line)
+        dry_report = _write_sam3_dry_run_report(report, output_base)
+        if dry_report is not None:
+            report.append(f"Report written to: {dry_report}")
+        summary = "\n".join(report[:min(18, len(report))])
+        if len(report) > 18:
+            summary += "\n… veja o arquivo SAM3_DRY_RUN.txt para o plano completo."
+        root.after(
+            0,
+            lambda: messagebox.showinfo("SAM 3 — dry-run", summary, parent=root),
+        )
+        if owns_root:
+            root.destroy()
+        return
+
+    if importlib.util.find_spec("sam3") is None:
+        _print_sam3_install_instructions()
+        open_sam3_install_help_in_browser()
+        if owns_root:
+            root.destroy()
+        return
+
+    if not _sam3_guard_cuda_gui(root):
+        if owns_root:
+            root.destroy()
+        return
 
     progress = SamBatchProgress(root, total=len(video_files), output_base=output_base)
 
@@ -1986,6 +2205,14 @@ def main() -> None:
         help="Max frames passed to SAM3 on GPU (VRAM). Overrides SAM3_MAX_FRAMES; 0 = full clip.",
     )
     parser.add_argument(
+        "--dry-run",
+        "--smoke",
+        dest="dry_run",
+        action="store_true",
+        help="Print effective settings, effective caps, retries, and detected checkpoint; "
+        "do not run SAM3.",
+    )
+    parser.add_argument(
         "--download-weights",
         action="store_true",
         help="Download facebook/sam3 (config.json + sam3.pt) into vaila/models/sam3/. "
@@ -2036,17 +2263,36 @@ def main() -> None:
     # of orphan SAM3 tensors into the next video (proven by debug-mode runtime logs:
     # H4+H7 — CUDA state corruption at start_session is irrecoverable in-process).
     if args.input and args.video_output_dir is not None:
-        if importlib.util.find_spec("sam3") is None:
-            _print_sam3_install_instructions()
-            open_sam3_install_help_in_browser()
-            raise SystemExit(1)
-        _sam3_guard_cuda_cli()
         single = args.input.resolve()
         if not single.is_file():
             print(f"--video-output-dir requires --input to be a single file: {single}")
             raise SystemExit(2)
         out_dir = args.video_output_dir.resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
+        if args.dry_run:
+            report = _sam3_dry_run_report(
+                single,
+                out_dir,
+                ckpt_opt=args.checkpoint,
+                text_prompt=args.text,
+                frame_index=args.frame,
+                max_input_frames=args.max_frames,
+                save_overlay_mp4=not args.no_overlay,
+                save_mask_png=not args.no_png,
+                frame_by_frame_fallback=args.frame_by_frame,
+                per_video_output=False,
+            )
+            for line in report:
+                print(line)
+            dry_report = _write_sam3_dry_run_report(report, out_dir)
+            if dry_report is not None:
+                print(f"Dry-run report written to: {dry_report}")
+            return
+        if importlib.util.find_spec("sam3") is None:
+            _print_sam3_install_instructions()
+            open_sam3_install_help_in_browser()
+            raise SystemExit(1)
+        _sam3_guard_cuda_cli()
         ok, err = _process_one_video_with_oom_retry(
             single,
             out_dir,
@@ -2065,11 +2311,6 @@ def main() -> None:
         raise SystemExit(3)
 
     if args.input and args.output:
-        if importlib.util.find_spec("sam3") is None:
-            _print_sam3_install_instructions()
-            open_sam3_install_help_in_browser()
-            raise SystemExit(1)
-        _sam3_guard_cuda_cli()
         inp = args.input.resolve()
         if inp.is_dir():
             video_files = _find_videos(inp)
@@ -2089,6 +2330,32 @@ def main() -> None:
         print(f"\nSAM 3 batch — {len(video_files)} video(s) to process")
         for idx, vf in enumerate(video_files, 1):
             print(f"  {idx}. {vf.name}")
+
+        if args.dry_run:
+            report = _sam3_dry_run_report(
+                inp,
+                output_base,
+                ckpt_opt=args.checkpoint,
+                text_prompt=args.text,
+                frame_index=args.frame,
+                max_input_frames=args.max_frames,
+                save_overlay_mp4=not args.no_overlay,
+                save_mask_png=not args.no_png,
+                frame_by_frame_fallback=args.frame_by_frame,
+                per_video_output=True,
+            )
+            for line in report:
+                print(line)
+            dry_report = _write_sam3_dry_run_report(report, output_base)
+            if dry_report is not None:
+                print(f"Dry-run report written to: {dry_report}")
+            return
+
+        if importlib.util.find_spec("sam3") is None:
+            _print_sam3_install_instructions()
+            open_sam3_install_help_in_browser()
+            raise SystemExit(1)
+        _sam3_guard_cuda_cli()
 
         # Subprocess-per-video isolation is the ONLY reliable fix for the SAM3
         # CUDA OOM cascade.  Runtime evidence (debug session 42b4a5):
