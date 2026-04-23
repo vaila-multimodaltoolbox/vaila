@@ -244,7 +244,7 @@ process_video(
 ### Python Dependencies
 ```
 opencv-python>=4.8.0
-mediapipe>=0.10.31  # Must support GPU delegate
+mediapipe>=0.10.33  # Must support GPU delegate (Tasks API)
 numpy>=1.24.0
 pandas>=2.0.0
 scipy>=1.10.0
