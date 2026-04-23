@@ -88,6 +88,7 @@ License:
     This project is licensed under the terms of AGPLv3.0.
 """
 
+import contextlib
 import datetime
 import gc
 import json
@@ -651,10 +652,8 @@ def filter_pose_data(
             k = int(median_kernel)
             if k % 2 == 0:
                 k += 1  # Ensure odd
-            try:
+            with contextlib.suppress(Exception):
                 filtered_data[:, j] = signal.medfilt(filtered_data[:, j], kernel_size=k)
-            except Exception:
-                pass  # Ignore error if array is too small
 
         # 2. SMOOTHING (BUTTERWORTH)
         if enable_butterworth:
@@ -663,10 +662,8 @@ def filter_pose_data(
             if normal_cutoff >= 1:
                 normal_cutoff = 0.99
             b, a = signal.butter(order, normal_cutoff, btype="low", analog=False)
-            try:
+            with contextlib.suppress(Exception):
                 filtered_data[:, j] = signal.filtfilt(b, a, filtered_data[:, j])
-            except Exception:
-                pass  # Keep data with only median if butter fails
 
     return filtered_data
 
@@ -689,7 +686,7 @@ def arima_smooth(data, order=(1, 0, 0)):
                 return data
 
             model = ARIMA(valid_data, order=order)
-            result = model.fit(disp=False)  # Suppress output
+            result = model.fit()  # Suppress output
 
             # Create output array
             output = data.copy()
@@ -718,7 +715,7 @@ def arima_smooth(data, order=(1, 0, 0)):
                     continue
 
                 model = ARIMA(valid_data, order=order)
-                result = model.fit(disp=False)  # Suppress output
+                result = model.fit()  # Suppress output
 
                 smoothed[:, j] = col_data.copy()
                 smoothed[valid_mask, j] = result.fittedvalues
@@ -1111,7 +1108,9 @@ def save_config_to_toml(config, filepath):
                 f.write("# resize_crop_scale = 2\n\n")
 
             # NEW: Scientific Robustness Section
-            sr = toml_config["scientific_robustness"]
+            sr = toml_config.get("scientific_robustness", {})
+            if not isinstance(sr, dict):
+                sr = {}
             f.write("\n[scientific_robustness]\n")
             f.write("# ================================================================\n")
             f.write("# SCIENTIFIC ROBUSTNESS PARAMETERS (Kalman + Optical Flow) - v0.9.0\n")
@@ -1338,13 +1337,55 @@ def get_config_filepath():
     return os.path.join(script_dir, "mediapipe_config.toml")
 
 
-class ConfidenceInputDialog(tk.simpledialog.Dialog):
+class ConfidenceInputDialog(simpledialog.Dialog):
+    """TOML/GUI configuration; all listed widgets are created in body() before use."""
+
+    notebook: ttk.Notebook
+    tab_mediapipe: ttk.Frame
+    tab_processing: ttk.Frame
+    tab_roi: ttk.Frame
+    tab_scientific: ttk.Frame
+    tab_filters: ttk.Frame
+    min_detection_entry: ttk.Entry
+    min_tracking_entry: ttk.Entry
+    model_complexity_entry: ttk.Entry
+    enable_segmentation_entry: ttk.Entry
+    smooth_segmentation_entry: ttk.Entry
+    static_image_mode_entry: ttk.Entry
+    apply_filtering_entry: ttk.Entry
+    estimate_occluded_entry: ttk.Entry
+    enable_median_filter_var: tk.BooleanVar
+    median_kernel_size_entry: ttk.Entry
+    track_process_noise_entry: ttk.Entry
+    track_measurement_noise_entry: ttk.Entry
+    max_pred_gap_entry: ttk.Entry
+    optical_flow_threshold_entry: ttk.Entry
+    enable_gap_reconstruction_entry: ttk.Entry
+    max_reconstruction_gap_entry: ttk.Entry
+    enable_resize_entry: ttk.Entry
+    resize_scale_entry: ttk.Entry
+    enable_padding_entry: ttk.Entry
+    pad_start_frames_entry: ttk.Entry
+    enable_reverse_padding_entry: ttk.Entry
+    pad_end_frames_entry: ttk.Entry
+    enable_crop_var: tk.BooleanVar
+    bbox_x_min_entry: ttk.Entry
+    bbox_y_min_entry: ttk.Entry
+    bbox_x_max_entry: ttk.Entry
+    bbox_y_max_entry: ttk.Entry
+    enable_resize_crop_var: tk.BooleanVar
+    resize_crop_scale_entry: ttk.Entry
+    num_roi_ranges_entry: ttk.Entry
+    norm_coords_label: ttk.Label
+    roi_ranges_label: ttk.Label
+
     def __init__(self, parent, input_dir=None):
         self.loaded_config = None
         self.use_toml = False
         self.toml_path = None
         self.input_dir = input_dir
         self.roi_polygon_points = None
+
         super().__init__(parent, title="vaila Toolbox Configuration")
 
     def body(self, master):
@@ -1370,6 +1411,7 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         self.notebook.add(self.tab_mediapipe, text=" MediaPipe & Model ")
         self.notebook.add(self.tab_processing, text=" Simple Processing ")
         self.notebook.add(self.tab_roi, text=" Advanced ROI ")
+        self.notebook.add(self.tab_scientific, text=" Scientific Robustness ")
         self.notebook.add(self.tab_filters, text=" Save & Load Config ")
 
         # --- ABA 1: MEDIAPIPE ---
@@ -1381,7 +1423,10 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
         # --- ABA 3: ROI (Bounding Box) ---
         self._build_roi_tab()
 
-        # --- ABA 4: SAVE & LOAD ---
+        # --- ABA 4: SCIENTIFIC ROBUSTNESS ---
+        self._build_scientific_tab()
+
+        # --- ABA 5: SAVE & LOAD ---
         self._build_filters_tab()
 
         # Retorna o foco inicial
@@ -1433,10 +1478,26 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             variable=self.enable_median_filter_var,
         ).grid(row=0, column=0, columnspan=2, sticky="w")
 
-        # Kernel Size
         self._create_entry_row(
             pp_frame, "Median Kernel Size (3, 5, 7):", "median_kernel_size_entry", "5", 1
         )
+
+    def _build_scientific_tab(self):
+        # Frame 1: Kalman & Tracking
+        frame = ttk.LabelFrame(self.tab_scientific, text="Scientific Robustness (Kalman & Optical Flow)", padding=15)
+        frame.pack(fill="x", padx=10, pady=5)
+
+        params = [
+            ("Kalman Process Noise (Default 1.0):", "track_process_noise_entry", "1.0"),
+            ("Measurement Noise (Default 0.1):", "track_measurement_noise_entry", "0.1"),
+            ("Max Prediction Gap (Frames):", "max_pred_gap_entry", "10"),
+            ("Optical Flow Threshold (0.0-1.0):", "optical_flow_threshold_entry", "0.15"),
+            ("Enable Gap Reconstruction (True/False):", "enable_gap_reconstruction_entry", "True"),
+            ("Max Reconstruction Gap (Frames):", "max_reconstruction_gap_entry", "10"),
+        ]
+
+        for i, (txt, attr, val) in enumerate(params):
+            self._create_entry_row(frame, txt, attr, val, i)
 
     def _build_processing_tab(self):
         # Frame de Resize
@@ -1462,7 +1523,11 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "enable_padding_entry",
                 str(ENABLE_PADDING_DEFAULT),
             ),
-            ("Initial Padding Frames:", "pad_start_frames_entry", str(PAD_START_FRAMES_DEFAULT)),
+            (
+                "Initial Padding Frames (-1 for full video reverse):",
+                "pad_start_frames_entry",
+                str(PAD_START_FRAMES_DEFAULT),
+            ),
             ("Enable Reverse Padding (True/False):", "enable_reverse_padding_entry", "True"),
             ("Reverse Padding Frames:", "pad_end_frames_entry", "30"),
         ]
@@ -1665,15 +1730,10 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             # Determine start frame default and min value based on previous range
             default_start = 0
             if i > 0 and self.bounding_box_ranges:
-                last_end = self.bounding_box_ranges[-1].get("frame_end", 0)
-                if last_end == float("inf"):
-                    # If previous range ends at infinity, we can't really suggest a valid start > inf.
-                    # We'll just default to Total Frames or 0, but user likely made a mistake or wants to override?
-                    # Let's set it to total_frames - 1 as a placeholder or just 0 if robust.
-                    default_start = total_frames
-                else:
-                    default_start = int(last_end) + 1
-                    # though typically sequential. minvalue=min_start in prompt enforces it if we want.
+                last_range = self.bounding_box_ranges[-1]
+                last_end = last_range.get("frame_end", 0) if isinstance(last_range, dict) else 0
+                default_start = total_frames if last_end == float("inf") else int(last_end) + 1
+                # though typically sequential. minvalue=min_start in prompt enforces it if we want.
 
             frame_start = simpledialog.askinteger(
                 f"ROI Range {i + 1}/{num_ranges}",
@@ -1859,6 +1919,15 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 # Advanced ROI
                 "roi_polygon_points": self.roi_polygon_points,
                 "bounding_box_ranges": self.bounding_box_ranges,
+                # Scientific Robustness
+                "scientific_robustness": {
+                    "track_process_noise": float(self.track_process_noise_entry.get()),
+                    "track_measurement_noise": float(self.track_measurement_noise_entry.get()),
+                    "max_pred_gap": int(self.max_pred_gap_entry.get()),
+                    "optical_flow_threshold": float(self.optical_flow_threshold_entry.get()),
+                    "enable_gap_reconstruction": self.enable_gap_reconstruction_entry.get().lower() == "true",
+                    "max_reconstruction_gap": int(self.max_reconstruction_gap_entry.get()),
+                },
             }
 
             # Try to get video total frames if input_dir is set
@@ -2279,10 +2348,6 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
             self.bbox_y_max_entry.delete(0, tk.END)
             self.bbox_y_max_entry.insert(0, str(config["bbox_y_max"]))
 
-        if "enable_resize_crop" in config:
-            val = str(config["enable_resize_crop"]).lower() == "true"
-            self.enable_resize_crop_var.set(val)
-
         if "resize_crop_scale" in config:
             self.resize_crop_scale_entry.delete(0, tk.END)
             self.resize_crop_scale_entry.insert(0, str(config["resize_crop_scale"]))
@@ -2298,26 +2363,43 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
 
         if "bounding_box_ranges" in config:
             self.bounding_box_ranges = config["bounding_box_ranges"]
-            self.roi_ranges_label.config(text=f"Configurados: {len(self.bounding_box_ranges)}")
-            self.num_roi_ranges_entry.delete(0, tk.END)
-            self.num_roi_ranges_entry.insert(0, str(len(self.bounding_box_ranges)))
+            if hasattr(self, "roi_ranges_label"):
+                self.roi_ranges_label.config(text=f"Configured: {len(self.bounding_box_ranges)}")
+            if hasattr(self, "num_roi_ranges_entry"):
+                self.num_roi_ranges_entry.delete(0, tk.END)
+                self.num_roi_ranges_entry.insert(0, str(len(self.bounding_box_ranges)))
+
+        # --- Scientific Robustness ---
+        if "scientific_robustness" in config:
+            sr = config["scientific_robustness"]
+            if isinstance(sr, dict):
+                if "track_process_noise" in sr:
+                    self.track_process_noise_entry.delete(0, tk.END)
+                    self.track_process_noise_entry.insert(0, str(sr["track_process_noise"]))
+                if "track_measurement_noise" in sr:
+                    self.track_measurement_noise_entry.delete(0, tk.END)
+                    self.track_measurement_noise_entry.insert(0, str(sr["track_measurement_noise"]))
+                if "max_pred_gap" in sr:
+                    self.max_pred_gap_entry.delete(0, tk.END)
+                    self.max_pred_gap_entry.insert(0, str(sr["max_pred_gap"]))
+                if "optical_flow_threshold" in sr:
+                    self.optical_flow_threshold_entry.delete(0, tk.END)
+                    self.optical_flow_threshold_entry.insert(0, str(sr["optical_flow_threshold"]))
+                if "enable_gap_reconstruction" in sr:
+                    self.enable_gap_reconstruction_entry.delete(0, tk.END)
+                    self.enable_gap_reconstruction_entry.insert(0, str(sr["enable_gap_reconstruction"]))
+                if "max_reconstruction_gap" in sr:
+                    self.max_reconstruction_gap_entry.delete(0, tk.END)
+                    self.max_reconstruction_gap_entry.insert(0, str(sr["max_reconstruction_gap"]))
 
         # Atualiza visualmente as coords normalizadas
         self.update_normalized_coords()
 
-        # Median Filter (Simple)
-        if hasattr(self, "enable_median_filter_var") and "enable_median_filter" in config:
-            self.enable_median_filter_var.set(config["enable_median_filter"])
-        if hasattr(self, "median_kernel_size_entry") and "median_kernel_size" in config:
-            self.median_kernel_size_entry.delete(0, tk.END)
-            self.median_kernel_size_entry.insert(0, str(config["median_kernel_size"]))
-
     def apply(self):
-        if self.use_toml and self.loaded_config:
-            self.result = self.loaded_config
-        else:
+        """Called when OK is pressed. Gather all values into self.result."""
+        try:
             self.result = {
-                # MediaPipe & Simple Processing
+                # MediaPipe
                 "min_detection_confidence": float(self.min_detection_entry.get()),
                 "min_tracking_confidence": float(self.min_tracking_entry.get()),
                 "model_complexity": int(self.model_complexity_entry.get()),
@@ -2326,34 +2408,44 @@ class ConfidenceInputDialog(tk.simpledialog.Dialog):
                 "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
                 "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
                 "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
-                # New Post-Processing
+                # Simple Median Filter
                 "enable_median_filter": self.enable_median_filter_var.get(),
                 "median_kernel_size": int(self.median_kernel_size_entry.get()),
-                # Resizing & Padding
+                # Resize & Padding
                 "enable_resize": self.enable_resize_entry.get().lower() == "true",
-                "resize_scale": int(self.resize_scale_entry.get()),
+                "resize_scale": float(self.resize_scale_entry.get()),
                 "enable_padding": self.enable_padding_entry.get().lower() == "true",
                 "pad_start_frames": int(self.pad_start_frames_entry.get()),
                 "enable_reverse_padding": self.enable_reverse_padding_entry.get().lower() == "true",
                 "pad_end_frames": int(self.pad_end_frames_entry.get()),
-                # Bounding box settings
+                # ROI
                 "enable_crop": self.enable_crop_var.get(),
                 "bbox_x_min": int(self.bbox_x_min_entry.get() or 0),
                 "bbox_y_min": int(self.bbox_y_min_entry.get() or 0),
                 "bbox_x_max": int(self.bbox_x_max_entry.get() or 1920),
                 "bbox_y_max": int(self.bbox_y_max_entry.get() or 1080),
                 "enable_resize_crop": self.enable_resize_crop_var.get(),
-                "resize_crop_scale": int(self.resize_crop_scale_entry.get() or 2),
-                "roi_polygon_points": getattr(
-                    self, "roi_polygon_points", None
-                ),  # Store polygon points if selected
-                "bounding_box_ranges": getattr(
-                    self, "bounding_box_ranges", []
-                ),  # Store multiple ROI ranges
+                "resize_crop_scale": float(self.resize_crop_scale_entry.get() or 2.0),
+                # Advanced ROI
+                "roi_polygon_points": self.roi_polygon_points,
+                "bounding_box_ranges": self.bounding_box_ranges,
+                # Scientific Robustness
+                "scientific_robustness": {
+                    "track_process_noise": float(self.track_process_noise_entry.get()),
+                    "track_measurement_noise": float(self.track_measurement_noise_entry.get()),
+                    "max_pred_gap": int(self.max_pred_gap_entry.get()),
+                    "optical_flow_threshold": float(self.optical_flow_threshold_entry.get()),
+                    "enable_gap_reconstruction": self.enable_gap_reconstruction_entry.get().lower() == "true",
+                    "max_reconstruction_gap": int(self.max_reconstruction_gap_entry.get()),
+                },
             }
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Validation Error", f"Please check your inputs:\n{e}")
+            self.result = None
 
 
-class DeviceSelectionDialog(tk.simpledialog.Dialog):
+class DeviceSelectionDialog(simpledialog.Dialog):
     """Dialog to select CPU or GPU backend for processing"""
 
     def __init__(self, parent, available_backends):
@@ -2726,7 +2818,8 @@ def resize_video_opencv(input_file, output_file, scale_factor, progress_callback
             progress_callback(f"Resizing from {width}x{height} to {new_width}x{new_height}")
 
         # Define codec and create VideoWriter object
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        fourcc_fn = getattr(cv2, "VideoWriter_fourcc", None) or cv2.VideoWriter.fourcc
+        fourcc = fourcc_fn(*"mp4v")
         out = cv2.VideoWriter(output_file, fourcc, 30, (new_width, new_height))
 
         # Process the video frame by frame
@@ -4260,10 +4353,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             self._proc = proc
 
         def write(self, frame_bgr: np.ndarray) -> None:
-            try:
+            with contextlib.suppress(BrokenPipeError):
                 self._proc.stdin.write(frame_bgr.tobytes())
-            except BrokenPipeError:
-                pass
 
         def release(self) -> None:
             try:
@@ -4277,22 +4368,35 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
 
     # First try FFmpeg pipe (most robust, avoids all timebase issues)
     _ffmpeg_cmd = [
-        "ffmpeg", "-y",
-        "-f", "rawvideo",
-        "-vcodec", "rawvideo",
-        "-s", f"{width}x{height}",
-        "-pix_fmt", "bgr24",
-        "-r", str(fps_out),
-        "-i", "pipe:0",
-        "-vcodec", "libx264",
-        "-preset", "fast",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
+        "ffmpeg",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-vcodec",
+        "rawvideo",
+        "-s",
+        f"{width}x{height}",
+        "-pix_fmt",
+        "bgr24",
+        "-r",
+        str(fps_out),
+        "-i",
+        "pipe:0",
+        "-vcodec",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
         str(annotated_output_path),
     ]
     try:
         import subprocess as _sp
+
         _ffmpeg_proc = _sp.Popen(
             _ffmpeg_cmd,
             stdin=_sp.PIPE,
@@ -4305,12 +4409,24 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     except Exception as _e:
         print(f"[WARNING] FFmpeg pipe failed ({_e}), falling back to cv2.VideoWriter...")
         _use_ffmpeg_pipe = False
-        fourcc = cv2.VideoWriter_fourcc(*"XVID")
+        fourcc_fn = getattr(cv2, "VideoWriter_fourcc", None) or cv2.VideoWriter.fourcc
+        fourcc = fourcc_fn(*"XVID")
         _avi_path = output_dir / f"{video_path.stem}_annotated.avi"
         out_video = cv2.VideoWriter(str(_avi_path), fourcc, fps_out, (width, height))
         if not out_video.isOpened():
             print("[WARNING] XVID also failed — video output disabled.")
-            out_video = type("NullWriter", (), {"write": lambda self, f: None, "release": lambda self: None})()
+
+            class NullWriter:
+                def write(self, f):
+                    pass
+
+                def release(self):
+                    pass
+
+                def isOpened(self) -> bool:  # noqa: N802 - duck-type cv2.VideoWriter
+                    return True
+
+            out_video = NullWriter()
 
     # Initialize results containers
     normalized_landmarks_list = []
@@ -4330,32 +4446,81 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         enable_padding = pose_config.get("enable_padding", ENABLE_PADDING_DEFAULT)
         pad_frames_count = pose_config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)
 
-        if enable_padding and pad_frames_count > 0:
-            print(f"Applying initial padding: {pad_frames_count} frames (reverse bounce) to stabilize model...")
-            
-            # Read the first N frames for padding
-            pad_frames = []
-            for _ in range(pad_frames_count):
-                success, frame = cap.read()
-                if not success:
-                    break
-                pad_frames.append(frame)
-                
-            if pad_frames:
-                # Feed them in reverse order (N-1, N-2, ..., 0) to provide smooth motion context
-                for pad_frame in reversed(pad_frames):
+        if enable_padding and pad_frames_count != 0:
+            if pad_frames_count == -1:
+                print(
+                    "Applying FULL reverse padding (videoprocessor merge mode) to stabilize model..."
+                )
+                # Stream the entire reversed video from FFmpeg
+                # This perfectly perfectly mimics videoprocessor.py merge without creating a massive file
+                cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(video_path),
+                    "-vf",
+                    "reverse",
+                    "-f",
+                    "rawvideo",
+                    "-pix_fmt",
+                    "bgr24",
+                    "pipe:1",
+                ]
+                import subprocess as _sp
+
+                proc = _sp.Popen(cmd, stdout=_sp.PIPE, stderr=_sp.DEVNULL)
+                frame_size = width * height * 3
+                pad_frames_processed = 0
+
+                print("Processing full reversed video as warm-up...")
+                while proc.stdout is not None:
+                    raw = proc.stdout.read(frame_size)
+                    if not raw or len(raw) != frame_size:
+                        break
+                    pad_frame = np.frombuffer(raw, dtype=np.uint8).reshape((height, width, 3))
                     mp_pad_frame = mp.Image(
                         image_format=mp.ImageFormat.SRGB,
                         data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
                     )
                     landmarker.detect_for_video(mp_pad_frame, current_timestamp_ms)
                     current_timestamp_ms += frame_duration_ms
+                    pad_frames_processed += 1
+                    if pad_frames_processed % 500 == 0:
+                        print(f"  Warm-up: Processed {pad_frames_processed} reversed frames...")
 
-                # Reset video to start
+                proc.wait()
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                print("Padding complete. Starting main analysis...")
+                print(
+                    f"Full padding complete ({pad_frames_processed} frames). Starting main analysis..."
+                )
             else:
-                print("Warning: Could not read frames for padding. Skipping.")
+                print(
+                    f"Applying initial padding: {pad_frames_count} frames (reverse bounce) to stabilize model..."
+                )
+
+                # Read the first N frames for padding
+                pad_frames = []
+                for _ in range(pad_frames_count):
+                    success, frame = cap.read()
+                    if not success:
+                        break
+                    pad_frames.append(frame)
+
+                if pad_frames:
+                    # Feed them in reverse order (N-1, N-2, ..., 0) to provide smooth motion context
+                    for pad_frame in reversed(pad_frames):
+                        mp_pad_frame = mp.Image(
+                            image_format=mp.ImageFormat.SRGB,
+                            data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
+                        )
+                        landmarker.detect_for_video(mp_pad_frame, current_timestamp_ms)
+                        current_timestamp_ms += frame_duration_ms
+
+                    # Reset video to start
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    print("Padding complete. Starting main analysis...")
+                else:
+                    print("Warning: Could not read frames for padding. Skipping.")
         # -------------------------------
 
         while cap.isOpened():
@@ -4484,48 +4649,48 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                 C_JOINT = (0, 255, 0)  # Green
 
                 # 4. Drawing Helpers
-                def dline(p1, p2, color, thick=3):
+                def dline(frame_out, p1, p2, color, thick=3):
                     if np.isnan(p1).any() or np.isnan(p2).any():
                         return
                     pt1 = (int(p1[0]), int(p1[1]))
                     pt2 = (int(p2[0]), int(p2[1]))
-                    cv2.line(annotated_frame, pt1, pt2, color, thick, cv2.LINE_AA)
+                    cv2.line(frame_out, pt1, pt2, color, thick, cv2.LINE_AA)
 
-                def dcircle(p, color, radius=5):
+                def dcircle(frame_out, p, color, radius=5):
                     if np.isnan(p).any():
                         return
                     pt = (int(p[0]), int(p[1]))
                     cv2.circle(
-                        annotated_frame, pt, radius, (255, 255, 255), -1, cv2.LINE_AA
+                        frame_out, pt, radius, (255, 255, 255), -1, cv2.LINE_AA
                     )  # white border
-                    cv2.circle(annotated_frame, pt, radius - 2, color, -1, cv2.LINE_AA)
+                    cv2.circle(frame_out, pt, radius - 2, color, -1, cv2.LINE_AA)
 
                 # 5. Draw Segments
                 # Right Side
-                dline(pts["right_shoulder"], pts["right_elbow"], C_RIGHT)
-                dline(pts["right_elbow"], pts["right_wrist"], C_RIGHT)
-                dline(pts["right_wrist"], pts["right_mid_hand"], C_RIGHT)
-                dline(pts["right_hip"], pts["right_knee"], C_RIGHT)
-                dline(pts["right_knee"], pts["right_ankle"], C_RIGHT)
-                dline(pts["right_ankle"], pts["right_heel"], C_RIGHT)
-                dline(pts["right_heel"], pts["right_foot_index"], C_RIGHT)
-                dline(pts["right_ankle"], pts["right_foot_index"], C_RIGHT)
+                dline(annotated_frame, pts["right_shoulder"], pts["right_elbow"], C_RIGHT)
+                dline(annotated_frame, pts["right_elbow"], pts["right_wrist"], C_RIGHT)
+                dline(annotated_frame, pts["right_wrist"], pts["right_mid_hand"], C_RIGHT)
+                dline(annotated_frame, pts["right_hip"], pts["right_knee"], C_RIGHT)
+                dline(annotated_frame, pts["right_knee"], pts["right_ankle"], C_RIGHT)
+                dline(annotated_frame, pts["right_ankle"], pts["right_heel"], C_RIGHT)
+                dline(annotated_frame, pts["right_heel"], pts["right_foot_index"], C_RIGHT)
+                dline(annotated_frame, pts["right_ankle"], pts["right_foot_index"], C_RIGHT)
 
                 # Left Side
-                dline(pts["left_shoulder"], pts["left_elbow"], C_LEFT)
-                dline(pts["left_elbow"], pts["left_wrist"], C_LEFT)
-                dline(pts["left_wrist"], pts["left_mid_hand"], C_LEFT)
-                dline(pts["left_hip"], pts["left_knee"], C_LEFT)
-                dline(pts["left_knee"], pts["left_ankle"], C_LEFT)
-                dline(pts["left_ankle"], pts["left_heel"], C_LEFT)
-                dline(pts["left_heel"], pts["left_foot_index"], C_LEFT)
-                dline(pts["left_ankle"], pts["left_foot_index"], C_LEFT)
+                dline(annotated_frame, pts["left_shoulder"], pts["left_elbow"], C_LEFT)
+                dline(annotated_frame, pts["left_elbow"], pts["left_wrist"], C_LEFT)
+                dline(annotated_frame, pts["left_wrist"], pts["left_mid_hand"], C_LEFT)
+                dline(annotated_frame, pts["left_hip"], pts["left_knee"], C_LEFT)
+                dline(annotated_frame, pts["left_knee"], pts["left_ankle"], C_LEFT)
+                dline(annotated_frame, pts["left_ankle"], pts["left_heel"], C_LEFT)
+                dline(annotated_frame, pts["left_heel"], pts["left_foot_index"], C_LEFT)
+                dline(annotated_frame, pts["left_ankle"], pts["left_foot_index"], C_LEFT)
 
                 # Center
-                dline(pts["mid_shoulder"], pts["mid_hip"], C_CENTER)
-                dline(pts["mid_ear"], pts["mid_shoulder"], C_CENTER)
-                dline(pts["right_shoulder"], pts["left_shoulder"], C_CENTER, 2)
-                dline(pts["right_hip"], pts["left_hip"], C_CENTER, 2)
+                dline(annotated_frame, pts["mid_shoulder"], pts["mid_hip"], C_CENTER)
+                dline(annotated_frame, pts["mid_ear"], pts["mid_shoulder"], C_CENTER)
+                dline(annotated_frame, pts["right_shoulder"], pts["left_shoulder"], C_CENTER, 2)
+                dline(annotated_frame, pts["right_hip"], pts["left_hip"], C_CENTER, 2)
 
                 # 6. Draw Joints
                 # region agent log H6
@@ -4572,7 +4737,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                 for name, pt in pts.items():
                     if "mid" in name:
                         continue
-                    dcircle(pt, C_JOINT, 5)
+                    dcircle(annotated_frame, pt, C_JOINT, 5)
 
                 # ----------------------------------------
 
@@ -4656,7 +4821,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             for lm in frame_landmarks:
                 row.extend(lm)
             data.append(row)
-        return pd.DataFrame(data, columns=columns)
+        return pd.DataFrame(np.array(data), columns=pd.Index(columns))
 
     print("Converting results to DataFrame...")
     df_norm = create_df(normalized_landmarks_list)

@@ -9,7 +9,7 @@ Version: 2024-08-16 12:00:00
 Update: 27 January 2026
 
 Changelog:
-- 2026-01-27: Updated `mediapipe` to version 0.10.32. This update fixes the issue with the `mediapipe` library not being able to find the `mediapipe` module.
+- 2026-01-27: Updated `mediapipe` to 0.10.33+ (Tasks API; legacy `mp.solutions` removed upstream).
 
 Author: Prof. Paulo Santiago
 """
