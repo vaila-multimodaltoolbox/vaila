@@ -32,6 +32,7 @@ from vaila.ffmpeg_utils import get_ffmpeg_path
 
 FFMPEG = get_ffmpeg_path()
 
+
 def run_benchmark_for_video(video_info):
     """Run H.264, H.265, and H.266 benchmarks for a single video."""
     video_path = video_info["video_path"]
@@ -39,20 +40,30 @@ def run_benchmark_for_video(video_info):
     basename = os.path.basename(video_path)
     original_size = os.path.getsize(video_path)
 
-    video_results = {
-        "video": basename,
-        "input_size_bytes": original_size,
-        "results": []
-    }
+    video_results = {"video": basename, "input_size_bytes": original_size, "results": []}
 
     codecs = [
-        {"name": "H.264", "ext": "_h264.mp4", "params": ["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-bf", "0"]},
-        {"name": "H.265", "ext": "_h265.mp4", "params": ["-c:v", "libx265", "-preset", "medium", "-crf", "28"]},
-        {"name": "H.266", "ext": "_h266.mp4", "params": ["-c:v", "libvvenc", "-vvenc-params", "preset=medium:qp=32"]},
+        {
+            "name": "H.264",
+            "ext": "_h264.mp4",
+            "params": ["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-bf", "0"],
+        },
+        {
+            "name": "H.265",
+            "ext": "_h265.mp4",
+            "params": ["-c:v", "libx265", "-preset", "medium", "-crf", "28"],
+        },
+        {
+            "name": "H.266",
+            "ext": "_h266.mp4",
+            "params": ["-c:v", "libvvenc", "-vvenc-params", "preset=medium:qp=32"],
+        },
     ]
 
     for codec in codecs:
-        output_path = os.path.join(output_base_dir, f"{os.path.splitext(basename)[0]}{codec['ext']}")
+        output_path = os.path.join(
+            output_base_dir, f"{os.path.splitext(basename)[0]}{codec['ext']}"
+        )
 
         start_time = time.time()
         success = False
@@ -60,7 +71,11 @@ def run_benchmark_for_video(video_info):
         output_size = 0
 
         try:
-            cmd = [FFMPEG, "-y", "-i", video_path] + codec["params"] + ["-c:a", "copy", "-hide_banner", "-nostats", output_path]
+            cmd = (
+                [FFMPEG, "-y", "-i", video_path]
+                + codec["params"]
+                + ["-c:a", "copy", "-hide_banner", "-nostats", output_path]
+            )
             subprocess.run(cmd, check=True, capture_output=True, text=True)
 
             if os.path.exists(output_path):
@@ -79,11 +94,12 @@ def run_benchmark_for_video(video_info):
             "error": error,
             "output_size_bytes": output_size,
             "compression_ratio": original_size / output_size if output_size > 0 else 0,
-            "time_seconds": elapsed_time
+            "time_seconds": elapsed_time,
         }
         video_results["results"].append(codec_res)
 
     return video_results
+
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark video codecs H.264, H.265, H.266.")
@@ -100,13 +116,19 @@ def main():
     os.makedirs(args.output, exist_ok=True)
 
     video_extensions = (".mp4", ".avi", ".mov", ".mkv", ".wmv")
-    video_files = [os.path.join(args.dir, f) for f in os.listdir(args.dir) if f.lower().endswith(video_extensions)]
+    video_files = [
+        os.path.join(args.dir, f)
+        for f in os.listdir(args.dir)
+        if f.lower().endswith(video_extensions)
+    ]
 
     if not video_files:
         print("[red]No videos found in directory.[/red]")
         return
 
-    print(f"[bold cyan]Starting Benchmark for {len(video_files)} videos using {args.workers} workers...[/bold cyan]")
+    print(
+        f"[bold cyan]Starting Benchmark for {len(video_files)} videos using {args.workers} workers...[/bold cyan]"
+    )
 
     video_infos = [{"video_path": v, "output_dir": args.output} for v in video_files]
 
@@ -126,6 +148,7 @@ def main():
         json.dump(all_results, f, indent=4)
 
     print(f"\n[bold green]Benchmark completed! Results saved to {json_path}[/bold green]")
+
 
 if __name__ == "__main__":
     main()
