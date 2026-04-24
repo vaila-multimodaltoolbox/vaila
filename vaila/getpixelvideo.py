@@ -2670,6 +2670,7 @@ def play_video_with_controls(
             auto_button_rect,  # Add auto button to return
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
+            pitch_guide_button_rect,  # Add PitchGuide button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
