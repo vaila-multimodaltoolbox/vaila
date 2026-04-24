@@ -226,6 +226,12 @@
               Ultralytics pose dataset; reuse <code>kpt_shape</code> when
               appending to an existing folder (F7)
             </li>
+            <li>
+              <strong>Pitch Guide Mode:</strong> Step-by-step guided labeling of all
+              soccer / FIFA field keypoints in order — an on-screen overlay tells you
+              exactly which point to click next; produces a named marker per point for
+              YOLO-pose export (F9)
+            </li>
           </ul>
         </div>
       </section>
@@ -247,7 +253,34 @@
         </ul>
 
         <h3>Installation (vailá repo, recommended):</h3>
-        <div class="code">uv sync<br />uv run vaila/getpixelvideo.py</div>
+        <div class="code">uv sync<br/>uv run vaila/getpixelvideo.py</div>
+
+        <h3>CLI Commands:</h3>
+        <div class="code">
+<strong># Open a video file (GUI opens automatically)</strong><br/>
+uv run vaila/getpixelvideo.py -f video.mp4<br/><br/>
+
+<strong># Open a single PNG image</strong><br/>
+uv run vaila/getpixelvideo.py -f frame.png<br/><br/>
+
+<strong># Open a folder of PNG frames (sequence)</strong><br/>
+uv run vaila/getpixelvideo.py --sequence /path/to/png_folder/<br/><br/>
+
+<strong># Start with pre-loaded keypoint CSV</strong><br/>
+uv run vaila/getpixelvideo.py -f video.mp4 -k markers.csv<br/><br/>
+
+<strong># Start in Labeling (bounding-box) mode</strong><br/>
+uv run vaila/getpixelvideo.py -f video.mp4 -l<br/><br/>
+
+<strong># Open with a pose dataset folder so F9 appends</strong><br/>
+uv run vaila/getpixelvideo.py -f video2.mp4 --dataset pose_dataset_20260424_120000/<br/><br/>
+
+<strong># Pitch Guide workflow (multi-video FIFA keypoints)</strong><br/>
+uv run vaila/getpixelvideo.py -f match.mp4<br/>
+# → click PitchGuide → annotate 37 points → F9 export<br/>
+uv run vaila/getpixelvideo.py -f match2.mp4 --dataset pose_dataset_&lt;ts&gt;/<br/>
+# → PitchGuide → F9 → appends to dataset
+        </div>
 
         <h3>Standalone pip:</h3>
         <div class="code">pip install opencv-python pygame pandas numpy</div>
@@ -430,6 +463,14 @@
                 <td>
                   Export YOLO-pose dataset from clicked markers (not only
                   labeling mode); see section 8
+                </td>
+              </tr>
+              <tr>
+                <td><span class="key">PitchGuide button</span></td>
+                <td>
+                  Toggle Pitch Guide mode — guided soccer field keypoint labeling;
+                  left-click = mark &amp; advance, right-click = skip.
+                  Loads <code>soccerfield_ref3d_fifa.csv</code> automatically.
                 </td>
               </tr>
             </table>
@@ -618,6 +659,58 @@
             markers for re-editing.
           </li>
         </ul>
+      </section>
+
+      <section id="pitch-guide">
+        <h2>6b. Pitch Guide Mode (Soccer Field Labeling)</h2>
+        <p>
+          <strong>Pitch Guide Mode</strong> is a dedicated workflow for creating a
+          YOLO-pose training dataset from soccer field keypoints. It loads the field
+          reference CSV (<code>soccerfield_ref3d_fifa.csv</code> or the standard
+          <code>soccerfield_ref3d.csv</code>) and walks you through each point one
+          by one, so you never have to guess which marker to place next.
+        </p>
+
+        <div class="feature-box">
+          <h3>How to use — GUI:</h3>
+          <ol>
+            <li>Open a video: <code>uv run vaila/getpixelvideo.py</code></li>
+            <li>Navigate to the frame where the field is clearly visible.</li>
+            <li>Click the <strong>PitchGuide</strong> button in the bottom bar (turns orange).</li>
+            <li>
+              A green panel appears in the top-left corner showing:<br/>
+              <code>Mark point N/37: (M remaining)</code><br/>
+              <code>  &lt;point_name&gt;</code>
+            </li>
+            <li><strong>Left-click</strong> on the video → marks the point and advances to the next.</li>
+            <li><strong>Right-click</strong> → skips the current point (records a <code>None</code> placeholder).</li>
+            <li>Repeat until all 37 points are done (guide exits automatically).</li>
+            <li>Press <strong>Save</strong> button or <kbd>S</kbd> to save the CSV.</li>
+            <li>Press <strong>F9</strong> to export a YOLO-pose dataset from the recorded markers.</li>
+          </ol>
+        </div>
+
+        <div class="feature-box">
+          <h3>CLI workflow (multi-video dataset):</h3>
+          <div class="code">
+# 1. Open first video and create dataset folder<br/>
+uv run vaila/getpixelvideo.py -f video1.mp4<br/>
+# → activate PitchGuide, annotate, press F9 → pose_dataset_YYYYMMDD/<br/>
+<br/>
+# 2. Open second video appending to the same dataset<br/>
+uv run vaila/getpixelvideo.py -f video2.mp4 --dataset pose_dataset_YYYYMMDD/<br/>
+# → activate PitchGuide, annotate, press F9 → appends to existing dataset<br/>
+<br/>
+# OR use F8 inside the app to switch videos without closing
+          </div>
+        </div>
+
+        <h3>Field reference files:</h3>
+        <ul>
+          <li><code>vaila/models/soccerfield_ref3d_fifa.csv</code> — FIFA Skeletal Tracking origin (0,0,0 = centre). 37 points. <em>Preferred.</em></li>
+          <li><code>vaila/models/soccerfield_ref3d.csv</code> — standard vailá layout (origin = bottom-left corner). 37 points. <em>Fallback.</em></li>
+        </ul>
+        <p>PitchGuide automatically picks the FIFA file if present; otherwise falls back to the standard one.</p>
       </section>
 
       <section id="visualization">
@@ -823,6 +916,13 @@
           </li>
         </ul>
 
+        <h3>Pose dataset (<span class="key">F9</span>)</h3>
+        <p>
+          Summarized: marker-based YOLO-pose export, multi-video via F7/F8,
+          optional <code>--dataset</code> CLI flag. See sections 6 and 8 for
+          full detail.
+        </p>
+
         <h3>Auto-detection</h3>
         <p>
           The tool automatically detects CSV format based on column structure:
@@ -896,10 +996,12 @@
         <p><strong>Essential Controls:</strong></p>
         <ul>
           <li><span class="key">Space</span> - Play/Pause</li>
-          <li><span class="key">Left Click</span> - Add Marker</li>
+          <li><span class="key">Left Click</span> - Add Marker (or mark current guide point in PitchGuide mode)</li>
           <li><span class="key">TAB</span> - Navigate Markers</li>
-          <li><span class="key">S</span> - Save</li>
+          <li><span class="key">S</span> - Save markers CSV</li>
           <li><span class="key">H</span> - Help</li>
+          <li><span class="key">F9</span> - Export YOLO-pose dataset from markers</li>
+          <li><span class="key">PitchGuide button</span> - Guided soccer field keypoint labeling (37 pts)</li>
         </ul>
       </div>
     </div>

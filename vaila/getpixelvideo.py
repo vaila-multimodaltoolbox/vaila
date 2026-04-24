@@ -1498,6 +1498,38 @@ def play_video_with_controls(
     # Feature: Click & Pass
     click_pass_mode = False
 
+    # -----------------------------------------------------------------------
+    # Feature: Pitch Guide Mode
+    # Guides the user through labeling all soccer-field keypoints in order.
+    # -----------------------------------------------------------------------
+    pitch_guide_mode = False  # Whether guide mode is active
+    pitch_guide_points: list[dict] = []  # List of {point_name, point_number} dicts
+    pitch_guide_index = 0  # Index of the current point to mark
+
+    def _load_pitch_guide_points() -> list[dict]:
+        """Load point names from the closest soccerfield_ref3d CSV."""
+        import pandas as _pd
+
+        candidates = [
+            Path(__file__).parent / "models" / "soccerfield_ref3d_fifa.csv",
+            Path(__file__).parent / "models" / "soccerfield_ref3d.csv",
+        ]
+        for _p in candidates:
+            if _p.exists():
+                try:
+                    _df = _pd.read_csv(str(_p))
+                    if "point_name" in _df.columns:
+                        return [
+                            {
+                                "point_name": row["point_name"],
+                                "point_number": int(row["point_number"]),
+                            }
+                            for _, row in _df.iterrows()
+                        ]
+                except Exception:
+                    pass
+        return []
+
     # Feature: Playback Speed
     playback_speed = 1.0  # 1.0 = Normal, 0.5 = Half speed, 2.0 = Double speed
 
@@ -2363,6 +2395,7 @@ def play_video_with_controls(
         auto_button_width = 70
         click_pass_button_width = 70
         labeling_button_width = 70
+        pitch_guide_button_width = 90  # NEW: Pitch Guide button
         tracking_csv_button_width = 120
         export_video_button_width = 100
         help_web_button_width = 30  # Width for '?' button
@@ -2373,10 +2406,11 @@ def play_video_with_controls(
             + auto_button_width
             + click_pass_button_width
             + labeling_button_width
+            + pitch_guide_button_width
             + tracking_csv_button_width
             + export_video_button_width
             + help_web_button_width
-            + (button_gap * 9)
+            + (button_gap * 10)
         )
         cluster_x = (window_width - total_buttons_width) // 2
         cluster_y = slider_y - button_height - 5
@@ -2480,7 +2514,23 @@ def play_video_with_controls(
             labeling_text, labeling_text.get_rect(center=labeling_button_rect.center)
         )
 
-        # 7. Load Tracking CSV button
+        # 7b. Pitch Guide button (NEW)
+        pitch_guide_button_rect = pygame.Rect(
+            current_x,
+            cluster_y,
+            pitch_guide_button_width,
+            button_height,
+        )
+        current_x += pitch_guide_button_width + button_gap
+
+        _pg_color = (180, 100, 20) if pitch_guide_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, _pg_color, pitch_guide_button_rect)
+        _pg_label = (
+            f"PitchGuide {'ON' if pitch_guide_mode else ''}" if pitch_guide_mode else "PitchGuide"
+        )
+        _pg_text = font.render(_pg_label, True, (255, 255, 255))
+        control_surface.blit(_pg_text, _pg_text.get_rect(center=pitch_guide_button_rect.center))
+
         tracking_csv_button_width = 120
         tracking_csv_button_rect = pygame.Rect(
             current_x,
@@ -4921,6 +4971,7 @@ def play_video_with_controls(
             auto_button_rect,  # Add auto button to return
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
+            pitch_guide_button_rect,  # Add PitchGuide button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
@@ -4950,6 +5001,39 @@ def play_video_with_controls(
                 screen.blit(msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15))
 
         pygame.display.flip()
+
+        # ---------------------------------------------------------------
+        # Pitch Guide Overlay: show current point to mark (drawn on top)
+        # ---------------------------------------------------------------
+        if pitch_guide_mode and pitch_guide_points:
+            _guide_font_big = pygame.font.SysFont("verdana", 18, bold=True)
+            _guide_font_sm = pygame.font.SysFont("verdana", 13)
+            _total_pts = len(pitch_guide_points)
+            _pt = pitch_guide_points[pitch_guide_index] if pitch_guide_index < _total_pts else None
+
+            _panel_w, _panel_h = 420, 85
+            _panel_x, _panel_y = 10, 10
+            _panel = pygame.Surface((_panel_w, _panel_h))
+            _panel.set_alpha(220)
+            _panel.fill((20, 55, 20))
+
+            if _pt:
+                _remaining_pts = _total_pts - pitch_guide_index
+                _line1 = (
+                    f"Mark point {_pt['point_number']}/{_total_pts}: ({_remaining_pts} remaining)"
+                )
+                _line2 = f"  {_pt['point_name']}"
+                _line3 = "Left-click=mark & advance  |  Right-click=skip  |  PitchGuide btn=exit"
+            else:
+                _line1 = "All pitch points marked!"
+                _line2 = "Press Save (S) or PitchGuide button to exit."
+                _line3 = ""
+
+            _panel.blit(_guide_font_sm.render(_line1, True, (255, 230, 60)), (8, 5))
+            _panel.blit(_guide_font_big.render(_line2, True, (255, 255, 255)), (8, 28))
+            _panel.blit(_guide_font_sm.render(_line3, True, (180, 220, 180)), (8, 62))
+            screen.blit(_panel, (_panel_x, _panel_y))
+            pygame.display.flip()
 
         # Auto-marking logic - mark points automatically during playback
         if auto_marking_mode and not paused and not one_line_mode:
@@ -5649,6 +5733,7 @@ def play_video_with_controls(
                             one_line_mode = False
                             auto_marking_mode = False
                             sequential_mode = False
+                            pitch_guide_mode = False
                             save_message_text = (
                                 "LABELING MODE: Click and DRAG to draw boxes. Press Z to undo."
                             )
@@ -5656,6 +5741,27 @@ def play_video_with_controls(
                             save_message_text = "Labeling mode disabled"
                         showing_save_message = True
                         save_message_timer = 90
+                    elif pitch_guide_button_rect.collidepoint(x, rel_y):
+                        # Toggle Pitch Guide mode
+                        pitch_guide_mode = not pitch_guide_mode
+                        if pitch_guide_mode:
+                            pitch_guide_points = _load_pitch_guide_points()
+                            pitch_guide_index = 0
+                            labeling_mode = False
+                            one_line_mode = False
+                            auto_marking_mode = False
+                            if pitch_guide_points:
+                                save_message_text = (
+                                    f"PITCH GUIDE ON: {len(pitch_guide_points)} points. "
+                                    f"Click to mark '{pitch_guide_points[0]['point_name']}'"
+                                )
+                            else:
+                                save_message_text = "Pitch Guide: no field CSV found in models/"
+                                pitch_guide_mode = False
+                        else:
+                            save_message_text = "Pitch Guide disabled"
+                        showing_save_message = True
+                        save_message_timer = 120
                     elif tracking_csv_button_rect.collidepoint(x, rel_y):
                         # Load tracking CSV
                         load_tracking_csv()
@@ -5740,6 +5846,27 @@ def play_video_with_controls(
                                     coordinates[frame_count].append((video_x, video_y))
                                     selected_marker_idx = len(coordinates[frame_count]) - 1
 
+                                # Pitch Guide: record current point and advance
+                                if pitch_guide_mode and pitch_guide_points:
+                                    if pitch_guide_index < len(pitch_guide_points):
+                                        _cur_pt = pitch_guide_points[pitch_guide_index]
+                                        pitch_guide_index += 1
+                                        _remaining_guide = (
+                                            len(pitch_guide_points) - pitch_guide_index
+                                        )
+                                        if pitch_guide_index < len(pitch_guide_points):
+                                            _next_pt = pitch_guide_points[pitch_guide_index]
+                                            save_message_text = (
+                                                f"Marked '{_cur_pt['point_name']}' ✓ "
+                                                f"Next: '{_next_pt['point_name']}' "
+                                                f"({_remaining_guide} left)"
+                                            )
+                                        else:
+                                            save_message_text = "All pitch points marked! Press Save or PitchGuide to exit."
+                                            pitch_guide_mode = False
+                                        showing_save_message = True
+                                        save_message_timer = 60
+
                                 # Feature: ClickPass logic
                                 if click_pass_mode:
                                     # Visual Feedback: Redraw frame with new marker before advancing
@@ -5777,8 +5904,28 @@ def play_video_with_controls(
                                     paused = True
 
                     elif event.button == 3:  # Right click
+                        # Pitch Guide: right-click = skip current point (record None)
+                        if pitch_guide_mode and pitch_guide_points and not (y >= window_height):
+                            if pitch_guide_index < len(pitch_guide_points):
+                                _skipped_pt = pitch_guide_points[pitch_guide_index]
+                                pitch_guide_index += 1
+                                # Store None placeholder for skipped point
+                                while len(coordinates[frame_count]) < pitch_guide_index:
+                                    coordinates[frame_count].append((None, None))
+                                if pitch_guide_index < len(pitch_guide_points):
+                                    save_message_text = (
+                                        f"Skipped '{_skipped_pt['point_name']}' → "
+                                        f"Next: '{pitch_guide_points[pitch_guide_index]['point_name']}'"
+                                    )
+                                else:
+                                    save_message_text = (
+                                        "All points done (some skipped). Press Save."
+                                    )
+                                    pitch_guide_mode = False
+                                showing_save_message = True
+                                save_message_timer = 60
                         # Keep existing behavior for right-click (delete most recent)
-                        if one_line_mode:
+                        elif one_line_mode:
                             for i in range(len(one_line_markers) - 1, -1, -1):
                                 if one_line_markers[i][0] == frame_count:
                                     del one_line_markers[i]
