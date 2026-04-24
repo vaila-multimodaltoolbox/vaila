@@ -452,7 +452,7 @@ uv run vaila/getpixelvideo.py -f match2.mp4 --dataset pose_dataset_&lt;ts&gt;/<b
               </tr>
               <tr>
                 <td><span class="key">F7</span></td>
-                <td>Load dataset folder – next Save appends (Labeling Mode Only)</td>
+                <td>Load dataset folder – next F9/Save appends for multi-video datasets</td>
               </tr>
               <tr>
                 <td><span class="key">F8</span></td>
@@ -469,7 +469,9 @@ uv run vaila/getpixelvideo.py -f match2.mp4 --dataset pose_dataset_&lt;ts&gt;/<b
                 <td><span class="key">PitchGuide button</span></td>
                 <td>
                   Toggle Pitch Guide mode — guided soccer field keypoint labeling;
-                  left-click = mark &amp; advance, right-click = skip.
+                  left-click = mark &amp; advance, A = next/skip,
+                  right-click = delete selected/current guide point,
+                  B/Backspace = previous point, V = show/hide FIFA field image.
                   Loads <code>soccerfield_ref3d_fifa.csv</code> automatically.
                 </td>
               </tr>
@@ -680,13 +682,20 @@ uv run vaila/getpixelvideo.py -f match2.mp4 --dataset pose_dataset_&lt;ts&gt;/<b
             <li>
               A green panel appears in the top-left corner showing:<br/>
               <code>Mark point N/37: (M remaining)</code><br/>
-              <code>  &lt;point_name&gt;</code>
+              <code>  pN: &lt;point_name&gt;</code><br/>
+              The guide also opens with a larger FIFA field reference image
+              showing the field lines and point numbers, with the current point
+              highlighted in yellow.
             </li>
-            <li><strong>Left-click</strong> on the video → marks the point and advances to the next.</li>
-            <li><strong>Right-click</strong> → skips the current point (records a <code>None</code> placeholder).</li>
+            <li><strong>Left-click</strong> on the video → marks the current FIFA point ID and advances to the next.</li>
+            <li><strong>A</strong> → advances/skips the current point (records a <code>None</code> placeholder).</li>
+            <li><strong>Right-click</strong> → deletes the selected/current guide point and returns the guide to that point.</li>
+            <li><strong>B</strong> or <strong>Backspace</strong> → moves back one point without deleting the marker, useful for correcting a previous click.</li>
+            <li><strong>G</strong> toggles Pitch Guide mode without using the mouse.</li>
+            <li><strong>V</strong> shows or hides the FIFA field reference image while keeping the text guide visible.</li>
             <li>Repeat until all 37 points are done (guide exits automatically).</li>
             <li>Press <strong>Save</strong> button or <kbd>S</kbd> to save the CSV.</li>
-            <li>Press <strong>F9</strong> to export a YOLO-pose dataset from the recorded markers.</li>
+            <li>Press <strong>F9</strong> to export a YOLO-pose dataset from the recorded markers. The export keeps the FIFA order as <code>p1..p37</code> and writes <code>keypoints.json</code> plus <code>kpt_names</code> in <code>data.yaml</code>.</li>
           </ol>
         </div>
 

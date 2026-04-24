@@ -85,6 +85,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 
 import io
 import json
+import math
 import os
 
 # Configure SDL environment variables BEFORE importing pygame
@@ -1503,10 +1504,13 @@ def play_video_with_controls(
     # Guides the user through labeling all soccer-field keypoints in order.
     # -----------------------------------------------------------------------
     pitch_guide_mode = False  # Whether guide mode is active
-    pitch_guide_points: list[dict] = []  # List of {point_name, point_number} dicts
+    pitch_guide_points: list[dict] = []  # List of {point_name, point_number, x, y, z} dicts
     pitch_guide_index = 0  # Index of the current point to mark
+    pitch_guide_source = ""
+    pitch_guide_done_by_frame: dict[int, set[int]] = {}
+    pitch_guide_show_reference = True
 
-    def _load_pitch_guide_points() -> list[dict]:
+    def _load_pitch_guide_points() -> tuple[list[dict], str]:
         """Load point names from the closest soccerfield_ref3d CSV."""
         import pandas as _pd
 
@@ -1518,17 +1522,261 @@ def play_video_with_controls(
             if _p.exists():
                 try:
                     _df = _pd.read_csv(str(_p))
-                    if "point_name" in _df.columns:
-                        return [
-                            {
-                                "point_name": row["point_name"],
-                                "point_number": int(row["point_number"]),
-                            }
-                            for _, row in _df.iterrows()
-                        ]
+                    required_cols = {"point_name", "point_number"}
+                    if required_cols.issubset(_df.columns):
+                        points = []
+                        for _, row in _df.iterrows():
+                            points.append(
+                                {
+                                    "point_name": str(row["point_name"]),
+                                    "point_number": int(row["point_number"]),
+                                    "x": float(row["x"]) if "x" in _df.columns else None,
+                                    "y": float(row["y"]) if "y" in _df.columns else None,
+                                    "z": float(row["z"]) if "z" in _df.columns else None,
+                                }
+                            )
+                        return points, str(_p)
                 except Exception:
                     pass
-        return []
+        return [], ""
+
+    def _pitch_guide_next_index(frame_idx: int) -> int:
+        """Return the next unhandled FIFA field point for the current frame."""
+        done = pitch_guide_done_by_frame.get(frame_idx, set())
+        frame_points = coordinates.get(frame_idx, [])
+        for idx in range(len(pitch_guide_points)):
+            if idx in done:
+                continue
+            if idx >= len(frame_points):
+                return idx
+            x_val, y_val = frame_points[idx]
+            if x_val is None or y_val is None:
+                return idx
+        return len(pitch_guide_points)
+
+    def _pitch_guide_status_message(prefix: str = "") -> str:
+        """Build a concise status line for Pitch Guide feedback."""
+        total = len(pitch_guide_points)
+        if not total:
+            return "Pitch Guide: no field reference CSV found in models/"
+        if pitch_guide_index >= total:
+            return f"{prefix}All {total} pitch points handled. Press S/Save or F9."
+        point = pitch_guide_points[pitch_guide_index]
+        base = (
+            f"{prefix}Point {point['point_number']}/{total}: "
+            f"{point['point_name']} ({total - pitch_guide_index} left)"
+        )
+        return base.strip()
+
+    def _pitch_guide_set_point(video_x: float | None, video_y: float | None, skipped=False) -> None:
+        """Store the current guide point at its FIFA index and advance."""
+        nonlocal pitch_guide_index, pitch_guide_mode, selected_marker_idx
+        nonlocal save_message_text, showing_save_message, save_message_timer
+
+        if not pitch_guide_points or pitch_guide_index >= len(pitch_guide_points):
+            pitch_guide_mode = False
+            return
+
+        point_idx = pitch_guide_index
+        frame_points = coordinates[frame_count]
+        while len(frame_points) <= point_idx:
+            frame_points.append((None, None))
+
+        frame_points[point_idx] = (video_x, video_y)
+        deleted_positions[frame_count].discard(point_idx)
+        pitch_guide_done_by_frame.setdefault(frame_count, set()).add(point_idx)
+        selected_marker_idx = point_idx
+
+        current_point = pitch_guide_points[point_idx]
+        pitch_guide_index += 1
+
+        if pitch_guide_index >= len(pitch_guide_points):
+            pitch_guide_mode = False
+            action = "Skipped" if skipped else "Marked"
+            save_message_text = (
+                f"{action} '{current_point['point_name']}'. All pitch points handled. "
+                "Press S/Save or F9."
+            )
+        else:
+            action = "Skipped" if skipped else "Marked"
+            save_message_text = _pitch_guide_status_message(
+                f"{action} '{current_point['point_name']}'. Next: "
+            )
+
+        showing_save_message = True
+        save_message_timer = 90
+
+    def _pitch_guide_step_back() -> None:
+        """Move the guide cursor back one point without deleting the marker."""
+        nonlocal pitch_guide_index, selected_marker_idx
+        nonlocal save_message_text, showing_save_message, save_message_timer
+
+        if not pitch_guide_points:
+            return
+        pitch_guide_index = max(0, pitch_guide_index - 1)
+        pitch_guide_done_by_frame.setdefault(frame_count, set()).discard(pitch_guide_index)
+        selected_marker_idx = pitch_guide_index
+        save_message_text = _pitch_guide_status_message("Back to: ")
+        showing_save_message = True
+        save_message_timer = 90
+
+    def _pitch_guide_delete_selected_point() -> None:
+        """Delete the selected/current guide point and position the guide there."""
+        nonlocal pitch_guide_index, selected_marker_idx
+        nonlocal save_message_text, showing_save_message, save_message_timer
+
+        if not pitch_guide_points:
+            return
+        if 0 <= selected_marker_idx < len(pitch_guide_points):
+            target_idx = selected_marker_idx
+        else:
+            target_idx = max(0, min(pitch_guide_index - 1, len(pitch_guide_points) - 1))
+
+        while len(coordinates[frame_count]) <= target_idx:
+            coordinates[frame_count].append((None, None))
+        coordinates[frame_count][target_idx] = (None, None)
+        deleted_positions[frame_count].discard(target_idx)
+        pitch_guide_done_by_frame.setdefault(frame_count, set()).discard(target_idx)
+        pitch_guide_index = target_idx
+        selected_marker_idx = target_idx
+        point = pitch_guide_points[target_idx]
+        save_message_text = f"Deleted p{point['point_number']} '{point['point_name']}'. Mark it again."
+        showing_save_message = True
+        save_message_timer = 90
+
+    def _pitch_guide_reference_surface(current_idx: int | None = None) -> pygame.Surface | None:
+        """Build a FIFA pitch reference image for the Pygame guide overlay."""
+        field_points = [
+            p for p in pitch_guide_points if p["x"] is not None and p["y"] is not None
+        ]
+        if not field_points:
+            return None
+
+        point_by_name = {p["point_name"]: p for p in field_points}
+        width, height = 500, 330
+        margin_x, margin_y = 22, 34
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        surface.fill((14, 74, 35, 238))
+
+        min_x = min(p["x"] for p in field_points)
+        max_x = max(p["x"] for p in field_points)
+        min_y = min(p["y"] for p in field_points)
+        max_y = max(p["y"] for p in field_points)
+        span_x = max(max_x - min_x, 1.0)
+        span_y = max(max_y - min_y, 1.0)
+
+        def map_xy(point):
+            px = margin_x + int(((point["x"] - min_x) / span_x) * (width - 2 * margin_x))
+            py = height - margin_y - int(
+                ((point["y"] - min_y) / span_y) * (height - 2 * margin_y)
+            )
+            return px, py
+
+        def pxy(name):
+            return map_xy(point_by_name[name])
+
+        def draw_line(name_a, name_b, line_width=2):
+            if name_a in point_by_name and name_b in point_by_name:
+                pygame.draw.line(surface, (245, 245, 245), pxy(name_a), pxy(name_b), line_width)
+
+        def draw_rect(name_a, name_b, line_width=2):
+            if name_a not in point_by_name or name_b not in point_by_name:
+                return
+            x1, y1 = pxy(name_a)
+            x2, y2 = pxy(name_b)
+            rect = pygame.Rect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+            pygame.draw.rect(surface, (245, 245, 245), rect, line_width)
+
+        def draw_circle_at(name, radius_m, line_width=2, filled=False):
+            if name not in point_by_name:
+                return
+            center = pxy(name)
+            radius_px = max(2, int((radius_m / span_y) * (height - 2 * margin_y)))
+            if filled:
+                pygame.draw.circle(surface, (245, 245, 245), center, radius_px)
+            else:
+                pygame.draw.circle(surface, (245, 245, 245), center, radius_px, line_width)
+
+        def draw_arc_from_points(center_name, lower_name, upper_name, side):
+            if not all(name in point_by_name for name in (center_name, lower_name, upper_name)):
+                return
+            center = point_by_name[center_name]
+            lower = point_by_name[lower_name]
+            upper = point_by_name[upper_name]
+            radius = math.hypot(lower["x"] - center["x"], lower["y"] - center["y"])
+            if radius <= 0:
+                return
+            if side == "left":
+                start = math.atan2(lower["y"] - center["y"], lower["x"] - center["x"])
+                end = math.atan2(upper["y"] - center["y"], upper["x"] - center["x"])
+            else:
+                start = math.atan2(upper["y"] - center["y"], upper["x"] - center["x"])
+                end = math.atan2(lower["y"] - center["y"], lower["x"] - center["x"])
+            if end < start:
+                end += 2 * math.pi
+            samples = []
+            for step in range(32):
+                t = start + (end - start) * (step / 31)
+                point = {
+                    "x": center["x"] + radius * math.cos(t),
+                    "y": center["y"] + radius * math.sin(t),
+                }
+                samples.append(map_xy(point))
+            if len(samples) > 1:
+                pygame.draw.lines(surface, (245, 245, 245), False, samples, 2)
+
+        # Same semantic field structure used by drawsportsfields.plot_field().
+        draw_rect("bottom_left_corner", "top_right_corner", 3)
+        draw_line("midfield_left", "midfield_right", 2)
+        draw_circle_at("center_field", 9.15, 2)
+        draw_circle_at("center_field", 0.6, filled=True)
+        draw_rect("left_penalty_area_bottom_left", "left_penalty_area_top_right", 2)
+        draw_rect("left_goal_area_bottom_left", "left_goal_area_top_right", 2)
+        draw_rect("right_penalty_area_top_left", "right_penalty_area_bottom_right", 2)
+        draw_rect("right_goal_area_top_left", "right_goal_area_bottom_right", 2)
+        draw_line("left_goal_bottom_post", "left_goal_top_post", 5)
+        draw_line("right_goal_bottom_post", "right_goal_top_post", 5)
+        draw_circle_at("left_penalty_spot", 0.45, filled=True)
+        draw_circle_at("right_penalty_spot", 0.45, filled=True)
+        draw_arc_from_points(
+            "left_penalty_spot",
+            "left_penalty_arc_left_intersection",
+            "left_penalty_arc_right_intersection",
+            "left",
+        )
+        draw_arc_from_points(
+            "right_penalty_spot",
+            "right_penalty_arc_left_intersection",
+            "right_penalty_arc_right_intersection",
+            "right",
+        )
+
+        small_font = pygame.font.SysFont("verdana", 10, bold=True)
+        title_font = pygame.font.SysFont("verdana", 12, bold=True)
+        title = title_font.render("FIFA Field Reference: point numbers", True, (255, 255, 255))
+        surface.blit(title, (10, 8))
+
+        for idx, point in enumerate(pitch_guide_points):
+            if point["x"] is None or point["y"] is None:
+                continue
+            px, py = map_xy(point)
+            is_current = idx == current_idx
+            radius = 7 if is_current else 4
+            fill = (255, 225, 35) if is_current else (255, 255, 255)
+            outline = (0, 0, 0)
+            pygame.draw.circle(surface, outline, (px, py), radius + 1)
+            pygame.draw.circle(surface, fill, (px, py), radius)
+            label = small_font.render(str(point["point_number"]), True, (0, 0, 0))
+            surface.blit(label, (px + 7, py - 8))
+
+        if current_idx is not None and 0 <= current_idx < len(pitch_guide_points):
+            current = pitch_guide_points[current_idx]
+            caption = f"Current: p{current['point_number']} {current['point_name']}"
+            caption_surface = title_font.render(caption, True, (255, 230, 60))
+            surface.blit(caption_surface, (10, height - 24))
+
+        pygame.draw.rect(surface, (230, 230, 230), surface.get_rect(), 2)
+        return surface
 
     # Feature: Playback Speed
     playback_speed = 1.0  # 1.0 = Normal, 0.5 = Half speed, 2.0 = Double speed
@@ -2734,6 +2982,7 @@ def play_video_with_controls(
             "      (or append to dataset loaded with F7)",
             "      Click N markers on each frame; F9 builds",
             "      images/ + labels/ + data.yaml (kpt_shape).",
+            "      PitchGuide also writes keypoints.json.",
         ]
 
         help_lines_right = [
@@ -2757,12 +3006,10 @@ def play_video_with_controls(
             "- ClickPass Mode: Advances to next frame after",
             "  adding a marker (Normal Mode).",
             "",
-            "Playback Speed:",
-            "- [ : Slower",
-            "- ] : Faster",
-            "",
-            "- ClickPass Mode: Advances to next frame after",
-            "  adding a marker (Normal Mode).",
+            "- PitchGuide (G key or button): guided FIFA",
+            "  soccer-field keypoints. Left=mark current pN,",
+            "  A=next/skip, Right=delete, B/Backspace=previous.",
+            "  It always stores p1..p37 in FIFA order.",
             "",
             "Playback Speed:",
             "- [ : Slower",
@@ -3531,6 +3778,8 @@ def play_video_with_controls(
         nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
 
         class_for_pose = current_label if current_label else "object"
+        pitch_keypoint_names = [p["point_name"] for p in pitch_guide_points] or None
+        was_appending = current_dataset_dir is not None
 
         dataset_dir, msg = export_pose_dataset(
             video_path,
@@ -3542,6 +3791,7 @@ def play_video_with_controls(
             deleted_positions=deleted_positions,
             class_name=class_for_pose,
             output_dataset_dir=current_dataset_dir,
+            keypoint_names=pitch_keypoint_names,
         )
 
         if not dataset_dir:
@@ -3581,6 +3831,8 @@ def play_video_with_controls(
             "coordinates": serializable_coords,
             "deleted_positions": deleted_serial,
             "bboxes": bboxes,
+            "keypoint_names": pitch_keypoint_names,
+            "pitch_guide_reference": pitch_guide_source,
         }
         try:
             with open(project_file, "w", encoding="utf-8") as f:
@@ -3588,7 +3840,7 @@ def play_video_with_controls(
         except Exception as e:
             print(f"Warning: could not save pose project JSON: {e}")
 
-        save_message_text = msg + (" (appended)" if current_dataset_dir else "")
+        save_message_text = msg + (" (appended)" if was_appending else "")
         showing_save_message = True
         save_message_timer = 180
         print(f"[pose-dataset] {msg}\n  dir: {dataset_dir}\n  project: {project_file}")
@@ -5001,8 +5253,6 @@ def play_video_with_controls(
                 screen.blit(msg_bg, (window_width // 2 - msg_bg.get_width() // 2, 10))
                 screen.blit(msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15))
 
-        pygame.display.flip()
-
         # ---------------------------------------------------------------
         # Pitch Guide Overlay: show current point to mark (drawn on top)
         # ---------------------------------------------------------------
@@ -5012,7 +5262,7 @@ def play_video_with_controls(
             _total_pts = len(pitch_guide_points)
             _pt = pitch_guide_points[pitch_guide_index] if pitch_guide_index < _total_pts else None
 
-            _panel_w, _panel_h = 420, 85
+            _panel_w, _panel_h = 560, 92
             _panel_x, _panel_y = 10, 10
             _panel = pygame.Surface((_panel_w, _panel_h))
             _panel.set_alpha(220)
@@ -5023,8 +5273,16 @@ def play_video_with_controls(
                 _line1 = (
                     f"Mark point {_pt['point_number']}/{_total_pts}: ({_remaining_pts} remaining)"
                 )
-                _line2 = f"  {_pt['point_name']}"
-                _line3 = "Left-click=mark & advance  |  Right-click=skip  |  PitchGuide btn=exit"
+                _field_xy = (
+                    f"field=({_pt['x']:.2f}, {_pt['y']:.2f})"
+                    if _pt["x"] is not None and _pt["y"] is not None
+                    else "field=(n/a)"
+                )
+                _line2 = f"  p{_pt['point_number']}: {_pt['point_name']}"
+                _line3 = (
+                    f"{_field_xy} | Left=mark | A=next/skip | Right=delete | "
+                    "B/Backspace=back | V=image"
+                )
             else:
                 _line1 = "All pitch points marked!"
                 _line2 = "Press Save (S) or PitchGuide button to exit."
@@ -5033,8 +5291,19 @@ def play_video_with_controls(
             _panel.blit(_guide_font_sm.render(_line1, True, (255, 230, 60)), (8, 5))
             _panel.blit(_guide_font_big.render(_line2, True, (255, 255, 255)), (8, 28))
             _panel.blit(_guide_font_sm.render(_line3, True, (180, 220, 180)), (8, 62))
+
             screen.blit(_panel, (_panel_x, _panel_y))
-            pygame.display.flip()
+            if pitch_guide_show_reference:
+                _reference_surface = _pitch_guide_reference_surface(pitch_guide_index)
+                if _reference_surface is not None:
+                    _ref_x = max(10, window_width - _reference_surface.get_width() - 10)
+                    _ref_y = _panel_y + _panel_h + 10
+                    if _ref_x < _panel_x + _panel_w + 10:
+                        _ref_x = 10
+                        _ref_y = _panel_y + _panel_h + 10
+                    screen.blit(_reference_surface, (_ref_x, _ref_y))
+
+        pygame.display.flip()
 
         # Auto-marking logic - mark points automatically during playback
         if auto_marking_mode and not paused and not one_line_mode:
@@ -5109,6 +5378,38 @@ def play_video_with_controls(
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
+                elif event.key == pygame.K_g:
+                    pitch_guide_mode = not pitch_guide_mode
+                    if pitch_guide_mode:
+                        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points()
+                        pitch_guide_index = _pitch_guide_next_index(frame_count)
+                        labeling_mode = False
+                        one_line_mode = False
+                        auto_marking_mode = False
+                        sequential_mode = False
+                        click_pass_mode = False
+                        selected_marker_idx = (
+                            pitch_guide_index if pitch_guide_index < len(pitch_guide_points) else -1
+                        )
+                        save_message_text = _pitch_guide_status_message("PITCH GUIDE ON: ")
+                        if not pitch_guide_points:
+                            pitch_guide_mode = False
+                    else:
+                        save_message_text = "Pitch Guide disabled"
+                    showing_save_message = True
+                    save_message_timer = 120
+                elif pitch_guide_mode and event.key in (pygame.K_BACKSPACE, pygame.K_b):
+                    _pitch_guide_step_back()
+                elif pitch_guide_mode and event.key == pygame.K_a:
+                    _pitch_guide_set_point(None, None, skipped=True)
+                elif pitch_guide_mode and event.key == pygame.K_v:
+                    pitch_guide_show_reference = not pitch_guide_show_reference
+                    save_message_text = (
+                        "Pitch Guide field image "
+                        f"{'enabled' if pitch_guide_show_reference else 'hidden'}"
+                    )
+                    showing_save_message = True
+                    save_message_timer = 60
                 elif event.key == pygame.K_RIGHT and paused:
                     frame_count = min(frame_count + 1, total_frames - 1)
                 elif event.key == pygame.K_LEFT and paused:
@@ -5123,9 +5424,13 @@ def play_video_with_controls(
                     zoom_level = max(0.2, zoom_level / 1.2)
                 elif event.key == pygame.K_c:
                     one_line_mode = not one_line_mode
+                    if one_line_mode:
+                        pitch_guide_mode = False
                     selected_marker_idx = -1  # Reset selected marker when changing modes
                 elif event.key == pygame.K_m:
                     auto_marking_mode = not auto_marking_mode
+                    if auto_marking_mode:
+                        pitch_guide_mode = False
                     save_message_text = (
                         f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
                     )
@@ -5146,6 +5451,7 @@ def play_video_with_controls(
                         one_line_mode = False
                         auto_marking_mode = False
                         sequential_mode = False
+                        pitch_guide_mode = False
                         save_message_text = (
                             "LABELING MODE: Click and DRAG to draw boxes. Press Z to undo."
                         )
@@ -5199,12 +5505,7 @@ def play_video_with_controls(
                         save_message_timer = 60
                 elif event.key == pygame.K_F7:
                     # Load dataset folder (next Save will append to it; multi-video)
-                    if labeling_mode:
-                        load_dataset_folder()
-                    else:
-                        save_message_text = "Enable Labeling Mode to set dataset folder"
-                        showing_save_message = True
-                        save_message_timer = 60
+                    load_dataset_folder()
                 elif event.key == pygame.K_F8:
                     # Open another video (keep dataset if set; no need to close app)
                     start_dir = (
@@ -5746,16 +6047,20 @@ def play_video_with_controls(
                         # Toggle Pitch Guide mode
                         pitch_guide_mode = not pitch_guide_mode
                         if pitch_guide_mode:
-                            pitch_guide_points = _load_pitch_guide_points()
-                            pitch_guide_index = 0
+                            pitch_guide_points, pitch_guide_source = _load_pitch_guide_points()
+                            pitch_guide_index = _pitch_guide_next_index(frame_count)
                             labeling_mode = False
                             one_line_mode = False
                             auto_marking_mode = False
+                            sequential_mode = False
+                            click_pass_mode = False
+                            selected_marker_idx = (
+                                pitch_guide_index
+                                if pitch_guide_index < len(pitch_guide_points)
+                                else -1
+                            )
                             if pitch_guide_points:
-                                save_message_text = (
-                                    f"PITCH GUIDE ON: {len(pitch_guide_points)} points. "
-                                    f"Click to mark '{pitch_guide_points[0]['point_name']}'"
-                                )
+                                save_message_text = _pitch_guide_status_message("PITCH GUIDE ON: ")
                             else:
                                 save_message_text = "Pitch Guide: no field CSV found in models/"
                                 pitch_guide_mode = False
@@ -5824,6 +6129,8 @@ def play_video_with_controls(
                         elif one_line_mode:
                             # Simply append the new marker
                             one_line_markers.append((frame_count, video_x, video_y))
+                        elif pitch_guide_mode and pitch_guide_points:
+                            _pitch_guide_set_point(video_x, video_y)
                         else:
                             if sequential_mode:
                                 # Find the next available marker index
@@ -5846,27 +6153,6 @@ def play_video_with_controls(
                                     # Add new marker at the end
                                     coordinates[frame_count].append((video_x, video_y))
                                     selected_marker_idx = len(coordinates[frame_count]) - 1
-
-                                # Pitch Guide: record current point and advance
-                                if pitch_guide_mode and pitch_guide_points:
-                                    if pitch_guide_index < len(pitch_guide_points):
-                                        _cur_pt = pitch_guide_points[pitch_guide_index]
-                                        pitch_guide_index += 1
-                                        _remaining_guide = (
-                                            len(pitch_guide_points) - pitch_guide_index
-                                        )
-                                        if pitch_guide_index < len(pitch_guide_points):
-                                            _next_pt = pitch_guide_points[pitch_guide_index]
-                                            save_message_text = (
-                                                f"Marked '{_cur_pt['point_name']}' ✓ "
-                                                f"Next: '{_next_pt['point_name']}' "
-                                                f"({_remaining_guide} left)"
-                                            )
-                                        else:
-                                            save_message_text = "All pitch points marked! Press Save or PitchGuide to exit."
-                                            pitch_guide_mode = False
-                                        showing_save_message = True
-                                        save_message_timer = 60
 
                                 # Feature: ClickPass logic
                                 if click_pass_mode:
@@ -5905,26 +6191,9 @@ def play_video_with_controls(
                                     paused = True
 
                     elif event.button == 3:  # Right click
-                        # Pitch Guide: right-click = skip current point (record None)
+                        # Pitch Guide keeps right-click as delete, matching normal marker UX.
                         if pitch_guide_mode and pitch_guide_points and not (y >= window_height):
-                            if pitch_guide_index < len(pitch_guide_points):
-                                _skipped_pt = pitch_guide_points[pitch_guide_index]
-                                pitch_guide_index += 1
-                                # Store None placeholder for skipped point
-                                while len(coordinates[frame_count]) < pitch_guide_index:
-                                    coordinates[frame_count].append((None, None))
-                                if pitch_guide_index < len(pitch_guide_points):
-                                    save_message_text = (
-                                        f"Skipped '{_skipped_pt['point_name']}' → "
-                                        f"Next: '{pitch_guide_points[pitch_guide_index]['point_name']}'"
-                                    )
-                                else:
-                                    save_message_text = (
-                                        "All points done (some skipped). Press Save."
-                                    )
-                                    pitch_guide_mode = False
-                                showing_save_message = True
-                                save_message_timer = 60
+                            _pitch_guide_delete_selected_point()
                         # Keep existing behavior for right-click (delete most recent)
                         elif one_line_mode:
                             for i in range(len(one_line_markers) - 1, -1, -1):
@@ -6887,6 +7156,7 @@ def export_pose_dataset(
     output_dataset_dir=None,
     split_ratios=(0.7, 0.2, 0.1),
     bbox_pad_ratio=0.04,
+    keypoint_names=None,
 ):
     """Export a YOLO-pose training dataset from the markers clicked in `coordinates`.
 
@@ -6979,11 +7249,12 @@ def export_pose_dataset(
         )
         file_prefix = ""
 
+    expected_nkp = len(keypoint_names) if keypoint_names else 0
     if existing_nkp is not None and existing_nkp > 0:
         nkp = existing_nkp
     else:
         nkp = max(len(per_frame_valid_kpts[f]) for f in annotated_frames)
-        nkp = max(1, nkp)
+        nkp = max(1, nkp, expected_nkp)
 
     class_names = sorted(set(existing_classes) | {class_name})
     cls_id = class_names.index(class_name) if class_name in class_names else 0
@@ -7083,7 +7354,20 @@ def export_pose_dataset(
 
     cap.release()
 
-    _write_pose_data_yaml(dataset_dir, nkp=nkp)
+    _write_pose_data_yaml(dataset_dir, nkp=nkp, keypoint_names=keypoint_names)
+    if keypoint_names:
+        metadata_path = os.path.join(dataset_dir, "keypoints.json")
+        metadata = {
+            "kpt_shape": [nkp, 3],
+            "keypoint_names": list(keypoint_names[:nkp])
+            + [f"kp_{i + 1}" for i in range(len(keypoint_names), nkp)],
+            "format": "Ultralytics YOLO pose: cls cx cy w h x y v...",
+        }
+        try:
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+        except Exception:
+            pass
 
     return (
         dataset_dir,
@@ -7093,7 +7377,7 @@ def export_pose_dataset(
     )
 
 
-def _write_pose_data_yaml(dataset_dir, nkp):
+def _write_pose_data_yaml(dataset_dir, nkp, keypoint_names=None):
     """Write data.yaml for YOLO pose training into `dataset_dir`.
 
     Reads class names from classes.txt (falls back to ['object']). Uses absolute
@@ -7118,6 +7402,9 @@ def _write_pose_data_yaml(dataset_dir, nkp):
     )
 
     flip_idx = list(range(nkp))
+    keypoint_names = list(keypoint_names[:nkp]) if keypoint_names else []
+    if len(keypoint_names) < nkp:
+        keypoint_names.extend(f"kp_{i + 1}" for i in range(len(keypoint_names), nkp))
 
     yaml_content = (
         "# YOLO pose dataset - generated by vailá getpixelvideo\n"
@@ -7128,6 +7415,7 @@ def _write_pose_data_yaml(dataset_dir, nkp):
         f"names: {class_names}\n"
         f"kpt_shape: [{nkp}, 3]\n"
         f"flip_idx: {flip_idx}\n"
+        f"kpt_names: {keypoint_names}\n"
     )
     try:
         with open(os.path.join(dataset_dir, "data.yaml"), "w", encoding="utf-8") as f:
