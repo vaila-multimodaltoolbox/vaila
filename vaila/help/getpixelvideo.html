@@ -154,11 +154,16 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.0<br />
-        <strong>Date:</strong> January 2026<br />
+        <strong>Version:</strong> 0.5.0<br />
+        <strong>Date:</strong> April 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
+        <strong>New in 0.5.0:</strong> <strong>F9</strong> exports a YOLO-pose
+        training dataset from clicked markers (<code>data.yaml</code> with
+        <code>kpt_shape</code>, train/val/test). Append across videos with
+        <strong>F7</strong> + <strong>F8</strong> or <code>--dataset</code> on
+        launch.<br />
         <strong>New in 0.3.0:</strong> Labeling Mode for ML dataset creation
         (Bounding Boxes)
       </div>
@@ -216,6 +221,11 @@
               <strong>Auto-detection:</strong> Automatically detect CSV format
               or manual selection
             </li>
+            <li>
+              <strong>YOLO-pose export (F9):</strong> Turn marker clicks into an
+              Ultralytics pose dataset; reuse <code>kpt_shape</code> when
+              appending to an existing folder (F7)
+            </li>
           </ul>
         </div>
       </section>
@@ -236,7 +246,10 @@
           </li>
         </ul>
 
-        <h3>Installation:</h3>
+        <h3>Installation (vailá repo, recommended):</h3>
+        <div class="code">uv sync<br />uv run vaila/getpixelvideo.py</div>
+
+        <h3>Standalone pip:</h3>
         <div class="code">pip install opencv-python pygame pandas numpy</div>
 
         <div class="warning">
@@ -250,7 +263,12 @@
         <h2>3. Basic Usage</h2>
 
         <h3>Starting the Application:</h3>
-        <div class="code">python vaila/getpixelvideo.py</div>
+        <div class="code">uv run vaila/getpixelvideo.py</div>
+        <p>
+          Optional: <code>--dataset /path/to/dataset</code> (folder with
+          <code>data.yaml</code>) so the next <strong>F9</strong> pose export
+          appends; <code>-l</code> starts in labeling mode.
+        </p>
 
         <h3>Step-by-Step Process:</h3>
         <ol>
@@ -407,6 +425,13 @@
                 <td><span class="key">F8</span></td>
                 <td>Open another video (keeps dataset; no need to close app)</td>
               </tr>
+              <tr>
+                <td><span class="key">F9</span></td>
+                <td>
+                  Export YOLO-pose dataset from clicked markers (not only
+                  labeling mode); see section 8
+                </td>
+              </tr>
             </table>
           </div>
 
@@ -557,6 +582,40 @@
           <li>
             <strong>Export:</strong> Save exports structured dataset with
             train/val/test split
+          </li>
+        </ul>
+
+        <h3>Pose dataset export (YOLO-pose) — <span class="key">F9</span></h3>
+        <p>
+          For <strong>keypoint / pose</strong> training (e.g. 32 football pitch
+          points), export marker positions as an Ultralytics-compatible layout.
+        </p>
+        <ul>
+          <li>
+            <strong>When:</strong> At least one frame has markers (normal
+            workflow; labeling mode does not need to be on).
+          </li>
+          <li>
+            <strong>F9:</strong> Creates
+            <code>pose_dataset_YYYYMMDD_HHMMSS/</code> next to the video with
+            splits, <code>classes.txt</code>, and <code>data.yaml</code>
+            including <code>kpt_shape: [Nkp, 3]</code> and <code>flip_idx</code>.
+          </li>
+          <li>
+            <strong>Append:</strong> <strong>F7</strong> (Dataset) → pick
+            existing <code>data.yaml</code>; <strong>F8</strong> open next video;
+            annotate; <strong>F9</strong> again — filenames prefixed with
+            <code>&lt;video_stem&gt;_</code>. Existing <code>kpt_shape</code> is
+            preserved when present.
+          </li>
+          <li>
+            <strong>BBox:</strong> First user-drawn bbox in labeling mode if
+            any; else tight box around visible keypoints (with padding).
+          </li>
+          <li>
+            <strong>Project JSON:</strong>
+            <code>&lt;video_stem&gt;_pose_project.json</code> stores raw
+            markers for re-editing.
           </li>
         </ul>
       </section>

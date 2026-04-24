@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 11 March 2026
-Version: 0.4.1
+Update: 24 April 2026
+Version: 0.5.0
 Python Version: 3.12.13
 
 Description:
@@ -16,6 +16,13 @@ This tool enables marking and saving pixel coordinates in video frames, with
 zoom functionality for precise annotations. The window can now be resized dynamically,
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
+
+New Features in This Version 0.5.0:
+- F9: Export YOLO-pose training dataset from the clicked markers (keypoints).
+  Produces Ultralytics-compatible layout with train/val/test splits,
+  classes.txt and data.yaml (with kpt_shape + flip_idx). Supports multi-video
+  append via the Dataset folder loaded with F7. Use for retraining pose nets
+  (e.g. soccer field keypoints YOLO) on your own new videos.
 
 New Features in This Version 0.4.1:
 - fix start GUI mode
@@ -63,6 +70,8 @@ Key Bindings (Labeling Mode Only - Press 'L' to toggle):
   F6                    Load Labeling Project (JSON)
   F7                    Load dataset folder (next Save appends; multi-video)
   F8                    Open another video (keep dataset; no need to close app)
+  F9                    Export YOLO-pose dataset from clicked markers
+                        (pose_dataset_YYYYMMDD_HHMMSS or append if F7 dataset is set)
   -v, --version         show version information and exit
 
 License:
@@ -2667,6 +2676,13 @@ def play_video_with_controls(
             "  - Click 'Save' button, OR",
             "  - Press ESC key",
             "  - Dataset saved: train/val/test",
+            "",
+            "=== POSE DATASET (Keypoints) ===",
+            "  F9: Export YOLO-pose dataset from markers",
+            "      -> pose_dataset_YYYYMMDD_HHMMSS/",
+            "      (or append to dataset loaded with F7)",
+            "      Click N markers on each frame; F9 builds",
+            "      images/ + labels/ + data.yaml (kpt_shape).",
         ]
 
         help_lines_right = [
@@ -2726,6 +2742,8 @@ def play_video_with_controls(
             "  - F6: Load Labeling Project (JSON)",
             "  - F7: Load dataset folder (next Save appends; multi-video)",
             "  - F8: Open another video (keep dataset; no need to close app)",
+            "  - F9: Export YOLO-pose dataset from markers (keypoints)",
+            "       -> retrain YOLO pose (e.g. soccer field, 32 kp)",
             "  - N:  Rename Object Class",
             "",
             "Swap Markers:",
@@ -3451,6 +3469,78 @@ def play_video_with_controls(
             save_message_text = f"Error saving JSON: {e}"
             showing_save_message = True
             save_message_timer = 120
+
+    def save_pose_dataset():
+        """Export a YOLO-pose dataset from the markers clicked in ``coordinates``.
+
+        Uses ``current_dataset_dir`` (multi-video append) when set; otherwise creates
+        a fresh ``pose_dataset_YYYYMMDD_HHMMSS/`` next to the video. Also writes a
+        sibling JSON project file with the raw markers (for later re-editing).
+        """
+        nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
+
+        class_for_pose = current_label if current_label else "object"
+
+        dataset_dir, msg = export_pose_dataset(
+            video_path,
+            coordinates,
+            total_frames,
+            original_width,
+            original_height,
+            bboxes=bboxes,
+            deleted_positions=deleted_positions,
+            class_name=class_for_pose,
+            output_dataset_dir=current_dataset_dir,
+        )
+
+        if not dataset_dir:
+            save_message_text = f"Pose export failed: {msg}"
+            showing_save_message = True
+            save_message_timer = 150
+            return
+
+        if not current_dataset_dir:
+            current_dataset_dir = dataset_dir
+
+        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        project_file = os.path.join(dataset_dir, f"{base_name}_pose_project.json")
+        serializable_coords = {}
+        for f_idx, pts in coordinates.items():
+            if not pts:
+                continue
+            serializable_coords[int(f_idx)] = [
+                None if (p is None or p[0] is None or p[1] is None) else [float(p[0]), float(p[1])]
+                for p in pts
+            ]
+        deleted_serial = {}
+        if deleted_positions:
+            for f_idx, dset in deleted_positions.items():
+                if dset:
+                    deleted_serial[int(f_idx)] = sorted(int(i) for i in dset)
+
+        project_data = {
+            "version": "0.5.0",
+            "kind": "pose",
+            "video_source": os.path.abspath(video_path),
+            "dataset_root": os.path.abspath(dataset_dir),
+            "class_name": class_for_pose,
+            "total_frames": total_frames,
+            "video_width": original_width,
+            "video_height": original_height,
+            "coordinates": serializable_coords,
+            "deleted_positions": deleted_serial,
+            "bboxes": bboxes,
+        }
+        try:
+            with open(project_file, "w", encoding="utf-8") as f:
+                json.dump(project_data, f, indent=2)
+        except Exception as e:
+            print(f"Warning: could not save pose project JSON: {e}")
+
+        save_message_text = msg + (" (appended)" if current_dataset_dir else "")
+        showing_save_message = True
+        save_message_timer = 180
+        print(f"[pose-dataset] {msg}\n  dir: {dataset_dir}\n  project: {project_file}")
 
     def show_file_browser(start_dir, title="Select a file", extensions=None):
         """Pygame-based file browser with mouse navigation, Ctrl+V paste, and scroll.
@@ -5067,6 +5157,8 @@ def play_video_with_controls(
                         save_message_text = "Select a different video file."
                         showing_save_message = True
                         save_message_timer = 60
+                elif event.key == pygame.K_F9:
+                    save_pose_dataset()
                 elif event.key == pygame.K_TAB:
                     # Completely revamped marker navigation
                     if one_line_mode:
@@ -6630,6 +6722,267 @@ names: {class_names}
     yaml_path = os.path.join(dataset_dir, "data.yaml")
     try:
         with open(yaml_path, "w", encoding="utf-8") as f:
+            f.write(yaml_content)
+    except Exception:
+        pass
+
+
+def export_pose_dataset(
+    video_path,
+    coordinates,
+    total_frames,
+    original_width,
+    original_height,
+    bboxes=None,
+    deleted_positions=None,
+    class_name="object",
+    output_dataset_dir=None,
+    split_ratios=(0.7, 0.2, 0.1),
+    bbox_pad_ratio=0.04,
+):
+    """Export a YOLO-pose training dataset from the markers clicked in `coordinates`.
+
+    Produces an Ultralytics-compatible layout::
+
+        dataset_dir/
+            classes.txt
+            data.yaml      # with kpt_shape: [Nkp, 3], nc: 1, names: [class_name]
+            train/images/*.jpg    train/labels/*.txt
+            val/images/*.jpg      val/labels/*.txt
+            test/images/*.jpg     test/labels/*.txt
+
+    Each annotated frame yields one instance (class ``class_name``):
+    - bbox = first user-drawn box in ``bboxes[frame]`` if available, else a tight
+      bbox around visible keypoints expanded by ``bbox_pad_ratio`` of image size
+    - keypoints = the clicked markers, padded/truncated to ``Nkp`` with
+      visibility ``v=2`` (visible) or ``v=0`` (missing/deleted)
+
+    YOLO-pose label line (all normalized to [0, 1] except visibility 0/1/2)::
+
+        cls cx cy w h  kp1_x kp1_y v1  kp2_x kp2_y v2  ...
+
+    Append mode (``output_dataset_dir`` given and valid): images/labels are
+    written with filename prefix ``<video_base_name>_`` so multiple videos share
+    one dataset. If an existing ``data.yaml`` defines ``kpt_shape``, that Nkp is
+    reused (frames with fewer markers are zero-padded, extras are dropped).
+
+    Returns ``(dataset_dir, message)`` or ``(None, error_message)``.
+    """
+    import random
+
+    annotated_frames = []
+    per_frame_valid_kpts = {}
+    for f_idx, pts in coordinates.items():
+        if not pts:
+            continue
+        deleted_set = deleted_positions.get(f_idx, set()) if deleted_positions else set()
+        valid_pts = []
+        for i, p in enumerate(pts):
+            if i in deleted_set:
+                valid_pts.append(None)
+                continue
+            if p is None:
+                valid_pts.append(None)
+                continue
+            x, y = p
+            if x is None or y is None:
+                valid_pts.append(None)
+                continue
+            valid_pts.append((float(x), float(y)))
+        if any(p is not None for p in valid_pts):
+            annotated_frames.append(int(f_idx))
+            per_frame_valid_kpts[int(f_idx)] = valid_pts
+
+    if not annotated_frames:
+        return None, "No keypoints to export (click markers on at least one frame)."
+
+    base_name = os.path.splitext(os.path.basename(video_path))[0]
+    video_dir = os.path.dirname(video_path)
+    is_append = output_dataset_dir is not None and os.path.isdir(output_dataset_dir)
+
+    existing_nkp = None
+    existing_classes = []
+    if is_append:
+        dataset_dir = os.path.abspath(output_dataset_dir)
+        yaml_path = os.path.join(dataset_dir, "data.yaml")
+        if os.path.exists(yaml_path):
+            try:
+                with open(yaml_path, encoding="utf-8") as f:
+                    for line in f:
+                        s = line.strip()
+                        if s.startswith("kpt_shape:"):
+                            inside = s.split(":", 1)[1].strip().strip("[]")
+                            parts = [p.strip() for p in inside.split(",") if p.strip()]
+                            if parts:
+                                existing_nkp = int(parts[0])
+            except Exception:
+                existing_nkp = None
+        classes_file = os.path.join(dataset_dir, "classes.txt")
+        if os.path.exists(classes_file):
+            try:
+                with open(classes_file, encoding="utf-8") as f:
+                    existing_classes = [line.strip() for line in f if line.strip()]
+            except Exception:
+                existing_classes = []
+        file_prefix = f"{base_name}_"
+    else:
+        dataset_dir = os.path.join(
+            video_dir, f"pose_dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+        file_prefix = ""
+
+    if existing_nkp is not None and existing_nkp > 0:
+        nkp = existing_nkp
+    else:
+        nkp = max(len(per_frame_valid_kpts[f]) for f in annotated_frames)
+        nkp = max(1, nkp)
+
+    class_names = sorted(set(existing_classes) | {class_name})
+    cls_id = class_names.index(class_name) if class_name in class_names else 0
+
+    for split in ("train", "val", "test"):
+        os.makedirs(os.path.join(dataset_dir, split, "images"), exist_ok=True)
+        os.makedirs(os.path.join(dataset_dir, split, "labels"), exist_ok=True)
+
+    with open(os.path.join(dataset_dir, "classes.txt"), "w", encoding="utf-8") as f:
+        for name in class_names:
+            f.write(name + "\n")
+
+    r_train, r_val, _ = split_ratios
+    frames_shuffled = list(annotated_frames)
+    random.shuffle(frames_shuffled)
+    n_total = len(frames_shuffled)
+    n_train = int(round(n_total * r_train))
+    n_val = int(round(n_total * r_val))
+    splits = {
+        "train": frames_shuffled[:n_train],
+        "val": frames_shuffled[n_train : n_train + n_val],
+        "test": frames_shuffled[n_train + n_val :],
+    }
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None, f"Could not open video: {video_path}"
+
+    written = 0
+    for split_name, frames in splits.items():
+        for frame_num in frames:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            valid_pts = per_frame_valid_kpts[frame_num]
+            kpts = list(valid_pts[:nkp]) + [None] * max(0, nkp - len(valid_pts))
+
+            user_bbox = None
+            if bboxes and frame_num in bboxes and bboxes[frame_num]:
+                b = bboxes[frame_num][0]
+                user_bbox = (
+                    float(b["x"]),
+                    float(b["y"]),
+                    float(b["w"]),
+                    float(b["h"]),
+                )
+
+            if user_bbox is not None:
+                bx, by, bw, bh = user_bbox
+            else:
+                xs = [p[0] for p in kpts if p is not None]
+                ys = [p[1] for p in kpts if p is not None]
+                if not xs or not ys:
+                    continue
+                min_x, max_x = min(xs), max(xs)
+                min_y, max_y = min(ys), max(ys)
+                pad = bbox_pad_ratio * max(original_width, original_height)
+                bx = max(0.0, min_x - pad)
+                by = max(0.0, min_y - pad)
+                bw = min(original_width - bx, (max_x - min_x) + 2 * pad)
+                bh = min(original_height - by, (max_y - min_y) + 2 * pad)
+                if bw <= 1 or bh <= 1:
+                    bx = max(0.0, min_x - 2)
+                    by = max(0.0, min_y - 2)
+                    bw = min(original_width - bx, 4.0)
+                    bh = min(original_height - by, 4.0)
+
+            cx = (bx + bw / 2.0) / original_width
+            cy = (by + bh / 2.0) / original_height
+            w_n = bw / original_width
+            h_n = bh / original_height
+            cx = max(0.0, min(1.0, cx))
+            cy = max(0.0, min(1.0, cy))
+            w_n = max(0.0, min(1.0, w_n))
+            h_n = max(0.0, min(1.0, h_n))
+
+            parts = [f"{cls_id}", f"{cx:.6f}", f"{cy:.6f}", f"{w_n:.6f}", f"{h_n:.6f}"]
+            for p in kpts:
+                if p is None:
+                    parts += ["0.000000", "0.000000", "0"]
+                else:
+                    kx = max(0.0, min(1.0, p[0] / original_width))
+                    ky = max(0.0, min(1.0, p[1] / original_height))
+                    parts += [f"{kx:.6f}", f"{ky:.6f}", "2"]
+
+            img_filename = f"{file_prefix}frame_{frame_num:06d}.jpg"
+            img_path = os.path.join(dataset_dir, split_name, "images", img_filename)
+            cv2.imwrite(img_path, frame)
+
+            txt_filename = f"{file_prefix}frame_{frame_num:06d}.txt"
+            txt_path = os.path.join(dataset_dir, split_name, "labels", txt_filename)
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(" ".join(parts) + "\n")
+            written += 1
+
+    cap.release()
+
+    _write_pose_data_yaml(dataset_dir, nkp=nkp)
+
+    return (
+        dataset_dir,
+        "Pose dataset exported: "
+        f"{written} frames, Nkp={nkp} (train: {len(splits['train'])}, "
+        f"val: {len(splits['val'])}, test: {len(splits['test'])})",
+    )
+
+
+def _write_pose_data_yaml(dataset_dir, nkp):
+    """Write data.yaml for YOLO pose training into `dataset_dir`.
+
+    Reads class names from classes.txt (falls back to ['object']). Uses absolute
+    paths for train/val/test so Ultralytics can resolve them regardless of CWD.
+    """
+    classes_file = os.path.join(dataset_dir, "classes.txt")
+    class_names = ["object"]
+    if os.path.exists(classes_file):
+        try:
+            with open(classes_file, encoding="utf-8") as f:
+                loaded = [line.strip() for line in f if line.strip()]
+            if loaded:
+                class_names = loaded
+        except Exception:
+            pass
+
+    train_path = os.path.abspath(os.path.join(dataset_dir, "train", "images")).replace("\\", "/")
+    val_path = os.path.abspath(os.path.join(dataset_dir, "val", "images")).replace("\\", "/")
+    test_abs = os.path.abspath(os.path.join(dataset_dir, "test", "images")).replace("\\", "/")
+    test_line = (
+        f"\ntest: {test_abs}" if os.path.isdir(os.path.join(dataset_dir, "test", "images")) else ""
+    )
+
+    flip_idx = list(range(nkp))
+
+    yaml_content = (
+        "# YOLO pose dataset - generated by vailá getpixelvideo\n"
+        "path: .\n"
+        f"train: {train_path}\n"
+        f"val: {val_path}{test_line}\n"
+        f"nc: {len(class_names)}\n"
+        f"names: {class_names}\n"
+        f"kpt_shape: [{nkp}, 3]\n"
+        f"flip_idx: {flip_idx}\n"
+    )
+    try:
+        with open(os.path.join(dataset_dir, "data.yaml"), "w", encoding="utf-8") as f:
             f.write(yaml_content)
     except Exception:
         pass
