@@ -186,6 +186,33 @@ Fix in `vaila/vaila_sam.py`:
 
 Full hypothesis log, runtime evidence, and code map: see `.claude/skills/sam3-video/SKILL.md` § *Why subprocess-per-video* and § *Cascading OOM in batch*.
 
+### Sports field CLI and GUI integration fixes (April 2026, session efe5a0)
+
+Symptom 1: `vaila/drawsportsfields.py` crashed with `qt.qpa.plugin` errors when run in CLI mode (`--field`) on Linux, while working fine when launched from the main `vaila.py` GUI.
+Symptom 2: `App` class initialization in `vaila/markerless_3d_analysis.py` failed with `ArgumentError` (expected `Tk`, found `Toplevel`) when integrated into the notebook interface.
+Symptom 3: Matplotlib reported `Module matplotlib.cm has no member rainbow` due to deprecated attribute access.
+
+Root cause 1: Matplotlib defaulted to the `QtAgg` backend in standalone CLI mode. On systems with missing or broken Qt dependencies, this caused an immediate crash. Additionally, the `--field` flag was incorrectly triggering the full Tkinter GUI loop instead of a simple plot.
+Root cause 2: The `App` class was defined inside an `if __name__ == "__main__":` block and its constructor type-hint was restricted to `tk.Tk`, preventing its use as a `tk.Toplevel` child window.
+Root cause 3: Modern Matplotlib versions require `plt.get_cmap("name")` instead of `plt.cm.name`.
+
+Fixes:
+- Added `matplotlib.use("TkAgg")` before `pyplot` imports in `drawsportsfields.py` to ensure cross-platform compatibility without Qt.
+- Refactored `drawsportsfields.py` CLI logic to use static `plt.show()` instead of the full `run_soccerfield()` GUI when arguments are passed.
+- Moved `App` class out of `__main__` in `markerless_3d_analysis.py` and updated its type hint to `tk.Tk | tk.Toplevel`.
+- Added native FIFA layout support via `soccerfield_ref3d_fifa.csv` and `SPORT_REGISTRY["fifa"]`.
+- Updated all colormap accesses to use `plt.get_cmap()`.
+
+Full details: see `.claude/skills/sports-field-visualization/SKILL.md`.
+
+### Soccer field AI keypoints (YOLO pose + video CSV) (April 2026, session 254a97)
+
+**Module:** `vaila/soccerfield_keypoints_ai.py` — Ultralytics local weights or Roboflow API; video mode writes `field_keypoints_video.csv`, `field_keypoints_getpixelvideo.csv`, `field_keypoints_overlay_markers.csv`, optional `field_keypoints_overlay.mp4`.
+
+**Training dataset (local YOLO):** `vaila/models/hf_datasets/football-pitch-detection/data/data.yaml` (`kpt_shape: [32, 3]`). Prefer `imgsz=1280`, `mosaic=0`, `erasing=0`, and moderate `pose`/`kobj` weights; naive `mosaic=1` + small `imgsz` can collapse all keypoints into a tiny cluster while box mAP stays high.
+
+**Handoff for other IDEs / agents:** read `.claude/skills/soccer-field-keypoints-yolo/SKILL.md` for exact train/export/infer commands, weight path resolution (Ultralytics run dir suffix `-N`), and CSV semantics.
+
 ## Security
 
 This is an **open-source (AGPL-3.0)** repository. Do **not** commit API keys, tokens, or credential files. See **[SECURITY.md](SECURITY.md)** and **[CONTRIBUTING.md](CONTRIBUTING.md)**.

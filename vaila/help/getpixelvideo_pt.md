@@ -4,8 +4,8 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Version:** 0.3.0  
-**Data:** Janeiro de 2026  
+**Versão:** 0.5.0  
+**Data:** Abril de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Projeto:** vailá - Multimodal Toolbox
 
@@ -16,6 +16,7 @@ A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangen
 - **Marcação Flexível:** Múltiplos modos de marcadores para diferentes necessidades de anotação
 - **Modo Labeling:** Criar anotações de caixas delimitadoras para datasets de Machine Learning
 - **Exportação de Datasets:** Exportar datasets estruturados (train/val/test) com imagens e anotações JSON
+- **Dataset YOLO-pose (F9):** Exportar os marcadores clicados como dataset Ultralytics pose (`data.yaml` com `kpt_shape`, splits train/val/test); anexar vários vídeos com F7 + F8
 - **Zoom & Navegação:** Capacidades completas de zoom com navegação quadro a quadro
 - **Modo Persistência:** Visualizar trilhas de marcadores através de múltiplos quadros
 - **Auto-detecção:** Detectar automaticamente formato CSV ou seleção manual
@@ -32,13 +33,22 @@ A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangen
 
 ### Instalação
 
+No repositório vailá (recomendado):
+
+```bash
+uv sync
+uv run vaila/getpixelvideo.py
+```
+
+Dependências avulsas:
+
 ```bash
 pip install opencv-python pygame pandas numpy
 ```
 
 ## Começando
 
-1. **Execute o script:** `python vaila/getpixelvideo.py`
+1. **Execute o script:** `uv run vaila/getpixelvideo.py` (ou `python vaila/getpixelvideo.py` se o ambiente já estiver configurado)
 2. **Selecione arquivo de vídeo:** Escolha o vídeo para processar
 3. **Carregue dados existentes:** Use o botão 'Load' na interface para carregar keypoints (opcional)
 4. **Selecione formato:** Se carregando dados, escolha o formato CSV:
@@ -154,6 +164,18 @@ frame,p1_x,p1_y,p2_x,p2_y
   - Botão Salvar ou F5 exporta dataset estruturado (train/val/test)
 - **Exportação:** Gera estrutura de pastas com imagens e anotações JSON
 
+### Exportação de dataset pose (YOLO-pose) — **F9**
+
+Para gerar dataset de **keypoints / pose** (ex.: campo de futebol com 32 pontos), não só detecção por bbox:
+
+- **Quando:** Com marcadores em pelo menos um quadro (fluxo normal de marcadores; o modo Labeling **não** precisa estar ativo).
+- **F9:** Cria `pose_dataset_YYYYMMDD_HHMMSS/` ao lado do vídeo com `train|val|test/{images,labels}/`, `classes.txt` e `data.yaml` (inclui `kpt_shape: [Nkp, 3]` e `flip_idx`).
+- **Multi-vídeo / anexar:** **F7** (Dataset) escolhe o `data.yaml` de um dataset existente; **F8** abre o próximo vídeo; anote e **F9** de novo — ficheiros prefixados com `<nome_video>_`. Se o `data.yaml` já tiver `kpt_shape` (ex.: 32), esse **Nkp** é mantido.
+- **CLI:** `uv run vaila/getpixelvideo.py -f VIDEO.mp4 --dataset /caminho/do/dataset_pose` define a pasta de anexo antes do **F9**.
+- **Nome da classe:** Usa a mesma string de classe do labeling de bbox (`current_label`; renomear com **N** no modo Labeling), padrão `object`.
+- **BBox por quadro:** Se existir bbox desenhada no modo Labeling, usa-se a **primeira**; senão, bbox ajustada aos keypoints visíveis (com margem).
+- **JSON de projeto:** `<nome_video>_pose_project.json` no dataset guarda os marcadores brutos para reedição.
+
 ## Comandos do Teclado
 
 ### Navegação de Vídeo
@@ -202,6 +224,7 @@ frame,p1_x,p1_y,p2_x,p2_y
 | **F6**          | Carregar Projeto de Labeling (JSON) (Apenas Modo Labeling) |
 | **F7**          | Carregar pasta do dataset – próximo Save anexa (Modo Labeling) |
 | **F8**          | Abrir outro vídeo (mantém dataset; não precisa fechar o app) |
+| **F9**          | Exportar dataset YOLO-pose a partir dos marcadores (ver secção acima) |
 | **1**           | Diminuir quadros de persistência                           |
 | **2**           | Aumentar quadros de persistência                           |
 | **3**           | Alternar persistência completa                             |
@@ -336,6 +359,14 @@ Cada arquivo JSON contém:
 - **Uso:** Para criação de datasets de Machine Learning (detecção de objetos)
 - **Ativação:** Salvar quando o modo Labeling estiver ativo (F5). Use F8 para abrir outro vídeo sem fechar o app.
 
+#### Salvamento pose (YOLO-pose) — **F9**
+
+- **Formato:** Labels YOLO-pose Ultralytics (`.txt` por imagem: `cls cx cy w h` + `kp_x kp_y v` × Nkp)
+- **Diretório:** Novo: `pose_dataset_YYYYMMDD_HHMMSS/` ao lado do vídeo; anexar: **F7** ou `--dataset` antes do **F9**
+- **Estrutura:** Mesmos splits (`train/val/test`, `images/`, `labels/`), mais `data.yaml` com `kpt_shape` e `names`
+- **Uso:** Retreino de redes de pose (ex.: keypoints do campo)
+- **Ativação:** **F9** com pelo menos um quadro com marcadores
+
 ### Carregando Coordenadas
 
 - Clique no botão **Carregar** a qualquer momento
@@ -364,7 +395,7 @@ Sistema de backup integrado para segurança dos dados:
 
 - **Ajuda Rápida:** Pressione H para ajuda no aplicativo
 - **Documentação Completa:** Pressione D no diálogo de ajuda para documentação HTML completa
-- **Documentação HTML:** Localizada em `vaila/help/getpixelvideo.html`
+- **Documentação HTML:** `vaila/help/getpixelvideo_pt.html` (PT) e `vaila/help/getpixelvideo.html` (EN)
 
 ## Dicas e Melhores Práticas
 
@@ -418,10 +449,17 @@ Sistema de backup integrado para segurança dos dados:
 
 - **Ajuda no Aplicativo:** Pressione H para ajuda rápida
 - **Documentação Completa:** Pressione D no diálogo de ajuda para documentação HTML completa
-- **Documentação HTML:** `vaila/help/getpixelvideo.html`
+- **Documentação HTML:** `vaila/help/getpixelvideo_pt.html` (PT) / `vaila/help/getpixelvideo.html` (EN)
 - **Repositório do Projeto:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Histórico de Versões
+
+### Versão 0.5.0 (Abril de 2026)
+
+- **F9 — exportação de dataset YOLO-pose** a partir dos marcadores (train/val/test, `data.yaml` com `kpt_shape` e `flip_idx`)
+- Anexo multi-vídeo via **F7** + **F8**; CLI **`--dataset`**
+- Ficheiro `<nome_video>_pose_project.json` por exportação
+- Ajuda in-app (H) atualizada (pose + F9)
 
 ### Versão 0.3.0 (Janeiro de 2026)
 

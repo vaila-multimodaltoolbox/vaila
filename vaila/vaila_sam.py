@@ -21,6 +21,7 @@ Description:
         - Default weights: vaila/models/sam3/sam3.pt (flat) or vaila/models/sam3/sam3_weights/sam3.pt (nested)
         - Legacy repo root: ./sam3_weights/sam3.pt — prefer flat layout under vaila/models/sam3/
         - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
+        - **Spatial:** very large frames (4K broadcast) can OOM even with ``--max-frames 1``; use ``--max-input-long-edge`` or ``SAM3_MAX_INPUT_LONG_EDGE`` (default 1920).
         - GPU: CUDA only (sam3 video predictor loads on .cuda()). No CPU or macOS MPS path; ``--frame-by-frame`` only lowers VRAM on CUDA.
 
 Usage:
@@ -75,6 +76,7 @@ import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from typing import Any
 
 import cv2
 import numpy as np
@@ -766,6 +768,501 @@ def _maybe_subsample_video_for_vram(
     return out_path.resolve(), out_path.resolve(), written
 
 
+def _read_max_input_long_edge(cli_value: int | None) -> int:
+    """Max long edge in pixels for frames fed to SAM3. 0 = do not downscale (native resolution).
+
+    **VRAM:** Even 1920×1080 can OOM at ``--max-frames 1`` on 8 GiB cards (model + backbone
+    features dominate). When env is unset, we auto-pick **1280** if total GPU VRAM < 10 GiB,
+    else **1920**. 4K+ is always scaled down to that cap. Override with ``SAM3_MAX_INPUT_LONG_EDGE``
+    or ``--max-input-long-edge``.
+    """
+    if cli_value is not None:
+        return max(0, int(cli_value))
+    raw = os.environ.get("SAM3_MAX_INPUT_LONG_EDGE", "").strip().lower()
+    if raw in ("0", "none", "unlimited", "off"):
+        return 0
+    if raw:
+        return max(0, int(raw))
+    profile = _sam3_vram_profile()
+    if profile is not None and profile["total_gib"] < 10.0:
+        return 1280
+    return 1920
+
+
+def _maybe_downscale_video_long_edge(
+    video_path: Path,
+    output_dir: Path,
+    max_long_edge: int,
+) -> tuple[Path, Path | None, int, int, int]:
+    """If max(width,height) > ``max_long_edge``, write a temp MP4 with all frames resized.
+
+    Returns ``(path_for_sam3, temp_path_or_none, out_w, out_h, n_frames)``.
+    """
+    if max_long_edge <= 0:
+        vp = str(video_path.resolve())
+        cap = cv2.VideoCapture(vp)
+        if not cap.isOpened():
+            raise OSError(f"Could not open video: {vp}")
+        w0 = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h0 = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        n0 = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        if n0 <= 0:
+            n0 = _video_frame_count(vp)
+        return video_path.resolve(), None, w0, h0, n0
+
+    vp = str(video_path.resolve())
+    cap = cv2.VideoCapture(vp)
+    if not cap.isOpened():
+        raise OSError(f"Could not open video: {vp}")
+    w0 = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h0 = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    n0 = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    if n0 <= 0:
+        n0 = _video_frame_count(vp)
+
+    m0 = max(w0, h0)
+    if m0 <= max_long_edge:
+        return video_path.resolve(), None, w0, h0, n0
+
+    scale = max_long_edge / m0
+    new_w = max(1, int(round(w0 * scale)))
+    new_h = max(1, int(round(h0 * scale)))
+    print(
+        f"[SAM3] Downscaling input for VRAM: {w0}x{h0} -> {new_w}x{new_h} "
+        f"(max long edge {max_long_edge}px; set SAM3_MAX_INPUT_LONG_EDGE=0 to disable)"
+    )
+
+    out_path = output_dir / "_sam3_spatial_downscale_input.mp4"
+    cap = cv2.VideoCapture(vp)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
+    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (new_w, new_h))
+    if not writer.isOpened():
+        cap.release()
+        raise OSError("Could not open VideoWriter for SAM3 spatial downscale (try another codec)")
+
+    written = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            break
+        if frame.shape[1] != new_w or frame.shape[0] != new_h:
+            frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        writer.write(frame)
+        written += 1
+    cap.release()
+    writer.release()
+
+    if written == 0:
+        with contextlib.suppress(OSError):
+            out_path.unlink(missing_ok=True)
+        raise OSError("Spatial downscale wrote zero frames; check video path/codec")
+    if written != n0 and n0 > 0:
+        n0 = written
+    return out_path.resolve(), out_path.resolve(), new_w, new_h, n0
+
+
+def _split_video_into_chunks(
+    video_path: Path,
+    chunk_dir: Path,
+    chunk_size: int,
+) -> list[tuple[Path, int, int]]:
+    """Split a video into temporal chunks of ``chunk_size`` frames.
+
+    Returns a list of ``(chunk_mp4_path, start_frame_inclusive, end_frame_exclusive)``
+    tuples.  Each chunk is a self-contained MP4 with contiguous frames from the
+    original video.
+
+    This is the *divide* half of the divide-and-conquer OOM strategy: when a
+    video is too large for SAM3's all-at-once GPU loading, we split it into
+    manageable pieces that each fit in VRAM.
+    """
+    vp = str(video_path.resolve())
+    cap = cv2.VideoCapture(vp)
+    if not cap.isOpened():
+        raise OSError(f"Could not open video for chunking: {vp}")
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cap.release()
+    if n <= 0:
+        n = _video_frame_count(vp)
+    if n <= 0:
+        raise OSError(f"Video has 0 frames: {vp}")
+
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    chunks: list[tuple[Path, int, int]] = []
+    cap = cv2.VideoCapture(vp)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
+
+    for chunk_idx in range(0, n, chunk_size):
+        start = chunk_idx
+        end = min(chunk_idx + chunk_size, n)
+        chunk_path = chunk_dir / f"_chunk_{chunk_idx:06d}.mp4"
+        writer = cv2.VideoWriter(str(chunk_path), fourcc, float(fps), (w, h))
+        if not writer.isOpened():
+            cap.release()
+            raise OSError(f"Could not open VideoWriter for chunk {chunk_idx}")
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+        written = 0
+        for _ in range(start, end):
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                writer.write(frame)
+                written += 1
+            else:
+                break
+        writer.release()
+        if written > 0:
+            chunks.append((chunk_path.resolve(), start, start + written))
+    cap.release()
+    return chunks
+
+
+def _merge_chunk_outputs(
+    chunks: list[tuple[Path, int, int]],
+    chunk_output_dirs: list[Path],
+    final_output_dir: Path,
+    video_path: Path,
+    *,
+    save_overlay_mp4: bool = True,
+    save_mask_png: bool = True,
+) -> None:
+    """Merge SAM3 results from temporal chunks into a unified output directory.
+
+    This is the *conquer* half of the divide-and-conquer OOM strategy.
+    Mask PNGs are renumbered from chunk-local indices to global frame indices.
+    The ``sam_frames_meta.csv`` rows are concatenated with corrected frame numbers.
+    An overlay MP4 is stitched from the per-chunk overlays if requested.
+    """
+    import shutil
+
+    final_masks_dir = final_output_dir / "masks"
+    if save_mask_png:
+        final_masks_dir.mkdir(parents=True, exist_ok=True)
+
+    all_meta_rows: list[str] = []
+    header_line: str = ""
+    all_unique_oids: set[int] = set()
+
+    # First pass: collect all object IDs across chunks for a unified header
+    for chunk_out in chunk_output_dirs:
+        meta_csv = chunk_out / "sam_frames_meta.csv"
+        if meta_csv.is_file():
+            lines = meta_csv.read_text(encoding="utf-8").strip().split("\n")
+            if lines:
+                hdr = lines[0]
+                # Extract OIDs from header columns like box_x_1, box_y_1, ...
+                for col in hdr.split(","):
+                    col = col.strip()
+                    if col.startswith("box_x_"):
+                        with contextlib.suppress(ValueError):
+                            all_unique_oids.add(int(col.split("_")[-1]))
+
+    sorted_oids = sorted(all_unique_oids)
+    if sorted_oids:
+        header_cols = ["frame"]
+        for oid in sorted_oids:
+            header_cols.extend(
+                [f"box_x_{oid}", f"box_y_{oid}", f"box_w_{oid}", f"box_h_{oid}", f"prob_{oid}"]
+            )
+        header_line = ",".join(header_cols)
+
+    # Second pass: renumber frames and copy masks
+    for ci, (chunk_info, chunk_out) in enumerate(zip(chunks, chunk_output_dirs, strict=True)):
+        _, start_frame, end_frame = chunk_info
+        meta_csv = chunk_out / "sam_frames_meta.csv"
+        chunk_masks = chunk_out / "masks"
+
+        if meta_csv.is_file():
+            lines = meta_csv.read_text(encoding="utf-8").strip().split("\n")
+            chunk_header = lines[0] if lines else ""
+            chunk_oid_cols = {}
+            # Build a map from chunk column positions to OIDs
+            chunk_cols = chunk_header.split(",")
+            for col_idx, col in enumerate(chunk_cols):
+                col = col.strip()
+                if col.startswith("box_x_"):
+                    with contextlib.suppress(ValueError):
+                        oid = int(col.split("_")[-1])
+                        chunk_oid_cols[oid] = col_idx
+
+            for row_line in lines[1:]:
+                parts = row_line.split(",")
+                if not parts:
+                    continue
+                try:
+                    local_frame = int(parts[0])
+                except ValueError:
+                    continue
+                global_frame = start_frame + local_frame
+
+                # Build unified row
+                row_parts = [str(global_frame)]
+                for oid in sorted_oids:
+                    if oid in chunk_oid_cols:
+                        ci_start = chunk_oid_cols[oid]
+                        # 5 columns per OID: box_x, box_y, box_w, box_h, prob
+                        vals = parts[ci_start : ci_start + 5]
+                        while len(vals) < 5:
+                            vals.append("")
+                        row_parts.extend(vals)
+                    else:
+                        row_parts.extend(["", "", "", "", ""])
+                all_meta_rows.append(",".join(row_parts))
+
+        # Copy and renumber mask PNGs
+        if save_mask_png and chunk_masks.is_dir():
+            for png in sorted(chunk_masks.glob("frame_*_obj_*.png")):
+                # Parse chunk-local frame index: frame_000005_obj_1.png
+                parts_name = png.stem.split("_")
+                # Expected: frame, NNNNNN, obj, OID
+                try:
+                    local_idx = int(parts_name[1])
+                    obj_suffix = "_".join(parts_name[2:])  # obj_1
+                    global_idx = start_frame + local_idx
+                    dest = final_masks_dir / f"frame_{global_idx:06d}_{obj_suffix}.png"
+                    shutil.copy2(str(png), str(dest))
+                except (ValueError, IndexError):
+                    # Fallback: just copy with a prefix
+                    dest = final_masks_dir / f"chunk{ci}_{png.name}"
+                    shutil.copy2(str(png), str(dest))
+
+    # Write unified meta CSV
+    if header_line and all_meta_rows:
+        meta_path = final_output_dir / "sam_frames_meta.csv"
+        # Sort rows by global frame index
+        all_meta_rows.sort(key=lambda r: int(r.split(",")[0]) if r.split(",")[0].isdigit() else 0)
+        meta_path.write_text(
+            header_line + "\n" + "\n".join(all_meta_rows) + "\n",
+            encoding="utf-8",
+        )
+
+    # Stitch overlay MP4s in order
+    if save_overlay_mp4:
+        overlay_parts = []
+        for chunk_out in chunk_output_dirs:
+            overlays = list(chunk_out.glob("*_sam_overlay.mp4"))
+            if overlays:
+                overlay_parts.append(overlays[0])
+        if overlay_parts:
+            _stitch_overlay_mp4s(overlay_parts, final_output_dir, video_path)
+
+
+def _stitch_overlay_mp4s(parts: list[Path], final_output_dir: Path, video_path: Path) -> None:
+    """Concatenate multiple overlay MP4 segments into a single file."""
+    out_path = final_output_dir / f"{video_path.stem}_sam_overlay.mp4"
+    if len(parts) == 1:
+        import shutil
+
+        shutil.copy2(str(parts[0]), str(out_path))
+        return
+    # Use OpenCV to stitch — read all parts and write sequentially
+    first_cap = cv2.VideoCapture(str(parts[0]))
+    if not first_cap.isOpened():
+        return
+    fps = first_cap.get(cv2.CAP_PROP_FPS) or 30.0
+    w = int(first_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(first_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    first_cap.release()
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
+    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (w, h))
+    if not writer.isOpened():
+        return
+    for part in parts:
+        cap = cv2.VideoCapture(str(part))
+        while True:
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break
+            writer.write(frame)
+        cap.release()
+    writer.release()
+
+
+def _process_video_chunked(
+    video_file: Path,
+    output_dir: Path,
+    *,
+    text_prompt: str,
+    frame_index: int,
+    checkpoint: Path | None,
+    max_input_frames: int | None,
+    max_input_long_edge: int | None = None,
+    save_overlay_mp4: bool,
+    save_mask_png: bool,
+    chunk_size: int | None = None,
+    log: Callable[[str], None] | None = None,
+) -> tuple[bool, str]:
+    """Divide-and-conquer: split video into temporal chunks, process each in a
+    subprocess, merge results.
+
+    This is the fallback when the standard OOM retry ladder fails — typically
+    because 1920×1080 frames are too large for SAM3 even at max_frames=1.
+    Each chunk is a contiguous segment of ``chunk_size`` frames (default: auto
+    from VRAM profile).  Processing in separate subprocesses guarantees a clean
+    GPU state for each chunk, avoiding the OOM cascade.
+
+    Returns ``(success, message)``.
+    """
+    import subprocess as _sp
+
+    def _log(s: str) -> None:
+        if log is not None:
+            log(s)
+        else:
+            print(s)
+
+    # Determine chunk size
+    if chunk_size is None or chunk_size <= 0:
+        profile = _sam3_vram_profile()
+        chunk_size = max(16, int(profile["safe_frames"])) if profile is not None else 64
+    # Safety: ensure chunk_size is at least 8 frames
+    chunk_size = max(8, chunk_size)
+
+    n_total = _video_frame_count(str(video_file))
+    if n_total <= 0:
+        return False, f"Could not read frame count from {video_file}"
+
+    n_chunks = (n_total + chunk_size - 1) // chunk_size
+    _log(
+        f"  [SAM3-CHUNK] Divide and conquer: {n_total} frames → "
+        f"{n_chunks} chunks of ≤{chunk_size} frames each"
+    )
+
+    # Create chunk working directory
+    chunk_work_dir = output_dir / "_chunks"
+    chunk_work_dir.mkdir(parents=True, exist_ok=True)
+
+    # Split video into chunks
+    _log("  [SAM3-CHUNK] Splitting video into chunks...")
+    try:
+        chunks = _split_video_into_chunks(video_file, chunk_work_dir, chunk_size)
+    except Exception as e:
+        return False, f"Failed to split video: {e}"
+    _log(f"  [SAM3-CHUNK] Created {len(chunks)} chunk(s)")
+
+    # Process each chunk in an isolated subprocess
+    chunk_output_dirs: list[Path] = []
+    failed_chunks: list[int] = []
+    for ci, (chunk_path, start_frame, end_frame) in enumerate(chunks):
+        chunk_out = chunk_work_dir / f"out_{start_frame:06d}"
+        chunk_out.mkdir(parents=True, exist_ok=True)
+        chunk_output_dirs.append(chunk_out)
+
+        _log(
+            f"  [SAM3-CHUNK] Processing chunk {ci + 1}/{len(chunks)}: "
+            f"frames {start_frame}-{end_frame - 1} ({end_frame - start_frame} frames)"
+        )
+
+        # Use frame_index=0 for each chunk (prompt at start of chunk)
+        # For the chunk that contains the original frame_index, use the offset
+        chunk_fi = 0
+        if start_frame <= frame_index < end_frame:
+            chunk_fi = frame_index - start_frame
+
+        cmd = [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--input",
+            str(chunk_path),
+            "--video-output-dir",
+            str(chunk_out),
+            "--text",
+            text_prompt,
+            "--frame",
+            str(chunk_fi),
+        ]
+        if max_input_frames is not None and max_input_frames > 0:
+            cmd += ["--max-frames", str(max_input_frames)]
+        if max_input_long_edge is not None:
+            cmd += ["--max-input-long-edge", str(max_input_long_edge)]
+        if checkpoint is not None:
+            cmd += ["--checkpoint", str(checkpoint)]
+        if not save_overlay_mp4:
+            cmd.append("--no-overlay")
+        if not save_mask_png:
+            cmd.append("--no-png")
+
+        env = os.environ.copy()
+        env.setdefault("TQDM_DISABLE", "1")
+        env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+        try:
+            rc = _sp.call(cmd, env=env)
+        except KeyboardInterrupt:
+            _log(f"  [SAM3-CHUNK] Interrupted at chunk {ci + 1}")
+            failed_chunks.append(ci)
+            break
+        except Exception as e:
+            _log(f"  [SAM3-CHUNK] Exception on chunk {ci + 1}: {e}")
+            failed_chunks.append(ci)
+            continue
+
+        if rc == 0:
+            _log(f"  [SAM3-CHUNK] Chunk {ci + 1}/{len(chunks)} done")
+        else:
+            _log(f"  [SAM3-CHUNK] Chunk {ci + 1}/{len(chunks)} FAILED (exit={rc})")
+            failed_chunks.append(ci)
+
+        # Clean up chunk MP4 to save disk space
+        with contextlib.suppress(OSError):
+            chunk_path.unlink(missing_ok=True)
+
+    # Merge results
+    successful_chunks = len(chunks) - len(failed_chunks)
+    if successful_chunks == 0:
+        _write_failure_marker(output_dir, video_file, "All chunks failed (CUDA OOM)")
+        return False, "All chunks failed"
+
+    _log(f"  [SAM3-CHUNK] Merging {successful_chunks}/{len(chunks)} chunk results...")
+    try:
+        _merge_chunk_outputs(
+            chunks,
+            chunk_output_dirs,
+            output_dir,
+            video_file,
+            save_overlay_mp4=save_overlay_mp4,
+            save_mask_png=save_mask_png,
+        )
+    except Exception as e:
+        _log(f"  [SAM3-CHUNK] Merge error: {e}")
+        return False, f"Chunk merge failed: {e}"
+
+    # Write README
+    readme = output_dir / "README_sam.txt"
+    readme.write_text(
+        f"SAM 3 video export (chunked divide-and-conquer)\n"
+        f"source={video_file.resolve()}\n"
+        f"total_frames={n_total}\n"
+        f"chunk_size={chunk_size}\n"
+        f"total_chunks={len(chunks)}\n"
+        f"successful_chunks={successful_chunks}\n"
+        f"failed_chunks={len(failed_chunks)}\n"
+        f"prompt={text_prompt!r}\n",
+        encoding="utf-8",
+    )
+
+    # Clean up chunk work dir (keep outputs in final dir)
+    import shutil
+
+    with contextlib.suppress(OSError):
+        shutil.rmtree(str(chunk_work_dir), ignore_errors=True)
+
+    if failed_chunks:
+        _log(
+            f"  [SAM3-CHUNK] Warning: {len(failed_chunks)} chunk(s) failed, "
+            f"but {successful_chunks} succeeded → partial result available"
+        )
+        return True, f"Partial: {successful_chunks}/{len(chunks)} chunks OK"
+    _log(f"  [SAM3-CHUNK] All {len(chunks)} chunks merged successfully")
+    return True, ""
+
+
 def _palette(n: int) -> np.ndarray:
     rng = np.random.default_rng(42)
     return (rng.random((max(n, 1), 3)) * 255).astype(np.uint8)
@@ -794,7 +1291,12 @@ def _composite_masks_bgr(
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
-def _sam3_cuda_oom_help(*, max_input_frames: int, session_frames: int) -> str:
+def _sam3_cuda_oom_help(
+    *,
+    max_input_frames: int,
+    session_frames: int,
+    max_input_long_edge: int = 0,
+) -> str:
     followups = _sam3_next_oom_caps(max_input_frames)
     if followups:
         followup_hint = ", ".join(map(str, followups[:4]))
@@ -815,11 +1317,27 @@ def _sam3_cuda_oom_help(*, max_input_frames: int, session_frames: int) -> str:
     else:
         max_hint = "or pass a smaller --max-frames value"
 
+    spatial = ""
+    if session_frames <= 1 or max_input_frames <= 1:
+        spatial = (
+            "\n\nAt 1 (or very few) session frame(s), OOM is usually input resolution (4K/8K), "
+            "not frame count. Try:\n"
+            "  - --max-input-long-edge 1280 (or 960, 640) or env SAM3_MAX_INPUT_LONG_EDGE=1280\n"
+            "  - or --frame-by-frame (per-frame subprocess with 640p cap)\n"
+        )
+    if max_input_long_edge > 0 and session_frames <= 1:
+        spatial += (
+            f"\nCurrent max long edge in effect: {max_input_long_edge}px (try a lower value).\n"
+        )
+
     return (
         "CUDA out of memory while loading the video into SAM3. "
-        "The library puts the whole session on GPU at once (~few GB per hundred frames at 1008²).\n\n"
+        "The library puts the whole session on GPU at once (~few GiB per long clip; "
+        "very large frame sizes at 4K+ also cost a lot of VRAM per frame at 1008² features).\n\n"
         f"This run used session_frames={session_frames} (max_input_frames_cap={max_input_frames}; "
-        "0 means no subsampling).\n\n"
+        "0 means no subsampling). "
+        f"max_input_long_edge={max_input_long_edge} (0 = native / no downscale)."
+        f"{spatial}\n"
         "Fix: unset SAM3_MAX_FRAMES (auto-sizes to GPU VRAM), "
         f"{max_hint}. "
         f"{followup_text} Keep weights under vaila/models/sam3/."
@@ -859,6 +1377,7 @@ def run_sam3_on_video(
     *,
     checkpoint: Path | None = None,
     max_input_frames: int | None = None,
+    max_input_long_edge: int | None = None,
     save_overlay_mp4: bool = True,
     save_mask_png: bool = True,
     frame_by_frame_fallback: bool = False,
@@ -884,8 +1403,20 @@ def run_sam3_on_video(
     _setup_cuda_for_sam3()
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    temp_spatial: Path | None = None
     mf = _read_max_input_frames(max_input_frames)
     session_path, temp_clip, n_sess = _maybe_subsample_video_for_vram(video_path, output_dir, mf)
+    le_cap = _read_max_input_long_edge(max_input_long_edge)
+    if max_input_long_edge is None and le_cap == 1280:
+        _vprof = _sam3_vram_profile()
+        if _vprof is not None:
+            print(
+                f"[SAM3] Default max_input_long_edge=1280 (GPU total {_vprof['total_gib']:.1f} GiB; "
+                "set SAM3_MAX_INPUT_LONG_EDGE=1920 to try full HD input if you have VRAM headroom)"
+            )
+    session_path, temp_spatial, _w_sess, _h_sess, n_sess = _maybe_downscale_video_long_edge(
+        session_path, output_dir, le_cap
+    )
     vp = str(session_path)
     vp_orig = str(video_path.resolve())
     fi_run = min(max(0, int(frame_index)), max(0, n_sess - 1))
@@ -900,8 +1431,6 @@ def run_sam3_on_video(
         pred_kw["checkpoint_path"] = str(ckpt_file)
 
     try:
-        from typing import Any
-
         predictor: Any = None
         outputs_by_frame: dict[int, dict] = {}
         _autocast: contextlib.AbstractContextManager[object] = contextlib.nullcontext()
@@ -1066,7 +1595,11 @@ def run_sam3_on_video(
             except Exception as e:
                 if type(e).__name__ == "OutOfMemoryError" or "CUDA out of memory" in str(e):
                     raise RuntimeError(
-                        _sam3_cuda_oom_help(max_input_frames=mf, session_frames=n_sess)
+                        _sam3_cuda_oom_help(
+                            max_input_frames=mf,
+                            session_frames=n_sess,
+                            max_input_long_edge=le_cap,
+                        )
                     ) from e
                 raise
             session_id = start["session_id"]
@@ -1101,7 +1634,11 @@ def run_sam3_on_video(
                 if _is_cuda_oom_error(e):
                     tip_n = _sam3_next_oom_tip(mf)
                     msg = (
-                        _sam3_cuda_oom_help(max_input_frames=mf, session_frames=n_sess)
+                        _sam3_cuda_oom_help(
+                            max_input_frames=mf,
+                            session_frames=n_sess,
+                            max_input_long_edge=le_cap,
+                        )
                         + f"\n\nTip: rerun with --max-frames {tip_n} (or another lower value until it fits)."
                     )
                     raise RuntimeError(msg) from e
@@ -1221,7 +1758,8 @@ def run_sam3_on_video(
             f"SAM 3 video export\n"
             f"source_original={vp_orig}\n"
             f"session_resource={vp}\n"
-            f"subsampled_to_disk={temp_clip is not None} max_input_frames_cap={mf} session_frames={n_sess}\n"
+            f"subsampled_to_disk={temp_clip is not None} spatial_downscale={temp_spatial is not None} "
+            f"max_input_long_edge_cap={le_cap} max_input_frames_cap={mf} session_frames={n_sess}\n"
             f"checkpoint={ckpt_note}\n"
             f"prompt={text_prompt!r}\n"
             f"prompt_frame_requested={frame_index} prompt_frame_used={fi_run}\n"
@@ -1229,9 +1767,10 @@ def run_sam3_on_video(
             encoding="utf-8",
         )
     finally:
-        if temp_clip is not None and Path(temp_clip).is_file():
-            with contextlib.suppress(OSError):
-                Path(temp_clip).unlink(missing_ok=True)
+        for _tmp in (temp_clip, temp_spatial):
+            if _tmp is not None and Path(_tmp).is_file():
+                with contextlib.suppress(OSError):
+                    Path(_tmp).unlink(missing_ok=True)
         # Last-line GPU cleanup: even if the run raised, drop the predictor
         # and reset CUDA caches so the next batch item starts from a clean slate.
         with contextlib.suppress(Exception):
@@ -1296,9 +1835,7 @@ def _sam3_build_oom_retry_attempts(max_input_frames: int | None) -> list[int | N
     """Caps to try on CUDA OOM (high → low). Includes low caps like 8→4→2→1."""
     attempts: list[int | None] = [max_input_frames]
     for step in _SAM3_OOM_FALLBACK_FRAMES:
-        if max_input_frames is None or max_input_frames <= 0:
-            attempts.append(step)
-        elif max_input_frames > step:
+        if max_input_frames is None or max_input_frames <= 0 or max_input_frames > step:
             attempts.append(step)
     seen: set[int | None] = set()
     uniq: list[int | None] = []
@@ -1333,6 +1870,7 @@ def _process_one_video_with_oom_retry(
     frame_index: int,
     checkpoint: Path | None,
     max_input_frames: int | None,
+    max_input_long_edge: int | None = None,
     save_overlay_mp4: bool,
     save_mask_png: bool,
     frame_by_frame_fallback: bool,
@@ -1370,6 +1908,7 @@ def _process_one_video_with_oom_retry(
     # #endregion
 
     last_err: str = ""
+    mf_try: int | None = None
     for attempt_idx, mf_try in enumerate(attempts, start=1):
         _release_sam3_gpu_memory()
         mf_try_resolved = _read_max_input_frames(mf_try)
@@ -1381,6 +1920,7 @@ def _process_one_video_with_oom_retry(
                 frame_index=frame_index,
                 checkpoint=checkpoint,
                 max_input_frames=mf_try,
+                max_input_long_edge=max_input_long_edge,
                 save_overlay_mp4=save_overlay_mp4,
                 save_mask_png=save_mask_png,
                 frame_by_frame_fallback=frame_by_frame_fallback,
@@ -1392,8 +1932,8 @@ def _process_one_video_with_oom_retry(
                 _write_failure_marker(output_dir, video_file, last_err)
                 return False, last_err
             if attempt_idx >= len(attempts):
-                _write_failure_marker(output_dir, video_file, "CUDA OOM: " + last_err)
-                return False, last_err
+                # Fall through to chunking fallback
+                break
             next_mf = attempts[attempt_idx]
             next_tip = (
                 next_mf
@@ -1418,8 +1958,62 @@ def _process_one_video_with_oom_retry(
                 f"  [SAM3] CUDA OOM at max_frames={mf_try_resolved}; "
                 f"retrying with max_frames={next_tip}..."
             )
-    _write_failure_marker(output_dir, video_file, last_err or "unknown failure")
-    return False, last_err or "unknown failure"
+    # Frame-cap ladder exhausted; 4K+ sources often OOM at session_frames=1 — lower long edge.
+    smf = mf_try if mf_try is not None else (attempts[-1] if attempts else 1)
+    user_le = _read_max_input_long_edge(max_input_long_edge)
+    for le in (1280, 960, 640, 512):
+        if user_le > 0 and le >= user_le:
+            continue
+        _release_sam3_gpu_memory()
+        _log(
+            f"  [SAM3] CUDA OOM persists for {video_file.name}; "
+            f"retrying with max_input_long_edge={le}px (spatial downscale) "
+            f"and max_input_frames={smf!r}..."
+        )
+        try:
+            run_sam3_on_video(
+                video_file,
+                output_dir,
+                text_prompt,
+                frame_index=frame_index,
+                checkpoint=checkpoint,
+                max_input_frames=smf,
+                max_input_long_edge=le,
+                save_overlay_mp4=save_overlay_mp4,
+                save_mask_png=save_mask_png,
+                frame_by_frame_fallback=frame_by_frame_fallback,
+            )
+            return True, ""
+        except Exception as e:
+            last_err = str(e)
+            if not _is_cuda_oom_error(e):
+                _write_failure_marker(output_dir, video_file, last_err)
+                return False, last_err
+    # All retry attempts exhausted — fall back to divide-and-conquer chunking.
+    # This splits the video into temporal segments small enough for VRAM,
+    # processes each in an isolated subprocess, then merges the masks.
+    _log(
+        f"  [SAM3] All OOM retry attempts exhausted for {video_file.name}; "
+        f"falling back to divide-and-conquer chunking..."
+    )
+    _release_sam3_gpu_memory()
+    ok, chunk_msg = _process_video_chunked(
+        video_file,
+        output_dir,
+        text_prompt=text_prompt,
+        frame_index=frame_index,
+        checkpoint=checkpoint,
+        max_input_frames=max_input_frames,
+        max_input_long_edge=max_input_long_edge,
+        save_overlay_mp4=save_overlay_mp4,
+        save_mask_png=save_mask_png,
+        log=log,
+    )
+    if ok:
+        _log(f"  [SAM3] Chunked processing succeeded for {video_file.name}")
+        return True, chunk_msg
+    _write_failure_marker(output_dir, video_file, f"Chunked fallback failed: {chunk_msg}")
+    return False, f"Chunked fallback failed: {chunk_msg}"
 
 
 def _find_videos(directory: Path) -> list[Path]:
@@ -1436,9 +2030,7 @@ class SamVideoDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
         self.title("SAM 3 — video segmentation")
-        self.result: (
-            tuple[Path, Path, Path | None, str, int, bool, bool, bool, bool] | None
-        ) = None
+        self.result: tuple[Path, Path, Path | None, str, int, bool, bool, bool, bool] | None = None
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -1721,17 +2313,21 @@ class SamBatchProgress(tk.Toplevel):
         self._append_log("[GUI] Cancel requested — waiting for current video to end...")
 
     def _finish(self) -> None:
-        self.cancel_btn.config(state="disabled")
-        self.close_btn.config(state="normal")
-        if self._output_base is not None and self._output_base.is_dir():
-            self.postproc_btn.config(state="normal")
-            self.calib_btn.config(state="normal")
+        def _done() -> None:
+            self.cancel_btn.config(state="disabled")
+            self.close_btn.config(state="normal")
+            if self._output_base is not None and self._output_base.is_dir():
+                self.postproc_btn.config(state="normal")
+                self.calib_btn.config(state="normal")
+
+        self.after(0, _done)
 
     def set_output_base(self, output_base: Path) -> None:
         self._output_base = output_base
 
     def _on_build_points(self) -> None:
-        if self._output_base is None or not self._output_base.is_dir():
+        ob = self._output_base
+        if ob is None or not ob.is_dir():
             messagebox.showwarning(
                 "Post-processing", "Output directory not available.", parent=self
             )
@@ -1743,7 +2339,7 @@ class SamBatchProgress(tk.Toplevel):
             try:
                 from vaila.sam_postprocess import extract_points_for_batch
 
-                outs = extract_points_for_batch(self._output_base, mode="all")
+                outs = extract_points_for_batch(ob, mode="all")
                 msg = f"Wrote {len(outs)} sam_points.csv file(s) under {self._output_base}"
                 self.after(
                     0,
@@ -1921,7 +2517,7 @@ def _start_sam_batch_subprocess(
         on_done(0, 0, [f"subprocess launch failed: {e!r}"], output_base)
         return
 
-    state: dict[str, object] = {
+    state: dict[str, Any] = {
         "succeeded": 0,
         "failed": [],
         "actual_output": output_base,
@@ -1942,21 +2538,22 @@ def _start_sam_batch_subprocess(
             idx = int(m.group(1))
             total = int(m.group(2))
             state["current_idx"] = idx
-            state["total_videos"] = max(int(state["total_videos"] or 0), total)
+            cur_total = state["total_videos"]
+            state["total_videos"] = max(int(cur_total), total)
             progress._set_progress(idx - 1)
         elif (m := re_done_line.match(line)) is not None:
-            state["succeeded"] = int(state["succeeded"] or 0) + 1
-            idx = int(state["current_idx"] or 0)
-            if idx > 0:
-                progress._set_progress(idx)
+            state["succeeded"] = int(state["succeeded"]) + 1
+            idx_done = int(state["current_idx"])
+            if idx_done > 0:
+                progress._set_progress(idx_done)
         elif (m := re_error_line.match(line)) is not None:
             fname = m.group(1).strip()
             err_text = m.group(2).strip()
-            failed_list = state["failed"]
-            if isinstance(failed_list, list):
-                failed_list.append(f"{fname}: {err_text}")
+            failed_list: list[str] = state["failed"]
+            failed_list.append(f"{fname}: {err_text}")
         elif (m := re_output_dir.match(line)) is not None:
-            state["actual_output"] = Path(m.group(1).strip())
+            actual_out_str = m.group(1).strip()
+            state["actual_output"] = Path(actual_out_str)
 
     def _drain_log_file() -> None:
         try:
@@ -2047,9 +2644,17 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
             root.destroy()
         return
 
-    input_path, out_parent, ckpt_opt, prompt, frame_idx, save_ov, save_png, frame_fallback, dry_run = (
-        dlg.result
-    )
+    (
+        input_path,
+        out_parent,
+        ckpt_opt,
+        prompt,
+        frame_idx,
+        save_ov,
+        save_png,
+        frame_fallback,
+        dry_run,
+    ) = dlg.result
 
     video_files = _find_videos(input_path) if input_path.is_dir() else [input_path]
     if not video_files:
@@ -2082,7 +2687,7 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         dry_report = _write_sam3_dry_run_report(report, output_base)
         if dry_report is not None:
             report.append(f"Report written to: {dry_report}")
-        summary = "\n".join(report[:min(18, len(report))])
+        summary = "\n".join(report[: min(18, len(report))])
         if len(report) > 18:
             summary += "\n… veja o arquivo SAM3_DRY_RUN.txt para o plano completo."
         root.after(
@@ -2205,6 +2810,15 @@ def main() -> None:
         help="Max frames passed to SAM3 on GPU (VRAM). Overrides SAM3_MAX_FRAMES; 0 = full clip.",
     )
     parser.add_argument(
+        "--max-input-long-edge",
+        type=int,
+        default=None,
+        metavar="PX",
+        help="Max long edge in pixels (width/height) for each frame fed to SAM3. "
+        "0 = native resolution (no downscale). Default 1920 or SAM3_MAX_INPUT_LONG_EDGE. "
+        "4K+ broadcast needs this on many GPUs; try 1280 or 960 if OOM with --max-frames 1.",
+    )
+    parser.add_argument(
         "--dry-run",
         "--smoke",
         dest="dry_run",
@@ -2300,6 +2914,7 @@ def main() -> None:
             frame_index=args.frame,
             checkpoint=args.checkpoint,
             max_input_frames=args.max_frames,
+            max_input_long_edge=args.max_input_long_edge,
             save_overlay_mp4=not args.no_overlay,
             save_mask_png=not args.no_png,
             frame_by_frame_fallback=args.frame_by_frame,
@@ -2391,6 +3006,8 @@ def main() -> None:
                 ]
                 if args.max_frames is not None:
                     cmd += ["--max-frames", str(args.max_frames)]
+                if args.max_input_long_edge is not None:
+                    cmd += ["--max-input-long-edge", str(args.max_input_long_edge)]
                 if args.checkpoint is not None:
                     cmd += ["--checkpoint", str(args.checkpoint)]
                 if args.no_overlay:
@@ -2428,6 +3045,7 @@ def main() -> None:
                     frame_index=args.frame,
                     checkpoint=args.checkpoint,
                     max_input_frames=args.max_frames,
+                    max_input_long_edge=args.max_input_long_edge,
                     save_overlay_mp4=not args.no_overlay,
                     save_mask_png=not args.no_png,
                     frame_by_frame_fallback=args.frame_by_frame,
@@ -2445,11 +3063,12 @@ def main() -> None:
                 print(f"  - {line}")
 
         if args.postprocess_points != "none":
+            ob = output_base
             try:
                 from vaila.sam_postprocess import extract_points_for_batch
 
                 print(f"\n[postprocess] mode={args.postprocess_points}")
-                outs = extract_points_for_batch(output_base, mode=args.postprocess_points)
+                outs = extract_points_for_batch(ob, mode=args.postprocess_points)
                 print(f"[postprocess] wrote {len(outs)} sam_points.csv file(s).")
             except Exception as exc:
                 print(f"[postprocess] FAILED: {exc}")

@@ -149,7 +149,7 @@ def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
 APPKIT_AVAILABLE = False
 if platform.system() == "Darwin":  # macOS
     try:
-        import AppKit  # macOS only ignore this line in other OS
+        import AppKit  # macOS only ignore this line in other OS  # type: ignore
 
         APPKIT_AVAILABLE = True
     except ImportError:
@@ -193,14 +193,14 @@ B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 B3_r3_c1 - HR/ECG         B3_r3_c2 - MP_Yolo         B3_r3_c3 - vailá_and_jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - Tracker        B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c1 - YOLO           B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
 B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
 B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - TUG and TURN
-B5_r6_c4 - SAM            B5_r6_c5 - Soccer-Field Calib
+B5_r6_c4 - vailá          B5_r6_c5 - Soccer-Field Calib
 
 B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - vailá
 B6_r7_c4 - vailá          B6_r7_c5 - vailá
@@ -235,7 +235,7 @@ print(text)
 
 def open_folder_cross_platform(path):
     if platform.system() == "Windows":
-        os.startfile(path)
+        os.startfile(path)  # type: ignore
     elif platform.system() == "Darwin":
         subprocess.Popen(["open", path])
     else:  # Linux
@@ -348,7 +348,7 @@ class Vaila(tk.Tk):
         preto_photo = ImageTk.PhotoImage(preto_image)
 
         # Create the label with the image
-        preto_label = tk.Label(header_frame, image=preto_photo)  # type: ignore
+        preto_label = tk.Label(header_frame, image=preto_photo)
         self._preto_photo = preto_photo  # Store as instance attribute to prevent garbage collection
         preto_label.pack(side="left", padx=10)
 
@@ -776,12 +776,12 @@ class Vaila(tk.Tk):
         row4_frame = tk.Frame(analysis_frame)
         row4_frame.pack(fill="x")
 
-        # B4_r4_c1 - YOLO Tracker-Pose
-        yolotrackerpose_btn = tk.Button(
+        # B4_r4_c1 - YOLO and SAM
+        yolo_and_sam_btn = tk.Button(
             row4_frame,
-            text="YOLO Tracker-Pose",
+            text="YOLO and SAM",
             width=button_width,
-            command=self.yolotrackerpose,
+            command=self.yolo_and_sam,
         )
 
         # B4_r4_c2 - ML Walkway
@@ -817,7 +817,7 @@ class Vaila(tk.Tk):
         )
 
         # Pack row4 buttons
-        yolotrackerpose_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        yolo_and_sam_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mlwalkway_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mphands_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mpangles_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
@@ -902,11 +902,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # B5_r6_c4 - SAM (Segment Anything Model 3 video)
-        sam_btn = tk.Button(
+        # B5_r6_c4 - vailá placeholder
+        soccerfield_kp_btn = tk.Button(
             row6_frame,
-            text="SAM",
-            command=self.sam_video,
+            text="Field KPs (AI)",
+            command=self.soccerfield_keypoints_ai,
             width=button_width,
         )
 
@@ -922,7 +922,7 @@ class Vaila(tk.Tk):
         sprint_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         face_mesh_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         tugturn_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        sam_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        soccerfield_kp_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         soccerfield_calib_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         # B6_r7 — seventh row: generic vailá placeholders (B6_r7_c1 .. B6_r7_c5)
@@ -1724,14 +1724,19 @@ class Vaila(tk.Tk):
 
                 # Import and run in same process
                 if version_choice == "1":
-                    from vaila.markerless_3d_analysis import process_videos_in_directory
+                    import tkinter as tk
+
+                    from vaila.markerless_3d_analysis import App
+
+                    dialog = tk.Toplevel(self)
+                    _app = App(dialog)
                 else:
                     from vaila.markerless3d_analysis_v2 import (
                         process_videos_in_directory,
                     )
 
-                # Pass the existing root window to avoid creating new Tk
-                process_videos_in_directory(existing_root=self.root)
+                    # Pass the existing root window to avoid creating new Tk
+                    process_videos_in_directory(existing_root=self)
 
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to run markerless 3D analysis: {e}")
@@ -1887,8 +1892,8 @@ class Vaila(tk.Tk):
 
         # Create a dialog window for tracking version selection
         dialog = tk.Toplevel(self)
-        dialog.title("Select YOLO Version")
-        dialog.geometry("400x500")
+        dialog.title("Select YOLO Tool")
+        dialog.geometry("400x650")
         dialog.transient(self)  # Make dialog modal
 
         # Try to set grab, but don't fail if another grab is active
@@ -1902,7 +1907,7 @@ class Vaila(tk.Tk):
             with contextlib.suppress(Exception):
                 dialog.grab_set()
 
-        tk.Label(dialog, text="Select YOLO tracker version to use:", pady=15).pack()
+        tk.Label(dialog, text="Select YOLO tool to use:", pady=15).pack()
 
         def use_yolov11():
             dialog.destroy()
@@ -1948,6 +1953,32 @@ class Vaila(tk.Tk):
                     f"Error: {str(e)}",
                 )
 
+        def use_yolov26_seg():
+            dialog.destroy()
+            messagebox.showinfo(
+                "YOLO Segmentation",
+                "In the next window, please select a segmentation model (e.g., yolo26n-seg.pt)",
+            )
+            try:
+                # Import inside function to avoid early loading
+                import sys
+
+                # Add the site-packages path first to ensure proper numpy loading
+                site_packages = os.path.join(
+                    os.path.dirname(sys.executable), "Lib", "site-packages"
+                )
+                if site_packages not in sys.path:
+                    sys.path.insert(0, site_packages)
+
+                from vaila import yolov26track
+
+                yolov26track.run_yolov26track()
+            except Exception as e:
+                messagebox.showerror(
+                    "Error Running YOLOv26 Segmentation",
+                    f"Error: {str(e)}",
+                )
+
         def use_train_yolov11():
             dialog.destroy()
             try:
@@ -1981,15 +2012,28 @@ class Vaila(tk.Tk):
                     f"Error: {str(e)}",
                 )
 
+        def use_sam():
+            dialog.destroy()
+            self.sam_video()
+
         tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(pady=8)
         tk.Button(dialog, text="YOLOv26 Tracker", command=use_yolov26, width=20).pack(pady=8)
-        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=20).pack(pady=8)
         tk.Button(dialog, text="YOLOv11 Pose", command=use_yolo_pose_v11, width=20).pack(pady=8)
         tk.Button(dialog, text="YOLOv26 Pose", command=use_yolo_pose_v26, width=20).pack(pady=8)
+        tk.Button(dialog, text="YOLOv26 Segmentation", command=use_yolov26_seg, width=20).pack(
+            pady=8
+        )
+        tk.Button(dialog, text="SAM (Segment Anything)", command=use_sam, width=20).pack(pady=8)
+        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=20).pack(pady=8)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
         # Wait for the dialog to be closed
         self.wait_window(dialog)
+
+    # Backwards-compat alias (older button handler name)
+    def yolo_and_sam(self):
+        """Alias to open the YOLO/SAM selection dialog."""
+        return self.yolotrackerpose()
 
     # B_r4_c2 - ML Walkway
     def ml_walkway(self):
@@ -2398,16 +2442,8 @@ class Vaila(tk.Tk):
 
     # C_B_r2_c2
     def vaila_gui(self):
-        """Runs the video compression module for H.265 format.
-
-        This function runs the video compression module for H.265 format, which can be used to
-        compress video files. The module will prompt the user to select the directory containing
-        the video files and input the sample rate and start and end indices for analysis.
-
-        """
-        from vaila import vaila
-
-        vaila.vaila_gui()
+        """Placeholder for future implementation."""
+        self.show_vaila_message()
 
     # C_B_r2_c3
     def sync_videos(self):
@@ -2939,12 +2975,24 @@ class Vaila(tk.Tk):
             extra_py_flags=("-u",),
         )
 
+    def soccerfield_keypoints_ai(self):
+        """Detect soccer-field keypoints (pixels) using an AI model (seed for getpixelvideo)."""
+        print("\n" + "=" * 60)
+        print("Launching: vaila.soccerfield_keypoints_ai")
+        print("Features: AI keypoints → pixel CSV template for getpixelvideo / soccerfield_calib")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.soccerfield_keypoints_ai",
+            "vaila/soccerfield_keypoints_ai.py",
+            extra_py_flags=("-u",),
+        )
+
     def fifa_cams_to_dlt_per_frame(self):
         """FIFA ``cameras/*.npz`` -> per-frame ``.dlt2d`` / ``.dlt3d`` for rec2d/rec3d."""
         try:
             from vaila.fifa_to_dlt import run_gui_flow
         except ImportError:
-            from fifa_to_dlt import run_gui_flow  # ty: ignore[unresolved-import]
+            from fifa_to_dlt import run_gui_flow  # type: ignore
 
         print("\n" + "=" * 60)
         print("FIFA cameras -> DLT (per frame): Tk dialogs")

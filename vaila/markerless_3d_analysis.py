@@ -885,147 +885,147 @@ def run_single_video(cfg: dict, video_path: str, out_dir: str, base_dir: Path | 
     )
 
 
+class App:
+    def __init__(self, master: tk.Tk | tk.Toplevel):
+        self.master = master
+        master.title("Markerless 3D Analysis")
+
+        top = tk.Frame(master)
+        top.pack(padx=10, pady=10, fill=tk.X)
+
+        # Config file row
+        row1 = tk.Frame(top)
+        row1.pack(fill=tk.X)
+        tk.Label(row1, text="Config TOML:").pack(side=tk.LEFT)
+        self.cfg_path_var = tk.StringVar(
+            value=str(Path("tests/markerless_3d_analysis/markerless3d_config.toml").resolve())
+        )
+        tk.Entry(row1, textvariable=self.cfg_path_var, width=80).pack(
+            side=tk.LEFT, padx=5, fill=tk.X, expand=True
+        )
+        tk.Button(row1, text="Browse", command=self.browse_cfg).pack(side=tk.LEFT, padx=5)
+
+        # Buttons
+        row2 = tk.Frame(top)
+        row2.pack(fill=tk.X, pady=(8, 0))
+        tk.Button(row2, text="Load TOML", command=self.load_cfg).pack(side=tk.LEFT, padx=5)
+        self.btn_default = tk.Button(
+            row2, text="Create Default TOML", command=self.write_default_cfg
+        )
+        self.btn_default.pack(side=tk.LEFT, padx=5)
+        self.btn_run = tk.Button(row2, text="Run Batch", command=self.run_batch)
+        self.btn_run.pack(side=tk.LEFT, padx=5)
+
+        self.status_var = tk.StringVar(value="Ready")
+        tk.Label(top, textvariable=self.status_var, fg="gray").pack(anchor=tk.W, pady=(8, 0))
+
+        self.cfg: dict = {}
+        self._worker_running = False
+
+    def _set_status(self, text: str):
+        self.status_var.set(text)
+        self.master.update_idletasks()
+
+    def _set_buttons_enabled(self, enabled: bool):
+        state = tk.NORMAL if enabled else tk.DISABLED
+        self.btn_default.config(state=state)
+        self.btn_run.config(state=state)
+
+    def browse_cfg(self):
+        path = filedialog.askopenfilename(
+            title="Select TOML",
+            filetypes=(("TOML files", "*.toml"), ("All files", "*.*")),
+        )
+        if path:
+            self.cfg_path_var.set(path)
+
+    def load_cfg(self):
+        try:
+            self.cfg = read_toml_config(self.cfg_path_var.get())
+            self.status_var.set("Config loaded")
+        except Exception as e:  # noqa: BLE001
+            messagebox.showerror("Error", str(e))
+
+    def write_default_cfg(self):
+        try:
+            cfg = default_config()
+            write_toml_config(self.cfg_path_var.get(), cfg)
+            self.status_var.set("Default config written")
+        except Exception as e:  # noqa: BLE001
+            messagebox.showerror("Error", str(e))
+
+    def run_batch(self):
+        try:
+            if self._worker_running:
+                return
+            if not self.cfg:
+                self.load_cfg()
+            cfg = self.cfg
+            # Resolve relative paths based on TOML location
+            cfg_path = Path(self.cfg_path_var.get())
+            base_dir = cfg_path.parent if cfg_path.exists() else Path.cwd()
+
+            vid_cfg = cfg.get("video", {})
+            input_dir = (base_dir / str(vid_cfg.get("input_dir", "."))).resolve()
+            patterns = [
+                p.strip()
+                for p in str(vid_cfg.get("pattern", "*.mp4;*_mp_pixel.csv")).split(";")
+                if p.strip()
+            ]
+            out_dir_cfg = cfg.get("output", {}).get("out_dir", str(input_dir / "mono3d_out"))
+            out_dir = (
+                str((base_dir / out_dir_cfg).resolve())
+                if not os.path.isabs(out_dir_cfg)
+                else out_dir_cfg
+            )
+            files: list[str] = []
+            for pat in patterns:
+                files.extend([str(p) for p in input_dir.glob(pat)])
+            if not files:
+                messagebox.showwarning(
+                    "No inputs",
+                    f"No files found in\n{input_dir}\nwith patterns: {', '.join(patterns)}",
+                )
+                return
+            self._set_status(f"Processing {len(files)} files...")
+            self._set_buttons_enabled(False)
+            self._worker_running = True
+
+            import threading
+
+            def _worker():
+                try:
+                    for i, fp in enumerate(files, 1):
+                        self.master.after(
+                            0,
+                            lambda i=i, fp=fp: self._set_status(
+                                f"[{i}/{len(files)}] {Path(fp).name}"
+                            ),
+                        )
+                        run_single_video(cfg, fp, out_dir, base_dir=base_dir)
+                    self.master.after(0, lambda: self._set_status("Done"))
+                except Exception as exc:  # noqa: BLE001
+                    import traceback
+
+                    tb = traceback.format_exc()
+
+                    def _show_error(msg=str(exc), tb_str=tb):
+                        messagebox.showerror("Error", f"{msg}\n\n{tb_str}")
+
+                    self.master.after(0, _show_error)
+                finally:
+                    self._worker_running = False
+                    self.master.after(0, lambda: self._set_buttons_enabled(True))
+
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception as e:  # noqa: BLE001
+            messagebox.showerror("Error", str(e))
+
+
 # =====================
 # Main
 # =====================
 if __name__ == "__main__":
-
-    class App:
-        def __init__(self, master: tk.Tk):
-            self.master = master
-            master.title("Markerless 3D Analysis")
-
-            top = tk.Frame(master)
-            top.pack(padx=10, pady=10, fill=tk.X)
-
-            # Config file row
-            row1 = tk.Frame(top)
-            row1.pack(fill=tk.X)
-            tk.Label(row1, text="Config TOML:").pack(side=tk.LEFT)
-            self.cfg_path_var = tk.StringVar(
-                value=str(Path("tests/markerless_3d_analysis/markerless3d_config.toml").resolve())
-            )
-            tk.Entry(row1, textvariable=self.cfg_path_var, width=80).pack(
-                side=tk.LEFT, padx=5, fill=tk.X, expand=True
-            )
-            tk.Button(row1, text="Browse", command=self.browse_cfg).pack(side=tk.LEFT, padx=5)
-
-            # Buttons
-            row2 = tk.Frame(top)
-            row2.pack(fill=tk.X, pady=(8, 0))
-            tk.Button(row2, text="Load TOML", command=self.load_cfg).pack(side=tk.LEFT, padx=5)
-            self.btn_default = tk.Button(
-                row2, text="Create Default TOML", command=self.write_default_cfg
-            )
-            self.btn_default.pack(side=tk.LEFT, padx=5)
-            self.btn_run = tk.Button(row2, text="Run Batch", command=self.run_batch)
-            self.btn_run.pack(side=tk.LEFT, padx=5)
-
-            self.status_var = tk.StringVar(value="Ready")
-            tk.Label(top, textvariable=self.status_var, fg="gray").pack(anchor=tk.W, pady=(8, 0))
-
-            self.cfg: dict = {}
-            self._worker_running = False
-
-        def _set_status(self, text: str):
-            self.status_var.set(text)
-            self.master.update_idletasks()
-
-        def _set_buttons_enabled(self, enabled: bool):
-            state = tk.NORMAL if enabled else tk.DISABLED
-            self.btn_default.config(state=state)
-            self.btn_run.config(state=state)
-
-        def browse_cfg(self):
-            path = filedialog.askopenfilename(
-                title="Select TOML",
-                filetypes=(("TOML files", "*.toml"), ("All files", "*.*")),
-            )
-            if path:
-                self.cfg_path_var.set(path)
-
-        def load_cfg(self):
-            try:
-                self.cfg = read_toml_config(self.cfg_path_var.get())
-                self.status_var.set("Config loaded")
-            except Exception as e:  # noqa: BLE001
-                messagebox.showerror("Error", str(e))
-
-        def write_default_cfg(self):
-            try:
-                cfg = default_config()
-                write_toml_config(self.cfg_path_var.get(), cfg)
-                self.status_var.set("Default config written")
-            except Exception as e:  # noqa: BLE001
-                messagebox.showerror("Error", str(e))
-
-        def run_batch(self):
-            try:
-                if self._worker_running:
-                    return
-                if not self.cfg:
-                    self.load_cfg()
-                cfg = self.cfg
-                # Resolve relative paths based on TOML location
-                cfg_path = Path(self.cfg_path_var.get())
-                base_dir = cfg_path.parent if cfg_path.exists() else Path.cwd()
-
-                vid_cfg = cfg.get("video", {})
-                input_dir = (base_dir / str(vid_cfg.get("input_dir", "."))).resolve()
-                patterns = [
-                    p.strip()
-                    for p in str(vid_cfg.get("pattern", "*.mp4;*_mp_pixel.csv")).split(";")
-                    if p.strip()
-                ]
-                out_dir_cfg = cfg.get("output", {}).get("out_dir", str(input_dir / "mono3d_out"))
-                out_dir = (
-                    str((base_dir / out_dir_cfg).resolve())
-                    if not os.path.isabs(out_dir_cfg)
-                    else out_dir_cfg
-                )
-                files: list[str] = []
-                for pat in patterns:
-                    files.extend([str(p) for p in input_dir.glob(pat)])
-                if not files:
-                    messagebox.showwarning(
-                        "No inputs",
-                        f"No files found in\n{input_dir}\nwith patterns: {', '.join(patterns)}",
-                    )
-                    return
-                self._set_status(f"Processing {len(files)} files...")
-                self._set_buttons_enabled(False)
-                self._worker_running = True
-
-                import threading
-
-                def _worker():
-                    try:
-                        for i, fp in enumerate(files, 1):
-                            self.master.after(
-                                0,
-                                lambda i=i, fp=fp: self._set_status(
-                                    f"[{i}/{len(files)}] {Path(fp).name}"
-                                ),
-                            )
-                            run_single_video(cfg, fp, out_dir, base_dir=base_dir)
-                        self.master.after(0, lambda: self._set_status("Done"))
-                    except Exception as exc:  # noqa: BLE001
-                        import traceback
-
-                        tb = traceback.format_exc()
-
-                        def _show_error(msg=str(exc), tb_str=tb):
-                            messagebox.showerror("Error", f"{msg}\n\n{tb_str}")
-
-                        self.master.after(0, _show_error)
-                    finally:
-                        self._worker_running = False
-                        self.master.after(0, lambda: self._set_buttons_enabled(True))
-
-                threading.Thread(target=_worker, daemon=True).start()
-            except Exception as e:  # noqa: BLE001
-                messagebox.showerror("Error", str(e))
-
     root = tk.Tk()
     app = App(root)
     root.mainloop()
