@@ -121,9 +121,7 @@ dependencies = [
     "vpython",
     "pyvista",
     "setuptools>=82.0.0",
-    "inference>=1.2.3",
-    "supervision>=0.27.0.post2",
-    "inference-gpu>=1.2.3",
+    "typer>=0.16.0",
 ]
 
 [project.optional-dependencies]
