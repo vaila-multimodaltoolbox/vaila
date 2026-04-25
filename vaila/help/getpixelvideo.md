@@ -4,8 +4,8 @@
 
 The Pixel Coordinate Tool (getpixelvideo.py) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.0  
-**Date:** January 2026  
+**Version:** 0.5.0  
+**Date:** April 2026  
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
 **Project:** vailá - Multimodal Toolbox
 
@@ -16,6 +16,7 @@ The Pixel Coordinate Tool (getpixelvideo.py) is a comprehensive video annotation
 - **Flexible Marking:** Multiple marker modes for different annotation needs
 - **Labeling Mode:** Create bounding box annotations for Machine Learning datasets
 - **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations
+- **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8
 - **Zoom & Navigation:** Full zoom capabilities with frame-by-frame navigation
 - **Persistence Mode:** View marker trails across multiple frames
 - **Auto-detection:** Automatically detect CSV format or manual selection
@@ -32,13 +33,22 @@ The Pixel Coordinate Tool (getpixelvideo.py) is a comprehensive video annotation
 
 ### Installation
 
+From the vailá repository (recommended):
+
+```bash
+uv sync
+uv run vaila/getpixelvideo.py
+```
+
+Standalone dependencies:
+
 ```bash
 pip install opencv-python pygame pandas numpy
 ```
 
 ## Getting Started
 
-1. **Run the script:** `python vaila/getpixelvideo.py`
+1. **Run the script:** `uv run vaila/getpixelvideo.py` (or `python vaila/getpixelvideo.py` if your environment is already set up)
 2. **Select video file:** Choose the video to process
 3. **Load existing data:** Use 'Load' button in interface (optional)
 4. **Select format:** If loading data, choose CSV format:
@@ -154,6 +164,18 @@ frame,p1_x,p1_y,p2_x,p2_y
   - Save button or F5 exports structured dataset (train/val/test)
 - **Export:** Generates folder structure with images and JSON annotations
 
+### Pose dataset export (YOLO-pose) — **F9**
+
+Use this when you want a **keypoint / pose** training set (e.g. football pitch with 32 points), not only bounding-box detection.
+
+- **When:** Any time you have markers on at least one frame (normal marker workflow; Labeling mode does **not** need to be on).
+- **F9:** Writes `pose_dataset_YYYYMMDD_HHMMSS/` next to the video with `train|val|test/{images,labels}/`, `classes.txt`, and `data.yaml` including `kpt_shape: [Nkp, 3]` and `flip_idx`.
+- **Multi-video / append:** Press **F7** (Dataset) and select an existing dataset’s `data.yaml`, then **F8** to open the next video from another folder; annotate and press **F9** again — new frames are prefixed with `<video_stem>_` so nothing collides. If the existing `data.yaml` already defines `kpt_shape` (e.g. 32), that **Nkp** is preserved.
+- **CLI:** `uv run vaila/getpixelvideo.py -f VIDEO.mp4 --dataset /path/to/existing_pose_dataset` sets the append target before launch (same as F7).
+- **Class name:** The pose instance uses the same class string as bbox labeling (`current_label`; rename with **N** while in Labeling mode), default `object`.
+- **BBox per frame:** If the frame has at least one bbox drawn in Labeling mode, the **first** box is used; otherwise a tight box around visible keypoints (with padding) is computed.
+- **Project JSON:** `<video_stem>_pose_project.json` in the dataset folder stores raw marker coordinates for later editing.
+
 ## Keyboard Commands
 
 ### Video Navigation
@@ -202,6 +224,7 @@ frame,p1_x,p1_y,p2_x,p2_y
 | **F6**          | Load Labeling Project (JSON) (Labeling Mode Only) |
 | **F7**          | Load dataset folder – next Save appends (Labeling Mode Only) |
 | **F8**          | Open another video (keeps dataset; no need to close app) |
+| **F9**          | Export YOLO-pose dataset from clicked markers (see Pose dataset section) |
 | **1**           | Decrease persistence frames                       |
 | **2**           | Increase persistence frames                      |
 | **3**           | Toggle full persistence                           |
@@ -292,6 +315,14 @@ Persistence mode shows markers from previous frames, creating a visual "trail":
 - **Use:** For creating Machine Learning datasets (object detection)
 - **Activation:** Save when Labeling mode is active (F5). Use F8 to open another video without closing the app.
 
+#### Pose dataset save (YOLO-pose) — **F9**
+
+- **Format:** Ultralytics YOLO-pose labels (`.txt` per image: `cls cx cy w h` + `kp_x kp_y v` × Nkp)
+- **Directory:** New: `pose_dataset_YYYYMMDD_HHMMSS/` beside the video; append: set target with **F7** or `--dataset` before **F9**
+- **Structure:** Same split layout as detection export (`train/val/test`, `images/`, `labels/`), plus `data.yaml` with `kpt_shape` and `names`
+- **Use:** Retraining pose networks (e.g. soccer field keypoints)
+- **Activation:** Press **F9** when at least one frame has markers
+
 ### Loading Coordinates
 
 - Click the **Load** button at any time
@@ -378,6 +409,13 @@ Built-in backup system for data safety:
 - **Project Repository:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Version History
+
+### Version 0.5.0 (April 2026)
+
+- **F9 — YOLO-pose dataset export** from clicked markers (train/val/test, `data.yaml` with `kpt_shape` and `flip_idx`)
+- Multi-video append via existing **F7** dataset folder + **F8** new video; optional **`--dataset`** on CLI
+- Writes `<video_stem>_pose_project.json` alongside exports for reproducibility
+- In-app help (H) updated with Pose dataset + F9
 
 ### Version 0.3.0 (January 2026)
 

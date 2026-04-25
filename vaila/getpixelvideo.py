@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 11 March 2026
-Version: 0.4.1
+Update: 24 April 2026
+Version: 0.5.0
 Python Version: 3.12.13
 
 Description:
@@ -16,6 +16,13 @@ This tool enables marking and saving pixel coordinates in video frames, with
 zoom functionality for precise annotations. The window can now be resized dynamically,
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
+
+New Features in This Version 0.5.0:
+- F9: Export YOLO-pose training dataset from the clicked markers (keypoints).
+  Produces Ultralytics-compatible layout with train/val/test splits,
+  classes.txt and data.yaml (with kpt_shape + flip_idx). Supports multi-video
+  append via the Dataset folder loaded with F7. Use for retraining pose nets
+  (e.g. soccer field keypoints YOLO) on your own new videos.
 
 New Features in This Version 0.4.1:
 - fix start GUI mode
@@ -63,6 +70,8 @@ Key Bindings (Labeling Mode Only - Press 'L' to toggle):
   F6                    Load Labeling Project (JSON)
   F7                    Load dataset folder (next Save appends; multi-video)
   F8                    Open another video (keep dataset; no need to close app)
+  F9                    Export YOLO-pose dataset from clicked markers
+                        (pose_dataset_YYYYMMDD_HHMMSS or append if F7 dataset is set)
   -v, --version         show version information and exit
 
 License:
@@ -76,10 +85,8 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 
 import io
 import json
+import math
 import os
-
-# Configure SDL environment variables BEFORE importing pygame
-# to prevent EGL/OpenGL warnings on Linux systems
 import platform
 import re
 import shutil
@@ -88,6 +95,7 @@ import sys
 import urllib.request
 from contextlib import redirect_stderr, suppress
 from pathlib import Path
+from typing import Any, cast
 
 from rich import print
 
@@ -125,7 +133,10 @@ try:
     import ultralytics
 
     # Mute YOLO unnecessary logs
-    ultralytics.checks = lambda: None
+    def _mute_ultralytics_checks(verbose=True, device=""):
+        return None
+
+    ultralytics.checks = cast(Any, _mute_ultralytics_checks)
     from ultralytics import YOLO
 
     YOLO_AVAILABLE = True
@@ -145,13 +156,8 @@ try:
 
     TOML_AVAILABLE = True
 except ImportError:
-    try:
-        import tomli as tomllib  # pyright: ignore[reportMissingImports]
-
-        TOML_AVAILABLE = True
-    except ImportError:
-        TOML_AVAILABLE = False
-        print("Warning: tomllib/tomli not found. TOML configuration features will be disabled.")
+    TOML_AVAILABLE = False
+    print("Warning: tomllib not found. TOML configuration features will be disabled.")
 
 # Removed native_file_dialog imports - now using Tkinter directly for all dialogs
 
@@ -518,9 +524,7 @@ def apply_swap_config(coordinates, swap_config):
         # Let's assume input is 0-based for internal consistency, GUI handles conversion.
 
         for frame_idx, markers in coordinates.items():
-            if start <= frame_idx <= end:
-                # Ensure we have enough markers
-                if len(markers) > max(m1_idx, m2_idx):
+            if start <= frame_idx <= end and len(markers) > max(m1_idx, m2_idx):
                     # Check if markers exist at these indices (not None)
                     # The markers list is [(x,y), (x,y), ...]. Some might be None or placeholders?
                     # getpixelvideo structure seems to be list of tuples.
@@ -698,9 +702,9 @@ def download_or_load_yolo_model(model_name=None):
             shutil.move(str(cwd_model), str(model_path))
 
         return model
-    except Exception:
-        return model
     except Exception as e:
+        if "model" in locals() and model is not None:
+            return model
         print(f"Failed to load YOLO model: {e}")
         return None
 
@@ -1103,19 +1107,11 @@ def pygame_file_dialog(
 
             # Draw background for item
             item_rect = pygame.Rect(12, y_pos - 2, dialog_width - 44, item_height)
-            if is_dir:
-                # Directory background (darker blue)
-                bg_color = (40, 60, 80)
-            else:
-                # File background (darker gray)
-                bg_color = (30, 30, 30)
+            bg_color = (40, 60, 80) if is_dir else (30, 30, 30)
 
             # Highlight selected item with brighter color
             if i == selected_index - scroll_offset:
-                if is_dir:
-                    bg_color = (80, 120, 200)  # Bright blue for selected directory
-                else:
-                    bg_color = (60, 60, 100)  # Brighter for selected file
+                bg_color = (80, 120, 200) if is_dir else (60, 60, 100)
 
             pygame.draw.rect(dialog_screen, bg_color, item_rect)
 
@@ -1130,7 +1126,7 @@ def pygame_file_dialog(
             # Try to render emoji, fallback to text if not supported
             try:
                 icon = small_font.render(icon_text, True, color)
-            except:
+            except Exception:
                 icon_text = "[DIR]" if is_dir else "[FILE]"
                 icon = small_font.render(icon_text, True, color)
             dialog_screen.blit(icon, (15, y_pos))
@@ -1228,9 +1224,7 @@ def pygame_file_dialog(
 
                 elif event.key == pygame.K_TAB:
                     input_active = not input_active
-                    if not input_active:
-                        # Try to navigate to entered path
-                        if text_input:
+                    if not input_active and text_input:
                             test_path = os.path.expanduser(text_input)
                             if os.path.isdir(test_path):
                                 current_dir = test_path
@@ -1396,9 +1390,14 @@ def play_video_with_controls(
     if labels is None:
         labels = []
 
-    # Initialize coordinates if not provided
+    # Initialize coordinates and deleted_positions
     if coordinates is None:
         coordinates = {i: [] for i in range(total_frames)}
+
+    deleted_positions = {i: set() for i in range(total_frames)}
+
+    assert coordinates is not None
+    assert deleted_positions is not None
 
     # Initialize active swap rules list to track session state
     active_swap_rules = []
@@ -1489,6 +1488,289 @@ def play_video_with_controls(
     # Feature: Click & Pass
     click_pass_mode = False
 
+    # -----------------------------------------------------------------------
+    # Feature: Pitch Guide Mode
+    # Guides the user through labeling all soccer-field keypoints in order.
+    # -----------------------------------------------------------------------
+    pitch_guide_mode = False  # Whether guide mode is active
+    pitch_guide_points: list[dict] = []  # List of {point_name, point_number, x, y, z} dicts
+    pitch_guide_index = 0  # Index of the current point to mark
+    pitch_guide_source = ""
+    pitch_guide_done_by_frame: dict[int, set[int]] = {}
+    pitch_guide_show_reference = True
+
+    def _load_pitch_guide_points() -> tuple[list[dict], str]:
+        """Load point names from the closest soccerfield_ref3d CSV."""
+        import pandas as _pd
+
+        candidates = [
+            Path(__file__).parent / "models" / "soccerfield_ref3d_fifa.csv",
+            Path(__file__).parent / "models" / "soccerfield_ref3d.csv",
+        ]
+        for _p in candidates:
+            if _p.exists():
+                try:
+                    _df = _pd.read_csv(str(_p))
+                    required_cols = {"point_name", "point_number"}
+                    if required_cols.issubset(_df.columns):
+                        points = []
+                        for _, row in _df.iterrows():
+                            points.append(
+                                {
+                                    "point_name": str(row["point_name"]),
+                                    "point_number": int(row["point_number"]),
+                                    "x": float(row["x"]) if "x" in _df.columns else None,
+                                    "y": float(row["y"]) if "y" in _df.columns else None,
+                                    "z": float(row["z"]) if "z" in _df.columns else None,
+                                }
+                            )
+                        return points, str(_p)
+                except Exception:
+                    pass
+        return [], ""
+
+    def _pitch_guide_next_index(frame_idx: int) -> int:
+        """Return the next unhandled FIFA field point for the specified frame."""
+        if coordinates is None:
+            return 0
+        done = pitch_guide_done_by_frame.get(frame_idx, set())
+        pts = coordinates.get(frame_idx, [])
+        for idx in range(len(pitch_guide_points)):
+            if idx in done:
+                continue
+            if idx >= len(pts):
+                return idx
+            x_val, y_val = pts[idx]
+            if x_val is None or y_val is None:
+                return idx
+        return len(pitch_guide_points)
+
+    def _pitch_guide_status_message(prefix: str = "") -> str:
+        """Build a concise status line for Pitch Guide feedback."""
+        total = len(pitch_guide_points)
+        if not total:
+            return "Pitch Guide: no field reference CSV found in models/"
+        if pitch_guide_index >= total:
+            return f"{prefix}All {total} pitch points handled. Press S/Save or F9."
+        point = pitch_guide_points[pitch_guide_index]
+        base = (
+            f"{prefix}Point {point['point_number']}/{total}: "
+            f"{point['point_name']} ({total - pitch_guide_index} left)"
+        )
+        return base.strip()
+
+    def _pitch_guide_set_point(video_x: float | None, video_y: float | None, skipped=False) -> None:
+        """Store the current guide point at its FIFA index and advance."""
+        nonlocal pitch_guide_index, pitch_guide_mode, selected_marker_idx
+        nonlocal save_message_text, showing_save_message, save_message_timer
+
+        if not pitch_guide_points or pitch_guide_index >= len(pitch_guide_points):
+            pitch_guide_mode = False
+            return
+
+        point_idx = pitch_guide_index
+        if coordinates is None:
+            return
+        frame_points = coordinates[frame_count]
+        while len(frame_points) <= point_idx:
+            frame_points.append((None, None))
+
+        frame_points[point_idx] = (video_x, video_y)
+        deleted_positions[frame_count].discard(point_idx)
+        pitch_guide_done_by_frame.setdefault(frame_count, set()).add(point_idx)
+        selected_marker_idx = point_idx
+
+        current_point = pitch_guide_points[point_idx]
+        pitch_guide_index += 1
+
+        if pitch_guide_index >= len(pitch_guide_points):
+            pitch_guide_mode = False
+            action = "Skipped" if skipped else "Marked"
+            save_message_text = (
+                f"{action} '{current_point['point_name']}'. All pitch points handled. "
+                "Press S/Save or F9."
+            )
+        else:
+            action = "Skipped" if skipped else "Marked"
+            save_message_text = _pitch_guide_status_message(
+                f"{action} '{current_point['point_name']}'. Next: "
+            )
+
+        showing_save_message = True
+        save_message_timer = 90
+
+    def _pitch_guide_step_back() -> None:
+        """Move the guide cursor back one point without deleting the marker."""
+        nonlocal pitch_guide_index, selected_marker_idx
+        nonlocal save_message_text, showing_save_message, save_message_timer
+
+        if not pitch_guide_points:
+            return
+        pitch_guide_index = max(0, pitch_guide_index - 1)
+        pitch_guide_done_by_frame.setdefault(frame_count, set()).discard(pitch_guide_index)
+        selected_marker_idx = pitch_guide_index
+        save_message_text = _pitch_guide_status_message("Back to: ")
+        showing_save_message = True
+        save_message_timer = 90
+
+    def _pitch_guide_delete_selected_point() -> None:
+        """Delete the selected/current guide point and position the guide there."""
+        nonlocal pitch_guide_index, selected_marker_idx
+        nonlocal save_message_text, showing_save_message, save_message_timer
+
+        if not pitch_guide_points or coordinates is None:
+            return
+        if 0 <= selected_marker_idx < len(pitch_guide_points):
+            target_idx = selected_marker_idx
+        else:
+            target_idx = max(0, min(pitch_guide_index - 1, len(pitch_guide_points) - 1))
+
+        while len(coordinates[frame_count]) <= target_idx:
+            coordinates[frame_count].append((None, None))
+        coordinates[frame_count][target_idx] = (None, None)
+        deleted_positions[frame_count].discard(target_idx)
+        pitch_guide_done_by_frame.setdefault(frame_count, set()).discard(target_idx)
+        pitch_guide_index = target_idx
+        selected_marker_idx = target_idx
+        point = pitch_guide_points[target_idx]
+        save_message_text = f"Deleted p{point['point_number']} '{point['point_name']}'. Mark it again."
+        showing_save_message = True
+        save_message_timer = 90
+
+    def _pitch_guide_reference_surface(current_idx: int | None = None) -> pygame.Surface | None:
+        """Build a FIFA pitch reference image for the Pygame guide overlay."""
+        field_points = [
+            p for p in pitch_guide_points if p["x"] is not None and p["y"] is not None
+        ]
+        if not field_points:
+            return None
+
+        point_by_name = {p["point_name"]: p for p in field_points}
+        width, height = 500, 330
+        margin_x, margin_y = 22, 34
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        surface.fill((14, 74, 35, 238))
+
+        min_x = min(p["x"] for p in field_points)
+        max_x = max(p["x"] for p in field_points)
+        min_y = min(p["y"] for p in field_points)
+        max_y = max(p["y"] for p in field_points)
+        span_x = max(max_x - min_x, 1.0)
+        span_y = max(max_y - min_y, 1.0)
+
+        def map_xy(point):
+            px = margin_x + int(((point["x"] - min_x) / span_x) * (width - 2 * margin_x))
+            py = height - margin_y - int(
+                ((point["y"] - min_y) / span_y) * (height - 2 * margin_y)
+            )
+            return px, py
+
+        def pxy(name):
+            return map_xy(point_by_name[name])
+
+        def draw_line(name_a, name_b, line_width=2):
+            if name_a in point_by_name and name_b in point_by_name:
+                pygame.draw.line(surface, (245, 245, 245), pxy(name_a), pxy(name_b), line_width)
+
+        def draw_rect(name_a, name_b, line_width=2):
+            if name_a not in point_by_name or name_b not in point_by_name:
+                return
+            x1, y1 = pxy(name_a)
+            x2, y2 = pxy(name_b)
+            rect = pygame.Rect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+            pygame.draw.rect(surface, (245, 245, 245), rect, line_width)
+
+        def draw_circle_at(name, radius_m, line_width=2, filled=False):
+            if name not in point_by_name:
+                return
+            center = pxy(name)
+            radius_px = max(2, int((radius_m / span_y) * (height - 2 * margin_y)))
+            if filled:
+                pygame.draw.circle(surface, (245, 245, 245), center, radius_px)
+            else:
+                pygame.draw.circle(surface, (245, 245, 245), center, radius_px, line_width)
+
+        def draw_arc_from_points(center_name, lower_name, upper_name, side):
+            if not all(name in point_by_name for name in (center_name, lower_name, upper_name)):
+                return
+            center = point_by_name[center_name]
+            lower = point_by_name[lower_name]
+            upper = point_by_name[upper_name]
+            radius = math.hypot(lower["x"] - center["x"], lower["y"] - center["y"])
+            if radius <= 0:
+                return
+            if side == "left":
+                start = math.atan2(lower["y"] - center["y"], lower["x"] - center["x"])
+                end = math.atan2(upper["y"] - center["y"], upper["x"] - center["x"])
+            else:
+                start = math.atan2(upper["y"] - center["y"], upper["x"] - center["x"])
+                end = math.atan2(lower["y"] - center["y"], lower["x"] - center["x"])
+            if end < start:
+                end += 2 * math.pi
+            samples = []
+            for step in range(32):
+                t = start + (end - start) * (step / 31)
+                point = {
+                    "x": center["x"] + radius * math.cos(t),
+                    "y": center["y"] + radius * math.sin(t),
+                }
+                samples.append(map_xy(point))
+            if len(samples) > 1:
+                pygame.draw.lines(surface, (245, 245, 245), False, samples, 2)
+
+        # Same semantic field structure used by drawsportsfields.plot_field().
+        draw_rect("bottom_left_corner", "top_right_corner", 3)
+        draw_line("midfield_left", "midfield_right", 2)
+        draw_circle_at("center_field", 9.15, 2)
+        draw_circle_at("center_field", 0.6, filled=True)
+        draw_rect("left_penalty_area_bottom_left", "left_penalty_area_top_right", 2)
+        draw_rect("left_goal_area_bottom_left", "left_goal_area_top_right", 2)
+        draw_rect("right_penalty_area_top_left", "right_penalty_area_bottom_right", 2)
+        draw_rect("right_goal_area_top_left", "right_goal_area_bottom_right", 2)
+        draw_line("left_goal_bottom_post", "left_goal_top_post", 5)
+        draw_line("right_goal_bottom_post", "right_goal_top_post", 5)
+        draw_circle_at("left_penalty_spot", 0.45, filled=True)
+        draw_circle_at("right_penalty_spot", 0.45, filled=True)
+        draw_arc_from_points(
+            "left_penalty_spot",
+            "left_penalty_arc_left_intersection",
+            "left_penalty_arc_right_intersection",
+            "left",
+        )
+        draw_arc_from_points(
+            "right_penalty_spot",
+            "right_penalty_arc_left_intersection",
+            "right_penalty_arc_right_intersection",
+            "right",
+        )
+
+        small_font = pygame.font.SysFont("verdana", 10, bold=True)
+        title_font = pygame.font.SysFont("verdana", 12, bold=True)
+        title = title_font.render("FIFA Field Reference: point numbers", True, (255, 255, 255))
+        surface.blit(title, (10, 8))
+
+        for idx, point in enumerate(pitch_guide_points):
+            if point["x"] is None or point["y"] is None:
+                continue
+            px, py = map_xy(point)
+            is_current = idx == current_idx
+            radius = 7 if is_current else 4
+            fill = (255, 225, 35) if is_current else (255, 255, 255)
+            outline = (0, 0, 0)
+            pygame.draw.circle(surface, outline, (px, py), radius + 1)
+            pygame.draw.circle(surface, fill, (px, py), radius)
+            label = small_font.render(str(point["point_number"]), True, (0, 0, 0))
+            surface.blit(label, (px + 7, py - 8))
+
+        if current_idx is not None and 0 <= current_idx < len(pitch_guide_points):
+            current = pitch_guide_points[current_idx]
+            caption = f"Current: p{current['point_number']} {current['point_name']}"
+            caption_surface = title_font.render(caption, True, (255, 230, 60))
+            surface.blit(caption_surface, (10, height - 24))
+
+        pygame.draw.rect(surface, (230, 230, 230), surface.get_rect(), 2)
+        return surface
+
     # Feature: Playback Speed
     playback_speed = 1.0  # 1.0 = Normal, 0.5 = Half speed, 2.0 = Double speed
 
@@ -1538,7 +1820,9 @@ def play_video_with_controls(
             total_frames_video = total_frames
 
             # Create video writer (temporary file without audio)
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            # Use getattr for fourcc to satisfy strict type checkers
+            fourcc_func = getattr(cv2, "VideoWriter_fourcc", None)
+            fourcc = fourcc_func(*"mp4v") if fourcc_func else 0x7634706D
             out = cv2.VideoWriter(temp_video, fourcc, fps_write, (width_write, height_write))
 
             if not out.isOpened():
@@ -1592,22 +1876,26 @@ def play_video_with_controls(
                                 1,
                             )
                 else:
-                    if frame_idx in coordinates:
-                        for i, (x, y) in enumerate(coordinates[frame_idx]):
-                            if i not in deleted_positions.get(frame_idx, set()):
-                                if x is not None and y is not None:
-                                    # Draw marker circle (green in BGR)
-                                    cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
-                                    # Draw marker number
-                                    cv2.putText(
-                                        frame,
-                                        str(i + 1),
-                                        (int(x) + 8, int(y) - 8),
-                                        cv2.FONT_HERSHEY_SIMPLEX,
-                                        0.5,
-                                        (255, 255, 255),
-                                        1,
-                                    )
+                    if coordinates is not None and frame_idx in coordinates:
+                        for idx, (x, y) in enumerate(coordinates[frame_idx]):
+                            if (
+                                deleted_positions is not None
+                                and idx not in deleted_positions.get(frame_idx, set())
+                                and x is not None
+                                and y is not None
+                            ):
+                                # Draw marker circle (green in BGR)
+                                cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
+                                # Draw marker number
+                                cv2.putText(
+                                    frame,
+                                    str(idx + 1),
+                                    (int(x) + 8, int(y) - 8),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.5,
+                                    (255, 255, 255),
+                                    1,
+                                )
 
                 # Draw YOLO tracking boxes
                 if csv_loaded and frame_idx in tracking_data:
@@ -1777,7 +2065,7 @@ def play_video_with_controls(
                     )
                     if temp_frame_count != total_frames_video:
                         print("[WARNING] Warning: Temp video frame count mismatch!")
-            except:
+            except (ValueError, subprocess.SubprocessError):
                 pass  # ffprobe not available or failed, continue anyway
 
             try:
@@ -1995,7 +2283,7 @@ def play_video_with_controls(
             rows_processed = 0
             boxes_loaded = 0
             skipped_frames = 0
-            for idx, row in df.iterrows():
+            for row_idx, row in df.iterrows():
                 try:
                     frame_idx = int(row["Frame"])
                     if frame_idx not in tracking_data:
@@ -2042,10 +2330,7 @@ def play_video_with_controls(
                                 else:
                                     # Try to extract ID from suffix itself (e.g., "person_id_01" -> "01")
                                     id_match = re.search(r"id[_\s]*(\d+)", suffix, re.IGNORECASE)
-                                    if id_match:
-                                        id_col = f"ID_{id_match.group(1)}"  # Use extracted ID
-                                    else:
-                                        id_col = None
+                                    id_col = f"ID_{id_match.group(1)}" if id_match else None
                             color_r_col = f"Color_R_{suffix}"
                             color_g_col = f"Color_G_{suffix}"
                             color_b_col = f"Color_B_{suffix}"
@@ -2229,7 +2514,7 @@ def play_video_with_controls(
 
                 except (ValueError, KeyError) as e:
                     # Skip rows with invalid frame numbers or missing required columns
-                    print(f"Warning: Skipping row {idx} due to error: {e}")
+                    print(f"Warning: Skipping row {row_idx} due to error: {e}")
 
                 rows_processed += 1
 
@@ -2326,7 +2611,7 @@ def play_video_with_controls(
             frame_markers = [m for m in one_line_markers if m[0] == frame_count]
             total_markers = len(frame_markers)
         else:
-            total_markers = len(coordinates[frame_count])
+            total_markers = 0 if coordinates is None else len(coordinates[frame_count])
 
         if total_markers > 0:
             marker_idx = selected_marker_idx + 1 if selected_marker_idx >= 0 else 0
@@ -2354,6 +2639,7 @@ def play_video_with_controls(
         auto_button_width = 70
         click_pass_button_width = 70
         labeling_button_width = 70
+        pitch_guide_button_width = 90  # NEW: Pitch Guide button
         tracking_csv_button_width = 120
         export_video_button_width = 100
         help_web_button_width = 30  # Width for '?' button
@@ -2364,10 +2650,11 @@ def play_video_with_controls(
             + auto_button_width
             + click_pass_button_width
             + labeling_button_width
+            + pitch_guide_button_width
             + tracking_csv_button_width
             + export_video_button_width
             + help_web_button_width
-            + (button_gap * 9)
+            + (button_gap * 10)
         )
         cluster_x = (window_width - total_buttons_width) // 2
         cluster_y = slider_y - button_height - 5
@@ -2471,7 +2758,23 @@ def play_video_with_controls(
             labeling_text, labeling_text.get_rect(center=labeling_button_rect.center)
         )
 
-        # 7. Load Tracking CSV button
+        # 7b. Pitch Guide button (NEW)
+        pitch_guide_button_rect = pygame.Rect(
+            current_x,
+            cluster_y,
+            pitch_guide_button_width,
+            button_height,
+        )
+        current_x += pitch_guide_button_width + button_gap
+
+        _pg_color = (180, 100, 20) if pitch_guide_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, _pg_color, pitch_guide_button_rect)
+        _pg_label = (
+            f"PitchGuide {'ON' if pitch_guide_mode else ''}" if pitch_guide_mode else "PitchGuide"
+        )
+        _pg_text = font.render(_pg_label, True, (255, 255, 255))
+        control_surface.blit(_pg_text, _pg_text.get_rect(center=pitch_guide_button_rect.center))
+
         tracking_csv_button_width = 120
         tracking_csv_button_rect = pygame.Rect(
             current_x,
@@ -2611,6 +2914,7 @@ def play_video_with_controls(
             auto_button_rect,  # Add auto button to return
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
+            pitch_guide_button_rect,  # Add PitchGuide button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
@@ -2667,6 +2971,14 @@ def play_video_with_controls(
             "  - Click 'Save' button, OR",
             "  - Press ESC key",
             "  - Dataset saved: train/val/test",
+            "",
+            "=== POSE DATASET (Keypoints) ===",
+            "  F9: Export YOLO-pose dataset from markers",
+            "      -> pose_dataset_YYYYMMDD_HHMMSS/",
+            "      (or append to dataset loaded with F7)",
+            "      Click N markers on each frame; F9 builds",
+            "      images/ + labels/ + data.yaml (kpt_shape).",
+            "      PitchGuide also writes keypoints.json.",
         ]
 
         help_lines_right = [
@@ -2690,12 +3002,10 @@ def play_video_with_controls(
             "- ClickPass Mode: Advances to next frame after",
             "  adding a marker (Normal Mode).",
             "",
-            "Playback Speed:",
-            "- [ : Slower",
-            "- ] : Faster",
-            "",
-            "- ClickPass Mode: Advances to next frame after",
-            "  adding a marker (Normal Mode).",
+            "- PitchGuide (G key or button): guided FIFA",
+            "  soccer-field keypoints. Left=mark current pN,",
+            "  A=next/skip, Right=delete, B/Backspace=previous.",
+            "  It always stores p1..p37 in FIFA order.",
             "",
             "Playback Speed:",
             "- [ : Slower",
@@ -2726,6 +3036,8 @@ def play_video_with_controls(
             "  - F6: Load Labeling Project (JSON)",
             "  - F7: Load dataset folder (next Save appends; multi-video)",
             "  - F8: Open another video (keep dataset; no need to close app)",
+            "  - F9: Export YOLO-pose dataset from markers (keypoints)",
+            "       -> retrain YOLO pose (e.g. soccer field, 32 kp)",
             "  - N:  Rename Object Class",
             "",
             "Swap Markers:",
@@ -2812,7 +3124,7 @@ def play_video_with_controls(
 
                 elif event.type == pygame.QUIT:
                     waiting_for_input = False
-                    global running
+                    nonlocal running
                     running = False
 
     def show_persistence_settings():
@@ -2825,7 +3137,7 @@ def play_video_with_controls(
         overlay.fill((0, 0, 0))
 
         # Create UI elements
-        if persistence_enabled and frame in bboxes:
+        if persistence_enabled and frame_count in bboxes:
             # Use a larger font for persistent boxes? Or same
             font = pygame.font.SysFont("verdana", 16)
         title = font.render("Persistence Settings", True, (255, 255, 255))
@@ -2859,7 +3171,7 @@ def play_video_with_controls(
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     waiting_for_input = False
-                    global running
+                    nonlocal running
                     running = False
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN or event.key == pygame.K_ESCAPE:
@@ -2964,7 +3276,7 @@ def play_video_with_controls(
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     waiting_for_input = False
-                    global running
+                    nonlocal running
                     running = False
                     return None
                 elif event.type == pygame.KEYDOWN:
@@ -3328,8 +3640,7 @@ def play_video_with_controls(
                                     selected_m2 = None
 
                         # Handle Add
-                        if btn_add.collidepoint(mx, my):
-                            if selected_m1 is not None and selected_m2 is not None:
+                        if btn_add.collidepoint(mx, my) and selected_m1 is not None and selected_m2 is not None:
                                 try:
                                     s = int(input_start) - 1
                                     e = int(input_end) - 1
@@ -3350,9 +3661,7 @@ def play_video_with_controls(
                         # Handle Delete Rule
                         if rule_panel.collidepoint(mx, my):
                             ridx = (my - rule_panel.y) // 25 + scroll_rules
-                            if 0 <= ridx < len(temp_rules):
-                                # We are just visualizing 'X' button logic roughly
-                                if mx > rule_panel.right - 30:
+                            if 0 <= ridx < len(temp_rules) and mx > rule_panel.right - 30:
                                     temp_rules.pop(ridx)
 
                         # Handle Footer
@@ -3452,6 +3761,85 @@ def play_video_with_controls(
             showing_save_message = True
             save_message_timer = 120
 
+    def save_pose_dataset():
+        """Export a YOLO-pose dataset from the markers clicked in ``coordinates``.
+
+        Uses ``current_dataset_dir`` (multi-video append) when set; otherwise creates
+        a fresh ``pose_dataset_YYYYMMDD_HHMMSS/`` next to the video. Also writes a
+        sibling JSON project file with the raw markers (for later re-editing).
+        """
+        nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
+
+        class_for_pose = current_label if current_label else "object"
+        pitch_keypoint_names = [p["point_name"] for p in pitch_guide_points] or None
+        was_appending = current_dataset_dir is not None
+
+        dataset_dir, msg = export_pose_dataset(
+            video_path,
+            coordinates,
+            total_frames,
+            original_width,
+            original_height,
+            bboxes=bboxes,
+            deleted_positions=deleted_positions,
+            class_name=class_for_pose,
+            output_dataset_dir=current_dataset_dir,
+            keypoint_names=pitch_keypoint_names,
+        )
+
+        if not dataset_dir:
+            save_message_text = f"Pose export failed: {msg}"
+            showing_save_message = True
+            save_message_timer = 150
+            return
+
+        if not current_dataset_dir:
+            current_dataset_dir = dataset_dir
+
+        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        project_file = os.path.join(dataset_dir, f"{base_name}_pose_project.json")
+        if coordinates is None:
+            return None, "No coordinates to export"
+        serializable_coords = {}
+        for f_idx, pts in coordinates.items():
+            if not pts:
+                continue
+            serializable_coords[int(f_idx)] = [
+                None if (p is None or p[0] is None or p[1] is None) else [float(p[0]), float(p[1])]
+                for p in pts
+            ]
+        deleted_serial = {}
+        if deleted_positions:
+            for f_idx, dset in deleted_positions.items():
+                if dset:
+                    deleted_serial[int(f_idx)] = sorted(int(i) for i in dset)
+
+        project_data = {
+            "version": "0.5.0",
+            "kind": "pose",
+            "video_source": os.path.abspath(video_path),
+            "dataset_root": os.path.abspath(dataset_dir),
+            "class_name": class_for_pose,
+            "total_frames": total_frames,
+            "video_width": original_width,
+            "video_height": original_height,
+            "coordinates": serializable_coords,
+            "deleted_positions": deleted_serial,
+            "bboxes": bboxes,
+            "keypoint_names": pitch_keypoint_names,
+            "pitch_guide_reference": pitch_guide_source,
+        }
+        try:
+            with open(project_file, "w", encoding="utf-8") as f:
+                json.dump(project_data, f, indent=2)
+        except Exception as e:
+            print(f"Warning: could not save pose project JSON: {e}")
+
+        save_message_text = msg + (" (appended)" if was_appending else "")
+        showing_save_message = True
+        save_message_timer = 180
+        print(f"[pose-dataset] {msg}\n  dir: {dataset_dir}\n  project: {project_file}")
+
     def show_file_browser(start_dir, title="Select a file", extensions=None):
         """Pygame-based file browser with mouse navigation, Ctrl+V paste, and scroll.
         Returns selected file path or None on cancel (Escape).
@@ -3498,9 +3886,8 @@ def play_video_with_controls(
                     if os.path.isdir(full):
                         dirs.append((name + "/", full, True))
                     else:
-                        if filter_yaml_only and extensions:
-                            if not any(name.lower().endswith(ext) for ext in extensions):
-                                continue
+                        if filter_yaml_only and extensions and not any(name.lower().endswith(ext) for ext in extensions):
+                            continue
                         files.append((name, full, False))
             except PermissionError:
                 pass
@@ -3628,7 +4015,7 @@ def play_video_with_controls(
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     browsing = False
-                    global running
+                    nonlocal running
                     running = False
                     return None
 
@@ -3941,17 +4328,14 @@ def play_video_with_controls(
             return
 
         # Fill the row with values, preserving marker indices even with deletions
-        row_values = [int(first_marker[0])]  # First marker's frame value
-
         # Initialize all positions with empty values
+        row_values: list[int | float | str] = [int(first_marker[0])]
         for _ in range(max_marker + 1):
             row_values.extend(["", ""])  # Empty x, y values
 
         # Fill in the non-deleted marker positions
         for idx, (_, x, y) in enumerate(one_line_markers):
-            if idx not in deleted_markers:
-                # Verificar se é um marcador vazio (None)
-                if x is not None and y is not None:
+            if idx not in deleted_markers and x is not None and y is not None:
                     # Marker indices are 1-based in the CSV
                     row_values[idx * 2 + 1] = float(
                         x
@@ -3959,7 +4343,7 @@ def play_video_with_controls(
                     row_values[idx * 2 + 2] = float(y)  # +2 for y position
                 # Se for None, deixar como vazio (já inicializado como "")
 
-        df = pd.DataFrame([row_values], columns=header)
+        df = pd.DataFrame([row_values], columns=pd.Index(header))
         df.to_csv(output_file, index=False)
 
         print(f"1 line coordinates saved to: {output_file}")
@@ -3994,6 +4378,9 @@ def play_video_with_controls(
         else:
             # In normal mode, we'll check the maximum number of visible markers
             max_visible_marker = -1
+
+            if coordinates is None:
+                return
 
             for frame in range(total_frames):
                 for i in range(len(coordinates[frame])):
@@ -4053,7 +4440,7 @@ def play_video_with_controls(
                 showing_save_message = True
                 save_message_timer = 60
         else:
-            if selected_marker_idx >= 0:
+            if selected_marker_idx >= 0 and coordinates is not None:
                 # Add the selected marker to the deleted list only in the current frame
                 if selected_marker_idx < len(coordinates[frame_count]):
                     deleted_positions[frame_count].add(selected_marker_idx)
@@ -4385,9 +4772,8 @@ def play_video_with_controls(
                     for i in range(1, 1001):  # Increased to support up to 1000 markers
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
-                        if x_col in df.columns and y_col in df.columns:
-                            if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                                one_line_markers.append((frame_num, row[x_col], row[y_col]))
+                        if x_col in df.columns and y_col in df.columns and pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                            one_line_markers.append((frame_num, row[x_col], row[y_col]))
 
                 save_message_text = f"Loaded 1 line file: {os.path.basename(input_file)}"
                 # If it was in normal mode, switch to 1 line mode
@@ -4402,9 +4788,8 @@ def play_video_with_controls(
                     for i in range(1, 1001):  # Increased to support up to 1000 markers
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
-                        if x_col in df.columns and y_col in df.columns:
-                            if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                                coordinates[frame_num].append((row[x_col], row[y_col]))
+                        if x_col in df.columns and y_col in df.columns and pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                            coordinates[frame_num].append((row[x_col], row[y_col]))
 
                 # Fix: Re-apply active swap rules after loading new data
                 if active_swap_rules:
@@ -4441,6 +4826,7 @@ def play_video_with_controls(
     save_message_text = ""
 
     last_valid_frame = None
+    slow_mo_accumulator = 0.0
     while running:
         # Once per run: if we have a dataset dir, load project for this video
         if current_dataset_dir and not auto_load_project_done:
@@ -4490,12 +4876,9 @@ def play_video_with_controls(
                 # The loop runs at 30Hz (clock.tick(30)).
                 # To get 0.5X speed (15fps effective), we should update frame every 2 ticks.
 
-                if not hasattr(play_video_with_controls, "slow_mo_accumulator"):
-                    play_video_with_controls.slow_mo_accumulator = 0.0
-
-                play_video_with_controls.slow_mo_accumulator += playback_speed
-                if play_video_with_controls.slow_mo_accumulator >= 1.0:
-                    play_video_with_controls.slow_mo_accumulator -= 1.0
+                slow_mo_accumulator += playback_speed
+                if slow_mo_accumulator >= 1.0:
+                    slow_mo_accumulator -= 1.0
                     ret, frame = cap.read()
                     if ret:
                         frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
@@ -4581,14 +4964,15 @@ def play_video_with_controls(
                         marker_trails[idx].append((f_num, x, y))
             else:
                 # In regular mode, need to track same marker ID across frames
-                for f_num in range(start_frame, frame_count + 1):
-                    for i, (x, y) in enumerate(coordinates[f_num]):
-                        if i in deleted_positions[f_num]:
-                            continue  # Skip deleted markers
+                if coordinates is not None:
+                    for f_num in range(start_frame, frame_count + 1):
+                        for i, (x, y) in enumerate(coordinates[f_num]):
+                            if i in deleted_positions[f_num]:
+                                continue  # Skip deleted markers
 
-                        if i not in marker_trails:
-                            marker_trails[i] = []
-                        marker_trails[i].append((f_num, x, y))
+                            if i not in marker_trails:
+                                marker_trails[i] = []
+                            marker_trails[i].append((f_num, x, y))
 
             # Draw trails for each marker
             for marker_id, positions in marker_trails.items():
@@ -4673,15 +5057,14 @@ def play_video_with_controls(
                     pygame.draw.circle(screen, color, (last_screen_x, last_screen_y), 2)
 
         # Draw Pose Connections if likely a full pose (33 points)
-        if not one_line_mode and len(coordinates[frame_count]) == 33:
+        if coordinates is not None and not one_line_mode and len(coordinates[frame_count]) == 33:
             for start_idx, end_idx in POSE_CONNECTIONS:
-                if start_idx < 33 and end_idx < 33:
-                    # Check if indices exist (redundant but safe)
-                    if start_idx < len(coordinates[frame_count]) and end_idx < len(
-                        coordinates[frame_count]
-                    ):
-                        pt1 = coordinates[frame_count][start_idx]
-                        pt2 = coordinates[frame_count][end_idx]
+                if start_idx < 33 and end_idx < 33 and start_idx < len(coordinates[frame_count]) and end_idx < len(
+                    coordinates[frame_count]
+                ):
+                        pts = coordinates[frame_count]
+                        pt1 = pts[start_idx]
+                        pt2 = pts[end_idx]
 
                         if pt1 is not None and pt2 is not None:
                             x1, y1 = pt1
@@ -4745,9 +5128,7 @@ def play_video_with_controls(
                 screen.blit(text_surface, (screen_x + 5, screen_y - 15))
 
         # Draw YOLO tracking bounding boxes
-        if show_tracking and csv_loaded:
-            # Check if current frame has tracking data
-            if frame_count in tracking_data:
+        if show_tracking and csv_loaded and frame_count in tracking_data:
                 boxes = tracking_data[frame_count]
                 for box in boxes:
                     # Convert video coordinates to screen coordinates (account for zoom/offset)
@@ -4831,6 +5212,7 @@ def play_video_with_controls(
             auto_button_rect,  # Add auto button to return
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
+            pitch_guide_button_rect,  # Add PitchGuide button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
@@ -4858,6 +5240,56 @@ def play_video_with_controls(
                 msg_bg.fill((0, 100, 0))
                 screen.blit(msg_bg, (window_width // 2 - msg_bg.get_width() // 2, 10))
                 screen.blit(msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15))
+
+        # ---------------------------------------------------------------
+        # Pitch Guide Overlay: show current point to mark (drawn on top)
+        # ---------------------------------------------------------------
+        if pitch_guide_mode and pitch_guide_points:
+            _guide_font_big = pygame.font.SysFont("verdana", 18, bold=True)
+            _guide_font_sm = pygame.font.SysFont("verdana", 13)
+            _total_pts = len(pitch_guide_points)
+            _pt = pitch_guide_points[pitch_guide_index] if pitch_guide_index < _total_pts else None
+
+            _panel_w, _panel_h = 560, 92
+            _panel_x, _panel_y = 10, 10
+            _panel = pygame.Surface((_panel_w, _panel_h))
+            _panel.set_alpha(220)
+            _panel.fill((20, 55, 20))
+
+            if _pt:
+                _remaining_pts = _total_pts - pitch_guide_index
+                _line1 = (
+                    f"Mark point {_pt['point_number']}/{_total_pts}: ({_remaining_pts} remaining)"
+                )
+                _field_xy = (
+                    f"field=({_pt['x']:.2f}, {_pt['y']:.2f})"
+                    if _pt["x"] is not None and _pt["y"] is not None
+                    else "field=(n/a)"
+                )
+                _line2 = f"  p{_pt['point_number']}: {_pt['point_name']}"
+                _line3 = (
+                    f"{_field_xy} | Left=mark | A=next/skip | Right=delete | "
+                    "B/Backspace=back | V=image"
+                )
+            else:
+                _line1 = "All pitch points marked!"
+                _line2 = "Press Save (S) or PitchGuide button to exit."
+                _line3 = ""
+
+            _panel.blit(_guide_font_sm.render(_line1, True, (255, 230, 60)), (8, 5))
+            _panel.blit(_guide_font_big.render(_line2, True, (255, 255, 255)), (8, 28))
+            _panel.blit(_guide_font_sm.render(_line3, True, (180, 220, 180)), (8, 62))
+
+            screen.blit(_panel, (_panel_x, _panel_y))
+            if pitch_guide_show_reference:
+                _reference_surface = _pitch_guide_reference_surface(pitch_guide_index)
+                if _reference_surface is not None:
+                    _ref_x = max(10, window_width - _reference_surface.get_width() - 10)
+                    _ref_y = _panel_y + _panel_h + 10
+                    if _ref_x < _panel_x + _panel_w + 10:
+                        _ref_x = 10
+                        _ref_y = _panel_y + _panel_h + 10
+                    screen.blit(_reference_surface, (_ref_x, _ref_y))
 
         pygame.display.flip()
 
@@ -4934,6 +5366,38 @@ def play_video_with_controls(
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
+                elif event.key == pygame.K_g:
+                    pitch_guide_mode = not pitch_guide_mode
+                    if pitch_guide_mode:
+                        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points()
+                        pitch_guide_index = _pitch_guide_next_index(frame_count)
+                        labeling_mode = False
+                        one_line_mode = False
+                        auto_marking_mode = False
+                        sequential_mode = False
+                        click_pass_mode = False
+                        selected_marker_idx = (
+                            pitch_guide_index if pitch_guide_index < len(pitch_guide_points) else -1
+                        )
+                        save_message_text = _pitch_guide_status_message("PITCH GUIDE ON: ")
+                        if not pitch_guide_points:
+                            pitch_guide_mode = False
+                    else:
+                        save_message_text = "Pitch Guide disabled"
+                    showing_save_message = True
+                    save_message_timer = 120
+                elif pitch_guide_mode and event.key in (pygame.K_BACKSPACE, pygame.K_b):
+                    _pitch_guide_step_back()
+                elif pitch_guide_mode and event.key == pygame.K_a:
+                    _pitch_guide_set_point(None, None, skipped=True)
+                elif pitch_guide_mode and event.key == pygame.K_v:
+                    pitch_guide_show_reference = not pitch_guide_show_reference
+                    save_message_text = (
+                        "Pitch Guide field image "
+                        f"{'enabled' if pitch_guide_show_reference else 'hidden'}"
+                    )
+                    showing_save_message = True
+                    save_message_timer = 60
                 elif event.key == pygame.K_RIGHT and paused:
                     frame_count = min(frame_count + 1, total_frames - 1)
                 elif event.key == pygame.K_LEFT and paused:
@@ -4948,9 +5412,13 @@ def play_video_with_controls(
                     zoom_level = max(0.2, zoom_level / 1.2)
                 elif event.key == pygame.K_c:
                     one_line_mode = not one_line_mode
+                    if one_line_mode:
+                        pitch_guide_mode = False
                     selected_marker_idx = -1  # Reset selected marker when changing modes
                 elif event.key == pygame.K_m:
                     auto_marking_mode = not auto_marking_mode
+                    if auto_marking_mode:
+                        pitch_guide_mode = False
                     save_message_text = (
                         f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
                     )
@@ -4971,6 +5439,7 @@ def play_video_with_controls(
                         one_line_mode = False
                         auto_marking_mode = False
                         sequential_mode = False
+                        pitch_guide_mode = False
                         save_message_text = (
                             "LABELING MODE: Click and DRAG to draw boxes. Press Z to undo."
                         )
@@ -5024,12 +5493,7 @@ def play_video_with_controls(
                         save_message_timer = 60
                 elif event.key == pygame.K_F7:
                     # Load dataset folder (next Save will append to it; multi-video)
-                    if labeling_mode:
-                        load_dataset_folder()
-                    else:
-                        save_message_text = "Enable Labeling Mode to set dataset folder"
-                        showing_save_message = True
-                        save_message_timer = 60
+                    load_dataset_folder()
                 elif event.key == pygame.K_F8:
                     # Open another video (keep dataset if set; no need to close app)
                     start_dir = (
@@ -5067,6 +5531,8 @@ def play_video_with_controls(
                         save_message_text = "Select a different video file."
                         showing_save_message = True
                         save_message_timer = 60
+                elif event.key == pygame.K_F9:
+                    save_pose_dataset()
                 elif event.key == pygame.K_TAB:
                     # Completely revamped marker navigation
                     if one_line_mode:
@@ -5349,8 +5815,8 @@ def play_video_with_controls(
                         landmarks = detect_pose_mediapipe(frame)
                         if landmarks:
                             # Ensure coordinate list is large enough
-                            while len(coordinates) <= frame_count:
-                                coordinates.append([])
+                            if frame_count not in coordinates:
+                                coordinates[frame_count] = []
 
                             # Add points
                             for px, py in landmarks:
@@ -5557,6 +6023,7 @@ def play_video_with_controls(
                             one_line_mode = False
                             auto_marking_mode = False
                             sequential_mode = False
+                            pitch_guide_mode = False
                             save_message_text = (
                                 "LABELING MODE: Click and DRAG to draw boxes. Press Z to undo."
                             )
@@ -5564,6 +6031,31 @@ def play_video_with_controls(
                             save_message_text = "Labeling mode disabled"
                         showing_save_message = True
                         save_message_timer = 90
+                    elif pitch_guide_button_rect.collidepoint(x, rel_y):
+                        # Toggle Pitch Guide mode
+                        pitch_guide_mode = not pitch_guide_mode
+                        if pitch_guide_mode:
+                            pitch_guide_points, pitch_guide_source = _load_pitch_guide_points()
+                            pitch_guide_index = _pitch_guide_next_index(frame_count)
+                            labeling_mode = False
+                            one_line_mode = False
+                            auto_marking_mode = False
+                            sequential_mode = False
+                            click_pass_mode = False
+                            selected_marker_idx = (
+                                pitch_guide_index
+                                if pitch_guide_index < len(pitch_guide_points)
+                                else -1
+                            )
+                            if pitch_guide_points:
+                                save_message_text = _pitch_guide_status_message("PITCH GUIDE ON: ")
+                            else:
+                                save_message_text = "Pitch Guide: no field CSV found in models/"
+                                pitch_guide_mode = False
+                        else:
+                            save_message_text = "Pitch Guide disabled"
+                        showing_save_message = True
+                        save_message_timer = 120
                     elif tracking_csv_button_rect.collidepoint(x, rel_y):
                         # Load tracking CSV
                         load_tracking_csv()
@@ -5625,6 +6117,8 @@ def play_video_with_controls(
                         elif one_line_mode:
                             # Simply append the new marker
                             one_line_markers.append((frame_count, video_x, video_y))
+                        elif pitch_guide_mode and pitch_guide_points:
+                            _pitch_guide_set_point(video_x, video_y)
                         else:
                             if sequential_mode:
                                 # Find the next available marker index
@@ -5685,8 +6179,11 @@ def play_video_with_controls(
                                     paused = True
 
                     elif event.button == 3:  # Right click
+                        # Pitch Guide keeps right-click as delete, matching normal marker UX.
+                        if pitch_guide_mode and pitch_guide_points and not (y >= window_height):
+                            _pitch_guide_delete_selected_point()
                         # Keep existing behavior for right-click (delete most recent)
-                        if one_line_mode:
+                        elif one_line_mode:
                             for i in range(len(one_line_markers) - 1, -1, -1):
                                 if one_line_markers[i][0] == frame_count:
                                     del one_line_markers[i]
@@ -5994,11 +6491,9 @@ def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video
         if frame_num is None:
             numbers = re.findall(r"\d+", base_name)
             if numbers:
-                try:
+                with suppress(ValueError):
                     # Use the last number found (usually the frame number)
                     frame_num = int(numbers[-1])
-                except ValueError:
-                    pass
 
         # Pattern 3: Just a number
         if frame_num is None:
@@ -6125,8 +6620,8 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         if classes_file and os.path.exists(classes_file):
             try:
                 with open(classes_file) as f:
-                    labels = [l.strip() for l in f.readlines()]
-            except:
+                    labels = [line.strip() for line in f.readlines()]
+            except Exception:
                 pass
         return {"_yolo_dataset": input_path}, labels
 
@@ -6158,12 +6653,6 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
     except PermissionError:
         print(f"ERROR: Permission denied accessing file: {input_file}")
         return {i: [] for i in range(total_frames)}
-    except Exception as e:
-        print(f"ERROR: Unexpected error reading file {input_file}: {e}")
-        print(f"Error type: {type(e).__name__}")
-        import traceback
-
-        traceback.print_exc()
     except Exception as e:
         print(f"ERROR: Unexpected error reading file {input_file}: {e}")
         print(f"Error type: {type(e).__name__}")
@@ -6217,9 +6706,8 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                 print(f"ERROR processing row {row_idx} in vailá format: {e}")
                 print(f"Row data: {dict(row)}")
                 # Add empty coordinates for this frame
-                coordinates[row_idx] = []
+                coordinates[int(cast(Any, row_idx))] = []
 
-        print(f"Coordinates successfully loaded (vailá format): {max_marker} markers")
         print(f"Coordinates successfully loaded (vailá format): {max_marker} markers")
         labels = [f"Pixel {i}" for i in range(1, max_marker + 1)]
         return coordinates, labels
@@ -6328,7 +6816,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                 print(f"ERROR processing row {row_idx}: {e}")
                 print(f"Row data: {dict(row)}")
                 # Add empty coordinates for this frame
-                coordinates[row_idx] = []
+                coordinates[int(cast(Any, row_idx))] = []
 
         print(
             f"Coordinates successfully loaded (MediaPipe {file_type} format): {len(base_names)} landmarks"
@@ -6428,15 +6916,13 @@ def save_coordinates(
         columns.append(f"p{i}_y")
 
     # Cria o DataFrame inicializado com NaN para todos os frames.
-    df = pd.DataFrame(np.nan, index=range(total_frames), columns=columns)
+    df = pd.DataFrame(np.nan, index=range(total_frames), columns=pd.Index(columns))
     df["frame"] = df.index
 
     # Preenche o DataFrame com os pontos marcados
     for frame_num, points in coordinates.items():
         for i, (x, y) in enumerate(points):
-            if i not in deleted_positions[frame_num]:  # Only save non-deleted markers
-                # Verificar se é um marcador vazio (None)
-                if x is not None and y is not None:
+            if i not in deleted_positions[frame_num] and x is not None and y is not None:
                     df.at[frame_num, f"p{i + 1}_x"] = float(x)
                     df.at[frame_num, f"p{i + 1}_y"] = float(y)
                 # Se for None, deixar como NaN (o que se tornará "" no CSV)
@@ -6476,7 +6962,7 @@ def export_labeling_dataset(
     is_append = output_dataset_dir is not None and os.path.isdir(output_dataset_dir)
 
     if is_append:
-        dataset_dir = os.path.abspath(output_dataset_dir)
+        dataset_dir = os.path.abspath(str(output_dataset_dir))
         # Load existing classes and merge with new labels
         existing_classes = []
         classes_file = os.path.join(dataset_dir, "classes.txt")
@@ -6630,6 +7116,286 @@ names: {class_names}
     yaml_path = os.path.join(dataset_dir, "data.yaml")
     try:
         with open(yaml_path, "w", encoding="utf-8") as f:
+            f.write(yaml_content)
+    except Exception:
+        pass
+
+
+def export_pose_dataset(
+    video_path,
+    coordinates,
+    total_frames,
+    original_width,
+    original_height,
+    bboxes=None,
+    deleted_positions=None,
+    class_name="object",
+    output_dataset_dir=None,
+    split_ratios=(0.7, 0.2, 0.1),
+    bbox_pad_ratio=0.04,
+    keypoint_names=None,
+):
+    """Export a YOLO-pose training dataset from the markers clicked in `coordinates`.
+
+    Produces an Ultralytics-compatible layout::
+
+        dataset_dir/
+            classes.txt
+            data.yaml      # with kpt_shape: [Nkp, 3], nc: 1, names: [class_name]
+            train/images/*.jpg    train/labels/*.txt
+            val/images/*.jpg      val/labels/*.txt
+            test/images/*.jpg     test/labels/*.txt
+
+    Each annotated frame yields one instance (class ``class_name``):
+    - bbox = first user-drawn box in ``bboxes[frame]`` if available, else a tight
+      bbox around visible keypoints expanded by ``bbox_pad_ratio`` of image size
+    - keypoints = the clicked markers, padded/truncated to ``Nkp`` with
+      visibility ``v=2`` (visible) or ``v=0`` (missing/deleted)
+
+    YOLO-pose label line (all normalized to [0, 1] except visibility 0/1/2)::
+
+        cls cx cy w h  kp1_x kp1_y v1  kp2_x kp2_y v2  ...
+
+    Append mode (``output_dataset_dir`` given and valid): images/labels are
+    written with filename prefix ``<video_base_name>_`` so multiple videos share
+    one dataset. If an existing ``data.yaml`` defines ``kpt_shape``, that Nkp is
+    reused (frames with fewer markers are zero-padded, extras are dropped).
+
+    Returns ``(dataset_dir, message)`` or ``(None, error_message)``.
+    """
+    import random
+
+    annotated_frames = []
+    per_frame_valid_kpts = {}
+    for f_idx, pts in coordinates.items():
+        if not pts:
+            continue
+        deleted_set = deleted_positions.get(f_idx, set()) if deleted_positions else set()
+        valid_pts = []
+        for i, p in enumerate(pts):
+            if i in deleted_set:
+                valid_pts.append(None)
+                continue
+            if p is None:
+                valid_pts.append(None)
+                continue
+            x, y = p
+            if x is None or y is None:
+                valid_pts.append(None)
+                continue
+            valid_pts.append((float(x), float(y)))
+        if any(p is not None for p in valid_pts):
+            annotated_frames.append(int(f_idx))
+            per_frame_valid_kpts[int(f_idx)] = valid_pts
+
+    if not annotated_frames:
+        return None, "No keypoints to export (click markers on at least one frame)."
+
+    base_name = os.path.splitext(os.path.basename(video_path))[0]
+    video_dir = os.path.dirname(video_path)
+    is_append = output_dataset_dir is not None and os.path.isdir(output_dataset_dir)
+
+    existing_nkp = None
+    existing_classes = []
+    if is_append:
+        dataset_dir = os.path.abspath(str(output_dataset_dir))
+        yaml_path = os.path.join(dataset_dir, "data.yaml")
+        if os.path.exists(yaml_path):
+            try:
+                with open(yaml_path, encoding="utf-8") as f:
+                    for line in f:
+                        s = line.strip()
+                        if s.startswith("kpt_shape:"):
+                            inside = s.split(":", 1)[1].strip().strip("[]")
+                            parts = [p.strip() for p in inside.split(",") if p.strip()]
+                            if parts:
+                                existing_nkp = int(parts[0])
+            except Exception:
+                existing_nkp = None
+        classes_file = os.path.join(dataset_dir, "classes.txt")
+        if os.path.exists(classes_file):
+            try:
+                with open(classes_file, encoding="utf-8") as f:
+                    existing_classes = [line.strip() for line in f if line.strip()]
+            except Exception:
+                existing_classes = []
+        file_prefix = f"{base_name}_"
+    else:
+        dataset_dir = os.path.join(
+            video_dir, f"pose_dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+        file_prefix = ""
+
+    expected_nkp = len(keypoint_names) if keypoint_names else 0
+    if existing_nkp is not None and existing_nkp > 0:
+        nkp = existing_nkp
+    else:
+        nkp = max(len(per_frame_valid_kpts[f]) for f in annotated_frames)
+        nkp = max(1, nkp, expected_nkp)
+
+    class_names = sorted(set(existing_classes) | {class_name})
+    cls_id = class_names.index(class_name) if class_name in class_names else 0
+
+    for split in ("train", "val", "test"):
+        os.makedirs(os.path.join(dataset_dir, split, "images"), exist_ok=True)
+        os.makedirs(os.path.join(dataset_dir, split, "labels"), exist_ok=True)
+
+    with open(os.path.join(dataset_dir, "classes.txt"), "w", encoding="utf-8") as f:
+        for name in class_names:
+            f.write(name + "\n")
+
+    r_train, r_val, _ = split_ratios
+    frames_shuffled = list(annotated_frames)
+    random.shuffle(frames_shuffled)
+    n_total = len(frames_shuffled)
+    n_train = int(round(n_total * r_train))
+    n_val = int(round(n_total * r_val))
+    splits = {
+        "train": frames_shuffled[:n_train],
+        "val": frames_shuffled[n_train : n_train + n_val],
+        "test": frames_shuffled[n_train + n_val :],
+    }
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None, f"Could not open video: {video_path}"
+
+    written = 0
+    for split_name, frames in splits.items():
+        for frame_num in frames:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            valid_pts = per_frame_valid_kpts[frame_num]
+            kpts = list(valid_pts[:nkp]) + [None] * max(0, nkp - len(valid_pts))
+
+            user_bbox = None
+            if bboxes and frame_num in bboxes and bboxes[frame_num]:
+                b = bboxes[frame_num][0]
+                user_bbox = (
+                    float(b["x"]),
+                    float(b["y"]),
+                    float(b["w"]),
+                    float(b["h"]),
+                )
+
+            if user_bbox is not None:
+                bx, by, bw, bh = user_bbox
+            else:
+                xs = [p[0] for p in kpts if p is not None]
+                ys = [p[1] for p in kpts if p is not None]
+                if not xs or not ys:
+                    continue
+                min_x, max_x = min(xs), max(xs)
+                min_y, max_y = min(ys), max(ys)
+                pad = bbox_pad_ratio * max(original_width, original_height)
+                bx = max(0.0, min_x - pad)
+                by = max(0.0, min_y - pad)
+                bw = min(original_width - bx, (max_x - min_x) + 2 * pad)
+                bh = min(original_height - by, (max_y - min_y) + 2 * pad)
+                if bw <= 1 or bh <= 1:
+                    bx = max(0.0, min_x - 2)
+                    by = max(0.0, min_y - 2)
+                    bw = min(original_width - bx, 4.0)
+                    bh = min(original_height - by, 4.0)
+
+            cx = (bx + bw / 2.0) / original_width
+            cy = (by + bh / 2.0) / original_height
+            w_n = bw / original_width
+            h_n = bh / original_height
+            cx = max(0.0, min(1.0, cx))
+            cy = max(0.0, min(1.0, cy))
+            w_n = max(0.0, min(1.0, w_n))
+            h_n = max(0.0, min(1.0, h_n))
+
+            parts = [f"{cls_id}", f"{cx:.6f}", f"{cy:.6f}", f"{w_n:.6f}", f"{h_n:.6f}"]
+            for p in kpts:
+                if p is None:
+                    parts += ["0.000000", "0.000000", "0"]
+                else:
+                    kx = max(0.0, min(1.0, p[0] / original_width))
+                    ky = max(0.0, min(1.0, p[1] / original_height))
+                    parts += [f"{kx:.6f}", f"{ky:.6f}", "2"]
+
+            img_filename = f"{file_prefix}frame_{frame_num:06d}.jpg"
+            img_path = os.path.join(dataset_dir, split_name, "images", img_filename)
+            cv2.imwrite(img_path, frame)
+
+            txt_filename = f"{file_prefix}frame_{frame_num:06d}.txt"
+            txt_path = os.path.join(dataset_dir, split_name, "labels", txt_filename)
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(" ".join(parts) + "\n")
+            written += 1
+
+    cap.release()
+
+    _write_pose_data_yaml(dataset_dir, nkp=nkp, keypoint_names=keypoint_names)
+    if keypoint_names:
+        metadata_path = os.path.join(dataset_dir, "keypoints.json")
+        metadata = {
+            "kpt_shape": [nkp, 3],
+            "keypoint_names": list(keypoint_names[:nkp])
+            + [f"kp_{i + 1}" for i in range(len(keypoint_names), nkp)],
+            "format": "Ultralytics YOLO pose: cls cx cy w h x y v...",
+        }
+        try:
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2)
+        except Exception:
+            pass
+
+    return (
+        dataset_dir,
+        "Pose dataset exported: "
+        f"{written} frames, Nkp={nkp} (train: {len(splits['train'])}, "
+        f"val: {len(splits['val'])}, test: {len(splits['test'])})",
+    )
+
+
+def _write_pose_data_yaml(dataset_dir, nkp, keypoint_names=None):
+    """Write data.yaml for YOLO pose training into `dataset_dir`.
+
+    Reads class names from classes.txt (falls back to ['object']). Uses absolute
+    paths for train/val/test so Ultralytics can resolve them regardless of CWD.
+    """
+    classes_file = os.path.join(dataset_dir, "classes.txt")
+    class_names = ["object"]
+    if os.path.exists(classes_file):
+        try:
+            with open(classes_file, encoding="utf-8") as f:
+                loaded = [line.strip() for line in f if line.strip()]
+            if loaded:
+                class_names = loaded
+        except Exception:
+            pass
+
+    train_path = os.path.abspath(os.path.join(dataset_dir, "train", "images")).replace("\\", "/")
+    val_path = os.path.abspath(os.path.join(dataset_dir, "val", "images")).replace("\\", "/")
+    test_abs = os.path.abspath(os.path.join(dataset_dir, "test", "images")).replace("\\", "/")
+    test_line = (
+        f"\ntest: {test_abs}" if os.path.isdir(os.path.join(dataset_dir, "test", "images")) else ""
+    )
+
+    flip_idx = list(range(nkp))
+    keypoint_names = list(keypoint_names[:nkp]) if keypoint_names else []
+    if len(keypoint_names) < nkp:
+        keypoint_names.extend(f"kp_{i + 1}" for i in range(len(keypoint_names), nkp))
+
+    yaml_content = (
+        "# YOLO pose dataset - generated by vailá getpixelvideo\n"
+        "path: .\n"
+        f"train: {train_path}\n"
+        f"val: {val_path}{test_line}\n"
+        f"nc: {len(class_names)}\n"
+        f"names: {class_names}\n"
+        f"kpt_shape: [{nkp}, 3]\n"
+        f"flip_idx: {flip_idx}\n"
+        f"kpt_names: {keypoint_names}\n"
+    )
+    try:
+        with open(os.path.join(dataset_dir, "data.yaml"), "w", encoding="utf-8") as f:
             f.write(yaml_content)
     except Exception:
         pass
@@ -6923,7 +7689,8 @@ def run_getpixelvideo(initial_dataset_dir=None, initial_media_path=None, initial
         if result and len(result) >= 3 and result[0] == "switch_video":
             video_path = result[1]
             initial_dataset_dir = result[2]
-            run_getpixelvideo._initial_labeling_mode = result[3] if len(result) > 3 else False
+            # Use the labeling mode from the previous session for the next one
+            initial_labeling_mode = result[3] if len(result) > 3 else False
             coordinates = None
             labels = []
             # Re-open media for next iteration (path may be video, single_png, or png_sequence dir)

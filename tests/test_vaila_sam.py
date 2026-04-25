@@ -44,7 +44,7 @@ def test_sam3_build_oom_retry_attempts_extends_below_32() -> None:
     """When auto-VRAM caps at 32, OOM retry must still try 24→8 (regression)."""
     from vaila.vaila_sam import _sam3_build_oom_retry_attempts
 
-    assert _sam3_build_oom_retry_attempts(32) == [32, 24, 16, 12, 8]
+    assert _sam3_build_oom_retry_attempts(32) == [32, 24, 16, 12, 8, 4, 2, 1]
     chain0 = _sam3_build_oom_retry_attempts(0)
     assert chain0[0] == 0
     assert 16 in chain0
@@ -145,3 +145,134 @@ def test_sam3_smoke_sample_video(tmp_path: Path) -> None:
     )
     assert (out_dir / "README_sam.txt").is_file()
     assert (out_dir / "sam_frames_meta.csv").is_file()
+
+
+def test_split_video_into_chunks(tmp_path: Path) -> None:
+    """_split_video_into_chunks produces chunk MP4s with correct frame ranges."""
+    import cv2
+
+    from vaila.vaila_sam import _split_video_into_chunks
+
+    # Create a synthetic test video with 30 frames
+    vid_path = tmp_path / "test_30frames.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(str(vid_path), fourcc, 30.0, (64, 64))
+    for i in range(30):
+        frame = np.full((64, 64, 3), i * 8, dtype=np.uint8)
+        writer.write(frame)
+    writer.release()
+
+    chunk_dir = tmp_path / "chunks"
+    chunks = _split_video_into_chunks(vid_path, chunk_dir, chunk_size=10)
+
+    assert len(chunks) == 3
+    # First chunk: frames 0-9
+    assert chunks[0][1] == 0
+    assert chunks[0][2] == 10
+    # Second chunk: frames 10-19
+    assert chunks[1][1] == 10
+    assert chunks[1][2] == 20
+    # Third chunk: frames 20-29
+    assert chunks[2][1] == 20
+    assert chunks[2][2] == 30
+
+    # Verify each chunk file exists and has correct frame count
+    for chunk_path, start, end in chunks:
+        assert Path(chunk_path).is_file()
+        cap = cv2.VideoCapture(str(chunk_path))
+        n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        assert n == end - start
+
+
+def test_merge_chunk_outputs(tmp_path: Path) -> None:
+    """_merge_chunk_outputs merges masks and metadata from multiple chunks."""
+    from vaila.vaila_sam import _merge_chunk_outputs
+
+    video_path = tmp_path / "test.mp4"
+    video_path.touch()
+    final_out = tmp_path / "merged"
+    final_out.mkdir()
+
+    # Simulate two chunks with masks and metadata
+    chunks = [
+        (tmp_path / "c0.mp4", 0, 10),
+        (tmp_path / "c1.mp4", 10, 20),
+    ]
+    chunk_dirs = []
+    for ci, (_, start, end) in enumerate(chunks):
+        d = tmp_path / f"chunk_out_{ci}"
+        d.mkdir()
+        chunk_dirs.append(d)
+        masks_dir = d / "masks"
+        masks_dir.mkdir()
+
+        # Write some mask PNGs with chunk-local frame indices
+        for local_fi in range(end - start):
+            mask = np.full((64, 64), 255, dtype=np.uint8)
+            import cv2
+
+            cv2.imwrite(str(masks_dir / f"frame_{local_fi:06d}_obj_1.png"), mask)
+
+        # Write metadata CSV
+        header = "frame,box_x_1,box_y_1,box_w_1,box_h_1,prob_1"
+        rows = []
+        for local_fi in range(end - start):
+            rows.append(f"{local_fi},10.0,20.0,30.0,40.0,0.95")
+        (d / "sam_frames_meta.csv").write_text(
+            header + "\n" + "\n".join(rows) + "\n", encoding="utf-8"
+        )
+
+    _merge_chunk_outputs(
+        chunks,
+        chunk_dirs,
+        final_out,
+        video_path,
+        save_overlay_mp4=False,
+        save_mask_png=True,
+    )
+
+    # Check merged masks exist with global frame indices
+    merged_masks = final_out / "masks"
+    assert merged_masks.is_dir()
+    # Should have 20 mask files (0-19)
+    mask_files = sorted(merged_masks.glob("frame_*_obj_*.png"))
+    assert len(mask_files) == 20
+    # Verify first file is frame 0 and last is frame 19
+    assert "frame_000000_obj_1.png" in mask_files[0].name
+    assert "frame_000019_obj_1.png" in mask_files[-1].name
+
+    # Check merged metadata CSV
+    meta = final_out / "sam_frames_meta.csv"
+    assert meta.is_file()
+    lines = meta.read_text(encoding="utf-8").strip().split("\n")
+    assert len(lines) == 21  # header + 20 data rows
+    # First data row should be frame 0
+    assert lines[1].startswith("0,")
+    # Last data row should be frame 19
+    assert lines[-1].startswith("19,")
+
+
+def test_read_max_input_long_edge_cli_explicit() -> None:
+    from vaila.vaila_sam import _read_max_input_long_edge
+
+    assert _read_max_input_long_edge(0) == 0
+    assert _read_max_input_long_edge(960) == 960
+
+
+def test_maybe_downscale_video_long_edge_noop_small_video(tmp_path: Path) -> None:
+    import cv2
+
+    from vaila.vaila_sam import _maybe_downscale_video_long_edge
+
+    vid = tmp_path / "small.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    w = cv2.VideoWriter(str(vid), fourcc, 30.0, (320, 240))
+    w.write(np.zeros((240, 320, 3), dtype=np.uint8))
+    w.release()
+
+    p, tmp, w0, h0, n = _maybe_downscale_video_long_edge(vid, tmp_path, 1280)
+    assert tmp is None
+    assert p == vid.resolve()
+    assert w0 == 320 and h0 == 240
+    assert n >= 1
