@@ -16,6 +16,13 @@ vaila/models/**/*.safetensors
 # Hugging Face hub cache under models (e.g. facebook/sam3 downloads)
 vaila/models/**/.cache/
 
+# Local Hugging Face datasets/models (offline training assets)
+vaila/models/hf_datasets/
+
+# Ultralytics training runs (local artifacts)
+runs/
+vaila/models/runs/
+
 # Stray weight files at repository root (use vaila/models/ instead)
 /*.pt
 /*.ckpt
@@ -57,6 +64,8 @@ tests/SAM/*.mp4
 *.mov
 *.AVI
 *.avi
+# Ignore all mp4 files in tests/sport_fields/
+tests/sport_fields/*.mp4
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -155,10 +155,13 @@
         <h1>getpixelvideo.py - Documentação Completa</h1>
 
         <div class="version-info">
-            <strong>Versão:</strong> 0.3.0<br>
-            <strong>Data:</strong> Janeiro 2026<br>
+            <strong>Versão:</strong> 0.5.0<br>
+            <strong>Data:</strong> Abril 2026<br>
             <strong>Autores:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro<br>
             <strong>Projeto:</strong> vailá - Multimodal Toolbox<br>
+            <strong>Novo na 0.5.0:</strong> <strong>F9</strong> exporta dataset YOLO-pose a partir dos marcadores
+            (<code>data.yaml</code> com <code>kpt_shape</code>, train/val/test). Anexar vários vídeos com
+            <strong>F7</strong> + <strong>F8</strong> ou <code>--dataset</code> na linha de comando.<br>
             <strong>Novo na 0.3.0:</strong> Modo Labeling para criação de datasets de ML (Bounding Boxes)
         </div>
 
@@ -351,6 +354,10 @@
                             <td><span class="key">N</span></td>
                             <td>Renomear label do objeto (Apenas Modo Labeling)</td>
                         </tr>
+                        <tr>
+                            <td><span class="key">G / PitchGuide</span></td>
+                            <td>Alternar guia FIFA de keypoints do campo; clique esquerdo marca, A pula/avança, clique direito apaga, B/Backspace volta, V mostra/esconde a imagem do campo.</td>
+                        </tr>
                     </table>
                 </div>
 
@@ -380,6 +387,10 @@
                         <tr>
                             <td><span class="key">F6</span></td>
                             <td>Carregar Projeto de Labeling (Apenas Modo Labeling)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">F7</span></td>
+                            <td>Carregar pasta de dataset; o próximo F9/Salvar anexa no dataset multi-vídeo.</td>
                         </tr>
                     </table>
                 </div>
@@ -477,6 +488,23 @@
                 <li><strong>Exportação de Dataset:</strong> Exporte datasets estruturados (train/val/test) com imagens e anotações JSON</li>
                 <li><strong>Comportamento:</strong> Clique e arraste para desenhar caixas, pressione Z para desfazer a última caixa</li>
                 <li><strong>Exportação:</strong> Salvar exporta dataset estruturado com divisão train/val/test</li>
+            </ul>
+
+            <h3>Modo Pitch Guide (keypoints FIFA do campo)</h3>
+            <p>
+                Fluxo guiado para rotular pontos do campo de futebol em ordem fixa. O modo carrega
+                <code>soccerfield_ref3d_fifa.csv</code> automaticamente e grava os marcadores como
+                <code>p1..p37</code>, preservando a ordem esperada para calibração e treino YOLO-pose.
+            </p>
+            <ul>
+                <li><strong>Ativação:</strong> clique no botão <strong>PitchGuide</strong> ou pressione <strong>G</strong>.</li>
+                <li><strong>Overlay:</strong> painel verde mostra o ponto atual e a coordenada de referência.</li>
+                <li><strong>Imagem:</strong> uma referência maior do FIFA Field aparece inicialmente com linhas do campo, números dos pontos e o ponto atual em amarelo; pressione V para mostrar/esconder.</li>
+                <li><strong>Marcar:</strong> clique esquerdo grava o ponto FIFA atual e avança automaticamente.</li>
+                <li><strong>Pular:</strong> A avança o guia e grava o ponto como ausente.</li>
+                <li><strong>Apagar:</strong> clique direito apaga o ponto selecionado/atual e retorna o guia para ele.</li>
+                <li><strong>Corrigir:</strong> B ou Backspace volta um ponto sem apagar o marcador já salvo.</li>
+                <li><strong>Exportar:</strong> F9 gera dataset YOLO-pose com <code>kpt_shape</code>, <code>kpt_names</code> e <code>keypoints.json</code>.</li>
             </ul>
         </section>
 

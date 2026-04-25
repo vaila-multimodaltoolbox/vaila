@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 20 March 2025
-Updated: 23 March 2026
-Version: 0.0.2
+Updated: 24 April 2026
+Version: 0.0.3
 
 Description:
     Unified sports-field/court visualization module.
@@ -46,15 +46,19 @@ from __future__ import annotations
 import math
 import os
 import tkinter as tk
+import tkinter.messagebox
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import Button, Frame, filedialog, messagebox
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+import matplotlib
+
+matplotlib.use("TkAgg")
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1646,6 +1650,12 @@ SPORT_REGISTRY.update(
             title="Soccer field (FIFA 105×68 m)",
             plot_fn=plot_field,
         ),
+        "fifa": SportDef(
+            label="FIFA Starter Kit",
+            model_csv="soccerfield_ref3d_fifa.csv",
+            title="FIFA Skeletal Tracking Pitch",
+            plot_fn=plot_field,
+        ),
         "tennis": SportDef(
             label="Tennis Court Visualization",
             model_csv="tenniscourt_ref3d.csv",
@@ -1757,7 +1767,7 @@ def load_and_plot_markers(
     field_ax._all_marker_names = marker_names
 
     # Define distinct colors for each marker
-    colors = plt.cm.rainbow(np.linspace(0, 1, len(marker_names)))
+    colors = plt.get_cmap("rainbow")(np.linspace(0, 1, len(marker_names)))
 
     # For each marker
     for idx, marker in enumerate(marker_names):
@@ -1943,7 +1953,7 @@ def load_and_plot_scout_events(
     }
 
     # Generate additional colors for custom team names
-    color_palette = plt.cm.Set3(np.linspace(0, 1, max(len(teams), 10)))
+    color_palette = plt.get_cmap("Set3")(np.linspace(0, 1, max(len(teams), 10)))
     for i, team in enumerate(teams):
         if team not in team_colors:
             team_colors[team] = color_palette[i % len(color_palette)]
@@ -2436,7 +2446,8 @@ def run_soccerfield(
                 current_frame,
                 selected_markers[0] if selected_markers[0] else [],
             )
-            current_canvas[0].draw()
+            if current_canvas[0] is not None:
+                current_canvas[0].draw()
             select_window.destroy()
 
         # Buttons
@@ -2520,7 +2531,7 @@ def run_soccerfield(
             circle = patches.Circle(
                 (x, y),
                 radius=0.4,
-                color=plt.cm.tab10(marker_num % 10),
+                color=plt.get_cmap("tab10")(marker_num % 10),
                 edgecolor="black",
                 linewidth=1,
                 alpha=0.8,
@@ -2537,7 +2548,7 @@ def run_soccerfield(
                 color="black",
                 weight="bold",
                 bbox={
-                    "facecolor": plt.cm.tab10(marker_num % 10),
+                    "facecolor": plt.get_cmap("tab10")(marker_num % 10),
                     "alpha": 0.7,
                     "edgecolor": "black",
                     "boxstyle": "round",
@@ -2550,7 +2561,8 @@ def run_soccerfield(
             manual_marker_artists.append((circle, text, x, y, marker_num, current_frame_idx))
 
             # Atualizar o canvas
-            current_canvas[0].draw()
+            if current_canvas[0] is not None:
+                current_canvas[0].draw()
             print(
                 f"Created marker p{marker_num} at frame {current_frame_idx}, position ({x:.2f}, {y:.2f})"
             )
@@ -2608,7 +2620,8 @@ def run_soccerfield(
                     del frame_markers[frame_idx]
 
             # Atualizar o canvas
-            current_canvas[0].draw()
+            if current_canvas[0] is not None:
+                current_canvas[0].draw()
             print(f"Deleted marker at frame {frame_idx}, position ({x:.2f}, {y:.2f})")
 
         except Exception as e:
@@ -2647,7 +2660,7 @@ def run_soccerfield(
             max_frame = max(frame_markers.keys()) if frame_markers else 0
 
             # Criar dados para o CSV
-            data = {"frame": list(range(max_frame + 1))}
+            data: dict[str, Any] = {"frame": list(range(max_frame + 1))}
 
             # Criar colunas para todos os marcadores
             for marker_num in range(1, max_marker_num + 1):
@@ -2963,6 +2976,8 @@ def run_soccerfield(
                     selected_players[0],
                     selected_actions[0],
                 )
+
+            if current_canvas[0] is not None:
                 current_canvas[0].draw()
                 select_window.destroy()
 
@@ -3092,7 +3107,7 @@ def run_soccerfield(
             menu = filter_cb["menu"]
             menu.delete(0, tk.END)
             opts = [ALL]
-            if src == "Markers CSV" and has_markers:
+            if src == "Markers CSV" and has_markers and current_markers_csv[0] is not None:
                 mdf = pd.read_csv(current_markers_csv[0])
                 names = sorted(
                     {
@@ -3102,7 +3117,7 @@ def run_soccerfield(
                     }
                 )
                 opts += names
-            elif src == "Scout CSV" and has_scout:
+            elif src == "Scout CSV" and has_scout and current_scout_csv[0] is not None:
                 sdf = pd.read_csv(current_scout_csv[0])
                 if "team" in sdf.columns:
                     opts += sorted(sdf["team"].dropna().unique().tolist())
@@ -3130,7 +3145,7 @@ def run_soccerfield(
                 flt = filter_var.get()
                 xs, ys = [], []
 
-                if src == "Markers CSV" and has_markers:
+                if src == "Markers CSV" and has_markers and current_markers_csv[0] is not None:
                     mdf = pd.read_csv(current_markers_csv[0]).replace("", np.nan)
                     names = sorted(
                         {
@@ -3148,7 +3163,7 @@ def run_soccerfield(
                             xs.extend(sub[xc].tolist())
                             ys.extend(sub[yc].tolist())
 
-                elif src == "Scout CSV" and has_scout:
+                elif src == "Scout CSV" and has_scout and current_scout_csv[0] is not None:
                     sdf = pd.read_csv(current_scout_csv[0]).replace("", np.nan)
                     if flt != ALL and "team" in sdf.columns:
                         sdf = sdf[sdf["team"] == flt]
@@ -3503,6 +3518,17 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.show()
     elif args.field:
-        run_soccerfield(initial_field_csv=args.field, default_field_csv=args.field)
+        _fdf = pd.read_csv(args.field)
+        sport = _detect_sport(args.field, _fdf)
+        if sport and sport in SPORT_REGISTRY:
+            config = SPORT_REGISTRY[sport]
+            _fig, _ax = config.plot_fn(_fdf, show_reference_points=True, show_axis_values=True)
+            _ax.set_title(config.title)
+        else:
+            _fig, _ax = plot_simple_field(
+                _fdf, show_reference_points=True, show_axis_values=True, title="Sports field"
+            )
+        plt.tight_layout()
+        plt.show()
     else:
         run_drawsportsfields(args.surface)
