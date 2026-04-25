@@ -525,18 +525,18 @@ def apply_swap_config(coordinates, swap_config):
 
         for frame_idx, markers in coordinates.items():
             if start <= frame_idx <= end and len(markers) > max(m1_idx, m2_idx):
-                    # Check if markers exist at these indices (not None)
-                    # The markers list is [(x,y), (x,y), ...]. Some might be None or placeholders?
-                    # getpixelvideo structure seems to be list of tuples.
+                # Check if markers exist at these indices (not None)
+                # The markers list is [(x,y), (x,y), ...]. Some might be None or placeholders?
+                # getpixelvideo structure seems to be list of tuples.
 
-                    # Swap
-                    try:
-                        temp = markers[m1_idx]
-                        markers[m1_idx] = markers[m2_idx]
-                        markers[m2_idx] = temp
-                        count += 1
-                    except IndexError:
-                        pass
+                # Swap
+                try:
+                    temp = markers[m1_idx]
+                    markers[m1_idx] = markers[m2_idx]
+                    markers[m2_idx] = temp
+                    count += 1
+                except IndexError:
+                    pass
 
     print(f"Applied {count} marker swaps across frames.")
     return coordinates
@@ -1225,16 +1225,16 @@ def pygame_file_dialog(
                 elif event.key == pygame.K_TAB:
                     input_active = not input_active
                     if not input_active and text_input:
-                            test_path = os.path.expanduser(text_input)
-                            if os.path.isdir(test_path):
-                                current_dir = test_path
-                                items = load_directory(current_dir)
-                                text_input = ""
-                                selected_index = 0
-                                scroll_offset = 0
-                            elif os.path.isfile(test_path):
-                                selected_file = test_path
-                                running = False
+                        test_path = os.path.expanduser(text_input)
+                        if os.path.isdir(test_path):
+                            current_dir = test_path
+                            items = load_directory(current_dir)
+                            text_input = ""
+                            selected_index = 0
+                            scroll_offset = 0
+                        elif os.path.isfile(test_path):
+                            selected_file = test_path
+                            running = False
 
                 else:
                     if input_active:
@@ -1633,15 +1633,15 @@ def play_video_with_controls(
         pitch_guide_index = target_idx
         selected_marker_idx = target_idx
         point = pitch_guide_points[target_idx]
-        save_message_text = f"Deleted p{point['point_number']} '{point['point_name']}'. Mark it again."
+        save_message_text = (
+            f"Deleted p{point['point_number']} '{point['point_name']}'. Mark it again."
+        )
         showing_save_message = True
         save_message_timer = 90
 
     def _pitch_guide_reference_surface(current_idx: int | None = None) -> pygame.Surface | None:
         """Build a FIFA pitch reference image for the Pygame guide overlay."""
-        field_points = [
-            p for p in pitch_guide_points if p["x"] is not None and p["y"] is not None
-        ]
+        field_points = [p for p in pitch_guide_points if p["x"] is not None and p["y"] is not None]
         if not field_points:
             return None
 
@@ -1660,9 +1660,7 @@ def play_video_with_controls(
 
         def map_xy(point):
             px = margin_x + int(((point["x"] - min_x) / span_x) * (width - 2 * margin_x))
-            py = height - margin_y - int(
-                ((point["y"] - min_y) / span_y) * (height - 2 * margin_y)
-            )
+            py = height - margin_y - int(((point["y"] - min_y) / span_y) * (height - 2 * margin_y))
             return px, py
 
         def pxy(name):
@@ -3640,29 +3638,33 @@ def play_video_with_controls(
                                     selected_m2 = None
 
                         # Handle Add
-                        if btn_add.collidepoint(mx, my) and selected_m1 is not None and selected_m2 is not None:
-                                try:
-                                    s = int(input_start) - 1
-                                    e = int(input_end) - 1
-                                    temp_rules.append(
-                                        {
-                                            "start_frame": s,
-                                            "end_frame": e,
-                                            "marker_1": selected_m1,
-                                            "marker_2": selected_m2,
-                                        }
-                                    )
-                                    # Reset selection
-                                    selected_m1 = None
-                                    selected_m2 = None
-                                except ValueError:
-                                    print("Invalid frame range")
+                        if (
+                            btn_add.collidepoint(mx, my)
+                            and selected_m1 is not None
+                            and selected_m2 is not None
+                        ):
+                            try:
+                                s = int(input_start) - 1
+                                e = int(input_end) - 1
+                                temp_rules.append(
+                                    {
+                                        "start_frame": s,
+                                        "end_frame": e,
+                                        "marker_1": selected_m1,
+                                        "marker_2": selected_m2,
+                                    }
+                                )
+                                # Reset selection
+                                selected_m1 = None
+                                selected_m2 = None
+                            except ValueError:
+                                print("Invalid frame range")
 
                         # Handle Delete Rule
                         if rule_panel.collidepoint(mx, my):
                             ridx = (my - rule_panel.y) // 25 + scroll_rules
                             if 0 <= ridx < len(temp_rules) and mx > rule_panel.right - 30:
-                                    temp_rules.pop(ridx)
+                                temp_rules.pop(ridx)
 
                         # Handle Footer
                         if btn_apply.collidepoint(mx, my):
@@ -3886,7 +3888,11 @@ def play_video_with_controls(
                     if os.path.isdir(full):
                         dirs.append((name + "/", full, True))
                     else:
-                        if filter_yaml_only and extensions and not any(name.lower().endswith(ext) for ext in extensions):
+                        if (
+                            filter_yaml_only
+                            and extensions
+                            and not any(name.lower().endswith(ext) for ext in extensions)
+                        ):
                             continue
                         files.append((name, full, False))
             except PermissionError:
@@ -4336,12 +4342,12 @@ def play_video_with_controls(
         # Fill in the non-deleted marker positions
         for idx, (_, x, y) in enumerate(one_line_markers):
             if idx not in deleted_markers and x is not None and y is not None:
-                    # Marker indices are 1-based in the CSV
-                    row_values[idx * 2 + 1] = float(
-                        x
-                    )  # +1 for frame column, then multiply by 2 for x position
-                    row_values[idx * 2 + 2] = float(y)  # +2 for y position
-                # Se for None, deixar como vazio (já inicializado como "")
+                # Marker indices are 1-based in the CSV
+                row_values[idx * 2 + 1] = float(
+                    x
+                )  # +1 for frame column, then multiply by 2 for x position
+                row_values[idx * 2 + 2] = float(y)  # +2 for y position
+            # Se for None, deixar como vazio (já inicializado como "")
 
         df = pd.DataFrame([row_values], columns=pd.Index(header))
         df.to_csv(output_file, index=False)
@@ -4772,7 +4778,12 @@ def play_video_with_controls(
                     for i in range(1, 1001):  # Increased to support up to 1000 markers
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
-                        if x_col in df.columns and y_col in df.columns and pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                        if (
+                            x_col in df.columns
+                            and y_col in df.columns
+                            and pd.notna(row[x_col])
+                            and pd.notna(row[y_col])
+                        ):
                             one_line_markers.append((frame_num, row[x_col], row[y_col]))
 
                 save_message_text = f"Loaded 1 line file: {os.path.basename(input_file)}"
@@ -4788,7 +4799,12 @@ def play_video_with_controls(
                     for i in range(1, 1001):  # Increased to support up to 1000 markers
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
-                        if x_col in df.columns and y_col in df.columns and pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                        if (
+                            x_col in df.columns
+                            and y_col in df.columns
+                            and pd.notna(row[x_col])
+                            and pd.notna(row[y_col])
+                        ):
                             coordinates[frame_num].append((row[x_col], row[y_col]))
 
                 # Fix: Re-apply active swap rules after loading new data
@@ -5059,30 +5075,28 @@ def play_video_with_controls(
         # Draw Pose Connections if likely a full pose (33 points)
         if coordinates is not None and not one_line_mode and len(coordinates[frame_count]) == 33:
             for start_idx, end_idx in POSE_CONNECTIONS:
-                if start_idx < 33 and end_idx < 33 and start_idx < len(coordinates[frame_count]) and end_idx < len(
-                    coordinates[frame_count]
+                if (
+                    start_idx < 33
+                    and end_idx < 33
+                    and start_idx < len(coordinates[frame_count])
+                    and end_idx < len(coordinates[frame_count])
                 ):
-                        pts = coordinates[frame_count]
-                        pt1 = pts[start_idx]
-                        pt2 = pts[end_idx]
+                    pts = coordinates[frame_count]
+                    pt1 = pts[start_idx]
+                    pt2 = pts[end_idx]
 
-                        if pt1 is not None and pt2 is not None:
-                            x1, y1 = pt1
-                            x2, y2 = pt2
+                    if pt1 is not None and pt2 is not None:
+                        x1, y1 = pt1
+                        x2, y2 = pt2
 
-                            if (
-                                x1 is not None
-                                and y1 is not None
-                                and x2 is not None
-                                and y2 is not None
-                            ):
-                                sx1 = int((x1 * zoom_level) - crop_x)
-                                sy1 = int((y1 * zoom_level) - crop_y)
-                                sx2 = int((x2 * zoom_level) - crop_x)
-                                sy2 = int((y2 * zoom_level) - crop_y)
+                        if x1 is not None and y1 is not None and x2 is not None and y2 is not None:
+                            sx1 = int((x1 * zoom_level) - crop_x)
+                            sy1 = int((y1 * zoom_level) - crop_y)
+                            sx2 = int((x2 * zoom_level) - crop_x)
+                            sy2 = int((y2 * zoom_level) - crop_y)
 
-                                # Draw simple blue line for skeleton
-                                pygame.draw.line(screen, (0, 0, 255), (sx1, sy1), (sx2, sy2), 2)
+                            # Draw simple blue line for skeleton
+                            pygame.draw.line(screen, (0, 0, 255), (sx1, sy1), (sx2, sy2), 2)
 
         # Draw current frame markers
 
@@ -5129,59 +5143,59 @@ def play_video_with_controls(
 
         # Draw YOLO tracking bounding boxes
         if show_tracking and csv_loaded and frame_count in tracking_data:
-                boxes = tracking_data[frame_count]
-                for box in boxes:
-                    # Convert video coordinates to screen coordinates (account for zoom/offset)
-                    screen_x1 = int((box["x1"] * zoom_level) - crop_x)
-                    screen_y1 = int((box["y1"] * zoom_level) - crop_y)
-                    screen_x2 = int((box["x2"] * zoom_level) - crop_x)
-                    screen_y2 = int((box["y2"] * zoom_level) - crop_y)
+            boxes = tracking_data[frame_count]
+            for box in boxes:
+                # Convert video coordinates to screen coordinates (account for zoom/offset)
+                screen_x1 = int((box["x1"] * zoom_level) - crop_x)
+                screen_y1 = int((box["y1"] * zoom_level) - crop_y)
+                screen_x2 = int((box["x2"] * zoom_level) - crop_x)
+                screen_y2 = int((box["y2"] * zoom_level) - crop_y)
 
-                    # Only draw if box is visible on screen
-                    if (
-                        screen_x2 > 0
-                        and screen_x1 < window_width
-                        and screen_y2 > 0
-                        and screen_y1 < window_height
-                    ):
-                        # Get color from box (RGB tuple)
-                        box_color = box.get("color", (0, 255, 0))
+                # Only draw if box is visible on screen
+                if (
+                    screen_x2 > 0
+                    and screen_x1 < window_width
+                    and screen_y2 > 0
+                    and screen_y1 < window_height
+                ):
+                    # Get color from box (RGB tuple)
+                    box_color = box.get("color", (0, 255, 0))
 
-                        # Draw rectangle outline with tracking color
-                        pygame.draw.rect(
-                            screen,
-                            box_color,
-                            (screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1),
-                            2,
+                    # Draw rectangle outline with tracking color
+                    pygame.draw.rect(
+                        screen,
+                        box_color,
+                        (screen_x1, screen_y1, screen_x2 - screen_x1, screen_y2 - screen_y1),
+                        2,
+                    )
+
+                    # Build complete label text: "Label:person id:1 conf:0.85"
+                    label = box.get("label", "object")
+                    tracker_id = box.get("id")
+                    conf = box.get("conf", 0)
+
+                    # Build text string
+                    label_parts = [f"Label:{label}"]
+                    if tracker_id is not None:
+                        label_parts.append(f"id:{tracker_id}")
+                    if conf > 0:
+                        label_parts.append(f"conf:{conf:.2f}")
+
+                    label_text = " ".join(label_parts)
+
+                    # Draw complete label text above the box
+                    if label_text:
+                        # Create text surface with background for readability
+                        text_surface = font.render(label_text, True, (255, 255, 255))
+                        text_bg = pygame.Surface(
+                            (text_surface.get_width() + 4, text_surface.get_height() + 2)
                         )
-
-                        # Build complete label text: "Label:person id:1 conf:0.85"
-                        label = box.get("label", "object")
-                        tracker_id = box.get("id")
-                        conf = box.get("conf", 0)
-
-                        # Build text string
-                        label_parts = [f"Label:{label}"]
-                        if tracker_id is not None:
-                            label_parts.append(f"id:{tracker_id}")
-                        if conf > 0:
-                            label_parts.append(f"conf:{conf:.2f}")
-
-                        label_text = " ".join(label_parts)
-
-                        # Draw complete label text above the box
-                        if label_text:
-                            # Create text surface with background for readability
-                            text_surface = font.render(label_text, True, (255, 255, 255))
-                            text_bg = pygame.Surface(
-                                (text_surface.get_width() + 4, text_surface.get_height() + 2)
-                            )
-                            text_bg.fill(box_color)
-                            text_bg.set_alpha(200)
-                            # Position above the box
-                            text_y = screen_y1 - text_surface.get_height() - 2
-                            screen.blit(text_bg, (screen_x1, text_y))
-                            screen.blit(text_surface, (screen_x1 + 2, text_y + 1))
+                        text_bg.fill(box_color)
+                        text_bg.set_alpha(200)
+                        # Position above the box
+                        text_y = screen_y1 - text_surface.get_height() - 2
+                        screen.blit(text_bg, (screen_x1, text_y))
+                        screen.blit(text_surface, (screen_x1 + 2, text_y + 1))
 
         # Draw bounding boxes when in labeling mode
         if labeling_mode:
@@ -6923,9 +6937,9 @@ def save_coordinates(
     for frame_num, points in coordinates.items():
         for i, (x, y) in enumerate(points):
             if i not in deleted_positions[frame_num] and x is not None and y is not None:
-                    df.at[frame_num, f"p{i + 1}_x"] = float(x)
-                    df.at[frame_num, f"p{i + 1}_y"] = float(y)
-                # Se for None, deixar como NaN (o que se tornará "" no CSV)
+                df.at[frame_num, f"p{i + 1}_x"] = float(x)
+                df.at[frame_num, f"p{i + 1}_y"] = float(y)
+            # Se for None, deixar como NaN (o que se tornará "" no CSV)
 
     # Salva o CSV com valores NaN representados como strings vazias
     df.to_csv(output_file, index=False, na_rep="")
@@ -7689,7 +7703,6 @@ def run_getpixelvideo(initial_dataset_dir=None, initial_media_path=None, initial
         if result and len(result) >= 3 and result[0] == "switch_video":
             video_path = result[1]
             initial_dataset_dir = result[2]
-            # Use the labeling mode from the previous session for the next one
             initial_labeling_mode = result[3] if len(result) > 3 else False
             coordinates = None
             labels = []
