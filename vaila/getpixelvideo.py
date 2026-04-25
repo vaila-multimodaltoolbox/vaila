@@ -87,9 +87,6 @@ import io
 import json
 import math
 import os
-
-# Configure SDL environment variables BEFORE importing pygame
-# to prevent EGL/OpenGL warnings on Linux systems
 import platform
 import re
 import shutil
@@ -98,6 +95,7 @@ import sys
 import urllib.request
 from contextlib import redirect_stderr, suppress
 from pathlib import Path
+from typing import Any, cast
 
 from rich import print
 
@@ -135,7 +133,10 @@ try:
     import ultralytics
 
     # Mute YOLO unnecessary logs
-    ultralytics.checks = lambda: None
+    def _mute_ultralytics_checks(verbose=True, device=""):
+        return None
+
+    ultralytics.checks = cast(Any, _mute_ultralytics_checks)
     from ultralytics import YOLO
 
     YOLO_AVAILABLE = True
@@ -155,13 +156,8 @@ try:
 
     TOML_AVAILABLE = True
 except ImportError:
-    try:
-        import tomli as tomllib  # pyright: ignore[reportMissingImports]
-
-        TOML_AVAILABLE = True
-    except ImportError:
-        TOML_AVAILABLE = False
-        print("Warning: tomllib/tomli not found. TOML configuration features will be disabled.")
+    TOML_AVAILABLE = False
+    print("Warning: tomllib not found. TOML configuration features will be disabled.")
 
 # Removed native_file_dialog imports - now using Tkinter directly for all dialogs
 
@@ -528,9 +524,7 @@ def apply_swap_config(coordinates, swap_config):
         # Let's assume input is 0-based for internal consistency, GUI handles conversion.
 
         for frame_idx, markers in coordinates.items():
-            if start <= frame_idx <= end:
-                # Ensure we have enough markers
-                if len(markers) > max(m1_idx, m2_idx):
+            if start <= frame_idx <= end and len(markers) > max(m1_idx, m2_idx):
                     # Check if markers exist at these indices (not None)
                     # The markers list is [(x,y), (x,y), ...]. Some might be None or placeholders?
                     # getpixelvideo structure seems to be list of tuples.
@@ -708,9 +702,9 @@ def download_or_load_yolo_model(model_name=None):
             shutil.move(str(cwd_model), str(model_path))
 
         return model
-    except Exception:
-        return model
     except Exception as e:
+        if "model" in locals() and model is not None:
+            return model
         print(f"Failed to load YOLO model: {e}")
         return None
 
@@ -1113,19 +1107,11 @@ def pygame_file_dialog(
 
             # Draw background for item
             item_rect = pygame.Rect(12, y_pos - 2, dialog_width - 44, item_height)
-            if is_dir:
-                # Directory background (darker blue)
-                bg_color = (40, 60, 80)
-            else:
-                # File background (darker gray)
-                bg_color = (30, 30, 30)
+            bg_color = (40, 60, 80) if is_dir else (30, 30, 30)
 
             # Highlight selected item with brighter color
             if i == selected_index - scroll_offset:
-                if is_dir:
-                    bg_color = (80, 120, 200)  # Bright blue for selected directory
-                else:
-                    bg_color = (60, 60, 100)  # Brighter for selected file
+                bg_color = (80, 120, 200) if is_dir else (60, 60, 100)
 
             pygame.draw.rect(dialog_screen, bg_color, item_rect)
 
@@ -1140,7 +1126,7 @@ def pygame_file_dialog(
             # Try to render emoji, fallback to text if not supported
             try:
                 icon = small_font.render(icon_text, True, color)
-            except:
+            except Exception:
                 icon_text = "[DIR]" if is_dir else "[FILE]"
                 icon = small_font.render(icon_text, True, color)
             dialog_screen.blit(icon, (15, y_pos))
@@ -1238,9 +1224,7 @@ def pygame_file_dialog(
 
                 elif event.key == pygame.K_TAB:
                     input_active = not input_active
-                    if not input_active:
-                        # Try to navigate to entered path
-                        if text_input:
+                    if not input_active and text_input:
                             test_path = os.path.expanduser(text_input)
                             if os.path.isdir(test_path):
                                 current_dir = test_path
@@ -1406,9 +1390,14 @@ def play_video_with_controls(
     if labels is None:
         labels = []
 
-    # Initialize coordinates if not provided
+    # Initialize coordinates and deleted_positions
     if coordinates is None:
         coordinates = {i: [] for i in range(total_frames)}
+
+    deleted_positions = {i: set() for i in range(total_frames)}
+
+    assert coordinates is not None
+    assert deleted_positions is not None
 
     # Initialize active swap rules list to track session state
     active_swap_rules = []
@@ -1541,15 +1530,17 @@ def play_video_with_controls(
         return [], ""
 
     def _pitch_guide_next_index(frame_idx: int) -> int:
-        """Return the next unhandled FIFA field point for the current frame."""
+        """Return the next unhandled FIFA field point for the specified frame."""
+        if coordinates is None:
+            return 0
         done = pitch_guide_done_by_frame.get(frame_idx, set())
-        frame_points = coordinates.get(frame_idx, [])
+        pts = coordinates.get(frame_idx, [])
         for idx in range(len(pitch_guide_points)):
             if idx in done:
                 continue
-            if idx >= len(frame_points):
+            if idx >= len(pts):
                 return idx
-            x_val, y_val = frame_points[idx]
+            x_val, y_val = pts[idx]
             if x_val is None or y_val is None:
                 return idx
         return len(pitch_guide_points)
@@ -1578,6 +1569,8 @@ def play_video_with_controls(
             return
 
         point_idx = pitch_guide_index
+        if coordinates is None:
+            return
         frame_points = coordinates[frame_count]
         while len(frame_points) <= point_idx:
             frame_points.append((None, None))
@@ -1625,7 +1618,7 @@ def play_video_with_controls(
         nonlocal pitch_guide_index, selected_marker_idx
         nonlocal save_message_text, showing_save_message, save_message_timer
 
-        if not pitch_guide_points:
+        if not pitch_guide_points or coordinates is None:
             return
         if 0 <= selected_marker_idx < len(pitch_guide_points):
             target_idx = selected_marker_idx
@@ -1827,7 +1820,9 @@ def play_video_with_controls(
             total_frames_video = total_frames
 
             # Create video writer (temporary file without audio)
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            # Use getattr for fourcc to satisfy strict type checkers
+            fourcc_func = getattr(cv2, "VideoWriter_fourcc", None)
+            fourcc = fourcc_func(*"mp4v") if fourcc_func else 0x7634706D
             out = cv2.VideoWriter(temp_video, fourcc, fps_write, (width_write, height_write))
 
             if not out.isOpened():
@@ -1881,22 +1876,26 @@ def play_video_with_controls(
                                 1,
                             )
                 else:
-                    if frame_idx in coordinates:
-                        for i, (x, y) in enumerate(coordinates[frame_idx]):
-                            if i not in deleted_positions.get(frame_idx, set()):
-                                if x is not None and y is not None:
-                                    # Draw marker circle (green in BGR)
-                                    cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
-                                    # Draw marker number
-                                    cv2.putText(
-                                        frame,
-                                        str(i + 1),
-                                        (int(x) + 8, int(y) - 8),
-                                        cv2.FONT_HERSHEY_SIMPLEX,
-                                        0.5,
-                                        (255, 255, 255),
-                                        1,
-                                    )
+                    if coordinates is not None and frame_idx in coordinates:
+                        for idx, (x, y) in enumerate(coordinates[frame_idx]):
+                            if (
+                                deleted_positions is not None
+                                and idx not in deleted_positions.get(frame_idx, set())
+                                and x is not None
+                                and y is not None
+                            ):
+                                # Draw marker circle (green in BGR)
+                                cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
+                                # Draw marker number
+                                cv2.putText(
+                                    frame,
+                                    str(idx + 1),
+                                    (int(x) + 8, int(y) - 8),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.5,
+                                    (255, 255, 255),
+                                    1,
+                                )
 
                 # Draw YOLO tracking boxes
                 if csv_loaded and frame_idx in tracking_data:
@@ -2066,7 +2065,7 @@ def play_video_with_controls(
                     )
                     if temp_frame_count != total_frames_video:
                         print("[WARNING] Warning: Temp video frame count mismatch!")
-            except:
+            except (ValueError, subprocess.SubprocessError):
                 pass  # ffprobe not available or failed, continue anyway
 
             try:
@@ -2284,7 +2283,7 @@ def play_video_with_controls(
             rows_processed = 0
             boxes_loaded = 0
             skipped_frames = 0
-            for idx, row in df.iterrows():
+            for row_idx, row in df.iterrows():
                 try:
                     frame_idx = int(row["Frame"])
                     if frame_idx not in tracking_data:
@@ -2331,10 +2330,7 @@ def play_video_with_controls(
                                 else:
                                     # Try to extract ID from suffix itself (e.g., "person_id_01" -> "01")
                                     id_match = re.search(r"id[_\s]*(\d+)", suffix, re.IGNORECASE)
-                                    if id_match:
-                                        id_col = f"ID_{id_match.group(1)}"  # Use extracted ID
-                                    else:
-                                        id_col = None
+                                    id_col = f"ID_{id_match.group(1)}" if id_match else None
                             color_r_col = f"Color_R_{suffix}"
                             color_g_col = f"Color_G_{suffix}"
                             color_b_col = f"Color_B_{suffix}"
@@ -2518,7 +2514,7 @@ def play_video_with_controls(
 
                 except (ValueError, KeyError) as e:
                     # Skip rows with invalid frame numbers or missing required columns
-                    print(f"Warning: Skipping row {idx} due to error: {e}")
+                    print(f"Warning: Skipping row {row_idx} due to error: {e}")
 
                 rows_processed += 1
 
@@ -2615,7 +2611,7 @@ def play_video_with_controls(
             frame_markers = [m for m in one_line_markers if m[0] == frame_count]
             total_markers = len(frame_markers)
         else:
-            total_markers = len(coordinates[frame_count])
+            total_markers = 0 if coordinates is None else len(coordinates[frame_count])
 
         if total_markers > 0:
             marker_idx = selected_marker_idx + 1 if selected_marker_idx >= 0 else 0
@@ -3128,7 +3124,7 @@ def play_video_with_controls(
 
                 elif event.type == pygame.QUIT:
                     waiting_for_input = False
-                    global running
+                    nonlocal running
                     running = False
 
     def show_persistence_settings():
@@ -3141,7 +3137,7 @@ def play_video_with_controls(
         overlay.fill((0, 0, 0))
 
         # Create UI elements
-        if persistence_enabled and frame in bboxes:
+        if persistence_enabled and frame_count in bboxes:
             # Use a larger font for persistent boxes? Or same
             font = pygame.font.SysFont("verdana", 16)
         title = font.render("Persistence Settings", True, (255, 255, 255))
@@ -3175,7 +3171,7 @@ def play_video_with_controls(
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     waiting_for_input = False
-                    global running
+                    nonlocal running
                     running = False
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN or event.key == pygame.K_ESCAPE:
@@ -3280,7 +3276,7 @@ def play_video_with_controls(
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     waiting_for_input = False
-                    global running
+                    nonlocal running
                     running = False
                     return None
                 elif event.type == pygame.KEYDOWN:
@@ -3644,8 +3640,7 @@ def play_video_with_controls(
                                     selected_m2 = None
 
                         # Handle Add
-                        if btn_add.collidepoint(mx, my):
-                            if selected_m1 is not None and selected_m2 is not None:
+                        if btn_add.collidepoint(mx, my) and selected_m1 is not None and selected_m2 is not None:
                                 try:
                                     s = int(input_start) - 1
                                     e = int(input_end) - 1
@@ -3666,9 +3661,7 @@ def play_video_with_controls(
                         # Handle Delete Rule
                         if rule_panel.collidepoint(mx, my):
                             ridx = (my - rule_panel.y) // 25 + scroll_rules
-                            if 0 <= ridx < len(temp_rules):
-                                # We are just visualizing 'X' button logic roughly
-                                if mx > rule_panel.right - 30:
+                            if 0 <= ridx < len(temp_rules) and mx > rule_panel.right - 30:
                                     temp_rules.pop(ridx)
 
                         # Handle Footer
@@ -3805,6 +3798,8 @@ def play_video_with_controls(
 
         base_name = os.path.splitext(os.path.basename(video_path))[0]
         project_file = os.path.join(dataset_dir, f"{base_name}_pose_project.json")
+        if coordinates is None:
+            return None, "No coordinates to export"
         serializable_coords = {}
         for f_idx, pts in coordinates.items():
             if not pts:
@@ -3891,9 +3886,8 @@ def play_video_with_controls(
                     if os.path.isdir(full):
                         dirs.append((name + "/", full, True))
                     else:
-                        if filter_yaml_only and extensions:
-                            if not any(name.lower().endswith(ext) for ext in extensions):
-                                continue
+                        if filter_yaml_only and extensions and not any(name.lower().endswith(ext) for ext in extensions):
+                            continue
                         files.append((name, full, False))
             except PermissionError:
                 pass
@@ -4021,7 +4015,7 @@ def play_video_with_controls(
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     browsing = False
-                    global running
+                    nonlocal running
                     running = False
                     return None
 
@@ -4334,17 +4328,14 @@ def play_video_with_controls(
             return
 
         # Fill the row with values, preserving marker indices even with deletions
-        row_values = [int(first_marker[0])]  # First marker's frame value
-
         # Initialize all positions with empty values
+        row_values: list[int | float | str] = [int(first_marker[0])]
         for _ in range(max_marker + 1):
             row_values.extend(["", ""])  # Empty x, y values
 
         # Fill in the non-deleted marker positions
         for idx, (_, x, y) in enumerate(one_line_markers):
-            if idx not in deleted_markers:
-                # Verificar se é um marcador vazio (None)
-                if x is not None and y is not None:
+            if idx not in deleted_markers and x is not None and y is not None:
                     # Marker indices are 1-based in the CSV
                     row_values[idx * 2 + 1] = float(
                         x
@@ -4352,7 +4343,7 @@ def play_video_with_controls(
                     row_values[idx * 2 + 2] = float(y)  # +2 for y position
                 # Se for None, deixar como vazio (já inicializado como "")
 
-        df = pd.DataFrame([row_values], columns=header)
+        df = pd.DataFrame([row_values], columns=pd.Index(header))
         df.to_csv(output_file, index=False)
 
         print(f"1 line coordinates saved to: {output_file}")
@@ -4387,6 +4378,9 @@ def play_video_with_controls(
         else:
             # In normal mode, we'll check the maximum number of visible markers
             max_visible_marker = -1
+
+            if coordinates is None:
+                return
 
             for frame in range(total_frames):
                 for i in range(len(coordinates[frame])):
@@ -4446,7 +4440,7 @@ def play_video_with_controls(
                 showing_save_message = True
                 save_message_timer = 60
         else:
-            if selected_marker_idx >= 0:
+            if selected_marker_idx >= 0 and coordinates is not None:
                 # Add the selected marker to the deleted list only in the current frame
                 if selected_marker_idx < len(coordinates[frame_count]):
                     deleted_positions[frame_count].add(selected_marker_idx)
@@ -4778,9 +4772,8 @@ def play_video_with_controls(
                     for i in range(1, 1001):  # Increased to support up to 1000 markers
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
-                        if x_col in df.columns and y_col in df.columns:
-                            if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                                one_line_markers.append((frame_num, row[x_col], row[y_col]))
+                        if x_col in df.columns and y_col in df.columns and pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                            one_line_markers.append((frame_num, row[x_col], row[y_col]))
 
                 save_message_text = f"Loaded 1 line file: {os.path.basename(input_file)}"
                 # If it was in normal mode, switch to 1 line mode
@@ -4795,9 +4788,8 @@ def play_video_with_controls(
                     for i in range(1, 1001):  # Increased to support up to 1000 markers
                         x_col = f"p{i}_x"
                         y_col = f"p{i}_y"
-                        if x_col in df.columns and y_col in df.columns:
-                            if pd.notna(row[x_col]) and pd.notna(row[y_col]):
-                                coordinates[frame_num].append((row[x_col], row[y_col]))
+                        if x_col in df.columns and y_col in df.columns and pd.notna(row[x_col]) and pd.notna(row[y_col]):
+                            coordinates[frame_num].append((row[x_col], row[y_col]))
 
                 # Fix: Re-apply active swap rules after loading new data
                 if active_swap_rules:
@@ -4834,6 +4826,7 @@ def play_video_with_controls(
     save_message_text = ""
 
     last_valid_frame = None
+    slow_mo_accumulator = 0.0
     while running:
         # Once per run: if we have a dataset dir, load project for this video
         if current_dataset_dir and not auto_load_project_done:
@@ -4883,12 +4876,9 @@ def play_video_with_controls(
                 # The loop runs at 30Hz (clock.tick(30)).
                 # To get 0.5X speed (15fps effective), we should update frame every 2 ticks.
 
-                if not hasattr(play_video_with_controls, "slow_mo_accumulator"):
-                    play_video_with_controls.slow_mo_accumulator = 0.0
-
-                play_video_with_controls.slow_mo_accumulator += playback_speed
-                if play_video_with_controls.slow_mo_accumulator >= 1.0:
-                    play_video_with_controls.slow_mo_accumulator -= 1.0
+                slow_mo_accumulator += playback_speed
+                if slow_mo_accumulator >= 1.0:
+                    slow_mo_accumulator -= 1.0
                     ret, frame = cap.read()
                     if ret:
                         frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
@@ -4974,14 +4964,15 @@ def play_video_with_controls(
                         marker_trails[idx].append((f_num, x, y))
             else:
                 # In regular mode, need to track same marker ID across frames
-                for f_num in range(start_frame, frame_count + 1):
-                    for i, (x, y) in enumerate(coordinates[f_num]):
-                        if i in deleted_positions[f_num]:
-                            continue  # Skip deleted markers
+                if coordinates is not None:
+                    for f_num in range(start_frame, frame_count + 1):
+                        for i, (x, y) in enumerate(coordinates[f_num]):
+                            if i in deleted_positions[f_num]:
+                                continue  # Skip deleted markers
 
-                        if i not in marker_trails:
-                            marker_trails[i] = []
-                        marker_trails[i].append((f_num, x, y))
+                            if i not in marker_trails:
+                                marker_trails[i] = []
+                            marker_trails[i].append((f_num, x, y))
 
             # Draw trails for each marker
             for marker_id, positions in marker_trails.items():
@@ -5066,15 +5057,14 @@ def play_video_with_controls(
                     pygame.draw.circle(screen, color, (last_screen_x, last_screen_y), 2)
 
         # Draw Pose Connections if likely a full pose (33 points)
-        if not one_line_mode and len(coordinates[frame_count]) == 33:
+        if coordinates is not None and not one_line_mode and len(coordinates[frame_count]) == 33:
             for start_idx, end_idx in POSE_CONNECTIONS:
-                if start_idx < 33 and end_idx < 33:
-                    # Check if indices exist (redundant but safe)
-                    if start_idx < len(coordinates[frame_count]) and end_idx < len(
-                        coordinates[frame_count]
-                    ):
-                        pt1 = coordinates[frame_count][start_idx]
-                        pt2 = coordinates[frame_count][end_idx]
+                if start_idx < 33 and end_idx < 33 and start_idx < len(coordinates[frame_count]) and end_idx < len(
+                    coordinates[frame_count]
+                ):
+                        pts = coordinates[frame_count]
+                        pt1 = pts[start_idx]
+                        pt2 = pts[end_idx]
 
                         if pt1 is not None and pt2 is not None:
                             x1, y1 = pt1
@@ -5138,9 +5128,7 @@ def play_video_with_controls(
                 screen.blit(text_surface, (screen_x + 5, screen_y - 15))
 
         # Draw YOLO tracking bounding boxes
-        if show_tracking and csv_loaded:
-            # Check if current frame has tracking data
-            if frame_count in tracking_data:
+        if show_tracking and csv_loaded and frame_count in tracking_data:
                 boxes = tracking_data[frame_count]
                 for box in boxes:
                     # Convert video coordinates to screen coordinates (account for zoom/offset)
@@ -5827,8 +5815,8 @@ def play_video_with_controls(
                         landmarks = detect_pose_mediapipe(frame)
                         if landmarks:
                             # Ensure coordinate list is large enough
-                            while len(coordinates) <= frame_count:
-                                coordinates.append([])
+                            if frame_count not in coordinates:
+                                coordinates[frame_count] = []
 
                             # Add points
                             for px, py in landmarks:
@@ -6503,11 +6491,9 @@ def load_yolo_dataset(dataset_path, video_path, total_frames, video_width, video
         if frame_num is None:
             numbers = re.findall(r"\d+", base_name)
             if numbers:
-                try:
+                with suppress(ValueError):
                     # Use the last number found (usually the frame number)
                     frame_num = int(numbers[-1])
-                except ValueError:
-                    pass
 
         # Pattern 3: Just a number
         if frame_num is None:
@@ -6634,8 +6620,8 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         if classes_file and os.path.exists(classes_file):
             try:
                 with open(classes_file) as f:
-                    labels = [l.strip() for l in f.readlines()]
-            except:
+                    labels = [line.strip() for line in f.readlines()]
+            except Exception:
                 pass
         return {"_yolo_dataset": input_path}, labels
 
@@ -6667,12 +6653,6 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
     except PermissionError:
         print(f"ERROR: Permission denied accessing file: {input_file}")
         return {i: [] for i in range(total_frames)}
-    except Exception as e:
-        print(f"ERROR: Unexpected error reading file {input_file}: {e}")
-        print(f"Error type: {type(e).__name__}")
-        import traceback
-
-        traceback.print_exc()
     except Exception as e:
         print(f"ERROR: Unexpected error reading file {input_file}: {e}")
         print(f"Error type: {type(e).__name__}")
@@ -6726,9 +6706,8 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                 print(f"ERROR processing row {row_idx} in vailá format: {e}")
                 print(f"Row data: {dict(row)}")
                 # Add empty coordinates for this frame
-                coordinates[row_idx] = []
+                coordinates[int(cast(Any, row_idx))] = []
 
-        print(f"Coordinates successfully loaded (vailá format): {max_marker} markers")
         print(f"Coordinates successfully loaded (vailá format): {max_marker} markers")
         labels = [f"Pixel {i}" for i in range(1, max_marker + 1)]
         return coordinates, labels
@@ -6837,7 +6816,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                 print(f"ERROR processing row {row_idx}: {e}")
                 print(f"Row data: {dict(row)}")
                 # Add empty coordinates for this frame
-                coordinates[row_idx] = []
+                coordinates[int(cast(Any, row_idx))] = []
 
         print(
             f"Coordinates successfully loaded (MediaPipe {file_type} format): {len(base_names)} landmarks"
@@ -6937,15 +6916,13 @@ def save_coordinates(
         columns.append(f"p{i}_y")
 
     # Cria o DataFrame inicializado com NaN para todos os frames.
-    df = pd.DataFrame(np.nan, index=range(total_frames), columns=columns)
+    df = pd.DataFrame(np.nan, index=range(total_frames), columns=pd.Index(columns))
     df["frame"] = df.index
 
     # Preenche o DataFrame com os pontos marcados
     for frame_num, points in coordinates.items():
         for i, (x, y) in enumerate(points):
-            if i not in deleted_positions[frame_num]:  # Only save non-deleted markers
-                # Verificar se é um marcador vazio (None)
-                if x is not None and y is not None:
+            if i not in deleted_positions[frame_num] and x is not None and y is not None:
                     df.at[frame_num, f"p{i + 1}_x"] = float(x)
                     df.at[frame_num, f"p{i + 1}_y"] = float(y)
                 # Se for None, deixar como NaN (o que se tornará "" no CSV)
@@ -6985,7 +6962,7 @@ def export_labeling_dataset(
     is_append = output_dataset_dir is not None and os.path.isdir(output_dataset_dir)
 
     if is_append:
-        dataset_dir = os.path.abspath(output_dataset_dir)
+        dataset_dir = os.path.abspath(str(output_dataset_dir))
         # Load existing classes and merge with new labels
         existing_classes = []
         classes_file = os.path.join(dataset_dir, "classes.txt")
@@ -7221,7 +7198,7 @@ def export_pose_dataset(
     existing_nkp = None
     existing_classes = []
     if is_append:
-        dataset_dir = os.path.abspath(output_dataset_dir)
+        dataset_dir = os.path.abspath(str(output_dataset_dir))
         yaml_path = os.path.join(dataset_dir, "data.yaml")
         if os.path.exists(yaml_path):
             try:
@@ -7712,7 +7689,8 @@ def run_getpixelvideo(initial_dataset_dir=None, initial_media_path=None, initial
         if result and len(result) >= 3 and result[0] == "switch_video":
             video_path = result[1]
             initial_dataset_dir = result[2]
-            run_getpixelvideo._initial_labeling_mode = result[3] if len(result) > 3 else False
+            # Use the labeling mode from the previous session for the next one
+            initial_labeling_mode = result[3] if len(result) > 3 else False
             coordinates = None
             labels = []
             # Re-open media for next iteration (path may be video, single_png, or png_sequence dir)
