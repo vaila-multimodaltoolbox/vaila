@@ -936,9 +936,9 @@ class Vaila(tk.Tk):
         )
         vaila_b6_r7_c2 = tk.Button(
             row7_frame,
-            text="vailá",
+            text="FIFA Dataset Builder",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.fifa_dataset_builder,
         )
         vaila_b6_r7_c3 = tk.Button(
             row7_frame,
@@ -3015,6 +3015,21 @@ class Vaila(tk.Tk):
         print("Help: vaila/help/vaila_sam.html (Full broadcast pipeline)")
         print("=" * 60 + "\n")
         run_gui_flow()
+
+    def fifa_dataset_builder(self):
+        """Aggregate open-source 32-pt soccer-pitch keypoint datasets.
+
+        Downloads HF / GitHub / (optionally) Roboflow + Kaggle datasets,
+        normalises every annotation to the canonical 32-keypoint YOLO Pose
+        schema used by ``vaila.soccerfield_keypoints_ai`` and writes a
+        unified dataset (``unified/data.yaml`` + ``manifest.csv``) ready
+        for ``yolo pose train``.
+        """
+        print("\n" + "=" * 60)
+        print("Launching: vaila.fifa_dataset_builder (Tk dialog)")
+        print("Output: <selected dir>/dataset_vaila_fifa/")
+        print("=" * 60 + "\n")
+        run_vaila_module("vaila.fifa_dataset_builder", "vaila/fifa_dataset_builder.py")
 
 
 if __name__ == "__main__":
