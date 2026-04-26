@@ -588,6 +588,21 @@ def launch_calibrate_dialog(parent, batch_root: Path) -> None:
     btns.pack(fill=tk.X, pady=(4, 0))
     run_btn = ttk.Button(btns, text="Run calibration")
     run_btn.pack(side=tk.LEFT)
+
+    def _open_help() -> None:
+        import webbrowser
+
+        help_html = Path(__file__).resolve().parent / "help" / "soccerfield_calib.html"
+        if help_html.exists():
+            webbrowser.open(help_html.as_uri())
+        else:
+            messagebox.showinfo(
+                "Help",
+                "Help file not found. See docs/fifa_workflow.md or run with --help.",
+                parent=win,
+            )
+
+    ttk.Button(btns, text="Help", command=_open_help).pack(side=tk.LEFT, padx=4)
     ttk.Button(btns, text="Close", command=win.destroy).pack(side=tk.RIGHT)
 
     def _on_run() -> None:

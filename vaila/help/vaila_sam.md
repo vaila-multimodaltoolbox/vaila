@@ -110,14 +110,18 @@ The resolver auto-detects checkpoints in this priority:
 ### Quick Start
 
 ```bash
-# Single video
-uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person
+# Single video — broadcast match
+uv run vaila/vaila_sam.py \
+  -i tests/sport_fields/ENG_FRA_220243.mp4 \
+  -o tests/sport_fields/runs/sam3 \
+  -t player --max-frames 80 --max-input-long-edge 1280 \
+  --postprocess-points foot
 
-# Batch (all videos in a directory)
-uv run vaila/vaila_sam.py -i videos_dir/ -o output/ -t person
+# Batch (all videos in a directory) — auto subprocess-per-video
+uv run vaila/vaila_sam.py -i videos_dir/ -o output/ -t player
 
 # With VRAM cap
-uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --max-frames 80
+uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t player --max-frames 80
 
 # Download weights only
 uv run vaila/vaila_sam.py --download-weights
@@ -125,6 +129,26 @@ uv run vaila/vaila_sam.py --download-weights
 # Open help in browser
 uv run vaila/vaila_sam.py --open-help
 ```
+
+### Companion AI seed for the soccer field
+
+Pair SAM 3 with the bundled YOLO-pose detector for the 32 pitch
+keypoints:
+
+```bash
+uv run python -m vaila.soccerfield_keypoints_ai \
+  --mode video \
+  -i tests/sport_fields/ENG_FRA_220243.mp4 \
+  -o tests/sport_fields/runs/pitch_kps \
+  --backend ultralytics \
+  --weights vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
+  --imgsz 1280 --conf 0.30 --draw-min-conf 0.40 \
+  --device 0 --stride 5 --max-frames 60 --overlay-video
+```
+
+> The bundled detector (`pitch32_recipeA_400ep`) reaches **Pose mAP50 = 0.945**
+> on the public `football-field-detection-f07vi` split (April 2026).
+> See [`soccerfield_keypoints_ai.html`](soccerfield_keypoints_ai.html).
 
 ### CLI Flags
 
