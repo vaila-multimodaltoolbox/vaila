@@ -11,6 +11,14 @@ Per-module HTML help (SAM, stroboscopic, DLT/reconstruction, video tools, etc.) 
 ### [**Open vailá Help Index →**](../vaila/help/index.html)
 > Same path on disk: `vaila/help/index.html`
 
+### 🏆 FIFA Skeletal Tracking Light 2026 — End-to-end workflow
+
+Step-by-step recipe (CLI + GUI) covering SAM 3 player masks, the AI-seed
+soccer-pitch keypoints, DLT2D homography, FIFA per-frame DLT export, 3D
+pose and Codabench submission:
+
+→ [docs/fifa_workflow.md](fifa_workflow.md)
+
 ---
 
 ## 🇬🇧 English — Project Overview

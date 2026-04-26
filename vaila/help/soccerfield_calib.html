@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>soccerfield_calib — vailá</title>
+    <style>
+      body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 0;
+             padding: 20px; background-color: #f5f5f5; color: #333; }
+      .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px;
+                   box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+      h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; margin-bottom: 24px; }
+      h2 { color: #34495e; border-left: 4px solid #3498db; padding-left: 12px; margin-top: 28px; }
+      h3 { color: #2980b9; margin-top: 22px; }
+      code { background: #e9ecef; padding: 1px 5px; border-radius: 3px; font-family: "Courier New", monospace; }
+      pre { background: #f8f9fa; border: 1px solid #e9ecef; padding: 12px; border-radius: 5px;
+            overflow-x: auto; font-family: "Courier New", monospace; font-size: 0.92em; }
+      table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+      th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+      th { background: #f8f9fa; }
+      .feature-box { background: #e8f4fd; border: 1px solid #3498db; border-radius: 5px; padding: 14px;
+                     margin: 14px 0; }
+      .warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 14px;
+                 margin: 14px 0; }
+      .footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid #dee2e6; color: #6c757d;
+                font-size: 0.9em; }
+      a { color: #3498db; text-decoration: none; } a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>soccerfield_calib — DLT2D homography from soccer-field keypoints</h1>
+
+      <div class="feature-box">
+        <strong>Module:</strong> <code>vaila/soccerfield_calib.py</code><br />
+        <strong>GUI button:</strong> <code>Soccer-Field Calib</code> in Frame B<br />
+        <strong>CLI:</strong> <code>uv run vaila/soccerfield_calib.py …</code><br />
+        Reference: <code>vaila/models/soccerfield_ref3d.csv</code> (29 FIFA keypoints, 105 × 68 m)
+      </div>
+
+      <h2>What it does</h2>
+      <p>Fits a <strong>DLT2D homography</strong> (8 coefficients) that maps a fixed broadcast frame to the
+      FIFA <strong>105 × 68 m</strong> ground plane (Z = 0), using ≥ 6 manually clicked keypoints. The
+      output <code>.dlt2d</code> is compatible with <code>vaila/rec2d.py</code>.</p>
+
+      <div class="warning">
+        <strong>This is a single-frame / static-camera tool.</strong> If the camera moves (typical broadcast),
+        use <code>fifa_to_dlt.py</code> (button <strong>FIFA cams→DLT</strong>) for per-frame DLT instead.
+      </div>
+
+      <h2>When to use which calibration</h2>
+      <table>
+        <tr><th>Tool</th><th>Camera</th><th>Per-frame?</th><th>Use</th></tr>
+        <tr><td><code>soccerfield_calib.py</code></td><td>fixed</td><td>No (single homography)</td><td>Static cam, fallback</td></tr>
+        <tr><td><code>fifa_to_dlt.py</code></td><td>moving</td><td>Yes</td><td>Broadcast pan/tilt/zoom</td></tr>
+        <tr><td><code>rec2d_one_dlt2d.py</code></td><td>fixed</td><td>1 row</td><td>Tripod 2D</td></tr>
+        <tr><td><code>rec3d_one_dlt3d.py</code></td><td>fixed (multi-cam)</td><td>1 row / cam</td><td>Static lab</td></tr>
+        <tr><td><code>rec2d.py</code> / <code>rec3d.py</code></td><td>moving</td><td>per-frame DLT</td><td>Broadcast</td></tr>
+      </table>
+
+      <h2>Step-by-step (GUI)</h2>
+      <ol>
+        <li>Open vailá and click <strong>Soccer-Field Calib</strong> in Frame B.</li>
+        <li>Pick the broadcast video / fixed frame.</li>
+        <li><code>getpixelvideo</code> opens — click <strong>at least 6</strong> named keypoints
+          (corners, midfield, penalty spots …).</li>
+        <li>Save. The script fits the homography and writes
+          <code>&lt;stem&gt;.dlt2d</code> + report.</li>
+        <li>If a FIFA <code>--data-root</code> is set, you also get
+          <code>cameras/&lt;stem&gt;_homography.npz</code>.</li>
+      </ol>
+
+      <h2>CLI quick recipes</h2>
+
+      <h3>Recipe 1 — Static frame, click in GUI</h3>
+      <pre>uv run vaila/soccerfield_calib.py -v /path/to/video.mp4 -o /path/to/out</pre>
+
+      <h3>Recipe 2 — Use a pre-clicked pixel CSV</h3>
+      <pre>uv run vaila/soccerfield_calib.py \
+  -v /path/to/video.mp4 -p /path/to/pixels.csv \
+  --frame 0 -o /path/to/out</pre>
+
+      <h3>Recipe 3 — FIFA fallback (no official cameras NPZ)</h3>
+      <pre>uv run vaila/soccerfield_calib.py \
+  -v /path/to/data/videos/SEQ.mp4 \
+  --data-root /path/to/data \
+  -o /path/to/data/cameras</pre>
+      <p>Produces <code>cameras/SEQ_homography.npz</code>.</p>
+
+      <h3>Recipe 4 — Restrict keypoint set</h3>
+      <pre>uv run vaila/soccerfield_calib.py -v video.mp4 -o out/ \
+  --keypoints bottom_left_corner,bottom_right_corner,top_left_corner,top_right_corner,center_field,left_penalty_spot</pre>
+
+      <h3>Recipe 5 — From a SAM3 batch output</h3>
+      <pre>uv run vaila/soccerfield_calib.py \
+  --from-sam /path/to/processed_sam_&lt;ts&gt;/&lt;video&gt;/ \
+  --pixels /path/to/clicks.csv</pre>
+
+      <h3>Recipe 6 — List valid keypoint names</h3>
+      <pre>uv run vaila/soccerfield_calib.py --list-keypoints</pre>
+
+      <h2>CLI flags</h2>
+      <table>
+        <tr><th>Flag</th><th>Purpose</th></tr>
+        <tr><td><code>-v, --video</code></td><td>Input video (triggers GUI clicking)</td></tr>
+        <tr><td><code>-p, --pixels</code></td><td>Pre-clicked pixel CSV (skip GUI)</td></tr>
+        <tr><td><code>-r, --ref3d</code></td><td>FIFA ref CSV (default <code>models/soccerfield_ref3d.csv</code>)</td></tr>
+        <tr><td><code>-o, --output</code></td><td>Output directory</td></tr>
+        <tr><td><code>--frame</code></td><td>Frame index for paired-column CSVs</td></tr>
+        <tr><td><code>--data-root</code></td><td>FIFA data root → also writes <code>cameras/*.npz</code></td></tr>
+        <tr><td><code>--keypoints</code></td><td>Comma-separated kp names overriding GUI suggestions</td></tr>
+        <tr><td><code>--list-keypoints</code></td><td>Print valid kp names and exit</td></tr>
+        <tr><td><code>--from-sam</code></td><td>SAM3 per-video output directory</td></tr>
+      </table>
+
+      <h2>Pixel CSV format</h2>
+      <ul>
+        <li><strong>Long:</strong> <code>name,x,y</code> — names must match
+          <code>soccerfield_ref3d.csv</code>.</li>
+        <li><strong>Wide:</strong> <code>frame,p1_x,p1_y,p2_x,p2_y,…</code>
+          (<code>getpixelvideo</code> layout). Combine with <code>--frame N</code>.</li>
+      </ul>
+      <p>Both are produced by <code>vaila.soccerfield_keypoints_ai</code>
+        (<code>field_keypoints_getpixelvideo.csv</code> for the wide one).</p>
+
+      <h2>Output files</h2>
+      <pre>&lt;output&gt;/
+  &lt;stem&gt;_ref2d.csv                  # world XY for fitting
+  &lt;stem&gt;.dlt2d                      # 8 DLT coefficients (1 row)
+  &lt;stem&gt;_homography_report.txt      # per-point error (px, m)
+  cameras/&lt;stem&gt;_homography.npz     # only when --data-root is set</pre>
+
+      <h2>Reading the error report</h2>
+      <table>
+        <tr><th>Quality</th><th>Pixel error</th><th>World error</th></tr>
+        <tr><td>Excellent</td><td>&lt; 2 px</td><td>&lt; 0.30 m</td></tr>
+        <tr><td>Acceptable</td><td>&lt; 5 px</td><td>&lt; 0.80 m</td></tr>
+        <tr><td>Re-click</td><td>&gt; 8 px</td><td>&gt; 1.5 m</td></tr>
+      </table>
+
+      <h2>End-to-end with the AI seed</h2>
+      <pre># 1. AI seed (32 keypoints)
+uv run python -m vaila.soccerfield_keypoints_ai \
+  --mode video -i video.mp4 -o out_kps/ \
+  --backend ultralytics \
+  --weights vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
+  --imgsz 1280 --conf 0.30 --draw-min-conf 0.40 --device 0 \
+  --stride 1 --overlay-video
+
+# 2. (optional) refine clicks in getpixelvideo
+
+# 3. DLT2D homography (one frame)
+uv run vaila/soccerfield_calib.py \
+  -v video.mp4 \
+  -p out_kps/processed_field_kps_*/field_keypoints_getpixelvideo.csv \
+  --frame 0 -o out_calib/
+
+# 4. Player pixel → field metres
+uv run vaila/rec2d.py \
+  --dlt-file out_calib/video.dlt2d \
+  --input-dir player_pixels/ \
+  --output-dir player_world/ --rate 30</pre>
+      <p>For <strong>moving cameras</strong>, replace step 3 by FIFA
+        <code>cameras/*.npz</code> → per-frame DLT — see <code>vaila_sam.html</code>
+        (section <em>Full broadcast pipeline</em>).</p>
+
+      <h2>Troubleshooting</h2>
+      <table>
+        <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+        <tr><td>"Need at least 6 points"</td><td>Not enough clicks</td><td>Click 8–10 well-spread kps</td></tr>
+        <tr><td>World error &gt; 5 m</td><td>Wrong correspondence</td>
+            <td>Verify <code>--list-keypoints</code></td></tr>
+        <tr><td>Fit ok, players wrong</td><td>Camera moves</td>
+            <td>Use <code>fifa_to_dlt.py</code> (per-frame DLT)</td></tr>
+      </table>
+
+      <h2>Related</h2>
+      <ul>
+        <li><code>soccerfield_keypoints_ai.py</code> — AI seed for the 32 keypoints</li>
+        <li><code>getpixelvideo.py</code> — manual click / refine</li>
+        <li><code>fifa_to_dlt.py</code> — per-frame DLT for moving camera</li>
+        <li><code>rec2d.py</code> / <code>rec3d.py</code> — pixel → world reconstruction</li>
+        <li><code>vaila_sam.html</code> — SAM 3 + FIFA pipeline</li>
+      </ul>
+
+      <div class="footer">vailá — Multimodal Toolbox · AGPL-3.0 · Generated April 2026 ·
+        <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></div>
+    </div>
+  </body>
+</html>
