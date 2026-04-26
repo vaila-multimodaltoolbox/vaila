@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>soccerfield_keypoints_ai — vailá</title>
+    <style>
+      body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 0;
+             padding: 20px; background-color: #f5f5f5; color: #333; }
+      .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px;
+                   box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+      h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; margin-bottom: 24px; }
+      h2 { color: #34495e; border-left: 4px solid #3498db; padding-left: 12px; margin-top: 28px; }
+      h3 { color: #2980b9; margin-top: 22px; }
+      code { background: #e9ecef; padding: 1px 5px; border-radius: 3px; font-family: "Courier New", monospace; }
+      pre { background: #f8f9fa; border: 1px solid #e9ecef; padding: 12px; border-radius: 5px; overflow-x: auto;
+            font-family: "Courier New", monospace; font-size: 0.92em; }
+      table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+      th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+      th { background: #f8f9fa; }
+      .feature-box { background: #e8f4fd; border: 1px solid #3498db; border-radius: 5px; padding: 14px;
+                     margin: 14px 0; }
+      .warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 14px;
+                 margin: 14px 0; }
+      .ok { background: #e7f6e7; border: 1px solid #2ecc71; border-radius: 5px; padding: 14px; margin: 14px 0; }
+      .footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid #dee2e6; color: #6c757d;
+                font-size: 0.9em; }
+      a { color: #3498db; text-decoration: none; } a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>soccerfield_keypoints_ai — Soccer-pitch keypoints (AI seed)</h1>
+
+      <div class="feature-box">
+        <strong>Module:</strong> <code>vaila/soccerfield_keypoints_ai.py</code><br />
+        <strong>GUI button:</strong> <code>Field KPs (AI)</code> in Frame B (analysis area, bottom row)<br />
+        <strong>CLI:</strong> <code>uv run python -m vaila.soccerfield_keypoints_ai</code><br />
+        <strong>Default model:</strong>
+        <code>vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt</code>
+        (Pose mAP50 = <strong>0.945</strong>, trained 400 epochs, recipe-A; April 2026)
+      </div>
+
+      <h2>What it does</h2>
+      <p>Detects up to <strong>32 soccer-field keypoints</strong> (corners, penalty areas, centre circle,
+        penalty spots, …) in <strong>broadcast video</strong> using a YOLO-pose model. Outputs are CSVs ready
+        for <code>getpixelvideo.py</code>, <code>soccerfield_calib.py</code> (DLT2D homography) and
+        <code>fifa_to_dlt.py</code> (per-frame DLT for <code>rec2d.py</code>/<code>rec3d.py</code>).</p>
+
+      <h2>Backends &amp; modes</h2>
+      <table>
+        <tr><th>Backend</th><th>When to use</th><th>Requires</th></tr>
+        <tr><td><code>ultralytics</code> <em>(recommended)</em></td><td>Local <code>.pt</code> weights</td><td>YOLO-pose <code>.pt</code></td></tr>
+        <tr><td><code>roboflow</code></td><td>Cloud inference</td><td><code>inference</code>, <code>supervision</code>, <code>ROBOFLOW_API_KEY</code></td></tr>
+      </table>
+      <table>
+        <tr><th>Mode</th><th>Outputs</th><th>Use</th></tr>
+        <tr><td><code>frame</code></td><td>raw CSV + getpixelvideo template + overlay PNG</td><td>sanity check</td></tr>
+        <tr><td><code>video</code></td><td>per-frame long &amp; wide CSV + overlay MP4</td><td>full pipeline</td></tr>
+      </table>
+
+      <h2>Step-by-step (GUI)</h2>
+      <ol>
+        <li>Open vailá and click <strong>Field KPs (AI)</strong> in Frame B.</li>
+        <li>Pick the broadcast video.</li>
+        <li>Pick an output folder (vailá creates <code>processed_field_kps_&lt;timestamp&gt;/</code>).</li>
+        <li>Set:
+          <ul>
+            <li>Mode → <code>video</code></li>
+            <li>Backend → <code>ultralytics</code></li>
+            <li>Stride → <code>1</code> (every frame) or <code>5</code> (smoke test)</li>
+            <li>Confidence → <code>0.30</code>, Draw/save min conf → <code>0.40</code></li>
+            <li>imgsz → <code>1280</code>, Device → <code>0</code> for CUDA, empty for auto</li>
+            <li>Ultralytics weights → empty (use bundled) <em>or</em> point to your <code>best.pt</code></li>
+            <li>Tick <strong>Write overlay .mp4</strong></li>
+          </ul>
+        </li>
+        <li>Click <strong>Run</strong>. The success messagebox shows the output folder.</li>
+      </ol>
+
+      <h2>CLI quick recipes</h2>
+
+      <h3>Recipe 1 — Smoke test (60 frames, default model)</h3>
+      <pre>uv run python -m vaila.soccerfield_keypoints_ai \
+  --mode video \
+  -i tests/sport_fields/ENG_FRA_220243.mp4 \
+  -o tests/sport_fields/runs/pitch_kps \
+  --backend ultralytics \
+  --weights vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
+  --imgsz 1280 --conf 0.30 --draw-min-conf 0.40 \
+  --device 0 --stride 5 --max-frames 60 --overlay-video</pre>
+
+      <h3>Recipe 2 — Full clip (every frame)</h3>
+      <pre>uv run python -m vaila.soccerfield_keypoints_ai \
+  --mode video -i path/to/video.mp4 -o path/to/output \
+  --backend ultralytics \
+  --weights vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
+  --imgsz 1280 --conf 0.30 --draw-min-conf 0.40 \
+  --device 0 --stride 1 --overlay-video</pre>
+
+      <h3>Recipe 3 — Batch over a folder</h3>
+      <pre>for f in /path/to/videos/*.mp4; do
+  uv run python -m vaila.soccerfield_keypoints_ai \
+    --mode video -i "$f" -o /path/to/outputs_pitch_kps_full \
+    --backend ultralytics \
+    --weights vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
+    --imgsz 1280 --conf 0.30 --draw-min-conf 0.40 \
+    --device 0 --stride 1 --overlay-video
+done</pre>
+
+      <h3>Recipe 4 — Roboflow (no local weights)</h3>
+      <pre>export ROBOFLOW_API_KEY="YOUR_KEY"
+uv run python -m vaila.soccerfield_keypoints_ai \
+  --mode video -i video.mp4 -o out/ \
+  --backend roboflow \
+  --roboflow-model-id football-field-detection-f07vi/14 \
+  --conf 0.3 --draw-min-conf 0.05 \
+  --stride 1 --overlay-video</pre>
+
+      <h3>Recipe 5 — Single frame sanity check</h3>
+      <pre>uv run python -m vaila.soccerfield_keypoints_ai \
+  --mode frame -i video.mp4 -o out/ --backend ultralytics \
+  --weights vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
+  --frame 0 --imgsz 1280 --conf 0.20 --draw-min-conf 0.20</pre>
+
+      <h2>Outputs</h2>
+      <pre>processed_field_kps_&lt;timestamp&gt;/
+  field_keypoints_video.csv               # long: frame, name, x, y, conf
+  field_keypoints_getpixelvideo.csv       # wide: frame, p1_x, p1_y, …, p32_x, p32_y
+  field_keypoints_overlay_markers.csv     # wide layout, filtered by --draw-min-conf
+  field_keypoints_overlay.mp4             # only with --overlay-video
+  README_field_keypoints_video.txt</pre>
+      <p>The wide CSV is directly compatible with <code>getpixelvideo.py</code>: open it there and refine clicks
+        if needed.</p>
+
+      <h2>Default model performance (recipe-A, 400 epochs)</h2>
+      <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Box mAP50</td><td>0.960</td></tr>
+        <tr><td>Box mAP50-95</td><td>0.788</td></tr>
+        <tr><td><strong>Pose mAP50</strong></td><td><strong>0.945</strong></td></tr>
+        <tr><td><strong>Pose mAP50-95</strong></td><td><strong>0.813</strong></td></tr>
+      </table>
+
+      <h2>Training a new detector</h2>
+      <p>Crucial recipe to <strong>avoid pose-collapse</strong>:</p>
+      <pre>uv run yolo pose train \
+  model=yolo26s-pose.pt \
+  data=vaila/models/hf_datasets/football-pitch-detection/data/data.yaml \
+  epochs=400 imgsz=1280 batch=8 \
+  mosaic=0.0 mixup=0.0 close_mosaic=0 erasing=0.0 \
+  pose=25.0 kobj=2.0 device=0 patience=80 \
+  project=vaila/models/runs/pose_fifa name=pitch32_recipeA_400ep</pre>
+      <div class="warning">
+        Do <strong>not</strong> enable <code>mosaic</code> or <code>mixup</code> with <code>imgsz</code> small.
+        It collapses all 32 keypoints onto a single point even while box mAP stays near 1.0
+        (<code>.claude/skills/soccer-field-keypoints-yolo/SKILL.md</code>).
+      </div>
+
+      <h2>Troubleshooting</h2>
+      <table>
+        <tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+        <tr><td>All 32 keypoints in a small cluster</td><td>Old/collapsed model</td>
+            <td>Use the bundled <code>pitch32_recipeA_400ep/best.pt</code> or retrain</td></tr>
+        <tr><td><code>cv2.VideoCapture not found</code></td><td>Broken OpenCV install</td>
+            <td><code>uv pip install --reinstall opencv-python==4.10.0.84</code></td></tr>
+        <tr><td>Roboflow backend missing</td><td>Optional deps</td>
+            <td><code>uv add inference supervision</code> + <code>ROBOFLOW_API_KEY</code></td></tr>
+        <tr><td>GPU OOM</td><td><code>imgsz</code> high or GPU busy</td>
+            <td><code>--imgsz 960</code> or <code>--device cpu</code></td></tr>
+      </table>
+
+      <h2>Related</h2>
+      <ul>
+        <li><code>soccerfield_calib.py</code> — DLT2D homography (one frame)</li>
+        <li><code>fifa_to_dlt.py</code> — FIFA <code>cameras/*.npz</code> → per-frame DLT</li>
+        <li><code>getpixelvideo.py</code> — manual click + refine of the wide CSV</li>
+        <li><code>vaila/help/vaila_sam.html</code> — SAM 3 video segmentation + FIFA pipeline</li>
+        <li><code>.claude/skills/soccer-field-keypoints-yolo/SKILL.md</code> — full training guide</li>
+      </ul>
+
+      <div class="footer">vailá — Multimodal Toolbox · AGPL-3.0 · Generated April 2026 ·
+        <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></div>
+    </div>
+  </body>
+</html>

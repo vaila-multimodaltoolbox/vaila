@@ -2961,13 +2961,15 @@ class Vaila(tk.Tk):
         """Launches DLT2D calibration of a broadcast soccer-field plane.
 
         Wraps :mod:`vaila.soccerfield_calib` (uses ``getpixelvideo`` + ``dlt2d`` +
-        ``rec2d`` with ``models/soccerfield_ref3d.csv``). CLI flags can be
-        provided through the subprocess when the module is launched from a
-        terminal (see ``vaila/help/vaila_sam.html`` for details).
+        ``rec2d`` with ``models/soccerfield_ref3d.csv``). The dialog has its
+        own **Help** button — see ``vaila/help/soccerfield_calib.html`` for
+        the full reference and ``docs/fifa_workflow.md`` for the unified
+        end-to-end recipe.
         """
         print("\n" + "=" * 60)
         print("Launching: vaila.soccerfield_calib")
         print("Features: Soccer-field DLT2D homography from FIFA 29-keypoint reference")
+        print("Help:     vaila/help/soccerfield_calib.html")
         print("=" * 60 + "\n")
         run_vaila_module(
             "vaila.soccerfield_calib",
@@ -2976,10 +2978,19 @@ class Vaila(tk.Tk):
         )
 
     def soccerfield_keypoints_ai(self):
-        """Detect soccer-field keypoints (pixels) using an AI model (seed for getpixelvideo)."""
+        """Detect 32 soccer-field keypoints with YOLO-pose (Field KPs (AI)).
+
+        Outputs a wide CSV that ``getpixelvideo`` and
+        ``soccerfield_calib`` can consume. Uses the bundled
+        ``vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt``
+        (Pose mAP50 ≈ 0.945) by default. The dialog has its own **Help**
+        button — see ``vaila/help/soccerfield_keypoints_ai.html`` and
+        ``docs/fifa_workflow.md``.
+        """
         print("\n" + "=" * 60)
         print("Launching: vaila.soccerfield_keypoints_ai")
         print("Features: AI keypoints → pixel CSV template for getpixelvideo / soccerfield_calib")
+        print("Help:     vaila/help/soccerfield_keypoints_ai.html")
         print("=" * 60 + "\n")
         run_vaila_module(
             "vaila.soccerfield_keypoints_ai",
@@ -2988,7 +2999,12 @@ class Vaila(tk.Tk):
         )
 
     def fifa_cams_to_dlt_per_frame(self):
-        """FIFA ``cameras/*.npz`` -> per-frame ``.dlt2d`` / ``.dlt3d`` for rec2d/rec3d."""
+        """FIFA ``cameras/*.npz`` -> per-frame ``.dlt2d`` / ``.dlt3d`` for rec2d/rec3d.
+
+        See ``vaila/help/vaila_sam.html`` (section *Full broadcast
+        pipeline*) and ``docs/fifa_workflow.md`` for the end-to-end
+        recipe.
+        """
         try:
             from vaila.fifa_to_dlt import run_gui_flow
         except ImportError:
@@ -2996,6 +3012,7 @@ class Vaila(tk.Tk):
 
         print("\n" + "=" * 60)
         print("FIFA cameras -> DLT (per frame): Tk dialogs")
+        print("Help: vaila/help/vaila_sam.html (Full broadcast pipeline)")
         print("=" * 60 + "\n")
         run_gui_flow()
 

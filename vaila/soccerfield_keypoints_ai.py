@@ -33,6 +33,7 @@ import datetime as dt
 import importlib
 import os
 import tkinter as tk
+import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -642,9 +643,21 @@ def run_gui() -> None:
             result["err"] = str(e)
             messagebox.showerror("Field keypoints failed", str(e), parent=dlg)
 
+    def _open_help() -> None:
+        help_html = Path(__file__).resolve().parent / "help" / "soccerfield_keypoints_ai.html"
+        if help_html.exists():
+            webbrowser.open(help_html.as_uri())
+        else:
+            messagebox.showinfo(
+                "Help",
+                "Help file not found. See docs/fifa_workflow.md or run with --help.",
+                parent=dlg,
+            )
+
     btns = ttk.Frame(frm)
     btns.grid(row=14, column=0, columnspan=4, pady=(10, 0))
     ttk.Button(btns, text="Run", command=_run).pack(side=tk.LEFT, padx=4)
+    ttk.Button(btns, text="Help", command=_open_help).pack(side=tk.LEFT, padx=4)
     ttk.Button(btns, text="Close", command=dlg.destroy).pack(side=tk.LEFT, padx=4)
 
     dlg.transient(root)
