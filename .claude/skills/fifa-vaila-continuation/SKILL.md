@@ -38,6 +38,54 @@ Continue from a known-good baseline and execute the improvement path:
 - `cv2.VideoCapture` is back after `uv pip install --reinstall opencv-python==4.10.0.84`.
 - SAM 3 smoke test: 32 frames of `ARG_CRO_000737.mp4` written to
   `/home/preto/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183925/`.
+- SAM 3 60-frame test: 37 person IDs tracked, `sam_points.csv` produced.
+  Output: `/home/preto/data/FIFA/outputs_sam3_test1/processed_sam_20260425_213120/ARG_CRO_000737/`.
+
+## Pitch-keypoint detector status (2026-04-25 21:42)
+
+| Model | Status | Path |
+|---|---|---|
+| Old `football_pitch32_best.pt` | **COLLAPSED** — all 32 kp in ~30 px cluster (mosaic-trained) | `vaila/models/soccerfield_keypoints_yolo/football_pitch32_best.pt` |
+| New 50-ep recipe-A `best.pt` | **Geometry recovered** — kp span full image; pose_mAP50=0.17, box_mAP50=0.83 | `vaila/models/runs/pose_fifa/pitch32_recipeA_50ep/weights/best.pt` |
+| 400-ep continuation | **Training in background (PID 2070719)** | `vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt` (when done) |
+
+Training recipe that escapes the collapse:
+
+```bash
+uv run yolo pose train \
+  model=/home/preto/data/vaila/yolo26s-pose.pt \
+  data=vaila/models/hf_datasets/football-pitch-detection/data/data.yaml \
+  epochs=800 imgsz=1280 batch=8 \
+  mosaic=0.0 mixup=0.0 close_mosaic=0 erasing=0.0 \
+  pose=25.0 kobj=2.0 device=0 patience=80 \
+  project=vaila/models/runs/pose_fifa name=pitch32_recipeA
+```
+
+Monitoring the running 400-ep job:
+
+```bash
+tail -1 /home/preto/data/vaila/vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/results.csv \
+  | awk -F',' '{printf "epoch=%s box_mAP50=%s pose_mAP50=%s pose_mAP50-95=%s\n",$1,$11,$15,$16}'
+
+# live progress
+tail -f /home/preto/data/vaila/vaila/models/runs/pose_fifa/train_recipeA_400ep.log
+```
+
+Sanity test for a freshly trained `best.pt` (CPU-friendly, no GPU):
+
+```bash
+CUDA_VISIBLE_DEVICES="" uv run python -m vaila.soccerfield_keypoints_ai \
+  --mode video \
+  -i /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
+  -o /home/preto/data/FIFA/outputs_pitch_kps_v3 \
+  --backend ultralytics \
+  --weights /home/preto/data/vaila/vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
+  --imgsz 1280 --conf 0.20 --draw-min-conf 0.30 \
+  --device cpu --stride 30 --max-frames 5 --overlay-video
+```
+
+Look at `field_keypoints_video.csv` and confirm `kp x` ranges across
+~the whole image width (not collapsed).
 
 ---
 
@@ -208,3 +256,22 @@ uv run vaila/vaila_sam.py fifa pack       --submission-full /home/preto/data/FIF
 1. **Per-frame camera refinement** with pitch keypoints (Section 5+6).
 2. **Cleaner player boxes/masks** with SAM 3 batch (Section 4).
 3. Only then touch `fifa baseline` and 3D refinement (Section 8).
+
+---
+
+## Fallbacks when the retrain plateaus
+
+1. **Push pose loss higher** (`pose=40 kobj=4`), reset from
+   `pitch32_recipeA_50ep/best.pt`, 200–300 epochs.
+2. **Bigger backbone** (`yolo26m-pose.pt` / `yolo26x-pose.pt`)
+   with `lr0=1e-4 amp=False` to dodge NaN.
+3. **Keypoint-safe augmentation**: `degrees=10 translate=0.1
+   scale=0.5` — never `mosaic` or `mixup`.
+4. **Roboflow drop-in** (no local training): `--backend roboflow
+   --roboflow-model-id football-field-detection-f07vi/14`
+   with `ROBOFLOW_API_KEY`.
+5. **Manual homography**: 4–6 keyframes/video with
+   `vaila/soccerfield_calib.py`, `cv2.findHomography`, interpolate.
+6. **External SOTA** as alternative pitch detector:
+   - https://github.com/MM4SPA/PnLCalib (Apache-2)
+   - https://github.com/mguti97/No-Bells-Just-Whistles (MIT)
