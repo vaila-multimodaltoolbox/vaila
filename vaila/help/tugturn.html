@@ -119,12 +119,58 @@
         overflow-x: auto;
       }
 
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+
       .callout {
         padding: 16px;
         border-radius: 6px;
         margin: 20px 0;
         background: #eff6ff;
         border-left: 4px solid var(--primary);
+      }
+
+      .meta {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin: 18px 0;
+        font-size: 0.92rem;
+      }
+
+      .meta strong {
+        color: var(--primary);
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 16px 0;
+        background: #fff;
+      }
+
+      th, td {
+        border: 1px solid #e2e8f0;
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 0.92rem;
+      }
+
+      th {
+        background: #f1f5f9;
+        color: var(--primary);
+      }
+
+      blockquote {
+        margin: 16px 0;
+        padding: 12px 18px;
+        background: #fefce8;
+        border-left: 4px solid var(--accent);
+        font-size: 0.95rem;
       }
     </style>
   </head>
@@ -133,176 +179,313 @@
       <h2>vailá Docs</h2>
       <ul>
         <li><a href="#intro">Introduction</a></li>
-        <li><a href="#workflow">Pipeline and Segmentation</a></li>
+        <li><a href="#workflow">Pipeline Overview</a></li>
+        <li><a href="#phases">Phase Segmentation</a></li>
         <li><a href="#kinematics">Gait Kinematics</a></li>
         <li><a href="#kin-magnitude">Kin Magnitude (2D)</a></li>
-        <li><a href="#coupling">Coupling Angle and Vector Coding</a></li>
+        <li><a href="#coupling">Vector Coding</a></li>
         <li><a href="#xcom">XCoM</a></li>
-        <li><a href="#config">Configuration</a></li>
+        <li><a href="#config">Configuration (TOML)</a></li>
         <li><a href="#outputs">Outputs</a></li>
         <li><a href="#usage">Usage</a></li>
+        <li><a href="#tests">Tests &amp; Reproducibility</a></li>
+        <li><a href="#cite">Citation</a></li>
       </ul>
     </nav>
 
     <main class="main-content">
       <header id="intro">
-        <h1>TUG and TURN <span class="version-badge">v0.0.4</span></h1>
+        <h1>TUG and TURN <span class="version-badge">v0.1.2</span></h1>
         <p>
-          Instrumented Timed Up and Go (TUG) analysis with 3D kinematics,
-          robust gait-event detection, phase segmentation, Vector Coding, and
-          XCoM-based stability metrics.
+          Instrumented Timed Up and Go (TUG) analysis with markerless 3D
+          kinematics, robust gait-event detection, deterministic spatial
+          phase segmentation, intersegmental Vector Coding, and
+          Extrapolated Center of Mass (XCoM) dynamic-stability metrics.
         </p>
+        <div class="meta">
+          <strong>Module:</strong> <code>vaila/tugturn.py</code><br />
+          <strong>Authors:</strong> Paulo R. P. Santiago, Abel G. Chinaglia<br />
+          <strong>Updated:</strong> 27 April 2026 &middot;
+          <strong>Python:</strong> 3.12 &middot;
+          <strong>License:</strong> AGPL-3.0<br />
+          <strong>Reference (preprint):</strong>
+          <a href="https://arxiv.org/abs/2602.21425">arXiv:2602.21425</a><br />
+          <strong>Project:</strong>
+          <a href="https://github.com/vaila-multimodaltoolbox/vaila">vailá Multimodal Toolbox</a><br />
+          <strong>Manuscript repo:</strong>
+          <a href="https://github.com/paulopreto/tugturn_GP">paulopreto/tugturn_GP</a>
+        </div>
       </header>
 
       <section id="workflow">
-        <h2>Pipeline and Segmentation</h2>
+        <h2>Pipeline Overview</h2>
         <p>
-          <code>tugturn.py</code> processes MediaPipe 3D CSV files and segments
-          the trial into functional phases: <strong>Stand</strong>,
-          <strong>Gait Forward</strong>, <strong>Turn</strong>,
-          <strong>Gait Back</strong>, and <strong>Sit</strong>.
+          <code>tugturn.py</code> ingests a MediaPipe-style 3D CSV (33
+          landmarks; the 1-based <code>p1_x..p33_z</code>, 0-based
+          <code>p0_x..p32_z</code>, or landmark-name schemas are all
+          accepted) plus a TOML metadata file with at least the sampling
+          rate <code>FPS</code>, and produces a complete clinical TUG
+          analysis in five stages:
         </p>
+        <ol>
+          <li>
+            Landmark resolution and 3D Center of Mass (CoM) estimation
+            (Dempster-style weighted segmental model, hands excluded).
+          </li>
+          <li>
+            Spatial phase segmentation along the antero-posterior progression
+            axis (Y).
+          </li>
+          <li>
+            Phase-aware Heel-Strike (HS) and Toe-Off (TO) detection using a
+            Zeni-style relative-distance algorithm with kinematic and spatial
+            masks.
+          </li>
+          <li>
+            Spatiotemporal parameters, joint angles, trunk inclination,
+            intersegmental coordination (Vector Coding), and Extrapolated CoM
+            (XCoM).
+          </li>
+          <li>
+            Reproducible output bundle: HTML reports, per-phase GIFs, JSON,
+            and a family of CSV "database rows" suitable for downstream
+            statistics or machine learning.
+          </li>
+        </ol>
+      </section>
+
+      <section id="phases">
+        <h2>Phase Segmentation</h2>
         <p>
-          Segmentation combines temporal anchors and spatial thresholds from TOML
-          (<code>y_chair</code>, <code>y_turn</code>, and
-          <code>y_chair_tol</code>) for robust behavior in clinical data.
+          The trial is partitioned into six canonical phases (the
+          <code>stop_5s</code> phase is skipped if the participant does not
+          pause):
+        </p>
+        <table>
+          <thead>
+            <tr><th>Phase</th><th>Meaning</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>stand</code></td>       <td>Sit-to-stand (chair → upright)</td></tr>
+            <tr><td><code>first_gait</code></td>  <td>Forward straight-line walking toward the turn zone</td></tr>
+            <tr><td><code>stop_5s</code></td>     <td>Optional pause / freeze before the turn (5-s standard)</td></tr>
+            <tr><td><code>turn180</code></td>     <td>180° turn around the cone</td></tr>
+            <tr><td><code>second_gait</code></td> <td>Return straight-line walking toward the chair</td></tr>
+            <tr><td><code>sit</code></td>         <td>Stand-to-sit (upright → chair)</td></tr>
+          </tbody>
+        </table>
+        <p>
+          Boundaries are computed from CoM-Z amplitude (sit/stand thresholds),
+          CoM-Y spatial thresholds (<code>y_chair</code>,
+          <code>y_turn ± y_tol</code>), trunk speed plateau (stop anchor),
+          and shoulder-yaw rate (turn boundaries). All values are exposed as
+          TOML overrides — see <a href="#config">Configuration</a>.
         </p>
         <div class="callout">
-          <strong>Gait events (HS/TO):</strong> heel-strike and toe-off are
-          estimated using a relative-distance method (Zeni-style approach), then
-          filtered against expected gait phases to reduce fictitious events.
+          <strong>Gait events (HS / TO):</strong> heel-strike and toe-off are
+          estimated via a Zeni-style relative-distance method, then
+          <em>strictly filtered</em> so that any event falling outside
+          <code>first_gait</code> or <code>second_gait</code> is discarded.
+          This eliminates fictitious events during sit-to-stand, turning, and
+          stand-to-sit.
         </div>
       </section>
 
       <section id="kinematics">
         <h2>Gait Kinematics</h2>
-        <p>
-          The script computes kinematic variables from landmark trajectories,
-          including:
-        </p>
+        <p>For every frame the pipeline computes:</p>
         <ul>
-          <li>Knee and ankle angles (right and left)</li>
-          <li>Trunk inclination</li>
-          <li>Trunk and foot position, velocity, and acceleration (Y/Z axes)</li>
-          <li>Spatiotemporal gait parameters by phase and globally</li>
+          <li>Knee and ankle angles (Right / Left) — anatomical convention (0° extended).</li>
+          <li>Hip angles (R / L) — from the shoulder–hip–knee triangle.</li>
+          <li>Trunk inclination relative to global vertical (clinically relevant for camptocormia, festinant posture, etc.).</li>
+          <li>Sagittal hip–knee Coupling Angle (R / L).</li>
+          <li>3D CoM position, velocity and acceleration.</li>
+          <li>Trunk, mid-trunk, and per-foot mean position / velocity / acceleration.</li>
+          <li>Step / stride length, step width, stance and swing times (with IQR outlier trimming on per-side aggregation), cadence, mean velocity.</li>
         </ul>
       </section>
 
       <section id="kin-magnitude">
-        <h2>Kin Magnitude (2D Kinematics Magnitude)</h2>
+        <h2>Kin Magnitude (Sagittal-plane Resultant)</h2>
         <p>
-          In TUG charts, <strong>Kin Magnitude</strong> means the
-          <strong>resultant scalar magnitude</strong> (Euclidean norm) of the
-          motion vector in the sagittal plane (Y and Z), not the separate axis
-          components.
+          In the visual reports, <strong>Kin Magnitude</strong> is the
+          resultant scalar magnitude (Euclidean norm) of the motion vector in
+          the sagittal Y/Z plane, <em>not</em> the separate axis components:
         </p>
+        <pre><code>|V_yz| = sqrt(Vy^2 + Vz^2)
+|A_yz| = sqrt(Ay^2 + Az^2)</code></pre>
         <p>
-          For velocity:
-          <code>|V_yz| = sqrt(Vy^2 + Vz^2)</code><br />
-          For acceleration:
-          <code>|A_yz| = sqrt(Ay^2 + Az^2)</code>
-        </p>
-        <p>
-          This is useful because Y and Z components can be positive or negative.
-          The magnitude summarizes movement intensity independently of direction.
+          This avoids sign confusion between AP and vertical axes and
+          represents absolute movement intensity.
         </p>
       </section>
 
       <section id="coupling">
-        <h2>Coupling Angle and Vector Coding</h2>
+        <h2>Intersegmental Coordination — Vector Coding</h2>
 
         <h3>Axial Vector Coding (Trunk vs Pelvis)</h3>
         <p>
-          During Turn/Stand phases, the script computes axial coordination using
-          Vector Coding:
-          <code>gamma = atan2(DeltaPelvis, DeltaTrunk)</code> (normalized to
-          0-360 degrees).
+          During the <strong>Turn</strong> and <strong>Stand</strong> phases
+          the trunk-pelvis coupling angle is computed as
         </p>
+        <pre><code>gamma = atan2(DeltaPelvis_yaw, DeltaTrunk_yaw)   (mapped to [0, 360) degrees)</code></pre>
+        <p>and binned into four coordination patterns (Chang et al., 2008):</p>
+        <ul>
+          <li><strong>Proximal_Phase</strong> — trunk dominant (0 ± 22.5° and 180 ± 22.5°)</li>
+          <li><strong>In_Phase</strong> — both segments move in-sync (45 ± 22.5° and 225 ± 22.5°)</li>
+          <li><strong>Distal_Phase</strong> — pelvis dominant (90 ± 22.5° and 270 ± 22.5°)</li>
+          <li><strong>Anti_Phase</strong> — segments move in opposite directions (135 ± 22.5° and 315 ± 22.5°)</li>
+        </ul>
         <p>
-          Coordination is classified into four patterns:
-          <strong>Proximal-Phase</strong>, <strong>In-Phase</strong>,
-          <strong>Distal-Phase</strong>, and <strong>Anti-Phase</strong>.
-          Outputs include time-normalized coupling-angle series, percentage per
-          pattern, and CAV (Coupling Angle Variability).
+          Outputs include the time-normalised coupling-angle series
+          (101 points, 0–100 % of phase progress), the percentage of frames
+          per pattern, the dominant pattern, and the Coupling Angle
+          Variability (CAV) computed as a circular standard deviation.
         </p>
 
-        <h3>Limb and Sagittal Coupling</h3>
+        <h3>Limb Vector Coding (Y-axis)</h3>
         <p>
-          The script also computes coupling metrics from sagittal kinematics,
-          including side-specific hip-knee coupling-angle trajectories and
-          additional limb Vector Coding along the anteroposterior axis during
-          gait-forward and gait-back phases.
+          The same machinery is applied to limb pairs (e.g., right elbow vs
+          right knee along Y) during the First-Gait and Second-Gait phases,
+          producing per-phase arm-leg coordination summaries.
         </p>
       </section>
 
       <section id="xcom">
-        <h2>XCoM (Extrapolated Center of Mass)</h2>
+        <h2>XCoM — Extrapolated Center of Mass</h2>
         <p>
-          XCoM is computed from center-of-mass position and velocity:
-          <code>XCoM = CoM + CoM_vel / omega_0</code>, with
-          <code>omega_0 = sqrt(g / l)</code>.
+          Dynamic stability is summarised with the Extrapolated Center of
+          Mass (Hof, Gazendam &amp; Sinke, 2005):
         </p>
+        <pre><code>XCoM = CoM + CoM_vel / omega_0
+omega_0 = sqrt(g / l)</code></pre>
         <p>
-          Here, <code>l</code> is approximated by mean CoM height
-          (<code>CoM_z</code>). XCoM path deviation is then used as a dynamic
-          stability metric for gait forward and gait back.
+          with <code>g = 9.81 m/s²</code> and <code>l</code> approximated by
+          the mean CoM-Z height. The <em>XCoM path deviation</em> against
+          the straight-line trajectory is reported for the First-Gait and
+          Second-Gait phases and stored as
+          <code>XcoM_Deviation_First_Gait_m</code> and
+          <code>XcoM_Deviation_Second_Gait_m</code>.
         </p>
       </section>
 
       <section id="config">
         <h2>Configuration (TOML)</h2>
         <p>
-          Configure spatial protocol thresholds in <code>[spatial]</code>:
+          Every CSV is paired with a TOML file with the same stem (or a
+          single TOML passed via <code>-c</code>). Required and optional
+          keys:
         </p>
-        <ul>
-          <li><code>y_chair</code>: chair position along Y</li>
-          <li><code>y_turn</code>: turn target position along Y</li>
-          <li><code>y_chair_tol</code>: tolerance near chair for phase/step logic</li>
-        </ul>
+        <pre><code># Subject metadata (any keys allowed; surfaced into _bd_participants.csv)
+SEX = "M"
+WEIGHT = 87.3
+HEIGHT = 1.63
+AGE = 63.0
+FPS = 59.94005994005994
+TURNSIDE = "R"
+
+# Optional spatial protocol overrides (LaBioCoM walkway defaults shown)
+[spatial]
+y_chair     = 1.125   # m — start/end of the walkway (chair zone boundary)
+y_turn      = 4.5     # m — centre of the turn zone
+y_tol       = 0.5     # m — ± window around y_turn for the speed-anchor search
+y_chair_tol = 0.2     # m — tolerance before y_chair to count steps inside zone</code></pre>
+        <p>
+          <code>y_chair_tol</code> can also be passed on the command line via
+          <code>-y</code>.
+        </p>
       </section>
 
       <section id="outputs">
-        <h2>Output Files</h2>
-        <p>The module exports clinical and research outputs per trial:</p>
-        <ul>
-          <li>
-            <strong>Reports:</strong> <code>*_tug_report.html</code> and
-            <code>*_tug_report_interactive.html</code>
-          </li>
-          <li>
-            <strong>Global database rows:</strong>
-            <code>*_bd_results.csv</code>, <code>*_bd_kinematics.csv</code>
-          </li>
-          <li>
-            <strong>Step-level rows:</strong> <code>*_bd_steps.csv</code>
-          </li>
-          <li>
-            <strong>Vector coding outputs:</strong> metrics and time-series CSVs
-          </li>
-          <li>
-            <strong>Phase GIFs:</strong> animated skeleton checks for segmented
-            phases
-          </li>
-        </ul>
+        <h2>Outputs</h2>
+        <p>Per-trial artefacts written to the output directory:</p>
+        <table>
+          <thead>
+            <tr><th>File</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>*_tugturn_report.html</code></td>
+                <td>Static Matplotlib visual report</td></tr>
+            <tr><td><code>*_tugturn_report_interactive.html</code></td>
+                <td>Interactive Plotly version (XYZ overlay, gait events, stick figures)</td></tr>
+            <tr><td><code>*_tugturn_data.json</code></td>
+                <td>Full structured report (metadata, phases, spatiotemporal, VC, XcoM)</td></tr>
+            <tr><td><code>*_bd_results.csv</code></td>
+                <td>One-row global summary (cadence, velocity, phase durations, VC summary)</td></tr>
+            <tr><td><code>*_bd_steps.csv</code></td>
+                <td>One row per detected step (Time_s, Y_m, Side, Phase, Step/Stride/Width, Stance/Swing)</td></tr>
+            <tr><td><code>*_bd_kinematics.csv</code></td>
+                <td>One-row kinematic summary (knee max R/L, mean trunk inclination, Coupling SD R/L)</td></tr>
+            <tr><td><code>*_bd_participants.csv</code></td>
+                <td>One-row TOML metadata snapshot (timestamped)</td></tr>
+            <tr><td><code>*_bd_vector_coding.csv</code></td>
+                <td>Long-format coupling-angle time series for axial and limb VC</td></tr>
+            <tr><td><code>*_stand.gif</code> … <code>*_sit.gif</code></td>
+                <td>One animated skeleton GIF per detected phase (segmentation QA)</td></tr>
+          </tbody>
+        </table>
+        <p>Filenames use the input CSV stem (e.g., <code>s26_m1_t1_*</code>).</p>
       </section>
 
       <section id="usage">
         <h2>Usage</h2>
-        <pre><code># CLI, explicit output directory
-uv run vaila/tugturn.py -i video_data.csv -c config.toml -o results/
+        <pre><code># Single trial with explicit output directory
+uv run vaila/tugturn.py -i tests/tugturn/s26_m1_t1.csv \
+                        -c tests/tugturn/s26_m1_t1.toml \
+                        -o tests/tugturn/results/
 
-# CLI, without -o
-# Output directory auto-created next to each CSV:
-# result_tugturn_&lt;csv_basename&gt;
-uv run vaila/tugturn.py -i video_data.csv -c config.toml
+# Single trial without -o
+# Output is auto-created next to the input CSV as:
+#   tugturn_result_&lt;csv_basename&gt;/
+uv run vaila/tugturn.py -i tests/tugturn/s26_m1_t1.csv \
+                        -c tests/tugturn/s26_m1_t1.toml
 
-# Batch processing (all CSVs in folder)
-uv run vaila/tugturn.py -i tests/tugturn/ -c tests/tugturn/s26_m1_t1.toml</code></pre>
+# Override the y_chair_tol from the CLI
+uv run vaila/tugturn.py -i tests/tugturn/s26_m1_t1.csv \
+                        -c tests/tugturn/s26_m1_t1.toml -y 0.15
+
+# Batch over a directory of CSVs (each pairs with its own *.toml)
+uv run vaila/tugturn.py -i tests/tugturn/ -c tests/tugturn/s26_m1_t1.toml
+
+# GUI mode — no -i argument: a Tk file/folder dialog opens
+uv run vaila/tugturn.py</code></pre>
+      </section>
+
+      <section id="tests">
+        <h2>Tests &amp; Reproducibility</h2>
+        <p>
+          A complete CLI test case ships with the repository under
+          <code>tests/tugturn/</code>:
+        </p>
+        <ul>
+          <li><code>s26_m1_t1.csv</code> — MediaPipe 3D landmarks (≈ 27 s, 60 fps)</li>
+          <li><code>s26_m1_t1.toml</code> — subject metadata</li>
+          <li><code>skeleton_pose_mediapipe.json</code> — 33-landmark connection schema</li>
+        </ul>
+        <p>
+          It is exercised by 51 automated tests covering unit, integration,
+          regression, and end-to-end (CLI subprocess) levels:
+        </p>
+        <pre><code>uv run pytest tests/test_tugturn.py tests/test_tugturn_integration.py -v</code></pre>
+      </section>
+
+      <section id="cite">
+        <h2>Citation</h2>
+        <blockquote>
+          Chinaglia AG, Cesar GM, Santiago PRP. <em>Automating Timed Up and
+          Go Phase Segmentation and Gait Analysis via the tugturn Markerless
+          3D Pipeline.</em> arXiv:2602.21425 [cs.CV], 2026.
+          <a href="https://arxiv.org/abs/2602.21425">https://arxiv.org/abs/2602.21425</a>
+        </blockquote>
+        <p>
+          Please also cite the parent vailá toolbox (Santiago, Cesar, Mochida,
+          Aceros et al., arXiv:2410.07238).
+        </p>
       </section>
 
       <footer>
         <hr />
-        <p>© 2026 vailá - Multimodal Toolbox</p>
+        <p>© 2026 vailá - Multimodal Toolbox &middot; Released under AGPL-3.0</p>
       </footer>
     </main>
   </body>

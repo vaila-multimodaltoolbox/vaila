@@ -1,11 +1,13 @@
 """
 ===============================================================================
-vaila_tugtun.py
+tugturn.py
 ===============================================================================
-Author: Paulo R. P. Santiago
+Authors:
+    - Paulo R. P. Santiago
+    - Abel G. Chinaglia
 Created: 20 February 2026
-Updated: 23 February 2026
-Version: 0.1.1
+Updated: 27 April 2026
+Version: 0.1.2
 Python Version: 3.12.13
 
 Description:
@@ -14,6 +16,18 @@ This script provides functionality for Timed Up and Go (TUG) instrumented
 analysis with 3D kinematics. It uses the Zeni relative-distance algorithm
 for robust heel-strike detection and implements spatial segmentation logic
 based on the LaBioCoM protocol.
+
+Reference:
+----------
+    Chinaglia, A. G.; Cesar, G. M.; Santiago, P. R. P. (2026).
+    Automating Timed Up and Go Phase Segmentation and Gait Analysis via
+    the tugturn Markerless 3D Pipeline. arXiv:2602.21425 [cs.CV].
+    https://arxiv.org/abs/2602.21425
+
+Repositories:
+-------------
+    - vailá Multimodal Toolbox: https://github.com/vaila-multimodaltoolbox/vaila
+    - tugturn (Gait & Posture preprint sources): https://github.com/paulopreto/tugturn_GP
 
 How to use:
 -----------
@@ -2479,7 +2493,7 @@ def generate_matplotlib_report(
     fig6 = plt.figure(figsize=(16, 25))
     gs6 = gridspec.GridSpec(5, 2, figure=fig6)
 
-    for side, prefix, color in [
+    for side, prefix, _color in [
         ("Left", "Med_Foot_Left", "green"),
         ("Right", "Med_Foot_Right", "red"),
     ]:

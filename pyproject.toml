@@ -265,3 +265,6 @@ filterwarnings = [
     "ignore::pyparsing.warnings.PyparsingDeprecationWarning",
     "ignore::pytest.PytestDeprecationWarning",
 ]
+markers = [
+    "slow: long-running tests (>30s) such as full TUG/Turn pipelines and CLI E2E",
+]
