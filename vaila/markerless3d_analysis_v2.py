@@ -226,8 +226,8 @@ def download_or_load_yolo_model():
     else:
         print(f"Downloading YOLO model {model_name}...")
         try:
-            # Criar instância temporária do YOLO que baixará os pesos
-            model = YOLO(model_name)
+            # Use full path to avoid downloading to root
+            model = YOLO(str(model_path))
 
             # Obter caminho onde o YOLO baixou o modelo
             source_path = model.ckpt_path

@@ -11,6 +11,7 @@ import json
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from vaila import fifa_dataset_builder as fdb
@@ -19,6 +20,17 @@ from vaila import fifa_dataset_builder as fdb
 def _write_image(path: Path, content: bytes = b"\x89PNG\r\n\x1a\n0000IHDR") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
+    return path
+
+
+def _write_real_rgb_image(path: Path, size: tuple[int, int] = (320, 180)) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        from PIL import Image
+    except ModuleNotFoundError as exc:  # pragma: no cover
+        raise RuntimeError("Pillow is required for this test helper") from exc
+    img = Image.new("RGB", size, (32, 96, 32))
+    img.save(path)
     return path
 
 
@@ -46,6 +58,71 @@ def test_canonical_constants_are_consistent():
     # flip is involutive: applying flip twice is identity.
     flipped_twice = [fdb.CANONICAL_FLIP_IDX_32[fdb.CANONICAL_FLIP_IDX_32[i]] for i in range(32)]
     assert flipped_twice == list(range(32))
+
+
+def test_canonical_vertices_match_roboflow_truth():
+    """Spot-check that vertex coordinates match the Roboflow SoccerPitchConfiguration."""
+    cm = fdb._canonical_vertices_cm()
+    assert cm[0] == (0.0, 0.0)  # top_left_corner
+    assert cm[24] == (12000.0, 0.0)  # top_right_corner
+    assert cm[5] == (0.0, 7000.0)  # bottom_left_corner
+    assert cm[29] == (12000.0, 7000.0)  # bottom_right_corner
+    assert cm[8] == (1100.0, 3500.0)  # left_penalty_spot
+    assert cm[21] == (10900.0, 3500.0)  # right_penalty_spot
+    assert cm[13] == (6000.0, 0.0)  # midfield_top
+    assert cm[16] == (6000.0, 7000.0)  # midfield_bottom
+    assert cm[30] == (5085.0, 3500.0)  # center_circle_left
+    assert cm[31] == (6915.0, 3500.0)  # center_circle_right
+
+
+def test_canonical_flip_pairs_are_geometric_mirrors():
+    """Each kp's flip target must be its horizontal mirror across X = L/2."""
+    cm = fdb._canonical_vertices_cm()
+    L = float(fdb.ROBOFLOW_FIELD_LENGTH_CM)
+    for i, j in enumerate(fdb.CANONICAL_FLIP_IDX_32):
+        assert abs(cm[i][0] + cm[j][0] - L) < 1e-6, f"kp {i} not horizontal mirror of kp {j}"
+        assert abs(cm[i][1] - cm[j][1]) < 1e-6, f"kp {i} y differs from kp {j}"
+
+
+def test_centered_meters_match_drawsportsfields_convention():
+    """Centered Y-up convention: top-left corner in upper-left = (-L/2, +W/2)."""
+    pts, length_m, width_m = fdb._load_centered_fifa_points_32()
+    assert length_m == fdb.DRAWSPORTSFIELDS_LENGTH_M
+    assert width_m == fdb.DRAWSPORTSFIELDS_WIDTH_M
+    # idx 0 = top_left -> (-L/2, +W/2, 0)
+    x, y, _z = pts[0]
+    assert x == -length_m / 2.0
+    assert y == +width_m / 2.0
+    # idx 5 = bottom_left -> (-L/2, -W/2, 0)
+    x, y, _z = pts[5]
+    assert x == -length_m / 2.0
+    assert y == -width_m / 2.0
+    # idx 24 = top_right -> (+L/2, +W/2, 0)
+    x, y, _z = pts[24]
+    assert x == +length_m / 2.0
+    assert y == +width_m / 2.0
+
+
+def test_kpsfr_template_matches_drawsportsfields_centered():
+    """Centered Y-up -> KpSFR (yards, Y-down, top-left origin)."""
+    # top_left in centered metres == (0, 0) yards in KpSFR template.
+    x_tpl, y_tpl = fdb._centered_meters_to_kpsfr_template(
+        -fdb.DRAWSPORTSFIELDS_LENGTH_M / 2.0,
+        +fdb.DRAWSPORTSFIELDS_WIDTH_M / 2.0,
+        length_m=fdb.DRAWSPORTSFIELDS_LENGTH_M,
+        width_m=fdb.DRAWSPORTSFIELDS_WIDTH_M,
+    )
+    assert abs(x_tpl) < 1e-6
+    assert abs(y_tpl) < 1e-6
+    # bottom_right in centered metres -> (114.83, 74.37) yards.
+    x_tpl, y_tpl = fdb._centered_meters_to_kpsfr_template(
+        +fdb.DRAWSPORTSFIELDS_LENGTH_M / 2.0,
+        -fdb.DRAWSPORTSFIELDS_WIDTH_M / 2.0,
+        length_m=fdb.DRAWSPORTSFIELDS_LENGTH_M,
+        width_m=fdb.DRAWSPORTSFIELDS_WIDTH_M,
+    )
+    assert abs(x_tpl - fdb.KPSFR_TEMPLATE_LENGTH_YARDS) < 1e-6
+    assert abs(y_tpl - fdb.KPSFR_TEMPLATE_WIDTH_YARDS) < 1e-6
 
 
 def test_select_sources_default_excludes_optional():
@@ -117,6 +194,19 @@ def test_convert_yolo_pose_passthrough(tmp_path: Path, fake_martinjolif_repo: Pa
     sample_label = next((out / "labels" / "train").glob("*.txt"))
     parts = sample_label.read_text(encoding="utf-8").strip().split()
     assert len(parts) == 1 + 4 + 32 * 3
+    # Regression: the formatter MUST keep keypoint y-coordinates as floats
+    # (only the visibility flag at offsets 7, 10, 13, ... is an int).
+    # Previous bug clamped y to 0/1 because the int/float layout test was wrong.
+    for j in range(32):
+        x = parts[5 + 3 * j]
+        y = parts[5 + 3 * j + 1]
+        v = parts[5 + 3 * j + 2]
+        assert "." in x, f"kp{j}.x lost decimals: {x}"
+        assert "." in y, f"kp{j}.y lost decimals: {y}"
+        assert "." not in v, f"kp{j}.v should be int, got {v}"
+        assert 0.0 <= float(y) <= 1.0
+        # Original synthetic y values are 0.02..0.04 — must NOT be 0 or 1.
+        assert float(y) > 0.0 and float(y) < 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -221,12 +311,21 @@ def test_convert_soccana_29pt_json_with_previews(tmp_path: Path, fake_soccana_re
     assert len(parts) == 1 + 4 + 32 * 3
     # canonical idx 0 (top_left_corner) <- 0_sideline_top_left = (0.05, 0.10)
     assert parts[5] == "0.050000" and parts[6] == "0.100000" and parts[7] == "2"
-    # canonical idx 9 (left_penalty_box_top_right) <- 2_big_rect_left_top_pt2 = (0.30, 0.20)
+    # canonical idx 9 (left_pen_box_top_inner) <- 2_big_rect_left_top_pt2 = (0.30, 0.20)
     base_9 = 5 + 3 * 9
     assert parts[base_9] == "0.300000" and parts[base_9 + 1] == "0.200000"
-    # canonical idx 4 (left_penalty_box_bottom_left) <- 3_big_rect_left_bottom_pt1 = (0.10, 0.80)
+    # canonical idx 4 (left_pen_box_bottom_outer) <- 3_big_rect_left_bottom_pt1 = (0.10, 0.80)
     base_4 = 5 + 3 * 4
     assert parts[base_4] == "0.100000" and parts[base_4 + 1] == "0.800000"
+    # canonical idx 24 (top_right_corner) <- 16_sideline_top_right = (0.95, 0.10)
+    base_24 = 5 + 3 * 24
+    assert parts[base_24] == "0.950000" and parts[base_24 + 1] == "0.100000"
+    # canonical idx 30 (center_circle_left) <- 27_center_circle_left = (0.45, 0.50)
+    base_30 = 5 + 3 * 30
+    assert parts[base_30] == "0.450000" and parts[base_30 + 1] == "0.500000"
+    # canonical idx 13 (midfield_top) <- 11_center_line_top = (0.50, 0.10)
+    base_13 = 5 + 3 * 13
+    assert parts[base_13] == "0.500000" and parts[base_13 + 1] == "0.100000"
 
 
 def test_convert_soccana_29pt_with_soccernet_images(tmp_path: Path, fake_soccana_repo: Path):
@@ -310,6 +409,15 @@ def test_convert_kaggle_bbox_landmarks(tmp_path: Path):
     assert parts[5] == "0.100000"
     assert parts[6] == "0.100000"
     assert parts[7] == "2"
+    # canonical idx 24 (top_right_corner) should be at (0.9, 0.1, 2)
+    base = 5 + 3 * 24
+    assert parts[base] == "0.900000" and parts[base + 1] == "0.100000"
+    # canonical idx 5 (bottom_left_corner) should be at (0.1, 0.9, 2)
+    base = 5 + 3 * 5
+    assert parts[base] == "0.100000" and parts[base + 1] == "0.900000"
+    # canonical idx 13 (midfield_top) should be at (0.5, 0.05, 2)  (halfway_top)
+    base = 5 + 3 * 13
+    assert parts[base] == "0.500000" and parts[base + 1] == "0.050000"
 
 
 # ---------------------------------------------------------------------------
@@ -344,9 +452,239 @@ def test_convert_pitchgeometry_csv(tmp_path: Path):
     assert len(parts) == 1 + 4 + 32 * 3
     # canonical idx 0 (top_left_corner) at (0.05, 0.05, 2)
     assert parts[5] == "0.050000" and parts[6] == "0.050000" and parts[7] == "2"
-    # canonical idx 26 (top_right_corner) at (0.95, 0.05, 2)
-    base = 5 + 3 * 26
+    # canonical idx 24 (top_right_corner) at (0.95, 0.05, 2)
+    base = 5 + 3 * 24
     assert parts[base] == "0.950000" and parts[base + 1] == "0.050000" and parts[base + 2] == "2"
+    # canonical idx 5 (bottom_left_corner) at (0.05, 0.95, 2)
+    base = 5 + 3 * 5
+    assert parts[base] == "0.050000" and parts[base + 1] == "0.950000"
+    # canonical idx 14 (center_circle_top) at (0.50, 0.40, 2)
+    base = 5 + 3 * 14
+    assert parts[base] == "0.500000" and parts[base + 1] == "0.400000"
+
+
+# ---------------------------------------------------------------------------
+# Homography-based converters (WC14 / TS-WorldCup)
+# ---------------------------------------------------------------------------
+
+
+def test_convert_worldcup2014_homography_identity(tmp_path: Path):
+    repo = tmp_path / "wc14"
+    img = _write_real_rgb_image(repo / "raw" / "train_val" / "1.jpg", size=(320, 200))
+    (repo / "raw" / "train_val" / "1.homographyMatrix").write_text(
+        "1 0 0\n0 1 0\n0 0 1\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "staging_wc14"
+    stats = fdb.convert_worldcup2014_homography(repo, out)
+    assert stats["images"] == 1
+    sample = (out / "labels" / "train" / "1.txt").read_text(encoding="utf-8").strip()
+    parts = sample.split()
+    assert len(parts) == 1 + 4 + 32 * 3
+    assert (out / "images" / "train" / img.name).exists()
+
+
+def test_convert_tsworldcup_homography_identity(tmp_path: Path):
+    repo = tmp_path / "tswc"
+    clip = "left/clip_001"
+    clip2 = "right/clip_001"
+    (repo / "TS-WorldCup").mkdir(parents=True, exist_ok=True)
+    (repo / "TS-WorldCup" / "train.txt").write_text(clip + "\n" + clip2 + "\n", encoding="utf-8")
+    (repo / "TS-WorldCup" / "test.txt").write_text("", encoding="utf-8")
+
+    ann = repo / "TS-WorldCup" / "Annotations" / "80_95" / "left" / "clip_001"
+    img_dir = repo / "TS-WorldCup" / "Dataset" / "80_95" / "left" / "clip_001"
+    ann.mkdir(parents=True, exist_ok=True)
+    img_dir.mkdir(parents=True, exist_ok=True)
+
+    np.save(ann / "IMG_001_homography.npy", np.eye(3, dtype=np.float64))
+    _write_real_rgb_image(img_dir / "IMG_001.jpg", size=(320, 200))
+
+    ann2 = repo / "TS-WorldCup" / "Annotations" / "80_95" / "right" / "clip_001"
+    img_dir2 = repo / "TS-WorldCup" / "Dataset" / "80_95" / "right" / "clip_001"
+    ann2.mkdir(parents=True, exist_ok=True)
+    img_dir2.mkdir(parents=True, exist_ok=True)
+    np.save(ann2 / "IMG_001_homography.npy", np.eye(3, dtype=np.float64))
+    _write_real_rgb_image(img_dir2 / "IMG_001.jpg", size=(320, 200))
+
+    out = tmp_path / "staging_tswc"
+    stats = fdb.convert_tsworldcup_homography(repo, out)
+    assert stats["images"] == 2
+    lbls = sorted((out / "labels" / "train").glob("*.txt"))
+    assert len(lbls) == 2
+    sample = lbls[0].read_text(encoding="utf-8").strip()
+    parts = sample.split()
+    assert len(parts) == 1 + 4 + 32 * 3
+
+
+# ---------------------------------------------------------------------------
+# Centered keypoint reference export
+# ---------------------------------------------------------------------------
+
+
+def test_write_keypoint_reference(tmp_path: Path):
+    unified = tmp_path / "unified"
+    unified.mkdir(parents=True, exist_ok=True)
+    out = fdb._write_keypoint_reference(unified)
+    assert out.exists()
+    rows = list(csv.DictReader(out.open("r", encoding="utf-8")))
+    assert len(rows) == 32
+    # New schema: idx 24 is top_right_corner.
+    by_idx = {int(r["idx"]): r for r in rows}
+    assert by_idx[0]["canonical_name"] == "top_left_corner"
+    assert by_idx[24]["canonical_name"] == "top_right_corner"
+    assert by_idx[5]["canonical_name"] == "bottom_left_corner"
+    assert by_idx[29]["canonical_name"] == "bottom_right_corner"
+    # Centered metres convention: top_left at (-L/2, +W/2).
+    L = fdb.DRAWSPORTSFIELDS_LENGTH_M
+    W = fdb.DRAWSPORTSFIELDS_WIDTH_M
+    assert abs(float(by_idx[0]["x_center_m"]) - (-L / 2.0)) < 1e-6
+    assert abs(float(by_idx[0]["y_center_m"]) - (+W / 2.0)) < 1e-6
+    # Roboflow truth columns.
+    assert abs(float(by_idx[0]["x_roboflow_cm"])) < 1e-6
+    assert abs(float(by_idx[24]["x_roboflow_cm"]) - 12000.0) < 1e-6
+    # KpSFR template columns.
+    assert abs(float(by_idx[0]["x_template_yard"])) < 1e-6
+    assert abs(float(by_idx[24]["x_template_yard"]) - fdb.KPSFR_TEMPLATE_LENGTH_YARDS) < 1e-6
+
+
+def test_convert_wc14_tvcalib_segments(tmp_path: Path):
+    sources_root = tmp_path / "sources"
+    tvc = sources_root / "wc14_tvcalib_additional_annotations"
+    wc14 = sources_root / "worldcup2014_nhoma" / "raw" / "test"
+    tvc.mkdir(parents=True, exist_ok=True)
+    wc14.mkdir(parents=True, exist_ok=True)
+    _write_real_rgb_image(wc14 / "1.jpg", size=(320, 200))
+
+    ann = {
+        "Side line top": [{"x": 0.1, "y": 0.2}, {"x": 0.9, "y": 0.2}],
+        "Side line bottom": [{"x": 0.1, "y": 0.8}, {"x": 0.9, "y": 0.8}],
+        "Side line left": [{"x": 0.1, "y": 0.2}, {"x": 0.1, "y": 0.8}],
+        "Side line right": [{"x": 0.9, "y": 0.2}, {"x": 0.9, "y": 0.8}],
+        "Middle line": [{"x": 0.5, "y": 0.2}, {"x": 0.5, "y": 0.8}],
+        "Circle left": [{"x": 0.25, "y": 0.5}, {"x": 0.28, "y": 0.55}, {"x": 0.28, "y": 0.45}],
+        "Circle right": [{"x": 0.75, "y": 0.5}, {"x": 0.72, "y": 0.55}, {"x": 0.72, "y": 0.45}],
+    }
+    (tvc / "1.json").write_text(json.dumps(ann), encoding="utf-8")
+
+    out = tmp_path / "staging_tvc"
+    stats = fdb.convert_wc14_tvcalib_segments(tvc, out)
+    assert stats["images"] == 1
+    sample = (out / "labels" / "test" / "1.txt").read_text(encoding="utf-8").strip()
+    parts = sample.split()
+    assert len(parts) == 1 + 4 + 32 * 3
+    # Spot-check a few key intersections (the synthetic field is the unit
+    # square scaled to [0.1, 0.9] in both axes):
+    # idx 0 = top_left = (sideline top ∩ sideline left) -> (0.1, 0.2)
+    assert parts[5] == "0.100000" and parts[6] == "0.200000"
+    # idx 24 = top_right = (sideline top ∩ sideline right) -> (0.9, 0.2)
+    base_24 = 5 + 3 * 24
+    assert parts[base_24] == "0.900000" and parts[base_24 + 1] == "0.200000"
+    # idx 13 = midfield_top = (middle line ∩ side line top) -> (0.5, 0.2)
+    base_13 = 5 + 3 * 13
+    assert parts[base_13] == "0.500000" and parts[base_13 + 1] == "0.200000"
+
+
+# ---------------------------------------------------------------------------
+# Quality filter and source fusion in the merger
+# ---------------------------------------------------------------------------
+
+
+def _write_label_with_visible(path: Path, n_visible: int, x: float = 0.5, y: float = 0.5) -> None:
+    """Write a YOLO Pose label with exactly ``n_visible`` visible keypoints."""
+    parts: list[str] = ["0", "0.5", "0.5", "0.4", "0.3"]
+    for k in range(32):
+        if k < n_visible:
+            parts += [f"{x:.6f}", f"{y:.6f}", "2"]
+        else:
+            parts += ["0.000000", "0.000000", "0"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(" ".join(parts) + "\n", encoding="utf-8")
+
+
+def test_merge_drops_low_visibility_labels(tmp_path: Path):
+    staging = tmp_path / "staging"
+    src = staging / "martinjolif_football-pitch-detection"
+    img_dir = src / "images" / "train"
+    lbl_dir = src / "labels" / "train"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    lbl_dir.mkdir(parents=True, exist_ok=True)
+    # Image A: 4 visible -> kept.
+    _write_real_rgb_image(img_dir / "A.jpg")
+    _write_label_with_visible(lbl_dir / "A.txt", n_visible=4)
+    # Image B: only 2 visible -> dropped.
+    _write_real_rgb_image(img_dir / "B.jpg")
+    _write_label_with_visible(lbl_dir / "B.txt", n_visible=2)
+
+    unified = fdb._ensure_dir(tmp_path / "unified")
+    counts = fdb._merge_staging_into_unified(staging, unified)
+    assert counts["train"] == 1
+    assert counts["_skipped_low_quality"] == 1
+    survivors = list((unified / "labels" / "train").glob("*.txt"))
+    assert len(survivors) == 1
+    assert "A" in survivors[0].name
+
+
+def test_merge_fusion_priority_keeps_higher_priority_source(tmp_path: Path):
+    """Two staging entries pointing at the *same* physical image fuse to one,
+    keeping the higher-priority source's label."""
+    staging = tmp_path / "staging"
+    # The underlying physical image (lives outside any staging tree).
+    physical_dir = tmp_path / "physical"
+    physical_dir.mkdir(parents=True, exist_ok=True)
+    physical_img = _write_real_rgb_image(physical_dir / "frame_001.jpg")
+
+    # Lower priority source: ts_worldcup_kpsfr (priority 60).
+    low = staging / "ts_worldcup_kpsfr"
+    img_low = low / "images" / "train"
+    lbl_low = low / "labels" / "train"
+    img_low.mkdir(parents=True, exist_ok=True)
+    lbl_low.mkdir(parents=True, exist_ok=True)
+    (img_low / "frame_001.jpg").symlink_to(physical_img)
+    _write_label_with_visible(lbl_low / "frame_001.txt", n_visible=8, x=0.1)
+
+    # Higher priority source: martinjolif (priority 100), same physical image.
+    high = staging / "martinjolif_football-pitch-detection"
+    img_high = high / "images" / "train"
+    lbl_high = high / "labels" / "train"
+    img_high.mkdir(parents=True, exist_ok=True)
+    lbl_high.mkdir(parents=True, exist_ok=True)
+    (img_high / "frame_001.jpg").symlink_to(physical_img)
+    _write_label_with_visible(lbl_high / "frame_001.txt", n_visible=8, x=0.9)
+
+    unified = fdb._ensure_dir(tmp_path / "unified")
+    counts = fdb._merge_staging_into_unified(staging, unified)
+    # Only one survives because both staging symlinks resolve to the same
+    # physical jpg.
+    assert counts["train"] == 1
+    assert counts["_fused_drops"] == 1
+    survivors = list((unified / "labels" / "train").glob("*.txt"))
+    assert len(survivors) == 1
+    # Survivor must be from the higher-priority source.
+    assert survivors[0].name.startswith("martinjolif_football-pitch-detection__")
+
+
+def test_merge_does_not_fuse_distinct_physical_images_with_same_basename(tmp_path: Path):
+    """Soccana ``00000.jpg`` from SoccerNet train and ``00000.jpg`` from a
+    different folder are physically different images and must NOT collapse."""
+    staging = tmp_path / "staging"
+    physical = tmp_path / "physical"
+    physical.mkdir(parents=True, exist_ok=True)
+    img_a = _write_real_rgb_image(physical / "a" / "00000.jpg")
+    img_b = _write_real_rgb_image(physical / "b" / "00000.jpg")
+
+    src_a = staging / "ts_worldcup_kpsfr"
+    src_b = staging / "Adit-jain_Soccana_Keypoint_detection_v1"
+    for src, img, x in [(src_a, img_a, 0.1), (src_b, img_b, 0.9)]:
+        (src / "images" / "train").mkdir(parents=True, exist_ok=True)
+        (src / "labels" / "train").mkdir(parents=True, exist_ok=True)
+        (src / "images" / "train" / "00000.jpg").symlink_to(img)
+        _write_label_with_visible(src / "labels" / "train" / "00000.txt", n_visible=8, x=x)
+
+    unified = fdb._ensure_dir(tmp_path / "unified")
+    counts = fdb._merge_staging_into_unified(staging, unified)
+    assert counts["train"] == 2
+    assert counts["_fused_drops"] == 0
 
 
 # ---------------------------------------------------------------------------
