@@ -86,8 +86,8 @@ def test_yolo():
             table.add_row("Model Load", f"[OK] Loaded from: {model_path}")
         else:
             rprint(f"[yellow]Downloading {model_name}...[/yellow]")
-            # This will download to current dir usually
-            model = YOLO(model_name)
+            # Use full path to avoid downloading to root
+            model = YOLO(str(model_path))
 
             # Locate where it was downloaded (usually current dir)
             # And move it to models_dir

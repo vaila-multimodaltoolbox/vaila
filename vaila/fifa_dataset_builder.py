@@ -67,6 +67,7 @@ import random
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.parse
 import urllib.request
@@ -74,85 +75,191 @@ import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, cast
+
+import numpy as np
 
 # ---------------------------------------------------------------------------
 # Canonical 32-keypoint schema (Roboflow ``football-field-detection-f07vi``)
 # ---------------------------------------------------------------------------
+#
+# The canonical schema is the one used by:
+#   * ``martinjolif/football-pitch-detection`` (HF) — the model trained on this.
+#   * Roboflow ``football-field-detection-f07vi`` and the ``roboflow/sports``
+#     repo's ``SoccerPitchConfiguration`` (https://github.com/roboflow/sports).
+#
+# Reference field dimensions (cm), copied verbatim from
+# ``sports/configs/soccer.py`` so the labels are bit-for-bit compatible with
+# the HF model that vailá ships at
+# ``models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt``::
+#
+#   width:               7000 cm  (along Y, "short" axis)
+#   length:             12000 cm  (along X, "long" axis)
+#   penalty_box_width:   4100 cm
+#   penalty_box_length:  2015 cm
+#   goal_box_width:      1832 cm
+#   goal_box_length:      550 cm
+#   centre_circle_radius: 915 cm
+#   penalty_spot_distance: 1100 cm
+#
+# Coordinate system (Roboflow / canonical labels):
+#   * origin = top-left corner of the field
+#   * X grows to the right (toward the right endline)
+#   * Y grows DOWN (toward the bottom sideline)  ← image convention
+#
+# vailá ``drawsportsfields.py`` uses a DIFFERENT convention (the user wants
+# us to align to it):
+#   * origin = field center  ([0, 0, 0])
+#   * X grows to the right, Y grows UP
+#   * dimensions ≈ 104.9 m × 67.9 m (FIFA standard) — see
+#     ``vaila/models/soccerfield_ref3d_fifa.csv``.
+#
+# When we need the centered-metres convention we derive it from the Roboflow
+# normalised coords; for homography projection we use the KpSFR template
+# (114.83 × 74.37 yards = 105 × 68 m, Y-down, origin top-left).
+ROBOFLOW_FIELD_LENGTH_CM = 12000
+ROBOFLOW_FIELD_WIDTH_CM = 7000
+ROBOFLOW_PEN_BOX_LEN_CM = 2015
+ROBOFLOW_PEN_BOX_WID_CM = 4100
+ROBOFLOW_GOAL_BOX_LEN_CM = 550
+ROBOFLOW_GOAL_BOX_WID_CM = 1832
+ROBOFLOW_CIRCLE_R_CM = 915
+ROBOFLOW_PEN_SPOT_CM = 1100
 
-# Index here is 0-based to match YOLO Pose ordering.  The numeric label in
-# ``vaila/models/hf_datasets/football-pitch-detection/pitch_keypoints.png`` is
-# 1-based (i.e. ``kp_00`` corresponds to label ``01`` on the image).
+# Drawsportsfields / FIFA centered model (length, width) in metres.
+DRAWSPORTSFIELDS_LENGTH_M = 104.9
+DRAWSPORTSFIELDS_WIDTH_M = 67.9
+
+# KpSFR / WC14 template dimensions used by public homography datasets.
+KPSFR_TEMPLATE_LENGTH_YARDS = 114.83
+KPSFR_TEMPLATE_WIDTH_YARDS = 74.37
+
+
+def _canonical_vertices_cm() -> list[tuple[float, float]]:
+    """Return the 32 canonical keypoints in **Roboflow cm coordinates**.
+
+    Same order/positions as :class:`sports.configs.soccer.SoccerPitchConfiguration`
+    so that YOLO Pose label index ``i`` corresponds exactly to ``vertices[i]``.
+    """
+    L = ROBOFLOW_FIELD_LENGTH_CM
+    W = ROBOFLOW_FIELD_WIDTH_CM
+    PBL = ROBOFLOW_PEN_BOX_LEN_CM
+    PBW = ROBOFLOW_PEN_BOX_WID_CM
+    GBL = ROBOFLOW_GOAL_BOX_LEN_CM
+    GBW = ROBOFLOW_GOAL_BOX_WID_CM
+    R = ROBOFLOW_CIRCLE_R_CM
+    PS = ROBOFLOW_PEN_SPOT_CM
+    return [
+        (0.0, 0.0),  # 0 top_left_corner
+        (0.0, (W - PBW) / 2.0),  # 1 left_pen_box_top_outer
+        (0.0, (W - GBW) / 2.0),  # 2 left_goal_area_top_outer
+        (0.0, (W + GBW) / 2.0),  # 3 left_goal_area_bottom_outer
+        (0.0, (W + PBW) / 2.0),  # 4 left_pen_box_bottom_outer
+        (0.0, float(W)),  # 5 bottom_left_corner
+        (float(GBL), (W - GBW) / 2.0),  # 6 left_goal_area_top_inner
+        (float(GBL), (W + GBW) / 2.0),  # 7 left_goal_area_bottom_inner
+        (float(PS), W / 2.0),  # 8 left_penalty_spot
+        (float(PBL), (W - PBW) / 2.0),  # 9 left_pen_box_top_inner
+        (float(PBL), (W - GBW) / 2.0),  # 10 left_pen_box_inner_top_at_goal_y
+        (float(PBL), (W + GBW) / 2.0),  # 11 left_pen_box_inner_bottom_at_goal_y
+        (float(PBL), (W + PBW) / 2.0),  # 12 left_pen_box_bottom_inner
+        (L / 2.0, 0.0),  # 13 midfield_top
+        (L / 2.0, W / 2.0 - R),  # 14 center_circle_top
+        (L / 2.0, W / 2.0 + R),  # 15 center_circle_bottom
+        (L / 2.0, float(W)),  # 16 midfield_bottom
+        (float(L - PBL), (W - PBW) / 2.0),  # 17 right_pen_box_top_inner
+        (float(L - PBL), (W - GBW) / 2.0),  # 18 right_pen_box_inner_top_at_goal_y
+        (float(L - PBL), (W + GBW) / 2.0),  # 19 right_pen_box_inner_bottom_at_goal_y
+        (float(L - PBL), (W + PBW) / 2.0),  # 20 right_pen_box_bottom_inner
+        (float(L - PS), W / 2.0),  # 21 right_penalty_spot
+        (float(L - GBL), (W - GBW) / 2.0),  # 22 right_goal_area_top_inner
+        (float(L - GBL), (W + GBW) / 2.0),  # 23 right_goal_area_bottom_inner
+        (float(L), 0.0),  # 24 top_right_corner
+        (float(L), (W - PBW) / 2.0),  # 25 right_pen_box_top_outer
+        (float(L), (W - GBW) / 2.0),  # 26 right_goal_area_top_outer
+        (float(L), (W + GBW) / 2.0),  # 27 right_goal_area_bottom_outer
+        (float(L), (W + PBW) / 2.0),  # 28 right_pen_box_bottom_outer
+        (float(L), float(W)),  # 29 bottom_right_corner
+        (L / 2.0 - R, W / 2.0),  # 30 center_circle_left
+        (L / 2.0 + R, W / 2.0),  # 31 center_circle_right
+    ]
+
+
+# Index here is 0-based to match YOLO Pose ordering and the order of
+# :func:`_canonical_vertices_cm`.  Names are derived from the Roboflow
+# ``SoccerPitchConfiguration`` (and verified against the ``flip_idx`` below).
 CANONICAL_KP_NAMES_32: tuple[str, ...] = (
-    "top_left_corner",  # 01
-    "left_penalty_box_top_left",  # 02
-    "left_goal_area_top_left",  # 03
-    "left_goal_area_bottom_left",  # 04
-    "left_penalty_box_bottom_left",  # 05
-    "bottom_left_corner",  # 06
-    "left_goal_area_top_right",  # 07
-    "left_goal_area_bottom_right",  # 08
-    "left_penalty_spot",  # 09
-    "left_penalty_box_top_right",  # 10
-    "left_penalty_arc_top_intersection",  # 11
-    "left_penalty_arc_bottom_intersection",  # 12
-    "left_penalty_box_bottom_right",  # 13
-    "center_circle_left",  # 14
-    "midfield_top",  # 15
-    "center_circle_top",  # 16
-    "center_circle_bottom",  # 17
-    "midfield_bottom",  # 18
-    "center_circle_right",  # 19
-    "right_penalty_box_top_left",  # 20
-    "right_penalty_arc_top_intersection",  # 21
-    "right_penalty_arc_bottom_intersection",  # 22
-    "right_penalty_box_bottom_left",  # 23
-    "right_penalty_spot",  # 24
-    "right_goal_area_top_left",  # 25
-    "right_goal_area_bottom_left",  # 26
-    "top_right_corner",  # 27
-    "right_penalty_box_top_right",  # 28
-    "right_goal_area_top_right",  # 29
-    "right_goal_area_bottom_right",  # 30
-    "right_penalty_box_bottom_right",  # 31
-    "bottom_right_corner",  # 32
+    "top_left_corner",  # 0
+    "left_pen_box_top_outer",  # 1
+    "left_goal_area_top_outer",  # 2
+    "left_goal_area_bottom_outer",  # 3
+    "left_pen_box_bottom_outer",  # 4
+    "bottom_left_corner",  # 5
+    "left_goal_area_top_inner",  # 6
+    "left_goal_area_bottom_inner",  # 7
+    "left_penalty_spot",  # 8
+    "left_pen_box_top_inner",  # 9
+    "left_pen_box_inner_top_at_goal_y",  # 10
+    "left_pen_box_inner_bottom_at_goal_y",  # 11
+    "left_pen_box_bottom_inner",  # 12
+    "midfield_top",  # 13
+    "center_circle_top",  # 14
+    "center_circle_bottom",  # 15
+    "midfield_bottom",  # 16
+    "right_pen_box_top_inner",  # 17
+    "right_pen_box_inner_top_at_goal_y",  # 18
+    "right_pen_box_inner_bottom_at_goal_y",  # 19
+    "right_pen_box_bottom_inner",  # 20
+    "right_penalty_spot",  # 21
+    "right_goal_area_top_inner",  # 22
+    "right_goal_area_bottom_inner",  # 23
+    "top_right_corner",  # 24
+    "right_pen_box_top_outer",  # 25
+    "right_goal_area_top_outer",  # 26
+    "right_goal_area_bottom_outer",  # 27
+    "right_pen_box_bottom_outer",  # 28
+    "bottom_right_corner",  # 29
+    "center_circle_left",  # 30
+    "center_circle_right",  # 31
 )
 NUM_KEYPOINTS = 32
 
 # Horizontal-flip permutation, matching the ``flip_idx`` published by the
-# canonical HF dataset.
+# canonical HF dataset and verified against :func:`_canonical_vertices_cm`
+# (each pair (i, flip_idx[i]) maps to a horizontal mirror around X = L/2).
 CANONICAL_FLIP_IDX_32: tuple[int, ...] = (
-    24,
-    25,
-    26,
-    27,
-    28,
-    29,
-    22,
-    23,
-    21,
-    17,
-    18,
-    19,
-    20,
-    13,
-    14,
-    15,
-    16,
-    9,
-    10,
-    11,
-    12,
-    8,
-    6,
-    7,
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    31,
-    30,
+    24,  # 0  top_left_corner            <-> top_right_corner
+    25,  # 1  left_pen_box_top_outer     <-> right_pen_box_top_outer
+    26,  # 2  left_goal_area_top_outer   <-> right_goal_area_top_outer
+    27,  # 3  left_goal_area_bottom_outer<-> right_goal_area_bottom_outer
+    28,  # 4  left_pen_box_bottom_outer  <-> right_pen_box_bottom_outer
+    29,  # 5  bottom_left_corner         <-> bottom_right_corner
+    22,  # 6  left_goal_area_top_inner   <-> right_goal_area_top_inner
+    23,  # 7  left_goal_area_bottom_inner<-> right_goal_area_bottom_inner
+    21,  # 8  left_penalty_spot          <-> right_penalty_spot
+    17,  # 9  left_pen_box_top_inner     <-> right_pen_box_top_inner
+    18,  # 10 left_pen_box_inner_top_y   <-> right_pen_box_inner_top_y
+    19,  # 11 left_pen_box_inner_bot_y   <-> right_pen_box_inner_bot_y
+    20,  # 12 left_pen_box_bottom_inner  <-> right_pen_box_bottom_inner
+    13,  # 13 midfield_top (self)
+    14,  # 14 center_circle_top (self)
+    15,  # 15 center_circle_bottom (self)
+    16,  # 16 midfield_bottom (self)
+    9,  # 17 -> 9
+    10,  # 18 -> 10
+    11,  # 19 -> 11
+    12,  # 20 -> 12
+    8,  # 21 -> 8
+    6,  # 22 -> 6
+    7,  # 23 -> 7
+    0,  # 24 -> 0
+    1,  # 25 -> 1
+    2,  # 26 -> 2
+    3,  # 27 -> 3
+    4,  # 28 -> 4
+    5,  # 29 -> 5
+    31,  # 30 center_circle_left  <-> center_circle_right
+    30,  # 31
 )
 
 
@@ -329,6 +436,44 @@ REGISTRY: tuple[DatasetSource, ...] = (
         optional=True,
         requires_env=("ROBOFLOW_API_KEY",),
     ),
+    DatasetSource(
+        name="worldcup2014_nhoma",
+        kind="url_archive",
+        url="https://nhoma.github.io/data/soccer_data.tar.gz",
+        converter="convert_worldcup2014_homography",
+        licence="see WorldCup 2014 dataset page/license terms",
+        notes=(
+            "WorldCup 2014 benchmark (209 train + 186 test images) with "
+            "per-frame homography matrices. We project the canonical 32 points "
+            "from the centered FIFA template into each image."
+        ),
+        optional=True,
+    ),
+    DatasetSource(
+        name="ts_worldcup_kpsfr",
+        kind="url_archive",
+        url="https://cgv.cs.nthu.edu.tw/KpSFR_data/TS-WorldCup.zip",
+        converter="convert_tsworldcup_homography",
+        licence="see TS-WorldCup/KpSFR page",
+        notes=(
+            "TS-WorldCup (3,812 frames, 43 clips) with per-frame homography "
+            "matrices under Annotations/. Converted to canonical 32-kp labels "
+            "by projecting centered FIFA template points."
+        ),
+        optional=True,
+    ),
+    DatasetSource(
+        name="wc14_tvcalib_additional_annotations",
+        kind="url_archive",
+        url="https://tib.eu/cloud/s/Jz4x2KsjinEEkwQ/download/wc14-test-additional_annotations_wacv23_theiner.tar",
+        converter="convert_wc14_tvcalib_segments",
+        licence="see TVCalib dataset page/license terms",
+        notes=(
+            "Additional WC14 segment annotations in SoccerNet-style format. "
+            "Converted to canonical keypoints via geometric line intersections."
+        ),
+        optional=True,
+    ),
 )
 
 
@@ -431,6 +576,30 @@ def _download_kaggle_dataset(slug: str, dst: Path) -> None:
     )
 
 
+def _download_url_archive(url: str, dst: Path) -> None:
+    """Download a .zip / .tar(.gz) archive URL and extract into ``dst``."""
+    _ensure_dir(dst)
+    parsed = urllib.parse.urlparse(url)
+    archive_name = Path(parsed.path).name or "dataset_archive"
+    archive_path = dst / archive_name
+    if not archive_path.exists():
+        urllib.request.urlretrieve(url, archive_path)  # noqa: S310
+    # Idempotency marker: if this exists, extraction has already run.
+    extracted_marker = dst / ".extracted_ok"
+    if extracted_marker.exists():
+        return
+    lower = archive_name.lower()
+    if lower.endswith(".zip"):
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            zf.extractall(dst)
+    elif lower.endswith(".tar") or lower.endswith(".tar.gz") or lower.endswith(".tgz"):
+        with tarfile.open(archive_path, "r:*") as tf:
+            tf.extractall(dst)
+    else:
+        raise RuntimeError(f"Unsupported archive extension for URL source: {archive_name}")
+    extracted_marker.write_text("ok\n", encoding="utf-8")
+
+
 def _download_soccernet_calibration(
     dst: Path,
     *,
@@ -485,6 +654,511 @@ def _extract_soccernet_zips(
 # ---------------------------------------------------------------------------
 # Converters: each takes (downloaded_path, staging_dir) and returns stats dict
 # ---------------------------------------------------------------------------
+
+
+def _canonical_vertices_normalized() -> list[tuple[float, float]]:
+    """Return the 32 canonical keypoints as ``(nx, ny)`` in ``[0, 1]^2``.
+
+    Normalised against the Roboflow template (12000×7000 cm), Y-down,
+    origin at top-left corner — the same convention used by the YOLO Pose
+    label files.
+    """
+    L = float(ROBOFLOW_FIELD_LENGTH_CM)
+    W = float(ROBOFLOW_FIELD_WIDTH_CM)
+    return [(x / L, y / W) for (x, y) in _canonical_vertices_cm()]
+
+
+def _load_centered_fifa_points_32() -> tuple[list[tuple[float, float, float]], float, float]:
+    """Return canonical 32 keypoints in **centered** drawsportsfields metres.
+
+    The output convention matches ``vaila/models/soccerfield_ref3d_fifa.csv``:
+
+    * origin = field center ``(0, 0, 0)``
+    * X grows to the right, Y grows UP
+    * field dimensions = ``DRAWSPORTSFIELDS_LENGTH_M × DRAWSPORTSFIELDS_WIDTH_M``
+      (FIFA standard: 104.9 × 67.9 m)
+
+    The ``length_m`` and ``width_m`` values returned describe the FIFA field
+    in metres (X span and Y span respectively).  Used by the homography
+    converters and by ``_write_keypoint_reference``.
+    """
+    L_m = DRAWSPORTSFIELDS_LENGTH_M
+    W_m = DRAWSPORTSFIELDS_WIDTH_M
+    centered: list[tuple[float, float, float]] = []
+    for nx, ny in _canonical_vertices_normalized():
+        # Roboflow: origin top-left, Y-down, normalised in [0,1].
+        # Centered drawsportsfields: origin centre, Y-up, scaled to FIFA dims.
+        x_m = (nx - 0.5) * L_m
+        y_m = (0.5 - ny) * W_m
+        centered.append((x_m, y_m, 0.0))
+    return centered, L_m, W_m
+
+
+def _centered_meters_to_kpsfr_template(
+    x_m: float,
+    y_m: float,
+    *,
+    length_m: float,
+    width_m: float,
+) -> tuple[float, float]:
+    """Map centered (Y-up) metres to KpSFR template (yards, Y-down, top-left origin).
+
+    KpSFR / WC14 use a 114.83 × 74.37 yard template with origin at the
+    top-left corner of the field and Y growing DOWN (image convention).
+    The drawsportsfields convention is centered with Y growing UP, so we
+    flip the Y axis when shifting.
+    """
+    # Centered (Y-up) -> normalised top-left (Y-down).
+    nx = x_m / length_m + 0.5
+    ny = 0.5 - y_m / width_m
+    x_tpl = nx * KPSFR_TEMPLATE_LENGTH_YARDS
+    y_tpl = ny * KPSFR_TEMPLATE_WIDTH_YARDS
+    return x_tpl, y_tpl
+
+
+def _project_template_points_to_image(
+    H: np.ndarray,
+    template_xy: list[tuple[float, float]],
+    *,
+    img_w: int,
+    img_h: int,
+) -> list[tuple[float, float, float]]:
+    """Project template points to image using whichever H direction fits best.
+
+    Public sports datasets differ in homography convention. We try both:
+    - image -> template (KpSFR convention): image = template @ inv(H.T)
+    - template -> image: image = template @ H.T
+    and keep the one with more projected points inside image bounds.
+    """
+    src = np.array([[x, y, 1.0] for x, y in template_xy], dtype=np.float64)
+    mats: list[np.ndarray] = []
+    with contextlib.suppress(np.linalg.LinAlgError):
+        mats.append(np.linalg.inv(H.T))
+    mats.append(H.T)
+
+    best: list[tuple[float, float, float]] = [(0.0, 0.0, 0.0)] * len(template_xy)
+    best_inside = -1
+    for M in mats:
+        proj = src @ M
+        z = proj[:, 2]
+        valid_z = np.abs(z) > 1e-9
+        xy = np.zeros((len(template_xy), 2), dtype=np.float64)
+        xy[valid_z, 0] = proj[valid_z, 0] / z[valid_z]
+        xy[valid_z, 1] = proj[valid_z, 1] / z[valid_z]
+
+        candidate: list[tuple[float, float, float]] = []
+        inside = 0
+        for i in range(len(template_xy)):
+            if not valid_z[i]:
+                candidate.append((0.0, 0.0, 0.0))
+                continue
+            x = float(xy[i, 0])
+            y = float(xy[i, 1])
+            if 0.0 <= x < float(img_w) and 0.0 <= y < float(img_h):
+                candidate.append((x / img_w, y / img_h, 2.0))
+                inside += 1
+            else:
+                candidate.append((0.0, 0.0, 0.0))
+        if inside > best_inside:
+            best = candidate
+            best_inside = inside
+    return best
+
+
+def convert_images_only(src_root: Path, dst_root: Path) -> dict[str, int]:
+    """No-op converter used for metadata-only sources."""
+    n_images = sum(1 for _ in _all_image_files(src_root))
+    return {"images_indexed": n_images, "images": 0, "labels": 0}
+
+
+def _fit_line_abc(points_xy: list[tuple[float, float]]) -> tuple[float, float, float] | None:
+    """Fit line ax+by+c=0 through points in normalized image coordinates."""
+    if len(points_xy) < 2:
+        return None
+    arr = np.array([[x, y, 1.0] for x, y in points_xy], dtype=np.float64)
+    # Total least squares via homogeneous SVD.
+    _, _, vh = np.linalg.svd(arr)
+    a, b, c = vh[-1, :]
+    norm = float(np.hypot(a, b))
+    if norm <= 1e-12:
+        return None
+    return (a / norm, b / norm, c / norm)
+
+
+def _line_intersection(
+    l1: tuple[float, float, float] | None,
+    l2: tuple[float, float, float] | None,
+) -> tuple[float, float] | None:
+    if l1 is None or l2 is None:
+        return None
+    a1, b1, c1 = l1
+    a2, b2, c2 = l2
+    det = a1 * b2 - a2 * b1
+    if abs(det) <= 1e-12:
+        return None
+    x = (b1 * c2 - b2 * c1) / det
+    y = (c1 * a2 - c2 * a1) / det
+    return (float(x), float(y))
+
+
+def _as_xy_list(raw_points: object) -> list[tuple[float, float]]:
+    out: list[tuple[float, float]] = []
+    if not isinstance(raw_points, list):
+        return out
+    for p in raw_points:
+        if not isinstance(p, dict):
+            continue
+        p_dict = cast(dict[str, Any], p)
+        x_raw = p_dict.get("x")
+        y_raw = p_dict.get("y")
+        if not isinstance(x_raw, int | float | str):
+            continue
+        if not isinstance(y_raw, int | float | str):
+            continue
+        try:
+            x = float(x_raw)
+            y = float(y_raw)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(x) and np.isfinite(y):
+            out.append((x, y))
+    return out
+
+
+def _put_if_valid(
+    canonical: list[tuple[float, float, float]],
+    idx: int,
+    pt: tuple[float, float] | None,
+) -> None:
+    if pt is None:
+        return
+    x, y = pt
+    if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
+        canonical[idx] = (x, y, 2.0)
+
+
+def _approx_circle_extrema(points: list[tuple[float, float]]) -> dict[str, tuple[float, float]]:
+    """Approximate left/right/top/bottom points from sampled circle/polyline points."""
+    if not points:
+        return {}
+    left = min(points, key=lambda p: p[0])
+    right = max(points, key=lambda p: p[0])
+    top = min(points, key=lambda p: p[1])
+    bottom = max(points, key=lambda p: p[1])
+    return {"left": left, "right": right, "top": top, "bottom": bottom}
+
+
+def convert_wc14_tvcalib_segments(src_root: Path, dst_root: Path) -> dict[str, int]:
+    """Convert WC14 TVCalib additional segment annotations to canonical 32-kp labels."""
+    stats = {"images": 0, "labels": 0, "skipped": 0, "low_visible": 0}
+    # Resolve images from the WC14 source downloaded by worldcup2014_nhoma.
+    wc14_root = src_root.parent / "worldcup2014_nhoma"
+
+    def _resolve_wc14_image(stem: str) -> Path | None:
+        for candidate in (
+            wc14_root / "raw" / "test" / f"{stem}.jpg",
+            wc14_root / "raw" / "train_val" / f"{stem}.jpg",
+            wc14_root / f"{stem}.jpg",
+        ):
+            if candidate.exists():
+                return candidate
+        matches = list(wc14_root.rglob(f"{stem}.jpg"))
+        return matches[0] if matches else None
+
+    for json_path in sorted(src_root.glob("*.json")):
+        if json_path.name == "match_info_cam_gt.json":
+            continue
+        stem = json_path.stem
+        img_path = _resolve_wc14_image(stem)
+        if img_path is None:
+            stats["skipped"] += 1
+            continue
+        try:
+            ann = json.loads(json_path.read_text(encoding="utf-8"))
+        except Exception:
+            stats["skipped"] += 1
+            continue
+
+        lines: dict[str, tuple[float, float, float] | None] = {}
+        for k, v in ann.items():
+            pts = _as_xy_list(v)
+            lines[k] = _fit_line_abc(pts)
+
+        canonical: list[tuple[float, float, float]] = [(0.0, 0.0, 0.0)] * NUM_KEYPOINTS
+        # Field corners and sidelines.
+        _put_if_valid(
+            canonical,
+            0,
+            _line_intersection(lines.get("Side line top"), lines.get("Side line left")),
+        )
+        _put_if_valid(
+            canonical,
+            24,
+            _line_intersection(lines.get("Side line top"), lines.get("Side line right")),
+        )
+        _put_if_valid(
+            canonical,
+            5,
+            _line_intersection(lines.get("Side line bottom"), lines.get("Side line left")),
+        )
+        _put_if_valid(
+            canonical,
+            29,
+            _line_intersection(lines.get("Side line bottom"), lines.get("Side line right")),
+        )
+        # Midfield (intersections of the middle line with sidelines).
+        _put_if_valid(
+            canonical, 13, _line_intersection(lines.get("Middle line"), lines.get("Side line top"))
+        )
+        _put_if_valid(
+            canonical,
+            16,
+            _line_intersection(lines.get("Middle line"), lines.get("Side line bottom")),
+        )
+        # Left big rect (penalty box):
+        # 1 = outer top (on side line left), 9 = inner top (on big rect main),
+        # 4 = outer bottom, 12 = inner bottom.
+        _put_if_valid(
+            canonical,
+            1,
+            _line_intersection(lines.get("Big rect. left top"), lines.get("Side line left")),
+        )
+        _put_if_valid(
+            canonical,
+            9,
+            _line_intersection(lines.get("Big rect. left top"), lines.get("Big rect. left main")),
+        )
+        _put_if_valid(
+            canonical,
+            4,
+            _line_intersection(lines.get("Big rect. left bottom"), lines.get("Side line left")),
+        )
+        _put_if_valid(
+            canonical,
+            12,
+            _line_intersection(
+                lines.get("Big rect. left bottom"), lines.get("Big rect. left main")
+            ),
+        )
+        # Left small rect (goal area):
+        # 2 = outer top, 6 = inner top, 3 = outer bottom, 7 = inner bottom.
+        _put_if_valid(
+            canonical,
+            2,
+            _line_intersection(lines.get("Small rect. left top"), lines.get("Side line left")),
+        )
+        _put_if_valid(
+            canonical,
+            6,
+            _line_intersection(
+                lines.get("Small rect. left top"), lines.get("Small rect. left main")
+            ),
+        )
+        _put_if_valid(
+            canonical,
+            3,
+            _line_intersection(lines.get("Small rect. left bottom"), lines.get("Side line left")),
+        )
+        _put_if_valid(
+            canonical,
+            7,
+            _line_intersection(
+                lines.get("Small rect. left bottom"), lines.get("Small rect. left main")
+            ),
+        )
+        # Right big rect:
+        # 25 = outer top (on side line right), 17 = inner top,
+        # 28 = outer bottom, 20 = inner bottom.
+        _put_if_valid(
+            canonical,
+            25,
+            _line_intersection(lines.get("Big rect. right top"), lines.get("Side line right")),
+        )
+        _put_if_valid(
+            canonical,
+            17,
+            _line_intersection(lines.get("Big rect. right top"), lines.get("Big rect. right main")),
+        )
+        _put_if_valid(
+            canonical,
+            28,
+            _line_intersection(lines.get("Big rect. right bottom"), lines.get("Side line right")),
+        )
+        _put_if_valid(
+            canonical,
+            20,
+            _line_intersection(
+                lines.get("Big rect. right bottom"), lines.get("Big rect. right main")
+            ),
+        )
+        # Right small rect:
+        # 26 = outer top, 22 = inner top, 27 = outer bottom, 23 = inner bottom.
+        _put_if_valid(
+            canonical,
+            26,
+            _line_intersection(lines.get("Small rect. right top"), lines.get("Side line right")),
+        )
+        _put_if_valid(
+            canonical,
+            22,
+            _line_intersection(
+                lines.get("Small rect. right top"), lines.get("Small rect. right main")
+            ),
+        )
+        _put_if_valid(
+            canonical,
+            27,
+            _line_intersection(lines.get("Small rect. right bottom"), lines.get("Side line right")),
+        )
+        _put_if_valid(
+            canonical,
+            23,
+            _line_intersection(
+                lines.get("Small rect. right bottom"), lines.get("Small rect. right main")
+            ),
+        )
+
+        # Penalty spots: take the centre of the small left/right circles
+        # (approx. by the bounding box centroid of sampled points).
+        for ann_name, idx in (("Circle left", 8), ("Circle right", 21)):
+            circ_pts = _as_xy_list(ann.get(ann_name))
+            if circ_pts:
+                ex = _approx_circle_extrema(circ_pts)
+                cx = 0.5 * (ex["left"][0] + ex["right"][0])
+                cy = 0.5 * (ex["top"][1] + ex["bottom"][1])
+                _put_if_valid(canonical, idx, (cx, cy))
+        # Center circle: top/bottom intersections (14, 15) and the left/right
+        # extremes (30, 31).
+        center_circle_pts = _as_xy_list(ann.get("Circle central"))
+        if center_circle_pts:
+            ex = _approx_circle_extrema(center_circle_pts)
+            _put_if_valid(canonical, 30, ex.get("left"))
+            _put_if_valid(canonical, 31, ex.get("right"))
+            _put_if_valid(canonical, 14, ex.get("top"))
+            _put_if_valid(canonical, 15, ex.get("bottom"))
+
+        if sum(1 for _, _, v in canonical if v > 0) < 4:
+            stats["low_visible"] += 1
+            continue
+        line_text = _make_canonical_label_text(None, canonical, cls=0)
+        out_img_dir = _ensure_dir(dst_root / "images" / "test")
+        out_lbl_dir = _ensure_dir(dst_root / "labels" / "test")
+        _link_or_copy(img_path, out_img_dir / img_path.name)
+        (out_lbl_dir / f"{stem}.txt").write_text(line_text + "\n", encoding="utf-8")
+        stats["images"] += 1
+        stats["labels"] += 1
+    return stats
+
+
+def _parse_split_file(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    out = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip().strip("/")
+        if line:
+            out.add(line)
+    return out
+
+
+def convert_worldcup2014_homography(src_root: Path, dst_root: Path) -> dict[str, int]:
+    """Convert WC14 (.homographyMatrix) to canonical 32-pt YOLO Pose labels."""
+    import numpy as np
+    from PIL import Image
+
+    stats = {"images": 0, "labels": 0, "skipped": 0, "low_visible": 0}
+    world_pts_m, length_m, width_m = _load_centered_fifa_points_32()
+    template_xy = [
+        _centered_meters_to_kpsfr_template(x, y, length_m=length_m, width_m=width_m)
+        for x, y, _ in world_pts_m
+    ]
+
+    for hom in sorted(src_root.rglob("*.homographyMatrix")):
+        stem = hom.stem
+        img_path = next(
+            (p for p in (hom.with_suffix(".jpg"), hom.with_suffix(".png")) if p.exists()),
+            None,
+        )
+        if img_path is None:
+            stats["skipped"] += 1
+            continue
+        split_out = "test" if "test" in hom.parts else "train"
+        try:
+            H = np.loadtxt(hom)
+            with Image.open(img_path) as im:
+                img_w, img_h = im.size
+        except Exception:
+            stats["skipped"] += 1
+            continue
+        canonical = _project_template_points_to_image(H, template_xy, img_w=img_w, img_h=img_h)
+        if sum(1 for _, _, v in canonical if v > 0) < 4:
+            stats["low_visible"] += 1
+            continue
+        line_text = _make_canonical_label_text(None, canonical, cls=0)
+        out_img_dir = _ensure_dir(dst_root / "images" / split_out)
+        out_lbl_dir = _ensure_dir(dst_root / "labels" / split_out)
+        _link_or_copy(img_path, out_img_dir / img_path.name)
+        (out_lbl_dir / f"{stem}.txt").write_text(line_text + "\n", encoding="utf-8")
+        stats["images"] += 1
+        stats["labels"] += 1
+    return stats
+
+
+def convert_tsworldcup_homography(src_root: Path, dst_root: Path) -> dict[str, int]:
+    """Convert TS-WorldCup homography annotations to canonical 32-pt YOLO Pose."""
+    import numpy as np
+    from PIL import Image
+
+    stats = {"images": 0, "labels": 0, "skipped": 0, "low_visible": 0}
+    world_pts_m, length_m, width_m = _load_centered_fifa_points_32()
+    template_xy = [
+        _centered_meters_to_kpsfr_template(x, y, length_m=length_m, width_m=width_m)
+        for x, y, _ in world_pts_m
+    ]
+
+    train_set = _parse_split_file(src_root / "TS-WorldCup" / "train.txt")
+    test_set = _parse_split_file(src_root / "TS-WorldCup" / "test.txt")
+    ann_root = src_root / "TS-WorldCup" / "Annotations"
+    img_root = src_root / "TS-WorldCup" / "Dataset"
+
+    for hom in sorted(ann_root.rglob("*_homography.npy")):
+        rel_clip = hom.parent.relative_to(ann_root)
+        # The split files omit the score-range directory (e.g. "80_95/").
+        clip_key = "/".join(rel_clip.parts[1:]) if len(rel_clip.parts) > 1 else rel_clip.as_posix()
+        if clip_key in test_set:
+            split_out = "test"
+        elif clip_key in train_set:
+            split_out = "train"
+        else:
+            split_out = "train"
+
+        img_name = hom.name.replace("_homography.npy", ".jpg")
+        img_path = img_root / rel_clip / img_name
+        if not img_path.exists():
+            img_path = img_root / rel_clip / img_name.replace(".jpg", ".png")
+        if not img_path.exists():
+            stats["skipped"] += 1
+            continue
+        try:
+            H = np.load(hom)
+            with Image.open(img_path) as im:
+                img_w, img_h = im.size
+        except Exception:
+            stats["skipped"] += 1
+            continue
+        canonical = _project_template_points_to_image(H, template_xy, img_w=img_w, img_h=img_h)
+        if sum(1 for _, _, v in canonical if v > 0) < 4:
+            stats["low_visible"] += 1
+            continue
+        line_text = _make_canonical_label_text(None, canonical, cls=0)
+        stem = f"{rel_clip.as_posix().replace('/', '__')}__{img_path.stem}"
+        out_img_dir = _ensure_dir(dst_root / "images" / split_out)
+        out_lbl_dir = _ensure_dir(dst_root / "labels" / split_out)
+        _link_or_copy(img_path, out_img_dir / f"{stem}{img_path.suffix.lower()}")
+        (out_lbl_dir / f"{stem}.txt").write_text(line_text + "\n", encoding="utf-8")
+        stats["images"] += 1
+        stats["labels"] += 1
+    return stats
 
 
 def _make_canonical_label_text(
@@ -563,12 +1237,18 @@ def convert_yolo_pose_passthrough(src_root: Path, dst_root: Path) -> dict[str, i
                     triplets.append((triplet[0], triplet[1], triplet[2]))
                 line = _make_canonical_label_text(bbox, triplets, cls=cls)
             else:
-                line = " ".join(
-                    str(int(row[0]))
-                    if i == 0
-                    else (f"{row[i]:.6f}" if (i - 1) % 3 != 2 or i < 5 else str(int(round(row[i]))))
-                    for i in range(len(row))
-                )
+                # Layout: [cls, cx, cy, bw, bh, x1, y1, v1, x2, y2, v2, ...].
+                # Visibility flags live at indices 7, 10, 13, ... i.e.
+                # ``i >= 5 and (i - 5) % 3 == 2``.  Everything else is a float.
+                parts: list[str] = []
+                for i, val in enumerate(row):
+                    if i == 0:
+                        parts.append(str(int(val)))
+                    elif i >= 5 and (i - 5) % 3 == 2:
+                        parts.append(str(int(round(val))))
+                    else:
+                        parts.append(f"{val:.6f}")
+                line = " ".join(parts)
             out_img_dir = _ensure_dir(dst_root / "images" / split_out)
             out_lbl_dir = _ensure_dir(dst_root / "labels" / split_out)
             out_img = out_img_dir / img_path.name
@@ -595,35 +1275,35 @@ def convert_yolo_pose_passthrough(src_root: Path, dst_root: Path) -> dict[str, i
 # ``1_big_rect_left_top_pt1`` and its inner-NE corner at
 # ``2_big_rect_left_top_pt2``; same for bottom edges and small (5.5 m) box.
 SOCCANA_INDEX_TO_CANONICAL: dict[int, int] = {
-    0: 0,  # sideline_top_left            -> top_left_corner
-    1: 1,  # big_rect_left_top_pt1   (out) -> left_penalty_box_top_left
-    2: 9,  # big_rect_left_top_pt2   (in)  -> left_penalty_box_top_right
-    3: 4,  # big_rect_left_bottom_pt1 (out)-> left_penalty_box_bottom_left
-    4: 12,  # big_rect_left_bottom_pt2 (in) -> left_penalty_box_bottom_right
-    5: 2,  # small_rect_left_top_pt1 (out) -> left_goal_area_top_left
-    6: 6,  # small_rect_left_top_pt2 (in)  -> left_goal_area_top_right
-    7: 3,  # small_rect_left_bottom_pt1 (out) -> left_goal_area_bottom_left
-    8: 7,  # small_rect_left_bottom_pt2 (in)  -> left_goal_area_bottom_right
-    9: 5,  # sideline_bottom_left         -> bottom_left_corner
-    10: -1,  # left_semicircle_right       (apex; no canonical match)
-    11: 14,  # center_line_top              -> midfield_top
-    12: 17,  # center_line_bottom           -> midfield_bottom
-    13: 15,  # center_circle_top            -> center_circle_top
-    14: 16,  # center_circle_bottom         -> center_circle_bottom
-    15: -1,  # field_center                 (no canonical match)
-    16: 26,  # sideline_top_right           -> top_right_corner
-    17: 27,  # big_rect_right_top_pt1  (out) -> right_penalty_box_top_right
-    18: 19,  # big_rect_right_top_pt2  (in)  -> right_penalty_box_top_left
-    19: 30,  # big_rect_right_bottom_pt1 (out) -> right_penalty_box_bottom_right
-    20: 22,  # big_rect_right_bottom_pt2 (in)  -> right_penalty_box_bottom_left
-    21: 28,  # small_rect_right_top_pt1 (out) -> right_goal_area_top_right
-    22: 24,  # small_rect_right_top_pt2 (in)  -> right_goal_area_top_left
-    23: 29,  # small_rect_right_bottom_pt1 (out) -> right_goal_area_bottom_right
-    24: 25,  # small_rect_right_bottom_pt2 (in)  -> right_goal_area_bottom_left
-    25: 31,  # sideline_bottom_right        -> bottom_right_corner
-    26: -1,  # right_semicircle_left        (apex; no canonical match)
-    27: 13,  # center_circle_left           -> center_circle_left
-    28: 18,  # center_circle_right          -> center_circle_right
+    0: 0,  # sideline_top_left              -> top_left_corner (0)
+    1: 1,  # big_rect_left_top_pt1   (out)  -> left_pen_box_top_outer (1)
+    2: 9,  # big_rect_left_top_pt2   (in)   -> left_pen_box_top_inner (9)
+    3: 4,  # big_rect_left_bottom_pt1 (out) -> left_pen_box_bottom_outer (4)
+    4: 12,  # big_rect_left_bottom_pt2 (in)  -> left_pen_box_bottom_inner (12)
+    5: 2,  # small_rect_left_top_pt1 (out)  -> left_goal_area_top_outer (2)
+    6: 6,  # small_rect_left_top_pt2 (in)   -> left_goal_area_top_inner (6)
+    7: 3,  # small_rect_left_bottom_pt1 (out) -> left_goal_area_bottom_outer (3)
+    8: 7,  # small_rect_left_bottom_pt2 (in)  -> left_goal_area_bottom_inner (7)
+    9: 5,  # sideline_bottom_left           -> bottom_left_corner (5)
+    10: -1,  # left_semicircle_right          (apex; no canonical match)
+    11: 13,  # center_line_top                -> midfield_top (13)
+    12: 16,  # center_line_bottom             -> midfield_bottom (16)
+    13: 14,  # center_circle_top              -> center_circle_top (14)
+    14: 15,  # center_circle_bottom           -> center_circle_bottom (15)
+    15: -1,  # field_center                   (no canonical match)
+    16: 24,  # sideline_top_right             -> top_right_corner (24)
+    17: 25,  # big_rect_right_top_pt1   (out) -> right_pen_box_top_outer (25)
+    18: 17,  # big_rect_right_top_pt2   (in)  -> right_pen_box_top_inner (17)
+    19: 28,  # big_rect_right_bottom_pt1 (out)-> right_pen_box_bottom_outer (28)
+    20: 20,  # big_rect_right_bottom_pt2 (in) -> right_pen_box_bottom_inner (20)
+    21: 26,  # small_rect_right_top_pt1 (out) -> right_goal_area_top_outer (26)
+    22: 22,  # small_rect_right_top_pt2 (in)  -> right_goal_area_top_inner (22)
+    23: 27,  # small_rect_right_bottom_pt1 (out) -> right_goal_area_bottom_outer (27)
+    24: 23,  # small_rect_right_bottom_pt2 (in)  -> right_goal_area_bottom_inner (23)
+    25: 29,  # sideline_bottom_right          -> bottom_right_corner (29)
+    26: -1,  # right_semicircle_left          (apex; no canonical match)
+    27: 30,  # center_circle_left             -> center_circle_left (30)
+    28: 31,  # center_circle_right            -> center_circle_right (31)
 }
 
 # Backwards-compatible name alias used in earlier API.  ``-1`` means "skip".
@@ -638,22 +1318,22 @@ SOCCANA_29_TO_CANONICAL: dict[str, int] = {
     "small_rect_left_bottom_pt1": 3,
     "small_rect_left_bottom_pt2": 7,
     "sideline_bottom_left": 5,
-    "center_line_top": 14,
-    "center_line_bottom": 17,
-    "center_circle_top": 15,
-    "center_circle_bottom": 16,
-    "sideline_top_right": 26,
-    "big_rect_right_top_pt1": 27,
-    "big_rect_right_top_pt2": 19,
-    "big_rect_right_bottom_pt1": 30,
-    "big_rect_right_bottom_pt2": 22,
-    "small_rect_right_top_pt1": 28,
-    "small_rect_right_top_pt2": 24,
-    "small_rect_right_bottom_pt1": 29,
-    "small_rect_right_bottom_pt2": 25,
-    "sideline_bottom_right": 31,
-    "center_circle_left": 13,
-    "center_circle_right": 18,
+    "center_line_top": 13,
+    "center_line_bottom": 16,
+    "center_circle_top": 14,
+    "center_circle_bottom": 15,
+    "sideline_top_right": 24,
+    "big_rect_right_top_pt1": 25,
+    "big_rect_right_top_pt2": 17,
+    "big_rect_right_bottom_pt1": 28,
+    "big_rect_right_bottom_pt2": 20,
+    "small_rect_right_top_pt1": 26,
+    "small_rect_right_top_pt2": 22,
+    "small_rect_right_bottom_pt1": 27,
+    "small_rect_right_bottom_pt2": 23,
+    "sideline_bottom_right": 29,
+    "center_circle_left": 30,
+    "center_circle_right": 31,
 }
 
 
@@ -678,10 +1358,14 @@ def _extract_soccana_zip_if_needed(src_root: Path) -> Path:
 
 
 def _index_soccernet_images(soccernet_root: Path | None) -> dict[str, Path]:
-    """Map ``"00000"`` -> ``Path/.../00000.jpg`` for every SoccerNet calib image.
+    """Map ``"<split>/<stem>"`` -> ``Path/.../calibration-2023/<split>/<stem>.jpg``.
 
-    Looks in the standard ``calibration-2023/{train,valid,test,challenge}/``
-    layout and falls back to a recursive search for ``[0-9]+.jpg`` files.
+    SoccerNet calibration-2023 reuses the same stems (``00000.jpg``, …) across
+    ``train/``, ``valid/``, ``test/`` and ``challenge/``, so we need a
+    split-aware key.  Plain stem lookups also still work via a fallback that
+    points at the *first* split where the stem is found, but Soccana 29-pt
+    labels are split-tagged and **always** prefer the ``"<split>/<stem>"``
+    form (see :func:`convert_soccana_29pt`).
     """
     out: dict[str, Path] = {}
     if soccernet_root is None or not soccernet_root.exists():
@@ -696,6 +1380,9 @@ def _index_soccernet_images(soccernet_root: Path | None) -> dict[str, Path]:
                 continue
             for ext in IMAGE_EXTS:
                 for p in base.rglob(f"*{ext}"):
+                    key = f"{split}/{p.stem}"
+                    out.setdefault(key, p)
+                    # Stem-only fallback (used by tests / legacy callers).
                     out.setdefault(p.stem, p)
     if not out:
         for ext in IMAGE_EXTS:
@@ -779,7 +1466,12 @@ def convert_soccana_29pt(
             if n_visible < 4:
                 stats["skipped_low_visible"] += 1
                 continue
-            img_path = img_index.get(stem)
+            # Prefer the split-aware lookup (e.g. "valid/00000") so that
+            # Soccana ``valid/00000.json`` pairs with SoccerNet
+            # ``calibration-2023/valid/00000.jpg`` and not with the train one
+            # — they share the same stem but are different physical frames.
+            soccernet_split = "valid" if split_in == "valid" else split_in
+            img_path = img_index.get(f"{soccernet_split}/{stem}") or img_index.get(stem)
             from_preview = False
             if img_path is None and yolo_dir is not None and (yolo_dir / f"{stem}.txt").exists():
                 # No real image available — keep label text, but skip the row;
@@ -824,15 +1516,15 @@ _SOCCANA_LEGACY_POSITIONAL_29 = tuple(SOCCANA_INDEX_TO_CANONICAL.get(i, -1) for 
 # https://github.com/PiotrGrabysz/PitchGeometry/blob/main/keypoints.md (paraphrased).
 PITCHGEOMETRY_NAME_TO_CANONICAL: dict[str, int] = {
     "TOP_LEFT_CORNER": 0,
-    "TOP_RIGHT_CORNER": 26,
+    "TOP_RIGHT_CORNER": 24,
     "BOTTOM_LEFT_CORNER": 5,
-    "BOTTOM_RIGHT_CORNER": 31,
-    "MIDFIELD_TOP": 14,
-    "MIDFIELD_BOTTOM": 17,
-    "CENTER_CIRCLE_TOP": 15,
-    "CENTER_CIRCLE_BOTTOM": 16,
-    "CENTER_CIRCLE_LEFT": 13,
-    "CENTER_CIRCLE_RIGHT": 18,
+    "BOTTOM_RIGHT_CORNER": 29,
+    "MIDFIELD_TOP": 13,
+    "MIDFIELD_BOTTOM": 16,
+    "CENTER_CIRCLE_TOP": 14,
+    "CENTER_CIRCLE_BOTTOM": 15,
+    "CENTER_CIRCLE_LEFT": 30,
+    "CENTER_CIRCLE_RIGHT": 31,
     "LEFT_PENALTY_AREA_TOP_LEFT": 1,
     "LEFT_PENALTY_AREA_TOP_RIGHT": 9,
     "LEFT_PENALTY_AREA_BOTTOM_LEFT": 4,
@@ -844,17 +1536,17 @@ PITCHGEOMETRY_NAME_TO_CANONICAL: dict[str, int] = {
     "LEFT_PENALTY_SPOT": 8,
     "LEFT_PENALTY_ARC_TOP": 10,
     "LEFT_PENALTY_ARC_BOTTOM": 11,
-    "RIGHT_PENALTY_AREA_TOP_LEFT": 19,
-    "RIGHT_PENALTY_AREA_TOP_RIGHT": 27,
-    "RIGHT_PENALTY_AREA_BOTTOM_LEFT": 22,
-    "RIGHT_PENALTY_AREA_BOTTOM_RIGHT": 30,
-    "RIGHT_GOAL_AREA_TOP_LEFT": 24,
-    "RIGHT_GOAL_AREA_TOP_RIGHT": 28,
-    "RIGHT_GOAL_AREA_BOTTOM_LEFT": 25,
-    "RIGHT_GOAL_AREA_BOTTOM_RIGHT": 29,
-    "RIGHT_PENALTY_SPOT": 23,
-    "RIGHT_PENALTY_ARC_TOP": 20,
-    "RIGHT_PENALTY_ARC_BOTTOM": 21,
+    "RIGHT_PENALTY_AREA_TOP_LEFT": 17,
+    "RIGHT_PENALTY_AREA_TOP_RIGHT": 25,
+    "RIGHT_PENALTY_AREA_BOTTOM_LEFT": 20,
+    "RIGHT_PENALTY_AREA_BOTTOM_RIGHT": 28,
+    "RIGHT_GOAL_AREA_TOP_LEFT": 22,
+    "RIGHT_GOAL_AREA_TOP_RIGHT": 26,
+    "RIGHT_GOAL_AREA_BOTTOM_LEFT": 23,
+    "RIGHT_GOAL_AREA_BOTTOM_RIGHT": 27,
+    "RIGHT_PENALTY_SPOT": 21,
+    "RIGHT_PENALTY_ARC_TOP": 18,
+    "RIGHT_PENALTY_ARC_BOTTOM": 19,
 }
 
 
@@ -957,15 +1649,15 @@ def convert_pitchgeometry_csv(src_root: Path, dst_root: Path) -> dict[str, int]:
 # Kaggle bbox class -> canonical index
 KAGGLE_BBOX_NAME_TO_CANONICAL: dict[str, int] = {
     "top_left_corner": 0,
-    "top_right_corner": 26,
+    "top_right_corner": 24,
     "bottom_left_corner": 5,
-    "bottom_right_corner": 31,
-    "halfway_top": 14,
-    "halfway_bottom": 17,
-    "center_circle_top": 15,
-    "center_circle_bottom": 16,
-    "center_circle_left": 13,
-    "center_circle_right": 18,
+    "bottom_right_corner": 29,
+    "halfway_top": 13,
+    "halfway_bottom": 16,
+    "center_circle_top": 14,
+    "center_circle_bottom": 15,
+    "center_circle_left": 30,
+    "center_circle_right": 31,
     "left_penalty_box_top_left": 1,
     "left_penalty_box_top_right": 9,
     "left_penalty_box_bottom_left": 4,
@@ -974,16 +1666,16 @@ KAGGLE_BBOX_NAME_TO_CANONICAL: dict[str, int] = {
     "left_goal_area_top_right": 6,
     "left_goal_area_bottom_left": 3,
     "left_goal_area_bottom_right": 7,
-    "right_penalty_box_top_left": 19,
-    "right_penalty_box_top_right": 27,
-    "right_penalty_box_bottom_left": 22,
-    "right_penalty_box_bottom_right": 30,
-    "right_goal_area_top_left": 24,
-    "right_goal_area_top_right": 28,
-    "right_goal_area_bottom_left": 25,
-    "right_goal_area_bottom_right": 29,
+    "right_penalty_box_top_left": 17,
+    "right_penalty_box_top_right": 25,
+    "right_penalty_box_bottom_left": 20,
+    "right_penalty_box_bottom_right": 28,
+    "right_goal_area_top_left": 22,
+    "right_goal_area_top_right": 26,
+    "right_goal_area_bottom_left": 23,
+    "right_goal_area_bottom_right": 27,
     "left_penalty_spot": 8,
-    "right_penalty_spot": 23,
+    "right_penalty_spot": 21,
 }
 
 
@@ -1088,7 +1780,10 @@ def convert_soccernet_images_only(src_root: Path, dst_root: Path) -> dict[str, i
     via ``soccernet_images``.  No labels are written from this source on its
     own.
     """
-    n_images = sum(1 for _ in _index_soccernet_images(src_root).values())
+    # ``_index_soccernet_images`` writes both ``"<split>/<stem>"`` and the
+    # bare ``stem`` keys.  Count unique physical paths so the human-readable
+    # "indexed N" reflects the actual number of frames.
+    n_images = len({str(p) for p in _index_soccernet_images(src_root).values()})
     return {
         "images_indexed": n_images,
         "images": 0,  # No staging output yet — Soccana will consume them.
@@ -1105,6 +1800,10 @@ CONVERTERS: dict[str, Callable[..., dict[str, int]]] = {
     "convert_kaggle_bbox_landmarks": convert_kaggle_bbox_landmarks,
     "convert_roboflow_yolo_pose": convert_roboflow_yolo_pose,
     "convert_soccernet_images_only": convert_soccernet_images_only,
+    "convert_worldcup2014_homography": convert_worldcup2014_homography,
+    "convert_tsworldcup_homography": convert_tsworldcup_homography,
+    "convert_images_only": convert_images_only,
+    "convert_wc14_tvcalib_segments": convert_wc14_tvcalib_segments,
 }
 
 
@@ -1193,21 +1892,85 @@ def _split_assignment(
     return assignment
 
 
+# Fusion priority: when the same physical image (matched by stem + dimensions)
+# is annotated by multiple sources, keep the label from the highest-priority
+# source.  Higher value = higher priority.
+SOURCE_FUSION_PRIORITY: dict[str, int] = {
+    "martinjolif_football-pitch-detection": 100,  # ground truth (HF)
+    "wc14_tvcalib_additional_annotations": 90,  # TVCalib geometric labels
+    "Adit-jain_Soccana_Keypoint_detection_v1": 80,  # Soccana JSON
+    "PiotrGrabysz_PitchGeometry": 70,
+    "ts_worldcup_kpsfr": 60,  # homography-derived
+    "worldcup2014_nhoma": 50,  # homography-derived
+    "soccernet_calibration_2023": 40,
+}
+
+
+def _label_quality(label_text: str) -> tuple[int, int]:
+    """Return ``(n_visible, n_valid_in_bounds)`` for a YOLO Pose label line."""
+    parts = label_text.split()
+    n_kp_floats = len(parts) - 5
+    if n_kp_floats <= 0 or n_kp_floats % 3 != 0:
+        return 0, 0
+    n_visible = 0
+    n_in_bounds = 0
+    for k in range(NUM_KEYPOINTS):
+        try:
+            x = float(parts[5 + 3 * k])
+            y = float(parts[5 + 3 * k + 1])
+            v = float(parts[5 + 3 * k + 2])
+        except (ValueError, IndexError):
+            continue
+        if v > 0.5:
+            n_visible += 1
+            if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
+                n_in_bounds += 1
+    return n_visible, n_in_bounds
+
+
 def _merge_staging_into_unified(
     staging_root: Path,
     unified_root: Path,
     *,
     keep_source_splits: bool = True,
     seed: int = 42,
+    min_visible_kp: int = 4,
 ) -> dict[str, int]:
-    """Copy/symlink images and labels from ``staging_root/<source>`` into the
-    unified dataset.  When ``keep_source_splits`` is true we honour the splits
-    written by the converter; otherwise we shuffle deterministically.
+    """Merge ``staging_root/<source>`` into the unified dataset.
+
+    Adds two features over a naive copy:
+
+    * **Quality filter** — drops labels with fewer than ``min_visible_kp``
+      keypoints whose visibility flag is set and whose ``(x, y)`` falls
+      inside ``[0, 1]^2``.
+    * **Source fusion** — when the same image stem is annotated by multiple
+      sources we keep the label from the source with the highest
+      :data:`SOURCE_FUSION_PRIORITY`; the others are dropped silently.
+      Images keep the prefix ``<best_source>__`` in the merged dataset.
     """
     counts = {"train": 0, "val": 0, "test": 0}
+    skipped_low_quality = 0
+    fused_drops = 0
+
+    def _physical_key(p: Path) -> str:
+        """Identity of the *underlying* image file.
+
+        We use the symlink target (or absolute path for real files); two
+        staging entries pointing at the same physical jpg are deduplicated.
+        Sources that stage independent files keep distinct keys even when
+        the basename collides (e.g. Soccana ``00000.jpg`` vs WC14 ``1.jpg``).
+        """
+        try:
+            return str(p.resolve())
+        except OSError:
+            return str(p.absolute())
+
+    # First pass: collect all candidates with quality + priority.
+    candidates: dict[str, dict[str, object]] = {}
     for src_dir in sorted(staging_root.iterdir()):
         if not src_dir.is_dir():
             continue
+        prio = SOURCE_FUSION_PRIORITY.get(src_dir.name, 10)
         for split in ("train", "val", "test"):
             img_dir = src_dir / "images" / split
             lbl_dir = src_dir / "labels" / split
@@ -1217,20 +1980,51 @@ def _merge_staging_into_unified(
                 lbl_src = lbl_dir / f"{img_path.stem}.txt"
                 if not lbl_src.exists():
                     continue
-                target_split = split
-                if not keep_source_splits:
-                    # Reassign deterministically using the file name as seed.
-                    rng = random.Random((seed * 1_000_003) ^ hash(img_path.name))
-                    target_split = rng.choices(["train", "val", "test"], weights=[0.85, 0.1, 0.05])[
-                        0
-                    ]
-                # Prefix file name with source to avoid collisions.
-                new_stem = f"{src_dir.name}__{img_path.stem}"
-                out_img_dir = _ensure_dir(unified_root / "images" / target_split)
-                out_lbl_dir = _ensure_dir(unified_root / "labels" / target_split)
-                _link_or_copy(img_path, out_img_dir / f"{new_stem}{img_path.suffix.lower()}")
-                shutil.copy2(lbl_src, out_lbl_dir / f"{new_stem}.txt")
-                counts[target_split] += 1
+                try:
+                    label_text = lbl_src.read_text(encoding="utf-8").strip()
+                except OSError:
+                    continue
+                if not label_text:
+                    continue
+                first_line = label_text.splitlines()[0]
+                n_visible, n_in_bounds = _label_quality(first_line)
+                if n_visible < min_visible_kp or n_in_bounds < min_visible_kp:
+                    skipped_low_quality += 1
+                    continue
+                fusion_key = _physical_key(img_path)
+                cand = candidates.get(fusion_key)
+                if cand is None or int(cast(int, cand["priority"])) < prio:
+                    if cand is not None:
+                        fused_drops += 1
+                    candidates[fusion_key] = {
+                        "img_path": img_path,
+                        "lbl_src": lbl_src,
+                        "src_name": src_dir.name,
+                        "priority": prio,
+                        "split": split,
+                        "n_visible": n_visible,
+                    }
+                else:
+                    fused_drops += 1
+
+    # Second pass: write the survivors.
+    for cand in candidates.values():
+        img_path = cast(Path, cand["img_path"])
+        lbl_src = cast(Path, cand["lbl_src"])
+        src_name = cast(str, cand["src_name"])
+        split = cast(str, cand["split"])
+        target_split = split
+        if not keep_source_splits:
+            rng = random.Random((seed * 1_000_003) ^ hash(img_path.name))
+            target_split = rng.choices(["train", "val", "test"], weights=[0.85, 0.1, 0.05])[0]
+        new_stem = f"{src_name}__{img_path.stem}"
+        out_img_dir = _ensure_dir(unified_root / "images" / target_split)
+        out_lbl_dir = _ensure_dir(unified_root / "labels" / target_split)
+        _link_or_copy(img_path, out_img_dir / f"{new_stem}{img_path.suffix.lower()}")
+        shutil.copy2(lbl_src, out_lbl_dir / f"{new_stem}.txt")
+        counts[target_split] += 1
+    counts["_skipped_low_quality"] = skipped_low_quality
+    counts["_fused_drops"] = fused_drops
     return counts
 
 
@@ -1278,6 +2072,70 @@ def _write_manifest(unified_root: Path, sources: list[SourceReport]) -> Path:
         writer.writeheader()
         writer.writerows(rows)
     return manifest
+
+
+def _write_keypoint_reference(unified_root: Path) -> Path:
+    """Write canonical 32-kp reference in **all** the relevant frames.
+
+    Columns:
+
+    * ``idx``, ``canonical_name``, ``flip_idx`` — from the canonical schema.
+    * ``x_roboflow_cm``, ``y_roboflow_cm`` — Roboflow truth (origin top-left,
+      Y-down, 12000×7000 cm).
+    * ``x_norm``, ``y_norm`` — normalised in ``[0,1]`` (Y-down).
+    * ``x_center_m``, ``y_center_m``, ``z_center_m`` — drawsportsfields convention
+      (origin field center, Y-up, 104.9×67.9 m).
+    * ``x_template_yard``, ``y_template_yard`` — KpSFR template (yards, Y-down,
+      origin top-left, 114.83×74.37 yd).
+    """
+    ref_path = unified_root / "keypoints_reference_drawsportsfields.csv"
+    cm_pts = _canonical_vertices_cm()
+    norm_pts = _canonical_vertices_normalized()
+    centered_pts, length_m, width_m = _load_centered_fifa_points_32()
+    rows: list[dict[str, object]] = []
+    for i, ((x_cm, y_cm), (nx, ny), (x_m, y_m, z_m)) in enumerate(
+        zip(cm_pts, norm_pts, centered_pts, strict=True)
+    ):
+        x_tpl, y_tpl = _centered_meters_to_kpsfr_template(
+            x_m, y_m, length_m=length_m, width_m=width_m
+        )
+        rows.append(
+            {
+                "idx": i,
+                "canonical_name": CANONICAL_KP_NAMES_32[i],
+                "flip_idx": CANONICAL_FLIP_IDX_32[i],
+                "x_roboflow_cm": f"{x_cm:.2f}",
+                "y_roboflow_cm": f"{y_cm:.2f}",
+                "x_norm": f"{nx:.6f}",
+                "y_norm": f"{ny:.6f}",
+                "x_center_m": f"{x_m:.6f}",
+                "y_center_m": f"{y_m:.6f}",
+                "z_center_m": f"{z_m:.6f}",
+                "x_template_yard": f"{x_tpl:.6f}",
+                "y_template_yard": f"{y_tpl:.6f}",
+            }
+        )
+    with ref_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "idx",
+                "canonical_name",
+                "flip_idx",
+                "x_roboflow_cm",
+                "y_roboflow_cm",
+                "x_norm",
+                "y_norm",
+                "x_center_m",
+                "y_center_m",
+                "z_center_m",
+                "x_template_yard",
+                "y_template_yard",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+    return ref_path
 
 
 # ---------------------------------------------------------------------------
@@ -1388,18 +2246,16 @@ def build_dataset(
                 )
             elif src.kind == "kaggle":
                 _download_kaggle_dataset(src.url, download_path)
+            elif src.kind == "url_archive":
+                _download_url_archive(src.url, download_path)
             elif src.kind == "soccernet":
                 if soccernet_dir is not None and soccernet_dir.exists():
                     log(f"      reusing existing SoccerNet dir: {soccernet_dir}")
                     if not download_path.exists():
                         os.symlink(soccernet_dir.resolve(), download_path)
-                    _extract_soccernet_zips(
-                        download_path, splits=tuple(soccernet_splits)
-                    )
+                    _extract_soccernet_zips(download_path, splits=tuple(soccernet_splits))
                 else:
-                    _download_soccernet_calibration(
-                        download_path, splits=tuple(soccernet_splits)
-                    )
+                    _download_soccernet_calibration(download_path, splits=tuple(soccernet_splits))
             else:
                 raise NotImplementedError(f"unknown source kind: {src.kind}")
         except Exception as e:  # pragma: no cover - network errors are runtime
@@ -1445,6 +2301,9 @@ def build_dataset(
         reports.append(report)
 
     # --- merge ---
+    if unified_dir.exists():
+        shutil.rmtree(unified_dir)
+    _ensure_dir(unified_dir)
     log("Merging staging -> unified")
     counts = _merge_staging_into_unified(
         staging_dir,
@@ -1455,8 +2314,10 @@ def build_dataset(
     log(f"Unified counts: {counts}")
     data_yaml = _write_data_yaml(unified_dir)
     manifest = _write_manifest(unified_dir, reports)
+    kp_ref = _write_keypoint_reference(unified_dir)
     log(f"Wrote: {data_yaml}")
     log(f"Wrote: {manifest}")
+    log(f"Wrote: {kp_ref}")
 
     finished_at = _now()
     elapsed = time.time() - started
@@ -1580,8 +2441,7 @@ def _build_argparser() -> argparse.ArgumentParser:
         "--preview-only",
         action="store_true",
         help=(
-            "Skip the build and only render --preview samples from an "
-            "existing unified/ directory."
+            "Skip the build and only render --preview samples from an existing unified/ directory."
         ),
     )
     p.add_argument(
@@ -1622,9 +2482,24 @@ def render_preview(unified_root: Path, n_samples: int = 12, *, seed: int = 0) ->
     if not candidates:
         print(f"[preview] No labels found under {unified_root}; nothing to draw.")
         return out_dir
-    rng.shuffle(candidates)
+
+    # Group by source so the QA preview always covers every dataset, not just
+    # the largest one (Soccana otherwise dominates random sampling).
+    by_source: dict[str, list[Path]] = {}
+    for p in candidates:
+        src = p.stem.split("__", 1)[0] if "__" in p.stem else "_other"
+        by_source.setdefault(src, []).append(p)
+    for lst in by_source.values():
+        rng.shuffle(lst)
+    sources = sorted(by_source)
+    # Round-robin pick: at least one per source, then top up.
+    ordered: list[Path] = []
+    while len(ordered) < n_samples and any(by_source[s] for s in sources):
+        for s in sources:
+            if by_source[s] and len(ordered) < n_samples:
+                ordered.append(by_source[s].pop())
     drawn = 0
-    for lbl_path in candidates:
+    for lbl_path in ordered:
         if drawn >= n_samples:
             break
         split = lbl_path.parent.name

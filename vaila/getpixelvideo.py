@@ -692,8 +692,8 @@ def download_or_load_yolo_model(model_name=None):
 
     try:
         print(f"Loading/Downloading YOLO model {model_name}...")
-        # This triggers download if not found
-        model = YOLO(model_name)
+        # Use full path to avoid downloading to root
+        model = YOLO(str(model_path))
 
         # If we successfully loaded/downloaded, check if the file is in CWD and move it to models_dir
         cwd_model = Path.cwd() / model_name

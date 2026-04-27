@@ -160,8 +160,8 @@ class FifaSam3dBodyModel:
     """Wraps ``SAM3DBodyEstimator`` + Body25 keypoint selection (70 → 25)."""
 
     def __init__(self, device: str = "cuda") -> None:
-        from sam_3d_body import SAM3DBodyEstimator
-        from sam_3d_body.build_models import load_sam_3d_body
+        from sam_3d_body import SAM3DBodyEstimator  # ty: ignore[unresolved-import]
+        from sam_3d_body.build_models import load_sam_3d_body  # ty: ignore[unresolved-import]
 
         ckpt = Path(os.environ.get("SAM3D_CHECKPOINT", "")).expanduser()
         mhr = Path(os.environ.get("SAM3D_MHR", "")).expanduser()
@@ -570,7 +570,14 @@ def generate_boxes_yolo(
     images = sorted(image_dir.glob("*.jpg"))
     if not images:
         raise FileNotFoundError(image_dir)
-    model = YOLO(yolo_model)
+    # Use vaila/models path for standard models
+    models_dir = _package_dir() / "models"
+    model_path = models_dir / yolo_model
+    if not model_path.exists() and not os.path.isabs(yolo_model):
+        # Let YOLO download to models_dir if possible, or at least load from there if it exists
+        model = YOLO(str(model_path))
+    else:
+        model = YOLO(yolo_model)
     counts: list[int] = []
     per_frame_boxes: list[list[list[float]]] = []
     for img_path in tqdm(images, desc=f"yolo-boxes {sequence}"):

@@ -70,7 +70,7 @@ import numpy as np
 import pandas as pd
 
 try:
-    import pkg_resources  # type: ignore[import-not-found]
+    import pkg_resources  # ty: ignore[import-not-found,unresolved-import]
 except ImportError:
     pkg_resources = None  # setuptools not installed; use importlib.resources only
 import torch
@@ -1876,7 +1876,7 @@ def create_combined_detection_csv(output_dir):
     max_frame = 0
     for csv_file in detection_csv_files:
         try:
-            df = pd.read_csv(csv_file, usecols=("Frame",))  # type: ignore[call-overload]  # faster
+            df = pd.read_csv(csv_file, usecols=("Frame",))  # ty: ignore[no-matching-overload]  # faster
             if not df.empty and df["Frame"].notna().any():
                 max_frame = max(max_frame, int(df["Frame"].max()))
         except Exception:
@@ -2441,7 +2441,7 @@ def select_id_and_run_pose():
     x = canvas_width // 2
     y = canvas_height // 2
     canvas.create_image(x, y, image=img, anchor="center")
-    canvas.image = img  # Keep a reference (dynamic attr for gc)
+    canvas.image = img  # ty: ignore[unresolved-attribute] # Keep a reference (dynamic attr for gc)
 
     cap.release()
 
@@ -2925,7 +2925,8 @@ def _process_pose_from_csv(
             print(f"Downloading pose model {pose_model_name}...")
             current_dir = os.getcwd()
             os.chdir(models_dir)
-            YOLO(pose_model_name)
+            # Specify full path to YOLO to avoid downloading to root
+            YOLO(pose_model_path)
             os.chdir(current_dir)
             print("Model downloaded successfully")
         except Exception as e:
@@ -3171,7 +3172,8 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
             print(f"Downloading pose model {pose_model_name}...")
             current_dir = os.getcwd()
             os.chdir(models_dir)
-            YOLO(pose_model_name)
+            # Specify full path to YOLO to avoid downloading to root
+            YOLO(pose_model_path)
             os.chdir(current_dir)
             print(f"Model downloaded successfully to {pose_model_path}")
         except Exception as e:
@@ -3294,7 +3296,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
                         )
 
                         # Extract keypoints (use first detection if multiple)
-                        keypoints_row = [frame_idx, tracker_id, label]
+                        keypoints_row: list[Any] = [frame_idx, tracker_id, label]
 
                         if results and len(results) > 0 and results[0].keypoints is not None:
                             # Get keypoints tensor and convert to numpy
@@ -3455,7 +3457,8 @@ def run_yolov26track():
                 print(f"Downloading model {model_name}...")
                 current_dir = os.getcwd()
                 os.chdir(models_dir)
-                YOLO(model_name)
+                # Specify full path to YOLO to avoid downloading to root
+                YOLO(model_path)
                 os.chdir(current_dir)
                 print(f"Model downloaded successfully to {model_path}")
             except Exception as e:
@@ -3536,9 +3539,9 @@ def run_yolov26track():
             # This ensures the video is written correctly without corruption
             writer = cv2.VideoWriter(
                 temp_avi_path,
-                cv2.VideoWriter_fourcc(*"MJPG"),
+                cv2.VideoWriter_fourcc(*"MJPG"),  # ty: ignore[unresolved-attribute]
                 fps,
-                (width, height),  # type: ignore
+                (width, height),
             )
             if not writer.isOpened():
                 print(f"Error creating video file: {temp_avi_path}")
@@ -3547,9 +3550,9 @@ def run_yolov26track():
                 print("[WARNING] MJPG failed. Trying XVID...")
                 writer = cv2.VideoWriter(
                     temp_avi_path,
-                    cv2.VideoWriter_fourcc(*"XVID"),
+                    cv2.VideoWriter_fourcc(*"XVID"),  # ty: ignore[unresolved-attribute]
                     fps,
-                    (width, height),  # type: ignore
+                    (width, height),
                 )
                 if not writer.isOpened():
                     print("Error: Could not create video writer with any codec")
@@ -3582,7 +3585,7 @@ def run_yolov26track():
             mask_img = None
             if roi_poly is not None:
                 mask_img = np.zeros((height, width), dtype=np.uint8)
-                cv2.fillPoly(mask_img, [roi_poly], 255)
+                cv2.fillPoly(mask_img, [roi_poly], 255)  # ty: ignore[no-matching-overload]
 
             # Try to use the default Ultralytics tracker config first, then customize
             tracker_config = None

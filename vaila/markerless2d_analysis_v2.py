@@ -59,17 +59,7 @@ License:
     This project is licensed under the terms of AGPLv3.0.
 """
 
-import warnings
-
-# Suppress protobuf deprecation warning from MediaPipe
-# This warning comes from MediaPipe using deprecated protobuf API
-# The warning is: "SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead."
-warnings.filterwarnings(
-    "ignore",
-    message="SymbolDatabase.GetPrototype",
-    category=UserWarning,
-)
-
+import contextlib
 import datetime
 import json
 import math
@@ -78,18 +68,16 @@ import platform
 import shutil
 import time
 import tkinter as tk
-
-# from rich import print
 import urllib.request
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import cv2
 import mediapipe as mp
 import numpy as np
+import toml
 import torch
-
-# --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.32+) ---
 import ultralytics
 from ultralytics import YOLO
 
@@ -107,10 +95,17 @@ except ImportError:
     if current_dir not in sys.path:
         sys.path.append(current_dir)
     from vaila.hardware_manager import HardwareManager
-import contextlib
-import webbrowser
 
-import toml
+import warnings
+
+# Suppress protobuf deprecation warning from MediaPipe
+# This warning comes from MediaPipe using deprecated protobuf API
+# The warning is: "SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead."
+warnings.filterwarnings(
+    "ignore",
+    message="SymbolDatabase.GetPrototype",
+    category=UserWarning,
+)
 
 __version__ = "0.3.17"
 
@@ -255,8 +250,9 @@ else:
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
     # Optimize CPU performance
-    torch.set_num_threads(os.cpu_count())  # Use all available CPU cores
-    cv2.setNumThreads(os.cpu_count())
+    num_threads = os.cpu_count() or 1
+    torch.set_num_threads(num_threads)  # Use all available CPU cores
+    cv2.setNumThreads(num_threads)
     cv2.setUseOptimized(True)
 
 landmark_names = [
@@ -1077,8 +1073,8 @@ def download_yolo_model(model_name):
     print("This may take a while for the first time (model size ~300-600 MB).")
 
     try:
-        # Method 1: Try to download using YOLO (will download to Ultralytics cache)
-        model = YOLO(model_name)
+        # Use full path to avoid downloading to root
+        model = YOLO(str(model_path))
 
         # Get the path where YOLO downloaded the model
         source_path = getattr(model, "ckpt_path", None)
@@ -1235,7 +1231,7 @@ def get_mediapipe_model_path(complexity):
             print("Download completed!")
         except Exception as e:
             print(f"Error downloading model: {e}")
-            raise RuntimeError("Failed to download MediaPipe model.")
+            raise RuntimeError("Failed to download MediaPipe model.") from e
     return str(model_path.resolve())
 
 
@@ -1943,10 +1939,9 @@ def apply_median_filter(landmarks_history, current_landmarks, window_size=3):
         valid_coords = []
 
         for frame in all_frames:
-            if i < len(frame) and frame[i] is not None:
-                # Check for NaNs
-                if not any(np.isnan(c) for c in frame[i][:3] if isinstance(c, (int, float))):
-                    valid_coords.append(frame[i])
+            if (i < len(frame) and frame[i] is not None and
+                not any(np.isnan(c) for c in frame[i][:3] if isinstance(c, (int, float)))):
+                valid_coords.append(frame[i])
 
         if not valid_coords:
             filtered.append(current_landmarks[i])
@@ -2442,7 +2437,7 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
     # Create video with visualization using manual OpenCV drawing
     cap = cv2.VideoCapture(str(video_path))
     codec = "mp4v"
-    fourcc = cv2.VideoWriter_fourcc(*codec)
+    fourcc = cv2.VideoWriter_fourcc(*codec)  # ty: ignore[unresolved-attribute]
     out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
 
     frame_idx = 0
@@ -2569,23 +2564,23 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
                     C_JOINT = (0, 255, 0)  # Green
 
                     # 4. Drawing Helpers
-                    def dline(p1, p2, color, thick=3):
+                    def dline(p1, p2, color, thick=3, f=frame):
                         if isinstance(p1, np.ndarray) and isinstance(p2, np.ndarray):
                             if np.isnan(p1).any() or np.isnan(p2).any():
                                 return
                             pt1 = (int(p1[0]), int(p1[1]))
                             pt2 = (int(p2[0]), int(p2[1]))
-                            cv2.line(frame, pt1, pt2, color, thick, cv2.LINE_AA)
+                            cv2.line(f, pt1, pt2, color, thick, cv2.LINE_AA)
 
-                    def dcircle(p, color, radius=5):
+                    def dcircle(p, color, radius=5, f=frame):
                         if isinstance(p, np.ndarray):
                             if np.isnan(p).any():
                                 return
                             pt = (int(p[0]), int(p[1]))
                             cv2.circle(
-                                frame, pt, radius, (255, 255, 255), -1, cv2.LINE_AA
+                                f, pt, radius, (255, 255, 255), -1, cv2.LINE_AA
                             )  # white border
-                            cv2.circle(frame, pt, radius - 2, color, -1, cv2.LINE_AA)
+                            cv2.circle(f, pt, radius - 2, color, -1, cv2.LINE_AA)
 
                     # 5. Draw Segments
                     # Right Side

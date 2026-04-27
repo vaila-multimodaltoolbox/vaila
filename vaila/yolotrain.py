@@ -204,7 +204,7 @@ class YOLOTrainApp(tk.Tk):
 
     def _update_model_list(self, event=None):
         """Updates the model list based on selected category."""
-        category = self.model_category.get()
+        category = self.model_category.get()  # ty: ignore[unresolved-attribute]
 
         # Filter models by category
         if category == "YOLO26":
@@ -219,7 +219,7 @@ class YOLOTrainApp(tk.Tk):
             models = self.available_models
 
         # Update combobox values
-        self.model_combo["values"] = models
+        self.model_combo["values"] = models  # ty: ignore[unresolved-attribute]
 
         # Set default model for category
         if models:
@@ -762,8 +762,9 @@ names: {names_str}  # class names
                     os.chdir(models_dir)
 
                     # Download using YOLO with progress indication
+                    # Use full path to avoid downloading to project root
                     print("\nInitiating download...")
-                    model = YOLO(model_name)
+                    model = YOLO(model_path)
 
                     os.chdir(current_dir)
 
