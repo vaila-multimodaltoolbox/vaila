@@ -249,7 +249,7 @@ class MediaPipeAngleCalculator(AngleCalculator):
 
     def __init__(self):
         super().__init__()
-        self.mp_pose = mp.solutions.pose
+        self.mp_pose = mp.solutions.pose  # ty: ignore[unresolved-attribute]
         self.pose = self.mp_pose.Pose(
             static_image_mode=False,
             model_complexity=1,
@@ -402,16 +402,17 @@ def download_model(model_name):
     print(f"Downloading {model_name} to {model_path}...")
     try:
         # Create a temporary YOLO model instance that will download the weights
-        model = YOLO(model_name)
+        # Use full path to avoid downloading to project root
+        model = YOLO(model_path)
 
         # Get the path where YOLO downloaded the model
-        source_path = model.ckpt_path
+        source_path = getattr(model, "ckpt_path", None)
 
-        if os.path.exists(source_path):
+        if source_path and os.path.exists(str(source_path)):
             # Copy the downloaded model to our models directory
             import shutil
 
-            shutil.copy2(source_path, model_path)
+            shutil.copy2(str(source_path), str(model_path))
             print(f"Successfully saved {model_name} to {model_path}")
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")
@@ -510,7 +511,7 @@ class MovementAnalyzer:
             self.model = None  # We don't need YOLO model for MediaPipe
             self.angle_calculator = MediaPipeAngleCalculator()
             # Configure MediaPipe with provided parameters
-            self.angle_calculator.pose = mp.solutions.pose.Pose(
+            self.angle_calculator.pose = mp.solutions.pose.Pose(  # ty: ignore[unresolved-attribute]
                 static_image_mode=False,
                 model_complexity=model_complexity,
                 smooth_landmarks=True,
@@ -716,6 +717,8 @@ class MovementAnalyzer:
         # Create a small test frame
         test_frame = np.zeros((100, 100, 3), dtype=np.uint8)
 
+        if self.model is None:
+            return
         # Run inference on the test frame
         results = self.model(test_frame, conf=self.conf_threshold, verbose=False)
 
@@ -750,7 +753,8 @@ class MovementAnalyzer:
                     print(f"Number of keypoints: {num_keypoints}")
 
                     # Update the angle calculator with the detected keypoint structure
-                    self.angle_calculator.adapt_to_keypoint_structure(num_keypoints)
+                    if isinstance(self.angle_calculator, YOLOAngleCalculator):
+                        self.angle_calculator.adapt_to_keypoint_structure(num_keypoints)
             else:
                 print(
                     "Warning: Could not detect keypoints in the YOLO model. Using default keypoint structure."
@@ -780,6 +784,8 @@ class MovementAnalyzer:
         processed_frame = frame.copy()
 
         if self.engine == "yolo":
+            if self.model is None:
+                return
             # Using YOLO for detection and angle calculation
             # Use a lower confidence threshold for better detection
             results = self.model(frame, conf=self.conf_threshold, verbose=False)
@@ -884,7 +890,9 @@ class MovementAnalyzer:
                             cv2.line(processed_frame, pt1, pt2, (0, 255, 0), 2)
 
                     # Calculate angles using YOLO calculator
-                    angles = self.angle_calculator.process_keypoints(keypoints)
+                    angles = {}
+                    if isinstance(self.angle_calculator, YOLOAngleCalculator):
+                        angles = self.angle_calculator.process_keypoints(keypoints)
                     print(f"Calculated angles: {angles}")
 
                     # Draw keypoints (excluding face keypoints)
@@ -931,11 +939,15 @@ class MovementAnalyzer:
 
         elif self.engine == "mediapipe":
             # Use MediaPipe for detection and angle calculation
-            angles, _, landmarks = self.angle_calculator.process_frame(frame)
+            angles, _, landmarks = {}, None, None
+            if isinstance(self.angle_calculator, MediaPipeAngleCalculator):
+                angles, _, landmarks = self.angle_calculator.process_frame(frame)
 
-            # Process the frame with MediaPipe
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = self.angle_calculator.pose.process(rgb_frame)
+                # Process the frame with MediaPipe
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = self.angle_calculator.pose.process(rgb_frame)
+            else:
+                return
 
             if results.pose_landmarks:
                 pose_landmarks = results.pose_landmarks.landmark
@@ -1051,8 +1063,7 @@ class MovementAnalyzer:
             # Draw angles in two columns
             y_offset = 35
             x_offset = 15
-            col = 0
-            for joint, angle in angles.items():
+            for col, (joint, angle) in enumerate(angles.items()):
                 text = f"{joint}: {angle:0.1f}°"
                 # Draw text with outline for better visibility
                 cv2.putText(
@@ -1074,8 +1085,7 @@ class MovementAnalyzer:
                     font_thickness,
                 )  # Texto
 
-                col += 1
-                if col % 2 == 0:
+                if (col + 1) % 2 == 0:
                     y_offset += 35
                     x_offset = 15
                 else:

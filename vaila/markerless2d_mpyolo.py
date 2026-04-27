@@ -67,6 +67,7 @@ import os
 import subprocess
 import threading
 import tkinter as tk
+import tkinter.messagebox
 import urllib.request
 from pathlib import Path
 from tkinter import filedialog, ttk
@@ -148,7 +149,7 @@ def get_mediapipe_model_path(complexity=2):
             print("Download completed!")
         except Exception as e:
             print(f"Error downloading model: {e}")
-            raise RuntimeError("Failed to download MediaPipe model.")
+            raise RuntimeError("Failed to download MediaPipe model.") from e
     return str(model_path.resolve())
 
 
@@ -399,16 +400,17 @@ def download_model(model_name):
     print(f"Downloading {model_name} to {model_path}...")
     try:
         # Create a temporary YOLO model instance that will download the weights
-        model = YOLO(model_name)
+        # Use full path to avoid downloading to project root
+        model = YOLO(model_path)
 
         # Get the path where YOLO downloaded the model
-        source_path = model.ckpt_path
+        source_path = getattr(model, "ckpt_path", None)
 
-        if os.path.exists(source_path):
+        if source_path is not None and os.path.exists(source_path):
             # Copy the downloaded model to our models directory
             import shutil
 
-            shutil.copy2(source_path, model_path)
+            shutil.copy2(source_path, model_path)  # ty: ignore[no-matching-overload]
             print(f"Successfully saved {model_name} to {model_path}")
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")
@@ -419,7 +421,7 @@ def download_model(model_name):
 
         try:
             # Try downloading through Ultralytics Hub
-            from ultralytics.utils.downloads import attempt_download
+            from ultralytics.utils.downloads import attempt_download  # ty: ignore[unresolved-import]
 
             attempt_download(model_path, model_name)
             if os.path.exists(model_path):
@@ -460,7 +462,7 @@ def initialize_csv(output_dir, class_name, object_id, is_person=False):
         # For other classes, save only bounding box coordinates
         columns = ["frame", "object_id", "x1", "y1", "x2", "y2", "confidence"]
 
-    df = pd.DataFrame(columns=columns)
+    df = pd.DataFrame(columns=columns)  # ty: ignore[invalid-argument-type]
     df.to_csv(csv_path, index=False)
     return csv_path
 
@@ -1165,7 +1167,7 @@ def process_yolo_tracking(video_path, output_dir, model, params):
                             "color_b",
                         ]
 
-                    pd.DataFrame(columns=columns).to_csv(csv_path, index=False)
+                    pd.DataFrame(columns=columns).to_csv(csv_path, index=False)  # ty: ignore[invalid-argument-type]
                     print(f"Created tracking CSV for {class_name} ID:{object_id}")
 
                 # Store detection data with color
@@ -1678,13 +1680,12 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, output_dir, 
     # Process video with YOLO
     results = model.track(source=video_source, **model_params)
 
-    frame_idx = 0
-    for result in results:
-        if result.boxes.id is not None:
-            boxes = result.boxes.xyxy.cpu().numpy()
-            ids = result.boxes.id.cpu().numpy()
-            clss = result.boxes.cls.cpu().numpy()
-            confs = result.boxes.conf.cpu().numpy()
+    for frame_idx, result in enumerate(results):
+        if getattr(result.boxes, "id", None) is not None:
+            boxes = result.boxes.xyxy.cpu().numpy()  # ty: ignore
+            ids = result.boxes.id.cpu().numpy()  # ty: ignore
+            clss = result.boxes.cls.cpu().numpy()  # ty: ignore
+            confs = result.boxes.conf.cpu().numpy()  # ty: ignore
 
             for box, track_id, cls_id, conf in zip(boxes, ids, clss, confs, strict=False):
                 class_id = int(cls_id)
@@ -1709,7 +1710,7 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, output_dir, 
                         "y2",
                         "confidence",
                     ]
-                    pd.DataFrame(columns=columns).to_csv(csv_path, index=False)
+                    pd.DataFrame(columns=columns).to_csv(csv_path, index=False)  # ty: ignore[invalid-argument-type]
                     print(f" Created tracking CSV for {class_name} ID:{object_id}")
 
                 # Store detection data
@@ -1740,7 +1741,6 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, output_dir, 
                 # Append to CSV
                 pd.DataFrame([row_data]).to_csv(csv_path, mode="a", header=False, index=False)
 
-        frame_idx += 1
         if frame_idx % 30 == 0:
             print(
                 f"\rProcessing {os.path.basename(video_source)}: frame {frame_idx}",
@@ -1978,7 +1978,7 @@ def process_video_enhanced(video_path, output_dir, model, params):
                                     ]
                                 )
 
-                            pd.DataFrame(columns=columns).to_csv(csv_path, index=False)
+                            pd.DataFrame(columns=columns).to_csv(csv_path, index=False)  # ty: ignore[invalid-argument-type]
                             print(f"Created enhanced CSV for person ID:{object_id}")
 
                         # Apply enhanced MediaPipe processing
@@ -2135,7 +2135,7 @@ def create_enhanced_visualization_video(video_path, output_dir, tracking_data, p
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     output_video = os.path.join(output_dir, f"{video_name}_enhanced_visualization.mp4")
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
     out = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
 
     # Load pose data for persons from enhanced CSV files

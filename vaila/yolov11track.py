@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 12 January 2026
-Version: 0.0.7
+Update Date: 27 April 2026
+Version: 0.0.8
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v11.
@@ -65,14 +65,15 @@ import subprocess
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
+from typing import Any, cast
 
 import cv2
 import numpy as np
 import pandas as pd
 
 try:
-    import pkg_resources  # type: ignore[import-not-found]
+    import pkg_resources  # ty: ignore[import-not-found,unresolved-import]
 except ImportError:
     pkg_resources = None  # setuptools not installed; use importlib.resources only
 import torch
@@ -2338,7 +2339,7 @@ def select_id_and_run_pose():
     """
     # Prefer existing Tk root to avoid multiple roots (pyimage errors); create only if needed
     created_root = False
-    root = tk._default_root
+    root = tk._default_root  # ty: ignore[unresolved-attribute]
     if root is None or not isinstance(root, tk.Tk):
         root = tk.Tk()
         root.withdraw()
@@ -2949,10 +2950,8 @@ def _process_pose_from_csv(
 
     # Load pose model
     # Models are downloaded to vaila/models/ directory
-    # Load pose model
     # Use get_model_path to ensure consistency
     pose_model_path = get_model_path(pose_model_name)
-    models_dir = os.path.dirname(pose_model_path)
 
     # Download model if needed
     if not os.path.exists(pose_model_path):
@@ -2960,13 +2959,9 @@ def _process_pose_from_csv(
             print(f"Downloading pose model {pose_model_name}...")
             # Use standard YOLO download behavior but ensure it goes to models_dir
             # We can use the same trick: chdir to models_dir
-            current_dir = os.getcwd()
-            try:
-                os.chdir(models_dir)
-                YOLO(pose_model_name)
-                print("Model downloaded successfully")
-            finally:
-                os.chdir(current_dir)
+            # Use full path to avoid downloading to root
+            YOLO(pose_model_path)
+            print("Model downloaded successfully")
 
             # Verify download
             if not os.path.exists(pose_model_path):
@@ -3043,7 +3038,7 @@ def _process_pose_from_csv(
     # Prepare video writer for skeleton overlay
     frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
     writer = cv2.VideoWriter(pose_video, fourcc, fps if fps > 0 else 25.0, (frame_w, frame_h))
 
     # Process each frame
@@ -3078,15 +3073,15 @@ def _process_pose_from_csv(
                 )
 
                 # Extract keypoints
-                keypoints_row = [frame_idx, output_tracker_id, label]
+                keypoints_row: list[Any] = [frame_idx, output_tracker_id, label]
 
                 if results and len(results) > 0 and results[0].keypoints is not None:
                     kp_data = results[0].keypoints.data
                     if kp_data is not None and len(kp_data) > 0:
                         if hasattr(kp_data, "cpu"):
-                            kp_data = kp_data.cpu().numpy()
+                            kp_data = cast(Any, kp_data).cpu().numpy()
                         elif hasattr(kp_data, "numpy"):
-                            kp_data = kp_data.numpy()
+                            kp_data = cast(Any, kp_data).numpy()
 
                         keypoints = kp_data[0]
 
@@ -3122,14 +3117,14 @@ def _process_pose_from_csv(
                         )
                 frame = _draw_keypoints_and_skeleton(frame, abs_kps, color=(0, 255, 0))
             else:
-                keypoints_row = [frame_idx, output_tracker_id, label]
+                keypoints_row: list[Any] = [frame_idx, output_tracker_id, label]
                 for _ in keypoint_names:
                     keypoints_row.extend([np.nan, np.nan, np.nan])
                 pose_data.append(keypoints_row)
 
             writer.write(frame)
         else:
-            keypoints_row = [frame_idx, output_tracker_id, label]
+            keypoints_row: list[Any] = [frame_idx, output_tracker_id, label]
             for _ in keypoint_names:
                 keypoints_row.extend([np.nan, np.nan, np.nan])
             pose_data.append(keypoints_row)
@@ -3143,7 +3138,7 @@ def _process_pose_from_csv(
     writer.release()
 
     # Save pose CSV
-    pose_df = pd.DataFrame(pose_data, columns=pose_headers)
+    pose_df = pd.DataFrame(pose_data, columns=pose_headers)  # ty: ignore[invalid-argument-type]
     pose_df.to_csv(pose_csv, index=False)
     print(f"\nPose data saved: {os.path.basename(pose_csv)}")
     print(f"Pose video saved: {os.path.basename(pose_video)}")
@@ -3214,10 +3209,8 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-p
     if not os.path.exists(pose_model_path):
         try:
             print(f"Downloading pose model {pose_model_name}...")
-            current_dir = os.getcwd()
-            os.chdir(models_dir)
-            YOLO(pose_model_name)
-            os.chdir(current_dir)
+            # Use full path to avoid downloading to root
+            YOLO(pose_model_path)
             print(f"Model downloaded successfully to {pose_model_path}")
         except Exception as e:
             print(f"Error downloading pose model: {e}")
@@ -3339,7 +3332,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-p
                         )
 
                         # Extract keypoints (use first detection if multiple)
-                        keypoints_row = [frame_idx, tracker_id, label]
+                        keypoints_row: list[Any] = [frame_idx, tracker_id, label]
 
                         if results and len(results) > 0 and results[0].keypoints is not None:
                             # Get keypoints tensor and convert to numpy
@@ -3347,9 +3340,9 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-p
                             if kp_data is not None and len(kp_data) > 0:
                                 # Convert tensor to numpy if needed
                                 if hasattr(kp_data, "cpu"):
-                                    kp_data = kp_data.cpu().numpy()
+                                    kp_data = cast(Any, kp_data).cpu().numpy()
                                 elif hasattr(kp_data, "numpy"):
-                                    kp_data = kp_data.numpy()
+                                    kp_data = cast(Any, kp_data).numpy()
 
                                 keypoints = kp_data[0]  # First person detected
 
@@ -3392,13 +3385,13 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-p
                         )
                     else:
                         # Empty ROI, fill with NaN
-                        keypoints_row = [frame_idx, tracker_id, label]
+                        keypoints_row: list[Any] = [frame_idx, tracker_id, label]
                         for _ in keypoint_names:
                             keypoints_row.extend([np.nan, np.nan, np.nan])
                         pose_data.append(keypoints_row)
                 else:
                     # No bbox for this frame, fill with NaN
-                    keypoints_row = [frame_idx, tracker_id, label]
+                    keypoints_row: list[Any] = [frame_idx, tracker_id, label]
                     for _ in keypoint_names:
                         keypoints_row.extend([np.nan, np.nan, np.nan])
                     pose_data.append(keypoints_row)
@@ -3410,7 +3403,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-p
                 writer.write(frame)
 
             # Save pose CSV
-            pose_df = pd.DataFrame(pose_data, columns=pose_headers)
+            pose_df = pd.DataFrame(pose_data, columns=pose_headers)  # ty: ignore[invalid-argument-type]
             pose_df.to_csv(pose_csv, index=False)
             print(f"\n  Pose data saved: {os.path.basename(pose_csv)}")
             print(f"  Pose video saved: {os.path.basename(pose_video)}")
@@ -3498,10 +3491,8 @@ def run_yolov11track():
         if not os.path.exists(model_path):
             try:
                 print(f"Downloading model {model_name}...")
-                current_dir = os.getcwd()
-                os.chdir(models_dir)
-                YOLO(model_name)
-                os.chdir(current_dir)
+                # Use full path to avoid downloading to root
+                YOLO(model_path)
                 print(f"Model downloaded successfully to {model_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to download model: {str(e)}")
@@ -3580,14 +3571,14 @@ def run_yolov11track():
             # Use MJPG codec for AVI (highly compatible and reliable)
             # This ensures the video is written correctly without corruption
             writer = cv2.VideoWriter(
-                temp_avi_path, cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)
+                temp_avi_path, cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)  # ty: ignore[unresolved-attribute]
             )
             if not writer.isOpened():
                 print(f"Error creating video file: {temp_avi_path}")
                 print("Trying alternative codec...")
                 # Fallback to XVID if MJPG fails
                 writer = cv2.VideoWriter(
-                    temp_avi_path, cv2.VideoWriter_fourcc(*"XVID"), fps, (width, height)
+                    temp_avi_path, cv2.VideoWriter_fourcc(*"XVID"), fps, (width, height)  # ty: ignore[unresolved-attribute]
                 )
                 if not writer.isOpened():
                     print("Error: Could not create video writer with any codec")
@@ -3620,7 +3611,7 @@ def run_yolov11track():
             mask_img = None
             if roi_poly is not None:
                 mask_img = np.zeros((height, width), dtype=np.uint8)
-                cv2.fillPoly(mask_img, [roi_poly], 255)
+                cv2.fillPoly(mask_img, [roi_poly], 255)  # ty: ignore[no-matching-overload]
 
             # Try to use the default Ultralytics tracker config first, then customize
             tracker_config = None
@@ -3764,7 +3755,7 @@ def run_yolov11track():
                     if mask_img is not None:
                         cx = (x_min + x_max) // 2
                         cy = (y_min + y_max) // 2
-                        inside = cv2.pointPolygonTest(roi_poly, (cx, cy), False)
+                        inside = cv2.pointPolygonTest(roi_poly, (cx, cy), False)  # ty: ignore[no-matching-overload]
                         if inside < 0:
                             continue
 
