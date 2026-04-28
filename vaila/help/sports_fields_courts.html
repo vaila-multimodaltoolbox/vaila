@@ -29,12 +29,26 @@
         <table>
             <tr><th>Choice</th><th>Tool</th><th>Model file (<code>vaila/models/</code>)</th></tr>
             <tr><td>Soccer</td><td><code>drawsportsfields.run_drawsportsfields("soccer")</code></td><td><code>soccerfield_ref3d.csv</code> (full FIFA markings)</td></tr>
+            <tr><td>FIFA Dataset (32 KP order)</td><td><code>drawsportsfields.run_drawsportsfields("fifa_dataset")</code></td><td><code>soccerfield_ref3d_fifa.csv</code> + overlay <code>01..32</code> canonical keypoints from <code>fifa_dataset_builder</code></td></tr>
             <tr><td>Tennis</td><td><code>drawsportsfields.run_drawsportsfields("tennis")</code></td><td><code>tenniscourt_ref3d.csv</code></td></tr>
             <tr><td>Basketball</td><td><code>drawsportsfields.run_drawsportsfields("basketball")</code></td><td><code>basketballcourt_ref3d.csv</code></td></tr>
             <tr><td>Volleyball</td><td><code>drawsportsfields.run_drawsportsfields("volleyball")</code></td><td><code>volleyball_ref3d.csv</code></td></tr>
             <tr><td>Futsal</td><td><code>drawsportsfields.run_drawsportsfields("futsal")</code></td><td><code>futsal_ref3d.csv</code></td></tr>
             <tr><td>Handball</td><td><code>drawsportsfields.run_drawsportsfields("handball")</code></td><td><code>handball_ref3d.csv</code></td></tr>
         </table>
+
+        <h2>FIFA Dataset labeling reference (new)</h2>
+        <p>Use <code>--type fifa_dataset</code> when your goal is to label new broadcast
+        frames/videos for the 32-keypoint pitch dataset used by
+        <code>vaila.fifa_dataset_builder</code>. This mode draws the same FIFA field
+        and overlays:</p>
+        <ul>
+            <li>the canonical keypoint order <strong>01..32</strong> (exact YOLO-pose order),</li>
+            <li>short semantic names near each point for human QA,</li>
+            <li>a footer reminder that ordering matches dataset/getpixelvideo export.</li>
+        </ul>
+        <p>This reference is intended to reduce keypoint index swaps while clicking in
+        <code>vaila/getpixelvideo.py</code>.</p>
 
         <div class="note">
             <strong>Note:</strong> All sports are unified under <code>vaila/drawsportsfields.py</code>.
@@ -53,6 +67,7 @@
 
         <h2>CLI usage</h2>
         <pre><code>uv run vaila/drawsportsfields.py -t soccer
+uv run vaila/drawsportsfields.py -t fifa_dataset
 uv run vaila/drawsportsfields.py -t tennis
 uv run vaila/drawsportsfields.py -t basketball
 uv run vaila/drawsportsfields.py --field path/to/custom.csv

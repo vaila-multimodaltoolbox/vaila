@@ -143,6 +143,7 @@ uv run python -m vaila.soccerfield_keypoints_ai \
       </table>
 
       <h2>Training a new detector</h2>
+      <h3>Option A — HF sample inside the repo (quick experiments)</h3>
       <p>Crucial recipe to <strong>avoid pose-collapse</strong>:</p>
       <pre>uv run yolo pose train \
   model=yolo26s-pose.pt \
@@ -151,8 +152,22 @@ uv run python -m vaila.soccerfield_keypoints_ai \
   mosaic=0.0 mixup=0.0 close_mosaic=0 erasing=0.0 \
   pose=25.0 kobj=2.0 device=0 patience=80 \
   project=vaila/models/runs/pose_fifa name=pitch32_recipeA_400ep</pre>
+      <h3>Option B — External merged dataset (FIFA / multi-source)</h3>
+      <p>Use an <strong>absolute</strong> <code>data=</code> path to <code>unified/data.yaml</code> produced by
+        <code>vaila.fifa_dataset_builder</code> (dataset root <strong>outside</strong> the vailá clone). After QA on
+        <code>check_all_labels/</code>, run <code>vaila.fifa_check_labels_dedupe</code> and
+        <code>vaila.fifa_dataset_train_readiness --prune-unified-to-flat --apply-prune</code> so
+        <code>unified/</code> matches what you validated — see
+        <a href="../../docs/fifa_workflow.md"><code>docs/fifa_workflow.md</code> §4.5</a>.</p>
+      <pre>uv run yolo pose train \
+  model=yolo11x-pose.pt \
+  data=/path/to/dataset_vaila_fifa/unified/data.yaml \
+  epochs=200 imgsz=1280 batch=8 \
+  mosaic=0 erasing=0 pose=20 kobj=2.5 flipud=0 fliplr=0.5 \
+  project=/path/to/dataset_vaila_fifa/runs name=fifa32_retrain \
+  device=0</pre>
       <div class="warning">
-        Do <strong>not</strong> enable <code>mosaic</code> or <code>mixup</code> with <code>imgsz</code> small.
+        Do <strong>not</strong> enable <code>mosaic</code> or <code>mixup</code> with small <code>imgsz</code>.
         It collapses all 32 keypoints onto a single point even while box mAP stays near 1.0
         (<code>.claude/skills/soccer-field-keypoints-yolo/SKILL.md</code>).
       </div>
@@ -177,6 +192,7 @@ uv run python -m vaila.soccerfield_keypoints_ai \
         <li><code>getpixelvideo.py</code> — manual click + refine of the wide CSV</li>
         <li><code>vaila/help/vaila_sam.html</code> — SAM 3 video segmentation + FIFA pipeline</li>
         <li><code>.claude/skills/soccer-field-keypoints-yolo/SKILL.md</code> — full training guide</li>
+        <li><code>docs/fifa_workflow.md</code> §4.5 — external <code>unified/</code> tree, QA export, dedupe, train</li>
       </ul>
 
       <div class="footer">vailá — Multimodal Toolbox · AGPL-3.0 · Generated April 2026 ·
