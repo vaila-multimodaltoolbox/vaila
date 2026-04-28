@@ -16,6 +16,13 @@ so ``kp_i = label_{i+1}`` in the figure).
 
 Output layout (``--out-root``)
 -----------------------------
+The merge root is normally **outside** the vailá repository (multi-gigabyte
+sources). Training reads ``<out-root>/unified/data.yaml`` with Ultralytics
+(``yolo pose train data=/ABS/.../unified/data.yaml``). After QA on
+``check_all_labels/``, sync ``unified/`` with
+``python -m vaila.fifa_dataset_train_readiness --prune-unified-to-flat`` — see
+``docs/fifa_workflow.md`` §4.5.
+
 ::
 
     dataset_vaila_fifa/
@@ -2449,6 +2456,31 @@ def _build_argparser() -> argparse.ArgumentParser:
         action="store_true",
         help="List the registered sources and exit.",
     )
+    p.add_argument(
+        "--export-label-check-to",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help=(
+            "Skip building: export a flat QA bundle under DIR with subdirs "
+            "`images/`, `labels/`, `images_with_labels/` (keypoint overlays) "
+            "from an existing `<out-root>/unified/` tree. "
+            "If --out-root is omitted, unified/ is inferred as "
+            "`<export-dir-parent>/unified/`."
+        ),
+    )
+    p.add_argument(
+        "--export-max-images",
+        type=int,
+        default=0,
+        metavar="N",
+        help="With --export-label-check-to: stop after N successfully written samples (0 = all).",
+    )
+    p.add_argument(
+        "--export-copy-images",
+        action="store_true",
+        help="With --export-label-check-to: copy images instead of symlinking.",
+    )
     return p
 
 
@@ -2458,6 +2490,173 @@ def list_sources() -> None:
     for s in REGISTRY:
         print(f"{s.name:45s} {s.kind:22s} {str(s.optional):9s} {s.url}")
     print()
+
+
+_IMAGE_EXTS_ORDERED = (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG")
+
+
+def find_unified_image_for_label(unified_root: Path, split: str, label_stem: str) -> Path | None:
+    """Return the first matching image path for a YOLO label stem under ``unified/``."""
+    img_dir = unified_root / "images" / split
+    for ext in _IMAGE_EXTS_ORDERED:
+        cand = img_dir / f"{label_stem}{ext}"
+        if cand.exists():
+            return cand
+    return None
+
+
+def draw_yolo_pose_overlay(
+    bgr: Any,
+    line_tokens: list[str],
+    *,
+    caption: str | None = None,
+) -> bool:
+    """Draw bbox + visible keypoints (with indices) on a BGR OpenCV image.
+
+    ``line_tokens`` is the whitespace-split first line of a YOLO-Pose label
+    (``1 + 4 + NUM_KEYPOINTS * 3`` fields).  Returns ``False`` if the line is
+    too short or invalid for drawing.
+    """
+    import cv2  # type: ignore[import-not-found]
+
+    if len(line_tokens) < 5 + NUM_KEYPOINTS * 3:
+        return False
+    h, w = bgr.shape[:2]
+    cls = int(line_tokens[0])
+    cx, cy, bw, bh = (float(x) for x in line_tokens[1:5])
+    x1 = int((cx - bw / 2) * w)
+    y1 = int((cy - bh / 2) * h)
+    x2 = int((cx + bw / 2) * w)
+    y2 = int((cy + bh / 2) * h)
+    cv2.rectangle(bgr, (x1, y1), (x2, y2), (0, 200, 255), 2)
+    for i in range(NUM_KEYPOINTS):
+        x = float(line_tokens[5 + i * 3]) * w
+        y = float(line_tokens[5 + i * 3 + 1]) * h
+        v = int(float(line_tokens[5 + i * 3 + 2]))
+        if v <= 0:
+            continue
+        color = (0, 255, 0) if v == 2 else (0, 165, 255)
+        cv2.circle(bgr, (int(x), int(y)), 4, color, -1)
+        cv2.putText(
+            bgr,
+            str(i),
+            (int(x) + 5, int(y) - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.4,
+            color,
+            1,
+            cv2.LINE_AA,
+        )
+    if caption is not None:
+        cv2.putText(
+            bgr,
+            caption,
+            (10, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+    else:
+        cv2.putText(
+            bgr,
+            f"cls={cls}",
+            (10, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+    return True
+
+
+def export_label_check_bundle(
+    unified_root: Path,
+    bundle_root: Path,
+    *,
+    max_images: int | None = None,
+    copy_images: bool = False,
+) -> dict[str, int]:
+    """Populate ``bundle_root`` with flat ``images/``, ``labels/``, ``images_with_labels/``.
+
+    Each sample is named ``{split}__{label_stem}.<ext>`` so filenames stay
+    unique across splits.  Images default to **symlinks** pointing at the
+    resolved unified frames (set ``copy_images=True`` for full copies).
+
+    Returns counters: ``written``, ``missing_image``, ``bad_label``, ``draw_fail``.
+    """
+    try:
+        import cv2  # type: ignore[import-not-found]
+    except ModuleNotFoundError:
+        raise RuntimeError("export_label_check_bundle requires opencv-python (cv2).") from None
+
+    bundle_root = bundle_root.resolve()
+    unified_root = unified_root.resolve()
+    images_d = bundle_root / "images"
+    labels_d = bundle_root / "labels"
+    overlay_d = bundle_root / "images_with_labels"
+    for d in (images_d, labels_d, overlay_d):
+        if d.exists():
+            shutil.rmtree(d)
+        d.mkdir(parents=True, exist_ok=True)
+
+    candidates: list[Path] = []
+    for split in ("train", "val", "test"):
+        candidates.extend(sorted((unified_root / "labels" / split).glob("*.txt")))
+
+    stats = {"written": 0, "missing_image": 0, "bad_label": 0, "draw_fail": 0}
+    for idx, lbl_path in enumerate(candidates):
+        if max_images is not None and stats["written"] >= max_images:
+            break
+        split = lbl_path.parent.name
+        stem = lbl_path.stem
+        flat_base = f"{split}__{stem}"
+        img_path = find_unified_image_for_label(unified_root, split, stem)
+        if img_path is None:
+            stats["missing_image"] += 1
+            continue
+        line = lbl_path.read_text().strip().splitlines()
+        if not line:
+            stats["bad_label"] += 1
+            continue
+        parts = line[0].split()
+        if len(parts) != 1 + 4 + NUM_KEYPOINTS * 3:
+            stats["bad_label"] += 1
+            continue
+
+        shutil.copy2(lbl_path, labels_d / f"{flat_base}.txt")
+        img_suffix = img_path.suffix
+        dest_img = images_d / f"{flat_base}{img_suffix}"
+        src_resolved = img_path.resolve()
+        if copy_images:
+            shutil.copy2(src_resolved, dest_img)
+        else:
+            try:
+                dest_img.symlink_to(src_resolved)
+            except OSError:
+                shutil.copy2(src_resolved, dest_img)
+
+        bgr = cv2.imread(str(src_resolved))
+        if bgr is None:
+            stats["draw_fail"] += 1
+            continue
+        cap = f"{flat_base} [{split}]"
+        if not draw_yolo_pose_overlay(bgr, parts, caption=cap):
+            stats["draw_fail"] += 1
+            continue
+        cv2.imwrite(str(overlay_d / f"{flat_base}.jpg"), bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        stats["written"] += 1
+        if (idx + 1) % 500 == 0:
+            print(f"[export-label-check] processed {idx + 1} label file(s)…")
+
+    print(
+        f"[export-label-check] done → {bundle_root} "
+        f"(written={stats['written']}, missing_image={stats['missing_image']}, "
+        f"bad_label={stats['bad_label']}, draw_fail={stats['draw_fail']})"
+    )
+    return stats
 
 
 def render_preview(unified_root: Path, n_samples: int = 12, *, seed: int = 0) -> Path:
@@ -2503,58 +2702,18 @@ def render_preview(unified_root: Path, n_samples: int = 12, *, seed: int = 0) ->
         if drawn >= n_samples:
             break
         split = lbl_path.parent.name
-        img_dir = unified_root / "images" / split
-        # Try common extensions; staging uses the source extension verbatim.
-        img_path = None
-        for ext in (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"):
-            cand = img_dir / f"{lbl_path.stem}{ext}"
-            if cand.exists():
-                img_path = cand
-                break
+        img_path = find_unified_image_for_label(unified_root, split, lbl_path.stem)
         if img_path is None:
             continue
         bgr = cv2.imread(str(img_path))
         if bgr is None:
             continue
-        h, w = bgr.shape[:2]
         line = lbl_path.read_text().strip().splitlines()[0].split()
         if len(line) < 5 + NUM_KEYPOINTS * 3:
             continue
-        cls = int(line[0])
-        cx, cy, bw, bh = (float(x) for x in line[1:5])
-        x1 = int((cx - bw / 2) * w)
-        y1 = int((cy - bh / 2) * h)
-        x2 = int((cx + bw / 2) * w)
-        y2 = int((cy + bh / 2) * h)
-        cv2.rectangle(bgr, (x1, y1), (x2, y2), (0, 200, 255), 2)
-        for i in range(NUM_KEYPOINTS):
-            x = float(line[5 + i * 3]) * w
-            y = float(line[5 + i * 3 + 1]) * h
-            v = int(float(line[5 + i * 3 + 2]))
-            if v <= 0:
-                continue
-            color = (0, 255, 0) if v == 2 else (0, 165, 255)
-            cv2.circle(bgr, (int(x), int(y)), 4, color, -1)
-            cv2.putText(
-                bgr,
-                str(i),
-                (int(x) + 5, int(y) - 5),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.4,
-                color,
-                1,
-                cv2.LINE_AA,
-            )
-        cv2.putText(
-            bgr,
-            f"{lbl_path.stem} [{split}] cls={cls}",
-            (10, 25),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (255, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
+        cap = f"{lbl_path.stem} [{split}] cls={int(line[0])}"
+        if not draw_yolo_pose_overlay(bgr, line, caption=cap):
+            continue
         cv2.imwrite(str(out_dir / f"{drawn:02d}_{split}_{lbl_path.stem}.jpg"), bgr)
         drawn += 1
     print(f"[preview] Wrote {drawn} sample(s) to {out_dir}")
@@ -2567,6 +2726,23 @@ def main(argv: list[str] | None = None) -> int:
         list_sources()
         return 0
     out_root = args.out_root if args.out_root else Path.cwd() / "dataset_vaila_fifa"
+    if args.export_label_check_to is not None:
+        dest = args.export_label_check_to.expanduser().resolve()
+        if args.out_root is not None:
+            unified = args.out_root.expanduser().resolve() / "unified"
+        else:
+            unified = dest.parent / "unified"
+        if not unified.is_dir():
+            print(f"[export-label-check] unified dataset not found: {unified}")
+            return 1
+        max_n = args.export_max_images if args.export_max_images > 0 else None
+        export_label_check_bundle(
+            unified,
+            dest,
+            max_images=max_n,
+            copy_images=bool(args.export_copy_images),
+        )
+        return 0
     if args.preview_only:
         unified = out_root / "unified"
         if not unified.exists():

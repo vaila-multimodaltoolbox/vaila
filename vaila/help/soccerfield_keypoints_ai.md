@@ -223,6 +223,8 @@ and the FIFA reference layout
 
 ## Training a new detector (advanced)
 
+### Option A — Small HF sample inside the repo (quick experiments)
+
 ```bash
 uv run yolo pose train \
   model=yolo26s-pose.pt \
@@ -233,10 +235,37 @@ uv run yolo pose train \
   project=vaila/models/runs/pose_fifa name=pitch32_recipeA_400ep
 ```
 
-Important: **do not enable `mosaic` or `mixup`** — they collapse the
-32 keypoints onto a single point even while box mAP stays high
-(documented in
-`.claude/skills/soccer-field-keypoints-yolo/SKILL.md`).
+### Option B — **External** merged 32-kp dataset (FIFA / multi-source, recommended for production)
+
+The vailá merger (`vaila.fifa_dataset_builder`) writes an Ultralytics-ready tree
+**outside** git — e.g. `/path/to/dataset_vaila_fifa/unified/data.yaml` with
+`images/{train,val,test}/` and matching `labels/`. After human QA on a flat
+`check_all_labels/` export, dedupe and align `unified/` with the helper CLIs
+below, then train with an **absolute** `data=` path:
+
+```bash
+uv run yolo pose train \
+  model=yolo11x-pose.pt \
+  data=/path/to/dataset_vaila_fifa/unified/data.yaml \
+  epochs=200 imgsz=1280 batch=8 \
+  mosaic=0 erasing=0 pose=20 kobj=2.5 flipud=0 fliplr=0.5 \
+  project=/path/to/dataset_vaila_fifa/runs name=fifa32_retrain \
+  device=0
+```
+
+**Related CLIs** (same `uv run python -m …` pattern):
+
+| Module | Role |
+|--------|------|
+| `vaila.fifa_dataset_builder` | Build `unified/` + `data.yaml`; `--export-label-check-to …/check_all_labels` for overlays |
+| `vaila.fifa_check_labels_dedupe` | Remove near-duplicate triplets under `check_all_labels/` |
+| `vaila.fifa_dataset_train_readiness` | Verify `unified/`; `--prune-unified-to-flat` + `--apply-prune` syncs after dedupe |
+
+Narrative + FIFA challenge context: **[`docs/fifa_workflow.md`](../../docs/fifa_workflow.md)** (section **4.5**).
+
+Important: **do not enable `mosaic` or `mixup`** on small `imgsz` — they
+collapse the 32 keypoints onto a single point even while box mAP stays high
+(see `.claude/skills/soccer-field-keypoints-yolo/SKILL.md`).
 
 ---
 
@@ -259,5 +288,6 @@ Important: **do not enable `mosaic` or `mixup`** — they collapse the
 - `vaila/getpixelvideo.py` — manual click + refine of the wide CSV
 - `.claude/skills/soccer-field-keypoints-yolo/SKILL.md` — full training recipe
 - `.claude/skills/fifa-vaila-continuation/SKILL.md` — FIFA challenge resume
+- [`docs/fifa_workflow.md`](../../docs/fifa_workflow.md) §4.5 — external unified dataset + QA + `yolo pose train`
 
 Generated: April 26, 2026.

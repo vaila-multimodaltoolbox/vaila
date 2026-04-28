@@ -3027,7 +3027,10 @@ class Vaila(tk.Tk):
         """
         print("\n" + "=" * 60)
         print("Launching: vaila.fifa_dataset_builder (Tk dialog)")
-        print("Output: <selected dir>/dataset_vaila_fifa/")
+        print(
+            "Output: <selected dir>/dataset_vaila_fifa/  (unified/ + data.yaml — usually outside git)"
+        )
+        print("Docs:    docs/fifa_workflow.md §4.5 (external tree, QA export, dedupe, yolo train)")
         print("=" * 60 + "\n")
         run_vaila_module("vaila.fifa_dataset_builder", "vaila/fifa_dataset_builder.py")
 
