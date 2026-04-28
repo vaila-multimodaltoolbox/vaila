@@ -2710,7 +2710,11 @@ class Vaila(tk.Tk):
         ).pack(anchor=tk.W, padx=14, pady=(14, 4))
 
         options = [
-            ("soccer", "Soccer field (FIFA 105 × 68 m)"),
+            ("soccer", "Soccer field (vailá ref, point_number do modelo)"),
+            (
+                "fifa_dataset",
+                "Soccer field (dataset ref, canonical keypoints 0..31 para labeling)",
+            ),
             ("tennis", "Tennis court (ITF 23.77 × 10.97 m)"),
             ("basketball", "Basketball (FIBA 28 × 15 m)"),
             ("volleyball", "Volleyball (FIVB 18 × 9 m)"),

@@ -67,6 +67,21 @@ import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from rich import print
 
+try:
+    from .fifa_dataset_builder import (
+        CANONICAL_KP_NAMES_32,
+        ROBOFLOW_FIELD_LENGTH_CM,
+        ROBOFLOW_FIELD_WIDTH_CM,
+        _canonical_vertices_cm,
+    )
+except ImportError:
+    from fifa_dataset_builder import (  # ty: ignore[unresolved-import]
+        CANONICAL_KP_NAMES_32,
+        ROBOFLOW_FIELD_LENGTH_CM,
+        ROBOFLOW_FIELD_WIDTH_CM,
+        _canonical_vertices_cm,
+    )
+
 # Full FIFA layout reference names required by plot_field() (see models/soccerfield_ref3d.csv)
 _SOCCER_FIELD_POINT_NAMES = frozenset(
     {
@@ -761,6 +776,109 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
                 zorder=10,
             )
 
+    return fig, ax
+
+
+def _draw_fifa32_dataset_keypoints_overlay(
+    ax: plt.Axes,
+    points: dict[str, tuple[float, float, int]],
+) -> None:
+    """Overlay FIFA builder canonical 32 keypoints on the current soccer field.
+
+    Mapping strategy:
+    - canonical points from `fifa_dataset_builder` are in Roboflow top-left
+      normalized coordinates (x right, y down).
+    - `drawsportsfields` field uses y-up coordinates; we map normalized
+      coordinates to the currently loaded field extents from corner points.
+    """
+    required = {"bottom_left_corner", "top_left_corner", "bottom_right_corner", "top_right_corner"}
+    if not required.issubset(points):
+        return
+
+    xs = [points[name][0] for name in required]
+    ys = [points[name][1] for name in required]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    width = max_x - min_x
+    height = max_y - min_y
+    if width <= 0 or height <= 0:
+        return
+
+    canonical_cm = _canonical_vertices_cm()
+    lx = float(ROBOFLOW_FIELD_LENGTH_CM)
+    wy = float(ROBOFLOW_FIELD_WIDTH_CM)
+
+    for idx, ((x_cm, y_cm), kp_name) in enumerate(
+        zip(canonical_cm, CANONICAL_KP_NAMES_32, strict=False)
+    ):
+        x_norm = x_cm / lx
+        y_norm = y_cm / wy  # y-down
+        x_field = min_x + x_norm * width
+        y_field = max_y - y_norm * height  # convert y-down -> y-up
+
+        ax.plot(
+            x_field,
+            y_field,
+            marker="o",
+            markersize=4.8,
+            markerfacecolor="#FFD100",
+            markeredgecolor="black",
+            markeredgewidth=0.8,
+            zorder=18,
+        )
+        ax.text(
+            x_field + 0.35,
+            y_field + 0.35,
+            str(idx),
+            fontsize=7.2,
+            color="black",
+            weight="bold",
+            bbox={"facecolor": "#fff7bf", "alpha": 0.9, "boxstyle": "round,pad=0.15"},
+            zorder=19,
+        )
+        # Small semantic helper near each label for fast manual labeling reference.
+        ax.text(
+            x_field + 0.35,
+            y_field - 0.55,
+            kp_name.replace("_", " "),
+            fontsize=5.5,
+            color="#222222",
+            alpha=0.9,
+            zorder=19,
+        )
+
+    ax.text(
+        0.015,
+        0.02,
+        "FIFA dataset keypoints: 0..31 (canonical order from fifa_dataset_builder/getpixelvideo)",
+        transform=ax.transAxes,
+        fontsize=8,
+        color="white",
+        bbox={"facecolor": "black", "alpha": 0.55, "boxstyle": "round,pad=0.25"},
+        zorder=21,
+    )
+
+
+def plot_field_fifa_dataset(
+    df: pd.DataFrame,
+    *,
+    show_reference_points: bool = True,
+    show_axis_values: bool = False,
+    color_scheme: str | None = None,
+):
+    """Draw FIFA pitch and overlay the 32 canonical dataset keypoints."""
+    fig, ax = plot_field(
+        df,
+        # Always hide model point_number labels (1..37 from ref CSV) in this
+        # dedicated view; we only want canonical dataset indices 0..31.
+        show_reference_points=False,
+        show_axis_values=show_axis_values,
+        color_scheme=color_scheme,
+    )
+    points = {
+        row["point_name"]: (row["x"], row["y"], row["point_number"]) for _, row in df.iterrows()
+    }
+    _draw_fifa32_dataset_keypoints_overlay(ax, points)
     return fig, ax
 
 
@@ -1656,6 +1774,12 @@ SPORT_REGISTRY.update(
             title="FIFA Skeletal Tracking Pitch",
             plot_fn=plot_field,
         ),
+        "fifa_dataset": SportDef(
+            label="FIFA Dataset Labeling (32 KP order)",
+            model_csv="soccerfield_ref3d_fifa.csv",
+            title="FIFA Pitch + Dataset Keypoints 01..32",
+            plot_fn=plot_field_fifa_dataset,
+        ),
         "tennis": SportDef(
             label="Tennis Court Visualization",
             model_csv="tenniscourt_ref3d.csv",
@@ -2091,6 +2215,7 @@ def run_soccerfield(
     default_field_csv: str | None = None,
     window_title: str = "Sports Field Visualization",
     help_html: str = "sports_fields_courts.html",
+    forced_sport: str | None = None,
 ):
     """Main function to run the soccerfield.py script with GUI controls.
 
@@ -2105,6 +2230,11 @@ def run_soccerfield(
         Tk window title.
     help_html
         Help HTML filename from ``vaila/help`` opened by the Help button.
+    forced_sport
+        If set, forces one key from ``SPORT_REGISTRY`` for plotting on load,
+        bypassing auto-detection from CSV content/name. Useful when two modes
+        share the same model CSV but different overlays (e.g. ``soccer`` vs
+        ``fifa_dataset``).
     """
     print(f"Running script: {os.path.basename(__file__)} — {window_title}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -2162,7 +2292,7 @@ def run_soccerfield(
             print(f"Number of reference points: {len(df)}")
 
             color_s = current_field_color[0] if current_field_color[0] != "default" else None
-            sport = _detect_sport(csv_path, df)
+            sport = forced_sport or _detect_sport(csv_path, df)
 
             if sport and sport in SPORT_REGISTRY:
                 config = SPORT_REGISTRY[sport]
@@ -3456,6 +3586,7 @@ def run_drawsportsfields(surface: str) -> None:
         default_field_csv=model,
         window_title=config.label,
         help_html="sports_fields_courts.html",
+        forced_sport=key,
     )
 
 
