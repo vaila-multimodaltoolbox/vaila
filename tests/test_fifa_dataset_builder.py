@@ -797,3 +797,26 @@ def test_render_preview_skips_when_unified_missing(tmp_path: Path, capsys):
     # Either OpenCV is missing (early return) or no labels were found — both
     # outputs are valid and exercise the safety branches.
     assert "preview" in captured.out.lower() or out.exists() or True
+
+
+def test_export_label_check_bundle_writes_triplets(tmp_path: Path):
+    """Flat ``images/`` + ``labels/`` + ``images_with_labels/`` for manual QA."""
+    unified = tmp_path / "unified"
+    _write_real_rgb_image(unified / "images" / "train" / "src__frame1.jpg")
+    kps: list[tuple[float, float, int]] = [(0.0, 0.0, 0)] * fdb.NUM_KEYPOINTS
+    for i in range(6):
+        kps[i] = (0.15 + 0.04 * i, 0.35, 2)
+    line = _yolo_pose_line(0, (0.5, 0.5, 0.9, 0.85), kps)
+    lbl = unified / "labels" / "train" / "src__frame1.txt"
+    lbl.parent.mkdir(parents=True, exist_ok=True)
+    lbl.write_text(line + "\n")
+
+    bundle = tmp_path / "check_all_labels"
+    stats = fdb.export_label_check_bundle(unified, bundle, copy_images=True)
+    assert stats["written"] == 1
+    assert stats["missing_image"] == 0
+    assert stats["bad_label"] == 0
+    assert stats["draw_fail"] == 0
+    assert (bundle / "labels" / "train__src__frame1.txt").read_text().strip() == line
+    assert (bundle / "images" / "train__src__frame1.jpg").is_file()
+    assert (bundle / "images_with_labels" / "train__src__frame1.jpg").is_file()

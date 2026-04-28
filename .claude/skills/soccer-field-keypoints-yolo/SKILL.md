@@ -11,8 +11,9 @@ Esta skill resume o que foi implementado e como retomar em **outra IDE ou LLM** 
 
 1. Abrir este `SKILL.md`.
 2. Abrir `vaila/soccerfield_keypoints_ai.py` — CLI/GUI, backends `roboflow` e `ultralytics`, vídeo frame-a-frame.
-3. Dataset YOLO local: `vaila/models/hf_datasets/football-pitch-detection/data/data.yaml` (`kpt_shape: [32, 3]`).
-4. Referência 3D vailá (nomes de pontos): `vaila/models/soccerfield_ref3d.csv` — **mapeamento semântico kp_00..31 → nomes** ainda é trabalho futuro se os IDs do dataset não coincidirem com a vailá.
+3. Dataset YOLO local (pequeno, **dentro** do repo): `vaila/models/hf_datasets/football-pitch-detection/data/data.yaml` (`kpt_shape: [32, 3]`).
+4. Dataset **externo** unificado (multi-fonte / FIFA pitch): árvore `…/unified/data.yaml` gerada por `vaila.fifa_dataset_builder` — ver `docs/fifa_workflow.md` §4.5 e os módulos `fifa_check_labels_dedupe`, `fifa_dataset_train_readiness`.
+5. Referência 3D vailá (nomes de pontos): `vaila/models/soccerfield_ref3d.csv` — **mapeamento semântico kp_00..31 → nomes** ainda é trabalho futuro se os IDs do dataset não coincidirem com a vailá.
 
 ## O que existe no código
 
@@ -53,6 +54,19 @@ uv run yolo pose train \
 ```
 
 **Atenção ao caminho de saída**: se `project=` já contiver `runs/pose/...`, o Ultralytics pode **prefixar** outro `runs/pose/`, gerando caminhos longos duplicados. Verificar sempre o log `Results saved to ...` e usar esse caminho absoluto nos comandos seguintes.
+
+### Treino em dataset **externo** (`unified/` fora do git)
+
+Use `data=` absoluto para o `data.yaml` que o merger escreveu (ex. `/data/FIFA/dataset_vaila_fifa/unified/data.yaml`). Fluxo típico:
+
+1. `uv run python -m vaila.fifa_dataset_builder --out-root /data/FIFA/dataset_vaila_fifa …`
+2. Export QA: `--export-label-check-to …/check_all_labels`
+3. Revisão humana dos overlays; opcional: `uv run python -m vaila.fifa_check_labels_dedupe --bundle …/check_all_labels`
+4. Alinhar `unified/` ao flat deduplicado: `uv run python -m vaila.fifa_dataset_train_readiness --unified …/unified --prune-unified-to-flat …/check_all_labels --apply-prune`
+5. Verificar: `…train_readiness --unified …/unified --compare-flat …/check_all_labels` (exit ≠ 0 se contagens divergirem)
+6. `uv run yolo pose train data=/ABS/.../unified/data.yaml … project=/ABS/.../runs name=…`
+
+Documentação: **`docs/fifa_workflow.md` §4.5**.
 
 ## Export ONNX
 

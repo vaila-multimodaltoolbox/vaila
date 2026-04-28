@@ -12,6 +12,7 @@ Companion files:
 - `.claude/skills/fifa-skeletal-tracking/SKILL.md` — full FIFA pipeline reference.
 - `.claude/skills/sam3-video/SKILL.md` — SAM 3 video segmentation reference.
 - `.claude/skills/soccer-field-keypoints-yolo/SKILL.md` — pitch-keypoint training/inference.
+- `docs/fifa_workflow.md` §4.5 — **external** merged `unified/` dataset, QA export, dedupe, `yolo pose train` (weights → `soccerfield_keypoints_ai`).
 - `.claude/skills/sports-field-visualization/SKILL.md` — field rendering helpers.
 
 Companion repo (the official starter kit):

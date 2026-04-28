@@ -74,6 +74,15 @@ The project uses `pytest` for automated testing.
 
 **Milestone (02 March 2026):** Refactored `vaila_and_jump.py` (v0.1.3), `vaila/tugturn.py`, and the DLT/Reconstruction suite (`dlt2d.py`, `dlt3d.py`, `rec2d_one_dlt2d.py`, `rec3d.py`, `rec3d_one_dlt3d.py`). Fixed all Ruff/Ty lint and type errors, added CLI/headless support, and established a comprehensive automated test suite across `tests/`.
 
+## External unified pitch dataset (YOLO retrain, outside the repo)
+
+The merged **32 pitch keypoint** tree from `vaila.fifa_dataset_builder` is designed to live on disk **outside** the git clone (large image banks). Ultralytics training points at `<dataset_root>/unified/data.yaml` with an **absolute** `data=` path. After QA on a flat `check_all_labels/` export, use `vaila.fifa_check_labels_dedupe` and `vaila.fifa_dataset_train_readiness` (`--prune-unified-to-flat`) so `unified/` matches human-validated samples. Narrative: **`docs/fifa_workflow.md` §4.5**; GUI companion help: **`vaila/help/soccerfield_keypoints_ai.md`** (Training → Option B).
+
+```bash
+uv run pytest tests/test_fifa_dataset_builder.py tests/test_fifa_check_labels_dedupe.py \
+  tests/test_fifa_dataset_train_readiness.py -v
+```
+
 ## Repo structure
 
 ```
