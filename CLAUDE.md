@@ -307,6 +307,7 @@ Reusable "how-to" guides for complex workflows:
 - **Sports AI**:
   - [sam3-video](.claude/skills/sam3-video/SKILL.md) — SAM 3 text-prompt video segmentation, GUI help button, prompt presets.
   - [fifa-skeletal-tracking](.claude/skills/fifa-skeletal-tracking/SKILL.md) — FIFA 2026 pipeline (`fifa bootstrap` / `prepare` / `boxes` / `preprocess` / `baseline` / **`dlt-export`** / `pack`), `vaila/fifa_to_dlt.py` (per-frame DLT for **`rec2d.py`/`rec3d.py`** vs fixed-cam **`rec2d_one_dlt2d.py`**), vendored `fifa_starter_lib`, gated SAM 3D Body setup, soccer-field DLT2D calibration.
+  - [soccer-field-keypoints-yolo](.claude/skills/soccer-field-keypoints-yolo/SKILL.md) — Ultralytics YOLO **pitch** pose (32 kp), external merged `unified/` tree, `yolo pose train`; see **`docs/fifa_workflow.md` §4.5** and `vaila/help/soccerfield_keypoints_ai.md`.
 - **Reports**: [xlsx](file:///home/preto/Preto/vaila/.claude/skills/xlsx/SKILL.md) (Excel), [pdf](file:///home/preto/Preto/vaila/.claude/skills/pdf/SKILL.md), [pptx](file:///home/preto/Preto/vaila/.claude/skills/pptx/SKILL.md) (PowerPoint).
 - **Automation**: [mcp-builder](file:///home/preto/Preto/vaila/.claude/skills/mcp-builder/SKILL.md) (Model Context Protocol), [webapp-testing](file:///home/preto/Preto/vaila/.claude/skills/webapp-testing/SKILL.md).
 - **Visualization**: [web-artifacts-builder](file:///home/preto/Preto/vaila/.claude/skills/web-artifacts-builder/SKILL.md).
@@ -334,6 +335,8 @@ Companion tool `vaila/soccerfield_calib.py` (button **Soccer-Field Calib** in
 Frame C of `vaila.py`) fits a DLT2D homography from 29 FIFA keypoints and can
 emit `cameras/<stem>_homography.npz` as a fallback when a sequence has no
 official `cameras/*.npz`.
+
+**External unified pitch dataset (YOLO retrain):** `vaila.fifa_dataset_builder` writes `unified/data.yaml` under a user-chosen root **outside** git. After QA on `check_all_labels/`, use `vaila.fifa_check_labels_dedupe` and `vaila.fifa_dataset_train_readiness` to align `unified/`, then `yolo pose train data=/ABS/.../unified/data.yaml`. Full recipe: **`docs/fifa_workflow.md` §4.5**.
 
 ### Slash Commands (`.claude/commands/`)
 

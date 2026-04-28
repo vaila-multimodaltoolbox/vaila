@@ -117,12 +117,11 @@ dependencies = [
     "psutil",
     "pyzmq",
     "protobuf",
+    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
     "ruff",
     "vpython",
     "pyvista",
     "setuptools>=82.0.0",
-    "typer>=0.16.0",
-    "soccernet>=0.1.62",
 ]
 
 [project.optional-dependencies]
@@ -130,10 +129,6 @@ dev = [
     "ruff",
     "ty>=0.0.16",
     "pytest>=8.0.0",
-]
-gpu = [
-    "tensorrt",
-    "nvidia-ml-py",
 ]
 upscaler = [
     "diffusers",
@@ -165,16 +160,6 @@ packages = ["vaila", "sam_3d_body"]
 override-dependencies = [
     "regex>=2025.11.3",
 ]
-
-[[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
-explicit = true
-
-[tool.uv.sources]
-torch = { index = "pytorch-cu128" }
-torchvision = { index = "pytorch-cu128" }
-torchaudio = { index = "pytorch-cu128" }
 
 [tool.uv.workspace]
 # Workspace configuration if needed
@@ -264,7 +249,4 @@ exclude = [
 filterwarnings = [
     "ignore::pyparsing.warnings.PyparsingDeprecationWarning",
     "ignore::pytest.PytestDeprecationWarning",
-]
-markers = [
-    "slow: long-running tests (>30s) such as full TUG/Turn pipelines and CLI E2E",
 ]

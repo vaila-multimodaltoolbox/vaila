@@ -9,6 +9,7 @@
 > Companion help pages:
 > - [`vaila_sam.html`](../vaila/help/vaila_sam.html) — SAM 3 video + FIFA pipeline
 > - [`soccerfield_keypoints_ai.html`](../vaila/help/soccerfield_keypoints_ai.html) — AI seed for the 32 pitch keypoints
+> - **This file §4.5** — external **unified** pitch dataset (merge, QA, dedupe, `yolo pose train`)
 > - [`soccerfield_calib.html`](../vaila/help/soccerfield_calib.html) — DLT2D homography from clicked keypoints
 > - [`sports_fields_courts.html`](../vaila/help/sports_fields_courts.html) — Draw the FIFA reference field
 > - [`getpixelvideo.html`](../vaila/help/getpixelvideo.html) — Manual click / refine
@@ -189,6 +190,50 @@ processed_field_kps_<timestamp>/
 ```
 
 Help: [`soccerfield_keypoints_ai.html`](../vaila/help/soccerfield_keypoints_ai.html).
+
+### 4.5 External unified pitch dataset (merger, QA, dedupe, Ultralytics train)
+
+The **32 soccer-pitch keypoints** layout (`kpt_shape: [32, 3]`) produced by
+`vaila.fifa_dataset_builder` is meant to live on disk **outside** the vailá
+repository (large image banks, merged sources). Pick any root, e.g.
+`EXTERNAL=/data/FIFA/dataset_vaila_fifa/`, with:
+
+```
+EXTERNAL/
+├── unified/
+│   ├── data.yaml              ← Ultralytics: data=…/unified/data.yaml (absolute path recommended)
+│   ├── images/{train,val,test}/
+│   └── labels/{train,val,test}/
+├── check_all_labels/        ← optional flat QA export (not required for training)
+│   ├── images/   labels/   images_with_labels/
+├── sources/  staging/  reports/  …
+```
+
+| Step | Command | Notes |
+|------|---------|--------|
+| **1. Build / refresh** | `uv run python -m vaila.fifa_dataset_builder --out-root EXTERNAL` | Writes `unified/` + `data.yaml`. See module docstring for `--include`, SoccerNet, previews. |
+| **2. Flat QA export** | `uv run python -m vaila.fifa_dataset_builder --export-label-check-to EXTERNAL/check_all_labels --out-root EXTERNAL` | Human review of overlays; **does not** replace `unified/` training layout. |
+| **3. Dedupe flat (optional)** | `uv run python -m vaila.fifa_check_labels_dedupe --bundle EXTERNAL/check_all_labels` | Removes duplicate triplets **only** under `check_all_labels/`. |
+| **4. Align `unified/` to flat** | `uv run python -m vaila.fifa_dataset_train_readiness --unified EXTERNAL/unified --prune-unified-to-flat EXTERNAL/check_all_labels --dry-run` then `--apply-prune` | After step 3, drop the same samples from `unified/` so training matches what you validated. |
+| **5. Verify** | `uv run python -m vaila.fifa_dataset_train_readiness --unified EXTERNAL/unified --compare-flat EXTERNAL/check_all_labels` | Expect exit **0** when label counts match the flat `images/` stem count. |
+
+**Train / fine-tune** (workstation: CUDA `pyproject` template + `uv sync --extra gpu`; use an **absolute** `data=` path):
+
+```bash
+uv run yolo pose train \
+  data=/data/FIFA/dataset_vaila_fifa/unified/data.yaml \
+  model=yolo11x-pose.pt \
+  epochs=200 imgsz=1280 batch=8 \
+  mosaic=0 erasing=0 pose=20 kobj=2.5 flipud=0 fliplr=0.5 \
+  project=/data/FIFA/dataset_vaila_fifa/runs name=fifa32_retrain \
+  device=0
+```
+
+Point **`soccerfield_keypoints_ai --weights`** at `…/runs/…/weights/best.pt`
+(or export ONNX) for inference on FIFA broadcast frames.
+
+> **Scope:** this pipeline is **pitch geometry** (calibration / homography seed),
+> not the FIFA **Skeletal Tracking** body joint set (`fifa_skeletal_pipeline`).
 
 ---
 
