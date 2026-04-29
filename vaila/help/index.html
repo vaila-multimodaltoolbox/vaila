@@ -7,21 +7,21 @@
     <title>vailá - Help Index</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 0;
+            line-height: 1.55;
+            background: #f6f7fb;
             font-size: 18px;
             color: #111;
         }
 
         .container {
             max-width: 1200px;
-            margin: 0 auto;
+            margin: 28px auto;
             background: #fff;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 28px;
+            border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
         }
 
         h1 {
@@ -57,16 +57,63 @@
 
         .tool-card {
             border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 10px;
+            border-radius: 12px;
+            padding: 12px 12px 10px 12px;
             background: #fff;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            transition: box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease;
         }
 
         .tool-card:hover {
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+            box-shadow: 0 10px 18px rgba(0, 0, 0, 0.10);
+            transform: translateY(-1px);
+            border-color: #c9c9c9;
+        }
+
+        .topbar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            margin: 18px 0 10px 0;
+            padding: 12px;
+            background: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 12px;
+        }
+
+        .searchbox {
+            flex: 1 1 420px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .searchbox input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d6d6d6;
+            border-radius: 10px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .searchbox input:focus {
+            border-color: #7a7a7a;
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid #e3e3e3;
+            background: #fff;
+            font-size: 14px;
+            color: #222;
         }
 
         .tool-title {
@@ -107,17 +154,26 @@
 
 <body>
     <div class="container">
-        <h1>📚 <i>vailá</i> - Multimodal Toolbox Help</h1>
+        <h1><i>vailá</i> — Help</h1>
 
-        <p style="text-align: center; margin-bottom: 30px; color: #111;">
-            <a href="../../docs/index.md" style="font-weight: bold; color: #111;">📂 Open Project Documentation</a> |
-            <a href="gpu_guide.html" style="font-weight: bold; color: #111;">⚡ Dynamic Hardware Optimization Guide</a> |
-            <a href="../../docs/fifa_workflow.md" style="font-weight: bold; color: #111;">🏆 FIFA Skeletal Tracking Light — End-to-end</a>
+        <p style="text-align: center; margin-bottom: 18px; color: #111;">
+            <a href="../../docs/index.md" style="font-weight: bold; color: #111;">Open Project Documentation</a> |
+            <a href="gpu_guide.html" style="font-weight: bold; color: #111;">Hardware Optimization Guide</a> |
+            <a href="../../docs/fifa_workflow.md" style="font-weight: bold; color: #111;">FIFA Workflow</a>
         </p>
+
+        <div class="topbar">
+            <div class="searchbox">
+                <span class="pill">Search</span>
+                <input id="toolSearch" type="text"
+                    placeholder="Type a tool name (e.g., Soccer Tools, YOLO, SAM, Rec2D, tugturn)..." />
+            </div>
+            <span class="pill">Layout: matches <code>vaila.py</code> CLI list</span>
+        </div>
 
         <!-- ASCII Art Header -->
         <div class="ascii-art">
-            <i>vailá</i> - 22.April.2026 v0.3.38 (Python 3.12.13)
+            vailá - 29.April.2026 v0.3.40 (Python 3.12.13)
             <div class="section-header">
                 <h2>============================ File Manager (Frame A) ========================</h2>
                 <div class="grid-container">
@@ -173,22 +229,22 @@
                 <h2>========================== Multimodal Analysis (Frame B) ===================</h2>
                 <div class="grid-container">
                     <div class="tool-card">
-                        <div class="tool-title">B1_r1_c1 - IMU Analysis</div>
+                        <div class="tool-title">B1_r1_c1 - IMU</div>
                         <div class="tool-links"><a href="imu_analysis.html">HTML</a> | <a href="imu_analysis.md">MD</a>
                         </div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B1_r1_c2 - MoCap Cluster</div>
+                        <div class="tool-title">B1_r1_c2 - Motion Capture Cluster</div>
                         <div class="tool-links"><a href="cluster_analysis.html">HTML</a> | <a
                                 href="cluster_analysis.md">MD</a></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B1_r1_c3 - MoCap Full Body</div>
+                        <div class="tool-title">B1_r1_c3 - Motion Capture Full Body</div>
                         <div class="tool-links"><a href="mocap_analysis.html">HTML</a> | <a
                                 href="mocap_analysis.md">MD</a></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B1_r1_c4 - Markerless 2D (v2)</div>
+                        <div class="tool-title">B1_r1_c4 - Markerless 2D</div>
                         <div class="tool-links"><a href="markerless2d_analysis_v2.html">HTML</a> | <a
                                 href="markerless2d_analysis_v2.md">MD</a></div>
                     </div>
@@ -228,13 +284,13 @@
                         <div class="tool-links"><span>(Coming Soon)</span></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B3_r3_c2 - MP Yolo</div>
-                        <div class="tool-links"><a href="markerless_2d_analysis_nvidia.html">HTML</a> |
-                            <a href="markerless_2d_analysis_nvidia.md">MD</a>
+                        <div class="tool-title">B3_r3_c2 - Yolo + Markerless_MP</div>
+                        <div class="tool-links"><a href="markerless2d_mpyolo.html">HTML</a> |
+                            <a href="markerless2d_mpyolo.md">MD</a>
                         </div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B3_r3_c3 - <i>vailá</i>_and_jump</div>
+                        <div class="tool-title">B3_r3_c3 - Vertical Jump</div>
                         <div class="tool-links"><a href="vaila_and_jump.html">HTML</a> | <a
                                 href="vaila_and_jump.md">MD</a></div>
                     </div>
@@ -250,9 +306,8 @@
                     </div>
 
                     <div class="tool-card">
-                        <div class="tool-title">B4_r4_c1 - Tracker</div>
-                        <div class="tool-links"><a href="reid_yolotrack.html">HTML</a> | <a
-                                href="reid_yolotrack.md">MD</a></div>
+                        <div class="tool-title">B4_r4_c1 - YOLO and SAM</div>
+                        <div class="tool-links"><a href="#yolo-sam">Jump</a> <span style="font-size:0.85em;">(chooser dialog)</span></div>
                     </div>
                     <div class="tool-card">
                         <div class="tool-title">B4_r4_c2 - ML Walkway</div>
@@ -304,26 +359,28 @@
                                 href="vailasprint_help.md">MD</a></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B5_r6_c2 - Facemesh</div>
+                        <div class="tool-title">B5_r6_c2 - Face Mesh</div>
                         <div class="tool-links"><a href="mp_facemesh_help.html">HTML</a> | <a
                                 href="mp_facemesh_help.md">MD</a></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B5_r6_c3 - TUG and TURN</div>
+                        <div class="tool-title">B5_r6_c3 - tugturn</div>
                         <div class="tool-links"><a href="tugturn.html">HTML</a> | <a
                                 href="tugturn.md">MD</a></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B5_r6_c4 - Field KPs (AI)</div>
-                        <div class="tool-links"><a href="soccerfield_keypoints_ai.html">HTML</a> |
-                            <a href="soccerfield_keypoints_ai.md">MD</a>
-                            <span style="font-size:0.85em;">(YOLO-pose 32 pitch keypoints)</span></div>
+                        <div class="tool-title">B5_r6_c4 - Soccer Tools</div>
+                        <div class="tool-links">
+                            <a href="../../docs/fifa_workflow.md">docs/fifa_workflow.md</a> |
+                            <a href="soccerfield_keypoints_ai.html">Field KPs (AI)</a> |
+                            <a href="soccerfield_calib.html">Soccer-Field Calib</a> |
+                            <a href="vaila_sam.html">FIFA cams→DLT (via SAM/FIFA)</a>
+                            <span style="font-size:0.85em;">(AI keypoints + DLT2D calib + FIFA utilities)</span>
+                        </div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B5_r6_c5 - Soccer-Field Calib</div>
-                        <div class="tool-links"><a href="soccerfield_calib.html">HTML</a> |
-                            <a href="soccerfield_calib.md">MD</a>
-                            <span style="font-size:0.85em;">(DLT2D homography)</span></div>
+                        <div class="tool-title">B5_r6_c5 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
                     </div>
                 </div>
             </div>
@@ -332,15 +389,12 @@
                 <h2>==================== Multimodal Analysis row 7 (Frame B) ===================</h2>
                 <div class="grid-container">
                     <div class="tool-card">
-                        <div class="tool-title">B6_r7_c1 - FIFA cams→DLT</div>
-                        <div class="tool-links"><a href="vaila_sam.html">HTML</a> | <a href="vaila_sam.md">MD</a>
-                            <span style="font-size:0.85em;">(FIFA <code>dlt-export</code> / per-frame DLT)</span></div>
+                        <div class="tool-title">B6_r7_c1 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">B6_r7_c2 - FIFA Dataset Builder</div>
-                        <div class="tool-links"><a href="../../docs/fifa_workflow.md">docs/fifa_workflow.md §4.5</a>
-                            <span style="font-size:0.85em;">(merge external <code>unified/</code>, QA, <code>yolo pose train</code>)</span>
-                        </div>
+                        <div class="tool-title">B6_r7_c2 - <i>vailá</i></div>
+                        <div class="tool-links"><a href="#">-</a></div>
                     </div>
                     <div class="tool-card">
                         <div class="tool-title">B6_r7_c3 - <i>vailá</i></div>
@@ -353,6 +407,40 @@
                     <div class="tool-card">
                         <div class="tool-title">B6_r7_c5 - <i>vailá</i></div>
                         <div class="tool-links"><a href="#">-</a></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-header" id="yolo-sam">
+                <h2>============================== YOLO &amp; SAM ===================</h2>
+                <p style="margin: 0 0 10px 0;">
+                  <strong>GUI:</strong> Frame B → <strong>YOLO and SAM</strong> opens the chooser:
+                  <code>YOLOv11/YOLOv26 Tracker</code>, <code>YOLOv11/YOLOv26 Pose</code>,
+                  <code>YOLOv26 Segmentation</code>, <code>SAM</code>, <code>Train YOLO</code>.
+                  <br />
+                  <strong>CLI:</strong> run headless with <code>uv run yolo ...</code> (train/val/test/predict) or open module GUIs with
+                  <code>uv run python -m vaila.&lt;module&gt;</code>.
+                </p>
+                <div class="grid-container">
+                    <div class="tool-card">
+                        <div class="tool-title">YOLO - Train</div>
+                        <div class="tool-links"><a href="yolotrain.html">HTML</a> | <a href="yolotrain.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">YOLO - Track (v11)</div>
+                        <div class="tool-links"><a href="yolov11track.html">HTML</a> | <a href="yolov11track.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">YOLO - Track (v26)</div>
+                        <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">YOLO - ReID</div>
+                        <div class="tool-links"><a href="reid_yolotrack.html">HTML</a> | <a href="reid_yolotrack.md">MD</a></div>
+                    </div>
+                    <div class="tool-card">
+                        <div class="tool-title">SAM 3 - Video segmentation + FIFA pipeline</div>
+                        <div class="tool-links"><a href="vaila_sam.html">HTML</a> | <a href="vaila_sam.md">MD</a></div>
                     </div>
                 </div>
             </div>
@@ -445,7 +533,7 @@
                         <div class="tool-links"><a href="drawboxe.html">HTML</a> | <a href="drawboxe.md">MD</a></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">C_B_r2_c1 - Compress</div>
+                        <div class="tool-title">C_B_r2_c1 - Compress Video</div>
                         <div class="tool-links"><a href="compressvideo.html">HTML</a> | <a
                                 href="compressvideo.md">MD</a></div>
                     </div>
@@ -549,9 +637,34 @@
             </div>
 
             <div style="margin-top: 50px; text-align: center; color: #111; font-size: 0.9em;">
-                <p>Generated based on <i>vailá</i> v0.3.38 layout.</p>
+                <p>Generated based on <i>vailá</i> v0.3.40 layout.</p>
             </div>
         </div>
+
+        <script>
+            (function () {
+                const input = document.getElementById("toolSearch");
+                const cards = Array.from(document.querySelectorAll(".tool-card"));
+                if (!input) return;
+
+                function norm(s) {
+                    return (s || "")
+                        .toLowerCase()
+                        .normalize("NFKD")
+                        .replace(/\\p{Diacritic}/gu, "");
+                }
+
+                function applyFilter() {
+                    const q = norm(input.value.trim());
+                    for (const c of cards) {
+                        const text = norm(c.innerText);
+                        c.style.display = q === "" || text.includes(q) ? "" : "none";
+                    }
+                }
+
+                input.addEventListener("input", applyFilter);
+            })();
+        </script>
 </body>
 
 </html>
