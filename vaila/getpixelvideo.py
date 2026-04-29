@@ -6849,7 +6849,20 @@ def play_video_with_controls(
                                         else selected_marker_idx + 1
                                     )
                                 else:
+                                    before_idx = -1
                                     next_idx = len(coordinates[frame_count])
+
+                                # In FIFA fixed-keypoint mode, sequential should never grow the row.
+                                # Keep internal indices in 0..(N-1) and wrap at the end.
+                                #
+                                # This prevents creating an out-of-range slot (e.g. idx=31 when N=31),
+                                # which then causes TAB navigation to snap back to 0.
+                                if pitch_guide_fifa_mode and fifa_fixed_keypoints:
+                                    n_fixed = max(1, int(fifa_fixed_keypoints))
+                                    if next_idx >= n_fixed:
+                                        next_idx = n_fixed - 1
+                                    elif next_idx < 0:
+                                        next_idx = 0
                                 while len(coordinates[frame_count]) <= next_idx:
                                     coordinates[frame_count].append((None, None))
                                 coordinates[frame_count][next_idx] = (video_x, video_y)
