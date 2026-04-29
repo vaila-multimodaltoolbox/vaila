@@ -725,16 +725,16 @@ def _maybe_subsample_video_for_vram(
     video_path: Path,
     output_dir: Path,
     max_frames: int,
-) -> tuple[Path, Path | None, int]:
+) -> tuple[Path, Path | None, int, np.ndarray]:
     """If the clip has more than ``max_frames``, write a temp MP4 with evenly spaced frames.
 
-    Returns ``(path_for_sam3, temp_path_or_none, num_frames_in_that_path)``.
+    Returns ``(path_for_sam3, temp_path_or_none, num_frames_in_that_path, orig_frame_indices)``.
     SAM3 loads the full tensor to GPU in ``init_state``; capping frames avoids OOM on 8GB cards.
     """
     vp = str(video_path.resolve())
     if max_frames <= 0:
         n = _video_frame_count(vp)
-        return video_path.resolve(), None, n
+        return video_path.resolve(), None, n, np.arange(max(0, n), dtype=np.int64)
 
     cap = cv2.VideoCapture(vp)
     if not cap.isOpened():
@@ -747,7 +747,7 @@ def _maybe_subsample_video_for_vram(
     if n <= 0:
         n = _video_frame_count(vp)
     if n <= max_frames:
-        return video_path.resolve(), None, n
+        return video_path.resolve(), None, n, np.arange(max(0, n), dtype=np.int64)
 
     indices = np.unique(np.linspace(0, n - 1, num=max_frames, dtype=np.int64))
     out_path = output_dir / "_sam3_subsample_input.mp4"
@@ -775,7 +775,7 @@ def _maybe_subsample_video_for_vram(
         with contextlib.suppress(OSError):
             out_path.unlink(missing_ok=True)
         raise OSError("Subsampled zero frames; check video path/codec")
-    return out_path.resolve(), out_path.resolve(), written
+    return out_path.resolve(), out_path.resolve(), written, indices
 
 
 def _read_max_input_long_edge(cli_value: int | None) -> int:
@@ -1415,7 +1415,9 @@ def run_sam3_on_video(
     output_dir.mkdir(parents=True, exist_ok=True)
     temp_spatial: Path | None = None
     mf = _read_max_input_frames(max_input_frames)
-    session_path, temp_clip, n_sess = _maybe_subsample_video_for_vram(video_path, output_dir, mf)
+    session_path, temp_clip, n_sess, sess_to_orig = _maybe_subsample_video_for_vram(
+        video_path, output_dir, mf
+    )
     le_cap = _read_max_input_long_edge(max_input_long_edge)
     if max_input_long_edge is None and le_cap == 1280:
         _vprof = _sam3_vram_profile()
@@ -1424,7 +1426,7 @@ def run_sam3_on_video(
                 f"[SAM3] Default max_input_long_edge=1280 (GPU total {_vprof['total_gib']:.1f} GiB; "
                 "set SAM3_MAX_INPUT_LONG_EDGE=1920 to try full HD input if you have VRAM headroom)"
             )
-    session_path, temp_spatial, _w_sess, _h_sess, n_sess = _maybe_downscale_video_long_edge(
+    session_path, temp_spatial, w_sess, h_sess, n_sess = _maybe_downscale_video_long_edge(
         session_path, output_dir, le_cap
     )
     vp = str(session_path)
@@ -1663,9 +1665,9 @@ def run_sam3_on_video(
             predictor = None
             _release_sam3_gpu_memory()
 
-        cap = cv2.VideoCapture(vp)
+        cap = cv2.VideoCapture(vp_orig)
         if not cap.isOpened():
-            raise OSError(f"Could not open video: {vp}")
+            raise OSError(f"Could not open video: {vp_orig}")
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -1701,15 +1703,32 @@ def run_sam3_on_video(
 
         meta_rows_wide: list[str] = []
 
-        cap = cv2.VideoCapture(vp)
+        # Write overlay at the ORIGINAL FPS and frame count.
+        #
+        # If we subsampled for VRAM, SAM3 only produced masks for the session clip frames.
+        # For the final overlay, we repeat the closest available session mask between those
+        # sampled frames so the output MP4 matches the original timeline.
+        cap = cv2.VideoCapture(vp_orig)
         nframes_to_write = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        sess_to_orig = np.asarray(sess_to_orig, dtype=np.int64)
+        if sess_to_orig.size <= 0:
+            sess_to_orig = np.arange(max(0, nframes_to_write), dtype=np.int64)
+
         for frame_idx in range(nframes_to_write):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ok, bgr = cap.read()
             if not ok or bgr is None:
                 continue
 
-            out = outputs_by_frame.get(frame_idx)
+            # Map original frame index -> nearest session frame index (piecewise-constant).
+            sess_idx = int(np.searchsorted(sess_to_orig, frame_idx, side="right") - 1)
+            if sess_idx < 0:
+                sess_idx = 0
+            if sess_idx >= sess_to_orig.size:
+                sess_idx = int(sess_to_orig.size - 1)
+
+            out = outputs_by_frame.get(sess_idx)
             if out is None:
                 if writer is not None:
                     writer.write(bgr)
@@ -1723,13 +1742,23 @@ def run_sam3_on_video(
                 if writer is not None:
                     writer.write(bgr)
                 continue
+
+            # If the session clip was downscaled, resize masks back to the original size.
+            if (int(w_sess), int(h_sess)) != (int(w), int(h)):
+                resized = []
+                for i in range(masks.shape[0]):
+                    m = masks[i].astype(np.uint8)
+                    m2 = cv2.resize(m, (int(w), int(h)), interpolation=cv2.INTER_NEAREST)
+                    resized.append(m2.astype(bool))
+                masks = np.stack(resized, axis=0) if resized else masks
+
             comp = _composite_masks_bgr(bgr, masks, oids)
             if writer is not None:
                 writer.write(comp)
             frame_data = {}
             for i in range(masks.shape[0]):
                 oid = int(oids[i])
-                if save_mask_png:
+                if save_mask_png and int(sess_to_orig[sess_idx]) == int(frame_idx):
                     png = masks_dir / f"frame_{frame_idx:06d}_obj_{oid}.png"
                     cv2.imwrite(str(png), (masks[i].astype(np.uint8)) * 255)
                 pr = float(probs[i]) if probs is not None and i < len(probs) else float("nan")
@@ -2041,7 +2070,20 @@ class SamVideoDialog(tk.Toplevel):
         super().__init__(parent)
         self.title("SAM 3 — video segmentation")
         self.result: (
-            tuple[Path, Path, Path | None, str, int, int | None, int | None, str, bool, bool, bool, bool]
+            tuple[
+                Path,
+                Path,
+                Path | None,
+                str,
+                int,
+                int | None,
+                int | None,
+                str,
+                bool,
+                bool,
+                bool,
+                bool,
+            ]
             | None
         ) = None
 
@@ -2105,7 +2147,9 @@ class SamVideoDialog(tk.Toplevel):
         ttk.Entry(frm, textvariable=self.frame_var, width=12).grid(
             row=5, column=1, sticky="w", pady=4
         )
-        ttk.Label(frm, text="Max frames (VRAM cap; 0=full):").grid(row=6, column=0, sticky="w", pady=4)
+        ttk.Label(frm, text="Max frames (VRAM cap; 0=full):").grid(
+            row=6, column=0, sticky="w", pady=4
+        )
         self.max_frames_var = tk.StringVar(value="")
         ttk.Entry(frm, textvariable=self.max_frames_var, width=12).grid(
             row=6, column=1, sticky="w", pady=4
@@ -2248,7 +2292,9 @@ class SamVideoDialog(tk.Toplevel):
             try:
                 max_long_edge = int(max_long_edge_txt)
             except ValueError:
-                messagebox.showerror("Error", "Max input long edge must be an integer.", parent=self)
+                messagebox.showerror(
+                    "Error", "Max input long edge must be an integer.", parent=self
+                )
                 return
             if max_long_edge < 0:
                 messagebox.showerror("Error", "Max input long edge must be >= 0.", parent=self)
