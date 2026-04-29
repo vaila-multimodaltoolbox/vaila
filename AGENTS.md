@@ -192,6 +192,7 @@ Fix in `vaila/vaila_sam.py`:
 
 - Moved `_release_sam3_gpu_memory()` to the start of each retry-loop iteration in `_process_one_video_with_oom_retry`.
 - Added **subprocess-per-video isolation** in the CLI batch loop (`main()`): for each video, spawn `python vaila_sam.py --input <single.mp4> --video-output-dir <out>` so OS-level process death guarantees a clean GPU for the next video. Default ON when batch has >1 video; disable with `--no-isolate-batch` only for debugging. New internal flag `--video-output-dir` lets the child write directly to the parent-supplied dir without creating its own `processed_sam_TS/` wrapper.
+- Added **rich outputs** for downstream multi-camera / 3D reconstruction: overlay can draw bbox/ID/score/contours and the run exports `sam_contours.json` (polygons), `sam_tracks.csv` (long bbox+area stats), and `sam_masks_manifest.csv` (mask index).
 
 Full hypothesis log, runtime evidence, and code map: see `.claude/skills/sam3-video/SKILL.md` § *Why subprocess-per-video* and § *Cascading OOM in batch*.
 

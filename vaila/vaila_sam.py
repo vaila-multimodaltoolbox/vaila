@@ -957,6 +957,10 @@ def _merge_chunk_outputs(
     all_meta_rows: list[str] = []
     header_line: str = ""
     all_unique_oids: set[int] = set()
+    merged_tracks_rows: list[str] = []
+    merged_manifest_rows: list[str] = ["frame,obj_id,area_px,mask_png"]
+    merged_contours_frames: list[dict[str, Any]] = []
+    merged_contour_oids: set[int] = set()
 
     # First pass: collect all object IDs across chunks for a unified header
     for chunk_out in chunk_output_dirs:
@@ -1041,6 +1045,87 @@ def _merge_chunk_outputs(
                     dest = final_masks_dir / f"chunk{ci}_{png.name}"
                     shutil.copy2(str(png), str(dest))
 
+        # Merge tracks (long format) if present
+        tracks_csv = chunk_out / "sam_tracks.csv"
+        if tracks_csv.is_file():
+            lines = tracks_csv.read_text(encoding="utf-8").strip().split("\n")
+            for ln in lines[1:]:
+                if not ln.strip():
+                    continue
+                parts = ln.split(",")
+                if not parts:
+                    continue
+                with contextlib.suppress(ValueError):
+                    parts[0] = str(start_frame + int(parts[0]))
+                    merged_tracks_rows.append(",".join(parts))
+
+        # Merge mask manifest if present (rewrite path to the merged masks dir)
+        manifest_csv = chunk_out / "sam_masks_manifest.csv"
+        if manifest_csv.is_file():
+            lines = manifest_csv.read_text(encoding="utf-8").strip().split("\n")
+            for ln in lines[1:]:
+                if not ln.strip():
+                    continue
+                parts = ln.split(",")
+                if len(parts) < 4:
+                    continue
+                try:
+                    local_f = int(parts[0])
+                    oid = int(parts[1])
+                except ValueError:
+                    continue
+                global_f = start_frame + local_f
+                parts[0] = str(global_f)
+                parts[3] = f"masks/frame_{global_f:06d}_obj_{oid}.png"
+                merged_manifest_rows.append(",".join(parts[:4]))
+
+        # Merge contours if present (json / jsonl, optional gzip)
+        contours_candidates = [
+            ("json", chunk_out / "sam_contours.json"),
+            ("json", chunk_out / "sam_contours.json.gz"),
+            ("jsonl", chunk_out / "sam_contours.jsonl"),
+            ("jsonl", chunk_out / "sam_contours.jsonl.gz"),
+        ]
+        found = next(((fmt, p) for fmt, p in contours_candidates if p.is_file()), None)
+        if found is not None:
+            fmt, cpath = found
+            if cpath.suffix == ".gz":
+                import gzip
+
+                with gzip.open(cpath, "rt", encoding="utf-8") as fh:
+                    raw = fh.read()
+            else:
+                raw = cpath.read_text(encoding="utf-8")
+            if fmt == "json":
+                payload = json.loads(raw)
+                frames = payload.get("frames") or []
+            else:
+                lines = [ln for ln in raw.split("\n") if ln.strip()]
+                frames = []
+                for ln in lines[1:]:
+                    frames.append(json.loads(ln))
+
+            for fr in frames:
+                try:
+                    local_f = int(fr.get("frame"))
+                except Exception:
+                    continue
+                global_f = start_frame + local_f
+                fr2 = dict(fr)
+                fr2["frame"] = global_f
+                objs = []
+                for obj in fr.get("objects") or []:
+                    obj2 = dict(obj)
+                    oid = obj2.get("obj_id")
+                    if isinstance(oid, int):
+                        merged_contour_oids.add(oid)
+                        mask_png = obj2.get("mask_png")
+                        if save_mask_png and mask_png:
+                            obj2["mask_png"] = f"masks/frame_{global_f:06d}_obj_{oid}.png"
+                    objs.append(obj2)
+                fr2["objects"] = objs
+                merged_contours_frames.append(fr2)
+
     # Write unified meta CSV
     if header_line and all_meta_rows:
         meta_path = final_output_dir / "sam_frames_meta.csv"
@@ -1048,6 +1133,50 @@ def _merge_chunk_outputs(
         all_meta_rows.sort(key=lambda r: int(r.split(",")[0]) if r.split(",")[0].isdigit() else 0)
         meta_path.write_text(
             header_line + "\n" + "\n".join(all_meta_rows) + "\n",
+            encoding="utf-8",
+        )
+
+    if merged_tracks_rows:
+        merged_tracks_rows.sort(
+            key=lambda r: (
+                int(r.split(",")[0]) if r.split(",")[0].isdigit() else 0,
+                int(r.split(",")[1]) if len(r.split(",")) > 1 and r.split(",")[1].isdigit() else 0,
+            )
+        )
+        (final_output_dir / "sam_tracks.csv").write_text(
+            "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts\n"
+            + "\n".join(merged_tracks_rows)
+            + "\n",
+            encoding="utf-8",
+        )
+
+    if len(merged_manifest_rows) > 1:
+        (final_output_dir / "sam_masks_manifest.csv").write_text(
+            "\n".join(merged_manifest_rows) + "\n",
+            encoding="utf-8",
+        )
+
+    if merged_contours_frames:
+        merged_contours_frames.sort(key=lambda d: int(d.get("frame", 0)))
+        cap = cv2.VideoCapture(str(video_path))
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) if cap.isOpened() else 0
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) if cap.isOpened() else 0
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0) if cap.isOpened() else 30.0
+        nframes = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if cap.isOpened() else 0
+        with contextlib.suppress(Exception):
+            cap.release()
+        payload = {
+            "schema": "vaila_sam_contours_v1",
+            "video": video_path.name,
+            "width": int(w),
+            "height": int(h),
+            "fps": float(fps),
+            "n_frames": int(nframes),
+            "object_ids": sorted(int(x) for x in merged_contour_oids),
+            "frames": merged_contours_frames,
+        }
+        (final_output_dir / "sam_contours.json").write_text(
+            json.dumps(payload, separators=(",", ":"), ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
 
@@ -1105,6 +1234,15 @@ def _process_video_chunked(
     max_input_long_edge: int | None = None,
     save_overlay_mp4: bool,
     save_mask_png: bool,
+    overlay_rich: bool = True,
+    draw_contour: bool = True,
+    draw_box: bool = True,
+    draw_id: bool = True,
+    draw_centroid: bool = False,
+    save_contours: bool = True,
+    save_tracks_csv: bool = True,
+    contours_format: str = "json",
+    contours_gzip: bool = False,
     chunk_size: int | None = None,
     log: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
@@ -1197,6 +1335,24 @@ def _process_video_chunked(
             cmd.append("--no-overlay")
         if not save_mask_png:
             cmd.append("--no-png")
+        if not overlay_rich:
+            cmd.append("--no-overlay-rich")
+        if not draw_contour:
+            cmd.append("--no-draw-contour")
+        if not draw_box:
+            cmd.append("--no-draw-box")
+        if not draw_id:
+            cmd.append("--no-draw-id")
+        if draw_centroid:
+            cmd.append("--draw-centroid")
+        if not save_contours:
+            cmd.append("--no-save-contours")
+        if not save_tracks_csv:
+            cmd.append("--no-save-tracks-csv")
+        if contours_format:
+            cmd += ["--contours-format", str(contours_format)]
+        if contours_gzip:
+            cmd.append("--contours-gzip")
 
         env = os.environ.copy()
         env.setdefault("TQDM_DISABLE", "1")
@@ -1283,6 +1439,15 @@ def _composite_masks_bgr(
     binary_masks: np.ndarray,
     obj_ids: np.ndarray,
     alpha: float = 0.45,
+    *,
+    probs: np.ndarray | None = None,
+    boxes_xywh: np.ndarray | None = None,
+    draw_box: bool = True,
+    draw_id: bool = True,
+    draw_contour: bool = True,
+    draw_centroid: bool = False,
+    contour_thickness: int = 2,
+    label_scale: float = 0.6,
 ) -> np.ndarray:
     """binary_masks: (N, H, W) bool; obj_ids: (N,) int."""
     out = frame_bgr.copy().astype(np.float32)
@@ -1298,7 +1463,107 @@ def _composite_masks_bgr(
         c = colors[oid % len(colors)].astype(np.float32)
         mo = m[..., None].astype(np.float32)
         out = out * (1 - alpha * mo) + c * (alpha * mo)
-    return np.clip(out, 0, 255).astype(np.uint8)
+    out_u8 = np.clip(out, 0, 255).astype(np.uint8)
+
+    # Draw overlays on top of the blended masks.
+    for i in range(binary_masks.shape[0]):
+        m = binary_masks[i]
+        if m.shape[:2] != (h, w):
+            m = cv2.resize(m.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(bool)
+        oid = int(obj_ids[i]) if i < len(obj_ids) else i
+        color = tuple(int(x) for x in colors[oid % len(colors)][::-1])  # BGR
+
+        if draw_contour:
+            mu8 = (m.astype(np.uint8)) * 255
+            contours, _hier = cv2.findContours(mu8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1)
+            if contours:
+                cv2.polylines(
+                    out_u8,
+                    contours,
+                    isClosed=True,
+                    color=color,
+                    thickness=int(max(1, contour_thickness)),
+                    lineType=cv2.LINE_AA,
+                )
+
+        bx = by = bw = bh = None
+        if boxes_xywh is not None and i < len(boxes_xywh):
+            try:
+                bx, by, bw, bh = (float(x) for x in boxes_xywh[i])
+            except Exception:
+                bx = by = bw = bh = None
+
+        if draw_box and bx is not None and by is not None and bw is not None and bh is not None:
+            x1 = int(round(bx))
+            y1 = int(round(by))
+            x2 = int(round(bx + bw))
+            y2 = int(round(by + bh))
+            x1 = max(0, min(w - 1, x1))
+            y1 = max(0, min(h - 1, y1))
+            x2 = max(0, min(w - 1, x2))
+            y2 = max(0, min(h - 1, y2))
+            if x2 > x1 and y2 > y1:
+                cv2.rectangle(out_u8, (x1, y1), (x2, y2), color=color, thickness=2)
+
+        if draw_centroid:
+            ys, xs = np.nonzero(m)
+            if xs.size:
+                cx = int(round(float(xs.mean())))
+                cy = int(round(float(ys.mean())))
+                cv2.circle(out_u8, (cx, cy), 3, color=(255, 255, 255), thickness=-1)
+                cv2.circle(out_u8, (cx, cy), 3, color=color, thickness=1)
+
+        if draw_id:
+            score = None
+            if probs is not None and i < len(probs):
+                with contextlib.suppress(Exception):
+                    score = float(probs[i])
+            label = f"#{oid}" + (f" {score:.2f}" if score is not None else "")
+
+            if bx is None or by is None:
+                ys, xs = np.nonzero(m)
+                if xs.size:
+                    bx0 = int(xs.min())
+                    by0 = int(ys.min())
+                else:
+                    bx0 = 0
+                    by0 = 0
+            else:
+                bx0 = int(round(float(bx)))
+                by0 = int(round(float(by)))
+            tx = max(0, min(w - 1, bx0))
+            ty = max(0, min(h - 1, by0 - 6))
+
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            (tw, th), baseline = cv2.getTextSize(label, font, float(label_scale), 1)
+            pad = 2
+            x1 = max(0, tx)
+            y1 = max(0, ty - th - baseline - pad * 2)
+            x2 = min(w - 1, tx + tw + pad * 2)
+            y2 = min(h - 1, ty + pad * 2)
+            cv2.rectangle(out_u8, (x1, y1), (x2, y2), color=(0, 0, 0), thickness=-1)
+            cv2.putText(
+                out_u8,
+                label,
+                (x1 + pad, y2 - pad - baseline),
+                font,
+                float(label_scale),
+                (255, 255, 255),
+                thickness=1,
+                lineType=cv2.LINE_AA,
+            )
+            cv2.putText(
+                out_u8,
+                label,
+                (x1 + pad, y2 - pad - baseline),
+                font,
+                float(label_scale),
+                color,
+                thickness=1,
+                lineType=cv2.LINE_AA,
+            )
+
+    return out_u8
 
 
 def _sam3_cuda_oom_help(
@@ -1391,6 +1656,15 @@ def run_sam3_on_video(
     save_overlay_mp4: bool = True,
     save_mask_png: bool = True,
     frame_by_frame_fallback: bool = False,
+    overlay_rich: bool = True,
+    draw_contour: bool = True,
+    draw_box: bool = True,
+    draw_id: bool = True,
+    draw_centroid: bool = False,
+    save_contours: bool = True,
+    save_tracks_csv: bool = True,
+    contours_format: str = "json",
+    contours_gzip: bool = False,
 ) -> None:
     import torch
 
@@ -1413,6 +1687,9 @@ def run_sam3_on_video(
     _setup_cuda_for_sam3()
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    contours_format = (contours_format or "json").strip().lower()
+    if contours_format not in ("json", "jsonl"):
+        contours_format = "json"
     temp_spatial: Path | None = None
     mf = _read_max_input_frames(max_input_frames)
     session_path, temp_clip, n_sess, sess_to_orig = _maybe_subsample_video_for_vram(
@@ -1686,6 +1963,10 @@ def run_sam3_on_video(
         if save_mask_png:
             masks_dir.mkdir(parents=True, exist_ok=True)
 
+        contours_frames: list[dict[str, Any]] = []
+        tracks_rows: list[str] = []
+        mask_manifest_rows: list[str] = ["frame,obj_id,area_px,mask_png"]
+
         all_unique_oids = set()
         for idx_eval in outputs_by_frame:
             out = outputs_by_frame[idx_eval]
@@ -1752,9 +2033,37 @@ def run_sam3_on_video(
                     resized.append(m2.astype(bool))
                 masks = np.stack(resized, axis=0) if resized else masks
 
-            comp = _composite_masks_bgr(bgr, masks, oids)
+            boxes_px = None
+            if boxes is not None and len(boxes):
+                try:
+                    b = np.asarray(boxes, dtype=np.float32)
+                    boxes_px = b.copy()
+                    boxes_px[:, 0] *= float(w)
+                    boxes_px[:, 2] *= float(w)
+                    boxes_px[:, 1] *= float(h)
+                    boxes_px[:, 3] *= float(h)
+                except Exception:
+                    boxes_px = None
+
+            if writer is not None:
+                if overlay_rich:
+                    comp = _composite_masks_bgr(
+                        bgr,
+                        masks,
+                        oids,
+                        probs=probs,
+                        boxes_xywh=boxes_px,
+                        draw_box=draw_box,
+                        draw_id=draw_id,
+                        draw_contour=draw_contour,
+                        draw_centroid=draw_centroid,
+                    )
+                else:
+                    comp = _composite_masks_bgr(bgr, masks, oids)
             if writer is not None:
                 writer.write(comp)
+
+            objects_for_json: list[dict[str, Any]] = []
             frame_data = {}
             for i in range(masks.shape[0]):
                 oid = int(oids[i])
@@ -1766,6 +2075,67 @@ def run_sam3_on_video(
                 if boxes is not None and i < len(boxes):
                     bx, by, bw, bh = (float(x) for x in boxes[i])
                 frame_data[oid] = (bx, by, bw, bh, pr)
+
+                # Rich exports (pixels, polygons) for 3D reconstruction / SAM-3D-Body.
+                if save_contours or save_tracks_csv:
+                    m = masks[i]
+                    area_px = int(m.sum())
+                    polys: list[list[list[int]]] = []
+                    if save_contours and draw_contour:
+                        mu8 = (m.astype(np.uint8)) * 255
+                        contours, _hier = cv2.findContours(
+                            mu8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1
+                        )
+                        for c in contours:
+                            pts = c.reshape(-1, 2)
+                            if pts.shape[0] < 3:
+                                continue
+                            polys.append([[int(x), int(y)] for x, y in pts])
+
+                    if boxes_px is not None and i < len(boxes_px):
+                        bx_px, by_px, bw_px, bh_px = (float(x) for x in boxes_px[i])
+                    else:
+                        bx_px = by_px = bw_px = bh_px = float("nan")
+
+                    mask_rel = (
+                        f"masks/frame_{frame_idx:06d}_obj_{oid}.png"
+                        if save_mask_png and int(sess_to_orig[sess_idx]) == int(frame_idx)
+                        else ""
+                    )
+                    if mask_rel:
+                        mask_manifest_rows.append(f"{frame_idx},{oid},{area_px},{mask_rel}")
+                    if save_tracks_csv:
+                        n_polys = len(polys) if polys else 0
+                        largest_pts = max((len(p) for p in polys), default=0)
+                        tracks_rows.append(
+                            f"{frame_idx},{oid},{bx_px:.3f},{by_px:.3f},{bw_px:.3f},{bh_px:.3f},"
+                            f"{pr:.6f},{area_px},{n_polys},{largest_pts}"
+                        )
+                    if save_contours:
+                        objects_for_json.append(
+                            {
+                                "obj_id": oid,
+                                "score": None if not np.isfinite(pr) else float(pr),
+                                "bbox_xywh_px": [
+                                    None if not np.isfinite(bx_px) else int(round(bx_px)),
+                                    None if not np.isfinite(by_px) else int(round(by_px)),
+                                    None if not np.isfinite(bw_px) else int(round(bw_px)),
+                                    None if not np.isfinite(bh_px) else int(round(bh_px)),
+                                ],
+                                "area_px": area_px,
+                                "mask_png": mask_rel or None,
+                                "polygons": polys,
+                            }
+                        )
+
+            if save_contours:
+                contours_frames.append(
+                    {
+                        "frame": int(frame_idx),
+                        "session_frame": int(sess_idx),
+                        "objects": objects_for_json,
+                    }
+                )
 
             row_cols = [str(frame_idx)]
             for oid in sorted_oids:
@@ -1788,6 +2158,62 @@ def run_sam3_on_video(
             ",".join(header_cols) + "\n" + "\n".join(meta_rows_wide) + "\n",
             encoding="utf-8",
         )
+
+        if save_tracks_csv:
+            tracks_path = output_dir / "sam_tracks.csv"
+            tracks_path.write_text(
+                "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts\n"
+                + "\n".join(tracks_rows)
+                + ("\n" if tracks_rows else ""),
+                encoding="utf-8",
+            )
+
+        if save_mask_png:
+            manifest_path = output_dir / "sam_masks_manifest.csv"
+            manifest_path.write_text(
+                "\n".join(mask_manifest_rows) + "\n",
+                encoding="utf-8",
+            )
+
+        if save_contours:
+            payload = {
+                "schema": "vaila_sam_contours_v1",
+                "video": video_path.name,
+                "width": int(w),
+                "height": int(h),
+                "fps": float(fps),
+                "n_frames": int(nframes_to_write),
+                "object_ids": [int(x) for x in sorted_oids],
+                "frames": contours_frames,
+            }
+            if contours_format == "jsonl":
+                out_path = output_dir / "sam_contours.jsonl"
+                lines = []
+                header = dict(payload)
+                header.pop("frames", None)
+                lines.append(json.dumps(header, separators=(",", ":"), ensure_ascii=False))
+                for fr in contours_frames:
+                    lines.append(json.dumps(fr, separators=(",", ":"), ensure_ascii=False))
+                text = "\n".join(lines) + "\n"
+                if contours_gzip:
+                    import gzip
+
+                    gz_path = output_dir / "sam_contours.jsonl.gz"
+                    with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
+                        fh.write(text)
+                else:
+                    out_path.write_text(text, encoding="utf-8")
+            else:
+                out_path = output_dir / "sam_contours.json"
+                text = json.dumps(payload, separators=(",", ":"), ensure_ascii=False) + "\n"
+                if contours_gzip:
+                    import gzip
+
+                    gz_path = output_dir / "sam_contours.json.gz"
+                    with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
+                        fh.write(text)
+                else:
+                    out_path.write_text(text, encoding="utf-8")
 
         readme = output_dir / "README_sam.txt"
         ckpt_note = (
@@ -1913,6 +2339,15 @@ def _process_one_video_with_oom_retry(
     save_overlay_mp4: bool,
     save_mask_png: bool,
     frame_by_frame_fallback: bool,
+    overlay_rich: bool = True,
+    draw_contour: bool = True,
+    draw_box: bool = True,
+    draw_id: bool = True,
+    draw_centroid: bool = False,
+    save_contours: bool = True,
+    save_tracks_csv: bool = True,
+    contours_format: str = "json",
+    contours_gzip: bool = False,
     log: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Run one video; on CUDA OOM retry with descending frame caps
@@ -1963,6 +2398,15 @@ def _process_one_video_with_oom_retry(
                 save_overlay_mp4=save_overlay_mp4,
                 save_mask_png=save_mask_png,
                 frame_by_frame_fallback=frame_by_frame_fallback,
+                overlay_rich=overlay_rich,
+                draw_contour=draw_contour,
+                draw_box=draw_box,
+                draw_id=draw_id,
+                draw_centroid=draw_centroid,
+                save_contours=save_contours,
+                save_tracks_csv=save_tracks_csv,
+                contours_format=contours_format,
+                contours_gzip=contours_gzip,
             )
             return True, ""
         except Exception as e:
@@ -2021,6 +2465,15 @@ def _process_one_video_with_oom_retry(
                 save_overlay_mp4=save_overlay_mp4,
                 save_mask_png=save_mask_png,
                 frame_by_frame_fallback=frame_by_frame_fallback,
+                overlay_rich=overlay_rich,
+                draw_contour=draw_contour,
+                draw_box=draw_box,
+                draw_id=draw_id,
+                draw_centroid=draw_centroid,
+                save_contours=save_contours,
+                save_tracks_csv=save_tracks_csv,
+                contours_format=contours_format,
+                contours_gzip=contours_gzip,
             )
             return True, ""
         except Exception as e:
@@ -2046,6 +2499,15 @@ def _process_one_video_with_oom_retry(
         max_input_long_edge=max_input_long_edge,
         save_overlay_mp4=save_overlay_mp4,
         save_mask_png=save_mask_png,
+        overlay_rich=overlay_rich,
+        draw_contour=draw_contour,
+        draw_box=draw_box,
+        draw_id=draw_id,
+        draw_centroid=draw_centroid,
+        save_contours=save_contours,
+        save_tracks_csv=save_tracks_csv,
+        contours_format=contours_format,
+        contours_gzip=contours_gzip,
         log=log,
     )
     if ok:
@@ -2071,18 +2533,27 @@ class SamVideoDialog(tk.Toplevel):
         self.title("SAM 3 — video segmentation")
         self.result: (
             tuple[
-                Path,
-                Path,
-                Path | None,
-                str,
-                int,
-                int | None,
-                int | None,
-                str,
-                bool,
-                bool,
-                bool,
-                bool,
+                Path,  # input (dir or file)
+                Path,  # output parent
+                Path | None,  # checkpoint
+                str,  # prompt
+                int,  # prompt frame
+                int | None,  # max_frames
+                int | None,  # max_input_long_edge
+                str,  # postprocess_points
+                bool,  # save_overlay
+                bool,  # save_png
+                bool,  # overlay_rich
+                bool,  # draw_contour
+                bool,  # draw_box
+                bool,  # draw_id
+                bool,  # draw_centroid
+                bool,  # save_contours
+                bool,  # save_tracks_csv
+                str,  # contours_format
+                bool,  # contours_gzip
+                bool,  # frame_fallback
+                bool,  # dry_run
             ]
             | None
         ) = None
@@ -2180,20 +2651,68 @@ class SamVideoDialog(tk.Toplevel):
         ttk.Checkbutton(frm, text="Save mask PNGs (per object)", variable=self.png_var).grid(
             row=10, column=1, sticky="w"
         )
+
+        out_opts = ttk.LabelFrame(frm, text="Overlay & Output (rich)", padding=6)
+        out_opts.grid(row=11, column=1, columnspan=2, sticky="ew", pady=(6, 0))
+        self.overlay_rich_var = tk.BooleanVar(value=True)
+        self.draw_contour_var = tk.BooleanVar(value=True)
+        self.draw_box_var = tk.BooleanVar(value=True)
+        self.draw_id_var = tk.BooleanVar(value=True)
+        self.draw_centroid_var = tk.BooleanVar(value=False)
+        self.save_contours_var = tk.BooleanVar(value=True)
+        self.save_tracks_csv_var = tk.BooleanVar(value=True)
+        self.contours_format_var = tk.StringVar(value="json")
+        self.contours_gzip_var = tk.BooleanVar(value=False)
+
+        ttk.Checkbutton(
+            out_opts,
+            text="Rich overlay (bbox/ID/score/contours)",
+            variable=self.overlay_rich_var,
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(out_opts, text="Draw contours", variable=self.draw_contour_var).grid(
+            row=1, column=0, sticky="w"
+        )
+        ttk.Checkbutton(out_opts, text="Draw boxes", variable=self.draw_box_var).grid(
+            row=1, column=1, sticky="w"
+        )
+        ttk.Checkbutton(out_opts, text="Draw IDs", variable=self.draw_id_var).grid(
+            row=2, column=0, sticky="w"
+        )
+        ttk.Checkbutton(out_opts, text="Draw centroid", variable=self.draw_centroid_var).grid(
+            row=2, column=1, sticky="w"
+        )
+        ttk.Checkbutton(
+            out_opts, text="Save sam_contours.json", variable=self.save_contours_var
+        ).grid(row=3, column=0, sticky="w")
+        ttk.Checkbutton(
+            out_opts, text="Save sam_tracks.csv", variable=self.save_tracks_csv_var
+        ).grid(row=3, column=1, sticky="w")
+        ttk.Label(out_opts, text="Contours format:").grid(row=4, column=0, sticky="w", pady=(4, 0))
+        ttk.Combobox(
+            out_opts,
+            textvariable=self.contours_format_var,
+            values=("json", "jsonl"),
+            width=10,
+            state="readonly",
+        ).grid(row=4, column=1, sticky="w", pady=(4, 0))
+        ttk.Checkbutton(out_opts, text="Gzip contours", variable=self.contours_gzip_var).grid(
+            row=5, column=0, sticky="w"
+        )
+
         ttk.Checkbutton(
             frm,
             text="Fallback: Frame-by-Frame (CUDA only; lower VRAM, slower, no temporal tracking)",
             variable=self.fallback_var,
-        ).grid(row=11, column=1, sticky="w")
+        ).grid(row=12, column=1, sticky="w")
         self.dry_run_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             frm,
             text="Dry-run / smoke (show plan only, do not run SAM3)",
             variable=self.dry_run_var,
-        ).grid(row=12, column=1, sticky="w")
+        ).grid(row=13, column=1, sticky="w")
 
         btns = ttk.Frame(frm)
-        btns.grid(row=13, column=0, columnspan=3, pady=12)
+        btns.grid(row=14, column=0, columnspan=3, pady=12)
         ttk.Button(btns, text="Run", command=self._on_ok).pack(side=tk.LEFT, padx=4)
         ttk.Button(btns, text="Cancel", command=self._on_cancel).pack(side=tk.LEFT, padx=4)
         ttk.Button(
@@ -2312,6 +2831,15 @@ class SamVideoDialog(tk.Toplevel):
             self.postprocess_var.get().strip() or "none",
             self.overlay_var.get(),
             self.png_var.get(),
+            self.overlay_rich_var.get(),
+            self.draw_contour_var.get(),
+            self.draw_box_var.get(),
+            self.draw_id_var.get(),
+            self.draw_centroid_var.get(),
+            self.save_contours_var.get(),
+            self.save_tracks_csv_var.get(),
+            self.contours_format_var.get().strip() or "json",
+            self.contours_gzip_var.get(),
             self.fallback_var.get(),
             self.dry_run_var.get(),
         )
@@ -2496,6 +3024,15 @@ def _run_sam_batch_in_thread(
     ckpt_opt: Path | None,
     save_ov: bool,
     save_png: bool,
+    overlay_rich: bool,
+    draw_contour: bool,
+    draw_box: bool,
+    draw_id: bool,
+    draw_centroid: bool,
+    save_contours: bool,
+    save_tracks_csv: bool,
+    contours_format: str,
+    contours_gzip: bool,
     frame_fallback: bool,
     max_frames: int | None,
     max_input_long_edge: int | None,
@@ -2526,9 +3063,19 @@ def _run_sam_batch_in_thread(
             frame_index=frame_idx,
             checkpoint=ckpt_opt,
             max_input_frames=None,
+            max_input_long_edge=max_input_long_edge,
             save_overlay_mp4=save_ov,
             save_mask_png=save_png,
             frame_by_frame_fallback=frame_fallback,
+            overlay_rich=overlay_rich,
+            draw_contour=draw_contour,
+            draw_box=draw_box,
+            draw_id=draw_id,
+            draw_centroid=draw_centroid,
+            save_contours=save_contours,
+            save_tracks_csv=save_tracks_csv,
+            contours_format=contours_format,
+            contours_gzip=contours_gzip,
             log=log,
         )
         if ok:
@@ -2555,6 +3102,15 @@ def _start_sam_batch_subprocess(
     ckpt_opt: Path | None,
     save_ov: bool,
     save_png: bool,
+    overlay_rich: bool,
+    draw_contour: bool,
+    draw_box: bool,
+    draw_id: bool,
+    draw_centroid: bool,
+    save_contours: bool,
+    save_tracks_csv: bool,
+    contours_format: str,
+    contours_gzip: bool,
     frame_fallback: bool,
     max_frames: int | None,
     max_input_long_edge: int | None,
@@ -2606,6 +3162,24 @@ def _start_sam_batch_subprocess(
         cmd.append("--no-png")
     if frame_fallback:
         cmd.append("--frame-by-frame")
+    if not overlay_rich:
+        cmd.append("--no-overlay-rich")
+    if not draw_contour:
+        cmd.append("--no-draw-contour")
+    if not draw_box:
+        cmd.append("--no-draw-box")
+    if not draw_id:
+        cmd.append("--no-draw-id")
+    if draw_centroid:
+        cmd.append("--draw-centroid")
+    if not save_contours:
+        cmd.append("--no-save-contours")
+    if not save_tracks_csv:
+        cmd.append("--no-save-tracks-csv")
+    if contours_format:
+        cmd += ["--contours-format", str(contours_format)]
+    if contours_gzip:
+        cmd.append("--contours-gzip")
 
     progress.schedule_log(f"[GUI] launching subprocess: {shlex.join(cmd)}")
 
@@ -2770,6 +3344,15 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         postprocess_points,
         save_ov,
         save_png,
+        overlay_rich,
+        draw_contour,
+        draw_box,
+        draw_id,
+        draw_centroid,
+        save_contours,
+        save_tracks_csv,
+        contours_format,
+        contours_gzip,
         frame_fallback,
         dry_run,
     ) = dlg.result
@@ -2856,6 +3439,15 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         ckpt_opt=ckpt_opt,
         save_ov=save_ov,
         save_png=save_png,
+        overlay_rich=bool(overlay_rich),
+        draw_contour=bool(draw_contour),
+        draw_box=bool(draw_box),
+        draw_id=bool(draw_id),
+        draw_centroid=bool(draw_centroid),
+        save_contours=bool(save_contours),
+        save_tracks_csv=bool(save_tracks_csv),
+        contours_format=str(contours_format),
+        contours_gzip=bool(contours_gzip),
         frame_fallback=frame_fallback,
         max_frames=max_frames,
         max_input_long_edge=max_input_long_edge,
@@ -2905,6 +3497,64 @@ def main() -> None:
     parser.add_argument("-f", "--frame", type=int, default=0, help="Frame index for prompt")
     parser.add_argument("--no-overlay", action="store_true", help="Skip overlay MP4")
     parser.add_argument("--no-png", action="store_true", help="Skip mask PNGs")
+    parser.add_argument(
+        "--overlay-rich",
+        dest="overlay_rich",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Overlay enrichment: draw bbox/ID/score/contours on top of colored masks (default: on).",
+    )
+    parser.add_argument(
+        "--draw-contour",
+        dest="draw_contour",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Draw mask contours (default: on).",
+    )
+    parser.add_argument(
+        "--draw-box",
+        dest="draw_box",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Draw bounding boxes (default: on).",
+    )
+    parser.add_argument(
+        "--draw-id",
+        dest="draw_id",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Draw object ID and score label (default: on).",
+    )
+    parser.add_argument(
+        "--draw-centroid",
+        action="store_true",
+        help="Draw mask centroid on the overlay (default: off).",
+    )
+    parser.add_argument(
+        "--save-contours",
+        dest="save_contours",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Write sam_contours.json with polygons per frame/object (default: on).",
+    )
+    parser.add_argument(
+        "--save-tracks-csv",
+        dest="save_tracks_csv",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Write sam_tracks.csv (long format, bbox in pixels + area + polygons stats) (default: on).",
+    )
+    parser.add_argument(
+        "--contours-format",
+        choices=["json", "jsonl"],
+        default="json",
+        help="Contours file format (default: json).",
+    )
+    parser.add_argument(
+        "--contours-gzip",
+        action="store_true",
+        help="Gzip sam_contours output (json.gz or jsonl.gz).",
+    )
     parser.add_argument(
         "--frame-by-frame",
         action="store_true",
@@ -3040,6 +3690,15 @@ def main() -> None:
             save_overlay_mp4=not args.no_overlay,
             save_mask_png=not args.no_png,
             frame_by_frame_fallback=args.frame_by_frame,
+            overlay_rich=bool(args.overlay_rich),
+            draw_contour=bool(args.draw_contour),
+            draw_box=bool(args.draw_box),
+            draw_id=bool(args.draw_id),
+            draw_centroid=bool(args.draw_centroid),
+            save_contours=bool(args.save_contours),
+            save_tracks_csv=bool(args.save_tracks_csv),
+            contours_format=str(args.contours_format),
+            contours_gzip=bool(args.contours_gzip),
         )
         if ok:
             print(f"  Done: {out_dir}")
@@ -3138,6 +3797,24 @@ def main() -> None:
                     cmd.append("--no-png")
                 if args.frame_by_frame:
                     cmd.append("--frame-by-frame")
+                if not args.overlay_rich:
+                    cmd.append("--no-overlay-rich")
+                if not args.draw_contour:
+                    cmd.append("--no-draw-contour")
+                if not args.draw_box:
+                    cmd.append("--no-draw-box")
+                if not args.draw_id:
+                    cmd.append("--no-draw-id")
+                if args.draw_centroid:
+                    cmd.append("--draw-centroid")
+                if not args.save_contours:
+                    cmd.append("--no-save-contours")
+                if not args.save_tracks_csv:
+                    cmd.append("--no-save-tracks-csv")
+                if args.contours_format:
+                    cmd += ["--contours-format", str(args.contours_format)]
+                if args.contours_gzip:
+                    cmd.append("--contours-gzip")
                 env = os.environ.copy()
                 env.setdefault("TQDM_DISABLE", "1")
                 env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -3171,6 +3848,15 @@ def main() -> None:
                     save_overlay_mp4=not args.no_overlay,
                     save_mask_png=not args.no_png,
                     frame_by_frame_fallback=args.frame_by_frame,
+                    overlay_rich=bool(args.overlay_rich),
+                    draw_contour=bool(args.draw_contour),
+                    draw_box=bool(args.draw_box),
+                    draw_id=bool(args.draw_id),
+                    draw_centroid=bool(args.draw_centroid),
+                    save_contours=bool(args.save_contours),
+                    save_tracks_csv=bool(args.save_tracks_csv),
+                    contours_format=str(args.contours_format),
+                    contours_gzip=bool(args.contours_gzip),
                 )
                 if ok:
                     print(f"  Done: {out_dir}")
