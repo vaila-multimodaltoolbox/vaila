@@ -1609,8 +1609,12 @@ def play_video_with_controls(
             return "Pitch Guide: no field reference CSV found in models/"
         idx = selected_marker_idx if 0 <= selected_marker_idx < total else 0
         point = pitch_guide_points[idx]
+        if pitch_guide_fifa_mode:
+            shown = int(fifa_start_keypoint) + idx + int(fifa_index_base)
+        else:
+            shown = idx + 1
         return (
-            f"{prefix}Field hint: p{point['point_number']} {point['point_name']} "
+            f"{prefix}Field hint: p{shown} {point['point_name']} "
             f"(TAB / Ctrl+G; same clicks as guide off)"
         ).strip()
 
@@ -2724,12 +2728,15 @@ def play_video_with_controls(
             frame_markers = [m for m in one_line_markers if m[0] == frame_count]
             total_markers = len(frame_markers)
         else:
-            total_markers = 0 if coordinates is None else len(coordinates[frame_count])
+            if pitch_guide_fifa_mode and fifa_fixed_keypoints:
+                total_markers = max(1, int(fifa_fixed_keypoints))
+            else:
+                total_markers = 0 if coordinates is None else len(coordinates[frame_count])
 
         if total_markers > 0:
             marker_idx = selected_marker_idx + 1 if selected_marker_idx >= 0 else 0
             if pitch_guide_fifa_mode and selected_marker_idx >= 0:
-                marker_idx = selected_marker_idx + fifa_index_base
+                marker_idx = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
             marker_info = font.render(
                 f"Marker: {marker_idx}/{total_markers}", True, (255, 255, 255)
             )
@@ -3305,13 +3312,14 @@ def play_video_with_controls(
         if total <= 0:
             return False, "No markers available in current frame."
         if pitch_guide_fifa_mode:
-            low = max(0, int(fifa_start_keypoint))
-            high = low + total - 1
-            display_low = low + fifa_index_base
-            display_high = high + fifa_index_base
+            # Internal slots are 0..(N-1); display numbers can be offset by start_keypoint/base_index.
+            low = 0
+            high = total - 1
+            display_low = int(fifa_start_keypoint) + low + int(fifa_index_base)
+            display_high = int(fifa_start_keypoint) + high + int(fifa_index_base)
             prompt = f"Go to FIFA keypoint ({display_low}..{display_high})"
             seed_idx = selected_marker_idx if low <= selected_marker_idx <= high else low
-            seed = str(seed_idx + fifa_index_base)
+            seed = str(int(fifa_start_keypoint) + seed_idx + int(fifa_index_base))
         else:
             low = 0
             high = total - 1
@@ -3346,9 +3354,10 @@ def play_video_with_controls(
             entered = int(raw)
         except ValueError:
             return False, "Invalid marker number."
-        target_idx = entered - fifa_index_base if pitch_guide_fifa_mode else entered - 1
-        # With 1-based display (base_index=1), users often type 0 meaning "first keypoint"
-        # (internal slot low, usually 0). Logs showed entered=0 -> target_idx=-1 otherwise.
+        if pitch_guide_fifa_mode:
+            target_idx = entered - int(fifa_start_keypoint) - int(fifa_index_base)
+        else:
+            target_idx = entered - 1
         remapped_zero_for_base1 = False
         if pitch_guide_fifa_mode and not (low <= target_idx <= high) and entered == 0 and low == 0:
             target_idx = 0
@@ -3383,7 +3392,10 @@ def play_video_with_controls(
             },
         )
         # #endregion
-        shown = selected_marker_idx + (fifa_index_base if pitch_guide_fifa_mode else 1)
+        if pitch_guide_fifa_mode:
+            shown = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
+        else:
+            shown = selected_marker_idx + 1
         return True, f"Marker selected: {shown}"
 
     def show_help_dialog():
@@ -6188,8 +6200,10 @@ def play_video_with_controls(
                     save_message_timer = 180 if ok_cfg else 90
                 elif event.key == pygame.K_TAB:
                     if pitch_guide_fifa_mode and fifa_fixed_keypoints:
-                        start_idx = max(0, int(fifa_start_keypoint))
-                        end_idx = start_idx + max(1, int(fifa_fixed_keypoints)) - 1
+                        # Internal slot indices are always 0..(N-1). TOML start_keypoint/base_index
+                        # only affect numbering in the CSV header and the UI display.
+                        start_idx = 0
+                        end_idx = max(1, int(fifa_fixed_keypoints)) - 1
                         before_idx = selected_marker_idx
                         if pygame.key.get_mods() & pygame.KMOD_SHIFT:
                             if selected_marker_idx < start_idx or selected_marker_idx > end_idx:
@@ -6221,7 +6235,7 @@ def play_video_with_controls(
                         )
                         # #endregion
                         save_message_text = (
-                            f"FIFA keypoint selected: p{selected_marker_idx + fifa_index_base} "
+                            f"FIFA keypoint selected: p{int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)} "
                             f"(slot {selected_marker_idx})"
                         )
                         showing_save_message = True
