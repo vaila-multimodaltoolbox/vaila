@@ -35,7 +35,7 @@ This script performs object detection and tracking on video files using the **YO
 
 Usage:
     Run the script from the command line:
-            python yolov26track.py
+            uv run python -m vaila.yolov26track
 
 Requirements:
     - Python 3.x
@@ -82,7 +82,9 @@ Requirements:
 
 ## 🎮 Usage: Tracking Workflow
 
-1. **Start Tracking**: Run `python yolov26track.py` or call `run_yolov26track()` from the main GUI
+1. **Start Tracking**:
+   - GUI: **Frame B → "YOLO and SAM" → "YOLOv26 Tracker"**
+   - CLI (open GUI): `uv run python -m vaila.yolov26track`
 2. **Select Directories**: Choose input directory (containing videos) and output directory
 3. **Select Model**: Choose YOLO26 model (detection, pose, segmentation, OBB) - pre-trained or custom
 4. **Select Tracker**: Choose tracking method (ByteTrack or BoTSORT)
@@ -96,7 +98,7 @@ Requirements:
 
 ## 🎯 Usage: Pose Estimation Workflow
 
-1. **Start Pose Estimation**: Click "YOLOv26 Pose" button in the main GUI
+1. **Start Pose Estimation**: GUI: **Frame B → "YOLO and SAM" → "YOLOv26 Pose"**
 2. **Select Tracking Directory**: Choose the directory containing tracking results (CSV files and video)
 3. **Select Video**: Prioritizes `processed_*.mp4` files, accepts any video file
 4. **Select ID(s)**: 

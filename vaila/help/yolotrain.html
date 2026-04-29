@@ -90,6 +90,31 @@ Change History:
             <ul><li><code>run_yolotrain_gui</code></li><li><code>write</code></li><li><code>flush</code></li><li><code>create_widgets</code></li><li><code>show_model_help</code></li><li><code>show_anylabeling_help</code></li><li><code>browse_dataset</code></li><li><code>browse_yaml</code></li><li><code>create_new_yaml</code></li><li><code>start_training_thread</code></li><li><code>show_completion</code></li></ul>
         </div>
 
+        <h2>Usage (updated)</h2>
+        <p><strong>GUI:</strong> in the main window, open <code>Frame B → YOLO and SAM → Train YOLO</code>.</p>
+        <p><strong>CLI (open GUI):</strong></p>
+        <pre><code>uv run python -m vaila.yolotrain</code></pre>
+
+        <h2>Ultralytics CLI (train / val / test / predict)</h2>
+        <p>If you want fully headless training/evaluation, use Ultralytics directly:</p>
+        <pre><code># Detect train
+uv run yolo detect train model=yolo11n.pt data=/ABS/path/to/data.yaml epochs=100 imgsz=640 device=0
+
+# Validate (val split)
+uv run yolo detect val model=/ABS/path/to/weights/best.pt data=/ABS/path/to/data.yaml split=val
+
+# Evaluate (test split, if available)
+uv run yolo detect val model=/ABS/path/to/weights/best.pt data=/ABS/path/to/data.yaml split=test
+
+# Segmentation (mask) train
+uv run yolo segment train model=yolo11n-seg.pt data=/ABS/path/to/data.yaml epochs=100 imgsz=640 device=0
+
+# Pose train (keypoints)
+uv run yolo pose train model=yolo26s-pose.pt data=/ABS/path/to/data.yaml epochs=200 imgsz=1280 device=0
+
+# Predict on a video
+uv run yolo predict model=/ABS/path/to/weights/best.pt source=/ABS/path/to/video.mp4 conf=0.25 device=0</code></pre>
+
         <div class="footer">
             <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>

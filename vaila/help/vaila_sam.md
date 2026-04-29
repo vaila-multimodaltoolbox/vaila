@@ -159,12 +159,48 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 | `--text` | `-t` | str | `person` | Open-vocabulary text prompt for segmentation (no fixed class list) |
 | `--frame` | `-f` | int | `0` | Frame index used for the initial prompt |
 | `--weights` / `--checkpoint` | `-w` | Path | auto | SAM 3 checkpoint (file or folder); auto-detected if omitted |
-| `--max-frames` | — | int | auto | Max frames on GPU (VRAM cap); `0` = full clip |
 | `--no-overlay` | — | flag | — | Skip overlay MP4 output |
 | `--no-png` | — | flag | — | Skip mask PNG output |
 | `--frame-by-frame` | — | flag | — | Process each frame individually (prevents OOM but loses temporal tracking) |
+| `--max-frames` | — | int | auto | Max frames passed to SAM3 on GPU (VRAM cap); `0` = full clip |
+| `--max-input-long-edge` | — | int | auto | Max long edge (px) for frames fed to SAM3; `0` = native resolution; try `1280`/`960` for 4K+ or OOM |
+| `--dry-run` / `--smoke` | — | flag | — | Print effective settings/caps/checkpoint and exit (does not run SAM3) |
+| `--postprocess-points` | — | choice | `none` | Build per-video vailá-format pixel CSVs (`sam_points.csv`) after batch: `foot` (bottom-center of bbox, best for soccer-field homography + `rec2d`), `center` (bbox center), `mask` (mask PNG centroid), `all` (foot + extra cx/cy/mx/my columns), `none` |
 | `--download-weights` | — | flag | — | Download facebook/sam3 into `vaila/models/sam3/` |
 | `--open-help` | — | flag | — | Open help page in the browser |
+| `--no-isolate-batch` | — | flag | — | Disable subprocess-per-video isolation in batch mode (not recommended; can cause cascading OOM after a failure) |
+| `--video-output-dir` | — | Path | — | **Internal/hidden**: used by subprocess-per-video isolation; write outputs directly to this directory (single-video mode only) |
+
+### CLI — full command (all options)
+
+Use this as a **copy/paste template** showing every CLI option that exists for SAM 3 video:
+
+```bash
+uv run vaila/vaila_sam.py \
+  --input "/path/to/video_or_dir" \
+  --output "/path/to/output_parent" \
+  --text "person" \
+  --frame 0 \
+  --checkpoint "/path/to/sam3.pt" \
+  --max-frames 80 \
+  --max-input-long-edge 1280 \
+  --postprocess-points all \
+  --dry-run \
+  --open-help \
+  --download-weights \
+  --no-overlay \
+  --no-png \
+  --frame-by-frame \
+  --no-isolate-batch \
+  --video-output-dir "/path/to/output_single_video_dir"
+```
+
+Notes:
+
+- **Do not** combine `--download-weights` or `--open-help` with a real run: they **exit early**.
+- `--dry-run` (alias `--smoke`) prints the effective settings and exits (no GPU work).
+- `--video-output-dir` is **internal** (hidden from `--help`) and only valid when `--input` is a **single file**.
+- For normal batch runs, **omit** `--no-isolate-batch` (keep isolation enabled by default).
 
 ### Invocation Modes
 
@@ -187,6 +223,54 @@ output/
       README_sam.txt
 ```
 
+### Additional outputs: `sam_points.csv` / `sam_id_map.csv` (optional)
+
+If you pass `--postprocess-points` (anything other than `none`), vailá post-processes each
+per-video output directory and writes **pixel CSVs** that can be loaded directly by
+`getpixelvideo.py` and `rec2d.py`:
+
+```
+output/processed_sam_YYYYMMDD_HHMMSS/
+  video_name/
+    sam_points.csv
+    sam_id_map.csv
+```
+
+#### `sam_points.csv` schema
+
+- **Always** starts with `frame`
+- Then one block per tracked object in the video: `p1_*`, `p2_*`, … (where `pN` is assigned from
+  the **sorted SAM `obj_id` list**; see `sam_id_map.csv`)
+
+Modes:
+
+- `--postprocess-points foot`:
+  - Columns: `frame, p1_x, p1_y, p2_x, p2_y, ...`
+  - Meaning: `pN_x/pN_y` = **bottom-center of bbox** (pixels)
+- `--postprocess-points center`:
+  - Columns: `frame, p1_x, p1_y, p2_x, p2_y, ...`
+  - Meaning: `pN_x/pN_y` = **bbox center** (pixels)
+- `--postprocess-points mask`:
+  - Columns: `frame, p1_x, p1_y, p2_x, p2_y, ...`
+  - Meaning: `pN_x/pN_y` = **mask centroid** from `masks/frame_*.png` (pixels)
+- `--postprocess-points all`:
+  - Columns: canonical `pN_x/pN_y` (default canonical is **foot**) plus extras:
+    `pN_cx, pN_cy` (bbox center) and `pN_mx, pN_my` (mask centroid)
+  - Example header:
+    `frame,p1_x,p1_y,p1_cx,p1_cy,p1_mx,p1_my,p2_x,p2_y,...`
+
+Notes:
+
+- Missing detections are written as **empty cells** (CSV blanks).
+- The coordinates are computed in **original video pixels**, using the overlay MP4 (or masks) to
+  recover frame width/height.
+
+#### `sam_id_map.csv` schema
+
+Maps `pN` columns to SAM object IDs and their lifespan:
+
+`pN,obj_id,n_frames,first_frame,last_frame`
+
 ---
 
 ## VRAM Management
@@ -202,6 +286,41 @@ SAM 3 loads **all session frames** onto the GPU. Long clips can exceed VRAM.
 | Frame-by-frame fallback | `--frame-by-frame` (loses temporal tracking) |
 
 > **PYTORCH_CUDA_ALLOC_CONF:** vailá auto-sets `expandable_segments:True` to reduce CUDA OOM from memory fragmentation.
+
+### Batch without VRAM blow-ups (recommended)
+
+For a directory of videos, prefer the **default batch isolation** (one subprocess per video)
+and set an explicit frame cap:
+
+```bash
+uv run vaila/vaila_sam.py \
+  --input "/caminho/para/dir_com_videos" \
+  --output "/caminho/para/saida" \
+  --text "person" \
+  --frame 0 \
+  --max-frames 80 \
+  --postprocess-points all
+```
+
+If you still see CUDA OOM on some clips:
+
+- Lower the cap: `--max-frames 64` or `--max-frames 32`
+- Or use frame-by-frame as a last resort (trades temporal tracking for memory safety):
+
+```bash
+uv run vaila/vaila_sam.py \
+  --input "/caminho/para/dir_com_videos" \
+  --output "/caminho/para/saida" \
+  --text "person" \
+  --frame 0 \
+  --frame-by-frame \
+  --postprocess-points all
+```
+
+Important:
+
+- Keep **subprocess-per-video isolation enabled** in batch mode (default). Avoid `--no-isolate-batch`
+  unless debugging: a CUDA OOM inside SAM3 can leak GPU state and poison the next videos.
 
 ### Batch behaviour (CLI and GUI)
 
@@ -245,6 +364,10 @@ uv run vaila/vaila_sam.py -i match.mp4 -o out/ -t "goalkeeper" -f 0
 ## GUI overview
 
 When you launch `vaila_sam` without CLI args (or from the vailá main window), two Tk windows may appear:
+
+In the main vailá window, open it via:
+
+- **Frame B → "YOLO and SAM" → "SAM (Segment Anything)"**
 
 1. **`SamVideoDialog`** — configuration modal:
     - `Input (dir or file)` + `Output folder` + `sam3.pt / weights (-w)` browsers.
@@ -575,7 +698,7 @@ Use this when the **camera moves** (typical broadcast). You need **one row of DL
    `uv run python vaila/rec3d.py --dlt-files dlt_out/camA.dlt3d dlt_out/camB.dlt3d --input-dir merged_pixels/ --output-dir rec3d_out/ --rate 30`  
    You must supply **time-synchronized** pixel CSVs and one **per-frame** `.dlt3d` per camera. The current `rec3d.py` expects one combined CSV directory — if your data are **one CSV per camera**, use `rec3d_one_dlt3d.py` only when cameras are **fixed**; for moving cameras, merge frames into the layout your analysis expects or preprocess columns accordingly.
 
-**GUI:** main window button **“FIFA cams→DLT”** runs the same Tk flow as `vaila.fifa_to_dlt.run_gui_flow()`.
+**GUI:** `FIFA cams→DLT` is available via **Frame B → Soccer Tools → FIFA cams→DLT** (same Tk flow as `vaila.fifa_to_dlt.run_gui_flow()`).
 
 ---
 

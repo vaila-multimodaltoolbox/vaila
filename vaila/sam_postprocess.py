@@ -192,6 +192,13 @@ def extract_points_from_sam_run(
         Override default output paths (defaults: ``sam_dir/sam_points.csv``
         and ``sam_dir/sam_id_map.csv``).
     """
+    # vaila_sam.py exposes a single flag (--postprocess-points) whose values map
+    # directly to our "mode". For the single-pair modes, users expect pN_x/pN_y
+    # to match the selected mode (center/mask), so we align canonical accordingly
+    # unless the caller explicitly requested otherwise.
+    if mode in ("center", "mask") and canonical == "foot":
+        canonical = mode
+
     art = discover_sam_run(sam_dir)
     df, oids = read_sam_meta(sam_dir)
     width, height = frame_size(art)
