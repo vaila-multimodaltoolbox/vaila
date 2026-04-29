@@ -242,6 +242,69 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td>Skip mask PNG output</td>
             </tr>
             <tr>
+                <td><code>--overlay-rich</code> / <code>--no-overlay-rich</code></td>
+                <td>—</td>
+                <td>bool</td>
+                <td><code>true</code></td>
+                <td>Enrich overlay with bbox/ID/score/contours (on top of the colored masks)</td>
+            </tr>
+            <tr>
+                <td><code>--draw-contour</code> / <code>--no-draw-contour</code></td>
+                <td>—</td>
+                <td>bool</td>
+                <td><code>true</code></td>
+                <td>Draw mask contours on the overlay</td>
+            </tr>
+            <tr>
+                <td><code>--draw-box</code> / <code>--no-draw-box</code></td>
+                <td>—</td>
+                <td>bool</td>
+                <td><code>true</code></td>
+                <td>Draw bounding boxes on the overlay</td>
+            </tr>
+            <tr>
+                <td><code>--draw-id</code> / <code>--no-draw-id</code></td>
+                <td>—</td>
+                <td>bool</td>
+                <td><code>true</code></td>
+                <td>Draw <code>#obj_id score</code> label on the overlay</td>
+            </tr>
+            <tr>
+                <td><code>--draw-centroid</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td>Draw the mask centroid on the overlay</td>
+            </tr>
+            <tr>
+                <td><code>--save-contours</code> / <code>--no-save-contours</code></td>
+                <td>—</td>
+                <td>bool</td>
+                <td><code>true</code></td>
+                <td>Write <code>sam_contours.json</code> (polygons per frame/object in pixels)</td>
+            </tr>
+            <tr>
+                <td><code>--save-tracks-csv</code> / <code>--no-save-tracks-csv</code></td>
+                <td>—</td>
+                <td>bool</td>
+                <td><code>true</code></td>
+                <td>Write <code>sam_tracks.csv</code> (long format, bbox in pixels + area + polygon stats)</td>
+            </tr>
+            <tr>
+                <td><code>--contours-format</code></td>
+                <td>—</td>
+                <td>choice</td>
+                <td><code>json</code></td>
+                <td><code>json</code> or <code>jsonl</code> (<code>sam_contours.json</code> vs <code>sam_contours.jsonl</code>)</td>
+            </tr>
+            <tr>
+                <td><code>--contours-gzip</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td>Write gzipped contours output (<code>.json.gz</code> / <code>.jsonl.gz</code>)</td>
+            </tr>
+            <tr>
                 <td><code>--frame-by-frame</code></td>
                 <td>—</td>
                 <td>flag</td>
@@ -321,6 +384,13 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
   --checkpoint "/path/to/sam3.pt" \
   --max-frames 80 \
   --max-input-long-edge 1280 \
+  --overlay-rich \
+  --draw-contour \
+  --draw-box \
+  --draw-id \
+  --save-contours \
+  --save-tracks-csv \
+  --contours-format json \
   --postprocess-points all \
   --dry-run \
   --open-help \
@@ -328,6 +398,7 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
   --no-overlay \
   --no-png \
   --frame-by-frame \
+  --contours-gzip \
   --no-isolate-batch \
   --video-output-dir "/path/to/output_single_video_dir"</code></pre>
 
@@ -358,6 +429,9 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
       masks/           (PNG per frame, unless --no-png)
       &lt;video_stem&gt;_sam_overlay.mp4   (unless --no-overlay)
       sam_frames_meta.csv
+      sam_contours.json             (unless --no-save-contours)
+      sam_tracks.csv                (unless --no-save-tracks-csv)
+      sam_masks_manifest.csv        (written when masks are saved; index of mask PNGs)
       README_sam.txt</div>
 
         <h3>Additional outputs: <code>sam_points.csv</code> / <code>sam_id_map.csv</code> (optional)</h3>
