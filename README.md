@@ -1,6 +1,6 @@
 # _vailá_ - Multimodal Toolbox
 
-**Package version:** `0.3.38` (see `[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -121,7 +121,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 22.April.2026 v0.3.38 (Python 3.12.13)
+vailá - 29.April.2026 v0.3.40 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -147,40 +147,45 @@ A_r1_c4 - Copy            A_r1_c5 - Move             A_r1_c6 - Remove
 A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
 
 ========================== Multimodal Analysis (Frame B) ===================
-B1_r1_c1 - IMU            B1_r1_c2 - MoCapCluster    B1_r1_c3 - MoCapFullBody
-B1_r1_c4 - Markerless2D   B1_r1_c5 - Markerless3D
+B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
+B1_r1_c3 - Motion Capture Full Body B1_r1_c4 - Markerless 2D
+B1_r1_c5 - Markerless 3D
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
-B3_r3_c1 - HR/ECG         B3_r3_c2 - MP_Yolo         B3_r3_c3 - vailá_and_jump
+B3_r3_c1 - HR/ECG         B3_r3_c2 - Yolo + Markerless_MP
+B3_r3_c3 - Vertical Jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - Tracker        B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c1 - YOLO and SAM   B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
 B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
-B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - TUG and TURN
-B5_r6_c4 - SAM            B5_r6_c5 - vailá
+B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
+B5_r6_c4 - Soccer Tools   B5_r6_c5 - vailá
+
+B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - vailá
+B6_r7_c4 - vailá          B6_r7_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
-C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth_Fill_Split
+C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
 C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
 C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá          C_B_r1_c3 - Draw Box
-C_B_r2_c1 - Compress      C_B_r2_c2 - vailá          C_B_r2_c3 - Make Sync file
-C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge Videos
-C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video      C_B_r4_c3 - Resize Video
+C_B_r2_c1 - Compress Video C_B_r2_c2 - vailá         C_B_r2_c3 - Make Sync file
+C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
+C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
 C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 
 -> C_C: Visualization
-C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
+C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV 3D    C_C_r2_c1 - Plot 2D
 C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Draw Sports    C_C_r3_c2 - Stroboscopic
 C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
 C_C_r5_c1 - vailá         C_C_r5_c2 - vailá          C_C_r5_c3 - vailá
