@@ -17,8 +17,8 @@ Per-module HTML help (SAM, stroboscopic, DLT/reconstruction, video tools, etc.) 
 
 ### What you get
 - **Frame A — File manager:** rename, import/export, copy/move, tree, find, SSH transfer.
-- **Frame B — Multimodal analysis:** IMU, MoCap, markerless, EMG, force plates, GNSS, and related pipelines.
-- **Frame C — Tools:** CSV/C3D workflows, DLT 2D/3D reconstruction, video and image utilities, plots and visualization.
+- **Frame B — Multimodal analysis:** IMU, MoCap, markerless (MP/YOLO), EMG, force plates, GNSS, SAM 3 video segmentation, soccer-field calibration, sprint analysis, and TUG/turn.
+- **Frame C — Tools:** CSV/C3D workflows, DLT 2D/3D reconstruction, video (compress, cut, resize, sync) and image utilities, stroboscopic generation, and sports field visualization.
 
 Optional stacks (CUDA/GPU templates, extras) are documented in the repository README and in [AGENTS.md](../AGENTS.md); the [Help Index](../vaila/help/index.html) focuses on what each tool does and how to open it from the GUI.
 
@@ -60,8 +60,8 @@ A documentação HTML por ferramenta (SAM, estroboscópio, DLT/reconstrução, v
 Caixa de ferramentas multimodal em Python 3.12 para análise do movimento e biomecânica, com interface desktop em Tkinter, integrando IMU, MoCap, rastreamento markerless 2D/3D, EMG, plataformas de força, GNSS/GPS e outros fluxos de dados.
 
 - **Quadro A — Arquivos:** renomear, importar/exportar, copiar/mover, árvore, busca, SSH.
-- **Quadro B — Análise multimodal:** IMU, MoCap, markerless, EMG, força, GNSS, etc.
-- **Quadro C — Ferramentas:** CSV/C3D, DLT 2D/3D, vídeo/imagem, visualização.
+- **Quadro B — Análise multimodal:** IMU, MoCap, markerless (MP/YOLO), EMG, força, GNSS, segmentação de vídeo SAM 3, calibração de campo de futebol, análise de sprint e TUG/turn.
+- **Quadro C — Ferramentas:** CSV/C3D, DLT 2D/3D, utilitários de vídeo (compressão, corte, redimensionamento, sincronia), geração estroboscópica e visualização de quadras esportivas.
 
 Detalhes de cada módulo: [índice em `vaila/help/index.html`](../vaila/help/index.html).
 

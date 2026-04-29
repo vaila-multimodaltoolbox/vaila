@@ -65,6 +65,30 @@ Available Tools:
         Description: Transfer files between local and remote systems using SSH (rsync/scp).
         Instructions: Open the File Manager (Frame A) and click "Transfer". Select Upload/Download mode and configure paths.
 
+    Soccer-Field Analysis (AI & Calib)
+        Description: AI-based field keypoint detection (YOLO-pose) and DLT2D homography calibration for broadcast soccer videos.
+        Instructions: Use "Field KPs (AI)" to generate pixel coordinates, then "Soccer-Field Calib" to fit the homography using the FIFA 29-keypoint reference.
+
+    SAM 3 Video Segmentation
+        Description: Text-prompt driven video segmentation using Segment Anything Model 3 (requires NVIDIA GPU + HF auth).
+        Instructions: Click "YOLO and SAM" -> "SAM", enter a text prompt (e.g., "person"), and process the video to generate masks and overlays.
+
+    FIFA cams→DLT
+        Description: Converts FIFA starter-kit camera NPZ files to per-frame DLT parameters for 2D/3D reconstruction.
+        Instructions: Click "FIFA cams→DLT" in Frame B, select the cameras directory and export per-frame calibration files.
+
+    Sprint Analysis
+        Description: Biomechanical analysis of sprint running phases and kinematics.
+        Instructions: Click "Sprint" in Frame B and follow the prompts to analyze sprint video or data.
+
+    Face Mesh
+        Description: MediaPipe-based face tracking and landmark extraction.
+        Instructions: Click "Face Mesh" in Frame B to launch the real-time or batch face tracking module.
+
+    tugturn
+        Description: 3D analysis of the Timed Up and Go (TUG) test with turning kinematics.
+        Instructions: Click "tugturn" in Frame B to analyze MoCap or markerless data of a TUG trial.
+
 Additional Commands:
 
     h - Display this help message.
