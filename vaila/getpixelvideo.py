@@ -6830,45 +6830,56 @@ def play_video_with_controls(
                             one_line_markers.append((frame_count, video_x, video_y))
                         else:
                             if sequential_mode:
-                                # Fill selected slot if still empty; otherwise advance (so kp 0 works).
                                 before_idx = selected_marker_idx
-                                if selected_marker_idx >= 0:
-                                    row = coordinates[frame_count]
-                                    if selected_marker_idx < len(row):
-                                        x_c, y_c = row[selected_marker_idx]
-                                        slot_empty = (
-                                            selected_marker_idx in deleted_positions[frame_count]
-                                            or x_c is None
-                                            or y_c is None
-                                        )
-                                    else:
-                                        slot_empty = True
-                                    next_idx = (
-                                        selected_marker_idx
-                                        if slot_empty
-                                        else selected_marker_idx + 1
-                                    )
-                                else:
-                                    before_idx = -1
-                                    next_idx = len(coordinates[frame_count])
 
-                                # In FIFA fixed-keypoint mode, sequential should never grow the row.
-                                # Keep internal indices in 0..(N-1) and wrap at the end.
-                                #
-                                # This prevents creating an out-of-range slot (e.g. idx=31 when N=31),
-                                # which then causes TAB navigation to snap back to 0.
+                                # FIFA fixed-keypoint sequential:
+                                # - always write into the currently selected slot (0..N-1)
+                                # - then advance selection by 1 (wrap only after the last)
+                                # This guarantees you can mark the last keypoint (e.g. 31/31)
+                                # without creating an out-of-range phantom slot.
                                 if pitch_guide_fifa_mode and fifa_fixed_keypoints:
                                     n_fixed = max(1, int(fifa_fixed_keypoints))
-                                    if next_idx >= n_fixed:
-                                        next_idx = n_fixed - 1
-                                    elif next_idx < 0:
-                                        next_idx = 0
-                                while len(coordinates[frame_count]) <= next_idx:
-                                    coordinates[frame_count].append((None, None))
-                                coordinates[frame_count][next_idx] = (video_x, video_y)
-                                selected_marker_idx = next_idx  # Auto-select the new marker
-                                if next_idx in deleted_positions[frame_count]:
-                                    deleted_positions[frame_count].discard(next_idx)
+                                    target_idx = selected_marker_idx
+                                    if target_idx < 0 or target_idx >= n_fixed:
+                                        target_idx = 0
+                                    # Ensure row is exactly N slots (so we never grow beyond template).
+                                    while len(coordinates[frame_count]) < n_fixed:
+                                        coordinates[frame_count].append((None, None))
+                                    coordinates[frame_count][target_idx] = (video_x, video_y)
+                                    deleted_positions[frame_count].discard(target_idx)
+
+                                    selected_marker_idx = target_idx + 1
+                                    if selected_marker_idx >= n_fixed:
+                                        selected_marker_idx = 0
+                                    next_idx = target_idx
+                                else:
+                                    # Generic sequential (non-fixed): keep legacy behaviour.
+                                    if selected_marker_idx >= 0:
+                                        row = coordinates[frame_count]
+                                        if selected_marker_idx < len(row):
+                                            x_c, y_c = row[selected_marker_idx]
+                                            slot_empty = (
+                                                selected_marker_idx in deleted_positions[frame_count]
+                                                or x_c is None
+                                                or y_c is None
+                                            )
+                                        else:
+                                            slot_empty = True
+                                        target_idx = (
+                                            selected_marker_idx
+                                            if slot_empty
+                                            else selected_marker_idx + 1
+                                        )
+                                    else:
+                                        before_idx = -1
+                                        target_idx = len(coordinates[frame_count])
+
+                                    while len(coordinates[frame_count]) <= target_idx:
+                                        coordinates[frame_count].append((None, None))
+                                    coordinates[frame_count][target_idx] = (video_x, video_y)
+                                    selected_marker_idx = target_idx  # Auto-select the new marker
+                                    deleted_positions[frame_count].discard(target_idx)
+                                    next_idx = target_idx
                                 # #region agent log
                                 _agent_debug_log(
                                     hypothesis_id="H3",
