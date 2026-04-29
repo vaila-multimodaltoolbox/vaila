@@ -12,93 +12,58 @@ Python Version: 3.12.13
 
 Description:
 ------------
-This tool enables marking and saving pixel coordinates in video frames, with
-zoom functionality for precise annotations. The window can now be resized dynamically,
-and all UI elements adjust accordingly. Users can navigate the video frames, mark
-points, and save results in CSV format.
+Mark and save pixel coordinates on video frames or PNG sequences, with zoom,
+pan, frame navigation, and multiple marker modes. CSV coordinates are saved as
+integers where applicable. Marker backups go to ``.vaila_markers_history/`` (latest
+100 per video).
 
-New Features in This Version 0.6.0:
-- FIFA Labeling Mode: dedicated workflow to expand the FIFA dataset at
-  ``/home/preto/data/FIFA/dataset_vaila_fifa``. The on-screen guide shows
-  the FIFA 32-keypoint pitch with idx **0 = top_left_corner**, walking the
-  user through every keypoint. F9 exports in the FIFA dataset layout
-  (``data.yaml`` with ``kpt_shape: [32, 3]``, ``flip_idx`` and
-  ``images/{train,val,test}`` + ``labels/{train,val,test}``) so new videos
-  can be appended directly to the existing ``unified/`` tree.
-  Activate with the **FIFA** button or ``--fifa-dataset DIR`` on the CLI.
+FIFA mode (button / ``--fifa`` / ``--fifa-dataset DIR``):
+  Configure fixed keypoint count, start index, and 0/1-based headers via a
+  **TOML** template (``K`` or FIFA button loads/creates it; no Tk config dialog).
+  Default template uses **31** FIFA pitch keypoints (idx **0 = top_left_corner**);
+  ``kpt_shape`` in an existing ``data.yaml`` may still be 32 when appending to an
+  older dataset. Save writes a **sparse** matrix (empty cells for unmarked KPs).
 
-New Features in This Version 0.5.0:
-- F9: Export YOLO-pose training dataset from the clicked markers (keypoints).
-  Produces Ultralytics-compatible layout with train/val/test splits,
-  classes.txt and data.yaml (with kpt_shape + flip_idx). Supports multi-video
-  append via the Dataset folder loaded with F7. Use for retraining pose nets
-  (e.g. soccer field keypoints YOLO) on your own new videos.
+Pitch Guide (``G`` or button):
+  **Visual only** — field overlay + optional reference image (``V`` toggles).
+  Same left/right click, TAB, and **Ctrl+G** (Go KP) behaviour as with the guide off.
 
-New Features in This Version 0.4.1:
-- fix start GUI mode
+Pose / ML:
+  **F9** exports a YOLO-pose layout (``data.yaml``, train/val/test, may write
+  ``keypoints.json`` when names are known). **Ctrl+E** / Save ML: user-chosen split
+  presets, **PNG** images, plus ``all_labels/`` for review.
 
 How to use:
 ------------
-1. Select the video file, a single PNG image, or a directory of PNG sequence to process.
-2. Select the keypoint file to load.
-3. Mark points in the video frame.
-4. Save the results in CSV format.
-5. Labeling mode to label images in video frames for Machine Learning training.
-6. **FIFA Labeling Mode** to expand
-   ``/home/preto/data/FIFA/dataset_vaila_fifa`` from new videos:
+1. Run ``uv run vaila/getpixelvideo.py`` (no args opens the media picker), or pass CLI paths.
+2. Optional: Load existing markers (Load button).
+3. Mark, TAB between slots, **Ctrl+G** to jump to a keypoint number, Save.
 
-       uv run vaila/getpixelvideo.py -f NEW_VIDEO.mp4 \
-           --fifa-dataset /home/preto/data/FIFA/dataset_vaila_fifa/unified
+CLI (non-exhaustive; ``-h`` / ``--help`` prints a short summary):
+  ``-f, --file`` — video, single ``.png``, or directory of PNG frames (subfolder
+  with PNGs is resolved). ``-d, --dir`` / ``--sequence DIR`` — PNG sequence folder.
+  ``--dataset DIR``, ``--fifa``, ``--fifa-dataset [DIR]``.
 
-- GUI: Run without arguments; choose "Open Video/Image File" or "Open Image Sequence (Folder)".
-- CLI: -f FILE for video or single PNG; --sequence DIR for a folder of PNGs.
+Examples::
 
-    GUI:
-    python getpixelvideo.py
+    uv run vaila/getpixelvideo.py --help
+    uv run vaila/getpixelvideo.py -f VIDEO.mp4
+    uv run vaila/getpixelvideo.py -d /path/to/png_frames
+    uv run vaila/getpixelvideo.py -f VIDEO.mp4 --fifa-dataset /path/to/unified
 
-    CLI:
-    python getpixelvideo.py -f FILE
-    python getpixelvideo.py --sequence DIR
-    python getpixelvideo.py -f VIDEO --fifa-dataset DATASET_DIR
+Key bindings (see in-app **H** help for full list):
+  Ctrl+G                Go to keypoint (Go KP dialog)
+  Ctrl+E                Save ML dataset (split + PNG + all_labels)
+  F9                    Export YOLO-pose dataset from markers
 
-Help:
-------------
-python getpixelvideo.py -h
-Usage: python getpixelvideo.py [options]
-
-Options:
-  -h, --help            show this help message and exit
-  -v, --version         show version information and exit
-  -f FILE, --file FILE  specify the video or single PNG file to process
-  --sequence DIR       specify a directory of PNG sequence (frames as images)
-  -k KEYPOINT, --keypoint KEYPOINT  specify the keypoint file to load
-  -l, --labeling        label images in video frames for Machine Learning training
-  --dataset DIR         set dataset folder (next Save appends; multi-video)
-  --fifa                enable FIFA Labeling Mode (32 kp, idx 0 = top_left_corner)
-  --fifa-dataset DIR    enable FIFA Labeling Mode AND set dataset folder for append
-                        (defaults the class to ``football_pitch``)
-  -s, --save            save the results in CSV format
-  -p, --persistence     show persistence mode
-  -a, --auto            show auto-marking mode
-  -c, --sequential      show sequential mode
-  -h, --help            show this help message and exit
-
-Key Bindings (Labeling Mode Only - Press 'L' to toggle):
-  N                     Rename current object label
-  F5                    Save Labeling Project (JSON) / export dataset (dataset_YYYYMMDD_HHMMSS or append)
-  F6                    Load Labeling Project (JSON)
-  F7                    Load dataset folder (next Save appends; multi-video)
-  F8                    Open another video (keep dataset; no need to close app)
-  F9                    Export YOLO-pose dataset from clicked markers
-                        (pose_dataset_YYYYMMDD_HHMMSS or append if F7 dataset is set)
-  Ctrl+E                Save ML dataset: choose split and export PNG + all_labels
-  -v, --version         show version information and exit
+New in 0.5.x / earlier:
+  F9 pose export; labeling mode; swap markers; playback tweaks.
 
 License:
 --------
 This program is licensed under the GNU Affero General Public License v3.0.
 For more details, visit: https://www.gnu.org/licenses/agpl-3.0.html
-Visit the project repository: https://github.com/vaila-multimodaltoolbox
+Visit the project repository: https://github.com/vaila-multimodaltoolbox/vaila
 
 ================================================================================
 """
@@ -3439,12 +3404,13 @@ def play_video_with_controls(
             "- Drag Slider: Jump to Frame",
             "- TAB: Next marker in current frame",
             "- SHIFT+TAB: Previous marker in current frame",
+            "- Ctrl+G: Go to keypoint (Go KP dialog)",
             "- DELETE: Delete selected marker",
             "- A: Add new empty marker to file",
-            "- R: Remove last marker from file",
+            "- R: Remove selected marker (current frame)",
             "- J: Detect Pose (MediaPipe + YOLO)",  # Updated Pose help
             "- H: Show this help",
-            "- D: Delete all markes in the current frame",
+            "- D: Delete all markers in the current frame",
             "- ?: Open documentation in browser",
             "",
             "=== LABELING MODE (Bounding Boxes) ===",
@@ -3459,7 +3425,7 @@ def play_video_with_controls(
             "  - Release mouse to save box",
             "",
             "STEP 3: Edit Boxes",
-            "  - Press Z / Right Click: Remove last box",
+            "  - Press Z: Remove last box",
             "  - Navigate frames to label more",
             "",
             "STEP 4: Export Dataset",
@@ -3473,20 +3439,17 @@ def play_video_with_controls(
             "      (or append to dataset loaded with F7)",
             "      Click N markers on each frame; F9 builds",
             "      images/ + labels/ + data.yaml (kpt_shape).",
-            "      PitchGuide also writes keypoints.json.",
+            "      May write keypoints.json in dataset (names).",
             "  Ctrl+E: Save ML dataset (PNG + split chooser).",
             "  Save ML button: export split + all_labels view",
             "      (all_labels has split-prefixed .txt copies).",
             "",
-            "=== FIFA LABELING MODE (32 kp pitch) ===",
-            "  Click 'FIFA' button (turns blue), or run:",
-            "    uv run vaila/getpixelvideo.py --fifa-dataset DIR",
-            "  - Loads 32 kp guide (idx 0 = top_left_corner).",
-            "  - Auto-enables PitchGuide; click pts 0..31.",
-            "  - Class: 'football_pitch' (matches FIFA dataset).",
-            "  - F9 exports in FIFA layout when current dataset",
-            "    is /home/preto/data/FIFA/dataset_vaila_fifa or",
-            "    any data.yaml with 'train: images/train'.",
+            "=== FIFA LABELING MODE ===",
+            "  FIFA button or K: load/create TOML (no Tk dialog).",
+            "  Default 31 kp, idx 0 = top_left_corner; sparse CSV;",
+            "  N/start/base in TOML. Pitch Guide (G) is visual only.",
+            "  --fifa-dataset DIR sets append target; class football_pitch.",
+            "  F9: FIFA layout when data.yaml matches FIFA train path.",
         ]
 
         help_lines_right = [
@@ -3499,9 +3462,9 @@ def play_video_with_controls(
             "  in one frame. Each click adds a new marker.",
             "  Use for tracing paths or outlines.",
             "",
-            "Sequential Mode (S/O key): Each click creates",
-            "  a new marker with incrementing IDs. No need",
-            "  to select markers first. Only in Normal mode.",
+            "Sequential Mode (S/O key): first click fills the",
+            "  selected slot (TAB/Ctrl+G) if empty incl. kp 0;",
+            "  then advances. Normal mode only.",
             "",
             "- Auto-marking Mode (M key): Automatically marks",
             "  points at mouse position during playback.",
@@ -3514,10 +3477,9 @@ def play_video_with_controls(
             "  overlay + reference image only. Same marking as",
             "  guide off (TAB / Ctrl+G / click). V toggles image.",
             "",
-            "- FIFA Mode (button): 32-kp dataset variant.",
-            "  idx 0 = top_left_corner (matches",
-            "  /home/preto/data/FIFA/dataset_vaila_fifa).",
-            "  Use --fifa-dataset DIR for 1-click append.",
+            "- FIFA Mode (button / K + TOML): fixed N kp,",
+            "  sparse save; default 31 FIFA field points.",
+            "  Use --fifa-dataset DIR to set append dataset.",
             "  Marker backups go to .vaila_markers_history/",
             "  with retention of latest 100 backups per video.",
             "",
@@ -3551,7 +3513,7 @@ def play_video_with_controls(
             "  - F7: Load dataset folder (next Save appends; multi-video)",
             "  - F8: Open another video (keep dataset; no need to close app)",
             "  - F9: Export YOLO-pose dataset from markers (keypoints)",
-            "       -> retrain YOLO pose (e.g. soccer field, 32 kp)",
+            "       -> retrain YOLO pose (e.g. soccer field, 31/32 kp)",
             "  - N:  Rename Object Class",
             "",
             "Swap Markers:",
