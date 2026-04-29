@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 27 April 2026
-Version: 0.3.39
+Update Date: 29 April 2026
+Version: 0.3.40
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -158,7 +158,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 27.April.2026 v0.3.39 (Python 3.12.13)
+vailá - 29.April.2026 v0.3.40 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -184,43 +184,45 @@ A_r1_c4 - Copy            A_r1_c5 - Move             A_r1_c6 - Remove
 A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
 
 ========================== Multimodal Analysis (Frame B) ===================
-B1_r1_c1 - IMU            B1_r1_c2 - MoCapCluster    B1_r1_c3 - MoCapFullBody
-B1_r1_c4 - Markerless2D   B1_r1_c5 - Markerless3D
+B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
+B1_r1_c3 - Motion Capture Full Body B1_r1_c4 - Markerless 2D
+B1_r1_c5 - Markerless 3D
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
-B3_r3_c1 - HR/ECG         B3_r3_c2 - MP_Yolo         B3_r3_c3 - vailá_and_jump
+B3_r3_c1 - HR/ECG         B3_r3_c2 - Yolo + Markerless_MP
+B3_r3_c3 - Vertical Jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - YOLO           B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c1 - YOLO and SAM   B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
-B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
-B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
+B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
+B5_r5_c4 - Start Block    B5_r5_c5 - Pynalty
 
-B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - TUG and TURN
-B5_r6_c4 - vailá          B5_r6_c5 - Soccer-Field Calib
+B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
+B5_r6_c4 - Soccer Tools   B5_r6_c5 - vailá
 
 B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - vailá
 B6_r7_c4 - vailá          B6_r7_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
-C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth_Fill_Split
+C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
 C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
 C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá          C_B_r1_c3 - Draw Box
-C_B_r2_c1 - Compress      C_B_r2_c2 - vailá          C_B_r2_c3 - Make Sync file
-C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge Videos
-C_B_r4_c1 - Distort video C_B_r4_c2 - Cut Video      C_B_r4_c3 - Resize Video
+C_B_r2_c1 - Compress Video C_B_r2_c2 - vailá         C_B_r2_c3 - Make Sync file
+C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
+C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
 C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 
 -> C_C: Visualization
-C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV       C_C_r2_c1 - Plot 2D
+C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV 3D    C_C_r2_c1 - Plot 2D
 C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Draw Sports    C_C_r3_c2 - Stroboscopic
 C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
 C_C_r5_c1 - vailá         C_C_r5_c2 - vailá          C_C_r5_c3 - vailá
@@ -267,7 +269,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 27.April.2026 v0.3.39 (Python 3.12.13)")
+        self.title("vailá - 29.April.2026 v0.3.40 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -903,18 +905,18 @@ class Vaila(tk.Tk):
         )
 
         # B5_r6_c4 - vailá placeholder
-        soccerfield_kp_btn = tk.Button(
+        soccer_tools_btn = tk.Button(
             row6_frame,
-            text="Field KPs (AI)",
-            command=self.soccerfield_keypoints_ai,
+            text="Soccer Tools",
+            command=self.soccer_tools,
             width=button_width,
         )
 
-        # B5_r6_c5 - Soccer-Field Calib (DLT2D homography from pitch keypoints)
-        soccerfield_calib_btn = tk.Button(
+        # B5_r6_c5 - vailá placeholder
+        vaila_b5_r6_c5 = tk.Button(
             row6_frame,
-            text="Soccer-Field Calib",
-            command=self.soccerfield_calib,
+            text="vailá",
+            command=self.show_vaila_message,
             width=button_width,
         )
 
@@ -922,23 +924,23 @@ class Vaila(tk.Tk):
         sprint_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         face_mesh_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         tugturn_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        soccerfield_kp_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        soccerfield_calib_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        soccer_tools_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b5_r6_c5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         # B6_r7 — seventh row: generic vailá placeholders (B6_r7_c1 .. B6_r7_c5)
         row7_frame = tk.Frame(analysis_frame)
         row7_frame.pack(fill="x")
         vaila_b6_r7_c1 = tk.Button(
             row7_frame,
-            text="FIFA cams→DLT",
+            text="vailá",
             width=button_width,
-            command=self.fifa_cams_to_dlt_per_frame,
+            command=self.show_vaila_message,
         )
         vaila_b6_r7_c2 = tk.Button(
             row7_frame,
-            text="FIFA Dataset Builder",
+            text="vailá",
             width=button_width,
-            command=self.fifa_dataset_builder,
+            command=self.show_vaila_message,
         )
         vaila_b6_r7_c3 = tk.Button(
             row7_frame,
@@ -2959,6 +2961,76 @@ class Vaila(tk.Tk):
         )
         print("=" * 60 + "\n")
         run_vaila_module("vaila.vaila_sam", "vaila/vaila_sam.py", extra_py_flags=("-u",))
+
+    def soccer_tools(self) -> None:
+        """Open a small launcher for soccer-related tools (AI + calibration + FIFA utilities)."""
+        win = tk.Toplevel(self)
+        win.title("Soccer Tools")
+        win.resizable(False, False)
+
+        frm = tk.Frame(win, padx=12, pady=12)
+        frm.pack(fill="both", expand=True)
+
+        tk.Label(
+            frm,
+            text="Soccer Tools",
+            font=("default", max(self.font_size + 2, 12), "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            frm,
+            text="Field keypoints (YOLO pose), calibration (DLT2D) e utilitários FIFA.",
+            font=("default", self.font_size),
+        ).pack(anchor="w", pady=(4, 10))
+
+        btn_frame = tk.Frame(frm)
+        btn_frame.pack(fill="x")
+
+        tk.Button(
+            btn_frame,
+            text="Field KPs (AI)",
+            command=lambda: (win.destroy(), self.soccerfield_keypoints_ai()),
+            width=22,
+        ).grid(row=0, column=0, padx=4, pady=4, sticky="we")
+        tk.Button(
+            btn_frame,
+            text="Soccer-Field Calib",
+            command=lambda: (win.destroy(), self.soccerfield_calib()),
+            width=22,
+        ).grid(row=0, column=1, padx=4, pady=4, sticky="we")
+        tk.Button(
+            btn_frame,
+            text="FIFA cams→DLT",
+            command=lambda: (win.destroy(), self.fifa_cams_to_dlt_per_frame()),
+            width=22,
+        ).grid(row=1, column=0, padx=4, pady=4, sticky="we")
+        tk.Button(
+            btn_frame,
+            text="FIFA Dataset Builder",
+            command=lambda: (win.destroy(), self.fifa_dataset_builder()),
+            width=22,
+        ).grid(row=1, column=1, padx=4, pady=4, sticky="we")
+
+        for col in (0, 1):
+            btn_frame.grid_columnconfigure(col, weight=1)
+
+        footer = tk.Frame(frm, pady=6)
+        footer.pack(fill="x")
+        tk.Button(footer, text="Help (FIFA workflow)", command=self._open_fifa_workflow).pack(
+            side="left"
+        )
+        tk.Button(footer, text="Close", command=win.destroy).pack(side="right")
+
+        win.transient(self)
+        win.grab_set()
+        win.update_idletasks()
+        w = win.winfo_width()
+        h = win.winfo_height()
+        x = (win.winfo_screenwidth() - w) // 2
+        y = (win.winfo_screenheight() - h) // 3
+        win.geometry(f"+{x}+{y}")
+
+    def _open_fifa_workflow(self) -> None:
+        webbrowser.open("file://" + str(Path(__file__).parent / "docs" / "fifa_workflow.md"))
 
     # B5_r6_c5 - Soccer-Field Calibration (DLT2D)
     def soccerfield_calib(self):

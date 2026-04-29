@@ -42,10 +42,47 @@ Simplified YOLO training interface specifically designed for AnyLabeling exports
 
 ## Usage
 
-Run the script from the command line:
+### GUI (recommended)
+
+- In the main window: **Frame B → "YOLO and SAM" → "Train YOLO"**
+
+### CLI (open GUI)
+
+Run with `uv` (do not activate venv manually):
+
 ```bash
-python yolotrain.py
+uv run python -m vaila.yolotrain
 ```
+
+### CLI (Ultralytics train / val / test / predict)
+
+This module is a Tk GUI wrapper. If you want fully headless runs (train/val/test),
+use the Ultralytics CLI directly:
+
+```bash
+# Detect training (AnyLabeling YOLO export)
+uv run yolo detect train model=yolo11n.pt data=/ABS/path/to/data.yaml epochs=100 imgsz=640 device=0
+
+# Validate on val split
+uv run yolo detect val model=/ABS/path/to/runs/detect/train/weights/best.pt data=/ABS/path/to/data.yaml split=val
+
+# Evaluate on test split (if your dataset has test/)
+uv run yolo detect val model=/ABS/path/to/runs/detect/train/weights/best.pt data=/ABS/path/to/data.yaml split=test
+
+# Segmentation (mask) training
+uv run yolo segment train model=yolo11n-seg.pt data=/ABS/path/to/data.yaml epochs=100 imgsz=640 device=0
+
+# Pose training (keypoints)
+uv run yolo pose train model=yolo26s-pose.pt data=/ABS/path/to/data.yaml epochs=200 imgsz=1280 device=0
+
+# Predict (inference) on a video
+uv run yolo predict model=/ABS/path/to/weights/best.pt source=/ABS/path/to/video.mp4 conf=0.25 device=0
+```
+
+Notes:
+
+- Use absolute paths for `data=` and `model=` to avoid saving under nested `runs/pose/runs/pose/...`.
+- For FIFA soccer-pitch keypoints (32 kp), see `soccerfield_keypoints_ai` + `docs/fifa_workflow.md` §4.5.
 
 ## Requirements
 - Python 3.x

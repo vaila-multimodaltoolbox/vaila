@@ -6,7 +6,7 @@
 - **File:** `vaila/soccerfield_keypoints_ai.py`
 - **Version:** 0.1.0 (April 2026)
 - **Author:** Paulo Santiago — paulosantiago@usp.br
-- **GUI Interface:** Yes (Tkinter) — button **Field KPs (AI)** in Frame B
+- **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → Field KPs (AI)**
 - **CLI Interface:** Yes
 - **License:** AGPL-3.0
 
@@ -64,7 +64,7 @@ pose=25 kobj=2 device=0 patience=80
 
 Either:
 
-- Click **Field KPs (AI)** in the vailá main window (Frame B, bottom row), **or**
+- Click **Soccer Tools → Field KPs (AI)** in the vailá main window (Frame B), **or**
 - Run `uv run python -m vaila.soccerfield_keypoints_ai` (no args → opens GUI)
 
 ### Step 2 — Pick the broadcast video and an output folder

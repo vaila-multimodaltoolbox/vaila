@@ -188,6 +188,25 @@ class TestExtractPointsFootOnly:
         df = pd.read_csv(out)
         assert list(df.columns) == ["frame", "p1_x", "p1_y", "p2_x", "p2_y"]
 
+    def test_center_mode_writes_center_as_canonical(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        out = extract_points_from_sam_run(sam_dir, mode="center")
+        df = pd.read_csv(out)
+        row0 = df.loc[0]
+        # bbox center for id0 f0: x = 0.10W + 0.10W/2, y = 0.10H + 0.10H/2
+        assert row0["p1_x"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
+        assert row0["p1_y"] == pytest.approx(0.10 * H + 0.10 * H * 0.5, abs=1e-3)
+
+    def test_mask_mode_writes_mask_centroid_as_canonical(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        out = extract_points_from_sam_run(sam_dir, mode="mask")
+        df = pd.read_csv(out)
+        row0 = df.loc[0]
+        cx0 = int(round(0.10 * W + 0.10 * W * 0.5))
+        cy0 = int(round(0.10 * H + 0.10 * H * 0.5))
+        assert row0["p1_x"] == pytest.approx(cx0, abs=1.0)
+        assert row0["p1_y"] == pytest.approx(cy0, abs=1.0)
+
 
 class TestExtractBatch:
     def test_batch_runs_all_subdirs(self, tmp_path: Path) -> None:

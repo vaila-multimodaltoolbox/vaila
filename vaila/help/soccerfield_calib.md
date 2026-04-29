@@ -6,7 +6,7 @@
 - **File:** `vaila/soccerfield_calib.py`
 - **Version:** 0.1.0 (April 2026)
 - **Author:** Paulo Santiago — paulosantiago@usp.br
-- **GUI Interface:** Yes — button **Soccer-Field Calib** in Frame B
+- **GUI Interface:** Yes — **Frame B → Soccer Tools → Soccer-Field Calib**
 - **CLI Interface:** Yes
 - **License:** AGPL-3.0
 
@@ -51,7 +51,7 @@ Outputs:
 
 ### Step 1 — Open
 
-Click **Soccer-Field Calib** in vailá Frame B.
+Click **Soccer Tools → Soccer-Field Calib** in vailá Frame B.
 
 ### Step 2 — Pick the broadcast video / fixed frame
 

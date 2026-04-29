@@ -37,7 +37,7 @@ This script performs object detection and tracking on video files using the YOLO
 
 Usage:
     Run the script from the command line by passing the path to a video file as an argument:
-            python yolov11track.py
+            uv run python -m vaila.yolov11track
 
 Requirements:
     - Python 3.x
@@ -86,7 +86,9 @@ Requirements:
 
 ## 🎮 Usage: Tracking Workflow
 
-1. **Start Tracking**: Run `python yolov11track.py` or call `run_yolov11track()` from the main GUI
+1. **Start Tracking**:
+   - GUI: **Frame B → "YOLO and SAM" → "YOLOv11 Tracker"**
+   - CLI (open GUI): `uv run python -m vaila.yolov11track`
 2. **Select Directories**: Choose input directory (containing videos) and output directory
 3. **Select Model**: Choose YOLO model (detection, pose, segmentation, OBB) - pre-trained or custom
 4. **Select Tracker**: Choose tracking method (ByteTrack or BoTSORT)
@@ -100,7 +102,7 @@ Requirements:
 
 ## 🎯 Usage: Pose Estimation Workflow
 
-1. **Start Pose Estimation**: Click "YOLO Pose" button in the main GUI (or call `select_id_and_run_pose()`)
+1. **Start Pose Estimation**: GUI: **Frame B → "YOLO and SAM" → "YOLOv11 Pose"**
 2. **Select Tracking Directory**: Choose the directory containing tracking results (CSV files and video)
 3. **Select Video**: 
    - If multiple videos found, a dialog appears to select one

@@ -76,6 +76,11 @@
             </ul>
         </div>
 
+        <div class="info-box">
+            <strong>GUI path:</strong> in the main vailá window, open
+            <code>Frame B → YOLO and SAM → SAM (Segment Anything)</code>.
+        </div>
+
         <!-- ============================================================ -->
         <h2>Installation</h2>
 
@@ -223,13 +228,6 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td>SAM 3 checkpoint (file or folder); auto-detected if omitted</td>
             </tr>
             <tr>
-                <td><code>--max-frames</code></td>
-                <td>—</td>
-                <td>int</td>
-                <td>auto</td>
-                <td>Max frames on GPU (VRAM cap); <code>0</code> = full clip</td>
-            </tr>
-            <tr>
                 <td><code>--no-overlay</code></td>
                 <td>—</td>
                 <td>flag</td>
@@ -251,6 +249,39 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td>Process each frame individually (prevents OOM but loses temporal tracking)</td>
             </tr>
             <tr>
+                <td><code>--max-frames</code></td>
+                <td>—</td>
+                <td>int</td>
+                <td>auto</td>
+                <td>Max frames passed to SAM3 on GPU (VRAM cap); <code>0</code> = full clip</td>
+            </tr>
+            <tr>
+                <td><code>--max-input-long-edge</code></td>
+                <td>—</td>
+                <td>int</td>
+                <td>auto</td>
+                <td>Max long edge (px) for frames fed to SAM3; <code>0</code> = native resolution; try <code>1280</code>/<code>960</code> for 4K+ or OOM</td>
+            </tr>
+            <tr>
+                <td><code>--dry-run</code> / <code>--smoke</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td>Print effective settings/caps/checkpoint and exit (does not run SAM3)</td>
+            </tr>
+            <tr>
+                <td><code>--postprocess-points</code></td>
+                <td>—</td>
+                <td>choice</td>
+                <td><code>none</code></td>
+                <td>After the batch finishes, build per-video vailá-format pixel CSVs (<code>sam_points.csv</code>):
+                    <code>foot</code> (bottom-center of bbox; best for soccer-field homography + <code>rec2d</code>),
+                    <code>center</code> (bbox center),
+                    <code>mask</code> (mask PNG centroid),
+                    <code>all</code> (foot + extra <code>cx/cy/mx/my</code> columns),
+                    <code>none</code></td>
+            </tr>
+            <tr>
                 <td><code>--download-weights</code></td>
                 <td>—</td>
                 <td>flag</td>
@@ -264,7 +295,51 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td>—</td>
                 <td>Open this help page in the browser</td>
             </tr>
+            <tr>
+                <td><code>--no-isolate-batch</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td>Disable subprocess-per-video isolation in batch mode (not recommended; can cause cascading OOM after a failure)</td>
+            </tr>
+            <tr>
+                <td><code>--video-output-dir</code></td>
+                <td>—</td>
+                <td>Path</td>
+                <td>—</td>
+                <td><strong>Internal/hidden</strong>: used by subprocess-per-video isolation; write outputs directly to this directory (single-video mode only)</td>
+            </tr>
         </table>
+
+        <h3>CLI — full command (all options)</h3>
+        <p>Copy/paste template showing every CLI option that exists for SAM 3 video:</p>
+        <pre><code>uv run vaila/vaila_sam.py \
+  --input "/path/to/video_or_dir" \
+  --output "/path/to/output_parent" \
+  --text "person" \
+  --frame 0 \
+  --checkpoint "/path/to/sam3.pt" \
+  --max-frames 80 \
+  --max-input-long-edge 1280 \
+  --postprocess-points all \
+  --dry-run \
+  --open-help \
+  --download-weights \
+  --no-overlay \
+  --no-png \
+  --frame-by-frame \
+  --no-isolate-batch \
+  --video-output-dir "/path/to/output_single_video_dir"</code></pre>
+
+        <div class="warning-box">
+            <strong>Notes:</strong>
+            <ul>
+                <li>Do not combine <code>--download-weights</code> or <code>--open-help</code> with a real run: they exit early.</li>
+                <li><code>--dry-run</code> (alias <code>--smoke</code>) prints effective settings and exits (no GPU work).</li>
+                <li><code>--video-output-dir</code> is internal/hidden and only valid when <code>--input</code> is a single file.</li>
+                <li>For normal batch runs, omit <code>--no-isolate-batch</code> (keep isolation enabled by default).</li>
+            </ul>
+        </div>
 
         <h3>Invocation Modes</h3>
         <table>
@@ -284,6 +359,40 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
       &lt;video_stem&gt;_sam_overlay.mp4   (unless --no-overlay)
       sam_frames_meta.csv
       README_sam.txt</div>
+
+        <h3>Additional outputs: <code>sam_points.csv</code> / <code>sam_id_map.csv</code> (optional)</h3>
+        <p>If you pass <code>--postprocess-points</code> (anything other than <code>none</code>), vailá post-processes each per-video
+          output directory and writes <strong>pixel CSVs</strong> that can be loaded directly by <code>getpixelvideo.py</code> and
+          <code>rec2d.py</code>:</p>
+        <div class="tree">output/processed_sam_YYYYMMDD_HHMMSS/
+  video_name/
+    sam_points.csv
+    sam_id_map.csv</div>
+
+        <h4><code>sam_points.csv</code> schema</h4>
+        <ul>
+            <li>Always starts with <code>frame</code></li>
+            <li>Then one block per tracked object in the video: <code>p1_*</code>, <code>p2_*</code>, …</li>
+            <li><code>pN</code> is assigned from the <strong>sorted SAM <code>obj_id</code> list</strong> (see <code>sam_id_map.csv</code>)</li>
+        </ul>
+        <p><strong>Modes:</strong></p>
+        <ul>
+            <li><code>--postprocess-points foot</code>: columns <code>frame,p1_x,p1_y,p2_x,p2_y,...</code> where <code>pN_x/pN_y</code> is the
+              <strong>bottom-center of the bbox</strong> (pixels)</li>
+            <li><code>--postprocess-points center</code>: columns <code>frame,p1_x,p1_y,p2_x,p2_y,...</code> where <code>pN_x/pN_y</code> is the
+              <strong>bbox center</strong> (pixels)</li>
+            <li><code>--postprocess-points mask</code>: columns <code>frame,p1_x,p1_y,p2_x,p2_y,...</code> where <code>pN_x/pN_y</code> is the
+              <strong>mask centroid</strong> computed from <code>masks/frame_*.png</code> (pixels)</li>
+            <li><code>--postprocess-points all</code>: canonical <code>pN_x/pN_y</code> (default canonical is <strong>foot</strong>) plus extras
+              <code>pN_cx,pN_cy</code> (bbox center) and <code>pN_mx,pN_my</code> (mask centroid). Example header:
+              <code>frame,p1_x,p1_y,p1_cx,p1_cy,p1_mx,p1_my,p2_x,p2_y,...</code></li>
+        </ul>
+        <p><strong>Notes:</strong> missing detections are written as empty cells (CSV blanks). Coordinates are computed in the original video
+          pixel space using the overlay MP4 (or masks) to recover frame width/height.</p>
+
+        <h4><code>sam_id_map.csv</code> schema</h4>
+        <p>Maps <code>pN</code> columns to SAM object IDs and their lifespan:</p>
+        <pre><code>pN,obj_id,n_frames,first_frame,last_frame</code></pre>
 
         <!-- ============================================================ -->
         <h2>VRAM Management</h2>
@@ -317,6 +426,34 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
         <div class="info-box">
             <strong>PYTORCH_CUDA_ALLOC_CONF:</strong> vailá auto-sets
             <code>expandable_segments:True</code> to reduce CUDA OOM from memory fragmentation.
+        </div>
+
+        <h3>Batch without VRAM blow-ups (recommended)</h3>
+        <p>For a directory of videos, prefer the <strong>default batch isolation</strong> (one subprocess per video) and set an explicit frame cap:</p>
+        <pre><code>uv run vaila/vaila_sam.py \
+  --input "/caminho/para/dir_com_videos" \
+  --output "/caminho/para/saida" \
+  --text "person" \
+  --frame 0 \
+  --max-frames 80 \
+  --postprocess-points all</code></pre>
+
+        <p>If you still hit CUDA OOM on some clips:</p>
+        <ul>
+            <li>Lower the cap: <code>--max-frames 64</code> or <code>--max-frames 32</code></li>
+            <li>Or use frame-by-frame as a last resort (trades temporal tracking for memory safety):</li>
+        </ul>
+        <pre><code>uv run vaila/vaila_sam.py \
+  --input "/caminho/para/dir_com_videos" \
+  --output "/caminho/para/saida" \
+  --text "person" \
+  --frame 0 \
+  --frame-by-frame \
+  --postprocess-points all</code></pre>
+
+        <div class="warning-box">
+            <strong>Important:</strong> keep subprocess-per-video isolation enabled in batch mode (default).
+            Avoid <code>--no-isolate-batch</code> unless debugging: a CUDA OOM inside SAM3 can leak GPU state and poison the next videos.
         </div>
 
         <h3>Batch behaviour (CLI and GUI)</h3>
@@ -626,7 +763,8 @@ uv run vaila/vaila_sam.py fifa pack \
             <li>2D: <code>uv run python vaila/rec2d.py --dlt-file dlt_out/&lt;SEQ&gt;.dlt2d --input-dir pixels/ --output-dir rec2d_out/ --rate 30</code></li>
             <li>3D (multi-cam): one <code>.dlt3d</code> per camera + synchronized pixel CSVs — see markdown help for caveats on <code>rec3d.py</code> vs per-camera CSVs.</li>
         </ol>
-        <p>GUI: main window button <strong>FIFA cams&rarr;DLT</strong> runs the same flow as <code>vaila.fifa_to_dlt.run_gui_flow()</code>.</p>
+        <p>GUI: <strong>Frame B → Soccer Tools → FIFA cams&rarr;DLT</strong> runs the same flow as
+          <code>vaila.fifa_to_dlt.run_gui_flow()</code>.</p>
 
         <!-- ============================================================ -->
         <h2>Main Functions</h2>
