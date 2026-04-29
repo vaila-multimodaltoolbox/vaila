@@ -160,15 +160,17 @@
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
         <strong>New in 0.6.0:</strong>
-        <strong>FIFA Labeling Mode</strong> — guided 32-keypoint pitch (idx 0 =
-        <code>top_left_corner</code>) for expanding
-        <code>/home/preto/data/FIFA/dataset_vaila_fifa</code> directly from new
-        videos. <strong>F9</strong> writes in the FIFA layout
-        (<code>images/{train,val,test}</code> + <code>labels/{train,val,test}</code>)
-        with <code>kpt_shape: [32, 3]</code>, FIFA <code>flip_idx</code> and
-        <code>names: { 0: football_pitch }</code>. Activate with the
-        <strong>FIFA</strong> button or
-        <code>--fifa-dataset DIR</code> on the CLI.<br />
+        <strong>FIFA labeling</strong> — TOML beside the video (<code>K</code> /
+        <strong>FIFA</strong> button) sets <code>n_keypoints</code> (default
+        <strong>31</strong> FIFA field KPs, <code>idx 0 = top_left_corner</code>),
+        <code>start_keypoint</code>, and <code>base_index</code>. Sparse integer CSV;
+        <strong>F9</strong> appends to a FIFA-style <code>unified/</code> tree when
+        <code>--fifa-dataset DIR</code> (or <strong>F7</strong> Dataset) points at one.
+        <strong>Pitch Guide (<code>G</code>)</strong> is <em>visual only</em>
+        (overlay + <code>V</code> image); marking uses the same
+        <strong>TAB</strong> / <strong>Ctrl+G</strong> / clicks as with the guide off.
+        <strong>Sequential (<code>S</code>/<code>O</code>)</strong> fills the selected
+        empty slot first (including kp 0), then advances.<br />
         <strong>New in 0.5.0:</strong> <strong>F9</strong> exports a YOLO-pose
         training dataset from clicked markers (<code>data.yaml</code> with
         <code>kpt_shape</code>, train/val/test). Append across videos with
@@ -244,15 +246,15 @@
               <code>all_labels/</code> didactic view with split-prefixed label copies
             </li>
             <li>
-              <strong>Pitch Guide Mode:</strong> Step-by-step guided labeling of all
-              soccer / FIFA field keypoints in order — an on-screen overlay tells you
-              exactly which point to click next; produces a named marker per point for
-              YOLO-pose export (F9)
+              <strong>Pitch Guide (<code>G</code>):</strong> Field overlay + optional
+              reference image (<code>V</code>) for alignment — does not change how you
+              click; use <strong>TAB</strong>, <strong>Ctrl+G</strong> (Go KP), and
+              left click as usual
             </li>
             <li>
-              <strong>FIFA KP button:</strong> Configure fixed FIFA CSV matrix export
-              (fixed <code>N</code>, start skip, and header base <code>0/1</code>)
-              while leaving unmarked keypoints blank
+              <strong>FIFA mode:</strong> <code>K</code> or <strong>FIFA</strong> loads
+              the TOML; <strong>Ctrl+E</strong> / Save ML and <strong>F9</strong> for
+              pose export; backups under <code>.vaila_markers_history/</code>
             </li>
           </ul>
         </div>
@@ -304,8 +306,10 @@ uv run vaila/getpixelvideo.py -f match2.mp4 --dataset pose_dataset_&lt;ts&gt;/<b
 # → PitchGuide → F9 → appends to dataset
         </div>
 
-        <h3>Standalone pip:</h3>
-        <div class="code">pip install opencv-python pygame pandas numpy</div>
+        <h3>Optional one-off (no full <code>uv sync</code>):</h3>
+        <div class="code">
+uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpixelvideo.py
+        </div>
 
         <div class="warning">
           <strong>Note:</strong> On some systems, pygame might require
