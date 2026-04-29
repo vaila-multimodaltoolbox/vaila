@@ -39,7 +39,6 @@
             color: #111;
             margin-top: 40px;
             border-left: 4px solid #111;
-            padding-left: 12px;
             background: #fff;
             padding: 10px 12px;
             border-radius: 0 10px 10px 0;
@@ -80,7 +79,26 @@
 
         .muted {
             color: #333;
-            opacity: 0.85;
+        }
+
+        .sep {
+            opacity: 0.55;
+            padding: 0 6px;
+        }
+
+        .text-sm {
+            font-size: 0.85em;
+        }
+
+        .mb-sm {
+            margin: 0 0 10px 0;
+        }
+
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            color: #111;
+            font-size: 0.9em;
         }
 
         .links {
@@ -171,8 +189,8 @@
             border: 1px solid #e6e6e6;
         }
 
-        .section-header {
-            margin-top: 40px;
+        .is-hidden {
+            display: none !important;
         }
 
         code {
@@ -212,9 +230,9 @@
 
         <div class="links">
             <a href="../../docs/index.md">Open Project Documentation</a>
-            <span class="muted"> | </span>
+            <span class="sep" aria-hidden="true">|</span>
             <a href="gpu_guide.html">Hardware Optimization Guide</a>
-            <span class="muted"> | </span>
+            <span class="sep" aria-hidden="true">|</span>
             <a href="../../docs/fifa_workflow.md">FIFA Workflow</a>
         </div>
 
@@ -229,7 +247,7 @@
 
         <pre class="banner">vailá - 29.April.2026 v0.3.40 (Python 3.12.13)</pre>
 
-        <div class="section-header">
+        <div>
             <h2>File Manager (Frame A)</h2>
             <div class="grid-container">
                 <div class="tool-card">
@@ -280,7 +298,7 @@
             </div>
         </div>
 
-        <div class="section-header">
+        <div>
             <h2>Multimodal Analysis (Frame B)</h2>
             <div class="grid-container">
                 <div class="tool-card">
@@ -362,7 +380,7 @@
 
                     <div class="tool-card">
                         <div class="tool-title">B4_r4_c1 - YOLO and SAM</div>
-                        <div class="tool-links"><a href="#yolo-sam">Jump</a> <span style="font-size:0.85em;">(chooser dialog)</span></div>
+                        <div class="tool-links"><a href="#yolo-sam">Jump</a> <span class="text-sm">(chooser dialog)</span></div>
                     </div>
                     <div class="tool-card">
                         <div class="tool-title">B4_r4_c2 - ML Walkway</div>
@@ -430,7 +448,7 @@
                             <a href="soccerfield_keypoints_ai.html">Field KPs (AI)</a> |
                             <a href="soccerfield_calib.html">Soccer-Field Calib</a> |
                             <a href="vaila_sam.html">FIFA cams→DLT (via SAM/FIFA)</a>
-                            <span style="font-size:0.85em;">(AI keypoints + DLT2D calib + FIFA utilities)</span>
+                            <span class="text-sm">(AI keypoints + DLT2D calib + FIFA utilities)</span>
                         </div>
                     </div>
                     <div class="tool-card">
@@ -440,8 +458,8 @@
                 </div>
             </div>
 
-            <div class="section-header">
-                <h2>==================== Multimodal Analysis row 7 (Frame B) ===================</h2>
+            <div>
+                <h2>Multimodal Analysis row 7 (Frame B)</h2>
                 <div class="grid-container">
                     <div class="tool-card">
                         <div class="tool-title">B6_r7_c1 - <i>vailá</i></div>
@@ -466,9 +484,9 @@
                 </div>
             </div>
 
-            <div class="section-header" id="yolo-sam">
-                <h2>============================== YOLO &amp; SAM ===================</h2>
-                <p style="margin: 0 0 10px 0;">
+            <div id="yolo-sam">
+                <h2>YOLO &amp; SAM</h2>
+                <p class="mb-sm">
                   <strong>GUI:</strong> Frame B → <strong>YOLO and SAM</strong> opens the chooser:
                   <code>YOLOv11/YOLOv26 Tracker</code>, <code>YOLOv11/YOLOv26 Pose</code>,
                   <code>YOLOv26 Segmentation</code>, <code>SAM</code>, <code>Train YOLO</code>.
@@ -500,8 +518,8 @@
                 </div>
             </div>
 
-            <div class="section-header">
-                <h2>============================== Tools Available (Frame C) ===================</h2>
+            <div>
+                <h2>Tools Available (Frame C)</h2>
 
                 <h3>-> C_A: Data Files</h3>
                 <div class="grid-container">
@@ -691,7 +709,7 @@
                 </div>
             </div>
 
-        <div style="margin-top: 50px; text-align: center; color: #111; font-size: 0.9em;">
+        <div class="footer">
             <p class="muted">Generated based on <i>vailá</i> v0.3.40 layout.</p>
         </div>
 
@@ -708,15 +726,27 @@
                         .replace(/\\p{Diacritic}/gu, "");
                 }
 
+                const searchCache = new Map();
+                for (const c of cards) {
+                    searchCache.set(c, norm(c.textContent));
+                }
+
                 function applyFilter() {
                     const q = norm(input.value.trim());
                     for (const c of cards) {
-                        const text = norm(c.innerText);
-                        c.style.display = q === "" || text.includes(q) ? "" : "none";
+                        const text = searchCache.get(c) || "";
+                        c.classList.toggle("is-hidden", !(q === "" || text.includes(q)));
                     }
                 }
 
-                input.addEventListener("input", applyFilter);
+                let raf = 0;
+                input.addEventListener("input", function () {
+                    if (raf) cancelAnimationFrame(raf);
+                    raf = requestAnimationFrame(function () {
+                        raf = 0;
+                        applyFilter();
+                    });
+                });
             })();
         </script>
     </div>
