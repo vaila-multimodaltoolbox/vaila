@@ -79,7 +79,6 @@ import subprocess
 import sys
 import urllib.request
 from contextlib import redirect_stderr, suppress
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -135,43 +134,6 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-
-
-# Debug-mode runtime instrumentation (session-scoped NDJSON log)
-@dataclass(frozen=True)
-class _DebugConfig:
-    log_path: str = "/home/preto/data/vaila/.cursor/debug-88633e.log"
-    session_id: str = "88633e"
-
-
-_DEBUG_CFG = _DebugConfig()
-
-
-def _agent_debug_log(
-    *,
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict[str, Any] | None = None,
-    run_id: str = "post-fix",
-) -> None:
-    """Append one NDJSON debug line for runtime evidence collection."""
-    payload = {
-        "sessionId": _DEBUG_CFG.session_id,
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data or {},
-        "timestamp": int(datetime.now().timestamp() * 1000),
-    }
-    try:
-        with open(_DEBUG_CFG.log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
-    except OSError:
-        # Never break UI flow due to debug logging.
-        pass
-
 
 # Optional import for TOML support (Python 3.11+)
 try:
@@ -1484,6 +1446,12 @@ def play_video_with_controls(
     scrolling = False
     dragging_slider = False
 
+    # Output formatting for screen pixel coordinates (applied on Save/export).
+    # - "int": store integer pixels (smaller files, default)
+    # - "float": store floats with coord_decimals digits after decimal separator
+    coord_format = "int"
+    coord_decimals = 1
+
     # Add marker navigation variables
     selected_marker_idx = 0  # Começar sempre com o marker 1 selecionado
 
@@ -2735,10 +2703,14 @@ def play_video_with_controls(
 
         if total_markers > 0:
             marker_idx = selected_marker_idx + 1 if selected_marker_idx >= 0 else 0
+            marker_total_display = total_markers
             if pitch_guide_fifa_mode and selected_marker_idx >= 0:
                 marker_idx = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
+                marker_total_display = (
+                    int(fifa_start_keypoint) + max(0, int(total_markers) - 1) + int(fifa_index_base)
+                )
             marker_info = font.render(
-                f"Marker: {marker_idx}/{total_markers}", True, (255, 255, 255)
+                f"Marker: {marker_idx}/{marker_total_display}", True, (255, 255, 255)
             )
             control_surface.blit(marker_info, (info_x, slider_y - 22))
             info_x += marker_info.get_width() + 25
@@ -3124,7 +3096,7 @@ def play_video_with_controls(
         for i in range(n_keypoints):
             kp_idx = start_idx + i + base_idx
             cols.extend([f"p{kp_idx}_x", f"p{kp_idx}_y"])
-        df = pd.DataFrame(np.nan, index=range(total_frames), columns=cols)
+        df = pd.DataFrame(np.nan, index=range(total_frames), columns=pd.Index(cols))
         df["frame"] = df.index
         df.to_csv(csv_path, index=False, na_rep="")
 
@@ -3186,13 +3158,23 @@ def play_video_with_controls(
             else os.path.join(os.path.dirname(video_path), "fifa_dataset_template")
         )
         history_default = os.path.join(os.path.dirname(video_path), ".vaila_markers_history")
+        # Stable defaults for newly created FIFA TOML templates:
+        # - start_keypoint/base_index control the displayed header numbering (pX)
+        # - n_keypoints is the SLOT COUNT (not "last index")
+        toml_default_start_keypoint = 0
+        toml_default_base_index = 0
         text = (
             "# FIFA template config for getpixelvideo.py\n"
             "# Load this file with FIFA button or key K.\n\n"
             "[fifa_template]\n"
             f"n_keypoints = {int(fifa_fixed_keypoints if fifa_fixed_keypoints else 31)}\n"
-            f"start_keypoint = {int(fifa_start_keypoint)}\n"
-            f"base_index = {int(fifa_index_base)}  # 0 or 1\n"
+            f"start_keypoint = {int(toml_default_start_keypoint)}\n"
+            f"base_index = {int(toml_default_base_index)}  # 0 or 1\n"
+            "# Optional inclusive end (use this if you think in 0..31 inclusive):\n"
+            "# end_keypoint = 30  # inclusive; when set, slot count = end_keypoint-start_keypoint+1\n"
+            "# Output formatting for pixel coordinates:\n"
+            'coord_format = "int"  # "int" or "float"\n'
+            'coord_decimals = 1    # only used when coord_format = "float"\n'
             f'csv_output = "{csv_default}"\n'
             "create_dataset_scaffold = true\n"
             f'dataset_dir = "{dataset_default}"\n'
@@ -3228,36 +3210,64 @@ def play_video_with_controls(
         nonlocal fifa_fixed_keypoints, fifa_start_keypoint, fifa_index_base
         nonlocal pitch_guide_fifa_mode, current_label
         nonlocal coordinates, deleted_positions, selected_marker_idx, marker_history_dir_override
+        nonlocal coord_format, coord_decimals
         if not TOML_AVAILABLE:
             return False, "TOML not available (tomllib missing)."
         try:
             with open(path, "rb") as f:
                 data = tomllib.load(f)
             cfg = data.get("fifa_template", {})
-            n_val = int(cfg.get("n_keypoints", 31))
             s_val = int(cfg.get("start_keypoint", 0))
             b_val = int(cfg.get("base_index", 0))
+            end_val_raw = cfg.get("end_keypoint", None)
+            n_val = int(cfg.get("n_keypoints", 31))
             csv_out = str(cfg.get("csv_output", "")).strip()
             mk_ds = bool(cfg.get("create_dataset_scaffold", True))
             ds = str(cfg.get("dataset_dir", "")).strip()
             activate_fifa = bool(cfg.get("activate_fifa_mode", True))
             reset_session = bool(cfg.get("reset_session_markers", True))
             history_dir_cfg = str(cfg.get("marker_history_dir", "")).strip()
-            if n_val <= 0:
-                return False, "Invalid n_keypoints in TOML (must be > 0)."
+            coord_format_raw = str(cfg.get("coord_format", coord_format)).strip().lower()
+            coord_decimals_raw = cfg.get("coord_decimals", coord_decimals)
             if s_val < 0:
                 return False, "Invalid start_keypoint in TOML (must be >= 0)."
             if b_val not in (0, 1):
                 return False, "Invalid base_index in TOML (must be 0 or 1)."
+            if coord_format_raw not in ("int", "float"):
+                return False, 'Invalid coord_format (must be "int" or "float").'
+            try:
+                coord_decimals_val = max(0, int(coord_decimals_raw))
+            except (TypeError, ValueError):
+                return False, "Invalid coord_decimals (must be an integer >= 0)."
+            # Interpret keypoint count:
+            # - If end_keypoint is provided: inclusive range [start_keypoint..end_keypoint]
+            # - Else: n_keypoints is the slot count
+            if end_val_raw is not None and str(end_val_raw).strip() != "":
+                end_val = int(end_val_raw)
+                if end_val < s_val:
+                    return False, "Invalid end_keypoint (must be >= start_keypoint)."
+                slot_count = (end_val - s_val) + 1
+            else:
+                if n_val <= 0:
+                    return False, "Invalid n_keypoints in TOML (must be > 0)."
+                # Back-compat for the most common FIFA convention:
+                # users often think in "0..31 inclusive" and write `n_keypoints = 31`.
+                # When that exact pattern is detected, treat `n_keypoints` as the inclusive
+                # end index (i.e., 32 slots).
+                slot_count = 32 if s_val == 0 and b_val == 0 and n_val == 31 else n_val
             if not csv_out:
                 return False, "Missing csv_output in TOML."
             os.makedirs(os.path.dirname(csv_out) or ".", exist_ok=True)
-            _write_fifa_csv_template(csv_out, n_keypoints=n_val, start_idx=s_val, base_idx=b_val)
+            _write_fifa_csv_template(
+                csv_out, n_keypoints=slot_count, start_idx=s_val, base_idx=b_val
+            )
             if mk_ds and ds:
-                _write_fifa_dataset_template(ds, n_keypoints=n_val)
-            fifa_fixed_keypoints = n_val
+                _write_fifa_dataset_template(ds, n_keypoints=slot_count)
+            fifa_fixed_keypoints = slot_count
             fifa_start_keypoint = s_val
             fifa_index_base = b_val
+            coord_format = coord_format_raw
+            coord_decimals = coord_decimals_val
             if activate_fifa:
                 pitch_guide_fifa_mode = True
                 current_label = "football_pitch"
@@ -3265,10 +3275,10 @@ def play_video_with_controls(
                 marker_history_dir_override = os.path.abspath(history_dir_cfg)
             if reset_session:
                 # Start from a clean in-memory matrix so labeling always begins from zero state.
-                blank_row = [(None, None)] * n_val
+                blank_row = [(None, None)] * slot_count
                 coordinates = {i: list(blank_row) for i in range(total_frames)}
                 deleted_positions = {i: set() for i in range(total_frames)}
-                selected_marker_idx = max(0, min(s_val, n_val - 1))
+                selected_marker_idx = max(0, min(s_val, slot_count - 1))
             msg = f"Template CSV created: {csv_out}"
             if mk_ds and ds:
                 msg += f"\nDataset scaffold created/updated: {ds}"
@@ -3306,7 +3316,10 @@ def play_video_with_controls(
         nonlocal selected_marker_idx
         if one_line_mode:
             return False, "Go marker is available in normal keypoint mode."
-        total = len(coordinates.get(frame_count, []))
+        frame_coords: list[object] = (
+            coordinates.get(frame_count, []) if isinstance(coordinates, dict) else []
+        )
+        total = len(frame_coords)
         if pitch_guide_fifa_mode and fifa_fixed_keypoints:
             total = max(1, int(fifa_fixed_keypoints))
         if total <= 0:
@@ -3326,24 +3339,6 @@ def play_video_with_controls(
             prompt = f"Go to marker (1..{total})"
             seed_idx = selected_marker_idx if 0 <= selected_marker_idx <= high else 0
             seed = str(seed_idx + 1)
-        # #region agent log
-        _agent_debug_log(
-            hypothesis_id="H1",
-            location="getpixelvideo.py:_goto_marker_dialog:range",
-            message="Computed Go KP range/seed",
-            data={
-                "pitch_guide_fifa_mode": pitch_guide_fifa_mode,
-                "fifa_fixed_keypoints": fifa_fixed_keypoints,
-                "fifa_start_keypoint": fifa_start_keypoint,
-                "fifa_index_base": fifa_index_base,
-                "selected_marker_idx": selected_marker_idx,
-                "total": total,
-                "low": low,
-                "high": high,
-                "seed": seed,
-            },
-        )
-        # #endregion
         raw = show_input_dialog(prompt, seed)
         if raw is None:
             return False, "Marker jump cancelled."
@@ -3358,40 +3353,11 @@ def play_video_with_controls(
             target_idx = entered - int(fifa_start_keypoint) - int(fifa_index_base)
         else:
             target_idx = entered - 1
-        remapped_zero_for_base1 = False
         if pitch_guide_fifa_mode and not (low <= target_idx <= high) and entered == 0 and low == 0:
             target_idx = 0
-            remapped_zero_for_base1 = True
-        # #region agent log
-        _agent_debug_log(
-            hypothesis_id="H1",
-            location="getpixelvideo.py:_goto_marker_dialog:target",
-            message="Parsed Go KP target",
-            data={
-                "raw": raw,
-                "entered": entered,
-                "target_idx": target_idx,
-                "low": low,
-                "high": high,
-                "remapped_zero_for_base1": remapped_zero_for_base1,
-            },
-        )
-        # #endregion
         if not (low <= target_idx <= high):
             return False, f"Marker out of range ({entered})."
         selected_marker_idx = target_idx
-        # #region agent log
-        _agent_debug_log(
-            hypothesis_id="H7",
-            location="getpixelvideo.py:_goto_marker_dialog:after_assign",
-            message="Go KP applied",
-            data={
-                "selected_marker_idx": selected_marker_idx,
-                "pitch_guide_mode": pitch_guide_mode,
-                "target_idx": target_idx,
-            },
-        )
-        # #endregion
         if pitch_guide_fifa_mode:
             shown = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
         else:
@@ -4312,7 +4278,9 @@ def play_video_with_controls(
             if not pts:
                 continue
             serializable_coords[int(f_idx)] = [
-                None if (p is None or p[0] is None or p[1] is None) else [float(p[0]), float(p[1])]
+                None
+                if (p is None or p[0] is None or p[1] is None)
+                else [int(round(p[0])), int(round(p[1]))]
                 for p in pts
             ]
         deleted_serial = {}
@@ -4381,7 +4349,7 @@ def play_video_with_controls(
         if max(values) > 1.0:
             values = [v / 100.0 for v in values]
         total = sum(values)
-        ratios = tuple(v / total for v in values)
+        ratios = (values[0] / total, values[1] / total, values[2] / total)
         label = f"Custom {ratios[0] * 100:.1f}/{ratios[1] * 100:.1f}/{ratios[2] * 100:.1f}"
         return ratios, label
 
@@ -5032,20 +5000,6 @@ def play_video_with_controls(
             showing_save_message, \
             save_message_timer, \
             save_message_text
-
-        # #region agent log
-        _agent_debug_log(
-            hypothesis_id="H3",
-            location="getpixelvideo.py:remove_marker:entry",
-            message="Remove marker requested",
-            data={
-                "one_line_mode": one_line_mode,
-                "frame_count": frame_count,
-                "selected_marker_idx": selected_marker_idx,
-                "frame_coords_len": len(coordinates.get(frame_count, [])) if coordinates else -1,
-            },
-        )
-        # #endregion
         if one_line_mode:
             if selected_marker_idx >= 0:
                 # Find and remove the selected marker only in the current frame
@@ -6010,6 +5964,8 @@ def play_video_with_controls(
                                 fifa_start_keypoint if pitch_guide_fifa_mode else 0
                             ),
                             keypoint_index_base=(fifa_index_base if pitch_guide_fifa_mode else 1),
+                            coord_format=coord_format,
+                            coord_decimals=coord_decimals,
                         )
                         # Save Swap Config if available
                         if active_swap_rules:
@@ -6204,7 +6160,6 @@ def play_video_with_controls(
                         # only affect numbering in the CSV header and the UI display.
                         start_idx = 0
                         end_idx = max(1, int(fifa_fixed_keypoints)) - 1
-                        before_idx = selected_marker_idx
                         if pygame.key.get_mods() & pygame.KMOD_SHIFT:
                             if selected_marker_idx < start_idx or selected_marker_idx > end_idx:
                                 selected_marker_idx = end_idx
@@ -6219,21 +6174,6 @@ def play_video_with_controls(
                                 selected_marker_idx += 1
                                 if selected_marker_idx > end_idx:
                                     selected_marker_idx = start_idx
-                        # #region agent log
-                        _agent_debug_log(
-                            hypothesis_id="H2",
-                            location="getpixelvideo.py:event_TAB_fifa",
-                            message="TAB navigation in FIFA mode",
-                            data={
-                                "shift": bool(pygame.key.get_mods() & pygame.KMOD_SHIFT),
-                                "before_idx": before_idx,
-                                "after_idx": selected_marker_idx,
-                                "start_idx": start_idx,
-                                "end_idx": end_idx,
-                                "fifa_index_base": fifa_index_base,
-                            },
-                        )
-                        # #endregion
                         save_message_text = (
                             f"FIFA keypoint selected: p{int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)} "
                             f"(slot {selected_marker_idx})"
@@ -6695,6 +6635,8 @@ def play_video_with_controls(
                                 keypoint_index_base=(
                                     fifa_index_base if pitch_guide_fifa_mode else 1
                                 ),
+                                coord_format=coord_format,
+                                coord_decimals=coord_decimals,
                             )
                             saved = True
                             save_message_text = f"Saved to: {os.path.basename(output_file)}"
@@ -6844,8 +6786,6 @@ def play_video_with_controls(
                             one_line_markers.append((frame_count, video_x, video_y))
                         else:
                             if sequential_mode:
-                                before_idx = selected_marker_idx
-
                                 # FIFA fixed-keypoint sequential:
                                 # - always write into the currently selected slot (0..N-1)
                                 # - then advance selection by 1 (wrap only after the last)
@@ -6865,7 +6805,6 @@ def play_video_with_controls(
                                     selected_marker_idx = target_idx + 1
                                     if selected_marker_idx >= n_fixed:
                                         selected_marker_idx = 0
-                                    next_idx = target_idx
                                 else:
                                     # Generic sequential (non-fixed): keep legacy behaviour.
                                     if selected_marker_idx >= 0:
@@ -6873,7 +6812,8 @@ def play_video_with_controls(
                                         if selected_marker_idx < len(row):
                                             x_c, y_c = row[selected_marker_idx]
                                             slot_empty = (
-                                                selected_marker_idx in deleted_positions[frame_count]
+                                                selected_marker_idx
+                                                in deleted_positions[frame_count]
                                                 or x_c is None
                                                 or y_c is None
                                             )
@@ -6885,7 +6825,6 @@ def play_video_with_controls(
                                             else selected_marker_idx + 1
                                         )
                                     else:
-                                        before_idx = -1
                                         target_idx = len(coordinates[frame_count])
 
                                     while len(coordinates[frame_count]) <= target_idx:
@@ -6893,24 +6832,6 @@ def play_video_with_controls(
                                     coordinates[frame_count][target_idx] = (video_x, video_y)
                                     selected_marker_idx = target_idx  # Auto-select the new marker
                                     deleted_positions[frame_count].discard(target_idx)
-                                    next_idx = target_idx
-                                # #region agent log
-                                _agent_debug_log(
-                                    hypothesis_id="H3",
-                                    location="getpixelvideo.py:left_click_sequential",
-                                    message="Sequential left-click assigned marker",
-                                    data={
-                                        "frame_count": frame_count,
-                                        "before_idx": before_idx,
-                                        "next_idx": next_idx,
-                                        "after_idx": selected_marker_idx,
-                                        "frame_marker_len": len(coordinates[frame_count]),
-                                        "pitch_guide_fifa_mode": pitch_guide_fifa_mode,
-                                        "filled_selected_slot": before_idx >= 0
-                                        and next_idx == before_idx,
-                                    },
-                                )
-                                # #endregion
                             else:
                                 # Use existing marker selection logic
                                 if selected_marker_idx >= 0:
@@ -7674,6 +7595,9 @@ def save_coordinates(
     fixed_keypoints_count=None,
     keypoint_start_idx=0,
     keypoint_index_base=1,
+    *,
+    coord_format: str = "int",
+    coord_decimals: int = 1,
 ):
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     video_dir = os.path.dirname(video_path)
@@ -7720,12 +7644,33 @@ def save_coordinates(
                 and (i - start_idx) < max_points
             ):
                 out_idx = (i - start_idx) + start_idx + base_idx
-                df.at[frame_num, f"p{out_idx}_x"] = int(round(x))
-                df.at[frame_num, f"p{out_idx}_y"] = int(round(y))
+                df.at[frame_num, f"p{out_idx}_x"] = float(x)
+                df.at[frame_num, f"p{out_idx}_y"] = float(y)
             # Se for None, deixar como NaN (o que se tornará "" no CSV)
 
-    # Salva o CSV com valores NaN representados como strings vazias
-    df.to_csv(output_file, index=False, na_rep="")
+    coord_format = str(coord_format).strip().lower()
+    if coord_format not in ("int", "float"):
+        coord_format = "int"
+    coord_decimals = max(0, int(coord_decimals))
+
+    # Ensure frame is integer.
+    df["frame"] = pd.to_numeric(df["frame"], errors="coerce").fillna(0).astype(int)
+
+    # Force a compact representation in the CSV:
+    # - "int": write integer pixels without `.0`
+    # - "float": write floats with fixed decimals (configurable)
+    float_format = None
+    for col in df.columns:
+        if col == "frame":
+            continue
+        if coord_format == "int":
+            df[col] = pd.to_numeric(df[col], errors="coerce").round(0).astype("Int64")
+        else:
+            df[col] = pd.to_numeric(df[col], errors="coerce").round(coord_decimals)
+            float_format = f"%.{coord_decimals}f"
+
+    # Salva o CSV com valores vazios representados como strings vazias
+    df.to_csv(output_file, index=False, na_rep="", float_format=float_format)
     print(f"Coordinates saved to: {output_file}")
     return output_file
 
@@ -8852,21 +8797,6 @@ if __name__ == "__main__":
                     )
             else:
                 print(f"Error: {opt} path is not a file or directory: {file_path}")
-
-    # #region agent log
-    _agent_debug_log(
-        hypothesis_id="H4",
-        location="getpixelvideo.py:__main__:cli_parse",
-        message="CLI parse result",
-        data={
-            "argv": sys.argv[1:],
-            "initial_media_path": initial_media_path,
-            "initial_source_type": initial_source_type,
-            "initial_fifa_mode": initial_fifa_mode,
-            "initial_dataset_dir": initial_dataset_dir,
-        },
-    )
-    # #endregion
 
     run_getpixelvideo(
         initial_dataset_dir=initial_dataset_dir,
