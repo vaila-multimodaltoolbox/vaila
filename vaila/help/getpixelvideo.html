@@ -154,11 +154,21 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.5.0<br />
+        <strong>Version:</strong> 0.6.0<br />
         <strong>Date:</strong> April 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
+        <strong>New in 0.6.0:</strong>
+        <strong>FIFA Labeling Mode</strong> — guided 32-keypoint pitch (idx 0 =
+        <code>top_left_corner</code>) for expanding
+        <code>/home/preto/data/FIFA/dataset_vaila_fifa</code> directly from new
+        videos. <strong>F9</strong> writes in the FIFA layout
+        (<code>images/{train,val,test}</code> + <code>labels/{train,val,test}</code>)
+        with <code>kpt_shape: [32, 3]</code>, FIFA <code>flip_idx</code> and
+        <code>names: { 0: football_pitch }</code>. Activate with the
+        <strong>FIFA</strong> button or
+        <code>--fifa-dataset DIR</code> on the CLI.<br />
         <strong>New in 0.5.0:</strong> <strong>F9</strong> exports a YOLO-pose
         training dataset from clicked markers (<code>data.yaml</code> with
         <code>kpt_shape</code>, train/val/test). Append across videos with
@@ -177,6 +187,8 @@
           <li><a href="#controls">4. Controls & Interface</a></li>
           <li><a href="#formats">5. Supported File Formats</a></li>
           <li><a href="#modes">6. Marker Modes</a></li>
+          <li><a href="#pitch-guide">6b. Pitch Guide Mode (Soccer Field)</a></li>
+          <li><a href="#fifa-labeling">6c. FIFA Labeling Mode (Expand FIFA Dataset)</a></li>
           <li><a href="#visualization">7. Data Visualization</a></li>
           <li><a href="#saving">8. Saving Options</a></li>
           <li><a href="#advanced">9. Advanced Features</a></li>
@@ -227,10 +239,20 @@
               appending to an existing folder (F7)
             </li>
             <li>
+              <strong>Save ML (button / Ctrl+E):</strong> Export a PNG pose
+              dataset with user-selected train/val/test split and build an
+              <code>all_labels/</code> didactic view with split-prefixed label copies
+            </li>
+            <li>
               <strong>Pitch Guide Mode:</strong> Step-by-step guided labeling of all
               soccer / FIFA field keypoints in order — an on-screen overlay tells you
               exactly which point to click next; produces a named marker per point for
               YOLO-pose export (F9)
+            </li>
+            <li>
+              <strong>FIFA KP button:</strong> Configure fixed FIFA CSV matrix export
+              (fixed <code>N</code>, start skip, and header base <code>0/1</code>)
+              while leaving unmarked keypoints blank
             </li>
           </ul>
         </div>
@@ -466,6 +488,13 @@ uv run vaila/getpixelvideo.py -f match2.mp4 --dataset pose_dataset_&lt;ts&gt;/<b
                 </td>
               </tr>
               <tr>
+                <td><span class="key">Ctrl+E</span></td>
+                <td>
+                  Save ML: choose split, export PNG pose dataset and build
+                  <code>all_labels/</code> didactic labels view
+                </td>
+              </tr>
+              <tr>
                 <td><span class="key">PitchGuide button</span></td>
                 <td>
                   Toggle Pitch Guide mode — guided soccer field keypoint labeling;
@@ -473,6 +502,14 @@ uv run vaila/getpixelvideo.py -f match2.mp4 --dataset pose_dataset_&lt;ts&gt;/<b
                   right-click = delete selected/current guide point,
                   B/Backspace = previous point, V = show/hide FIFA field image.
                   Loads <code>soccerfield_ref3d_fifa.csv</code> automatically.
+                </td>
+              </tr>
+              <tr>
+                <td><span class="key">FIFA KP button</span></td>
+                <td>
+                  FIFA CSV matrix setup (FIFA mode ON): left-click cycles fixed
+                  <code>N</code>, right-click toggles header base <code>0/1</code>,
+                  middle-click increments start index (skip initial keypoints)
                 </td>
               </tr>
             </table>
@@ -716,10 +753,116 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset pose_dataset_YYYYMMDD/<br/
 
         <h3>Field reference files:</h3>
         <ul>
-          <li><code>vaila/models/soccerfield_ref3d_fifa.csv</code> — FIFA Skeletal Tracking origin (0,0,0 = centre). 37 points. <em>Preferred.</em></li>
+          <li><code>vaila/models/soccerfield_ref3d_fifa.csv</code> — FIFA Skeletal Tracking origin (0,0,0 = centre). 37 points. <em>Legacy / 1-based numbering.</em></li>
           <li><code>vaila/models/soccerfield_ref3d.csv</code> — standard vailá layout (origin = bottom-left corner). 37 points. <em>Fallback.</em></li>
+          <li><code>vaila/models/soccerfield_ref3d_fifa_dataset.csv</code> — <strong>NEW (v0.6.0):</strong> 32 keypoints, <code>idx 0 = top_left_corner</code>, with <code>flip_idx</code>. Matches <code>/home/preto/data/FIFA/dataset_vaila_fifa/unified/keypoints_reference_drawsportsfields.csv</code> and is used by FIFA Labeling Mode.</li>
         </ul>
-        <p>PitchGuide automatically picks the FIFA file if present; otherwise falls back to the standard one.</p>
+        <p>PitchGuide (G key) uses the legacy FIFA / standard CSV; FIFA Labeling Mode (FIFA button or <code>--fifa-dataset</code>) loads the dataset CSV.</p>
+      </section>
+
+      <section id="fifa-labeling">
+        <h2>6c. FIFA Labeling Mode (Expand the FIFA Dataset)</h2>
+        <p>
+          A focused workflow to <strong>append new videos directly to the FIFA dataset</strong>
+          at <code>/home/preto/data/FIFA/dataset_vaila_fifa</code>, ready for retraining the
+          YOLO pitch keypoints model. The on-screen guide shows the FIFA 32-keypoint pitch
+          with <strong><code>idx 0 = top_left_corner</code></strong> through
+          <code>idx 31 = center_circle_right</code>; numbers and order match
+          <code>unified/keypoints_reference_drawsportsfields.csv</code>.
+        </p>
+
+        <div class="feature-box">
+          <h3>Why a separate mode?</h3>
+          <ul>
+            <li>The legacy PitchGuide uses 37 points starting at <code>p1 = bottom_left_corner</code>; the FIFA dataset uses 32 points starting at <code>idx 0 = top_left_corner</code>.</li>
+            <li>The FIFA dataset stores files as <code>images/{train,val,test}</code> + <code>labels/{train,val,test}</code> (different from the default <code>train/images</code> layout), and uses <code>names: { 0: football_pitch }</code>.</li>
+            <li>Each keypoint has a fixed <code>flip_idx</code> for horizontal-flip augmentation — these are loaded from the new reference CSV and written into <code>data.yaml</code> automatically.</li>
+          </ul>
+        </div>
+
+        <h3>Activate (three ways)</h3>
+        <ol>
+          <li>
+            <strong>CLI (recommended):</strong>
+            <div class="code">
+uv run vaila/getpixelvideo.py \<br/>
+&nbsp;&nbsp;-f /path/to/new_video.mp4 \<br/>
+&nbsp;&nbsp;--fifa-dataset /home/preto/data/FIFA/dataset_vaila_fifa/unified
+            </div>
+            Short alias <code>--fifa</code> enables the mode without an existing dataset
+            (F9 will create a fresh <code>pose_dataset_YYYYMMDD_HHMMSS/</code> in the FIFA
+            layout).
+          </li>
+          <li>
+            <strong>GUI button:</strong> click <span class="key">FIFA</span> in the bottom
+            button cluster. The button turns blue, the 32-kp guide loads, PitchGuide is
+            auto-enabled and the class is set to <code>football_pitch</code>. Click
+            <span class="key">Dataset</span> next to point at <code>unified/data.yaml</code>
+            for append.
+          </li>
+          <li>
+            <strong>Mid-session toggle:</strong> click <span class="key">FIFA</span> at any
+            time to switch between the 32-kp dataset reference and the legacy 37-kp guide.
+          </li>
+        </ol>
+
+        <h3>New: FIFA KP button (fixed sparse CSV matrix)</h3>
+        <ul>
+          <li><strong>Only active when FIFA mode is ON.</strong></li>
+          <li><strong>Left-click:</strong> cycle fixed keypoint count <code>N</code> (8, 16, 24, 32, 40, 50, 64).</li>
+          <li><strong>Right-click:</strong> toggle header base between <code>0</code> and <code>1</code>.</li>
+          <li><strong>Middle-click:</strong> increment <code>start</code> to skip initial keypoints in CSV output.</li>
+          <li>Saving markers (<span class="key">S</span> / Save button) writes a fixed matrix and keeps unmarked keypoints as empty cells.</li>
+        </ul>
+
+        <h3>Workflow per video</h3>
+        <ol>
+          <li>The FIFA reference panel shows on the right of the video, with the current keypoint highlighted in yellow.</li>
+          <li>Click the corresponding pixel — the marker is stored at the FIFA index. The guide advances to the next point automatically.</li>
+          <li>Skip occluded points with <span class="key">A</span>, step back with <span class="key">B</span>/<span class="key">Backspace</span>, delete with right-click or <span class="key">DELETE</span>.</li>
+          <li>Navigate frames (<span class="key">Space</span>, <span class="key">←</span>/<span class="key">→</span>, slider). Pick frames with clear pitch geometry.</li>
+          <li>Press <span class="key">F9</span> — new images and labels are appended to <code>unified/{images,labels}/{train,val,test}/</code> with filename prefix <code>&lt;video_stem&gt;_</code>.</li>
+        </ol>
+
+        <h3>Output layout (FIFA dataset)</h3>
+        <div class="code">
+&lt;dataset_dir&gt;/<br/>
+&nbsp;&nbsp;data.yaml          <em># path: &lt;abs&gt;</em><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em># train: images/train</em><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em># val:   images/val</em><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em># test:  images/test</em><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em># kpt_shape: [32, 3]</em><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em># flip_idx:  [24, 25, ..., 31, 30]</em><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<em># names:     { 0: football_pitch }</em><br/>
+&nbsp;&nbsp;images/{train,val,test}/&lt;videoname&gt;_frame_NNNNNN.jpg <em># F9 quick export</em><br/>
+&nbsp;&nbsp;images/{train,val,test}/&lt;videoname&gt;_frame_NNNNNN.png <em># Save ML export</em><br/>
+&nbsp;&nbsp;labels/{train,val,test}/&lt;videoname&gt;_frame_NNNNNN.txt
+        </div>
+
+        <h3>Batch over many new videos</h3>
+        <div class="code">
+for v in /path/to/new_videos/*.mp4; do<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;uv run vaila/getpixelvideo.py -f "$v" \<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--fifa-dataset /home/preto/data/FIFA/dataset_vaila_fifa/unified<br/>
+done
+        </div>
+        <p>Or, in the same session: after F9, press <span class="key">F8</span> to open another video while keeping the dataset target.</p>
+
+        <h3>Train YOLO with the augmented dataset</h3>
+        <div class="code">
+uv run yolo pose train \<br/>
+&nbsp;&nbsp;data=/home/preto/data/FIFA/dataset_vaila_fifa/unified/data.yaml \<br/>
+&nbsp;&nbsp;model=yolo11x-pose.pt imgsz=1280 mosaic=0 erasing=0 epochs=80
+        </div>
+
+        <div class="warning">
+          <strong>Notes &amp; safeguards:</strong>
+          <ul>
+            <li>Both layouts (<code>&lt;dir&gt;/{split}/{images,labels}</code> and <code>&lt;dir&gt;/{images,labels}/{split}</code>) are auto-detected when appending — vailá won't create a wrong subdirectory inside an existing FIFA dataset.</li>
+            <li>If <code>vaila/models/soccerfield_ref3d_fifa_dataset.csv</code> is missing, FIFA Mode is auto-disabled and a status message is shown.</li>
+            <li>The legacy 37-kp guide (<span class="key">G</span> key) remains available for non-dataset projects.</li>
+          </ul>
+        </div>
       </section>
 
       <section id="visualization">
@@ -783,6 +926,25 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset pose_dataset_YYYYMMDD/<br/
           <li><strong>File:</strong> {video_name}_markers.csv</li>
           <li><strong>Location:</strong> Same directory as video file</li>
         </ul>
+
+        <p>
+          In <strong>FIFA mode</strong>, if configured with <strong>FIFA KP</strong>,
+          Save uses a fixed sparse matrix based on <code>N</code>, <code>start</code>,
+          and header base (<code>0</code> or <code>1</code>).
+        </p>
+        <div class="format-example">
+          <strong>Example (FIFA mode, N=8, start=5, base=0):</strong>
+          <div class="code">
+frame,p5_x,p5_y,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_y
+120,,,,1020.4,410.1,1005.8,398.7,,,,,,,,,
+121,,,,1018.6,409.2,1003.5,397.2,,,,,,,,,
+          </div>
+          <strong>Example (same setup, base=1):</strong>
+          <div class="code">
+frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_y,p13_x,p13_y
+120,,,,1020.4,410.1,1005.8,398.7,,,,,,,,,
+          </div>
+        </div>
 
         <h3>1 Line Save</h3>
         <p>Saves sequential markers from 1 Line mode.</p>
@@ -854,6 +1016,29 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset pose_dataset_YYYYMMDD/<br/
             keypoints).
           </li>
           <li><strong>Activation:</strong> Press <strong>F9</strong> when markers exist.</li>
+        </ul>
+
+        <h3>Save ML dataset (PNG split + all_labels) — <span class="key">Ctrl+E</span> or button</h3>
+        <ul>
+          <li>
+            <strong>Export:</strong> Runs split export (<code>train/val/test</code>) using
+            the same base pose flow as F9 and saves frame images as <code>.png</code>.
+          </li>
+          <li>
+            <strong>Split presets:</strong> choose <code>1</code> for classic
+            <code>70/15/15</code>, <code>2</code> for training focus
+            <code>80/10/10</code>, or <code>3</code> for Big Data
+            <code>98/1/1</code>. You can also type custom percentages, for example
+            <code>75,15,10</code>.
+          </li>
+          <li>
+            <strong>Didactic view:</strong> Also writes
+            <code>all_labels/</code> in dataset root with split-prefixed
+            label copies (<code>train_*</code>, <code>val_*</code>, <code>test_*</code>).
+          </li>
+          <li>
+            <strong>Scope:</strong> Works for standard and FIFA labeling workflows.
+          </li>
         </ul>
       </section>
 
@@ -958,6 +1143,13 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset pose_dataset_YYYYMMDD/<br/
             <strong>Auto-backup:</strong> Automatic backups before major
             operations
           </li>
+          <li>
+            <strong>Hidden history:</strong> Backups are stored in
+            <code>.vaila_markers_history/&lt;video_stem&gt;/</code>
+          </li>
+          <li>
+            <strong>Retention:</strong> Keeps only the latest 100 backups per video
+          </li>
         </ul>
       </section>
 
@@ -1010,6 +1202,7 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset pose_dataset_YYYYMMDD/<br/
           <li><span class="key">S</span> - Save markers CSV</li>
           <li><span class="key">H</span> - Help</li>
           <li><span class="key">F9</span> - Export YOLO-pose dataset from markers</li>
+          <li><span class="key">Ctrl+E</span> - Save ML (PNG split + all_labels)</li>
           <li><span class="key">PitchGuide button</span> - Guided soccer field keypoint labeling (37 pts)</li>
         </ul>
       </div>

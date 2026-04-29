@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 114 | **Categories:** 7 | **Generated on:** 22/02/2026
+**Total documented modules:** 122 | **Categories:** 7 | **Generated on:** 28/04/2026
 
 ---
 
@@ -58,6 +58,18 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **tugturn (TUG Analysis)**
   - [📄 HTML](tugturn.html)
   - [📝 Markdown](tugturn.md)
+- **vailasprint (Sprint Analysis)**
+  - [📄 HTML](vailasprint_help.html)
+  - [📝 Markdown](vailasprint_help.md)
+- **soccerfield_keypoints_ai (Field KPs AI)**
+  - [📄 HTML](soccerfield_keypoints_ai.html)
+  - [📝 Markdown](soccerfield_keypoints_ai.md)
+- **soccerfield_calib (Soccer-Field Calib)**
+  - [📄 HTML](soccerfield_calib.html)
+  - [📝 Markdown](soccerfield_calib.md)
+- **startblock (Start Block Analysis)**
+  - [📄 HTML](startblock.html)
+  - [📝 Markdown](startblock.md)
 
 ## Utils (19 modules)
 
@@ -259,6 +271,16 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **videoprocessor**
   - [📄 HTML](videoprocessor.html)
   - [📝 Markdown](videoprocessor.md)
+- **vaila_sam (SAM 3 Video Segmentation)**
+  - [📄 HTML](vaila_sam.html)
+  - [📝 Markdown](vaila_sam.md)
+- **vaila_stroboscopic (Stroboscopic Generator)**
+  - [📄 HTML](vaila_stroboscopic.html)
+  - [📝 Markdown](vaila_stroboscopic.md)
+- **fifa_to_dlt (FIFA cams to DLT)**
+  - [📄 HTML](vaila_sam.html)
+- **fifa_dataset_builder (FIFA Dataset Builder)**
+  - [📄 HTML](fifa_dataset_builder.html)
 
 ## Processing (16 modules)
 

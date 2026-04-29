@@ -2030,7 +2030,10 @@ class SamVideoDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
         self.title("SAM 3 — video segmentation")
-        self.result: tuple[Path, Path, Path | None, str, int, bool, bool, bool, bool] | None = None
+        self.result: (
+            tuple[Path, Path, Path | None, str, int, int | None, int | None, str, bool, bool, bool, bool]
+            | None
+        ) = None
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -2092,6 +2095,25 @@ class SamVideoDialog(tk.Toplevel):
         ttk.Entry(frm, textvariable=self.frame_var, width=12).grid(
             row=5, column=1, sticky="w", pady=4
         )
+        ttk.Label(frm, text="Max frames (VRAM cap; 0=full):").grid(row=6, column=0, sticky="w", pady=4)
+        self.max_frames_var = tk.StringVar(value="")
+        ttk.Entry(frm, textvariable=self.max_frames_var, width=12).grid(
+            row=6, column=1, sticky="w", pady=4
+        )
+        ttk.Label(frm, text="Max input long edge (px):").grid(row=7, column=0, sticky="w", pady=4)
+        self.max_long_edge_var = tk.StringVar(value="")
+        ttk.Entry(frm, textvariable=self.max_long_edge_var, width=12).grid(
+            row=7, column=1, sticky="w", pady=4
+        )
+        ttk.Label(frm, text="Post-process points:").grid(row=8, column=0, sticky="w", pady=4)
+        self.postprocess_var = tk.StringVar(value="none")
+        ttk.Combobox(
+            frm,
+            textvariable=self.postprocess_var,
+            values=("none", "foot", "center", "mask", "all"),
+            width=14,
+            state="readonly",
+        ).grid(row=8, column=1, sticky="w", pady=4)
 
         self.overlay_var = tk.BooleanVar(value=True)
         self.png_var = tk.BooleanVar(value=True)
@@ -2100,24 +2122,24 @@ class SamVideoDialog(tk.Toplevel):
             frm,
             text="Save overlay MP4 (video with colored masks on top of frames)",
             variable=self.overlay_var,
-        ).grid(row=6, column=1, sticky="w")
+        ).grid(row=9, column=1, sticky="w")
         ttk.Checkbutton(frm, text="Save mask PNGs (per object)", variable=self.png_var).grid(
-            row=7, column=1, sticky="w"
+            row=10, column=1, sticky="w"
         )
         ttk.Checkbutton(
             frm,
             text="Fallback: Frame-by-Frame (CUDA only; lower VRAM, slower, no temporal tracking)",
             variable=self.fallback_var,
-        ).grid(row=8, column=1, sticky="w")
+        ).grid(row=11, column=1, sticky="w")
         self.dry_run_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             frm,
             text="Dry-run / smoke (show plan only, do not run SAM3)",
             variable=self.dry_run_var,
-        ).grid(row=9, column=1, sticky="w")
+        ).grid(row=12, column=1, sticky="w")
 
         btns = ttk.Frame(frm)
-        btns.grid(row=10, column=0, columnspan=3, pady=12)
+        btns.grid(row=13, column=0, columnspan=3, pady=12)
         ttk.Button(btns, text="Run", command=self._on_ok).pack(side=tk.LEFT, padx=4)
         ttk.Button(btns, text="Cancel", command=self._on_cancel).pack(side=tk.LEFT, padx=4)
         ttk.Button(
@@ -2199,6 +2221,28 @@ class SamVideoDialog(tk.Toplevel):
         except ValueError:
             messagebox.showerror("Error", "Frame index must be an integer.", parent=self)
             return
+        max_frames: int | None = None
+        max_frames_txt = self.max_frames_var.get().strip()
+        if max_frames_txt:
+            try:
+                max_frames = int(max_frames_txt)
+            except ValueError:
+                messagebox.showerror("Error", "Max frames must be an integer.", parent=self)
+                return
+            if max_frames < 0:
+                messagebox.showerror("Error", "Max frames must be >= 0.", parent=self)
+                return
+        max_long_edge: int | None = None
+        max_long_edge_txt = self.max_long_edge_var.get().strip()
+        if max_long_edge_txt:
+            try:
+                max_long_edge = int(max_long_edge_txt)
+            except ValueError:
+                messagebox.showerror("Error", "Max input long edge must be an integer.", parent=self)
+                return
+            if max_long_edge < 0:
+                messagebox.showerror("Error", "Max input long edge must be >= 0.", parent=self)
+                return
         ck = self.ckpt_var.get().strip()
         ckpt_path: Path | None = Path(ck) if ck else None
         self.result = (
@@ -2207,6 +2251,9 @@ class SamVideoDialog(tk.Toplevel):
             ckpt_path,
             self.prompt_var.get().strip() or "person",
             fi,
+            max_frames,
+            max_long_edge,
+            self.postprocess_var.get().strip() or "none",
             self.overlay_var.get(),
             self.png_var.get(),
             self.fallback_var.get(),
@@ -2394,6 +2441,9 @@ def _run_sam_batch_in_thread(
     save_ov: bool,
     save_png: bool,
     frame_fallback: bool,
+    max_frames: int | None,
+    max_input_long_edge: int | None,
+    postprocess_points: str,
     on_done: Callable[[int, int, list[str], Path], None],
 ) -> None:
     """Background worker for the GUI batch (started from a Thread)."""
@@ -2450,6 +2500,9 @@ def _start_sam_batch_subprocess(
     save_ov: bool,
     save_png: bool,
     frame_fallback: bool,
+    max_frames: int | None,
+    max_input_long_edge: int | None,
+    postprocess_points: str,
     on_done: Callable[[int, int, list[str], Path], None],
 ) -> None:
     """Run SAM3 batch in an isolated child process; reader threads stream stdout.
@@ -2485,6 +2538,12 @@ def _start_sam_batch_subprocess(
     ]
     if ckpt_opt is not None:
         cmd += ["-w", str(ckpt_opt.resolve())]
+    if max_frames is not None:
+        cmd += ["--max-frames", str(max_frames)]
+    if max_input_long_edge is not None:
+        cmd += ["--max-input-long-edge", str(max_input_long_edge)]
+    if postprocess_points and postprocess_points != "none":
+        cmd += ["--postprocess-points", postprocess_points]
     if not save_ov:
         cmd.append("--no-overlay")
     if not save_png:
@@ -2650,6 +2709,9 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         ckpt_opt,
         prompt,
         frame_idx,
+        max_frames,
+        max_input_long_edge,
+        postprocess_points,
         save_ov,
         save_png,
         frame_fallback,
@@ -2676,7 +2738,8 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
             ckpt_opt=ckpt_opt,
             text_prompt=prompt,
             frame_index=frame_idx,
-            max_input_frames=None,
+            max_input_frames=max_frames,
+            max_input_long_edge=max_input_long_edge,
             save_overlay_mp4=save_ov,
             save_mask_png=save_png,
             frame_by_frame_fallback=frame_fallback,
@@ -2738,6 +2801,9 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         save_ov=save_ov,
         save_png=save_png,
         frame_fallback=frame_fallback,
+        max_frames=max_frames,
+        max_input_long_edge=max_input_long_edge,
+        postprocess_points=postprocess_points,
         on_done=_on_done,
     )
 

@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 24 April 2026
-Version: 0.5.0
+Update: 28 April 2026
+Version: 0.6.0
 Python Version: 3.12.13
 
 Description:
@@ -16,6 +16,16 @@ This tool enables marking and saving pixel coordinates in video frames, with
 zoom functionality for precise annotations. The window can now be resized dynamically,
 and all UI elements adjust accordingly. Users can navigate the video frames, mark
 points, and save results in CSV format.
+
+New Features in This Version 0.6.0:
+- FIFA Labeling Mode: dedicated workflow to expand the FIFA dataset at
+  ``/home/preto/data/FIFA/dataset_vaila_fifa``. The on-screen guide shows
+  the FIFA 32-keypoint pitch with idx **0 = top_left_corner**, walking the
+  user through every keypoint. F9 exports in the FIFA dataset layout
+  (``data.yaml`` with ``kpt_shape: [32, 3]``, ``flip_idx`` and
+  ``images/{train,val,test}`` + ``labels/{train,val,test}``) so new videos
+  can be appended directly to the existing ``unified/`` tree.
+  Activate with the **FIFA** button or ``--fifa-dataset DIR`` on the CLI.
 
 New Features in This Version 0.5.0:
 - F9: Export YOLO-pose training dataset from the clicked markers (keypoints).
@@ -34,6 +44,11 @@ How to use:
 3. Mark points in the video frame.
 4. Save the results in CSV format.
 5. Labeling mode to label images in video frames for Machine Learning training.
+6. **FIFA Labeling Mode** to expand
+   ``/home/preto/data/FIFA/dataset_vaila_fifa`` from new videos:
+
+       uv run vaila/getpixelvideo.py -f NEW_VIDEO.mp4 \
+           --fifa-dataset /home/preto/data/FIFA/dataset_vaila_fifa/unified
 
 - GUI: Run without arguments; choose "Open Video/Image File" or "Open Image Sequence (Folder)".
 - CLI: -f FILE for video or single PNG; --sequence DIR for a folder of PNGs.
@@ -44,6 +59,7 @@ How to use:
     CLI:
     python getpixelvideo.py -f FILE
     python getpixelvideo.py --sequence DIR
+    python getpixelvideo.py -f VIDEO --fifa-dataset DATASET_DIR
 
 Help:
 ------------
@@ -58,6 +74,9 @@ Options:
   -k KEYPOINT, --keypoint KEYPOINT  specify the keypoint file to load
   -l, --labeling        label images in video frames for Machine Learning training
   --dataset DIR         set dataset folder (next Save appends; multi-video)
+  --fifa                enable FIFA Labeling Mode (32 kp, idx 0 = top_left_corner)
+  --fifa-dataset DIR    enable FIFA Labeling Mode AND set dataset folder for append
+                        (defaults the class to ``football_pitch``)
   -s, --save            save the results in CSV format
   -p, --persistence     show persistence mode
   -a, --auto            show auto-marking mode
@@ -72,6 +91,7 @@ Key Bindings (Labeling Mode Only - Press 'L' to toggle):
   F8                    Open another video (keep dataset; no need to close app)
   F9                    Export YOLO-pose dataset from clicked markers
                         (pose_dataset_YYYYMMDD_HHMMSS or append if F7 dataset is set)
+  Ctrl+E                Save ML dataset: choose split and export PNG + all_labels
   -v, --version         show version information and exit
 
 License:
@@ -94,6 +114,7 @@ import subprocess
 import sys
 import urllib.request
 from contextlib import redirect_stderr, suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -150,6 +171,43 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+
+# Debug-mode runtime instrumentation (session-scoped NDJSON log)
+@dataclass(frozen=True)
+class _DebugConfig:
+    log_path: str = "/home/preto/data/vaila/.cursor/debug-88633e.log"
+    session_id: str = "88633e"
+
+
+_DEBUG_CFG = _DebugConfig()
+
+
+def _agent_debug_log(
+    *,
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict[str, Any] | None = None,
+    run_id: str = "post-fix",
+) -> None:
+    """Append one NDJSON debug line for runtime evidence collection."""
+    payload = {
+        "sessionId": _DEBUG_CFG.session_id,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data or {},
+        "timestamp": int(datetime.now().timestamp() * 1000),
+    }
+    try:
+        with open(_DEBUG_CFG.log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except OSError:
+        # Never break UI flow due to debug logging.
+        pass
+
+
 # Optional import for TOML support (Python 3.11+)
 try:
     import tomllib
@@ -158,6 +216,20 @@ try:
 except ImportError:
     TOML_AVAILABLE = False
     print("Warning: tomllib not found. TOML configuration features will be disabled.")
+
+# Numpad keys are not contiguous in pygame/SDL; map explicitly for input dialogs.
+_PYGAME_KP_DIGIT: dict[int, str] = {
+    pygame.K_KP0: "0",
+    pygame.K_KP1: "1",
+    pygame.K_KP2: "2",
+    pygame.K_KP3: "3",
+    pygame.K_KP4: "4",
+    pygame.K_KP5: "5",
+    pygame.K_KP6: "6",
+    pygame.K_KP7: "7",
+    pygame.K_KP8: "8",
+    pygame.K_KP9: "9",
+}
 
 # Removed native_file_dialog imports - now using Tkinter directly for all dialogs
 
@@ -1354,6 +1426,7 @@ def play_video_with_controls(
     initial_labeling_mode=None,
     frame_source=None,
     metadata=None,
+    initial_fifa_mode=False,
 ):
     if frame_source is not None:
         cap = frame_source
@@ -1427,7 +1500,10 @@ def play_video_with_controls(
     )
     window_width = min(original_width, screen_width - 100)
     window_height = min(original_height, screen_height - 150)
-    screen = pygame.display.set_mode((window_width, window_height + 80), pygame.RESIZABLE)
+    control_panel_height = 120
+    screen = pygame.display.set_mode(
+        (window_width, window_height + control_panel_height), pygame.RESIZABLE
+    )
     pygame.display.set_caption("Video Player with Controls")
     clock = pygame.time.Clock()
 
@@ -1480,6 +1556,7 @@ def play_video_with_controls(
         if initial_dataset_dir and os.path.isdir(initial_dataset_dir)
         else None
     )  # When set, Save (F5) appends to this dataset (multi-video)
+    marker_history_dir_override = None  # Optional backup history root from TOML
 
     # When opening with a dataset (e.g. after F8 switch or --dataset), auto-load project for this video
     switch_to_video = None  # If set, exit and run_getpixelvideo will reopen with this path
@@ -1489,24 +1566,45 @@ def play_video_with_controls(
     click_pass_mode = False
 
     # -----------------------------------------------------------------------
-    # Feature: Pitch Guide Mode
-    # Guides the user through labeling all soccer-field keypoints in order.
+    # Pitch Guide (visual only): field overlay + reference image. Same clicks
+    # and FIFA/TAB/Go KP logic as when the guide is off.
     # -----------------------------------------------------------------------
-    pitch_guide_mode = False  # Whether guide mode is active
-    pitch_guide_points: list[dict] = []  # List of {point_name, point_number, x, y, z} dicts
-    pitch_guide_index = 0  # Index of the current point to mark
+    pitch_guide_mode = False
+    pitch_guide_points: list[dict] = []  # {point_name, point_number, x, y, z}
     pitch_guide_source = ""
-    pitch_guide_done_by_frame: dict[int, set[int]] = {}
     pitch_guide_show_reference = True
+    # FIFA dataset mode (32 kp, 0-based, top_left_corner = idx 0).
+    # Activated via --fifa-dataset CLI flag or "FIFA" GUI button.
+    pitch_guide_fifa_mode = bool(initial_fifa_mode)
+    pitch_guide_flip_idx: list[int] = []  # FIFA flip_idx (length matches points)
+    fifa_fixed_keypoints = 31 if pitch_guide_fifa_mode else None
+    fifa_start_keypoint = 0
+    fifa_index_base = 0 if pitch_guide_fifa_mode else 1
+    if pitch_guide_fifa_mode:
+        current_label = "football_pitch"
 
-    def _load_pitch_guide_points() -> tuple[list[dict], str]:
-        """Load point names from the closest soccerfield_ref3d CSV."""
+    def _load_pitch_guide_points(prefer_fifa_dataset: bool = False) -> tuple[list[dict], str]:
+        """Load FIFA pitch-guide point names from the closest soccerfield_ref3d CSV.
+
+        When ``prefer_fifa_dataset`` is True, the loader prefers the FIFA-dataset
+        layout CSV (``soccerfield_ref3d_fifa_dataset.csv``) which has 32 keypoints
+        starting at ``point_number = 0`` (``top_left_corner``) and matches the
+        layout of ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``.
+        """
         import pandas as _pd
 
-        candidates = [
+        nonlocal pitch_guide_flip_idx
+
+        fifa_dataset_csv = Path(__file__).parent / "models" / "soccerfield_ref3d_fifa_dataset.csv"
+        legacy_candidates = [
             Path(__file__).parent / "models" / "soccerfield_ref3d_fifa.csv",
             Path(__file__).parent / "models" / "soccerfield_ref3d.csv",
         ]
+        if prefer_fifa_dataset:
+            candidates = [fifa_dataset_csv, *legacy_candidates]
+        else:
+            candidates = [*legacy_candidates, fifa_dataset_csv]
+
         for _p in candidates:
             if _p.exists():
                 try:
@@ -1514,6 +1612,8 @@ def play_video_with_controls(
                     required_cols = {"point_name", "point_number"}
                     if required_cols.issubset(_df.columns):
                         points = []
+                        flip_list: list[int] = []
+                        has_flip = "flip_idx" in _df.columns
                         for _, row in _df.iterrows():
                             points.append(
                                 {
@@ -1524,120 +1624,30 @@ def play_video_with_controls(
                                     "z": float(row["z"]) if "z" in _df.columns else None,
                                 }
                             )
+                            if has_flip:
+                                with suppress(Exception):
+                                    flip_list.append(int(row["flip_idx"]))
+                        if has_flip and len(flip_list) == len(points):
+                            pitch_guide_flip_idx = flip_list
+                        else:
+                            pitch_guide_flip_idx = []
                         return points, str(_p)
                 except Exception:
                     pass
+        pitch_guide_flip_idx = []
         return [], ""
 
-    def _pitch_guide_next_index(frame_idx: int) -> int:
-        """Return the next unhandled FIFA field point for the specified frame."""
-        if coordinates is None:
-            return 0
-        done = pitch_guide_done_by_frame.get(frame_idx, set())
-        pts = coordinates.get(frame_idx, [])
-        for idx in range(len(pitch_guide_points)):
-            if idx in done:
-                continue
-            if idx >= len(pts):
-                return idx
-            x_val, y_val = pts[idx]
-            if x_val is None or y_val is None:
-                return idx
-        return len(pitch_guide_points)
-
     def _pitch_guide_status_message(prefix: str = "") -> str:
-        """Build a concise status line for Pitch Guide feedback."""
+        """Status line for Pitch Guide (visual only — follows selected marker)."""
         total = len(pitch_guide_points)
         if not total:
             return "Pitch Guide: no field reference CSV found in models/"
-        if pitch_guide_index >= total:
-            return f"{prefix}All {total} pitch points handled. Press S/Save or F9."
-        point = pitch_guide_points[pitch_guide_index]
-        base = (
-            f"{prefix}Point {point['point_number']}/{total}: "
-            f"{point['point_name']} ({total - pitch_guide_index} left)"
-        )
-        return base.strip()
-
-    def _pitch_guide_set_point(video_x: float | None, video_y: float | None, skipped=False) -> None:
-        """Store the current guide point at its FIFA index and advance."""
-        nonlocal pitch_guide_index, pitch_guide_mode, selected_marker_idx
-        nonlocal save_message_text, showing_save_message, save_message_timer
-
-        if not pitch_guide_points or pitch_guide_index >= len(pitch_guide_points):
-            pitch_guide_mode = False
-            return
-
-        point_idx = pitch_guide_index
-        if coordinates is None:
-            return
-        frame_points = coordinates[frame_count]
-        while len(frame_points) <= point_idx:
-            frame_points.append((None, None))
-
-        frame_points[point_idx] = (video_x, video_y)
-        deleted_positions[frame_count].discard(point_idx)
-        pitch_guide_done_by_frame.setdefault(frame_count, set()).add(point_idx)
-        selected_marker_idx = point_idx
-
-        current_point = pitch_guide_points[point_idx]
-        pitch_guide_index += 1
-
-        if pitch_guide_index >= len(pitch_guide_points):
-            pitch_guide_mode = False
-            action = "Skipped" if skipped else "Marked"
-            save_message_text = (
-                f"{action} '{current_point['point_name']}'. All pitch points handled. "
-                "Press S/Save or F9."
-            )
-        else:
-            action = "Skipped" if skipped else "Marked"
-            save_message_text = _pitch_guide_status_message(
-                f"{action} '{current_point['point_name']}'. Next: "
-            )
-
-        showing_save_message = True
-        save_message_timer = 90
-
-    def _pitch_guide_step_back() -> None:
-        """Move the guide cursor back one point without deleting the marker."""
-        nonlocal pitch_guide_index, selected_marker_idx
-        nonlocal save_message_text, showing_save_message, save_message_timer
-
-        if not pitch_guide_points:
-            return
-        pitch_guide_index = max(0, pitch_guide_index - 1)
-        pitch_guide_done_by_frame.setdefault(frame_count, set()).discard(pitch_guide_index)
-        selected_marker_idx = pitch_guide_index
-        save_message_text = _pitch_guide_status_message("Back to: ")
-        showing_save_message = True
-        save_message_timer = 90
-
-    def _pitch_guide_delete_selected_point() -> None:
-        """Delete the selected/current guide point and position the guide there."""
-        nonlocal pitch_guide_index, selected_marker_idx
-        nonlocal save_message_text, showing_save_message, save_message_timer
-
-        if not pitch_guide_points or coordinates is None:
-            return
-        if 0 <= selected_marker_idx < len(pitch_guide_points):
-            target_idx = selected_marker_idx
-        else:
-            target_idx = max(0, min(pitch_guide_index - 1, len(pitch_guide_points) - 1))
-
-        while len(coordinates[frame_count]) <= target_idx:
-            coordinates[frame_count].append((None, None))
-        coordinates[frame_count][target_idx] = (None, None)
-        deleted_positions[frame_count].discard(target_idx)
-        pitch_guide_done_by_frame.setdefault(frame_count, set()).discard(target_idx)
-        pitch_guide_index = target_idx
-        selected_marker_idx = target_idx
-        point = pitch_guide_points[target_idx]
-        save_message_text = (
-            f"Deleted p{point['point_number']} '{point['point_name']}'. Mark it again."
-        )
-        showing_save_message = True
-        save_message_timer = 90
+        idx = selected_marker_idx if 0 <= selected_marker_idx < total else 0
+        point = pitch_guide_points[idx]
+        return (
+            f"{prefix}Field hint: p{point['point_number']} {point['point_name']} "
+            f"(TAB / Ctrl+G; same clicks as guide off)"
+        ).strip()
 
     def _pitch_guide_reference_surface(current_idx: int | None = None) -> pygame.Surface | None:
         """Build a FIFA pitch reference image for the Pygame guide overlay."""
@@ -1769,6 +1779,140 @@ def play_video_with_controls(
         pygame.draw.rect(surface, (230, 230, 230), surface.get_rect(), 2)
         return surface
 
+    def _pitch_guide_reference_surface_fifa(
+        current_idx: int | None = None,
+    ) -> pygame.Surface | None:
+        """FIFA-dataset pitch reference (32 keypoints, idx 0..31, top_left_corner=0).
+
+        Used when ``pitch_guide_fifa_mode`` is True. Field is drawn from the FIFA
+        dataset point names (top_left_corner / midfield_top / center_circle_*,
+        left_pen_box_*_outer / inner, etc.). Indexing matches the ``unified/``
+        layout of ``/home/preto/data/FIFA/dataset_vaila_fifa``.
+        """
+        if not pitch_guide_points:
+            return None
+        point_by_name = {
+            p["point_name"]: p
+            for p in pitch_guide_points
+            if p.get("x") is not None and p.get("y") is not None
+        }
+        if not point_by_name:
+            return None
+
+        width, height = 540, 360
+        margin_x, margin_y = 28, 38
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        surface.fill((14, 74, 35, 238))
+
+        all_pts = list(point_by_name.values())
+        min_x = min(p["x"] for p in all_pts)
+        max_x = max(p["x"] for p in all_pts)
+        min_y = min(p["y"] for p in all_pts)
+        max_y = max(p["y"] for p in all_pts)
+        span_x = max(max_x - min_x, 1.0)
+        span_y = max(max_y - min_y, 1.0)
+
+        def map_xy(point):
+            px = margin_x + int(((point["x"] - min_x) / span_x) * (width - 2 * margin_x))
+            py = height - margin_y - int(((point["y"] - min_y) / span_y) * (height - 2 * margin_y))
+            return px, py
+
+        def has(*names):
+            return all(n in point_by_name for n in names)
+
+        def line(name_a, name_b, w=2):
+            if has(name_a, name_b):
+                pygame.draw.line(
+                    surface,
+                    (245, 245, 245),
+                    map_xy(point_by_name[name_a]),
+                    map_xy(point_by_name[name_b]),
+                    w,
+                )
+
+        def rect_from_two(name_a, name_b, w=2):
+            if not has(name_a, name_b):
+                return
+            x1, y1 = map_xy(point_by_name[name_a])
+            x2, y2 = map_xy(point_by_name[name_b])
+            r = pygame.Rect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+            pygame.draw.rect(surface, (245, 245, 245), r, w)
+
+        # Outer pitch
+        rect_from_two("bottom_left_corner", "top_right_corner", 3)
+        # Midfield line (top->bottom across the field width)
+        line("midfield_top", "midfield_bottom", 2)
+        # Penalty boxes (outer corners <-> inner-side corners at penalty-area depth)
+        rect_from_two("left_pen_box_top_outer", "left_pen_box_bottom_inner", 2)
+        rect_from_two("right_pen_box_top_outer", "right_pen_box_bottom_inner", 2)
+        # Goal areas (outer at goal line <-> inner at goal-area depth)
+        rect_from_two("left_goal_area_top_outer", "left_goal_area_bottom_inner", 2)
+        rect_from_two("right_goal_area_top_outer", "right_goal_area_bottom_inner", 2)
+        # Center circle from 4 cardinal points
+        if all(
+            n in point_by_name
+            for n in (
+                "center_circle_top",
+                "center_circle_bottom",
+                "center_circle_left",
+                "center_circle_right",
+            )
+        ):
+            cx_real = (
+                point_by_name["center_circle_left"]["x"] + point_by_name["center_circle_right"]["x"]
+            ) / 2.0
+            cy_real = (
+                point_by_name["center_circle_top"]["y"] + point_by_name["center_circle_bottom"]["y"]
+            ) / 2.0
+            center_px = map_xy({"x": cx_real, "y": cy_real})
+            radius_m = (
+                point_by_name["center_circle_top"]["y"] - point_by_name["center_circle_bottom"]["y"]
+            ) / 2.0
+            radius_px = max(2, int((radius_m / span_y) * (height - 2 * margin_y)))
+            pygame.draw.circle(surface, (245, 245, 245), center_px, radius_px, 2)
+            pygame.draw.circle(surface, (245, 245, 245), center_px, 3)
+        # Penalty spots
+        for name in ("left_penalty_spot", "right_penalty_spot"):
+            if name in point_by_name:
+                pygame.draw.circle(surface, (245, 245, 245), map_xy(point_by_name[name]), 3)
+
+        # Title and points
+        small_font = pygame.font.SysFont("verdana", 10, bold=True)
+        title_font = pygame.font.SysFont("verdana", 12, bold=True)
+        title = title_font.render(
+            "FIFA Dataset Reference (32 kp, 0..31, idx 0 = top_left_corner)",
+            True,
+            (255, 255, 255),
+        )
+        surface.blit(title, (10, 8))
+
+        for idx, point in enumerate(pitch_guide_points):
+            if point["x"] is None or point["y"] is None:
+                continue
+            px, py = map_xy(point)
+            is_current = idx == current_idx
+            radius = 7 if is_current else 4
+            fill = (255, 225, 35) if is_current else (255, 255, 255)
+            pygame.draw.circle(surface, (0, 0, 0), (px, py), radius + 1)
+            pygame.draw.circle(surface, fill, (px, py), radius)
+            label = small_font.render(str(point["point_number"]), True, (0, 0, 0))
+            surface.blit(label, (px + 7, py - 8))
+
+        if current_idx is not None and 0 <= current_idx < len(pitch_guide_points):
+            current = pitch_guide_points[current_idx]
+            caption = f"Current: p{current['point_number']} {current['point_name']}"
+            caption_surface = title_font.render(caption, True, (255, 230, 60))
+            surface.blit(caption_surface, (10, height - 24))
+
+        pygame.draw.rect(surface, (230, 230, 230), surface.get_rect(), 2)
+        return surface
+
+    # Auto-enable Pitch Guide in FIFA mode (CLI --fifa-dataset / GUI button).
+    if pitch_guide_fifa_mode:
+        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(prefer_fifa_dataset=True)
+        if pitch_guide_points:
+            pitch_guide_mode = True
+
     # Feature: Playback Speed
     playback_speed = 1.0  # 1.0 = Normal, 0.5 = Half speed, 2.0 = Double speed
 
@@ -1864,9 +2008,12 @@ def play_video_with_controls(
                             # Draw marker circle (green in BGR)
                             cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
                             # Draw marker number
+                            display_idx = idx + 1
+                            if pitch_guide_fifa_mode:
+                                display_idx = idx + fifa_index_base
                             cv2.putText(
                                 frame,
-                                str(idx + 1),
+                                str(display_idx),
                                 (int(x) + 8, int(y) - 8),
                                 cv2.FONT_HERSHEY_SIMPLEX,
                                 0.5,
@@ -1885,9 +2032,12 @@ def play_video_with_controls(
                                 # Draw marker circle (green in BGR)
                                 cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
                                 # Draw marker number
+                                display_idx = idx + 1
+                                if pitch_guide_fifa_mode:
+                                    display_idx = idx + fifa_index_base
                                 cv2.putText(
                                     frame,
-                                    str(idx + 1),
+                                    str(display_idx),
                                     (int(x) + 8, int(y) - 8),
                                     cv2.FONT_HERSHEY_SIMPLEX,
                                     0.5,
@@ -2153,7 +2303,7 @@ def play_video_with_controls(
             csv_path = pygame_file_dialog(
                 initial_dir=initial_dir,
                 file_extensions=[".csv"],
-                restore_size=(window_width, window_height + 80),
+                restore_size=(window_width, window_height + control_panel_height),
             )
         else:
             # Use Tkinter on Windows/Mac
@@ -2560,7 +2710,7 @@ def play_video_with_controls(
           - "1 line" (toggle one-line marker mode)
           - "Persist" (toggle point persistence)
         """
-        control_surface_height = 80
+        control_surface_height = control_panel_height
         control_surface = pygame.Surface((window_width, control_surface_height))
         control_surface.fill((30, 30, 30))
         # Use Verdana for better legibility (l vs I)
@@ -2601,7 +2751,7 @@ def play_video_with_controls(
         )
 
         info_x = slider_margin_left
-        control_surface.blit(frame_info, (info_x, slider_y - 25))
+        control_surface.blit(frame_info, (info_x, slider_y - 22))
         info_x += frame_info.get_width() + 25
 
         # Draw marker navigation and persistence info
@@ -2613,16 +2763,23 @@ def play_video_with_controls(
 
         if total_markers > 0:
             marker_idx = selected_marker_idx + 1 if selected_marker_idx >= 0 else 0
+            if pitch_guide_fifa_mode and selected_marker_idx >= 0:
+                marker_idx = selected_marker_idx + fifa_index_base
             marker_info = font.render(
                 f"Marker: {marker_idx}/{total_markers}", True, (255, 255, 255)
             )
-            control_surface.blit(marker_info, (info_x, slider_y - 25))
+            control_surface.blit(marker_info, (info_x, slider_y - 22))
             info_x += marker_info.get_width() + 25
+        goto_marker_button_rect = pygame.Rect(info_x, slider_y - 24, 64, 18)
+        pygame.draw.rect(control_surface, (90, 90, 120), goto_marker_button_rect)
+        goto_text = font.render("Go KP", True, (255, 255, 255))
+        control_surface.blit(goto_text, goto_text.get_rect(center=goto_marker_button_rect.center))
+        info_x += goto_marker_button_rect.width + 10
 
         # Draw auto-marking indicator if enabled
         if auto_marking_mode:
             auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
-            control_surface.blit(auto_indicator, (info_x, slider_y - 25))
+            control_surface.blit(auto_indicator, (info_x, slider_y - 22))
             info_x += auto_indicator.get_width() + 25
 
         # We save info_x so it can be picked up by labeling text further down
@@ -2638,32 +2795,48 @@ def play_video_with_controls(
         click_pass_button_width = 70
         labeling_button_width = 70
         pitch_guide_button_width = 90  # NEW: Pitch Guide button
+        fifa_button_width = 60  # NEW: FIFA-dataset labeling toggle
         tracking_csv_button_width = 120
         export_video_button_width = 100
+        save_dataset_button_width = 100
         help_web_button_width = 30  # Width for '?' button
-        total_buttons_width = (
-            (button_width * 3)
+        total_top_width = (
+            button_width
             + persist_button_width
             + seq_button_width
             + auto_button_width
             + click_pass_button_width
             + labeling_button_width
             + pitch_guide_button_width
-            + tracking_csv_button_width
-            + export_video_button_width
-            + help_web_button_width
-            + (button_gap * 10)
+            + fifa_button_width
+            + (button_gap * 8)
         )
-        cluster_x = (window_width - total_buttons_width) // 2
-        cluster_y = slider_y - button_height - 5
+        show_tracking_indicator_size = 12
+        total_bottom_width = (
+            tracking_csv_button_width
+            + 5
+            + show_tracking_indicator_size
+            + button_width
+            + button_width
+            + button_width
+            + button_width
+            + export_video_button_width
+            + save_dataset_button_width
+            + help_web_button_width
+            + (button_gap * 8)
+        )
+        row_start_top = max(window_width // 2, window_width - 10 - total_top_width)
+        row_start_bottom = max(window_width // 2, window_width - 10 - total_bottom_width)
+        cluster_y_top = 8
+        cluster_y_bottom = cluster_y_top + button_height + 6
 
         # Helper to advance x position
-        current_x = cluster_x
+        current_x = row_start_top
 
         # 1. "1 Line" mode toggle button.
         one_line_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_top,
             button_width,
             button_height,
         )
@@ -2679,7 +2852,7 @@ def play_video_with_controls(
         # 2. "Persist" mode toggle button.
         persist_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_top,
             persist_button_width,
             button_height,
         )
@@ -2697,7 +2870,7 @@ def play_video_with_controls(
         # 3. Sequential mode button
         seq_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_top,
             seq_button_width,
             button_height,
         )
@@ -2711,7 +2884,7 @@ def play_video_with_controls(
         # 4. Auto-marking mode button
         auto_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_top,
             auto_button_width,
             button_height,
         )
@@ -2725,7 +2898,7 @@ def play_video_with_controls(
         # 5. ClickPass mode button
         click_pass_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_top,
             click_pass_button_width,
             button_height,
         )
@@ -2743,7 +2916,7 @@ def play_video_with_controls(
         # 7. Labeling mode button
         labeling_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_top,
             labeling_button_width,
             button_height,
         )
@@ -2759,7 +2932,7 @@ def play_video_with_controls(
         # 7b. Pitch Guide button (NEW)
         pitch_guide_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_top,
             pitch_guide_button_width,
             button_height,
         )
@@ -2773,10 +2946,26 @@ def play_video_with_controls(
         _pg_text = font.render(_pg_label, True, (255, 255, 255))
         control_surface.blit(_pg_text, _pg_text.get_rect(center=pitch_guide_button_rect.center))
 
+        # 7c. FIFA dataset labeling button (toggles 32 kp / FIFA layout for F9 export).
+        fifa_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_top,
+            fifa_button_width,
+            button_height,
+        )
+        current_x += fifa_button_width + button_gap
+        _fifa_color = (50, 100, 220) if pitch_guide_fifa_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, _fifa_color, fifa_button_rect)
+        _fifa_text = font.render(
+            "FIFA ON" if pitch_guide_fifa_mode else "FIFA", True, (255, 255, 255)
+        )
+        control_surface.blit(_fifa_text, _fifa_text.get_rect(center=fifa_button_rect.center))
+
+        current_x = row_start_bottom
         tracking_csv_button_width = 120
         tracking_csv_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_bottom,
             tracking_csv_button_width,
             button_height,
         )
@@ -2790,7 +2979,6 @@ def play_video_with_controls(
         )
 
         # 8. Show Tracking checkbox indicator (small square next to button)
-        show_tracking_indicator_size = 12
         show_tracking_indicator_rect = pygame.Rect(
             tracking_csv_button_rect.right + 5,
             tracking_csv_button_rect.centery - show_tracking_indicator_size // 2,
@@ -2808,7 +2996,7 @@ def play_video_with_controls(
             pygame.draw.rect(control_surface, (150, 150, 150), show_tracking_indicator_rect, 1)
 
         # 9. Load button (Moved here)
-        load_button_rect = pygame.Rect(current_x, cluster_y, button_width, button_height)
+        load_button_rect = pygame.Rect(current_x, cluster_y_bottom, button_width, button_height)
         current_x += button_width + button_gap
 
         pygame.draw.rect(control_surface, (100, 100, 100), load_button_rect)
@@ -2818,7 +3006,7 @@ def play_video_with_controls(
         # 10. Save button (Moved here)
         save_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_bottom,
             button_width,
             button_height,
         )
@@ -2831,7 +3019,7 @@ def play_video_with_controls(
         # 10b. Dataset button (Load dataset folder; next Save appends - multi-video)
         dataset_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_bottom,
             button_width,
             button_height,
         )
@@ -2843,7 +3031,7 @@ def play_video_with_controls(
         # 11. Help button (Moved here)
         help_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_bottom,
             button_width,
             button_height,
         )
@@ -2856,7 +3044,7 @@ def play_video_with_controls(
         # 12. Export Video button
         export_video_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_bottom,
             export_video_button_width,
             button_height,
         )
@@ -2870,9 +3058,23 @@ def play_video_with_controls(
         )
 
         # 13. Help Web button ('?')
+        save_dataset_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_bottom,
+            save_dataset_button_width,
+            button_height,
+        )
+        current_x += save_dataset_button_width + button_gap
+        pygame.draw.rect(control_surface, (80, 140, 80), save_dataset_button_rect)
+        save_dataset_text = font.render("Save ML", True, (255, 255, 255))
+        control_surface.blit(
+            save_dataset_text, save_dataset_text.get_rect(center=save_dataset_button_rect.center)
+        )
+
+        # 14. Help Web button ('?')
         help_web_button_rect = pygame.Rect(
             current_x,
-            cluster_y,
+            cluster_y_bottom,
             help_web_button_width,
             button_height,
         )
@@ -2887,7 +3089,7 @@ def play_video_with_controls(
         # Display current class label when in labeling mode
         if labeling_mode:
             class_info = font.render(f"Class: {current_label}", True, (255, 255, 0))
-            control_surface.blit(class_info, (_global_info_x, slider_y - 25))
+            control_surface.blit(class_info, (_global_info_x, slider_y - 22))
             _global_info_x += class_info.get_width() + 25
 
         # Display tracking info when CSV is loaded
@@ -2895,11 +3097,19 @@ def play_video_with_controls(
             tracking_info = font.render(
                 f"Tracking: {len(tracking_data)} frames", True, (150, 255, 150)
             )
-            control_surface.blit(tracking_info, (slider_margin_left, slider_y - 45))
+            control_surface.blit(tracking_info, (slider_margin_left, slider_y - 42))
 
         # Display Speed Info
         speed_text = font.render(f"Speed: {playback_speed}X", True, (255, 255, 255))
-        control_surface.blit(speed_text, (window_width - 100, slider_y - 45))
+        control_surface.blit(speed_text, (window_width - 100, slider_y - 42))
+        if pitch_guide_fifa_mode:
+            _nkp = fifa_fixed_keypoints if fifa_fixed_keypoints is not None else "auto"
+            _fifa_cfg = font.render(
+                f"FIFA CSV: N={_nkp} start={fifa_start_keypoint} base={fifa_index_base}",
+                True,
+                (120, 220, 255),
+            )
+            control_surface.blit(_fifa_cfg, (slider_margin_left, slider_y - 60))
 
         screen.blit(control_surface, (0, window_height))
         return (
@@ -2913,16 +3123,303 @@ def play_video_with_controls(
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             pitch_guide_button_rect,  # Add PitchGuide button to return
+            fifa_button_rect,  # Add FIFA-mode button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
+            save_dataset_button_rect,  # Export PNG ML dataset + all_labels
             help_web_button_rect,  # Add help web button to return
             dataset_button_rect,  # Load dataset folder (multi-video)
+            goto_marker_button_rect,  # Jump to marker index
             slider_margin_left,
             slider_y,
             slider_width,
             slider_height,
         )
+
+    def _write_fifa_csv_template(
+        csv_path: str,
+        *,
+        n_keypoints: int,
+        start_idx: int,
+        base_idx: int,
+    ) -> None:
+        """Create an empty fixed FIFA keypoint CSV template."""
+        n_keypoints = max(1, int(n_keypoints))
+        start_idx = max(0, int(start_idx))
+        base_idx = 0 if int(base_idx) == 0 else 1
+        cols = ["frame"]
+        for i in range(n_keypoints):
+            kp_idx = start_idx + i + base_idx
+            cols.extend([f"p{kp_idx}_x", f"p{kp_idx}_y"])
+        df = pd.DataFrame(np.nan, index=range(total_frames), columns=cols)
+        df["frame"] = df.index
+        df.to_csv(csv_path, index=False, na_rep="")
+
+    def _write_fifa_dataset_template(
+        dataset_dir: str,
+        *,
+        n_keypoints: int,
+    ) -> None:
+        """Create FIFA dataset directory scaffold for future labeling."""
+        dataset_dir = os.path.abspath(dataset_dir)
+        for split in ("train", "val", "test"):
+            os.makedirs(os.path.join(dataset_dir, "images", split), exist_ok=True)
+            os.makedirs(os.path.join(dataset_dir, "labels", split), exist_ok=True)
+        yaml_path = os.path.join(dataset_dir, "data.yaml")
+        if not os.path.exists(yaml_path):
+            yaml_content = (
+                "# YOLO pose dataset - generated by vaila getpixelvideo (FIFA template)\n"
+                f"path: {dataset_dir.replace(os.sep, '/')}\n"
+                "train: images/train\n"
+                "val: images/val\n"
+                "test: images/test\n"
+                f"kpt_shape: [{max(1, int(n_keypoints))}, 3]\n"
+                "names: {0: football_pitch}\n"
+            )
+            with open(yaml_path, "w", encoding="utf-8") as f:
+                f.write(yaml_content)
+
+    def _export_all_labels_view(dataset_dir: str) -> tuple[bool, str]:
+        """Create a didactic all_labels view from train/val/test labels."""
+        layout = _detect_dataset_layout(dataset_dir)
+        out_dir = os.path.join(dataset_dir, "all_labels")
+        os.makedirs(out_dir, exist_ok=True)
+        copied = 0
+        for split in ("train", "val", "test"):
+            _, labels_dir = _split_paths(dataset_dir, split, layout)
+            if not os.path.isdir(labels_dir):
+                continue
+            for name in os.listdir(labels_dir):
+                if not name.lower().endswith(".txt"):
+                    continue
+                src = os.path.join(labels_dir, name)
+                dst = os.path.join(out_dir, f"{split}_{name}")
+                try:
+                    shutil.copy2(src, dst)
+                    copied += 1
+                except Exception:
+                    continue
+        if copied == 0:
+            return False, "No label files found to build all_labels."
+        return True, f"all_labels ready: {out_dir} ({copied} files)"
+
+    def _save_fifa_template_toml(path: str) -> str:
+        """Write a starter TOML config for FIFA template generation."""
+        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        csv_default = os.path.join(os.path.dirname(video_path), f"{base_name}_fifa_template.csv")
+        dataset_default = (
+            current_dataset_dir
+            if current_dataset_dir
+            else os.path.join(os.path.dirname(video_path), "fifa_dataset_template")
+        )
+        history_default = os.path.join(os.path.dirname(video_path), ".vaila_markers_history")
+        text = (
+            "# FIFA template config for getpixelvideo.py\n"
+            "# Load this file with FIFA button or key K.\n\n"
+            "[fifa_template]\n"
+            f"n_keypoints = {int(fifa_fixed_keypoints if fifa_fixed_keypoints else 31)}\n"
+            f"start_keypoint = {int(fifa_start_keypoint)}\n"
+            f"base_index = {int(fifa_index_base)}  # 0 or 1\n"
+            f'csv_output = "{csv_default}"\n'
+            "create_dataset_scaffold = true\n"
+            f'dataset_dir = "{dataset_default}"\n'
+            "activate_fifa_mode = true\n"
+            "reset_session_markers = true\n"
+            f'marker_history_dir = "{history_default}"\n'
+            "# Optional restore note: use marker_history_dir/<video_stem>/ backups\n"
+        )
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def _seed_fifa_template_from_tests(path: str) -> bool:
+        """Seed per-video TOML from tests/sport_fields example if available."""
+        seed_path = (
+            Path(__file__).resolve().parents[1] / "tests" / "sport_fields" / "fifa_template.toml"
+        )
+        if not seed_path.exists():
+            return False
+        try:
+            base_name = os.path.splitext(os.path.basename(video_path))[0]
+            video_dir = os.path.dirname(video_path)
+            text = seed_path.read_text(encoding="utf-8")
+            text = text.replace("__VIDEO_DIR__", video_dir.replace(os.sep, "/"))
+            text = text.replace("__VIDEO_STEM__", base_name)
+            Path(path).write_text(text, encoding="utf-8")
+            return True
+        except Exception:
+            return False
+
+    def _apply_fifa_toml_config(path: str) -> tuple[bool, str]:
+        """Load TOML config, generate template CSV, and optionally dataset scaffold."""
+        nonlocal fifa_fixed_keypoints, fifa_start_keypoint, fifa_index_base
+        nonlocal pitch_guide_fifa_mode, current_label
+        nonlocal coordinates, deleted_positions, selected_marker_idx, marker_history_dir_override
+        if not TOML_AVAILABLE:
+            return False, "TOML not available (tomllib missing)."
+        try:
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
+            cfg = data.get("fifa_template", {})
+            n_val = int(cfg.get("n_keypoints", 31))
+            s_val = int(cfg.get("start_keypoint", 0))
+            b_val = int(cfg.get("base_index", 0))
+            csv_out = str(cfg.get("csv_output", "")).strip()
+            mk_ds = bool(cfg.get("create_dataset_scaffold", True))
+            ds = str(cfg.get("dataset_dir", "")).strip()
+            activate_fifa = bool(cfg.get("activate_fifa_mode", True))
+            reset_session = bool(cfg.get("reset_session_markers", True))
+            history_dir_cfg = str(cfg.get("marker_history_dir", "")).strip()
+            if n_val <= 0:
+                return False, "Invalid n_keypoints in TOML (must be > 0)."
+            if s_val < 0:
+                return False, "Invalid start_keypoint in TOML (must be >= 0)."
+            if b_val not in (0, 1):
+                return False, "Invalid base_index in TOML (must be 0 or 1)."
+            if not csv_out:
+                return False, "Missing csv_output in TOML."
+            os.makedirs(os.path.dirname(csv_out) or ".", exist_ok=True)
+            _write_fifa_csv_template(csv_out, n_keypoints=n_val, start_idx=s_val, base_idx=b_val)
+            if mk_ds and ds:
+                _write_fifa_dataset_template(ds, n_keypoints=n_val)
+            fifa_fixed_keypoints = n_val
+            fifa_start_keypoint = s_val
+            fifa_index_base = b_val
+            if activate_fifa:
+                pitch_guide_fifa_mode = True
+                current_label = "football_pitch"
+            if history_dir_cfg:
+                marker_history_dir_override = os.path.abspath(history_dir_cfg)
+            if reset_session:
+                # Start from a clean in-memory matrix so labeling always begins from zero state.
+                blank_row = [(None, None)] * n_val
+                coordinates = {i: list(blank_row) for i in range(total_frames)}
+                deleted_positions = {i: set() for i in range(total_frames)}
+                selected_marker_idx = max(0, min(s_val, n_val - 1))
+            msg = f"Template CSV created: {csv_out}"
+            if mk_ds and ds:
+                msg += f"\nDataset scaffold created/updated: {ds}"
+            if marker_history_dir_override:
+                msg += f"\nMarker history dir: {marker_history_dir_override}"
+            if reset_session:
+                msg += "\nSession markers reset from TOML (clean start)."
+            return True, msg
+        except Exception as e:
+            return False, f"Failed to apply FIFA TOML config: {e}"
+
+    def configure_fifa_from_toml() -> tuple[bool, str]:
+        """Create/load FIFA TOML config without opening Tk windows."""
+        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        default_toml = os.path.join(os.path.dirname(video_path), f"{base_name}_fifa_template.toml")
+        if not os.path.exists(default_toml):
+            seeded = _seed_fifa_template_from_tests(default_toml)
+            if not seeded:
+                _save_fifa_template_toml(default_toml)
+            return (
+                False,
+                f"FIFA TOML template created. Edit it and click FIFA again:\n{default_toml}",
+            )
+        path = pygame_file_dialog(
+            initial_dir=os.path.dirname(video_path),
+            file_extensions=[".toml"],
+            restore_size=(window_width, window_height + control_panel_height),
+        )
+        if not path:
+            return False, "FIFA config cancelled."
+        return _apply_fifa_toml_config(path)
+
+    def _goto_marker_dialog() -> tuple[bool, str]:
+        """Prompt marker number/index and jump selection."""
+        nonlocal selected_marker_idx
+        if one_line_mode:
+            return False, "Go marker is available in normal keypoint mode."
+        total = len(coordinates.get(frame_count, []))
+        if pitch_guide_fifa_mode and fifa_fixed_keypoints:
+            total = max(1, int(fifa_fixed_keypoints))
+        if total <= 0:
+            return False, "No markers available in current frame."
+        if pitch_guide_fifa_mode:
+            low = max(0, int(fifa_start_keypoint))
+            high = low + total - 1
+            display_low = low + fifa_index_base
+            display_high = high + fifa_index_base
+            prompt = f"Go to FIFA keypoint ({display_low}..{display_high})"
+            seed_idx = selected_marker_idx if low <= selected_marker_idx <= high else low
+            seed = str(seed_idx + fifa_index_base)
+        else:
+            low = 0
+            high = total - 1
+            prompt = f"Go to marker (1..{total})"
+            seed_idx = selected_marker_idx if 0 <= selected_marker_idx <= high else 0
+            seed = str(seed_idx + 1)
+        # #region agent log
+        _agent_debug_log(
+            hypothesis_id="H1",
+            location="getpixelvideo.py:_goto_marker_dialog:range",
+            message="Computed Go KP range/seed",
+            data={
+                "pitch_guide_fifa_mode": pitch_guide_fifa_mode,
+                "fifa_fixed_keypoints": fifa_fixed_keypoints,
+                "fifa_start_keypoint": fifa_start_keypoint,
+                "fifa_index_base": fifa_index_base,
+                "selected_marker_idx": selected_marker_idx,
+                "total": total,
+                "low": low,
+                "high": high,
+                "seed": seed,
+            },
+        )
+        # #endregion
+        raw = show_input_dialog(prompt, seed)
+        if raw is None:
+            return False, "Marker jump cancelled."
+        raw = raw.strip()
+        if raw == "":
+            return False, "Marker jump cancelled."
+        try:
+            entered = int(raw)
+        except ValueError:
+            return False, "Invalid marker number."
+        target_idx = entered - fifa_index_base if pitch_guide_fifa_mode else entered - 1
+        # With 1-based display (base_index=1), users often type 0 meaning "first keypoint"
+        # (internal slot low, usually 0). Logs showed entered=0 -> target_idx=-1 otherwise.
+        remapped_zero_for_base1 = False
+        if pitch_guide_fifa_mode and not (low <= target_idx <= high) and entered == 0 and low == 0:
+            target_idx = 0
+            remapped_zero_for_base1 = True
+        # #region agent log
+        _agent_debug_log(
+            hypothesis_id="H1",
+            location="getpixelvideo.py:_goto_marker_dialog:target",
+            message="Parsed Go KP target",
+            data={
+                "raw": raw,
+                "entered": entered,
+                "target_idx": target_idx,
+                "low": low,
+                "high": high,
+                "remapped_zero_for_base1": remapped_zero_for_base1,
+            },
+        )
+        # #endregion
+        if not (low <= target_idx <= high):
+            return False, f"Marker out of range ({entered})."
+        selected_marker_idx = target_idx
+        # #region agent log
+        _agent_debug_log(
+            hypothesis_id="H7",
+            location="getpixelvideo.py:_goto_marker_dialog:after_assign",
+            message="Go KP applied",
+            data={
+                "selected_marker_idx": selected_marker_idx,
+                "pitch_guide_mode": pitch_guide_mode,
+                "target_idx": target_idx,
+            },
+        )
+        # #endregion
+        shown = selected_marker_idx + (fifa_index_base if pitch_guide_fifa_mode else 1)
+        return True, f"Marker selected: {shown}"
 
     def show_help_dialog():
         # Instead of using tkinter, display help directly in pygame
@@ -2937,7 +3434,7 @@ def play_video_with_controls(
             "- -: Zoom Out",
             "- Scroll M: Zoom In/Out",
             "- Left Click: Add Marker",
-            "- Right Click: Remove Last Marker",
+            "- Right Click: Remove selected marker (then previous)",
             "- Middle Click: Enable Pan/Move",
             "- Drag Slider: Jump to Frame",
             "- TAB: Next marker in current frame",
@@ -2977,6 +3474,19 @@ def play_video_with_controls(
             "      Click N markers on each frame; F9 builds",
             "      images/ + labels/ + data.yaml (kpt_shape).",
             "      PitchGuide also writes keypoints.json.",
+            "  Ctrl+E: Save ML dataset (PNG + split chooser).",
+            "  Save ML button: export split + all_labels view",
+            "      (all_labels has split-prefixed .txt copies).",
+            "",
+            "=== FIFA LABELING MODE (32 kp pitch) ===",
+            "  Click 'FIFA' button (turns blue), or run:",
+            "    uv run vaila/getpixelvideo.py --fifa-dataset DIR",
+            "  - Loads 32 kp guide (idx 0 = top_left_corner).",
+            "  - Auto-enables PitchGuide; click pts 0..31.",
+            "  - Class: 'football_pitch' (matches FIFA dataset).",
+            "  - F9 exports in FIFA layout when current dataset",
+            "    is /home/preto/data/FIFA/dataset_vaila_fifa or",
+            "    any data.yaml with 'train: images/train'.",
         ]
 
         help_lines_right = [
@@ -3000,10 +3510,16 @@ def play_video_with_controls(
             "- ClickPass Mode: Advances to next frame after",
             "  adding a marker (Normal Mode).",
             "",
-            "- PitchGuide (G key or button): guided FIFA",
-            "  soccer-field keypoints. Left=mark current pN,",
-            "  A=next/skip, Right=delete, B/Backspace=previous.",
-            "  It always stores p1..p37 in FIFA order.",
+            "- PitchGuide (G key or button): visual FIFA field",
+            "  overlay + reference image only. Same marking as",
+            "  guide off (TAB / Ctrl+G / click). V toggles image.",
+            "",
+            "- FIFA Mode (button): 32-kp dataset variant.",
+            "  idx 0 = top_left_corner (matches",
+            "  /home/preto/data/FIFA/dataset_vaila_fifa).",
+            "  Use --fifa-dataset DIR for 1-click append.",
+            "  Marker backups go to .vaila_markers_history/",
+            "  with retention of latest 100 backups per video.",
             "",
             "Playback Speed:",
             "- [ : Slower",
@@ -3045,7 +3561,7 @@ def play_video_with_controls(
         ]
 
         # Create semi-transparent overlay
-        overlay = pygame.Surface((window_width, window_height + 80))
+        overlay = pygame.Surface((window_width, window_height + control_panel_height))
         overlay.set_alpha(230)
         overlay.fill((0, 0, 0))
 
@@ -3130,7 +3646,7 @@ def play_video_with_controls(
         nonlocal persistence_frames
 
         # Create semi-transparent overlay
-        overlay = pygame.Surface((window_width, window_height + 80))
+        overlay = pygame.Surface((window_width, window_height + control_panel_height))
         overlay.set_alpha(200)
         overlay.fill((0, 0, 0))
 
@@ -3286,7 +3802,11 @@ def play_video_with_controls(
                         return None
                     elif event.key == pygame.K_BACKSPACE:
                         input_text = input_text[:-1]
-                    else:
+                    elif pygame.K_0 <= event.key <= pygame.K_9:
+                        input_text += chr(event.key)
+                    elif event.key in _PYGAME_KP_DIGIT:
+                        input_text += _PYGAME_KP_DIGIT[event.key]
+                    elif event.unicode and event.unicode.isprintable():
                         input_text += event.unicode
         return None
 
@@ -3316,7 +3836,7 @@ def play_video_with_controls(
         waiting = True
         while waiting:
             # Draw Overlay
-            overlay = pygame.Surface((window_width, window_height + 80))
+            overlay = pygame.Surface((window_width, window_height + control_panel_height))
             overlay.set_alpha(200)
             overlay.fill((0, 0, 0))
             screen.blit(overlay, (0, 0))
@@ -3763,7 +4283,7 @@ def play_video_with_controls(
             showing_save_message = True
             save_message_timer = 120
 
-    def save_pose_dataset():
+    def save_pose_dataset(split_ratios=(0.7, 0.2, 0.1), image_format="jpg"):
         """Export a YOLO-pose dataset from the markers clicked in ``coordinates``.
 
         Uses ``current_dataset_dir`` (multi-video append) when set; otherwise creates
@@ -3776,6 +4296,13 @@ def play_video_with_controls(
         pitch_keypoint_names = [p["point_name"] for p in pitch_guide_points] or None
         was_appending = current_dataset_dir is not None
 
+        # If in FIFA mode, prefer the FIFA layout for fresh exports and the
+        # FIFA flip_idx loaded from the reference CSV.
+        export_layout = "fifa" if pitch_guide_fifa_mode else None
+        export_flip_idx = (
+            list(pitch_guide_flip_idx) if pitch_guide_fifa_mode and pitch_guide_flip_idx else None
+        )
+
         dataset_dir, msg = export_pose_dataset(
             video_path,
             coordinates,
@@ -3787,13 +4314,17 @@ def play_video_with_controls(
             class_name=class_for_pose,
             output_dataset_dir=current_dataset_dir,
             keypoint_names=pitch_keypoint_names,
+            flip_idx=export_flip_idx,
+            layout=export_layout,
+            split_ratios=split_ratios,
+            image_format=image_format,
         )
 
         if not dataset_dir:
             save_message_text = f"Pose export failed: {msg}"
             showing_save_message = True
             save_message_timer = 150
-            return
+            return False
 
         if not current_dataset_dir:
             current_dataset_dir = dataset_dir
@@ -3801,7 +4332,7 @@ def play_video_with_controls(
         base_name = os.path.splitext(os.path.basename(video_path))[0]
         project_file = os.path.join(dataset_dir, f"{base_name}_pose_project.json")
         if coordinates is None:
-            return None, "No coordinates to export"
+            return False
         serializable_coords = {}
         for f_idx, pts in coordinates.items():
             if not pts:
@@ -3841,6 +4372,69 @@ def play_video_with_controls(
         showing_save_message = True
         save_message_timer = 180
         print(f"[pose-dataset] {msg}\n  dir: {dataset_dir}\n  project: {project_file}")
+        return True
+
+    def _parse_ml_split_choice(raw: str) -> tuple[tuple[float, float, float] | None, str]:
+        """Parse ML split preset/custom input into normalized ratios."""
+        text = raw.strip().lower()
+        presets = {
+            "1": ((0.70, 0.15, 0.15), "Classic 70/15/15"),
+            "classic": ((0.70, 0.15, 0.15), "Classic 70/15/15"),
+            "classica": ((0.70, 0.15, 0.15), "Classic 70/15/15"),
+            "clássica": ((0.70, 0.15, 0.15), "Classic 70/15/15"),
+            "2": ((0.80, 0.10, 0.10), "Training focus 80/10/10"),
+            "train": ((0.80, 0.10, 0.10), "Training focus 80/10/10"),
+            "treino": ((0.80, 0.10, 0.10), "Training focus 80/10/10"),
+            "3": ((0.98, 0.01, 0.01), "Big Data 98/1/1"),
+            "big": ((0.98, 0.01, 0.01), "Big Data 98/1/1"),
+            "bigdata": ((0.98, 0.01, 0.01), "Big Data 98/1/1"),
+            "big data": ((0.98, 0.01, 0.01), "Big Data 98/1/1"),
+        }
+        if text in presets:
+            return presets[text]
+
+        parts = [
+            p for p in text.replace(";", ",").replace("/", ",").replace(" ", ",").split(",") if p
+        ]
+        if len(parts) != 3:
+            return None, "Use 1, 2, 3 or custom train,val,test (example: 70,15,15)."
+        try:
+            values = [float(p.replace("%", "")) for p in parts]
+        except ValueError:
+            return None, "Invalid split percentages."
+        if any(v < 0 for v in values) or sum(values) <= 0:
+            return None, "Split percentages must be positive."
+        if max(values) > 1.0:
+            values = [v / 100.0 for v in values]
+        total = sum(values)
+        ratios = tuple(v / total for v in values)
+        label = f"Custom {ratios[0] * 100:.1f}/{ratios[1] * 100:.1f}/{ratios[2] * 100:.1f}"
+        return ratios, label
+
+    def _choose_ml_split_ratios() -> tuple[tuple[float, float, float] | None, str]:
+        prompt = "Save ML split: 1=70/15/15 2=80/10/10 3=98/1/1 or train,val,test"
+        raw = show_input_dialog(prompt, "1")
+        if raw is None or raw.strip() == "":
+            return None, "Save ML dataset cancelled."
+        return _parse_ml_split_choice(raw)
+
+    def save_split_dataset_with_all_labels():
+        """Export split PNG dataset and build didactic all_labels view."""
+        nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
+        split_ratios, split_label = _choose_ml_split_ratios()
+        if split_ratios is None:
+            save_message_text = split_label
+            showing_save_message = True
+            save_message_timer = 90
+            return
+        if not save_pose_dataset(split_ratios=split_ratios, image_format="png"):
+            return
+        if not current_dataset_dir:
+            return
+        ok_all, msg_all = _export_all_labels_view(current_dataset_dir)
+        save_message_text = f"{save_message_text} | PNG | {split_label} | {msg_all}"
+        showing_save_message = True
+        save_message_timer = 180 if ok_all else 120
 
     def show_file_browser(start_dir, title="Select a file", extensions=None):
         """Pygame-based file browser with mouse navigation, Ctrl+V paste, and scroll.
@@ -4206,10 +4800,12 @@ def play_video_with_controls(
             showing_save_message = True
             save_message_timer = 60
             return
-        train_img = os.path.join(folder, "train", "images")
+        # Accept both layouts: vaila ``<dir>/train/images`` and FIFA ``<dir>/images/train``.
+        train_img_vaila = os.path.join(folder, "train", "images")
+        train_img_fifa = os.path.join(folder, "images", "train")
         classes_file = os.path.join(folder, "classes.txt")
-        if not os.path.isdir(train_img):
-            save_message_text = "Folder must contain train/images/ (YOLO dataset)."
+        if not (os.path.isdir(train_img_vaila) or os.path.isdir(train_img_fifa)):
+            save_message_text = "Folder must contain train/images/ or images/train/ (YOLO dataset)."
             showing_save_message = True
             save_message_timer = 90
             return
@@ -4222,6 +4818,43 @@ def play_video_with_controls(
                     current_label = lines[0]
             except Exception:
                 pass
+        else:
+            # FIFA layout: pull names from data.yaml's `names: { 0: football_pitch }`
+            yaml_p = os.path.join(folder, "data.yaml")
+            if os.path.exists(yaml_p):
+                try:
+                    in_names = False
+                    with open(yaml_p, encoding="utf-8") as f:
+                        for ln in f:
+                            s = ln.rstrip()
+                            if s.startswith("names:"):
+                                rest = s.split(":", 1)[1].strip()
+                                if rest.startswith("[") and rest.endswith("]"):
+                                    inside = rest.strip("[]")
+                                    nm = next(
+                                        (
+                                            n.strip().strip("'\"")
+                                            for n in inside.split(",")
+                                            if n.strip()
+                                        ),
+                                        None,
+                                    )
+                                    if nm:
+                                        current_label = nm
+                                    break
+                                in_names = True
+                                continue
+                            if in_names:
+                                if not s or not s.startswith((" ", "\t")):
+                                    break
+                                kv = s.strip()
+                                if ":" in kv:
+                                    nm = kv.split(":", 1)[1].strip().strip("'\"")
+                                    if nm:
+                                        current_label = nm
+                                        break
+                except Exception:
+                    pass
 
         # Auto-load the project JSON for the current video (if it exists in this dataset)
         base_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -4343,10 +4976,8 @@ def play_video_with_controls(
         for idx, (_, x, y) in enumerate(one_line_markers):
             if idx not in deleted_markers and x is not None and y is not None:
                 # Marker indices are 1-based in the CSV
-                row_values[idx * 2 + 1] = float(
-                    x
-                )  # +1 for frame column, then multiply by 2 for x position
-                row_values[idx * 2 + 2] = float(y)  # +2 for y position
+                row_values[idx * 2 + 1] = int(round(x))
+                row_values[idx * 2 + 2] = int(round(y))
             # Se for None, deixar como vazio (já inicializado como "")
 
         df = pd.DataFrame([row_values], columns=pd.Index(header))
@@ -4428,6 +5059,19 @@ def play_video_with_controls(
             save_message_timer, \
             save_message_text
 
+        # #region agent log
+        _agent_debug_log(
+            hypothesis_id="H3",
+            location="getpixelvideo.py:remove_marker:entry",
+            message="Remove marker requested",
+            data={
+                "one_line_mode": one_line_mode,
+                "frame_count": frame_count,
+                "selected_marker_idx": selected_marker_idx,
+                "frame_coords_len": len(coordinates.get(frame_count, [])) if coordinates else -1,
+            },
+        )
+        # #endregion
         if one_line_mode:
             if selected_marker_idx >= 0:
                 # Find and remove the selected marker only in the current frame
@@ -4440,6 +5084,8 @@ def play_video_with_controls(
                         )
                         showing_save_message = True
                         save_message_timer = 60
+                        # Move selection backwards for quick repeated deletes.
+                        selected_marker_idx = max(0, selected_marker_idx - 1)
                         break
             else:
                 save_message_text = "No marker selected to remove"
@@ -4455,6 +5101,8 @@ def play_video_with_controls(
                     )
                     showing_save_message = True
                     save_message_timer = 60
+                    # Move selection backwards for quick repeated deletes.
+                    selected_marker_idx = max(0, selected_marker_idx - 1)
                 else:
                     save_message_text = "Marker does not exist in this frame"
                     showing_save_message = True
@@ -4468,12 +5116,19 @@ def play_video_with_controls(
         make_backup()
 
     def make_backup():
-        """Make a backup of the original coordinates file with timestamp"""
+        """Make timestamped marker backups in a hidden local history folder."""
         if not os.path.exists(video_path):
             return
 
         base_name = os.path.splitext(os.path.basename(video_path))[0]
         video_dir = os.path.dirname(video_path)
+        history_root = (
+            marker_history_dir_override
+            if marker_history_dir_override
+            else os.path.join(video_dir, ".vaila_markers_history")
+        )
+        history_dir = os.path.join(history_root, base_name)
+        os.makedirs(history_dir, exist_ok=True)
 
         # Get current timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -4481,12 +5136,9 @@ def play_video_with_controls(
         # Check if there is a normal coordinates file
         coords_file = os.path.join(video_dir, f"{base_name}_markers.csv")
         if os.path.exists(coords_file):
-            backup_file = os.path.join(video_dir, f"{base_name}_markers_bk_{timestamp}.csv")
+            backup_file = os.path.join(history_dir, f"{base_name}_markers_bk_{timestamp}.csv")
             try:
-                import shutil
-
                 shutil.copy2(coords_file, backup_file)
-                print(f"Backup created: {backup_file}")
             except Exception as e:
                 print(f"Error making backup: {e}")
 
@@ -4494,27 +5146,37 @@ def play_video_with_controls(
         seq_file = os.path.join(video_dir, f"{base_name}_markers_sequential.csv")
         if os.path.exists(seq_file):
             backup_file = os.path.join(
-                video_dir, f"{base_name}_markers_sequential_bk_{timestamp}.csv"
+                history_dir, f"{base_name}_markers_sequential_bk_{timestamp}.csv"
             )
             try:
-                import shutil
-
                 shutil.copy2(seq_file, backup_file)
-                print(f"Sequential backup created: {backup_file}")
             except Exception as e:
                 print(f"Error making sequential backup: {e}")
 
         # Also check the 1 line file
         line_file = os.path.join(video_dir, f"{base_name}_markers_1_line.csv")
         if os.path.exists(line_file):
-            backup_file = os.path.join(video_dir, f"{base_name}_markers_1_line_bk_{timestamp}.csv")
+            backup_file = os.path.join(
+                history_dir, f"{base_name}_markers_1_line_bk_{timestamp}.csv"
+            )
             try:
-                import shutil
-
                 shutil.copy2(line_file, backup_file)
-                print(f"1-Line backup created: {backup_file}")
             except Exception as e:
                 print(f"Error trying to backup 1-line: {e}")
+
+        # Keep only latest 100 backups per video to avoid unlimited growth.
+        try:
+            files = [
+                os.path.join(history_dir, f)
+                for f in os.listdir(history_dir)
+                if f.endswith(".csv") and "_bk_" in f
+            ]
+            files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            for old in files[100:]:
+                with suppress(Exception):
+                    os.remove(old)
+        except Exception:
+            pass
 
     def show_file_path_dialog():
         """
@@ -4533,7 +5195,7 @@ def play_video_with_controls(
             return pygame_file_dialog(
                 initial_dir=initial_dir,
                 file_extensions=[".csv"],
-                restore_size=(window_width, window_height + 80),
+                restore_size=(window_width, window_height + control_panel_height),
             )
         else:
             # Use Tkinter for Windows/Mac with option to select file or directory
@@ -4645,7 +5307,7 @@ def play_video_with_controls(
             csv_path = pygame_file_dialog(
                 initial_dir=initial_dir,
                 file_extensions=[".csv"],
-                restore_size=(window_width, window_height + 80),
+                restore_size=(window_width, window_height + control_panel_height),
             )
 
             if csv_path:
@@ -5117,7 +5779,10 @@ def play_video_with_controls(
                         )  # Orange highlight
 
                     pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
-                    text_surface = font.render(str(idx + 1), True, (255, 255, 255))
+                    display_idx = idx + 1
+                    if pitch_guide_fifa_mode:
+                        display_idx = idx + fifa_index_base
+                    text_surface = font.render(str(display_idx), True, (255, 255, 255))
                     screen.blit(text_surface, (screen_x + 5, screen_y - 15))
         else:
             for i, (x, y) in enumerate(coordinates[frame_count]):
@@ -5138,7 +5803,10 @@ def play_video_with_controls(
                     )  # Orange highlight
 
                 pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
-                text_surface = font.render(str(i + 1), True, (255, 255, 255))
+                display_idx = i + 1
+                if pitch_guide_fifa_mode:
+                    display_idx = i + fifa_index_base
+                text_surface = font.render(str(display_idx), True, (255, 255, 255))
                 screen.blit(text_surface, (screen_x + 5, screen_y - 15))
 
         # Draw YOLO tracking bounding boxes
@@ -5227,11 +5895,14 @@ def play_video_with_controls(
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             pitch_guide_button_rect,  # Add PitchGuide button to return
+            fifa_button_rect,  # Add FIFA-mode button to return
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
+            save_dataset_button_rect,  # Export PNG ML dataset + all_labels
             help_web_button_rect,  # Add help web button to return
             dataset_button_rect,  # Load dataset folder (multi-video)
+            goto_marker_button_rect,  # Jump to marker index
             slider_x,
             slider_y,
             slider_width,
@@ -5256,13 +5927,14 @@ def play_video_with_controls(
                 screen.blit(msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15))
 
         # ---------------------------------------------------------------
-        # Pitch Guide Overlay: show current point to mark (drawn on top)
+        # Pitch Guide overlay (visual only): follows selected marker index.
         # ---------------------------------------------------------------
         if pitch_guide_mode and pitch_guide_points:
             _guide_font_big = pygame.font.SysFont("verdana", 18, bold=True)
             _guide_font_sm = pygame.font.SysFont("verdana", 13)
             _total_pts = len(pitch_guide_points)
-            _pt = pitch_guide_points[pitch_guide_index] if pitch_guide_index < _total_pts else None
+            _ov = selected_marker_idx if 0 <= selected_marker_idx < _total_pts else 0
+            _pt = pitch_guide_points[_ov]
 
             _panel_w, _panel_h = 560, 92
             _panel_x, _panel_y = 10, 10
@@ -5270,25 +5942,14 @@ def play_video_with_controls(
             _panel.set_alpha(220)
             _panel.fill((20, 55, 20))
 
-            if _pt:
-                _remaining_pts = _total_pts - pitch_guide_index
-                _line1 = (
-                    f"Mark point {_pt['point_number']}/{_total_pts}: ({_remaining_pts} remaining)"
-                )
-                _field_xy = (
-                    f"field=({_pt['x']:.2f}, {_pt['y']:.2f})"
-                    if _pt["x"] is not None and _pt["y"] is not None
-                    else "field=(n/a)"
-                )
-                _line2 = f"  p{_pt['point_number']}: {_pt['point_name']}"
-                _line3 = (
-                    f"{_field_xy} | Left=mark | A=next/skip | Right=delete | "
-                    "B/Backspace=back | V=image"
-                )
-            else:
-                _line1 = "All pitch points marked!"
-                _line2 = "Press Save (S) or PitchGuide button to exit."
-                _line3 = ""
+            _line1 = f"Field hint p{_pt['point_number']}/{_total_pts} (visual only)"
+            _field_xy = (
+                f"field=({_pt['x']:.2f}, {_pt['y']:.2f})"
+                if _pt["x"] is not None and _pt["y"] is not None
+                else "field=(n/a)"
+            )
+            _line2 = f"  p{_pt['point_number']}: {_pt['point_name']}"
+            _line3 = f"{_field_xy} | Same clicks as guide off | TAB / Ctrl+G | V=field image"
 
             _panel.blit(_guide_font_sm.render(_line1, True, (255, 230, 60)), (8, 5))
             _panel.blit(_guide_font_big.render(_line2, True, (255, 255, 255)), (8, 28))
@@ -5296,7 +5957,10 @@ def play_video_with_controls(
 
             screen.blit(_panel, (_panel_x, _panel_y))
             if pitch_guide_show_reference:
-                _reference_surface = _pitch_guide_reference_surface(pitch_guide_index)
+                if pitch_guide_fifa_mode:
+                    _reference_surface = _pitch_guide_reference_surface_fifa(_ov)
+                else:
+                    _reference_surface = _pitch_guide_reference_surface(_ov)
                 if _reference_surface is not None:
                     _ref_x = max(10, window_width - _reference_surface.get_width() - 10)
                     _ref_y = _panel_y + _panel_h + 10
@@ -5330,8 +5994,8 @@ def play_video_with_controls(
 
             elif event.type == pygame.VIDEORESIZE:
                 new_w, new_h = event.w, event.h
-                if new_h > 80:
-                    window_width, window_height = new_w, new_h - 80
+                if new_h > control_panel_height:
+                    window_width, window_height = new_w, new_h - control_panel_height
                     screen = pygame.display.set_mode((new_w, new_h), pygame.RESIZABLE)
 
             elif event.type == pygame.KEYDOWN:
@@ -5365,6 +6029,13 @@ def play_video_with_controls(
                             total_frames,
                             deleted_positions,
                             is_sequential=sequential_mode,
+                            fixed_keypoints_count=(
+                                fifa_fixed_keypoints if pitch_guide_fifa_mode else None
+                            ),
+                            keypoint_start_idx=(
+                                fifa_start_keypoint if pitch_guide_fifa_mode else 0
+                            ),
+                            keypoint_index_base=(fifa_index_base if pitch_guide_fifa_mode else 1),
                         )
                         # Save Swap Config if available
                         if active_swap_rules:
@@ -5380,19 +6051,22 @@ def play_video_with_controls(
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
+                elif event.key == pygame.K_g and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+                    ok_go, msg_go = _goto_marker_dialog()
+                    save_message_text = msg_go
+                    showing_save_message = True
+                    save_message_timer = 60 if ok_go else 45
                 elif event.key == pygame.K_g:
                     pitch_guide_mode = not pitch_guide_mode
                     if pitch_guide_mode:
-                        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points()
-                        pitch_guide_index = _pitch_guide_next_index(frame_count)
+                        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
+                            prefer_fifa_dataset=pitch_guide_fifa_mode
+                        )
                         labeling_mode = False
                         one_line_mode = False
                         auto_marking_mode = False
                         sequential_mode = False
                         click_pass_mode = False
-                        selected_marker_idx = (
-                            pitch_guide_index if pitch_guide_index < len(pitch_guide_points) else -1
-                        )
                         save_message_text = _pitch_guide_status_message("PITCH GUIDE ON: ")
                         if not pitch_guide_points:
                             pitch_guide_mode = False
@@ -5400,10 +6074,6 @@ def play_video_with_controls(
                         save_message_text = "Pitch Guide disabled"
                     showing_save_message = True
                     save_message_timer = 120
-                elif pitch_guide_mode and event.key in (pygame.K_BACKSPACE, pygame.K_b):
-                    _pitch_guide_step_back()
-                elif pitch_guide_mode and event.key == pygame.K_a:
-                    _pitch_guide_set_point(None, None, skipped=True)
                 elif pitch_guide_mode and event.key == pygame.K_v:
                     pitch_guide_show_reference = not pitch_guide_show_reference
                     save_message_text = (
@@ -5547,7 +6217,54 @@ def play_video_with_controls(
                         save_message_timer = 60
                 elif event.key == pygame.K_F9:
                     save_pose_dataset()
+                elif event.key == pygame.K_e and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+                    save_split_dataset_with_all_labels()
+                elif event.key == pygame.K_k:
+                    ok_cfg, cfg_msg = configure_fifa_from_toml()
+                    save_message_text = cfg_msg
+                    showing_save_message = True
+                    save_message_timer = 180 if ok_cfg else 90
                 elif event.key == pygame.K_TAB:
+                    if pitch_guide_fifa_mode and fifa_fixed_keypoints:
+                        start_idx = max(0, int(fifa_start_keypoint))
+                        end_idx = start_idx + max(1, int(fifa_fixed_keypoints)) - 1
+                        before_idx = selected_marker_idx
+                        if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                            if selected_marker_idx < start_idx or selected_marker_idx > end_idx:
+                                selected_marker_idx = end_idx
+                            else:
+                                selected_marker_idx -= 1
+                                if selected_marker_idx < start_idx:
+                                    selected_marker_idx = end_idx
+                        else:
+                            if selected_marker_idx < start_idx or selected_marker_idx > end_idx:
+                                selected_marker_idx = start_idx
+                            else:
+                                selected_marker_idx += 1
+                                if selected_marker_idx > end_idx:
+                                    selected_marker_idx = start_idx
+                        # #region agent log
+                        _agent_debug_log(
+                            hypothesis_id="H2",
+                            location="getpixelvideo.py:event_TAB_fifa",
+                            message="TAB navigation in FIFA mode",
+                            data={
+                                "shift": bool(pygame.key.get_mods() & pygame.KMOD_SHIFT),
+                                "before_idx": before_idx,
+                                "after_idx": selected_marker_idx,
+                                "start_idx": start_idx,
+                                "end_idx": end_idx,
+                                "fifa_index_base": fifa_index_base,
+                            },
+                        )
+                        # #endregion
+                        save_message_text = (
+                            f"FIFA keypoint selected: p{selected_marker_idx + fifa_index_base} "
+                            f"(slot {selected_marker_idx})"
+                        )
+                        showing_save_message = True
+                        save_message_timer = 45
+                        continue
                     # Completely revamped marker navigation
                     if one_line_mode:
                         # Get all marker indices in current frame, including deleted ones
@@ -5770,7 +6487,7 @@ def play_video_with_controls(
                     root_fps.destroy()
                     # Reinitialize pygame display
                     screen = pygame.display.set_mode(
-                        (window_width, window_height + 80), pygame.RESIZABLE
+                        (window_width, window_height + control_panel_height), pygame.RESIZABLE
                     )
                     if new_fps_str:
                         try:
@@ -5944,7 +6661,7 @@ def play_video_with_controls(
 
                     # RESTORE MAIN WINDOW STATE
                     screen = pygame.display.set_mode(
-                        (window_width, window_height + 80), pygame.RESIZABLE
+                        (window_width, window_height + control_panel_height), pygame.RESIZABLE
                     )
 
                 # Add sequential mode toggle with 'o' key
@@ -5993,6 +6710,15 @@ def play_video_with_controls(
                                 total_frames,
                                 deleted_positions,
                                 is_sequential=sequential_mode,
+                                fixed_keypoints_count=(
+                                    fifa_fixed_keypoints if pitch_guide_fifa_mode else None
+                                ),
+                                keypoint_start_idx=(
+                                    fifa_start_keypoint if pitch_guide_fifa_mode else 0
+                                ),
+                                keypoint_index_base=(
+                                    fifa_index_base if pitch_guide_fifa_mode else 1
+                                ),
                             )
                             saved = True
                             save_message_text = f"Saved to: {os.path.basename(output_file)}"
@@ -6049,18 +6775,14 @@ def play_video_with_controls(
                         # Toggle Pitch Guide mode
                         pitch_guide_mode = not pitch_guide_mode
                         if pitch_guide_mode:
-                            pitch_guide_points, pitch_guide_source = _load_pitch_guide_points()
-                            pitch_guide_index = _pitch_guide_next_index(frame_count)
+                            pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
+                                prefer_fifa_dataset=pitch_guide_fifa_mode
+                            )
                             labeling_mode = False
                             one_line_mode = False
                             auto_marking_mode = False
                             sequential_mode = False
                             click_pass_mode = False
-                            selected_marker_idx = (
-                                pitch_guide_index
-                                if pitch_guide_index < len(pitch_guide_points)
-                                else -1
-                            )
                             if pitch_guide_points:
                                 save_message_text = _pitch_guide_status_message("PITCH GUIDE ON: ")
                             else:
@@ -6070,6 +6792,11 @@ def play_video_with_controls(
                             save_message_text = "Pitch Guide disabled"
                         showing_save_message = True
                         save_message_timer = 120
+                    elif fifa_button_rect.collidepoint(x, rel_y):
+                        ok_cfg, cfg_msg = configure_fifa_from_toml()
+                        save_message_text = cfg_msg
+                        showing_save_message = True
+                        save_message_timer = 180 if ok_cfg else 90
                     elif tracking_csv_button_rect.collidepoint(x, rel_y):
                         # Load tracking CSV
                         load_tracking_csv()
@@ -6089,9 +6816,17 @@ def play_video_with_controls(
                     elif export_video_button_rect.collidepoint(x, rel_y):
                         # Export video with annotations
                         export_video_with_annotations()
+                    elif save_dataset_button_rect.collidepoint(x, rel_y):
+                        # Export PNG ML dataset and all_labels helper folder
+                        save_split_dataset_with_all_labels()
                     elif dataset_button_rect.collidepoint(x, rel_y):
                         # Load dataset folder (next Save appends; multi-video). Same as F7.
                         load_dataset_folder()
+                    elif goto_marker_button_rect.collidepoint(x, rel_y):
+                        ok_go, msg_go = _goto_marker_dialog()
+                        save_message_text = msg_go
+                        showing_save_message = True
+                        save_message_timer = 60 if ok_go else 45
                     elif help_web_button_rect.collidepoint(x, rel_y):
                         # Open documentation in browser
                         import webbrowser
@@ -6131,14 +6866,51 @@ def play_video_with_controls(
                         elif one_line_mode:
                             # Simply append the new marker
                             one_line_markers.append((frame_count, video_x, video_y))
-                        elif pitch_guide_mode and pitch_guide_points:
-                            _pitch_guide_set_point(video_x, video_y)
                         else:
                             if sequential_mode:
-                                # Find the next available marker index
-                                next_idx = len(coordinates[frame_count])
-                                coordinates[frame_count].append((video_x, video_y))
+                                # Fill selected slot if still empty; otherwise advance (so kp 0 works).
+                                before_idx = selected_marker_idx
+                                if selected_marker_idx >= 0:
+                                    row = coordinates[frame_count]
+                                    if selected_marker_idx < len(row):
+                                        x_c, y_c = row[selected_marker_idx]
+                                        slot_empty = (
+                                            selected_marker_idx in deleted_positions[frame_count]
+                                            or x_c is None
+                                            or y_c is None
+                                        )
+                                    else:
+                                        slot_empty = True
+                                    next_idx = (
+                                        selected_marker_idx
+                                        if slot_empty
+                                        else selected_marker_idx + 1
+                                    )
+                                else:
+                                    next_idx = len(coordinates[frame_count])
+                                while len(coordinates[frame_count]) <= next_idx:
+                                    coordinates[frame_count].append((None, None))
+                                coordinates[frame_count][next_idx] = (video_x, video_y)
                                 selected_marker_idx = next_idx  # Auto-select the new marker
+                                if next_idx in deleted_positions[frame_count]:
+                                    deleted_positions[frame_count].discard(next_idx)
+                                # #region agent log
+                                _agent_debug_log(
+                                    hypothesis_id="H3",
+                                    location="getpixelvideo.py:left_click_sequential",
+                                    message="Sequential left-click assigned marker",
+                                    data={
+                                        "frame_count": frame_count,
+                                        "before_idx": before_idx,
+                                        "next_idx": next_idx,
+                                        "after_idx": selected_marker_idx,
+                                        "frame_marker_len": len(coordinates[frame_count]),
+                                        "pitch_guide_fifa_mode": pitch_guide_fifa_mode,
+                                        "filled_selected_slot": before_idx >= 0
+                                        and next_idx == before_idx,
+                                    },
+                                )
+                                # #endregion
                             else:
                                 # Use existing marker selection logic
                                 if selected_marker_idx >= 0:
@@ -6193,18 +6965,8 @@ def play_video_with_controls(
                                     paused = True
 
                     elif event.button == 3:  # Right click
-                        # Pitch Guide keeps right-click as delete, matching normal marker UX.
-                        if pitch_guide_mode and pitch_guide_points and not (y >= window_height):
-                            _pitch_guide_delete_selected_point()
-                        # Keep existing behavior for right-click (delete most recent)
-                        elif one_line_mode:
-                            for i in range(len(one_line_markers) - 1, -1, -1):
-                                if one_line_markers[i][0] == frame_count:
-                                    del one_line_markers[i]
-                                    break
-                        else:
-                            if coordinates[frame_count]:
-                                coordinates[frame_count].pop()
+                        # Remove currently selected marker (not the last one).
+                        remove_marker()
                         # Reset selection if we removed the selected marker
                         if one_line_mode:
                             markers_in_frame = [
@@ -6904,7 +7666,14 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
 
 
 def save_coordinates(
-    video_path, coordinates, total_frames, deleted_positions=None, is_sequential=False
+    video_path,
+    coordinates,
+    total_frames,
+    deleted_positions=None,
+    is_sequential=False,
+    fixed_keypoints_count=None,
+    keypoint_start_idx=0,
+    keypoint_index_base=1,
 ):
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     video_dir = os.path.dirname(video_path)
@@ -6920,14 +7689,21 @@ def save_coordinates(
         deleted_positions = {i: set() for i in range(total_frames)}
 
     # Determina o número máximo de pontos marcados em qualquer frame.
-    max_points = max((len(points) for points in coordinates.values()), default=0)
+    max_points_detected = max((len(points) for points in coordinates.values()), default=0)
+    if fixed_keypoints_count is not None and fixed_keypoints_count > 0:
+        max_points = fixed_keypoints_count
+    else:
+        max_points = max_points_detected
+    start_idx = max(0, int(keypoint_start_idx))
+    base_idx = 0 if int(keypoint_index_base) == 0 else 1
 
     # Cria o cabeçalho: a primeira coluna é 'frame' e para cada ponto,
     # adiciona as colunas 'p{i}_x' e 'p{i}_y'
     columns = ["frame"]
-    for i in range(1, max_points + 1):
-        columns.append(f"p{i}_x")
-        columns.append(f"p{i}_y")
+    for i in range(max_points):
+        kp_idx = start_idx + i + base_idx
+        columns.append(f"p{kp_idx}_x")
+        columns.append(f"p{kp_idx}_y")
 
     # Cria o DataFrame inicializado com NaN para todos os frames.
     df = pd.DataFrame(np.nan, index=range(total_frames), columns=pd.Index(columns))
@@ -6936,9 +7712,16 @@ def save_coordinates(
     # Preenche o DataFrame com os pontos marcados
     for frame_num, points in coordinates.items():
         for i, (x, y) in enumerate(points):
-            if i not in deleted_positions[frame_num] and x is not None and y is not None:
-                df.at[frame_num, f"p{i + 1}_x"] = float(x)
-                df.at[frame_num, f"p{i + 1}_y"] = float(y)
+            if (
+                i not in deleted_positions[frame_num]
+                and x is not None
+                and y is not None
+                and i >= start_idx
+                and (i - start_idx) < max_points
+            ):
+                out_idx = (i - start_idx) + start_idx + base_idx
+                df.at[frame_num, f"p{out_idx}_x"] = int(round(x))
+                df.at[frame_num, f"p{out_idx}_y"] = int(round(y))
             # Se for None, deixar como NaN (o que se tornará "" no CSV)
 
     # Salva o CSV com valores NaN representados como strings vazias
@@ -7135,6 +7918,57 @@ names: {class_names}
         pass
 
 
+def _detect_dataset_layout(dataset_dir: str) -> str:
+    """Return ``"fifa"`` for ``<dir>/{images,labels}/{split}`` (the FIFA dataset
+    layout used at ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``) or
+    ``"vaila"`` for the legacy ``<dir>/{split}/{images,labels}`` layout.
+
+    Heuristics, in order:
+    1. Read ``data.yaml`` and inspect ``train:`` (``images/train`` -> fifa,
+       ``train/images`` -> vaila).
+    2. Look at existing folders.
+    3. Default to ``"vaila"``.
+    """
+    yaml_path = os.path.join(dataset_dir, "data.yaml")
+    if os.path.exists(yaml_path):
+        try:
+            with open(yaml_path, encoding="utf-8") as f:
+                for line in f:
+                    s = line.strip()
+                    if s.startswith("train:"):
+                        value = s.split(":", 1)[1].strip()
+                        low = value.lower().replace("\\", "/")
+                        if "images/train" in low:
+                            return "fifa"
+                        if "train/images" in low:
+                            return "vaila"
+                        break
+        except Exception:
+            pass
+    if os.path.isdir(os.path.join(dataset_dir, "images", "train")) and os.path.isdir(
+        os.path.join(dataset_dir, "labels", "train")
+    ):
+        return "fifa"
+    if os.path.isdir(os.path.join(dataset_dir, "train", "images")) and os.path.isdir(
+        os.path.join(dataset_dir, "train", "labels")
+    ):
+        return "vaila"
+    return "vaila"
+
+
+def _split_paths(dataset_dir: str, split: str, layout: str) -> tuple[str, str]:
+    """Return (images_dir, labels_dir) for ``split`` given ``layout``."""
+    if layout == "fifa":
+        return (
+            os.path.join(dataset_dir, "images", split),
+            os.path.join(dataset_dir, "labels", split),
+        )
+    return (
+        os.path.join(dataset_dir, split, "images"),
+        os.path.join(dataset_dir, split, "labels"),
+    )
+
+
 def export_pose_dataset(
     video_path,
     coordinates,
@@ -7148,17 +7982,33 @@ def export_pose_dataset(
     split_ratios=(0.7, 0.2, 0.1),
     bbox_pad_ratio=0.04,
     keypoint_names=None,
+    flip_idx=None,
+    layout=None,
+    image_format="jpg",
 ):
     """Export a YOLO-pose training dataset from the markers clicked in `coordinates`.
 
-    Produces an Ultralytics-compatible layout::
+    Produces an Ultralytics-compatible layout. Two layouts are supported:
+
+    * ``layout="vaila"`` (default for new exports)::
 
         dataset_dir/
             classes.txt
-            data.yaml      # with kpt_shape: [Nkp, 3], nc: 1, names: [class_name]
-            train/images/*.jpg    train/labels/*.txt
-            val/images/*.jpg      val/labels/*.txt
-            test/images/*.jpg     test/labels/*.txt
+            data.yaml      # kpt_shape: [Nkp, 3], nc: 1, names: [class_name]
+            train/images/*.jpg|png    train/labels/*.txt
+            val/images/*.jpg|png      val/labels/*.txt
+            test/images/*.jpg|png     test/labels/*.txt
+
+    * ``layout="fifa"`` (matches ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``)::
+
+        dataset_dir/
+            data.yaml      # path: <dir>, train: images/train, ...
+            images/{train,val,test}/*.jpg|png
+            labels/{train,val,test}/*.txt
+
+    When appending (``output_dataset_dir`` valid), the existing layout is
+    auto-detected from ``data.yaml`` / folders, and the existing ``kpt_shape``
+    and ``flip_idx`` are preserved.
 
     Each annotated frame yields one instance (class ``class_name``):
     - bbox = first user-drawn box in ``bboxes[frame]`` if available, else a tight
@@ -7170,14 +8020,16 @@ def export_pose_dataset(
 
         cls cx cy w h  kp1_x kp1_y v1  kp2_x kp2_y v2  ...
 
-    Append mode (``output_dataset_dir`` given and valid): images/labels are
-    written with filename prefix ``<video_base_name>_`` so multiple videos share
-    one dataset. If an existing ``data.yaml`` defines ``kpt_shape``, that Nkp is
-    reused (frames with fewer markers are zero-padded, extras are dropped).
+    Append mode also prefixes filenames with ``<video_base_name>_`` so multiple
+    videos can share one dataset without collisions.
 
     Returns ``(dataset_dir, message)`` or ``(None, error_message)``.
     """
     import random
+
+    image_ext = str(image_format or "jpg").lower().lstrip(".")
+    if image_ext != "png":
+        image_ext = "jpg"
 
     annotated_frames = []
     per_frame_valid_kpts = {}
@@ -7211,6 +8063,7 @@ def export_pose_dataset(
 
     existing_nkp = None
     existing_classes = []
+    existing_flip_idx: list[int] | None = None
     if is_append:
         dataset_dir = os.path.abspath(str(output_dataset_dir))
         yaml_path = os.path.join(dataset_dir, "data.yaml")
@@ -7224,6 +8077,13 @@ def export_pose_dataset(
                             parts = [p.strip() for p in inside.split(",") if p.strip()]
                             if parts:
                                 existing_nkp = int(parts[0])
+                        elif s.startswith("flip_idx:"):
+                            inside = s.split(":", 1)[1].strip().strip("[]")
+                            parts = [p.strip() for p in inside.split(",") if p.strip()]
+                            try:
+                                existing_flip_idx = [int(p) for p in parts]
+                            except Exception:
+                                existing_flip_idx = None
             except Exception:
                 existing_nkp = None
         classes_file = os.path.join(dataset_dir, "classes.txt")
@@ -7233,12 +8093,48 @@ def export_pose_dataset(
                     existing_classes = [line.strip() for line in f if line.strip()]
             except Exception:
                 existing_classes = []
+        if not existing_classes:
+            # FIFA-style: no classes.txt, names are inside data.yaml as "names: {0: football_pitch}"
+            yaml_p = os.path.join(dataset_dir, "data.yaml")
+            if os.path.exists(yaml_p):
+                try:
+                    in_names_block = False
+                    with open(yaml_p, encoding="utf-8") as f:
+                        for line in f:
+                            s = line.rstrip()
+                            if s.startswith("names:"):
+                                rest = s.split(":", 1)[1].strip()
+                                if rest.startswith("[") and rest.endswith("]"):
+                                    inside = rest.strip("[]")
+                                    existing_classes = [
+                                        n.strip().strip("'\"")
+                                        for n in inside.split(",")
+                                        if n.strip()
+                                    ]
+                                    break
+                                in_names_block = True
+                                continue
+                            if in_names_block:
+                                if not s or not s.startswith((" ", "\t")):
+                                    break
+                                key_val = s.strip()
+                                if ":" in key_val:
+                                    nm = key_val.split(":", 1)[1].strip().strip("'\"")
+                                    if nm:
+                                        existing_classes.append(nm)
+                except Exception:
+                    pass
         file_prefix = f"{base_name}_"
     else:
         dataset_dir = os.path.join(
             video_dir, f"pose_dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
         file_prefix = ""
+
+    detected_layout = _detect_dataset_layout(dataset_dir) if is_append else "vaila"
+    layout_to_use = (layout or detected_layout) if is_append else (layout or "vaila")
+    if layout_to_use not in ("vaila", "fifa"):
+        layout_to_use = "vaila"
 
     expected_nkp = len(keypoint_names) if keypoint_names else 0
     if existing_nkp is not None and existing_nkp > 0:
@@ -7247,18 +8143,35 @@ def export_pose_dataset(
         nkp = max(len(per_frame_valid_kpts[f]) for f in annotated_frames)
         nkp = max(1, nkp, expected_nkp)
 
+    flip_idx_final: list[int]
+    if existing_flip_idx and len(existing_flip_idx) == nkp:
+        flip_idx_final = existing_flip_idx
+    elif flip_idx and len(flip_idx) == nkp:
+        flip_idx_final = list(flip_idx)
+    else:
+        flip_idx_final = list(range(nkp))
+
     class_names = sorted(set(existing_classes) | {class_name})
     cls_id = class_names.index(class_name) if class_name in class_names else 0
 
     for split in ("train", "val", "test"):
-        os.makedirs(os.path.join(dataset_dir, split, "images"), exist_ok=True)
-        os.makedirs(os.path.join(dataset_dir, split, "labels"), exist_ok=True)
+        img_dir, lbl_dir = _split_paths(dataset_dir, split, layout_to_use)
+        os.makedirs(img_dir, exist_ok=True)
+        os.makedirs(lbl_dir, exist_ok=True)
 
-    with open(os.path.join(dataset_dir, "classes.txt"), "w", encoding="utf-8") as f:
-        for name in class_names:
-            f.write(name + "\n")
+    # classes.txt is kept for vaila layout (FIFA layout encodes names inside data.yaml).
+    if layout_to_use == "vaila" or os.path.exists(os.path.join(dataset_dir, "classes.txt")):
+        with open(os.path.join(dataset_dir, "classes.txt"), "w", encoding="utf-8") as f:
+            for name in class_names:
+                f.write(name + "\n")
 
-    r_train, r_val, _ = split_ratios
+    if len(split_ratios) != 3:
+        split_ratios = (0.7, 0.2, 0.1)
+    ratio_sum = float(sum(split_ratios))
+    if ratio_sum <= 0:
+        split_ratios = (0.7, 0.2, 0.1)
+        ratio_sum = 1.0
+    r_train, r_val, _ = (float(v) / ratio_sum for v in split_ratios)
     frames_shuffled = list(annotated_frames)
     random.shuffle(frames_shuffled)
     n_total = len(frames_shuffled)
@@ -7333,19 +8246,26 @@ def export_pose_dataset(
                     ky = max(0.0, min(1.0, p[1] / original_height))
                     parts += [f"{kx:.6f}", f"{ky:.6f}", "2"]
 
-            img_filename = f"{file_prefix}frame_{frame_num:06d}.jpg"
-            img_path = os.path.join(dataset_dir, split_name, "images", img_filename)
+            img_dir, lbl_dir = _split_paths(dataset_dir, split_name, layout_to_use)
+            img_filename = f"{file_prefix}frame_{frame_num:06d}.{image_ext}"
+            img_path = os.path.join(img_dir, img_filename)
             cv2.imwrite(img_path, frame)
 
             txt_filename = f"{file_prefix}frame_{frame_num:06d}.txt"
-            txt_path = os.path.join(dataset_dir, split_name, "labels", txt_filename)
+            txt_path = os.path.join(lbl_dir, txt_filename)
             with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(" ".join(parts) + "\n")
             written += 1
 
     cap.release()
 
-    _write_pose_data_yaml(dataset_dir, nkp=nkp, keypoint_names=keypoint_names)
+    _write_pose_data_yaml(
+        dataset_dir,
+        nkp=nkp,
+        keypoint_names=keypoint_names,
+        flip_idx=flip_idx_final,
+        layout=layout_to_use,
+    )
     if keypoint_names:
         metadata_path = os.path.join(dataset_dir, "keypoints.json")
         metadata = {
@@ -7364,50 +8284,117 @@ def export_pose_dataset(
         dataset_dir,
         "Pose dataset exported: "
         f"{written} frames, Nkp={nkp} (train: {len(splits['train'])}, "
-        f"val: {len(splits['val'])}, test: {len(splits['test'])})",
+        f"val: {len(splits['val'])}, test: {len(splits['test'])}, images: {image_ext})",
     )
 
 
-def _write_pose_data_yaml(dataset_dir, nkp, keypoint_names=None):
-    """Write data.yaml for YOLO pose training into `dataset_dir`.
+def _write_pose_data_yaml(
+    dataset_dir,
+    nkp,
+    keypoint_names=None,
+    flip_idx=None,
+    layout: str = "vaila",
+):
+    """Write ``data.yaml`` for YOLO pose training into ``dataset_dir``.
 
-    Reads class names from classes.txt (falls back to ['object']). Uses absolute
-    paths for train/val/test so Ultralytics can resolve them regardless of CWD.
+    Reads class names from ``classes.txt`` (or ``names:`` already in
+    ``data.yaml`` for FIFA layout). ``layout`` selects between:
+
+    * ``"vaila"`` - absolute paths to ``<dir>/{split}/images``
+      (legacy / standalone export).
+    * ``"fifa"`` - relative ``images/{split}`` (matches
+      ``/home/preto/data/FIFA/dataset_vaila_fifa/unified/data.yaml``).
     """
     classes_file = os.path.join(dataset_dir, "classes.txt")
-    class_names = ["object"]
+    class_names: list[str] = []
     if os.path.exists(classes_file):
         try:
             with open(classes_file, encoding="utf-8") as f:
-                loaded = [line.strip() for line in f if line.strip()]
-            if loaded:
-                class_names = loaded
+                class_names = [line.strip() for line in f if line.strip()]
         except Exception:
-            pass
+            class_names = []
+    if not class_names:
+        # Fallback: pull names from existing data.yaml (e.g. FIFA dataset before our write)
+        yaml_p = os.path.join(dataset_dir, "data.yaml")
+        if os.path.exists(yaml_p):
+            try:
+                in_names_block = False
+                with open(yaml_p, encoding="utf-8") as f:
+                    for line in f:
+                        s = line.rstrip()
+                        if s.startswith("names:"):
+                            rest = s.split(":", 1)[1].strip()
+                            if rest.startswith("[") and rest.endswith("]"):
+                                inside = rest.strip("[]")
+                                class_names = [
+                                    n.strip().strip("'\"") for n in inside.split(",") if n.strip()
+                                ]
+                                break
+                            in_names_block = True
+                            continue
+                        if in_names_block:
+                            if not s or not s.startswith((" ", "\t")):
+                                break
+                            key_val = s.strip()
+                            if ":" in key_val:
+                                nm = key_val.split(":", 1)[1].strip().strip("'\"")
+                                if nm:
+                                    class_names.append(nm)
+            except Exception:
+                pass
+    if not class_names:
+        class_names = ["object"]
 
-    train_path = os.path.abspath(os.path.join(dataset_dir, "train", "images")).replace("\\", "/")
-    val_path = os.path.abspath(os.path.join(dataset_dir, "val", "images")).replace("\\", "/")
-    test_abs = os.path.abspath(os.path.join(dataset_dir, "test", "images")).replace("\\", "/")
-    test_line = (
-        f"\ntest: {test_abs}" if os.path.isdir(os.path.join(dataset_dir, "test", "images")) else ""
-    )
-
-    flip_idx = list(range(nkp))
+    flip_idx_use = list(flip_idx) if flip_idx and len(flip_idx) == nkp else list(range(nkp))
     keypoint_names = list(keypoint_names[:nkp]) if keypoint_names else []
     if len(keypoint_names) < nkp:
         keypoint_names.extend(f"kp_{i + 1}" for i in range(len(keypoint_names), nkp))
 
-    yaml_content = (
-        "# YOLO pose dataset - generated by vailá getpixelvideo\n"
-        "path: .\n"
-        f"train: {train_path}\n"
-        f"val: {val_path}{test_line}\n"
-        f"nc: {len(class_names)}\n"
-        f"names: {class_names}\n"
-        f"kpt_shape: [{nkp}, 3]\n"
-        f"flip_idx: {flip_idx}\n"
-        f"kpt_names: {keypoint_names}\n"
-    )
+    if layout == "fifa":
+        # FIFA dataset format: path + relative split directories, names as a YAML map.
+        path_abs = os.path.abspath(dataset_dir).replace("\\", "/")
+        names_block_lines = [f"  {i}: {nm}" for i, nm in enumerate(class_names)]
+        names_block = "\n".join(names_block_lines)
+        test_line = (
+            "\ntest: images/test"
+            if os.path.isdir(os.path.join(dataset_dir, "images", "test"))
+            else ""
+        )
+        yaml_content = (
+            "# YOLO pose dataset - generated by vailá getpixelvideo (FIFA layout)\n"
+            f"path: {path_abs}\n"
+            "train: images/train\n"
+            f"val: images/val{test_line}\n"
+            "\n"
+            f"kpt_shape: [{nkp}, 3]\n"
+            f"flip_idx: {flip_idx_use}\n"
+            "\n"
+            f"names:\n{names_block}\n"
+            "\n"
+            f"# kpt_names (informational): {keypoint_names}\n"
+        )
+    else:
+        train_path = os.path.abspath(os.path.join(dataset_dir, "train", "images")).replace(
+            "\\", "/"
+        )
+        val_path = os.path.abspath(os.path.join(dataset_dir, "val", "images")).replace("\\", "/")
+        test_abs = os.path.abspath(os.path.join(dataset_dir, "test", "images")).replace("\\", "/")
+        test_line = (
+            f"\ntest: {test_abs}"
+            if os.path.isdir(os.path.join(dataset_dir, "test", "images"))
+            else ""
+        )
+        yaml_content = (
+            "# YOLO pose dataset - generated by vailá getpixelvideo\n"
+            "path: .\n"
+            f"train: {train_path}\n"
+            f"val: {val_path}{test_line}\n"
+            f"nc: {len(class_names)}\n"
+            f"names: {class_names}\n"
+            f"kpt_shape: [{nkp}, 3]\n"
+            f"flip_idx: {flip_idx_use}\n"
+            f"kpt_names: {keypoint_names}\n"
+        )
     try:
         with open(os.path.join(dataset_dir, "data.yaml"), "w", encoding="utf-8") as f:
             f.write(yaml_content)
@@ -7632,7 +8619,12 @@ def get_video_path():
 # The main load_coordinates_from_file function is defined above
 
 
-def run_getpixelvideo(initial_dataset_dir=None, initial_media_path=None, initial_source_type=None):
+def run_getpixelvideo(
+    initial_dataset_dir=None,
+    initial_media_path=None,
+    initial_source_type=None,
+    initial_fifa_mode: bool = False,
+):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
@@ -7698,6 +8690,7 @@ def run_getpixelvideo(initial_dataset_dir=None, initial_media_path=None, initial
             initial_labeling_mode=initial_labeling_mode,
             frame_source=frame_source,
             metadata=metadata,
+            initial_fifa_mode=initial_fifa_mode,
         )
         # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
         if result and len(result) >= 3 and result[0] == "switch_video":
@@ -7729,10 +8722,55 @@ def run_getpixelvideo(initial_dataset_dir=None, initial_media_path=None, initial
         break
 
 
+def _dir_contains_png_files(directory: str) -> bool:
+    try:
+        return os.path.isdir(directory) and any(
+            f.lower().endswith(".png") for f in os.listdir(directory)
+        )
+    except OSError:
+        return False
+
+
+def _resolve_png_sequence_directory(directory: str, *, max_subdirs: int = 500) -> str | None:
+    """Use directory if it contains PNGs, else first immediate subdirectory that does."""
+    if not directory or not os.path.isdir(directory):
+        return None
+    if _dir_contains_png_files(directory):
+        return os.path.abspath(directory)
+    try:
+        entries = sorted(os.listdir(directory))
+    except OSError:
+        return None
+    checked = 0
+    for name in entries:
+        if checked >= max_subdirs:
+            break
+        sub = os.path.join(directory, name)
+        if os.path.isdir(sub):
+            checked += 1
+            if _dir_contains_png_files(sub):
+                return os.path.abspath(sub)
+    return None
+
+
 if __name__ == "__main__":
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print(
+            "Usage: uv run vaila/getpixelvideo.py [options]\n"
+            "  -f, --file PATH     Video, single PNG, or folder of PNG frames (auto-detect)\n"
+            "  -d, --dir DIR       Folder of PNG frames (same as --sequence; subfolders ok)\n"
+            "  --sequence DIR      Folder of PNG frames\n"
+            "  --dataset DIR       YOLO / multi-video dataset root\n"
+            "  --fifa / --fifa-dataset [DIR]  FIFA labeling mode\n"
+            "Run without arguments to open the media picker.\n"
+            "Full options are documented in the module docstring (top of getpixelvideo.py)."
+        )
+        raise SystemExit(0)
+
     initial_dataset_dir = None
     initial_media_path = None
     initial_source_type = None
+    initial_fifa_mode = False
 
     if "--dataset" in sys.argv:
         idx = sys.argv.index("--dataset")
@@ -7742,17 +8780,51 @@ if __name__ == "__main__":
                 print(f"Error: --dataset path is not a directory: {initial_dataset_dir}")
                 initial_dataset_dir = None
 
+    if "--fifa-dataset" in sys.argv:
+        idx = sys.argv.index("--fifa-dataset")
+        # Accept --fifa-dataset DIR (with arg) or --fifa-dataset (flag-only, opens picker later).
+        if idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith("-"):
+            fifa_dir = sys.argv[idx + 1]
+            if os.path.isdir(fifa_dir):
+                initial_dataset_dir = os.path.abspath(fifa_dir)
+                initial_fifa_mode = True
+                print(f"FIFA dataset mode: appending to {initial_dataset_dir}")
+            else:
+                print(f"Error: --fifa-dataset path is not a directory: {fifa_dir}")
+        else:
+            initial_fifa_mode = True
+            print("FIFA dataset mode enabled (no dataset dir given; F9 will create a new one)")
+    elif "--fifa" in sys.argv:
+        # Short alias: enable FIFA labeling mode without specifying a dataset directory.
+        initial_fifa_mode = True
+        print("FIFA labeling mode enabled (no dataset dir given; F9 will create a new one)")
+
     if "--sequence" in sys.argv:
         idx = sys.argv.index("--sequence")
         if idx + 1 < len(sys.argv):
             seq_dir = sys.argv[idx + 1]
-            if os.path.isdir(seq_dir) and any(
-                f.lower().endswith(".png") for f in os.listdir(seq_dir)
-            ):
-                initial_media_path = seq_dir
+            resolved = _resolve_png_sequence_directory(seq_dir)
+            if resolved:
+                initial_media_path = resolved
                 initial_source_type = "png_sequence"
+                if resolved != os.path.abspath(seq_dir):
+                    print(f"PNG sequence: using subdirectory with frames: {resolved}")
             else:
-                print(f"Error: --sequence path is not a directory with PNGs: {seq_dir}")
+                print(f"Error: --sequence path has no folder with PNGs: {seq_dir}")
+
+    if initial_media_path is None and ("-d" in sys.argv or "--dir" in sys.argv):
+        opt = "-d" if "-d" in sys.argv else "--dir"
+        idx = sys.argv.index(opt)
+        if idx + 1 < len(sys.argv):
+            seq_dir = sys.argv[idx + 1]
+            resolved = _resolve_png_sequence_directory(seq_dir)
+            if resolved:
+                initial_media_path = resolved
+                initial_source_type = "png_sequence"
+                if resolved != os.path.abspath(seq_dir):
+                    print(f"PNG sequence: using subdirectory with frames: {resolved}")
+            else:
+                print(f"Error: {opt} path has no folder with PNGs: {seq_dir}")
 
     if initial_media_path is None and ("-f" in sys.argv or "--file" in sys.argv):
         opt = "-f" if "-f" in sys.argv else "--file"
@@ -7766,11 +8838,39 @@ if __name__ == "__main__":
                 else:
                     initial_media_path = file_path
                     initial_source_type = "video"
+            elif os.path.isdir(file_path):
+                resolved = _resolve_png_sequence_directory(file_path)
+                if resolved:
+                    initial_media_path = resolved
+                    initial_source_type = "png_sequence"
+                    if resolved != os.path.abspath(file_path):
+                        print(f"PNG sequence: using subdirectory with frames: {resolved}")
+                else:
+                    print(
+                        f"Error: {opt} directory contains no PNG frames (checked one level of "
+                        f"subfolders): {file_path}"
+                    )
             else:
-                print(f"Error: --file path is not a file: {file_path}")
+                print(f"Error: {opt} path is not a file or directory: {file_path}")
+
+    # #region agent log
+    _agent_debug_log(
+        hypothesis_id="H4",
+        location="getpixelvideo.py:__main__:cli_parse",
+        message="CLI parse result",
+        data={
+            "argv": sys.argv[1:],
+            "initial_media_path": initial_media_path,
+            "initial_source_type": initial_source_type,
+            "initial_fifa_mode": initial_fifa_mode,
+            "initial_dataset_dir": initial_dataset_dir,
+        },
+    )
+    # #endregion
 
     run_getpixelvideo(
         initial_dataset_dir=initial_dataset_dir,
         initial_media_path=initial_media_path,
         initial_source_type=initial_source_type,
+        initial_fifa_mode=initial_fifa_mode,
     )
