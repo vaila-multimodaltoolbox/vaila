@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 
@@ -38,6 +39,34 @@ def test_composite_masks_bgr_empty() -> None:
         frame, np.zeros((0, 64, 64), dtype=bool), np.array([], dtype=np.int64)
     )
     assert out.shape == frame.shape
+
+
+def test_composite_masks_bgr_rich_draws_contour_and_label() -> None:
+    from vaila.vaila_sam import _composite_masks_bgr
+
+    frame = np.zeros((64, 64, 3), dtype=np.uint8)
+    mask = np.zeros((1, 64, 64), dtype=bool)
+    mask[0, 16:48, 20:44] = True
+    oids = np.array([3], dtype=np.int64)
+    probs = np.array([0.9], dtype=np.float32)
+    boxes = np.array([[20.0, 16.0, 24.0, 32.0]], dtype=np.float32)
+
+    out_plain = _composite_masks_bgr(frame, mask, oids)
+    out_rich = _composite_masks_bgr(
+        frame,
+        mask,
+        oids,
+        probs=probs,
+        boxes_xywh=boxes,
+        draw_box=True,
+        draw_id=True,
+        draw_contour=True,
+        draw_centroid=True,
+    )
+    assert out_rich.shape == out_plain.shape
+    # Rich overlay should add non-mask pixels (box/label/contour) compared to plain blending.
+    diff = np.abs(out_rich.astype(np.int16) - out_plain.astype(np.int16)).sum(axis=2)
+    assert int((diff > 0).sum()) > 0
 
 
 def test_sam3_build_oom_retry_attempts_extends_below_32() -> None:
@@ -223,6 +252,63 @@ def test_merge_chunk_outputs(tmp_path: Path) -> None:
             header + "\n" + "\n".join(rows) + "\n", encoding="utf-8"
         )
 
+        # Tracks CSV (long)
+        (d / "sam_tracks.csv").write_text(
+            "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts\n"
+            + "\n".join(
+                f"{local_fi},1,20,16,24,32,0.95,100,1,12" for local_fi in range(end - start)
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        # Masks manifest
+        (d / "sam_masks_manifest.csv").write_text(
+            "frame,obj_id,area_px,mask_png\n"
+            + "\n".join(
+                f"{local_fi},1,100,masks/frame_{local_fi:06d}_obj_1.png"
+                for local_fi in range(end - start)
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        # Contours JSON (minimal schema)
+        frames = []
+        for local_fi in range(end - start):
+            frames.append(
+                {
+                    "frame": local_fi,
+                    "session_frame": local_fi,
+                    "objects": [
+                        {
+                            "obj_id": 1,
+                            "score": 0.95,
+                            "bbox_xywh_px": [20, 16, 24, 32],
+                            "area_px": 100,
+                            "mask_png": f"masks/frame_{local_fi:06d}_obj_1.png",
+                            "polygons": [[[20, 16], [44, 16], [44, 48], [20, 48]]],
+                        }
+                    ],
+                }
+            )
+
+        (d / "sam_contours.json").write_text(
+            json.dumps(
+                {
+                    "schema": "vaila_sam_contours_v1",
+                    "video": "chunk.mp4",
+                    "width": 64,
+                    "height": 64,
+                    "fps": 30.0,
+                    "n_frames": end - start,
+                    "object_ids": [1],
+                    "frames": frames,
+                },
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
     _merge_chunk_outputs(
         chunks,
         chunk_dirs,
@@ -251,6 +337,18 @@ def test_merge_chunk_outputs(tmp_path: Path) -> None:
     assert lines[1].startswith("0,")
     # Last data row should be frame 19
     assert lines[-1].startswith("19,")
+
+    # Check merged tracks + manifest + contours exist
+    assert (final_out / "sam_tracks.csv").is_file()
+    assert (final_out / "sam_masks_manifest.csv").is_file()
+    c = final_out / "sam_contours.json"
+    assert c.is_file()
+    payload = json.loads(c.read_text(encoding="utf-8"))
+    assert payload["schema"] == "vaila_sam_contours_v1"
+    assert payload["frames"][0]["frame"] == 0
+    assert payload["frames"][-1]["frame"] == 19
+    # merged mask_png should point to global frame indices
+    assert payload["frames"][-1]["objects"][0]["mask_png"].endswith("frame_000019_obj_1.png")
 
 
 def test_read_max_input_long_edge_cli_explicit() -> None:
