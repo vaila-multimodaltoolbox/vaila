@@ -161,6 +161,15 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 | `--weights` / `--checkpoint` | `-w` | Path | auto | SAM 3 checkpoint (file or folder); auto-detected if omitted |
 | `--no-overlay` | — | flag | — | Skip overlay MP4 output |
 | `--no-png` | — | flag | — | Skip mask PNG output |
+| `--[no-]overlay-rich` | — | bool | `true` | Enrich overlay with bbox/ID/score/contours (on top of the colored masks) |
+| `--[no-]draw-contour` | — | bool | `true` | Draw mask contours on the overlay |
+| `--[no-]draw-box` | — | bool | `true` | Draw bounding boxes on the overlay |
+| `--[no-]draw-id` | — | bool | `true` | Draw `#obj_id score` label on the overlay |
+| `--draw-centroid` | — | flag | — | Draw the mask centroid on the overlay |
+| `--[no-]save-contours` | — | bool | `true` | Write `sam_contours.json` (polygons per frame/object in pixels) |
+| `--[no-]save-tracks-csv` | — | bool | `true` | Write `sam_tracks.csv` (long format, bbox in pixels + area + polygon stats) |
+| `--contours-format` | — | choice | `json` | `json` or `jsonl` (`sam_contours.json` vs `sam_contours.jsonl`) |
+| `--contours-gzip` | — | flag | — | Write gzipped contours output (`.json.gz` / `.jsonl.gz`) |
 | `--frame-by-frame` | — | flag | — | Process each frame individually (prevents OOM but loses temporal tracking) |
 | `--max-frames` | — | int | auto | Max frames passed to SAM3 on GPU (VRAM cap); `0` = full clip |
 | `--max-input-long-edge` | — | int | auto | Max long edge (px) for frames fed to SAM3; `0` = native resolution; try `1280`/`960` for 4K+ or OOM |
@@ -184,6 +193,13 @@ uv run vaila/vaila_sam.py \
   --checkpoint "/path/to/sam3.pt" \
   --max-frames 80 \
   --max-input-long-edge 1280 \
+  --overlay-rich \
+  --draw-contour \
+  --draw-box \
+  --draw-id \
+  --save-contours \
+  --save-tracks-csv \
+  --contours-format json \
   --postprocess-points all \
   --dry-run \
   --open-help \
@@ -191,6 +207,7 @@ uv run vaila/vaila_sam.py \
   --no-overlay \
   --no-png \
   --frame-by-frame \
+  --contours-gzip \
   --no-isolate-batch \
   --video-output-dir "/path/to/output_single_video_dir"
 ```
@@ -220,6 +237,9 @@ output/
       masks/           (PNG per frame, unless --no-png)
       <video_stem>_sam_overlay.mp4   (unless --no-overlay)
       sam_frames_meta.csv
+      sam_contours.json             (unless --no-save-contours)
+      sam_tracks.csv                (unless --no-save-tracks-csv)
+      sam_masks_manifest.csv        (written when masks are saved; index of mask PNGs)
       README_sam.txt
 ```
 

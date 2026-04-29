@@ -10,7 +10,9 @@
             font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
             margin: 0;
             line-height: 1.55;
-            background: #f6f7fb;
+            background: radial-gradient(1200px 600px at 10% 0%, #eef2ff 0%, rgba(238, 242, 255, 0) 60%),
+                radial-gradient(900px 500px at 90% 10%, #fce7f3 0%, rgba(252, 231, 243, 0) 55%),
+                #f6f7fb;
             font-size: 18px;
             color: #111;
         }
@@ -22,23 +24,26 @@
             padding: 28px;
             border-radius: 14px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.06);
         }
 
         h1 {
             color: #111;
             text-align: center;
-            border-bottom: 2px solid #333;
-            padding-bottom: 20px;
+            border-bottom: 1px solid #e8e8e8;
+            padding-bottom: 16px;
+            margin: 4px 0 12px 0;
         }
 
         h2 {
             color: #111;
             margin-top: 40px;
-            border-left: 4px solid #333;
-            padding-left: 15px;
+            border-left: 4px solid #111;
+            padding-left: 12px;
             background: #fff;
-            padding: 10px;
-            border-radius: 0 5px 5px 0;
+            padding: 10px 12px;
+            border-radius: 0 10px 10px 0;
+            font-size: 20px;
         }
 
         h3 {
@@ -46,6 +51,7 @@
             margin-top: 20px;
             border-bottom: 1px solid #ddd;
             padding-bottom: 5px;
+            font-size: 18px;
         }
 
         .grid-container {
@@ -70,6 +76,26 @@
             box-shadow: 0 10px 18px rgba(0, 0, 0, 0.10);
             transform: translateY(-1px);
             border-color: #c9c9c9;
+        }
+
+        .muted {
+            color: #333;
+            opacity: 0.85;
+        }
+
+        .links {
+            text-align: center;
+            margin-bottom: 18px;
+        }
+
+        .links a {
+            font-weight: 700;
+            color: #111;
+            text-decoration: none;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
         }
 
         .topbar {
@@ -133,21 +159,49 @@
             text-decoration: underline;
         }
 
-        .ascii-art {
-            font-family: monospace;
-            white-space: pre;
-            background: #fff;
+        .banner {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            background: linear-gradient(180deg, #fcfcfc, #f7f7f7);
             color: #111;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 30px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            margin: 14px 0 22px 0;
             overflow-x: auto;
-            font-size: 0.8em;
-            border: 1px solid #ddd;
+            font-size: 14px;
+            border: 1px solid #e6e6e6;
         }
 
         .section-header {
             margin-top: 40px;
+        }
+
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            font-size: 0.95em;
+            background: #f3f4f6;
+            padding: 0.1em 0.35em;
+            border-radius: 0.4em;
+            border: 1px solid #e5e7eb;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                font-size: 16px;
+            }
+
+            .container {
+                margin: 14px auto;
+                padding: 16px;
+                border-radius: 12px;
+            }
+
+            h2 {
+                font-size: 18px;
+            }
+
+            .pill {
+                font-size: 13px;
+            }
         }
     </style>
 </head>
@@ -156,11 +210,13 @@
     <div class="container">
         <h1><i>vailá</i> — Help</h1>
 
-        <p style="text-align: center; margin-bottom: 18px; color: #111;">
-            <a href="../../docs/index.md" style="font-weight: bold; color: #111;">Open Project Documentation</a> |
-            <a href="gpu_guide.html" style="font-weight: bold; color: #111;">Hardware Optimization Guide</a> |
-            <a href="../../docs/fifa_workflow.md" style="font-weight: bold; color: #111;">FIFA Workflow</a>
-        </p>
+        <div class="links">
+            <a href="../../docs/index.md">Open Project Documentation</a>
+            <span class="muted"> | </span>
+            <a href="gpu_guide.html">Hardware Optimization Guide</a>
+            <span class="muted"> | </span>
+            <a href="../../docs/fifa_workflow.md">FIFA Workflow</a>
+        </div>
 
         <div class="topbar">
             <div class="searchbox">
@@ -171,139 +227,138 @@
             <span class="pill">Layout: matches <code>vaila.py</code> CLI list</span>
         </div>
 
-        <!-- ASCII Art Header -->
-        <div class="ascii-art">
-            vailá - 29.April.2026 v0.3.40 (Python 3.12.13)
-            <div class="section-header">
-                <h2>============================ File Manager (Frame A) ========================</h2>
-                <div class="grid-container">
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c1 - Rename</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+        <pre class="banner">vailá - 29.April.2026 v0.3.40 (Python 3.12.13)</pre>
+
+        <div class="section-header">
+            <h2>File Manager (Frame A)</h2>
+            <div class="grid-container">
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c1 - Rename</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c2 - Import</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c2 - Import</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c3 - Export</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c3 - Export</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c4 - Copy</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c4 - Copy</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c5 - Move</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c5 - Move</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c6 - Remove</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c6 - Remove</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c7 - Tree</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c7 - Tree</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c8 - Find</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c8 - Find</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">A_r1_c9 - Transfer</div>
-                        <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">A_r1_c9 - Transfer</div>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div class="section-header">
-                <h2>========================== Multimodal Analysis (Frame B) ===================</h2>
-                <div class="grid-container">
-                    <div class="tool-card">
-                        <div class="tool-title">B1_r1_c1 - IMU</div>
-                        <div class="tool-links"><a href="imu_analysis.html">HTML</a> | <a href="imu_analysis.md">MD</a>
-                        </div>
+        <div class="section-header">
+            <h2>Multimodal Analysis (Frame B)</h2>
+            <div class="grid-container">
+                <div class="tool-card">
+                    <div class="tool-title">B1_r1_c1 - IMU</div>
+                    <div class="tool-links"><a href="imu_analysis.html">HTML</a> | <a href="imu_analysis.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B1_r1_c2 - Motion Capture Cluster</div>
-                        <div class="tool-links"><a href="cluster_analysis.html">HTML</a> | <a
-                                href="cluster_analysis.md">MD</a></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B1_r1_c2 - Motion Capture Cluster</div>
+                    <div class="tool-links"><a href="cluster_analysis.html">HTML</a> | <a
+                            href="cluster_analysis.md">MD</a></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B1_r1_c3 - Motion Capture Full Body</div>
+                    <div class="tool-links"><a href="mocap_analysis.html">HTML</a> | <a href="mocap_analysis.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B1_r1_c3 - Motion Capture Full Body</div>
-                        <div class="tool-links"><a href="mocap_analysis.html">HTML</a> | <a
-                                href="mocap_analysis.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B1_r1_c4 - Markerless 2D</div>
-                        <div class="tool-links"><a href="markerless2d_analysis_v2.html">HTML</a> | <a
-                                href="markerless2d_analysis_v2.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B1_r1_c5 - Markerless 3D</div>
-                        <div class="tool-links"><a href="markerless_3d_analysis.html">HTML</a> | <a
-                                href="markerless_3d_analysis.md">MD</a></div>
-                    </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B1_r1_c4 - Markerless 2D</div>
+                    <div class="tool-links"><a href="markerless2d_analysis_v2.html">HTML</a> | <a
+                            href="markerless2d_analysis_v2.md">MD</a></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B1_r1_c5 - Markerless 3D</div>
+                    <div class="tool-links"><a href="markerless_3d_analysis.html">HTML</a> | <a
+                            href="markerless_3d_analysis.md">MD</a></div>
+                </div>
 
-                    <div class="tool-card">
-                        <div class="tool-title">B2_r2_c1 - Vector Coding</div>
-                        <div class="tool-links"><a href="run_vector_coding.html">HTML</a> | <a
-                                href="run_vector_coding.md">MD</a></div>
+                <div class="tool-card">
+                    <div class="tool-title">B2_r2_c1 - Vector Coding</div>
+                    <div class="tool-links"><a href="run_vector_coding.html">HTML</a> | <a
+                            href="run_vector_coding.md">MD</a></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B2_r2_c2 - EMG</div>
+                    <div class="tool-links"><a href="emg_labiocom.html">HTML</a> | <a href="emg_labiocom.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B2_r2_c2 - EMG</div>
-                        <div class="tool-links"><a href="emg_labiocom.html">HTML</a> | <a href="emg_labiocom.md">MD</a>
-                        </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B2_r2_c3 - Force Plate</div>
+                    <div class="tool-links"><a href="forceplate_analysis.html">HTML</a> | <a
+                            href="forceplate_analysis.md">MD</a></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B2_r2_c4 - GNSS/GPS</div>
+                    <div class="tool-links"><a href="gnss_analysis.html">HTML</a> | <a href="gnss_analysis.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B2_r2_c3 - Force Plate</div>
-                        <div class="tool-links"><a href="forceplate_analysis.html">HTML</a> | <a
-                                href="forceplate_analysis.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B2_r2_c4 - GNSS/GPS</div>
-                        <div class="tool-links"><a href="gnss_analysis.html">HTML</a> | <a
-                                href="gnss_analysis.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B2_r2_c5 - MEG/EEG</div>
-                        <div class="tool-links"><span>(Coming Soon)</span></div>
-                    </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B2_r2_c5 - MEG/EEG</div>
+                    <div class="tool-links"><span>(Coming Soon)</span></div>
+                </div>
 
-                    <div class="tool-card">
-                        <div class="tool-title">B3_r3_c1 - HR/ECG</div>
-                        <div class="tool-links"><span>(Coming Soon)</span></div>
+                <div class="tool-card">
+                    <div class="tool-title">B3_r3_c1 - HR/ECG</div>
+                    <div class="tool-links"><span>(Coming Soon)</span></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B3_r3_c2 - Yolo + Markerless_MP</div>
+                    <div class="tool-links"><a href="markerless2d_mpyolo.html">HTML</a> |
+                        <a href="markerless2d_mpyolo.md">MD</a>
                     </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B3_r3_c2 - Yolo + Markerless_MP</div>
-                        <div class="tool-links"><a href="markerless2d_mpyolo.html">HTML</a> |
-                            <a href="markerless2d_mpyolo.md">MD</a>
-                        </div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B3_r3_c3 - Vertical Jump</div>
-                        <div class="tool-links"><a href="vaila_and_jump.html">HTML</a> | <a
-                                href="vaila_and_jump.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B3_r3_c4 - Cube2D</div>
-                        <div class="tool-links"><a href="cube2d_kinematics.html">HTML</a> | <a
-                                href="cube2d_kinematics.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">B3_r3_c5 - Animal Open Field</div>
-                        <div class="tool-links"><a href="animal_open_field.html">HTML</a> | <a
-                                href="animal_open_field.md">MD</a></div>
-                    </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B3_r3_c3 - Vertical Jump</div>
+                    <div class="tool-links"><a href="vaila_and_jump.html">HTML</a> | <a
+                            href="vaila_and_jump.md">MD</a></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B3_r3_c4 - Cube2D</div>
+                    <div class="tool-links"><a href="cube2d_kinematics.html">HTML</a> | <a
+                            href="cube2d_kinematics.md">MD</a></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">B3_r3_c5 - Animal Open Field</div>
+                    <div class="tool-links"><a href="animal_open_field.html">HTML</a> | <a
+                            href="animal_open_field.md">MD</a></div>
+                </div>
 
                     <div class="tool-card">
                         <div class="tool-title">B4_r4_c1 - YOLO and SAM</div>
@@ -636,9 +691,8 @@
                 </div>
             </div>
 
-            <div style="margin-top: 50px; text-align: center; color: #111; font-size: 0.9em;">
-                <p>Generated based on <i>vailá</i> v0.3.40 layout.</p>
-            </div>
+        <div style="margin-top: 50px; text-align: center; color: #111; font-size: 0.9em;">
+            <p class="muted">Generated based on <i>vailá</i> v0.3.40 layout.</p>
         </div>
 
         <script>
@@ -665,6 +719,7 @@
                 input.addEventListener("input", applyFilter);
             })();
         </script>
+    </div>
 </body>
 
 </html>
