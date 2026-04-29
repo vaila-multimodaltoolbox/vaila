@@ -2622,9 +2622,9 @@ class Vaila(tk.Tk):
         This function runs the Remove Duplicate Frames module, which can be used to
         remove duplicate frames from video files.
         """
-        from vaila import rm_duplicateframes
+        from vaila import remove_frames2sync
 
-        rm_duplicateframes.run_rm_duplicateframes()
+        remove_frames2sync.run_remove_frames2sync()
 
     # C_C_r1_c1
     def show_c3d_data(self):
