@@ -592,6 +592,7 @@ def _sam3_dry_run_report(
     text_prompt: str,
     frame_index: int,
     max_input_frames: int | None,
+    max_input_long_edge: int | None = None,
     save_overlay_mp4: bool,
     save_mask_png: bool,
     frame_by_frame_fallback: bool,
@@ -607,6 +608,10 @@ def _sam3_dry_run_report(
         f"frame_by_frame_fallback={'enabled' if frame_by_frame_fallback else 'disabled'}"
         f" | save_overlay_mp4={save_overlay_mp4} | save_mask_png={save_mask_png}"
     )
+    if max_input_long_edge is not None:
+        lines.append(f"max_input_long_edge (CLI)={int(max_input_long_edge)}")
+    else:
+        lines.append("max_input_long_edge (CLI)=auto/env")
 
     vram_profile = _sam3_vram_profile()
     if vram_profile is None:
@@ -748,7 +753,12 @@ def _maybe_subsample_video_for_vram(
     out_path = output_dir / "_sam3_subsample_input.mp4"
     cap = cv2.VideoCapture(vp)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
-    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (w, h))
+    # Preserve *duration* when subsampling: we keep fewer frames that represent the full clip,
+    # so we must reduce the output FPS proportionally; otherwise the clip (and SAM overlay)
+    # plays back faster than real time.
+    fps_out = float(fps) * (float(len(indices)) / float(n)) if n > 0 else float(fps)
+    fps_out = max(1e-3, fps_out)
+    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps_out), (w, h))
     if not writer.isOpened():
         cap.release()
         raise OSError("Could not open VideoWriter for SAM3 subsample (try another codec/OS path)")
