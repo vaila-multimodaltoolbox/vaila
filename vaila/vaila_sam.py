@@ -218,6 +218,15 @@ def _print_sam3_install_instructions() -> None:
     print(msg, file=sys.stderr)
 
 
+# Exit codes for the per-video isolated subprocess (see batch CLI loop).
+# When the per-video subprocess exhausts its OOM retry ladder while running
+# under ``--no-chunked-fallback``, it exits with this code so the *coordinator*
+# (the outer CLI process, which never loaded SAM3 and therefore has a clean
+# CUDA context) can run the chunked fallback itself.  Keeping the chunked
+# coordinator separate from the OOM victim is the only way to free the ~13 GiB
+# of orphan SAM3 C++ workspace tensors that no in-process gc can reach.
+EXIT_NEEDS_CHUNKING = 7
+
 _SAM3_CUDA_REQUIRED_BODY = (
     "SAM 3 video in vailá requires an NVIDIA GPU with CUDA "
     "(PyTorch must see torch.cuda.is_available()).\n\n"
@@ -1265,10 +1274,18 @@ def _process_video_chunked(
         else:
             print(s)
 
-    # Determine chunk size
+    # Determine chunk size.  This is OOM-recovery territory: by definition we
+    # are running because the in-process retry ladder failed for the source
+    # resolution.  Pick a conservative value capped at 48 frames so each chunk
+    # fits comfortably in 24 GiB even at 1080p×1280-long-edge (KV cache for
+    # SAM3's transformer grows ~80–120 MiB per propagated frame, so 48 frames
+    # ≈ 5 GiB KV + 6.3 GiB model + processing).  A larger chunk_size triggered
+    # the same cascade we are trying to escape (debug 2026-04-30: chunk_size=128
+    # OOMed at ~58% propagation of the first 128-frame chunk).
     if chunk_size is None or chunk_size <= 0:
         profile = _sam3_vram_profile()
-        chunk_size = max(16, int(profile["safe_frames"])) if profile is not None else 64
+        auto_safe = int(profile["safe_frames"]) if profile is not None else 64
+        chunk_size = max(16, min(48, auto_safe))
     # Safety: ensure chunk_size is at least 8 frames
     chunk_size = max(8, chunk_size)
 
@@ -1324,11 +1341,31 @@ def _process_video_chunked(
             text_prompt,
             "--frame",
             str(chunk_fi),
+            # Recursion guard: a chunk that itself OOMs must NOT spawn another
+            # chunked fallback (otherwise ``_chunks/out_*/_chunks/out_*/...``
+            # explodes — the chunk_size=16 floor means a 16-frame chunk would
+            # split into one 16-frame chunk == itself, looping forever).
+            "--no-chunked-fallback",
         ]
+        # Pin the chunk subprocess to a max-frames cap = chunk_size so it does
+        # NOT use the optimistic auto value (e.g. auto=128 inside a 48-frame
+        # chunk would still try to load 48 frames into one session, which is
+        # what we want — but if the chunk happens to be shorter than auto, the
+        # subprocess otherwise reports auto=128 and tries the full retry ladder
+        # 128→64→32→… on EACH chunk in-process, recreating the cascade).
+        effective_max_frames = chunk_size
         if max_input_frames is not None and max_input_frames > 0:
-            cmd += ["--max-frames", str(max_input_frames)]
-        if max_input_long_edge is not None:
-            cmd += ["--max-input-long-edge", str(max_input_long_edge)]
+            effective_max_frames = min(chunk_size, int(max_input_frames))
+        cmd += ["--max-frames", str(effective_max_frames)]
+        # Force a tighter spatial cap for chunk subprocesses: the parent landed
+        # in chunked fallback precisely because its frame-cap AND long-edge
+        # ladders failed at the source resolution.  Re-running at the same
+        # resolution per chunk would just OOM again.  Use the user's value if
+        # it is already <=1280, else clamp to 1280.
+        chunk_long_edge = max_input_long_edge
+        if chunk_long_edge is None or chunk_long_edge <= 0 or chunk_long_edge > 1280:
+            chunk_long_edge = 1280
+        cmd += ["--max-input-long-edge", str(chunk_long_edge)]
         if checkpoint is not None:
             cmd += ["--checkpoint", str(checkpoint)]
         if not save_overlay_mp4:
@@ -1996,7 +2033,32 @@ def run_sam3_on_video(
         if sess_to_orig.size <= 0:
             sess_to_orig = np.arange(max(0, nframes_to_write), dtype=np.int64)
 
+        n_unique_masks = len(outputs_by_frame)
+        if sess_to_orig.size < nframes_to_write:
+            print(
+                f"[SAM3] Overlay: {nframes_to_write} original frames, "
+                f"{n_unique_masks} unique mask keyframes (session={sess_to_orig.size} frames). "
+                f"Masks are interpolated (nearest-neighbor) between keyframes."
+            )
+        else:
+            print(
+                f"[SAM3] Overlay: {nframes_to_write} frames, "
+                f"{n_unique_masks} frames with mask outputs."
+            )
+        print(
+            f"[SAM3] Rendering overlay + exporting CSV/JSON "
+            f"({nframes_to_write} frames at {w}x{h})..."
+        )
+        sys.stdout.flush()
+
+        _overlay_log_interval = max(1, nframes_to_write // 20)  # ~5% increments
         for frame_idx in range(nframes_to_write):
+            if frame_idx % _overlay_log_interval == 0 or frame_idx == nframes_to_write - 1:
+                pct = 100.0 * (frame_idx + 1) / nframes_to_write
+                print(
+                    f"  overlay: frame {frame_idx + 1}/{nframes_to_write} ({pct:.0f}%)",
+                    flush=True,
+                )
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ok, bgr = cap.read()
             if not ok or bgr is None:
@@ -2231,6 +2293,21 @@ def run_sam3_on_video(
             f"frames_with_outputs={len(outputs_by_frame)} / {nframes}\n",
             encoding="utf-8",
         )
+
+        # Summary for the user.
+        _written_files = [
+            f for f in (
+                overlay_path if save_overlay_mp4 and writer is not None else None,
+                output_dir / "sam_frames_meta.csv",
+                output_dir / "sam_tracks.csv" if save_tracks_csv else None,
+                output_dir / "sam_contours.json" if save_contours else None,
+            )
+            if f is not None and Path(f).is_file()
+        ]
+        print(f"[SAM3] ✓ Done — {len(_written_files)} output files in {output_dir}")
+        for f in _written_files:
+            print(f"  • {Path(f).name} ({Path(f).stat().st_size / 1024:.0f} KB)")
+        sys.stdout.flush()
     finally:
         for _tmp in (temp_clip, temp_spatial):
             if _tmp is not None and Path(_tmp).is_file():
@@ -2348,6 +2425,7 @@ def _process_one_video_with_oom_retry(
     save_tracks_csv: bool = True,
     contours_format: str = "json",
     contours_gzip: bool = False,
+    no_chunked_fallback: bool = False,
     log: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Run one video; on CUDA OOM retry with descending frame caps
@@ -2484,6 +2562,25 @@ def _process_one_video_with_oom_retry(
     # All retry attempts exhausted — fall back to divide-and-conquer chunking.
     # This splits the video into temporal segments small enough for VRAM,
     # processes each in an isolated subprocess, then merges the masks.
+    #
+    # Recursion guard (debug session 2026-04-30, /home/preto/Videos test):
+    # When ``_process_video_chunked`` spawns a chunk subprocess, it passes
+    # ``--no-chunked-fallback`` so the child never re-enters this branch.  Without
+    # this guard a single OOMing chunk produced 10+ levels of
+    # ``_chunks/out_000000/_chunks/...`` because ``safe_frames`` is clamped to
+    # ``max(16, …)`` — chunking a 16-frame video yields exactly one chunk equal
+    # to the input, OOMs, and recurses forever.
+    if no_chunked_fallback:
+        _log(
+            f"  [SAM3] All OOM retries exhausted for {video_file.name} "
+            "(--no-chunked-fallback set; refusing to recurse into another chunked split)"
+        )
+        _write_failure_marker(
+            output_dir,
+            video_file,
+            last_err or "All OOM retries exhausted (chunked fallback disabled)",
+        )
+        return False, last_err or "All OOM retries exhausted (chunked fallback disabled)"
     _log(
         f"  [SAM3] All OOM retry attempts exhausted for {video_file.name}; "
         f"falling back to divide-and-conquer chunking..."
@@ -3632,6 +3729,12 @@ def main() -> None:
         default=None,
         help=argparse.SUPPRESS,  # internal: used by subprocess-per-video isolation
     )
+    parser.add_argument(
+        "--no-chunked-fallback",
+        action="store_true",
+        help=argparse.SUPPRESS,  # internal: prevents recursive chunking when
+        # this process is itself a chunk spawned by _process_video_chunked
+    )
     args = parser.parse_args()
 
     if args.open_help:
@@ -3699,10 +3802,21 @@ def main() -> None:
             save_tracks_csv=bool(args.save_tracks_csv),
             contours_format=str(args.contours_format),
             contours_gzip=bool(args.contours_gzip),
+            no_chunked_fallback=bool(args.no_chunked_fallback),
         )
         if ok:
             print(f"  Done: {out_dir}")
             raise SystemExit(0)
+        # If we are running under --no-chunked-fallback (i.e. either as a chunk
+        # spawned by ``_process_video_chunked`` *or* as a per-video isolated
+        # subprocess from the coordinator), and the failure was OOM, exit with
+        # EXIT_NEEDS_CHUNKING so the *outer* coordinator can run the chunked
+        # fallback from a clean CUDA context.  The current process is poisoned:
+        # SAM3 leaves ~13 GiB of orphan C++ workspace tensors after a failed
+        # start_session that nothing short of process death can release.
+        if bool(args.no_chunked_fallback) and ("out of memory" in err.lower()):
+            print(f"  OOM EXHAUSTED on {single.name}; exiting with EXIT_NEEDS_CHUNKING")
+            raise SystemExit(EXIT_NEEDS_CHUNKING)
         print(f"  ERROR on {single.name}: {err}")
         raise SystemExit(3)
 
@@ -3754,26 +3868,36 @@ def main() -> None:
         _sam3_guard_cuda_cli()
 
         # Subprocess-per-video isolation is the ONLY reliable fix for the SAM3
-        # CUDA OOM cascade.  Runtime evidence (debug session 42b4a5):
+        # CUDA OOM cascade.  Runtime evidence (debug session 42b4a5, plus a
+        # follow-up on 2026-04-30 with a 1080p×1189 frame clip on a clean RTX
+        # 4090):
         #   - Without OOM: post-cleanup alloc=0.009 GiB → batch works.
         #   - With OOM: ~13 GiB orphan C++ tensors persist; gc.collect / empty_cache
-        #     cannot reach them → next video starts with leaked state → cascade.
+        #     cannot reach them → next video AND any chunked-fallback children
+        #     spawned from the poisoned process see only ~3 GiB free → cascade.
         # Killing the Python process is the only way to release SAM3's internal
         # C++ workspace pools after a failed start_session.
-        use_isolation = (not args.no_isolate_batch) and len(video_files) > 1
+        #
+        # Coordinator pattern (2026-04-30): isolation now runs for *every* video,
+        # including single-video CLI invocations.  This keeps the *outer*
+        # coordinator process clean (it only runs ``_sam3_guard_cuda_cli`` ~
+        # 100 MiB CUDA context) so when a per-video subprocess OOMs and exits
+        # with EXIT_NEEDS_CHUNKING, we can run ``_process_video_chunked`` from
+        # *here* (the coordinator), spawning chunk subprocesses against a
+        # near-empty GPU instead of the 20 GiB-poisoned victim process.
+        use_isolation = not args.no_isolate_batch
         failed_cli: list[str] = []
 
         if use_isolation:
             import subprocess as _sp
 
-            print("[batch] subprocess-per-video isolation: ENABLED (each video in fresh process)")
-            for idx, video_file in enumerate(video_files, 1):
-                print(f"\n{'=' * 60}")
-                print(f"Processing video {idx}/{len(video_files)}: {video_file.name} (isolated)")
-                print(f"{'=' * 60}")
-                out_dir = output_base / video_file.stem
-                out_dir.mkdir(parents=True, exist_ok=True)
-                cmd = [
+            scope = "single-video" if len(video_files) == 1 else "each video"
+            print(
+                f"[batch] subprocess-per-video isolation: ENABLED ({scope} in a fresh process)"
+            )
+
+            def _build_isolated_cmd(video_file: Path, out_dir: Path) -> list[str]:
+                cmd_local = [
                     sys.executable,
                     str(Path(__file__).resolve()),
                     "--input",
@@ -3784,37 +3908,53 @@ def main() -> None:
                     args.text,
                     "--frame",
                     str(args.frame),
+                    # Per-video subprocess MUST NOT chunk in-process: any chunk
+                    # subprocesses it would spawn would inherit a poisoned GPU
+                    # (the OOM victim still holds ~13 GiB of orphan C++ pools
+                    # until process exit).  When OOM-exhausted, this child
+                    # exits with EXIT_NEEDS_CHUNKING and the coordinator runs
+                    # the chunked fallback from a clean state.
+                    "--no-chunked-fallback",
                 ]
                 if args.max_frames is not None:
-                    cmd += ["--max-frames", str(args.max_frames)]
+                    cmd_local += ["--max-frames", str(args.max_frames)]
                 if args.max_input_long_edge is not None:
-                    cmd += ["--max-input-long-edge", str(args.max_input_long_edge)]
+                    cmd_local += ["--max-input-long-edge", str(args.max_input_long_edge)]
                 if args.checkpoint is not None:
-                    cmd += ["--checkpoint", str(args.checkpoint)]
+                    cmd_local += ["--checkpoint", str(args.checkpoint)]
                 if args.no_overlay:
-                    cmd.append("--no-overlay")
+                    cmd_local.append("--no-overlay")
                 if args.no_png:
-                    cmd.append("--no-png")
+                    cmd_local.append("--no-png")
                 if args.frame_by_frame:
-                    cmd.append("--frame-by-frame")
+                    cmd_local.append("--frame-by-frame")
                 if not args.overlay_rich:
-                    cmd.append("--no-overlay-rich")
+                    cmd_local.append("--no-overlay-rich")
                 if not args.draw_contour:
-                    cmd.append("--no-draw-contour")
+                    cmd_local.append("--no-draw-contour")
                 if not args.draw_box:
-                    cmd.append("--no-draw-box")
+                    cmd_local.append("--no-draw-box")
                 if not args.draw_id:
-                    cmd.append("--no-draw-id")
+                    cmd_local.append("--no-draw-id")
                 if args.draw_centroid:
-                    cmd.append("--draw-centroid")
+                    cmd_local.append("--draw-centroid")
                 if not args.save_contours:
-                    cmd.append("--no-save-contours")
+                    cmd_local.append("--no-save-contours")
                 if not args.save_tracks_csv:
-                    cmd.append("--no-save-tracks-csv")
+                    cmd_local.append("--no-save-tracks-csv")
                 if args.contours_format:
-                    cmd += ["--contours-format", str(args.contours_format)]
+                    cmd_local += ["--contours-format", str(args.contours_format)]
                 if args.contours_gzip:
-                    cmd.append("--contours-gzip")
+                    cmd_local.append("--contours-gzip")
+                return cmd_local
+
+            for idx, video_file in enumerate(video_files, 1):
+                print(f"\n{'=' * 60}")
+                print(f"Processing video {idx}/{len(video_files)}: {video_file.name} (isolated)")
+                print(f"{'=' * 60}")
+                out_dir = output_base / video_file.stem
+                out_dir.mkdir(parents=True, exist_ok=True)
+                cmd = _build_isolated_cmd(video_file, out_dir)
                 env = os.environ.copy()
                 env.setdefault("TQDM_DISABLE", "1")
                 env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -3826,6 +3966,49 @@ def main() -> None:
                     raise
                 if rc == 0:
                     print(f"  Done: {out_dir}")
+                    continue
+                if rc == EXIT_NEEDS_CHUNKING:
+                    print(
+                        f"  [coordinator] {video_file.name}: per-video subprocess OOM-exhausted; "
+                        "running chunked divide-and-conquer from coordinator (clean GPU)..."
+                    )
+                    import shutil as _shutil_local
+
+                    # Wipe stale chunk artefacts from the failed in-process attempt
+                    # so the coordinator-driven retry starts clean.
+                    chunk_work_dir = out_dir / "_chunks"
+                    if chunk_work_dir.exists():
+                        with contextlib.suppress(OSError):
+                            _shutil_local.rmtree(str(chunk_work_dir), ignore_errors=True)
+                    failure_marker = out_dir / "FAILED_sam.txt"
+                    with contextlib.suppress(OSError):
+                        failure_marker.unlink(missing_ok=True)
+                    chunk_ok, chunk_msg = _process_video_chunked(
+                        video_file,
+                        out_dir,
+                        text_prompt=args.text,
+                        frame_index=args.frame,
+                        checkpoint=args.checkpoint,
+                        max_input_frames=args.max_frames,
+                        max_input_long_edge=args.max_input_long_edge,
+                        save_overlay_mp4=not args.no_overlay,
+                        save_mask_png=not args.no_png,
+                        overlay_rich=bool(args.overlay_rich),
+                        draw_contour=bool(args.draw_contour),
+                        draw_box=bool(args.draw_box),
+                        draw_id=bool(args.draw_id),
+                        draw_centroid=bool(args.draw_centroid),
+                        save_contours=bool(args.save_contours),
+                        save_tracks_csv=bool(args.save_tracks_csv),
+                        contours_format=str(args.contours_format),
+                        contours_gzip=bool(args.contours_gzip),
+                    )
+                    if chunk_ok:
+                        print(f"  Done (chunked): {out_dir} — {chunk_msg}")
+                    else:
+                        err_msg = f"chunked fallback failed: {chunk_msg}"
+                        print(f"  ERROR on {video_file.name}: {err_msg}")
+                        failed_cli.append(f"{video_file.name}: {err_msg}")
                 else:
                     err_msg = f"subprocess exit={rc}"
                     print(f"  ERROR on {video_file.name}: {err_msg}")
@@ -3857,6 +4040,7 @@ def main() -> None:
                     save_tracks_csv=bool(args.save_tracks_csv),
                     contours_format=str(args.contours_format),
                     contours_gzip=bool(args.contours_gzip),
+                    no_chunked_fallback=bool(args.no_chunked_fallback),
                 )
                 if ok:
                     print(f"  Done: {out_dir}")

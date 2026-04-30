@@ -156,11 +156,25 @@ uv run vaila/vaila_sam.py \
   -t player --max-frames 80 --max-input-long-edge 1280 \
   --postprocess-points foot
 
-# Batch (all videos in a directory) — auto subprocess-per-video
+# Batch (all videos in a directory) — auto subprocess-per-video isolation
 uv run vaila/vaila_sam.py -i videos_dir/ -o output/ -t player
 
-# With VRAM cap
-uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t player --max-frames 80
+# Large videos (1080p+ / long clips): stable caps to avoid OOM cascades
+# (also useful if your desktop session is still holding VRAM)
+uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person \
+  --max-frames 48 --max-input-long-edge 1280 --no-png
+
+# Smoke / dry-run (prints effective settings, detected weights, and retry ladder)
+uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run</code></pre>
+
+        <div class="info-box">
+            <strong>What happens on CUDA OOM (important for big videos)</strong>
+            <ul>
+                <li>The script runs each video in an <strong>isolated subprocess</strong> by default (even for a single video).</li>
+                <li>If SAM3 exhausts its OOM retry ladder, the per-video subprocess exits and the <strong>coordinator</strong> automatically runs the <strong>chunked divide-and-conquer</strong> fallback from a clean GPU state.</li>
+                <li>Chunked fallback uses a conservative chunk size (≤48 frames) and clamps chunk subprocesses to <code>--max-frames=&lt;chunk_size&gt;</code> and <code>--max-input-long-edge 1280</code>.</li>
+            </ul>
+        </div>
 
 # Download weights only
 uv run vaila/vaila_sam.py --download-weights
@@ -363,7 +377,7 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td>—</td>
                 <td>flag</td>
                 <td>—</td>
-                <td>Disable subprocess-per-video isolation in batch mode (not recommended; can cause cascading OOM after a failure)</td>
+                <td>Disable subprocess-per-video isolation (not recommended; can cause cascading OOM after a failure). Default behavior is isolation-enabled for both single-video and batch runs.</td>
             </tr>
             <tr>
                 <td><code>--video-output-dir</code></td>
@@ -371,6 +385,13 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td>Path</td>
                 <td>—</td>
                 <td><strong>Internal/hidden</strong>: used by subprocess-per-video isolation; write outputs directly to this directory (single-video mode only)</td>
+            </tr>
+            <tr>
+                <td><code>--no-chunked-fallback</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td><strong>Internal/hidden</strong>: recursion guard used by coordinator/chunk subprocesses (prevents infinite <code>_chunks/out_*/_chunks/...</code> on repeated OOM)</td>
             </tr>
         </table>
 
