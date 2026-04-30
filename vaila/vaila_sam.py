@@ -730,6 +730,182 @@ def _video_frame_count(video_path: str) -> int:
     return max(0, n)
 
 
+def _video_basic_meta(video_path: Path) -> dict[str, float | int | str]:
+    """Best-effort metadata probe via OpenCV (no decode pass)."""
+    vp = str(video_path.resolve())
+    cap = cv2.VideoCapture(vp)
+    if not cap.isOpened():
+        return {
+            "path": vp,
+            "name": video_path.name,
+            "ok": 0,
+            "width": 0,
+            "height": 0,
+            "fps": 0.0,
+            "frames": 0,
+            "duration_s": 0.0,
+            "long_edge": 0,
+        }
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    if n <= 0:
+        n = _video_frame_count(vp)
+    duration_s = float(n) / fps if fps > 0.0 and n > 0 else 0.0
+    return {
+        "path": vp,
+        "name": video_path.name,
+        "ok": 1,
+        "width": w,
+        "height": h,
+        "fps": fps,
+        "frames": int(max(0, n)),
+        "duration_s": float(max(0.0, duration_s)),
+        "long_edge": int(max(w, h)),
+    }
+
+
+def _sam3_preflight_scan(
+    input_path: Path,
+    *,
+    output_base: Path,
+    max_input_frames: int | None,
+    max_input_long_edge: int | None,
+) -> Path | None:
+    """Scan videos and write a CSV summary + recommendations; no SAM3 inference."""
+    video_files = _find_videos(input_path) if input_path.is_dir() else [input_path]
+    if not video_files:
+        print(f"[preflight] No video files found under {input_path}")
+        return None
+
+    vram_profile = _sam3_vram_profile()
+    mf_resolved = _resolve_max_input_frames_value(max_input_frames, auto_profile=vram_profile)
+    le_cap = _read_max_input_long_edge(max_input_long_edge)
+    safe_auto = int(vram_profile["safe_frames"]) if vram_profile is not None else 32
+
+    output_base.mkdir(parents=True, exist_ok=True)
+    out_csv = output_base / "SAM3_PREFLIGHT.csv"
+    import csv as _csv
+
+    max_long_edge_seen = 0
+    max_frames_seen = 0
+    max_duration_seen = 0.0
+
+    with out_csv.open("w", encoding="utf-8", newline="") as f:
+        w = _csv.DictWriter(
+            f,
+            fieldnames=[
+                "name",
+                "path",
+                "ok",
+                "width",
+                "height",
+                "long_edge",
+                "fps",
+                "frames",
+                "duration_s",
+                "suggest_max_input_long_edge",
+                "suggest_max_frames",
+                "recommended_flags",
+                "risk",
+                "notes",
+            ],
+        )
+        w.writeheader()
+        for vf in video_files:
+            m = _video_basic_meta(vf)
+            long_edge = int(m["long_edge"]) if isinstance(m["long_edge"], int) else 0
+            frames = int(m["frames"]) if isinstance(m["frames"], int) else 0
+            duration_s = float(m["duration_s"]) if isinstance(m["duration_s"], float) else 0.0
+
+            if long_edge > max_long_edge_seen:
+                max_long_edge_seen = long_edge
+            if frames > max_frames_seen:
+                max_frames_seen = frames
+            if duration_s > max_duration_seen:
+                max_duration_seen = duration_s
+
+            suggest_le = le_cap
+            notes: list[str] = []
+            if long_edge <= 0:
+                notes.append("unreadable_meta")
+            if le_cap > 0 and long_edge > 0 and long_edge > le_cap:
+                notes.append(f"downscale_long_edge({long_edge}->{le_cap})")
+            if le_cap == 0 and long_edge >= 3000:
+                notes.append("high_res_no_cap(consider --max-input-long-edge)")
+
+            suggest_mf = mf_resolved
+            if frames > 0 and suggest_mf > 0 and frames > suggest_mf:
+                notes.append(f"will_subsample_frames({frames}->{suggest_mf})")
+            if frames > 0 and suggest_mf <= 0:
+                notes.append("full_clip_mode(consider --max-frames)")
+
+            risk = "low"
+            recommended_flags: list[str] = []
+            if long_edge > 0 and le_cap > 0 and long_edge > le_cap:
+                risk = "medium"
+                recommended_flags += ["--max-input-long-edge", str(le_cap)]
+            if frames > 0 and frames > safe_auto:
+                risk = "high"
+                recommended_flags += ["--max-frames", str(safe_auto)]
+            if frames > 0 and frames > (10 * safe_auto):
+                notes.append("very_long_clip(consider --frame-by-frame if OOM)")
+
+            w.writerow(
+                {
+                    **m,
+                    "suggest_max_input_long_edge": int(suggest_le),
+                    "suggest_max_frames": int(suggest_mf),
+                    "recommended_flags": " ".join(recommended_flags),
+                    "risk": risk,
+                    "notes": ";".join(notes),
+                }
+            )
+
+    print(f"[preflight] Videos: {len(video_files)}")
+    if vram_profile is None:
+        print("[preflight] VRAM profile: unavailable (CUDA not accessible)")
+    else:
+        print(
+            "[preflight] VRAM profile: "
+            f"total={vram_profile['total_gib']:.2f} GiB free={vram_profile['free_gib']:.2f} GiB "
+            f"safe_auto={int(vram_profile['safe_frames'])} frames"
+        )
+    print(
+        "[preflight] Effective caps (current CLI/env): "
+        f"max_frames={mf_resolved} max_long_edge={le_cap} safe_auto_frames={safe_auto}"
+    )
+    print(f"[preflight] Wrote: {out_csv}")
+
+    suggest_cmd: list[str] = [
+        "uv",
+        "run",
+        "vaila/vaila_sam.py",
+        "-i",
+        str(input_path),
+        "-o",
+        str(output_base),
+        "-t",
+        "person",
+        "--postprocess-points",
+        "all",
+    ]
+    if max_long_edge_seen > 0 and le_cap > 0 and max_long_edge_seen > le_cap:
+        suggest_cmd += ["--max-input-long-edge", str(le_cap)]
+    if max_frames_seen > safe_auto:
+        suggest_cmd += ["--max-frames", str(safe_auto)]
+    print("[preflight] Suggested command (conservative caps based on scan):")
+    print("  " + " ".join(suggest_cmd))
+    if max_duration_seen > 0.0:
+        print(
+            f"[preflight] Largest clip: long_edge={max_long_edge_seen}px "
+            f"frames={max_frames_seen} duration≈{max_duration_seen:.1f}s"
+        )
+    return out_csv
+
+
 def _maybe_subsample_video_for_vram(
     video_path: Path,
     output_dir: Path,
@@ -1286,8 +1462,6 @@ def _process_video_chunked(
         profile = _sam3_vram_profile()
         auto_safe = int(profile["safe_frames"]) if profile is not None else 64
         chunk_size = max(16, min(48, auto_safe))
-    # Safety: ensure chunk_size is at least 8 frames
-    chunk_size = max(8, chunk_size)
 
     n_total = _video_frame_count(str(video_file))
     if n_total <= 0:
@@ -1362,9 +1536,11 @@ def _process_video_chunked(
         # ladders failed at the source resolution.  Re-running at the same
         # resolution per chunk would just OOM again.  Use the user's value if
         # it is already <=1280, else clamp to 1280.
-        chunk_long_edge = max_input_long_edge
-        if chunk_long_edge is None or chunk_long_edge <= 0 or chunk_long_edge > 1280:
-            chunk_long_edge = 1280
+        chunk_long_edge = (
+            max_input_long_edge
+            if isinstance(max_input_long_edge, int) and 0 < max_input_long_edge <= 1280
+            else 1280
+        )
         cmd += ["--max-input-long-edge", str(chunk_long_edge)]
         if checkpoint is not None:
             cmd += ["--checkpoint", str(checkpoint)]
@@ -2052,60 +2228,82 @@ def run_sam3_on_video(
         sys.stdout.flush()
 
         _overlay_log_interval = max(1, nframes_to_write // 20)  # ~5% increments
-        for frame_idx in range(nframes_to_write):
+        sess_ptr = 0
+        last_sess_idx: int | None = None
+        last_masks: np.ndarray | None = None
+        last_oids: np.ndarray | None = None
+        last_probs: np.ndarray | None = None
+        last_boxes = None
+        last_boxes_px: np.ndarray | None = None
+
+        frame_idx = 0
+        while frame_idx < nframes_to_write:
+            ok, bgr = cap.read()
+            if not ok or bgr is None:
+                frame_idx += 1
+                continue
+
             if frame_idx % _overlay_log_interval == 0 or frame_idx == nframes_to_write - 1:
                 pct = 100.0 * (frame_idx + 1) / nframes_to_write
                 print(
-                    f"  overlay: frame {frame_idx + 1}/{nframes_to_write} ({pct:.0f}%)",
-                    flush=True,
+                    f"  overlay: frame {frame_idx + 1}/{nframes_to_write} ({pct:.0f}%)", flush=True
                 )
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ok, bgr = cap.read()
-            if not ok or bgr is None:
-                continue
 
             # Map original frame index -> nearest session frame index (piecewise-constant).
-            sess_idx = int(np.searchsorted(sess_to_orig, frame_idx, side="right") - 1)
-            if sess_idx < 0:
-                sess_idx = 0
-            if sess_idx >= sess_to_orig.size:
-                sess_idx = int(sess_to_orig.size - 1)
+            while (
+                sess_ptr + 1 < int(sess_to_orig.size)
+                and int(sess_to_orig[sess_ptr + 1]) <= frame_idx
+            ):
+                sess_ptr += 1
+            sess_idx = sess_ptr
 
-            out = outputs_by_frame.get(sess_idx)
-            if out is None:
+            if last_sess_idx != sess_idx:
+                out = outputs_by_frame.get(sess_idx)
+                if out is None:
+                    last_masks = last_oids = last_probs = None
+                    last_boxes = None
+                    last_boxes_px = None
+                else:
+                    last_masks = out.get("out_binary_masks")
+                    last_oids = out.get("out_obj_ids")
+                    last_probs = out.get("out_probs")
+                    last_boxes = out.get("out_boxes_xywh")
+
+                    if (
+                        last_masks is not None
+                        and last_oids is not None
+                        and getattr(last_masks, "size", 0) != 0
+                        and (int(w_sess), int(h_sess)) != (int(w), int(h))
+                    ):
+                        resized: list[np.ndarray] = []
+                        for i in range(last_masks.shape[0]):
+                            m = last_masks[i].astype(np.uint8)
+                            m2 = cv2.resize(m, (int(w), int(h)), interpolation=cv2.INTER_NEAREST)
+                            resized.append(m2.astype(bool))
+                        last_masks = np.stack(resized, axis=0) if resized else last_masks
+
+                    last_boxes_px = None
+                    if last_boxes is not None and len(last_boxes):
+                        with contextlib.suppress(Exception):
+                            b = np.asarray(last_boxes, dtype=np.float32)
+                            last_boxes_px = b.copy()
+                            last_boxes_px[:, 0] *= float(w)
+                            last_boxes_px[:, 2] *= float(w)
+                            last_boxes_px[:, 1] *= float(h)
+                            last_boxes_px[:, 3] *= float(h)
+
+                last_sess_idx = sess_idx
+
+            masks = last_masks
+            oids = last_oids
+            probs = last_probs
+            boxes = last_boxes
+            boxes_px = last_boxes_px
+            if masks is None or oids is None or getattr(masks, "size", 0) == 0:
                 if writer is not None:
                     writer.write(bgr)
+                frame_idx += 1
                 continue
-
-            masks = out.get("out_binary_masks")
-            oids = out.get("out_obj_ids")
-            probs = out.get("out_probs")
-            boxes = out.get("out_boxes_xywh")
-            if masks is None or oids is None or masks.size == 0:
-                if writer is not None:
-                    writer.write(bgr)
-                continue
-
-            # If the session clip was downscaled, resize masks back to the original size.
-            if (int(w_sess), int(h_sess)) != (int(w), int(h)):
-                resized = []
-                for i in range(masks.shape[0]):
-                    m = masks[i].astype(np.uint8)
-                    m2 = cv2.resize(m, (int(w), int(h)), interpolation=cv2.INTER_NEAREST)
-                    resized.append(m2.astype(bool))
-                masks = np.stack(resized, axis=0) if resized else masks
-
-            boxes_px = None
-            if boxes is not None and len(boxes):
-                try:
-                    b = np.asarray(boxes, dtype=np.float32)
-                    boxes_px = b.copy()
-                    boxes_px[:, 0] *= float(w)
-                    boxes_px[:, 2] *= float(w)
-                    boxes_px[:, 1] *= float(h)
-                    boxes_px[:, 3] *= float(h)
-                except Exception:
-                    boxes_px = None
 
             if writer is not None:
                 if overlay_rich:
@@ -2211,6 +2409,8 @@ def run_sam3_on_video(
 
             meta_rows_wide.append(",".join(row_cols))
 
+            frame_idx += 1
+
         cap.release()
         if writer is not None:
             writer.release()
@@ -2296,7 +2496,8 @@ def run_sam3_on_video(
 
         # Summary for the user.
         _written_files = [
-            f for f in (
+            f
+            for f in (
                 overlay_path if save_overlay_mp4 and writer is not None else None,
                 output_dir / "sam_frames_meta.csv",
                 output_dir / "sam_tracks.csv" if save_tracks_csv else None,
@@ -3696,6 +3897,12 @@ def main() -> None:
         "do not run SAM3.",
     )
     parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="Scan input file/dir and write SAM3_PREFLIGHT.csv (resolution/fps/frames/duration) "
+        "plus suggested caps. Does not run SAM3.",
+    )
+    parser.add_argument(
         "--download-weights",
         action="store_true",
         help="Download facebook/sam3 (config.json + sam3.pt) into vaila/models/sam3/. "
@@ -3744,6 +3951,19 @@ def main() -> None:
     if args.download_weights:
         out_ckpt = download_sam3_weights_to_vaila_models()
         print(f"SAM3 weights ready: {out_ckpt}")
+        return
+
+    if args.preflight:
+        if args.input is None:
+            print("--preflight requires --input")
+            raise SystemExit(2)
+        output_base = (args.output or Path.cwd() / "sam_preflight").resolve()
+        _sam3_preflight_scan(
+            args.input,
+            output_base=output_base,
+            max_input_frames=args.max_frames,
+            max_input_long_edge=args.max_input_long_edge,
+        )
         return
 
     # Internal isolated single-video mode: skip CUDA guard / processed_sam_TS wrapper
@@ -3892,9 +4112,7 @@ def main() -> None:
             import subprocess as _sp
 
             scope = "single-video" if len(video_files) == 1 else "each video"
-            print(
-                f"[batch] subprocess-per-video isolation: ENABLED ({scope} in a fresh process)"
-            )
+            print(f"[batch] subprocess-per-video isolation: ENABLED ({scope} in a fresh process)")
 
             def _build_isolated_cmd(video_file: Path, out_dir: Path) -> list[str]:
                 cmd_local = [
