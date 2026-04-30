@@ -410,7 +410,7 @@ def download_model(model_name):
             # Copy the downloaded model to our models directory
             import shutil
 
-            shutil.copy2(source_path, model_path)  # ty: ignore[no-matching-overload]
+            shutil.copy2(source_path, model_path)
             print(f"Successfully saved {model_name} to {model_path}")
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")
@@ -421,9 +421,9 @@ def download_model(model_name):
 
         try:
             # Try downloading through Ultralytics Hub
-            from ultralytics.utils.downloads import attempt_download  # ty: ignore[unresolved-import]
+            import ultralytics.utils.downloads as ud
 
-            attempt_download(model_path, model_name)
+            ud.attempt_download_asset(model_path, repo="ultralytics/assets")
             if os.path.exists(model_path):
                 print(f"Successfully downloaded {model_name} using attempt_download")
             else:

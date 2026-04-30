@@ -55,7 +55,6 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 import colorsys
-import contextlib
 import csv
 import datetime
 import glob
@@ -71,11 +70,6 @@ from typing import Any, cast
 import cv2
 import numpy as np
 import pandas as pd
-
-try:
-    import pkg_resources  # ty: ignore[import-not-found,unresolved-import]
-except ImportError:
-    pkg_resources = None  # setuptools not installed; use importlib.resources only
 import torch
 import ultralytics
 import yaml
@@ -1007,7 +1001,7 @@ def select_bbox_roi(video_path):
         return None
 
 
-class TrackerConfigDialog(tk.simpledialog.Dialog):
+class TrackerConfigDialog(simpledialog.Dialog):
     def __init__(self, parent, title=None):
         self.tooltip = None
         self.hardware_info = get_hardware_info()
@@ -1393,7 +1387,7 @@ class TrackerConfigDialog(tk.simpledialog.Dialog):
         self.result = self.result
 
 
-class ModelSelectorDialog(tk.simpledialog.Dialog):
+class ModelSelectorDialog(simpledialog.Dialog):
     def body(self, master):
         # Create main frame
         main_frame = tk.Frame(master)
@@ -1544,7 +1538,7 @@ class ModelSelectorDialog(tk.simpledialog.Dialog):
             self.result = self.custom_path_var.get().strip()
 
 
-class TrackerSelectorDialog(tk.simpledialog.Dialog):
+class TrackerSelectorDialog(simpledialog.Dialog):
     def body(self, master):
         trackers = [
             ("bytetrack", "ByteTrack - YOLO's default tracker"),
@@ -1569,7 +1563,7 @@ class TrackerSelectorDialog(tk.simpledialog.Dialog):
         self.result = selection.split(" - ")[0]
 
 
-class ReidModelSelectorDialog(tk.simpledialog.Dialog):
+class ReidModelSelectorDialog(simpledialog.Dialog):
     def body(self, master):
         reid_models = list(REID_MODELS.items())
 
@@ -1600,7 +1594,7 @@ class ReidModelSelectorDialog(tk.simpledialog.Dialog):
         self.result = selection.split(" - ")[0]
 
 
-class ClassSelectorDialog(tk.simpledialog.Dialog):
+class ClassSelectorDialog(simpledialog.Dialog):
     def body(self, master):
         # Default COCO classes used by YOLO
         self.coco_classes = {
@@ -1911,7 +1905,7 @@ def create_combined_detection_csv(output_dir):
     max_frame = 0
     for csv_file in detection_csv_files:
         try:
-            df = pd.read_csv(csv_file, usecols=["Frame"])  # faster
+            df = pd.read_csv(str(csv_file), usecols=cast(Any, ["Frame"]))  # faster
             if not df.empty and df["Frame"].notna().any():
                 max_frame = max(max_frame, int(df["Frame"].max()))
         except Exception:
@@ -2476,7 +2470,7 @@ def select_id_and_run_pose():
     x = canvas_width // 2
     y = canvas_height // 2
     canvas.create_image(x, y, image=img, anchor="center")
-    canvas.image = img  # Keep a reference
+    canvas.image = img  # ty: ignore[unresolved-attribute] # Keep a reference
 
     cap.release()
 
@@ -3297,7 +3291,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-p
             frame_idx = 0
             writer = cv2.VideoWriter(
                 pose_video,
-                cv2.VideoWriter_fourcc(*"mp4v"),
+                cv2.VideoWriter_fourcc(*"mp4v"),  # ty: ignore[unresolved-attribute]
                 fps if fps > 0 else 25.0,
                 (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))),
             )
@@ -3571,14 +3565,20 @@ def run_yolov11track():
             # Use MJPG codec for AVI (highly compatible and reliable)
             # This ensures the video is written correctly without corruption
             writer = cv2.VideoWriter(
-                temp_avi_path, cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)  # ty: ignore[unresolved-attribute]
+                temp_avi_path,
+                cv2.VideoWriter_fourcc(*"MJPG"),  # ty: ignore[unresolved-attribute]
+                fps,
+                (width, height),
             )
             if not writer.isOpened():
                 print(f"Error creating video file: {temp_avi_path}")
                 print("Trying alternative codec...")
                 # Fallback to XVID if MJPG fails
                 writer = cv2.VideoWriter(
-                    temp_avi_path, cv2.VideoWriter_fourcc(*"XVID"), fps, (width, height)  # ty: ignore[unresolved-attribute]
+                    temp_avi_path,
+                    cv2.VideoWriter_fourcc(*"XVID"),  # ty: ignore[unresolved-attribute]
+                    fps,
+                    (width, height),
                 )
                 if not writer.isOpened():
                     print("Error: Could not create video writer with any codec")
@@ -3587,7 +3587,7 @@ def run_yolov11track():
             # Load ROI from saved TOML file if available
             roi_poly = None
             roi_file_path = config.get("roi_file")
-            if roi_file_path and os.path.exists(roi_file_path):
+            if isinstance(roi_file_path, str) and os.path.exists(roi_file_path):
                 print(f"Loading ROI from file: {os.path.basename(roi_file_path)}")
                 try:
                     roi_poly = load_roi_from_toml(roi_file_path)
@@ -3611,7 +3611,7 @@ def run_yolov11track():
             mask_img = None
             if roi_poly is not None:
                 mask_img = np.zeros((height, width), dtype=np.uint8)
-                cv2.fillPoly(mask_img, [roi_poly], 255)  # ty: ignore[no-matching-overload]
+                cv2.fillPoly(mask_img, [roi_poly], 255)
 
             # Try to use the default Ultralytics tracker config first, then customize
             tracker_config = None
@@ -3626,12 +3626,8 @@ def run_yolov11track():
 
                         ultralytics_path = str(files("ultralytics") / "cfg" / "trackers")
                     except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
-                        # Fallback: try pkg_resources (deprecated but still works)
-                        if pkg_resources is not None:
-                            with contextlib.suppress(Exception):
-                                ultralytics_path = pkg_resources.resource_filename(
-                                    "ultralytics", "cfg/trackers"
-                                )
+                        # Fallback: try to find it manually or skip
+                        pass
                 except Exception:
                     pass
                 # If we couldn't find the path, skip to Option 2 (create from scratch)

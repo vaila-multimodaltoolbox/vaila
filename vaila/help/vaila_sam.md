@@ -117,18 +117,29 @@ uv run vaila/vaila_sam.py \
   -t player --max-frames 80 --max-input-long-edge 1280 \
   --postprocess-points foot
 
-# Batch (all videos in a directory) — auto subprocess-per-video
+# Batch (all videos in a directory) — auto subprocess-per-video isolation
 uv run vaila/vaila_sam.py -i videos_dir/ -o output/ -t player
 
-# With VRAM cap
-uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t player --max-frames 80
+# Large videos (1080p+ / long clips): stable caps to avoid OOM cascades
+# (also useful if your desktop session is still holding VRAM)
+uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person \
+  --max-frames 48 --max-input-long-edge 1280 --no-png
 
 # Download weights only
 uv run vaila/vaila_sam.py --download-weights
 
 # Open help in browser
 uv run vaila/vaila_sam.py --open-help
+
+# Smoke / dry-run (prints effective settings, detected weights, and retry ladder)
+uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run
 ```
+
+### What happens on CUDA OOM (important for big videos)
+
+- The script runs each video in an **isolated subprocess** by default (even for a single video). This prevents SAM3's CUDA state from leaking into subsequent runs.
+- If SAM3 exhausts its in-process OOM retry ladder (frame caps and long-edge caps), the per-video subprocess exits and the **coordinator process** automatically runs the **chunked divide-and-conquer** fallback from a clean GPU state.
+- Chunked fallback uses a conservative chunk size (≤48 frames) and clamps chunk subprocesses to `--max-frames=<chunk_size>` and `--max-input-long-edge=1280` to avoid repeating the same OOM ladder inside each chunk.
 
 ### Companion AI seed for the soccer field
 
@@ -177,8 +188,9 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 | `--postprocess-points` | — | choice | `none` | Build per-video vailá-format pixel CSVs (`sam_points.csv`) after batch: `foot` (bottom-center of bbox, best for soccer-field homography + `rec2d`), `center` (bbox center), `mask` (mask PNG centroid), `all` (foot + extra cx/cy/mx/my columns), `none` |
 | `--download-weights` | — | flag | — | Download facebook/sam3 into `vaila/models/sam3/` |
 | `--open-help` | — | flag | — | Open help page in the browser |
-| `--no-isolate-batch` | — | flag | — | Disable subprocess-per-video isolation in batch mode (not recommended; can cause cascading OOM after a failure) |
+| `--no-isolate-batch` | — | flag | — | Disable subprocess-per-video isolation (not recommended; can cause cascading OOM after a failure). Default behavior is isolation-enabled for both single-video and batch runs. |
 | `--video-output-dir` | — | Path | — | **Internal/hidden**: used by subprocess-per-video isolation; write outputs directly to this directory (single-video mode only) |
+| `--no-chunked-fallback` | — | flag | — | **Internal/hidden**: recursion guard used by coordinator/chunk subprocesses (prevents infinite `_chunks/out_*/_chunks/...` on repeated OOM) |
 
 ### CLI — full command (all options)
 
