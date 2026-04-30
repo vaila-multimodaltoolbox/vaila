@@ -52,7 +52,6 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 import colorsys
-import contextlib
 import csv
 import datetime
 import glob
@@ -68,11 +67,6 @@ from typing import Any, cast
 import cv2
 import numpy as np
 import pandas as pd
-
-try:
-    import pkg_resources  # ty: ignore[import-not-found,unresolved-import]
-except ImportError:
-    pkg_resources = None  # setuptools not installed; use importlib.resources only
 import torch
 import ultralytics
 import yaml
@@ -3349,13 +3343,13 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
                         )
                     else:
                         # Empty ROI, fill with NaN
-                        keypoints_row = [frame_idx, tracker_id, label]
+                        keypoints_row: list[Any] = [frame_idx, tracker_id, label]
                         for _ in keypoint_names:
                             keypoints_row.extend([np.nan, np.nan, np.nan])
                         pose_data.append(keypoints_row)
                 else:
                     # No bbox for this frame, fill with NaN
-                    keypoints_row = [frame_idx, tracker_id, label]
+                    keypoints_row: list[Any] = [frame_idx, tracker_id, label]
                     for _ in keypoint_names:
                         keypoints_row.extend([np.nan, np.nan, np.nan])
                     pose_data.append(keypoints_row)
@@ -3585,7 +3579,7 @@ def run_yolov26track():
             mask_img = None
             if roi_poly is not None:
                 mask_img = np.zeros((height, width), dtype=np.uint8)
-                cv2.fillPoly(mask_img, [roi_poly], 255)  # ty: ignore[no-matching-overload]
+                cv2.fillPoly(mask_img, [roi_poly], 255)
 
             # Try to use the default Ultralytics tracker config first, then customize
             tracker_config = None
@@ -3600,12 +3594,8 @@ def run_yolov26track():
 
                         ultralytics_path = str(files("ultralytics") / "cfg" / "trackers")
                     except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
-                        # Fallback: try pkg_resources (deprecated but still works)
-                        if pkg_resources is not None:
-                            with contextlib.suppress(Exception):
-                                ultralytics_path = pkg_resources.resource_filename(
-                                    "ultralytics", "cfg/trackers"
-                                )
+                        # Fallback: try to find it manually or skip
+                        pass
                 except Exception:
                     pass
                 # If we couldn't find the path, skip to Option 2 (create from scratch)

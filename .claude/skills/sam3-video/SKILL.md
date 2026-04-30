@@ -184,6 +184,42 @@ Multi-video batches kept failing with cascading `CUDA OOM while loading the vide
 
 If you need to revisit this with full context, see the agent transcript: [SAM3 OOM cascade debug](42b4a5fd-2701-458b-b7ec-e554e2265426).
 
+### Coordinator pattern + chunked fallback (debug session 2026-04-30)
+
+A second OOM cascade was hit on a single 1080p × 1189-frame clip on a clean RTX 4090 (`/home/preto/Videos/CRO_MOR_182145.mp4`, 22 MB):
+
+1. The per-video subprocess OOMed at `max_frames=128` (auto from `safe_frames=128`) around frame 70/127 — KV cache for 128 frames at 1080p exceeds 24 GiB.
+2. The in-process retry ladder (`128→64→32→24→16→12→8→4→2→1`) cascaded: each prior OOM left orphan tensors that poisoned the next attempt.
+3. After exhausting frame caps, the long-edge ladder `1280→960→640→512` also cascaded.
+4. The chunked fallback then kicked in **inside the same poisoned process** — it spawned chunk subprocesses while the parent still held ~20.5 GiB → every chunk OOMed at `start_session` (only ~3 GiB free).
+5. Worse: each chunk subprocess re-entered the same OOM ladder and again fell back to chunking → produced `_chunks/out_*/_chunks/out_*/...` 10+ levels deep before disk filled.
+
+**Fix** (`vaila/vaila_sam.py`):
+
+- New module-level `EXIT_NEEDS_CHUNKING = 7`.
+- New private CLI flag `--no-chunked-fallback` (recursion guard) on `_process_one_video_with_oom_retry`. When set, exhausting the OOM ladder writes `FAILED_sam.txt` and returns; the CLI single-video handler converts a true OOM exhaustion into `SystemExit(EXIT_NEEDS_CHUNKING)`.
+- `use_isolation = not args.no_isolate_batch` (drop the `len(video_files) > 1` requirement). **Single-video CLI now also runs through the coordinator-subprocess pattern.**
+- Per-video isolated subprocesses are spawned with `--no-chunked-fallback` so they cannot recurse into chunking.
+- The outer coordinator (which only ran `_sam3_guard_cuda_cli` → ~100 MiB CUDA context) catches `EXIT_NEEDS_CHUNKING` and runs `_process_video_chunked` itself, against a near-empty GPU.
+- `_process_video_chunked` clamps the chunk size: `chunk_size = max(16, min(48, auto_safe_frames))`. We are here precisely because the in-process ladder failed at the source resolution; 48 frames at 1080p×1280-long-edge fits comfortably.
+- Chunk subprocesses are forced to `--max-frames=chunk_size` and `--max-input-long-edge=min(user, 1280)`, so they don't try the optimistic auto value (e.g. auto=128 inside a 48-frame chunk would still try to load 48 frames into one session — fine — but if the chunk is shorter than auto, the subprocess otherwise reports auto=128 and tries the full 128→64→32… ladder per chunk, recreating the cascade).
+
+Verified end-to-end on 1920×1080 / 50 fps / 1189 frames / 22 MB:
+
+```
+[per-video subprocess]  CUDA OOM at max_frames=128 → 64 → 32 → … → 1
+                        long-edge 1280 → 960 → 640 → 512  (all OOM)
+                        OOM EXHAUSTED; exiting with EXIT_NEEDS_CHUNKING
+[coordinator]           running chunked divide-and-conquer (clean GPU)
+[SAM3-CHUNK]            Divide and conquer: 1189 frames → 25 chunks of ≤48 frames
+[chunk subprocess]      48/48 [01:52<00:00, 2.34s/it]   ✓ Done
+[chunk subprocess]      48/48 [01:52<00:00, 2.34s/it]   ✓ Done   …repeats…
+```
+
+**Operational guidance for users on 1080p+ sources**: pass `--max-frames 48 --max-input-long-edge 1280` upfront to skip the failing OOM ladder and go straight to a single happy session per chunk if you happen to be running tight on free VRAM (e.g. desktop session still attached). On a fully clean GPU (run `sudo gpu-mode --cuda` to drop into multi-user.target), 64 should also fit. If you do hit the cascade, the coordinator fallback now recovers automatically — but it costs the SAM3 model reload (~10 s) per chunk.
+
+If you need to revisit this with full context, see the agent transcripts: [SAM3 OOM cascade debug](42b4a5fd-2701-458b-b7ec-e554e2265426) and the 2026-04-30 follow-up in `/home/preto/Videos/CRO_MOR_182145.mp4`.
+
 ---
 
 ## Output Format
