@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 29 April 2026
-Version: 0.3.40
+Update Date: 02 May 2026
+Version: 0.3.41
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -158,7 +158,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 29.April.2026 v0.3.40 (Python 3.12.13)
+vailá - 02.May.2026 v0.3.41 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -269,7 +269,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 29.April.2026 v0.3.40 (Python 3.12.13)")
+        self.title("vailá - 02.May.2026 v0.3.41 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -3009,6 +3009,12 @@ class Vaila(tk.Tk):
             command=lambda: (win.destroy(), self.fifa_dataset_builder()),
             width=22,
         ).grid(row=1, column=1, padx=4, pady=4, sticky="we")
+        tk.Button(
+            btn_frame,
+            text="FIFA: merge manual labels",
+            command=lambda: (win.destroy(), self.fifa_manual_merge()),
+            width=22,
+        ).grid(row=2, column=0, padx=4, pady=4, sticky="we", columnspan=2)
 
         for col in (0, 1):
             btn_frame.grid_columnconfigure(col, weight=1)
@@ -3109,6 +3115,26 @@ class Vaila(tk.Tk):
         print("Docs:    docs/fifa_workflow.md §4.5 (external tree, QA export, dedupe, yolo train)")
         print("=" * 60 + "\n")
         run_vaila_module("vaila.fifa_dataset_builder", "vaila/fifa_dataset_builder.py")
+
+    def fifa_manual_merge(self):
+        """Merge manually-labeled YOLO Pose data into ``<dst>/unified/``.
+
+        Reads ``<src>/<annotator>/<sequence>/(fifa_dataset_template|pose_dataset_*)/
+        {images,labels}/{train,val,test}/`` produced by vailá ``getpixelvideo``
+        FIFA template + human review, validates the 32-kp YOLO Pose label width
+        (1 + 4 + 32*3 = 101 fields) and merges the valid pairs into
+        ``<dst>/unified/`` using the same staging+symlink+manifest convention
+        used by :mod:`vaila.fifa_dataset_builder`. Idempotent.
+        """
+        print("\n" + "=" * 60)
+        print("Launching: vaila.fifa_manual_merge (Tk dialog)")
+        print("Features: validate 32-kp YOLO labels, stage, symlink into unified/, append manifest")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.fifa_manual_merge",
+            "vaila/fifa_manual_merge.py",
+            extra_py_flags=("-u",),
+        )
 
 
 if __name__ == "__main__":

@@ -397,8 +397,20 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td>Rewind (when paused)</td>
               </tr>
               <tr>
-                <td><span class="key">Drag Slider</span></td>
+                <td><span class="key">Drag bottom scrub slider</span></td>
                 <td>Jump to specific frame</td>
+              </tr>
+              <tr>
+                <td><span class="key">SHIFT+→</span> / <span class="key">SHIFT+←</span></td>
+                <td>Jump to next/previous frame that has visible markers (wraps)</td>
+              </tr>
+              <tr>
+                <td><span class="key">Marker timeline strip</span></td>
+                <td
+                  >Above the scrub bar: <strong>click</strong> or <strong>drag</strong> to jump.
+                  Green = spans with markers; gold line = current frame. Snaps to a marked frame in
+                  that column when possible.</td
+                >
               </tr>
             </table>
           </div>

@@ -230,7 +230,7 @@ Use this when you want **FIFA pitch keypoints** in the sparse CSV workflow and *
 
 1. Launch with `--fifa-dataset …/unified` or enable FIFA in-session and set the dataset with **F7** if needed.
 2. Select the keypoint slot with **TAB** / **SHIFT+TAB** or **Ctrl+G** (Go KP). Place points with **left click**; **right click** clears the **selected** slot (same idea as **R**). **D** clears **all** markers on the **current frame**.
-3. Navigate frames (`Space`, arrows, slider). Prefer frames with **clear pitch geometry**.
+3. Navigate frames (`Space`, arrows, bottom slider, **marker timeline strip**, **SHIFT+←/→**). Prefer frames with **clear pitch geometry**.
 4. **F9** appends images/labels under `unified/` with prefix `<video_stem>_`. **Ctrl+E** / Save ML runs the PNG split export + `all_labels/`.
 
 **Batch example:**
@@ -268,7 +268,9 @@ uv run yolo pose train \
 | **←**           | Previous frame (when paused) |
 | **↑**           | Fast forward (when paused)   |
 | **↓**           | Rewind (when paused)         |
-| **Drag Slider** | Jump to specific frame       |
+| **Drag bottom scrub slider** | Jump to specific frame |
+| **SHIFT+→** / **SHIFT+←** | Jump to next/previous frame that has visible markers (wraps) |
+| **Marker timeline strip** (above scrub bar) | **Click** or **drag**: jump to that position; **green** = spans containing marked frames; **gold** line = current frame; inside a column with markers, snaps to one of those frames (middle of group), otherwise same proportional mapping as the slider |
 
 ### Zoom & Pan
 
