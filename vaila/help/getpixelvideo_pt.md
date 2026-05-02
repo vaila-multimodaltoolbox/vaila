@@ -187,7 +187,9 @@ Para gerar dataset de **keypoints / pose** (ex.: campo de futebol com 32 pontos)
 | **←**               | Quadro anterior (quando pausado) |
 | **↑**               | Avançar rápido (quando pausado)  |
 | **↓**               | Retroceder (quando pausado)      |
-| **Arrastar Slider** | Pular para quadro específico     |
+| **Arrastar slider inferior** | Pular para quadro específico |
+| **SHIFT+→** / **SHIFT+←** | Próximo/anterior quadro com marcadores visíveis (wrap) |
+| **Faixa timeline de marcadores** (acima do slider) | **Clique** ou **arrastar**: saltar; **verde** = trechos com marcadores; **dourado** = quadro atual; com marcadores na coluna, encaixa num deles (meio do grupo) |
 
 ### Zoom e Pan
 
