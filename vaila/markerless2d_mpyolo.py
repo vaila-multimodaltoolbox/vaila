@@ -64,6 +64,7 @@ License:
 import colorsys  # Adicionar esta importação no topo do arquivo
 import datetime
 import os
+import shutil
 import subprocess
 import threading
 import tkinter as tk
@@ -82,6 +83,12 @@ from ultralytics import YOLO
 # Configurações para evitar conflitos
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 torch.set_num_threads(1)
+
+
+def _package_models_dir() -> Path:
+    """YOLO/MediaPipe weights: always ``vaila/models`` next to this package (never repo CWD)."""
+    return Path(__file__).resolve().parent / "models"
+
 
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed in 0.10.32)
 POSE_CONNECTIONS = frozenset(
@@ -373,7 +380,7 @@ def get_color_for_id(tracker_id):
 
 def download_model(model_name):
     """
-    Download a specific YOLO model to the vaila/vaila/models directory.
+    Download a specific YOLO model under ``vaila/models`` (adjacent to this package).
 
     Args:
         model_name: Name of the model to download (e.g., "yolo11x.pt")
@@ -381,36 +388,39 @@ def download_model(model_name):
     Returns:
         Path to the downloaded model
     """
-    # Correto caminho para vaila/vaila/models
-    script_dir = os.path.dirname(os.path.abspath(__file__))  # vaila/
-    vaila_dir = os.path.dirname(script_dir)  # root directory
-    models_dir = os.path.join(vaila_dir, "vaila", "models")  # vaila/vaila/models
-
-    # Create the models directory if it doesn't exist
-    os.makedirs(models_dir, exist_ok=True)
+    models_dir = _package_models_dir()
+    models_dir.mkdir(parents=True, exist_ok=True)
     print(f"Models will be downloaded to: {models_dir}")
 
-    model_path = os.path.join(models_dir, model_name)
+    model_path = models_dir / model_name
 
     # Check if model already exists
-    if os.path.exists(model_path):
+    if model_path.exists():
         print(f"Model {model_name} already exists at {model_path}, using existing file.")
-        return model_path
+        return str(model_path)
 
     print(f"Downloading {model_name} to {model_path}...")
     try:
-        # Create a temporary YOLO model instance that will download the weights
-        # Use full path to avoid downloading to project root
-        model = YOLO(model_path)
+        model = YOLO(str(model_path))
 
-        # Get the path where YOLO downloaded the model
         source_path = getattr(model, "ckpt_path", None)
 
         if source_path is not None and os.path.exists(source_path):
-            # Copy the downloaded model to our models directory
-            import shutil
-
-            shutil.copy2(source_path, model_path)
+            src = Path(source_path).resolve()
+            if src != model_path.resolve():
+                shutil.copy2(source_path, model_path)
+            try:
+                abs_src = os.path.abspath(source_path)
+                if (
+                    os.path.basename(abs_src) == model_name
+                    and abs_src.startswith(os.getcwd())
+                    and Path(abs_src).resolve() != model_path.resolve()
+                ):
+                    os.remove(abs_src)
+            except OSError:
+                pass
+            print(f"Successfully saved {model_name} to {model_path}")
+        elif model_path.exists():
             print(f"Successfully saved {model_name} to {model_path}")
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")
@@ -420,18 +430,17 @@ def download_model(model_name):
         print("Trying alternative download method...")
 
         try:
-            # Try downloading through Ultralytics Hub
             import ultralytics.utils.downloads as ud
 
-            ud.attempt_download_asset(model_path, repo="ultralytics/assets")
-            if os.path.exists(model_path):
+            ud.attempt_download_asset(str(model_path), repo="ultralytics/assets")
+            if model_path.exists():
                 print(f"Successfully downloaded {model_name} using attempt_download")
             else:
                 print(f"Failed to download {model_name} to {model_path}")
         except Exception as e2:
             print(f"All download methods failed for {model_name}: {e2}")
 
-    return model_path
+    return str(model_path)
 
 
 def initialize_csv(output_dir, class_name, object_id, is_person=False):
@@ -1659,7 +1668,7 @@ def run_tracker_in_thread(model_path, video_source, tracker_config, output_dir, 
         params (dict): YOLO parameters.
     """
     # Each thread uses its own model instance
-    model = YOLO(model_path)
+    model = YOLO(str(model_path))
     print(f"Started tracking for: {video_source}")
 
     # Configure YOLO parameters
@@ -1806,13 +1815,12 @@ def run_multithreaded_tracking(params=None):
 
     # Derive model name from params
     model_name = params.get("yolo_model", "yolo26x") + ".pt"
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    models_dir = os.path.join(script_dir, "models")
-    model_path = os.path.join(models_dir, model_name)
+    models_dir = _package_models_dir()
+    model_path = models_dir / model_name
 
     # Check if the model exists, download only if necessary
-    if not os.path.exists(model_path):
-        model_path = download_model(model_name)
+    if not model_path.exists():
+        model_path = Path(download_model(model_name))
     else:
         print(f"Found local model for tracking: {model_path}")
 
@@ -2325,14 +2333,13 @@ def run_markerless2d_mpyolo(root=None, params=None):
 
     # --- Sequential mode ---
     model_name = params.get("yolo_model", "yolo26x") + ".pt"
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    models_dir = os.path.join(script_dir, "models")
-    os.makedirs(models_dir, exist_ok=True)
-    model_path = os.path.join(models_dir, model_name)
+    models_dir = _package_models_dir()
+    models_dir.mkdir(parents=True, exist_ok=True)
+    model_path = models_dir / model_name
 
     # Download the model only after confirming that we will use it
-    if not os.path.exists(model_path):
-        model_path = download_model(model_name)
+    if not model_path.exists():
+        model_path = Path(download_model(model_name))
     else:
         print(f"Found model at: {model_path}. Using the local file.")
 
@@ -2359,7 +2366,7 @@ def run_markerless2d_mpyolo(root=None, params=None):
 
     # Initialize YOLO26 model
     print(f"Loading YOLO26 model from {model_path}...")
-    model = YOLO(model_path)
+    model = YOLO(str(model_path))
 
     # Process video with enhanced pipeline (MediaPipe Tasks API)
     process_video_enhanced(video_path, output_dir, model, params)
@@ -2485,19 +2492,18 @@ if __name__ == "__main__":
             "safety_margin": args.safety_margin,
         }
 
-        # Resolve model path
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        models_dir = os.path.join(script_dir, "models")
-        os.makedirs(models_dir, exist_ok=True)
+        # Resolve model path (always under vaila/models)
+        models_dir = _package_models_dir()
+        models_dir.mkdir(parents=True, exist_ok=True)
         model_name = args.model + ".pt"
-        model_path = os.path.join(models_dir, model_name)
-        if not os.path.exists(model_path):
-            model_path = download_model(model_name)
+        model_path = models_dir / model_name
+        if not model_path.exists():
+            model_path = Path(download_model(model_name))
         else:
             print(f"Found YOLO26 model: {model_path}")
 
         print(f"Loading YOLO26 model: {model_path}")
-        model = YOLO(model_path)
+        model = YOLO(str(model_path))
         process_video_enhanced(video_path, output_dir, model, cli_params)
         print(f"\nDone! Results saved to: {output_dir}")
     else:
