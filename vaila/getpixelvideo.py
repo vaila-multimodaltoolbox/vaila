@@ -703,10 +703,24 @@ def download_or_load_yolo_model(model_name=None):
 
     try:
         print(f"Loading/Downloading YOLO model {model_name}...")
-        # Use full path to avoid downloading to root
         model = YOLO(str(model_path))
 
-        # If we successfully loaded/downloaded, check if the file is in CWD and move it to models_dir
+        source_path = getattr(model, "ckpt_path", None)
+        if source_path and os.path.exists(source_path):
+            src = Path(source_path).resolve()
+            if src != model_path.resolve():
+                shutil.copy2(source_path, str(model_path))
+            try:
+                abs_src = os.path.abspath(source_path)
+                if (
+                    os.path.basename(abs_src) == model_name
+                    and abs_src.startswith(os.getcwd())
+                    and Path(abs_src).resolve() != model_path.resolve()
+                ):
+                    os.remove(abs_src)
+            except OSError:
+                pass
+
         cwd_model = Path.cwd() / model_name
         if cwd_model.exists() and not model_path.exists():
             print(f"Moving downloaded model to {models_dir}...")
@@ -3489,17 +3503,15 @@ def play_video_with_controls(
         new_coords: dict[int, list[tuple[Any, Any]]] = {}
         for i in range(total_frames):
             row = list(coordinates.get(i, []))
-            compact = [
-                p
-                for p in row
-                if p is not None and not (p[0] is None and p[1] is None)
-            ]
+            compact = [p for p in row if p is not None and not (p[0] is None and p[1] is None)]
             new_coords[i] = compact
         coordinates = new_coords
         deleted_positions = {i: set() for i in range(total_frames)}
         selected_marker_idx = -1
         if pitch_guide_mode:
-            pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(prefer_fifa_dataset=False)
+            pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
+                prefer_fifa_dataset=False
+            )
 
     def configure_fifa_from_toml() -> tuple[bool, str]:
         """Create/load FIFA TOML config without opening Tk windows."""
@@ -6201,9 +6213,7 @@ def play_video_with_controls(
         _vh_font_rm = pygame.font.SysFont("verdana", _vh_sz)
         _vh_rgb = (238, 238, 245)
         _vh_mark = _vh_font_it.render(VAILA_MARK, True, _vh_rgb)
-        _vh_rest = _vh_font_rm.render(
-            f" getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}", True, _vh_rgb
-        )
+        _vh_rest = _vh_font_rm.render(f" getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}", True, _vh_rgb)
         _vh_pad_x, _vh_pad_y = 8, 5
         _vh_tw = _vh_mark.get_width() + _vh_rest.get_width()
         _vh_th = max(_vh_mark.get_height(), _vh_rest.get_height())

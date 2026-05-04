@@ -35,6 +35,7 @@ import datetime
 import glob
 import os
 import platform
+import shutil
 import time
 import tkinter as tk
 from pathlib import Path
@@ -47,11 +48,130 @@ from ultralytics import YOLO
 
 # Standard 17 COCO Keypoints for YOLO Pose
 KEYPOINT_NAMES = [
-    "nose", "left_eye", "right_eye", "left_ear", "right_ear",
-    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
-    "left_wrist", "right_wrist", "left_hip", "right_hip",
-    "left_knee", "right_knee", "left_ankle", "right_ankle"
+    "nose",
+    "left_eye",
+    "right_eye",
+    "left_ear",
+    "right_ear",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
 ]
+
+
+def ensure_yolo_pose_weights(model_filename: str) -> Path:
+    """Resolve ``.pt`` under ``vaila/models``. Bare ``YOLO(name.pt)`` saves to process CWD (often repo root)."""
+    models_dir = Path(__file__).resolve().parent / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    model_path = models_dir / model_filename
+
+    if model_path.exists():
+        return model_path
+
+    print(f"Downloading {model_filename} to {model_path}...")
+    try:
+        model = YOLO(str(model_path))
+        source_path = getattr(model, "ckpt_path", None)
+
+        if source_path and os.path.exists(source_path):
+            if Path(source_path).resolve() != model_path.resolve():
+                shutil.copy2(source_path, str(model_path))
+            try:
+                abs_src = os.path.abspath(source_path)
+                if (
+                    os.path.basename(abs_src) == model_filename
+                    and abs_src.startswith(os.getcwd())
+                    and Path(abs_src).resolve() != model_path.resolve()
+                ):
+                    os.remove(abs_src)
+            except OSError:
+                pass
+            return model_path
+
+        if model_path.exists():
+            return model_path
+        print(f"YOLO could not place weights at {model_path} (ckpt_path={source_path!r}).")
+    except Exception as e:
+        print(f"Ultralytics download path failed: {e}")
+
+    try:
+        import requests
+
+        if "yolo11" in model_filename.lower() or "yolov11" in model_filename.lower():
+            version_tag = "v11.0.0"
+        elif "yolo8" in model_filename.lower() or "yolov8" in model_filename.lower():
+            version_tag = "v8.0.0"
+        else:
+            version_tag = "v0.0.0"
+
+        url_model_name = (
+            model_filename.replace("yolov", "yolo")
+            if "yolov" in model_filename.lower()
+            else model_filename
+        )
+        possible_urls = [
+            f"https://github.com/ultralytics/assets/releases/download/{version_tag}/{url_model_name}",
+            f"https://github.com/ultralytics/assets/releases/download/v0.0.0/{url_model_name}",
+        ]
+
+        response = None
+        for attempt_url in possible_urls:
+            try:
+                response = requests.get(attempt_url, stream=True, timeout=60)
+                if response.status_code == 200:
+                    break
+                response = None
+            except Exception:
+                continue
+
+        if response is None or response.status_code != 200:
+            raise RuntimeError("HTTP fallback: no asset URL returned success")
+
+        total_size = int(response.headers.get("content-length", 0))
+        downloaded = 0
+        with model_path.open("wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0 and downloaded % (1024 * 1024) == 0:
+                        print(f"  Downloaded: {(downloaded / total_size) * 100:.1f}%")
+
+        print(f"[OK] Saved {model_filename} to {model_path}")
+        return model_path
+
+    except Exception as e2:
+        print(f"HTTP fallback failed: {e2}")
+
+    home = Path.home()
+    for cache_path in (
+        home / ".ultralytics" / "weights" / model_filename,
+        home / ".cache" / "ultralytics" / model_filename,
+    ):
+        if cache_path.exists():
+            shutil.copy2(str(cache_path), str(model_path))
+            print(f"[OK] Copied from Ultralytics cache to {model_path}")
+            return model_path
+
+    stray = Path.cwd() / model_filename
+    if stray.exists():
+        shutil.copy2(str(stray), str(model_path))
+        print(f"[OK] Moved stray weights from CWD to {model_path}")
+        return model_path
+
+    raise RuntimeError(
+        f"Could not resolve YOLO weights {model_filename!r}. "
+        f"Place the file under {models_dir} or check connectivity."
+    )
 
 
 class YoloConfigDialog(simpledialog.Dialog):
@@ -62,9 +182,16 @@ class YoloConfigDialog(simpledialog.Dialog):
 
         self.model_var = tk.StringVar(value="yolo11x-pose.pt")
         models = [
-            "yolo11n-pose.pt", "yolo11s-pose.pt", "yolo11m-pose.pt",
-            "yolo11l-pose.pt", "yolo11x-pose.pt", "yolo26n-pose.pt",
-            "yolo26s-pose.pt", "yolo26m-pose.pt", "yolo26l-pose.pt", "yolo26x-pose.pt"
+            "yolo11n-pose.pt",
+            "yolo11s-pose.pt",
+            "yolo11m-pose.pt",
+            "yolo11l-pose.pt",
+            "yolo11x-pose.pt",
+            "yolo26n-pose.pt",
+            "yolo26s-pose.pt",
+            "yolo26m-pose.pt",
+            "yolo26l-pose.pt",
+            "yolo26x-pose.pt",
         ]
         self.model_combo = ttk.Combobox(
             master, textvariable=self.model_var, values=models, state="readonly", width=25
@@ -81,7 +208,7 @@ class YoloConfigDialog(simpledialog.Dialog):
         try:
             self.result = {
                 "model": self.model_var.get(),
-                "confidence": float(self.conf_entry.get())
+                "confidence": float(self.conf_entry.get()),
             }
         except ValueError:
             messagebox.showerror("Error", "Confidence must be a number between 0 and 1")
@@ -92,10 +219,25 @@ def draw_yolo_pose(frame, keypoints, width, height):
     """Draw 17 keypoints and skeleton on frame"""
     # Define skeleton connections for COCO 17
     skeleton = [
-        (15, 13), (13, 11), (16, 14), (14, 12), (11, 12),
-        (5, 11), (6, 12), (5, 6), (5, 7), (6, 8), (7, 9),
-        (8, 10), (1, 2), (0, 1), (0, 2), (1, 3), (2, 4),
-        (3, 5), (4, 6)
+        (15, 13),
+        (13, 11),
+        (16, 14),
+        (14, 12),
+        (11, 12),
+        (5, 11),
+        (6, 12),
+        (5, 6),
+        (5, 7),
+        (6, 8),
+        (7, 9),
+        (8, 10),
+        (1, 2),
+        (0, 1),
+        (0, 2),
+        (1, 3),
+        (2, 4),
+        (3, 5),
+        (4, 6),
     ]
 
     # Draw lines
@@ -108,7 +250,8 @@ def draw_yolo_pose(frame, keypoints, width, height):
                     frame,
                     (int(pt1[0] * width), int(pt1[1] * height)),
                     (int(pt2[0] * width), int(pt2[1] * height)),
-                    (0, 255, 0), 2
+                    (0, 255, 0),
+                    2,
                 )
 
     # Draw points
@@ -134,8 +277,13 @@ def process_video(video_path, config):
     video_out_path = run_dir / f"{base_name}_yolo26.mp4"
     log_path = run_dir / "log_info.txt"
 
-    print(f"Loading model: {config['model']}")
-    model = YOLO(config['model'])
+    try:
+        weights_path = ensure_yolo_pose_weights(config["model"])
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        return
+    print(f"Loading model: {weights_path}")
+    model = YOLO(str(weights_path))
 
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -147,12 +295,13 @@ def process_video(video_path, config):
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # ty: ignore[unresolved-attribute]
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
     out = cv2.VideoWriter(str(video_out_path), fourcc, fps, (width, height))
 
-    with open(norm_csv_path, 'w', newline='') as norm_file, \
-         open(pixel_csv_path, 'w', newline='') as pixel_file:
-
+    with (
+        open(norm_csv_path, "w", newline="") as norm_file,
+        open(pixel_csv_path, "w", newline="") as pixel_file,
+    ):
         header = ["frame"]
         for name in KEYPOINT_NAMES:
             header.extend([f"{name}_x", f"{name}_y", f"{name}_conf"])
@@ -176,7 +325,7 @@ def process_video(video_path, config):
             if not ret:
                 break
 
-            results = model(frame, conf=config['confidence'], verbose=False)
+            results = model(frame, conf=config["confidence"], verbose=False)
 
             norm_row = [float(frame_idx)] + [np.nan] * (17 * 3)
             pixel_row = [float(frame_idx)] + [np.nan] * (17 * 3)
@@ -197,7 +346,7 @@ def process_video(video_path, config):
 
                     if i < len(kpts):
                         x, y, conf = kpts[i]
-                        if conf > config['confidence']:
+                        if conf > config["confidence"]:
                             kpt_norm = [x / width, y / height, conf]
                             kpt_pixel = [x, y, conf]
 
@@ -233,7 +382,7 @@ def process_video(video_path, config):
         f.write(f"FPS: {fps}\n")
         f.write(f"Total Frames: {total_frames}\n")
         f.write(f"Processing Duration: {duration:.1f}s\n")
-        f.write(f"Average FPS: {frame_idx/duration:.1f}\n\n")
+        f.write(f"Average FPS: {frame_idx / duration:.1f}\n\n")
         f.write("Configuration:\n")
         f.write(f"  Model: {config['model']}\n")
         f.write(f"  Confidence: {config['confidence']}\n")
@@ -247,7 +396,7 @@ def run_markerless2d_yolo26():
     root.withdraw()
 
     dialog = YoloConfigDialog(root)
-    if not hasattr(dialog, 'result') or not dialog.result:
+    if not hasattr(dialog, "result") or not dialog.result:
         print("Configuration cancelled.")
         return
 
@@ -276,4 +425,3 @@ def run_markerless2d_yolo26():
 
 if __name__ == "__main__":
     run_markerless2d_yolo26()
-

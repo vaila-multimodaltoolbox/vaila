@@ -79,9 +79,11 @@ If not, see <https://www.gnu.org/licenses/>.
 
 import csv
 import os
+import shutil
 import time
 import tkinter as tk
 from datetime import datetime
+from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 
 import cv2
@@ -375,7 +377,7 @@ class MediaPipeAngleCalculator(AngleCalculator):
 
 def download_model(model_name):
     """
-    Download a specific YOLO model to the vaila/vaila/models directory.
+    Download a specific YOLO model under ``vaila/models`` (adjacent to this package).
 
     Args:
         model_name: Name of the model to download (e.g., "yolov11n.pt")
@@ -383,36 +385,40 @@ def download_model(model_name):
     Returns:
         Path to the downloaded model
     """
-    # Correct path to vaila/vaila/models
-    script_dir = os.path.dirname(os.path.abspath(__file__))  # vaila/
-    vaila_dir = os.path.dirname(script_dir)  # root directory
-    models_dir = os.path.join(vaila_dir, "vaila", "models")  # vaila/vaila/models
-
-    # Create the models directory if it doesn't exist
-    os.makedirs(models_dir, exist_ok=True)
+    models_dir = Path(__file__).resolve().parent / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
     print(f"Models will be downloaded to: {models_dir}")
 
-    model_path = os.path.join(models_dir, model_name)
+    model_path = models_dir / model_name
 
     # Check if model already exists
-    if os.path.exists(model_path):
+    if model_path.exists():
         print(f"Model {model_name} already exists at {model_path}, using existing file.")
-        return model_path
+        return str(model_path)
 
     print(f"Downloading {model_name} to {model_path}...")
     try:
-        # Create a temporary YOLO model instance that will download the weights
-        # Use full path to avoid downloading to project root
-        model = YOLO(model_path)
+        # Full path so Ultralytics does not drop weights in process CWD (repo root).
+        model = YOLO(str(model_path))
 
         # Get the path where YOLO downloaded the model
         source_path = getattr(model, "ckpt_path", None)
 
         if source_path and os.path.exists(str(source_path)):
-            # Copy the downloaded model to our models directory
-            import shutil
-
-            shutil.copy2(str(source_path), str(model_path))
+            if Path(source_path).resolve() != model_path.resolve():
+                shutil.copy2(str(source_path), str(model_path))
+            try:
+                abs_src = os.path.abspath(source_path)
+                if (
+                    os.path.basename(abs_src) == model_name
+                    and abs_src.startswith(os.getcwd())
+                    and Path(abs_src).resolve() != model_path.resolve()
+                ):
+                    os.remove(abs_src)
+            except OSError:
+                pass
+            print(f"Successfully saved {model_name} to {model_path}")
+        elif model_path.exists():
             print(f"Successfully saved {model_name} to {model_path}")
         else:
             print(f"YOLO downloaded the model but couldn't find it at {source_path}")
@@ -422,19 +428,15 @@ def download_model(model_name):
         print("Trying alternative download method...")
 
         try:
-            # Alternative download method using requests
             import requests
 
-            # URL for the model - updated to use the correct model name and version
             version_tag = "v11.0.0" if model_name.lower().startswith("yolo11") else "v0.0.0"
             url = f"https://github.com/ultralytics/assets/releases/download/{version_tag}/{model_name}"
 
-            # Download the file
             response = requests.get(url, stream=True)
-            response.raise_for_status()  # Raise an exception for HTTP errors
+            response.raise_for_status()
 
-            # Save the file
-            with open(model_path, "wb") as f:
+            with model_path.open("wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
 
@@ -443,19 +445,16 @@ def download_model(model_name):
             print(f"All download methods failed for {model_name}: {e2}")
             print("Trying to find the model in the local directory...")
 
-            # Try to find the model in the local directory
-            local_model_path = os.path.join(script_dir, model_name)
-            if os.path.exists(local_model_path):
-                print(f"Found model at {local_model_path}, copying to {model_path}")
-                import shutil
+            # Only migrate stray copy from process CWD (e.g. old Ultralytics behavior); canonical dir is models_dir.
+            for stray in (Path.cwd() / model_name,):
+                if stray.exists() and stray.resolve() != model_path.resolve():
+                    print(f"Found model at {stray}, copying to {model_path}")
+                    shutil.copy2(str(stray), str(model_path))
+                    return str(model_path)
+            print(f"Could not find model {model_name} locally or download it.")
+            print("Please manually download the model and place it in the models directory.")
 
-                shutil.copy2(local_model_path, model_path)
-                return model_path
-            else:
-                print(f"Could not find model {model_name} locally or download it.")
-                print("Please manually download the model and place it in the models directory.")
-
-    return model_path
+    return str(model_path)
 
 
 class MovementAnalyzer:
@@ -695,22 +694,17 @@ class MovementAnalyzer:
 
     def get_model_path(self, model_name="yolo11n-pose.pt"):
         """Get the path to the YOLO model, downloading it if necessary."""
-        # Get the correct path relative to the script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        vaila_dir = os.path.dirname(script_dir)
-        models_dir = os.path.join(vaila_dir, "vaila", "models")
-        os.makedirs(models_dir, exist_ok=True)
+        models_dir = Path(__file__).resolve().parent / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        model_path = models_dir / model_name
 
-        model_path = os.path.join(models_dir, model_name)
-
-        # Download if not exists
-        if not os.path.exists(model_path):
+        if not model_path.exists():
             print(f"Model not found at {model_path}, downloading...")
-            model_path = download_model(model_name)
+            model_path = Path(download_model(model_name))
         else:
             print(f"Using existing model at: {model_path}")
 
-        return model_path
+        return str(model_path)
 
     def detect_yolo_model_type(self):
         """Detect the YOLO model type and adapt keypoint processing accordingly."""
