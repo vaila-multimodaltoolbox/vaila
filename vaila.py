@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 02 May 2026
-Version: 0.3.41
+Update Date: 04 May 2026
+Version: 0.3.42
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -158,7 +158,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 02.May.2026 v0.3.41 (Python 3.12.13)
+vailá - 04.May.2026 v0.3.42 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -269,7 +269,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 02.May.2026 v0.3.41 (Python 3.12.13)")
+        self.title("vailá - 04.May.2026 v0.3.42 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -1626,6 +1626,25 @@ class Vaila(tk.Tk):
         )
         advanced_desc.pack(anchor="w", padx=(25, 0))
 
+        # Version 3: YOLO-Only
+        yolo_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        yolo_frame.pack(fill="x", pady=5)
+        yolo_radio = tk.Radiobutton(
+            yolo_frame,
+            text="YOLOv26 Pose Only (17 keypoints)",
+            variable=version_var,
+            value="3",
+            font=("Arial", 10),
+        )
+        yolo_radio.pack(anchor="w")
+        yolo_desc = Label(
+            yolo_frame,
+            text="Uses purely YOLO pose models for 17-keypoint detection",
+            font=("Arial", 9),
+            fg="gray",
+        )
+        yolo_desc.pack(anchor="w", padx=(25, 0))
+
         # Buttons frame
         buttons_frame = tk.Frame(main_frame)
         buttons_frame.pack(pady=(20, 0))
@@ -1654,6 +1673,16 @@ class Vaila(tk.Tk):
                     print("=" * 60 + "\n")
                     run_vaila_module(
                         "vaila.markerless2d_analysis_v2", script_path="markerless2d_analysis_v2.py"
+                    )
+                elif version_choice == "3":
+                    print("\n" + "=" * 60)
+                    print("Markerless 2D Analysis - Version Selected: YOLOv26 Pose Only")
+                    print("=" * 60)
+                    print("Launching: vaila.markerless2d_yolo26")
+                    print("Features: Pure YOLO pose extraction (17 keypoints)")
+                    print("=" * 60 + "\n")
+                    run_vaila_module(
+                        "vaila.markerless2d_yolo26", script_path="markerless2d_yolo26.py"
                     )
             except Exception as e:
                 print(f"\nERROR: Failed to launch markerless analysis: {e}\n")
