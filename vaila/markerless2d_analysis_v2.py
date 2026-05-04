@@ -11,7 +11,7 @@ Version: 0.3.16
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
-MediaPipe's Pose model (Tasks API 0.10.31+) with optional YOLOv11 integration for
+MediaPipe's Pose model (Tasks API 0.10.35+) with optional YOLOv11 integration for
 enhanced person detection. It processes videos from a specified input directory,
 overlays pose landmarks on each video frame, and exports both normalized and
 pixel-based landmark coordinates to CSV files.
@@ -22,7 +22,7 @@ The user can configure key parameters via a graphical interface:
 - Modes: YOLO-only, YOLO+MediaPipe, or MediaPipe-only
 
 New Features (v0.3.16):
-- Updated to use MediaPipe Tasks API (0.10.32+) instead of deprecated mp.solutions
+- Updated to use MediaPipe Tasks API (0.10.35+) instead of deprecated mp.solutions
 - Added temporal filters: Kalman, Savitzky-Golay, and Median
 - Manual OpenCV drawing for landmarks (compatible with new MediaPipe version)
 - Automatic model download for both MediaPipe and YOLO models
@@ -37,7 +37,7 @@ python markerless2d_analysis_v2.py
 Requirements:
 - Python 3.12.13
 - OpenCV (pip install opencv-python)
-- MediaPipe (pip install mediapipe>=0.10.32)
+- MediaPipe (pip install mediapipe)
 - Ultralytics (pip install ultralytics)
 - Tkinter (usually included with Python installations)
 - PyTorch (for GPU acceleration)
@@ -1252,9 +1252,15 @@ def reset_yolo_tracker_state(model) -> None:
     if model is None:
         return
     pred = getattr(model, "predictor", None)
-    if pred is not None:
-        with contextlib.suppress(Exception):
-            pred.trackers = []
+    if pred is None:
+        return
+    # Ultralytics `on_predict_start(..., persist=True)` skips tracker setup when `trackers`
+    # attribute exists. Assigning [] leaves an empty list → next frame uses trackers[0]
+    # and raises IndexError. Drop the attribute so trackers are recreated for the new video.
+    with contextlib.suppress(AttributeError):
+        delattr(pred, "trackers")
+    with contextlib.suppress(AttributeError):
+        delattr(pred, "vid_path")
 
 
 def load_yolo_detector(model_name: str | None = None):
@@ -1939,8 +1945,11 @@ def apply_median_filter(landmarks_history, current_landmarks, window_size=3):
         valid_coords = []
 
         for frame in all_frames:
-            if (i < len(frame) and frame[i] is not None and
-                not any(np.isnan(c) for c in frame[i][:3] if isinstance(c, (int, float)))):
+            if (
+                i < len(frame)
+                and frame[i] is not None
+                and not any(np.isnan(c) for c in frame[i][:3] if isinstance(c, (int, float)))
+            ):
                 valid_coords.append(frame[i])
 
         if not valid_coords:

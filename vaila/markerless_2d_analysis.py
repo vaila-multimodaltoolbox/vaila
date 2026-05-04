@@ -6,14 +6,17 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 22 April 2026
-Version: 0.8.2
+Update Date: 4 May 2026
+Version: 0.8.4
 
 Example of usage:
-First activate the vaila environment:
-conda activate vaila
-Then run the markerless_2d_analysis.py script:
-python markerless_2d_analysis.py -i input_directory -o output_directory -c config.toml
+GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
+
+Headless batch (NVIDIA GPU + TOML from GUI export):
+``uv run python vaila/markerless_2d_analysis.py batch -i /path/to/videos -o /path/out -c mediapipe.toml --device nvidia``
+
+Optional: ``--nvenc`` (GPU encode annotated MP4; uses VRAM) or ``--libx264-encode`` (CPU, often faster end-to-end).
+``--no-sleep-between-videos`` skips the 2s pause between files.
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -90,6 +93,7 @@ License:
 
 import contextlib
 import datetime
+import functools
 import gc
 import json
 import os
@@ -319,6 +323,202 @@ PAD_START_FRAMES = 120  # Number of initial frames to pad for MediaPipe stabiliz
 # Add new defaults
 PAD_START_FRAMES_DEFAULT = 30
 ENABLE_PADDING_DEFAULT = True
+MERGE_REVERSE_PERCENT_DEFAULT = 0
+
+
+def probe_video_duration_seconds(video_path: str | Path) -> float | None:
+    """Return container duration in seconds via ffprobe, or None on failure."""
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
+    ]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if out.returncode != 0 or not out.stdout.strip():
+            return None
+        return float(out.stdout.strip())
+    except (ValueError, OSError):
+        return None
+
+
+def merge_warmup_video_filter(
+    duration_seconds: float | None,
+    merge_reverse_percent: int,
+) -> str:
+    """
+    FFmpeg -vf chain for merge-style warmup (same trim/reverse semantics as videoprocessor).
+    Requires merge_reverse_percent in 1..100.
+    """
+    pct = max(1, min(100, int(merge_reverse_percent)))
+    if pct == 100 or duration_seconds is None:
+        return "reverse"
+    reverse_duration = duration_seconds * (pct / 100.0)
+    rd = f"{reverse_duration:.6f}"
+    return f"trim=start=0:end={rd},reverse,setpts=PTS-STARTPTS"
+
+
+def build_merge_warmup_ffmpeg_argv(video_path: str | Path, vf_filter: str) -> list[str]:
+    """Decode video with vf_filter; emit raw BGR24 on stdout (pipe:1)."""
+    return [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-vf",
+        vf_filter,
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "bgr24",
+        "pipe:1",
+    ]
+
+
+def build_reverse_prepend_video(
+    video_path: str | Path,
+    merge_reverse_percent: int,
+    output_dir: str | Path | None = None,
+) -> tuple[str | None, int]:
+    """
+    Create a temporary video: [reversed last X%] + [original video].
+
+    This allows MediaPipe to build tracker context on the reversed prefix and then
+    seamlessly transition into the original video with no state reset.
+
+    Args:
+        video_path: Path to the original video.
+        merge_reverse_percent: Percentage of the video duration to reverse and prepend (1–100).
+        output_dir: Optional directory for the temp file. Uses system tempdir if None.
+
+    Returns:
+        (temp_video_path, n_prefix_frames):
+            temp_video_path: Path to the concatenated video, or None on failure.
+            n_prefix_frames: Number of frames in the reversed prefix (to strip later).
+    """
+    video_path = Path(video_path)
+    pct = max(1, min(100, int(merge_reverse_percent)))
+
+    # Probe video duration
+    dur_s = probe_video_duration_seconds(video_path)
+    if dur_s is None or dur_s <= 0:
+        print("[REVERSE-PREPEND] Could not probe video duration; skipping.")
+        return None, 0
+
+    # Probe FPS
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return None, 0
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0:
+        fps = 30.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+
+    # Calculate reverse portion
+    reverse_dur = dur_s * (pct / 100.0)
+    n_prefix_frames = max(1, int(round(reverse_dur * fps)))
+
+    # Create temp directory
+    if output_dir:
+        tmp_dir = Path(output_dir)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        tmp_dir = Path(tempfile.mkdtemp())
+
+    temp_reversed = tmp_dir / f"_reverse_prefix_{pct}pct.mp4"
+    temp_concat = tmp_dir / f"_concat_reverse_{pct}pct.mp4"
+
+    # Build the reversed prefix video via FFmpeg
+    if pct == 100:
+        vf = "reverse"
+    else:
+        # Trim last X% then reverse it
+        trim_start = max(0, dur_s - reverse_dur)
+        vf = f"trim=start={trim_start:.6f},setpts=PTS-STARTPTS,reverse,setpts=PTS-STARTPTS"
+
+    cmd_reverse = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-vf",
+        vf,
+        "-an",  # drop audio
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        str(temp_reversed),
+    ]
+
+    print(f"[REVERSE-PREPEND] Creating reversed prefix ({pct}% = ~{n_prefix_frames} frames)...")
+    ret = subprocess.run(cmd_reverse, capture_output=True, text=True, check=False)
+    if ret.returncode != 0 or not temp_reversed.exists():
+        print(
+            f"[REVERSE-PREPEND] FFmpeg reverse failed: {ret.stderr[:500] if ret.stderr else 'unknown'}"
+        )
+        return None, 0
+
+    # Get actual frame count of the reversed prefix
+    cap_rev = cv2.VideoCapture(str(temp_reversed))
+    if cap_rev.isOpened():
+        n_prefix_frames = int(cap_rev.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap_rev.release()
+
+    # Concatenate: reversed prefix + original
+    concat_list = tmp_dir / "_concat_list.txt"
+    with open(concat_list, "w") as f:
+        f.write(f"file '{temp_reversed}'\n")
+        f.write(f"file '{video_path.resolve()}'\n")
+
+    cmd_concat = [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(concat_list),
+        "-c",
+        "copy",  # stream copy, no re-encode
+        str(temp_concat),
+    ]
+
+    print("[REVERSE-PREPEND] Concatenating reversed prefix + original...")
+    ret = subprocess.run(cmd_concat, capture_output=True, text=True, check=False)
+    if ret.returncode != 0 or not temp_concat.exists():
+        print(
+            f"[REVERSE-PREPEND] FFmpeg concat failed: {ret.stderr[:500] if ret.stderr else 'unknown'}"
+        )
+        # Clean up
+        with contextlib.suppress(OSError):
+            temp_reversed.unlink()
+            concat_list.unlink()
+        return None, 0
+
+    # Clean up intermediate files
+    with contextlib.suppress(OSError):
+        temp_reversed.unlink()
+        concat_list.unlink()
+
+    print(
+        f"[REVERSE-PREPEND] Done. Concatenated video: {temp_concat.name} "
+        f"({n_prefix_frames} prefix + {total_frames} original = "
+        f"{n_prefix_frames + total_frames} total frames)"
+    )
+    return str(temp_concat), n_prefix_frames
+
 
 # CPU throttling settings for high-resolution videos
 CPU_USAGE_THRESHOLD = 150  # Percentage (across all cores)
@@ -737,6 +937,10 @@ def get_default_config():
             "enable_segmentation": False,
             "smooth_segmentation": False,
             "static_image_mode": False,
+            # RunningMode.IMAGE for first N frames (full detection); 0 = off
+            "image_bootstrap_first_frame": True,
+            "image_bootstrap_num_frames": 45,
+            "use_nvenc_encoder": False,
             "apply_filtering": True,
             "estimate_occluded": True,
             # Simple Post-Processing
@@ -757,10 +961,127 @@ def get_default_config():
         },
         "enable_padding": ENABLE_PADDING_DEFAULT,
         "pad_start_frames": PAD_START_FRAMES_DEFAULT,
+        "merge_reverse_percent": MERGE_REVERSE_PERCENT_DEFAULT,
         "enable_reverse_padding": True,
         "pad_end_frames": 30,
         "bounding_box_ranges": [],
     }
+
+
+def get_flat_default_pose_config() -> dict:
+    """Flat pose_config dict (same shape as GUI / load_config_from_toml) for CLI defaults."""
+    d = get_default_config()
+    mp = d["mediapipe"]
+    vr = d["video_resize"]
+    bb = d["bounding_box"]
+    return {
+        "min_detection_confidence": mp["min_detection_confidence"],
+        "min_tracking_confidence": mp["min_tracking_confidence"],
+        "model_complexity": mp["model_complexity"],
+        "enable_segmentation": mp["enable_segmentation"],
+        "smooth_segmentation": mp["smooth_segmentation"],
+        "static_image_mode": mp["static_image_mode"],
+        "image_bootstrap_first_frame": mp["image_bootstrap_first_frame"],
+        "image_bootstrap_num_frames": int(mp.get("image_bootstrap_num_frames", 45)),
+        "use_nvenc_encoder": bool(mp.get("use_nvenc_encoder", False)),
+        "apply_filtering": mp["apply_filtering"],
+        "estimate_occluded": mp["estimate_occluded"],
+        "enable_median_filter": mp["enable_median_filter"],
+        "median_kernel_size": mp["median_kernel_size"],
+        "enable_resize": vr["enable_resize"],
+        "resize_scale": float(vr["resize_scale"]),
+        "enable_padding": d["enable_padding"],
+        "pad_start_frames": d["pad_start_frames"],
+        "merge_reverse_percent": int(d.get("merge_reverse_percent", MERGE_REVERSE_PERCENT_DEFAULT)),
+        "enable_reverse_padding": d["enable_reverse_padding"],
+        "pad_end_frames": d["pad_end_frames"],
+        "enable_crop": bb["enable_crop"],
+        "bbox_x_min": bb["bbox_x_min"],
+        "bbox_y_min": bb["bbox_y_min"],
+        "bbox_x_max": bb["bbox_x_max"],
+        "bbox_y_max": bb["bbox_y_max"],
+        "enable_resize_crop": bb["enable_resize_crop"],
+        "resize_crop_scale": float(bb["resize_crop_scale"]),
+        "roi_polygon_points": bb["roi_polygon_points"],
+        "bounding_box_ranges": list(d["bounding_box_ranges"]),
+        "scientific_robustness": {
+            "track_process_noise": 1.0,
+            "track_measurement_noise": 0.1,
+            "max_pred_gap": 10,
+            "optical_flow_threshold": 0.15,
+            "enable_gap_reconstruction": True,
+            "max_reconstruction_gap": 10,
+        },
+    }
+
+
+def merge_pose_config_with_defaults(partial: dict | None) -> dict:
+    """Fill missing keys from get_flat_default_pose_config (TOML may omit new options)."""
+    base = get_flat_default_pose_config()
+    if partial:
+        base.update(partial)
+    return base
+
+
+def apply_linux_nvidia_egl_env() -> None:
+    """Force NVIDIA EGL before MediaPipe GPU delegate (Linux hybrid graphics)."""
+    if platform.system() != "Linux":
+        return
+    nvidia_egl_json = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
+    if os.path.exists(nvidia_egl_json):
+        os.environ["__EGL_VENDOR_LIBRARY_FILENAMES"] = nvidia_egl_json
+        os.environ["EGL_PLATFORM"] = "device"
+        print("[EGL] Forcing NVIDIA EGL ICD for GPU delegate...")
+
+
+def probe_markerless_gpu_backends() -> dict:
+    """Detect and self-test GPU backends for MediaPipe Tasks PoseLandmarker."""
+    print("\n=== Detecting GPU Backends Availability ===")
+    backends = detect_gpu_backends()
+    available_backends: dict = {}
+    for backend_name in ["nvidia", "rocm", "mps"]:
+        if backend_name in backends:
+            available, info, error = backends[backend_name]
+            if available:
+                print(f"\nTesting {backend_name.upper()} backend...")
+                test_result = test_mediapipe_gpu_delegate(backend_name)
+                available_backends[backend_name] = (available, info, error)
+                available_backends[f"{backend_name}_test"] = test_result
+                if test_result[0]:
+                    print(f"[OK] {backend_name.upper()} backend test passed")
+                else:
+                    print(f"[WARNING] {backend_name.upper()} backend test failed: {test_result[1]}")
+                    available_backends[backend_name] = (False, info, test_result[1])
+            else:
+                print(f"[FAIL] {backend_name.upper()} not available: {error}")
+                available_backends[backend_name] = (False, info, error)
+                available_backends[f"{backend_name}_test"] = (False, error)
+
+    print("=" * 40 + "\n")
+    return available_backends
+
+
+def pick_markerless_device(requested: str, available_backends: dict) -> tuple[bool, str | None]:
+    """Return (use_gpu, gpu_backend) for MediaPipe delegate."""
+    req = (requested or "auto").lower()
+    if req == "cpu":
+        return False, None
+
+    def _ok(name: str) -> bool:
+        base = available_backends.get(name, (False,))[0]
+        test = available_backends.get(f"{name}_test", (False, ""))[0]
+        return bool(base and test)
+
+    if req == "nvidia":
+        return (True, "nvidia") if _ok("nvidia") else (False, None)
+    if req in ("rocm", "mps"):
+        return (True, req) if _ok(req) else (False, None)
+    if req == "auto":
+        for name in ("nvidia", "rocm", "mps"):
+            if _ok(name):
+                return True, name
+        return False, None
+    return False, None
 
 
 def save_config_to_toml(config, filepath):
@@ -775,6 +1096,8 @@ def save_config_to_toml(config, filepath):
                 "enable_segmentation": config.get("enable_segmentation", False),
                 "smooth_segmentation": config.get("smooth_segmentation", False),
                 "static_image_mode": config.get("static_image_mode", False),
+                "image_bootstrap_first_frame": config.get("image_bootstrap_first_frame", True),
+                "image_bootstrap_num_frames": int(config.get("image_bootstrap_num_frames", 45)),
                 "apply_filtering": config.get("apply_filtering", True),
                 "estimate_occluded": config.get("estimate_occluded", True),
                 # New Post-Processing
@@ -788,6 +1111,9 @@ def save_config_to_toml(config, filepath):
             # Sections advanced_filtering, smoothing_params, scientific_robustness REMOVED
             "enable_padding": str(config.get("enable_padding", ENABLE_PADDING_DEFAULT)).lower(),
             "pad_start_frames": config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT),
+            "merge_reverse_percent": int(
+                config.get("merge_reverse_percent", MERGE_REVERSE_PERCENT_DEFAULT)
+            ),
             "bounding_box": {
                 "enable_crop": config.get("enable_crop", False),
                 "bbox_x_min": config.get("bbox_x_min", 0),
@@ -887,6 +1213,23 @@ def save_config_to_toml(config, filepath):
             f.write("#                           # true = detect fresh each frame (slower)\n")
 
             f.write(
+                f"image_bootstrap_first_frame = {str(mp.get('image_bootstrap_first_frame', True)).lower()}   # Frame 0: RunningMode.IMAGE detect (true/false)\n"
+            )
+            f.write(
+                "#                           # true = strong first-frame pose (recommended for CSV/overlay)\n"
+            )
+            f.write(
+                "#                           # false = VIDEO mode only (legacy; may warm up slowly)\n"
+            )
+
+            f.write(
+                f"image_bootstrap_num_frames = {int(mp.get('image_bootstrap_num_frames', 45))}   # IMAGE-mode refine for first N frames (0 = off)\n"
+            )
+            f.write(
+                "#                           # 30–60 typical; trim clips may need more until tracker locks\n"
+            )
+
+            f.write(
                 f"apply_filtering = {str(mp['apply_filtering']).lower()}               # Apply built-in smoothing (true/false)\n"
             )
             f.write("#                         # true = smoother movement (recommended)\n")
@@ -948,12 +1291,27 @@ def save_config_to_toml(config, filepath):
                 f"pad_start_frames = {config.get('pad_start_frames', PAD_START_FRAMES_DEFAULT)}  # Number of frames to pad at start\n"
             )
             f.write(
+                f"merge_reverse_percent = {int(config.get('merge_reverse_percent', MERGE_REVERSE_PERCENT_DEFAULT))}  # 0 = off; 1–100 = reverse-prepend (reversed last X%% + original); MediaPipe runs on entire concat video\n"
+            )
+            f.write(
+                "# When merge_reverse_percent > 0: creates temp video [reversed last X%%] + [original], runs MediaPipe on it, then strips prefix rows from CSV. No state reset = solid first-frame detection.\n"
+            )
+            f.write(
                 f"enable_reverse_padding = {str(config.get('enable_reverse_padding', False)).lower()}  # Reverse padding at end (true/false)\n"
             )
             f.write(
                 f"pad_end_frames = {config.get('pad_end_frames', 0)}  # Number of frames to pad at end\n"
             )
             f.write("# Recommended: 30-60 for most videos.\n\n")
+
+            f.write("[video_encoding]\n")
+            f.write("# Annotated MP4: libx264 (CPU) vs h264_nvenc (GPU).\n")
+            f.write(
+                "# NVENC frees CPU but uses ~0.5–1 GiB VRAM and can lower MediaPipe GPU headroom.\n"
+            )
+            f.write(
+                f"use_nvenc = {str(bool(config.get('use_nvenc_encoder', False))).lower()}  # true/false\n\n"
+            )
 
             f.write("[bounding_box]\n")
             f.write("# ================================================================\n")
@@ -1174,6 +1532,10 @@ def load_config_from_toml(filepath):
                     "enable_segmentation": bool(mp.get("enable_segmentation", False)),
                     "smooth_segmentation": bool(mp.get("smooth_segmentation", False)),
                     "static_image_mode": bool(mp.get("static_image_mode", False)),
+                    "image_bootstrap_first_frame": bool(
+                        mp.get("image_bootstrap_first_frame", True)
+                    ),
+                    "image_bootstrap_num_frames": int(mp.get("image_bootstrap_num_frames", 45)),
                     "apply_filtering": bool(mp.get("apply_filtering", True)),
                     "estimate_occluded": bool(mp.get("estimate_occluded", True)),
                     # New Post-Processing
@@ -1208,11 +1570,16 @@ def load_config_from_toml(filepath):
             pad = toml_config["padding"]
             config["enable_padding"] = bool(pad.get("enable_padding", ENABLE_PADDING_DEFAULT))
             config["pad_start_frames"] = int(pad.get("pad_start_frames", PAD_START_FRAMES_DEFAULT))
+            config["merge_reverse_percent"] = int(
+                pad.get("merge_reverse_percent", MERGE_REVERSE_PERCENT_DEFAULT)
+            )
+            config["merge_reverse_percent"] = max(0, min(100, config["merge_reverse_percent"]))
             config["enable_reverse_padding"] = bool(pad.get("enable_reverse_padding", False))
             config["pad_end_frames"] = int(pad.get("pad_end_frames", 0))
         else:
             config["enable_padding"] = ENABLE_PADDING_DEFAULT
             config["pad_start_frames"] = PAD_START_FRAMES_DEFAULT
+            config["merge_reverse_percent"] = MERGE_REVERSE_PERCENT_DEFAULT
             config["enable_reverse_padding"] = False
             config["pad_end_frames"] = 0
 
@@ -1310,6 +1677,10 @@ def load_config_from_toml(filepath):
         else:
             config["bounding_box_ranges"] = []
 
+        if "video_encoding" in toml_config:
+            ve = toml_config["video_encoding"]
+            config["use_nvenc_encoder"] = bool(ve.get("use_nvenc", False))
+
         print(f"Configuration loaded successfully from: {filepath}")
         print(f"Total parameters: {len(config)}")
         print(f"Advanced filtering: {config.get('enable_advanced_filtering', False)}")
@@ -1317,7 +1688,7 @@ def load_config_from_toml(filepath):
         if config.get("bounding_box_ranges"):
             print(f"Multiple ROI ranges loaded: {len(config['bounding_box_ranges'])} ranges")
 
-        return config
+        return merge_pose_config_with_defaults(config)
 
     except toml.TomlDecodeError as e:
         print(f"TOML syntax error in {filepath}: {str(e)}")
@@ -1352,6 +1723,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
     enable_segmentation_entry: ttk.Entry
     smooth_segmentation_entry: ttk.Entry
     static_image_mode_entry: ttk.Entry
+    image_bootstrap_first_frame_entry: ttk.Entry
+    image_bootstrap_num_frames_entry: ttk.Entry
+    use_nvenc_output_var: tk.BooleanVar
     apply_filtering_entry: ttk.Entry
     estimate_occluded_entry: ttk.Entry
     enable_median_filter_var: tk.BooleanVar
@@ -1366,6 +1740,7 @@ class ConfidenceInputDialog(simpledialog.Dialog):
     resize_scale_entry: ttk.Entry
     enable_padding_entry: ttk.Entry
     pad_start_frames_entry: ttk.Entry
+    merge_reverse_percent_entry: ttk.Entry
     enable_reverse_padding_entry: ttk.Entry
     pad_end_frames_entry: ttk.Entry
     enable_crop_var: tk.BooleanVar
@@ -1459,6 +1834,11 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             ("Enable Segmentation (True/False):", "enable_segmentation_entry", "False"),
             ("Smooth Segmentation (True/False):", "smooth_segmentation_entry", "False"),
             ("Static Image Mode (True/False):", "static_image_mode_entry", "False"),
+            (
+                "Image bootstrap frame 0 (True/False):",
+                "image_bootstrap_first_frame_entry",
+                "True",
+            ),
             ("Apply Internal Filtering (True/False):", "apply_filtering_entry", "True"),
             ("Estimate Occluded (True/False):", "estimate_occluded_entry", "True"),
         ]
@@ -1530,12 +1910,32 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "pad_start_frames_entry",
                 str(PAD_START_FRAMES_DEFAULT),
             ),
+            (
+                "Reverse-Prepend % (0=off; 1–100; reversed prefix + full analysis):",
+                "merge_reverse_percent_entry",
+                str(MERGE_REVERSE_PERCENT_DEFAULT),
+            ),
             ("Enable Reverse Padding (True/False):", "enable_reverse_padding_entry", "True"),
             ("Reverse Padding Frames:", "pad_end_frames_entry", "30"),
         ]
 
         for i, (txt, attr, val) in enumerate(pad_params):
             self._create_entry_row(pad_frame, txt, attr, val, i)
+
+        _pr = len(pad_params)
+        self._create_entry_row(
+            pad_frame,
+            "IMAGE refine first N frames (0 = off):",
+            "image_bootstrap_num_frames_entry",
+            "45",
+            _pr,
+        )
+        self.use_nvenc_output_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            pad_frame,
+            text="NVENC (GPU) for annotated MP4 (uses VRAM; can compete with MediaPipe)",
+            variable=self.use_nvenc_output_var,
+        ).grid(row=_pr + 1, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
     def _build_roi_tab(self):
         roi_frame = ttk.LabelFrame(
@@ -1657,6 +2057,15 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "enable_segmentation": default_config["mediapipe"]["enable_segmentation"],
                 "smooth_segmentation": default_config["mediapipe"]["smooth_segmentation"],
                 "static_image_mode": default_config["mediapipe"]["static_image_mode"],
+                "image_bootstrap_first_frame": default_config["mediapipe"].get(
+                    "image_bootstrap_first_frame", True
+                ),
+                "image_bootstrap_num_frames": int(
+                    default_config["mediapipe"].get("image_bootstrap_num_frames", 45)
+                ),
+                "use_nvenc_encoder": bool(
+                    default_config["mediapipe"].get("use_nvenc_encoder", False)
+                ),
                 "apply_filtering": default_config["mediapipe"]["apply_filtering"],
                 "estimate_occluded": default_config["mediapipe"]["estimate_occluded"],
                 "enable_median_filter": default_config["mediapipe"].get(
@@ -1667,6 +2076,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "resize_scale": default_config["video_resize"]["resize_scale"],
                 "enable_padding": ENABLE_PADDING_DEFAULT,
                 "pad_start_frames": PAD_START_FRAMES_DEFAULT,
+                "merge_reverse_percent": int(
+                    default_config.get("merge_reverse_percent", MERGE_REVERSE_PERCENT_DEFAULT)
+                ),
                 "enable_crop": default_config["bounding_box"]["enable_crop"],
                 "bbox_x_min": default_config["bounding_box"]["bbox_x_min"],
                 "bbox_y_min": default_config["bounding_box"]["bbox_y_min"],
@@ -1894,6 +2306,10 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
                 "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
                 "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
+                "image_bootstrap_first_frame": self.image_bootstrap_first_frame_entry.get().lower()
+                == "true",
+                "image_bootstrap_num_frames": int(self.image_bootstrap_num_frames_entry.get()),
+                "use_nvenc_encoder": self.use_nvenc_output_var.get(),
                 "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
                 "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
                 # Simple Median Filter
@@ -1908,6 +2324,10 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "resize_scale": float(self.resize_scale_entry.get()),
                 "enable_padding": self.enable_padding_entry.get().lower() == "true",
                 "pad_start_frames": int(self.pad_start_frames_entry.get()),
+                "merge_reverse_percent": max(
+                    0,
+                    min(100, int(self.merge_reverse_percent_entry.get())),
+                ),
                 "enable_reverse_padding": self.enable_reverse_padding_entry.get().lower() == "true",
                 "pad_end_frames": int(self.pad_end_frames_entry.get()),
                 # ROI
@@ -1997,6 +2417,9 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                     summary += f"enable_segmentation: {config.get('enable_segmentation')}\n"
                     summary += f"smooth_segmentation: {config.get('smooth_segmentation')}\n"
                     summary += f"static_image_mode: {config.get('static_image_mode')}\n"
+                    summary += f"image_bootstrap_first_frame: {config.get('image_bootstrap_first_frame', True)}\n"
+                    summary += f"image_bootstrap_num_frames: {config.get('image_bootstrap_num_frames', 45)}\n"
+                    summary += f"use_nvenc_encoder: {config.get('use_nvenc_encoder', False)}\n"
                     summary += f"apply_filtering: {config.get('apply_filtering')}\n"
                     summary += f"estimate_occluded: {config.get('estimate_occluded')}\n"
                     summary += f"enable_resize: {config.get('enable_resize')}\n"
@@ -2013,6 +2436,7 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                         f"enable_padding: {config.get('enable_padding', ENABLE_PADDING_DEFAULT)}\n"
                     )
                     summary += f"pad_start_frames: {config.get('pad_start_frames', PAD_START_FRAMES_DEFAULT)}\n"
+                    summary += f"merge_reverse_percent: {config.get('merge_reverse_percent', MERGE_REVERSE_PERCENT_DEFAULT)}\n"
                     summary += f"enable_crop: {config.get('enable_crop', False)}\n"
                     if config.get("enable_crop", False):
                         summary += f"bbox: ({config.get('bbox_x_min', 0)}, {config.get('bbox_y_min', 0)}) to ({config.get('bbox_x_max', 1920)}, {config.get('bbox_y_max', 1080)})\n"
@@ -2298,6 +2722,18 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         if "static_image_mode" in config:
             self.static_image_mode_entry.delete(0, tk.END)
             self.static_image_mode_entry.insert(0, str(config["static_image_mode"]))
+        if "image_bootstrap_first_frame" in config:
+            self.image_bootstrap_first_frame_entry.delete(0, tk.END)
+            self.image_bootstrap_first_frame_entry.insert(
+                0, str(config["image_bootstrap_first_frame"])
+            )
+        if "image_bootstrap_num_frames" in config:
+            self.image_bootstrap_num_frames_entry.delete(0, tk.END)
+            self.image_bootstrap_num_frames_entry.insert(
+                0, str(config["image_bootstrap_num_frames"])
+            )
+        if hasattr(self, "use_nvenc_output_var") and "use_nvenc_encoder" in config:
+            self.use_nvenc_output_var.set(bool(config["use_nvenc_encoder"]))
         if "apply_filtering" in config:
             self.apply_filtering_entry.delete(0, tk.END)
             self.apply_filtering_entry.insert(0, str(config["apply_filtering"]))
@@ -2325,6 +2761,12 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         if "pad_start_frames" in config:
             self.pad_start_frames_entry.delete(0, tk.END)
             self.pad_start_frames_entry.insert(0, str(config["pad_start_frames"]))
+        _mrp = max(
+            0,
+            min(100, int(config.get("merge_reverse_percent", MERGE_REVERSE_PERCENT_DEFAULT))),
+        )
+        self.merge_reverse_percent_entry.delete(0, tk.END)
+        self.merge_reverse_percent_entry.insert(0, str(_mrp))
         if "enable_reverse_padding" in config:
             self.enable_reverse_padding_entry.delete(0, tk.END)
             self.enable_reverse_padding_entry.insert(0, str(config["enable_reverse_padding"]))
@@ -2411,6 +2853,10 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
                 "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
                 "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
+                "image_bootstrap_first_frame": self.image_bootstrap_first_frame_entry.get().lower()
+                == "true",
+                "image_bootstrap_num_frames": int(self.image_bootstrap_num_frames_entry.get()),
+                "use_nvenc_encoder": self.use_nvenc_output_var.get(),
                 "apply_filtering": self.apply_filtering_entry.get().lower() == "true",
                 "estimate_occluded": self.estimate_occluded_entry.get().lower() == "true",
                 # Simple Median Filter
@@ -2421,6 +2867,10 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "resize_scale": float(self.resize_scale_entry.get()),
                 "enable_padding": self.enable_padding_entry.get().lower() == "true",
                 "pad_start_frames": int(self.pad_start_frames_entry.get()),
+                "merge_reverse_percent": max(
+                    0,
+                    min(100, int(self.merge_reverse_percent_entry.get())),
+                ),
                 "enable_reverse_padding": self.enable_reverse_padding_entry.get().lower() == "true",
                 "pad_end_frames": int(self.pad_end_frames_entry.get()),
                 # ROI
@@ -3981,6 +4431,8 @@ def process_frame_with_tasks_api(
     original_height,
     pose_config,
     landmarks_history,
+    *,
+    use_image_detect: bool = False,
 ):
     """
     Process a single frame using MediaPipe Tasks API.
@@ -4096,8 +4548,10 @@ def process_frame_with_tasks_api(
     rgb_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-    # Use Standard Detection
-    pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+    if use_image_detect:
+        pose_landmarker_result = landmarker.detect(mp_image)
+    else:
+        pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
     if pose_landmarker_result.pose_landmarks and len(pose_landmarker_result.pose_landmarks) > 0:
         raw_landmarks = pose_landmarker_result.pose_landmarks[0]
         pose_landmarks_found = True
@@ -4285,6 +4739,35 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             print("Failed to resize video, using original")
             enable_resize = False
 
+    # --- Step 2: Reverse-Prepend (when merge_reverse_percent > 0) ---
+    # Build a concatenated video: [reversed last X%] + [original]
+    # MediaPipe will process the entire video with no tracker state reset.
+    _n_reverse_prefix_frames = 0
+    _temp_concat_video = None
+    _merge_pct_early = max(
+        0,
+        min(100, int(pose_config.get("merge_reverse_percent", MERGE_REVERSE_PERCENT_DEFAULT))),
+    )
+    _enable_padding_early = pose_config.get("enable_padding", ENABLE_PADDING_DEFAULT)
+
+    if _enable_padding_early and _merge_pct_early > 0:
+        print(
+            f"\n[REVERSE-PREPEND] Building concatenated video with {_merge_pct_early}% reversed prefix..."
+        )
+        concat_path, n_prefix = build_reverse_prepend_video(
+            processing_video_path, _merge_pct_early, output_dir=None
+        )
+        if concat_path is not None and n_prefix > 0:
+            _temp_concat_video = concat_path
+            _n_reverse_prefix_frames = n_prefix
+            processing_video_path = concat_path
+            print(
+                f"[REVERSE-PREPEND] Using concatenated video for analysis. Prefix: {n_prefix} frames."
+            )
+        else:
+            print("[REVERSE-PREPEND] Failed to build concatenated video; falling back to original.")
+            _n_reverse_prefix_frames = 0
+
     # Initial configuration
     cap = cv2.VideoCapture(str(processing_video_path))
     if not cap.isOpened():
@@ -4294,6 +4777,14 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # When using reverse-prepend, total_frames includes the prefix.
+    # The "original" frame count is total_frames - _n_reverse_prefix_frames.
+    _original_total_frames = total_frames - _n_reverse_prefix_frames
+
+    with contextlib.suppress(Exception):
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    with contextlib.suppress(Exception):
+        psutil.cpu_percent(interval=0.05)
 
     # Output files
     output_dir / f"{video_path.stem}_mp.mp4"
@@ -4340,6 +4831,24 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         num_poses=1,
     )
 
+    image_bootstrap_cfg = bool(pose_config.get("image_bootstrap_first_frame", True))
+    raw_bootstrap_n = int(pose_config.get("image_bootstrap_num_frames", 45))
+    image_bootstrap_n = max(0, raw_bootstrap_n) if image_bootstrap_cfg else 0
+    image_options = None
+    if image_bootstrap_n > 0:
+        image_options = PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=model_path, delegate=delegate),
+            running_mode=VisionRunningMode.IMAGE,
+            min_pose_detection_confidence=pose_config.get("min_detection_confidence", 0.5),
+            min_pose_presence_confidence=pose_config.get("min_detection_confidence", 0.5),
+            min_tracking_confidence=pose_config.get("min_tracking_confidence", 0.5),
+            num_poses=1,
+        )
+        print(
+            f"[POSE] IMAGE refine window: first {image_bootstrap_n} frames "
+            "(second landmarker freed after — keeps VRAM for MediaPipe)"
+        )
+
     # Setup Video Writer for annotated output via FFmpeg pipe
     # cv2.VideoWriter with mp4v/avc1 fails when the source video has a
     # non-standard timebase (e.g. 1000/239621). We pipe raw BGR frames
@@ -4374,33 +4883,72 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             return self._proc is not None and self._proc.poll() is None
 
     # First try FFmpeg pipe (most robust, avoids all timebase issues)
-    _ffmpeg_cmd = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "rawvideo",
-        "-vcodec",
-        "rawvideo",
-        "-s",
-        f"{width}x{height}",
-        "-pix_fmt",
-        "bgr24",
-        "-r",
-        str(fps_out),
-        "-i",
-        "pipe:0",
-        "-vcodec",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "18",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        str(annotated_output_path),
-    ]
+    _use_nvenc = (
+        bool(pose_config.get("use_nvenc_encoder", False))
+        and bool(use_gpu)
+        and (gpu_backend or "").lower() == "nvidia"
+        and _ffmpeg_lists_h264_nvenc()
+    )
+    if _use_nvenc:
+        _ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-vcodec",
+            "rawvideo",
+            "-s",
+            f"{width}x{height}",
+            "-pix_fmt",
+            "bgr24",
+            "-r",
+            str(fps_out),
+            "-i",
+            "pipe:0",
+            "-c:v",
+            "h264_nvenc",
+            "-preset",
+            "p4",
+            "-cq",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(annotated_output_path),
+        ]
+        _enc_label = "h264_nvenc (GPU encode)"
+    else:
+        _ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-vcodec",
+            "rawvideo",
+            "-s",
+            f"{width}x{height}",
+            "-pix_fmt",
+            "bgr24",
+            "-r",
+            str(fps_out),
+            "-i",
+            "pipe:0",
+            "-vcodec",
+            "libx264",
+            "-threads",
+            "0",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "20",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(annotated_output_path),
+        ]
+        _enc_label = "libx264 (CPU encode)"
     try:
         import subprocess as _sp
 
@@ -4412,7 +4960,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         )
         out_video = _FFmpegWriter(_ffmpeg_proc)
         _use_ffmpeg_pipe = True
-        print(f"[VIDEO] Using FFmpeg libx264 pipe @ {fps_out} fps → {annotated_output_path.name}")
+        print(f"[VIDEO] FFmpeg pipe {_enc_label} @ {fps_out} fps → {annotated_output_path.name}")
     except Exception as _e:
         print(f"[WARNING] FFmpeg pipe failed ({_e}), falling back to cv2.VideoWriter...")
         _use_ffmpeg_pipe = False
@@ -4440,9 +4988,22 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     pixel_landmarks_list = []
     deque(maxlen=30)
 
-    print(f"Starting analysis loop... (Total frames: {total_frames})")
+    # Initialize prefix skip counter (set in warm-up logic inside with block)
+    n_prefix_frames_to_skip = 0
+
+    if _n_reverse_prefix_frames > 0:
+        print(
+            f"Starting analysis loop... "
+            f"(Total frames in concat video: {total_frames}, "
+            f"prefix: {_n_reverse_prefix_frames}, original: {_original_total_frames})"
+        )
+    else:
+        print(f"Starting analysis loop... (Total frames: {total_frames})")
 
     with PoseLandmarker.create_from_options(options) as landmarker:
+        _image_lm_mgr = None  # PoseLandmarker.create_from_options(IMAGE) context manager
+        _image_lm_obj = None  # object returned by __enter__ (passed to detect)
+
         frame_count = 0
         landmarks_history = deque(maxlen=30)
 
@@ -4452,53 +5013,61 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
 
         enable_padding = pose_config.get("enable_padding", ENABLE_PADDING_DEFAULT)
         pad_frames_count = pose_config.get("pad_start_frames", PAD_START_FRAMES_DEFAULT)
+        merge_pct = max(
+            0,
+            min(100, int(pose_config.get("merge_reverse_percent", MERGE_REVERSE_PERCENT_DEFAULT))),
+        )
 
-        if enable_padding and pad_frames_count != 0:
+        # Number of prefix frames to skip in output (set by reverse-prepend)
+        n_prefix_frames_to_skip = 0
+
+        # --- NEW: Reverse-prepend approach (merge_reverse_percent > 0) ---
+        # NOTE: When merge_reverse_percent > 0, the concatenated video was already
+        # created BEFORE this block (see above). The cap is already reading from
+        # the concatenated video. We just need to track how many prefix frames
+        # to skip in the output.
+        # The reverse-prepend video creation happens earlier in process_video(),
+        # before the PoseLandmarker context. The variable _n_reverse_prefix_frames
+        # is set there.
+        if enable_padding and merge_pct > 0:
+            n_prefix_frames_to_skip = _n_reverse_prefix_frames
+            print(
+                f"[REVERSE-PREPEND] Will skip first {n_prefix_frames_to_skip} prefix frames "
+                f"from output (they are the reversed warmup prefix)."
+            )
+
+        elif enable_padding and pad_frames_count != 0:
             if pad_frames_count == -1:
                 print(
-                    "Applying FULL reverse padding (videoprocessor merge mode) to stabilize model..."
+                    "Applying FULL reverse padding (pad_start_frames=-1); "
+                    "consider merge_reverse_percent=100 instead."
                 )
-                # Stream the entire reversed video from FFmpeg
-                # This perfectly perfectly mimics videoprocessor.py merge without creating a massive file
-                cmd = [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    str(video_path),
-                    "-vf",
-                    "reverse",
-                    "-f",
-                    "rawvideo",
-                    "-pix_fmt",
-                    "bgr24",
-                    "pipe:1",
-                ]
-                import subprocess as _sp
-
-                proc = _sp.Popen(cmd, stdout=_sp.PIPE, stderr=_sp.DEVNULL)
+                # Legacy: feed reversed video as warmup-only (discard results)
+                cmd = build_merge_warmup_ffmpeg_argv(processing_video_path, "reverse")
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 frame_size = width * height * 3
                 pad_frames_processed = 0
-
                 print("Processing full reversed video as warm-up...")
-                while proc.stdout is not None:
-                    raw = proc.stdout.read(frame_size)
-                    if not raw or len(raw) != frame_size:
-                        break
-                    pad_frame = np.frombuffer(raw, dtype=np.uint8).reshape((height, width, 3))
-                    mp_pad_frame = mp.Image(
-                        image_format=mp.ImageFormat.SRGB,
-                        data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
-                    )
-                    landmarker.detect_for_video(mp_pad_frame, current_timestamp_ms)
-                    current_timestamp_ms += frame_duration_ms
-                    pad_frames_processed += 1
-                    if pad_frames_processed % 500 == 0:
-                        print(f"  Warm-up: Processed {pad_frames_processed} reversed frames...")
-
-                proc.wait()
+                try:
+                    while proc.stdout is not None:
+                        raw = proc.stdout.read(frame_size)
+                        if not raw or len(raw) != frame_size:
+                            break
+                        pad_frame = np.frombuffer(raw, dtype=np.uint8).reshape((height, width, 3))
+                        mp_pad_frame = mp.Image(
+                            image_format=mp.ImageFormat.SRGB,
+                            data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
+                        )
+                        landmarker.detect_for_video(mp_pad_frame, current_timestamp_ms)
+                        current_timestamp_ms += frame_duration_ms
+                        pad_frames_processed += 1
+                        if pad_frames_processed % 500 == 0:
+                            print(f"  Warm-up: Processed {pad_frames_processed} frames...")
+                finally:
+                    proc.wait()
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 print(
-                    f"Full padding complete ({pad_frames_processed} frames). Starting main analysis..."
+                    f"Warm-up complete ({pad_frames_processed} frames). Starting main analysis..."
                 )
             else:
                 print(
@@ -4560,19 +5129,85 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
 
             # --- PROCESS FRAME ---
             # Returns landmarks in normalized coordinates (w.r.t Original Video Size)
-            landmarks = process_frame_with_tasks_api(
-                frame,
-                landmarker,
-                timestamp_ms,
-                bbox_config.get("enable_crop", False),
-                bbox_config,
-                width,  # Process width
-                height,  # Process height
-                original_width,
-                original_height,
-                pose_config,
-                landmarks_history,
+            if _image_lm_mgr is not None and frame_count >= image_bootstrap_n:
+                with contextlib.suppress(Exception):
+                    _image_lm_mgr.__exit__(None, None, None)
+                _image_lm_mgr = None
+                _image_lm_obj = None
+
+            use_dual = (
+                image_options is not None
+                and image_bootstrap_n > 0
+                and frame_count < image_bootstrap_n
             )
+            if use_dual and _image_lm_mgr is None:
+                try:
+                    _image_lm_mgr = PoseLandmarker.create_from_options(image_options)
+                    _image_lm_obj = _image_lm_mgr.__enter__()
+                except Exception as _img_e:
+                    print(f"[WARNING] IMAGE PoseLandmarker failed ({_img_e}); VIDEO-only.")
+                    _image_lm_mgr = None
+                    _image_lm_obj = None
+
+            if use_dual and _image_lm_obj is not None:
+                landmarks_video = process_frame_with_tasks_api(
+                    frame,
+                    landmarker,
+                    timestamp_ms,
+                    bbox_config.get("enable_crop", False),
+                    bbox_config,
+                    width,
+                    height,
+                    original_width,
+                    original_height,
+                    pose_config,
+                    landmarks_history,
+                    use_image_detect=False,
+                )
+                landmarks_image = process_frame_with_tasks_api(
+                    frame,
+                    _image_lm_obj,
+                    timestamp_ms,
+                    bbox_config.get("enable_crop", False),
+                    bbox_config,
+                    width,
+                    height,
+                    original_width,
+                    original_height,
+                    pose_config,
+                    landmarks_history,
+                    use_image_detect=True,
+                )
+                landmarks = landmarks_image if landmarks_image is not None else landmarks_video
+            else:
+                landmarks = process_frame_with_tasks_api(
+                    frame,
+                    landmarker,
+                    timestamp_ms,
+                    bbox_config.get("enable_crop", False),
+                    bbox_config,
+                    width,
+                    height,
+                    original_width,
+                    original_height,
+                    pose_config,
+                    landmarks_history,
+                    use_image_detect=False,
+                )
+
+            # --- REVERSE-PREPEND: Skip output for prefix frames ---
+            # During prefix frames, MediaPipe processes them for tracker context
+            # but we do NOT append results or write to annotated video.
+            if frame_count < n_prefix_frames_to_skip:
+                # Still run detection (already done above), but skip output
+                frame_count += 1
+                current_timestamp_ms += frame_duration_ms
+                if frame_count % 100 == 0:
+                    print(
+                        f"  [REVERSE-PREPEND] Prefix frame {frame_count}/{n_prefix_frames_to_skip} "
+                        f"(warming up tracker, not saving output)..."
+                    )
+                continue
 
             # Draw on frame (Visualization)
             annotated_frame = frame.copy()
@@ -4767,14 +5402,41 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             frame_count += 1
             current_timestamp_ms += frame_duration_ms
 
-            if frame_count % 100 == 0:
-                print(f"Processed {frame_count}/{total_frames} frames...")
+            # Progress: show original frame index (after prefix)
+            original_frame_idx = frame_count - n_prefix_frames_to_skip
+            if original_frame_idx % 100 == 0:
+                print(f"Processed {original_frame_idx}/{_original_total_frames} frames...")
+
+        if _image_lm_mgr is not None:
+            with contextlib.suppress(Exception):
+                _image_lm_mgr.__exit__(None, None, None)
+            _image_lm_mgr = None
+            _image_lm_obj = None
 
     cap.release()
     out_video.release()
     cv2.destroyAllWindows()
     if _use_ffmpeg_pipe:
         print(f"[VIDEO] Annotated video saved → {annotated_output_path}")
+
+    # Clean up temp concatenated video (reverse-prepend)
+    if _temp_concat_video is not None:
+        with contextlib.suppress(OSError):
+            Path(_temp_concat_video).unlink()
+            # Also try to remove the parent temp dir if empty
+            parent = Path(_temp_concat_video).parent
+            if parent.exists() and not any(parent.iterdir()):
+                parent.rmdir()
+        print("[REVERSE-PREPEND] Cleaned up temp concatenated video.")
+
+    # Use original frame count for reporting (not the concatenated total)
+    total_frames = _original_total_frames
+
+    if n_prefix_frames_to_skip > 0:
+        print(
+            f"\n[REVERSE-PREPEND] Summary: processed {n_prefix_frames_to_skip} prefix frames "
+            f"(discarded) + {len(normalized_landmarks_list)} original frames (saved)."
+        )
 
     print("\nAnalysis loop completed.")
 
@@ -4891,7 +5553,9 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             f.write("Video Info:\n")
             f.write(f"  - Original Resolution: {original_width}x{original_height}\n")
             f.write(f"  - Processing Resolution: {width}x{height}\n")
-            f.write(f"  - Total Frames: {total_frames}\n")
+            f.write(f"  - Total Frames: {total_frames} (original)\n")
+            if n_prefix_frames_to_skip > 0:
+                f.write(f"  - Reverse-Prepend Prefix: {n_prefix_frames_to_skip} frames\n")
             f.write(f"  - FPS: {fps:.2f}\n\n")
             f.write("Configuration:\n")
             f.write(f"  - Model Complexity: {pose_config.get('model_complexity', 2)}\n")
@@ -4900,6 +5564,9 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             )
             f.write(f"  - Tracking Confidence: {pose_config.get('min_tracking_confidence', 0.5)}\n")
             f.write(f"  - Enable Resize: {pose_config.get('enable_resize', False)}\n")
+            f.write(
+                f"  - Reverse-Prepend %: {pose_config.get('merge_reverse_percent', MERGE_REVERSE_PERCENT_DEFAULT)}\n"
+            )
             f.write(f"  - Enable Median Filter: {pose_config.get('enable_median_filter', False)}\n")
             if pose_config.get("enable_median_filter", False):
                 f.write(f"  - Median Kernel Size: {pose_config.get('median_kernel_size', 5)}\n")
@@ -4942,45 +5609,8 @@ def process_videos_in_directory(existing_root=None):
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
 
-    # --- Pre-emptively force NVIDIA EGL on Linux before any MediaPipe init ---
-    # MediaPipe uses EGL for GPU acceleration. On Linux with both NVIDIA and
-    # Mesa installed, EGL can pick Mesa/llvmpipe instead of the real GPU.
-    # Setting __EGL_VENDOR_LIBRARY_FILENAMES to the NVIDIA ICD JSON forces the
-    # correct EGL implementation before the first MediaPipe call.
-    if platform.system() == "Linux":
-        nvidia_egl_json = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
-        if os.path.exists(nvidia_egl_json):
-            os.environ["__EGL_VENDOR_LIBRARY_FILENAMES"] = nvidia_egl_json
-            os.environ["EGL_PLATFORM"] = "device"
-            print("[EGL] Forcing NVIDIA EGL ICD for GPU delegate...")
-    # -------------------------------------------------------------------------
-
-    # Detect GPU backends availability
-    print("\n=== Detecting GPU Backends Availability ===")
-    backends = detect_gpu_backends()
-
-    # Test each available backend
-    available_backends = {}
-    for backend_name in ["nvidia", "rocm", "mps"]:
-        if backend_name in backends:
-            available, info, error = backends[backend_name]
-            if available:
-                print(f"\nTesting {backend_name.upper()} backend...")
-                test_result = test_mediapipe_gpu_delegate(backend_name)
-                available_backends[backend_name] = (available, info, error)
-                available_backends[f"{backend_name}_test"] = test_result
-                if test_result[0]:
-                    print(f"[OK] {backend_name.upper()} backend test passed")
-                else:
-                    print(f"[WARNING] {backend_name.upper()} backend test failed: {test_result[1]}")
-                    # Mark as unavailable if test fails
-                    available_backends[backend_name] = (False, info, test_result[1])
-            else:
-                print(f"[FAIL] {backend_name.upper()} not available: {error}")
-                available_backends[backend_name] = (False, info, error)
-                available_backends[f"{backend_name}_test"] = (False, error)
-
-    print("=" * 40 + "\n")
+    apply_linux_nvidia_egl_env()
+    available_backends = probe_markerless_gpu_backends()
 
     # Use existing root or create new one for dialogs
     if existing_root is not None:
@@ -5108,6 +5738,115 @@ def process_videos_in_directory(existing_root=None):
     print("\nAll videos processed!")
 
 
+def run_markerless_cli_batch(argv: list[str]) -> int:
+    """Headless folder batch (no Tk dialogs). See module docstring for examples."""
+    import argparse
+    import sys
+
+    p = argparse.ArgumentParser(
+        prog="markerless_2d_analysis.py batch",
+        description="Markerless 2D: MediaPipe pose on all videos in a folder (efficient GPU path).",
+    )
+    p.add_argument("-i", "--input", type=Path, required=True, help="Input folder (.mp4/.avi/.mov)")
+    p.add_argument("-o", "--output", type=Path, required=True, help="Base output folder")
+    p.add_argument(
+        "-c",
+        "--config",
+        type=Path,
+        help="TOML from GUI (Load/Save); merges with defaults when keys missing",
+    )
+    p.add_argument(
+        "--device",
+        choices=["auto", "nvidia", "rocm", "mps", "cpu"],
+        default="auto",
+        help="MediaPipe delegate (default: auto → first working GPU)",
+    )
+    p.add_argument(
+        "--nvenc",
+        action="store_true",
+        help="Annotated MP4: h264_nvenc (uses ~0.5–1 GiB VRAM; can slow pose)",
+    )
+    p.add_argument(
+        "--libx264-encode",
+        action="store_true",
+        help="Annotated MP4: libx264 on CPU (default unless TOML use_nvenc=true)",
+    )
+    p.add_argument(
+        "--no-sleep-between-videos",
+        action="store_true",
+        help="Skip 2s pause between files (GUI keeps pause for stability)",
+    )
+    args = p.parse_args(argv)
+    apply_linux_nvidia_egl_env()
+
+    if args.nvenc and args.libx264_encode:
+        print("Error: use at most one of --nvenc / --libx264-encode", file=sys.stderr)
+        return 2
+
+    available = probe_markerless_gpu_backends()
+    use_gpu, gpu_backend = pick_markerless_device(args.device, available)
+    if args.device not in ("cpu", "auto") and not use_gpu:
+        print(
+            f"[WARN] device={args.device!r} unavailable after probe — using CPU. "
+            "Check drivers / EGL / MediaPipe GPU build."
+        )
+    if use_gpu:
+        print(f"[OK] GPU delegate: {gpu_backend}")
+    else:
+        print("[OK] CPU delegate")
+
+    if args.config:
+        loaded = load_config_from_toml(str(args.config))
+        if loaded is None:
+            print("Error: failed to load --config TOML", file=sys.stderr)
+            return 2
+        pose_config = loaded
+    else:
+        pose_config = get_flat_default_pose_config()
+
+    if args.nvenc:
+        pose_config["use_nvenc_encoder"] = True
+    elif args.libx264_encode:
+        pose_config["use_nvenc_encoder"] = False
+
+    input_dir = args.input.expanduser().resolve()
+    if not input_dir.is_dir():
+        print(f"Error: not a directory: {input_dir}", file=sys.stderr)
+        return 2
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_base = (args.output.expanduser().resolve()) / f"mediapipe_cli_{timestamp}"
+    output_base.mkdir(parents=True, exist_ok=True)
+
+    video_files = sorted(
+        f for f in input_dir.glob("*.*") if f.suffix.lower() in {".mp4", ".avi", ".mov"}
+    )
+    if not video_files:
+        print(f"Error: no videos in {input_dir}", file=sys.stderr)
+        return 2
+
+    print(f"\nCLI batch: {len(video_files)} video(s) → {output_base}")
+    for i, video_file in enumerate(video_files, 1):
+        print(f"\n[{i}/{len(video_files)}] {video_file.name}")
+        out_dir = output_base / video_file.stem
+        out_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            process_video(
+                video_file, out_dir, pose_config, use_gpu=use_gpu, gpu_backend=gpu_backend
+            )
+        except Exception as e:
+            print(f"Error: {video_file.name}: {e}", file=sys.stderr)
+        finally:
+            with contextlib.suppress(Exception):
+                gc.collect()
+            if not args.no_sleep_between_videos:
+                time.sleep(2)
+            print("Memory released")
+
+    print(f"\nDone. Outputs under: {output_base}")
+    return 0
+
+
 def convert_mediapipe_to_vaila_format(df_pixel, output_path):
     """
     Convert MediaPipe format to vailá format (frame, p1_x, p1_y, p2_x, p2_y, ...)
@@ -5145,11 +5884,28 @@ def convert_mediapipe_to_vaila_format(df_pixel, output_path):
 
 
 def get_cpu_usage():
-    """Get current CPU usage percentage"""
+    """Get current CPU usage percentage (non-blocking; call after one priming sample)."""
     try:
-        return psutil.cpu_percent(interval=0.1)
+        return float(psutil.cpu_percent(interval=None))
     except Exception:
-        return 0
+        return 0.0
+
+
+@functools.lru_cache(maxsize=1)
+def _ffmpeg_lists_h264_nvenc() -> bool:
+    """True if FFmpeg build exposes NVIDIA H.264 encoder (offloads annotated MP4 from CPU)."""
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=12,
+            check=False,
+        )
+        blob = (proc.stdout or "") + (proc.stderr or "")
+        return proc.returncode == 0 and "h264_nvenc" in blob
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
 
 
 def should_throttle_cpu(frame_count):
@@ -5177,4 +5933,8 @@ def apply_cpu_throttling():
 
 
 if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "batch":
+        raise SystemExit(run_markerless_cli_batch(sys.argv[2:]))
     process_videos_in_directory()

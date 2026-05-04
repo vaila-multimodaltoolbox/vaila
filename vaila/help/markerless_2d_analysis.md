@@ -215,7 +215,7 @@ process_video(
 ### Python Dependencies
 ```
 opencv-python>=4.8.0
-mediapipe>=0.10.0
+mediapipe
 numpy>=1.24.0
 pandas>=2.0.0
 scipy>=1.10.0

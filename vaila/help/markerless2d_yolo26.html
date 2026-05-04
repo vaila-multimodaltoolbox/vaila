@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markerless 2D YOLOv26 Pose Help</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #2980b9; margin-top: 30px; }
+        code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        th { background: #f8f9fa; }
+        .footer { margin-top: 50px; font-size: 0.8em; color: #7f8c8d; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>Markerless 2D YOLOv26 Pose Help</h1>
+    
+    <p>This tool provides 2D pose estimation using <strong>YOLOv26/v11</strong> models. It is a fast and reliable alternative to MediaPipe for standard joint tracking.</p>
+
+    <h2>Quick Start</h2>
+    <ul>
+        <li><strong>Model:</strong> Select a YOLO pose model. <code>yolo11x-pose.pt</code> offers the highest accuracy.</li>
+        <li><strong>Confidence:</strong> Set the minimum detection threshold (default 0.5). Lower it for distant subjects.</li>
+        <li><strong>Directory:</strong> Choose the folder containing your videos. All videos inside will be processed.</li>
+    </ul>
+
+    <h2>Outputs</h2>
+    <p>Results are saved in a folder named <code>processed_yolo26_YYYYMMDD_HHMMSS</code>:</p>
+    <ul>
+        <li><strong>Annotated Video:</strong> Visual verification of tracking quality with skeleton overlay.</li>
+        <li><strong>Normalized CSV:</strong> Landmark coordinates from 0.0 to 1.0.</li>
+        <li><strong>Pixel CSV:</strong> Landmark coordinates in exact pixel locations.</li>
+        <li><strong>Log Info:</strong> Processing metadata and performance stats.</li>
+    </ul>
+
+    <h2>17 Keypoints (COCO Standard)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Index</th>
+                <th>Landmark Name</th>
+                <th>Region</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>0</td><td>nose</td><td>Face</td></tr>
+            <tr><td>1-2</td><td>left_eye, right_eye</td><td>Face</td></tr>
+            <tr><td>3-4</td><td>left_ear, right_ear</td><td>Face</td></tr>
+            <tr><td>5-6</td><td>left_shoulder, right_shoulder</td><td>Upper Body</td></tr>
+            <tr><td>7-8</td><td>left_elbow, right_elbow</td><td>Upper Body</td></tr>
+            <tr><td>9-10</td><td>left_wrist, right_wrist</td><td>Upper Body</td></tr>
+            <tr><td>11-12</td><td>left_hip, right_hip</td><td>Lower Body</td></tr>
+            <tr><td>13-14</td><td>left_knee, right_knee</td><td>Lower Body</td></tr>
+            <tr><td>15-16</td><td>left_ankle, right_ankle</td><td>Lower Body</td></tr>
+        </tbody>
+    </table>
+
+    <div class="footer">
+        © 2026 vailá Multimodal Toolbox - AGPLv3 License
+    </div>
+</body>
+</html>

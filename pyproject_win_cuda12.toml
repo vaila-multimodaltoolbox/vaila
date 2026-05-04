@@ -61,10 +61,10 @@ dependencies = [
     "jax",
     "jaxlib",
     "xgboost",
-    "mediapipe>=0.10.33",
-    "torch==2.9.1",
-    "torchvision==0.24.1",
-    "torchaudio==2.9.1",
+    "mediapipe",
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+    "torchaudio==2.11.0",
     "ultralytics",
     "boxmot",
     "requests",
@@ -120,7 +120,7 @@ dependencies = [
     "ruff",
     "vpython",
     "pyvista",
-    "setuptools>=82.0.0",
+    "setuptools<82",
 ]
 
 [project.optional-dependencies]

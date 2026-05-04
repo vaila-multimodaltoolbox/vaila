@@ -1,0 +1,167 @@
+# ================================================================
+# MediaPipe 2D Analysis Configuration File
+# Generated automatically by markerless_2D_analysis.py in vaila Multimodal Analysis Toolbox
+# Created: 2026-05-04 07:13:58
+# ================================================================
+#
+# HOW TO USE THIS FILE:
+# 1. Edit the values below to customize your analysis
+# 2. Save this file
+# 3. In the script, click 'Load Existing TOML Configuration'
+# 4. Select this file and run your analysis
+#
+# IMPORTANT: Keep the format exactly as shown!
+# - true/false must be lowercase
+# - Numbers can have decimals (3.0) or not (30)
+# - Text must be in quotes ("linear")
+# ================================================================
+
+[mediapipe]
+# ================================================================
+# MEDIAPIPE POSE DETECTION SETTINGS
+# ================================================================
+# These control how MediaPipe detects poses in your video
+min_detection_confidence = 0.1    # How confident to start detecting (0.1-1.0)
+#                                        # Lower = detect more poses (try 0.1-0.3)
+#                                        # Higher = only clear poses (try 0.7-0.9)
+min_tracking_confidence = 0.1     # How confident to keep tracking (0.1-1.0)
+#                                       # Lower = track longer (try 0.1-0.3)
+#                                       # Higher = drop unclear tracking (try 0.7-0.9)
+model_complexity = 2                  # Model accuracy vs speed
+#                        # 0 = fastest, least accurate
+#                        # 1 = balanced speed and accuracy
+#                        # 2 = slowest, most accurate (recommended)
+enable_segmentation = false           # Draw person outline (true/false)
+#                             # true = creates person mask (slower)
+#                             # false = only landmarks (faster)
+smooth_segmentation = false           # Smooth the outline (true/false)
+#                             # Only works if enable_segmentation = true
+static_image_mode = false             # Treat each frame separately (true/false)
+#                           # false = track across frames (recommended)
+#                           # true = detect fresh each frame (slower)
+image_bootstrap_first_frame = true   # Frame 0: RunningMode.IMAGE detect (true/false)
+#                           # true = strong first-frame pose (recommended for CSV/overlay)
+#                           # false = VIDEO mode only (legacy; may warm up slowly)
+image_bootstrap_num_frames = 45   # IMAGE-mode refine for first N frames (0 = off)
+#                           # 30–60 typical; trim clips may need more until tracker locks
+apply_filtering = true               # Apply built-in smoothing (true/false)
+#                         # true = smoother movement (recommended)
+#                         # false = raw detection results
+estimate_occluded = true             # Guess hidden body parts (true/false)
+#                           # true = fill in missing landmarks (recommended)
+#                           # false = leave gaps when parts are hidden
+
+# ================================================================
+# POST-PROCESSING (Optional)
+# ================================================================
+enable_median_filter = false          # Apply simple median smoothing (true/false)
+median_kernel_size = 5               # Kernel size (odd integer: 3, 5, 7)
+#                           # Helps reduce jitter without heavy distortion.
+
+
+[video_resize]
+# ================================================================
+# VIDEO RESIZING FOR BETTER DETECTION
+# ================================================================
+# Resize video before analysis to improve pose detection
+# Useful for: small people, distant subjects, low resolution videos
+enable_resize = false                 # Resize video before analysis (true/false)
+#                           # true = upscale for better detection
+#                           # false = use original size (faster)
+resize_scale = 2                      # Scale factor (2-8)
+#                        # 2 = double size (good for most cases)
+#                        # 3-4 = better for very small subjects
+#                        # 5-8 = for very distant or tiny people
+#                        # Higher = better detection but much slower
+#                        # Coordinates are automatically converted back
+
+[padding]
+# ================================================================
+# INITIAL FRAME PADDING FOR STABILIZATION
+# ================================================================
+# Add repeated frames at the start to help MediaPipe stabilize.
+enable_padding = true  # true/false
+pad_start_frames = 30  # Number of frames to pad at start
+merge_reverse_percent = 0  # 0 = off; 1–100 = videoprocessor-style reversed-prefix warmup (ignores pad_start_frames for warmup)
+enable_reverse_padding = true  # Reverse padding at end (true/false)
+pad_end_frames = 30  # Number of frames to pad at end
+# Recommended: 30-60 for most videos.
+
+[video_encoding]
+# Annotated MP4: libx264 (CPU) vs h264_nvenc (GPU).
+# NVENC frees CPU but uses ~0.5–1 GiB VRAM and can lower MediaPipe GPU headroom.
+use_nvenc = false  # true/false
+
+[bounding_box]
+# ================================================================
+# BOUNDING BOX (ROI) SELECTION FOR SMALL SUBJECTS
+# ================================================================
+# Crop frames to a region of interest before MediaPipe processing.
+# Useful when: multiple people in frame, subject is very small,
+# or you want to focus on a specific area.
+
+enable_crop = false              # Enable bounding box cropping (true/false)
+#                         # true = crop frames to ROI before processing
+#                         # false = process full frame (default)
+
+bbox_x_min = 0                   # Left edge of ROI in pixels
+bbox_y_min = 0                   # Top edge of ROI in pixels
+bbox_x_max = 1920                  # Right edge of ROI in pixels
+bbox_y_max = 1080                  # Bottom edge of ROI in pixels
+# Note: Coordinates are in pixels. Use 'Select ROI from Video'
+# button in GUI to visually select the region from first video frame.
+
+enable_resize_crop = false       # Resize the cropped region (true/false)
+#                         # true = upscale cropped region for better detection
+#                         # false = use cropped region at original size
+
+resize_crop_scale = 2            # Scale factor for cropped region (2-8)
+#                         # 2 = double size (good for most cases)
+#                         # 3-4 = better for very small subjects
+#                         # 5-8 = for very distant or tiny people
+# This is separate from video_resize. Only the cropped region is resized,
+# which is more efficient than resizing the entire video.
+
+# Polygon ROI (optional):
+# roi_polygon_points = [[x1, y1], [x2, y2], ...]  # Polygon ROI points
+# Note: If roi_polygon_points is set, it takes precedence over bbox coordinates.
+# Use 'Select Polygon ROI' button in GUI to visually select polygon from video.
+
+# [bounding_box_ranges]  # Uncomment to use multiple ROI ranges
+# [[bounding_box_ranges.range]]
+# frame_start = 0
+# frame_end = 100
+# enable_crop = true
+# bbox_x_min = 100
+# bbox_y_min = 100
+# bbox_x_max = 500
+# bbox_y_max = 400
+# enable_resize_crop = true
+# resize_crop_scale = 4
+#
+# [[bounding_box_ranges.range]]
+# frame_start = 101
+# frame_end = "inf"  # Use "inf" for last frame
+# enable_crop = true
+# bbox_x_min = 150
+# bbox_y_min = 150
+# bbox_x_max = 600
+# bbox_y_max = 500
+# enable_resize_crop = true
+# resize_crop_scale = 2
+
+
+[scientific_robustness]
+# ================================================================
+# SCIENTIFIC ROBUSTNESS PARAMETERS (Kalman + Optical Flow) - v0.9.0
+# ================================================================
+# Kalman Filter: Predicts motion when tracking is lost.
+track_process_noise = 1.0       # Process noise (model uncertainty)
+track_measurement_noise = 0.1   # Base measurement noise (sensor uncertainty)
+max_pred_gap = 10              # Max frames to predict before declaring a gap
+# Optical Flow: Tracks points when MediaPipe confidence is low.
+optical_flow_threshold = 0.15    # Max error for optical flow tracking
+# Gap Reconstruction: Fills true gaps (offline).
+enable_gap_reconstruction = true # Enable offline gap reconstruction
+max_reconstruction_gap = 10      # Max gap size to fill (frames)
+
