@@ -407,7 +407,7 @@ process_video(
 
 ```txt
 opencv-python>=4.8.0
-mediapipe>=0.10.32
+mediapipe
 numpy>=1.24.0
 pandas>=2.0.0
 ultralytics>=8.0.0
@@ -616,7 +616,7 @@ conda activate vaila
 - "Tasks API error"
 
 **Solutions:**
-- Update MediaPipe: `pip install --upgrade mediapipe>=0.10.32`
+- Update MediaPipe: `pip install --upgrade mediapipe`
 - Verify model files in `vaila/models/` directory
 - Check MediaPipe version: `python -c "import mediapipe as mp; print(mp.__version__)"`
 - Reinstall MediaPipe if issues persist
