@@ -223,6 +223,60 @@ Full details: see `.claude/skills/sports-field-visualization/SKILL.md`.
 
 **Handoff for other IDEs / agents:** read `.claude/skills/soccer-field-keypoints-yolo/SKILL.md` for exact train/export/infer commands, weight path resolution (Ultralytics run dir suffix `-N`), and CSV semantics.
 
+## Caveman mode (optional)
+
+[Caveman](https://github.com/JuliusBrussee/caveman) is a skills/plugin pack for AI coding agents (Claude Code, Cursor, Gemini CLI, Windsurf, Copilot, and 30+ others). It steers the model toward terse replies: fewer filler words and articles, typically **~65–75% fewer output tokens** while keeping technical content intact.
+
+### Install
+
+The upstream installer auto-detects supported agents. **Node.js + `npx`** must be on your PATH (the installer uses `npx skills add`).
+
+- **macOS / Linux / WSL / Git Bash**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JuliusBrussee/caveman/main/install.sh | bash
+```
+
+- **Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/JuliusBrussee/caveman/main/install.ps1 | iex
+```
+
+Re-run the same command to refresh. Optional: `--with-init` (see upstream README) to write per-repo rule files into the current directory.
+
+### Enable / disable in a session
+
+- **On:** `/caveman`, or phrases like “talk like caveman” / “less tokens please”. On Codex: `$caveman`.
+- **Off:** `stop caveman` or `normal mode`.
+
+**Intensity:** `/caveman lite` (trim fluff, keep grammar), `/caveman full` (default: minimal articles/sentences), `/caveman ultra` (telegraphic), `/caveman wenyan` (upstream style).
+
+**Auto-clarity:** drop caveman tone for security warnings, irreversible actions, or when the user is confused; resume after.
+
+**Boundaries:** generated code and formal commit/PR prose can stay normal; the style target is conversational assistant output.
+
+### Extra upstream tools (input + workflow)
+
+- **`/caveman:compress <file>`** — rewrite large project memory files (e.g. `CLAUDE.md`) in the same terse style to cut **input** tokens on every read (upstream cites ~46% average on those files).
+- **`/caveman-commit`** — very short commit messages (focus on *why*).
+- **`/caveman-review`** — one-line PR review comments.
+- **caveman-shrink (MCP)** — optional proxy that compresses MCP tool/resource descriptions to save system-side tokens.
+
+### Cursor in this repo
+
+Repo-local Cursor rule (always-on terse baseline for the IDE): `.cursor/rules/caveman.mdc`. Upstream skills install is separate; use the `curl` / `irm` commands above.
+
+### In-chat rules (mirror)
+
+Respond terse like smart caveman. All technical substance stay. Only fluff die.
+
+- Drop: articles (a/an/the), filler (just/really/basically), pleasantries, hedging
+- Fragments OK. Short synonyms. Technical terms exact. Code unchanged
+- Pattern: [thing] [action] [reason]. [next step].
+- Not: “Sure! I'd be happy to help you with that.”
+- Yes: “Bug in auth middleware. Fix:”
+
 ## Security
 
 This is an **open-source (AGPL-3.0)** repository. Do **not** commit API keys, tokens, or credential files. See **[SECURITY.md](SECURITY.md)** and **[CONTRIBUTING.md](CONTRIBUTING.md)**.
