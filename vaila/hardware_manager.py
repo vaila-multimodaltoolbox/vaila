@@ -14,13 +14,15 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from typing import Any
+
 import psutil
 from ultralytics import YOLO
 
 try:
     import pynvml  # type: ignore[import-not-found]
 except ImportError:
-    pynvml = None
+    pynvml: Any = None
 
 
 class HardwareManager:
@@ -36,6 +38,22 @@ class HardwareManager:
             self.models_dir = Path(os.path.dirname(__file__)) / models_dir
         else:
             self.models_dir = Path(models_dir)
+
+        # Keep Ultralytics artifacts out of repo root / $PWD.
+        try:
+            from ultralytics import settings
+
+            ul_root = self.models_dir / "ultralytics"
+            ul_root.mkdir(parents=True, exist_ok=True)
+            settings.update(
+                {
+                    "runs_dir": str(ul_root / "runs"),
+                    "weights_dir": str(self.models_dir),
+                    "datasets_dir": str(ul_root / "datasets"),
+                }
+            )
+        except Exception:
+            pass
 
         self.gpu_info = self._detect_gpu()
         self.sys_info = self._detect_system()

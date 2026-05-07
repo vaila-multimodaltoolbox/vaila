@@ -105,7 +105,7 @@
             <p><strong>Category:</strong> Ml</p>
             <p><strong>File:</strong> vaila/yolov26track.py</p>
             <p><strong>Lines:</strong> 3980+</p>
-            <p><strong>Version:</strong> 0.0.1</p>
+            <p><strong>Version:</strong> 0.3.43</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -122,6 +122,8 @@
                 <li>CSV generation with frame-by-frame tracking data</li>
                 <li>Pose estimation within tracked bounding boxes</li>
                 <li>Automatic GPU detection (CUDA/MPS/CPU)</li>
+                <li>Run modes: <code>track</code>, <code>track+pose</code>, <code>track+seg</code>, <code>run_all (track+seg+pose)</code></li>
+                <li>Segmentation exports (when masks available): <code>yolo_masks_manifest.csv</code>, <code>yolo_contours.json</code>, <code>yolo_masks/</code></li>
             </ul>
         </div>
 
@@ -133,7 +135,7 @@
             <p><strong>Segmentation:</strong> yolo26n-seg.pt, yolo26s-seg.pt, yolo26m-seg.pt, yolo26l-seg.pt,
                 yolo26x-seg.pt</p>
             <p><strong>OBB:</strong> yolo26n-obb.pt, yolo26s-obb.pt, yolo26m-obb.pt, yolo26l-obb.pt, yolo26x-obb.pt</p>
-            <p><small>Models are automatically downloaded to <code>vaila/models/</code></small></p>
+            <p><small>Models are stored under <code>vaila/models/</code>. Ultralytics runs/cache redirected under <code>vaila/models/ultralytics/</code>.</small></p>
         </div>
 
         <div class="functions">
@@ -157,7 +159,7 @@
         </div>
 
         <div class="footer">
-            <p>📅 Last Updated: January 2026 (v0.0.1)</p>
+            <p>📅 Last Updated: May 07, 2026 (v0.3.43)</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
