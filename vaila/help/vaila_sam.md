@@ -4,7 +4,7 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.0.4
+- **Version:** 0.3.43
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -775,6 +775,7 @@ Place a short MP4 at `tests/SAM/test1000.mp4` for smoke tests (see `tests/SAM/RE
 
 ## Version History
 
+- **v0.3.43 (07 May 2026):** Fix GUI batch output directory — GUI now passes exact `processed_sam_...` folder to subprocess so no empty sibling folder is created.
 - **v0.0.4 (April 2026):** `fifa dlt-export` / `vaila.fifa_to_dlt` — FIFA `cameras/*.npz` → per-frame `.dlt2d` / `.dlt3d` for `rec2d.py` / `rec3d.py` (moving broadcast camera); help section **Full broadcast pipeline**; GUI button **FIFA cams→DLT**
 - **v0.0.3 (17 April 2026):** `SamVideoDialog` Help button + editable prompt combobox (14 presets); `SamBatchProgress` Help button; `fifa bootstrap` subcommand (symlinks + sequences + pitch_points); `bin/setup_fifa_sam3d.sh/ps1` for SAM 3D Body cloning and gated weights download; `vaila/fifa_starter_lib/` vendorised (MIT); companion **Soccer-field DLT2D calibration** in `vaila/soccerfield_calib.py`
 - **v0.0.2 (April 2026):** FIFA Skeletal Tracking Light pipeline integration; SAM 3.1 Multiplex support; BFloat16 patches; VRAM auto-sizing
@@ -799,7 +800,7 @@ the script and will ship in a follow-up.
 
 ---
 
-Generated: April 17, 2026
+Generated: May 7, 2026
 Part of vailá - Multimodal Toolbox
 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 Contact: paulosantiago@usp.br

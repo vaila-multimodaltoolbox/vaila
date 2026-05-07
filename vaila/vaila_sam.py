@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 19 April 2026
-Version: 0.0.4
+Update Date: 7 May 2026
+Version: 0.3.43
 
 Description:
     This script performs video segmentation using the SAM 3 model from Meta.
@@ -3441,6 +3441,8 @@ def _start_sam_batch_subprocess(
         str(input_path.resolve()),
         "-o",
         str(out_parent.resolve()),
+        "--output-base",
+        str(output_base.resolve()),
         "-t",
         prompt,
         "-f",
@@ -3664,11 +3666,10 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
             root.destroy()
         return
 
-    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_base = out_parent / f"processed_sam_{ts}"
-    output_base.mkdir(parents=True, exist_ok=True)
-
     if dry_run:
+        ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_base = out_parent / f"processed_sam_{ts}"
+        output_base.mkdir(parents=True, exist_ok=True)
         report = _sam3_dry_run_report(
             input_path,
             output_base,
@@ -3709,6 +3710,10 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         if owns_root:
             root.destroy()
         return
+
+    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_base = out_parent / f"processed_sam_{ts}"
+    output_base.mkdir(parents=True, exist_ok=True)
 
     progress = SamBatchProgress(root, total=len(video_files), output_base=output_base)
 
@@ -3781,6 +3786,11 @@ def main() -> None:
         help="Input video file OR directory containing videos (batch)",
     )
     parser.add_argument("-o", "--output", type=Path, help="Output base directory")
+    parser.add_argument(
+        "--output-base",
+        type=Path,
+        help=argparse.SUPPRESS,  # internal: GUI passes an exact processed_sam_TS dir
+    )
     parser.add_argument(
         "-t",
         "--text",
@@ -4053,8 +4063,11 @@ def main() -> None:
             print(f"Input path does not exist: {inp}")
             return
 
-        ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_base = args.output / f"processed_sam_{ts}"
+        if args.output_base is not None:
+            output_base = args.output_base.resolve()
+        else:
+            ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_base = args.output / f"processed_sam_{ts}"
         output_base.mkdir(parents=True, exist_ok=True)
 
         print(f"\nSAM 3 batch — {len(video_files)} video(s) to process")
