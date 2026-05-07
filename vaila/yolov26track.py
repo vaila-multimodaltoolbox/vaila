@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 12 January 2026
-Version: 0.0.7
+Update Date: 07 May 2026
+Version: 0.3.43
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -51,10 +51,13 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 
 """
 
+from __future__ import annotations
+
 import colorsys
 import csv
 import datetime
 import glob
+import json
 import os
 import platform
 import subprocess
@@ -75,27 +78,44 @@ from ultralytics import YOLO
 
 from .hardware_manager import HardwareManager
 
-# Import PIL for image display
 try:
     from PIL import Image, ImageTk
-except ImportError:
-    print("Warning: PIL (Pillow) not found. Installing...")
-    import subprocess
-    import sys
+except ImportError as e:
+    raise ImportError(
+        "Missing dependency: Pillow. Install via `uv sync` (or add extra that provides it)."
+    ) from e
 
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow"])
-    from PIL import Image, ImageTk
-
-# Import TOML for ROI configuration
 try:
     import toml
-except ImportError:
-    print("Warning: toml not found. Installing...")
-    import subprocess
-    import sys
+except ImportError as e:
+    raise ImportError(
+        "Missing dependency: toml. Install via `uv sync` (or add dependency in pyproject)."
+    ) from e
 
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "toml"])
-    import toml
+
+VAILA_MODELS_DIR = Path(__file__).resolve().parent / "models"
+
+
+def _configure_ultralytics_dirs(models_dir: Path) -> None:
+    """Force Ultralytics cache/runs/weights under vailá `vaila/models/`."""
+    root = models_dir / "ultralytics"
+    root.mkdir(parents=True, exist_ok=True)
+
+    # Newer Ultralytics versions expose `settings.update`.
+    try:
+        from ultralytics import settings
+
+        settings.update(
+            {
+                "runs_dir": str(root / "runs"),
+                "weights_dir": str(models_dir),
+                "datasets_dir": str(root / "datasets"),
+            }
+        )
+    except Exception:
+        # Fallback: env var at least moves Ultralytics "home" dir on some versions.
+        os.environ.setdefault("ULTRALYTICS_DIR", str(root))
+
 
 # Print the script version and directory
 print(f"Running script: {Path(__file__).name}")
@@ -1111,15 +1131,75 @@ class TrackerConfigDialog(simpledialog.Dialog):
         help_text.bind("<Enter>", lambda e: self.show_help(e, stride_tooltip))
         help_text.bind("<Leave>", self.hide_help)
 
+        # Run mode (track / seg / pose)
+        run_frame = tk.LabelFrame(master, text="Run Mode", padx=5, pady=5)
+        run_frame.grid(row=5, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+
+        tk.Label(run_frame, text="Mode:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.run_mode_var = tk.StringVar(value="track")
+        run_mode_combo = ttk.Combobox(
+            run_frame,
+            textvariable=self.run_mode_var,
+            values=[
+                "track",
+                "track+pose",
+                "track+seg",
+                "run_all (track+seg+pose)",
+            ],
+            state="readonly",
+            width=22,
+        )
+        run_mode_combo.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+        self.save_masks_var = tk.BooleanVar(value=True)
+        self.save_contours_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(run_frame, text="Save masks (PNG)", variable=self.save_masks_var).grid(
+            row=1, column=0, padx=5, pady=2, sticky="w"
+        )
+        tk.Checkbutton(
+            run_frame, text="Save contours (JSON)", variable=self.save_contours_var
+        ).grid(row=1, column=1, padx=5, pady=2, sticky="w")
+
+        # Pose sub-config (used when mode includes pose)
+        pose_frame = tk.LabelFrame(master, text="Pose (optional)", padx=5, pady=5)
+        pose_frame.grid(row=6, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+
+        tk.Label(pose_frame, text="Pose model:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.pose_model_var = tk.StringVar(value="yolo26n-pose.pt")
+        pose_model_combo = ttk.Combobox(
+            pose_frame,
+            textvariable=self.pose_model_var,
+            values=[
+                "yolo26n-pose.pt",
+                "yolo26s-pose.pt",
+                "yolo26m-pose.pt",
+                "yolo26l-pose.pt",
+                "yolo26x-pose.pt",
+            ],
+            state="readonly",
+            width=18,
+        )
+        pose_model_combo.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+        tk.Label(pose_frame, text="Pose conf:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.pose_conf = tk.Entry(pose_frame, width=10)
+        self.pose_conf.insert(0, "0.10")
+        self.pose_conf.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+
+        tk.Label(pose_frame, text="Pose IoU:").grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        self.pose_iou = tk.Entry(pose_frame, width=10)
+        self.pose_iou.insert(0, "0.70")
+        self.pose_iou.grid(row=1, column=3, padx=5, pady=5, sticky="w")
+
         # ROI selection section
-        tk.Label(master, text="Region of Interest (ROI):").grid(row=5, column=0, padx=5, pady=5)
+        tk.Label(master, text="Region of Interest (ROI):").grid(row=7, column=0, padx=5, pady=5)
         self.roi_file_path = None
         self.roi_status_label = tk.Label(master, text="No ROI selected", fg="gray")
-        self.roi_status_label.grid(row=5, column=1, padx=5, pady=5, sticky="w")
+        self.roi_status_label.grid(row=7, column=1, padx=5, pady=5, sticky="w")
 
         # Frame for ROI buttons
         roi_buttons_frame = tk.Frame(master)
-        roi_buttons_frame.grid(row=6, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
+        roi_buttons_frame.grid(row=8, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
         btn_create_roi_poly = tk.Button(
             roi_buttons_frame,
@@ -1152,7 +1232,7 @@ class TrackerConfigDialog(simpledialog.Dialog):
         btn_load_roi.pack(side="left", padx=5)
 
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
-        help_text.grid(row=5, column=2, padx=5, pady=5)
+        help_text.grid(row=7, column=2, padx=5, pady=5)
         roi_tooltip = (
             "ROI Options:\n"
             "'Create Polygon ROI' - Draw a free polygon on a video frame\n"
@@ -1337,6 +1417,12 @@ class TrackerConfigDialog(simpledialog.Dialog):
                 "iou": float(self.iou.get()),
                 "device": device,
                 "vid_stride": int(self.vid_stride.get()),
+                "run_mode": self.run_mode_var.get(),
+                "save_masks": bool(self.save_masks_var.get()),
+                "save_contours": bool(self.save_contours_var.get()),
+                "pose_model_name": self.pose_model_var.get(),
+                "pose_conf": float(self.pose_conf.get()),
+                "pose_iou": float(self.pose_iou.get()),
                 "roi_file": self.roi_file_path,  # Path to saved ROI TOML file
                 "half": True,
                 "persist": True,
@@ -2066,6 +2152,40 @@ def _draw_keypoints_and_skeleton(frame, keypoints_abs, color=(0, 255, 0)):
         if not np.isnan(x) and not np.isnan(y):
             cv2.circle(frame, (int(x), int(y)), 3, color, -1, cv2.LINE_AA)
     return frame
+
+
+def _mask_to_polygons(mask_u8: np.ndarray) -> list[list[list[int]]]:
+    """Binary mask (H,W uint8 {0,255}) -> polygons [[x,y], ...] list."""
+    if mask_u8.ndim != 2:
+        raise ValueError("mask_u8 must be 2D")
+    contours, _ = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    polys: list[list[list[int]]] = []
+    for cnt in contours:
+        if len(cnt) < 3:
+            continue
+        # cnt shape (N,1,2) -> (N,2)
+        pts = cnt.reshape(-1, 2)
+        polys.append([[int(x), int(y)] for x, y in pts])
+    return polys
+
+
+def _to_mask_u8(mask: Any) -> np.ndarray:
+    """Ultralytics mask tensor/array -> uint8 0/255 mask."""
+    if hasattr(mask, "cpu"):
+        mask = cast(Any, mask).cpu().numpy()
+    elif hasattr(mask, "numpy"):
+        mask = cast(Any, mask).numpy()
+    m = np.asarray(mask)
+    if m.dtype != np.uint8:
+        m = (m > 0.5).astype(np.uint8) * 255
+    else:
+        # assume 0/1 or 0/255
+        if m.max() <= 1:
+            m = m * 255
+    if m.ndim == 3 and m.shape[0] == 1:
+        # (N,H,W) caller should pass single slice, but accept N=1
+        m = m[0]
+    return m
 
 
 def merge_tracking_csvs(csv_files, output_csv_path, label="merged"):
@@ -2907,9 +3027,10 @@ def _process_pose_from_csv(
         tracker_id: Optional tracker ID (None for merged CSV)
     """
 
-    # Load pose model
-    # Models are downloaded to vaila/models/ directory
-    models_dir = os.path.join(os.path.dirname(__file__), "models")
+    _configure_ultralytics_dirs(VAILA_MODELS_DIR)
+
+    # Load pose model (download into vaila/models/)
+    models_dir = str(VAILA_MODELS_DIR)
     os.makedirs(models_dir, exist_ok=True)
     pose_model_path = os.path.join(models_dir, pose_model_name)
 
@@ -2928,7 +3049,7 @@ def _process_pose_from_csv(
             return False
 
     # Initialize Hardware Manager
-    hw = HardwareManager()
+    hw = HardwareManager(models_dir=models_dir)
 
     try:
         # Check and auto-export optimized .engine model
@@ -3155,8 +3276,9 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
     print(f"Found {len(csv_files)} tracking CSV files")
 
     # Load pose model
-    # Models are downloaded to vaila/models/ directory
-    models_dir = os.path.join(os.path.dirname(__file__), "models")
+    _configure_ultralytics_dirs(VAILA_MODELS_DIR)
+
+    models_dir = str(VAILA_MODELS_DIR)
     os.makedirs(models_dir, exist_ok=True)
     pose_model_path = os.path.join(models_dir, pose_model_name)
 
@@ -3176,7 +3298,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
             return False
 
     # Initialize Hardware Manager
-    hw = HardwareManager()
+    hw = HardwareManager(models_dir=models_dir)
 
     try:
         # Check and auto-export optimized .engine model
@@ -3393,6 +3515,8 @@ def run_yolov26track():
     print("Starting yolov26track.py...")
     print("-" * 80)
 
+    _configure_ultralytics_dirs(VAILA_MODELS_DIR)
+
     # Print hardware information
     print("=" * 60)
     print("HARDWARE CONFIGURATION")
@@ -3428,6 +3552,8 @@ def run_yolov26track():
         return
     tracker_name = tracker_dialog.result
 
+    models_dir = str(VAILA_MODELS_DIR)
+
     # Handle model path based on whether it's a custom model or pre-trained
     if os.path.isabs(model_name) or model_name.startswith("./") or model_name.startswith("../"):
         # Custom model - use the path directly
@@ -3441,7 +3567,6 @@ def run_yolov26track():
     else:
         # Pre-trained model - build the path in models directory
         # Models are downloaded to vaila/models/ directory
-        models_dir = os.path.join(os.path.dirname(__file__), "models")
         os.makedirs(models_dir, exist_ok=True)
         model_path = os.path.join(models_dir, model_name)
 
@@ -3466,6 +3591,12 @@ def run_yolov26track():
 
     config = config_dialog.result
 
+    run_mode = config.get("run_mode", "track")
+    do_pose = run_mode in {"track+pose", "run_all (track+seg+pose)"}
+    do_seg = run_mode in {"track+seg", "run_all (track+seg+pose)"}
+    save_masks = bool(config.get("save_masks", True))
+    save_contours = bool(config.get("save_contours", True))
+
     # Print device information
     device = config["device"]
     print(f"\nSelected device: {device}")
@@ -3480,7 +3611,7 @@ def run_yolov26track():
 
     # Initialize the YOLO model
     # Use HardwareManager to get optimal model for this GPU
-    hw = HardwareManager()
+    hw = HardwareManager(models_dir=models_dir)
     hw.print_report()
 
     try:
@@ -3513,6 +3644,16 @@ def run_yolov26track():
             # Create a subdirectory for this specific video
             output_dir = os.path.join(main_output_dir, video_name)
             os.makedirs(output_dir, exist_ok=True)
+
+            seg_masks_dir = Path(output_dir) / "yolo_masks"
+            if do_seg and save_masks:
+                seg_masks_dir.mkdir(parents=True, exist_ok=True)
+            mask_manifest_rows: list[str] = ["frame,obj_id,area_px,mask_png"]
+            contours_out: dict[str, Any] = {
+                "schema": "vaila_yolo_contours_v1",
+                "video": str(video_path),
+                "frames": [],
+            }
 
             # Read the dimensions and total frames of the original video
             cap = cv2.VideoCapture(video_path)
@@ -3693,6 +3834,12 @@ def run_yolov26track():
             frame_idx = 0
             for result in results:
                 frame = result.orig_img
+                frame_contours: dict[str, Any] | None = None
+                masks_data = None
+                if do_seg and getattr(result, "masks", None) is not None:
+                    masks_data = getattr(result.masks, "data", None)
+                    if masks_data is not None and hasattr(masks_data, "cpu"):
+                        masks_data = cast(Any, masks_data).cpu().numpy()
 
                 # Overlay ROI outline for reference
                 if roi_poly is not None:
@@ -3705,7 +3852,8 @@ def run_yolov26track():
                     frame_idx += 1
                     continue
 
-                for box in boxes:
+                for det_i, box in enumerate(cast(Any, boxes)):
+                    box = cast(Any, box)
                     x_min, y_min, x_max, y_max = map(int, box.xyxy[0].tolist())
                     conf = box.conf[0].item()
                     raw_id = int(box.id[0]) if box.id is not None else -1
@@ -3766,7 +3914,37 @@ def run_yolov26track():
                         conf,
                     )
 
+                    if do_seg and masks_data is not None and det_i < len(masks_data):
+                        mask_u8 = _to_mask_u8(masks_data[det_i])
+                        area_px = int(np.count_nonzero(mask_u8))
+                        mask_rel = ""
+                        if save_masks:
+                            mask_name = f"frame_{frame_idx:06d}_id_{tracker_id:02d}.png"
+                            mask_path = seg_masks_dir / mask_name
+                            cv2.imwrite(str(mask_path), mask_u8)
+                            mask_rel = str(mask_path.relative_to(Path(output_dir)))
+                            mask_manifest_rows.append(
+                                f"{frame_idx},{tracker_id},{area_px},{mask_rel}"
+                            )
+
+                        if save_contours:
+                            polys = _mask_to_polygons(mask_u8)
+                            if polys:
+                                if frame_contours is None:
+                                    frame_contours = {"frame": frame_idx, "objects": []}
+                                frame_contours["objects"].append(
+                                    {
+                                        "id": tracker_id,
+                                        "label": label,
+                                        "bbox_xyxy": [x_min, y_min, x_max, y_max],
+                                        "area_px": area_px,
+                                        "polygons": polys,
+                                    }
+                                )
+
                 writer.write(frame)
+                if frame_contours is not None:
+                    contours_out["frames"].append(frame_contours)
 
                 if frame_idx % 20 == 0:
                     print(f"Processing frame {frame_idx}/{total_frames}", end="\r")
@@ -3775,6 +3953,16 @@ def run_yolov26track():
 
             writer.release()
             print("")  # newline after progress
+
+            if do_seg:
+                if save_masks and len(mask_manifest_rows) > 1:
+                    (Path(output_dir) / "yolo_masks_manifest.csv").write_text(
+                        "\n".join(mask_manifest_rows) + "\n", encoding="utf-8"
+                    )
+                if save_contours and contours_out["frames"]:
+                    (Path(output_dir) / "yolo_contours.json").write_text(
+                        json.dumps(contours_out, ensure_ascii=False) + "\n", encoding="utf-8"
+                    )
 
             # Verify the AVI file was written successfully
             if not os.path.exists(temp_avi_path) or os.path.getsize(temp_avi_path) == 0:
@@ -3863,6 +4051,14 @@ def run_yolov26track():
                 print(f"Merged detection tracking file created: {merged_csv}")
 
             processed_count += 1
+
+            if do_pose:
+                print("\nRUN POSE IN BBOXES (post)")
+                process_pose_in_bboxes(
+                    output_dir,
+                    device=config.get("device"),
+                    pose_model_name=config.get("pose_model_name", "yolo26n-pose.pt"),
+                )
 
     # Show completion message
     if video_count == 0:
