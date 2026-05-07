@@ -5,6 +5,9 @@
 #
 # HardwareManager.py
 # Manages hardware detection (GPU/CPU/RAM) and auto-optimizes models for the current system.
+#
+# Update Date: 07 May 2026
+# Version: 0.3.43 (matches vailá app)
 """
 
 import logging
@@ -13,11 +16,15 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
-
 from typing import Any
 
 import psutil
-from ultralytics import YOLO
+
+# Force Ultralytics to keep cache/weights/runs under vailá `vaila/models/` even if cwd is repo root.
+_DEFAULT_MODELS_DIR = Path(__file__).resolve().parent / "models"
+os.environ.setdefault("ULTRALYTICS_DIR", str(_DEFAULT_MODELS_DIR / "ultralytics"))
+
+from ultralytics import YOLO  # noqa: E402
 
 try:
     import pynvml  # type: ignore[import-not-found]
@@ -59,6 +66,26 @@ class HardwareManager:
         self.sys_info = self._detect_system()
         self.profile = self._get_hardware_profile()
         self.config = self.get_trt_config()
+
+    def _trtexec_workspace_cli_args(self, trtexec_cmd: str) -> list[str]:
+        """TensorRT 10+ replaces ``--workspace`` with ``--memPoolSize``; probe ``trtexec --help``."""
+        try:
+            r = subprocess.run(
+                [trtexec_cmd, "--help"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return []
+        h = f"{r.stdout or ''}\n{r.stderr or ''}"
+        w = int(self.config["workspace"])
+        if "memPoolSize" in h:
+            return [f"--memPoolSize=workspace:{w}MiB"]
+        if "--workspace" in h:
+            return [f"--workspace={w}"]
+        return []
 
     def _detect_gpu(self):
         """Detects NVIDIA GPU VRAM and Name using pynvml."""
@@ -180,7 +207,7 @@ class HardwareManager:
             print("Step 1/2: Exporting to ONNX...")
             try:
                 model = YOLO(str(pt_path))
-                model.export(format="onnx", dynamic=True, simplify=True)
+                model.export(format="onnx", dynamic=True, simplify=True, imgsz=imgsz)
                 # Ultralytics exports to same dir as pt usually
             except Exception as e:
                 print(f"[FAIL] ONNX export failed: {e}")
@@ -194,31 +221,37 @@ class HardwareManager:
         # 2. Convert to Engine
         print("Step 2/2: Building TensorRT Engine (this takes a few minutes)...")
         precision_flag = f"--{self.config['precision']}"
+        workspace_args = self._trtexec_workspace_cli_args(trtexec_cmd)
+
+        # Explicit shapes are required for dynamic ONNX to avoid 1x3x1x1 default.
+        shapes_args = [
+            f"--minShapes=images:1x3x{imgsz}x{imgsz}",
+            f"--optShapes=images:1x3x{imgsz}x{imgsz}",
+            f"--maxShapes=images:1x3x{imgsz}x{imgsz}",
+        ]
 
         cmd = [
             trtexec_cmd,
             f"--onnx={onnx_path}",
             f"--saveEngine={engine_path}",
-            f"--workspace={self.config['workspace']}",
+            *workspace_args,
+            *shapes_args,
             precision_flag,
             "--avgRuns=10",
             "--verbose" if self.profile == "ULTRA" else "--noDataTransfer",  # Less verbose usually
         ]
 
         try:
-            # Run conversion
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-            # Note: capturing output allows checking errors but hides progress.
-            # Given user wants to see it, maybe let it print?
-            # User said "Auto-Export", implied background or explicit.
-            # Let's print a success message.
-
             print(f"SUCCESS! Optimized engine created: {engine_name}")
             return str(engine_path)
 
         except subprocess.CalledProcessError as e:
+            err = e.stderr.decode("utf-8", errors="replace") if e.stderr else ""
+            self.logger.info("TensorRT trtexec failed; full stderr:\n%s", err)
             print("[FAIL] TensorRT optimization failed.")
-            print(f"   Error: {e.stderr.decode('utf-8')[-200:] if e.stderr else 'Unknown'}")
+            if err.strip():
+                print(err)
             return str(pt_path)
 
     def print_report(self):
