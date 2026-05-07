@@ -158,6 +158,25 @@ uv run pytest tests/ -v           # run tests
 
 ---
 
+## Mandatory: Update metadata on any script change
+
+Whenever you edit **any** Python script (`*.py`) in this repo, also update metadata so users see consistent **date/version** across app, docs, and help.
+
+### Checklist
+
+- **Edited script header**: update top module docstring/header:
+  - **Update Date**: today
+  - **Version**: **global vailá version** (same as `vaila.py` header/banner)
+- **Main entry point**: if change impacts GUI/CLI banner, update `vaila.py` header and any banner strings.
+- **Install scripts**: if install/run UX impacted, review/update:
+  - `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`, `install-hooks.sh`
+- **Repo README**: update root `README.md` line `Last updated: YYYY-MM-DD` to today.
+- **Help docs**:
+  - main index `vaila/help/index.md` + `vaila/help/index.html` (“Generated on”)
+  - changed module help `vaila/help/<module>.md` + `vaila/help/<module>.html` (Version + Updated)
+
+---
+
 ## Architecture
 
 ### Entry Point & GUI (`vaila.py`)

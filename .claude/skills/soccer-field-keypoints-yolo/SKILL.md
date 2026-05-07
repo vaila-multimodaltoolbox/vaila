@@ -7,6 +7,17 @@ description: Treino Ultralytics YOLO pose para keypoints do campo de futebol (32
 
 Esta skill resume o que foi implementado e como retomar em **outra IDE ou LLM** sem perder o fio: leia este ficheiro, depois [`AGENTS.md`](../../../AGENTS.md) (secção de handoff) e o módulo [`vaila/soccerfield_keypoints_ai.py`](../../../vaila/soccerfield_keypoints_ai.py).
 
+## Regra manutenção vailá (version/date)
+
+Sempre que editar qualquer `*.py` no repo (ex.: `vaila/soccerfield_keypoints_ai.py`), também atualizar:
+
+- header do script: **Update Date** (hoje) + **Version** (global, do `vaila.py` header/banner)
+- `README.md` (raiz): linha `Last updated: YYYY-MM-DD`
+- helps: `vaila/help/soccerfield_keypoints_ai.md` + `.html` e `vaila/help/index.md` + `.html` (“Generated on”)
+- installers / `vaila.py` se mudança impactar install/run UX
+
+Checklist referência: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ## Handoff rápido (outro agente)
 
 1. Abrir este `SKILL.md`.

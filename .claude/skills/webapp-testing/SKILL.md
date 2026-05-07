@@ -8,6 +8,16 @@ license: Complete terms in LICENSE.txt
 
 To test local web applications, write native Python Playwright scripts.
 
+## vailá maintenance rule (version/date)
+
+If testing/debugging work requires editing any `*.py` in this repo, also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs if applicable: `vaila/help/index.md` + `.html`, and `vaila/help/<module>.md` + `.html`
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 **Helper Scripts Available**:
 - `scripts/with_server.py` - Manages server lifecycle (supports multiple servers)
 

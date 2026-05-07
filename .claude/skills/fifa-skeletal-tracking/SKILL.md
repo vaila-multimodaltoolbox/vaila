@@ -2,6 +2,17 @@
 
 Use when the user works on **FIFA Skeletal Tracking Light 2026**, monocular broadcast pose estimation, `vaila_sam.py fifa`, or `fifa_skeletal_pipeline.py`.
 
+## vailá maintenance rule (version/date)
+
+When you edit any FIFA-related `*.py` (e.g. `vaila/vaila_sam.py`, `vaila/fifa_skeletal_pipeline.py`, `vaila/fifa_to_dlt.py`), also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs: matching `vaila/help/<module>.md` + `.html`, plus `vaila/help/index.md` + `.html` (“Generated on”)
+- installers / `vaila.py` if change impacts install/run UX
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ---
 
 ## Challenge Overview

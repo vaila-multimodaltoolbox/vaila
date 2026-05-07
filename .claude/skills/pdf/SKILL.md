@@ -10,6 +10,17 @@ license: Proprietary. LICENSE.txt has complete terms
 
 This guide covers essential PDF processing operations using Python libraries and command-line tools. For advanced features, JavaScript libraries, and detailed examples, see REFERENCE.md. If you need to fill out a PDF form, read FORMS.md and follow its instructions.
 
+## vailá maintenance rule (version/date)
+
+If your PDF task involves editing **any** `*.py` in this repo, also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs if applicable: `vaila/help/index.md` + `.html`, and `vaila/help/<module>.md` + `.html`
+- installers / `vaila.py` if change impacts install/run UX
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ## Quick Start
 
 ```python

@@ -7,6 +7,8 @@ description: Resume work on the FIFA Skeletal Tracking Light 2026 challenge usin
 
 Companion files:
 
+- Maintenance rule: when you edit any `*.py` during this continuation, also update version/date metadata (global version from `vaila.py`), root `README.md` `Last updated:`, and matching help `.md/.html`. See `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 - `/home/preto/data/vaila/AGENT_HISTORY.md` — what was done, current state, decisions.
 - `/home/preto/data/vaila/HISTORY.md` — chronological log of the session.
 - `.claude/skills/fifa-skeletal-tracking/SKILL.md` — full FIFA pipeline reference.
