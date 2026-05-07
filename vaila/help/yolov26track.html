@@ -123,7 +123,9 @@
                 <li>Pose estimation within tracked bounding boxes</li>
                 <li>Automatic GPU detection (CUDA/MPS/CPU)</li>
                 <li>Run modes: <code>track</code>, <code>track+pose</code>, <code>track+seg</code>, <code>run_all (track+seg+pose)</code></li>
-                <li>Segmentation exports (when masks available): <code>yolo_masks_manifest.csv</code>, <code>yolo_contours.json</code>, <code>yolo_masks/</code></li>
+                <li>Segmentation exports (when masks available): <code>yolo_masks_manifest.csv</code> (<code>frame,id,area,mask_png</code>), <code>yolo_contours.json</code> (SAM-style top-level metadata + <code>frames</code>), <code>yolo_masks/</code>; <code>processed_*_seg.mp4</code> / <code>_all.mp4</code> via H.264 FFmpeg like bbox outputs</li>
+                <li>Tracking-directory discovery for pose-from-tracking: recursive scan for <code>*_id_*.csv</code> under a chosen root (e.g. <code>vailatracker_*</code>)</li>
+                <li>TensorRT: <code>trtexec</code> args match TRT 10; full stderr on failure; fallback to <code>.pt</code></li>
             </ul>
         </div>
 
@@ -155,7 +157,7 @@
         <div class="docstring">
             <h3>🎮 Usage</h3>
             <pre><code>uv run python -m vaila.yolov26track</code></pre>
-            <p>GUI: Frame B → <strong>YOLO and SAM</strong> → <strong>YOLOv26 Tracker</strong> (or <strong>YOLOv26 Pose</strong> / <strong>YOLOv26 Segmentation</strong>).</p>
+            <p>GUI: Frame B → <strong>YOLO + SAM</strong> → <strong>Tracker (v26)</strong> / <strong>Pose (video)</strong> / <strong>Pose (tracking)</strong> / <strong>Seg (v26)</strong> / <strong>SAM 3 video</strong>.</p>
         </div>
 
         <div class="footer">

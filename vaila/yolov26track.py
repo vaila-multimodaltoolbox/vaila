@@ -32,6 +32,7 @@ Requirements:
     - Additional dependencies as imported (numpy, csv, etc.)
 
 Change History:
+    - 2026-05: Ultralytics dir bootstrap before YOLO import; recursive tracking-dir discovery; TRT10-style trtexec; SAM-shaped yolo_contours + manifest columns; FFmpeg for seg/all overlays.
     - 2026-01: Added ROI selection with improved visibility on macOS.
     - 2023-10: Initial version implemented, integrating detection and tracking with various configurable options.
     - 2025-03: Added color-coding for each tracker ID, improved GUI, and added more detailed help text.
@@ -54,6 +55,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 from __future__ import annotations
 
 import colorsys
+import contextlib
 import csv
 import datetime
 import glob
@@ -71,9 +73,58 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-import ultralytics
 import yaml
 from rich import print
+
+# Must set Ultralytics home before importing YOLO (avoids weights in repo root / CWD).
+VAILA_MODELS_DIR = Path(__file__).resolve().parent / "models"
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _move_root_ultralytics_weights_to_models() -> None:
+    """Best-effort: move accidental YOLO/Ultralytics *.pt drops from repo root into vaila/models/."""
+    try:
+        VAILA_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        for src in sorted(_REPO_ROOT.glob("yolo*.pt")):
+            if not src.is_file():
+                continue
+            dst = VAILA_MODELS_DIR / src.name
+            try:
+                if not dst.exists():
+                    src.replace(dst)
+                else:
+                    src.unlink(missing_ok=True)
+            except OSError:
+                continue
+    except Exception:
+        return
+
+
+def _configure_ultralytics_dirs(models_dir: Path) -> None:
+    """Force Ultralytics cache/runs/weights under vailá `vaila/models/`."""
+    root = models_dir / "ultralytics"
+    root.mkdir(parents=True, exist_ok=True)
+    os.environ["ULTRALYTICS_DIR"] = str(root)
+
+    # Newer Ultralytics versions expose `settings.update`.
+    try:
+        from ultralytics import settings
+
+        settings.update(
+            {
+                "runs_dir": str(root / "runs"),
+                "weights_dir": str(models_dir),
+                "datasets_dir": str(root / "datasets"),
+            }
+        )
+    except Exception:
+        pass
+
+    _move_root_ultralytics_weights_to_models()
+
+
+_configure_ultralytics_dirs(VAILA_MODELS_DIR)
+
 from ultralytics import YOLO
 
 from .hardware_manager import HardwareManager
@@ -93,39 +144,6 @@ except ImportError as e:
     ) from e
 
 
-VAILA_MODELS_DIR = Path(__file__).resolve().parent / "models"
-
-
-def _configure_ultralytics_dirs(models_dir: Path) -> None:
-    """Force Ultralytics cache/runs/weights under vailá `vaila/models/`."""
-    root = models_dir / "ultralytics"
-    root.mkdir(parents=True, exist_ok=True)
-
-    # Newer Ultralytics versions expose `settings.update`.
-    try:
-        from ultralytics import settings
-
-        settings.update(
-            {
-                "runs_dir": str(root / "runs"),
-                "weights_dir": str(models_dir),
-                "datasets_dir": str(root / "datasets"),
-            }
-        )
-    except Exception:
-        # Fallback: env var at least moves Ultralytics "home" dir on some versions.
-        os.environ.setdefault("ULTRALYTICS_DIR", str(root))
-
-
-# Print the script version and directory
-print(f"Running script: {Path(__file__).name}")
-print(f"Script directory: {Path(__file__).parent}")
-print("Starting YOLOv26Track...")
-print("-" * 80)
-print(f"Ultralytics version: {ultralytics.__version__}")
-print("-" * 80)
-
-
 # Ensure BoxMOT can be found
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -143,6 +161,120 @@ REID_MODELS = {
     "clip_market1501.pt": "Heavy (CLIP Market1501)",
     "clip_vehicleid.pt": "Heavy (CLIP VehicleID)",
 }
+
+
+def _discover_tracking_csv_roots(root: str | Path, max_depth: int = 6) -> list[Path]:
+    """Directories under root (bounded depth) that contain per-ID tracking CSVs."""
+    root_p = Path(root).resolve()
+    if not root_p.is_dir():
+        return []
+    hits: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root_p):
+        rel = Path(dirpath).relative_to(root_p)
+        if len(rel.parts) > max_depth:
+            dirnames.clear()
+            continue
+        if len(rel.parts) >= max_depth:
+            dirnames.clear()
+        if any(
+            fn.endswith(".csv") and "_id_" in fn and not fn.startswith("all_id_")
+            for fn in filenames
+        ):
+            hits.append(Path(dirpath))
+    return sorted(set(hits))
+
+
+def _pick_tracking_leaf_dir(
+    parent: tk.Misc, title: str, message: str, candidates: list[Path]
+) -> Path | None:
+    """Tk listbox chooser for multiple tracking CSV roots."""
+    pick = tk.Toplevel(parent)
+    pick.title(title)
+    pick.geometry("560x380")
+    pick.transient(cast(tk.Wm, parent))
+    with contextlib.suppress(Exception):
+        pick.grab_set()
+    tk.Label(pick, text=message, pady=10).pack()
+    lb = tk.Listbox(pick, width=82, height=12)
+    for c in candidates:
+        lb.insert(tk.END, str(c))
+    lb.pack(padx=10, pady=10, fill="both", expand=True)
+    chosen: list[Path] = []
+
+    def _ok() -> None:
+        sel = lb.curselection()
+        if not sel:
+            return
+        chosen.append(Path(lb.get(sel[0])))
+        pick.destroy()
+
+    def _cancel() -> None:
+        pick.destroy()
+
+    bf = tk.Frame(pick)
+    bf.pack(pady=10)
+    tk.Button(bf, text="OK", command=_ok, width=10).pack(side="left", padx=6)
+    tk.Button(bf, text="Cancel", command=_cancel, width=10).pack(side="left", padx=6)
+    pick.wait_window()
+    return chosen[0] if chosen else None
+
+
+def resolve_tracking_dir_with_csvs(tracking_dir: str, parent: tk.Misc | None = None) -> str | None:
+    """Resolve a user-selected root to the directory that holds ``*_id_*.csv`` files."""
+    candidates = _discover_tracking_csv_roots(tracking_dir)
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return str(candidates[0])
+
+    created = False
+    if parent is None or not parent.winfo_exists():
+        parent = tk.Tk()
+        parent.withdraw()
+        created = True
+    try:
+        pick = _pick_tracking_leaf_dir(
+            parent,
+            "Select tracking folder",
+            "Multiple folders with tracking CSVs were found. Pick the folder to use:",
+            candidates,
+        )
+    finally:
+        if created and parent.winfo_exists():
+            parent.destroy()
+    return str(pick) if pick else None
+
+
+def _ffmpeg_temp_avi_to_h264_mp4(temp_avi: str, out_mp4: str) -> bool:
+    """Convert MJPG AVI from OpenCV to H.264 MP4 (no audio). Returns True on success."""
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        temp_avi,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-an",
+        out_mp4,
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if proc.returncode != 0 or not os.path.exists(out_mp4) or os.path.getsize(out_mp4) == 0:
+            if proc.stderr:
+                print(f"FFmpeg: {proc.stderr[:800]}")
+            return False
+        return True
+    except FileNotFoundError:
+        print("Error: FFmpeg not found. Please install FFmpeg.")
+        return False
 
 
 def initialize_csv(output_dir, label, tracker_id, total_frames):
@@ -2154,6 +2286,220 @@ def _draw_keypoints_and_skeleton(frame, keypoints_abs, color=(0, 255, 0)):
     return frame
 
 
+def run_yolov26pose_video() -> None:
+    """Pose inference direct from video (no tracking required)."""
+    _configure_ultralytics_dirs(VAILA_MODELS_DIR)
+
+    root = tk.Tk()
+    root.withdraw()
+
+    video_path = filedialog.askopenfilename(
+        title="Select Video for YOLOv26 Pose",
+        filetypes=[
+            ("Video files", "*.mp4 *.avi *.mov *.mkv *.MP4 *.AVI *.MOV *.MKV"),
+            ("All files", "*.*"),
+        ],
+    )
+    if not video_path:
+        messagebox.showinfo("YOLOv26 Pose", "No video selected.")
+        root.destroy()
+        return
+
+    output_base_dir = filedialog.askdirectory(title="Select Output Directory")
+    if not output_base_dir:
+        messagebox.showinfo("YOLOv26 Pose", "Pose run cancelled (no output directory).")
+        root.destroy()
+        return
+
+    # Quick config dialog
+    cfg = tk.Toplevel(root)
+    cfg.title("YOLOv26 Pose Inference")
+    cfg.geometry("420x260")
+    cfg.transient(root)
+    with contextlib.suppress(Exception):
+        cfg.grab_set()
+
+    tk.Label(cfg, text="Pose model:").pack(pady=(12, 2))
+    model_var = tk.StringVar(value="yolo26n-pose.pt")
+    ttk.Combobox(
+        cfg,
+        textvariable=model_var,
+        values=[
+            "yolo26n-pose.pt",
+            "yolo26s-pose.pt",
+            "yolo26m-pose.pt",
+            "yolo26l-pose.pt",
+            "yolo26x-pose.pt",
+        ],
+        state="readonly",
+        width=22,
+    ).pack()
+
+    tk.Label(cfg, text="Pose conf (0-1):").pack(pady=(10, 2))
+    conf_entry = tk.Entry(cfg, width=10)
+    conf_entry.insert(0, "0.10")
+    conf_entry.pack()
+
+    tk.Label(cfg, text="Pose IoU (0-1):").pack(pady=(10, 2))
+    iou_entry = tk.Entry(cfg, width=10)
+    iou_entry.insert(0, "0.70")
+    iou_entry.pack()
+
+    tk.Label(cfg, text="Device (cpu/cuda/mps):").pack(pady=(10, 2))
+    dev_var = tk.StringVar(value=detect_optimal_device())
+    ttk.Combobox(
+        cfg, textvariable=dev_var, values=["cpu", "cuda", "mps"], state="readonly", width=10
+    ).pack()
+
+    result: dict[str, Any] = {}
+    cancelled: list[bool] = [False]
+
+    def _on_close() -> None:
+        cancelled[0] = True
+        cfg.destroy()
+
+    cfg.protocol("WM_DELETE_WINDOW", _on_close)
+
+    def _ok() -> None:
+        try:
+            result["pose_model_name"] = model_var.get()
+            result["pose_conf"] = float(conf_entry.get())
+            result["pose_iou"] = float(iou_entry.get())
+            result["device"] = dev_var.get()
+        except Exception as e:
+            messagebox.showerror("Error", f"Invalid parameters: {e}")
+            return
+        cfg.destroy()
+
+    tk.Button(cfg, text="Run", command=_ok, width=12).pack(pady=14)
+    cfg.wait_window()
+    if cancelled[0] or not result:
+        messagebox.showinfo("YOLOv26 Pose", "Pose run cancelled (close window or incomplete Run).")
+        root.destroy()
+        return
+
+    video_stem = Path(video_path).stem
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = Path(output_base_dir) / f"{video_stem}_pose_{timestamp}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    models_dir = str(VAILA_MODELS_DIR)
+    os.makedirs(models_dir, exist_ok=True)
+    pose_model_name = cast(str, result["pose_model_name"])
+    pose_model_path = os.path.join(models_dir, pose_model_name)
+    if not os.path.exists(pose_model_path):
+        try:
+            cur = os.getcwd()
+            os.chdir(models_dir)
+            YOLO(pose_model_path)
+            os.chdir(cur)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to download pose model: {e}")
+            return
+
+    hw = HardwareManager(models_dir=models_dir)
+    pose_model_path = hw.auto_export(pose_model_name, imgsz=640)
+    pose_model = YOLO(pose_model_path)
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        messagebox.showerror("Error", f"Could not open video:\n{video_path}")
+        return
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0) or 25.0
+    frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    pose_csv = out_dir / f"{video_stem}_pose.csv"
+    pose_video = out_dir / f"{video_stem}_pose.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore
+    writer = cv2.VideoWriter(str(pose_video), fourcc, fps, (frame_w, frame_h))
+
+    keypoint_names = [
+        "nose",
+        "left_eye",
+        "right_eye",
+        "left_ear",
+        "right_ear",
+        "left_shoulder",
+        "right_shoulder",
+        "left_elbow",
+        "right_elbow",
+        "left_wrist",
+        "right_wrist",
+        "left_hip",
+        "right_hip",
+        "left_knee",
+        "right_knee",
+        "left_ankle",
+        "right_ankle",
+    ]
+    headers: list[str] = ["Frame", "Tracker_ID", "Label"]
+    for kp in keypoint_names:
+        headers.extend([f"{kp}_x", f"{kp}_y", f"{kp}_conf"])
+
+    rows: list[list[Any]] = []
+    frame_idx = 0
+    while frame_idx < total_frames:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        results = pose_model.predict(
+            frame,
+            conf=float(result["pose_conf"]),
+            iou=float(result["pose_iou"]),
+            device=cast(str, result["device"]),
+            verbose=False,
+            show=False,
+            save=False,
+        )
+
+        row: list[Any] = [frame_idx, 1, "pose"]
+        abs_kps: list[tuple[float, float, float]] = []
+        if results and len(results) > 0 and results[0].keypoints is not None:
+            kp_data = results[0].keypoints.data
+            if kp_data is not None and len(kp_data) > 0:
+                if hasattr(kp_data, "cpu"):
+                    kp_data = cast(Any, kp_data).cpu().numpy()
+                elif hasattr(kp_data, "numpy"):
+                    kp_data = cast(Any, kp_data).numpy()
+                kps = kp_data[0]
+                for i in range(len(keypoint_names)):
+                    if i < len(kps):
+                        x = float(kps[i][0])
+                        y = float(kps[i][1])
+                        c = float(kps[i][2]) if len(kps[i]) > 2 else 1.0
+                        row.extend([x, y, c])
+                        abs_kps.append((x, y, c))
+                    else:
+                        row.extend([np.nan, np.nan, np.nan])
+                        abs_kps.append((np.nan, np.nan, 0.0))
+            else:
+                for _ in keypoint_names:
+                    row.extend([np.nan, np.nan, np.nan])
+                abs_kps = [(np.nan, np.nan, 0.0) for _ in keypoint_names]
+        else:
+            for _ in keypoint_names:
+                row.extend([np.nan, np.nan, np.nan])
+            abs_kps = [(np.nan, np.nan, 0.0) for _ in keypoint_names]
+
+        rows.append(row)
+        frame = _draw_keypoints_and_skeleton(frame, abs_kps, color=(0, 255, 0))
+        writer.write(frame)
+
+        frame_idx += 1
+        if frame_idx % 20 == 0:
+            print(f"[pose] frame {frame_idx}/{total_frames}", end="\r")
+
+    cap.release()
+    writer.release()
+
+    pd.DataFrame(rows, columns=cast(Any, headers)).to_csv(pose_csv, index=False)
+    messagebox.showinfo("YOLOv26 Pose", f"Done.\n\nCSV:\n{pose_csv}\n\nVideo:\n{pose_video}")
+
+
 def _mask_to_polygons(mask_u8: np.ndarray) -> list[list[list[int]]]:
     """Binary mask (H,W uint8 {0,255}) -> polygons [[x,y], ...] list."""
     if mask_u8.ndim != 2:
@@ -2416,6 +2762,7 @@ def select_id_and_run_pose():
     """
     GUI to select tracking directory, view video with bboxes/IDs, and select ID for pose estimation.
     """
+    _configure_ultralytics_dirs(VAILA_MODELS_DIR)
     # Prefer existing Tk root to avoid multiple roots (pyimage errors); create only if needed
     created_root = False
     root = getattr(tk, "_default_root", None)
@@ -2425,16 +2772,25 @@ def select_id_and_run_pose():
         created_root = True
     print(f"[pose] Using root: created={created_root}, exists={root.winfo_exists()}")
 
-    # Select tracking directory
+    # Select tracking directory (accept vailatracker_* root or per-video subdir)
     tracking_dir = filedialog.askdirectory(title="Select Tracking Directory")
     if not tracking_dir:
         if created_root and root.winfo_exists():
             root.destroy()
         return
 
-    # Find tracking CSV files
+    resolved = resolve_tracking_dir_with_csvs(tracking_dir, parent=root)
+    if not resolved:
+        messagebox.showerror(
+            "Error",
+            f"No tracking CSV files (*_id_*.csv) found under:\n{tracking_dir}",
+        )
+        if created_root and root.winfo_exists():
+            root.destroy()
+        return
+    tracking_dir = resolved
+
     csv_files = glob.glob(os.path.join(tracking_dir, "*_id_*.csv"))
-    # Filter out combined/merged files (all_id_merge.csv, all_id_detection.csv, etc.)
     csv_files = [f for f in csv_files if not os.path.basename(f).startswith("all_id_")]
 
     if not csv_files:
@@ -3053,7 +3409,7 @@ def _process_pose_from_csv(
 
     try:
         # Check and auto-export optimized .engine model
-        pose_model_path = hw.auto_export(pose_model_name)
+        pose_model_path = hw.auto_export(pose_model_name, imgsz=640)
         pose_model = YOLO(pose_model_path)
         print(f"Pose model loaded: {pose_model_name}")
     except Exception as e:
@@ -3254,6 +3610,18 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
     if device is None:
         device = detect_optimal_device()
     print(f"Using device: {device}")
+    parent_ui = getattr(tk, "_default_root", None)
+    resolve_parent: tk.Misc | None = None
+    if parent_ui is not None and parent_ui.winfo_exists():
+        resolve_parent = cast(tk.Misc, parent_ui)
+
+    resolved_tracking = resolve_tracking_dir_with_csvs(tracking_dir, parent=resolve_parent)
+    if not resolved_tracking:
+        print(f"Error: No tracking CSV files found under {tracking_dir}")
+        messagebox.showerror("Error", f"No tracking CSV files found under:\n{tracking_dir}")
+        return False
+    tracking_dir = resolved_tracking
+
     # Create pose output directory with timestamp
     pose_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     pose_output_dir = os.path.join(tracking_dir, f"pose_{pose_timestamp}")
@@ -3267,7 +3635,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
         return False
 
     # Find video (processed_* preferred, else any; allow manual pick)
-    video_path = pick_video_for_pose(tracking_dir)
+    video_path = pick_video_for_pose(tracking_dir, parent=parent_ui)
     if not video_path:
         print(f"Error: No video found in {tracking_dir}")
         messagebox.showerror("Error", f"No video found in:\n{tracking_dir}")
@@ -3302,7 +3670,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
 
     try:
         # Check and auto-export optimized .engine model
-        pose_model_path = hw.auto_export(pose_model_name)
+        pose_model_path = hw.auto_export(pose_model_name, imgsz=640)
         pose_model = YOLO(pose_model_path)
         print(f"Pose model loaded: {pose_model_name}")
     except Exception as e:
@@ -3616,7 +3984,7 @@ def run_yolov26track():
 
     try:
         # Auto-export if needed (creates .engine optimized for this GPU)
-        model_path = hw.auto_export(model_name)
+        model_path = hw.auto_export(model_name, imgsz=640)
         model = YOLO(model_path)
         print(f"Model loaded successfully: {model_path}")
     except Exception as e:
@@ -3648,10 +4016,9 @@ def run_yolov26track():
             seg_masks_dir = Path(output_dir) / "yolo_masks"
             if do_seg and save_masks:
                 seg_masks_dir.mkdir(parents=True, exist_ok=True)
-            mask_manifest_rows: list[str] = ["frame,obj_id,area_px,mask_png"]
+            mask_manifest_rows: list[str] = ["frame,id,area,mask_png"]
             contours_out: dict[str, Any] = {
                 "schema": "vaila_yolo_contours_v1",
-                "video": str(video_path),
                 "frames": [],
             }
 
@@ -3669,6 +4036,10 @@ def run_yolov26track():
             temp_avi_path = os.path.join(output_dir, f"processed_{video_name}_temp.avi")
             # Final MP4 path
             out_video_path = os.path.join(output_dir, f"processed_{video_name}.mp4")
+            seg_video_path = os.path.join(output_dir, f"processed_{video_name}_seg.mp4")
+            all_video_path = os.path.join(output_dir, f"processed_{video_name}_all.mp4")
+            temp_seg_avi_path = os.path.join(output_dir, f"processed_{video_name}_seg_temp.avi")
+            temp_all_avi_path = os.path.join(output_dir, f"processed_{video_name}_all_temp.avi")
 
             # Use MJPG codec for AVI (highly compatible and reliable)
             # This ensures the video is written correctly without corruption
@@ -3832,8 +4203,40 @@ def run_yolov26track():
             )
 
             frame_idx = 0
+            seg_writer: cv2.VideoWriter | None = None
+            all_writer: cv2.VideoWriter | None = None
+            if do_seg:
+                seg_writer = cv2.VideoWriter(
+                    temp_seg_avi_path,
+                    cv2.VideoWriter_fourcc(*"MJPG"),  # ty: ignore[unresolved-attribute]
+                    fps,
+                    (width, height),
+                )
+                if not seg_writer.isOpened():
+                    seg_writer = cv2.VideoWriter(
+                        temp_seg_avi_path,
+                        cv2.VideoWriter_fourcc(*"XVID"),  # ty: ignore[unresolved-attribute]
+                        fps,
+                        (width, height),
+                    )
+            if do_seg or do_pose:
+                all_writer = cv2.VideoWriter(
+                    temp_all_avi_path,
+                    cv2.VideoWriter_fourcc(*"MJPG"),  # ty: ignore[unresolved-attribute]
+                    fps,
+                    (width, height),
+                )
+                if not all_writer.isOpened():
+                    all_writer = cv2.VideoWriter(
+                        temp_all_avi_path,
+                        cv2.VideoWriter_fourcc(*"XVID"),  # ty: ignore[unresolved-attribute]
+                        fps,
+                        (width, height),
+                    )
             for result in results:
                 frame = result.orig_img
+                frame_seg = frame.copy() if do_seg else frame
+                frame_all = frame.copy() if (do_seg or do_pose) else frame
                 frame_contours: dict[str, Any] | None = None
                 masks_data = None
                 if do_seg and getattr(result, "masks", None) is not None:
@@ -3844,11 +4247,21 @@ def run_yolov26track():
                 # Overlay ROI outline for reference
                 if roi_poly is not None:
                     cv2.polylines(frame, [roi_poly], True, (255, 255, 0), 2)
+                    if do_seg:
+                        cv2.polylines(frame_seg, [roi_poly], True, (255, 255, 0), 2)
+                    if do_seg or do_pose:
+                        cv2.polylines(frame_all, [roi_poly], True, (255, 255, 0), 2)
 
                 boxes = result.boxes if result.boxes is not None else getattr(result, "obbs", None)
 
                 if boxes is None:
                     writer.write(frame)
+                    if seg_writer is not None:
+                        seg_writer.write(frame_seg)
+                    if all_writer is not None:
+                        all_writer.write(frame_all)
+                    if frame_idx % 20 == 0:
+                        print(f"Processing frame {frame_idx}/{total_frames}", end="\r")
                     frame_idx += 1
                     continue
 
@@ -3884,6 +4297,10 @@ def run_yolov26track():
                     color = get_color_for_id(tracker_id)
 
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
+                    if do_seg:
+                        cv2.rectangle(frame_seg, (x_min, y_min), (x_max, y_max), color, 2)
+                    if do_seg or do_pose:
+                        cv2.rectangle(frame_all, (x_min, y_min), (x_max, y_max), color, 2)
                     cv2.putText(
                         frame,
                         f"id {tracker_id} {label}",
@@ -3893,6 +4310,26 @@ def run_yolov26track():
                         color,
                         2,
                     )
+                    if do_seg:
+                        cv2.putText(
+                            frame_seg,
+                            f"id {tracker_id} {label}",
+                            (x_min, y_min - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            color,
+                            2,
+                        )
+                    if do_seg or do_pose:
+                        cv2.putText(
+                            frame_all,
+                            f"id {tracker_id} {label}",
+                            (x_min, y_min - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            color,
+                            2,
+                        )
 
                     key = (tracker_id, label)
                     if key not in tracker_csv_files:
@@ -3932,17 +4369,30 @@ def run_yolov26track():
                             if polys:
                                 if frame_contours is None:
                                     frame_contours = {"frame": frame_idx, "objects": []}
-                                frame_contours["objects"].append(
-                                    {
-                                        "id": tracker_id,
-                                        "label": label,
-                                        "bbox_xyxy": [x_min, y_min, x_max, y_max],
-                                        "area_px": area_px,
-                                        "polygons": polys,
-                                    }
-                                )
+                                obj_entry: dict[str, Any] = {
+                                    "id": tracker_id,
+                                    "obj_id": tracker_id,
+                                    "label": label,
+                                    "bbox_xyxy": [x_min, y_min, x_max, y_max],
+                                    "area_px": area_px,
+                                    "polygons": polys,
+                                }
+                                if save_masks and mask_rel:
+                                    obj_entry["mask_png"] = mask_rel
+                                frame_contours["objects"].append(obj_entry)
+
+                        # Overlay segmentation mask on seg/all videos
+                        colored = np.zeros_like(frame, dtype=np.uint8)
+                        colored[:, :, 1] = mask_u8  # green channel
+                        alpha = 0.35
+                        frame_seg = cv2.addWeighted(frame_seg, 1.0, colored, alpha, 0.0)
+                        frame_all = cv2.addWeighted(frame_all, 1.0, colored, alpha, 0.0)
 
                 writer.write(frame)
+                if seg_writer is not None:
+                    seg_writer.write(frame_seg)
+                if all_writer is not None:
+                    all_writer.write(frame_all)
                 if frame_contours is not None:
                     contours_out["frames"].append(frame_contours)
 
@@ -3952,6 +4402,30 @@ def run_yolov26track():
                 frame_idx += 1
 
             writer.release()
+            if seg_writer is not None:
+                seg_writer.release()
+                if (
+                    do_seg
+                    and os.path.exists(temp_seg_avi_path)
+                    and os.path.getsize(temp_seg_avi_path) > 0
+                ):
+                    print("Converting seg overlay to MP4...")
+                    if _ffmpeg_temp_avi_to_h264_mp4(temp_seg_avi_path, seg_video_path):
+                        os.remove(temp_seg_avi_path)
+                    else:
+                        print(f"Seg FFmpeg failed; keeping {temp_seg_avi_path}")
+            if all_writer is not None:
+                all_writer.release()
+                if (
+                    (do_seg or do_pose)
+                    and os.path.exists(temp_all_avi_path)
+                    and os.path.getsize(temp_all_avi_path) > 0
+                ):
+                    print("Converting combined overlay to MP4...")
+                    if _ffmpeg_temp_avi_to_h264_mp4(temp_all_avi_path, all_video_path):
+                        os.remove(temp_all_avi_path)
+                    else:
+                        print(f"Combined FFmpeg failed; keeping {temp_all_avi_path}")
             print("")  # newline after progress
 
             if do_seg:
@@ -3960,6 +4434,19 @@ def run_yolov26track():
                         "\n".join(mask_manifest_rows) + "\n", encoding="utf-8"
                     )
                 if save_contours and contours_out["frames"]:
+                    oids: set[int] = set()
+                    for fr in contours_out["frames"]:
+                        for obj in fr.get("objects") or []:
+                            oid = obj.get("obj_id", obj.get("id"))
+                            if isinstance(oid, int):
+                                oids.add(oid)
+                    contours_out["frames"].sort(key=lambda d: int(d.get("frame", 0)))
+                    contours_out["video"] = os.path.basename(video_path)
+                    contours_out["width"] = int(width)
+                    contours_out["height"] = int(height)
+                    contours_out["fps"] = float(fps)
+                    contours_out["n_frames"] = int(total_frames)
+                    contours_out["object_ids"] = sorted(oids)
                     (Path(output_dir) / "yolo_contours.json").write_text(
                         json.dumps(contours_out, ensure_ascii=False) + "\n", encoding="utf-8"
                     )

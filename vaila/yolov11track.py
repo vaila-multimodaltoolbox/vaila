@@ -2971,7 +2971,7 @@ def _process_pose_from_csv(
 
     try:
         # Check and auto-export optimized .engine model
-        pose_model_path = hw.auto_export(pose_model_name)
+        pose_model_path = hw.auto_export(pose_model_name, imgsz=640)
         pose_model = YOLO(pose_model_path)
         print(f"Pose model loaded: {pose_model_name}")
     except Exception as e:
@@ -3216,7 +3216,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo11n-p
 
     try:
         # Check and auto-export optimized .engine model
-        pose_model_path = hw.auto_export(pose_model_name)
+        pose_model_path = hw.auto_export(pose_model_name, imgsz=640)
         pose_model = YOLO(pose_model_path)
         print(f"Pose model loaded: {pose_model_name}")
     except Exception as e:
@@ -3518,7 +3518,7 @@ def run_yolov11track():
 
     try:
         # Auto-export if needed (creates .engine optimized for this GPU)
-        model_path = hw.auto_export(model_name)
+        model_path = hw.auto_export(model_name, imgsz=640)
         model = YOLO(model_path)
         print(f"Model loaded successfully: {model_path}")
     except Exception as e:

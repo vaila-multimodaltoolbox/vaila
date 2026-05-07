@@ -195,7 +195,7 @@ B3_r3_c1 - HR/ECG         B3_r3_c2 - Yolo + Markerless_MP
 B3_r3_c3 - Vertical Jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - YOLO and SAM   B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c1 - YOLO + SAM       B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
 B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
@@ -778,10 +778,10 @@ class Vaila(tk.Tk):
         row4_frame = tk.Frame(analysis_frame)
         row4_frame.pack(fill="x")
 
-        # B4_r4_c1 - YOLO and SAM
+        # B4_r4_c1 - YOLO + SAM
         yolo_and_sam_btn = tk.Button(
             row4_frame,
-            text="YOLO and SAM",
+            text="YOLO + SAM",
             width=button_width,
             command=self.yolo_and_sam,
         )
@@ -1620,7 +1620,7 @@ class Vaila(tk.Tk):
         advanced_radio.pack(anchor="w")
         advanced_desc = Label(
             advanced_frame,
-            text="Multi-person detection with YOLOv11, slower but more accurate",
+            text="Multi-person detection with YOLO and MediaPipe (Ultralytics stack)",
             font=("Arial", 9),
             fg="gray",
         )
@@ -1669,7 +1669,7 @@ class Vaila(tk.Tk):
                     print("Markerless 2D Analysis - Version Selected: Advanced (YOLO + MediaPipe)")
                     print("=" * 60)
                     print("Launching: vaila.markerless2d_analysis_v2")
-                    print("Features: Multi-person detection with YOLOv11, slower but more accurate")
+                    print("Features: Multi-person detection with YOLO and MediaPipe")
                     print("=" * 60 + "\n")
                     run_vaila_module(
                         "vaila.markerless2d_analysis_v2", script_path="markerless2d_analysis_v2.py"
@@ -1940,27 +1940,13 @@ class Vaila(tk.Tk):
 
         tk.Label(dialog, text="Select YOLO tool to use:", pady=15).pack()
 
-        def use_yolov11():
-            dialog.destroy()
-            try:
-                # Import inside function to avoid early loading
-                import sys
+        # Ensure Ultralytics never downloads into repo root.
+        try:
+            from vaila.yolov26track import VAILA_MODELS_DIR, _configure_ultralytics_dirs
 
-                # Add the site-packages path first to ensure proper numpy loading
-                site_packages = os.path.join(
-                    os.path.dirname(sys.executable), "Lib", "site-packages"
-                )
-                if site_packages not in sys.path:
-                    sys.path.insert(0, site_packages)
-
-                from vaila import yolov11track
-
-                yolov11track.run_yolov11track()
-            except Exception as e:
-                messagebox.showerror(
-                    "Error Running YOLOv11",
-                    f"Error: {str(e)}",
-                )
+            _configure_ultralytics_dirs(VAILA_MODELS_DIR)
+        except Exception:
+            pass
 
         def use_yolov26():
             dialog.destroy()
@@ -2019,19 +2005,19 @@ class Vaila(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
-        def use_yolo_pose_v11():
+        def use_yolo_pose_v26():
             dialog.destroy()
             try:
-                from vaila import yolov11track
+                from vaila import yolov26track
 
-                yolov11track.select_id_and_run_pose()
+                yolov26track.run_yolov26pose_video()
             except Exception as e:
                 messagebox.showerror(
-                    "Error Running YOLOv11 Pose",
+                    "Error Running YOLOv26 Pose",
                     f"Error: {str(e)}",
                 )
 
-        def use_yolo_pose_v26():
+        def use_yolo_pose_v26_from_tracking():
             dialog.destroy()
             try:
                 from vaila import yolov26track
@@ -2039,7 +2025,7 @@ class Vaila(tk.Tk):
                 yolov26track.select_id_and_run_pose()
             except Exception as e:
                 messagebox.showerror(
-                    "Error Running YOLOv26 Pose",
+                    "Error Running YOLOv26 Pose (from tracking)",
                     f"Error: {str(e)}",
                 )
 
@@ -2047,15 +2033,17 @@ class Vaila(tk.Tk):
             dialog.destroy()
             self.sam_video()
 
-        tk.Button(dialog, text="YOLOv11 Tracker", command=use_yolov11, width=20).pack(pady=8)
-        tk.Button(dialog, text="YOLOv26 Tracker", command=use_yolov26, width=20).pack(pady=8)
-        tk.Button(dialog, text="YOLOv11 Pose", command=use_yolo_pose_v11, width=20).pack(pady=8)
-        tk.Button(dialog, text="YOLOv26 Pose", command=use_yolo_pose_v26, width=20).pack(pady=8)
-        tk.Button(dialog, text="YOLOv26 Segmentation", command=use_yolov26_seg, width=20).pack(
-            pady=8
-        )
-        tk.Button(dialog, text="SAM (Segment Anything)", command=use_sam, width=20).pack(pady=8)
-        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=20).pack(pady=8)
+        tk.Button(dialog, text="Tracker (v26)", command=use_yolov26, width=16).pack(pady=6)
+        tk.Button(dialog, text="Pose (video)", command=use_yolo_pose_v26, width=16).pack(pady=6)
+        tk.Button(
+            dialog,
+            text="Pose (tracking)",
+            command=use_yolo_pose_v26_from_tracking,
+            width=16,
+        ).pack(pady=6)
+        tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
+        tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
+        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=16).pack(pady=6)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
         # Wait for the dialog to be closed

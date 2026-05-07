@@ -1300,13 +1300,13 @@ def load_yolo_pose_model(model_name: str | None = None):
         print(f"Loading YOLO pose model {model_name}...")
         print(f"Models directory: {models_dir}")
         hw = HardwareManager()
-        optimized_model_path = hw.auto_export(model_name)
+        optimized_model_path = hw.auto_export(model_name, imgsz=1280)
         if not os.path.exists(optimized_model_path):
             print(f"Model file not found: {optimized_model_path}")
             print(f"Downloading {model_name} to vaila/models...")
             downloaded_path = download_yolo_model(model_name)
             if downloaded_path:
-                optimized_model_path = hw.auto_export(model_name)
+                optimized_model_path = hw.auto_export(model_name, imgsz=1280)
         print(f" OPTIMIZED MODEL: Loading tailored model from {optimized_model_path}")
         model = YOLO(str(optimized_model_path), task="pose")
         if str(optimized_model_path).endswith(".pt"):
@@ -1321,7 +1321,7 @@ def load_yolo_pose_model(model_name: str | None = None):
             print("Trying fallback to yolo11n-pose.pt...")
             hw = HardwareManager()
             fallback_name = "yolo11n-pose.pt"
-            optimized_fallback = hw.auto_export(fallback_name)
+            optimized_fallback = hw.auto_export(fallback_name, imgsz=1280)
             model = YOLO(str(optimized_fallback), task="pose")
             if str(optimized_fallback).endswith(".pt"):
                 model.to(device)
@@ -2988,3 +2988,4 @@ def process_videos_in_directory(existing_root=None):
 
 if __name__ == "__main__":
     process_videos_in_directory()
+directory()

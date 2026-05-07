@@ -27,7 +27,7 @@ This script performs object detection and tracking on video files using the **YO
 - **Configurable pose detection parameters** (conf, iou)
 - **Automatic GPU detection** - Uses CUDA if available
 - **Run modes**: `track`, `track+pose`, `track+seg`, `run_all (track+seg+pose)`
-- **Segmentation exports** (when model provides masks): `yolo_masks_manifest.csv`, `yolo_contours.json`, `yolo_masks/` PNGs
+- **Segmentation exports** (when model provides masks): `yolo_masks_manifest.csv` (`frame,id,area,mask_png`), `yolo_contours.json` (schema `vaila_yolo_contours_v1` with top-level `video`, `width`, `height`, `fps`, `n_frames`, `object_ids` aligned with SAM-style consumers), `yolo_masks/` PNGs
 
 ### YOLO26 Models Available
 - Detection: `yolo26n.pt`, `yolo26s.pt`, `yolo26m.pt`, `yolo26l.pt`, `yolo26x.pt`
@@ -85,30 +85,33 @@ Requirements:
 ## 🎮 Usage: Tracking Workflow
 
 1. **Start Tracking**:
-   - GUI: **Frame B → "YOLO and SAM" → "YOLOv26 Tracker"**
+   - GUI: **Frame B → "YOLO + SAM" → "Tracker (v26)"**
    - CLI (open GUI): `uv run python -m vaila.yolov26track`
-2. **Select Directories**: Choose input directory (containing videos) and output directory
-3. **Select Model**: Choose YOLO26 model (detection, pose, segmentation, OBB) - pre-trained or custom
-4. **Select Tracker**: Choose tracking method (ByteTrack or BoTSORT)
-5. **Configure Parameters**: Set device (CPU/CUDA), confidence threshold, IoU threshold, video stride, **Run Mode**, and optionally ROI
-6. **Select Classes**: Choose which object classes to track (default: person and sports ball)
-7. **Process Videos**: Script processes all videos in the input directory and generates:
+2. **Select Directories**: Choose input directory (videos) and output directory  
+3. **Ultralytics paths**: Weights and cache live under `vaila/models/` (including BoT-SORT classifier downloads); stray `yolo*.pt` in the repo root are moved into `vaila/models/` on startup.
+4. **TensorRT**: If `trtexec` fails (e.g. TensorRT 10 flag changes), processing falls back to the `.pt` model automatically. Check the log for full `trtexec` stderr.
+5. **Select Model**: Choose YOLO26 model (detection, pose, segmentation, OBB) - pre-trained or custom
+6. **Select Tracker**: Choose tracking method (ByteTrack or BoTSORT)
+7. **Configure Parameters**: Set device (CPU/CUDA), confidence threshold, IoU threshold, video stride, **Run Mode**, and optionally ROI
+8. **Select Classes**: Choose which object classes to track (default: person and sports ball)
+9. **Process Videos**: Script processes all videos in the input directory and generates:
    - Individual CSV files per tracked ID: `{label}_id_{tracker_id:02d}.csv`
    - Combined CSV: `all_id_detection.csv`
    - Merged CSV(s): `all_id_merge_{label}.csv` or `all_id_merge.csv`
    - Processed videos: `processed_{video_name}.mp4`
    - If **Run Mode** includes **seg** and model outputs masks:
-     - `yolo_masks_manifest.csv` (frame,id,area,mask path)
-     - `yolo_contours.json` (polygons per frame/object)
+     - `yolo_masks_manifest.csv` with header `frame,id,area,mask_png`
+     - `yolo_contours.json` (`vaila_yolo_contours_v1`) with SAM-compatible top-level metadata
+     - `processed_<stem>_seg.mp4` and `processed_<stem>_all.mp4` (H.264 via FFmpeg, same path as bbox video)
      - `yolo_masks/` (PNG masks per frame/object)
    - If **Run Mode** includes **pose**:
      - `*_pose.csv` and `*_pose.mp4` (skeleton overlay)
 
 ## 🎯 Usage: Pose Estimation Workflow
 
-1. **Start Pose Estimation**: GUI: **Frame B → "YOLO and SAM" → "YOLOv26 Pose"**
-2. **Select Tracking Directory**: Choose the directory containing tracking results (CSV files and video)
-3. **Select Video**: Prioritizes `processed_*.mp4` files, accepts any video file
+1. **Start Pose Estimation**: GUI: **Frame B → "YOLO + SAM" → "Pose (video)"** or **"Pose (tracking)"**
+2. **Select Tracking Directory** (only for **Pose (tracking)**): Choose results root or subfolder; nested `*_id_*.csv` trees under e.g. a `vailatracker_*` root are discovered automatically (bounded depth), with a picker if several leaves exist. For **Pose (video)** you only select a video file next.
+3. **Select Video** (**Pose (tracking)**): Prioritizes `processed_*.mp4`, accepts any video in the resolved tracking folder
 4. **Select ID(s)**: 
    - **Single ID**: Click on one ID from the list
    - **Multiple IDs**: Hold Ctrl/Cmd and click multiple IDs to merge
@@ -136,16 +139,17 @@ Models are downloaded to: `vaila/models/`
 - MPS (Apple Silicon) as secondary option
 - Falls back to CPU if no GPU available
 - Device selection logged: `Using device: cuda`
+- Optional TensorRT engines via `trtexec`: on failure (e.g. TensorRT 10 CLI changes), vailá logs full stderr and continues with the `.pt` weights
 
 ## 🐛 Troubleshooting
 
-- **No tracking CSV files found**: Ensure you've run the tracking workflow first
+- **No tracking CSV files found**: Run tracking first, or pick a higher-level output folder — nested folders with `*_id_*.csv` are scanned up to a bounded depth; if several are found, a folder picker appears.
 - **GPU not being used**: Check CUDA availability with `torch.cuda.is_available()`
 - **Model download fails**: Check internet connection, models are downloaded from Ultralytics servers
 - **YOLO26 model not found**: Models are automatically downloaded on first use to `vaila/models/`
 
 ---
 
-📅 **Last Updated:** January 2026 (v0.0.1 - Initial YOLOv26 support)  
+📅 **Last Updated:** 07 May 2026 (v0.3.43)  
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
