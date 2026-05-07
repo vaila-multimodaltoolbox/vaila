@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 02 May 2026
-Version: 0.6.1
+Update: 07 May 2026
+Version: 0.3.43
 Python Version: 3.12.13
 
 Description:
@@ -17,7 +17,12 @@ pan, frame navigation, and multiple marker modes. CSV coordinates are saved as
 integers where applicable. Marker backups go to ``.vaila_markers_history/`` (latest
 100 per video).
 
-FIFA mode (``--fifa`` / ``--fifa-dataset DIR`` / **Mode** cycle or right-click / ``K``):
+Template Marker Mode (toolbar Template button):
+  - **FIFA Soccer-Field** (32 pitch keypoints, idx 0 = top_left_corner)
+  - **MediaPipe Pose** (33 landmarks)
+  - **YOLO Pose** (COCO-17 keypoints)
+
+FIFA mode (``--fifa`` / ``--fifa-dataset DIR`` / **Template:FIFA** toolbar button or ``K`` / TOML):
   Configure fixed keypoint count, start index, and 0/1-based headers via a
   **TOML** template (no Tk config dialog).
   Default FIFA slot layout uses **32** pitch keypoints (idx **0 = top_left_corner**).
@@ -56,7 +61,7 @@ Key bindings (see in-app **H** help for full list):
   F9                    Export YOLO-pose dataset from markers
   Shift+← / Shift+→     Jump prev/next frame that has markers
   Marker timeline strip Click or drag (above scrub bar) to jump
-  Status bar Pix:(x,y) live cursor position in video pixels
+  Marker toolbar       Template (FIFA/MediaPipe/YOLO; right-click TOML when FIFA); Mode (Mark/Seq/1-line)
 
 New in 0.5.x / earlier:
   F9 pose export; labeling mode; swap markers; playback tweaks.
@@ -151,8 +156,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.6.1"
-GETPIXELVIDEO_UPDATE_DATE = "02 May 2026"
+GETPIXELVIDEO_VERSION = "0.6.2"
+GETPIXELVIDEO_UPDATE_DATE = "07 May 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -666,6 +671,32 @@ POSE_CONNECTIONS = frozenset(
         (27, 31),
         (28, 32),
     ]
+)
+
+# YOLO Pose (COCO-17) skeleton connections (match vaila/markerless2d_yolo26.py draw_yolo_pose()).
+# Ref (dataset): https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco-pose.yaml
+COCO17_CONNECTIONS = frozenset(
+    {
+        (15, 13),
+        (13, 11),
+        (16, 14),
+        (14, 12),
+        (11, 12),
+        (5, 11),
+        (6, 12),
+        (5, 6),
+        (5, 7),
+        (6, 8),
+        (7, 9),
+        (8, 10),
+        (1, 2),
+        (0, 1),
+        (0, 2),
+        (1, 3),
+        (2, 4),
+        (3, 5),
+        (4, 6),
+    }
 )
 
 
@@ -1465,7 +1496,11 @@ def play_video_with_controls(
         pygame.scrap.init()
 
     # Control variables
-    zoom_level = 1.0
+    # Default: auto-fit media to viewport (useful for 4K on 1080p displays).
+    # Only zoom out by default; avoid upscaling small media.
+    fit_zoom_w = window_width / max(1, int(original_width))
+    fit_zoom_h = window_height / max(1, int(original_height))
+    zoom_level = min(1.0, fit_zoom_w, fit_zoom_h)
     offset_x, offset_y = 0, 0
     frame_count = 0
     paused = True
@@ -1543,6 +1578,193 @@ def play_video_with_controls(
     fifa_index_base = 0 if pitch_guide_fifa_mode else 1
     if pitch_guide_fifa_mode:
         current_label = "football_pitch"
+
+    # Template Marker Mode
+    # - "free": variable-length markers (no fixed slots)
+    # - "fifa": fixed 32 pitch keypoints + pitch guide (visual)
+    # - "mediapipe": fixed 33 pose landmarks
+    # - "yolo": fixed 17 COCO pose keypoints
+    template_mode = "fifa" if pitch_guide_fifa_mode else "free"
+    template_keypoint_names: list[str] | None = None
+
+    _TEMPLATE_LABELS: dict[str, str] = {
+        "free": "Free",
+        "fifa": "FIFA Soccer-Field",
+        "mediapipe": "MediaPipe Pose",
+        "yolo": "YOLO Pose",
+    }
+
+    # MediaPipe Pose Landmarker (33) names.
+    # Ref: https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker
+    _MEDIAPIPE_33 = [
+        "nose",
+        "left_eye_inner",
+        "left_eye",
+        "left_eye_outer",
+        "right_eye_inner",
+        "right_eye",
+        "right_eye_outer",
+        "left_ear",
+        "right_ear",
+        "mouth_left",
+        "mouth_right",
+        "left_shoulder",
+        "right_shoulder",
+        "left_elbow",
+        "right_elbow",
+        "left_wrist",
+        "right_wrist",
+        "left_pinky",
+        "right_pinky",
+        "left_index",
+        "right_index",
+        "left_thumb",
+        "right_thumb",
+        "left_hip",
+        "right_hip",
+        "left_knee",
+        "right_knee",
+        "left_ankle",
+        "right_ankle",
+        "left_heel",
+        "right_heel",
+        "left_foot_index",
+        "right_foot_index",
+    ]
+
+    # YOLO Pose (COCO-17) names.
+    # Ref: https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/datasets/coco-pose.yaml
+    _YOLO_COCO_17 = [
+        "nose",
+        "left_eye",
+        "right_eye",
+        "left_ear",
+        "right_ear",
+        "left_shoulder",
+        "right_shoulder",
+        "left_elbow",
+        "right_elbow",
+        "left_wrist",
+        "right_wrist",
+        "left_hip",
+        "right_hip",
+        "left_knee",
+        "right_knee",
+        "left_ankle",
+        "right_ankle",
+    ]
+
+    # Guide "map" canonical XY layouts (0..1) for upper-right reference.
+    # Intent: quick index→body-part orientation for manual clicking, not metric.
+    _POSE_GUIDE_MEDIAPIPE_33_XY: list[tuple[float, float]] = [
+        (0.50, 0.12),  # 0 nose
+        (0.47, 0.10),
+        (0.46, 0.10),
+        (0.45, 0.10),
+        (0.53, 0.10),
+        (0.54, 0.10),
+        (0.55, 0.10),
+        (0.42, 0.12),  # 7 left_ear
+        (0.58, 0.12),  # 8 right_ear
+        (0.48, 0.14),
+        (0.52, 0.14),
+        (0.42, 0.22),  # 11 left_shoulder
+        (0.58, 0.22),  # 12 right_shoulder
+        (0.36, 0.32),
+        (0.64, 0.32),
+        (0.32, 0.44),
+        (0.68, 0.44),
+        (0.30, 0.48),
+        (0.70, 0.48),
+        (0.30, 0.46),
+        (0.70, 0.46),
+        (0.30, 0.50),
+        (0.70, 0.50),
+        (0.46, 0.46),  # 23 left_hip
+        (0.54, 0.46),  # 24 right_hip
+        (0.44, 0.62),
+        (0.56, 0.62),
+        (0.42, 0.78),
+        (0.58, 0.78),
+        (0.41, 0.86),
+        (0.59, 0.86),
+        (0.40, 0.90),
+        (0.60, 0.90),
+    ]
+
+    _POSE_GUIDE_COCO_17_XY: list[tuple[float, float]] = [
+        (0.50, 0.14),  # 0 nose
+        (0.46, 0.12),
+        (0.54, 0.12),
+        (0.42, 0.14),
+        (0.58, 0.14),
+        (0.42, 0.26),  # 5 left_shoulder
+        (0.58, 0.26),  # 6 right_shoulder
+        (0.36, 0.38),
+        (0.64, 0.38),
+        (0.32, 0.50),
+        (0.68, 0.50),
+        (0.46, 0.52),  # 11 left_hip
+        (0.54, 0.52),  # 12 right_hip
+        (0.44, 0.68),
+        (0.56, 0.68),
+        (0.42, 0.86),
+        (0.58, 0.86),
+    ]
+
+    def _pose_guide_reference_surface(
+        mode: str,
+        current_idx: int | None = None,
+    ) -> pygame.Surface | None:
+        """Upper-right "map" for pose templates (MediaPipe 33 / COCO-17)."""
+        mode = str(mode or "").strip().lower()
+        if mode == "mediapipe":
+            xy = _POSE_GUIDE_MEDIAPIPE_33_XY
+            connections = POSE_CONNECTIONS
+            title = "MediaPipe Pose Reference (33)"
+        elif mode == "yolo":
+            xy = _POSE_GUIDE_COCO_17_XY
+            connections = COCO17_CONNECTIONS
+            title = "YOLO Pose Reference (COCO-17)"
+        else:
+            return None
+
+        width, height = 340, 360
+        margin_x, margin_y = 26, 42
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        surface.fill((18, 18, 26, 110))
+
+        def map_xy(p: tuple[float, float]) -> tuple[int, int]:
+            px = margin_x + int(p[0] * (width - 2 * margin_x))
+            py = margin_y + int(p[1] * (height - 2 * margin_y))
+            return px, py
+
+        line_rgba = (245, 245, 245, 170)
+        dot_rgba = (255, 255, 255, 210)
+        ring_rgba = (30, 90, 170, 230)
+        current_fill = (255, 225, 35, 245)
+
+        for a, b in connections:
+            if a >= len(xy) or b >= len(xy):
+                continue
+            pygame.draw.line(surface, line_rgba, map_xy(xy[a]), map_xy(xy[b]), 2)
+
+        small_font = pygame.font.SysFont("verdana", 10, bold=True)
+        title_font = pygame.font.SysFont("verdana", 12, bold=True)
+        surface.blit(title_font.render(title, True, (255, 255, 255)), (10, 10))
+
+        cur = int(current_idx) if current_idx is not None else -1
+        for idx, p in enumerate(xy):
+            px, py = map_xy(p)
+            is_current = idx == cur
+            radius = 7 if is_current else 4
+            pygame.draw.circle(surface, ring_rgba, (px, py), radius + 1)
+            pygame.draw.circle(surface, current_fill if is_current else dot_rgba, (px, py), radius)
+            label = small_font.render(str(idx), True, (255, 235, 72))
+            surface.blit(label, (px + 7, py - 8))
+
+        pygame.draw.rect(surface, (230, 230, 230, 165), surface.get_rect(), 2)
+        return surface
 
     def _load_pitch_guide_points(prefer_fifa_dataset: bool = False) -> tuple[list[dict], str]:
         """Load FIFA pitch-guide point names from the closest soccerfield_ref3d CSV.
@@ -2676,26 +2898,99 @@ def play_video_with_controls(
 
             traceback.print_exc()
 
+    def _apply_template_mode(mode: str) -> None:
+        """Apply Template Marker Mode. May reshape slot count; clears pitch guide unless FIFA."""
+        nonlocal template_mode, template_keypoint_names
+        nonlocal pitch_guide_fifa_mode, fifa_fixed_keypoints, fifa_start_keypoint, fifa_index_base
+        nonlocal current_label, coordinates, deleted_positions, selected_marker_idx
+        nonlocal pitch_guide_points, pitch_guide_source, pitch_guide_mode
+        nonlocal one_line_mode
+
+        if not isinstance(coordinates, dict):
+            coordinates = {i: [] for i in range(total_frames)}
+
+        mode = mode.strip().lower()
+        if mode not in _TEMPLATE_LABELS:
+            mode = "free"
+
+        # Back up before destructive reshape.
+        make_backup()
+
+        if mode == "free":
+            template_mode = "free"
+            template_keypoint_names = None
+            _quick_fifa_preset_disable()
+            return
+
+        if mode == "fifa":
+            template_mode = "fifa"
+            template_keypoint_names = None  # names come from pitch guide dataset CSV
+            _quick_fifa_preset_enable()
+            return
+
+        # Fixed slots without pitch guide.
+        one_line_mode = False
+        pitch_guide_fifa_mode = False
+        pitch_guide_mode = False
+        pitch_guide_points = []
+        pitch_guide_source = ""
+        fifa_start_keypoint = 0
+        fifa_index_base = 0
+        current_label = "person"
+
+        if mode == "mediapipe":
+            template_mode = "mediapipe"
+            template_keypoint_names = list(_MEDIAPIPE_33)
+            fifa_fixed_keypoints = len(_MEDIAPIPE_33)
+        else:
+            template_mode = "yolo"
+            template_keypoint_names = list(_YOLO_COCO_17)
+            fifa_fixed_keypoints = len(_YOLO_COCO_17)
+
+        n = max(1, int(fifa_fixed_keypoints))
+        new_coords: dict[int, list[tuple[Any, Any]]] = {}
+        for i in range(total_frames):
+            old = list(coordinates.get(i, []))
+            if len(old) < n:
+                old.extend([(None, None)] * (n - len(old)))
+            else:
+                old = old[:n]
+            new_coords[i] = old
+        coordinates = new_coords
+        deleted_positions = {
+            fi: {idx for idx in deleted_positions.get(fi, set()) if idx < n}
+            for fi in range(total_frames)
+        }
+        selected_marker_idx = 0
+
+    def _cycle_template_mode() -> None:
+        order = ("free", "fifa", "mediapipe", "yolo")
+        try:
+            idx = order.index(template_mode)
+        except ValueError:
+            idx = 0
+        _apply_template_mode(order[(idx + 1) % len(order)])
+
     def draw_controls():
         """
         Draw the control area on a separate surface.
         The frame slider is drawn across the bottom; above it a thin **marker timeline**
         (green = frames with visible keypoints, gold line = current frame).  The strip is
         clickable / draggable to jump frames (snaps to markers inside the column when possible).
-        Top button row includes **Mode** (left-click cycles Markers / Sequential / 1-line /
-        FIFA preset; right-click loads FIFA TOML like ``K``), **Persist**, **Auto**, **ClickPass**,
-        **Labeling**, **PitchGuide**.
+        Top button row includes **Template** (FIFA/MediaPipe/YOLO; right-click = TOML like ``K`` when FIFA),
+        **Mode** (Mark / Sequential / 1-line), **Persist**, **Auto**, **ClickPass**,
+        **Labeling**, **Guide** (field or skeleton overlay).
         """
 
+        def _template_button_caption() -> str:
+            return f"Tpl: {_TEMPLATE_LABELS.get(template_mode, template_mode)}"
+
         def _marker_mode_button_caption() -> str:
-            """Short label for the unified marker-mode control (shown on the button)."""
             if one_line_mode:
                 return "Mode: 1-line"
             if sequential_mode:
                 return "Mode: Seq"
-            if pitch_guide_fifa_mode:
-                return "Mode: FIFA"
-            return "Mode: Markers"
+            return "Mode: Mark"
 
         def _modes_summary_text() -> str:
             core = "Label" if labeling_mode else ("1-line" if one_line_mode else "Markers")
@@ -2707,6 +3002,8 @@ def play_video_with_controls(
                 parts.append("map" if pitch_guide_show_reference else "map-off")
             if pitch_guide_fifa_mode:
                 parts.append("FIFA-slots")
+            elif template_mode != "free" and fifa_fixed_keypoints:
+                parts.append(f"Tpl:{template_mode}:{int(fifa_fixed_keypoints)}")
             if persistence_enabled:
                 parts.append(f"Persist×{persistence_frames}")
             if auto_marking_mode:
@@ -2760,7 +3057,7 @@ def play_video_with_controls(
             frame_markers = [m for m in one_line_markers if m[0] == frame_count]
             total_markers = len(frame_markers)
         else:
-            if pitch_guide_fifa_mode and fifa_fixed_keypoints:
+            if template_mode != "free" and fifa_fixed_keypoints:
                 total_markers = max(1, int(fifa_fixed_keypoints))
             else:
                 total_markers = 0 if coordinates is None else len(coordinates[frame_count])
@@ -2769,7 +3066,7 @@ def play_video_with_controls(
         if total_markers > 0:
             marker_idx = selected_marker_idx + 1 if selected_marker_idx >= 0 else 0
             marker_total_display = total_markers
-            if pitch_guide_fifa_mode and selected_marker_idx >= 0:
+            if template_mode != "free" and selected_marker_idx >= 0:
                 marker_idx = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
                 marker_total_display = (
                     int(fifa_start_keypoint) + max(0, int(total_markers) - 1) + int(fifa_index_base)
@@ -2791,11 +3088,12 @@ def play_video_with_controls(
                 f"Tracking: {len(tracking_data)} frames", True, (150, 255, 150)
             )
 
-        fifa_cfg_surface = None
-        if pitch_guide_fifa_mode:
-            _nkp = fifa_fixed_keypoints if fifa_fixed_keypoints is not None else "auto"
-            fifa_cfg_surface = font.render(
-                f"FIFA CSV: N={_nkp} start={fifa_start_keypoint} base={fifa_index_base}",
+        template_cfg_surface = None
+        if template_mode != "free" and fifa_fixed_keypoints is not None:
+            _nkp = fifa_fixed_keypoints
+            _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
+            template_cfg_surface = font.render(
+                f"Tpl: {_tpl} N={_nkp} start={fifa_start_keypoint} base={fifa_index_base}",
                 True,
                 (120, 220, 255),
             )
@@ -2813,8 +3111,8 @@ def play_video_with_controls(
         meta_heights = [speed_text.get_height()]
         if tracking_info is not None:
             meta_heights.append(tracking_info.get_height())
-        if fifa_cfg_surface is not None:
-            meta_heights.append(fifa_cfg_surface.get_height())
+        if template_cfg_surface is not None:
+            meta_heights.append(template_cfg_surface.get_height())
         meta_row_h = max(meta_heights)
 
         info_row_y = heat_y - pad_heat_primary - primary_row_h
@@ -2865,10 +3163,10 @@ def play_video_with_controls(
         _global_info_x = info_x
 
         mx_meta = slider_margin_left
-        if fifa_cfg_surface is not None:
-            dy_f = meta_row_y + (meta_row_h - fifa_cfg_surface.get_height()) // 2
-            control_surface.blit(fifa_cfg_surface, (mx_meta, dy_f))
-            mx_meta += fifa_cfg_surface.get_width() + 14
+        if template_cfg_surface is not None:
+            dy_f = meta_row_y + (meta_row_h - template_cfg_surface.get_height()) // 2
+            control_surface.blit(template_cfg_surface, (mx_meta, dy_f))
+            mx_meta += template_cfg_surface.get_width() + 14
         if tracking_info is not None:
             dy_t = meta_row_y + (meta_row_h - tracking_info.get_height()) // 2
             control_surface.blit(tracking_info, (mx_meta, dy_t))
@@ -2933,24 +3231,29 @@ def play_video_with_controls(
         # Draw button cluster in the lower-right corner.
         button_width = 50
         button_gap = 10
-        marker_mode_button_width = 168  # Markers / Seq / 1-line + optional FIFA· prefix
+        template_button_width = 170  # Tpl: Free/FIFA/MediaPipe/YOLO
+        marker_mode_button_width = 118  # Mode: Mark / Seq / 1-line
         persist_button_width = 70
         auto_button_width = 70
         click_pass_button_width = 70
         labeling_button_width = 70
-        pitch_guide_button_width = 90  # Pitch Guide button
+        guide_button_width = 74  # Guide button (field / skeleton overlay)
+        guide_toggle_size = 12
         tracking_csv_button_width = 120
         export_video_button_width = 100
         save_dataset_button_width = 100
         help_web_button_width = 30  # Width for '?' button
         total_top_width = (
-            marker_mode_button_width
+            template_button_width
+            + marker_mode_button_width
             + persist_button_width
             + auto_button_width
             + click_pass_button_width
             + labeling_button_width
-            + pitch_guide_button_width
-            + (button_gap * 6)
+            + guide_button_width
+            + 5
+            + guide_toggle_size
+            + (button_gap * 7)
         )
         show_tracking_indicator_size = 12
         total_bottom_width = (
@@ -2972,8 +3275,25 @@ def play_video_with_controls(
         # Helper to advance x position
         current_x = row_start_top
 
-        # 1. Unified marker mode: left-click cycles Markers → Sequential → 1-line → FIFA → …;
-        #    right-click opens FIFA TOML flow (same as K).
+        # 1. Template Marker Mode: left-click cycles templates; right-click = TOML (K) when FIFA.
+        template_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_top,
+            template_button_width,
+            button_height,
+        )
+        current_x += template_button_width + button_gap
+
+        _tpl_color = (45, 95, 195) if template_mode != "free" else (95, 95, 115)
+        pygame.draw.rect(control_surface, _tpl_color, template_button_rect)
+        _tpl_cap = _template_button_caption()
+        _top_btn_font = pygame.font.SysFont("verdana", 11)
+        while len(_tpl_cap) > 4 and _top_btn_font.size(_tpl_cap)[0] > template_button_width - 10:
+            _tpl_cap = _tpl_cap[:-2].rstrip("·") + "…"
+        _tpl_txt = _top_btn_font.render(_tpl_cap, True, (255, 255, 255))
+        control_surface.blit(_tpl_txt, _tpl_txt.get_rect(center=template_button_rect.center))
+
+        # 2. Marker mode: Markers → Sequential → 1-line.
         marker_mode_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -2983,22 +3303,22 @@ def play_video_with_controls(
         current_x += marker_mode_button_width + button_gap
 
         if one_line_mode:
-            _mm_color = (150, 50, 50)
+            _place_color = (150, 50, 50)
         elif sequential_mode:
-            _mm_color = (50, 130, 50)
-        elif pitch_guide_fifa_mode:
-            _mm_color = (45, 95, 195)
+            _place_color = (50, 130, 50)
         else:
-            _mm_color = (95, 95, 115)
-        pygame.draw.rect(control_surface, _mm_color, marker_mode_button_rect)
-        _mode_cap = _marker_mode_button_caption()
-        _mode_font = pygame.font.SysFont("verdana", 11)
-        while len(_mode_cap) > 6 and _mode_font.size(_mode_cap)[0] > marker_mode_button_width - 10:
-            _mode_cap = _mode_cap[:-2].rstrip("·") + "…"
-        _mode_txt = _mode_font.render(_mode_cap, True, (255, 255, 255))
-        control_surface.blit(_mode_txt, _mode_txt.get_rect(center=marker_mode_button_rect.center))
+            _place_color = (95, 95, 115)
+        pygame.draw.rect(control_surface, _place_color, marker_mode_button_rect)
+        _place_cap = _marker_mode_button_caption()
+        while (
+            len(_place_cap) > 4
+            and _top_btn_font.size(_place_cap)[0] > marker_mode_button_width - 10
+        ):
+            _place_cap = _place_cap[:-2].rstrip("·") + "…"
+        _place_txt = _top_btn_font.render(_place_cap, True, (255, 255, 255))
+        control_surface.blit(_place_txt, _place_txt.get_rect(center=marker_mode_button_rect.center))
 
-        # 2. "Persist" mode toggle button.
+        # 3. "Persist" mode toggle button.
         persist_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -3016,7 +3336,7 @@ def play_video_with_controls(
         )
         control_surface.blit(persist_text, persist_text.get_rect(center=persist_button_rect.center))
 
-        # 3. Auto-marking mode button
+        # 4. Auto-marking mode button
         auto_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -3030,7 +3350,7 @@ def play_video_with_controls(
         auto_text = font.render("Auto", True, (255, 255, 255))
         control_surface.blit(auto_text, auto_text.get_rect(center=auto_button_rect.center))
 
-        # 4. ClickPass mode button
+        # 5. ClickPass mode button
         click_pass_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -3048,7 +3368,7 @@ def play_video_with_controls(
 
         # 5. Pose button REMOVED (Use 'J' hotkey)
 
-        # 6. Labeling mode button
+        # 7. Labeling mode button
         labeling_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -3064,22 +3384,31 @@ def play_video_with_controls(
             labeling_text, labeling_text.get_rect(center=labeling_button_rect.center)
         )
 
-        # 7. Pitch Guide button
-        pitch_guide_button_rect = pygame.Rect(
+        # 8. Guide button + on/off toggle (tiny square).
+        guide_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
-            pitch_guide_button_width,
+            guide_button_width,
             button_height,
         )
-        current_x += pitch_guide_button_width + button_gap
-
-        _pg_color = (180, 100, 20) if pitch_guide_mode else (100, 100, 100)
-        pygame.draw.rect(control_surface, _pg_color, pitch_guide_button_rect)
-        _pg_label = (
-            f"PitchGuide {'ON' if pitch_guide_mode else ''}" if pitch_guide_mode else "PitchGuide"
+        guide_toggle_rect = pygame.Rect(
+            guide_button_rect.right + 5,
+            guide_button_rect.centery - guide_toggle_size // 2,
+            guide_toggle_size,
+            guide_toggle_size,
         )
-        _pg_text = font.render(_pg_label, True, (255, 255, 255))
-        control_surface.blit(_pg_text, _pg_text.get_rect(center=pitch_guide_button_rect.center))
+        current_x += guide_button_width + 5 + guide_toggle_size + button_gap
+
+        _g_color = (180, 100, 20) if pitch_guide_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, _g_color, guide_button_rect)
+        _g_text = font.render("Guide", True, (255, 255, 255))
+        control_surface.blit(_g_text, _g_text.get_rect(center=guide_button_rect.center))
+        if pitch_guide_mode:
+            pygame.draw.rect(control_surface, (0, 255, 0), guide_toggle_rect)
+            pygame.draw.rect(control_surface, (255, 255, 255), guide_toggle_rect, 1)
+        else:
+            pygame.draw.rect(control_surface, (60, 60, 60), guide_toggle_rect)
+            pygame.draw.rect(control_surface, (150, 150, 150), guide_toggle_rect, 1)
 
         current_x = row_start_bottom
         tracking_csv_button_width = 120
@@ -3215,6 +3544,7 @@ def play_video_with_controls(
         marker_timeline_rect = pygame.Rect(slider_margin_left, heat_y, slider_width, heat_h)
         screen.blit(control_surface, (0, window_height))
         return (
+            template_button_rect,
             marker_mode_button_rect,
             save_button_rect,
             help_button_rect,
@@ -3223,7 +3553,8 @@ def play_video_with_controls(
             auto_button_rect,  # Add auto button to return
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
-            pitch_guide_button_rect,  # Add PitchGuide button to return
+            guide_button_rect,  # Guide button (field/skeleton)
+            guide_toggle_rect,  # Guide on/off indicator
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
@@ -3322,7 +3653,7 @@ def play_video_with_controls(
         toml_default_base_index = 0
         text = (
             "# FIFA template config for getpixelvideo.py\n"
-            "# Load this file with Mode button right-click or key K.\n\n"
+            "# Load this file with Template button right-click (when Template:FIFA) or key K.\n\n"
             "[fifa_template]\n"
             f"n_keypoints = {int(fifa_fixed_keypoints if fifa_fixed_keypoints else 32)}\n"
             f"start_keypoint = {int(toml_default_start_keypoint)}\n"
@@ -3463,9 +3794,10 @@ def play_video_with_controls(
         nonlocal pitch_guide_fifa_mode, fifa_fixed_keypoints, fifa_start_keypoint, fifa_index_base
         nonlocal current_label, coordinates, deleted_positions, selected_marker_idx
         nonlocal pitch_guide_points, pitch_guide_source, pitch_guide_mode
-        nonlocal one_line_mode, sequential_mode
+        nonlocal one_line_mode
+        if not isinstance(coordinates, dict):
+            coordinates = {i: [] for i in range(total_frames)}
         one_line_mode = False
-        sequential_mode = False
         pitch_guide_fifa_mode = True
         fifa_fixed_keypoints = 32
         fifa_start_keypoint = 0
@@ -3495,6 +3827,8 @@ def play_video_with_controls(
         nonlocal pitch_guide_fifa_mode, fifa_fixed_keypoints, fifa_start_keypoint, fifa_index_base
         nonlocal current_label, coordinates, deleted_positions, selected_marker_idx
         nonlocal pitch_guide_points, pitch_guide_source
+        if not isinstance(coordinates, dict):
+            coordinates = {i: [] for i in range(total_frames)}
         pitch_guide_fifa_mode = False
         fifa_fixed_keypoints = None
         fifa_start_keypoint = 0
@@ -3543,17 +3877,18 @@ def play_video_with_controls(
             coordinates.get(frame_count, []) if isinstance(coordinates, dict) else []
         )
         total = len(frame_coords)
-        if pitch_guide_fifa_mode and fifa_fixed_keypoints:
+        if template_mode != "free" and fifa_fixed_keypoints:
             total = max(1, int(fifa_fixed_keypoints))
         if total <= 0:
             return False, "No markers available in current frame."
-        if pitch_guide_fifa_mode:
+        if template_mode != "free":
             # Internal slots are 0..(N-1); display numbers can be offset by start_keypoint/base_index.
             low = 0
             high = total - 1
             display_low = int(fifa_start_keypoint) + low + int(fifa_index_base)
             display_high = int(fifa_start_keypoint) + high + int(fifa_index_base)
-            prompt = f"Go to FIFA keypoint ({display_low}..{display_high})"
+            _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
+            prompt = f"Go to {_tpl} keypoint ({display_low}..{display_high})"
             seed_idx = selected_marker_idx if low <= selected_marker_idx <= high else low
             seed = str(int(fifa_start_keypoint) + seed_idx + int(fifa_index_base))
         else:
@@ -3615,6 +3950,8 @@ def play_video_with_controls(
             "    of them (middle of the group); else same mapping as slider.",
             "- Footer shows: Marked:N · click strip · Shift+←/→",
             "- Status row: Pix:(x,y) = video pixel under cursor (over video)",
+            "- Toolbar: Template cycles Free/FIFA/MediaPipe/YOLO (right-click or K = TOML when FIFA);",
+            "    Mode cycles Mark/Seq/1-line (1-line forces Template Free).",
             "- TAB: Next marker in current frame",
             "- SHIFT+TAB: Previous marker in current frame",
             "- Ctrl+G: Go to keypoint (Go KP dialog)",
@@ -3648,7 +3985,7 @@ def play_video_with_controls(
             "",
             "=== POSE DATASET (Keypoints) ===",
             "  F9: Export YOLO-pose dataset from markers",
-            "      -> pose_dataset_YYYYMMDD_HHMMSS/",
+            "      -> vaila_dataset_YYYYMMDD_HHMMSS/",
             "      (or append to dataset loaded with F7)",
             "      Click N markers on each frame; F9 builds",
             "      images/ + labels/ + data.yaml (kpt_shape).",
@@ -3658,7 +3995,7 @@ def play_video_with_controls(
             "      (all_labels has split-prefixed .txt copies).",
             "",
             "=== FIFA LABELING MODE ===",
-            "  Mode button right-click or K: load/create TOML (no Tk dialog).",
+            "  Template:FIFA right-click or K: load/create TOML (no Tk dialog).",
             "  Default 32 kp, idx 0 = top_left_corner; sparse CSV;",
             "  N/start/base in TOML. Pitch Guide (G) is visual only.",
             "  --fifa-dataset DIR sets append target; class football_pitch.",
@@ -3667,9 +4004,10 @@ def play_video_with_controls(
 
         help_lines_right = [
             "Marker Modes:",
-            "- Mode button (left): cycles Markers / Sequential / 1-line / FIFA;",
-            "  FIFA step = 32 soccer-field slots, idx 0, Pitch Guide if CSV OK;",
-            "  TOML paths/templates: Mode right-click or K.",
+            "- Template button (left): cycles Free/FIFA/MediaPipe/YOLO;",
+            "  right-click or K: TOML (only when Template:FIFA).",
+            "- Mode button (left): cycles Mark/Seq/1-line;",
+            "  1-line forces Template Free (no fixed slots).",
             "",
             "- Normal Mode (default): Clicking selects and",
             "  updates the current marker. Use TAB to navigate.",
@@ -3679,9 +4017,9 @@ def play_video_with_controls(
             "  in one frame. Each click adds a new marker.",
             "  Use for tracing paths or outlines.",
             "",
-            "Sequential Mode (S/O key): first click fills the",
+            "Sequential Mode (S/O key or Mode): first click fills the",
             "  selected slot (TAB/Ctrl+G) if empty incl. kp 0;",
-            "  then advances. Normal mode only.",
+            "  then advances. Works with FIFA fixed slots.",
             "",
             "- Auto-marking Mode (M key): Automatically marks",
             "  points at mouse position during playback.",
@@ -3690,11 +4028,11 @@ def play_video_with_controls(
             "- ClickPass Mode: Advances to next frame after",
             "  adding a marker (Normal Mode).",
             "",
-            "- PitchGuide (G key or button): translucent FIFA field",
-            "  hint panel + upper-right reference map (SRCALPHA). Same",
+            "- Guide (G key or button): translucent overlay for active template,",
+            "  FIFA field map or pose skeleton (MediaPipe/YOLO). V toggles FIFA map.",
             "  marking as guide off (TAB / Ctrl+G / click). V toggles map.",
             "",
-            "- FIFA Mode (Mode cycle / Mode right-click / K + TOML): fixed N kp,",
+            "- Template:FIFA (right-click Template button or K + TOML): fixed N kp,",
             "  sparse save; default 32 FIFA field points.",
             "  Use --fifa-dataset DIR to set append dataset.",
             "  Marker backups go to .vaila_markers_history/",
@@ -4466,7 +4804,7 @@ def play_video_with_controls(
         """Export a YOLO-pose dataset from the markers clicked in ``coordinates``.
 
         Uses ``current_dataset_dir`` (multi-video append) when set; otherwise creates
-        a fresh ``pose_dataset_YYYYMMDD_HHMMSS/`` next to the video. Also writes a
+        a fresh ``vaila_dataset_YYYYMMDD_HHMMSS/`` next to the video. Also writes a
         sibling JSON project file with the raw markers (for later re-editing).
         """
         nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
@@ -4494,6 +4832,10 @@ def play_video_with_controls(
             output_dataset_dir=current_dataset_dir,
             keypoint_names=pitch_keypoint_names,
             flip_idx=export_flip_idx,
+            keypoint_start_idx=(fifa_start_keypoint if template_mode != "free" else 0),
+            keypoint_index_base=(fifa_index_base if template_mode != "free" else 1),
+            coord_format=coord_format,
+            coord_decimals=coord_decimals,
             layout=export_layout,
             split_ratios=split_ratios,
             image_format=image_format,
@@ -5838,6 +6180,52 @@ def play_video_with_controls(
         )
         screen.blit(frame_surface, (0, 0))
 
+        # Pose skeleton guide overlay (MediaPipe/YOLO) — translucent lines + dots.
+        if (
+            pitch_guide_mode
+            and template_mode in ("mediapipe", "yolo")
+            and coordinates is not None
+            and not one_line_mode
+            and frame_count in coordinates
+        ):
+            pts = coordinates[frame_count]
+            connections = POSE_CONNECTIONS if template_mode == "mediapipe" else COCO17_CONNECTIONS
+            guide_alpha = 95
+            overlay = pygame.Surface((window_width, window_height), pygame.SRCALPHA)
+            line_color = (0, 160, 255, guide_alpha)
+            dot_color = (255, 255, 255, guide_alpha)
+            deleted_now = deleted_positions.get(frame_count, set())
+            for a, b in connections:
+                if a >= len(pts) or b >= len(pts):
+                    continue
+                if a in deleted_now or b in deleted_now:
+                    continue
+                p1 = pts[a]
+                p2 = pts[b]
+                if not p1 or not p2:
+                    continue
+                x1, y1 = p1
+                x2, y2 = p2
+                if x1 is None or y1 is None or x2 is None or y2 is None:
+                    continue
+                sx1 = int((x1 * zoom_level) - crop_x)
+                sy1 = int((y1 * zoom_level) - crop_y)
+                sx2 = int((x2 * zoom_level) - crop_x)
+                sy2 = int((y2 * zoom_level) - crop_y)
+                pygame.draw.line(overlay, line_color, (sx1, sy1), (sx2, sy2), 3)
+            for idx, p in enumerate(pts):
+                if idx in deleted_now:
+                    continue
+                if not p:
+                    continue
+                x, y = p
+                if x is None or y is None:
+                    continue
+                sx = int((x * zoom_level) - crop_x)
+                sy = int((y * zoom_level) - crop_y)
+                pygame.draw.circle(overlay, dot_color, (sx, sy), 4)
+            screen.blit(overlay, (0, 0))
+
         # Draw persistent markers first (draw in order from oldest to newest)
         # Draw persistent markers first (draw in order from oldest to newest)
         font = pygame.font.SysFont("verdana", 14)
@@ -5952,32 +6340,6 @@ def play_video_with_controls(
 
                     # Draw a small circle for the most recent position
                     pygame.draw.circle(screen, color, (last_screen_x, last_screen_y), 2)
-
-        # Draw Pose Connections if likely a full pose (33 points)
-        if coordinates is not None and not one_line_mode and len(coordinates[frame_count]) == 33:
-            for start_idx, end_idx in POSE_CONNECTIONS:
-                if (
-                    start_idx < 33
-                    and end_idx < 33
-                    and start_idx < len(coordinates[frame_count])
-                    and end_idx < len(coordinates[frame_count])
-                ):
-                    pts = coordinates[frame_count]
-                    pt1 = pts[start_idx]
-                    pt2 = pts[end_idx]
-
-                    if pt1 is not None and pt2 is not None:
-                        x1, y1 = pt1
-                        x2, y2 = pt2
-
-                        if x1 is not None and y1 is not None and x2 is not None and y2 is not None:
-                            sx1 = int((x1 * zoom_level) - crop_x)
-                            sy1 = int((y1 * zoom_level) - crop_y)
-                            sx2 = int((x2 * zoom_level) - crop_x)
-                            sy2 = int((y2 * zoom_level) - crop_y)
-
-                            # Draw simple blue line for skeleton
-                            pygame.draw.line(screen, (0, 0, 255), (sx1, sy1), (sx2, sy2), 2)
 
         # Draw current frame markers
 
@@ -6115,6 +6477,7 @@ def play_video_with_controls(
             hover_pixel_xy = None
 
         (
+            template_button_rect,
             marker_mode_button_rect,
             save_button_rect,
             help_button_rect,
@@ -6123,7 +6486,8 @@ def play_video_with_controls(
             auto_button_rect,  # Add auto button to return
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
-            pitch_guide_button_rect,  # Add PitchGuide button to return
+            guide_button_rect,  # Guide button (field/skeleton)
+            guide_toggle_rect,  # Guide on/off indicator
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             export_video_button_rect,  # Add export video button to return
@@ -6156,22 +6520,23 @@ def play_video_with_controls(
                 screen.blit(msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15))
 
         # ---------------------------------------------------------------
-        # Pitch Guide overlay (visual only): follows selected marker index.
+        # Guide panel + upper-right reference map (visual only).
         # ---------------------------------------------------------------
-        if pitch_guide_mode and pitch_guide_points:
+        if pitch_guide_mode and template_mode != "free":
             _guide_font_big = pygame.font.SysFont("verdana", 18, bold=True)
             _guide_font_sm = pygame.font.SysFont("verdana", 13)
-            _total_pts = len(pitch_guide_points)
-            _ov = selected_marker_idx if 0 <= selected_marker_idx < _total_pts else 0
-            _pt = pitch_guide_points[_ov]
+            _ov = selected_marker_idx if selected_marker_idx >= 0 else 0
 
             _reference_surface = None
             _rw = _rh = 0
             if pitch_guide_show_reference:
-                if pitch_guide_fifa_mode:
-                    _reference_surface = _pitch_guide_reference_surface_fifa(_ov)
+                if template_mode == "fifa" and pitch_guide_points:
+                    if pitch_guide_fifa_mode:
+                        _reference_surface = _pitch_guide_reference_surface_fifa(_ov)
+                    else:
+                        _reference_surface = _pitch_guide_reference_surface(_ov)
                 else:
-                    _reference_surface = _pitch_guide_reference_surface(_ov)
+                    _reference_surface = _pose_guide_reference_surface(template_mode, _ov)
                 if _reference_surface is not None:
                     _rw, _rh = _reference_surface.get_size()
 
@@ -6187,17 +6552,28 @@ def play_video_with_controls(
             _panel.set_alpha(142)
             _panel.fill((20, 55, 20))
 
-            _line1 = f"Field hint p{_pt['point_number']}/{_total_pts} (visual only)"
-            _field_xy = (
-                f"field=({_pt['x']:.2f}, {_pt['y']:.2f})"
-                if _pt["x"] is not None and _pt["y"] is not None
-                else "field=(n/a)"
-            )
-            _line2 = f"  p{_pt['point_number']}: {_pt['point_name']}"
-            _line3 = (
-                f"{_field_xy} | Same clicks as guide off | TAB / Ctrl+G | "
-                "V=toggle field map (translucent, upper-right)"
-            )
+            if template_mode == "fifa" and pitch_guide_points:
+                _total_pts = len(pitch_guide_points)
+                _ov = selected_marker_idx if 0 <= selected_marker_idx < _total_pts else 0
+                _pt = pitch_guide_points[_ov]
+                _line1 = f"Field hint p{_pt['point_number']}/{_total_pts} (visual only)"
+                _field_xy = (
+                    f"field=({_pt['x']:.2f}, {_pt['y']:.2f})"
+                    if _pt["x"] is not None and _pt["y"] is not None
+                    else "field=(n/a)"
+                )
+                _line2 = f"  p{_pt['point_number']}: {_pt['point_name']}"
+                _line3 = (
+                    f"{_field_xy} | Same clicks as guide off | TAB / Ctrl+G | "
+                    "V=toggle map (upper-right)"
+                )
+            else:
+                _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
+                _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
+                shown_idx = int(fifa_start_keypoint) + _ov + int(fifa_index_base)
+                _line1 = f"Pose guide {_tpl} (visual only)"
+                _line2 = f"  kp {shown_idx}/{max(1, _n)} (TAB / Ctrl+G)"
+                _line3 = "Same clicks as guide off | V=toggle map (upper-right)"
 
             _panel.blit(_guide_font_sm.render(_line1, True, (255, 230, 60)), (8, 5))
             _panel.blit(_guide_font_big.render(_line2, True, (255, 255, 255)), (8, 28))
@@ -6318,28 +6694,43 @@ def play_video_with_controls(
                     showing_save_message = True
                     save_message_timer = 60 if ok_go else 45
                 elif event.key == pygame.K_g:
-                    pitch_guide_mode = not pitch_guide_mode
-                    if pitch_guide_mode:
-                        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
-                            prefer_fifa_dataset=pitch_guide_fifa_mode
-                        )
-                        labeling_mode = False
-                        one_line_mode = False
-                        auto_marking_mode = False
-                        sequential_mode = False
-                        click_pass_mode = False
-                        save_message_text = _pitch_guide_status_message("PITCH GUIDE ON: ")
-                        if not pitch_guide_points:
+                    want = not pitch_guide_mode
+                    if want:
+                        if template_mode == "free":
                             pitch_guide_mode = False
+                            save_message_text = "Guide not available in Template: Free"
+                        elif template_mode == "fifa":
+                            pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
+                                prefer_fifa_dataset=pitch_guide_fifa_mode
+                            )
+                            labeling_mode = False
+                            one_line_mode = False
+                            auto_marking_mode = False
+                            sequential_mode = False
+                            click_pass_mode = False
+                            if pitch_guide_points:
+                                pitch_guide_mode = True
+                                save_message_text = _pitch_guide_status_message("GUIDE ON: ")
+                            else:
+                                pitch_guide_mode = False
+                                save_message_text = (
+                                    "Guide (FIFA field): no field CSV found in models/"
+                                )
+                        elif template_mode == "mediapipe":
+                            pitch_guide_mode = True
+                            save_message_text = "GUIDE ON: MediaPipe Pose skeleton"
+                        else:
+                            pitch_guide_mode = True
+                            save_message_text = "GUIDE ON: YOLO Pose (COCO-17) skeleton"
                     else:
-                        save_message_text = "Pitch Guide disabled"
+                        pitch_guide_mode = False
+                        save_message_text = "Guide disabled"
                     showing_save_message = True
                     save_message_timer = 120
-                elif pitch_guide_mode and event.key == pygame.K_v:
+                elif pitch_guide_mode and template_mode != "free" and event.key == pygame.K_v:
                     pitch_guide_show_reference = not pitch_guide_show_reference
                     save_message_text = (
-                        "Pitch Guide field image "
-                        f"{'enabled' if pitch_guide_show_reference else 'hidden'}"
+                        f"Guide map {'enabled' if pitch_guide_show_reference else 'hidden'}"
                     )
                     showing_save_message = True
                     save_message_timer = 60
@@ -6976,42 +7367,64 @@ def play_video_with_controls(
                     if load_button_rect.collidepoint(x, rel_y):
                         # Carregar novo arquivo
                         reload_coordinates()
-                    elif marker_mode_button_rect.collidepoint(x, rel_y):
+                    elif template_button_rect.collidepoint(x, rel_y):
                         if labeling_mode:
                             save_message_text = (
-                                "Exit Labeling mode first — use the Mode button for keypoints."
+                                "Exit Labeling mode first — Template/Mode buttons manage keypoints."
                             )
                             showing_save_message = True
                             save_message_timer = 90
                         elif event.button == 3:
-                            ok_cfg, cfg_msg = configure_fifa_from_toml()
-                            save_message_text = cfg_msg
-                            showing_save_message = True
-                            save_message_timer = 180 if ok_cfg else 90
+                            if template_mode == "fifa":
+                                ok_cfg, cfg_msg = configure_fifa_from_toml()
+                                save_message_text = cfg_msg
+                                showing_save_message = True
+                                save_message_timer = 180 if ok_cfg else 90
+                            else:
+                                save_message_text = (
+                                    "Right-click config only available for Template:FIFA (TOML)."
+                                )
+                                showing_save_message = True
+                                save_message_timer = 75
                         elif event.button == 1:
-                            if pitch_guide_fifa_mode and not one_line_mode and not sequential_mode:
-                                _quick_fifa_preset_disable()
-                                save_message_text = "Mode: Markers (FIFA slots off)"
-                            elif one_line_mode:
+                            _cycle_template_mode()
+                            _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
+                            if template_mode == "free":
+                                save_message_text = "Template: Free — variable-length markers"
+                            elif template_mode == "fifa":
+                                save_message_text = (
+                                    f"Template: {_tpl} — 32 kp, idx 0; Pitch Guide on. "
+                                    "TOML: right-click or K"
+                                )
+                            else:
+                                _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
+                                save_message_text = f"Template: {_tpl} — fixed slots N={_n}"
+                            showing_save_message = True
+                            save_message_timer = 45
+                    elif marker_mode_button_rect.collidepoint(x, rel_y):
+                        if labeling_mode:
+                            save_message_text = (
+                                "Exit Labeling mode first — Template/Mode buttons manage keypoints."
+                            )
+                            showing_save_message = True
+                            save_message_timer = 90
+                        elif event.button == 1:
+                            if one_line_mode:
                                 one_line_mode = False
                                 sequential_mode = False
-                                _quick_fifa_preset_enable()
-                                save_message_text = (
-                                    "Mode: FIFA — 32 kp, idx 0; Pitch Guide on if CSV exists. "
-                                    "TOML (paths/templates): right-click or K"
-                                )
+                                save_message_text = "Mode: Mark"
                             elif sequential_mode:
                                 sequential_mode = False
                                 one_line_mode = True
                                 selected_marker_idx = -1
-                                if pitch_guide_fifa_mode:
-                                    _quick_fifa_preset_disable()
-                                save_message_text = "Mode: 1-line"
+                                if template_mode != "free":
+                                    _apply_template_mode("free")
+                                save_message_text = "Mode: 1-line (Template free)"
                             else:
                                 sequential_mode = True
-                                save_message_text = "Mode: Sequential"
-                                if pitch_guide_fifa_mode:
-                                    save_message_text += " · FIFA slots"
+                                save_message_text = "Mode: Seq"
+                                if template_mode != "free":
+                                    save_message_text += f" · Template:{template_mode}"
                             showing_save_message = True
                             save_message_timer = 45
                     elif help_button_rect.collidepoint(x, rel_y):
@@ -7038,13 +7451,13 @@ def play_video_with_controls(
                                 deleted_positions,
                                 is_sequential=sequential_mode,
                                 fixed_keypoints_count=(
-                                    fifa_fixed_keypoints if pitch_guide_fifa_mode else None
+                                    fifa_fixed_keypoints if template_mode != "free" else None
                                 ),
                                 keypoint_start_idx=(
-                                    fifa_start_keypoint if pitch_guide_fifa_mode else 0
+                                    fifa_start_keypoint if template_mode != "free" else 0
                                 ),
                                 keypoint_index_base=(
-                                    fifa_index_base if pitch_guide_fifa_mode else 1
+                                    fifa_index_base if template_mode != "free" else 1
                                 ),
                                 coord_format=coord_format,
                                 coord_decimals=coord_decimals,
@@ -7092,27 +7505,54 @@ def play_video_with_controls(
                             save_message_text = "Labeling mode disabled"
                         showing_save_message = True
                         save_message_timer = 90
-                    elif pitch_guide_button_rect.collidepoint(x, rel_y):
-                        # Toggle Pitch Guide mode
-                        pitch_guide_mode = not pitch_guide_mode
-                        if pitch_guide_mode:
-                            pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
-                                prefer_fifa_dataset=pitch_guide_fifa_mode
+                    elif guide_toggle_rect.collidepoint(x, rel_y) or guide_button_rect.collidepoint(
+                        x, rel_y
+                    ):
+                        if event.button == 3 and template_mode != "free":
+                            pitch_guide_show_reference = not pitch_guide_show_reference
+                            save_message_text = (
+                                f"Guide map {'enabled' if pitch_guide_show_reference else 'hidden'}"
                             )
-                            labeling_mode = False
-                            one_line_mode = False
-                            auto_marking_mode = False
-                            sequential_mode = False
-                            click_pass_mode = False
-                            if pitch_guide_points:
-                                save_message_text = _pitch_guide_status_message("PITCH GUIDE ON: ")
+                            showing_save_message = True
+                            save_message_timer = 60
+                        elif event.button == 1:
+                            want = not pitch_guide_mode
+                            if want:
+                                if template_mode == "free":
+                                    pitch_guide_mode = False
+                                    save_message_text = "Guide not available in Template: Free"
+                                elif template_mode == "fifa":
+                                    pitch_guide_points, pitch_guide_source = (
+                                        _load_pitch_guide_points(
+                                            prefer_fifa_dataset=pitch_guide_fifa_mode
+                                        )
+                                    )
+                                    labeling_mode = False
+                                    one_line_mode = False
+                                    auto_marking_mode = False
+                                    sequential_mode = False
+                                    click_pass_mode = False
+                                    if pitch_guide_points:
+                                        pitch_guide_mode = True
+                                        save_message_text = _pitch_guide_status_message(
+                                            "GUIDE ON: "
+                                        )
+                                    else:
+                                        save_message_text = (
+                                            "Guide (FIFA field): no field CSV found in models/"
+                                        )
+                                        pitch_guide_mode = False
+                                elif template_mode == "mediapipe":
+                                    pitch_guide_mode = True
+                                    save_message_text = "GUIDE ON: MediaPipe Pose skeleton"
+                                else:
+                                    pitch_guide_mode = True
+                                    save_message_text = "GUIDE ON: YOLO Pose (COCO-17) skeleton"
                             else:
-                                save_message_text = "Pitch Guide: no field CSV found in models/"
                                 pitch_guide_mode = False
-                        else:
-                            save_message_text = "Pitch Guide disabled"
-                        showing_save_message = True
-                        save_message_timer = 120
+                                save_message_text = "Guide disabled"
+                            showing_save_message = True
+                            save_message_timer = 120
                     elif tracking_csv_button_rect.collidepoint(x, rel_y):
                         # Load tracking CSV
                         load_tracking_csv()
@@ -8489,6 +8929,10 @@ def export_pose_dataset(
     bbox_pad_ratio=0.04,
     keypoint_names=None,
     flip_idx=None,
+    keypoint_start_idx: int = 0,
+    keypoint_index_base: int = 1,
+    coord_format: str = "int",
+    coord_decimals: int = 1,
     layout=None,
     image_format="jpg",
 ):
@@ -8633,7 +9077,7 @@ def export_pose_dataset(
         file_prefix = f"{base_name}_"
     else:
         dataset_dir = os.path.join(
-            video_dir, f"pose_dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            video_dir, f"vaila_dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
         file_prefix = ""
 
@@ -8664,6 +9108,24 @@ def export_pose_dataset(
         img_dir, lbl_dir = _split_paths(dataset_dir, split, layout_to_use)
         os.makedirs(img_dir, exist_ok=True)
         os.makedirs(lbl_dir, exist_ok=True)
+
+    # Also store a readable vailá markers CSV in dataset root (easy Load in vailá).
+    try:
+        csv_video_stub = os.path.join(dataset_dir, f"{base_name}.mp4")
+        save_coordinates(
+            csv_video_stub,
+            coordinates,
+            total_frames,
+            deleted_positions=deleted_positions,
+            is_sequential=False,
+            fixed_keypoints_count=(nkp if nkp else None),
+            keypoint_start_idx=int(keypoint_start_idx),
+            keypoint_index_base=int(keypoint_index_base),
+            coord_format=coord_format,
+            coord_decimals=coord_decimals,
+        )
+    except Exception:
+        pass
 
     # classes.txt is kept for vaila layout (FIFA layout encodes names inside data.yaml).
     if layout_to_use == "vaila" or os.path.exists(os.path.join(dataset_dir, "classes.txt")):

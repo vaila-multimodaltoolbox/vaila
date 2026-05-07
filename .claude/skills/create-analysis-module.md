@@ -151,6 +151,17 @@ Minimum required tests:
 3. If new dependency needed: `uv add <package>` then commit updated `uv.lock`
    and update **all** `pyproject_*.toml` files
 
+### Mandatory: version/date metadata
+
+Whenever you add or edit a module (or any `*.py` in repo), also update:
+
+- module header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs for the module: `vaila/help/<module>.md` + `.html`
+- help index: `vaila/help/index.md` + `.html` (“Generated on”)
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ---
 
 ## Checklist Before Committing

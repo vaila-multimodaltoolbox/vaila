@@ -10,6 +10,17 @@ license: Complete terms in LICENSE.txt
 
 Create MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. The quality of an MCP server is measured by how well it enables LLMs to accomplish real-world tasks.
 
+## vailá maintenance rule (version/date)
+
+When you edit **any** `*.py` in this repo, also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs if applicable: `vaila/help/index.md` + `.html`, and `vaila/help/<module>.md` + `.html`
+- installers / `vaila.py` if change impacts install/run UX
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ---
 
 # Process

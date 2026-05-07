@@ -7,6 +7,17 @@ description: Create new skills, modify and improve existing skills, and measure 
 
 Create new skills and iteratively improve them through test-driven development.
 
+## vailá maintenance rule (version/date)
+
+If improving a skill requires editing any `*.py` in this repo, also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs if applicable: `vaila/help/index.md` + `.html`, and `vaila/help/<module>.md` + `.html`
+- installers / `vaila.py` if change impacts install/run UX
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ## Core Loop
 
 1. **Draft** — Write the skill
