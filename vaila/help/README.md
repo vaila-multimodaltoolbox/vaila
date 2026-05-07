@@ -128,6 +128,16 @@ When adding help for a new script:
 4. Include all relevant technical details
 5. Update this README with the new script
 
+## Mandatory: keep help synced with code (version/date)
+
+Whenever any `*.py` script is updated, also update the matching help files:
+
+- main index: `vaila/help/index.md` + `vaila/help/index.html` (“Generated on”)
+- module help: `vaila/help/<module>.md` + `vaila/help/<module>.html` (Version + Updated)
+- root `README.md`: `Last updated: YYYY-MM-DD`
+
+Global version source: `vaila.py` header/banner. Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ## Related Documentation
 
 - Button documentation: `docs/vaila_buttons/` - Contains documentation for GUI buttons
@@ -135,4 +145,4 @@ When adding help for a new script:
 
 ---
 
-**Last Updated:** January 2026
+**Last Updated:** May 2026

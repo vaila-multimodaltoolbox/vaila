@@ -11,6 +11,16 @@ license: Proprietary. LICENSE.txt has complete terms
 ### Professional Font
 - Use a consistent, professional font (e.g., Arial, Times New Roman) for all deliverables unless otherwise instructed by the user
 
+## vailá maintenance rule (version/date)
+
+If spreadsheet work requires editing any `*.py` in this repo, also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs if applicable: `vaila/help/index.md` + `.html`, and `vaila/help/<module>.md` + `.html`
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ### Zero Formula Errors
 - Every Excel model MUST be delivered with ZERO formula errors (#REF!, #DIV/0!, #VALUE!, #N/A, #NAME?)
 

@@ -7,6 +7,16 @@ description: Cria novas skills do zero. Use quando o usuário quer criar uma ski
 
 Workflow simplificado para criar novas skills do zero. Se o usuário quiser evals completos e benchmarks, use a skill `skill-creator` em vez desta.
 
+## Regra manutenção vailá (version/date)
+
+Se criação/modificação de skill exigir editar algum `*.py` no repo, também atualizar:
+
+- header do script: **Update Date** (hoje) + **Version** (global, do `vaila.py` header/banner)
+- `README.md` (raiz): linha `Last updated: YYYY-MM-DD`
+- helps se aplicável: `vaila/help/index.md` + `.html` e `vaila/help/<module>.md` + `.html`
+
+Checklist referência: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ## Passo 1: Capturar Intent
 
 Se o usuário já mencionou o que quer na conversa atual, extraia da conversa. Se não, pergunte:

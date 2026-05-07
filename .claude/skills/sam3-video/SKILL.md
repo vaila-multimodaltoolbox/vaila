@@ -2,6 +2,17 @@
 
 Use when the user works on **SAM 3 video segmentation**, text-prompt masks, `vaila_sam.py` (non-FIFA mode), or troubleshoots SAM 3 checkpoint/VRAM/BFloat16 issues.
 
+## vailá maintenance rule (version/date)
+
+When you edit `vaila/vaila_sam.py` (or any `*.py` in repo), also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs: `vaila/help/vaila_sam.md` + `.html`, plus `vaila/help/index.md` + `.html` (“Generated on”)
+- installers / `vaila.py` if change impacts install/run UX
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ---
 
 ## Overview

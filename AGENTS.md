@@ -74,6 +74,25 @@ The project uses `pytest` for automated testing.
 
 **Milestone (02 March 2026):** Refactored `vaila_and_jump.py` (v0.1.3), `vaila/tugturn.py`, and the DLT/Reconstruction suite (`dlt2d.py`, `dlt3d.py`, `rec2d_one_dlt2d.py`, `rec3d.py`, `rec3d_one_dlt3d.py`). Fixed all Ruff/Ty lint and type errors, added CLI/headless support, and established a comprehensive automated test suite across `tests/`.
 
+## Mandatory: Update metadata on any script change
+
+When you change **any** Python script (`*.py`) anywhere in this repo, also update user-facing metadata so version/date stay consistent.
+
+### Checklist
+
+- **Script header**: in the edited `*.py`, update top module docstring/header fields:
+  - **Update Date**: today
+  - **Version**: **global vailá version** (same as `vaila.py` header/banner)
+- **Main entry point**: if change impacts GUI/CLI banner, also update `vaila.py`:
+  - header **Update Date** + **Version**
+  - any printed/banner strings that embed version/date
+- **Installers**: review/update if install/run UX impacted:
+  - `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`, `install-hooks.sh`
+- **README**: update root `README.md` line `Last updated: YYYY-MM-DD` to today
+- **Help docs**: keep help in sync with edited script:
+  - main index `vaila/help/index.md` + `vaila/help/index.html` (“Generated on”)
+  - edited module help `vaila/help/<module>.md` + `vaila/help/<module>.html` (Version + Updated)
+
 ## External unified pitch dataset (YOLO retrain, outside the repo)
 
 The merged **32 pitch keypoint** tree from `vaila.fifa_dataset_builder` is designed to live on disk **outside** the git clone (large image banks). Ultralytics training points at `<dataset_root>/unified/data.yaml` with an **absolute** `data=` path. After QA on a flat `check_all_labels/` export, use `vaila.fifa_check_labels_dedupe` and `vaila.fifa_dataset_train_readiness` (`--prune-unified-to-flat`) so `unified/` matches human-validated samples. Narrative: **`docs/fifa_workflow.md` §4.5**; GUI companion help: **`vaila/help/soccerfield_keypoints_ai.md`** (Training → Option B).
