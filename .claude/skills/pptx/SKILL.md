@@ -14,6 +14,16 @@ license: Proprietary. LICENSE.txt has complete terms
 | Edit or create from template | Read [editing.md](editing.md) |
 | Create from scratch | Read [pptxgenjs.md](pptxgenjs.md) |
 
+## vailá maintenance rule (version/date)
+
+If presentation work requires editing any `*.py` in this repo, also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs if applicable: `vaila/help/index.md` + `.html`, and `vaila/help/<module>.md` + `.html`
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ---
 
 ## Reading Content

@@ -4,13 +4,17 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.6.0  
-**Date:** April 2026  
+**Version:** 0.3.43  
+**Date:** 07 May 2026  
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
 **Project:** vailá - Multimodal Toolbox
 
 ## Key Features
 
+- **Template Marker Mode:** Choose fixed keypoint templates in the toolbar:
+  - **FIFA Soccer-Field:** 32 pitch keypoints (`idx 0 = top_left_corner`) + TOML config (right-click or `K`)
+  - **MediaPipe Pose:** 33 pose landmarks
+  - **YOLO Pose:** COCO-17 keypoints
 - **Multi-format Support:** Load and visualize MediaPipe, YOLO tracking, and vailá standard formats
 - **Advanced Visualization:** Stick figures for MediaPipe, bounding boxes for YOLO tracking
 - **Flexible Marking:** Multiple marker modes for different annotation needs
@@ -19,7 +23,11 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 - **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8; may write `keypoints.json` when keypoint names are known
 - **Save ML (button / Ctrl+E):** Export a PNG pose dataset with user-selected `train/val/test` split and create `all_labels/` with split-prefixed label copies for didactic review
 - **FIFA Labeling Mode:** Configure via **TOML** (FIFA button or `K` key — no separate Tk config dialog). Default **31** FIFA pitch keypoints (`idx 0 = top_left_corner`); fixed `N`, optional `start` skip, header base `0/1`; sparse CSV with **integer** pixels and empty cells for unmarked KPs. Optional `--fifa-dataset DIR` to append into an existing unified / pose tree.
-- **Pitch Guide (`G`):** **Visual only** — field overlay + optional reference image (`V`). Marking behaviour is the same as with the guide off (TAB, **Ctrl+G** / Go KP, left/right click).
+- **Guide (`G`):** **Visual only** overlay for active template:
+  - **FIFA:** soccer-field guide + optional reference map (`V`)
+  - **MediaPipe:** pose skeleton guide (33)
+  - **YOLO:** pose skeleton guide (COCO-17)
+  Marking behaviour is the same as with the guide off (TAB, **Ctrl+G** / Go KP, left/right click).
 - **Zoom & Navigation:** Full zoom capabilities with frame-by-frame navigation
 - **Persistence Mode:** View marker trails across multiple frames
 - **Auto-detection:** Automatically detect CSV format or manual selection
@@ -67,7 +75,7 @@ uv run vaila/getpixelvideo.py -f /path/to/png_folder      # or single .png
 uv run vaila/getpixelvideo.py -d /path/to/png_folder      # same as --sequence; subfolder with PNGs is auto-picked
 uv run vaila/getpixelvideo.py --sequence /path/to/frames
 uv run vaila/getpixelvideo.py -f VIDEO.mp4 --fifa-dataset /path/to/unified
-uv run vaila/getpixelvideo.py -f VIDEO.mp4 --dataset /path/to/pose_dataset
+uv run vaila/getpixelvideo.py -f VIDEO.mp4 --dataset /path/to/vaila_dataset
 ```
 
 Flags include `--fifa`, `--fifa-dataset [DIR]`, `--dataset DIR` (see module docstring in `vaila/getpixelvideo.py` for the full list).
@@ -181,9 +189,9 @@ frame,p1_x,p1_y,p2_x,p2_y
 Use this when you want a **keypoint / pose** training set (e.g. football pitch with 32 points), not only bounding-box detection.
 
 - **When:** Any time you have markers on at least one frame (normal marker workflow; Labeling mode does **not** need to be on).
-- **F9:** Writes `pose_dataset_YYYYMMDD_HHMMSS/` next to the video with `train|val|test/{images,labels}/`, `classes.txt`, and `data.yaml` including `kpt_shape: [Nkp, 3]` and `flip_idx`.
+- **F9:** Writes `vaila_dataset_YYYYMMDD_HHMMSS/` next to the video with `train|val|test/{images,labels}/`, `classes.txt`, `data.yaml` including `kpt_shape: [Nkp, 3]` and `flip_idx`, and also `<video_stem>_markers.csv` (readable vailá format) for easy loading.
 - **Multi-video / append:** Press **F7** (Dataset) and select an existing dataset’s `data.yaml`, then **F8** to open the next video from another folder; annotate and press **F9** again — new frames are prefixed with `<video_stem>_` so nothing collides. If the existing `data.yaml` already defines `kpt_shape` (e.g. 32), that **Nkp** is preserved.
-- **CLI:** `uv run vaila/getpixelvideo.py -f VIDEO.mp4 --dataset /path/to/existing_pose_dataset` sets the append target before launch (same as F7).
+- **CLI:** `uv run vaila/getpixelvideo.py -f VIDEO.mp4 --dataset /path/to/existing_vaila_dataset` sets the append target before launch (same as F7).
 - **Class name:** The pose instance uses the same class string as bbox labeling (`current_label`; rename with **N** while in Labeling mode), default `object`.
 - **BBox per frame:** If the frame has at least one bbox drawn in Labeling mode, the **first** box is used; otherwise a tight box around visible keypoints (with padding) is computed.
 - **Project JSON:** `<video_stem>_pose_project.json` in the dataset folder stores raw marker coordinates for later editing.
@@ -196,7 +204,7 @@ Use this when you want **FIFA pitch keypoints** in the sparse CSV workflow and *
 
 - **Configuration in TOML** next to the video (template fields `n_keypoints`, `start_keypoint`, `base_index`). Press **`K`** or click **`FIFA`** to load or create that file — there is no separate Tk “FIFA config” dialog.
 - **Default in vailá:** **31** FIFA field keypoints (`idx 0 = top_left_corner` …). If you append to an older tree whose `data.yaml` still has `kpt_shape: [32, 3]`, that **N** is preserved on export; new standalone FIFA exports use the TOML / default **31** unless you change `n_keypoints`.
-- **Pitch Guide (`G`)** does **not** drive clicking: it is **overlay + optional reference image (`V`)** only. Marking is the same as with the guide off (**TAB**, **Ctrl+G** / Go KP, left click to place on the selected slot).
+- **Guide (`G`)** does **not** drive clicking: it is **overlay** only (FIFA field or pose skeleton). `V` toggles the upper-right guide map. Marking is the same as with the guide off (**TAB**, **Ctrl+G** / Go KP, left click to place on the selected slot).
 - **F9** writes into the dataset layout (when the loaded `data.yaml` matches a FIFA-style tree), for example:
 
   ```
@@ -220,11 +228,11 @@ Use this when you want **FIFA pitch keypoints** in the sparse CSV workflow and *
        --fifa-dataset /path/to/your_dataset/unified
    ```
 
-   Use **`--fifa`** to enable FIFA mode without a pre-existing dataset (first **F9** creates a fresh `pose_dataset_YYYYMMDD_HHMMSS/` in the FIFA layout beside the video).
+   Use **`--fifa`** to enable FIFA mode without a pre-existing dataset (first **F9** creates a fresh `vaila_dataset_YYYYMMDD_HHMMSS/` in the FIFA layout beside the video).
 
 2. **GUI:** click **`FIFA`** (or **`K`**) and edit/save the TOML when prompted. Optionally use **`F7` (Dataset)** to point at an existing `unified/` folder so the next **F9** appends there.
 
-3. **`G`** toggles **Pitch Guide** (visual reference only). It does **not** replace FIFA mode or TOML setup.
+3. **`G`** toggles **Guide** (visual reference only). It does **not** replace FIFA mode or TOML setup.
 
 **Workflow (single new video):**
 
@@ -303,7 +311,7 @@ uv run yolo pose train \
 | **O** or **S**  | Toggle Sequential mode (Normal mode only)        |
 | **P**           | Toggle Persistence mode                           |
 | **L**           | Toggle Labeling mode (Bounding Boxes)             |
-| **G**           | Toggle Pitch Guide (**visual** overlay + reference; `V` toggles image) |
+| **G**           | Toggle Guide (**visual** overlay for template; `V` toggles map) |
 | **FIFA** / **K** | Load or create **FIFA TOML** beside the video (`n_keypoints`, `start`, `base`) |
 | **Z**           | Remove last bounding box (Labeling mode)          |
 | **N**           | Rename object label (Labeling Mode Only)          |
@@ -423,7 +431,7 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 #### Pose dataset save (YOLO-pose) — **F9**
 
 - **Format:** Ultralytics YOLO-pose labels (`.txt` per image: `cls cx cy w h` + `kp_x kp_y v` × Nkp)
-- **Directory:** New: `pose_dataset_YYYYMMDD_HHMMSS/` beside the video; append: set target with **F7** or `--dataset` before **F9**
+- **Directory:** New: `vaila_dataset_YYYYMMDD_HHMMSS/` beside the video; append: set target with **F7** or `--dataset` before **F9**
 - **Structure:** Same split layout as detection export (`train/val/test`, `images/`, `labels/`), plus `data.yaml` with `kpt_shape` and `names`
 - **Use:** Retraining pose networks (e.g. soccer field keypoints)
 - **Activation:** Press **F9** when at least one frame has markers
@@ -531,7 +539,7 @@ Built-in backup system for data safety:
 - **FIFA labeling:** TOML-driven `n_keypoints` / `start_keypoint` / `base_index` (**K** or **FIFA** button); default **31** FIFA field KPs in vailá; sparse integer CSV; `--fifa-dataset` / `--fifa` CLI
 - **`FIFA`** button in the control cluster; **F7** accepts vailá and FIFA dataset layouts
 - Reference geometry: `vaila/models/soccerfield_ref3d_fifa_dataset.csv` (and related dataset metadata)
-- **Pitch Guide (`G`):** visual overlay + **`V`** reference image only (no guided A/B walk)
+- **Guide (`G`):** visual overlay (FIFA field or pose skeleton); **`V`** toggles the reference map
 - **Sequential mode:** fills the **selected** empty slot first (including index **0**), then advances
 - **Ctrl+G** (Go KP), **Ctrl+E** / Save ML, `.vaila_markers_history/` backups (100 newest per video)
 

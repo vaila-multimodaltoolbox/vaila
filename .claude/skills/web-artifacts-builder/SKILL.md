@@ -15,6 +15,16 @@ To build powerful frontend claude.ai artifacts, follow these steps:
 
 **Stack**: React 18 + TypeScript + Vite + Parcel (bundling) + Tailwind CSS + shadcn/ui
 
+## vailá maintenance rule (version/date)
+
+If this task edits **any** `*.py` under this repo (e.g. scripts that generate artifacts), also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs if applicable: `vaila/help/index.md` + `.html`, and `vaila/help/<module>.md` + `.html`
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ## Design & Style Guidelines
 
 VERY IMPORTANT: To avoid what is often referred to as "AI slop", avoid using excessive centered layouts, purple gradients, uniform rounded corners, and Inter font.

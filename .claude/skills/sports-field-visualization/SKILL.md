@@ -2,6 +2,17 @@
 
 This skill documents the patterns and fixes for maintaining cross-platform compatibility between Tkinter GUIs and standalone CLI tools using Matplotlib, specifically focusing on the `drawsportsfields.py` and `markerless_3d_analysis.py` modules.
 
+## vailá maintenance rule (version/date)
+
+When you edit `drawsportsfields.py`, `markerless_3d_analysis.py`, or any `*.py` in this repo, also update:
+
+- edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
+- root `README.md` line `Last updated: YYYY-MM-DD`
+- help docs: matching `vaila/help/<module>.md` + `.html`, plus `vaila/help/index.md` + `.html` (“Generated on”)
+- installers / `vaila.py` if change impacts install/run UX
+
+Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+
 ## Context
 
 The `vailá` project uses a dual-mode execution pattern for many modules:
