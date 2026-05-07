@@ -5,7 +5,7 @@
 - **Category:** Ml
 - **File:** `vaila/yolov26track.py`
 - **Lines:** 3980+
-- **Version:** 0.0.1
+- **Version:** 0.3.43
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -26,6 +26,8 @@ This script performs object detection and tracking on video files using the **YO
 - **Multiple ID selection for pose estimation**
 - **Configurable pose detection parameters** (conf, iou)
 - **Automatic GPU detection** - Uses CUDA if available
+- **Run modes**: `track`, `track+pose`, `track+seg`, `run_all (track+seg+pose)`
+- **Segmentation exports** (when model provides masks): `yolo_masks_manifest.csv`, `yolo_contours.json`, `yolo_masks/` PNGs
 
 ### YOLO26 Models Available
 - Detection: `yolo26n.pt`, `yolo26s.pt`, `yolo26m.pt`, `yolo26l.pt`, `yolo26x.pt`
@@ -88,13 +90,19 @@ Requirements:
 2. **Select Directories**: Choose input directory (containing videos) and output directory
 3. **Select Model**: Choose YOLO26 model (detection, pose, segmentation, OBB) - pre-trained or custom
 4. **Select Tracker**: Choose tracking method (ByteTrack or BoTSORT)
-5. **Configure Parameters**: Set device (CPU/CUDA), confidence threshold, IoU threshold, video stride, and optionally ROI
+5. **Configure Parameters**: Set device (CPU/CUDA), confidence threshold, IoU threshold, video stride, **Run Mode**, and optionally ROI
 6. **Select Classes**: Choose which object classes to track (default: person and sports ball)
 7. **Process Videos**: Script processes all videos in the input directory and generates:
    - Individual CSV files per tracked ID: `{label}_id_{tracker_id:02d}.csv`
    - Combined CSV: `all_id_detection.csv`
    - Merged CSV(s): `all_id_merge_{label}.csv` or `all_id_merge.csv`
    - Processed videos: `processed_{video_name}.mp4`
+   - If **Run Mode** includes **seg** and model outputs masks:
+     - `yolo_masks_manifest.csv` (frame,id,area,mask path)
+     - `yolo_contours.json` (polygons per frame/object)
+     - `yolo_masks/` (PNG masks per frame/object)
+   - If **Run Mode** includes **pose**:
+     - `*_pose.csv` and `*_pose.mp4` (skeleton overlay)
 
 ## 🎯 Usage: Pose Estimation Workflow
 
@@ -118,6 +126,7 @@ Requirements:
 
 Models are downloaded to: `vaila/models/`
 - Tracker configs: `vaila/models/trackers/`
+- Ultralytics runs/cache redirected under: `vaila/models/ultralytics/`
 - Pose outputs: `{tracking_dir}/{video_name}_pose_{timestamp}/`
 
 ## 🔬 GPU Auto-Detection
