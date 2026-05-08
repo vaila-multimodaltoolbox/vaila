@@ -58,13 +58,17 @@ import colorsys
 import contextlib
 import csv
 import datetime
+import faulthandler
 import glob
 import json
+import logging
 import os
 import platform
 import subprocess
 import sys
 import tkinter as tk
+import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Any, cast
@@ -79,6 +83,68 @@ from rich import print
 # Must set Ultralytics home before importing YOLO (avoids weights in repo root / CWD).
 VAILA_MODELS_DIR = Path(__file__).resolve().parent / "models"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@dataclass(frozen=True)
+class _RunLog:
+    path: Path
+
+
+class _Tee:
+    def __init__(self, *streams: Any) -> None:
+        self._streams = streams
+
+    def write(self, data: str) -> int:
+        n = 0
+        for s in self._streams:
+            try:
+                n = s.write(data)
+            except Exception:
+                continue
+        return n
+
+    def flush(self) -> None:
+        for s in self._streams:
+            with contextlib.suppress(Exception):
+                s.flush()
+
+
+def _setup_run_logging(tag: str) -> _RunLog:
+    """Always-on per-run log file under `vaila/models/logs/`."""
+    logs_dir = VAILA_MODELS_DIR / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = logs_dir / f"{tag}_{ts}.log"
+
+    # Configure python logging (keep idempotent in case multiple entrypoints called).
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    fh = logging.FileHandler(log_path, encoding="utf-8")
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root.addHandler(fh)
+
+    # Tee stdout/stderr into file too (GUI callbacks sometimes swallow tracebacks).
+    f = open(log_path, "a", encoding="utf-8")  # noqa: SIM115
+    sys.stdout = _Tee(sys.__stdout__, f)  # type: ignore[assignment]
+    sys.stderr = _Tee(sys.__stderr__, f)  # type: ignore[assignment]
+
+    # Dump fatal signals (segfault / abort) into same log.
+    with contextlib.suppress(Exception):
+        faulthandler.enable(file=f, all_threads=True)
+
+    # Announce log path both to console and to file (keep plain text).
+    msg = f"[log] Writing: {log_path}\n"
+    with contextlib.suppress(Exception):
+        out = sys.__stdout__
+        if out is not None:
+            out.write(msg)
+    with contextlib.suppress(Exception):
+        f.write(msg)
+        f.flush()
+    return _RunLog(path=log_path)
 
 
 def _move_root_ultralytics_weights_to_models() -> None:
@@ -127,7 +193,11 @@ _configure_ultralytics_dirs(VAILA_MODELS_DIR)
 
 from ultralytics import YOLO
 
-from .hardware_manager import HardwareManager
+# Mandatory dual-import pattern (package + standalone execution).
+try:
+    from .hardware_manager import HardwareManager
+except ImportError:  # pragma: no cover
+    from hardware_manager import HardwareManager  # ty: ignore[unresolved-import]
 
 try:
     from PIL import Image, ImageTk
@@ -2286,14 +2356,40 @@ def _draw_keypoints_and_skeleton(frame, keypoints_abs, color=(0, 255, 0)):
     return frame
 
 
-def run_yolov26pose_video() -> None:
-    """Pose inference direct from video (no tracking required)."""
+def _console_hint(msg: str) -> None:
+    """Print to real stdout (bypass Rich) and flush so CLI users see progress during GUI waits."""
+    out = sys.__stdout__
+    if out is not None:
+        out.write(f"{msg}\n")
+        out.flush()
+
+
+def run_yolov26pose_video(parent: tk.Misc | None = None) -> None:
+    """Pose inference direct from video (no tracking required).
+
+    Pass ``parent`` when called from an existing Tk app (e.g. main ``vaila.py``).
+    A second ``tk.Tk()`` would deadlock or hide file dialogs on Linux.
+    """
+    _setup_run_logging("yolov26pose_video")
     _configure_ultralytics_dirs(VAILA_MODELS_DIR)
 
-    root = tk.Tk()
-    root.withdraw()
+    created_root = False
+    root: tk.Misc
+    if parent is not None and parent.winfo_exists():
+        root = parent
+    else:
+        existing = getattr(tk, "_default_root", None)
+        if existing is not None and existing.winfo_exists():
+            root = cast(Any, existing)
+        else:
+            root = tk.Tk()
+            root.withdraw()
+            created_root = True
+
+    _console_hint("[pose] Open file dialog: select input video (check taskbar if nothing appears).")
 
     video_path = filedialog.askopenfilename(
+        parent=root,
         title="Select Video for YOLOv26 Pose",
         filetypes=[
             ("Video files", "*.mp4 *.avi *.mov *.mkv *.MP4 *.AVI *.MOV *.MKV"),
@@ -2302,20 +2398,23 @@ def run_yolov26pose_video() -> None:
     )
     if not video_path:
         messagebox.showinfo("YOLOv26 Pose", "No video selected.")
-        root.destroy()
+        if created_root and isinstance(root, tk.Tk):
+            root.destroy()
         return
 
-    output_base_dir = filedialog.askdirectory(title="Select Output Directory")
+    _console_hint("[pose] Open folder dialog: select output directory.")
+    output_base_dir = filedialog.askdirectory(parent=root, title="Select Output Directory")
     if not output_base_dir:
         messagebox.showinfo("YOLOv26 Pose", "Pose run cancelled (no output directory).")
-        root.destroy()
+        if created_root and isinstance(root, tk.Tk):
+            root.destroy()
         return
 
     # Quick config dialog
     cfg = tk.Toplevel(root)
     cfg.title("YOLOv26 Pose Inference")
     cfg.geometry("420x260")
-    cfg.transient(root)
+    cfg.transient(cast(tk.Wm, root))
     with contextlib.suppress(Exception):
         cfg.grab_set()
 
@@ -2375,7 +2474,8 @@ def run_yolov26pose_video() -> None:
     cfg.wait_window()
     if cancelled[0] or not result:
         messagebox.showinfo("YOLOv26 Pose", "Pose run cancelled (close window or incomplete Run).")
-        root.destroy()
+        if created_root and isinstance(root, tk.Tk):
+            root.destroy()
         return
 
     video_stem = Path(video_path).stem
@@ -2395,15 +2495,31 @@ def run_yolov26pose_video() -> None:
             os.chdir(cur)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to download pose model: {e}")
+            if created_root and isinstance(root, tk.Tk):
+                root.destroy()
             return
 
     hw = HardwareManager(models_dir=models_dir)
     pose_model_path = hw.auto_export(pose_model_name, imgsz=640)
-    pose_model = YOLO(pose_model_path)
+    if str(pose_model_path).endswith(".engine"):
+        p = Path(pose_model_path)
+        with contextlib.suppress(OSError):
+            if p.exists() and p.stat().st_size == 0:
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                with contextlib.suppress(Exception):
+                    p.replace(p.with_suffix(f".broken_{ts}.engine"))
+                pose_model_path = str(Path(models_dir) / f"{Path(pose_model_name).stem}.pt")
+                _console_hint(f"[pose] Zero-byte engine skipped; using PT: {pose_model_path}")
+    try:
+        pose_model = YOLO(pose_model_path, task="pose")
+    except TypeError:
+        pose_model = YOLO(pose_model_path)
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         messagebox.showerror("Error", f"Could not open video:\n{video_path}")
+        if created_root and isinstance(root, tk.Tk):
+            root.destroy()
         return
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -2441,6 +2557,7 @@ def run_yolov26pose_video() -> None:
 
     rows: list[list[Any]] = []
     frame_idx = 0
+    _console_hint(f"[pose] Processing {total_frames} frames → {out_dir}")
     while frame_idx < total_frames:
         ret, frame = cap.read()
         if not ret:
@@ -2498,6 +2615,8 @@ def run_yolov26pose_video() -> None:
 
     pd.DataFrame(rows, columns=cast(Any, headers)).to_csv(pose_csv, index=False)
     messagebox.showinfo("YOLOv26 Pose", f"Done.\n\nCSV:\n{pose_csv}\n\nVideo:\n{pose_video}")
+    if created_root and isinstance(root, tk.Tk):
+        root.destroy()
 
 
 def _mask_to_polygons(mask_u8: np.ndarray) -> list[list[list[int]]]:
@@ -2762,6 +2881,7 @@ def select_id_and_run_pose():
     """
     GUI to select tracking directory, view video with bboxes/IDs, and select ID for pose estimation.
     """
+    _setup_run_logging("yolov26pose_from_tracking")
     _configure_ultralytics_dirs(VAILA_MODELS_DIR)
     # Prefer existing Tk root to avoid multiple roots (pyimage errors); create only if needed
     created_root = False
@@ -3878,6 +3998,7 @@ def process_pose_in_bboxes(tracking_dir, device=None, pose_model_name="yolo26n-p
 
 
 def run_yolov26track():
+    _setup_run_logging("yolov26track")
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
     print("Starting yolov26track.py...")
@@ -3982,14 +4103,68 @@ def run_yolov26track():
     hw = HardwareManager(models_dir=models_dir)
     hw.print_report()
 
+    def _guess_task(name: str) -> str:
+        low = name.lower()
+        if "-seg" in low or "segment" in low:
+            return "segment"
+        if "-pose" in low or "pose" in low:
+            return "pose"
+        return "detect"
+
     try:
         # Auto-export if needed (creates .engine optimized for this GPU)
         model_path = hw.auto_export(model_name, imgsz=640)
+        # Guard: some failed exports leave a 0-byte engine, which will crash inside `track()`.
+        if str(model_path).endswith(".engine"):
+            p = Path(model_path)
+            with contextlib.suppress(OSError):
+                if p.exists() and p.stat().st_size == 0:
+                    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    broken_dst = p.with_suffix(f".broken_{ts}.engine")
+                    with contextlib.suppress(Exception):
+                        p.replace(broken_dst)
+                        print(f"[warning] Zero-byte TensorRT engine moved to: {broken_dst}")
+                    model_path = str(Path(models_dir) / f"{Path(model_name).stem}.pt")
+                    print(f"[warning] Falling back to PT weights: {model_path}")
+        task = _guess_task(model_name)
+        # Ultralytics sometimes cannot infer task for TensorRT engines; pass explicit task.
+        model = YOLO(model_path, task=task)
+        print(f"Model loaded successfully: {model_path} (task={task})")
+    except TypeError:
+        # Back-compat if installed Ultralytics does not accept `task=` kwarg.
+        model_path = hw.auto_export(model_name, imgsz=640)
         model = YOLO(model_path)
-        print(f"Model loaded successfully: {model_path}")
+        print(f"Model loaded successfully: {model_path} (task=auto)")
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to load model: {str(e)}")
-        return
+        # TensorRT engines can become stale/corrupt across Ultralytics/TensorRT updates.
+        # When that happens, AutoBackend(tensorrt) may fail decoding embedded JSON metadata.
+        mp = str(model_path) if "model_path" in locals() else ""
+        if mp.endswith(".engine") and isinstance(e, json.JSONDecodeError):
+            broken = Path(mp)
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            broken_dst = broken.with_suffix(f".broken_{ts}.engine")
+            with contextlib.suppress(Exception):
+                broken.replace(broken_dst)
+                print(f"[warning] Corrupt TensorRT engine moved to: {broken_dst}")
+
+            # Fall back to PT weights (no TensorRT) so tracking can run.
+            pt_path = Path(models_dir) / f"{Path(model_name).stem}.pt"
+            try:
+                task = _guess_task(model_name)
+                model = YOLO(str(pt_path), task=task)
+                print(f"[warning] Falling back to PT weights: {pt_path} (task={task})")
+            except Exception:
+                logging.exception("Failed to fall back to PT after engine JSONDecodeError")
+                messagebox.showerror(
+                    "Error",
+                    "Failed to load TensorRT engine (corrupt metadata) and PT fallback also failed.\n\n"
+                    f"Engine: {mp}\nPT: {pt_path}\n\nError: {e}",
+                )
+                return
+        else:
+            logging.exception("Failed to load YOLO model")
+            messagebox.showerror("Error", f"Failed to load model: {str(e)}")
+            return
 
     # Select classes for tracking
     class_dialog = ClassSelectorDialog(root, title="Select Classes for Tracking")
@@ -4188,19 +4363,48 @@ def run_yolov26track():
             label_to_raw2seq = {}
             label_to_next = {}
 
-            results = model.track(
-                source=video_path,
-                conf=config["conf"],
-                iou=config["iou"],
-                device=config["device"],
-                vid_stride=config["vid_stride"],
-                save=False,
-                stream=True,
-                persist=True,
-                tracker=tracker_config,
-                classes=target_classes,
-                verbose=False,
-            )
+            try:
+                results = model.track(
+                    source=video_path,
+                    conf=config["conf"],
+                    iou=config["iou"],
+                    device=config["device"],
+                    vid_stride=config["vid_stride"],
+                    save=False,
+                    stream=True,
+                    persist=True,
+                    tracker=tracker_config,
+                    classes=target_classes,
+                    verbose=False,
+                )
+            except json.JSONDecodeError as e:
+                # AutoBackend(TensorRT) can throw JSONDecodeError if engine metadata is empty/corrupt.
+                if str(model_path).endswith(".engine"):
+                    broken = Path(model_path)
+                    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    broken_dst = broken.with_suffix(f".broken_{ts}.engine")
+                    with contextlib.suppress(Exception):
+                        broken.replace(broken_dst)
+                        print(f"[warning] Corrupt TensorRT engine moved to: {broken_dst}")
+                    pt_path = Path(models_dir) / f"{Path(model_name).stem}.pt"
+                    task = _guess_task(model_name)
+                    model = YOLO(str(pt_path), task=task)
+                    print(f"[warning] Retrying tracking with PT weights: {pt_path} (task={task})")
+                    results = model.track(
+                        source=video_path,
+                        conf=config["conf"],
+                        iou=config["iou"],
+                        device=config["device"],
+                        vid_stride=config["vid_stride"],
+                        save=False,
+                        stream=True,
+                        persist=True,
+                        tracker=tracker_config,
+                        classes=target_classes,
+                        verbose=False,
+                    )
+                else:
+                    raise e
 
             frame_idx = 0
             seg_writer: cv2.VideoWriter | None = None
