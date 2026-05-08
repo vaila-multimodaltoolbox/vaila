@@ -151,12 +151,13 @@ class HardwareManager:
         }
         return configs.get(self.profile)
 
-    def auto_export(self, model_input):
+    def auto_export(self, model_input, imgsz=640):
         """
         Checks for and automatically exports models to .engine format optimized for the current GPU.
 
         Args:
             model_input (str): Name of the model (e.g., 'yolo11n-pose.pt' or just 'yolo11n-pose')
+            imgsz (int): Image size for export (default: 640).
 
         Returns:
             str: Path to the optimal model to load (.engine if available/created, else .pt).

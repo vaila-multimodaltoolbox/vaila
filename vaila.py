@@ -1916,10 +1916,13 @@ class Vaila(tk.Tk):
         """Runs the specified YOLO tracking analysis."""
         print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
         print(f"Running tracker analysis {os.path.basename(__file__)}")
-        # print number of this line of code
-        # Esta linha não vai funcionar como esperado para mostrar a linha exata do código
-        # Mas pode ser removida ou apenas exibir o nome do arquivo.
-        print("Line number: 1616")  # Melhor assim, ou remova
+        # Show approximate source line for debugging.
+        with contextlib.suppress(Exception):
+            import inspect
+
+            frame = inspect.currentframe()
+            if frame is not None:
+                print(f"Line number: {frame.f_lineno}")
 
         # Create a dialog window for tracking version selection
         dialog = tk.Toplevel(self)
@@ -1951,19 +1954,11 @@ class Vaila(tk.Tk):
         def use_yolov26():
             dialog.destroy()
             try:
-                # Import inside function to avoid early loading
-                import sys
-
-                # Add the site-packages path first to ensure proper numpy loading
-                site_packages = os.path.join(
-                    os.path.dirname(sys.executable), "Lib", "site-packages"
+                # Run in separate process. Reason: native TensorRT/torch failures can kill main GUI.
+                run_vaila_module(
+                    "vaila.yolov26track",
+                    extra_py_flags=("-u",),
                 )
-                if site_packages not in sys.path:
-                    sys.path.insert(0, site_packages)
-
-                from vaila import yolov26track
-
-                yolov26track.run_yolov26track()
             except Exception as e:
                 messagebox.showerror(
                     "Error Running YOLOv26",
@@ -1977,19 +1972,11 @@ class Vaila(tk.Tk):
                 "In the next window, please select a segmentation model (e.g., yolo26n-seg.pt)",
             )
             try:
-                # Import inside function to avoid early loading
-                import sys
-
-                # Add the site-packages path first to ensure proper numpy loading
-                site_packages = os.path.join(
-                    os.path.dirname(sys.executable), "Lib", "site-packages"
+                # Same tracker GUI (has seg run mode in config dialog).
+                run_vaila_module(
+                    "vaila.yolov26track",
+                    extra_py_flags=("-u",),
                 )
-                if site_packages not in sys.path:
-                    sys.path.insert(0, site_packages)
-
-                from vaila import yolov26track
-
-                yolov26track.run_yolov26track()
             except Exception as e:
                 messagebox.showerror(
                     "Error Running YOLOv26 Segmentation",
@@ -2010,7 +1997,7 @@ class Vaila(tk.Tk):
             try:
                 from vaila import yolov26track
 
-                yolov26track.run_yolov26pose_video()
+                yolov26track.run_yolov26pose_video(parent=self)
             except Exception as e:
                 messagebox.showerror(
                     "Error Running YOLOv26 Pose",
