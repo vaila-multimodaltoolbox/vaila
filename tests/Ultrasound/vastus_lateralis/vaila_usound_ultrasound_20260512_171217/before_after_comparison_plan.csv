@@ -1,0 +1,5 @@
+Before_File,After_File,Correlation,Shift_X_px,Shift_Y_px,Selected_For_Visual_Report
+before_20020127_031207_3.jpg,before_20020127_031207_3.jpg,1.000000,0.000,0.000,1
+after_20020127_032015_6.jpg,after_20020127_032015_6.jpg,1.000000,0.000,0.000,1
+after_20020127_032015_6.jpg,before_20020127_031207_3.jpg,0.408020,1.453,0.537,0
+before_20020127_031207_3.jpg,after_20020127_032015_6.jpg,0.408020,-1.453,-0.537,0
