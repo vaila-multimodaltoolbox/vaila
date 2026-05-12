@@ -24,6 +24,19 @@ import torch.optim as optim
 from tqdm import tqdm
 
 try:
+    from .fifa_anthropometry import (
+        AnthropometricProfile,
+        load_sequence_profiles,
+        scale_skeleton_to_profile,
+    )
+except ImportError:
+    from fifa_anthropometry import (  # ty: ignore[unresolved-import]
+        AnthropometricProfile,
+        load_sequence_profiles,
+        scale_skeleton_to_profile,
+    )
+
+try:
     from .fifa_starter_lib.camera_tracker import CameraTracker, CameraTrackerOptions
     from .fifa_starter_lib.postprocess import smoothen
 except ImportError:
@@ -409,6 +422,8 @@ def process_sequence(
     pitch_points: np.ndarray,
     tracker_options: CameraTrackerOptions,
     device: torch.device,
+    slot_profiles: list[AnthropometricProfile | None] | None = None,
+    anthropometric_scale_bounds: tuple[float, float] = (0.75, 1.35),
 ) -> np.ndarray:
     num_frames, num_persons, _ = boxes.shape
     predictions = np.zeros((num_persons, num_frames, 15, 3), dtype=np.float32)
@@ -460,6 +475,13 @@ def process_sequence(
             inter = intersection_over_plane(o, d)
 
             skel_3d = skels_3d[frame_idx, person]
+            if slot_profiles is not None and person < len(slot_profiles):
+                skel_3d, _ = scale_skeleton_to_profile(
+                    skel_3d,
+                    slot_profiles[person],
+                    min_scale=anthropometric_scale_bounds[0],
+                    max_scale=anthropometric_scale_bounds[1],
+                )
             skel_3d = skel_3d @ r_mat
             skel_3d = skel_3d - skel_3d[idx] + inter
             predictions[person, frame_idx] = skel_3d
@@ -485,6 +507,9 @@ def fifa_baseline(
     export_camera: bool = False,
     visualize: bool = False,
     calibration_dir: Path | None = None,
+    anthropometrics_dir: Path | None = None,
+    anthropometric_min_scale: float = 0.75,
+    anthropometric_max_scale: float = 1.35,
 ) -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("fifa baseline requires CUDA (camera tracker + LBFGS).")
@@ -512,6 +537,21 @@ def fifa_baseline(
         if not video_path.is_file():
             raise FileNotFoundError(video_path)
 
+        slot_profiles: list[AnthropometricProfile | None] | None = None
+        if anthropometrics_dir is not None:
+            slot_profiles, source_csv = load_sequence_profiles(sequence, boxes, anthropometrics_dir)
+            if source_csv is not None:
+                assigned = sum(profile is not None for profile in (slot_profiles or []))
+                print(
+                    f"[fifa anthropometry] sequence={sequence} csv={source_csv.name} "
+                    f"assigned_slots={assigned}/{boxes.shape[1]}"
+                )
+            else:
+                print(
+                    f"[fifa anthropometry] sequence={sequence} no matching CSV found in "
+                    f"{anthropometrics_dir}"
+                )
+
         num_frames = boxes.shape[0]
         solutions[sequence] = process_sequence(
             boxes=boxes,
@@ -525,6 +565,8 @@ def fifa_baseline(
                 debug_stages=debug_stages,
             ),
             device=device,
+            slot_profiles=slot_profiles,
+            anthropometric_scale_bounds=(anthropometric_min_scale, anthropometric_max_scale),
         )
         if export_camera and cal_dir is not None:
             np.savez(cal_dir / f"{sequence}.npz", **camera)
@@ -739,6 +781,24 @@ def build_fifa_argparser() -> argparse.ArgumentParser:
     pl.add_argument("--export-camera", action="store_true")
     pl.add_argument("--visualize", action="store_true")
     pl.add_argument("--calibration-dir", type=Path, default=None)
+    pl.add_argument(
+        "--anthropometrics-dir",
+        type=Path,
+        default=None,
+        help="Directory with per-match anthropometric CSVs (e.g. croacia_marrocos_full.csv).",
+    )
+    pl.add_argument(
+        "--anthropometric-min-scale",
+        type=float,
+        default=0.75,
+        help="Lower clamp for per-player anthropometric scale.",
+    )
+    pl.add_argument(
+        "--anthropometric-max-scale",
+        type=float,
+        default=1.35,
+        help="Upper clamp for per-player anthropometric scale.",
+    )
 
     pk = sub.add_parser("pack", help="Split submission_full.npz → submission_{val|test}.zip")
     pk.add_argument("--submission-full", type=Path, required=True)
@@ -804,6 +864,9 @@ def main_fifa_cli(argv: list[str] | None = None) -> None:
             export_camera=args.export_camera,
             visualize=args.visualize,
             calibration_dir=args.calibration_dir,
+            anthropometrics_dir=args.anthropometrics_dir,
+            anthropometric_min_scale=args.anthropometric_min_scale,
+            anthropometric_max_scale=args.anthropometric_max_scale,
         )
     elif args.cmd == "pack":
         fifa_pack(args.submission_full, args.data_root, args.output_dir, args.split)
