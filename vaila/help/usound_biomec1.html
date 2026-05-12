@@ -38,9 +38,9 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
             <p><strong>File:</strong> vaila\usound_biomec1.py</p>
-            <p><strong>Lines:</strong> 639</p>
-            <p><strong>Size:</strong> 20695 characters</p>
-            <p><strong>Version:</strong> 0.0.7</p>
+            <p><strong>Lines:</strong> 1570</p>
+            <p><strong>Size:</strong> 53500 characters</p>
+            <p><strong>Version:</strong> 0.3.44</p>
             
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -52,27 +52,29 @@
             <pre>
 usound_biomec1.py
 
-Module to analyze ultrasound data from images.
+Module to analyze ultrasound images with manual thickness measurements and
+smarter before/after batch comparison support.
 
 Updated by: Prof. Paulo R. P. Santiago
-Updated: 15 May 2025
-Version: 0.0.7
+Updated: 12 May 2026
+Version: 0.3.44
 
-- Crop all images using first image as template
-- Original image display for measurements
-- Enhanced edge detection with adjustable parameters
-- Additional edge-only comparison visualization
+- Separate BEFORE and AFTER directory selection for comparison workflows
+- Parent-folder batch mode for muscle/before and muscle/after structures
+- Automatic ROI detection with manual fallback for ultrasound content
+- Condition-aware measurement CSV and summary reports
+- Smarter visual comparisons based on best cross-condition image matches
 </pre>
         </div>
 
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 17</p>
-            <ul><li><code>list_images</code></li><li><code>redraw_annotations</code></li><li><code>mouse_event</code></li><li><code>process_images</code></li><li><code>crop_images_batch</code></li><li><code>adjust_edge_parameters</code></li><li><code>create_comparison_images</code></li><li><code>side_by_side_images</code></li><li><code>overlay_images</code></li><li><code>overlay_with_edges</code></li><li><code>edges_only_comparison</code></li><li><code>run_usound</code></li><li><code>on_crop</code></li><li><code>on_threshold1</code></li><li><code>on_threshold2</code></li><li><code>on_blur</code></li><li><code>update_display</code></li></ul>
+            <p><strong>Total functions found:</strong> 39</p>
+            <ul><li><code>list_images</code></li><li><code>sanitize_label</code></li><li><code>load_image_or_raise</code></li><li><code>infer_comparison_label</code></li><li><code>discover_before_after_groups</code></li><li><code>write_batch_summary</code></li><li><code>build_condition_records</code></li><li><code>detect_ultrasound_roi</code></li><li><code>combine_rois</code></li><li><code>compute_shared_roi</code></li><li><code>preview_roi</code></li><li><code>select_roi_manually</code></li><li><code>choose_roi_and_scale</code></li><li><code>crop_image_records</code></li><li><code>redraw_annotations</code></li><li><code>mouse_event</code></li><li><code>write_measurement_row</code></li><li><code>process_images</code></li><li><code>crop_images_batch</code></li><li><code>adjust_edge_parameters</code></li><li><code>create_comparison_images</code></li><li><code>_fit_label</code></li><li><code>side_by_side_images</code></li><li><code>overlay_images</code></li><li><code>overlay_with_edges</code></li><li><code>edges_only_comparison</code></li><li><code>process_condition_image_records</code></li><li><code>_measurement_stats</code></li><li><code>write_condition_summaries</code></li><li><code>prepare_similarity_image</code></li><li><code>calculate_image_similarity</code></li><li><code>build_comparison_plan</code></li><li><code>select_unique_best_pairs</code></li><li><code>save_comparison_plan</code></li><li><code>create_before_after_comparison_images</code></li><li><code>run_before_after_workflow</code></li><li><code>run_parent_batch_workflow</code></li><li><code>choose_usound_workflow_mode</code></li><li><code>run_usound</code></li><li><code>on_crop</code></li><li><code>on_threshold1</code></li><li><code>on_threshold2</code></li><li><code>on_blur</code></li><li><code>update_display</code></li></ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Generated automatically on: 12/05/2026 16:15:00</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
