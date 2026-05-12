@@ -220,7 +220,6 @@ ignore = [
 # Ignore specific rules for specific file patterns
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
 "*.pyi" = ["E501"]  # Allow long lines in type stubs
-"vaila/yolov26track.py" = ["E402"]  # YOLO import after ULTRALYTICS_DIR bootstrap
 
 [tool.ruff.format]
 # Formatting options
