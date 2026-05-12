@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 122 | **Categories:** 7 | **Generated on:** 07/05/2026
+**Total documented modules:** 122 | **Categories:** 7 | **Generated on:** 12/05/2026
 
 ---
 
