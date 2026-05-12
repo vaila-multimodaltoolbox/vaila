@@ -487,11 +487,15 @@ def _resolve_sam_video_overlay(sam_dir: Path) -> Path:
 
 def main(argv: list[str] | None = None) -> None:
     print(f"--- {os.path.basename(__file__)} ---")
-    args = build_argparser().parse_args(argv)
+    parser = build_argparser()
+    args = parser.parse_args(argv)
     if args.list_keypoints:
         for kp in load_field_reference(args.ref3d):
             print(f"{kp.number:3d}  {kp.name}  X={kp.world_xy[0]:7.3f}  Y={kp.world_xy[1]:7.3f}")
         return
+
+    if args.from_sam is None and args.video is None and args.pixels is None:
+        parser.error("either --video, --pixels, or --from-sam is required")
 
     if args.from_sam is not None:
         sam_dir = Path(args.from_sam).resolve()
