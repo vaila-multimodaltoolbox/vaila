@@ -98,6 +98,23 @@ def test_validate_label_text_rejects_non_numeric() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_discover_finds_vaila_dataset_named_folder(tmp_path: Path) -> None:
+    src = tmp_path / "manual_root"
+    _write_manual_pair(
+        src,
+        annotator="felipe",
+        sequence="mor_por_1809",
+        dataset="vaila_dataset_20260513_143924",
+        split="train",
+        stem="frame_000000",
+        label_text=_one_valid_label_line(),
+        image_ext=".png",
+    )
+    cands = fmm.discover_candidates(src)
+    assert len(cands) == 1
+    assert cands[0].dataset == "vaila_dataset_20260513_143924"
+
+
 def test_discover_finds_pose_dataset_pairs(tmp_path: Path) -> None:
     src = tmp_path / "vaila_dataset"
     _write_manual_pair(
