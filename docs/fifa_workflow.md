@@ -212,17 +212,18 @@ EXTERNAL/
 | Step | Command | Notes |
 |------|---------|--------|
 | **1. Build / refresh** | `uv run python -m vaila.fifa_dataset_builder --out-root EXTERNAL` | Writes `unified/` + `data.yaml`. See module docstring for `--include`, SoccerNet, previews. |
-| **2. Flat QA export** | `uv run python -m vaila.fifa_dataset_builder --export-label-check-to EXTERNAL/check_all_labels --out-root EXTERNAL` | Human review of overlays; **does not** replace `unified/` training layout. |
-| **3. Dedupe flat (optional)** | `uv run python -m vaila.fifa_check_labels_dedupe --bundle EXTERNAL/check_all_labels` | Removes duplicate triplets **only** under `check_all_labels/`. |
-| **4. Align `unified/` to flat** | `uv run python -m vaila.fifa_dataset_train_readiness --unified EXTERNAL/unified --prune-unified-to-flat EXTERNAL/check_all_labels --dry-run` then `--apply-prune` | After step 3, drop the same samples from `unified/` so training matches what you validated. |
-| **5. Verify** | `uv run python -m vaila.fifa_dataset_train_readiness --unified EXTERNAL/unified --compare-flat EXTERNAL/check_all_labels` | Expect exit **0** when label counts match the flat `images/` stem count. |
+| **2. Merge manual** | `uv run python -m vaila.fifa_manual_merge --src <labeled_dir> --dst EXTERNAL` | Idempotent merge of manually authored video labels into `unified/`. |
+| **3. Flat QA export** | `uv run python -m vaila.fifa_dataset_builder --export-label-check-to EXTERNAL/check_all_labels --out-root EXTERNAL` | Human review of overlays; **does not** replace `unified/` training layout. |
+| **4. Dedupe flat (optional)** | `uv run python -m vaila.fifa_check_labels_dedupe --bundle EXTERNAL/check_all_labels` | Removes duplicate triplets **only** under `check_all_labels/`. |
+| **5. Align `unified/` to flat** | `uv run python -m vaila.fifa_dataset_train_readiness --unified EXTERNAL/unified --prune-unified-to-flat EXTERNAL/check_all_labels --dry-run` then `--apply-prune` | After step 4, drop the same samples from `unified/` so training matches what you validated. |
+| **6. Verify** | `uv run python -m vaila.fifa_dataset_train_readiness --unified EXTERNAL/unified --compare-flat EXTERNAL/check_all_labels` | Expect exit **0** when label counts match the flat `images/` stem count. |
 
 **Train / fine-tune** (workstation: CUDA `pyproject` template + `uv sync --extra gpu`; use an **absolute** `data=` path):
 
 ```bash
 uv run yolo pose train \
   data=/data/FIFA/dataset_vaila_fifa/unified/data.yaml \
-  model=yolo11x-pose.pt \
+  model=vaila/models/yolo26x-pose.pt \
   epochs=200 imgsz=1280 batch=8 \
   mosaic=0 erasing=0 pose=20 kobj=2.5 flipud=0 fliplr=0.5 \
   project=/data/FIFA/dataset_vaila_fifa/runs name=fifa32_retrain \

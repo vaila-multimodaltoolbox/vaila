@@ -1,7 +1,11 @@
 """Merge manually-labeled YOLO Pose data into the FIFA `unified/` dataset.
 
+Update Date: 13 May 2026
+Version: 0.3.44
+
 This module reads a folder tree authored by human annotators (vailá
-``getpixelvideo`` FIFA template / ``pose_dataset_<TS>``) and integrates the
+``getpixelvideo`` FIFA template / ``pose_dataset_<TS>`` / ``vaila_dataset_<TS>``)
+and integrates the
 valid (image + non-empty 32-kp label) pairs into the existing
 ``dataset_vaila_fifa/unified/`` YOLO Pose tree built by
 :mod:`vaila.fifa_dataset_builder`, using the same staging-then-symlink
@@ -9,7 +13,7 @@ convention and appending provenance rows to ``unified/manifest.csv``.
 
 Source layout it understands::
 
-    <src>/<annotator>/<sequence>/(fifa_dataset_template|pose_dataset_<TS>)/
+    <src>/<annotator>/<sequence>/(fifa_dataset_template|pose_dataset_<TS>|vaila_dataset_<TS>)/
         images/{train,val,test}/<stem>.<ext>
         labels/{train,val,test}/<stem>.txt    # 1 + 4 + 32*3 = 101 fields
 
@@ -129,7 +133,11 @@ class MergeResult:
 
 
 def _is_dataset_dir(name: str) -> bool:
-    return name == "fifa_dataset_template" or name.startswith("pose_dataset_")
+    return (
+        name == "fifa_dataset_template"
+        or name.startswith("pose_dataset_")
+        or name.startswith("vaila_dataset_")
+    )
 
 
 def _find_image_for_label(label_path: Path, dataset_dir: Path, split: str) -> Path | None:
