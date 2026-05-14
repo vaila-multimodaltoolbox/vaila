@@ -245,7 +245,7 @@ below, then train with an **absolute** `data=` path:
 
 ```bash
 uv run yolo pose train \
-  model=yolo11x-pose.pt \
+  model=vaila/models/yolo26x-pose.pt \
   data=/path/to/dataset_vaila_fifa/unified/data.yaml \
   epochs=200 imgsz=1280 batch=8 \
   mosaic=0 erasing=0 pose=20 kobj=2.5 flipud=0 fliplr=0.5 \
@@ -258,6 +258,7 @@ uv run yolo pose train \
 | Module | Role |
 |--------|------|
 | `vaila.fifa_dataset_builder` | Build `unified/` + `data.yaml`; `--export-label-check-to …/check_all_labels` for overlays |
+| `vaila.fifa_manual_merge` | Merge manually authored video labels into `unified/` |
 | `vaila.fifa_check_labels_dedupe` | Remove near-duplicate triplets under `check_all_labels/` |
 | `vaila.fifa_dataset_train_readiness` | Verify `unified/`; `--prune-unified-to-flat` + `--apply-prune` syncs after dedupe |
 
