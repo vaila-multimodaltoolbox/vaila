@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - rf_trackers</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background-color: #f5f5f5; }
+        .container { max-width: 840px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 24px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+        th, td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
+        th { background: #f1f3f5; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá — rf_trackers</h1>
+
+        <div class="module-info">
+            <p><strong>File:</strong> vaila/rf_trackers.py</p>
+            <p><strong>Version:</strong> 0.3.44</p>
+            <p><strong>Updated:</strong> 2026-05-14</p>
+            <p><strong>GUI:</strong> Frame B → <strong>Video AI tools</strong> → <strong>Roboflow trackers (v2.4)</strong></p>
+        </div>
+
+        <h2>Description</h2>
+        <p>
+            Ultralytics YOLO26 (<strong>default: yolo26x.pt</strong> in <code>vaila/models/</code>) + <a href="https://github.com/roboflow/trackers">Roboflow trackers</a> 2.4.x
+            (SORT, ByteTrack, OC-SORT, BoT-SORT). BoT-SORT CMC: pass the video frame into <code>update</code>
+            (<a href="https://github.com/roboflow/trackers/releases/tag/2.4.0">release notes</a>).
+        </p>
+
+        <h2>CLI progress</h2>
+        <p>By default, the CLI prints a short status block and a <code>tqdm</code> progress bar on <strong>stderr</strong>. Use <code>--quiet</code> / <code>-q</code> to disable.</p>
+        <pre><code>uv run python -m vaila.rf_trackers --help</code></pre>
+        <p>Prints all CLI flags and an epilog with a FIFA sample command.</p>
+
+        <h2>GUI (no arguments)</h2>
+        <pre><code>uv run python -m vaila.rf_trackers</code></pre>
+
+        <h2>CLI example (FIFA video)</h2>
+        <pre><code>uv run python -m vaila.rf_trackers \
+  -i /home/preto/data/FIFA/to_sent/BRA_KOR_234113.mp4 \
+  -w vaila/models/yolo26x.pt \
+  --tracker botsort \
+  --conf 0.25</code></pre>
+        <p>Options: <code>--no-save-video</code>, <code>--no-cmc</code> (BoT-SORT), <code>--cmc-method</code> (<code>sparseOptFlow</code> | <code>orb</code> | <code>sift</code> | <code>ecc</code>).</p>
+
+        <h2>Output</h2>
+        <p><code>processed_rf_trackers_YYYYMMDD_HHMMSS/</code> beside the input video:</p>
+        <table>
+            <tr><th>File</th><th>Purpose</th></tr>
+            <tr><td><code>rf_tracks.csv</code></td><td>Long format (frame, ids, boxes, classes) — debug / analysis</td></tr>
+            <tr><td><code>{Label}_id_XX.csv</code></td><td>Per-ID vailá/yolov26 header; one row per frame with NaN when missing</td></tr>
+            <tr><td><code>all_id_detection.csv</code></td><td>Wide merge for <strong>Get Pixel Video</strong> (multi-object tracking CSV)</td></tr>
+            <tr><td><code>&lt;stem&gt;_rf_tracked.mp4</code></td><td>Optional overlay video</td></tr>
+        </table>
+        <p>Load <code>all_id_detection.csv</code> or per-ID files in Get Pixel Video. <strong>rec2d</strong> uses the <strong>pixel</strong> CSV from Get Pixel Video, not bbox CSVs. Prefer a fresh output folder when re-running the merge.</p>
+
+        <div class="footer">
+            <p>© vailá — AGPL-3.0-or-later. Upstream <code>trackers</code>: Apache-2.0.</p>
+        </div>
+    </div>
+</body>
+</html>

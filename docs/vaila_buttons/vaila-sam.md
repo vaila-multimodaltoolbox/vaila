@@ -16,7 +16,7 @@ SAM 3 allows for high-quality, zero-shot segmentation of objects in video based 
 
 ## Usage
 
-1. Click **YOLO and SAM** -> **SAM (Segment Anything)** in Frame B.
+1. Click **Video AI tools** -> **SAM (Segment Anything)** in Frame B.
 2. Select the input video or folder.
 3. Enter a **Text prompt** (e.g., `person`).
 4. (Optional) Select **Save overlay MP4** to visualize the segmentation.

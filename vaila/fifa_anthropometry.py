@@ -13,15 +13,14 @@ for anthropometric regularization when per-match player tables are available.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-import re
-import unicodedata
 
 import numpy as np
 import pandas as pd
-
 
 TEAM_CODE_TO_CANONICAL: dict[str, str] = {
     "ARG": "argentina",

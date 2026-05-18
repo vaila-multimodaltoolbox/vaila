@@ -5,16 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from vaila import soccerfield_calib as sc
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_REF = REPO_ROOT / "models" / "soccerfield_ref3d.csv"
-
 
 def test_load_field_reference_has_29_points() -> None:
-    kps = sc.load_field_reference(DEFAULT_REF)
+    kps = sc.load_field_reference(sc.DEFAULT_REF3D)
     assert len(kps) >= 29
     names = {kp.name for kp in kps}
     for must_have in (
@@ -61,7 +59,7 @@ def test_compute_dlt2d_raises_on_few_points() -> None:
 def test_end_to_end_with_pixel_csv(tmp_path: Path) -> None:
     # Build a synthetic pixel CSV using the real FIFA reference to exercise
     # load_pixel_points + run_soccerfield_calib (no video, no GUI).
-    kps_all = sc.load_field_reference(DEFAULT_REF)
+    kps_all = sc.load_field_reference(sc.DEFAULT_REF3D)
     selected = [
         kp
         for kp in kps_all
@@ -94,7 +92,7 @@ def test_end_to_end_with_pixel_csv(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     res = sc.run_soccerfield_calib(
         video=None,
-        ref3d_csv=DEFAULT_REF,
+        ref3d_csv=sc.DEFAULT_REF3D,
         pixel_csv=csv_path,
         output_dir=out_dir,
         data_root=data_root,
@@ -106,3 +104,31 @@ def test_end_to_end_with_pixel_csv(tmp_path: Path) -> None:
     assert Path(res["cameras_npz"]).exists()
     assert res["n_points"] == len(selected)
     assert res["rms_pixels_or_metres"] < 1e-6
+
+
+def test_pitch32_all_frames_writes_multirow_dlt(tmp_path: Path) -> None:
+    ref = sc.load_field_reference(sc.DEFAULT_REF3D_FIFA_DATASET)
+    assert len(ref) == 32
+    rows: list[dict[str, object]] = []
+    for fr in (0, 1):
+        row: dict[str, object] = {"frame": int(fr)}
+        for i in range(1, 9):
+            xy = ref[i - 1].world_xy
+            row[f"p{i}_x"] = float(xy[0] * 2.5 + 400 + fr * 2)
+            row[f"p{i}_y"] = float(xy[1] * 2.5 + 200)
+        rows.append(row)
+    csv_path = tmp_path / "field_keypoints_getpixelvideo.csv"
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    out_dir = tmp_path / "calib"
+    res = sc.run_soccerfield_calib(
+        pixel_csv=csv_path,
+        output_dir=out_dir,
+        ref3d_csv=sc.DEFAULT_REF3D_FIFA_DATASET,
+        pitch32=True,
+        all_frames=True,
+        min_points=6,
+    )
+    assert res["n_dlt_frames"] == 2
+    dlt_df = pd.read_csv(res["dlt2d"])
+    assert len(dlt_df) == 2
+    assert {int(dlt_df["frame"].iloc[0]), int(dlt_df["frame"].iloc[1])} == {0, 1}

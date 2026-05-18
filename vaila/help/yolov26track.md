@@ -85,7 +85,7 @@ Requirements:
 ## 🎮 Usage: Tracking Workflow
 
 1. **Start Tracking**:
-   - GUI: **Frame B → "YOLO + SAM" → "Tracker (v26)"**
+   - GUI: **Frame B → "Video AI tools" → "Tracker (v26)"**
    - CLI (open GUI): `uv run python -m vaila.yolov26track`
 2. **Select Directories**: Choose input directory (videos) and output directory  
 3. **Ultralytics paths**: Weights and cache live under `vaila/models/` (including BoT-SORT classifier downloads); stray `yolo*.pt` in the repo root are moved into `vaila/models/` on startup.
@@ -109,7 +109,7 @@ Requirements:
 
 ## 🎯 Usage: Pose Estimation Workflow
 
-1. **Start Pose Estimation**: GUI: **Frame B → "YOLO + SAM" → "Pose (video)"** or **"Pose (tracking)"**
+1. **Start Pose Estimation**: GUI: **Frame B → "Video AI tools" → "Pose (video)"** or **"Pose (tracking)"**
 2. **Select Tracking Directory** (only for **Pose (tracking)**): Choose results root or subfolder; nested `*_id_*.csv` trees under e.g. a `vailatracker_*` root are discovered automatically (bounded depth), with a picker if several leaves exist. For **Pose (video)** you only select a video file next.
 3. **Select Video** (**Pose (tracking)**): Prioritizes `processed_*.mp4`, accepts any video in the resolved tracking folder
 4. **Select ID(s)**: 
