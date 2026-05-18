@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 12 May 2026
+Update Date: 14 May 2026
 Version: 0.3.44
 
 Example of usage:
@@ -158,7 +158,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 12.May.2026 v0.3.44 (Python 3.12.13)
+vailá - 14.May.2026 v0.3.44 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -195,7 +195,7 @@ B3_r3_c1 - HR/ECG         B3_r3_c2 - Yolo + Markerless_MP
 B3_r3_c3 - Vertical Jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - YOLO + SAM       B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c1 - Video AI tools    B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
 B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
@@ -269,7 +269,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 12.May.2026 v0.3.44 (Python 3.12.13)")
+        self.title("vailá - 14.May.2026 v0.3.44 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -778,10 +778,10 @@ class Vaila(tk.Tk):
         row4_frame = tk.Frame(analysis_frame)
         row4_frame.pack(fill="x")
 
-        # B4_r4_c1 - YOLO + SAM
+        # B4_r4_c1 - Video AI tools (YOLO, SAM, Roboflow trackers, …)
         yolo_and_sam_btn = tk.Button(
             row4_frame,
-            text="YOLO + SAM",
+            text="Video AI tools",
             width=button_width,
             command=self.yolo_and_sam,
         )
@@ -1913,7 +1913,7 @@ class Vaila(tk.Tk):
 
     # B_r4_c1
     def yolotrackerpose(self):
-        """Runs the specified YOLO tracking analysis."""
+        """Open chooser for video AI: YOLO tracking/pose/seg, SAM 3, training, Roboflow trackers."""
         print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
         print(f"Running tracker analysis {os.path.basename(__file__)}")
         # Show approximate source line for debugging.
@@ -1924,10 +1924,10 @@ class Vaila(tk.Tk):
             if frame is not None:
                 print(f"Line number: {frame.f_lineno}")
 
-        # Create a dialog window for tracking version selection
+        # Create a dialog window for tool selection
         dialog = tk.Toplevel(self)
-        dialog.title("Select YOLO Tool")
-        dialog.geometry("400x650")
+        dialog.title("Video AI tools")
+        dialog.geometry("400x720")
         dialog.transient(self)  # Make dialog modal
 
         # Try to set grab, but don't fail if another grab is active
@@ -1941,7 +1941,7 @@ class Vaila(tk.Tk):
             with contextlib.suppress(Exception):
                 dialog.grab_set()
 
-        tk.Label(dialog, text="Select YOLO tool to use:", pady=15).pack()
+        tk.Label(dialog, text="Select a video AI tool:", pady=15).pack()
 
         # Ensure Ultralytics never downloads into repo root.
         try:
@@ -2020,6 +2020,19 @@ class Vaila(tk.Tk):
             dialog.destroy()
             self.sam_video()
 
+        def use_rf_trackers():
+            dialog.destroy()
+            try:
+                run_vaila_module(
+                    "vaila.rf_trackers",
+                    extra_py_flags=("-u",),
+                )
+            except Exception as e:
+                messagebox.showerror(
+                    "Error Running Roboflow trackers",
+                    f"Error: {str(e)}",
+                )
+
         tk.Button(dialog, text="Tracker (v26)", command=use_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Pose (video)", command=use_yolo_pose_v26, width=16).pack(pady=6)
         tk.Button(
@@ -2030,6 +2043,12 @@ class Vaila(tk.Tk):
         ).pack(pady=6)
         tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
         tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
+        tk.Button(
+            dialog,
+            text="Roboflow trackers (v2.4)",
+            command=use_rf_trackers,
+            width=22,
+        ).pack(pady=6)
         tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=16).pack(pady=6)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
@@ -2038,7 +2057,7 @@ class Vaila(tk.Tk):
 
     # Backwards-compat alias (older button handler name)
     def yolo_and_sam(self):
-        """Alias to open the YOLO/SAM selection dialog."""
+        """Alias to open the Video AI tools selection dialog."""
         return self.yolotrackerpose()
 
     # B_r4_c2 - ML Walkway
@@ -3046,11 +3065,12 @@ class Vaila(tk.Tk):
     def soccerfield_calib(self):
         """Launches DLT2D calibration of a broadcast soccer-field plane.
 
-        Wraps :mod:`vaila.soccerfield_calib` (uses ``getpixelvideo`` + ``dlt2d`` +
-        ``rec2d`` with ``models/soccerfield_ref3d.csv``). The dialog has its
-        own **Help** button — see ``vaila/help/soccerfield_calib.html`` for
-        the full reference and ``docs/fifa_workflow.md`` for the unified
-        end-to-end recipe.
+        Wraps :mod:`vaila.soccerfield_calib` (``dlt2d`` + ``rec2d`` with
+        ``models/soccerfield_ref3d*.csv``). **No CLI args** opens a Tk dialog:
+        pick ``field_keypoints_getpixelvideo.csv`` from ``soccerfield_keypoints_ai``,
+        optional **pitch32** + **all-frames** DLT. For getpixelvideo-first workflow use
+        ``python -m vaila.soccerfield_calib -v VIDEO``. Help:
+        ``vaila/help/soccerfield_calib.html``, ``docs/fifa_workflow.md``.
         """
         print("\n" + "=" * 60)
         print("Launching: vaila.soccerfield_calib")
@@ -3067,9 +3087,11 @@ class Vaila(tk.Tk):
         """Detect 32 soccer-field keypoints with YOLO-pose (Field KPs (AI)).
 
         Outputs a wide CSV that ``getpixelvideo`` and
-        ``soccerfield_calib`` can consume. Uses the bundled
-        ``vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt``
-        (Pose mAP50 ≈ 0.945) by default. The dialog has its own **Help**
+        ``soccerfield_calib`` can consume. GUI dialog mirrors **all CLI flags**
+        (mode, video options, conf thresholds, Roboflow vs Ultralytics with
+        ``--weights`` / ``--imgsz`` / ``--device``); default local ``.pt`` is
+        auto-filled when present under ``vaila/models/...`` (see module
+        ``default_ultralytics_weights_path``). The dialog has a **Help**
         button — see ``vaila/help/soccerfield_keypoints_ai.html`` and
         ``docs/fifa_workflow.md``.
         """

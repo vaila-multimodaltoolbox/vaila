@@ -4,7 +4,7 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.43
+- **Version:** 0.3.44
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -19,9 +19,9 @@
 ### Main features:
 
 - Text-prompt video segmentation with SAM 3 / SAM 3.1 Multiplex
-- Automatic VRAM management (auto-sizes to GPU memory)
+- Automatic VRAM management (auto `max_frames` scales with GPU size; `--max-frames 0` = full clip for correct overlay timing)
 - Batch processing (directory of videos or single file)
-- Overlay MP4 output with coloured masks
+- Overlay MP4 output with coloured masks (temporally nearest SAM keyframe when `--max-frames` subsamples input)
 - Per-frame mask PNG output
 - Frame-by-frame fallback for low-VRAM GPUs
 - GUI mode (Tkinter dialog) and headless CLI mode
@@ -399,7 +399,7 @@ When you launch `vaila_sam` without CLI args (or from the vailá main window), t
 
 In the main vailá window, open it via:
 
-- **Frame B → "YOLO and SAM" → "SAM (Segment Anything)"**
+- **Frame B → "Video AI tools" → "SAM (Segment Anything)"**
 
 1. **`SamVideoDialog`** — configuration modal:
     - `Input (dir or file)` + `Output folder` + `sam3.pt / weights (-w)` browsers.
@@ -800,7 +800,7 @@ the script and will ship in a follow-up.
 
 ---
 
-Generated: May 7, 2026
+Generated: May 15, 2026
 Part of vailá - Multimodal Toolbox
 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 Contact: paulosantiago@usp.br

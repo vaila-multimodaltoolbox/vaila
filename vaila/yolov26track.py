@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 07 May 2026
-Version: 0.3.43
+Update Date: 14 May 2026
+Version: 0.3.44
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -2132,8 +2132,12 @@ def create_combined_detection_csv(output_dir):
     Returns:
         Path to the created combined CSV file
     """
-    # Find all detection CSV files (any class with _id pattern)
-    detection_csv_files = glob.glob(os.path.join(output_dir, "*_id_*.csv"))
+    # Find all detection CSV files (any class with _id pattern); exclude merged vailá exports.
+    detection_csv_files = [
+        f
+        for f in glob.glob(os.path.join(output_dir, "*_id_*.csv"))
+        if not os.path.basename(f).startswith("all_id_")
+    ]
 
     if not detection_csv_files:
         print(f"No detection tracking files found in {output_dir}")
@@ -2217,7 +2221,11 @@ def create_merged_detection_csv(output_dir, total_frames):
     Create wide per-label CSV(s) with one row per frame (0..N-1) merging all IDs.
     Writes all_id_merge_<Label>.csv and an alias all_id_merge.csv if only one label.
     """
-    csv_files = glob.glob(os.path.join(output_dir, "*_id_*.csv"))
+    csv_files = [
+        f
+        for f in glob.glob(os.path.join(output_dir, "*_id_*.csv"))
+        if not os.path.basename(f).startswith("all_id_")
+    ]
 
     if not csv_files:
         print(f"No per-ID tracking files found in {output_dir}")

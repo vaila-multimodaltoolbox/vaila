@@ -82,6 +82,28 @@ def test_sam3_build_oom_retry_attempts_extends_below_32() -> None:
     assert 32 in none_chain and 8 in none_chain
 
 
+def test_sam3_auto_max_frames_upper_bound_scales_with_gpu_class() -> None:
+    """Workstation GPUs must not be stuck at 128-frame SAM subsample cap (overlay sync)."""
+    from vaila.vaila_sam import _sam3_auto_max_frames_upper_bound
+
+    assert _sam3_auto_max_frames_upper_bound(8.0) == 128
+    assert _sam3_auto_max_frames_upper_bound(10.5) == 512
+    assert _sam3_auto_max_frames_upper_bound(15.0) == 1024
+    assert _sam3_auto_max_frames_upper_bound(24.0) == 8192
+
+
+def test_nearest_sess_idx_for_orig_frame_tie_breaks_forward() -> None:
+    """VRAM subsample overlay must not systematically lag (tie → newer keyframe)."""
+    from vaila.vaila_sam import _nearest_sess_idx_for_orig_frame
+
+    a = np.array([0, 10, 20], dtype=np.int64)
+    assert _nearest_sess_idx_for_orig_frame(15, a) == 2
+    assert _nearest_sess_idx_for_orig_frame(12, a) == 1
+    assert _nearest_sess_idx_for_orig_frame(0, a) == 0
+    assert _nearest_sess_idx_for_orig_frame(100, a) == 2
+    assert _nearest_sess_idx_for_orig_frame(7, a) == 1
+
+
 def test_sam3_prompt_presets_cover_sports_scenarios() -> None:
     """The GUI combobox must advertise at least a minimum set of open-vocabulary
     presets (see the plan: person/player/goalkeeper/referee/ball/...)."""

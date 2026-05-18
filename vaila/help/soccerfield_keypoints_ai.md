@@ -4,7 +4,7 @@
 
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/soccerfield_keypoints_ai.py`
-- **Version:** 0.1.0 (April 2026)
+- **Version:** 0.3.44 (May 2026)
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → Field KPs (AI)**
 - **CLI Interface:** Yes
@@ -76,17 +76,25 @@ The GUI asks for:
 
 ### Step 3 — Configure the dialog
 
+The Tk dialog mirrors **all CLI flags** (see `python -m vaila.soccerfield_keypoints_ai --help`):
+mode, frame index, video-mode start/stride/max-frames/overlay, `--conf`, `--draw-min-conf`, backend,
+Roboflow model id + API key, and (for Ultralytics) **`--weights`**, **`--imgsz`**, **`--device`**.
+Video-only fields are **disabled** when mode is `frame`.
+
 | Field | Meaning | Recommended |
 |---|---|---|
 | Mode | `frame` or `video` | `video` for FIFA pipeline |
-| Backend | `ultralytics` or `roboflow` | `ultralytics` (default model bundled) |
+| Backend | `ultralytics` or `roboflow` | `ultralytics` if you have a local `.pt` |
+| Weights (.pt) | `--weights` | If **pitch32** `best.pt` exists under `vaila/models/...`, GUI pre-fills it and sets backend to Ultralytics; otherwise Run opens a file dialog when Ultralytics is selected and the path is empty |
 | Stride | every Nth frame | `1` for full clip, `5` for smoke test |
 | Max frames | cap on processed frames | empty for full clip |
 | Confidence | YOLO `conf` threshold | `0.30` |
 | Draw/save min conf | overlay filter | `0.40` |
 | imgsz | inference size | `1280` |
 | Device | GPU id or empty | `0` for CUDA, empty for auto |
-| Ultralytics weights | path to `.pt` | leave empty → bundled `pitch32_recipeA_400ep/best.pt` |
+| Roboflow model id / API | cloud backend | only when backend = Roboflow |
+
+CLI note: with `--backend ultralytics` and **no** `--weights`, the same default path search as the GUI is applied when a file exists.
 
 For Roboflow: fill `Roboflow model id` and `Roboflow API key` (or
 export `ROBOFLOW_API_KEY` before launching).
@@ -291,4 +299,4 @@ collapse the 32 keypoints onto a single point even while box mAP stays high
 - `.claude/skills/fifa-vaila-continuation/SKILL.md` — FIFA challenge resume
 - [`docs/fifa_workflow.md`](../../docs/fifa_workflow.md) §4.5 — external unified dataset + QA + `yolo pose train`
 
-Generated: April 26, 2026.
+Generated: May 14, 2026.

@@ -44,7 +44,7 @@ Simplified YOLO training interface specifically designed for AnyLabeling exports
 
 ### GUI (recommended)
 
-- In the main window: **Frame B → "YOLO and SAM" → "Train YOLO"**
+- In the main window: **Frame B → "Video AI tools" → "Train YOLO"**
 
 ### CLI (open GUI)
 

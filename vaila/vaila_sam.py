@@ -5,45 +5,46 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 7 May 2026
-Version: 0.3.43
+Update Date: 15 May 2026
+Version: 0.3.44
 
 Description:
-    This script performs video segmentation using the SAM 3 model from Meta.
-    It supports text-prompt masks via Hugging Face checkpoints.
-    Requires: uv sync --extra sam (works on the universal CPU pyproject; inference still needs NVIDIA CUDA).
-    Hybrid installs: see AGENTS.md (bin/use_pyproject_* to switch laptop CPU vs workstation CUDA).
-    Auth: the repo facebook/sam3 is gated. Either:
-        - Accept the model on Hugging Face, then: uv run hf auth login
-        - Or download into the repo: uv run vaila/vaila_sam.py --download-weights
-        - Or: uv run hf download facebook/sam3 sam3.pt --local-dir DIR
-        - Or set env SAM3_CHECKPOINT=/path/to/sam3.pt
-        - Default weights: vaila/models/sam3/sam3.pt (flat) or vaila/models/sam3/sam3_weights/sam3.pt (nested)
-        - Legacy repo root: ./sam3_weights/sam3.pt — prefer flat layout under vaila/models/sam3/
-        - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
-        - **Spatial:** very large frames (4K broadcast) can OOM even with ``--max-frames 1``; use ``--max-input-long-edge`` or ``SAM3_MAX_INPUT_LONG_EDGE`` (default 1920).
-        - GPU: CUDA only (sam3 video predictor loads on .cuda()). No CPU or macOS MPS path; ``--frame-by-frame`` only lowers VRAM on CUDA.
+    Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
+    Install: ``uv sync --extra sam``; **inference requires NVIDIA CUDA** (see AGENTS.md / ``bin/use_pyproject_*`` for CPU laptop vs CUDA workstation).
 
-Usage:
-    uv run vaila/vaila_sam.py
-    uv run vaila/vaila_sam.py --open-help          # SAM 3 setup (HTML in browser)
-    uv run vaila/vaila_sam.py --download-weights   # HF_TOKEN or hf auth login
+Auth (gated ``facebook/sam3``):
+    - Hugging Face: accept the model, then ``uv run hf auth login``
+    - Or: ``uv run vaila/vaila_sam.py --download-weights``
+    - Or: ``uv run hf download facebook/sam3 sam3.pt --local-dir DIR`` / ``SAM3_CHECKPOINT=/path/to/sam3.pt``
+    - Defaults: ``vaila/models/sam3/sam3.pt`` or nested ``.../sam3_weights/sam3.pt``
 
-Requires: ``uv sync --extra sam`` (works on the universal CPU ``pyproject``; inference still needs NVIDIA CUDA).
-Hybrid installs: see ``AGENTS.md`` (``bin/use_pyproject_*`` to switch laptop CPU vs workstation CUDA).
-Auth: the repo facebook/sam3 is gated. Either:
-  - Accept the model on Hugging Face, then: uv run hf auth login
-  - Or download into the repo: uv run vaila/vaila_sam.py --download-weights
-    (writes vaila/models/sam3/; *.pt is gitignored)
-  - Or: uv run hf download facebook/sam3 sam3.pt --local-dir DIR
-  - Or set env SAM3_CHECKPOINT=/path/to/sam3.pt
-  - Default weights: vaila/models/sam3/sam3.pt (flat) or vaila/models/sam3/sam3_weights/sam3.pt (nested)
-  - Legacy repo root: ./sam3_weights/sam3.pt — prefer flat layout under vaila/models/sam3/
-  - VRAM: long clips load all frames onto GPU; auto-sized to GPU VRAM by default, or set SAM3_MAX_FRAMES / --max-frames
-GPU: CUDA only (sam3 video predictor loads on .cuda()). No CPU or macOS MPS; ``--frame-by-frame`` is CUDA VRAM-only (not a CPU mode).
+VRAM / resolution:
+    - Long clips: ``--max-frames`` / ``SAM3_MAX_FRAMES`` / GUI field; **empty = auto** from free VRAM (cap scales up on 16–24 GiB GPUs). **0 = full clip** (every frame to SAM — best overlay sync; needs enough VRAM). Heavy temporal subsample reuses masks across many original frames → motion looks “late”; fix is more frames or **0**.
+    - Large frames (e.g. 4K): ``--max-input-long-edge`` / ``SAM3_MAX_INPUT_LONG_EDGE`` (defaults depend on GPU size).
+    - Heavy OOM: ``--frame-by-frame`` (CUDA VRAM tradeoff only; not a CPU mode).
+
+Usage (quick):
+    uv run vaila/vaila_sam.py                      # Tkinter: pick video, prompt, output folder
+    uv run vaila/vaila_sam.py --open-help          # SAM 3 setup in browser
+    uv run vaila/vaila_sam.py --download-weights   # fetch weights (needs HF auth)
+
+**Full match / broadcast clip (CLI)** — segmentation + ``*_sam_overlay.mp4`` + CSV/JSON exports.
+Tweak ``--max-input-long-edge`` / ``--max-frames`` if CUDA OOMs:
+
+    uv run vaila/vaila_sam.py \\
+        -i /path/to/match.mp4 \\
+        -o /path/to/processed_sam_YYYYMMDD_HHMMSS \\
+        -t player \\
+        --max-input-long-edge 1920
+
+Shorter temporal SAM input (overlay still follows every frame of ``-i``):
+
+    uv run vaila/vaila_sam.py -i /path/to/match.mp4 -o /path/to/out -t player --max-frames 400
+
+More detail: ``vaila/help/vaila_sam.md`` / ``vaila/help/vaila_sam.html``.
 
 FIFA Skeletal Tracking Light (optional ``--extra fifa``): subcommand ``fifa`` delegates to
-``vaila.fifa_skeletal_pipeline`` (prepare, boxes, preprocess, baseline, dlt-export, pack). Example::
+``vaila.fifa_skeletal_pipeline`` (prepare, boxes, preprocess, baseline, dlt-export, pack). Example:
 
     uv sync --extra fifa --extra sam --extra gpu   # CUDA template + deps
     uv run vaila/vaila_sam.py fifa prepare --video-source DIR --data-root data/
@@ -502,6 +503,23 @@ def _auto_max_frames_for_vram() -> int:
     return safe_frames
 
 
+def _sam3_auto_max_frames_upper_bound(total_gib: float) -> int:
+    """Max value for auto ``max_frames`` before budget math clamps lower.
+
+    A hard cap of 128 was safe on 8 GiB laptops but forced 2.7k-frame clips down to
+    ~128 SAM keyframes on 24 GiB cards — overlays looked permanently out of sync.
+    """
+    if total_gib >= 24.0:
+        return 8192
+    if total_gib >= 18.0:
+        return 4096
+    if total_gib >= 12.0:
+        return 1024
+    if total_gib >= 10.0:
+        return 512
+    return 128
+
+
 def _sam3_vram_profile() -> dict[str, float] | None:
     """Collect non-throwing CUDA/VRAM stats used by SAM3 planning helpers."""
     try:
@@ -523,7 +541,8 @@ def _sam3_vram_profile() -> dict[str, float] | None:
     per_frame_mib = 3.6
     budget_gib = max(0.0, free_gib - model_gib - processing_gib - headroom_gib)
     safe_frames = int(budget_gib * 1024 / per_frame_mib)
-    safe_frames = max(16, min(safe_frames, 128))
+    upper = _sam3_auto_max_frames_upper_bound(total_gib)
+    safe_frames = max(16, min(safe_frames, upper))
     return {
         "total_gib": total_gib,
         "free_gib": free_gib,
@@ -906,6 +925,29 @@ def _sam3_preflight_scan(
     return out_csv
 
 
+def _nearest_sess_idx_for_orig_frame(frame_idx: int, sess_to_orig: np.ndarray) -> int:
+    """Map an original-timeline frame index to a SAM session frame index.
+
+    VRAM subsampling feeds SAM a shortened clip; each session frame corresponds to one
+    original frame index in ``sess_to_orig``. Using the latest keyframe with
+    ``sess_to_orig[k] <= frame_idx`` lags overlays by up to ~half the subsample spacing
+    (masks look ``behind`` motion). Nearest keyframe in time fixes that.
+    """
+    if sess_to_orig.size <= 0:
+        return 0
+    a = sess_to_orig
+    ins = int(np.searchsorted(a, frame_idx, side="left"))
+    candidates: list[int] = []
+    if ins > 0:
+        candidates.append(ins - 1)
+    if ins < int(a.size):
+        candidates.append(ins)
+    if not candidates:
+        return 0
+    # Prefer smaller temporal error; on ties, prefer the larger original index (newer keyframe).
+    return int(min(candidates, key=lambda j: (abs(int(a[j]) - frame_idx), -int(a[j]))))
+
+
 def _maybe_subsample_video_for_vram(
     video_path: Path,
     output_dir: Path,
@@ -935,8 +977,17 @@ def _maybe_subsample_video_for_vram(
         return video_path.resolve(), None, n, np.arange(max(0, n), dtype=np.int64)
 
     indices = np.unique(np.linspace(0, n - 1, num=max_frames, dtype=np.int64))
+    print(
+        f"[SAM3] Temporal subsample: {n} → {len(indices)} frames (max_frames={max_frames}). "
+        "Overlay uses nearest SAM keyframe on each original frame — wide spacing looks like lag. "
+        "Use Max frames = 0 / --max-frames 0 for full clip if VRAM allows.",
+        flush=True,
+    )
+    wanted: set[int] = {int(x) for x in indices.tolist()}
     out_path = output_dir / "_sam3_subsample_input.mp4"
     cap = cv2.VideoCapture(vp)
+    if not cap.isOpened():
+        raise OSError(f"Could not open video: {vp}")
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
     # Preserve *duration* when subsampling: we keep fewer frames that represent the full clip,
     # so we must reduce the output FPS proportionally; otherwise the clip (and SAM overlay)
@@ -947,20 +998,25 @@ def _maybe_subsample_video_for_vram(
     if not writer.isOpened():
         cap.release()
         raise OSError("Could not open VideoWriter for SAM3 subsample (try another codec/OS path)")
-    written = 0
-    for fi in indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, int(fi))
+    written_orig: list[int] = []
+    fi = 0
+    while True:
         ok, frame = cap.read()
-        if ok and frame is not None:
+        if not ok or frame is None:
+            break
+        if fi in wanted:
             writer.write(frame)
-            written += 1
+            written_orig.append(fi)
+        fi += 1
     cap.release()
     writer.release()
+    written = len(written_orig)
     if written == 0:
         with contextlib.suppress(OSError):
             out_path.unlink(missing_ok=True)
         raise OSError("Subsampled zero frames; check video path/codec")
-    return out_path.resolve(), out_path.resolve(), written, indices
+    orig_kept = np.asarray(written_orig, dtype=np.int64)
+    return out_path.resolve(), out_path.resolve(), written, orig_kept
 
 
 def _read_max_input_long_edge(cli_value: int | None) -> int:
@@ -1647,6 +1703,33 @@ def _palette(n: int) -> np.ndarray:
     return (rng.random((max(n, 1), 3)) * 255).astype(np.uint8)
 
 
+def _sam_frame_outputs_to_numpy(outputs: dict[str, Any]) -> dict[str, Any]:
+    """Make SAM3 ``add_prompt`` / ``propagate`` outputs overlay-safe (host numpy)."""
+    try:
+        import torch
+    except ImportError:
+        tensor_type: tuple[type, ...] = ()
+    else:
+        tensor_type = (torch.Tensor,)
+
+    out = dict(outputs)
+    for key in ("out_binary_masks", "out_obj_ids", "out_probs", "out_boxes_xywh"):
+        v = out.get(key)
+        if v is None:
+            continue
+        if tensor_type and isinstance(v, tensor_type):
+            v = v.detach().cpu().numpy()
+        else:
+            v = np.asarray(v)
+        if key == "out_binary_masks":
+            out[key] = v.astype(bool, copy=False)
+        elif key == "out_obj_ids":
+            out[key] = v.astype(np.int32, copy=False)
+        elif key in ("out_probs", "out_boxes_xywh"):
+            out[key] = v.astype(np.float32, copy=False)
+    return out
+
+
 def _composite_masks_bgr(
     frame_bgr: np.ndarray,
     binary_masks: np.ndarray,
@@ -2120,7 +2203,7 @@ def run_sam3_on_video(
                         }
                     )
                 fi0 = int(prompt_resp["frame_index"])
-                outputs_by_frame[fi0] = prompt_resp["outputs"]
+                outputs_by_frame[fi0] = _sam_frame_outputs_to_numpy(prompt_resp["outputs"])
 
                 stream_req = {
                     "type": "propagate_in_video",
@@ -2131,7 +2214,12 @@ def run_sam3_on_video(
                 }
                 with _autocast:
                     for chunk in predictor.handle_stream_request(stream_req):
-                        outputs_by_frame[int(chunk["frame_index"])] = chunk["outputs"]
+                        raw_out = chunk.get("outputs")
+                        if raw_out is None:
+                            continue
+                        outputs_by_frame[int(chunk["frame_index"])] = _sam_frame_outputs_to_numpy(
+                            raw_out
+                        )
             except Exception as e:
                 if _is_cuda_oom_error(e):
                     tip_n = _sam3_next_oom_tip(mf)
@@ -2214,7 +2302,7 @@ def run_sam3_on_video(
             print(
                 f"[SAM3] Overlay: {nframes_to_write} original frames, "
                 f"{n_unique_masks} unique mask keyframes (session={sess_to_orig.size} frames). "
-                f"Masks are interpolated (nearest-neighbor) between keyframes."
+                f"Each output frame uses temporally nearest SAM keyframe (VRAM subsample alignment)."
             )
         else:
             print(
@@ -2228,7 +2316,6 @@ def run_sam3_on_video(
         sys.stdout.flush()
 
         _overlay_log_interval = max(1, nframes_to_write // 20)  # ~5% increments
-        sess_ptr = 0
         last_sess_idx: int | None = None
         last_masks: np.ndarray | None = None
         last_oids: np.ndarray | None = None
@@ -2249,13 +2336,7 @@ def run_sam3_on_video(
                     f"  overlay: frame {frame_idx + 1}/{nframes_to_write} ({pct:.0f}%)", flush=True
                 )
 
-            # Map original frame index -> nearest session frame index (piecewise-constant).
-            while (
-                sess_ptr + 1 < int(sess_to_orig.size)
-                and int(sess_to_orig[sess_ptr + 1]) <= frame_idx
-            ):
-                sess_ptr += 1
-            sess_idx = sess_ptr
+            sess_idx = _nearest_sess_idx_for_orig_frame(frame_idx, sess_to_orig)
 
             if last_sess_idx != sess_idx:
                 out = outputs_by_frame.get(sess_idx)
@@ -2869,7 +2950,8 @@ class SamVideoDialog(tk.Toplevel):
                 "Checkpoint: video weights only (facebook/sam3 → sam3.pt / sam3.1_multiplex.pt).\n"
                 "Not FIFA / sam-3d-dinov3. CLI equivalent: -w / --weights / --checkpoint.\n"
                 "Results folder: <output>/processed_sam_YYYYMMDD_HHMMSS/ (created under Output folder).\n"
-                "VRAM: frame cap auto-sized to GPU; override with SAM3_MAX_FRAMES or --max-frames."
+                "VRAM: optional Max frames — 0 = every frame to SAM (best mask sync); "
+                "empty = auto from free VRAM (see log line [SAM3 VRAM])."
             ),
             wraplength=520,
             justify="left",
@@ -2916,9 +2998,10 @@ class SamVideoDialog(tk.Toplevel):
         ttk.Entry(frm, textvariable=self.frame_var, width=12).grid(
             row=5, column=1, sticky="w", pady=4
         )
-        ttk.Label(frm, text="Max frames (VRAM cap; 0=full):").grid(
-            row=6, column=0, sticky="w", pady=4
-        )
+        ttk.Label(
+            frm,
+            text="Max frames (0=full clip; empty=auto from VRAM):",
+        ).grid(row=6, column=0, sticky="w", pady=4)
         self.max_frames_var = tk.StringVar(value="")
         ttk.Entry(frm, textvariable=self.max_frames_var, width=12).grid(
             row=6, column=1, sticky="w", pady=4

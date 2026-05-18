@@ -48,7 +48,7 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.3.43</p>
+            <p><strong>Version:</strong> 0.3.44</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
             <p><strong>CLI Interface:</strong> Yes (<code>-i</code>, <code>-o</code>, <code>-t</code>, ...)</p>
@@ -68,7 +68,7 @@
                 <li>Text-prompt video segmentation with SAM 3 / SAM 3.1 Multiplex</li>
                 <li>Automatic VRAM management (auto-sizes to GPU memory)</li>
                 <li>Batch processing (directory of videos or single file)</li>
-                <li>Overlay MP4 output with coloured masks</li>
+                <li>Overlay MP4 output with coloured masks (temporally nearest SAM keyframe when <code>--max-frames</code> subsamples input)</li>
                 <li>Per-frame mask PNG output</li>
                 <li>Frame-by-frame fallback for low-VRAM GPUs</li>
                 <li>GUI mode (Tkinter dialog) and headless CLI mode</li>
@@ -78,7 +78,7 @@
 
         <div class="info-box">
             <strong>GUI path:</strong> in the main vailá window, open
-            <code>Frame B → YOLO and SAM → SAM (Segment Anything)</code>.
+            <code>Frame B → Video AI tools → SAM (Segment Anything)</code>.
         </div>
 
         <!-- ============================================================ -->
@@ -932,7 +932,7 @@ uv run pytest tests/test_vaila_sam.py -v -k sam3_smoke</code></pre>
         </ul>
 
         <div class="footer">
-            <p>Generated: May 7, 2026</p>
+            <p>Generated: May 15, 2026</p>
             <p>Part of vailá - Multimodal Toolbox</p>
             <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
             <p>Contact: paulosantiago@usp.br</p>

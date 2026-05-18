@@ -60,6 +60,11 @@
       </table>
 
       <h2>Step-by-step (GUI)</h2>
+      <p class="ok">The configuration window lists the <strong>same options as the CLI</strong>
+        (<code>python -m vaila.soccerfield_keypoints_ai --help</code>): mode, frame index, video-only
+        start/stride/max-frames/overlay, confidence thresholds, backend, Roboflow model id + API key, and for
+        Ultralytics the <code>.pt</code> path (<strong>Browse…</strong>), <code>imgsz</code>, and
+        <code>device</code>. Video-only controls are disabled in <code>frame</code> mode.</p>
       <ol>
         <li>Open vailá and click <strong>Field KPs (AI)</strong> in Frame B.</li>
         <li>Pick the broadcast video.</li>
@@ -67,12 +72,13 @@
         <li>Set:
           <ul>
             <li>Mode → <code>video</code></li>
-            <li>Backend → <code>ultralytics</code></li>
+            <li>Backend → <code>ultralytics</code> (default when bundled <code>best.pt</code> exists on disk)</li>
+            <li>Weights → pre-filled when found under <code>vaila/models/...</code>; otherwise choose
+              <code>best.pt</code> or <strong>Run</strong> opens a file dialog if still empty</li>
             <li>Stride → <code>1</code> (every frame) or <code>5</code> (smoke test)</li>
             <li>Confidence → <code>0.30</code>, Draw/save min conf → <code>0.40</code></li>
             <li>imgsz → <code>1280</code>, Device → <code>0</code> for CUDA, empty for auto</li>
-            <li>Ultralytics weights → empty (use bundled) <em>or</em> point to your <code>best.pt</code></li>
-            <li>Tick <strong>Write overlay .mp4</strong></li>
+            <li>Tick <strong>Write overlay .mp4</strong> (video mode)</li>
           </ul>
         </li>
         <li>Click <strong>Run</strong>. The success messagebox shows the output folder.</li>
@@ -196,7 +202,7 @@ uv run python -m vaila.soccerfield_keypoints_ai \
         <li><code>docs/fifa_workflow.md</code> §4.5 — external <code>unified/</code> tree, QA export, dedupe, train</li>
       </ul>
 
-      <div class="footer">vailá — Multimodal Toolbox · AGPL-3.0 · Generated April 2026 ·
+      <div class="footer">vailá — Multimodal Toolbox · AGPL-3.0 · Generated May 14, 2026 ·
         <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></div>
     </div>
   </body>

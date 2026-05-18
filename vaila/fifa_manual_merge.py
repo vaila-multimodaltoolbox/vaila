@@ -1,6 +1,6 @@
 """Merge manually-labeled YOLO Pose data into the FIFA `unified/` dataset.
 
-Update Date: 13 May 2026
+Update Date: 14 May 2026
 Version: 0.3.44
 
 This module reads a folder tree authored by human annotators (vailá

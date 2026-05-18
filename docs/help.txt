@@ -71,7 +71,7 @@ Available Tools:
 
     SAM 3 Video Segmentation
         Description: Text-prompt driven video segmentation using Segment Anything Model 3 (requires NVIDIA GPU + HF auth).
-        Instructions: Click "YOLO and SAM" -> "SAM", enter a text prompt (e.g., "person"), and process the video to generate masks and overlays.
+        Instructions: Click "Video AI tools" -> "SAM", enter a text prompt (e.g., "person"), and process the video to generate masks and overlays.
 
     FIFA cams→DLT
         Description: Converts FIFA starter-kit camera NPZ files to per-frame DLT parameters for 2D/3D reconstruction.

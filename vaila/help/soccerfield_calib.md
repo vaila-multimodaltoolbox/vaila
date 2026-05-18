@@ -4,7 +4,7 @@
 
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/soccerfield_calib.py`
-- **Version:** 0.1.0 (April 2026)
+- **Version:** 0.3.44 (May 2026)
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes — **Frame B → Soccer Tools → Soccer-Field Calib**
 - **CLI Interface:** Yes
@@ -17,13 +17,15 @@
 `soccerfield_calib.py` fits a **DLT2D homography** (8 coefficients) that
 maps a fixed broadcast frame to the **FIFA 105 × 68 m soccer field**,
 using a small set of clicked pixel keypoints (≥ 6) and the canonical
-3D reference [`vaila/models/soccerfield_ref3d.csv`](../models/soccerfield_ref3d.csv)
-(29 named points, Z = 0 ground plane).
+3D reference:
+
+- **Legacy 29-pt metre grid:** [`vaila/models/soccerfield_ref3d.csv`](../models/soccerfield_ref3d.csv) (getpixelvideo manual clicks with point names).
+- **32-pt FIFA-dataset order (pitch / YOLO F07VI):** [`vaila/models/soccerfield_ref3d_fifa_dataset.csv`](../models/soccerfield_ref3d_fifa_dataset.csv) — same `p1`…`p32` order as `soccerfield_keypoints_ai` → `field_keypoints_getpixelvideo.csv`.
 
 Outputs:
 
-- `<stem>_ref2d.csv` — world XY pairs used for fitting
-- `<stem>.dlt2d` — 8 DLT coefficients (compatible with `vaila/rec2d.py`)
+- `<stem>_ref2d.csv` — world XY pairs used for fitting (metres, FIFA centre-field system for the FIFA-dataset file)
+- `<stem>.dlt2d` — one or **many rows** (`frame`, 8 DLT coeffs) when `--all-frames` is used with a multi-row pixel CSV (compatible with `vaila/rec2d.py`)
 - `<stem>_homography_report.txt` — per-point reprojection error
 - `cameras/<stem>_homography.npz` (when `--data-root` is given) —
   fallback for FIFA sequences without an official `cameras/<stem>.npz`
@@ -36,7 +38,7 @@ Outputs:
 
 | Tool | Camera | Per frame? | Use |
 |---|---|---|---|
-| `soccerfield_calib.py` | **fixed / static frame** | **No** (single homography) | Static cam, demo, fallback when there is no FIFA NPZ |
+| `soccerfield_calib.py` | fixed / static **or** AI CSV | **Optional** (`--all-frames`) | Single H from clicks; **per-frame DLT** from `field_keypoints_getpixelvideo.csv` + `--pitch32` |
 | `fifa_to_dlt.py` (a.k.a. **`fifa dlt-export`**) | **moving broadcast** | **Yes** (one row / frame) | Pan/tilt/zoom — required for real broadcast |
 | `rec2d_one_dlt2d.py` | fixed | one row of 8 coeffs | Tripod 2D reconstruction |
 | `rec3d_one_dlt3d.py` | fixed (multi-cam) | one row of 11 coeffs/cam | Static lab |
@@ -47,7 +49,19 @@ Outputs:
 
 ---
 
-## Step-by-step (GUI)
+## Step-by-step (GUI from vailá button)
+
+Launching **Soccer-Field Calib** with no CLI args opens a short dialog:
+
+1. Choose **`field_keypoints_getpixelvideo.csv`** (or any paired `frame,p1_x,p1_y,…` CSV).
+2. Choose an **output folder**.
+3. Enable **Pitch32** when the CSV comes from `soccerfield_keypoints_ai` (auto-ticked if the filename contains `field_keypoints`).
+4. Enable **All frames** to write **one DLT row per CSV row** (broadcast / moving plane approximated frame-wise).
+5. **Run**.
+
+For manual clicks only (no CSV yet), use the CLI with `-v` video to open getpixelvideo, or prepare pixels first.
+
+### Legacy: getpixelvideo-only workflow
 
 ### Step 1 — Open
 
@@ -73,7 +87,7 @@ The script fits the homography, prints a per-point error report and
 writes the 4 output files. If you set **FIFA data-root**, it also
 drops `cameras/<stem>_homography.npz`.
 
----
+*(Note: the button launcher uses the new CSV-first dialog above; use `uv run python -m vaila.soccerfield_calib -v VIDEO.mp4` for the legacy getpixelvideo-first CLI path.)*
 
 ## CLI quick recipes
 
@@ -94,6 +108,17 @@ uv run vaila/soccerfield_calib.py \
   --frame 0 \
   -o /path/to/output_dir
 ```
+
+### Recipe 2b — `soccerfield_keypoints_ai` wide CSV, DLT per frame
+
+```bash
+uv run python -m vaila.soccerfield_calib \
+  -p /path/to/processed_field_kps_*/field_keypoints_getpixelvideo.csv \
+  --pitch32 --all-frames \
+  -o /path/to/calib_out
+```
+
+Uses `vaila/models/soccerfield_ref3d_fifa_dataset.csv` by default with `--pitch32`. Output `*.dlt2d` has one row per frame with enough visible points (≥ 6 by default).
 
 ### Recipe 3 — FIFA fallback (no official cameras NPZ)
 

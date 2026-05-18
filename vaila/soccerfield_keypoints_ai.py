@@ -1,5 +1,9 @@
 """AI soccer-field keypoints (pixels) for vailá.
 
+Project: vailá — vaila/soccerfield_keypoints_ai.py
+Update Date: 14 May 2026
+Version: 0.3.44
+
 Goal
 ----
 Provide an **automatic first pass** of soccer-field keypoints in pixel space to seed:
@@ -50,6 +54,21 @@ except ImportError:
 
 HF_REPO_ID = "Simon9/football-field-detection-roboflow"
 ROBOFLOW_DEFAULT_MODEL_ID = "football-field-detection-f07vi/14"
+
+_PACK_DIR = Path(__file__).resolve().parent
+# Checked-in docs / GUI default — actual files may be gitignored after training or download.
+_DEFAULT_ULTRALYTICS_WEIGHTS: tuple[Path, ...] = (
+    _PACK_DIR / "models" / "runs" / "pose_fifa" / "pitch32_recipeA_400ep" / "weights" / "best.pt",
+    _PACK_DIR / "models" / "soccerfield_keypoints_yolo" / "football_pitch32_best.pt",
+)
+
+
+def default_ultralytics_weights_path() -> Path | None:
+    """First existing local YOLO-pose .pt (same search order as docs / Field KPs button text)."""
+    for p in _DEFAULT_ULTRALYTICS_WEIGHTS:
+        if p.is_file():
+            return p
+    return None
 
 
 @dataclass(frozen=True)
@@ -257,9 +276,7 @@ def detect_field_keypoints(
                 f"Ultralytics weights not found: {ultralytics_weights}\n"
                 f"Tip: Ultralytics may suffix the run dir (e.g. '{ultralytics_weights.parent.parent.name}-3')."
             )
-        kps = _backend_ultralytics(
-            bgr, weights=resolved_w, conf=conf, imgsz=imgsz, device=device
-        )
+        kps = _backend_ultralytics(bgr, weights=resolved_w, conf=conf, imgsz=imgsz, device=device)
     else:
         raise ValueError(f"Unknown backend: {backend!r}")
 
@@ -384,7 +401,8 @@ def detect_field_keypoints_video(
                 f"[field_kps] frame={frame_index}"
                 f"{'' if n_frames is None else f'/{n_frames - 1}'}"
                 f" processed={processed + 1}"
-                f"{'' if max_frames_i is None else f'/{max_frames_i}'}"
+                f"{'' if max_frames_i is None else f'/{max_frames_i}'}",
+                flush=True,
             )
             if backend == "roboflow":
                 api_key = (roboflow_api_key or os.environ.get("ROBOFLOW_API_KEY") or "").strip()
@@ -428,7 +446,9 @@ def detect_field_keypoints_video(
                 )
 
             if writer is not None:
-                writer.write(_draw_kps(bgr, [kp for kp in kps if float(kp.conf) >= float(draw_min_conf)]))
+                writer.write(
+                    _draw_kps(bgr, [kp for kp in kps if float(kp.conf) >= float(draw_min_conf)])
+                )
 
             # Fill getpixelvideo row (blank for low-confidence points)
             if 0 <= int(frame_index) < len(df_gv):
@@ -485,26 +505,36 @@ def detect_field_keypoints_video(
 
 
 def run_gui() -> None:
+    # Hidden root during native file picks; main UI attaches to root (not Toplevel) so the window
+    # maps reliably on Linux/Wayland — Toplevel(withdrawn_parent) often stays invisible.
     root = tk.Tk()
     root.withdraw()
 
-    video = filedialog.askopenfilename(
-        title="Select soccer video (broadcast)",
+    videos = filedialog.askopenfilenames(
+        parent=root,
+        title="Select soccer video(s) (broadcast)",
         filetypes=[("Video", "*.mp4 *.avi *.mov *.mkv *.webm"), ("All files", "*.*")],
     )
-    if not video:
+    if not videos:
+        root.destroy()
         return
-    out_parent = filedialog.askdirectory(title="Select output folder")
+    out_parent = filedialog.askdirectory(parent=root, title="Select output folder")
     if not out_parent:
+        root.destroy()
         return
 
-    dlg = tk.Toplevel(root)
-    dlg.title("Soccer field keypoints (AI)")
-    frm = ttk.Frame(dlg, padding=10)
+    root.title("Soccer field keypoints (AI)")
+    root.minsize(520, 480)
+    root.geometry("+120+120")
+    root.deiconify()
+    frm = ttk.Frame(root, padding=10)
     frm.grid(row=0, column=0, sticky="nsew")
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(0, weight=1)
 
+    _dw = default_ultralytics_weights_path()
     mode_var = tk.StringVar(value="frame")
-    backend_var = tk.StringVar(value="roboflow")
+    backend_var = tk.StringVar(value="ultralytics" if _dw is not None else "roboflow")
     frame_var = tk.StringVar(value="0")
     start_var = tk.StringVar(value="0")
     stride_var = tk.StringVar(value="10")
@@ -515,80 +545,156 @@ def run_gui() -> None:
     imgsz_var = tk.StringVar(value="1280")
     device_var = tk.StringVar(value="")
     model_id_var = tk.StringVar(value=ROBOFLOW_DEFAULT_MODEL_ID)
-    weights_var = tk.StringVar(value="")
+    weights_var = tk.StringVar(value=str(_dw) if _dw is not None else "")
     api_key_var = tk.StringVar(value=os.environ.get("ROBOFLOW_API_KEY", ""))
 
-    ttk.Label(frm, text="Mode:").grid(row=0, column=0, sticky="w")
-    ttk.Combobox(frm, textvariable=mode_var, values=("frame", "video"), width=18, state="readonly").grid(
-        row=0, column=1, sticky="w"
+    r = 0
+    ttk.Label(
+        frm,
+        text=f"{len(videos)} video(s) selected — output base: {out_parent}",
+        wraplength=500,
+    ).grid(row=r, column=0, sticky="w")
+    r += 1
+    ttk.Label(
+        frm,
+        text="Same flags as CLI (see: python -m vaila.soccerfield_keypoints_ai --help)",
+        foreground="#444",
+        wraplength=500,
+    ).grid(row=r, column=0, sticky="w", pady=(0, 6))
+    r += 1
+
+    lf_mode = ttk.LabelFrame(frm, text="Mode (--mode, --frame)", padding=8)
+    lf_mode.grid(row=r, column=0, sticky="ew", pady=(0, 6))
+    frm.columnconfigure(0, weight=1)
+    lf_mode.columnconfigure(1, weight=1)
+    ttk.Label(lf_mode, text="Run mode:").grid(row=0, column=0, sticky="w")
+    ttk.Combobox(
+        lf_mode, textvariable=mode_var, values=("frame", "video"), width=16, state="readonly"
+    ).grid(row=0, column=1, sticky="w")
+    ttk.Label(lf_mode, text="Frame index (single-frame mode, --frame):").grid(
+        row=1, column=0, sticky="w", pady=(6, 0)
     )
-    ttk.Label(frm, text="Backend:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-    ttk.Combobox(frm, textvariable=backend_var, values=("roboflow", "ultralytics"), width=18).grid(
+    ttk.Entry(lf_mode, textvariable=frame_var, width=14).grid(
         row=1, column=1, sticky="w", pady=(6, 0)
     )
-    ttk.Label(frm, text="Frame index (frame mode):").grid(row=2, column=0, sticky="w", pady=(6, 0))
-    ttk.Entry(frm, textvariable=frame_var, width=10).grid(row=2, column=1, sticky="w", pady=(6, 0))
+    r += 1
 
-    ttk.Label(frm, text="Start frame (video):").grid(row=3, column=0, sticky="w", pady=(6, 0))
-    ttk.Entry(frm, textvariable=start_var, width=10).grid(row=3, column=1, sticky="w", pady=(6, 0))
-    ttk.Label(frm, text="Stride (video):").grid(row=4, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=stride_var, width=10).grid(row=4, column=1, sticky="w")
-    ttk.Label(frm, text="Max frames (video, empty=all):").grid(row=5, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=max_frames_var, width=10).grid(row=5, column=1, sticky="w")
-    ttk.Checkbutton(frm, text="Write overlay .mp4 (video)", variable=overlay_video_var).grid(
-        row=6, column=0, columnspan=2, sticky="w", pady=(6, 0)
+    lf_video = ttk.LabelFrame(
+        frm, text="Video mode (--start, --stride, --max-frames, --overlay-video)", padding=8
+    )
+    lf_video.grid(row=r, column=0, sticky="ew", pady=(0, 6))
+    lf_video.columnconfigure(1, weight=1)
+    ttk.Label(lf_video, text="Start frame (--start):").grid(row=0, column=0, sticky="w")
+    ent_start = ttk.Entry(lf_video, textvariable=start_var, width=14)
+    ent_start.grid(row=0, column=1, sticky="w")
+    ttk.Label(lf_video, text="Stride (--stride):").grid(row=1, column=0, sticky="w", pady=(6, 0))
+    ent_stride = ttk.Entry(lf_video, textvariable=stride_var, width=14)
+    ent_stride.grid(row=1, column=1, sticky="w", pady=(6, 0))
+    ttk.Label(lf_video, text="Max processed frames (--max-frames, empty = all):").grid(
+        row=2, column=0, sticky="w", pady=(6, 0)
+    )
+    ent_maxf = ttk.Entry(lf_video, textvariable=max_frames_var, width=14)
+    ent_maxf.grid(row=2, column=1, sticky="w", pady=(6, 0))
+    chk_overlay = ttk.Checkbutton(
+        lf_video, text="Write overlay .mp4 (--overlay-video)", variable=overlay_video_var
+    )
+    chk_overlay.grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
+    r += 1
+
+    lf_det = ttk.LabelFrame(frm, text="Detection (--conf, --draw-min-conf)", padding=8)
+    lf_det.grid(row=r, column=0, sticky="ew", pady=(0, 6))
+    lf_det.columnconfigure(1, weight=1)
+    ttk.Label(lf_det, text="Model confidence (--conf):").grid(row=0, column=0, sticky="w")
+    ttk.Entry(lf_det, textvariable=conf_var, width=14).grid(row=0, column=1, sticky="w")
+    ttk.Label(lf_det, text="Draw/save min conf (--draw-min-conf):").grid(
+        row=1, column=0, sticky="w", pady=(6, 0)
+    )
+    ttk.Entry(lf_det, textvariable=draw_min_conf_var, width=14).grid(
+        row=1, column=1, sticky="w", pady=(6, 0)
+    )
+    r += 1
+
+    inner_be = ttk.Frame(frm)
+    inner_be.grid(row=r, column=0, sticky="w", pady=(0, 4))
+    ttk.Label(inner_be, text="Backend (--backend):").pack(side=tk.LEFT)
+    ttk.Combobox(
+        inner_be,
+        textvariable=backend_var,
+        values=("roboflow", "ultralytics"),
+        width=16,
+        state="readonly",
+    ).pack(side=tk.LEFT, padx=(8, 0))
+    r += 1
+
+    backend_panel = ttk.Frame(frm)
+    backend_panel.grid(row=r, column=0, sticky="ew", pady=(0, 6))
+    backend_panel.columnconfigure(0, weight=1)
+    r += 1
+
+    lf_rf = ttk.LabelFrame(
+        backend_panel, text="Roboflow (--roboflow-model-id, ROBOFLOW_API_KEY)", padding=8
+    )
+    lf_rf.grid(row=0, column=0, sticky="ew")
+    lf_rf.columnconfigure(1, weight=1)
+    ttk.Label(lf_rf, text="Model id:").grid(row=0, column=0, sticky="w")
+    ttk.Entry(lf_rf, textvariable=model_id_var).grid(row=0, column=1, sticky="ew", padx=(8, 0))
+    ttk.Label(lf_rf, text="API key (optional if env set):").grid(
+        row=1, column=0, sticky="w", pady=(6, 0)
+    )
+    ttk.Entry(lf_rf, textvariable=api_key_var, show="*").grid(
+        row=1, column=1, sticky="ew", padx=(8, 0), pady=(6, 0)
     )
 
-    ttk.Label(frm, text="Confidence:").grid(row=7, column=0, sticky="w", pady=(6, 0))
-    ttk.Entry(frm, textvariable=conf_var, width=10).grid(row=7, column=1, sticky="w", pady=(6, 0))
-    ttk.Label(frm, text="Draw/save min conf:").grid(row=8, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=draw_min_conf_var, width=10).grid(row=8, column=1, sticky="w")
-    ttk.Label(frm, text="imgsz (ultralytics):").grid(row=9, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=imgsz_var, width=10).grid(row=9, column=1, sticky="w")
-    ttk.Label(frm, text="Device (ultralytics):").grid(row=10, column=0, sticky="w")
-    ttk.Entry(frm, textvariable=device_var, width=10).grid(row=10, column=1, sticky="w")
-
-    lbl_model = ttk.Label(frm, text="Roboflow model id:")
-    ent_model = ttk.Entry(frm, textvariable=model_id_var, width=38)
-    lbl_api = ttk.Label(frm, text="Roboflow API key (optional):")
-    ent_api = ttk.Entry(frm, textvariable=api_key_var, width=38, show="*")
-    lbl_model.grid(row=11, column=0, sticky="w", pady=(6, 0))
-    ent_model.grid(row=11, column=1, columnspan=2, sticky="ew", pady=(6, 0))
-    lbl_api.grid(row=12, column=0, sticky="w", pady=(6, 0))
-    ent_api.grid(row=12, column=1, columnspan=2, sticky="ew", pady=(6, 0))
-
-    ttk.Label(frm, text="Ultralytics weights (.pt):").grid(row=13, column=0, sticky="w", pady=(6, 0))
-    ttk.Entry(frm, textvariable=weights_var, width=38).grid(
-        row=13, column=1, columnspan=2, sticky="ew", pady=(6, 0)
+    lf_ut = ttk.LabelFrame(
+        backend_panel, text="Ultralytics (--weights, --imgsz, --device)", padding=8
     )
+    lf_ut.grid(row=0, column=0, sticky="ew")
+    lf_ut.columnconfigure(1, weight=1)
+    ttk.Label(lf_ut, text="Weights (.pt), required:").grid(row=0, column=0, sticky="nw")
+    ttk.Entry(lf_ut, textvariable=weights_var).grid(row=0, column=1, sticky="ew", padx=(8, 0))
 
     def _browse_weights() -> None:
         p = filedialog.askopenfilename(
+            parent=root,
             title="Select YOLO pose weights (.pt)",
             filetypes=[("PyTorch", "*.pt"), ("All files", "*.*")],
         )
         if p:
             weights_var.set(p)
 
-    ttk.Button(frm, text="Browse…", command=_browse_weights).grid(row=13, column=3, padx=(6, 0))
+    ttk.Button(lf_ut, text="Browse…", command=_browse_weights).grid(row=0, column=2, padx=(6, 0))
+    ttk.Label(lf_ut, text="Inference size (--imgsz):").grid(
+        row=1, column=0, sticky="w", pady=(6, 0)
+    )
+    ttk.Entry(lf_ut, textvariable=imgsz_var, width=14).grid(
+        row=1, column=1, sticky="w", padx=(8, 0), pady=(6, 0)
+    )
+    ttk.Label(lf_ut, text="Device (--device, e.g. 0 or cpu, empty = auto):").grid(
+        row=2, column=0, sticky="w", pady=(6, 0)
+    )
+    ttk.Entry(lf_ut, textvariable=device_var, width=14).grid(
+        row=2, column=1, sticky="w", padx=(8, 0), pady=(6, 0)
+    )
+    lf_ut.grid_remove()
 
-    frm.columnconfigure(2, weight=1)
+    def _sync_mode_video_widgets(*_args: object) -> None:
+        st = "normal" if mode_var.get().strip() == "video" else "disabled"
+        for w in (ent_start, ent_stride, ent_maxf, chk_overlay):
+            w.configure(state=st)
 
-    def _sync_backend_rows(*_args: object) -> None:
+    def _sync_backend_panels(*_args: object) -> None:
         b = backend_var.get().strip()
         if b == "roboflow":
-            lbl_model.grid()
-            ent_model.grid()
-            lbl_api.grid()
-            ent_api.grid()
+            lf_ut.grid_remove()
+            lf_rf.grid(row=0, column=0, sticky="ew")
         else:
-            lbl_model.grid_remove()
-            ent_model.grid_remove()
-            lbl_api.grid_remove()
-            ent_api.grid_remove()
+            lf_rf.grid_remove()
+            lf_ut.grid(row=0, column=0, sticky="ew")
 
-    backend_var.trace_add("write", _sync_backend_rows)
-    _sync_backend_rows()
+    mode_var.trace_add("write", _sync_mode_video_widgets)
+    backend_var.trace_add("write", _sync_backend_panels)
+    _sync_mode_video_widgets()
+    _sync_backend_panels()
 
     result: dict[str, object] = {"ok": False, "err": ""}
 
@@ -599,49 +705,70 @@ def run_gui() -> None:
             api_override = api_key_var.get().strip() or None
             device_raw = device_var.get().strip()
             device: str | int | None = None if device_raw == "" else device_raw
-            if mode_var.get().strip() == "frame":
-                detect_field_keypoints(
-                    Path(video),
-                    frame_index=int(frame_var.get().strip() or "0"),
-                    backend=backend,
-                    roboflow_api_key=api_override,
-                    roboflow_model_id=model_id_var.get().strip() or ROBOFLOW_DEFAULT_MODEL_ID,
-                    ultralytics_weights=Path(weights_var.get()).expanduser().resolve()
-                    if weights_var.get().strip()
-                    else None,
-                    conf=float(conf_var.get().strip() or "0.3"),
-                    imgsz=int(imgsz_var.get().strip() or "1280"),
-                    device=device,
-                    draw_min_conf=float(draw_min_conf_var.get().strip() or "0.3"),
-                    out_dir=out_base,
+            if backend == "ultralytics" and not weights_var.get().strip():
+                picked = filedialog.askopenfilename(
+                    parent=root,
+                    title="Select Ultralytics weights (.pt) — required for --backend ultralytics",
+                    filetypes=[("PyTorch", "*.pt"), ("All files", "*.*")],
                 )
-            else:
-                mf_raw = (max_frames_var.get() or "").strip()
-                max_frames = None if mf_raw == "" else int(mf_raw)
-                detect_field_keypoints_video(
-                    Path(video),
-                    backend=backend,
-                    roboflow_api_key=api_override,
-                    roboflow_model_id=model_id_var.get().strip() or ROBOFLOW_DEFAULT_MODEL_ID,
-                    ultralytics_weights=Path(weights_var.get()).expanduser().resolve()
-                    if weights_var.get().strip()
-                    else None,
-                    conf=float(conf_var.get().strip() or "0.3"),
-                    imgsz=int(imgsz_var.get().strip() or "1280"),
-                    device=device,
-                    draw_min_conf=float(draw_min_conf_var.get().strip() or "0.3"),
-                    out_dir=out_base,
-                    start=int(start_var.get().strip() or "0"),
-                    stride=int(stride_var.get().strip() or "10"),
-                    max_frames=max_frames,
-                    write_overlay_video=bool(overlay_video_var.get()),
-                )
+                if not picked:
+                    messagebox.showwarning(
+                        "Weights required",
+                        "Ultralytics backend needs a .pt file (--weights).\n\n"
+                        "Pick a file or switch to Roboflow.",
+                        parent=root,
+                    )
+                    return
+                weights_var.set(picked)
+
+            for vid_str in videos:
+                vid_path = Path(vid_str)
+                vid_out = out_base / vid_path.stem if len(videos) > 1 else out_base
+                print(f"\n[field_kps] Starting video: {vid_path.name}", flush=True)
+
+                if mode_var.get().strip() == "frame":
+                    detect_field_keypoints(
+                        vid_path,
+                        frame_index=int(frame_var.get().strip() or "0"),
+                        backend=backend,
+                        roboflow_api_key=api_override,
+                        roboflow_model_id=model_id_var.get().strip() or ROBOFLOW_DEFAULT_MODEL_ID,
+                        ultralytics_weights=Path(weights_var.get()).expanduser().resolve()
+                        if weights_var.get().strip()
+                        else None,
+                        conf=float(conf_var.get().strip() or "0.3"),
+                        imgsz=int(imgsz_var.get().strip() or "1280"),
+                        device=device,
+                        draw_min_conf=float(draw_min_conf_var.get().strip() or "0.3"),
+                        out_dir=vid_out,
+                    )
+                else:
+                    mf_raw = (max_frames_var.get() or "").strip()
+                    max_frames = None if mf_raw == "" else int(mf_raw)
+                    detect_field_keypoints_video(
+                        vid_path,
+                        backend=backend,
+                        roboflow_api_key=api_override,
+                        roboflow_model_id=model_id_var.get().strip() or ROBOFLOW_DEFAULT_MODEL_ID,
+                        ultralytics_weights=Path(weights_var.get()).expanduser().resolve()
+                        if weights_var.get().strip()
+                        else None,
+                        conf=float(conf_var.get().strip() or "0.3"),
+                        imgsz=int(imgsz_var.get().strip() or "1280"),
+                        device=device,
+                        draw_min_conf=float(draw_min_conf_var.get().strip() or "0.3"),
+                        out_dir=vid_out,
+                        start=int(start_var.get().strip() or "0"),
+                        stride=int(stride_var.get().strip() or "10"),
+                        max_frames=max_frames,
+                        write_overlay_video=bool(overlay_video_var.get()),
+                    )
             result["ok"] = True
-            messagebox.showinfo("Done", f"Wrote outputs under:\n{out_base}", parent=dlg)
-            dlg.destroy()
+            messagebox.showinfo("Done", f"Wrote outputs under:\n{out_base}", parent=root)
+            root.destroy()
         except Exception as e:
             result["err"] = str(e)
-            messagebox.showerror("Field keypoints failed", str(e), parent=dlg)
+            messagebox.showerror("Field keypoints failed", str(e), parent=root)
 
     def _open_help() -> None:
         help_html = Path(__file__).resolve().parent / "help" / "soccerfield_keypoints_ai.html"
@@ -651,19 +778,25 @@ def run_gui() -> None:
             messagebox.showinfo(
                 "Help",
                 "Help file not found. See docs/fifa_workflow.md or run with --help.",
-                parent=dlg,
+                parent=root,
             )
 
     btns = ttk.Frame(frm)
-    btns.grid(row=14, column=0, columnspan=4, pady=(10, 0))
+    btns.grid(row=r, column=0, sticky="w", pady=(10, 0))
     ttk.Button(btns, text="Run", command=_run).pack(side=tk.LEFT, padx=4)
     ttk.Button(btns, text="Help", command=_open_help).pack(side=tk.LEFT, padx=4)
-    ttk.Button(btns, text="Close", command=dlg.destroy).pack(side=tk.LEFT, padx=4)
+    ttk.Button(btns, text="Close", command=root.destroy).pack(side=tk.LEFT, padx=4)
 
-    dlg.transient(root)
-    dlg.grab_set()
-    root.wait_window(dlg)
-    root.destroy()
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
+
+    try:
+        root.lift()
+        root.attributes("-topmost", True)
+        root.after(50, lambda: root.attributes("-topmost", False))
+    except tk.TclError:
+        pass
+    root.focus_force()
+    root.mainloop()
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -673,9 +806,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--mode", choices=["frame", "video"], default="frame")
     parser.add_argument("--frame", type=int, default=0, help="Frame index for inference")
     parser.add_argument("--start", type=int, default=0, help="Start frame for video mode")
-    parser.add_argument("--stride", type=int, default=10, help="Process every Nth frame in video mode")
-    parser.add_argument("--max-frames", type=int, default=None, help="Max processed frames in video mode")
-    parser.add_argument("--overlay-video", action="store_true", help="Write an overlay .mp4 in video mode")
+    parser.add_argument(
+        "--stride", type=int, default=10, help="Process every Nth frame in video mode"
+    )
+    parser.add_argument(
+        "--max-frames", type=int, default=None, help="Max processed frames in video mode"
+    )
+    parser.add_argument(
+        "--overlay-video", action="store_true", help="Write an overlay .mp4 in video mode"
+    )
     parser.add_argument("--backend", choices=["roboflow", "ultralytics"], default="roboflow")
     parser.add_argument("--conf", type=float, default=0.3, help="Confidence threshold")
     parser.add_argument(
@@ -692,19 +831,28 @@ def main(argv: list[str] | None = None) -> None:
         help="Ultralytics device (e.g. '0', 'cpu'). Empty = auto. Used only for backend=ultralytics.",
     )
     parser.add_argument("--roboflow-model-id", type=str, default=ROBOFLOW_DEFAULT_MODEL_ID)
-    parser.add_argument("--weights", type=Path, default=None, help="Ultralytics weights (.pt)")
+    parser.add_argument(
+        "--weights",
+        type=Path,
+        default=None,
+        help="Ultralytics weights (.pt). If omitted with --backend ultralytics, first match under "
+        "vaila/models/.../best.pt (see module default list) is used when present.",
+    )
     args = parser.parse_args(argv)
 
     if args.input and args.output:
         out_base = args.output / f"processed_field_kps_{_timestamp()}"
         device: str | int | None = None if (args.device or "").strip() == "" else args.device
+        weights_path: Path | None = args.weights
+        if args.backend == "ultralytics" and weights_path is None:
+            weights_path = default_ultralytics_weights_path()
         if args.mode == "frame":
             detect_field_keypoints(
                 args.input,
                 frame_index=args.frame,
                 backend=args.backend,
                 roboflow_model_id=args.roboflow_model_id,
-                ultralytics_weights=args.weights,
+                ultralytics_weights=weights_path,
                 conf=args.conf,
                 draw_min_conf=args.draw_min_conf,
                 imgsz=args.imgsz,
@@ -716,7 +864,7 @@ def main(argv: list[str] | None = None) -> None:
                 args.input,
                 backend=args.backend,
                 roboflow_model_id=args.roboflow_model_id,
-                ultralytics_weights=args.weights,
+                ultralytics_weights=weights_path,
                 conf=args.conf,
                 draw_min_conf=args.draw_min_conf,
                 imgsz=args.imgsz,
