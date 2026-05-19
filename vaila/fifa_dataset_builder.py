@@ -2535,8 +2535,10 @@ def draw_yolo_pose_overlay(
         v = int(float(line_tokens[5 + i * 3 + 2]))
         if v <= 0:
             continue
-        color = (0, 255, 0) if v == 2 else (0, 165, 255)
-        cv2.circle(bgr, (int(x), int(y)), 4, color, -1)
+        # Orange keypoints (visible on green turf); BGR: bright vs dim orange
+        color = (0, 165, 255) if v >= 2 else (0, 120, 200)
+        cv2.circle(bgr, (int(x), int(y)), 5, color, -1)
+        cv2.circle(bgr, (int(x), int(y)), 5, (0, 0, 0), 1)
         cv2.putText(
             bgr,
             str(i),
