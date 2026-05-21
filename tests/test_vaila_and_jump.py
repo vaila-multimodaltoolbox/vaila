@@ -18,8 +18,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vaila.vaila_and_jump import (
+    _jump_context_from_cfg,
     _load_jump_context_from_file,
     _load_jump_context_from_toml,
+    _parse_locale_float,
     calculate_average_power,
     calculate_baseline,
     calculate_force,
@@ -184,6 +186,20 @@ class TestCalculateTimeOfFlight:
 # ──────────────────────────────────────────────
 # 10. TOML context loading
 # ──────────────────────────────────────────────
+class TestParseLocaleFloat:
+    def test_dot_decimal(self):
+        assert _parse_locale_float("0.40") == pytest.approx(0.40)
+
+    def test_comma_decimal(self):
+        assert _parse_locale_float("0,42") == pytest.approx(0.42)
+
+    def test_leading_dot(self):
+        assert _parse_locale_float(".40") == pytest.approx(0.40)
+
+    def test_numeric_input(self):
+        assert _parse_locale_float(0.38) == pytest.approx(0.38)
+
+
 class TestTomlContextLoading:
     def _write_toml(self, path: Path, mass: float, fps: float, shank: float):
         content = f"[jump_context]\nmass_kg = {mass}\nfps = {fps}\nshank_length_m = {shank}\n"
@@ -197,6 +213,11 @@ class TestTomlContextLoading:
         assert ctx["mass_kg"] == pytest.approx(75.0)
         assert ctx["fps"] == pytest.approx(240.0)
         assert ctx["shank_length_m"] == pytest.approx(0.40)
+
+    def test_jump_context_from_cfg_comma_string_shank(self):
+        ctx = _jump_context_from_cfg({"mass_kg": 75.0, "fps": 240.0, "shank_length_m": "0,43"})
+        assert ctx is not None
+        assert ctx["shank_length_m"] == pytest.approx(0.43)
 
     def test_load_from_file_missing(self):
         ctx = _load_jump_context_from_file("/nonexistent/path.toml")

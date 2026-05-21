@@ -6,7 +6,7 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 02 March 2026
+Update Date: 21 May 2026
 Version: 0.1.3
 Python Version: 3.12.13
 
@@ -166,6 +166,63 @@ except Exception:  # pragma: no cover
 _JUMP_CONTEXT: dict[str, float] | None = None
 
 
+def _parse_locale_float(value: object) -> float:
+    """Parse a float from GUI/TOML input; accepts comma or dot decimals."""
+    if isinstance(value, bool):
+        raise ValueError("boolean is not a float")
+    if isinstance(value, str):
+        text = value.strip().replace(",", ".")
+        if not text:
+            raise ValueError("empty float")
+        return float(text)
+    if isinstance(value, int | float):
+        return float(value)
+    text = str(value).strip().replace(",", ".")
+    if not text:
+        raise ValueError("empty float")
+    return float(text)
+
+
+def _ask_locale_float(
+    title: str,
+    prompt: str,
+    *,
+    parent=None,
+    initialvalue: float | None = None,
+    minvalue: float | None = None,
+    maxvalue: float | None = None,
+) -> float | None:
+    """Like ``simpledialog.askfloat`` but parses with Python (comma or dot OK)."""
+
+    class _LocaleFloatDialog(simpledialog._QueryDialog):  # ty: ignore[unresolved-attribute]
+        errormessage = "Not a floating-point value."
+
+        def getresult(self):
+            return _parse_locale_float(self.entry.get())
+
+    dialog = _LocaleFloatDialog(
+        title,
+        prompt,
+        initialvalue=initialvalue,
+        minvalue=minvalue,
+        maxvalue=maxvalue,
+        parent=parent,
+    )
+    return dialog.result
+
+
+def _jump_context_from_cfg(cfg: dict) -> dict[str, float] | None:
+    try:
+        mass = _parse_locale_float(cfg.get("mass_kg", 0))
+        fps = _parse_locale_float(cfg.get("fps", 0))
+        shank = _parse_locale_float(cfg.get("shank_length_m", 0.0))
+    except (TypeError, ValueError):
+        return None
+    if mass > 0 and fps > 0 and shank > 0:
+        return {"mass_kg": mass, "fps": fps, "shank_length_m": shank}
+    return None
+
+
 def _open_jump_help() -> None:
     try:
         help_html = Path(__file__).parent / "help" / "vaila_and_jump_help.html"
@@ -207,11 +264,9 @@ def _load_jump_context_from_toml(
                     with open(p, "rb") as f:
                         data = _toml_reader.load(f)
                 cfg = data.get("jump_context", {})
-                mass = float(cfg.get("mass_kg", 0))
-                fps = float(cfg.get("fps", 0))
-                shank = float(cfg.get("shank_length_m", 0.0))
-                if mass > 0 and fps > 0 and shank > 0:
-                    return {"mass_kg": mass, "fps": float(fps), "shank_length_m": shank}
+                ctx = _jump_context_from_cfg(cfg)
+                if ctx is not None:
+                    return ctx
             except Exception:
                 pass
     return None
@@ -231,11 +286,7 @@ def _load_jump_context_from_file(config_path: str | Path) -> dict[str, float] | 
             with open(p, "rb") as f:
                 data = _toml_reader.load(f)
         cfg = data.get("jump_context", {})
-        mass = float(cfg.get("mass_kg", 0))
-        fps = float(cfg.get("fps", 0))
-        shank = float(cfg.get("shank_length_m", 0.0))
-        if mass > 0 and fps > 0 and shank > 0:
-            return {"mass_kg": mass, "fps": float(fps), "shank_length_m": shank}
+        return _jump_context_from_cfg(cfg)
     except Exception:
         pass
     return None
@@ -288,7 +339,7 @@ def _get_or_ask_jump_context(
     with contextlib.suppress(Exception):
         root.attributes("-topmost", True)
     try:
-        mass = simpledialog.askfloat(
+        mass = _ask_locale_float(
             "Mass (kg)",
             "Enter subject mass (kg):",
             parent=root,
@@ -297,15 +348,16 @@ def _get_or_ask_jump_context(
         )
         if mass is None:
             return None
-        fps = simpledialog.askfloat(
+        fps = _ask_locale_float(
             "FPS", "Enter video FPS (frames/s):", parent=root, minvalue=1.0, maxvalue=1000.0
         )
         if fps is None:
             fps = 30
-        shank = simpledialog.askfloat(
+        shank = _ask_locale_float(
             "Shank length (m)",
-            "Enter shank length in meters (e.g., 0.40):",
+            "Enter shank length in meters (e.g., 0.40 or 0,40):",
             parent=root,
+            initialvalue=0.40,
             minvalue=0.1,
             maxvalue=1.0,
         )
