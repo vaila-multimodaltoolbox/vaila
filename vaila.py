@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 14 May 2026
+Update Date: 19 May 2026
 Version: 0.3.44
 
 Example of usage:
@@ -3001,7 +3001,7 @@ class Vaila(tk.Tk):
         ).pack(anchor="w")
         tk.Label(
             frm,
-            text="Field keypoints (YOLO pose), calibration (DLT2D) e utilitários FIFA.",
+            text="Field keypoints (YOLO pose), calibration (DLT2D), and FIFA utilities.",
             font=("default", self.font_size),
         ).pack(anchor="w", pady=(4, 10))
 
@@ -3037,7 +3037,13 @@ class Vaila(tk.Tk):
             text="FIFA: merge manual labels",
             command=lambda: (win.destroy(), self.fifa_manual_merge()),
             width=22,
-        ).grid(row=2, column=0, padx=4, pady=4, sticky="we", columnspan=2)
+        ).grid(row=2, column=0, padx=4, pady=4, sticky="we")
+        tk.Button(
+            btn_frame,
+            text="YOLO Dataset QA",
+            command=lambda: (win.destroy(), self.fifa_yolo_dataset_qa()),
+            width=22,
+        ).grid(row=2, column=1, padx=4, pady=4, sticky="we")
 
         for col in (0, 1):
             btn_frame.grid_columnconfigure(col, weight=1)
@@ -3141,6 +3147,23 @@ class Vaila(tk.Tk):
         print("Docs:    docs/fifa_workflow.md §4.5 (external tree, QA export, dedupe, yolo train)")
         print("=" * 60 + "\n")
         run_vaila_module("vaila.fifa_dataset_builder", "vaila/fifa_dataset_builder.py")
+
+    def fifa_yolo_dataset_qa(self):
+        """QA a Roboflow YOLO-Pose pitch export and draw keypoint overlays.
+
+        Wraps :mod:`vaila.fifa_yolo_dataset_qa` — validates ``train/valid/test``
+        trees (32 keypoints, ``data.yaml``) and writes preview JPEGs under
+        ``images_with_labels/``. CLI: ``python -m vaila.fifa_yolo_dataset_qa``.
+        """
+        print("\n" + "=" * 60)
+        print("Launching: vaila.fifa_yolo_dataset_qa (Tk dialog)")
+        print("Features: validate 32-kp labels, export orange keypoint overlays")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.fifa_yolo_dataset_qa",
+            "vaila/fifa_yolo_dataset_qa.py",
+            extra_py_flags=("-u",),
+        )
 
     def fifa_manual_merge(self):
         """Merge manually-labeled YOLO Pose data into ``<dst>/unified/``.
