@@ -1,6 +1,6 @@
 ---
 name: fifa-vaila-continuation
-description: Resume work on the FIFA Skeletal Tracking Light 2026 challenge using vailá modules (SAM 3, soccer pitch keypoints, calibration, per-frame DLT). Use whenever the user reopens the project after closing the terminal, asks "where did we stop on FIFA?", or wants the next concrete commands to run from `/home/preto/data/vaila` with `.venv` already created.
+description: Resume work on the FIFA Skeletal Tracking Light 2026 challenge using vailá modules (SAM 3, soccer pitch keypoints, calibration, per-frame DLT). Use whenever the user reopens the project after closing the terminal, asks "where did we stop on FIFA?", or wants the next concrete commands to run from `~/data/vaila` with `.venv` already created.
 ---
 
 # FIFA + vailá Continuation Skill
@@ -9,8 +9,8 @@ Companion files:
 
 - Maintenance rule: when you edit any `*.py` during this continuation, also update version/date metadata (global version from `vaila.py`), root `README.md` `Last updated:`, and matching help `.md/.html`. See `AGENTS.md` (“Mandatory: Update metadata on any script change”).
 
-- `/home/preto/data/vaila/AGENT_HISTORY.md` — what was done, current state, decisions.
-- `/home/preto/data/vaila/HISTORY.md` — chronological log of the session.
+- `~/data/vaila/AGENT_HISTORY.md` — what was done, current state, decisions.
+- `~/data/vaila/HISTORY.md` — chronological log of the session.
 - `.claude/skills/fifa-skeletal-tracking/SKILL.md` — full FIFA pipeline reference.
 - `.claude/skills/sam3-video/SKILL.md` — SAM 3 video segmentation reference.
 - `.claude/skills/soccer-field-keypoints-yolo/SKILL.md` — pitch-keypoint training/inference.
@@ -18,7 +18,7 @@ Companion files:
 - `.claude/skills/sports-field-visualization/SKILL.md` — field rendering helpers.
 
 Companion repo (the official starter kit):
-`/home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`.
+`~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`.
 
 ---
 
@@ -40,9 +40,9 @@ Continue from a known-good baseline and execute the improvement path:
 - `vaila/models/sam3/sam3.pt` and `sam3.1_multiplex.pt` present.
 - `cv2.VideoCapture` is back after `uv pip install --reinstall opencv-python==4.10.0.84`.
 - SAM 3 smoke test: 32 frames of `ARG_CRO_000737.mp4` written to
-  `/home/preto/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183925/`.
+  `~/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183925/`.
 - SAM 3 60-frame test: 37 person IDs tracked, `sam_points.csv` produced.
-  Output: `/home/preto/data/FIFA/outputs_sam3_test1/processed_sam_20260425_213120/ARG_CRO_000737/`.
+  Output: `~/data/FIFA/outputs_sam3_test1/processed_sam_20260425_213120/ARG_CRO_000737/`.
 
 ## Pitch-keypoint detector status (2026-04-25 21:42)
 
@@ -56,7 +56,7 @@ Training recipe that escapes the collapse:
 
 ```bash
 uv run yolo pose train \
-  model=/home/preto/data/vaila/yolo26s-pose.pt \
+  model=~/data/vaila/yolo26s-pose.pt \
   data=vaila/models/hf_datasets/football-pitch-detection/data/data.yaml \
   epochs=800 imgsz=1280 batch=8 \
   mosaic=0.0 mixup=0.0 close_mosaic=0 erasing=0.0 \
@@ -67,11 +67,11 @@ uv run yolo pose train \
 Monitoring the running 400-ep job:
 
 ```bash
-tail -1 /home/preto/data/vaila/vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/results.csv \
+tail -1 ~/data/vaila/vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/results.csv \
   | awk -F',' '{printf "epoch=%s box_mAP50=%s pose_mAP50=%s pose_mAP50-95=%s\n",$1,$11,$15,$16}'
 
 # live progress
-tail -f /home/preto/data/vaila/vaila/models/runs/pose_fifa/train_recipeA_400ep.log
+tail -f ~/data/vaila/vaila/models/runs/pose_fifa/train_recipeA_400ep.log
 ```
 
 Sanity test for a freshly trained `best.pt` (CPU-friendly, no GPU):
@@ -79,10 +79,10 @@ Sanity test for a freshly trained `best.pt` (CPU-friendly, no GPU):
 ```bash
 CUDA_VISIBLE_DEVICES="" uv run python -m vaila.soccerfield_keypoints_ai \
   --mode video \
-  -i /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
-  -o /home/preto/data/FIFA/outputs_pitch_kps_v3 \
+  -i ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
+  -o ~/data/FIFA/outputs_pitch_kps_v3 \
   --backend ultralytics \
-  --weights /home/preto/data/vaila/vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
+  --weights ~/data/vaila/vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
   --imgsz 1280 --conf 0.20 --draw-min-conf 0.30 \
   --device cpu --stride 30 --max-frames 5 --overlay-video
 ```
@@ -97,7 +97,7 @@ Look at `field_keypoints_video.csv` and confirm `kp x` ranges across
 ### 0. Enter the project
 
 ```bash
-cd /home/preto/data/vaila
+cd ~/data/vaila
 source .venv/bin/activate     # optional — `uv run` works without it
 ```
 
@@ -119,8 +119,8 @@ ls vaila/models/sam3/sam3.pt
 
 ```bash
 uv run vaila/vaila_sam.py \
-  -i /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
-  -o /home/preto/data/FIFA/outputs_sam3_smoke \
+  -i ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
+  -o ~/data/FIFA/outputs_sam3_smoke \
   -t person --max-frames 32
 ```
 
@@ -130,8 +130,8 @@ Default uses subprocess-per-video isolation (clean GPU between clips):
 
 ```bash
 uv run vaila/vaila_sam.py \
-  -i /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos \
-  -o /home/preto/data/FIFA/outputs_sam3 \
+  -i ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos \
+  -o ~/data/FIFA/outputs_sam3 \
   -t person \
   --max-frames 64 \
   --max-input-long-edge 1280 \
@@ -152,8 +152,8 @@ Useful flags:
 export ROBOFLOW_API_KEY="YOUR_KEY"
 uv run python -m vaila.soccerfield_keypoints_ai \
   --mode video \
-  -i /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
-  -o /home/preto/data/FIFA/outputs_pitch_kps \
+  -i ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
+  -o ~/data/FIFA/outputs_pitch_kps \
   --backend roboflow \
   --roboflow-model-id football-field-detection-f07vi/14 \
   --conf 0.3 --draw-min-conf 0.05 \
@@ -166,8 +166,8 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 ```bash
 uv run python -m vaila.soccerfield_keypoints_ai \
   --mode video \
-  -i /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
-  -o /home/preto/data/FIFA/outputs_pitch_kps \
+  -i ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
+  -o ~/data/FIFA/outputs_pitch_kps \
   --backend ultralytics \
   --weights /ABS/PATH/TO/best.pt \
   --imgsz 1280 --conf 0.3 --draw-min-conf 0.05 \
@@ -187,9 +187,9 @@ uv run python -m vaila.soccerfield_calib --list-keypoints
 
 # Manual interactive calibration on a single FIFA clip
 uv run python -m vaila.soccerfield_calib \
-  -v /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
-  -o /home/preto/data/FIFA/outputs_pitch_calib \
-  --data-root /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
+  -v ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
+  -o ~/data/FIFA/outputs_pitch_calib \
+  --data-root ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
 ```
 
 > The detector outputs generic `p1, p2, …`. Until a mapping
@@ -204,8 +204,8 @@ official dataset or from `fifa baseline --export-camera`):
 
 ```bash
 uv run vaila/vaila_sam.py fifa dlt-export \
-  --cameras-dir /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/cameras \
-  --output-dir   /home/preto/data/FIFA/outputs_dlt_per_frame
+  --cameras-dir ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/cameras \
+  --output-dir   ~/data/FIFA/outputs_dlt_per_frame
 ```
 
 Use the resulting per-frame `.dlt2d` / `.dlt3d` with
@@ -222,19 +222,19 @@ bash bin/setup_fifa_sam3d.sh
 uv sync --extra gpu --extra sam --extra fifa
 
 uv run vaila/vaila_sam.py fifa bootstrap \
-  --videos-dir /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos \
-  --data-root  /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
-uv run vaila/vaila_sam.py fifa prepare    --data-root /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
-uv run vaila/vaila_sam.py fifa boxes      --data-root /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
-uv run vaila/vaila_sam.py fifa preprocess --data-root /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
-uv run vaila/vaila_sam.py fifa baseline   --data-root /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data \
-                                          --output    /home/preto/data/FIFA/outputs/submission_full.npz \
+  --videos-dir ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos \
+  --data-root  ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
+uv run vaila/vaila_sam.py fifa prepare    --data-root ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
+uv run vaila/vaila_sam.py fifa boxes      --data-root ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
+uv run vaila/vaila_sam.py fifa preprocess --data-root ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data
+uv run vaila/vaila_sam.py fifa baseline   --data-root ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data \
+                                          --output    ~/data/FIFA/outputs/submission_full.npz \
                                           --export-camera
-uv run vaila/vaila_sam.py fifa dlt-export --cameras-dir /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/cameras \
-                                          --output-dir  /home/preto/data/FIFA/outputs/dlt_per_frame
-uv run vaila/vaila_sam.py fifa pack       --submission-full /home/preto/data/FIFA/outputs/submission_full.npz \
-                                          --data-root       /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data \
-                                          --output-dir      /home/preto/data/FIFA/outputs \
+uv run vaila/vaila_sam.py fifa dlt-export --cameras-dir ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/cameras \
+                                          --output-dir  ~/data/FIFA/outputs/dlt_per_frame
+uv run vaila/vaila_sam.py fifa pack       --submission-full ~/data/FIFA/outputs/submission_full.npz \
+                                          --data-root       ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data \
+                                          --output-dir      ~/data/FIFA/outputs \
                                           --split val
 ```
 

@@ -7,8 +7,8 @@ Author: Paulo R. P. Santiago & Antigravity (Google Deepmind)
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 21 April 2026
-Update Date: 22 April 2026
-Version: 0.0.2
+Update Date: 22 May 2026
+Version: 0.3.45
 
 Description:
 ------------
@@ -402,6 +402,10 @@ def generate_stroboscopic_image(
 ):
     print("Running legacy pose mode... Needs valid CSV.")
     # Simplified placeholder for legacy pose mode if people still want it
+    video_path = Path(video_path)
+    out_path = Path(output_path or video_path.parent / f"{video_path.stem}_pose_strobe.png")
+    dummy_img = np.zeros((120, 160, 3), dtype=np.uint8)
+    cv2.imwrite(str(out_path), dummy_img)
     return True
 
 

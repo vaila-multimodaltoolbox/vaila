@@ -127,7 +127,10 @@ def load_distortion_parameters(toml_path):
     # #region agent log
     try:
         with open(
-            "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a"
+            Path(__file__).resolve().parents[1]
+            / ".cursor"
+            / "debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log",
+            "a",
         ) as _f:
             _f.write(
                 json.dumps(
@@ -363,7 +366,11 @@ def run_datdistort():
 
     # Determine parameters file
     # #region agent log
-    _log_path = "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+    _log_path = str(
+        Path(__file__).resolve().parents[1]
+        / ".cursor"
+        / "debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+    )
     # #endregion
     if args.params_file:
         parameters_path = os.path.abspath(args.params_file)

@@ -30,9 +30,10 @@ The project uses the full Astral Rust-based stack. **Never use** bare `pip`, `bl
 
 ```bash
 uv run vaila.py                  # run the app
-uv sync                          # default universal CPU pyproject
-uv sync --extra gpu              # after CUDA template (`bin/use_pyproject_linux_cuda.sh` etc.)
-uv sync --extra sam              # optional SAM 3; see AGENTS.md Hybrid
+uv sync                          # default: CUDA 12.8 PyTorch (pytorch-cu128 index)
+uv sync --extra gpu              # adds tensorrt + nvidia-ml-py on CUDA workstation
+uv sync --extra sam              # optional SAM 3; CUDA required at runtime
+uv sync --extra fifa             # FIFA Skeletal Tracking Light stack
 uv sync --frozen                 # CI mode: strict lock
 uv add <pkg>                     # add runtime dep
 uv add --dev <pkg>               # add dev dep
@@ -41,6 +42,11 @@ uv export --format requirements-txt > requirements.txt
 ```
 
 > Always prefix tool runs with `uv run` — never activate the venv manually.
+
+> **Note (v0.3.44):** the checked-in `pyproject.toml` now points `torch`,
+> `torchvision`, `torchaudio` at the explicit `pytorch-cu128` index. CPU-only
+> machines must switch to the universal template before `uv sync`
+> (`bash bin/use_pyproject_universal_cpu.sh`).
 
 ---
 
@@ -265,12 +271,18 @@ Sample data: `tests/vaila_and_jump/` (CSV + TOML). SAM smoke tests: `tests/SAM/`
 
 Copy the correct template **before** `uv python pin` / `uv venv`:
 
-| File | Platform |
-|------|----------|
-| `pyproject_win_cuda12.toml` | Windows + NVIDIA CUDA 12.1 |
-| `pyproject_linux_cuda12.toml` | Linux + NVIDIA CUDA 12.8 |
-| `pyproject_macos.toml` | macOS Apple Silicon (Metal/MPS) |
-| `pyproject_universal_cpu.toml` | CPU-only fallback |
+| File | Platform | `uv sync` flags |
+|------|----------|-----------------|
+| `pyproject_linux_cuda12.toml` (**default in git**) | Linux + NVIDIA CUDA 12.8 | `--extra gpu` (tensorrt + nvidia-ml-py) |
+| `pyproject_win_cuda12.toml` | Windows + NVIDIA CUDA 12.1 | `--extra gpu` |
+| `pyproject_macos.toml` | macOS Apple Silicon (Metal/MPS) | none |
+| `pyproject_universal_cpu.toml` | CPU-only fallback | none |
+
+The checked-in `pyproject.toml` mirrors **`pyproject_linux_cuda12.toml`**
+(version `0.3.44`): PyTorch resolves from the explicit `pytorch-cu128` index.
+Use the `bin/use_pyproject_*.sh` / `.ps1` helpers to switch templates; each
+helper runs `uv lock` and regenerates `uv.lock` for the chosen hardware
+matrix.
 
 ---
 
@@ -288,4 +300,4 @@ Copy the correct template **before** `uv python pin` / `uv venv`:
 ❌ Other GUI frameworks (Qt, wx, Dear PyGui, etc.)
 ❌ Duplicate GPU detection (use `hardware_manager.py`)
 ❌ Hard-coded absolute paths
-❌ Files ≥20 MiB in the repo
+❌ Files ≥20 MiB in the repo (pre-commit hook blocks them; large fixtures like `tests/Deadlift/*.mp4` must stay local or be `.gitignore`d)

@@ -2,6 +2,12 @@
 datasets/
 bin/ffmpeg/
 
+# Local test fixtures (large videos, user-specific .toml with absolute paths)
+tests/Deadlift/
+
+# Antigravity CLI per-project config (symlinks to user home)
+.antigravitycli/
+
 # vaila/models: track small reference files (e.g. *.csv, *.json <20MB). Ignore weight-like
 # binaries (Git cannot ignore by size; pre-commit rejects staged files ≥20MB — hooks/pre-commit).
 vaila/models/**/*.pt

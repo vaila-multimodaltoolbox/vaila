@@ -4,7 +4,7 @@
 
 - **Category:** Tools  
 - **File:** `vaila/cutvideo.py`  
-- **Version:** 0.2.0  
+- **Version:** 0.3.45  
 - **Author:** Paulo Roberto Pereira Santiago  
 - **Email:** paulosantiago@usp.br  
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila  
@@ -71,5 +71,5 @@ Interactive video cutting with frame-accurate navigation, TOML-based cut storage
 - **Audio not syncing:** Ensure audio is loaded (A key) and not muted (M key); audio syncs on play/pause and frame navigation.  
 
 ---
-📅 **Last Updated:** January 2026 (v0.1.1 - Audio waveform, loop control, auto-fit, marker navigation)  
+📅 **Last Updated:** 22 May 2026 (v0.3.45 - Corrected aspect ratio distortion for rotated smartphone videos)  
 🔗 **Part of vailá - Multimodal Toolbox**  

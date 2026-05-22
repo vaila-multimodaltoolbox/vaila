@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 07 May 2026
-Version: 0.3.43
+Update: 22 May 2026
+Version: 0.3.45
 Python Version: 3.12.13
 
 Description:
@@ -471,10 +471,38 @@ def get_precise_video_metadata(video_path):
         if nb_frames is None and duration > 0 and fps > 0:
             nb_frames = int(round(duration * fps))
 
+        # Check for rotation metadata to adjust width and height
+        rotation = 0
+        for side_data in video_stream.get("side_data_list", []):
+            if "rotation" in side_data:
+                try:
+                    rotation = int(side_data["rotation"])
+                    break
+                except (ValueError, TypeError):
+                    pass
+        if rotation == 0:
+            rotate_tag = video_stream.get("tags", {}).get("rotate")
+            if rotate_tag:
+                try:
+                    rotation = int(rotate_tag)
+                except (ValueError, TypeError):
+                    pass
+
+        width = video_stream.get("width")
+        height = video_stream.get("height")
+        if width is not None and height is not None:
+            try:
+                width = int(width)
+                height = int(height)
+                if abs(rotation) in (90, 270):
+                    width, height = height, width
+            except (ValueError, TypeError):
+                pass
+
         return {
             "fps": fps,
-            "width": video_stream.get("width"),
-            "height": video_stream.get("height"),
+            "width": width,
+            "height": height,
             "codec": video_stream.get("codec_name", "unknown"),
             "r_frame_rate": r_frame_rate_str,
             "avg_frame_rate": avg_frame_rate_str,
@@ -1772,7 +1800,7 @@ def play_video_with_controls(
         When ``prefer_fifa_dataset`` is True, the loader prefers the FIFA-dataset
         layout CSV (``soccerfield_ref3d_fifa_dataset.csv``) which has 32 keypoints
         starting at ``point_number = 0`` (``top_left_corner``) and matches the
-        layout of ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``.
+        layout of ``<dataset_root>/FIFA/dataset_vaila_fifa/unified``.
         """
         import pandas as _pd
 
@@ -1984,7 +2012,7 @@ def play_video_with_controls(
         Used when ``pitch_guide_fifa_mode`` is True. Field is drawn from the FIFA
         dataset point names (top_left_corner / midfield_top / center_circle_*,
         left_pen_box_*_outer / inner, etc.). Indexing matches the ``unified/``
-        layout of ``/home/preto/data/FIFA/dataset_vaila_fifa``.
+        layout of ``<dataset_root>/FIFA/dataset_vaila_fifa``.
         """
         if not pitch_guide_points:
             return None
@@ -8866,7 +8894,7 @@ names: {class_names}
 
 def _detect_dataset_layout(dataset_dir: str) -> str:
     """Return ``"fifa"`` for ``<dir>/{images,labels}/{split}`` (the FIFA dataset
-    layout used at ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``) or
+    layout used at ``<dataset_root>/FIFA/dataset_vaila_fifa/unified``) or
     ``"vaila"`` for the legacy ``<dir>/{split}/{images,labels}`` layout.
 
     Heuristics, in order:
@@ -8949,7 +8977,7 @@ def export_pose_dataset(
             val/images/*.jpg|png      val/labels/*.txt
             test/images/*.jpg|png     test/labels/*.txt
 
-    * ``layout="fifa"`` (matches ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``)::
+    * ``layout="fifa"`` (matches ``<dataset_root>/FIFA/dataset_vaila_fifa/unified``)::
 
         dataset_dir/
             data.yaml      # path: <dir>, train: images/train, ...
@@ -9271,7 +9299,7 @@ def _write_pose_data_yaml(
     * ``"vaila"`` - absolute paths to ``<dir>/{split}/images``
       (legacy / standalone export).
     * ``"fifa"`` - relative ``images/{split}`` (matches
-      ``/home/preto/data/FIFA/dataset_vaila_fifa/unified/data.yaml``).
+      ``<dataset_root>/FIFA/dataset_vaila_fifa/unified/data.yaml``).
     """
     classes_file = os.path.join(dataset_dir, "classes.txt")
     class_names: list[str] = []

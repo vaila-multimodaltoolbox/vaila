@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 10 October 2024
-Update Date: 06 February 2026
-Version: 0.1.4
+Update Date: 22 May 2026
+Version: 0.3.45
 Python Version: 3.12.13
 
 Description:
@@ -183,7 +183,10 @@ def load_distortion_parameters(toml_path):
     # #region agent log
     try:
         with open(
-            "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a"
+            Path(__file__).resolve().parents[1]
+            / ".cursor"
+            / "debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log",
+            "a",
         ) as _f:
             _f.write(
                 json.dumps(
@@ -286,10 +289,38 @@ def get_precise_video_metadata(video_path):
         if nb_frames is None and duration > 0 and fps > 0:
             nb_frames = int(round(duration * fps))
 
+        # Check for rotation metadata to adjust width and height
+        rotation = 0
+        for side_data in video_stream.get("side_data_list", []):
+            if "rotation" in side_data:
+                try:
+                    rotation = int(side_data["rotation"])
+                    break
+                except (ValueError, TypeError):
+                    pass
+        if rotation == 0:
+            rotate_tag = video_stream.get("tags", {}).get("rotate")
+            if rotate_tag:
+                try:
+                    rotation = int(rotate_tag)
+                except (ValueError, TypeError):
+                    pass
+
+        width = video_stream.get("width")
+        height = video_stream.get("height")
+        if width is not None and height is not None:
+            try:
+                width = int(width)
+                height = int(height)
+                if abs(rotation) in (90, 270):
+                    width, height = height, width
+            except (ValueError, TypeError):
+                pass
+
         return {
             "fps": fps,
-            "width": int(video_stream.get("width")),
-            "height": int(video_stream.get("height")),
+            "width": width,
+            "height": height,
             "codec": video_stream.get("codec_name", "unknown"),
             "r_frame_rate": r_frame_rate_str,
             "avg_frame_rate": avg_frame_rate_str,
@@ -506,8 +537,10 @@ def run_distortvideo():
 
     # Determine parameters file
     # #region agent log
-    _log_path_lens = (
-        "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+    _log_path_lens = str(
+        Path(__file__).resolve().parents[1]
+        / ".cursor"
+        / "debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
     )
     # #endregion
     if args.params_file:

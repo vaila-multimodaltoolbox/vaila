@@ -99,8 +99,6 @@ def test_rec2d_integration(test_data):
             str(input_dir),
             "--output-dir",
             str(output_dir),
-            "--rate",
-            "100",
         ],
         capture_output=True,
         text=True,

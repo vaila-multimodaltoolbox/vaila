@@ -55,7 +55,7 @@ DEFAULT_SKELETON_JSON = (
     / "vaila_tugturn"
     / "skeleton_pose_mediapipe.json"
 )
-DEBUG_LOG_PATH = "/home/preto/Preto/vaila/.cursor/debug-2d1fa6.log"
+DEBUG_LOG_PATH = str(Path(__file__).resolve().parents[1] / ".cursor" / "debug-2d1fa6.log")
 DEBUG_SESSION_ID = "2d1fa6"
 _DBG_TUG_FACE_LOGGED = False
 
