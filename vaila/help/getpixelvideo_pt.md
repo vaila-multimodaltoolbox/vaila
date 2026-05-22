@@ -4,8 +4,8 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Versão:** 0.5.0  
-**Data:** Abril de 2026  
+**Versão:** 0.3.45  
+**Data:** 22 de Maio de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Projeto:** vailá - Multimodal Toolbox
 
@@ -455,6 +455,10 @@ Sistema de backup integrado para segurança dos dados:
 - **Repositório do Projeto:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Histórico de Versões
+
+### Versão 0.3.45 (22 de Maio de 2026)
+
+- **Correção de Rotação**: Corrigida a distorção da proporção de aspecto (aspect ratio) para vídeos verticais/retrato gravados em smartphones ao verificar as tags de rotação em `get_precise_video_metadata`.
 
 ### Versão 0.5.0 (Abril de 2026)
 

@@ -31,7 +31,7 @@ CLI (headless — pass input video):
 
 Example (FIFA broadcast clip on a local disk):
     uv run python -m vaila.rf_trackers \\
-      -i /home/preto/data/FIFA/to_sent/BRA_KOR_234113.mp4 \\
+      -i /path/to/FIFA/to_sent/BRA_KOR_234113.mp4 \\
       -w vaila/models/yolo26x.pt --tracker botsort --conf 0.25
 
 Module help (browser / editor):
@@ -266,7 +266,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
   CLI with local FIFA sample:
     uv run python -m vaila.rf_trackers \\
-      -i /home/preto/data/FIFA/to_sent/BRA_KOR_234113.mp4 \\
+      -i /path/to/FIFA/to_sent/BRA_KOR_234113.mp4 \\
       -w vaila/models/yolo26x.pt --tracker botsort --conf 0.25
 
   Human-readable help in-repo:

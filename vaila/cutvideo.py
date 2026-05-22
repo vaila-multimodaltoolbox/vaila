@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 03 March 2026
-Version: 0.2.1
+Update Date: 22 May 2026
+Version: 0.3.45
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -185,10 +185,38 @@ def get_precise_video_metadata(video_path):
         if nb_frames is None and duration > 0 and fps > 0:
             nb_frames = int(round(duration * fps))
 
+        # Check for rotation metadata to adjust width and height
+        rotation = 0
+        for side_data in video_stream.get("side_data_list", []):
+            if "rotation" in side_data:
+                try:
+                    rotation = int(side_data["rotation"])
+                    break
+                except (ValueError, TypeError):
+                    pass
+        if rotation == 0:
+            rotate_tag = video_stream.get("tags", {}).get("rotate")
+            if rotate_tag:
+                try:
+                    rotation = int(rotate_tag)
+                except (ValueError, TypeError):
+                    pass
+
+        width = video_stream.get("width")
+        height = video_stream.get("height")
+        if width is not None and height is not None:
+            try:
+                width = int(width)
+                height = int(height)
+                if abs(rotation) in (90, 270):
+                    width, height = height, width
+            except (ValueError, TypeError):
+                pass
+
         return {
             "fps": fps,
-            "width": video_stream.get("width"),
-            "height": video_stream.get("height"),
+            "width": width,
+            "height": height,
             "codec": video_stream.get("codec_name", "unknown"),
             "r_frame_rate": r_frame_rate_str,
             "avg_frame_rate": avg_frame_rate_str,

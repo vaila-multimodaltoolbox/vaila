@@ -313,23 +313,23 @@ Step-by-step workflows and specialized agent roles are stored in the `.claude/` 
 
 Role cards for domain experts. Use these when the task fits their specific domain:
 
-- [biomechanics-analyst.md](file:///home/preto/Preto/vaila/.claude/agents/biomechanics-analyst.md)
-- [gui-developer.md](file:///home/preto/Preto/vaila/.claude/agents/gui-developer.md)
-- [video-processor.md](file:///home/preto/Preto/vaila/.claude/agents/video-processor.md)
-- [test-writer.md](file:///home/preto/Preto/vaila/.claude/agents/test-writer.md)
+- [biomechanics-analyst.md](.claude/agents/biomechanics-analyst.md)
+- [gui-developer.md](.claude/agents/gui-developer.md)
+- [video-processor.md](.claude/agents/video-processor.md)
+- [test-writer.md](.claude/agents/test-writer.md)
 
 ### Technical Skills (`.claude/skills/`)
 
 Reusable "how-to" guides for complex workflows:
 
-- **vailá Core**: [create a new analysis module](file:///home/preto/Preto/vaila/.claude/skills/create-analysis-module.md), [port a MATLAB algorithm](file:///home/preto/Preto/vaila/.claude/skills/port-matlab-algorithm.md).
+- **vailá Core**: [create a new analysis module](.claude/skills/create-analysis-module.md), [port a MATLAB algorithm](.claude/skills/port-matlab-algorithm.md).
 - **Sports AI**:
   - [sam3-video](.claude/skills/sam3-video/SKILL.md) — SAM 3 text-prompt video segmentation, GUI help button, prompt presets.
   - [fifa-skeletal-tracking](.claude/skills/fifa-skeletal-tracking/SKILL.md) — FIFA 2026 pipeline (`fifa bootstrap` / `prepare` / `boxes` / `preprocess` / `baseline` / **`dlt-export`** / `pack`), `vaila/fifa_to_dlt.py` (per-frame DLT for **`rec2d.py`/`rec3d.py`** vs fixed-cam **`rec2d_one_dlt2d.py`**), vendored `fifa_starter_lib`, gated SAM 3D Body setup, soccer-field DLT2D calibration.
   - [soccer-field-keypoints-yolo](.claude/skills/soccer-field-keypoints-yolo/SKILL.md) — Ultralytics YOLO **pitch** pose (32 kp), external merged `unified/` tree, `yolo pose train`; see **`docs/fifa_workflow.md` §4.5** and `vaila/help/soccerfield_keypoints_ai.md`.
-- **Reports**: [xlsx](file:///home/preto/Preto/vaila/.claude/skills/xlsx/SKILL.md) (Excel), [pdf](file:///home/preto/Preto/vaila/.claude/skills/pdf/SKILL.md), [pptx](file:///home/preto/Preto/vaila/.claude/skills/pptx/SKILL.md) (PowerPoint).
-- **Automation**: [mcp-builder](file:///home/preto/Preto/vaila/.claude/skills/mcp-builder/SKILL.md) (Model Context Protocol), [webapp-testing](file:///home/preto/Preto/vaila/.claude/skills/webapp-testing/SKILL.md).
-- **Visualization**: [web-artifacts-builder](file:///home/preto/Preto/vaila/.claude/skills/web-artifacts-builder/SKILL.md).
+- **Reports**: [xlsx](.claude/skills/xlsx/SKILL.md) (Excel), [pdf](.claude/skills/pdf/SKILL.md), [pptx](.claude/skills/pptx/SKILL.md) (PowerPoint).
+- **Automation**: [mcp-builder](.claude/skills/mcp-builder/SKILL.md) (Model Context Protocol), [webapp-testing](.claude/skills/webapp-testing/SKILL.md).
+- **Visualization**: [web-artifacts-builder](.claude/skills/web-artifacts-builder/SKILL.md).
 
 ### FIFA Skeletal Tracking Light 2026
 
