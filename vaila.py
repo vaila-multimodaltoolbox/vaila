@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 19 May 2026
-Version: 0.3.44
+Update Date: 22 May 2026
+Version: 0.3.45
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -158,7 +158,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 14.May.2026 v0.3.44 (Python 3.12.13)
+vailá - 22.May.2026 v0.3.45 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -269,7 +269,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 14.May.2026 v0.3.44 (Python 3.12.13)")
+        self.title("vailá - 22.May.2026 v0.3.45 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars

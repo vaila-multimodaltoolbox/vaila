@@ -1416,7 +1416,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
 
     import matplotlib.pyplot as plt
 
-    log_path = "/home/preto/Desktop/Preto/vaila/.cursor/debug.log"
+    log_path = str(Path(__file__).resolve().parents[1] / ".cursor" / "debug.log")
 
     def log_debug(location, message, data_dict, hypothesis_id):
         try:

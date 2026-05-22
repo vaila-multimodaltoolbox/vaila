@@ -2646,7 +2646,7 @@ def _agent_dbg_sam3(*, hypothesis_id: str, location: str, message: str, data: di
             )
             + "\n"
         )
-        with Path("/home/preto/data/vaila/.cursor/debug-42b4a5.log").open(
+        with (Path(__file__).resolve().parents[1] / ".cursor" / "debug-42b4a5.log").open(
             "a", encoding="utf-8"
         ) as _lf:
             _lf.write(line)
@@ -2845,7 +2845,7 @@ def _process_one_video_with_oom_retry(
     # This splits the video into temporal segments small enough for VRAM,
     # processes each in an isolated subprocess, then merges the masks.
     #
-    # Recursion guard (debug session 2026-04-30, /home/preto/Videos test):
+    # Recursion guard (debug session 2026-04-30, local Videos test):
     # When ``_process_video_chunked`` spawns a chunk subprocess, it passes
     # ``--no-chunked-fallback`` so the child never re-enters this branch.  Without
     # this guard a single OOMing chunk produced 10+ levels of

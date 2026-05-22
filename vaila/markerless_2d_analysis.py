@@ -195,7 +195,7 @@ POSE_CONNECTIONS = frozenset(
 )
 
 # #region agent log
-_AGENT_DBG_PATH = "/home/preto/Preto/vaila/.cursor/debug-2d1fa6.log"
+_AGENT_DBG_PATH = str(Path(__file__).resolve().parents[1] / ".cursor" / "debug-2d1fa6.log")
 _AGENT_DBG_SESSION = "2d1fa6"
 _AGENT_FACE_DRAW_LOGGED = False
 try:

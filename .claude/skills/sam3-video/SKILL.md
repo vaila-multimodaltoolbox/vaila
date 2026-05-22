@@ -197,7 +197,7 @@ If you need to revisit this with full context, see the agent transcript: [SAM3 O
 
 ### Coordinator pattern + chunked fallback (debug session 2026-04-30)
 
-A second OOM cascade was hit on a single 1080p × 1189-frame clip on a clean RTX 4090 (`/home/preto/Videos/CRO_MOR_182145.mp4`, 22 MB):
+A second OOM cascade was hit on a single 1080p × 1189-frame clip on a clean RTX 4090 (`~/Videos/CRO_MOR_182145.mp4`, 22 MB):
 
 1. The per-video subprocess OOMed at `max_frames=128` (auto from `safe_frames=128`) around frame 70/127 — KV cache for 128 frames at 1080p exceeds 24 GiB.
 2. The in-process retry ladder (`128→64→32→24→16→12→8→4→2→1`) cascaded: each prior OOM left orphan tensors that poisoned the next attempt.
@@ -229,7 +229,7 @@ Verified end-to-end on 1920×1080 / 50 fps / 1189 frames / 22 MB:
 
 **Operational guidance for users on 1080p+ sources**: pass `--max-frames 48 --max-input-long-edge 1280` upfront to skip the failing OOM ladder and go straight to a single happy session per chunk if you happen to be running tight on free VRAM (e.g. desktop session still attached). On a fully clean GPU (run `sudo gpu-mode --cuda` to drop into multi-user.target), 64 should also fit. If you do hit the cascade, the coordinator fallback now recovers automatically — but it costs the SAM3 model reload (~10 s) per chunk.
 
-If you need to revisit this with full context, see the agent transcripts: [SAM3 OOM cascade debug](42b4a5fd-2701-458b-b7ec-e554e2265426) and the 2026-04-30 follow-up in `/home/preto/Videos/CRO_MOR_182145.mp4`.
+If you need to revisit this with full context, see the agent transcripts: [SAM3 OOM cascade debug](42b4a5fd-2701-458b-b7ec-e554e2265426) and the 2026-04-30 follow-up in `~/Videos/CRO_MOR_182145.mp4`.
 
 ---
 

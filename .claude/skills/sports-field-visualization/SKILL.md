@@ -83,6 +83,6 @@ SPORT_REGISTRY["fifa"] = SportDef(
 ```
 
 ## Related Modules
-- [drawsportsfields.py](file:///home/preto/data/vaila/vaila/drawsportsfields.py)
-- [markerless_3d_analysis.py](file:///home/preto/data/vaila/vaila/markerless_3d_analysis.py)
-- [soccerfield_ref3d_fifa.csv](file:///home/preto/data/vaila/vaila/models/soccerfield_ref3d_fifa.csv)
+- [drawsportsfields.py](../../../vaila/drawsportsfields.py)
+- [markerless_3d_analysis.py](../../../vaila/markerless_3d_analysis.py)
+- [soccerfield_ref3d_fifa.csv](../../../vaila/models/soccerfield_ref3d_fifa.csv)

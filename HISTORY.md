@@ -1,7 +1,7 @@
 # Session History — vailá ↔ FIFA Skeletal Tracking Light 2026
 
 Date: 2026-04-25
-Repo: `/home/preto/data/vaila` (branch `main`)
+Repo: `~/data/vaila` (branch `main`)
 
 This file is the chronological log of what happened in this terminal
 session, so any future agent (Cursor / Claude Code / Antigravity /
@@ -12,13 +12,13 @@ Windsurf / warp.dev) can resume without reading the whole transcript.
 ## 1. Context before the session
 
 - FIFA challenge starter kit already cloned and partially tuned at
-  `/home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`:
+  `~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`:
   - `uv` venv created in that repo
   - dataset wired into `data/` via symlinks
   - `pandas` added to its `pyproject.toml`
   - `main.py` patched to survive videos shorter than annotation arrays
   - baseline (`main.py`, `scripts/run_jobs.sh`) ran end-to-end
-- vailá clone at `/home/preto/data/vaila` already shipped:
+- vailá clone at `~/data/vaila` already shipped:
   - `vaila/vaila_sam.py` (SAM 3 video segmentation + `fifa` subcommands)
   - `vaila/soccerfield_keypoints_ai.py` (YOLO-pose / Roboflow detector)
   - `vaila/soccerfield_calib.py` (manual / DLT2D pitch calibration)
@@ -39,7 +39,7 @@ Windsurf / warp.dev) can resume without reading the whole transcript.
 - Don't touch SAM 3D Body / `fifa baseline` yet — needs `--extra fifa`
   + gated HF weights, deferred until pitch keypoints are working.
 
-## 3. Commands actually executed in `/home/preto/data/vaila`
+## 3. Commands actually executed in `~/data/vaila`
 
 ```bash
 bash bin/use_pyproject_linux_cuda.sh
@@ -51,8 +51,8 @@ uv pip install --reinstall opencv-python==4.10.0.84
 
 # SAM 3 smoke test (1 video, 32 frames)
 uv run vaila/vaila_sam.py \
-  -i /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
-  -o /home/preto/data/FIFA/outputs_sam3_smoke \
+  -i ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/ARG_CRO_000737.mp4 \
+  -o ~/data/FIFA/outputs_sam3_smoke \
   -t person --max-frames 32
 ```
 
@@ -65,8 +65,8 @@ uv run vaila/vaila_sam.py \
   - `vaila/models/sam3/sam3.pt`
   - `vaila/models/sam3/sam3.1_multiplex.pt`
 - Smoke test output:
-  - `/home/preto/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183854/`
-  - `/home/preto/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183925/`
+  - `~/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183854/`
+  - `~/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183925/`
 
 ## 5. Known issues + workarounds
 
@@ -84,7 +84,7 @@ uv run vaila/vaila_sam.py \
   `vaila/models/sam-3d-dinov3/`).
 - `uv sync --extra gpu --extra sam --extra fifa` (FIFA Lightning stack).
 - SAM 3 batch over all videos in
-  `/home/preto/data/FIFA/.../data/videos/`.
+  `~/data/FIFA/.../data/videos/`.
 - Soccer-pitch keypoint detection on FIFA broadcast clips.
 - `fifa baseline` / `fifa dlt-export` / `fifa pack` for the
   Codabench submission.
@@ -115,7 +115,7 @@ Nothing was committed during this session.
   (also `.onnx`, ~13 MB). Task=pose, names={0:'football_pitch'},
   kpt_shape=[32,3].
 - Smoke test (5 frames, stride 30) on `ARG_CRO_000737.mp4`:
-  output dir `/home/preto/data/FIFA/outputs_pitch_kps/processed_field_kps_20260425_213008/`.
+  output dir `~/data/FIFA/outputs_pitch_kps/processed_field_kps_20260425_213008/`.
 - Direct YOLO predict on frame 0 (`imgsz=1280`, `conf=0.05`, `device=0`):
   - boxes OK: 3 detections covering the field with conf 0.89 / 0.66 / 0.29.
   - **all 32 keypoints collapsed inside a ~30 px cluster** of the
@@ -147,7 +147,7 @@ Nothing was committed during this session.
   - input downscaled 1920x1080 → 1280x720 (VRAM cap)
   - propagation ~1.84 s/iter on the local CUDA GPU
   - output dir
-    `/home/preto/data/FIFA/outputs_sam3_test1/processed_sam_20260425_213120/ARG_CRO_000737/`
+    `~/data/FIFA/outputs_sam3_test1/processed_sam_20260425_213120/ARG_CRO_000737/`
 - Detected **37 person IDs** across 59 frames; `sam_points.csv`
   written with stable `p1..p37` foot keypoints (mode=foot).
 - Files produced per video:
@@ -178,12 +178,12 @@ Command:
 
 ```bash
 uv run yolo pose train \
-  model=/home/preto/data/vaila/yolo26s-pose.pt \
-  data=/home/preto/data/vaila/vaila/models/hf_datasets/football-pitch-detection/data/data.yaml \
+  model=~/data/vaila/yolo26s-pose.pt \
+  data=~/data/vaila/vaila/models/hf_datasets/football-pitch-detection/data/data.yaml \
   epochs=50 imgsz=1280 batch=8 \
   mosaic=0.0 mixup=0.0 close_mosaic=0 erasing=0.0 \
   pose=25.0 kobj=2.0 device=0 \
-  project=/home/preto/data/vaila/vaila/models/runs/pose_fifa \
+  project=~/data/vaila/vaila/models/runs/pose_fifa \
   name=pitch32_recipeA_50ep
 ```
 
@@ -210,7 +210,7 @@ detector now produces **field geometry** (with low confidence on most
 keypoints — that improves with more training).
 
 CSV demo (CPU inference, since GPU was busy with the 400-ep retrain):
-`/home/preto/data/FIFA/outputs_pitch_kps_v2/processed_field_kps_20260425_214224/`.
+`~/data/FIFA/outputs_pitch_kps_v2/processed_field_kps_20260425_214224/`.
 
 ### 400-epoch retrain — DONE 2026-04-26 08:32 (excellent)
 
@@ -234,7 +234,7 @@ Validated visually on FIFA `ARG_CRO_000737.mp4` frame 0:
   keypoints land on the actual field markings (mid-line, centre
   circle, right penalty area, lower side line)
 
-Full output (60 frames, stride=5): `/home/preto/data/FIFA/outputs_pitch_kps_final/processed_field_kps_20260426_083336/`
+Full output (60 frames, stride=5): `~/data/FIFA/outputs_pitch_kps_final/processed_field_kps_20260426_083336/`
 
 Best.pt path:
 `vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt`
@@ -275,10 +275,10 @@ uv run yolo pose train \
 
 | What | Path |
 |---|---|
-| Old (collapsed) keypoints CSV | `/home/preto/data/FIFA/outputs_pitch_kps/processed_field_kps_20260425_213008/` |
-| New (50-ep) keypoints CSV | `/home/preto/data/FIFA/outputs_pitch_kps_v2/processed_field_kps_20260425_214224/` |
+| Old (collapsed) keypoints CSV | `~/data/FIFA/outputs_pitch_kps/processed_field_kps_20260425_213008/` |
+| New (50-ep) keypoints CSV | `~/data/FIFA/outputs_pitch_kps_v2/processed_field_kps_20260425_214224/` |
 | New best.pt (50 ep, geometry recovered) | `vaila/models/runs/pose_fifa/pitch32_recipeA_50ep/weights/best.pt` |
-| SAM 3 tracking (60 frames, 37 person IDs) | `/home/preto/data/FIFA/outputs_sam3_test1/processed_sam_20260425_213120/ARG_CRO_000737/` |
+| SAM 3 tracking (60 frames, 37 person IDs) | `~/data/FIFA/outputs_sam3_test1/processed_sam_20260425_213120/ARG_CRO_000737/` |
 
 ### Backup / fallback solutions if 400-ep retrain plateaus
 

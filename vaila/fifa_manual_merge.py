@@ -40,8 +40,8 @@ counted as ``already_present`` and the manifest is not re-appended.
 CLI::
 
     uv run python -m vaila.fifa_manual_merge \\
-        --src /home/preto/data/FIFA/vaila_dataset \\
-        --dst /home/preto/data/FIFA/dataset_vaila_fifa
+        --src /path/to/FIFA/vaila_dataset \\
+        --dst /path/to/FIFA/dataset_vaila_fifa
 
 GUI::
 
@@ -464,10 +464,10 @@ def merge_manual_dataset(
     Parameters
     ----------
     src_root:
-        Path to the manually-labeled tree (e.g. ``/home/preto/data/FIFA/vaila_dataset``).
+        Path to the manually-labeled tree (e.g. ``<data_root>/FIFA/vaila_dataset``).
     dst_root:
         Path to the FIFA dataset root that contains ``unified/`` (e.g.
-        ``/home/preto/data/FIFA/dataset_vaila_fifa``).
+        ``<data_root>/FIFA/dataset_vaila_fifa``).
     move:
         If ``True``, move source files into ``staging/`` instead of copying.
     dry_run:

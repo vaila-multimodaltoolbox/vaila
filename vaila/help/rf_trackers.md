@@ -45,7 +45,7 @@ uv run python -m vaila.rf_trackers -i /path/to/video.mp4 \
 
 ```bash
 uv run python -m vaila.rf_trackers \
-  -i /home/preto/data/FIFA/to_sent/BRA_KOR_234113.mp4 \
+  -i /path/to/FIFA/to_sent/BRA_KOR_234113.mp4 \
   -w vaila/models/yolo26x.pt \
   --tracker botsort \
   --conf 0.25

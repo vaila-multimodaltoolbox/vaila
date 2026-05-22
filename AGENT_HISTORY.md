@@ -1,8 +1,8 @@
 # Agent Continuation Log — vailá ↔ FIFA Skeletal Tracking Light 2026
 
 Last update: 2026-04-25
-Working clone: `/home/preto/data/vaila`
-Companion repo: `/home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`
+Working clone: `~/data/vaila`
+Companion repo: `~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`
 
 ---
 
@@ -11,7 +11,7 @@ Companion repo: `/home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`
 Use **vailá** modules (`vaila_sam.py`, `soccerfield_keypoints_ai.py`,
 `soccerfield_calib.py`, plus the `fifa_*` pipeline) to improve the
 **FIFA Skeletal Tracking Light 2026** baseline that runs from the
-official starter kit at `/home/preto/data/FIFA`.
+official starter kit at `~/data/FIFA`.
 
 Strategy:
 
@@ -26,10 +26,10 @@ Strategy:
 
 ---
 
-## Current state of `/home/preto/data/vaila`
+## Current state of `~/data/vaila`
 
 - Active template: **`pyproject_linux_cuda12.toml`** (CUDA 12.8, PyTorch 2.9.1+cu128).
-- `.venv` at `/home/preto/data/vaila/.venv` is healthy:
+- `.venv` at `~/data/vaila/.venv` is healthy:
   - `torch.cuda.is_available() == True` (RTX class GPU detected)
   - `sam3` package importable
   - `ultralytics`, `inference`, `supervision` installed
@@ -41,7 +41,7 @@ Strategy:
   reinstalled (previous cv2 install was missing `cv2.VideoCapture`).
 - Smoke test SAM 3 succeeded on 1 video, 32 frames:
   - input  : `data/videos/ARG_CRO_000737.mp4` (FIFA starter kit)
-  - output : `/home/preto/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183925/`
+  - output : `~/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183925/`
 
 ### Pending in the FIFA pipeline
 
@@ -74,7 +74,7 @@ Strategy:
 
 ## What was completed in this session
 
-1. Verified `/home/preto/data/vaila` already ships:
+1. Verified `~/data/vaila` already ships:
    - `vaila/vaila_sam.py` (SAM 3 video segmentation + `fifa` subcommands)
    - `vaila/soccerfield_keypoints_ai.py` (Ultralytics + Roboflow backend, video CSV export)
    - `vaila/soccerfield_calib.py` (manual / DLT2D pitch calibration)
@@ -127,8 +127,8 @@ Strategy:
 
    ```bash
    uv run vaila/vaila_sam.py \
-     -i /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos \
-     -o /home/preto/data/FIFA/outputs_sam3 \
+     -i ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos \
+     -o ~/data/FIFA/outputs_sam3 \
      -t person --max-frames 64 --max-input-long-edge 1280 \
      --postprocess-points foot
    ```
@@ -136,9 +136,9 @@ Strategy:
 3. Re-run keypoints on every video with the **new `best.pt`**:
 
    ```bash
-   for f in /home/preto/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/*.mp4; do
+   for f in ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos/*.mp4; do
      uv run python -m vaila.soccerfield_keypoints_ai \
-       --mode video -i "$f" -o /home/preto/data/FIFA/outputs_pitch_kps_final \
+       --mode video -i "$f" -o ~/data/FIFA/outputs_pitch_kps_final \
        --backend ultralytics \
        --weights vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt \
        --imgsz 1280 --conf 0.30 --draw-min-conf 0.40 \

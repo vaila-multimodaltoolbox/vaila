@@ -753,7 +753,9 @@ def run_distortvideo_gui():
         # #region agent log
         try:
             with open(
-                "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log",
+                Path(__file__).resolve().parents[1]
+                / ".cursor"
+                / "debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log",
                 "a",
             ) as _f:
                 _f.write(
