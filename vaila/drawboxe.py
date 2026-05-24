@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 28 October 2024
-Update Date: 22 May 2026
+Update Date: 23 May 2026
 Version: 0.3.45
 Description:
     Draw boxes on videos.
@@ -132,33 +132,34 @@ def get_precise_video_metadata(video_path):
         if nb_frames is None and duration > 0 and fps > 0:
             nb_frames = int(round(duration * fps))
 
-        # Check for rotation metadata to adjust width and height
+        # Extract rotation angle
         rotation = 0
-        for side_data in video_stream.get("side_data_list", []):
-            if "rotation" in side_data:
+        for sd in video_stream.get("side_data_list", []):
+            if sd.get("side_data_type") == "Display Matrix" and "rotation" in sd:
                 try:
-                    rotation = int(side_data["rotation"])
+                    rotation = int(float(sd["rotation"]))
                     break
                 except (ValueError, TypeError):
                     pass
-        if rotation == 0:
-            rotate_tag = video_stream.get("tags", {}).get("rotate")
+        if rotation == 0 and "tags" in video_stream:
+            rotate_tag = video_stream["tags"].get("rotate")
             if rotate_tag:
                 try:
-                    rotation = int(rotate_tag)
+                    rotation = int(float(rotate_tag))
                 except (ValueError, TypeError):
                     pass
 
-        width = video_stream.get("width")
-        height = video_stream.get("height")
-        if width is not None and height is not None:
-            try:
-                width = int(width)
-                height = int(height)
-                if abs(rotation) in (90, 270):
-                    width, height = height, width
-            except (ValueError, TypeError):
-                pass
+        rotation = rotation % 360
+        raw_width = int(video_stream.get("width"))
+        raw_height = int(video_stream.get("height"))
+
+        # Swap width and height if rotated by 90 or 270 degrees
+        if rotation in (90, 270):
+            width = raw_height
+            height = raw_width
+        else:
+            width = raw_width
+            height = raw_height
 
         return {
             "fps": fps,
@@ -169,6 +170,7 @@ def get_precise_video_metadata(video_path):
             "avg_frame_rate": avg_frame_rate_str,
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
+            "rotation": rotation,
         }
     except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
         # Fallback to OpenCV if ffprobe is not available
@@ -187,13 +189,40 @@ def get_precise_video_metadata(video_path):
             "r_frame_rate": None,
             "avg_frame_rate": None,
             "nb_frames": total_frames,
+            "rotation": 0,
         }
+
+
+def check_and_rotate_frame(frame, metadata):
+    """
+    Ensure the frame matches display dimensions by rotating if OpenCV didn't do it.
+    """
+    if frame is None or not metadata or "rotation" not in metadata:
+        return frame
+    rot = metadata["rotation"] % 360
+    if rot in (90, 180, 270):
+        h, w = frame.shape[:2]
+        target_w = metadata["width"]
+        target_h = metadata["height"]
+        if w == target_w and h == target_h:
+            # Already auto-rotated by OpenCV
+            return frame
+        # Apply manual rotation
+        if rot == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        elif rot == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        elif rot == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
 
 
 def save_first_frame(video_path, frame_path):
     vidcap = cv2.VideoCapture(video_path)
     success, image = vidcap.read()
     if success:
+        metadata = get_precise_video_metadata(video_path)
+        image = check_and_rotate_frame(image, metadata)
         cv2.imwrite(frame_path, image)
     vidcap.release()
 
@@ -300,6 +329,8 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
         # Explicitly set frame position to ensure we don't skip frames
         vidcap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
         ret, frame = vidcap.read()
+        if ret and frame is not None:
+            frame = check_and_rotate_frame(frame, metadata)
 
         if not ret:
             # If we can't read this frame, try to continue but warn

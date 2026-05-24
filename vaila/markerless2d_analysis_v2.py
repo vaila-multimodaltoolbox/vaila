@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 22 May 2026
+Update: 23 May 2026
 Version: 0.3.45
 
 Description:
@@ -151,7 +151,7 @@ POSE_CONNECTIONS = frozenset(
 )
 
 # #region agent log
-_DBG_PATH = str(Path(__file__).resolve().parents[1] / ".cursor" / "debug-2d1fa6.log")
+_DBG_PATH = "/home/preto/Preto/vaila/.cursor/debug-2d1fa6.log"
 _DBG_SESSION = "2d1fa6"
 _DBG_FACE_DRAW_ONCE = False
 

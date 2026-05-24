@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 4 May 2026
-Version: 0.8.4
+Update Date: 23 May 2026
+Version: 0.3.45
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -195,7 +195,7 @@ POSE_CONNECTIONS = frozenset(
 )
 
 # #region agent log
-_AGENT_DBG_PATH = str(Path(__file__).resolve().parents[1] / ".cursor" / "debug-2d1fa6.log")
+_AGENT_DBG_PATH = "/home/preto/Preto/vaila/.cursor/debug-2d1fa6.log"
 _AGENT_DBG_SESSION = "2d1fa6"
 _AGENT_FACE_DRAW_LOGGED = False
 try:
@@ -3991,8 +3991,12 @@ def test_mediapipe_gpu_delegate(backend="nvidia"):
             with pose_landmarker_cls.create_from_options(options) as landmarker:
                 # Create a dummy test image
                 test_image = np.zeros((100, 100, 3), dtype=np.uint8)
-                rgb_image = cv2.cvtColor(test_image, cv2.COLOR_BGR2RGB)
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+                if platform.system() == "Darwin" and backend == "mps":
+                    rgba_image = cv2.cvtColor(test_image, cv2.COLOR_BGR2RGBA)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGBA, data=rgba_image)
+                else:
+                    rgb_image = cv2.cvtColor(test_image, cv2.COLOR_BGR2RGB)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
 
                 # Try to detect (this will fail if GPU delegate doesn't work)
                 landmarker.detect(mp_image)
@@ -4433,6 +4437,7 @@ def process_frame_with_tasks_api(
     landmarks_history,
     *,
     use_image_detect: bool = False,
+    is_mps_gpu: bool = False,
 ):
     """
     Process a single frame using MediaPipe Tasks API.
@@ -4544,9 +4549,13 @@ def process_frame_with_tasks_api(
             actual_process_width = new_w
             actual_process_height = new_h
 
-    # Convert to RGB and create MP Image
-    rgb_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGB)
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+    # Convert to RGB/RGBA and create MP Image
+    if is_mps_gpu:
+        rgba_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGBA)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGBA, data=rgba_frame)
+    else:
+        rgb_frame = cv2.cvtColor(process_frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
     if use_image_detect:
         pose_landmarker_result = landmarker.detect(mp_image)
@@ -4821,6 +4830,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             use_gpu = False
             gpu_backend = None
 
+    is_mps_gpu = (platform.system() == "Darwin" and use_gpu and gpu_backend == "mps")
+
     # Create landmarker options
     options = PoseLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=model_path, delegate=delegate),
@@ -5054,10 +5065,16 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                         if not raw or len(raw) != frame_size:
                             break
                         pad_frame = np.frombuffer(raw, dtype=np.uint8).reshape((height, width, 3))
-                        mp_pad_frame = mp.Image(
-                            image_format=mp.ImageFormat.SRGB,
-                            data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
-                        )
+                        if is_mps_gpu:
+                            mp_pad_frame = mp.Image(
+                                image_format=mp.ImageFormat.SRGBA,
+                                data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGBA),
+                            )
+                        else:
+                            mp_pad_frame = mp.Image(
+                                image_format=mp.ImageFormat.SRGB,
+                                data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
+                            )
                         landmarker.detect_for_video(mp_pad_frame, current_timestamp_ms)
                         current_timestamp_ms += frame_duration_ms
                         pad_frames_processed += 1
@@ -5085,10 +5102,16 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                 if pad_frames:
                     # Feed them in reverse order (N-1, N-2, ..., 0) to provide smooth motion context
                     for pad_frame in reversed(pad_frames):
-                        mp_pad_frame = mp.Image(
-                            image_format=mp.ImageFormat.SRGB,
-                            data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
-                        )
+                        if is_mps_gpu:
+                            mp_pad_frame = mp.Image(
+                                image_format=mp.ImageFormat.SRGBA,
+                                data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGBA),
+                            )
+                        else:
+                            mp_pad_frame = mp.Image(
+                                image_format=mp.ImageFormat.SRGB,
+                                data=cv2.cvtColor(pad_frame, cv2.COLOR_BGR2RGB),
+                            )
                         landmarker.detect_for_video(mp_pad_frame, current_timestamp_ms)
                         current_timestamp_ms += frame_duration_ms
 
@@ -5163,6 +5186,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     pose_config,
                     landmarks_history,
                     use_image_detect=False,
+                    is_mps_gpu=is_mps_gpu,
                 )
                 landmarks_image = process_frame_with_tasks_api(
                     frame,
@@ -5177,6 +5201,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     pose_config,
                     landmarks_history,
                     use_image_detect=True,
+                    is_mps_gpu=is_mps_gpu,
                 )
                 landmarks = landmarks_image if landmarks_image is not None else landmarks_video
             else:
@@ -5193,6 +5218,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     pose_config,
                     landmarks_history,
                     use_image_detect=False,
+                    is_mps_gpu=is_mps_gpu,
                 )
 
             # --- REVERSE-PREPEND: Skip output for prefix frames ---

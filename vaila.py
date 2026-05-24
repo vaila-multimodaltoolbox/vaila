@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 22 May 2026
+Update Date: 23 May 2026
 Version: 0.3.45
 
 Example of usage:
@@ -89,6 +89,14 @@ def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
         script_path (str, optional): Alternative script path if module import fails
         extra_py_flags: Extra flags after ``sys.executable`` (e.g. ``("-u",)`` for unbuffered SAM subprocess logs)
     """
+    def _activate_pid_macos(pid):
+        if platform.system() == "Darwin" and pid:
+            try:
+                cmd = f"sleep 0.5 && osascript -e 'tell application \"System Events\" to set frontmost of the first process whose unix id is {pid} to true'"
+                subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
     # If script_path is provided, try to run it directly first (avoids __init__.py import issues)
     if script_path:
         try:
@@ -98,11 +106,12 @@ def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
                 full_script_path = os.path.join(vaila_dir, script_path)
             if os.path.exists(full_script_path):
                 print(f"Running script directly: {full_script_path}")
-                subprocess.Popen(
+                proc = subprocess.Popen(
                     [sys.executable, *extra_py_flags, full_script_path],
                     cwd=vaila_dir,
                     env={**os.environ, "PYTHONPATH": vaila_dir},
                 )
+                _activate_pid_macos(proc.pid)
                 return
             else:
                 print(f"Warning: Script path not found: {full_script_path}")
@@ -112,11 +121,12 @@ def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
     try:
         # Try to run the module directly (will import __init__.py)
         print(f"Running module: {module_name}")
-        subprocess.Popen(
+        proc = subprocess.Popen(
             [sys.executable, *extra_py_flags, "-m", module_name],
             cwd=vaila_dir,
             env={**os.environ, "PYTHONPATH": vaila_dir},
         )
+        _activate_pid_macos(proc.pid)
     except Exception as e:
         print(f"Error launching {module_name}: {e}")
         if script_path:
@@ -125,11 +135,12 @@ def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
                 full_script_path = os.path.join(vaila_dir, "vaila", script_path)
                 if not os.path.exists(full_script_path):
                     full_script_path = os.path.join(vaila_dir, script_path)
-                subprocess.Popen(
+                proc = subprocess.Popen(
                     [sys.executable, *extra_py_flags, full_script_path],
                     cwd=vaila_dir,
                     env={**os.environ, "PYTHONPATH": vaila_dir},
                 )
+                _activate_pid_macos(proc.pid)
             except Exception as e2:
                 print(f"Fallback also failed: {e2}")
                 import traceback
@@ -158,7 +169,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 22.May.2026 v0.3.45 (Python 3.12.13)
+vailá - 23.May.2026 v0.3.45 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -195,7 +206,7 @@ B3_r3_c1 - HR/ECG         B3_r3_c2 - Yolo + Markerless_MP
 B3_r3_c3 - Vertical Jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - Video AI tools    B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c1 - YOLO + SAM       B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
 B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
@@ -269,7 +280,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 22.May.2026 v0.3.45 (Python 3.12.13)")
+        self.title("vailá - 23.May.2026 v0.3.45 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -778,10 +789,10 @@ class Vaila(tk.Tk):
         row4_frame = tk.Frame(analysis_frame)
         row4_frame.pack(fill="x")
 
-        # B4_r4_c1 - Video AI tools (YOLO, SAM, Roboflow trackers, …)
+        # B4_r4_c1 - YOLO + SAM
         yolo_and_sam_btn = tk.Button(
             row4_frame,
-            text="Video AI tools",
+            text="YOLO + SAM",
             width=button_width,
             command=self.yolo_and_sam,
         )
@@ -1913,7 +1924,7 @@ class Vaila(tk.Tk):
 
     # B_r4_c1
     def yolotrackerpose(self):
-        """Open chooser for video AI: YOLO tracking/pose/seg, SAM 3, training, Roboflow trackers."""
+        """Runs the specified YOLO tracking analysis."""
         print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
         print(f"Running tracker analysis {os.path.basename(__file__)}")
         # Show approximate source line for debugging.
@@ -1924,10 +1935,10 @@ class Vaila(tk.Tk):
             if frame is not None:
                 print(f"Line number: {frame.f_lineno}")
 
-        # Create a dialog window for tool selection
+        # Create a dialog window for tracking version selection
         dialog = tk.Toplevel(self)
-        dialog.title("Video AI tools")
-        dialog.geometry("400x720")
+        dialog.title("Select YOLO Tool")
+        dialog.geometry("400x650")
         dialog.transient(self)  # Make dialog modal
 
         # Try to set grab, but don't fail if another grab is active
@@ -1941,7 +1952,7 @@ class Vaila(tk.Tk):
             with contextlib.suppress(Exception):
                 dialog.grab_set()
 
-        tk.Label(dialog, text="Select a video AI tool:", pady=15).pack()
+        tk.Label(dialog, text="Select YOLO tool to use:", pady=15).pack()
 
         # Ensure Ultralytics never downloads into repo root.
         try:
@@ -2020,19 +2031,6 @@ class Vaila(tk.Tk):
             dialog.destroy()
             self.sam_video()
 
-        def use_rf_trackers():
-            dialog.destroy()
-            try:
-                run_vaila_module(
-                    "vaila.rf_trackers",
-                    extra_py_flags=("-u",),
-                )
-            except Exception as e:
-                messagebox.showerror(
-                    "Error Running Roboflow trackers",
-                    f"Error: {str(e)}",
-                )
-
         tk.Button(dialog, text="Tracker (v26)", command=use_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Pose (video)", command=use_yolo_pose_v26, width=16).pack(pady=6)
         tk.Button(
@@ -2043,12 +2041,6 @@ class Vaila(tk.Tk):
         ).pack(pady=6)
         tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
         tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
-        tk.Button(
-            dialog,
-            text="Roboflow trackers (v2.4)",
-            command=use_rf_trackers,
-            width=22,
-        ).pack(pady=6)
         tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=16).pack(pady=6)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
@@ -2057,7 +2049,7 @@ class Vaila(tk.Tk):
 
     # Backwards-compat alias (older button handler name)
     def yolo_and_sam(self):
-        """Alias to open the Video AI tools selection dialog."""
+        """Alias to open the YOLO/SAM selection dialog."""
         return self.yolotrackerpose()
 
     # B_r4_c2 - ML Walkway
@@ -3001,7 +2993,7 @@ class Vaila(tk.Tk):
         ).pack(anchor="w")
         tk.Label(
             frm,
-            text="Field keypoints (YOLO pose), calibration (DLT2D), and FIFA utilities.",
+            text="Field keypoints (YOLO pose), calibration (DLT2D) e utilitários FIFA.",
             font=("default", self.font_size),
         ).pack(anchor="w", pady=(4, 10))
 
@@ -3037,13 +3029,7 @@ class Vaila(tk.Tk):
             text="FIFA: merge manual labels",
             command=lambda: (win.destroy(), self.fifa_manual_merge()),
             width=22,
-        ).grid(row=2, column=0, padx=4, pady=4, sticky="we")
-        tk.Button(
-            btn_frame,
-            text="YOLO Dataset QA",
-            command=lambda: (win.destroy(), self.fifa_yolo_dataset_qa()),
-            width=22,
-        ).grid(row=2, column=1, padx=4, pady=4, sticky="we")
+        ).grid(row=2, column=0, padx=4, pady=4, sticky="we", columnspan=2)
 
         for col in (0, 1):
             btn_frame.grid_columnconfigure(col, weight=1)
@@ -3071,12 +3057,11 @@ class Vaila(tk.Tk):
     def soccerfield_calib(self):
         """Launches DLT2D calibration of a broadcast soccer-field plane.
 
-        Wraps :mod:`vaila.soccerfield_calib` (``dlt2d`` + ``rec2d`` with
-        ``models/soccerfield_ref3d*.csv``). **No CLI args** opens a Tk dialog:
-        pick ``field_keypoints_getpixelvideo.csv`` from ``soccerfield_keypoints_ai``,
-        optional **pitch32** + **all-frames** DLT. For getpixelvideo-first workflow use
-        ``python -m vaila.soccerfield_calib -v VIDEO``. Help:
-        ``vaila/help/soccerfield_calib.html``, ``docs/fifa_workflow.md``.
+        Wraps :mod:`vaila.soccerfield_calib` (uses ``getpixelvideo`` + ``dlt2d`` +
+        ``rec2d`` with ``models/soccerfield_ref3d.csv``). The dialog has its
+        own **Help** button — see ``vaila/help/soccerfield_calib.html`` for
+        the full reference and ``docs/fifa_workflow.md`` for the unified
+        end-to-end recipe.
         """
         print("\n" + "=" * 60)
         print("Launching: vaila.soccerfield_calib")
@@ -3093,11 +3078,9 @@ class Vaila(tk.Tk):
         """Detect 32 soccer-field keypoints with YOLO-pose (Field KPs (AI)).
 
         Outputs a wide CSV that ``getpixelvideo`` and
-        ``soccerfield_calib`` can consume. GUI dialog mirrors **all CLI flags**
-        (mode, video options, conf thresholds, Roboflow vs Ultralytics with
-        ``--weights`` / ``--imgsz`` / ``--device``); default local ``.pt`` is
-        auto-filled when present under ``vaila/models/...`` (see module
-        ``default_ultralytics_weights_path``). The dialog has a **Help**
+        ``soccerfield_calib`` can consume. Uses the bundled
+        ``vaila/models/runs/pose_fifa/pitch32_recipeA_400ep/weights/best.pt``
+        (Pose mAP50 ≈ 0.945) by default. The dialog has its own **Help**
         button — see ``vaila/help/soccerfield_keypoints_ai.html`` and
         ``docs/fifa_workflow.md``.
         """
@@ -3147,23 +3130,6 @@ class Vaila(tk.Tk):
         print("Docs:    docs/fifa_workflow.md §4.5 (external tree, QA export, dedupe, yolo train)")
         print("=" * 60 + "\n")
         run_vaila_module("vaila.fifa_dataset_builder", "vaila/fifa_dataset_builder.py")
-
-    def fifa_yolo_dataset_qa(self):
-        """QA a Roboflow YOLO-Pose pitch export and draw keypoint overlays.
-
-        Wraps :mod:`vaila.fifa_yolo_dataset_qa` — validates ``train/valid/test``
-        trees (32 keypoints, ``data.yaml``) and writes preview JPEGs under
-        ``images_with_labels/``. CLI: ``python -m vaila.fifa_yolo_dataset_qa``.
-        """
-        print("\n" + "=" * 60)
-        print("Launching: vaila.fifa_yolo_dataset_qa (Tk dialog)")
-        print("Features: validate 32-kp labels, export orange keypoint overlays")
-        print("=" * 60 + "\n")
-        run_vaila_module(
-            "vaila.fifa_yolo_dataset_qa",
-            "vaila/fifa_yolo_dataset_qa.py",
-            extra_py_flags=("-u",),
-        )
 
     def fifa_manual_merge(self):
         """Merge manually-labeled YOLO Pose data into ``<dst>/unified/``.

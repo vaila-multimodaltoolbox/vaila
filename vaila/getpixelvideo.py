@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 22 May 2026
+Update: 23 May 2026
 Version: 0.3.45
 Python Version: 3.12.13
 
@@ -156,8 +156,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.6.2"
-GETPIXELVIDEO_UPDATE_DATE = "07 May 2026"
+GETPIXELVIDEO_VERSION = "0.3.45"
+GETPIXELVIDEO_UPDATE_DATE = "23 May 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -211,12 +211,16 @@ class VideoFrameSource(FrameSource):
 
     def __init__(self, video_path):
         self._cap = cv2.VideoCapture(str(video_path))
+        self._metadata = get_precise_video_metadata(video_path)
 
     def isOpened(self):  # noqa: N802 (match cv2.VideoCapture API)
         return self._cap.isOpened()
 
     def read(self):
-        return self._cap.read()
+        ret, frame = self._cap.read()
+        if ret and frame is not None:
+            frame = check_and_rotate_frame(frame, self._metadata)
+        return ret, frame
 
     def set(self, prop, value):
         return self._cap.set(prop, value)
@@ -471,33 +475,34 @@ def get_precise_video_metadata(video_path):
         if nb_frames is None and duration > 0 and fps > 0:
             nb_frames = int(round(duration * fps))
 
-        # Check for rotation metadata to adjust width and height
+        # Extract rotation angle
         rotation = 0
-        for side_data in video_stream.get("side_data_list", []):
-            if "rotation" in side_data:
+        for sd in video_stream.get("side_data_list", []):
+            if sd.get("side_data_type") == "Display Matrix" and "rotation" in sd:
                 try:
-                    rotation = int(side_data["rotation"])
+                    rotation = int(float(sd["rotation"]))
                     break
                 except (ValueError, TypeError):
                     pass
-        if rotation == 0:
-            rotate_tag = video_stream.get("tags", {}).get("rotate")
+        if rotation == 0 and "tags" in video_stream:
+            rotate_tag = video_stream["tags"].get("rotate")
             if rotate_tag:
                 try:
-                    rotation = int(rotate_tag)
+                    rotation = int(float(rotate_tag))
                 except (ValueError, TypeError):
                     pass
 
-        width = video_stream.get("width")
-        height = video_stream.get("height")
-        if width is not None and height is not None:
-            try:
-                width = int(width)
-                height = int(height)
-                if abs(rotation) in (90, 270):
-                    width, height = height, width
-            except (ValueError, TypeError):
-                pass
+        rotation = rotation % 360
+        raw_width = int(video_stream.get("width"))
+        raw_height = int(video_stream.get("height"))
+
+        # Swap width and height if rotated by 90 or 270 degrees
+        if rotation in (90, 270):
+            width = raw_height
+            height = raw_width
+        else:
+            width = raw_width
+            height = raw_height
 
         return {
             "fps": fps,
@@ -508,6 +513,7 @@ def get_precise_video_metadata(video_path):
             "avg_frame_rate": avg_frame_rate_str,
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
+            "rotation": rotation,
         }
     except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
         # Fallback to OpenCV if ffprobe is not available
@@ -524,7 +530,32 @@ def get_precise_video_metadata(video_path):
             "codec": "unknown",
             "r_frame_rate": None,
             "avg_frame_rate": None,
+            "rotation": 0,
         }
+
+
+def check_and_rotate_frame(frame, metadata):
+    """
+    Ensure the frame matches display dimensions by rotating if OpenCV didn't do it.
+    """
+    if frame is None or not metadata or "rotation" not in metadata:
+        return frame
+    rot = metadata["rotation"] % 360
+    if rot in (90, 180, 270):
+        h, w = frame.shape[:2]
+        target_w = metadata["width"]
+        target_h = metadata["height"]
+        if w == target_w and h == target_h:
+            # Already auto-rotated by OpenCV
+            return frame
+        # Apply manual rotation
+        if rot == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        elif rot == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        elif rot == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
 
 
 def get_color_for_id(marker_id):
@@ -1800,7 +1831,7 @@ def play_video_with_controls(
         When ``prefer_fifa_dataset`` is True, the loader prefers the FIFA-dataset
         layout CSV (``soccerfield_ref3d_fifa_dataset.csv``) which has 32 keypoints
         starting at ``point_number = 0`` (``top_left_corner``) and matches the
-        layout of ``<dataset_root>/FIFA/dataset_vaila_fifa/unified``.
+        layout of ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``.
         """
         import pandas as _pd
 
@@ -2012,7 +2043,7 @@ def play_video_with_controls(
         Used when ``pitch_guide_fifa_mode`` is True. Field is drawn from the FIFA
         dataset point names (top_left_corner / midfield_top / center_circle_*,
         left_pen_box_*_outer / inner, etc.). Indexing matches the ``unified/``
-        layout of ``<dataset_root>/FIFA/dataset_vaila_fifa``.
+        layout of ``/home/preto/data/FIFA/dataset_vaila_fifa``.
         """
         if not pitch_guide_points:
             return None
@@ -2211,10 +2242,18 @@ def play_video_with_controls(
                 cap_export.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
                 ret, frame = cap_export.read()
 
+                if ret and frame is not None:
+                    # Get precise metadata for rotation check
+                    metadata_export = get_precise_video_metadata(video_path)
+                    frame = check_and_rotate_frame(frame, metadata_export)
+
                 if not ret:
                     print(f"Warning: Could not read frame {frame_idx}/{total_frames_video}")
                     # Try reading sequentially as fallback
                     ret, frame = cap_export.read()
+                    if ret and frame is not None:
+                        metadata_export = get_precise_video_metadata(video_path)
+                        frame = check_and_rotate_frame(frame, metadata_export)
                     if not ret:
                         print(f"Error: Could not read frame {frame_idx} even with sequential read")
                         # Create a black frame as last resort to maintain frame count
@@ -8789,6 +8828,9 @@ def export_labeling_dataset(
     if not cap.isOpened():
         return None, "Could not open video"
 
+    # Get precise metadata for rotation check
+    metadata_export = get_precise_video_metadata(video_path)
+
     # Process each split
     for split_name, frames in splits.items():
         for frame_num in frames:
@@ -8797,6 +8839,7 @@ def export_labeling_dataset(
             ret, frame = cap.read()
             if not ret:
                 continue
+            frame = check_and_rotate_frame(frame, metadata_export)
 
             # Save image (with optional prefix for multi-video append)
             img_filename = f"{file_prefix}frame_{frame_num:06d}.jpg"
@@ -8894,7 +8937,7 @@ names: {class_names}
 
 def _detect_dataset_layout(dataset_dir: str) -> str:
     """Return ``"fifa"`` for ``<dir>/{images,labels}/{split}`` (the FIFA dataset
-    layout used at ``<dataset_root>/FIFA/dataset_vaila_fifa/unified``) or
+    layout used at ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``) or
     ``"vaila"`` for the legacy ``<dir>/{split}/{images,labels}`` layout.
 
     Heuristics, in order:
@@ -8977,7 +9020,7 @@ def export_pose_dataset(
             val/images/*.jpg|png      val/labels/*.txt
             test/images/*.jpg|png     test/labels/*.txt
 
-    * ``layout="fifa"`` (matches ``<dataset_root>/FIFA/dataset_vaila_fifa/unified``)::
+    * ``layout="fifa"`` (matches ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``)::
 
         dataset_dir/
             data.yaml      # path: <dir>, train: images/train, ...
@@ -9183,6 +9226,9 @@ def export_pose_dataset(
     if not cap.isOpened():
         return None, f"Could not open video: {video_path}"
 
+    # Get precise metadata for rotation check
+    metadata_export = get_precise_video_metadata(video_path)
+
     written = 0
     for split_name, frames in splits.items():
         for frame_num in frames:
@@ -9190,6 +9236,7 @@ def export_pose_dataset(
             ret, frame = cap.read()
             if not ret:
                 continue
+            frame = check_and_rotate_frame(frame, metadata_export)
 
             valid_pts = per_frame_valid_kpts[frame_num]
             kpts = list(valid_pts[:nkp]) + [None] * max(0, nkp - len(valid_pts))
@@ -9299,7 +9346,7 @@ def _write_pose_data_yaml(
     * ``"vaila"`` - absolute paths to ``<dir>/{split}/images``
       (legacy / standalone export).
     * ``"fifa"`` - relative ``images/{split}`` (matches
-      ``<dataset_root>/FIFA/dataset_vaila_fifa/unified/data.yaml``).
+      ``/home/preto/data/FIFA/dataset_vaila_fifa/unified/data.yaml``).
     """
     classes_file = os.path.join(dataset_dir, "classes.txt")
     class_names: list[str] = []

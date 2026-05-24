@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -42,7 +43,7 @@ def test_dlt2d_integration(test_data):
 
     # Use subprocess to test CLI parsing
     result = subprocess.run(
-        ["python3", "vaila/dlt2d.py", "--pixel", pixel_file, "--real", real_file],
+        [sys.executable, "vaila/dlt2d.py", "--pixel", pixel_file, "--real", real_file],
         capture_output=True,
         text=True,
     )
@@ -57,7 +58,7 @@ def test_dlt3d_integration(test_data):
     real_file = str(test_data / "real3d.ref3d")
 
     result = subprocess.run(
-        ["python3", "vaila/dlt3d.py", "--pixel", pixel_file, "--real", real_file],
+        [sys.executable, "vaila/dlt3d.py", "--pixel", pixel_file, "--real", real_file],
         capture_output=True,
         text=True,
     )
@@ -71,7 +72,7 @@ def test_rec2d_integration(test_data):
     # First generate the .dlt2d
     subprocess.run(
         [
-            "python3",
+            sys.executable,
             "vaila/dlt2d.py",
             "--pixel",
             str(test_data / "pixels2d.csv"),
@@ -91,7 +92,7 @@ def test_rec2d_integration(test_data):
 
     result = subprocess.run(
         [
-            "python3",
+            sys.executable,
             "vaila/rec2d_one_dlt2d.py",
             "--dlt-file",
             dlt_file,
@@ -122,7 +123,7 @@ def test_rec3d_integration(test_data):
 
     result = subprocess.run(
         [
-            "python3",
+            sys.executable,
             "vaila/rec3d.py",
             "--dlt-files",
             dlt_file,
@@ -156,7 +157,7 @@ def test_rec3d_one_dlt3d_integration(test_data):
 
     result = subprocess.run(
         [
-            "python3",
+            sys.executable,
             "vaila/rec3d_one_dlt3d.py",
             "--dlt3d",
             dlt1,

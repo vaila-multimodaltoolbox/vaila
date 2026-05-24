@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Roberto Pereira Santiago
-Version: 0.0.3
+Version: 0.3.45
 Create: 24 February, 2025
-Last Updated: 02 August, 2025
+Last Updated: 23 May 2026
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -177,7 +177,7 @@ def process_files(pixel_file, ref3d_file):
     return dlt_params_all
 
 
-def save_dlt_parameters(output_file, dlt_params):
+def save_dlt_parameters(output_file, dlt_params, show_gui=True):
     """Saves the computed DLT3d parameters to a CSV file without spaces after commas."""
     with open(output_file, "w") as f:
         f.write(
@@ -187,7 +187,13 @@ def save_dlt_parameters(output_file, dlt_params):
             param_str = ",".join([f"{p:.6f}" for p in params])
             f.write(f"{frame},{param_str}\n")
     # Show a message box indicating success
-    messagebox.showinfo("Success", f"DLT3d file saved successfully: {output_file}")
+    if show_gui:
+        try:
+            import tkinter as tk
+            if tk._default_root is not None:
+                messagebox.showinfo("Success", f"DLT3d file saved successfully: {output_file}")
+        except Exception:
+            pass
     print(f"DLT3d parameters saved to {output_file}")
 
 
@@ -259,7 +265,8 @@ def main(pixel_file=None, real_file=None, create_ref=False):
         print("Error processing the files.")
         return
     output_file = os.path.splitext(pixel_file)[0] + ".dlt3d"
-    save_dlt_parameters(output_file, dlt_params)
+    show_gui = (pixel_file is None)
+    save_dlt_parameters(output_file, dlt_params, show_gui=show_gui)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@
 - **File:** `vaila\vaila_lensdistortvideo.py`
 - **Lines:** 349
 - **Size:** 11795 characters
-- **Version:** 0.1.4
+- **Version:** 0.3.45
 - **Author:** Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **CLI Support:** ✅ Yes
@@ -75,6 +75,6 @@ python vaila_lensdistortvideo.py --input_dir "..." --params_file "..." --output_
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
+📅 **Generated automatically on:** 23/05/2026 17:30:00
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

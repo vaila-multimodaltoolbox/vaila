@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 22 May 2026
+Update Date: 23 May 2026
 Version: 0.3.45
 
 Description:
@@ -185,33 +185,34 @@ def get_precise_video_metadata(video_path):
         if nb_frames is None and duration > 0 and fps > 0:
             nb_frames = int(round(duration * fps))
 
-        # Check for rotation metadata to adjust width and height
+        # Extract rotation angle
         rotation = 0
-        for side_data in video_stream.get("side_data_list", []):
-            if "rotation" in side_data:
+        for sd in video_stream.get("side_data_list", []):
+            if sd.get("side_data_type") == "Display Matrix" and "rotation" in sd:
                 try:
-                    rotation = int(side_data["rotation"])
+                    rotation = int(float(sd["rotation"]))
                     break
                 except (ValueError, TypeError):
                     pass
-        if rotation == 0:
-            rotate_tag = video_stream.get("tags", {}).get("rotate")
+        if rotation == 0 and "tags" in video_stream:
+            rotate_tag = video_stream["tags"].get("rotate")
             if rotate_tag:
                 try:
-                    rotation = int(rotate_tag)
+                    rotation = int(float(rotate_tag))
                 except (ValueError, TypeError):
                     pass
 
-        width = video_stream.get("width")
-        height = video_stream.get("height")
-        if width is not None and height is not None:
-            try:
-                width = int(width)
-                height = int(height)
-                if abs(rotation) in (90, 270):
-                    width, height = height, width
-            except (ValueError, TypeError):
-                pass
+        rotation = rotation % 360
+        raw_width = int(video_stream.get("width"))
+        raw_height = int(video_stream.get("height"))
+
+        # Swap width and height if rotated by 90 or 270 degrees
+        if rotation in (90, 270):
+            width = raw_height
+            height = raw_width
+        else:
+            width = raw_width
+            height = raw_height
 
         return {
             "fps": fps,
@@ -224,6 +225,7 @@ def get_precise_video_metadata(video_path):
             "fps_den": fps_den,
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
+            "rotation": rotation,
         }
     except (
         subprocess.CalledProcessError,
@@ -248,7 +250,32 @@ def get_precise_video_metadata(video_path):
             "avg_frame_rate": None,
             "fps_num": int(fps) if fps else 30,
             "fps_den": 1,
+            "rotation": 0,
         }
+
+
+def check_and_rotate_frame(frame, metadata):
+    """
+    Ensure the frame matches the display dimensions by rotating it if needed.
+    """
+    if frame is None or not metadata or "rotation" not in metadata:
+        return frame
+    rot = metadata["rotation"] % 360
+    if rot in (90, 180, 270):
+        h, w = frame.shape[:2]
+        target_w = metadata["width"]
+        target_h = metadata["height"]
+        if w == target_w and h == target_h:
+            # Already rotated by OpenCV/backend
+            return frame
+        # Apply manual rotation
+        if rot == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        elif rot == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        elif rot == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
 
 
 def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metadata):
@@ -341,6 +368,7 @@ def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metad
         ret, frame = cap.read()
         if not ret:
             break
+        frame = check_and_rotate_frame(frame, metadata)
         out.write(frame)
 
     out.release()
@@ -1910,6 +1938,8 @@ def play_video_with_cuts(video_path):
 
         if not ret:
             break
+
+        frame = check_and_rotate_frame(frame, metadata)
 
         # Base scale so that at zoom_level=1.0 the whole video fits in the window
         clamp_zoom_level()
