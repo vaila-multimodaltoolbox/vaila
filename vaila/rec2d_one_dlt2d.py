@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.4
+Version: 0.3.45
 Created: August 9, 2024
-Last Updated: March 24, 2026
+Last Updated: 23 May 2026
 
 Description:
     Optimized batch processing of 2D coordinates reconstruction using corresponding DLT parameters for each frame.
@@ -65,7 +65,7 @@ def rec2d(A, cc2d):
     return H
 
 
-def process_files_in_directory(dlt_params, input_directory, output_directory):
+def process_files_in_directory(dlt_params, input_directory, output_directory, show_gui=True):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_directory, f"vaila_rec2d_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
@@ -73,7 +73,13 @@ def process_files_in_directory(dlt_params, input_directory, output_directory):
     csv_files = sorted([f for f in os.listdir(input_directory) if f.endswith(".csv")])
 
     if not csv_files:
-        messagebox.showerror("Error", "No CSV files found in the selected directory!")
+        if show_gui:
+            try:
+                import tkinter as tk
+                if tk._default_root is not None:
+                    messagebox.showerror("Error", "No CSV files found in the selected directory!")
+            except Exception:
+                pass
         return
 
     print(f"Found {len(csv_files)} CSV files to process")
@@ -143,12 +149,18 @@ def process_files_in_directory(dlt_params, input_directory, output_directory):
     print(f"Processed {total_files} files")
     print(f"Output directory: {output_dir}")
 
-    messagebox.showinfo(
-        "Processing Complete",
-        f"2D reconstruction completed successfully!\n\n"
-        f"Processed: {total_files} files\n"
-        f"Output directory: {os.path.basename(output_dir)}",
-    )
+    if show_gui:
+        try:
+            import tkinter as tk
+            if tk._default_root is not None:
+                messagebox.showinfo(
+                    "Processing Complete",
+                    f"2D reconstruction completed successfully!\n\n"
+                    f"Processed: {total_files} files\n"
+                    f"Output directory: {os.path.basename(output_dir)}",
+                )
+        except Exception:
+            pass
     print(f"Reconstructed 2D coordinates saved to {output_dir}")
 
 
@@ -211,7 +223,8 @@ def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=No
     print("-" * 80)
 
     # Process files
-    process_files_in_directory(dlt_params, input_directory, output_directory)
+    show_gui = (dlt_file is None)
+    process_files_in_directory(dlt_params, input_directory, output_directory, show_gui=show_gui)
 
 
 if __name__ == "__main__":

@@ -6,10 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vailá - Help Index</title>
     <style>
-        html {
-            scroll-behavior: smooth;
-        }
-
         body {
             font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
             margin: 0;
@@ -206,58 +202,6 @@
             border: 1px solid #e5e7eb;
         }
 
-        .sub-section-container {
-            margin-top: 60px;
-            padding: 20px;
-            background: #fdfdfd;
-            border: 1px solid #eee;
-            border-radius: 16px;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-        }
-
-        .sub-section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #111;
-            margin-bottom: 20px;
-        }
-
-        .sub-section-header h2 {
-            margin-top: 0;
-            border-left: none;
-            background: transparent;
-            padding-left: 0;
-        }
-
-        .jump-link {
-            display: inline-block;
-            background: #111;
-            color: #fff !important;
-            padding: 6px 12px;
-            border-radius: 8px;
-            text-decoration: none !important;
-            font-weight: 600;
-            font-size: 0.9em;
-            transition: transform 100ms ease;
-        }
-
-        .jump-link:hover {
-            transform: scale(1.05);
-            background: #333;
-        }
-
-        .back-link {
-            font-size: 0.85em;
-            color: #666;
-            text-decoration: none;
-        }
-
-        .back-link:hover {
-            color: #111;
-            text-decoration: underline;
-        }
-
         @media (max-width: 640px) {
             body {
                 font-size: 16px;
@@ -301,7 +245,7 @@
             <span class="pill">Layout: matches <code>vaila.py</code> CLI list</span>
         </div>
 
-        <pre class="banner">vailá - 07.May.2026 v0.3.43 (Python 3.12.13)</pre>
+        <pre class="banner">vailá - 23.May.2026 v0.3.45 (Python 3.12.13)</pre>
 
         <div>
             <h2>File Manager (Frame A)</h2>
@@ -435,8 +379,8 @@
                 </div>
 
                     <div class="tool-card">
-                        <div class="tool-title">B4_r4_c1 - Video AI tools</div>
-                        <div class="tool-links"><a href="#yolo-sam" class="jump-link">Open Video AI Selection</a></div>
+                        <div class="tool-title">B4_r4_c1 - YOLO and SAM</div>
+                        <div class="tool-links"><a href="#yolo-sam">Jump</a> <span class="text-sm">(chooser dialog)</span></div>
                     </div>
                     <div class="tool-card">
                         <div class="tool-title">B4_r4_c2 - ML Walkway</div>
@@ -500,7 +444,11 @@
                     <div class="tool-card">
                         <div class="tool-title">B5_r6_c4 - Soccer Tools</div>
                         <div class="tool-links">
-                            <a href="#soccer-tools" class="jump-link">Open Soccer Tools Selection</a>
+                            <a href="../../docs/fifa_workflow.md">docs/fifa_workflow.md</a> |
+                            <a href="soccerfield_keypoints_ai.html">Field KPs (AI)</a> |
+                            <a href="soccerfield_calib.html">Soccer-Field Calib</a> |
+                            <a href="vaila_sam.html">FIFA cams→DLT (via SAM/FIFA)</a>
+                            <span class="text-sm">(AI keypoints + DLT2D calib + FIFA utilities)</span>
                         </div>
                     </div>
                     <div class="tool-card">
@@ -536,15 +484,15 @@
                 </div>
             </div>
 
-            <div id="yolo-sam" class="sub-section-container">
-                <div class="sub-section-header">
-                    <h2>Video AI tools</h2>
-                    <a href="#" class="back-link">↑ Back to Top</a>
-                </div>
+            <div id="yolo-sam">
+                <h2>YOLO &amp; SAM</h2>
                 <p class="mb-sm">
-                  <strong>GUI:</strong> Frame B → <strong>Video AI tools</strong> opens the chooser:
-                  <code>Tracker (v26)</code>, <code>Pose (video/tracking)</code>,
-                  <code>Seg (v26)</code>, <code>SAM 3 video</code>, <code>Roboflow trackers (v2.4)</code>, <code>Train YOLO</code>.
+                  <strong>GUI:</strong> Frame B → <strong>YOLO and SAM</strong> opens the chooser:
+                  <code>YOLOv11/YOLOv26 Tracker</code>, <code>YOLOv11/YOLOv26 Pose</code>,
+                  <code>YOLOv26 Segmentation</code>, <code>SAM</code>, <code>Train YOLO</code>.
+                  <br />
+                  <strong>CLI:</strong> run headless with <code>uv run yolo ...</code> (train/val/test/predict) or open module GUIs with
+                  <code>uv run python -m vaila.&lt;module&gt;</code>.
                 </p>
                 <div class="grid-container">
                     <div class="tool-card">
@@ -564,41 +512,8 @@
                         <div class="tool-links"><a href="reid_yolotrack.html">HTML</a> | <a href="reid_yolotrack.md">MD</a></div>
                     </div>
                     <div class="tool-card">
-                        <div class="tool-title">Roboflow trackers + YOLO (v2.4)</div>
-                        <div class="tool-links"><a href="rf_trackers.html">HTML</a> | <a href="rf_trackers.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
                         <div class="tool-title">SAM 3 - Video segmentation + FIFA pipeline</div>
                         <div class="tool-links"><a href="vaila_sam.html">HTML</a> | <a href="vaila_sam.md">MD</a></div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="soccer-tools" class="sub-section-container">
-                <div class="sub-section-header">
-                    <h2>Soccer Tools</h2>
-                    <a href="#" class="back-link">↑ Back to Top</a>
-                </div>
-                <p class="mb-sm">
-                  <strong>FIFA Workflow & AI Keypoints:</strong> Tools for soccer field calibration, 
-                  automatic keypoint detection, and 3D reconstruction from broadcast cameras.
-                </p>
-                <div class="grid-container">
-                    <div class="tool-card">
-                        <div class="tool-title">FIFA Workflow (Docs)</div>
-                        <div class="tool-links"><a href="../../docs/fifa_workflow.md">Markdown Guide</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">Field KPs (AI)</div>
-                        <div class="tool-links"><a href="soccerfield_keypoints_ai.html">HTML</a> | <a href="soccerfield_keypoints_ai.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">Soccer-Field Calib</div>
-                        <div class="tool-links"><a href="soccerfield_calib.html">HTML</a> | <a href="soccerfield_calib.md">MD</a></div>
-                    </div>
-                    <div class="tool-card">
-                        <div class="tool-title">FIFA cams→DLT</div>
-                        <div class="tool-links"><a href="vaila_sam.html">HTML (via SAM)</a> | <a href="fifa_to_dlt.md">MD</a></div>
                     </div>
                 </div>
             </div>
@@ -795,7 +710,7 @@
             </div>
 
         <div class="footer">
-            <p class="muted">Generated based on <i>vailá</i> v0.3.45 layout. Help index refreshed 2026-05-22.</p>
+            <p class="muted">Generated based on <i>vailá</i> v0.3.45 layout.</p>
         </div>
 
         <script>

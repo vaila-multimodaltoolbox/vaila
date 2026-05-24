@@ -6,7 +6,7 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 10 October 2024
-Update Date: 22 May 2026
+Update Date: 23 May 2026
 Version: 0.3.45
 Python Version: 3.12.13
 
@@ -183,10 +183,7 @@ def load_distortion_parameters(toml_path):
     # #region agent log
     try:
         with open(
-            Path(__file__).resolve().parents[1]
-            / ".cursor"
-            / "debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log",
-            "a",
+            "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a"
         ) as _f:
             _f.write(
                 json.dumps(
@@ -289,33 +286,34 @@ def get_precise_video_metadata(video_path):
         if nb_frames is None and duration > 0 and fps > 0:
             nb_frames = int(round(duration * fps))
 
-        # Check for rotation metadata to adjust width and height
+        # Extract rotation angle
         rotation = 0
-        for side_data in video_stream.get("side_data_list", []):
-            if "rotation" in side_data:
+        for sd in video_stream.get("side_data_list", []):
+            if sd.get("side_data_type") == "Display Matrix" and "rotation" in sd:
                 try:
-                    rotation = int(side_data["rotation"])
+                    rotation = int(float(sd["rotation"]))
                     break
                 except (ValueError, TypeError):
                     pass
-        if rotation == 0:
-            rotate_tag = video_stream.get("tags", {}).get("rotate")
+        if rotation == 0 and "tags" in video_stream:
+            rotate_tag = video_stream["tags"].get("rotate")
             if rotate_tag:
                 try:
-                    rotation = int(rotate_tag)
+                    rotation = int(float(rotate_tag))
                 except (ValueError, TypeError):
                     pass
 
-        width = video_stream.get("width")
-        height = video_stream.get("height")
-        if width is not None and height is not None:
-            try:
-                width = int(width)
-                height = int(height)
-                if abs(rotation) in (90, 270):
-                    width, height = height, width
-            except (ValueError, TypeError):
-                pass
+        rotation = rotation % 360
+        raw_width = int(video_stream.get("width"))
+        raw_height = int(video_stream.get("height"))
+
+        # Swap width and height if rotated by 90 or 270 degrees
+        if rotation in (90, 270):
+            width = raw_height
+            height = raw_width
+        else:
+            width = raw_width
+            height = raw_height
 
         return {
             "fps": fps,
@@ -326,6 +324,7 @@ def get_precise_video_metadata(video_path):
             "avg_frame_rate": avg_frame_rate_str,
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
+            "rotation": rotation,
         }
     except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
         # Fallback to OpenCV if ffprobe is not available
@@ -346,7 +345,32 @@ def get_precise_video_metadata(video_path):
             "codec": "unknown",
             "r_frame_rate": None,
             "avg_frame_rate": None,
+            "rotation": 0,
         }
+
+
+def check_and_rotate_frame(frame, metadata):
+    """
+    Ensure the frame matches display dimensions by rotating if OpenCV didn't do it.
+    """
+    if frame is None or not metadata or "rotation" not in metadata:
+        return frame
+    rot = metadata["rotation"] % 360
+    if rot in (90, 180, 270):
+        h, w = frame.shape[:2]
+        target_w = metadata["width"]
+        target_h = metadata["height"]
+        if w == target_w and h == target_h:
+            # Already auto-rotated by OpenCV
+            return frame
+        # Apply manual rotation
+        if rot == 90:
+            return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        elif rot == 180:
+            return cv2.rotate(frame, cv2.ROTATE_180)
+        elif rot == 270:
+            return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
 
 
 def process_video(input_path, output_path, parameters):
@@ -419,6 +443,7 @@ def process_video(input_path, output_path, parameters):
                 ret, frame = cap.read()
                 if not ret:
                     break
+                frame = check_and_rotate_frame(frame, metadata)
 
                 # Undistort frame
                 undistorted = cv2.undistort(
@@ -537,10 +562,8 @@ def run_distortvideo():
 
     # Determine parameters file
     # #region agent log
-    _log_path_lens = str(
-        Path(__file__).resolve().parents[1]
-        / ".cursor"
-        / "debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+    _log_path_lens = (
+        "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
     )
     # #endregion
     if args.params_file:

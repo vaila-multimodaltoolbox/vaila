@@ -6,7 +6,7 @@
 - **File:** `vaila\extractpng.py`
 - **Lines:** 497
 - **Size:** 16763 characters
-- **Version:** 2.1.0
+- **Version:** 0.3.45
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -25,8 +25,8 @@ Contact: paulosantiago@usp.br
 Laboratory website: https://github.com/vaila-multimodaltoolbox/vaila
 
 Created: December 15, 2023
-Last Updated: January 27, 2025
-Version: 2.1.0
+Last Updated: 23 May 2026
+Version: 0.3.45
 
 Description:
 ------------
@@ -60,6 +60,6 @@ The main features of the module include:
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
+📅 **Generated automatically on:** 23/05/2026 17:30:00
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

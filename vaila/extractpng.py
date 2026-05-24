@@ -11,8 +11,8 @@ Contact: paulosantiago@usp.br
 Laboratory website: https://github.com/vaila-multimodaltoolbox/vaila
 
 Created: December 15, 2023
-Last Updated: March 05, 2026
-Version: 0.0.3
+Last Updated: 23 May 2026
+Version: 0.3.45
 
 Description:
 ------------
@@ -350,70 +350,76 @@ class VideoProcessor:
         return fps
 
     def get_video_info(self, video_path):
-        """Get video dimensions and FPS using ffprobe."""
+        """Get video dimensions (adjusting for rotation) and FPS using ffprobe."""
+        import json
         try:
-            width = int(
-                subprocess.check_output(
-                    [
-                        "ffprobe",
-                        "-v",
-                        "error",
-                        "-select_streams",
-                        "v:0",
-                        "-show_entries",
-                        "stream=width",
-                        "-of",
-                        "csv=p=0",
-                        video_path,
-                    ]
-                )
-                .decode()
-                .strip()
-            )
+            cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-print_format",
+                "json",
+                "-show_streams",
+                str(video_path),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            data = json.loads(result.stdout)
 
-            height = int(
-                subprocess.check_output(
-                    [
-                        "ffprobe",
-                        "-v",
-                        "error",
-                        "-select_streams",
-                        "v:0",
-                        "-show_entries",
-                        "stream=height",
-                        "-of",
-                        "csv=p=0",
-                        video_path,
-                    ]
-                )
-                .decode()
-                .strip()
-            )
+            video_stream = None
+            for stream in data.get("streams", []):
+                if stream.get("codec_type") == "video":
+                    video_stream = stream
+                    break
 
-            fps = float(
-                subprocess.check_output(
-                    [
-                        "ffprobe",
-                        "-v",
-                        "error",
-                        "-select_streams",
-                        "v:0",
-                        "-show_entries",
-                        "stream=r_frame_rate",
-                        "-of",
-                        "csv=p=0",
-                        video_path,
-                    ]
-                )
-                .decode()
-                .strip()
-                .split("/")[0]
-            )
+            if not video_stream:
+                raise ValueError("No video stream found in file")
+
+            raw_width = int(video_stream.get("width", 0))
+            raw_height = int(video_stream.get("height", 0))
+
+            # Parse r_frame_rate
+            r_frame_rate_str = video_stream.get("r_frame_rate", "0/0")
+            fps = 30.0
+            if "/" in r_frame_rate_str:
+                try:
+                    num, den = map(int, r_frame_rate_str.split("/"))
+                    if den != 0:
+                        fps = float(num) / den
+                except (ValueError, ZeroDivisionError):
+                    pass
+
+            # Extract rotation angle
+            rotation = 0
+            for sd in video_stream.get("side_data_list", []):
+                if sd.get("side_data_type") == "Display Matrix" and "rotation" in sd:
+                    try:
+                        rotation = int(float(sd["rotation"]))
+                        break
+                    except (ValueError, TypeError):
+                        pass
+            if rotation == 0 and "tags" in video_stream:
+                rotate_tag = video_stream["tags"].get("rotate")
+                if rotate_tag:
+                    try:
+                        rotation = int(float(rotate_tag))
+                    except (ValueError, TypeError):
+                        pass
+
+            rotation = rotation % 360
+
+            # Swap width and height if rotated by 90 or 270 degrees
+            if rotation in (90, 270):
+                width = raw_height
+                height = raw_width
+            else:
+                width = raw_width
+                height = raw_height
 
             return width, height, fps
 
         except subprocess.CalledProcessError as e:
-            print(f"Error getting video info: {e.stderr}")
+            err = getattr(e, "stderr", None) or str(e)
+            print(f"Error getting video info: {err}")
             raise
         except Exception as e:
             print(f"Unexpected error getting video info: {str(e)}")

@@ -7,7 +7,7 @@ Author: Paulo R. P. Santiago & Antigravity (Google Deepmind)
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 21 April 2026
-Update Date: 22 May 2026
+Update Date: 23 May 2026
 Version: 0.3.45
 
 Description:
@@ -401,11 +401,92 @@ def generate_stroboscopic_image(
     video_path, csv_path=None, output_path=None, strobe_interval=10, **kwargs
 ):
     print("Running legacy pose mode... Needs valid CSV.")
-    # Simplified placeholder for legacy pose mode if people still want it
     video_path = Path(video_path)
-    out_path = Path(output_path or video_path.parent / f"{video_path.stem}_pose_strobe.png")
-    dummy_img = np.zeros((120, 160, 3), dtype=np.uint8)
-    cv2.imwrite(str(out_path), dummy_img)
+    if csv_path is None:
+        # Search for CSV files in the same directory that contain the video name
+        candidates = list(video_path.parent.glob(f"*{video_path.stem}*.csv"))
+        if not candidates:
+            # Fallback to any CSV file in the same directory
+            candidates = list(video_path.parent.glob("*.csv"))
+        if candidates:
+            csv_path = candidates[0]
+            print(f"Auto-detected CSV: {csv_path}")
+        else:
+            print("No CSV file found.")
+            return False
+
+    if csv_path is not None:
+        csv_path = Path(csv_path)
+        if csv_path.exists():
+            import pandas as pd
+            df = pd.read_csv(csv_path)
+        else:
+            print(f"CSV path does not exist: {csv_path}")
+            return False
+    else:
+        print("CSV file is required.")
+        return False
+
+    cap = _open_video_or_raise(video_path)
+    if cap is None:
+        print("Error opening video.")
+        return False
+
+    width, height, fps, nframes = _read_video_info(cap)
+    ret, base_frame = cap.read()
+    if not ret:
+        cap.release()
+        return False
+
+    canvas = base_frame.copy()
+
+    # Draw pose skeleton for sample frames
+    for fi in range(0, nframes, strobe_interval):
+        # Match frame index in CSV
+        row_df = df[df["frame"] == fi]
+        if row_df.empty:
+            row_df = df[df["frame"].astype(float).round() == float(fi)]
+        if row_df.empty:
+            continue
+
+        row = row_df.iloc[0]
+        pts = {}
+        is_normalized = False
+        for p in range(1, 34):
+            x_val = row.get(f"p{p}_x")
+            y_val = row.get(f"p{p}_y")
+            if x_val is not None and y_val is not None and not pd.isna(x_val) and not pd.isna(y_val):
+                # Simple heuristic to check if coordinates are normalized [0, 1] or pixels
+                if 0.0 <= float(x_val) <= 1.0 and 0.0 <= float(y_val) <= 1.0:
+                    is_normalized = True
+                pts[p] = (float(x_val), float(y_val))
+
+        scaled_pts = {}
+        for p, (x, y) in pts.items():
+            if is_normalized:
+                px = int(x * width)
+                py = int(y * height)
+            else:
+                px = int(x)
+                py = int(y)
+            scaled_pts[p] = (px, py)
+            cv2.circle(canvas, (px, py), 4, (0, 255, 0), -1)
+
+        connections = [
+            (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),  # upper body
+            (11, 23), (12, 24), (23, 24),                      # torso
+            (23, 25), (25, 27), (24, 26), (26, 28),            # legs
+            (27, 29), (29, 31), (27, 31),                      # feet
+            (28, 30), (30, 32), (28, 32)
+        ]
+        for p1, p2 in connections:
+            if p1 in scaled_pts and p2 in scaled_pts:
+                cv2.line(canvas, scaled_pts[p1], scaled_pts[p2], (255, 0, 0), 2)
+
+    cap.release()
+    out_path = output_path or video_path.parent / f"{video_path.stem}_pose_strobe.png"
+    cv2.imwrite(str(out_path), canvas)
+    print(f"Saved pose stroboscopic image to {out_path}")
     return True
 
 

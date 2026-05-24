@@ -71,5 +71,5 @@ Interactive video cutting with frame-accurate navigation, TOML-based cut storage
 - **Audio not syncing:** Ensure audio is loaded (A key) and not muted (M key); audio syncs on play/pause and frame navigation.  
 
 ---
-📅 **Last Updated:** 22 May 2026 (v0.3.45 - Corrected aspect ratio distortion for rotated smartphone videos)  
+📅 **Last Updated:** 23 May 2026 (v0.3.45 - Audio waveform, loop control, auto-fit, marker navigation, portrait video distortion fixes)  
 🔗 **Part of vailá - Multimodal Toolbox**  

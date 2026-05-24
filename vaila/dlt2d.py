@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.0.3
+Version: 0.3.45
 Created: November 26, 2024
-Last Updated: August 02, 2025
+Last Updated: 23 May 2026
 ================================================================================
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 2D coordinate transformations.
@@ -293,13 +293,14 @@ def process_files(pixel_file, real_file):
     return dlt_params
 
 
-def save_dlt_parameters(output_file, dlt_params):
+def save_dlt_parameters(output_file, dlt_params, show_gui=True):
     """
     Save the DLT parameters to a CSV file.
 
     Args:
     output_file (str): Path to the output file.
     dlt_params (list): List of DLT parameters.
+    show_gui (bool): Whether to display GUI message box on success.
     """
     with open(output_file, "w", newline="") as csvfile:
         csvwriter = csv.writer(csvfile)
@@ -309,7 +310,13 @@ def save_dlt_parameters(output_file, dlt_params):
             frame = int(frame)
             csvwriter.writerow([frame] + list(params))
 
-    messagebox.showinfo("Success", f"DLT parameters saved to {output_file}")
+    if show_gui:
+        try:
+            import tkinter as tk
+            if tk._default_root is not None:
+                messagebox.showinfo("Success", f"DLT parameters saved to {output_file}")
+        except Exception:
+            pass
     print(f"DLT parameters saved to {output_file}")
 
 
@@ -360,7 +367,8 @@ def run_dlt2d(pixel_file=None, real_file=None, create_ref=False):
 
     dlt_params = process_files(pixel_file, real_file)
     output_file = os.path.splitext(pixel_file)[0] + ".dlt2d"
-    save_dlt_parameters(output_file, dlt_params)
+    show_gui = (pixel_file is None)
+    save_dlt_parameters(output_file, dlt_params, show_gui=show_gui)
 
 
 if __name__ == "__main__":

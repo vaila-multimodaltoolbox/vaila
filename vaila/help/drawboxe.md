@@ -5,7 +5,7 @@
 - **Category:** Tools
 - **File:** `vaila/drawboxe.py`
 - **Lines:** 1390
-- **Version:** 0.0.7
+- **Version:** 0.3.45
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** ✅ Yes
 - **Email:** paulosantiago@usp.br
@@ -255,7 +255,7 @@ After drawing shapes and pressing `Enter`:
 
 ---
 
-📅 **Generated automatically on:** January 15, 2025  
+📅 **Generated automatically on:** 23 May 2026  
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)  
 📧 **Contact:** paulosantiago@usp.br

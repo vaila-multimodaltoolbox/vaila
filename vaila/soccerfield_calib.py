@@ -1,9 +1,5 @@
 """Soccer-field 2D calibration (DLT2D) for vailá.
 
-Project: vailá — vaila/soccerfield_calib.py
-Update Date: 14 May 2026
-Version: 0.3.44
-
 Pipeline (per video):
 
 1. Load the FIFA 105 × 68 m reference from ``models/soccerfield_ref3d.csv`` —
@@ -52,10 +48,7 @@ except ImportError:
     from dlt2d import dlt2d  # ty: ignore[unresolved-import]
     from rec2d import rec2d  # ty: ignore[unresolved-import]
 
-_MODULE_DIR = Path(__file__).resolve().parent
-DEFAULT_REF3D = _MODULE_DIR / "models" / "soccerfield_ref3d.csv"
-# 32-kp order matches ``soccerfield_keypoints_ai`` outputs (p1..p32) and Roboflow F07VI / pitch32 model.
-DEFAULT_REF3D_FIFA_DATASET = _MODULE_DIR / "models" / "soccerfield_ref3d_fifa_dataset.csv"
+DEFAULT_REF3D = Path(__file__).resolve().parent / "models" / "soccerfield_ref3d.csv"
 
 # Keypoint presets (name → priority). Users are free to use *any* point_name
 # from the CSV; this just drives the default GUI suggestions. The top-6 are
@@ -122,86 +115,6 @@ def _filter_reference(keypoints: list[FieldKeypoint], names: list[str]) -> list[
     return out
 
 
-def _pitch_index_from_header(name: str) -> int | None:
-    n = name.strip()
-    if n.startswith("p") and n[1:].isdigit():
-        return int(n[1:])
-    return None
-
-
-def names_are_pitch32_style(names: list[str]) -> bool:
-    """True if all names look like p1, p2, … (``soccerfield_keypoints_ai`` wide CSV)."""
-    if not names:
-        return False
-    return all(_pitch_index_from_header(n) is not None for n in names)
-
-
-def extract_points_from_dataframe_row(
-    row: pd.Series,
-    cols: list[str],
-) -> tuple[np.ndarray, list[str]]:
-    """Extract finite (x,y) pairs from one CSV row (paired p*_x / p*_y columns)."""
-    cols = [c.strip() for c in cols]
-    if {"name", "x", "y"}.issubset(set(cols)):
-        raise ValueError("extract_points_from_dataframe_row expects paired p*_x/p*_y columns")
-
-    coord_cols = [c for c in cols if c != "frame"]
-    if len(coord_cols) % 2 != 0:
-        raise ValueError(
-            f"pixel row has an odd number of coordinate columns after removing 'frame': {coord_cols}"
-        )
-
-    pts_list: list[list[float]] = []
-    names: list[str] = []
-    for i in range(0, len(coord_cols), 2):
-        cx, cy = coord_cols[i], coord_cols[i + 1]
-        name = cx
-        for suffix in ("_x", ".x", "X"):
-            if name.lower().endswith(suffix.lower()):
-                name = name[: -len(suffix)]
-                break
-        try:
-            x = float(row[cx])
-            y = float(row[cy])
-        except (TypeError, ValueError):
-            continue
-        if np.isnan(x) or np.isnan(y):
-            continue
-        pts_list.append([x, y])
-        names.append(name)
-
-    return np.asarray(pts_list, dtype=float), names
-
-
-def align_pitch32_pixels_to_world(
-    pixel_points: np.ndarray,
-    names: list[str],
-    ref_ordered: list[FieldKeypoint],
-) -> tuple[np.ndarray, np.ndarray, list[str]]:
-    """Map ``p1``…``p32`` pixels to ``ref_ordered`` rows by index (pitch32 / F07VI order)."""
-    if len(pixel_points) != len(names):
-        raise ValueError(f"pixel ({len(pixel_points)}) vs name ({len(names)}) count mismatch")
-    order = sorted(
-        range(len(names)), key=lambda i: int(names[i][1:]) if names[i][1:].isdigit() else 9999
-    )
-    pix_list: list[np.ndarray] = []
-    world_list: list[np.ndarray] = []
-    name_list: list[str] = []
-    for i in order:
-        nm = names[i]
-        k = _pitch_index_from_header(nm)
-        if k is None or k < 1 or k > len(ref_ordered):
-            continue
-        pix_list.append(pixel_points[i])
-        world_list.append(ref_ordered[k - 1].world_xy.copy())
-        name_list.append(ref_ordered[k - 1].name)
-    return (
-        np.asarray(pix_list, dtype=float),
-        np.asarray(world_list, dtype=float),
-        name_list,
-    )
-
-
 def load_pixel_points(
     pixel_csv: Path | str,
     *,
@@ -243,7 +156,32 @@ def load_pixel_points(
         else:
             row = df.iloc[0]
 
-    return extract_points_from_dataframe_row(row, cols)
+    coord_cols = [c for c in cols if c != "frame"]
+    if len(coord_cols) % 2 != 0:
+        raise ValueError(
+            f"pixel CSV {pixel_csv} has an odd number of coordinate columns: {coord_cols}"
+        )
+
+    pts_list: list[list[float]] = []
+    names: list[str] = []
+    for i in range(0, len(coord_cols), 2):
+        cx, cy = coord_cols[i], coord_cols[i + 1]
+        name = cx
+        for suffix in ("_x", ".x", "X"):
+            if name.lower().endswith(suffix.lower()):
+                name = name[: -len(suffix)]
+                break
+        try:
+            x = float(row[cx])
+            y = float(row[cy])
+        except (TypeError, ValueError):
+            continue
+        if np.isnan(x) or np.isnan(y):
+            continue
+        pts_list.append([x, y])
+        names.append(name)
+
+    return np.asarray(pts_list, dtype=float), names
 
 
 def compute_dlt2d(
@@ -278,25 +216,14 @@ def compute_dlt2d(
     return params, rms, per_point
 
 
-def save_dlt2d_params(out_path: Path, params: np.ndarray, *, frame: int = 0) -> None:
-    """Write the 8 DLT2D parameters to ``*.dlt2d`` (one row: frame + 8 columns)."""
+def save_dlt2d_params(out_path: Path, params: np.ndarray) -> None:
+    """Write the 8 DLT2D parameters to ``*.dlt2d`` (frame + 8 columns)."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(
-        [[int(frame), *params.tolist()]],
+        [[0, *params.tolist()]],
         columns=["frame", *[f"p{i + 1}" for i in range(8)]],  # ty: ignore[invalid-argument-type]
     )
-    df.to_csv(out_path, index=False)
-
-
-def save_dlt2d_params_per_frame(
-    out_path: Path, frames_params: list[tuple[int, np.ndarray]]
-) -> None:
-    """Write multi-row ``*.dlt2d`` (one DLT row per frame) for ``rec2d`` / FIFA."""
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    rows = [[int(fr), *np.asarray(p, dtype=float).tolist()] for fr, p in frames_params]
-    df = pd.DataFrame(rows, columns=["frame", *[f"p{i + 1}" for i in range(8)]])
     df.to_csv(out_path, index=False)
 
 
@@ -410,26 +337,18 @@ def _run_getpixelvideo(video: Path, output_dir: Path) -> Path:
 def run_soccerfield_calib(
     *,
     video: Path | None = None,
-    ref3d_csv: Path | None = None,
+    ref3d_csv: Path = DEFAULT_REF3D,
     pixel_csv: Path | None = None,
     output_dir: Path | None = None,
     frame_index: int | None = None,
     data_root: Path | None = None,
     keypoint_names: list[str] | None = None,
-    all_frames: bool = False,
-    pitch32: bool | None = None,
-    min_points: int = 6,
 ) -> dict:
     """High-level entry point used by the CLI and by the ``vaila.py`` GUI.
 
     When ``pixel_csv`` is ``None`` and ``video`` is given, launches
     ``getpixelvideo`` so the user can click pixels interactively. Returns a
     dict summarising the artifacts that were produced.
-
-    ``pitch32``: when True (or auto-detected from ``p1``… column names), pixel
-    columns are aligned to rows of ``DEFAULT_REF3D_FIFA_DATASET`` (same order
-    as ``soccerfield_keypoints_ai`` / Roboflow F07VI). ``all_frames``: fit one
-    DLT per row in a multi-row ``field_keypoints_getpixelvideo.csv``.
     """
     if video is None and pixel_csv is None:
         raise ValueError("either --video or --pixels is required")
@@ -456,166 +375,54 @@ def run_soccerfield_calib(
     if pixel_path is None:
         assert video_path is not None
         pixel_path = _run_getpixelvideo(video_path, output_dir)
-    pixel_csv_path = pixel_path
+    pixel_csv = pixel_path
 
-    df_pix = pd.read_csv(pixel_csv_path)
-    cols = [c.strip() for c in df_pix.columns]
-    name_xy_layout = {"name", "x", "y"}.issubset(set(cols))
-
-    if not name_xy_layout:
-        _, preview_names = extract_points_from_dataframe_row(df_pix.iloc[0], cols)
-        use_pitch32 = pitch32 if pitch32 is not None else names_are_pitch32_style(preview_names)
-    else:
-        use_pitch32 = False
-
-    if ref3d_csv is None:
-        ref_path = DEFAULT_REF3D_FIFA_DATASET if use_pitch32 else DEFAULT_REF3D
-    else:
-        ref_path = Path(ref3d_csv)
-        if use_pitch32 and ref_path.resolve() == DEFAULT_REF3D.resolve():
-            ref_path = DEFAULT_REF3D_FIFA_DATASET
-
-    ref_all = load_field_reference(ref_path)
-    if use_pitch32 and len(ref_all) < 32:
+    pixel_points, names = load_pixel_points(pixel_csv, frame_index=frame_index)
+    ref_all = load_field_reference(ref3d_csv)
+    if keypoint_names is None:
+        keypoint_names = names
+    if len(keypoint_names) != len(pixel_points):
         raise ValueError(
-            f"--pitch32 expects a 32-kp reference (e.g. {DEFAULT_REF3D_FIFA_DATASET.name}), "
-            f"got {len(ref_all)} points in {ref_path}"
+            f"pixel count ({len(pixel_points)}) must match keypoint name count "
+            f"({len(keypoint_names)}). Rename columns or pass --keypoints."
         )
+    selected = _filter_reference(ref_all, keypoint_names)
+    world_points = np.asarray([kp.world_xy for kp in selected])
+
+    params, rms, per_point = compute_dlt2d(pixel_points, world_points)
 
     dlt2d_path = output_dir / f"{video_stem}.dlt2d"
     ref2d_path = output_dir / f"{video_stem}_ref2d.csv"
     report_path = output_dir / f"{video_stem}_homography_report.txt"
 
-    multi = bool(all_frames) and "frame" in cols and len(df_pix) > 1 and not name_xy_layout
+    save_dlt2d_params(dlt2d_path, params)
+    save_ref2d_csv(ref2d_path, keypoint_names, world_points)
+    save_homography_report(report_path, keypoint_names, world_points, pixel_points, per_point, rms)
 
-    def _one_frame(
-        row: pd.Series,
-    ) -> tuple[int, np.ndarray, list[str], np.ndarray, np.ndarray, float, np.ndarray] | None:
-        xy, names = extract_points_from_dataframe_row(row, cols)
-        if len(xy) < min_points:
-            return None
-        if use_pitch32:
-            xy_a, world_a, knames = align_pitch32_pixels_to_world(xy, names, ref_all)
-        else:
-            kn = keypoint_names or names
-            if len(kn) != len(xy):
-                raise ValueError(
-                    f"pixel count ({len(xy)}) must match keypoint name count ({len(kn)}). "
-                    "Rename columns or pass --keypoints."
-                )
-            selected = _filter_reference(ref_all, kn)
-            world_a = np.asarray([kp.world_xy for kp in selected])
-            knames = kn
-            xy_a = xy
-        if len(xy_a) < min_points:
-            return None
-        params, rms, per_point = compute_dlt2d(xy_a, world_a)
-        fr_raw = row["frame"] if "frame" in row.index else 0
-        fr = int(fr_raw) if not pd.isna(fr_raw) else 0
-        return fr, params, knames, world_a, xy_a, rms, per_point
-
-    if multi:
-        dlt_rows: list[tuple[int, np.ndarray]] = []
-        first_bundle: tuple[list[str], np.ndarray, np.ndarray, np.ndarray, float] | None = None
-        for j in range(len(df_pix)):
-            got = _one_frame(df_pix.iloc[j])
-            if got is None:
-                continue
-            fr, params, knames, world_a, xy_a, rms, per_point = got
-            dlt_rows.append((fr, params))
-            if first_bundle is None:
-                first_bundle = (knames, world_a, xy_a, per_point, rms)
-        if not dlt_rows:
-            raise ValueError(
-                f"No frame had at least {min_points} correspondences for DLT2D ({pixel_csv_path})."
-            )
-        assert first_bundle is not None
-        knames, world_a, xy_a, per_point, rms = first_bundle
-        save_dlt2d_params_per_frame(dlt2d_path, dlt_rows)
-        save_ref2d_csv(ref2d_path, knames, world_a)
-        save_homography_report(report_path, knames, world_a, xy_a, per_point, rms)
-        params_last = dlt_rows[-1][1]
-        npz_path: Path | None = None
-        if data_root is not None:
-            data_root = Path(data_root).resolve()
-            cam_dir = data_root / "cameras"
-            cam_dir.mkdir(parents=True, exist_ok=True)
-            npz_path = cam_dir / f"{video_stem}_homography.npz"
-            np.savez(
-                npz_path,
-                dlt2d=params_last,
-                ref_points=world_a,
-                pixel_points=xy_a,
-                keypoint_names=np.array(knames, dtype=object),
-                rms=np.array(rms),
-            )
-        return {
-            "video": str(video) if video else None,
-            "pixel_csv": str(pixel_csv_path),
-            "dlt2d": str(dlt2d_path),
-            "ref2d": str(ref2d_path),
-            "homography_report": str(report_path),
-            "cameras_npz": str(npz_path) if npz_path else None,
-            "rms_pixels_or_metres": float(rms),
-            "n_points": int(len(knames)),
-            "n_dlt_frames": int(len(dlt_rows)),
-        }
-
-    pixel_points_, names_ = load_pixel_points(pixel_csv_path, frame_index=frame_index)
-    if use_pitch32:
-        pixel_points, world_points, keypoint_names_out = align_pitch32_pixels_to_world(
-            pixel_points_, names_, ref_all
-        )
-    else:
-        keypoint_names_out = names_ if keypoint_names is None else keypoint_names
-        if len(keypoint_names_out) != len(pixel_points_):
-            raise ValueError(
-                f"pixel count ({len(pixel_points_)}) must match keypoint name count "
-                f"({len(keypoint_names_out)}). Rename columns or pass --keypoints."
-            )
-        selected = _filter_reference(ref_all, keypoint_names_out)
-        world_points = np.asarray([kp.world_xy for kp in selected])
-        pixel_points = pixel_points_
-
-    params, rms, per_point = compute_dlt2d(pixel_points, world_points)
-
-    frame_for_file = 0
-    if "frame" in cols and frame_index is None:
-        frame_for_file = int(df_pix.iloc[0]["frame"])
-    elif frame_index is not None:
-        frame_for_file = int(frame_index)
-
-    save_dlt2d_params(dlt2d_path, params, frame=frame_for_file)
-    save_ref2d_csv(ref2d_path, keypoint_names_out, world_points)
-    save_homography_report(
-        report_path, keypoint_names_out, world_points, pixel_points, per_point, rms
-    )
-
-    npz_path_single: Path | None = None
+    npz_path: Path | None = None
     if data_root is not None:
         data_root = Path(data_root).resolve()
         cam_dir = data_root / "cameras"
         cam_dir.mkdir(parents=True, exist_ok=True)
-        npz_path_single = cam_dir / f"{video_stem}_homography.npz"
+        npz_path = cam_dir / f"{video_stem}_homography.npz"
         np.savez(
-            npz_path_single,
+            npz_path,
             dlt2d=params,
             ref_points=world_points,
             pixel_points=pixel_points,
-            keypoint_names=np.array(keypoint_names_out, dtype=object),
+            keypoint_names=np.array(keypoint_names, dtype=object),
             rms=np.array(rms),
         )
 
     return {
         "video": str(video) if video else None,
-        "pixel_csv": str(pixel_csv_path),
+        "pixel_csv": str(pixel_csv),
         "dlt2d": str(dlt2d_path),
         "ref2d": str(ref2d_path),
         "homography_report": str(report_path),
-        "cameras_npz": str(npz_path_single) if npz_path_single else None,
+        "cameras_npz": str(npz_path) if npz_path else None,
         "rms_pixels_or_metres": float(rms),
-        "n_points": int(len(keypoint_names_out)),
-        "n_dlt_frames": 1,
+        "n_points": int(len(keypoint_names)),
     }
 
 
@@ -635,29 +442,11 @@ def build_argparser() -> argparse.ArgumentParser:
         "-r",
         "--ref3d",
         type=Path,
-        default=None,
-        help=(
-            "World reference CSV. Default: soccerfield_ref3d.csv (legacy named points), "
-            "or soccerfield_ref3d_fifa_dataset.csv when --pitch32 / field_keypoints CSV."
-        ),
+        default=DEFAULT_REF3D,
+        help=f"Soccer-field reference CSV (default: {DEFAULT_REF3D.name})",
     )
     p.add_argument("-o", "--output", type=Path, default=None, help="Output directory")
     p.add_argument("--frame", type=int, default=None, help="Frame index for paired-column CSVs")
-    p.add_argument(
-        "--all-frames",
-        action="store_true",
-        help=(
-            "Fit one DLT2D per row (uses frame column). For field_keypoints_getpixelvideo.csv "
-            "from soccerfield_keypoints_ai video mode."
-        ),
-    )
-    p.add_argument(
-        "--pitch32",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="p1..pN columns map to 32-kp FIFA-dataset reference order (auto if filename contains "
-        "'field_keypoints').",
-    )
     p.add_argument(
         "--data-root",
         type=Path,
@@ -696,140 +485,17 @@ def _resolve_sam_video_overlay(sam_dir: Path) -> Path:
     return overlays[0]
 
 
-def run_gui() -> None:
-    """Tkinter flow when ``soccerfield_calib`` is launched with no CLI args."""
-    import tkinter as tk
-    from tkinter import filedialog, messagebox, ttk
-
-    root = tk.Tk()
-    root.withdraw()
-
-    pix = filedialog.askopenfilename(
-        parent=root,
-        title="Pixel CSV (e.g. field_keypoints_getpixelvideo.csv)",
-        filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
-    )
-    if not pix:
-        root.destroy()
-        return
-    out_dir = filedialog.askdirectory(parent=root, title="Output folder")
-    if not out_dir:
-        root.destroy()
-        return
-
-    root.title("Soccer-field calib (DLT2D)")
-    root.minsize(520, 320)
-    root.geometry("+120+120")
-    root.deiconify()
-    frm = ttk.Frame(root, padding=10)
-    frm.pack(fill=tk.BOTH, expand=True)
-
-    pix_path = Path(pix)
-    ref_var = tk.StringVar(value=str(DEFAULT_REF3D_FIFA_DATASET))
-    vf = tk.StringVar(value="")
-    pitch_var = tk.BooleanVar(value="field_keypoints" in pix_path.name.lower())
-    allf_var = tk.BooleanVar(value=True)
-    minpt_var = tk.StringVar(value="6")
-    dr_var = tk.StringVar(value="")
-
-    ttk.Label(frm, text=f"Pixels:\n{pix_path}", wraplength=520).pack(anchor="w")
-    ttk.Label(frm, text="Reference 3D CSV (world metres, Z=0)").pack(anchor="w", pady=(10, 0))
-    ttk.Entry(frm, textvariable=ref_var, width=76).pack(fill=tk.X, pady=4)
-
-    def browse_ref() -> None:
-        p = filedialog.askopenfilename(
-            parent=root, filetypes=[("CSV", "*.csv"), ("All files", "*.*")]
-        )
-        if p:
-            ref_var.set(p)
-
-    ttk.Button(frm, text="Browse ref3d…", command=browse_ref).pack(anchor="w")
-    ttk.Checkbutton(
-        frm,
-        text="Pitch32 mode (p1…p32 ↔ vailá FIFA-dataset 32-kp order)",
-        variable=pitch_var,
-    ).pack(anchor="w", pady=(10, 0))
-    ttk.Checkbutton(
-        frm,
-        text="All frames — one DLT row per CSV row (video-mode keypoints AI)",
-        variable=allf_var,
-    ).pack(anchor="w")
-    rowm = ttk.Frame(frm)
-    rowm.pack(anchor="w", pady=(6, 0))
-    ttk.Label(rowm, text="Min correspondences per frame:").pack(side=tk.LEFT)
-    ttk.Entry(rowm, textvariable=minpt_var, width=6).pack(side=tk.LEFT, padx=6)
-
-    ttk.Label(frm, text="Optional FIFA data-root (writes cameras/*_homography.npz):").pack(
-        anchor="w", pady=(10, 0)
-    )
-    ttk.Entry(frm, textvariable=dr_var, width=76).pack(fill=tk.X)
-    ttk.Label(
-        frm, text="Optional video path (only if you need getpixelvideo; leave empty if CSV ready):"
-    ).pack(anchor="w", pady=(10, 0))
-    ttk.Entry(frm, textvariable=vf, width=76).pack(fill=tk.X)
-
-    def browse_v() -> None:
-        p = filedialog.askopenfilename(
-            parent=root,
-            filetypes=[("Video", "*.mp4 *.avi *.mov *.mkv"), ("All files", "*.*")],
-        )
-        if p:
-            vf.set(p)
-
-    ttk.Button(frm, text="Browse video…", command=browse_v).pack(anchor="w")
-
-    def do_run() -> None:
-        try:
-            ref_s = ref_var.get().strip()
-            res = run_soccerfield_calib(
-                video=Path(vf.get()) if vf.get().strip() else None,
-                ref3d_csv=Path(ref_s) if ref_s else None,
-                pixel_csv=pix_path,
-                output_dir=Path(out_dir),
-                data_root=Path(dr_var.get().strip()) if dr_var.get().strip() else None,
-                pitch32=pitch_var.get(),
-                all_frames=allf_var.get(),
-                min_points=int(minpt_var.get().strip() or "6"),
-            )
-            messagebox.showinfo(
-                "Calibration done",
-                f"dlt2d: {res['dlt2d']}\nref2d: {res['ref2d']}\n"
-                f"DLT rows: {res.get('n_dlt_frames', 1)}",
-                parent=root,
-            )
-            root.destroy()
-        except Exception as e:
-            messagebox.showerror("Calibration failed", str(e), parent=root)
-
-    bf = ttk.Frame(frm)
-    bf.pack(fill=tk.X, pady=14)
-    ttk.Button(bf, text="Run", command=do_run).pack(side=tk.LEFT)
-    ttk.Button(bf, text="Close", command=root.destroy).pack(side=tk.LEFT, padx=8)
-
-    root.protocol("WM_DELETE_WINDOW", root.destroy)
-    try:
-        root.lift()
-        root.attributes("-topmost", True)
-        root.after(50, lambda: root.attributes("-topmost", False))
-    except tk.TclError:
-        pass
-    root.focus_force()
-    root.mainloop()
-
-
 def main(argv: list[str] | None = None) -> None:
     print(f"--- {os.path.basename(__file__)} ---")
     parser = build_argparser()
     args = parser.parse_args(argv)
     if args.list_keypoints:
-        ref_l = args.ref3d if args.ref3d is not None else DEFAULT_REF3D
-        for kp in load_field_reference(ref_l):
+        for kp in load_field_reference(args.ref3d):
             print(f"{kp.number:3d}  {kp.name}  X={kp.world_xy[0]:7.3f}  Y={kp.world_xy[1]:7.3f}")
         return
 
     if args.from_sam is None and args.video is None and args.pixels is None:
-        run_gui()
-        return
+        parser.error("either --video, --pixels, or --from-sam is required")
 
     if args.from_sam is not None:
         sam_dir = Path(args.from_sam).resolve()
@@ -842,26 +508,14 @@ def main(argv: list[str] | None = None) -> None:
     if args.keypoints:
         keypoint_names = [n.strip() for n in args.keypoints.split(",") if n.strip()]
 
-    pitch32_flag = args.pitch32
-    if pitch32_flag is None and args.pixels is not None:
-        pitch32_flag = "field_keypoints" in str(args.pixels).lower()
-    if pitch32_flag is None:
-        pitch32_flag = False
-
-    ref_eff = args.ref3d
-    if ref_eff is None:
-        ref_eff = DEFAULT_REF3D_FIFA_DATASET if pitch32_flag else DEFAULT_REF3D
-
     res = run_soccerfield_calib(
         video=args.video,
-        ref3d_csv=ref_eff,
+        ref3d_csv=args.ref3d,
         pixel_csv=args.pixels,
         output_dir=args.output,
         frame_index=args.frame,
         data_root=args.data_root,
         keypoint_names=keypoint_names,
-        all_frames=bool(args.all_frames),
-        pitch32=pitch32_flag,
     )
     print(">> Soccer-field DLT2D calibration complete")
     for k, v in res.items():
