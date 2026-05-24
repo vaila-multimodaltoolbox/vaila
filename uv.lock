@@ -3116,6 +3116,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pydeprecate"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/be/0f746a6cc399dc437d494c4240d25fa3151314dbd42cb1e89a5543fc1801/pydeprecate-0.7.0.tar.gz", hash = "sha256:925ee2e39f266bcd923c1abb76256da240e51ac04fc1ebb5490e32683770f9c4", size = 98242, upload-time = "2026-03-31T17:31:36.498Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/e6/42ece1260c287c5b376932d0d0fb776e5fe2a55ee58cf85d01ef97ca6c15/pydeprecate-0.7.0-py3-none-any.whl", hash = "sha256:b2baf35f82c06a22824029dd54ed763c7e8226f133893d15af4f9cf950a3b4d3", size = 63749, upload-time = "2026-03-31T17:31:35.023Z" },
+]
+
+[[package]]
 name = "pydub"
 version = "0.25.1"
 source = { registry = "https://pypi.org/simple" }
@@ -6337,6 +6346,27 @@ wheels = [
 ]
 
 [[package]]
+name = "supervision"
+version = "0.28.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "defusedxml" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "pydeprecate" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "scipy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3f/b0/2a3dcfd922d115a3dd76684927d9ed7576b36a8f696181bc334b04b0bef9/supervision-0.28.0.tar.gz", hash = "sha256:ae32536bba3239125311e3e91d7d1773cf8348da2f3ebe6836d90aa95b5908e5", size = 217542, upload-time = "2026-04-30T16:02:13.172Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/2c/c3a0b6b258e9c698409dcbadd3c40c847f0cf170218d539c9b45b0069c5c/supervision-0.28.0-py3-none-any.whl", hash = "sha256:d38cf041751110c2c55a5c1c5d09c97a110ee253afa580818313db8654eef40f", size = 251564, upload-time = "2026-04-30T16:02:11.119Z" },
+]
+
+[[package]]
 name = "sympy"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -6540,6 +6570,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/09/a9/6ba95a270c6f1fbcd8dac228323f2777d886cb206987444e4bce66338dd4/tqdm-4.67.3.tar.gz", hash = "sha256:7d825f03f89244ef73f1d4ce193cb1774a8179fd96f31d7e1dcde62092b960bb", size = 169598, upload-time = "2026-02-03T17:35:53.048Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl", hash = "sha256:ee1e4c0e59148062281c49d80b25b67771a127c85fc9676d3be5f243206826bf", size = 78374, upload-time = "2026-02-03T17:35:50.982Z" },
+]
+
+[[package]]
+name = "trackers"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "requests" },
+    { name = "rich" },
+    { name = "scipy" },
+    { name = "supervision" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/01/d7/ef7a223be4ce81bddbf1023f2dcbe5f7317ad35df85d8af2fa9e54f20ae3/trackers-2.4.0.tar.gz", hash = "sha256:0839394bae9dea68fb23effce844644d351e76ba780cce385421a5206bcf78f6", size = 424364, upload-time = "2026-05-06T21:11:38.558Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/3c/29594d8e24f0520df876373c470270bf141b060efc9757e9c37b70780ebe/trackers-2.4.0-py3-none-any.whl", hash = "sha256:0d5981c1c39196a43f2dc3b3f7c331e8d62594cd1ab6024aae7288f24e24e893", size = 126400, upload-time = "2026-05-06T21:11:37.178Z" },
 ]
 
 [[package]]
@@ -6750,7 +6797,7 @@ wheels = [
 
 [[package]]
 name = "vaila"
-version = "0.3.38"
+version = "0.3.45"
 source = { editable = "." }
 dependencies = [
     { name = "absl-py" },
@@ -6834,6 +6881,7 @@ dependencies = [
     { name = "torch" },
     { name = "torchaudio" },
     { name = "torchvision" },
+    { name = "trackers" },
     { name = "ultralytics" },
     { name = "vpython" },
     { name = "watchdog" },
@@ -6967,6 +7015,7 @@ requires-dist = [
     { name = "torchaudio", specifier = "==2.11.0" },
     { name = "torchvision", specifier = "==0.26.0" },
     { name = "tqdm", marker = "extra == 'fifa'" },
+    { name = "trackers", specifier = "==2.4.0" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.16" },
     { name = "ultralytics" },
     { name = "vpython" },

@@ -1,6 +1,6 @@
 [project]
 name = "vaila"
-version = "0.3.38"
+version = "0.3.45"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -67,6 +67,7 @@ dependencies = [
     "torchaudio==2.11.0",
     "ultralytics",
     "boxmot",
+    "trackers==2.4.0",
     "requests",
     # 3D processing
     "open3d",
