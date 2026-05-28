@@ -154,8 +154,8 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.45<br />
-        <strong>Date:</strong> 23 May 2026<br />
+        <strong>Version:</strong> 0.3.46<br />
+        <strong>Date:</strong> 28 May 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
@@ -172,7 +172,8 @@
         (FIFA field overlay + <code>V</code> image; or pose skeleton in MediaPipe/YOLO templates); marking uses the same
         <strong>TAB</strong> / <strong>Ctrl+G</strong> / clicks as with the guide off.
         <strong>Sequential (<code>S</code>/<code>O</code>)</strong> fills the selected
-        empty slot first (including kp 0), then advances.<br />
+        empty slot first (including kp 0), then advances.
+        <strong>Del Range</strong> deletes one marker/keypoint number across an inclusive frame range.<br />
         <strong>New in 0.5.0:</strong> <strong>F9</strong> exports a YOLO-pose
         training dataset from clicked markers (<code>data.yaml</code> with
         <code>kpt_shape</code>, train/val/test). Append across videos with
@@ -224,6 +225,10 @@
             <li>
               <strong>Flexible Marking:</strong> Multiple marker modes for
               different annotation needs
+            </li>
+            <li>
+              <strong>Del Range:</strong> Delete one marker/keypoint number across
+              an inclusive frame range without changing other markers
             </li>
             <li>
               <strong>Zoom & Navigation:</strong> Full zoom capabilities with
@@ -363,7 +368,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
           </li>
           <li>
             <strong>Navigate & Annotate:</strong> Use the interface to navigate,
-            zoom, and edit markers
+            zoom, and edit markers; use <strong>Del Range</strong> to delete one marker/keypoint over a frame interval
           </li>
           <li>
             <strong>Save Results:</strong> Save the annotated data in CSV format
@@ -461,6 +466,10 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               <tr>
                 <td><span class="key">DELETE</span></td>
                 <td>Delete selected marker</td>
+              </tr>
+              <tr>
+                <td><span class="key">Del Range button</span></td>
+                <td>Delete the chosen marker/keypoint number over an inclusive frame range</td>
               </tr>
               <tr>
                 <td><span class="key">A</span></td>
@@ -612,7 +621,8 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
         <p>
           The standard marking mode where clicking selects and updates the
           current marker. Use TAB to navigate between markers. Each marker keeps
-          its ID across all frames.
+          its ID across all frames. Use <strong>Del Range</strong> to hide/delete one marker ID
+          over an inclusive frame range while preserving other markers.
         </p>
         <ul>
           <li>

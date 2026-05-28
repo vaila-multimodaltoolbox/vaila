@@ -4,8 +4,8 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.45  
-**Date:** 23 May 2026  
+**Version:** 0.3.46  
+**Date:** 28 May 2026  
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
 **Project:** vailá - Multimodal Toolbox
 
@@ -18,6 +18,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 - **Multi-format Support:** Load and visualize MediaPipe, YOLO tracking, and vailá standard formats
 - **Advanced Visualization:** Stick figures for MediaPipe, bounding boxes for YOLO tracking
 - **Flexible Marking:** Multiple marker modes for different annotation needs
+- **Del Range:** Button to delete one marker/keypoint number across an inclusive frame range
 - **Labeling Mode:** Create bounding box annotations for Machine Learning datasets
 - **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations
 - **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8; may write `keypoints.json` when keypoint names are known
@@ -63,7 +64,7 @@ Optional one-off run without syncing the whole repo: `uv run --with opencv-pytho
    - **MediaPipe format:** For landmark data with stick figure visualization
    - **YOLO tracking format:** For tracking data with bounding box visualization
    - **vailá standard format:** For standard coordinate data
-5. **Navigate & annotate:** Use the interface to navigate, zoom, and edit markers (**TAB** / **SHIFT+TAB**, **Ctrl+G** to jump to a keypoint index)
+5. **Navigate & annotate:** Use the interface to navigate, zoom, and edit markers (**TAB** / **SHIFT+TAB**, **Ctrl+G** to jump to a keypoint index; **Del Range** deletes one marker/keypoint across a frame interval)
 6. **Save results:** Save the annotated data in CSV format
 
 ## CLI quick reference
@@ -88,7 +89,7 @@ The tool interface consists of:
 - **Control panel** (bottom section) with:
   - Current frame information
   - Slider for navigating between frames
-  - Buttons for main functions (Load, Save, Help, 1 Line, Persistence, Sequential)
+  - Buttons for main functions (Load, Save, Help, Del Range, 1 Line, Persistence, Sequential)
   - Format-specific visualization controls
 
 ## Supported File Formats
@@ -148,6 +149,7 @@ frame,p1_x,p1_y,p2_x,p2_y
 - Each click selects and updates the currently selected marker
 - Navigate between markers using TAB
 - Each marker maintains its ID across all frames
+- Use **Del Range** to hide/delete one marker ID over an inclusive frame range without touching other markers
 - **Use case:** Tracking specific points across frames
 - **Activation:** Default mode at startup
 

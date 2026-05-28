@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 23 May 2026
-Version: 0.3.45
+Update: 28 May 2026
+Version: 0.3.46
 Python Version: 3.12.13
 
 Description:
@@ -57,6 +57,7 @@ Examples::
 
 Key bindings (see in-app **H** help for full list):
   Ctrl+G                Go to keypoint (Go KP dialog)
+  Del Range button      Delete one marker/keypoint across a frame range
   Ctrl+E                Save ML dataset (split + PNG + all_labels)
   F9                    Export YOLO-pose dataset from markers
   Shift+← / Shift+→     Jump prev/next frame that has markers
@@ -156,8 +157,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.45"
-GETPIXELVIDEO_UPDATE_DATE = "23 May 2026"
+GETPIXELVIDEO_VERSION = "0.3.46"
+GETPIXELVIDEO_UPDATE_DATE = "28 May 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -487,10 +488,8 @@ def get_precise_video_metadata(video_path):
         if rotation == 0 and "tags" in video_stream:
             rotate_tag = video_stream["tags"].get("rotate")
             if rotate_tag:
-                try:
+                with suppress(ValueError, TypeError):
                     rotation = int(float(rotate_tag))
-                except (ValueError, TypeError):
-                    pass
 
         rotation = rotation % 360
         raw_width = int(video_stream.get("width"))
@@ -1634,7 +1633,7 @@ def play_video_with_controls(
     pitch_guide_flip_idx: list[int] = []  # FIFA flip_idx (length matches points)
     fifa_fixed_keypoints = 32 if pitch_guide_fifa_mode else None
     fifa_start_keypoint = 0
-    fifa_index_base = 0 if pitch_guide_fifa_mode else 1
+    fifa_index_base = 0
     if pitch_guide_fifa_mode:
         current_label = "football_pitch"
 
@@ -1715,60 +1714,62 @@ def play_video_with_controls(
 
     # Guide "map" canonical XY layouts (0..1) for upper-right reference.
     # Intent: quick index→body-part orientation for manual clicking, not metric.
+    # Camera-view layout: subject's "left" appears on the RIGHT of the image.
     _POSE_GUIDE_MEDIAPIPE_33_XY: list[tuple[float, float]] = [
         (0.50, 0.12),  # 0 nose
-        (0.47, 0.10),
-        (0.46, 0.10),
-        (0.45, 0.10),
-        (0.53, 0.10),
-        (0.54, 0.10),
-        (0.55, 0.10),
-        (0.42, 0.12),  # 7 left_ear
-        (0.58, 0.12),  # 8 right_ear
-        (0.48, 0.14),
-        (0.52, 0.14),
-        (0.42, 0.22),  # 11 left_shoulder
-        (0.58, 0.22),  # 12 right_shoulder
-        (0.36, 0.32),
-        (0.64, 0.32),
-        (0.32, 0.44),
-        (0.68, 0.44),
-        (0.30, 0.48),
-        (0.70, 0.48),
-        (0.30, 0.46),
-        (0.70, 0.46),
-        (0.30, 0.50),
-        (0.70, 0.50),
-        (0.46, 0.46),  # 23 left_hip
-        (0.54, 0.46),  # 24 right_hip
-        (0.44, 0.62),
-        (0.56, 0.62),
-        (0.42, 0.78),
-        (0.58, 0.78),
-        (0.41, 0.86),
-        (0.59, 0.86),
-        (0.40, 0.90),
-        (0.60, 0.90),
+        (0.53, 0.10),  # 1 left_eye_inner
+        (0.54, 0.10),  # 2 left_eye
+        (0.55, 0.10),  # 3 left_eye_outer
+        (0.47, 0.10),  # 4 right_eye_inner
+        (0.46, 0.10),  # 5 right_eye
+        (0.45, 0.10),  # 6 right_eye_outer
+        (0.58, 0.12),  # 7 left_ear
+        (0.42, 0.12),  # 8 right_ear
+        (0.52, 0.14),  # 9 mouth_left
+        (0.48, 0.14),  # 10 mouth_right
+        (0.58, 0.22),  # 11 left_shoulder
+        (0.42, 0.22),  # 12 right_shoulder
+        (0.64, 0.32),  # 13 left_elbow
+        (0.36, 0.32),  # 14 right_elbow
+        (0.68, 0.44),  # 15 left_wrist
+        (0.32, 0.44),  # 16 right_wrist
+        (0.70, 0.48),  # 17 left_pinky
+        (0.30, 0.48),  # 18 right_pinky
+        (0.70, 0.46),  # 19 left_index
+        (0.30, 0.46),  # 20 right_index
+        (0.70, 0.50),  # 21 left_thumb
+        (0.30, 0.50),  # 22 right_thumb
+        (0.54, 0.46),  # 23 left_hip
+        (0.46, 0.46),  # 24 right_hip
+        (0.56, 0.62),  # 25 left_knee
+        (0.44, 0.62),  # 26 right_knee
+        (0.58, 0.78),  # 27 left_ankle
+        (0.42, 0.78),  # 28 right_ankle
+        (0.59, 0.86),  # 29 left_heel
+        (0.41, 0.86),  # 30 right_heel
+        (0.60, 0.90),  # 31 left_foot_index
+        (0.40, 0.90),  # 32 right_foot_index
     ]
 
+    # Camera-view layout: subject's "left" appears on the RIGHT of the image.
     _POSE_GUIDE_COCO_17_XY: list[tuple[float, float]] = [
         (0.50, 0.14),  # 0 nose
-        (0.46, 0.12),
-        (0.54, 0.12),
-        (0.42, 0.14),
-        (0.58, 0.14),
-        (0.42, 0.26),  # 5 left_shoulder
-        (0.58, 0.26),  # 6 right_shoulder
-        (0.36, 0.38),
-        (0.64, 0.38),
-        (0.32, 0.50),
-        (0.68, 0.50),
-        (0.46, 0.52),  # 11 left_hip
-        (0.54, 0.52),  # 12 right_hip
-        (0.44, 0.68),
-        (0.56, 0.68),
-        (0.42, 0.86),
-        (0.58, 0.86),
+        (0.54, 0.12),  # 1 left_eye
+        (0.46, 0.12),  # 2 right_eye
+        (0.58, 0.14),  # 3 left_ear
+        (0.42, 0.14),  # 4 right_ear
+        (0.58, 0.26),  # 5 left_shoulder
+        (0.42, 0.26),  # 6 right_shoulder
+        (0.64, 0.38),  # 7 left_elbow
+        (0.36, 0.38),  # 8 right_elbow
+        (0.68, 0.50),  # 9 left_wrist
+        (0.32, 0.50),  # 10 right_wrist
+        (0.54, 0.52),  # 11 left_hip
+        (0.46, 0.52),  # 12 right_hip
+        (0.56, 0.68),  # 13 left_knee
+        (0.44, 0.68),  # 14 right_knee
+        (0.58, 0.86),  # 15 left_ankle
+        (0.42, 0.86),  # 16 right_ankle
     ]
 
     def _pose_guide_reference_surface(
@@ -1886,10 +1887,10 @@ def play_video_with_controls(
             return "Pitch Guide: no field reference CSV found in models/"
         idx = selected_marker_idx if 0 <= selected_marker_idx < total else 0
         point = pitch_guide_points[idx]
-        if pitch_guide_fifa_mode:
+        if template_mode != "free":
             shown = int(fifa_start_keypoint) + idx + int(fifa_index_base)
         else:
-            shown = idx + 1
+            shown = idx
         return (
             f"{prefix}Field hint: p{shown} {point['point_name']} "
             f"(TAB / Ctrl+G; same clicks as guide off)"
@@ -2272,10 +2273,10 @@ def play_video_with_controls(
                         if f_num == frame_idx and x is not None and y is not None:
                             # Draw marker circle (green in BGR)
                             cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
-                            # Draw marker number
-                            display_idx = idx + 1
-                            if pitch_guide_fifa_mode:
-                                display_idx = idx + fifa_index_base
+                            if template_mode != "free":
+                                display_idx = int(fifa_start_keypoint) + idx + int(fifa_index_base)
+                            else:
+                                display_idx = idx
                             cv2.putText(
                                 frame,
                                 str(display_idx),
@@ -2296,10 +2297,12 @@ def play_video_with_controls(
                             ):
                                 # Draw marker circle (green in BGR)
                                 cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
-                                # Draw marker number
-                                display_idx = idx + 1
-                                if pitch_guide_fifa_mode:
-                                    display_idx = idx + fifa_index_base
+                                if template_mode != "free":
+                                    display_idx = (
+                                        int(fifa_start_keypoint) + idx + int(fifa_index_base)
+                                    )
+                                else:
+                                    display_idx = idx
                                 cv2.putText(
                                     frame,
                                     str(display_idx),
@@ -3131,13 +3134,14 @@ def play_video_with_controls(
 
         marker_info = None
         if total_markers > 0:
-            marker_idx = selected_marker_idx + 1 if selected_marker_idx >= 0 else 0
-            marker_total_display = total_markers
             if template_mode != "free" and selected_marker_idx >= 0:
                 marker_idx = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
                 marker_total_display = (
                     int(fifa_start_keypoint) + max(0, int(total_markers) - 1) + int(fifa_index_base)
                 )
+            else:
+                marker_idx = selected_marker_idx if selected_marker_idx >= 0 else 0
+                marker_total_display = max(0, total_markers - 1)
             marker_info = font.render(
                 f"Marker: {marker_idx}/{marker_total_display}", True, (255, 255, 255)
             )
@@ -3218,6 +3222,19 @@ def play_video_with_controls(
         goto_text = font.render("Go KP", True, (255, 255, 255))
         control_surface.blit(goto_text, goto_text.get_rect(center=goto_marker_button_rect.center))
         info_x += goto_marker_button_rect.width + 10
+
+        delete_range_button_rect = pygame.Rect(
+            info_x,
+            info_row_y + (primary_row_h - go_kp_h) // 2,
+            82,
+            go_kp_h,
+        )
+        pygame.draw.rect(control_surface, (145, 65, 65), delete_range_button_rect)
+        delete_range_text = font.render("Del Range", True, (255, 255, 255))
+        control_surface.blit(
+            delete_range_text, delete_range_text.get_rect(center=delete_range_button_rect.center)
+        )
+        info_x += delete_range_button_rect.width + 10
 
         if auto_marking_mode:
             auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
@@ -3629,6 +3646,7 @@ def play_video_with_controls(
             help_web_button_rect,  # Add help web button to return
             dataset_button_rect,  # Load dataset folder (multi-video)
             goto_marker_button_rect,  # Jump to marker index
+            delete_range_button_rect,  # Delete one marker/keypoint across a frame range
             marker_timeline_rect,
             slider_margin_left,
             slider_y,
@@ -3899,7 +3917,7 @@ def play_video_with_controls(
         pitch_guide_fifa_mode = False
         fifa_fixed_keypoints = None
         fifa_start_keypoint = 0
-        fifa_index_base = 1
+        fifa_index_base = 0
         current_label = "object"
         new_coords: dict[int, list[tuple[Any, Any]]] = {}
         for i in range(total_frames):
@@ -3961,9 +3979,9 @@ def play_video_with_controls(
         else:
             low = 0
             high = total - 1
-            prompt = f"Go to marker (1..{total})"
+            prompt = f"Go to marker (0..{total - 1})"
             seed_idx = selected_marker_idx if 0 <= selected_marker_idx <= high else 0
-            seed = str(seed_idx + 1)
+            seed = str(seed_idx)
         raw = show_input_dialog(prompt, seed)
         if raw is None:
             return False, "Marker jump cancelled."
@@ -3974,19 +3992,17 @@ def play_video_with_controls(
             entered = int(raw)
         except ValueError:
             return False, "Invalid marker number."
-        if pitch_guide_fifa_mode:
+        if template_mode != "free":
             target_idx = entered - int(fifa_start_keypoint) - int(fifa_index_base)
         else:
-            target_idx = entered - 1
-        if pitch_guide_fifa_mode and not (low <= target_idx <= high) and entered == 0 and low == 0:
-            target_idx = 0
+            target_idx = entered
         if not (low <= target_idx <= high):
             return False, f"Marker out of range ({entered})."
         selected_marker_idx = target_idx
-        if pitch_guide_fifa_mode:
+        if template_mode != "free":
             shown = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
         else:
-            shown = selected_marker_idx + 1
+            shown = selected_marker_idx
         return True, f"Marker selected: {shown}"
 
     def show_help_dialog():
@@ -4022,6 +4038,7 @@ def play_video_with_controls(
             "- TAB: Next marker in current frame",
             "- SHIFT+TAB: Previous marker in current frame",
             "- Ctrl+G: Go to keypoint (Go KP dialog)",
+            "- Del Range button: delete marker/keypoint N across a frame range",
             "- DELETE: Delete selected marker",
             "- A: Add new empty marker to file",
             "- R: Remove selected marker (current frame)",
@@ -4394,6 +4411,251 @@ def play_video_with_controls(
                         input_text += event.unicode
         return None
 
+    def _max_marker_index_for_delete() -> int:
+        """Return the highest internal marker slot that can be targeted for range delete."""
+        if one_line_mode:
+            return len(one_line_markers) - 1
+        if template_mode != "free" and fifa_fixed_keypoints:
+            return max(0, int(fifa_fixed_keypoints) - 1)
+        if not isinstance(coordinates, dict) or not coordinates:
+            return -1
+        return max((len(row) for row in coordinates.values()), default=0) - 1
+
+    def _marker_display_range_for_delete() -> tuple[int, int] | None:
+        """Return displayed marker/keypoint range accepted by the delete dialog."""
+        max_idx = _max_marker_index_for_delete()
+        if max_idx < 0:
+            return None
+        if template_mode != "free" and not one_line_mode:
+            low = int(fifa_start_keypoint) + int(fifa_index_base)
+            high = int(fifa_start_keypoint) + max_idx + int(fifa_index_base)
+            return low, high
+        return 0, max_idx
+
+    def _marker_display_to_internal_for_delete(display_number: int) -> int:
+        """Convert user-visible marker/keypoint number to internal zero-based slot."""
+        if template_mode != "free" and not one_line_mode:
+            return int(display_number) - int(fifa_start_keypoint) - int(fifa_index_base)
+        return int(display_number)
+
+    def _show_delete_marker_range_form() -> dict[str, int] | None:
+        """Pygame form for deleting one marker/keypoint over an inclusive frame range."""
+        marker_range = _marker_display_range_for_delete()
+        if marker_range is None:
+            return None
+
+        current_w, current_h = pygame.display.get_surface().get_size()
+        font = pygame.font.SysFont("verdana", 14)
+        title_font = pygame.font.SysFont("verdana", 16, bold=True)
+        small_font = pygame.font.SysFont("verdana", 12)
+
+        marker_low, marker_high = marker_range
+        if selected_marker_idx >= 0:
+            if template_mode != "free" and not one_line_mode:
+                default_marker = (
+                    int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
+                )
+            else:
+                default_marker = selected_marker_idx
+        else:
+            default_marker = marker_low
+        default_marker = max(marker_low, min(default_marker, marker_high))
+
+        inputs = {
+            "Start Frame": str(frame_count + 1),
+            "End Frame": str(frame_count + 1),
+            "Marker Number": str(default_marker),
+        }
+        order = ["Start Frame", "End Frame", "Marker Number"]
+        active_idx = 0
+
+        dialog_w = 520
+        dialog_h = 300
+        dx = max(10, (current_w - dialog_w) // 2)
+        dy = max(10, (current_h - dialog_h) // 2)
+        field_x = dx + 210
+        field_w = 160
+        field_h = 30
+        row_gap = 44
+        first_y = dy + 92
+        submit_rect = pygame.Rect(dx + 150, dy + dialog_h - 58, 95, 34)
+        cancel_rect = pygame.Rect(dx + 275, dy + dialog_h - 58, 95, 34)
+
+        def _draw() -> None:
+            overlay = pygame.Surface((current_w, current_h))
+            overlay.set_alpha(215)
+            overlay.fill((0, 0, 0))
+            screen.blit(overlay, (0, 0))
+
+            dialog_rect = pygame.Rect(dx, dy, dialog_w, dialog_h)
+            pygame.draw.rect(screen, (38, 38, 42), dialog_rect)
+            pygame.draw.rect(screen, (135, 135, 145), dialog_rect, 2)
+
+            title = title_font.render("Delete Marker Range", True, (255, 255, 255))
+            screen.blit(title, (dx + 20, dy + 18))
+            hint = small_font.render(
+                "Frames are 1-based and inclusive. Marker follows current template numbering.",
+                True,
+                (210, 210, 210),
+            )
+            screen.blit(hint, (dx + 20, dy + 48))
+            range_hint = small_font.render(
+                f"Marker range: {marker_low}..{marker_high} | Frame range: 1..{max(1, total_frames)}",
+                True,
+                (245, 210, 110),
+            )
+            screen.blit(range_hint, (dx + 20, dy + 66))
+
+            for i, key in enumerate(order):
+                y_row = first_y + i * row_gap
+                label = font.render(f"{key}:", True, (225, 225, 225))
+                screen.blit(label, (dx + 42, y_row + 6))
+                rect = pygame.Rect(field_x, y_row, field_w, field_h)
+                border = (255, 235, 120) if i == active_idx else (145, 145, 145)
+                pygame.draw.rect(screen, (18, 18, 20), rect)
+                pygame.draw.rect(screen, border, rect, 1)
+                val = font.render(
+                    inputs[key] + ("_" if i == active_idx else ""), True, (255, 255, 255)
+                )
+                screen.blit(val, (rect.x + 8, rect.y + 5))
+
+            pygame.draw.rect(screen, (55, 145, 70), submit_rect)
+            pygame.draw.rect(screen, (150, 55, 55), cancel_rect)
+            screen.blit(
+                font.render("Apply", True, (255, 255, 255)),
+                (submit_rect.x + 24, submit_rect.y + 7),
+            )
+            screen.blit(
+                font.render("Cancel", True, (255, 255, 255)),
+                (cancel_rect.x + 20, cancel_rect.y + 7),
+            )
+            pygame.display.flip()
+
+        while True:
+            _draw()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    nonlocal running
+                    running = False
+                    return None
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return None
+                    if event.key == pygame.K_TAB:
+                        active_idx = (active_idx + 1) % len(order)
+                    elif event.key == pygame.K_RETURN:
+                        try:
+                            return {key: int(inputs[key]) for key in order}
+                        except ValueError:
+                            return None
+                    elif event.key == pygame.K_BACKSPACE:
+                        key = order[active_idx]
+                        inputs[key] = inputs[key][:-1]
+                    elif pygame.K_0 <= event.key <= pygame.K_9:
+                        key = order[active_idx]
+                        inputs[key] += chr(event.key)
+                    elif event.key in _PYGAME_KP_DIGIT:
+                        key = order[active_idx]
+                        inputs[key] += _PYGAME_KP_DIGIT[event.key]
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mx, my = event.pos
+                    for i, _key in enumerate(order):
+                        y_row = first_y + i * row_gap
+                        rect = pygame.Rect(field_x, y_row, field_w, field_h)
+                        if rect.collidepoint(mx, my):
+                            active_idx = i
+                            break
+                    if submit_rect.collidepoint(mx, my):
+                        try:
+                            return {key: int(inputs[key]) for key in order}
+                        except ValueError:
+                            return None
+                    if cancel_rect.collidepoint(mx, my):
+                        return None
+            pygame.time.Clock().tick(30)
+
+    def _delete_marker_range_dialog() -> tuple[bool, str]:
+        """Delete one marker/keypoint slot over an inclusive user-selected frame range."""
+        if labeling_mode:
+            return False, "Exit Labeling mode first; Del Range edits keypoint markers."
+        if total_frames <= 0:
+            return False, "No frames available."
+        if _max_marker_index_for_delete() < 0:
+            return False, "No markers available to delete."
+
+        values = _show_delete_marker_range_form()
+        if values is None:
+            return False, "Delete range cancelled."
+
+        try:
+            start_frame = int(values["Start Frame"]) - 1
+            end_frame = int(values["End Frame"]) - 1
+            marker_display = int(values["Marker Number"])
+        except (KeyError, TypeError, ValueError):
+            return False, "Invalid delete range input."
+
+        if start_frame > end_frame:
+            start_frame, end_frame = end_frame, start_frame
+        start_frame = max(0, min(start_frame, total_frames - 1))
+        end_frame = max(0, min(end_frame, total_frames - 1))
+
+        marker_range = _marker_display_range_for_delete()
+        if marker_range is None:
+            return False, "No marker range available."
+        marker_low, marker_high = marker_range
+        if not (marker_low <= marker_display <= marker_high):
+            return False, f"Marker out of range ({marker_low}..{marker_high})."
+
+        marker_idx = _marker_display_to_internal_for_delete(marker_display)
+        max_idx = _max_marker_index_for_delete()
+        if marker_idx < 0 or marker_idx > max_idx:
+            return False, f"Marker {marker_display} does not exist."
+
+        make_backup()
+        changed = 0
+        had_coordinates = 0
+
+        if one_line_mode:
+            for idx, marker in enumerate(one_line_markers):
+                if idx != marker_idx or idx in deleted_markers:
+                    continue
+                try:
+                    f_num, x_val, y_val = int(marker[0]), marker[1], marker[2]
+                except (TypeError, ValueError, IndexError):
+                    continue
+                if start_frame <= f_num <= end_frame:
+                    deleted_markers.add(idx)
+                    changed += 1
+                    if x_val is not None and y_val is not None:
+                        had_coordinates += 1
+        else:
+            if not isinstance(coordinates, dict):
+                return False, "Marker data is not available."
+            for f_num in range(start_frame, end_frame + 1):
+                row = coordinates.get(f_num, [])
+                if marker_idx >= len(row):
+                    continue
+                deleted_here = deleted_positions.setdefault(f_num, set())
+                if marker_idx not in deleted_here:
+                    changed += 1
+                    point = row[marker_idx]
+                    if point is not None:
+                        try:
+                            if point[0] is not None and point[1] is not None:
+                                had_coordinates += 1
+                        except (TypeError, IndexError):
+                            pass
+                deleted_here.add(marker_idx)
+
+        if changed == 0:
+            return False, (
+                f"Marker {marker_display} not found in frames {start_frame + 1}-{end_frame + 1}."
+            )
+        return True, (
+            f"Deleted marker {marker_display} in frames {start_frame + 1}-{end_frame + 1} "
+            f"({had_coordinates} coordinate rows hidden)."
+        )
+
     def _deprecated_show_swap_dialog(current_frame, total_fr):
         """
         Show dialog to swap two markers over a frame range.
@@ -4596,7 +4858,7 @@ def play_video_with_controls(
         display_labels = markers_labels.copy()
         if len(display_labels) < max_idx:
             for i in range(len(display_labels), max_idx):
-                display_labels.append(f"Pixel {i + 1}")
+                display_labels.append(f"Pixel {i}")
 
         running = True
         while running:
@@ -4633,7 +4895,7 @@ def play_video_with_controls(
 
                 # Text: "1: Left Hip"
                 lbl = display_labels[i]
-                d_surf.blit(font.render(f"{i + 1}: {lbl}", True, TEXT), (r.x + 10, r.y + 5))
+                d_surf.blit(font.render(f"{i}: {lbl}", True, TEXT), (r.x + 10, r.y + 5))
 
             # --- Right Panel: Controls & Rules ---
 
@@ -4678,14 +4940,10 @@ def play_video_with_controls(
                 m1_idx = rule["marker_1"]
                 m2_idx = rule["marker_2"]
                 m1_name = (
-                    display_labels[m1_idx]
-                    if m1_idx < len(display_labels)
-                    else f"Pixel {m1_idx + 1}"
+                    display_labels[m1_idx] if m1_idx < len(display_labels) else f"Pixel {m1_idx}"
                 )
                 m2_name = (
-                    display_labels[m2_idx]
-                    if m2_idx < len(display_labels)
-                    else f"Pixel {m2_idx + 1}"
+                    display_labels[m2_idx] if m2_idx < len(display_labels) else f"Pixel {m2_idx}"
                 )
 
                 txt = f"[{rule['start_frame'] + 1}-{rule['end_frame'] + 1}] {m1_name} <-> {m2_name}"
@@ -4900,7 +5158,7 @@ def play_video_with_controls(
             keypoint_names=pitch_keypoint_names,
             flip_idx=export_flip_idx,
             keypoint_start_idx=(fifa_start_keypoint if template_mode != "free" else 0),
-            keypoint_index_base=(fifa_index_base if template_mode != "free" else 1),
+            keypoint_index_base=(fifa_index_base if template_mode != "free" else 0),
             coord_format=coord_format,
             coord_decimals=coord_decimals,
             layout=export_layout,
@@ -5599,7 +5857,7 @@ def play_video_with_controls(
             one_line_markers.append((frame_count, None, None))
             selected_marker_idx = new_idx
 
-            save_message_text = f"Added new empty marker {new_idx + 1}"
+            save_message_text = f"Added new empty marker {new_idx}"
             showing_save_message = True
             save_message_timer = 60
         else:
@@ -5632,7 +5890,7 @@ def play_video_with_controls(
             # Select the new added marker
             selected_marker_idx = new_marker_idx
 
-            save_message_text = f"Added new empty marker {new_marker_idx + 1}"
+            save_message_text = f"Added new empty marker {new_marker_idx}"
             showing_save_message = True
             save_message_timer = 60
 
@@ -5656,7 +5914,7 @@ def play_video_with_controls(
                         # Instead of removing completely, add to the deleted markers list
                         deleted_markers.add(selected_marker_idx)
                         save_message_text = (
-                            f"Removed marker {selected_marker_idx + 1} in the current frame"
+                            f"Removed marker {selected_marker_idx} in the current frame"
                         )
                         showing_save_message = True
                         save_message_timer = 60
@@ -5672,9 +5930,7 @@ def play_video_with_controls(
                 # Add the selected marker to the deleted list only in the current frame
                 if selected_marker_idx < len(coordinates[frame_count]):
                     deleted_positions[frame_count].add(selected_marker_idx)
-                    save_message_text = (
-                        f"Removed marker {selected_marker_idx + 1} in the current frame"
-                    )
+                    save_message_text = f"Removed marker {selected_marker_idx} in the current frame"
                     showing_save_message = True
                     save_message_timer = 60
                     # Move selection backwards for quick repeated deletes.
@@ -6427,9 +6683,10 @@ def play_video_with_controls(
                         )  # Orange highlight
 
                     pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
-                    display_idx = idx + 1
-                    if pitch_guide_fifa_mode:
-                        display_idx = idx + fifa_index_base
+                    if template_mode != "free":
+                        display_idx = int(fifa_start_keypoint) + idx + int(fifa_index_base)
+                    else:
+                        display_idx = idx
                     text_surface = font.render(str(display_idx), True, (255, 255, 255))
                     screen.blit(text_surface, (screen_x + 5, screen_y - 15))
         else:
@@ -6451,9 +6708,10 @@ def play_video_with_controls(
                     )  # Orange highlight
 
                 pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
-                display_idx = i + 1
-                if pitch_guide_fifa_mode:
-                    display_idx = i + fifa_index_base
+                if template_mode != "free":
+                    display_idx = int(fifa_start_keypoint) + i + int(fifa_index_base)
+                else:
+                    display_idx = i
                 text_surface = font.render(str(display_idx), True, (255, 255, 255))
                 screen.blit(text_surface, (screen_x + 5, screen_y - 15))
 
@@ -6562,6 +6820,7 @@ def play_video_with_controls(
             help_web_button_rect,  # Add help web button to return
             dataset_button_rect,  # Load dataset folder (multi-video)
             goto_marker_button_rect,  # Jump to marker index
+            delete_range_button_rect,  # Delete one marker/keypoint across a frame range
             marker_timeline_rect,
             slider_x,
             slider_y,
@@ -6639,7 +6898,7 @@ def play_video_with_controls(
                 _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
                 shown_idx = int(fifa_start_keypoint) + _ov + int(fifa_index_base)
                 _line1 = f"Pose guide {_tpl} (visual only)"
-                _line2 = f"  kp {shown_idx}/{max(1, _n)} (TAB / Ctrl+G)"
+                _line2 = f"  kp {shown_idx}/{max(0, _n - 1)} (TAB / Ctrl+G)"
                 _line3 = "Same clicks as guide off | V=toggle map (upper-right)"
 
             _panel.blit(_guide_font_sm.render(_line1, True, (255, 230, 60)), (8, 5))
@@ -6737,7 +6996,7 @@ def play_video_with_controls(
                             keypoint_start_idx=(
                                 fifa_start_keypoint if pitch_guide_fifa_mode else 0
                             ),
-                            keypoint_index_base=(fifa_index_base if pitch_guide_fifa_mode else 1),
+                            keypoint_index_base=(fifa_index_base if pitch_guide_fifa_mode else 0),
                             coord_format=coord_format,
                             coord_decimals=coord_decimals,
                         )
@@ -7524,7 +7783,7 @@ def play_video_with_controls(
                                     fifa_start_keypoint if template_mode != "free" else 0
                                 ),
                                 keypoint_index_base=(
-                                    fifa_index_base if template_mode != "free" else 1
+                                    fifa_index_base if template_mode != "free" else 0
                                 ),
                                 coord_format=coord_format,
                                 coord_decimals=coord_decimals,
@@ -7650,6 +7909,11 @@ def play_video_with_controls(
                         save_message_text = msg_go
                         showing_save_message = True
                         save_message_timer = 60 if ok_go else 45
+                    elif delete_range_button_rect.collidepoint(x, rel_y):
+                        ok_del, msg_del = _delete_marker_range_dialog()
+                        save_message_text = msg_del
+                        showing_save_message = True
+                        save_message_timer = 90 if ok_del else 60
                     elif marker_timeline_rect.collidepoint(x, rel_y):
                         dragging_marker_timeline = True
                         paused = True
@@ -8639,7 +8903,7 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
             coordinates[frame_num] = pts
 
         print(f"Coordinates loaded (generic CSV format): {len(coord_cols) // 2} coordinate pairs")
-        labels = [f"Pixel {i + 1}" for i in range(len(coord_cols) // 2)]
+        labels = [f"Pixel {i}" for i in range(len(coord_cols) // 2)]
         return coordinates, labels
 
     print(f"File format not recognized: {input_file}. Starting fresh.")
@@ -8662,7 +8926,7 @@ def save_coordinates(
     is_sequential=False,
     fixed_keypoints_count=None,
     keypoint_start_idx=0,
-    keypoint_index_base=1,
+    keypoint_index_base=0,
     *,
     coord_format: str = "int",
     coord_decimals: int = 1,
