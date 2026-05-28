@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vaila - vaila_deadlift</title>
+<style>
+body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5;color:#222}.container{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1)}h1{color:#1f2937;border-bottom:3px solid #2563eb;padding-bottom:10px}h2{color:#374151;margin-top:30px}.module-info,.metrics,.usage{background:#f8fafc;padding:15px;border-left:4px solid #2563eb;margin:15px 0}code{background:#e5e7eb;padding:2px 5px;border-radius:3px}pre{background:#111827;color:#f9fafb;padding:14px;border-radius:6px;overflow:auto}.footer{margin-top:35px;padding-top:15px;border-top:1px solid #ddd;color:#666;font-size:.9em}
+</style>
+</head>
+<body><div class="container">
+<h1>vaila_deadlift</h1>
+<div class="module-info">
+<p><strong>Category:</strong> Analysis</p>
+<p><strong>File:</strong> vaila/vaila_deadlift.py</p>
+<p><strong>Version:</strong> 0.3.46</p>
+<p><strong>Updated:</strong> 2026-05-28</p>
+<p><strong>GUI Interface:</strong> Yes - Frame B - Deadlift</p>
+</div>
+<h2>Description</h2>
+<p>Deadlift/RDL biomechanical analysis for MediaPipe Pose CSV files. The tool exports processed frame metrics, diagnostic plots, variant classification, and an HTML report.</p>
+<p>The wrist landmark is used as a barbell proxy because MediaPipe Pose does not track the bar directly. Use a sagittal/profile camera view for horizontal setup checks.</p>
+<div class="metrics"><h2>New validations</h2>
+<ul>
+<li><strong>Arm verticality:</strong> shoulder-to-wrist horizontal offset at setup; tolerance 5 cm.</li>
+<li><strong>Bar over midfoot:</strong> wrist projection against heel-to-foot-index midpoint; tolerance 3 cm.</li>
+<li><strong>Initial pull synchronism:</strong> first 15% of concentric pull; flags knee extension velocity greater than 2x hip opening velocity.</li>
+</ul></div>
+<h2>Metrics</h2>
+<ul><li>Stance width ratio</li><li>Knee flexion</li><li>Tibia angle to ground</li><li>Spine deviation from setup</li><li>Bar path proximity</li><li>Cervical deviation</li><li>Deadlift variant classification</li></ul>
+<div class="usage"><h2>Usage</h2>
+<p>GUI: run <code>uv run vaila.py</code>, click <strong>Deadlift</strong>, and select a folder containing MediaPipe CSV files.</p>
+<pre><code>uv run python vaila/vaila_deadlift.py -i path/to/pose.csv -o path/to/output</code></pre>
+</div>
+<h2>Outputs</h2>
+<ul><li>Processed kinematics CSV</li><li>Lower limb and safety metric plots</li><li>Biomechanical HTML report</li></ul>
+<div class="footer">Generated on 2026-05-28 for vaila 0.3.46.</div>
+</div></body></html>

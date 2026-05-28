@@ -34,6 +34,7 @@ Each button in the vailá GUI has its own documentation file:
 | B_r3_c1 | HR/ECG | `ecg_btn` | [hr-analysis.md](hr-analysis.md) |
 | B_r3_c2 | Yolo + Markerless_MP | `markerless2d_mpyolo` | [markerless2d-mpyolo.md](markerless2d-mpyolo.md) |
 | B_r3_c3 | Vertical Jump | `vailajump` | [vailajump.md](vailajump.md) |
+| B_r6_c5 | Deadlift | `deadlift_analysis` | [deadlift.md](deadlift.md) |
 | B_r3_c4 | Cube2D | `cube2d_kinematics` | [cube2d-kinematics.md](cube2d-kinematics.md) |
 | B_r3_c5 | Animal Open Field | `animal_open_field` | [animal-open-field.md](animal-open-field.md) |
 | B_r4_c1 | Video AI tools | `yolo_and_sam` | [vaila-sam.md](vaila-sam.md) |

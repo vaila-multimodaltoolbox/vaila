@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 23 May 2026
-Version: 0.3.45
+Update Date: 28 May 2026
+Version: 0.3.46
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -89,11 +89,14 @@ def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
         script_path (str, optional): Alternative script path if module import fails
         extra_py_flags: Extra flags after ``sys.executable`` (e.g. ``("-u",)`` for unbuffered SAM subprocess logs)
     """
+
     def _activate_pid_macos(pid):
         if platform.system() == "Darwin" and pid:
             try:
                 cmd = f"sleep 0.5 && osascript -e 'tell application \"System Events\" to set frontmost of the first process whose unix id is {pid} to true'"
-                subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(
+                    cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
             except Exception:
                 pass
 
@@ -169,7 +172,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 23.May.2026 v0.3.45 (Python 3.12.13)
+vailá - 28.May.2026 v0.3.46 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -280,7 +283,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 23.May.2026 v0.3.45 (Python 3.12.13)")
+        self.title("vailá - 28.May.2026 v0.3.46 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -923,11 +926,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # B5_r6_c5 - vailá placeholder
-        vaila_b5_r6_c5 = tk.Button(
+        # B5_r6_c5 - Deadlift
+        deadlift_btn = tk.Button(
             row6_frame,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Deadlift",
+            command=self.deadlift_analysis,
             width=button_width,
         )
 
@@ -936,7 +939,7 @@ class Vaila(tk.Tk):
         face_mesh_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         tugturn_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         soccer_tools_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        vaila_b5_r6_c5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        deadlift_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         # B6_r7 — seventh row: generic vailá placeholders (B6_r7_c1 .. B6_r7_c5)
         row7_frame = tk.Frame(analysis_frame)
@@ -1908,6 +1911,13 @@ class Vaila(tk.Tk):
         from vaila import markerless2d_mpyolo
 
         markerless2d_mpyolo.run_markerless2d_mpyolo(root=self)
+
+    # B_r6_c5
+    def deadlift_analysis(self):
+        """Run the Deadlift/RDL biomechanical analysis module."""
+        from vaila import vaila_deadlift
+
+        vaila_deadlift.main_gui()
 
     # B_r3_c5
     def animal_open_field(self):
