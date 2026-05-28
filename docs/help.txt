@@ -95,3 +95,8 @@ Additional Commands:
     exit - Exit the program.
 
 To use this toolbox, simply select the desired option by typing the corresponding number and pressing Enter. You can also type 'h' to view this help message or 'exit' to quit the program.
+
+
+    Deadlift Analysis
+        Description: Analyze MediaPipe Pose CSV files for deadlift/RDL setup and movement quality. Validates arm verticality, bar over midfoot, bar path proximity, spine deviation, shin angle, and initial pull synchronism.
+        Instructions: Click "Deadlift" in Frame B and select a folder with MediaPipe CSV files, or run `uv run python vaila/vaila_deadlift.py -i pose.csv -o output_dir`.

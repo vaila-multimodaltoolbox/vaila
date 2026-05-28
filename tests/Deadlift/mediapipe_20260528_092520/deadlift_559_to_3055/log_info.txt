@@ -1,0 +1,28 @@
+vailá Markerless 2D Analysis Log
+================================
+
+Video: deadlift_559_to_3055.mp4
+Processing Date: 2026-05-28 09:33:38
+Processing Time: 497.99 seconds
+
+Video Info:
+  - Original Resolution: 1080x1920
+  - Processing Resolution: 1080x1920
+  - Total Frames: 2497 (original)
+  - FPS: 59.87
+
+Configuration:
+  - Model Complexity: 2
+  - Detection Confidence: 0.1
+  - Tracking Confidence: 0.1
+  - Enable Resize: False
+  - Reverse-Prepend %: 0
+  - Enable Median Filter: False
+  - Enable Crop/ROI: False
+
+Output Files:
+  - Annotated Video: deadlift_559_to_3055_annotated.mp4
+  - Normalized CSV: deadlift_559_to_3055_mp_norm.csv
+  - Pixel CSV: deadlift_559_to_3055_mp_pixel.csv
+  - vailá Format CSV: deadlift_559_to_3055_pixel_vaila.csv
+  - Configuration: configuration_used.toml

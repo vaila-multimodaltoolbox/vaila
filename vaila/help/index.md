@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 122 | **Categories:** 7 | **Generated on:** 23/05/2026
+**Total documented modules:** 123 | **Categories:** 7 | **Generated on:** 28/05/2026
 
 ---
 
@@ -49,6 +49,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **vaila_and_jump**
   - [📄 HTML](vaila_and_jump.html)
   - [📝 Markdown](vaila_and_jump.md)
+- **vaila_deadlift**
+  - [📄 HTML](vaila_deadlift.html)
+  - [📝 Markdown](vaila_deadlift.md)
 - **pynalty**
   - [📄 HTML](pynalty_help.html)
   - [📝 Markdown](pynalty_help.md)
