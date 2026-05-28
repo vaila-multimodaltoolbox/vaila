@@ -173,7 +173,8 @@
         <strong>TAB</strong> / <strong>Ctrl+G</strong> / clicks as with the guide off.
         <strong>Sequential (<code>S</code>/<code>O</code>)</strong> fills the selected
         empty slot first (including kp 0), then advances.
-        <strong>Del Range</strong> deletes one marker/keypoint number across an inclusive frame range.<br />
+        <strong>Del Range</strong> deletes one marker/keypoint number, a comma-separated list such as <code>0,3,7</code>, or a sequential range such as <code>1:10</code>, across an inclusive frame range.
+        <strong>Swap Range</strong> swaps paired marker/keypoint lists over an inclusive frame range, for example <code>26,28</code> with <code>27,29</code>, or <code>1:10</code> with <code>11:20</code>.<br />
         <strong>New in 0.5.0:</strong> <strong>F9</strong> exports a YOLO-pose
         training dataset from clicked markers (<code>data.yaml</code> with
         <code>kpt_shape</code>, train/val/test). Append across videos with
@@ -216,7 +217,7 @@
           <ul>
             <li>
               <strong>Multi-format Support:</strong> Load and visualize
-              MediaPipe, YOLO tracking, and vailá standard formats
+              MediaPipe, YOLO tracking, vailá standard formats, and markerless 2D named-landmark CSVs (<code>frame_index,nose_x,nose_y,nose_z,...</code>)
             </li>
             <li>
               <strong>Advanced Visualization:</strong> Stick figures for
@@ -227,8 +228,12 @@
               different annotation needs
             </li>
             <li>
-              <strong>Del Range:</strong> Delete one marker/keypoint number across
-              an inclusive frame range without changing other markers
+              <strong>Del Range:</strong> Delete one or more marker/keypoint numbers across
+              an inclusive frame range without changing other markers; use commas (<code>0,3,7</code>) or ranges (<code>1:10</code>)
+            </li>
+            <li>
+              <strong>Swap Range:</strong> Swap paired marker/keypoint lists across
+              an inclusive frame range; first marker line maps pairwise to the second (<code>26,28</code> with <code>27,29</code>, or <code>1:10</code> with <code>11:20</code>)
             </li>
             <li>
               <strong>Zoom & Navigation:</strong> Full zoom capabilities with
@@ -368,7 +373,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
           </li>
           <li>
             <strong>Navigate & Annotate:</strong> Use the interface to navigate,
-            zoom, and edit markers; use <strong>Del Range</strong> to delete one marker/keypoint over a frame interval
+            zoom, and edit markers; use <strong>Del Range</strong> to delete one marker/keypoint, comma-separated marker list, or <code>A:B</code> range; use <strong>Swap Range</strong> to swap paired marker lists/ranges over a frame interval
           </li>
           <li>
             <strong>Save Results:</strong> Save the annotated data in CSV format
@@ -469,7 +474,11 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">Del Range button</span></td>
-                <td>Delete the chosen marker/keypoint number over an inclusive frame range</td>
+                <td>Delete the chosen marker/keypoint number, comma-separated list, or <code>A:B</code> range over an inclusive frame range</td>
+              </tr>
+              <tr>
+                <td><span class="key">Swap Range button</span></td>
+                <td>Swap paired marker/keypoint lists or matching <code>A:B</code> ranges over an inclusive frame range</td>
               </tr>
               <tr>
                 <td><span class="key">A</span></td>
@@ -621,8 +630,8 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
         <p>
           The standard marking mode where clicking selects and updates the
           current marker. Use TAB to navigate between markers. Each marker keeps
-          its ID across all frames. Use <strong>Del Range</strong> to hide/delete one marker ID
-          over an inclusive frame range while preserving other markers.
+          its ID across all frames. Use <strong>Del Range</strong> to hide/delete one marker ID, multiple comma-separated IDs, or a sequential <code>A:B</code> range,
+          over an inclusive frame range while preserving other markers. Use <strong>Swap Range</strong> to exchange paired marker IDs over an inclusive frame range; <code>26,28</code> with <code>27,29</code> swaps <code>26&lt;-&gt;27</code> and <code>28&lt;-&gt;29</code>.
         </p>
         <ul>
           <li>
