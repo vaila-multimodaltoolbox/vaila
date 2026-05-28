@@ -94,6 +94,7 @@ This page provides a comprehensive reference of all modules available in the vai
 
 ### Biomechanical Analysis
 - **`vaila_and_jump`**: Vertical jump analysis and performance metrics
+- **`vaila_deadlift`**: Deadlift/RDL MediaPipe kinematic analysis with setup, bar path, and pull synchronism validation
 - **`animal_open_field`**: Animal behavior analysis in open field tests
 - **`cube2d_kinematics`**: 2D kinematic analysis of cube movements
 - **`vector_coding`**: Vector coding analysis for joint coupling
