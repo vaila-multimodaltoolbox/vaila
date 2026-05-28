@@ -15,10 +15,11 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
   - **FIFA Soccer-Field:** 32 pitch keypoints (`idx 0 = top_left_corner`) + TOML config (right-click or `K`)
   - **MediaPipe Pose:** 33 pose landmarks
   - **YOLO Pose:** COCO-17 keypoints
-- **Multi-format Support:** Load and visualize MediaPipe, YOLO tracking, and vailá standard formats
+- **Multi-format Support:** Load and visualize MediaPipe, YOLO tracking, vailá standard formats, and markerless 2D named-landmark CSVs (`frame_index,nose_x,nose_y,nose_z,...`)
 - **Advanced Visualization:** Stick figures for MediaPipe, bounding boxes for YOLO tracking
 - **Flexible Marking:** Multiple marker modes for different annotation needs
-- **Del Range:** Button to delete one marker/keypoint number across an inclusive frame range
+- **Del Range:** Button to delete one or more marker/keypoint numbers across an inclusive frame range; use commas (`0,3,7`) and sequential ranges (`1:10`)
+- **Swap Range:** Button to swap marker/keypoint pairs over a frame range; first marker line maps pairwise to the second (`26,28` with `27,29`, or `1:10` with `11:20`)
 - **Labeling Mode:** Create bounding box annotations for Machine Learning datasets
 - **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations
 - **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8; may write `keypoints.json` when keypoint names are known
@@ -64,7 +65,8 @@ Optional one-off run without syncing the whole repo: `uv run --with opencv-pytho
    - **MediaPipe format:** For landmark data with stick figure visualization
    - **YOLO tracking format:** For tracking data with bounding box visualization
    - **vailá standard format:** For standard coordinate data
-5. **Navigate & annotate:** Use the interface to navigate, zoom, and edit markers (**TAB** / **SHIFT+TAB**, **Ctrl+G** to jump to a keypoint index; **Del Range** deletes one marker/keypoint across a frame interval)
+   - **markerless_2d_analysis named landmarks:** CSVs like `frame_index,nose_x,nose_y,nose_z,...`; x/y columns are loaded in file order and z columns are ignored
+5. **Navigate & annotate:** Use the interface to navigate, zoom, and edit markers (**TAB** / **SHIFT+TAB**, **Ctrl+G** to jump to a keypoint index; **Del Range** deletes one marker/keypoint, comma-separated list, or `A:B` range; **Swap Range** swaps paired marker lists/ranges across a frame interval)
 6. **Save results:** Save the annotated data in CSV format
 
 ## CLI quick reference
@@ -89,7 +91,7 @@ The tool interface consists of:
 - **Control panel** (bottom section) with:
   - Current frame information
   - Slider for navigating between frames
-  - Buttons for main functions (Load, Save, Help, Del Range, 1 Line, Persistence, Sequential)
+  - Buttons for main functions (Load, Save, Help, Del Range, Swap Range, 1 Line, Persistence, Sequential)
   - Format-specific visualization controls
 
 ## Supported File Formats
@@ -149,7 +151,8 @@ frame,p1_x,p1_y,p2_x,p2_y
 - Each click selects and updates the currently selected marker
 - Navigate between markers using TAB
 - Each marker maintains its ID across all frames
-- Use **Del Range** to hide/delete one marker ID over an inclusive frame range without touching other markers
+- Use **Del Range** to hide/delete one marker ID, multiple comma-separated IDs, or a sequential `A:B` marker range over an inclusive frame range without touching other markers
+- Use **Swap Range** to exchange paired marker IDs over an inclusive frame range. The first marker line maps pairwise to the second: `26,28` with `27,29` swaps `26<->27` and `28<->29`; `1:10` with `11:20` swaps each expanded position.
 - **Use case:** Tracking specific points across frames
 - **Activation:** Default mode at startup
 

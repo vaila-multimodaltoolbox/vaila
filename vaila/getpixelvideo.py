@@ -57,7 +57,8 @@ Examples::
 
 Key bindings (see in-app **H** help for full list):
   Ctrl+G                Go to keypoint (Go KP dialog)
-  Del Range button      Delete one marker/keypoint across a frame range
+  Del Range button      Delete marker list/range (e.g. 0,3,7 or 1:10) across frames
+  Swap Range button     Swap paired marker lists/ranges across frames
   Ctrl+E                Save ML dataset (split + PNG + all_labels)
   F9                    Export YOLO-pose dataset from markers
   Shift+← / Shift+→     Jump prev/next frame that has markers
@@ -3236,6 +3237,19 @@ def play_video_with_controls(
         )
         info_x += delete_range_button_rect.width + 10
 
+        swap_range_button_rect = pygame.Rect(
+            info_x,
+            info_row_y + (primary_row_h - go_kp_h) // 2,
+            92,
+            go_kp_h,
+        )
+        pygame.draw.rect(control_surface, (70, 105, 155), swap_range_button_rect)
+        swap_range_text = font.render("Swap Range", True, (255, 255, 255))
+        control_surface.blit(
+            swap_range_text, swap_range_text.get_rect(center=swap_range_button_rect.center)
+        )
+        info_x += swap_range_button_rect.width + 10
+
         if auto_marking_mode:
             auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
             control_surface.blit(auto_indicator, (info_x, info_row_y))
@@ -3647,6 +3661,7 @@ def play_video_with_controls(
             dataset_button_rect,  # Load dataset folder (multi-video)
             goto_marker_button_rect,  # Jump to marker index
             delete_range_button_rect,  # Delete one marker/keypoint across a frame range
+            swap_range_button_rect,  # Swap marker/keypoint pairs across a frame range
             marker_timeline_rect,
             slider_margin_left,
             slider_y,
@@ -4038,7 +4053,8 @@ def play_video_with_controls(
             "- TAB: Next marker in current frame",
             "- SHIFT+TAB: Previous marker in current frame",
             "- Ctrl+G: Go to keypoint (Go KP dialog)",
-            "- Del Range button: delete marker/keypoint N across a frame range",
+            "- Del Range button: delete marker/keypoint N, comma list N,M,K, or range A:B across a frame range",
+            "- Swap Range button: swap paired marker lists/ranges across a frame range",
             "- DELETE: Delete selected marker",
             "- A: Add new empty marker to file",
             "- R: Remove selected marker (current frame)",
@@ -4438,8 +4454,44 @@ def play_video_with_controls(
             return int(display_number) - int(fifa_start_keypoint) - int(fifa_index_base)
         return int(display_number)
 
-    def _show_delete_marker_range_form() -> dict[str, int] | None:
-        """Pygame form for deleting one marker/keypoint over an inclusive frame range."""
+    def _parse_marker_display_spec(
+        raw: str,
+        *,
+        marker_low: int,
+        marker_high: int,
+    ) -> tuple[list[int], str | None]:
+        """Expand marker spec strings like ``1,3,7`` or ``1:10`` into display IDs."""
+        marker_displays: list[int] = []
+        seen_displays: set[int] = set()
+        for part in str(raw).replace(";", ",").split(","):
+            token = part.strip()
+            if not token:
+                continue
+            try:
+                if ":" in token:
+                    start_s, end_s = [piece.strip() for piece in token.split(":", 1)]
+                    range_start = int(start_s)
+                    range_end = int(end_s)
+                    step = 1 if range_start <= range_end else -1
+                    expanded = range(range_start, range_end + step, step)
+                else:
+                    expanded = [int(token)]
+            except ValueError:
+                return [], f"Invalid marker number/range: {token}"
+            for display_number in expanded:
+                if not (marker_low <= display_number <= marker_high):
+                    return [], (
+                        f"Marker out of range ({marker_low}..{marker_high}): {display_number}"
+                    )
+                if display_number not in seen_displays:
+                    marker_displays.append(display_number)
+                    seen_displays.add(display_number)
+        if not marker_displays:
+            return [], "Enter at least one marker number."
+        return marker_displays, None
+
+    def _show_delete_marker_range_form() -> dict[str, str] | None:
+        """Pygame form for deleting marker/keypoint IDs over an inclusive frame range."""
         marker_range = _marker_display_range_for_delete()
         if marker_range is None:
             return None
@@ -4464,9 +4516,9 @@ def play_video_with_controls(
         inputs = {
             "Start Frame": str(frame_count + 1),
             "End Frame": str(frame_count + 1),
-            "Marker Number": str(default_marker),
+            "Marker Numbers": str(default_marker),
         }
-        order = ["Start Frame", "End Frame", "Marker Number"]
+        order = ["Start Frame", "End Frame", "Marker Numbers"]
         active_idx = 0
 
         dialog_w = 520
@@ -4494,7 +4546,7 @@ def play_video_with_controls(
             title = title_font.render("Delete Marker Range", True, (255, 255, 255))
             screen.blit(title, (dx + 20, dy + 18))
             hint = small_font.render(
-                "Frames are 1-based and inclusive. Marker follows current template numbering.",
+                "Frames 1-based/inclusive. Markers: 0,3,7 or 1:10 ranges.",
                 True,
                 (210, 210, 210),
             )
@@ -4545,7 +4597,7 @@ def play_video_with_controls(
                         active_idx = (active_idx + 1) % len(order)
                     elif event.key == pygame.K_RETURN:
                         try:
-                            return {key: int(inputs[key]) for key in order}
+                            return dict(inputs)
                         except ValueError:
                             return None
                     elif event.key == pygame.K_BACKSPACE:
@@ -4557,6 +4609,9 @@ def play_video_with_controls(
                     elif event.key in _PYGAME_KP_DIGIT:
                         key = order[active_idx]
                         inputs[key] += _PYGAME_KP_DIGIT[event.key]
+                    elif order[active_idx] == "Marker Numbers" and event.unicode in {",", ":", " "}:
+                        key = order[active_idx]
+                        inputs[key] += event.unicode
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mx, my = event.pos
                     for i, _key in enumerate(order):
@@ -4567,7 +4622,7 @@ def play_video_with_controls(
                             break
                     if submit_rect.collidepoint(mx, my):
                         try:
-                            return {key: int(inputs[key]) for key in order}
+                            return dict(inputs)
                         except ValueError:
                             return None
                     if cancel_rect.collidepoint(mx, my):
@@ -4590,7 +4645,7 @@ def play_video_with_controls(
         try:
             start_frame = int(values["Start Frame"]) - 1
             end_frame = int(values["End Frame"]) - 1
-            marker_display = int(values["Marker Number"])
+            markers_raw = str(values["Marker Numbers"])
         except (KeyError, TypeError, ValueError):
             return False, "Invalid delete range input."
 
@@ -4603,21 +4658,29 @@ def play_video_with_controls(
         if marker_range is None:
             return False, "No marker range available."
         marker_low, marker_high = marker_range
-        if not (marker_low <= marker_display <= marker_high):
-            return False, f"Marker out of range ({marker_low}..{marker_high})."
 
-        marker_idx = _marker_display_to_internal_for_delete(marker_display)
+        marker_displays, parse_error = _parse_marker_display_spec(
+            markers_raw, marker_low=marker_low, marker_high=marker_high
+        )
+        if parse_error:
+            return False, parse_error
+
         max_idx = _max_marker_index_for_delete()
-        if marker_idx < 0 or marker_idx > max_idx:
-            return False, f"Marker {marker_display} does not exist."
+        marker_indices: list[int] = []
+        for display_number in marker_displays:
+            marker_idx = _marker_display_to_internal_for_delete(display_number)
+            if marker_idx < 0 or marker_idx > max_idx:
+                return False, f"Marker {display_number} does not exist."
+            marker_indices.append(marker_idx)
 
         make_backup()
         changed = 0
         had_coordinates = 0
+        marker_index_set = set(marker_indices)
 
         if one_line_mode:
             for idx, marker in enumerate(one_line_markers):
-                if idx != marker_idx or idx in deleted_markers:
+                if idx not in marker_index_set or idx in deleted_markers:
                     continue
                 try:
                     f_num, x_val, y_val = int(marker[0]), marker[1], marker[2]
@@ -4633,27 +4696,267 @@ def play_video_with_controls(
                 return False, "Marker data is not available."
             for f_num in range(start_frame, end_frame + 1):
                 row = coordinates.get(f_num, [])
-                if marker_idx >= len(row):
-                    continue
                 deleted_here = deleted_positions.setdefault(f_num, set())
-                if marker_idx not in deleted_here:
-                    changed += 1
-                    point = row[marker_idx]
-                    if point is not None:
-                        try:
-                            if point[0] is not None and point[1] is not None:
-                                had_coordinates += 1
-                        except (TypeError, IndexError):
-                            pass
-                deleted_here.add(marker_idx)
+                for marker_idx in marker_indices:
+                    if marker_idx >= len(row):
+                        continue
+                    if marker_idx not in deleted_here:
+                        changed += 1
+                        point = row[marker_idx]
+                        if point is not None:
+                            try:
+                                if point[0] is not None and point[1] is not None:
+                                    had_coordinates += 1
+                            except (TypeError, IndexError):
+                                pass
+                    deleted_here.add(marker_idx)
 
+        marker_label = ",".join(str(m) for m in marker_displays)
         if changed == 0:
             return False, (
-                f"Marker {marker_display} not found in frames {start_frame + 1}-{end_frame + 1}."
+                f"Markers {marker_label} not found in frames "
+                f"{start_frame + 1}-{end_frame + 1}."
             )
         return True, (
-            f"Deleted marker {marker_display} in frames {start_frame + 1}-{end_frame + 1} "
+            f"Deleted markers {marker_label} in frames {start_frame + 1}-{end_frame + 1} "
             f"({had_coordinates} coordinate rows hidden)."
+        )
+
+    def _show_swap_marker_range_form() -> dict[str, str] | None:
+        """Pygame form for swapping paired marker/keypoint IDs over frame range."""
+        marker_range = _marker_display_range_for_delete()
+        if marker_range is None:
+            return None
+
+        current_w, current_h = pygame.display.get_surface().get_size()
+        font = pygame.font.SysFont("verdana", 14)
+        title_font = pygame.font.SysFont("verdana", 16, bold=True)
+        small_font = pygame.font.SysFont("verdana", 12)
+
+        marker_low, marker_high = marker_range
+        default_a = marker_low
+        default_b = min(marker_high, marker_low + 1)
+        if selected_marker_idx >= 0:
+            if template_mode != "free" and not one_line_mode:
+                default_a = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
+            else:
+                default_a = selected_marker_idx
+            default_a = max(marker_low, min(default_a, marker_high))
+            default_b = min(marker_high, default_a + 1) if default_a < marker_high else max(marker_low, default_a - 1)
+
+        inputs = {
+            "Start Frame": str(frame_count + 1),
+            "End Frame": str(frame_count + 1),
+            "Markers A": str(default_a),
+            "Markers B": str(default_b),
+        }
+        order = ["Start Frame", "End Frame", "Markers A", "Markers B"]
+        active_idx = 0
+
+        dialog_w = 580
+        dialog_h = 350
+        dx = max(10, (current_w - dialog_w) // 2)
+        dy = max(10, (current_h - dialog_h) // 2)
+        field_x = dx + 210
+        field_w = 220
+        field_h = 30
+        row_gap = 44
+        first_y = dy + 98
+        submit_rect = pygame.Rect(dx + 172, dy + dialog_h - 58, 95, 34)
+        cancel_rect = pygame.Rect(dx + 302, dy + dialog_h - 58, 95, 34)
+
+        def _draw() -> None:
+            overlay = pygame.Surface((current_w, current_h))
+            overlay.set_alpha(215)
+            overlay.fill((0, 0, 0))
+            screen.blit(overlay, (0, 0))
+
+            dialog_rect = pygame.Rect(dx, dy, dialog_w, dialog_h)
+            pygame.draw.rect(screen, (34, 38, 48), dialog_rect)
+            pygame.draw.rect(screen, (135, 145, 165), dialog_rect, 2)
+
+            title = title_font.render("Swap Marker Range", True, (255, 255, 255))
+            screen.blit(title, (dx + 20, dy + 18))
+            hint1 = small_font.render(
+                "Pairs by position: A[0]<->B[0], A[1]<->B[1]. Use 26,28 and 27,29.",
+                True,
+                (215, 220, 230),
+            )
+            hint2 = small_font.render(
+                "Ranges expand as vectors: A=1:10 with B=11:20 swaps 1<->11 ... 10<->20.",
+                True,
+                (215, 220, 230),
+            )
+            screen.blit(hint1, (dx + 20, dy + 48))
+            screen.blit(hint2, (dx + 20, dy + 66))
+            range_hint = small_font.render(
+                f"Marker range: {marker_low}..{marker_high} | Frame range: 1..{max(1, total_frames)}",
+                True,
+                (245, 210, 110),
+            )
+            screen.blit(range_hint, (dx + 20, dy + 82))
+
+            for i, key in enumerate(order):
+                y_row = first_y + i * row_gap
+                label = font.render(f"{key}:", True, (225, 225, 225))
+                screen.blit(label, (dx + 42, y_row + 6))
+                rect = pygame.Rect(field_x, y_row, field_w, field_h)
+                border = (255, 235, 120) if i == active_idx else (145, 145, 145)
+                pygame.draw.rect(screen, (18, 20, 26), rect)
+                pygame.draw.rect(screen, border, rect, 1)
+                val = font.render(
+                    inputs[key] + ("_" if i == active_idx else ""), True, (255, 255, 255)
+                )
+                screen.blit(val, (rect.x + 8, rect.y + 5))
+
+            pygame.draw.rect(screen, (55, 145, 70), submit_rect)
+            pygame.draw.rect(screen, (150, 55, 55), cancel_rect)
+            screen.blit(
+                font.render("Apply", True, (255, 255, 255)),
+                (submit_rect.x + 24, submit_rect.y + 7),
+            )
+            screen.blit(
+                font.render("Cancel", True, (255, 255, 255)),
+                (cancel_rect.x + 20, cancel_rect.y + 7),
+            )
+            pygame.display.flip()
+
+        while True:
+            _draw()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    nonlocal running
+                    running = False
+                    return None
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return None
+                    if event.key == pygame.K_TAB:
+                        active_idx = (active_idx + 1) % len(order)
+                    elif event.key == pygame.K_RETURN:
+                        return dict(inputs)
+                    elif event.key == pygame.K_BACKSPACE:
+                        key = order[active_idx]
+                        inputs[key] = inputs[key][:-1]
+                    elif pygame.K_0 <= event.key <= pygame.K_9:
+                        key = order[active_idx]
+                        inputs[key] += chr(event.key)
+                    elif event.key in _PYGAME_KP_DIGIT:
+                        key = order[active_idx]
+                        inputs[key] += _PYGAME_KP_DIGIT[event.key]
+                    elif order[active_idx] in {"Markers A", "Markers B"} and event.unicode in {
+                        ",",
+                        ":",
+                        " ",
+                    }:
+                        key = order[active_idx]
+                        inputs[key] += event.unicode
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mx, my = event.pos
+                    for i, _key in enumerate(order):
+                        y_row = first_y + i * row_gap
+                        rect = pygame.Rect(field_x, y_row, field_w, field_h)
+                        if rect.collidepoint(mx, my):
+                            active_idx = i
+                            break
+                    if submit_rect.collidepoint(mx, my):
+                        return dict(inputs)
+                    if cancel_rect.collidepoint(mx, my):
+                        return None
+            pygame.time.Clock().tick(30)
+
+    def _swap_marker_range_dialog() -> tuple[bool, str]:
+        """Swap paired marker/keypoint slots over an inclusive frame range."""
+        if labeling_mode:
+            return False, "Exit Labeling mode first; Swap Range edits keypoint markers."
+        if one_line_mode:
+            return False, "Swap Range is available in normal/template marker mode, not 1-line mode."
+        if total_frames <= 0:
+            return False, "No frames available."
+        if _max_marker_index_for_delete() < 1:
+            return False, "Need at least two marker slots to swap."
+        if not isinstance(coordinates, dict):
+            return False, "Marker data is not available."
+
+        values = _show_swap_marker_range_form()
+        if values is None:
+            return False, "Swap range cancelled."
+
+        try:
+            start_frame = int(values["Start Frame"]) - 1
+            end_frame = int(values["End Frame"]) - 1
+            markers_a_raw = str(values["Markers A"])
+            markers_b_raw = str(values["Markers B"])
+        except (KeyError, TypeError, ValueError):
+            return False, "Invalid swap range input."
+
+        if start_frame > end_frame:
+            start_frame, end_frame = end_frame, start_frame
+        start_frame = max(0, min(start_frame, total_frames - 1))
+        end_frame = max(0, min(end_frame, total_frames - 1))
+
+        marker_range = _marker_display_range_for_delete()
+        if marker_range is None:
+            return False, "No marker range available."
+        marker_low, marker_high = marker_range
+        markers_a, err_a = _parse_marker_display_spec(
+            markers_a_raw, marker_low=marker_low, marker_high=marker_high
+        )
+        if err_a:
+            return False, f"Markers A: {err_a}"
+        markers_b, err_b = _parse_marker_display_spec(
+            markers_b_raw, marker_low=marker_low, marker_high=marker_high
+        )
+        if err_b:
+            return False, f"Markers B: {err_b}"
+        if len(markers_a) != len(markers_b):
+            return False, (
+                f"Markers A and B must have same length ({len(markers_a)} != {len(markers_b)})."
+            )
+
+        pairs_display = list(zip(markers_a, markers_b, strict=True))
+        flat_displays = [m for pair in pairs_display for m in pair]
+        if len(set(flat_displays)) != len(flat_displays):
+            return False, "Each marker can appear only once across all swap pairs."
+        if any(a == b for a, b in pairs_display):
+            return False, "Cannot swap a marker with itself."
+
+        max_idx = _max_marker_index_for_delete()
+        pairs_idx: list[tuple[int, int]] = []
+        for a_display, b_display in pairs_display:
+            a_idx = _marker_display_to_internal_for_delete(a_display)
+            b_idx = _marker_display_to_internal_for_delete(b_display)
+            if a_idx < 0 or b_idx < 0 or a_idx > max_idx or b_idx > max_idx:
+                return False, f"Invalid swap pair: {a_display}<->{b_display}"
+            pairs_idx.append((a_idx, b_idx))
+
+        make_backup()
+        swap_count = 0
+        for f_num in range(start_frame, end_frame + 1):
+            row = coordinates.get(f_num, [])
+            deleted_here = deleted_positions.setdefault(f_num, set())
+            for a_idx, b_idx in pairs_idx:
+                if max(a_idx, b_idx) >= len(row):
+                    continue
+                row[a_idx], row[b_idx] = row[b_idx], row[a_idx]
+                a_deleted = a_idx in deleted_here
+                b_deleted = b_idx in deleted_here
+                if b_deleted:
+                    deleted_here.add(a_idx)
+                else:
+                    deleted_here.discard(a_idx)
+                if a_deleted:
+                    deleted_here.add(b_idx)
+                else:
+                    deleted_here.discard(b_idx)
+                swap_count += 1
+
+        if swap_count == 0:
+            return False, f"No matching marker pairs found in frames {start_frame + 1}-{end_frame + 1}."
+        pairs_label = ", ".join(f"{a}<->{b}" for a, b in pairs_display)
+        return True, (
+            f"Swapped {pairs_label} in frames {start_frame + 1}-{end_frame + 1} "
+            f"({swap_count} frame-pair swaps)."
         )
 
     def _deprecated_show_swap_dialog(current_frame, total_fr):
@@ -6143,7 +6446,8 @@ def play_video_with_controls(
             showing_save_message, \
             save_message_timer, \
             pitch_guide_points, \
-            pitch_guide_source
+            pitch_guide_source, \
+            labels
 
         # Make backup of the current before loading a new one
         make_backup()
@@ -6305,56 +6609,45 @@ def play_video_with_controls(
                             print(msg_sync)
                         else:
                             print(f"[getpixelvideo] FIFA TOML sync skipped: {msg_sync}")
-            if "_1_line" in input_file or len(df) == 1:
-                # Probably a 1 line file
+            is_one_line_csv = "_1_line" in input_file and "frame" in df.columns
+            if is_one_line_csv:
                 one_line_markers = []
                 deleted_markers = set()
 
                 for _, row in df.iterrows():
                     frame_num = int(row["frame"])
-                    for i in range(1, 1001):  # Increased to support up to 1000 markers
-                        x_col = f"p{i}_x"
-                        y_col = f"p{i}_y"
-                        if (
-                            x_col in df.columns
-                            and y_col in df.columns
-                            and pd.notna(row[x_col])
-                            and pd.notna(row[y_col])
-                        ):
-                            one_line_markers.append((frame_num, row[x_col], row[y_col]))
-
-                save_message_text = f"Loaded 1 line file: {os.path.basename(input_file)}"
-                # If it was in normal mode, switch to 1 line mode
-                one_line_mode = True
-            else:
-                # Normal coordinates file (``pN_x`` / ``pN_y``): slot-aligned when a
-                # ``frame`` column exists so FIFA ``p0``… matches YOLO kp 0…
-                coordinates = {i: [] for i in range(total_frames)}
-                deleted_positions = {i: set() for i in range(total_frames)}
-                kp_cols = _vaila_pitch_p_indices_from_columns(df.columns)
-                if "frame" in df.columns and kp_cols:
-                    coordinates, _ = load_vaila_p_xy_markers_df(df, total_frames=total_frames)
-                else:
-                    for _, row in df.iterrows():
-                        frame_num = int(row["frame"])
-                        for i in range(1, 1001):  # Increased to support up to 1000 markers
-                            x_col = f"p{i}_x"
-                            y_col = f"p{i}_y"
+                    for i in range(0, 1001):  # Supports p0 and p1 legacy one-line files.
+                        candidate_cols = ((f"p{i}_x", f"p{i}_y"), (f"p{i}x", f"p{i}y"))
+                        for x_col, y_col in candidate_cols:
                             if (
                                 x_col in df.columns
                                 and y_col in df.columns
                                 and pd.notna(row[x_col])
                                 and pd.notna(row[y_col])
                             ):
-                                coordinates[frame_num].append((row[x_col], row[y_col]))
+                                one_line_markers.append((frame_num, row[x_col], row[y_col]))
+                                break
 
-                # Fix: Re-apply active swap rules after loading new data
+                save_message_text = f"Loaded 1 line file: {os.path.basename(input_file)}"
+                one_line_mode = True
+            else:
+                coordinates, loaded_labels, load_msg = load_marker_csv_df(
+                    df,
+                    total_frames=total_frames,
+                    input_file=input_file,
+                    video_width=original_width,
+                    video_height=original_height,
+                )
+                labels = loaded_labels
+                deleted_positions = {i: set() for i in range(total_frames)}
+
                 if active_swap_rules:
                     print(f"Re-applying {len(active_swap_rules)} swap rules to loaded data...")
                     coordinates = apply_swap_config(coordinates, active_swap_rules)
 
-                save_message_text = f"Loaded file: {os.path.basename(input_file)}{_toml_sync_note}"
-                # If it was in 1 line mode, switch to normal mode
+                save_message_text = (
+                    f"Loaded {load_msg}: {os.path.basename(input_file)}{_toml_sync_note}"
+                )
                 one_line_mode = False
 
             # Always initialize on the first marker (index 0)
@@ -6821,6 +7114,7 @@ def play_video_with_controls(
             dataset_button_rect,  # Load dataset folder (multi-video)
             goto_marker_button_rect,  # Jump to marker index
             delete_range_button_rect,  # Delete one marker/keypoint across a frame range
+            swap_range_button_rect,  # Swap marker/keypoint pairs across a frame range
             marker_timeline_rect,
             slider_x,
             slider_y,
@@ -7914,6 +8208,11 @@ def play_video_with_controls(
                         save_message_text = msg_del
                         showing_save_message = True
                         save_message_timer = 90 if ok_del else 60
+                    elif swap_range_button_rect.collidepoint(x, rel_y):
+                        ok_swap, msg_swap = _swap_marker_range_dialog()
+                        save_message_text = msg_swap
+                        showing_save_message = True
+                        save_message_timer = 120 if ok_swap else 70
                     elif marker_timeline_rect.collidepoint(x, rel_y):
                         dragging_marker_timeline = True
                         paused = True
@@ -8551,6 +8850,182 @@ def load_vaila_p_xy_markers_df(
     return coordinates, labels
 
 
+def _frame_column_from_df(df: Any) -> str | None:
+    """Return likely frame-index column for marker CSVs."""
+    exact_candidates = ("frame", "frame_index", "Frame", "FRAME", "frame_number", "frame_num")
+    for col in exact_candidates:
+        if col in df.columns:
+            return col
+    for col in df.columns:
+        if isinstance(col, str) and "frame" in col.lower():
+            return col
+    if len(df.columns) > 0:
+        first = df.columns[0]
+        series = pd.to_numeric(df[first], errors="coerce")
+        if series.notna().all():
+            diffs = series.diff().dropna()
+            if series.iloc[0] in (0, 1) and (diffs >= 0).all():
+                return str(first)
+    return None
+
+
+def _ordered_xy_column_pairs(df: Any) -> list[tuple[str, str, str]]:
+    """Return ordered (label, x_col, y_col) pairs for named/pN marker CSVs.
+
+    Supports both ``name_x/name_y`` (MediaPipe/vailá modern) and ``namex/namey``
+    (legacy p1x/p1y style). ``*_z``/``*z`` columns are ignored.
+    """
+    columns = [str(c) for c in df.columns]
+    column_set = set(columns)
+    pairs: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+
+    for col in columns:
+        low = col.lower()
+        if low in {"frame", "frame_index", "frame_number", "frame_num"}:
+            continue
+        label = ""
+        y_col = ""
+        if low.endswith("_x"):
+            label = col[:-2]
+            y_col = f"{label}_y"
+        elif low.endswith("x") and len(col) > 1 and not low.endswith(("max", "min")):
+            label = col[:-1]
+            y_col = f"{label}y"
+        if not label or label in seen or y_col not in column_set:
+            continue
+        pairs.append((label, col, y_col))
+        seen.add(label)
+    return pairs
+
+
+def _detect_xy_scale(
+    df: Any,
+    pairs: list[tuple[str, str, str]],
+    *,
+    input_file: str = "",
+    video_width: int | float | None = None,
+    video_height: int | float | None = None,
+) -> tuple[float, float, str]:
+    """Infer whether x/y coordinates are normalized and return scale factors."""
+    filename_lower = input_file.lower()
+    if "_pixel" in filename_lower or "pixel" in filename_lower:
+        return 1.0, 1.0, "pixel"
+
+    sample_cols = [col for _, x_col, y_col in pairs[: min(8, len(pairs))] for col in (x_col, y_col)]
+    is_norm = False
+    if sample_cols:
+        with suppress(Exception):
+            sample_vals = pd.concat(
+                [pd.to_numeric(df[c], errors="coerce").dropna().head(200) for c in sample_cols]
+            )
+            if not sample_vals.empty:
+                max_val = float(sample_vals.max())
+                min_val = float(sample_vals.min())
+                is_norm = max_val <= 1.2 and min_val >= -0.2
+                print(
+                    f"Coordinate range: {min_val:.3f} to {max_val:.3f} - "
+                    f"{'Normalized' if is_norm else 'Pixel'}"
+                )
+
+    if "_norm" in filename_lower or "normalized" in filename_lower:
+        is_norm = True
+    if is_norm and video_width and video_height:
+        return float(video_width), float(video_height), "normalized"
+    if is_norm:
+        return 1.0, 1.0, "normalized (video size unavailable; kept 0..1)"
+    return 1.0, 1.0, "pixel"
+
+
+def load_named_xy_markers_df(
+    df: Any,
+    *,
+    total_frames: int,
+    input_file: str = "",
+    video_width: int | float | None = None,
+    video_height: int | float | None = None,
+) -> tuple[dict[int, list[Any]], list[str], str]:
+    """Load marker CSVs with ordered named x/y columns.
+
+    Intended for ``markerless_2d_analysis.py`` outputs such as
+    ``frame_index,nose_x,nose_y,nose_z,...`` and similar CSVs with meaningful
+    landmark names. Column order defines marker order.
+    """
+    frame_col = _frame_column_from_df(df)
+    if frame_col is None:
+        raise ValueError(
+            "Could not identify frame column. Expected 'frame'/'frame_index' or a first numeric frame column."
+        )
+    pairs = _ordered_xy_column_pairs(df)
+    if not pairs:
+        raise ValueError(
+            "Could not identify x/y landmark columns. Expected pairs like 'nose_x,nose_y' or 'p1x,p1y'."
+        )
+
+    sx, sy, coord_kind = _detect_xy_scale(
+        df,
+        pairs,
+        input_file=input_file,
+        video_width=video_width,
+        video_height=video_height,
+    )
+    coordinates: dict[int, list[Any]] = {i: [] for i in range(total_frames)}
+    labels = [label for label, _, _ in pairs]
+    loaded_rows = 0
+
+    for row_idx, row in df.iterrows():
+        try:
+            frame_raw = row.get(frame_col, row_idx)
+            frame_num = int(frame_raw) if pd.notna(frame_raw) else int(row_idx)
+        except (TypeError, ValueError):
+            print(f"Warning: invalid frame value at row {row_idx}; row skipped")
+            continue
+        if frame_num < 0 or frame_num >= total_frames:
+            continue
+
+        pts: list[Any] = []
+        for _, x_col, y_col in pairs:
+            x_val = row.get(x_col)
+            y_val = row.get(y_col)
+            try:
+                if pd.notna(x_val) and pd.notna(y_val):
+                    pts.append((float(x_val) * sx, float(y_val) * sy))
+                else:
+                    pts.append((None, None))
+            except (TypeError, ValueError):
+                pts.append((None, None))
+        coordinates[frame_num] = pts
+        loaded_rows += 1
+
+    msg = f"named x/y CSV ({len(labels)} landmarks, {coord_kind}, {loaded_rows} rows)"
+    return coordinates, labels, msg
+
+
+def load_marker_csv_df(
+    df: Any,
+    *,
+    total_frames: int,
+    input_file: str = "",
+    video_width: int | float | None = None,
+    video_height: int | float | None = None,
+) -> tuple[dict[int, list[Any]], list[str], str]:
+    """Load supported marker CSV layouts into getpixelvideo coordinate rows."""
+    kp_cols = _vaila_pitch_p_indices_from_columns(df.columns)
+    if "frame" in df.columns and kp_cols:
+        coordinates, labels = load_vaila_p_xy_markers_df(df, total_frames=total_frames)
+        msg = f"vailá pN_x/pN_y CSV ({len(labels)} keypoints)"
+        return coordinates, labels, msg
+
+    coordinates, labels, msg = load_named_xy_markers_df(
+        df,
+        total_frames=total_frames,
+        input_file=input_file,
+        video_width=video_width,
+        video_height=video_height,
+    )
+    return coordinates, labels, msg
+
+
 def sorted_frames_with_visible_markers(
     *,
     coordinates: dict[int, list[Any]] | None,
@@ -8740,7 +9215,23 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
         print(f"Coordinates successfully loaded (vailá format): {len(kp_ids)} keypoints per row")
         return coordinates, labels
 
-    # Case B: MediaPipe format (frame_index + landmark_x/y/z) - from markerless_2d_analysis.py
+    # Case B: named/generic x-y marker CSVs (MediaPipe/vailá markerless outputs and similar).
+    try:
+        coordinates, labels, load_msg = load_marker_csv_df(
+            df,
+            total_frames=total_frames,
+            input_file=input_file,
+            video_width=video_width,
+            video_height=video_height,
+        )
+        print(f"Detected format: {load_msg}")
+        print(f"Coordinates successfully loaded: {len(labels)} landmarks")
+        return coordinates, labels
+    except ValueError as e:
+        print(f"Could not auto-load as marker CSV: {e}")
+        print("Trying legacy fallback parsers...")
+
+    # Case C: MediaPipe format (frame_index + landmark_x/y/z) - legacy fallback
     if "frame_index" in df.columns and any(col.endswith("_x") for col in df.columns):
         print("Detected format: MediaPipe (landmark_x, landmark_y, landmark_z)")
 
@@ -8752,7 +9243,6 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
                 if f"{base_name}_y" in df.columns:
                     base_names.append(base_name)
 
-        base_names = sorted(base_names)
         print(f"Found {len(base_names)} landmarks: {base_names[:5]}...")  # Show first 5
 
         # Detect if coordinates are normalized (0-1) or pixel values
