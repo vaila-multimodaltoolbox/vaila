@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - transcribe_pdfs</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background-color: #f5f5f5; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .note { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f0f3f5; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - transcribe_pdfs</h1>
+        <div class="module-info">
+            <h3>Module Information</h3>
+            <p><strong>Category:</strong> Tools / Brainstorm</p>
+            <p><strong>File:</strong> <code>vaila/transcribe_pdfs.py</code></p>
+            <p><strong>Version:</strong> 0.3.47</p>
+            <p><strong>Updated:</strong> 29/05/2026</p>
+            <p><strong>GUI:</strong> Frame B -> Brainstorm -> Transcribe PDFs</p>
+            <p><strong>CLI:</strong> Yes</p>
+        </div>
+
+        <h2>Description</h2>
+        <p><code>transcribe_pdfs.py</code> converts typed, scanned, or handwritten PDF exams into text files. It writes one <code>.txt</code> and one <code>.report.json</code> per PDF, plus a <code>batch_report.csv</code> summary.</p>
+
+        <h2>GUI Workflow</h2>
+        <ol>
+            <li>Open <code>vaila.py</code>.</li>
+            <li>Click <strong>Brainstorm</strong> in Frame B.</li>
+            <li>Click <strong>Transcribe PDFs</strong>.</li>
+            <li>Select a PDF directory or a single PDF.</li>
+            <li>Confirm output options and click <strong>Transcribe PDFs</strong>.</li>
+        </ol>
+
+        <h2>Default PAE Folders</h2>
+        <pre>~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais
+~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/transcritas_originais</pre>
+
+        <h2>Modes</h2>
+        <table>
+            <tr><th>Mode</th><th>Use</th></tr>
+            <tr><td><code>auto</code></td><td>Try native text first; if not useful, use vision transcription.</td></tr>
+            <tr><td><code>vision</code></td><td>Render pages and send images to Gemini CLI. Best for handwritten exams.</td></tr>
+            <tr><td><code>native</code></td><td>Use embedded PDF text only. Does not require Gemini.</td></tr>
+            <tr><td><code>ocr</code></td><td>Reserved for future local OCR backend.</td></tr>
+        </table>
+
+        <h2>Requirements</h2>
+        <ul>
+            <li><code>pdftotext</code>, <code>pdftoppm</code>, and <code>pdfinfo</code> or <code>qpdf</code></li>
+            <li><code>gemini</code> CLI for <code>auto</code> / <code>vision</code> handwritten transcription</li>
+            <li>Python packages used by vailá: Pillow, tkinter, and optional tqdm</li>
+        </ul>
+
+        <h2>CLI Examples</h2>
+        <pre>uv run python -m vaila.transcribe_pdfs --gui</pre>
+        <pre>uv run python -m vaila.transcribe_pdfs \
+  --input-dir ~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais \
+  --output-dir ~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/transcritas_originais \
+  --mode auto</pre>
+
+        <div class="note">
+            <strong>Review required:</strong> check pages listed in <code>low_confidence_pages</code> and markers such as <code>[ilegível]</code>, <code>[revisar]</code>, and <code>[palavra incerta: ...]</code> before using the transcription for grading or records.
+        </div>
+
+        <div class="footer">
+            <p>Updated: 29/05/2026</p>
+            <p>Part of vailá - Multimodal Toolbox</p>
+            <p><a href="index.html">Back to help index</a></p>
+        </div>
+    </div>
+</body>
+</html>
