@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-05-28
+**Last updated:** 2026-05-29
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -123,7 +123,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 29.April.2026 v0.3.40 (Python 3.12.13)
+vailá - 29.May.2026 v0.3.47 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -865,6 +865,7 @@ The help documentation includes detailed information about:
 
 - **[AGENTS.md](AGENTS.md)** - `uv run` recipes, hybrid CPU vs CUDA `pyproject` templates, SAM 3 / FIFA pointers
 - **[Project Documentation](docs/index.md)** - Overview and module documentation
+- **[PDF Transcription](docs/pdf_transcription.md)** - Brainstorm PDF exam transcription workflow
 - **[Help Guide](docs/help.md)** - User guide and installation instructions
 - **[GUI Button Documentation](docs/vaila_buttons/README.md)** - Complete documentation for all GUI buttons
 
