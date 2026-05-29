@@ -25,6 +25,9 @@ Optional stacks (CUDA/GPU templates, extras) are documented in the repository RE
 ### GUI button reference (Markdown)
 Long-form descriptions of individual GUI buttons live under `docs/vaila_buttons/`: [Button documentation index](vaila_buttons/README.md).
 
+### PDF transcription from Brainstorm
+Brainstorm includes **Transcribe PDFs** for typed, scanned, and handwritten exam PDFs: [PDF transcription guide](pdf_transcription.md).
+
 ### Quick run (after install)
 ```bash
 uv run vaila.py
@@ -67,6 +70,9 @@ Detalhes de cada módulo: [índice em `vaila/help/index.html`](../vaila/help/ind
 
 ### Documentação dos botões da GUI
 Textos por botão: [índice em `docs/vaila_buttons/`](vaila_buttons/README.md).
+
+### Transcrição de PDFs no Brainstorm
+O Brainstorm inclui **Transcribe PDFs** para PDFs de provas digitadas, escaneadas ou manuscritas: [guia de transcrição de PDFs](pdf_transcription.md).
 
 ### Executar após instalação
 ```bash

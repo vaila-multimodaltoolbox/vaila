@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Create: 18 February 2025
-Update: 18 February 2026
-Version: 0.1.4
+Update: 29 May 2026
+Version: 0.3.47
 
 Description:
     Record voice audio, transcribe it to text, and use LLM to generate:
@@ -111,7 +111,7 @@ class BrainstormApp:
 
     def show_workflow_guide(self):
         """Show a comprehensive workflow guide for users."""
-        guide_text = """BRAINSTORM WORKFLOW GUIDE - v0.3.1
+        guide_text = """BRAINSTORM WORKFLOW GUIDE - v0.3.47
 
 COMPLETE CREATIVE WORKFLOW:
 
@@ -128,6 +128,7 @@ COMPLETE CREATIVE WORKFLOW:
 3. TRANSCRIPTION
    • Transcribe: Convert single audio to text
    • Batch Transcribe: Process multiple audio files
+   • Transcribe PDFs: Convert typed/scanned PDF exams to text reports
    • Load Transcription: Import existing text files
 
 4. MUSIC GENERATION
@@ -166,7 +167,8 @@ REQUIREMENTS:
    • FFmpeg (MP3 conversion)
    • FluidSynth/TiMidity (MIDI→MP3)
    • MIDIUtil (music generation)
-   • Internet (transcription)
+   • Internet (audio transcription)
+   • Poppler tools + Gemini CLI (PDF vision transcription)
 
 SHORTCUTS:
    • Record → Transcribe → Music → Export
@@ -359,6 +361,14 @@ SHORTCUTS:
             text="Batch Transcribe",
             command=self.batch_transcribe,
             bg="#9C27B0",
+            fg="white",
+            font=("Arial", 10, "bold"),
+        ).pack(side="left", padx=5)
+        tk.Button(
+            audio_buttons,
+            text="Transcribe PDFs",
+            command=self.transcribe_pdfs,
+            bg="#3F51B5",
             fg="white",
             font=("Arial", 10, "bold"),
         ).pack(side="left", padx=5)
@@ -811,6 +821,8 @@ SHORTCUTS:
     def _try_pyttsx3_tts(self, text, audio_file):
         """Try pyttsx3 for TTS conversion."""
         try:
+            import pyttsx3
+
             engine = pyttsx3.init()
 
             rate = engine.getProperty("rate")
@@ -830,6 +842,8 @@ SHORTCUTS:
     def _try_gtts_tts(self, text, audio_file):
         """Try Google TTS for conversion."""
         try:
+            from gtts import gTTS
+
             portuguese_words = [
                 "o",
                 "a",
@@ -934,6 +948,25 @@ Set objVoice = Nothing
         except Exception:
             return False
 
+    def transcribe_pdfs(self):
+        """Open the PDF transcription GUI inside Brainstorm."""
+        print("[DEBUG] Button clicked: Transcribe PDFs")
+        try:
+            from vaila import transcribe_pdfs
+        except ImportError:
+            import transcribe_pdfs
+
+        try:
+            transcribe_pdfs.run_gui(parent=self.root)
+            self.status_label.config(text="PDF transcription window opened", fg="blue")
+        except Exception as e:
+            self.status_label.config(text=f"PDF transcription error: {str(e)}", fg="red")
+            self.show_message(
+                "error",
+                "PDF Transcription Error",
+                f"Failed to open PDF transcription tool:\n\n{str(e)}",
+            )
+
     def transcribe_audio(self):
         """Transcribe the recorded audio and save to txt file."""
         print("[DEBUG] Button clicked: Transcribe Audio")
@@ -1016,7 +1049,7 @@ Set objVoice = Nothing
                         print("[INFO] Install librosa or pydub for better audio format support:")
                         print("[INFO] pip install librosa")
                         print("[INFO] pip install pydub")
-                        raise audio_error
+                        raise audio_error from None
 
             self.status_label.config(text="Transcribing...", fg="orange")
             self.root.update()
