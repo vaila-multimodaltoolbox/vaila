@@ -35,6 +35,9 @@ sam3_weights/
 
 # Keep the model directories in GitHub, but track only *.txt instructions inside them.
 # (Weights and other large artifacts must remain local; see instruction_to_download_models.txt)
+vaila/models/crop_face/*
+!vaila/models/crop_face/*.txt
+
 vaila/models/sam3/*
 !vaila/models/sam3/*.txt
 

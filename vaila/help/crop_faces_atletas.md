@@ -23,8 +23,9 @@ The module follows the same directory-selection pattern used by other vailá too
 
 1. Select the input directory containing athlete photos.
 2. Select the output directory for the cropped face images.
-3. If `face_detector.task` is not found automatically, select the MediaPipe model file.
-4. Wait for the completion dialog with processed and skipped image counts.
+3. If the default face detector model is absent, wait for its automatic download.
+4. If automatic download fails, select a compatible MediaPipe `.task` or `.tflite` model file.
+5. Wait for the completion dialog with processed and skipped image counts.
 
 ## Inputs
 
@@ -54,7 +55,13 @@ Output properties:
 
 ## Face Detector Model
 
-The module expects the MediaPipe model `face_detector.task`. It searches these locations first:
+The module uses the official MediaPipe BlazeFace short-range detector. On first use, it downloads the versioned model into the local Git-ignored cache:
+
+```text
+vaila/models/crop_face/face_detector.task
+```
+
+Legacy locations remain auto-detected for compatibility:
 
 ```text
 vaila/crop_face/models/face_detector.task
@@ -62,7 +69,13 @@ vaila/models/face_detector.task
 models/face_detector.task
 ```
 
-If none exists, the GUI prompts for the model file. In CLI mode, pass it explicitly with `--model`.
+To provision the model before opening the GUI:
+
+```bash
+uv run python vaila/crop_faces_atletas.py --download-model
+```
+
+The downloaded bytes come from Google's official `.tflite` model and are stored locally as `face_detector.task`. If automatic download fails, the GUI prompts for a compatible `.task` or `.tflite` file. In CLI mode, you can pass a custom model explicitly with `--model`.
 
 ## CLI Usage
 
@@ -126,7 +139,7 @@ Lower margins zoom closer to the face. A negative vertical offset moves the crop
 
 | Problem | Cause | Action |
 |---|---|---|
-| `Modelo não encontrado` | `face_detector.task` is absent | Select the model in the GUI or pass `--model` in CLI |
+| `Modelo não encontrado` | Automatic model download failed | Check network access, run `--download-model`, select a model in the GUI, or pass `--model` in CLI |
 | No images processed | Unsupported extension or empty folder | Use `.jpg`, `.jpeg`, `.png`, or `.webp` files |
 | `Nenhuma face detectada` | Face too small, blurred, occluded, or side-facing | Use clearer frontal photos or adjust input images |
 | Name label too large/small | File name length or output size | Rename files or adjust font scaling in `adicionar_nome()` |
@@ -141,4 +154,4 @@ Lower margins zoom closer to the face. A negative vertical offset moves the crop
 
 ## Version History
 
-- **0.3.46 (01 June 2026):** Added vailá GUI directory-selection workflow, CLI arguments, model selection fallback, complete script header, and help documentation. Integrated into **Tools -> Video and Image -> Crop Face**.
+- **0.3.46 (01 June 2026):** Added automatic download and SHA-256 verification for the official MediaPipe BlazeFace short-range model, plus `--download-model` provisioning. Added vailá GUI directory-selection workflow, CLI arguments, manual model-selection fallback, complete script header, and help documentation. Integrated into **Tools -> Video and Image -> Crop Face**.

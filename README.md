@@ -79,6 +79,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - [Description](#description)
 - [_vailá_ Structure and Interface](#vailá-structure-and-interface)
 - [Installation and Setup](#installation-and-setup)
+  - [Optional: Crop Face model](#optional-crop-face-model)
   - [Optional: SAM 3 (video segmentation)](#optional-sam-3-video-segmentation)
 - [Running the Application](#running-the-application)
 - [Uninstallation Instructions](#uninstallation-instructions)
@@ -298,6 +299,22 @@ This ensures that:
 - ✅ Automatic fallback to CPU-only if GPU installation fails
 
 For more information about uv, visit: [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+
+### Optional: Crop Face model
+
+The **Crop Face** button uses dependencies already included in the standard vailá install. On first use, it downloads the official MediaPipe BlazeFace short-range detector into the local Git-ignored model cache:
+
+```text
+vaila/models/crop_face/face_detector.task
+```
+
+To provision the model before opening the GUI, run:
+
+```bash
+uv run python vaila/crop_faces_atletas.py --download-model
+```
+
+The downloaded bytes come from Google's versioned [MediaPipe BlazeFace short-range model](https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite). If automatic download fails, the GUI still allows manual selection of a compatible `.task` or `.tflite` file.
 
 ### Optional: SAM 3 (video segmentation)
 

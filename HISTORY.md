@@ -311,10 +311,14 @@ uv run yolo pose train \
 - Changed the workflow from fixed hard-coded folders to vailá-style dialogs:
   1. select input directory with athlete photos;
   2. select output directory for cropped JPEGs;
-  3. select `face_detector.task` only when auto-detection fails.
+  3. download the official MediaPipe BlazeFace short-range model automatically when absent;
+  4. select a compatible `.task` or `.tflite` file only if network download fails.
+- Store the verified local model in Git-ignored
+  `vaila/models/crop_face/face_detector.task` and validate its SHA-256 before use.
 - Added CLI support:
 
   ```bash
+  uv run python vaila/crop_faces_atletas.py --download-model
   uv run python vaila/crop_faces_atletas.py --input /path/photos --output /path/out
   ```
 
@@ -342,8 +346,10 @@ uv run yolo pose train \
 ### Verification
 
 ```bash
-python3 -m py_compile vaila/crop_faces_atletas.py vaila.py
-uv run ruff check vaila/crop_faces_atletas.py vaila.py
-uv run ruff format vaila/crop_faces_atletas.py
+python3 -m py_compile vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py vaila.py
+uv run ruff check vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py vaila.py
+uv run ruff format --check vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py
+uv run pytest tests/test_crop_faces_atletas.py -v
 uv run python vaila/crop_faces_atletas.py --help
+uv run python vaila/crop_faces_atletas.py --download-model
 ```

@@ -170,8 +170,11 @@ agents touching GUI/video-image tools.
 
 - `vaila/crop_faces_atletas.py` is now a full vailá module for athlete face
   photo cropping. It keeps **Abel Gonçalves Chinaglia** as creator.
-- GUI workflow: input directory first, output directory second, then optional
-  MediaPipe `face_detector.task` selection if no default model is found.
+- GUI workflow: input directory first, output directory second, then automatic
+  download of the official MediaPipe BlazeFace short-range model into Git-ignored
+  `vaila/models/crop_face/face_detector.task`. Manual `.task` / `.tflite`
+  selection remains fallback when network download fails. Provision explicitly
+  with `uv run python vaila/crop_faces_atletas.py --download-model`.
 - Main GUI integration: **Frame C -> Video and Image -> C_B_r1_c2 - Crop Face**.
 - Documentation added:
   - `vaila/help/crop_faces_atletas.md`
@@ -185,7 +188,10 @@ agents touching GUI/video-image tools.
 Validation run:
 
 ```bash
-python3 -m py_compile vaila/crop_faces_atletas.py vaila.py
-uv run ruff check vaila/crop_faces_atletas.py vaila.py
+python3 -m py_compile vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py vaila.py
+uv run ruff check vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py vaila.py
+uv run ruff format --check vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py
+uv run pytest tests/test_crop_faces_atletas.py -v
 uv run python vaila/crop_faces_atletas.py --help
+uv run python vaila/crop_faces_atletas.py --download-model
 ```

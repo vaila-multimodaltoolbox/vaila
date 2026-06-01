@@ -15,6 +15,7 @@ Batch crop athlete face photos into square 5 x 5 cm images at 300 DPI. The
 module uses MediaPipe Face Detector to locate the largest face in each image,
 applies a configurable square crop around the face, resizes the result to
 591 x 591 pixels, and optionally overlays the athlete name from the file name.
+The official MediaPipe BlazeFace model is downloaded and verified on first use.
 
 The GUI workflow follows the vailá directory-selection pattern:
 1. Select the input directory with athlete photos.
@@ -32,6 +33,7 @@ Standalone GUI:
 
 CLI:
     uv run python vaila/crop_faces_atletas.py --input /path/photos --output /path/out
+    uv run python vaila/crop_faces_atletas.py --download-model
 
 License:
 --------
@@ -42,9 +44,12 @@ This program is licensed under the GNU Affero General Public License v3.0.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import shutil
 import sys
 from pathlib import Path
 from tkinter import Tk, filedialog, messagebox
+from urllib.request import urlopen
 
 import cv2
 import mediapipe as mp
@@ -54,7 +59,12 @@ from PIL import Image, ImageDraw, ImageFont
 EXTENSOES_VALIDAS = {".jpg", ".jpeg", ".png", ".webp"}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-MODELO_PATH = SCRIPT_DIR / "crop_face" / "models" / "face_detector.task"
+MODELO_PATH = SCRIPT_DIR / "models" / "crop_face" / "face_detector.task"
+MODELO_URL = (
+    "https://storage.googleapis.com/mediapipe-models/face_detector/"
+    "blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
+)
+MODELO_SHA256 = "b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f"
 
 # 5 cm em 300 DPI aproximadamente 591 pixels.
 TAMANHO_SAIDA_PX = 591
@@ -223,6 +233,7 @@ def localizar_modelo_padrao():
     """Return the first available MediaPipe face detector model path."""
     candidatos = [
         MODELO_PATH,
+        SCRIPT_DIR / "crop_face" / "models" / "face_detector.task",
         SCRIPT_DIR / "models" / "face_detector.task",
         SCRIPT_DIR.parent / "models" / "face_detector.task",
     ]
@@ -234,12 +245,56 @@ def localizar_modelo_padrao():
     return MODELO_PATH
 
 
+def baixar_modelo_padrao(force=False):
+    """Download the official MediaPipe BlazeFace model into the local model cache."""
+    if MODELO_PATH.exists() and not force:
+        return MODELO_PATH
+
+    MODELO_PATH.parent.mkdir(parents=True, exist_ok=True)
+    caminho_temporario = MODELO_PATH.with_suffix(".task.download")
+
+    print(f"Baixando modelo MediaPipe Face Detector: {MODELO_URL}")
+    try:
+        with (
+            urlopen(MODELO_URL, timeout=60) as resposta,
+            caminho_temporario.open("wb") as arquivo_saida,
+        ):
+            shutil.copyfileobj(resposta, arquivo_saida)
+
+        sha256 = hashlib.sha256(caminho_temporario.read_bytes()).hexdigest()
+        if sha256 != MODELO_SHA256:
+            raise RuntimeError(
+                "O arquivo baixado não corresponde ao modelo oficial esperado "
+                f"(SHA-256 recebido: {sha256})."
+            )
+
+        caminho_temporario.replace(MODELO_PATH)
+    except Exception as exc:
+        caminho_temporario.unlink(missing_ok=True)
+        raise RuntimeError(
+            "Não foi possível baixar automaticamente o modelo MediaPipe Face Detector. "
+            "Verifique a conexão de rede ou selecione o arquivo manualmente."
+        ) from exc
+
+    print(f"Modelo salvo em: {MODELO_PATH}")
+    return MODELO_PATH
+
+
+def garantir_modelo_padrao():
+    """Return an installed default model, downloading it on first use when needed."""
+    modelo_path = localizar_modelo_padrao()
+    if modelo_path.exists():
+        return modelo_path
+
+    return baixar_modelo_padrao()
+
+
 def mensagem_modelo_nao_encontrado(modelo_path):
     """Build the user-facing missing-model message."""
     return (
         f"Modelo não encontrado: {modelo_path}\n\n"
-        "Baixe o modelo MediaPipe face_detector.task e selecione o arquivo quando "
-        "solicitado, ou salve em vaila/crop_face/models/face_detector.task."
+        "Execute `uv run python vaila/crop_faces_atletas.py --download-model` "
+        "para baixar o modelo oficial ou selecione um arquivo compatível quando solicitado."
     )
 
 
@@ -253,11 +308,11 @@ def processar_pasta(
     """Process all supported images from an input directory into cropped face JPEGs."""
     pasta_entrada = Path(pasta_entrada)
     pasta_saida = Path(pasta_saida)
-    modelo_path = Path(modelo_path) if modelo_path else localizar_modelo_padrao()
 
     if not pasta_entrada.exists():
         raise FileNotFoundError(f"Pasta de entrada não encontrada: {pasta_entrada}")
 
+    modelo_path = Path(modelo_path) if modelo_path else garantir_modelo_padrao()
     if not modelo_path.exists():
         raise FileNotFoundError(mensagem_modelo_nao_encontrado(modelo_path))
 
@@ -335,20 +390,30 @@ def processar_pasta(
 
 
 def selecionar_modelo(root):
-    """Ask the user to select face_detector.task when the default model is absent."""
+    """Download the default model or ask the user to select a compatible model file."""
     modelo_path = localizar_modelo_padrao()
     if modelo_path.exists():
         return modelo_path
 
+    try:
+        return baixar_modelo_padrao()
+    except RuntimeError as exc:
+        mensagem_erro = f"{exc}\n\n{mensagem_modelo_nao_encontrado(modelo_path)}"
+
     messagebox.showwarning(
         "Crop Face - modelo não encontrado",
-        mensagem_modelo_nao_encontrado(modelo_path),
+        mensagem_erro,
         parent=root,
     )
     selecionado = filedialog.askopenfilename(
         parent=root,
-        title="Select MediaPipe face_detector.task",
-        filetypes=[("MediaPipe task model", "*.task"), ("All files", "*.*")],
+        title="Select MediaPipe face detector model",
+        filetypes=[
+            ("MediaPipe model", "*.task *.tflite"),
+            ("MediaPipe task model", "*.task"),
+            ("TensorFlow Lite model", "*.tflite"),
+            ("All files", "*.*"),
+        ],
     )
 
     return Path(selecionado) if selecionado else None
@@ -419,7 +484,12 @@ def parse_args(argv=None):
         "-m",
         "--model",
         default=None,
-        help="Path to MediaPipe face_detector.task. Defaults to vaila/crop_face/models/face_detector.task.",
+        help="Path to a MediaPipe face detector model. Downloads the default model on first use.",
+    )
+    parser.add_argument(
+        "--download-model",
+        action="store_true",
+        help="Download the official MediaPipe Face Detector model and exit.",
     )
     parser.add_argument(
         "--no-name",
@@ -438,6 +508,10 @@ def parse_args(argv=None):
 def main(argv=None):
     """CLI entry point; launches GUI when input/output are not provided."""
     args = parse_args(argv)
+
+    if args.download_model:
+        print(f"Modelo disponível em: {baixar_modelo_padrao()}")
+        return 0
 
     if not args.input or not args.output:
         run_crop_faces_atletas_gui()

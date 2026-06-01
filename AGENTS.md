@@ -252,11 +252,13 @@ and Image -> C_B_r1_c2 - Crop Face**. Help files live at
 `vaila/help/crop_faces_atletas.md` and `.html`; `README.md` and
 `vaila/help/index.*` list the new button.
 
-**Model path:** the MediaPipe `face_detector.task` is auto-detected at
-`vaila/crop_face/models/face_detector.task`, `vaila/models/face_detector.task`,
-or repo-root `models/face_detector.task`. If missing, the GUI asks the user to
-select it. Keep downloaded `.task` model files out of git unless they are
-explicitly approved and below repository size limits.
+**Model path:** the MediaPipe detector is downloaded on first use into the
+Git-ignored `vaila/models/crop_face/face_detector.task`; provision explicitly
+with `uv run python vaila/crop_faces_atletas.py --download-model`. Legacy
+locations `vaila/crop_face/models/face_detector.task`,
+`vaila/models/face_detector.task`, and repo-root `models/face_detector.task`
+remain auto-detected. If download fails, the GUI asks the user to select a
+compatible `.task` or `.tflite` file. Keep downloaded model files out of git.
 
 **Help opener fix:** the main `Help` button in `vaila.py` must use
 `webbrowser.open_new_tab(Path(...).as_uri())` for `vaila/help/index.html`.
