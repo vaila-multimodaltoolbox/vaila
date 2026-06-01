@@ -309,6 +309,12 @@ Open-source under **AGPL-3.0** — never commit API keys, tokens, or local crede
 
 Step-by-step workflows and specialized agent roles are stored in the `.claude/` directory. This structure is intended to be used by any AI assistant (Claude Code, Antigravity, Cursor, etc.).
 
+
+### Recent GUI Notes
+
+- **Crop Face (`vaila/crop_faces_atletas.py`)**: integrated at **Frame C -> Video and Image -> C_B_r1_c2**. The GUI flow must remain input directory first, output directory second, then automatic official model download into Git-ignored `vaila/models/crop_face/face_detector.task`; manual `.task` / `.tflite` selection remains fallback when network download fails. Provision explicitly with `uv run python vaila/crop_faces_atletas.py --download-model`. Creator metadata remains `Abel Gonçalves Chinaglia`; help docs are `vaila/help/crop_faces_atletas.md` and `.html`.
+- **Main Help button**: open `vaila/help/index.html` with `webbrowser.open_new_tab(Path(...).as_uri())`. Avoid `os.system("open ...")` / shell openers for this button because Linux file associations may launch an IDE/editor instead of the browser.
+
 ### Specialized Agents (`.claude/agents/`)
 
 Role cards for domain experts. Use these when the task fits their specific domain:

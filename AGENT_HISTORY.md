@@ -1,6 +1,6 @@
 # Agent Continuation Log — vailá ↔ FIFA Skeletal Tracking Light 2026
 
-Last update: 2026-04-25
+Last update: 2026-06-01
 Working clone: `~/data/vaila`
 Companion repo: `~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`
 
@@ -159,3 +159,39 @@ Strategy:
 See `HISTORY.md` for the chronological log and
 `.claude/skills/fifa-vaila-continuation/SKILL.md` for ready-to-run
 command blocks.
+
+
+---
+
+## Update — 2026-06-01 (general vailá GUI maintenance)
+
+This update is outside the FIFA-specific pipeline, but matters for future
+agents touching GUI/video-image tools.
+
+- `vaila/crop_faces_atletas.py` is now a full vailá module for athlete face
+  photo cropping. It keeps **Abel Gonçalves Chinaglia** as creator.
+- GUI workflow: input directory first, output directory second, then automatic
+  download of the official MediaPipe BlazeFace short-range model into Git-ignored
+  `vaila/models/crop_face/face_detector.task`. Manual `.task` / `.tflite`
+  selection remains fallback when network download fails. Provision explicitly
+  with `uv run python vaila/crop_faces_atletas.py --download-model`.
+- Main GUI integration: **Frame C -> Video and Image -> C_B_r1_c2 - Crop Face**.
+- Documentation added:
+  - `vaila/help/crop_faces_atletas.md`
+  - `vaila/help/crop_faces_atletas.html`
+  - index updates in `vaila/help/index.md` and `.html`
+- Main Help button bug fixed in `vaila.py`: use
+  `webbrowser.open_new_tab(Path(...).as_uri())` for `vaila/help/index.html`.
+  Avoid shell `open`/`xdg-open` via `os.system` there, because user file
+  associations can open an IDE/editor instead of a browser.
+
+Validation run:
+
+```bash
+python3 -m py_compile vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py vaila.py
+uv run ruff check vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py vaila.py
+uv run ruff format --check vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py
+uv run pytest tests/test_crop_faces_atletas.py -v
+uv run python vaila/crop_faces_atletas.py --help
+uv run python vaila/crop_faces_atletas.py --download-model
+```
