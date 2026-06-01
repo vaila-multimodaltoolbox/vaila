@@ -242,6 +242,30 @@ Full details: see `.claude/skills/sports-field-visualization/SKILL.md`.
 
 **Handoff for other IDEs / agents:** read `.claude/skills/soccer-field-keypoints-yolo/SKILL.md` for exact train/export/infer commands, weight path resolution (Ultralytics run dir suffix `-N`), and CSV semantics.
 
+
+### Crop Face GUI integration and Help opener (June 2026, session 2026-06-01)
+
+**Module:** `vaila/crop_faces_atletas.py` — athlete face photo cropper by
+Abel Gonçalves Chinaglia. It now follows the project GUI pattern: select input
+photo directory first, then output directory. It is wired to **Frame C -> Video
+and Image -> C_B_r1_c2 - Crop Face**. Help files live at
+`vaila/help/crop_faces_atletas.md` and `.html`; `README.md` and
+`vaila/help/index.*` list the new button.
+
+**Model path:** the MediaPipe detector is downloaded on first use into the
+Git-ignored `vaila/models/crop_face/face_detector.task`; provision explicitly
+with `uv run python vaila/crop_faces_atletas.py --download-model`. Legacy
+locations `vaila/crop_face/models/face_detector.task`,
+`vaila/models/face_detector.task`, and repo-root `models/face_detector.task`
+remain auto-detected. If download fails, the GUI asks the user to select a
+compatible `.task` or `.tflite` file. Keep downloaded model files out of git.
+
+**Help opener fix:** the main `Help` button in `vaila.py` must use
+`webbrowser.open_new_tab(Path(...).as_uri())` for `vaila/help/index.html`.
+Do not use shell `open`/`xdg-open` through `os.system` for this button; on Linux
+that can open an IDE/editor instead of the browser depending on user file
+associations.
+
 ## Caveman mode (optional)
 
 [Caveman](https://github.com/JuliusBrussee/caveman) is a skills/plugin pack for AI coding agents (Claude Code, Cursor, Gemini CLI, Windsurf, Copilot, and 30+ others). It steers the model toward terse replies: fewer filler words and articles, typically **~65–75% fewer output tokens** while keeping technical content intact.

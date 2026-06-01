@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 124 | **Categories:** 7 | **Generated on:** 29/05/2026
+**Total documented modules:** 124 | **Categories:** 7 | **Generated on:** 01/06/2026
 
 ---
 
@@ -85,6 +85,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **compressvideo**
   - [📄 HTML](compressvideo.html)
   - [📝 Markdown](compressvideo.md)
+- **crop_faces_atletas (Crop Face)**
+  - [📄 HTML](crop_faces_atletas.html)
+  - [📝 Markdown](crop_faces_atletas.md)
 - **dialogsuser**
   - [📄 HTML](dialogsuser.html)
   - [📝 Markdown](dialogsuser.md)

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crop Faces Atletas - vailá Help</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; background: #f6f7fb; color: #111; }
+    .container { max-width: 980px; margin: 28px auto; background: #fff; padding: 28px; border-radius: 10px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+    h1, h2, h3 { color: #111; }
+    h1 { border-bottom: 2px solid #111; padding-bottom: 10px; }
+    h2 { margin-top: 30px; border-left: 4px solid #111; padding-left: 10px; }
+    code, pre { background: #f2f2f2; border-radius: 4px; }
+    code { padding: 2px 4px; }
+    pre { padding: 12px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+    th { background: #f2f2f2; }
+    .meta { background: #fafafa; border: 1px solid #eee; padding: 12px; border-radius: 8px; }
+    .footer { margin-top: 36px; color: #444; font-size: 0.9em; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Crop Faces Atletas - Crop Face</h1>
+    <div class="meta">
+      <strong>Script:</strong> <code>crop_faces_atletas.py</code><br>
+      <strong>Category:</strong> Tools / Video and Image<br>
+      <strong>Creator:</strong> Abel Gonçalves Chinaglia<br>
+      <strong>Version:</strong> 0.3.46<br>
+      <strong>Updated:</strong> 01 June 2026<br>
+      <strong>Python:</strong> 3.12
+    </div>
+
+    <h2>Overview</h2>
+    <p><code>crop_faces_atletas.py</code> batch-processes athlete photos and creates square face crops suitable for 5 x 5 cm outputs at 300 DPI. It uses MediaPipe Face Detector, selects the largest face, applies a square crop, resizes to 591 x 591 pixels, and saves JPEG files with 300 DPI metadata.</p>
+    <p>The file name stem is used as the athlete name. By default, the name is drawn in a small white rounded label at the top of the exported image.</p>
+
+    <h2>GUI Workflow</h2>
+    <p>Main GUI path: <strong>Tools -> Video and Image -> Crop Face</strong>.</p>
+    <ol>
+      <li>Select the input directory containing athlete photos.</li>
+      <li>Select the output directory for cropped face images.</li>
+      <li>If the default face detector model is absent, wait for its automatic download.</li>
+      <li>If automatic download fails, select a compatible MediaPipe <code>.task</code> or <code>.tflite</code> model file.</li>
+      <li>Wait for the completion dialog with processed and skipped image counts.</li>
+    </ol>
+
+    <h2>Inputs</h2>
+    <p>Supported image extensions: <code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, <code>.webp</code>. The module processes images directly inside the selected input directory and does not recurse into subdirectories.</p>
+
+    <h2>Outputs</h2>
+    <pre><code>&lt;athlete_name&gt;_resultado.jpeg</code></pre>
+    <ul>
+      <li>591 x 591 pixels by default</li>
+      <li>JPEG quality 95</li>
+      <li>300 DPI metadata</li>
+      <li>Optional athlete-name label from the input file name</li>
+    </ul>
+
+    <h2>Face Detector Model</h2>
+    <p>The module uses the official MediaPipe BlazeFace short-range detector. On first use, it downloads the versioned model into the local Git-ignored cache:</p>
+    <pre><code>vaila/models/crop_face/face_detector.task</code></pre>
+    <p>Legacy locations remain auto-detected for compatibility:</p>
+    <pre><code>vaila/crop_face/models/face_detector.task
+vaila/models/face_detector.task
+models/face_detector.task</code></pre>
+    <p>To provision the model before opening the GUI:</p>
+    <pre><code>uv run python vaila/crop_faces_atletas.py --download-model</code></pre>
+    <p>The downloaded bytes come from Google's official <code>.tflite</code> model and are stored locally as <code>face_detector.task</code>. If automatic download fails, the GUI prompts for a compatible <code>.task</code> or <code>.tflite</code> file. In CLI mode, pass a custom model explicitly with <code>--model</code>.</p>
+
+    <h2>CLI Usage</h2>
+    <pre><code>uv run python vaila/crop_faces_atletas.py</code></pre>
+    <pre><code>uv run python vaila/crop_faces_atletas.py   --input /path/to/photos   --output /path/to/cropped_faces   --model /path/to/face_detector.task</code></pre>
+    <pre><code>uv run python vaila/crop_faces_atletas.py -i photos -o output --no-name</code></pre>
+    <pre><code>uv run python vaila/crop_faces_atletas.py -i photos -o output --size 768</code></pre>
+
+    <h2>Processing Details</h2>
+    <ol>
+      <li>Reads the image with OpenCV.</li>
+      <li>Converts it to RGB for MediaPipe.</li>
+      <li>Detects faces with MediaPipe Tasks Vision Face Detector.</li>
+      <li>Selects the largest detected face.</li>
+      <li>Builds a square crop using lateral, superior, inferior, and vertical-offset parameters.</li>
+      <li>Clips the crop to image boundaries.</li>
+      <li>Resizes to the requested square output size.</li>
+      <li>Optionally draws the athlete name.</li>
+      <li>Saves JPEG output with 300 DPI metadata.</li>
+    </ol>
+
+    <h2>Tunable Constants</h2>
+    <pre><code>TAMANHO_SAIDA_PX = 591
+INSERIR_NOME = True
+MARGEM_LATERAL = 0.55
+MARGEM_SUPERIOR = 0.55
+MARGEM_INFERIOR = 0.45
+DESLOCAMENTO_VERTICAL = -0.04</code></pre>
+
+    <h2>Troubleshooting</h2>
+    <table>
+      <tr><th>Problem</th><th>Cause</th><th>Action</th></tr>
+      <tr><td><code>Modelo não encontrado</code></td><td>Automatic model download failed</td><td>Check network access, run <code>--download-model</code>, select a model in the GUI, or pass <code>--model</code> in CLI</td></tr>
+      <tr><td>No images processed</td><td>Unsupported extension or empty folder</td><td>Use <code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, or <code>.webp</code></td></tr>
+      <tr><td><code>Nenhuma face detectada</code></td><td>Face too small, blurred, occluded, or side-facing</td><td>Use clearer frontal photos or adjust input images</td></tr>
+      <tr><td>Name label too large/small</td><td>File name length or output size</td><td>Rename files or adjust font scaling in <code>adicionar_nome()</code></td></tr>
+    </table>
+
+    <h2>Dependencies</h2>
+    <ul>
+      <li>OpenCV (<code>cv2</code>)</li>
+      <li>MediaPipe (<code>mediapipe</code>)</li>
+      <li>NumPy (<code>numpy</code>)</li>
+      <li>Pillow (<code>PIL</code>)</li>
+      <li>Tkinter</li>
+    </ul>
+
+    <h2>Version History</h2>
+    <p><strong>0.3.46 (01 June 2026):</strong> Added automatic download and SHA-256 verification for the official MediaPipe BlazeFace short-range model, plus <code>--download-model</code> provisioning. Added vailá GUI directory-selection workflow, CLI arguments, manual model-selection fallback, complete script header, and help documentation. Integrated into <strong>Tools -> Video and Image -> Crop Face</strong>.</p>
+
+    <div class="footer">Generated on 2026-06-01 for vailá 0.3.46.</div>
+  </div>
+</body>
+</html>

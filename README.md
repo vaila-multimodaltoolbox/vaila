@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-05-29
+**Last updated:** 2026-06-01
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -79,6 +79,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - [Description](#description)
 - [_vailá_ Structure and Interface](#vailá-structure-and-interface)
 - [Installation and Setup](#installation-and-setup)
+  - [Optional: Crop Face model](#optional-crop-face-model)
   - [Optional: SAM 3 (video segmentation)](#optional-sam-3-video-segmentation)
 - [Running the Application](#running-the-application)
 - [Uninstallation Instructions](#uninstallation-instructions)
@@ -180,7 +181,7 @@ C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
-C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá          C_B_r1_c3 - Draw Box
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Crop Face      C_B_r1_c3 - Draw Box
 C_B_r2_c1 - Compress Video C_B_r2_c2 - vailá         C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
@@ -298,6 +299,22 @@ This ensures that:
 - ✅ Automatic fallback to CPU-only if GPU installation fails
 
 For more information about uv, visit: [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+
+### Optional: Crop Face model
+
+The **Crop Face** button uses dependencies already included in the standard vailá install. On first use, it downloads the official MediaPipe BlazeFace short-range detector into the local Git-ignored model cache:
+
+```text
+vaila/models/crop_face/face_detector.task
+```
+
+To provision the model before opening the GUI, run:
+
+```bash
+uv run python vaila/crop_faces_atletas.py --download-model
+```
+
+The downloaded bytes come from Google's versioned [MediaPipe BlazeFace short-range model](https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite). If automatic download fails, the GUI still allows manual selection of a compatible `.task` or `.tflite` file.
 
 ### Optional: SAM 3 (video segmentation)
 

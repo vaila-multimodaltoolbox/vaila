@@ -299,3 +299,57 @@ uv run yolo pose train \
    [No-Bells-PnL](https://github.com/mguti97/No-Bells-Just-Whistles)
    as alternative pitch detectors (both Apache-2 / MIT).
 
+
+---
+
+## 10. Update — 2026-06-01 (Crop Face GUI + Help opener)
+
+### Crop Face integrated into Video and Image tools
+
+- Added/updated `vaila/crop_faces_atletas.py` as a documented vailá module.
+- Preserved creator metadata as **Abel Gonçalves Chinaglia**.
+- Changed the workflow from fixed hard-coded folders to vailá-style dialogs:
+  1. select input directory with athlete photos;
+  2. select output directory for cropped JPEGs;
+  3. download the official MediaPipe BlazeFace short-range model automatically when absent;
+  4. select a compatible `.task` or `.tflite` file only if network download fails.
+- Store the verified local model in Git-ignored
+  `vaila/models/crop_face/face_detector.task` and validate its SHA-256 before use.
+- Added CLI support:
+
+  ```bash
+  uv run python vaila/crop_faces_atletas.py --download-model
+  uv run python vaila/crop_faces_atletas.py --input /path/photos --output /path/out
+  ```
+
+- Wired the main GUI button **Frame C -> Video and Image -> C_B_r1_c2** from
+  placeholder `vailá` to **Crop Face**.
+- Added help docs:
+  - `vaila/help/crop_faces_atletas.md`
+  - `vaila/help/crop_faces_atletas.html`
+- Updated `vaila/help/index.md`, `vaila/help/index.html`, `README.md`, and
+  `vaila.py` metadata/layout text.
+
+### Main Help button fix
+
+- Fixed `Vaila.display_help()` in `vaila.py` to open
+  `vaila/help/index.html` with:
+
+  ```python
+  webbrowser.open_new_tab(help_file_path.resolve().as_uri())
+  ```
+
+- Reason: the previous shell command (`open <index.html>` on non-Windows)
+  could launch an IDE/editor depending on Linux file associations. Using a
+  `file://` URI through `webbrowser` targets the default browser.
+
+### Verification
+
+```bash
+python3 -m py_compile vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py vaila.py
+uv run ruff check vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py vaila.py
+uv run ruff format --check vaila/crop_faces_atletas.py tests/test_crop_faces_atletas.py
+uv run pytest tests/test_crop_faces_atletas.py -v
+uv run python vaila/crop_faces_atletas.py --help
+uv run python vaila/crop_faces_atletas.py --download-model
+```

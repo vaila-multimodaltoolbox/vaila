@@ -1,0 +1,17 @@
+Crop Face - MediaPipe Face Detector model
+==========================================
+
+The Crop Face tool downloads its default model automatically on first use.
+To provision it before opening the GUI, run from the repository root:
+
+    uv run python vaila/crop_faces_atletas.py --download-model
+
+Local destination:
+
+    vaila/models/crop_face/face_detector.task
+
+Official versioned source (Google MediaPipe BlazeFace short-range):
+
+    https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite
+
+The downloaded model remains local and must not be committed to Git.
