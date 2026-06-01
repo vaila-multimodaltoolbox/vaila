@@ -531,8 +531,13 @@ class TranscribePDFsGUI:
         self.skip_presence_var = tk.BooleanVar(value=True)
         self.overwrite_var = tk.BooleanVar(value=False)
         self.save_images_var = tk.BooleanVar(value=False)
+        self.source_feedback_var = tk.StringVar(value="")
 
         self._build_ui()
+        self.source_mode.trace_add("write", lambda *_: self._refresh_source_feedback())
+        self.recursive_var.trace_add("write", lambda *_: self._refresh_source_feedback())
+        self.skip_presence_var.trace_add("write", lambda *_: self._refresh_source_feedback())
+        self._refresh_source_feedback()
 
     def _build_ui(self) -> None:
         main = ttk.Frame(self.window, padding=12)
@@ -575,6 +580,12 @@ class TranscribePDFsGUI:
         ttk.Button(source_frame, text="Browse", command=self._browse_input_file).grid(
             row=1, column=2, padx=6, pady=4
         )
+        ttk.Label(
+            source_frame,
+            textvariable=self.source_feedback_var,
+            foreground="#1f4e79",
+            wraplength=760,
+        ).grid(row=2, column=0, columnspan=3, sticky="ew", padx=6, pady=(0, 4))
 
         output_frame = ttk.LabelFrame(main, text="Outputs")
         output_frame.grid(row=2, column=0, sticky="ew", pady=5)
@@ -670,6 +681,62 @@ class TranscribePDFsGUI:
         )
         self.log_text.pack(fill="both", expand=True, padx=6, pady=6)
 
+    def _source_pdf_is_included(self, pdf: Path) -> bool:
+        if pdf.suffix.lower() != ".pdf":
+            return False
+        return not (self.skip_presence_var.get() and "presenca" in pdf.name.lower())
+
+    def _selected_source_pdfs(self) -> list[Path]:
+        if self.source_mode.get() == "file":
+            pdf = Path(self.input_file_var.get()).expanduser()
+            if pdf.is_file() and self._source_pdf_is_included(pdf):
+                return [pdf]
+            return []
+
+        root = Path(self.input_dir_var.get()).expanduser()
+        if not root.is_dir():
+            return []
+        pattern = "**/*" if self.recursive_var.get() else "*"
+        return sorted(
+            pdf for pdf in root.glob(pattern) if pdf.is_file() and self._source_pdf_is_included(pdf)
+        )
+
+    def _source_feedback_message(self) -> str:
+        try:
+            if self.source_mode.get() == "file":
+                raw_path = self.input_file_var.get().strip()
+                if not raw_path:
+                    return "No PDF file selected."
+                pdf = Path(raw_path).expanduser()
+                if not pdf.exists():
+                    return f"File not found: {pdf}"
+                if pdf.suffix.lower() != ".pdf":
+                    return f"Selected file is not a PDF: {pdf.name}"
+                if self.skip_presence_var.get() and "presenca" in pdf.name.lower():
+                    return f"Selected PDF is skipped by presença/lista filter: {pdf.name}"
+                return f"Selected file: {pdf.name} (1 PDF ready)."
+
+            root = Path(self.input_dir_var.get().strip() or ".").expanduser()
+            if not root.exists():
+                return f"Directory not found: {root}"
+            if not root.is_dir():
+                return f"Selected source is not a directory: {root}"
+            count = len(self._selected_source_pdfs())
+            scope = "recursive" if self.recursive_var.get() else "top-level"
+            if count == 0:
+                return f"Selected directory: {root} (no PDFs found, {scope})."
+            return f"Selected directory: {root} ({count} PDF(s) ready, {scope})."
+        except OSError as exc:
+            return f"Could not inspect selected source: {exc}"
+
+    def _refresh_source_feedback(self, log: bool = False) -> None:
+        message = self._source_feedback_message()
+        self.source_feedback_var.set(message)
+        if hasattr(self, "status_var"):
+            self.status_var.set(message)
+        if log and hasattr(self, "log_text"):
+            self._append_log(message)
+
     def _browse_input_dir(self) -> None:
         directory = filedialog.askdirectory(
             title="Select directory with PDFs",
@@ -679,6 +746,7 @@ class TranscribePDFsGUI:
         if directory:
             self.source_mode.set("dir")
             self.input_dir_var.set(directory)
+            self._refresh_source_feedback(log=True)
 
     def _browse_input_file(self) -> None:
         file_path = filedialog.askopenfilename(
@@ -690,6 +758,7 @@ class TranscribePDFsGUI:
         if file_path:
             self.source_mode.set("file")
             self.input_file_var.set(file_path)
+            self._refresh_source_feedback(log=True)
 
     def _browse_output_dir(self) -> None:
         directory = filedialog.askdirectory(
@@ -699,6 +768,8 @@ class TranscribePDFsGUI:
         )
         if directory:
             self.output_dir_var.set(directory)
+            self.status_var.set(f"Output directory selected: {directory}")
+            self._append_log(f"Output directory selected: {directory}")
 
     def _browse_debug_dir(self) -> None:
         directory = filedialog.askdirectory(
@@ -708,6 +779,8 @@ class TranscribePDFsGUI:
         )
         if directory:
             self.debug_dir_var.set(directory)
+            self.status_var.set(f"Debug image directory selected: {directory}")
+            self._append_log(f"Debug image directory selected: {directory}")
 
     def _open_help(self) -> None:
         help_html = Path(__file__).resolve().parent / "help" / "transcribe_pdfs.html"
@@ -798,6 +871,7 @@ class TranscribePDFsGUI:
         self.log_text.configure(state="normal")
         self.log_text.delete("1.0", tk.END)
         self.log_text.configure(state="disabled")
+        self._refresh_source_feedback(log=True)
         self._set_running(True)
         self.worker = threading.Thread(target=self._worker, args=(args,), daemon=True)
         self.worker.start()

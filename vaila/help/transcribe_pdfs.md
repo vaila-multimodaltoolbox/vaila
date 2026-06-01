@@ -31,10 +31,11 @@ The Brainstorm button opens a Tkinter launcher with defaults for the PAE Biomec1
 
 1. Open `vaila.py`.
 2. Click **Brainstorm** in Frame B.
-3. Click **Transcribe PDFs**.
+3. Use the separate **PDF Transcription** section near the top and click **Transcribe PDFs**.
 4. Choose a PDF directory or a single PDF.
-5. Confirm the output folder and options.
-6. Click **Transcribe PDFs** in the dialog.
+5. Check the source feedback line for the selected path and PDF count.
+6. Confirm the output folder and options.
+7. Click **Transcribe PDFs** in the dialog.
 
 ## Modes
 

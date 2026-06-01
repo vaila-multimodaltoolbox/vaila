@@ -26,7 +26,7 @@
 
 ## PDF Transcription Button
 
-Click **Transcribe PDFs** in the Brainstorm window to open the PDF transcription dialog. Defaults target the PAE Biomec1 folder when present:
+Use the separate **PDF Transcription** section near the top of Brainstorm and click **Transcribe PDFs** to open the PDF transcription dialog. Defaults target the PAE Biomec1 folder when present:
 
 ```text
 ~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais
