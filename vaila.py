@@ -172,7 +172,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 28.May.2026 v0.3.46 (Python 3.12.13)
+vailá - 29.May.2026 v0.3.47 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -283,7 +283,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 28.May.2026 v0.3.46 (Python 3.12.13)")
+        self.title("vailá - 29.May.2026 v0.3.47 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars

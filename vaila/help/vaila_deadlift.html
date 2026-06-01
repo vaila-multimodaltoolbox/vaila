@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>vaila - vaila_deadlift</title>
 <style>
-body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5;color:#222}.container{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1)}h1{color:#1f2937;border-bottom:3px solid #2563eb;padding-bottom:10px}h2{color:#374151;margin-top:30px}.module-info,.metrics,.usage{background:#f8fafc;padding:15px;border-left:4px solid #2563eb;margin:15px 0}code{background:#e5e7eb;padding:2px 5px;border-radius:3px}pre{background:#111827;color:#f9fafb;padding:14px;border-radius:6px;overflow:auto}.footer{margin-top:35px;padding-top:15px;border-top:1px solid #ddd;color:#666;font-size:.9em}
+body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5;color:#222}.container{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1)}h1{color:#1f2937;border-bottom:3px solid #2563eb;padding-bottom:10px}h2{color:#374151;margin-top:30px}h3{color:#4b5563;margin-top:20px}.module-info,.metrics,.usage{background:#f8fafc;padding:15px;border-left:4px solid #2563eb;margin:15px 0}code{background:#e5e7eb;padding:2px 5px;border-radius:3px}pre{background:#111827;color:#f9fafb;padding:14px;border-radius:6px;overflow:auto}.footer{margin-top:35px;padding-top:15px;border-top:1px solid #ddd;color:#666;font-size:.9em}
 </style>
 </head>
 <body><div class="container">
@@ -14,25 +14,90 @@ body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5
 <p><strong>Category:</strong> Analysis</p>
 <p><strong>File:</strong> vaila/vaila_deadlift.py</p>
 <p><strong>Version:</strong> 0.3.46</p>
-<p><strong>Updated:</strong> 2026-05-28</p>
+<p><strong>Updated:</strong> 2026-05-29</p>
 <p><strong>GUI Interface:</strong> Yes - Frame B - Deadlift</p>
 </div>
+
 <h2>Description</h2>
-<p>Deadlift/RDL biomechanical analysis for MediaPipe Pose CSV files. The tool exports processed frame metrics, diagnostic plots, variant classification, and an HTML report.</p>
-<p>The wrist landmark is used as a barbell proxy because MediaPipe Pose does not track the bar directly. Use a sagittal/profile camera view for horizontal setup checks.</p>
-<div class="metrics"><h2>New validations</h2>
+<p>Deadlift/RDL biomechanical analysis supporting two data types:</p>
+<ol>
+<li><strong>IMU data</strong> (accelerometer + gyroscope CSV from barbell-mounted sensors)</li>
+<li><strong>MediaPipe Pose</strong> CSV files with landmark coordinates</li>
+</ol>
+<p>The script auto-detects the data type from CSV column headers and routes to the appropriate pipeline.</p>
+
+<h3>IMU Pipeline</h3>
 <ul>
-<li><strong>Arm verticality:</strong> shoulder-to-wrist horizontal offset at setup; tolerance 5 cm.</li>
-<li><strong>Bar over midfoot:</strong> wrist projection against heel-to-foot-index midpoint; tolerance 3 cm.</li>
-<li><strong>Initial pull synchronism:</strong> first 15% of concentric pull; flags knee extension velocity greater than 2x hip opening velocity.</li>
-</ul></div>
-<h2>Metrics</h2>
-<ul><li>Stance width ratio</li><li>Knee flexion</li><li>Tibia angle to ground</li><li>Spine deviation from setup</li><li>Bar path proximity</li><li>Cervical deviation</li><li>Deadlift variant classification</li></ul>
-<div class="usage"><h2>Usage</h2>
-<p>GUI: run <code>uv run vaila.py</code>, click <strong>Deadlift</strong>, and select a folder containing MediaPipe CSV files.</p>
-<pre><code>uv run python vaila/vaila_deadlift.py -i path/to/pose.csv -o path/to/output</code></pre>
+<li>Automatic repetition detection from filtered vertical acceleration</li>
+<li>Per-rep velocity estimation via numerical integration with drift correction</li>
+<li>Per-rep power (P&nbsp;=&nbsp;F&nbsp;&times;&nbsp;v) and work (W&nbsp;=&nbsp;&int;P&nbsp;dt) from barbell weight</li>
+<li>Cadence metrics (reps/min, inter-rep intervals, timing variability)</li>
+<li>Center of mass trajectory (barbell displacement)</li>
+<li>Rep-to-rep comparison: max, min, range, CV%, best/worst rep</li>
+</ul>
+
+<h3>MediaPipe Pipeline</h3>
+<ul>
+<li>Multi-repetition detection from shoulder/hip vertical displacement</li>
+<li>Whole-body center of mass estimation (De Leva 1996 segment proportions)</li>
+<li>Foot spread (ankle-to-ankle) and knee spread (knee-to-knee) distances</li>
+<li>Hand-to-foot horizontal distance</li>
+<li>Per-rep power &amp; work from COM vertical velocity and body mass</li>
+<li>Cadence and rep-to-rep comparison statistics</li>
+<li>Deadlift variant classification: stiff-legged, RDL, conventional, or mixed</li>
+<li>Form quality validations (arm verticality, bar over midfoot, pull synchronism)</li>
+</ul>
+
+<div class="metrics">
+<h2>Form Validations (MediaPipe)</h2>
+<ul>
+<li><strong>Arm verticality:</strong> shoulder-to-wrist horizontal offset at setup; tolerance 5&nbsp;cm.</li>
+<li><strong>Bar over midfoot:</strong> wrist projection against heel-to-foot-index midpoint; tolerance 3&nbsp;cm.</li>
+<li><strong>Initial pull synchronism:</strong> first 15% of concentric pull; flags knee extension velocity &gt; 2&times; hip opening velocity.</li>
+</ul>
 </div>
+
+<h2>Metrics</h2>
+<ul>
+<li>Stance width ratio, foot spread, knee spread</li>
+<li>Knee flexion, tibia angle, spine deviation, cervical deviation</li>
+<li>Bar path proximity, hand-to-foot horizontal offset</li>
+<li>Center of mass trajectory (x, y)</li>
+<li>Per-rep: peak/mean velocity, peak/mean power, work, ROM, force</li>
+<li>Cadence: reps/min, mean/std rep duration, interval variability</li>
+<li>Rep comparison: max, min, range, CV%, best/worst rep</li>
+</ul>
+
+<div class="usage">
+<h2>Usage</h2>
+<p>GUI: run <code>uv run vaila.py</code>, click <strong>Deadlift</strong>, and select a folder containing CSV files (IMU or MediaPipe).</p>
+<pre><code>uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output</code></pre>
+</div>
+
+<h2>Configuration</h2>
+<p>Optional <code>vaila_deadlift_config.toml</code> beside the input CSV or in <code>vaila/</code>:</p>
+<pre><code>[deadlift_context]
+fps = 30
+shank_length_m = 0.40
+mass_kg = 75
+weight_kg = 20
+imu_fps = 25</code></pre>
+
 <h2>Outputs</h2>
-<ul><li>Processed kinematics CSV</li><li>Lower limb and safety metric plots</li><li>Biomechanical HTML report</li></ul>
-<div class="footer">Generated on 2026-05-28 for vaila 0.3.46.</div>
+<h3>IMU mode</h3>
+<ul>
+<li>Processed time series CSV (vert. acceleration, velocity, displacement)</li>
+<li>Per-rep summary CSV</li>
+<li>Time series plot, per-rep bar charts, velocity overlay</li>
+<li>IMU biomechanical HTML report</li>
+</ul>
+<h3>MediaPipe mode</h3>
+<ul>
+<li>Kinematics CSV with frame-by-frame metrics</li>
+<li>Per-rep summary CSV</li>
+<li>Lower limb, safety, body distances, and per-rep plots</li>
+<li>Biomechanical HTML report with variant classification</li>
+</ul>
+
+<div class="footer">Generated on 2026-05-29 for vaila 0.3.46.</div>
 </div></body></html>

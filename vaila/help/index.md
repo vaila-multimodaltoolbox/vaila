@@ -137,7 +137,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
   - [📄 HTML](vpython_c3d.html)
   - [📝 Markdown](vpython_c3d.md)
 
-## Tools (46 modules)
+## Tools (47 modules)
 
 - **batchcut**
   - [📄 HTML](batchcut.html)
@@ -145,6 +145,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **brainstorm**
   - [📄 HTML](brainstorm.html)
   - [📝 Markdown](brainstorm.md)
+- **transcribe_pdfs**
+  - [📄 HTML](transcribe_pdfs.html)
+  - [📝 Markdown](transcribe_pdfs.md)
 - **compress_videos_h264**
   - [📄 HTML](compress_videos_h264.html)
   - [📝 Markdown](compress_videos_h264.md)

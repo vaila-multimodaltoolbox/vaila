@@ -1,50 +1,48 @@
-# Which conversion would you like to perform? - Button B_r5_c2
+# Brainstorm - Button B_r5_c2
 
 ## Overview
 
 **Button Position:** B_r5_c2  
 **Method Name:** `brainstorm`  
-**Button Text:** Which conversion would you like to perform?
+**Button Text:** Brainstorm
 
 ## Description
 
-Runs the Brainstorm module.
+Opens the Brainstorm workspace for audio transcription, prompt editing, creative text workflows, music-code generation, image prompt generation, text-to-audio, and PDF transcription.
+
+## New PDF Transcription Action
+
+Inside Brainstorm, use the separate **PDF Transcription** section near the top and click **Transcribe PDFs** to launch `vaila/transcribe_pdfs.py`. The dialog can process a directory of PDFs or a single PDF and writes `.txt`, `.report.json`, and `batch_report.csv` outputs.
+
+Default PAE workflow folders when present:
+
+```text
+~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais
+~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/transcritas_originais
+```
 
 ## Usage
 
-1. Click the **Which conversion would you like to perform?** button in the vailá GUI
-2. Follow the prompts in the dialog windows
-3. Select input files/directories as requested
-4. Configure parameters if needed
-5. Review the output files
+1. Click **Brainstorm** in the vailá GUI.
+2. Create or select a session when using audio/text creative workflows.
+3. For PDFs, click **Transcribe PDFs** and choose PDF source/output folders.
+4. Review low-confidence pages and markers in the generated reports.
 
 ## Related Scripts
 
-This button launches one or more Python scripts from the `vaila/` directory. For detailed script documentation, see:
-- `vaila/help/` - Script-specific help files
+- `vaila/brainstorm.py`
+- `vaila/transcribe_pdfs.py`
+- `vaila/help/brainstorm.md`
+- `vaila/help/transcribe_pdfs.md`
+- `docs/pdf_transcription.md`
 
-## Integration
+## Requirements
 
-This button integrates with other vailá modules:
-- Check related buttons in the same frame/section
-- Output files can be used as input for other modules
-
-## Troubleshooting
-
-### Common Issues
-
-- **Module not found**: Ensure all dependencies are installed
-- **File not found**: Check that input files exist in the specified directory
-- **Permission errors**: Ensure write permissions for output directory
-
-### Getting Help
-
-- Check the script-specific help in `vaila/help/`
-- Review the main documentation in `docs/`
-- Open an issue on GitHub if problems persist
+- Audio workflows: `speech_recognition`, `sounddevice`, `soundfile`, optional FFmpeg/MIDI/TTS packages.
+- PDF workflows: `pdftotext`, `pdftoppm`, `pdfinfo` or `qpdf`, and Gemini CLI for vision transcription.
 
 ---
 
-**Last Updated:** November 2025  
+**Last Updated:** 2026-05-29  
 **Part of vailá - Multimodal Toolbox**  
 **License:** AGPLv3.0

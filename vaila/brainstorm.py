@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Create: 18 February 2025
-Update: 18 February 2026
-Version: 0.1.4
+Update: 29 May 2026
+Version: 0.3.47
 
 Description:
     Record voice audio, transcribe it to text, and use LLM to generate:
@@ -111,7 +111,7 @@ class BrainstormApp:
 
     def show_workflow_guide(self):
         """Show a comprehensive workflow guide for users."""
-        guide_text = """BRAINSTORM WORKFLOW GUIDE - v0.3.1
+        guide_text = """BRAINSTORM WORKFLOW GUIDE - v0.3.47
 
 COMPLETE CREATIVE WORKFLOW:
 
@@ -128,6 +128,7 @@ COMPLETE CREATIVE WORKFLOW:
 3. TRANSCRIPTION
    • Transcribe: Convert single audio to text
    • Batch Transcribe: Process multiple audio files
+   • Transcribe PDFs: Convert typed/scanned PDF exams to text reports
    • Load Transcription: Import existing text files
 
 4. MUSIC GENERATION
@@ -166,7 +167,8 @@ REQUIREMENTS:
    • FFmpeg (MP3 conversion)
    • FluidSynth/TiMidity (MIDI→MP3)
    • MIDIUtil (music generation)
-   • Internet (transcription)
+   • Internet (audio transcription)
+   • Poppler tools + Gemini CLI (PDF vision transcription)
 
 SHORTCUTS:
    • Record → Transcribe → Music → Export
@@ -302,9 +304,32 @@ SHORTCUTS:
         )
         self.session_label.pack(side="left", padx=5, fill="x", expand=True)
 
+        # PDF transcription section
+        pdf_frame = tk.LabelFrame(
+            main_frame, text="1. PDF Transcription", font=("Arial", 12, "bold")
+        )
+        pdf_frame.pack(fill="x", pady=5)
+
+        pdf_buttons = tk.Frame(pdf_frame)
+        pdf_buttons.pack(fill="x", pady=5)
+
+        tk.Button(
+            pdf_buttons,
+            text="Transcribe PDFs",
+            command=self.transcribe_pdfs,
+            bg="#3F51B5",
+            fg="white",
+            font=("Arial", 10, "bold"),
+        ).pack(side="left", padx=5)
+
+        self.pdf_status_label = tk.Label(
+            pdf_frame, text="Ready for PDF transcription...", fg="blue"
+        )
+        self.pdf_status_label.pack(anchor="w", padx=8, pady=(0, 5))
+
         # Audio section
         audio_frame = tk.LabelFrame(
-            main_frame, text="1. Audio Recording", font=("Arial", 12, "bold")
+            main_frame, text="2. Audio Recording", font=("Arial", 12, "bold")
         )
         audio_frame.pack(fill="x", pady=5)
 
@@ -369,7 +394,7 @@ SHORTCUTS:
 
         # Text editing section
         text_frame = tk.LabelFrame(
-            main_frame, text="2. Text Editing & Prompt", font=("Arial", 12, "bold")
+            main_frame, text="3. Text Editing & Prompt", font=("Arial", 12, "bold")
         )
         text_frame.pack(fill="both", expand=True, pady=5)
 
@@ -402,7 +427,7 @@ SHORTCUTS:
         self.text_display.pack(fill="both", expand=True, pady=5)
 
         # Generation section
-        gen_frame = tk.LabelFrame(main_frame, text="3. AI Generation", font=("Arial", 12, "bold"))
+        gen_frame = tk.LabelFrame(main_frame, text="4. AI Generation", font=("Arial", 12, "bold"))
         gen_frame.pack(fill="x", pady=5)
 
         gen_buttons = tk.Frame(gen_frame)
@@ -453,7 +478,7 @@ SHORTCUTS:
 
         # Results section
         results_frame = tk.LabelFrame(
-            main_frame, text="4. Generated Results", font=("Arial", 12, "bold")
+            main_frame, text="5. Generated Results", font=("Arial", 12, "bold")
         )
         results_frame.pack(fill="both", expand=True, pady=5)
 
@@ -811,6 +836,8 @@ SHORTCUTS:
     def _try_pyttsx3_tts(self, text, audio_file):
         """Try pyttsx3 for TTS conversion."""
         try:
+            import pyttsx3
+
             engine = pyttsx3.init()
 
             rate = engine.getProperty("rate")
@@ -830,6 +857,8 @@ SHORTCUTS:
     def _try_gtts_tts(self, text, audio_file):
         """Try Google TTS for conversion."""
         try:
+            from gtts import gTTS
+
             portuguese_words = [
                 "o",
                 "a",
@@ -934,6 +963,25 @@ Set objVoice = Nothing
         except Exception:
             return False
 
+    def transcribe_pdfs(self):
+        """Open the PDF transcription GUI inside Brainstorm."""
+        print("[DEBUG] Button clicked: Transcribe PDFs")
+        try:
+            from vaila import transcribe_pdfs
+        except ImportError:
+            import transcribe_pdfs
+
+        try:
+            transcribe_pdfs.run_gui(parent=self.root)
+            self.pdf_status_label.config(text="PDF transcription window opened", fg="blue")
+        except Exception as e:
+            self.pdf_status_label.config(text=f"PDF transcription error: {str(e)}", fg="red")
+            self.show_message(
+                "error",
+                "PDF Transcription Error",
+                f"Failed to open PDF transcription tool:\n\n{str(e)}",
+            )
+
     def transcribe_audio(self):
         """Transcribe the recorded audio and save to txt file."""
         print("[DEBUG] Button clicked: Transcribe Audio")
@@ -1016,7 +1064,7 @@ Set objVoice = Nothing
                         print("[INFO] Install librosa or pydub for better audio format support:")
                         print("[INFO] pip install librosa")
                         print("[INFO] pip install pydub")
-                        raise audio_error
+                        raise audio_error from None
 
             self.status_label.config(text="Transcribing...", fg="orange")
             self.root.update()

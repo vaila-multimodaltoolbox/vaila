@@ -1,82 +1,66 @@
 # brainstorm
 
-## 📋 Module Information
+## Module Information
 
 - **Category:** Tools
-- **File:** `vaila\brainstorm.py`
-- **Lines:** 2574
-- **Size:** 88961 characters
-- **Version:** 0.3.1
+- **File:** `vaila/brainstorm.py`
+- **Version:** 0.3.47
+- **Updated:** 29/05/2026
 - **Author:** Paulo Roberto Pereira Santiago
-- **GUI Interface:** ✅ Yes
+- **GUI Interface:** Yes — **Frame B -> Brainstorm**
+- **License:** AGPL-3.0
 
-## 📖 Description
+## Description
 
+`brainstorm.py` is a Tkinter workspace for creative text workflows inside vailá. It records or loads audio, transcribes speech, edits text prompts, generates music code / ideas / image prompts, and now launches PDF transcription for scanned or handwritten exams.
 
-Project: vailá
-Script: brainstorm.py
+## Main Workflows
 
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 18 February 2025
-Update Date: 18 February 2025
-Version: 0.3.1
+- **Record Audio** — capture voice audio and save WAV/MP3 in the current session.
+- **Transcribe** — convert a loaded or recorded audio file to text.
+- **Batch Transcribe** — process multiple audio files.
+- **Transcribe PDFs** — open `transcribe_pdfs.py` for PDF exam transcription.
+- **Load Transcription / Save Text** — edit and reuse text prompts.
+- **Generate Music Code / Batch Music Generation** — create Python/MIDI code from text.
+- **Generate Image / Creative Ideas / Text to Audio** — produce creative downstream outputs.
 
-Description:
-    Record voice audio, transcribe it to text, and use LLM to generate:
-    - Python musical code (using MIDIUtil or Music21)
-    - Artistic images via DALL-E/Stable Diffusion
+## PDF Transcription Button
 
-    Enhanced workflow:
-    1. Record and transcribe audio
-    2. Edit transcribed text manually
-    3. Generate music code or images via LLM
-    4. Display and save results
+Use the separate **PDF Transcription** section near the top of Brainstorm and click **Transcribe PDFs** to open the PDF transcription dialog. Defaults target the PAE Biomec1 folder when present:
 
-    Usage:
-        python brainstorm.py
+```text
+~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais
+~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/transcritas_originais
+```
 
-Requirements:
-    - Python 3.x
-    - tkinter, speech_recognition, sounddevice, soundfile
-    - openai (optional, for GPT integration)
-    - midiutil, music21 (optional, for music generation)
+Detailed help: [`transcribe_pdfs.md`](transcribe_pdfs.md) / [`transcribe_pdfs.html`](transcribe_pdfs.html).
 
-License:
-    GNU General Public License v3.0
+## Session Structure
 
+```text
+brainstorm_YYYYMMDD_HHMMSS/
+  audio/      WAV, MP3, generated TTS audio
+  text/       transcriptions, prompts, ideas
+  scripts/    generated Python/MIDI code
+  images/     image prompts and descriptions
+```
 
-## 🔧 Main Functions
+## Requirements
 
-**Total functions found:** 20
+Core Brainstorm audio features:
 
-- `run_brainstorm`
-- `show_message`
-- `show_workflow_guide`
-- `create_session_directory`
-- `setup_directories`
-- `setup_ui`
-- `choose_output_directory`
-- `reset_output_directory`
-- `create_new_session`
-- `record_audio`
-- `load_audio`
-- `load_transcription`
-- `save_transcription_edits`
-- `text_to_audio`
-- `transcribe_audio`
-- `batch_transcribe`
-- `generate_music`
-- `generate_image`
-- `generate_ideas`
-- `save_music_code`
+- `tkinter`
+- `speech_recognition`
+- `sounddevice`
+- `soundfile`
+- optional `openai`, `midiutil`, `music21`, `pyttsx3`, `gtts`, FFmpeg
 
+PDF transcription:
 
-
+- Poppler command-line tools: `pdftotext`, `pdftoppm`, `pdfinfo` or `qpdf`
+- Gemini CLI for handwritten/scanned vision transcription
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
-🔗 **Part of vailá - Multimodal Toolbox**
-🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+Updated: 29/05/2026  
+Part of vailá - Multimodal Toolbox
