@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 28 May 2026
+Update Date: 01 June 2026
 Version: 0.3.46
 
 Example of usage:
@@ -229,7 +229,7 @@ C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
-C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá          C_B_r1_c3 - Draw Box
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Crop Face      C_B_r1_c3 - Draw Box
 C_B_r2_c1 - Compress Video C_B_r2_c2 - vailá         C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
@@ -1145,11 +1145,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_B_r1_c2 - Video: vailá (placeholder)
-        vaila_btn_sync = tk.Button(
+        # C_B_r1_c2 - Video: Crop Face
+        crop_face_btn = tk.Button(
             tools_col2,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Crop Face",
+            command=self.crop_faces_atletas,
             width=button_width,
         )
 
@@ -1255,7 +1255,7 @@ class Vaila(tk.Tk):
 
         # Packing Video buttons
         extract_png_btn.grid(row=0, column=0, padx=2, pady=2)
-        vaila_btn_sync.grid(row=0, column=1, padx=2, pady=2)  # Replaced with vaila
+        crop_face_btn.grid(row=0, column=1, padx=2, pady=2)
         draw_box_btn.grid(row=0, column=2, padx=2, pady=2)
         compress_videos_gui_btn.grid(row=1, column=0, padx=2, pady=2)
         vaila_btn_compress.grid(row=1, column=1, padx=2, pady=2)
@@ -2326,18 +2326,11 @@ class Vaila(tk.Tk):
         processor.run()
 
     # C_B_r1_c2
-    def cut_videos(self):
-        """Runs the batch video cutting module.
+    def crop_faces_atletas(self):
+        """Runs the athlete face crop module."""
+        from vaila import crop_faces_atletas
 
-        This function runs the batch video cutting module, which can be used to
-        cut videos based on a list of specified time intervals. The module will
-        prompt the user to select the directory containing the video files and
-        input the list of time intervals for analysis.
-
-        """
-        from vaila import cutvideo
-
-        cutvideo.run_cutvideo()
+        crop_faces_atletas.run_crop_faces_atletas_gui(parent=self)
 
     # C_B_r1_c3
     def draw_box(self):
@@ -2802,18 +2795,12 @@ class Vaila(tk.Tk):
 
     # Help, Exit and About
     def display_help(self):
-        """Displays the help file for the Multimodal Toolbox.
-
-        The help file is a static HTML file located in the "vaila/help" directory
-        of the Multimodal Toolbox source code. If the file is not found,
-        an error message is shown.
-        """
-        # Correct path: vaila/help/index.html
-        help_file_path = os.path.join(os.path.dirname(__file__), "vaila", "help", "index.html")
-        if os.path.exists(help_file_path):
-            os.system(f"start {help_file_path}" if os.name == "nt" else f"open {help_file_path}")
+        """Open the main HTML help index in the default web browser."""
+        help_file_path = Path(__file__).parent / "vaila" / "help" / "index.html"
+        if help_file_path.exists():
+            webbrowser.open_new_tab(help_file_path.resolve().as_uri())
         else:
-            messagebox.showerror("Error", "Help file not found.")
+            messagebox.showerror("Error", f"Help file not found:\n{help_file_path}")
 
     def open_link(self, event=None):
         import webbrowser

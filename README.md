@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-05-28
+**Last updated:** 2026-06-01
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -180,7 +180,7 @@ C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
-C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - vailá          C_B_r1_c3 - Draw Box
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Crop Face      C_B_r1_c3 - Draw Box
 C_B_r2_c1 - Compress Video C_B_r2_c2 - vailá         C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
