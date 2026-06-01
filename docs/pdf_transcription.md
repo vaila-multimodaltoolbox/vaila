@@ -8,9 +8,10 @@ Updated: 2026-05-29
 
 1. Run `uv run vaila.py`.
 2. Click **Brainstorm** in Frame B.
-3. Click **Transcribe PDFs**.
+3. Use the separate **PDF Transcription** section near the top and click **Transcribe PDFs**.
 4. Select a PDF directory or a single PDF.
-5. Confirm output and click **Transcribe PDFs**.
+5. Check the source feedback line for the selected path and PDF count.
+6. Confirm output and click **Transcribe PDFs**.
 
 Default folders when present:
 

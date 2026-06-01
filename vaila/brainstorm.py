@@ -304,9 +304,32 @@ SHORTCUTS:
         )
         self.session_label.pack(side="left", padx=5, fill="x", expand=True)
 
+        # PDF transcription section
+        pdf_frame = tk.LabelFrame(
+            main_frame, text="1. PDF Transcription", font=("Arial", 12, "bold")
+        )
+        pdf_frame.pack(fill="x", pady=5)
+
+        pdf_buttons = tk.Frame(pdf_frame)
+        pdf_buttons.pack(fill="x", pady=5)
+
+        tk.Button(
+            pdf_buttons,
+            text="Transcribe PDFs",
+            command=self.transcribe_pdfs,
+            bg="#3F51B5",
+            fg="white",
+            font=("Arial", 10, "bold"),
+        ).pack(side="left", padx=5)
+
+        self.pdf_status_label = tk.Label(
+            pdf_frame, text="Ready for PDF transcription...", fg="blue"
+        )
+        self.pdf_status_label.pack(anchor="w", padx=8, pady=(0, 5))
+
         # Audio section
         audio_frame = tk.LabelFrame(
-            main_frame, text="1. Audio Recording", font=("Arial", 12, "bold")
+            main_frame, text="2. Audio Recording", font=("Arial", 12, "bold")
         )
         audio_frame.pack(fill="x", pady=5)
 
@@ -364,14 +387,6 @@ SHORTCUTS:
             fg="white",
             font=("Arial", 10, "bold"),
         ).pack(side="left", padx=5)
-        tk.Button(
-            audio_buttons,
-            text="Transcribe PDFs",
-            command=self.transcribe_pdfs,
-            bg="#3F51B5",
-            fg="white",
-            font=("Arial", 10, "bold"),
-        ).pack(side="left", padx=5)
 
         # Status label
         self.status_label = tk.Label(audio_frame, text="Ready to record...", fg="green")
@@ -379,7 +394,7 @@ SHORTCUTS:
 
         # Text editing section
         text_frame = tk.LabelFrame(
-            main_frame, text="2. Text Editing & Prompt", font=("Arial", 12, "bold")
+            main_frame, text="3. Text Editing & Prompt", font=("Arial", 12, "bold")
         )
         text_frame.pack(fill="both", expand=True, pady=5)
 
@@ -412,7 +427,7 @@ SHORTCUTS:
         self.text_display.pack(fill="both", expand=True, pady=5)
 
         # Generation section
-        gen_frame = tk.LabelFrame(main_frame, text="3. AI Generation", font=("Arial", 12, "bold"))
+        gen_frame = tk.LabelFrame(main_frame, text="4. AI Generation", font=("Arial", 12, "bold"))
         gen_frame.pack(fill="x", pady=5)
 
         gen_buttons = tk.Frame(gen_frame)
@@ -463,7 +478,7 @@ SHORTCUTS:
 
         # Results section
         results_frame = tk.LabelFrame(
-            main_frame, text="4. Generated Results", font=("Arial", 12, "bold")
+            main_frame, text="5. Generated Results", font=("Arial", 12, "bold")
         )
         results_frame.pack(fill="both", expand=True, pady=5)
 
@@ -958,9 +973,9 @@ Set objVoice = Nothing
 
         try:
             transcribe_pdfs.run_gui(parent=self.root)
-            self.status_label.config(text="PDF transcription window opened", fg="blue")
+            self.pdf_status_label.config(text="PDF transcription window opened", fg="blue")
         except Exception as e:
-            self.status_label.config(text=f"PDF transcription error: {str(e)}", fg="red")
+            self.pdf_status_label.config(text=f"PDF transcription error: {str(e)}", fg="red")
             self.show_message(
                 "error",
                 "PDF Transcription Error",
