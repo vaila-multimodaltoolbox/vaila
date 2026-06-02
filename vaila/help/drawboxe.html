@@ -45,8 +45,8 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
             <p><strong>File:</strong> vaila/drawboxe.py</p>
-            <p><strong>Lines:</strong> 1390</p>
-            <p><strong>Version:</strong> 0.3.45</p>
+            <p><strong>Lines:</strong> 2051</p>
+            <p><strong>Version:</strong> 0.3.47</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
             <p><strong>Email:</strong> paulosantiago@usp.br</p>
@@ -70,6 +70,8 @@
                 <li>Batch processing support for multiple videos</li>
                 <li>Frame intervals (process only specific frames)</li>
                 <li>Save and load configurations in TOML files</li>
+                <li>Automatic NVIDIA NVENC H.264 encoding when supported, with CPU fallback</li>
+                <li>Continuous OpenCV-to-NVENC pipe and periodic NVIDIA utilization telemetry for videos without frame intervals</li>
             </ul>
         </div>
 
@@ -301,12 +303,28 @@ end_frame = 600</code></pre>
             <li>If you already have a TOML file with frame intervals, it will be automatically detected</li>
             <li>Videos will be processed and saved in a <code>video_2_drawbox_[timestamp]</code> directory</li>
             <li>Processed videos will have the suffix <code>_dbox.mp4</code></li>
+            <li>FFmpeg automatically uses verified NVIDIA <code>h264_nvenc</code> encoding when available; otherwise it uses CPU <code>libx264</code></li>
+            <li>If NVENC fails during a real export, that encode is retried automatically with CPU <code>libx264</code></li>
+            <li>Terminal output reports batch backend and every encode start/finish with <code>[FFmpeg][GPU]</code> or <code>[FFmpeg][CPU]</code></li>
+            <li>NVENC exports explicitly use NVIDIA/NVENC GPU index <code>0</code> (<code>h264_nvenc -gpu 0</code>) and print NVIDIA model, PCI address, and UUID</li>
+            <li>Without frame intervals, edited OpenCV frames are streamed continuously into NVENC; terminal telemetry reports GPU utilization, NVENC utilization, and VRAM about every 5 seconds</li>
+            <li>With frame intervals, PNG extraction/editing remains CPU/disk-bound and NVENC is used during final reassembly</li>
         </ol>
+        <p>GPU acceleration applies to FFmpeg H.264 encoding. Polygon filling remains an OpenCV frame-processing step. NVIDIA/NVENC GPU indices are independent from DRM card numbering shown by tools such as <code>nvtop</code>.</p>
 
         <h2>🔧 Main Functions</h2>
         <div class="functions">
-            <h3>Total functions: 20</h3>
+            <h3>Total functions: 29</h3>
             <ul>
+                <li><code>get_nvidia_gpu_telemetry</code> - Reads live NVIDIA GPU, NVENC, and VRAM utilization</li>
+                <li><code>has_audio_stream</code> - Detects original audio before FFmpeg pipe export</li>
+                <li><code>apply_boxes_to_frame</code> - Applies configured boxes and polygons to one OpenCV frame</li>
+                <li><code>stream_boxes_to_ffmpeg</code> - Streams edited frames continuously into NVENC or CPU FFmpeg encoding</li>
+                <li><code>get_nvidia_gpu_info</code> - Reads selected NVIDIA GPU model, UUID, and PCI address from nvidia-smi</li>
+                <li><code>describe_nvenc_gpu</code> - Formats selected NVENC device details for terminal feedback</li>
+                <li><code>detect_ffmpeg_video_encoder</code> - Verifies NVIDIA NVENC with a short test encode</li>
+                <li><code>get_ffmpeg_video_encoding_args</code> - Builds GPU or CPU H.264 encoding arguments</li>
+                <li><code>run_ffmpeg_encode_with_fallback</code> - Retries a failed NVENC export with CPU libx264</li>
                 <li><code>save_first_frame</code> - Saves the first frame of the video</li>
                 <li><code>extract_frames</code> - Extracts all frames from the video</li>
                 <li><code>apply_boxes_directly_to_video</code> - Applies boxes directly to the video</li>
@@ -329,6 +347,7 @@ end_frame = 600</code></pre>
                 <li>Processing large videos may take time</li>
                 <li>Make sure you have enough disk space for processed videos</li>
                 <li>FFmpeg must be installed on the system for frame extraction</li>
+                <li>NVIDIA NVENC acceleration requires an NVIDIA GPU, driver, and FFmpeg build with <code>h264_nvenc</code>; CPU fallback is automatic</li>
             </ul>
         </div>
 
@@ -341,10 +360,12 @@ end_frame = 600</code></pre>
             <li>Tkinter (usually included with Python)</li>
             <li>TOML (for configuration files)</li>
             <li>FFmpeg (for video processing)</li>
+            <li>NVIDIA GPU with working NVENC support (optional)</li>
         </ul>
 
         <h2>📝 Version History</h2>
         <ul>
+            <li><strong>v0.3.47:</strong> Continuous OpenCV-to-NVENC pipe, explicit NVIDIA GPU 0 selection, periodic telemetry, and CPU fallback</li>
             <li><strong>v0.0.7:</strong> Added hatching to indicate "outside" mode</li>
             <li><strong>v0.0.6:</strong> Support for free polygons</li>
             <li><strong>v0.0.5:</strong> Support for trapezoidal boxes</li>
@@ -355,7 +376,7 @@ end_frame = 600</code></pre>
         </ul>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 23 May 2026</p>
+            <p>📅 Generated automatically on: 02 June 2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
             <p>📧 Contact: paulosantiago@usp.br</p>

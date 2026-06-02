@@ -6,12 +6,14 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 28 October 2024
-Update Date: 23 May 2026
-Version: 0.3.45
+Update Date: 02 June 2026
+Version: 0.3.47
 Description:
     Draw boxes on videos.
     This script is a modified version of the original drawboxe.py script.
     Draw trapezoid and free polygon boxes.
+    Uses NVIDIA NVENC automatically for FFmpeg H.264 encoding when available.
+    Streams edited OpenCV frames continuously into NVENC and reports NVIDIA telemetry.
 
 Usage:
     Run the script from the command line:
@@ -26,6 +28,7 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.3.47: Added continuous OpenCV-to-NVENC pipe, explicit GPU 0 selection, telemetry, and CPU fallback
     - v0.0.9: Audio and metadata preservation - preserves original video audio and all metadata (compatible with numberframes.py and other metadata tools)
     - v0.0.8: Frame-accurate preservation - ensures exact frame count and precise FPS are maintained for biomechanical data synchronization (similar to cutvideo.py)
     - v0.0.7: Added hatching to indicate outside mode
@@ -45,6 +48,7 @@ import shutil
 import subprocess
 import time
 import tkinter as tk
+from functools import lru_cache
 from tkinter import filedialog, messagebox
 
 import cv2
@@ -52,6 +56,162 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import toml  # type: ignore[import-untyped]
+
+try:
+    from .ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
+except ImportError:
+    from ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
+
+FFMPEG = get_ffmpeg_path()
+FFPROBE = get_ffprobe_path()
+NVENC_GPU_INDEX = 0
+
+
+@lru_cache(maxsize=1)
+def get_nvidia_gpu_info():
+    """Return nvidia-smi details for the NVIDIA GPU selected for NVENC."""
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,name,uuid,pci.bus_id",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+        for line in result.stdout.splitlines():
+            index, name, uuid, pci_bus_id = (part.strip() for part in line.split(",", maxsplit=3))
+            if int(index) == NVENC_GPU_INDEX:
+                return {
+                    "index": index,
+                    "name": name,
+                    "uuid": uuid,
+                    "pci_bus_id": pci_bus_id,
+                }
+    except (FileNotFoundError, subprocess.SubprocessError, OSError, ValueError):
+        pass
+    return None
+
+
+def describe_nvenc_gpu():
+    """Return a CLI-friendly description of the NVIDIA NVENC device."""
+    gpu_info = get_nvidia_gpu_info()
+    if not gpu_info:
+        return f"NVIDIA NVENC GPU index {NVENC_GPU_INDEX}"
+    return (
+        f"NVIDIA NVENC GPU {gpu_info['index']}: {gpu_info['name']} "
+        f"(PCI {gpu_info['pci_bus_id']}, UUID {gpu_info['uuid']})"
+    )
+
+
+@lru_cache(maxsize=1)
+def detect_ffmpeg_video_encoder():
+    """Return the fastest verified FFmpeg H.264 encoder available."""
+    try:
+        encoders_result = subprocess.run(
+            [FFMPEG, "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        if "h264_nvenc" in encoders_result.stdout:
+            test_result = subprocess.run(
+                [
+                    FFMPEG,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=1280x720:rate=30",
+                    "-t",
+                    "1",
+                    "-c:v",
+                    "h264_nvenc",
+                    "-gpu",
+                    str(NVENC_GPU_INDEX),
+                    "-preset",
+                    "p5",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if test_result.returncode == 0:
+                print(f"  [FFmpeg][GPU] h264_nvenc verified on {describe_nvenc_gpu()}")
+                return "h264_nvenc"
+            print("  [FFmpeg][CPU] h264_nvenc is listed but unavailable at runtime")
+    except (FileNotFoundError, subprocess.SubprocessError, OSError) as e:
+        print(f"  [FFmpeg][CPU] Could not verify NVIDIA NVENC support ({e})")
+
+    print("  [FFmpeg][CPU] Using libx264 software encoding")
+    return "libx264"
+
+
+def get_ffmpeg_video_encoding_args(encoder=None):
+    """Build quality-oriented FFmpeg H.264 arguments for GPU or CPU encoding."""
+    selected_encoder = encoder or detect_ffmpeg_video_encoder()
+    if selected_encoder == "h264_nvenc":
+        return [
+            "-c:v",
+            "h264_nvenc",
+            "-gpu",
+            str(NVENC_GPU_INDEX),
+            "-preset",
+            "p5",
+            "-tune",
+            "hq",
+            "-rc",
+            "vbr",
+            "-cq",
+            "18",
+            "-b:v",
+            "0",
+        ]
+    return ["-c:v", "libx264", "-preset", "medium", "-crf", "18"]
+
+
+def run_ffmpeg_encode_with_fallback(command_prefix, command_suffix):
+    """Run an FFmpeg encode, retrying with CPU if a verified NVENC encode fails."""
+    selected_encoder = detect_ffmpeg_video_encoder()
+    encoders = [selected_encoder]
+    if selected_encoder == "h264_nvenc":
+        encoders.append("libx264")
+
+    for encoder in encoders:
+        device = "GPU" if encoder == "h264_nvenc" else "CPU"
+        command = [
+            *command_prefix,
+            *get_ffmpeg_video_encoding_args(encoder),
+            *command_suffix,
+        ]
+        if encoder == "h264_nvenc":
+            print(
+                f"  [FFmpeg][GPU] Starting H.264 encode with h264_nvenc on "
+                f"{describe_nvenc_gpu()}..."
+            )
+        else:
+            print("  [FFmpeg][CPU] Starting H.264 encode with libx264...")
+        try:
+            subprocess.run(command, check=True, capture_output=False, text=True)
+            print(f"  [FFmpeg][{device}] Finished H.264 encode with {encoder}")
+            return encoder
+        except subprocess.CalledProcessError:
+            if encoder != "h264_nvenc":
+                raise
+            print("  [FFmpeg][GPU] Warning: h264_nvenc failed; retrying with CPU libx264")
+
+    raise RuntimeError("FFmpeg encoding failed without producing an output file")
 
 
 def get_precise_video_metadata(video_path):
@@ -62,7 +222,7 @@ def get_precise_video_metadata(video_path):
     """
     try:
         cmd = [
-            "ffprobe",
+            FFPROBE,
             "-v",
             "error",
             "-print_format",
@@ -144,10 +304,8 @@ def get_precise_video_metadata(video_path):
         if rotation == 0 and "tags" in video_stream:
             rotate_tag = video_stream["tags"].get("rotate")
             if rotate_tag:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     rotation = int(float(rotate_tag))
-                except (ValueError, TypeError):
-                    pass
 
         rotation = rotation % 360
         raw_width = int(video_stream.get("width"))
@@ -242,7 +400,7 @@ def extract_frames(video_path, frames_dir):
         # -vsync 0 ensures no frame dropping or duplication
         # -start_number 1 ensures frame numbering starts at 1
         command = [
-            "ffmpeg",
+            FFMPEG,
             "-i",
             video_path,
             "-vsync",
@@ -272,210 +430,258 @@ def extract_frames(video_path, frames_dir):
         raise
 
 
-def apply_boxes_directly_to_video(input_path, output_path, coordinates, selections, colors):
-    """
-    Apply boxes directly to video using OpenCV for processing, then ffmpeg to preserve
-    audio and metadata. Ensures all frames are preserved with original audio and metadata.
-    """
+def get_nvidia_gpu_telemetry():
+    """Return current NVIDIA utilization for CLI progress feedback."""
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=index,utilization.gpu,utilization.encoder,memory.used",
+                "--format=csv,noheader,nounits",
+                "-i",
+                str(NVENC_GPU_INDEX),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        )
+        index, gpu_util, encoder_util, memory_used = (
+            part.strip() for part in result.stdout.strip().split(",", maxsplit=3)
+        )
+        return (
+            f"NVIDIA GPU {index}: GPU util {gpu_util}%, "
+            f"NVENC util {encoder_util}%, VRAM {memory_used} MiB"
+        )
+    except (FileNotFoundError, subprocess.SubprocessError, OSError, ValueError):
+        return None
+
+
+def has_audio_stream(video_path):
+    """Return whether ffprobe finds an audio stream in a video."""
+    probe_cmd = [
+        FFPROBE,
+        "-v",
+        "error",
+        "-select_streams",
+        "a:0",
+        "-show_entries",
+        "stream=codec_type",
+        "-of",
+        "csv=p=0",
+        str(video_path),
+    ]
+    probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+    return probe_result.returncode == 0 and probe_result.stdout.strip() == "audio"
+
+
+def apply_boxes_to_frame(frame, coordinates, selections, colors):
+    """Apply configured boxes and polygons to one OpenCV BGR frame."""
+    for coords, selection, color in zip(coordinates, selections, colors, strict=False):
+        mode = selection[0]
+        shape_type = selection[1]
+        bgr_color = (int(color[2] * 255), int(color[1] * 255), int(color[0] * 255))
+
+        if shape_type == "rectangle":
+            x1, y1 = int(coords[0][0]), int(coords[0][1])
+            x2, y2 = int(coords[2][0]), int(coords[2][1])
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            if mode == "inside":
+                frame[y1:y2, x1:x2] = bgr_color
+            else:
+                mask = np.ones(frame.shape[:2], dtype=np.uint8)
+                cv2.rectangle(mask, (x1, y1), (x2, y2), 0, -1)
+                frame[mask == 1] = bgr_color
+        elif shape_type in ("trapezoid", "free"):
+            pts = np.array(coords, np.int32).reshape((-1, 1, 2))
+            if mode == "inside":
+                cv2.fillPoly(frame, [pts], bgr_color)
+            else:
+                mask = np.ones(frame.shape[:2], dtype=np.uint8)
+                cv2.fillPoly(mask, [pts], 0)
+                frame[mask == 1] = bgr_color
+
+    return frame
+
+
+def stream_boxes_to_ffmpeg(
+    input_path, output_path, coordinates, selections, colors, metadata, encoder
+):
+    """Edit frames with OpenCV and stream them directly into an FFmpeg H.264 encoder."""
     import tempfile
 
-    # Get precise metadata first
-    metadata = get_precise_video_metadata(input_path)
-    width = metadata["width"]
-    height = metadata["height"]
     fps = metadata["fps"]
+    fps_str = f"{fps:.6f}"
     total_frames = metadata.get("nb_frames")
+    has_audio = has_audio_stream(input_path)
 
     vidcap = cv2.VideoCapture(input_path)
     if not vidcap.isOpened():
-        print(f"Error: Could not open video {input_path}")
-        return False
-
-    # Verify dimensions match
-    actual_width = int(vidcap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    actual_height = int(vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    if actual_width != width or actual_height != height:
-        print(
-            f"Warning: Metadata dimensions ({width}x{height}) don't match video ({actual_width}x{actual_height})"
-        )
-        width, height = actual_width, actual_height
-
-    # Get actual frame count if metadata didn't provide it
+        raise OSError(f"Could not open video {input_path}")
     if total_frames is None:
         total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    print(
-        f"Applying boxes to {total_frames} frames: {os.path.basename(input_path)} -> {os.path.basename(output_path)}"
-    )
-    # Create temporary video file for processed frames (without audio)
-    temp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    temp_video_path = temp_video.name
-    temp_video.close()
-
-    # Use float FPS to preserve precision
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(temp_video_path, fourcc, fps, (width, height))
-
-    if not out.isOpened():
-        print(f"Error: Could not create temporary video {temp_video_path}")
+    ret, first_frame = vidcap.read()
+    if not ret or first_frame is None:
         vidcap.release()
-        return False
+        raise OSError(f"Could not read first frame from {input_path}")
+    first_frame = check_and_rotate_frame(first_frame, metadata)
+    height, width = first_frame.shape[:2]
+
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+        temp_video_path = temp_video.name
+
+    command = [
+        FFMPEG,
+        "-y",
+        "-f",
+        "rawvideo",
+        "-vcodec",
+        "rawvideo",
+        "-pix_fmt",
+        "bgr24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        fps_str,
+        "-i",
+        "pipe:0",
+        "-i",
+        str(input_path),
+        *get_ffmpeg_video_encoding_args(encoder),
+        "-r",
+        fps_str,
+        "-map",
+        "0:v:0",
+        "-map_metadata",
+        "1",
+    ]
+    if has_audio:
+        command.extend(["-map", "1:a?", "-c:a", "copy"])
+    else:
+        print("  [FFmpeg] Original video has no audio stream")
+    command.extend(["-pix_fmt", "yuv420p", temp_video_path])
+
+    device = "GPU" if encoder == "h264_nvenc" else "CPU"
+    if encoder == "h264_nvenc":
+        print(f"  [FFmpeg][GPU] Continuous OpenCV -> NVENC pipe on {describe_nvenc_gpu()}")
+    else:
+        print("  [FFmpeg][CPU] Continuous OpenCV -> libx264 pipe")
+    print(f"  [FFmpeg][{device}] Starting H.264 encode while frames are edited...")
+
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.PIPE)
+    except Exception:
+        vidcap.release()
+        with contextlib.suppress(OSError):
+            os.remove(temp_video_path)
+        raise
 
     frame_count = 0
-    frames_written = 0
-
-    # Process ALL frames, ensuring none are skipped
-    while frame_count < total_frames:
-        # Explicitly set frame position to ensure we don't skip frames
-        vidcap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
-        ret, frame = vidcap.read()
-        if ret and frame is not None:
-            frame = check_and_rotate_frame(frame, metadata)
-
-        if not ret:
-            # If we can't read this frame, try to continue but warn
-            print(f"\nWarning: Could not read frame {frame_count + 1}, skipping...")
-            frame_count += 1
-            continue
-
-        # Apply boxes to frame
-        for coords, selection, color in zip(coordinates, selections, colors, strict=False):
-            mode = selection[0]
-            shape_type = selection[1]
-            # Converter cor de matplotlib (0-1) para OpenCV (0-255) BGR
-            bgr_color = (int(color[2] * 255), int(color[1] * 255), int(color[0] * 255))
-
-            if shape_type == "rectangle":
-                x1, y1 = int(coords[0][0]), int(coords[0][1])
-                x2, y2 = int(coords[2][0]), int(coords[2][1])
-                x1, x2 = min(x1, x2), max(x1, x2)
-                y1, y2 = min(y1, y2), max(y1, y2)
-                if mode == "inside":
-                    frame[y1:y2, x1:x2] = bgr_color
-                else:
-                    # For outside mode, fill everything except the rectangle
-                    mask = np.ones(frame.shape[:2], dtype=np.uint8)
-                    cv2.rectangle(mask, (x1, y1), (x2, y2), 0, -1)
-                    frame[mask == 1] = bgr_color
-            elif shape_type in ("trapezoid", "free"):
-                pts = np.array(coords, np.int32).reshape((-1, 1, 2))
-                if mode == "inside":
-                    cv2.fillPoly(frame, [pts], bgr_color)
-                else:
-                    # For outside mode, fill everything except the polygon
-                    mask = np.ones(frame.shape[:2], dtype=np.uint8)
-                    cv2.fillPoly(mask, [pts], 0)
-                    frame[mask == 1] = bgr_color
-
-        out.write(frame)
-        frames_written += 1
-        frame_count += 1
-
-        step = 10 if total_frames > 50 else 5
-        if frame_count % step == 0 or frame_count == total_frames:
-            print(
-                f"  Processed {frame_count}/{total_frames} frames for {os.path.basename(input_path)}",
-                end="\r",
-            )
-
-    print(f"\n  Completed processing frames: {frames_written}/{total_frames}")
-
-    out.release()
-    vidcap.release()
-
-    # Verify frame count preservation
-    if frames_written != total_frames:
-        print(f"Warning: Frame count mismatch! Expected {total_frames}, wrote {frames_written}")
-        with contextlib.suppress(BaseException):
-            os.remove(temp_video_path)
-        return False
-
-    # Now use ffmpeg to combine processed video with original audio and preserve metadata
+    telemetry_step = max(1, int(round(fps * 5)))
+    current_frame = first_frame
+    processing_error = None
     try:
-        # Check if ffmpeg is available
-        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        while frame_count < total_frames:
+            frame = apply_boxes_to_frame(current_frame, coordinates, selections, colors)
+            if process.stdin is None:
+                raise BrokenPipeError("FFmpeg stdin is unavailable")
+            process.stdin.write(frame.tobytes())
+            frame_count += 1
 
-        fps_str = f"{fps:.6f}"
+            if frame_count % telemetry_step == 0 and encoder == "h264_nvenc":
+                telemetry = get_nvidia_gpu_telemetry()
+                if telemetry:
+                    print(f"\n  [FFmpeg][GPU] {telemetry}")
+            step = 10 if total_frames > 50 else 5
+            if frame_count % step == 0 or frame_count == total_frames:
+                print(
+                    f"  Processed and streamed {frame_count}/{total_frames} frames "
+                    f"for {os.path.basename(input_path)}",
+                    end="\r",
+                )
 
-        # Check if original video has audio stream
-        probe_cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "a:0",
-            "-show_entries",
-            "stream=codec_type",
-            "-of",
-            "csv=p=0",
-            str(input_path),
-        ]
-        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
-        has_audio = probe_result.returncode == 0 and probe_result.stdout.strip() == "audio"
+            if frame_count >= total_frames:
+                break
+            ret, current_frame = vidcap.read()
+            if not ret or current_frame is None:
+                raise OSError(f"Could not read frame {frame_count + 1} from {input_path}")
+            current_frame = check_and_rotate_frame(current_frame, metadata)
+    except Exception as e:
+        processing_error = e
+    finally:
+        vidcap.release()
+        if process.stdin is not None:
+            with contextlib.suppress(BrokenPipeError, OSError):
+                process.stdin.close()
 
-        # Build ffmpeg command to combine video with audio and preserve metadata
-        cmd = [
-            "ffmpeg",
-            "-y",  # Overwrite output
-            "-i",
-            temp_video_path,  # Processed video (no audio)
-            "-i",
-            str(input_path),  # Original video (for audio and metadata)
-            "-c:v",
-            "libx264",  # Video codec
-            "-preset",
-            "medium",  # Encoding preset
-            "-crf",
-            "18",  # High quality
-            "-r",
-            fps_str,  # Preserve exact FPS
-            "-map",
-            "0:v",  # Use video from processed file
-            "-map_metadata",
-            "1",  # Copy all metadata from original video
-        ]
-
-        # Add audio mapping if available
-        if has_audio:
-            cmd.extend(["-map", "1:a?", "-c:a", "copy"])  # Copy audio codec (no re-encoding)
-        else:
-            print("Info: Original video has no audio stream, video will be saved without audio")
-
-        cmd.extend(
-            [
-                "-pix_fmt",
-                "yuv420p",  # Ensure compatibility
-                "-avoid_negative_ts",
-                "make_zero",
-                str(output_path),
-            ]
-        )
-
-        print("  Combining video with audio and metadata (ffmpeg)...")
-        subprocess.run(cmd, capture_output=False, text=True, check=True)
-
-        print(f"  Done: {os.path.basename(output_path)}")
-
-        # Clean up temporary file
-        with contextlib.suppress(BaseException):
+    try:
+        return_code = process.wait(timeout=120)
+    except subprocess.TimeoutExpired:
+        process.terminate()
+        process.wait(timeout=10)
+        with contextlib.suppress(OSError):
             os.remove(temp_video_path)
+        raise OSError("FFmpeg pipe did not terminate after stdin closed") from None
 
-        return True
+    print(f"\n  Completed processing frames: {frame_count}/{total_frames}")
+    if processing_error is not None:
+        with contextlib.suppress(OSError):
+            os.remove(temp_video_path)
+        raise processing_error
+    if return_code != 0:
+        with contextlib.suppress(OSError):
+            os.remove(temp_video_path)
+        raise subprocess.CalledProcessError(return_code, command)
+    if frame_count != total_frames:
+        with contextlib.suppress(OSError):
+            os.remove(temp_video_path)
+        raise OSError(f"Frame count mismatch: expected {total_frames}, streamed {frame_count}")
 
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        # If ffmpeg fails or is not available, fallback to just using the temp video
-        print(f"Warning: ffmpeg not available or failed, saving without audio/metadata: {e}")
+    shutil.move(temp_video_path, output_path)
+    print(f"  [FFmpeg][{device}] Finished H.264 encode with {encoder}")
+    print(f"  Done: {os.path.basename(output_path)} ({encoder})")
+    return True
+
+
+def apply_boxes_directly_to_video(input_path, output_path, coordinates, selections, colors):
+    """Apply boxes while streaming edited frames into NVENC or CPU FFmpeg encoding."""
+    metadata = get_precise_video_metadata(input_path)
+    total_frames = metadata.get("nb_frames")
+    if total_frames is None:
+        vidcap = cv2.VideoCapture(input_path)
+        total_frames = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
+        vidcap.release()
+        metadata["nb_frames"] = total_frames
+
+    print(
+        f"Applying boxes to {total_frames} frames: "
+        f"{os.path.basename(input_path)} -> {os.path.basename(output_path)}"
+    )
+    selected_encoder = detect_ffmpeg_video_encoder()
+    encoders = [selected_encoder]
+    if selected_encoder == "h264_nvenc":
+        encoders.append("libx264")
+
+    for encoder in encoders:
         try:
-            import shutil
+            return stream_boxes_to_ffmpeg(
+                input_path,
+                output_path,
+                coordinates,
+                selections,
+                colors,
+                metadata,
+                encoder,
+            )
+        except (BrokenPipeError, FileNotFoundError, OSError, subprocess.CalledProcessError) as e:
+            if encoder != "h264_nvenc":
+                print(f"Error: FFmpeg CPU encode failed: {e}")
+                return False
+            print(f"  [FFmpeg][GPU] Warning: NVENC pipe failed ({e}); retrying with CPU libx264")
 
-            shutil.move(temp_video_path, output_path)
-            print(f"Saved video without audio/metadata: {os.path.basename(output_path)}")
-            return True
-        except Exception as e2:
-            print(f"Error moving temp file: {e2}")
-            with contextlib.suppress(BaseException):
-                os.remove(temp_video_path)
-            return False
+    return False
 
 
 def apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_intervals):
@@ -486,38 +692,7 @@ def apply_boxes_to_frames(frames_dir, coordinates, selections, colors, frame_int
                 frame_path = os.path.join(frames_dir, filename)
                 img = cv2.imread(frame_path)
 
-                for coords, selection, color in zip(coordinates, selections, colors, strict=False):
-                    mode = selection[0]
-                    shape_type = selection[1]
-                    # Converter cor de matplotlib (0-1) para OpenCV (0-255) BGR
-                    bgr_color = (
-                        int(color[2] * 255),
-                        int(color[1] * 255),
-                        int(color[0] * 255),
-                    )
-
-                    if shape_type == "rectangle":
-                        x1, y1 = int(coords[0][0]), int(coords[0][1])
-                        x2, y2 = int(coords[2][0]), int(coords[2][1])
-                        x1, x2 = min(x1, x2), max(x1, x2)
-                        y1, y2 = min(y1, y2), max(y1, y2)
-                        if mode == "inside":
-                            img[y1:y2, x1:x2] = bgr_color
-                        else:
-                            # For outside mode, fill everything except the rectangle
-                            mask = np.ones(img.shape[:2], dtype=np.uint8)
-                            cv2.rectangle(mask, (x1, y1), (x2, y2), 0, -1)
-                            img[mask == 1] = bgr_color
-                    elif shape_type in ("trapezoid", "free"):
-                        pts = np.array(coords, np.int32).reshape((-1, 1, 2))
-                        if mode == "inside":
-                            cv2.fillPoly(img, [pts], bgr_color)
-                        else:
-                            # For outside mode, fill everything except the polygon
-                            mask = np.ones(img.shape[:2], dtype=np.uint8)
-                            cv2.fillPoly(mask, [pts], 0)
-                            img[mask == 1] = bgr_color
-
+                img = apply_boxes_to_frame(img, coordinates, selections, colors)
                 cv2.imwrite(frame_path, img)
 
 
@@ -542,45 +717,38 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
     fps_str = f"{fps:.6f}"
 
     # Create temporary video file (without audio) first
-    temp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    temp_video_path = temp_video.name
-    temp_video.close()
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+        temp_video_path = temp_video.name
 
     # Build ffmpeg command to create video from frames (no audio)
-    command = [
-        "ffmpeg",
+    command_prefix = [
+        FFMPEG,
         "-y",  # Overwrite output file
         "-framerate",
         fps_str,  # Input framerate (precise)
         "-i",
         os.path.join(frames_dir, "frame_%09d.png"),
-        "-c:v",
-        "libx264",  # Video codec
-        "-preset",
-        "medium",  # Encoding preset
-        "-crf",
-        "18",  # High quality
+    ]
+    command_suffix = [
         "-r",
         fps_str,  # Output framerate (precise, must match input)
         "-pix_fmt",
         "yuv420p",  # Ensure compatibility
-        "-avoid_negative_ts",
-        "make_zero",  # Avoid timestamp issues
     ]
 
     # If we know the exact frame count, specify it
     if total_frames is not None:
-        command.extend(["-frames:v", str(total_frames)])
+        command_suffix.extend(["-frames:v", str(total_frames)])
     elif actual_frame_count > 0:
         # Use actual frame count as fallback
-        command.extend(["-frames:v", str(actual_frame_count)])
+        command_suffix.extend(["-frames:v", str(actual_frame_count)])
 
-    command.append(str(temp_video_path))
+    command_suffix.append(str(temp_video_path))
 
     try:
         print(f"  Creating video from {actual_frame_count} frames at {fps_str} fps (ffmpeg)...")
-        subprocess.run(command, check=True, capture_output=False, text=True)
-        print(f"  Created video from frames: {actual_frame_count} frames")
+        encoder = run_ffmpeg_encode_with_fallback(command_prefix, command_suffix)
+        print(f"  Created video from frames: {actual_frame_count} frames ({encoder})")
     except subprocess.CalledProcessError as e:
         err = getattr(e, "stderr", None) or str(e)
         print(f"Error creating video from frames: {err}")
@@ -593,7 +761,7 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
         try:
             # Check if original video has audio stream
             probe_cmd = [
-                "ffprobe",
+                FFPROBE,
                 "-v",
                 "error",
                 "-select_streams",
@@ -609,20 +777,14 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
 
             # Build command to combine video with audio and metadata
             combine_cmd = [
-                "ffmpeg",
+                FFMPEG,
                 "-y",
                 "-i",
                 temp_video_path,  # Processed video (no audio)
                 "-i",
                 str(original_video_path),  # Original video (for audio and metadata)
                 "-c:v",
-                "libx264",  # Video codec
-                "-preset",
-                "medium",
-                "-crf",
-                "18",
-                "-r",
-                fps_str,  # Preserve exact FPS
+                "copy",  # Video is already encoded; avoid a second lossy encode
                 "-map",
                 "0:v",  # Use video from processed file
                 "-map_metadata",
@@ -637,15 +799,12 @@ def reassemble_video(frames_dir, output_path, fps, total_frames=None, original_v
 
             combine_cmd.extend(
                 [
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-avoid_negative_ts",
-                    "make_zero",
                     str(output_path),
                 ]
             )
 
             print("  Combining with audio and metadata (ffmpeg)...")
+            print("  [FFmpeg] Muxing encoded video with original audio/metadata (stream copy)")
             subprocess.run(combine_cmd, check=True, capture_output=False, text=True)
 
             print(f"  Done: {os.path.basename(output_path)}")
@@ -1847,6 +2006,11 @@ def run_drawboxe():
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
+    encoder = detect_ffmpeg_video_encoder()
+    if encoder == "h264_nvenc":
+        print(f"\n[FFmpeg] Batch H.264 encoding backend: {describe_nvenc_gpu()} (h264_nvenc)")
+    else:
+        print("\n[FFmpeg] Batch H.264 encoding backend: CPU (libx264)")
     n_videos = len(video_files)
     for idx, video_file in enumerate(video_files):
         input_path = os.path.join(video_directory, video_file)
