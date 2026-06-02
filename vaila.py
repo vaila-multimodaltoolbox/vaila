@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 01 June 2026
-Version: 0.3.46
+Update Date: 02 June 2026
+Version: 0.3.47
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -172,7 +172,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 29.May.2026 v0.3.47 (Python 3.12.13)
+vailá - 02.Jun.2026 v0.3.47 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -283,7 +283,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 29.May.2026 v0.3.47 (Python 3.12.13)")
+        self.title("vailá - 02.Jun.2026 v0.3.47 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -2591,9 +2591,11 @@ class Vaila(tk.Tk):
         file and input the start and end times for cutting.
 
         """
-        from vaila import cutvideo
-
-        cutvideo.run_cutvideo()
+        # Run in a separate process: cutvideo creates its own Tk root and a
+        # blocking pygame event loop. Running it in-process shares the Tcl/Tk
+        # interpreter with the main vailá GUI and freezes it on exit
+        # (same dispatch pattern as getpixelvideo).
+        run_vaila_module("vaila.cutvideo", "vaila/cutvideo.py")
 
     def resize_video(self):
         """Runs the video resizing module.

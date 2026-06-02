@@ -790,7 +790,7 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset vaila_dataset_YYYYMMDD/<br
         <ul>
           <li><code>vaila/models/soccerfield_ref3d_fifa.csv</code> — FIFA Skeletal Tracking origin (0,0,0 = centre). 37 points. <em>Legacy / 1-based numbering.</em></li>
           <li><code>vaila/models/soccerfield_ref3d.csv</code> — standard vailá layout (origin = bottom-left corner). 37 points. <em>Fallback.</em></li>
-          <li><code>vaila/models/soccerfield_ref3d_fifa_dataset.csv</code> — <strong>NEW (v0.6.0):</strong> 32 keypoints, <code>idx 0 = top_left_corner</code>, with <code>flip_idx</code>. Matches <code>/home/preto/data/FIFA/dataset_vaila_fifa/unified/keypoints_reference_drawsportsfields.csv</code> and is used by FIFA Labeling Mode.</li>
+          <li><code>vaila/models/soccerfield_ref3d_fifa_dataset.csv</code> — <strong>NEW (v0.6.0):</strong> 32 keypoints, <code>idx 0 = top_left_corner</code>, with <code>flip_idx</code>. Matches <code>&lt;dataset_root&gt;/unified/keypoints_reference_drawsportsfields.csv</code> and is used by FIFA Labeling Mode.</li>
         </ul>
         <p>Legacy PitchGuide (G key) uses the legacy FIFA / standard CSV; Template:FIFA (toolbar Template button or <code>--fifa-dataset</code>) loads the dataset CSV.</p>
       </section>
@@ -799,7 +799,7 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset vaila_dataset_YYYYMMDD/<br
         <h2>6c. FIFA Labeling Mode (Expand the FIFA Dataset)</h2>
         <p>
           A focused workflow to <strong>append new videos directly to the FIFA dataset</strong>
-          at <code>/home/preto/data/FIFA/dataset_vaila_fifa</code>, ready for retraining the
+          at <code>&lt;dataset_root&gt;</code>, ready for retraining the
           YOLO pitch keypoints model. The on-screen guide shows the FIFA 32-keypoint pitch
           with <strong><code>idx 0 = top_left_corner</code></strong> through
           <code>idx 31 = center_circle_right</code>; numbers and order match
@@ -822,7 +822,7 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset vaila_dataset_YYYYMMDD/<br
             <div class="code">
 uv run vaila/getpixelvideo.py \<br/>
 &nbsp;&nbsp;-f /path/to/new_video.mp4 \<br/>
-&nbsp;&nbsp;--fifa-dataset /home/preto/data/FIFA/dataset_vaila_fifa/unified
+&nbsp;&nbsp;--fifa-dataset <code>&lt;dataset_root&gt;</code>/unified
             </div>
             Short alias <code>--fifa</code> enables the mode without an existing dataset
             (F9 will create a fresh <code>vaila_dataset_YYYYMMDD_HHMMSS/</code> in the FIFA
@@ -878,7 +878,7 @@ uv run vaila/getpixelvideo.py \<br/>
         <div class="code">
 for v in /path/to/new_videos/*.mp4; do<br/>
 &nbsp;&nbsp;&nbsp;&nbsp;uv run vaila/getpixelvideo.py -f "$v" \<br/>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--fifa-dataset /home/preto/data/FIFA/dataset_vaila_fifa/unified<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--fifa-dataset <code>&lt;dataset_root&gt;</code>/unified<br/>
 done
         </div>
         <p>Or, in the same session: after F9, press <span class="key">F8</span> to open another video while keeping the dataset target.</p>
@@ -886,7 +886,7 @@ done
         <h3>Train YOLO with the augmented dataset</h3>
         <div class="code">
 uv run yolo pose train \<br/>
-&nbsp;&nbsp;data=/home/preto/data/FIFA/dataset_vaila_fifa/unified/data.yaml \<br/>
+&nbsp;&nbsp;data=<code>&lt;dataset_root&gt;</code>/unified/data.yaml \<br/>
 &nbsp;&nbsp;model=yolo11x-pose.pt imgsz=1280 mosaic=0 erasing=0 epochs=80
         </div>
 

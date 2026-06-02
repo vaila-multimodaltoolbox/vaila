@@ -7,7 +7,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Create: 28 May 2026
-Update: 29 May 2026
+Update: 01 June 2026
 Version: 0.3.47
 
 Description:
@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import csv
 import json
 import re
@@ -66,7 +67,9 @@ LOW_CONFIDENCE_MARKERS = (
     "não reconhecido",
     "sem respostas manuscritas legíveis",
 )
-DEFAULT_PAE_ROOT = Path.home() / "Preto" / "USP_RP" / "Alunos" / "PAE_USP" / "PAE_Biomec1"
+# Default root can be overridden via VAILA_PAE_ROOT environment variable.
+# Falls back to ~/vaila_data/pae if not set.
+DEFAULT_PAE_ROOT = Path(os.environ.get("VAILA_PAE_ROOT", str(Path.home() / "vaila_data" / "pae")))
 DEFAULT_INPUT_DIR = DEFAULT_PAE_ROOT / "originais"
 DEFAULT_OUTPUT_DIR = DEFAULT_PAE_ROOT / "transcritas_originais"
 DEFAULT_DEBUG_DIR = DEFAULT_PAE_ROOT / "transcritas_originais_debug" / "pages"

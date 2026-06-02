@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 23 May 2026
+Update: 01 June 2026
 Version: 0.3.45
 
 Description:
@@ -64,6 +64,7 @@ import datetime
 import json
 import math
 import os
+import tempfile
 import platform
 import shutil
 import time
@@ -151,7 +152,7 @@ POSE_CONNECTIONS = frozenset(
 )
 
 # #region agent log
-_DBG_PATH = "/home/preto/Preto/vaila/.cursor/debug-2d1fa6.log"
+_DBG_PATH = os.path.join(tempfile.gettempdir(), "vaila_debug_2d1fa6.log")
 _DBG_SESSION = "2d1fa6"
 _DBG_FACE_DRAW_ONCE = False
 

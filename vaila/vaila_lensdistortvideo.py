@@ -6,7 +6,7 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 10 October 2024
-Update Date: 23 May 2026
+Update Date: 01 June 2026
 Version: 0.3.45
 Python Version: 3.12.13
 
@@ -144,6 +144,7 @@ References:
 import argparse
 import json
 import os
+import tempfile
 import subprocess
 import time
 import tkinter as tk
@@ -183,7 +184,7 @@ def load_distortion_parameters(toml_path):
     # #region agent log
     try:
         with open(
-            "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log", "a"
+            os.path.join(tempfile.gettempdir(), "vaila_debug_lensdistort.log"), "a"
         ) as _f:
             _f.write(
                 json.dumps(
@@ -563,7 +564,7 @@ def run_distortvideo():
     # Determine parameters file
     # #region agent log
     _log_path_lens = (
-        "/home/preto/Preto/vaila/.cursor/debug-a5f5a000-975d-4bfc-9676-f9748629bda8.log"
+        os.path.join(tempfile.gettempdir(), "vaila_debug_lensdistort.log")
     )
     # #endregion
     if args.params_file:

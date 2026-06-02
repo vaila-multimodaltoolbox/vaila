@@ -25,7 +25,7 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.3.45</p>
+        <p><strong>Version:</strong> 0.3.47</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -41,16 +41,17 @@
     <div class="card">
         <h2>Key Updates</h2>
         <ul>
-            <li><strong>TOML cuts</strong>: Saves/loads <code>{basename}_cuts.toml</code> with 1-based frames, .6f precision, <code>frame_count = end - start + 1</code> (duration = frame_count / fps), plus <code>output_dir</code> and per-cut <code>output_file</code>. Paths stored as POSIX to avoid escaping.</li>
-            <li><strong>Audio waveform visualization</strong>: VirtualDub-style audio panel with orange waveform line, synchronized playback, and mute/unmute control (hotkey <code>A</code> for panel, <code>M</code> for mute).</li>
-            <li><strong>Audio playback</strong>: Synchronized audio playback with video; automatically loops when loop mode is enabled.</li>
-            <li><strong>Loop control</strong>: Loop button (column layout above Help) to enable/disable video and audio looping.</li>
-            <li><strong>Auto-fit window</strong>: Hotkey <code>0</code> automatically adjusts window to maximize screen space usage while maintaining aspect ratio.</li>
-            <li><strong>Marker navigation</strong>: PageUp/PageDown cycle through every start/end marker; Home/End jump to current/last cut bounds.</li>
-            <li><strong>Manual FPS</strong>: Hotkey <code>I</code>/<code>P</code> overrides FPS via Tk dialog and refreshes the UI.</li>
-            <li><strong>Scrollable help</strong>: Help overlay scrolls with mouse wheel or arrow keys.</li>
-            <li><strong>Output naming</strong>: Single → <code>{video}_vailacut_{timestamp}</code>; batch → <code>vailacut_{prefix}{source}_batch_{timestamp}</code>; sync batch → <code>vailacut_sync_{video}_{timestamp}</code>; files use 1-based frame ranges.</li>
-            <li><strong>Time display</strong>: Caption shows filename + FPS; slider shows frame and time with .6f precision (<code>Frame: X/Y (t.TTTTTT/T.TTTTTT)</code>).</li>
+            <li><strong>TOML cuts</strong>: Saves/loads <code>{basename}_cuts.toml</code> with 1-based frames, .6f precision, <code>frame_count = end - start + 1</code>, plus <code>output_dir</code> and per-cut <code>output_file</code>. Paths stored as POSIX.</li>
+            <li><strong>Audio waveform</strong>: Panel with orange waveform, sync playback; <code>A</code> toggle, <code>M</code> mute.</li>
+            <li><strong>Loop control</strong>: Loop button stacked above Help / Base name (right side of control bar).</li>
+            <li><strong>Auto-fit</strong>: Hotkey <code>0</code>; zoom/pan with +/-, wheel, middle-mouse drag.</li>
+            <li><strong>Marker navigation</strong>: Shift+Left/Right cycles previous/next cut marker with wraparound, matching <code>getpixelvideo</code>; PageUp/PageDown and Home/End remain available.</li>
+            <li><strong>Cut timeline feedback</strong>: clickable/draggable strip above the scrub slider, matching <code>getpixelvideo</code>. Blue = range, green = start, orange = end, yellow = pending start, white = playhead. Marker columns snap to cut points.</li>
+            <li><strong>Responsive final render</strong>: ffmpeg/OpenCV export uses a cancellable Tk progress dialog that remains responsive while rendering.</li>
+            <li><strong>Custom output base name</strong>: <code>B</code> or <strong>Base name</strong> button → <code>{prefix}_frame_{start}_to_{end}.mp4</code>; folder still <code>{video}_vailacut_{timestamp}</code>.</li>
+            <li><strong>Per-cut names from CSV (NEW)</strong>: <code>N</code> or <strong>Names CSV</strong> button loads a CSV/TXT list of base names (one per cut). Cut 1 → name 1, cut 2 → name 2, … each saved as <code>{name}.mp4</code> (clean). Accepts a comma-separated line or one name per line (<code>name,label</code> also works). Names are sanitized and de-duplicated; missing names fall back to the single base / video stem; per-cut names take priority over <code>B</code>.</li>
+            <li><strong>Subprocess launch</strong>: started from the main GUI as a separate process (like <code>getpixelvideo</code>), so closing the cut window returns control to vailá without freezing the main window.</li>
+            <li><strong>Player startup fix (v0.3.47)</strong>: <code>output_basename</code> initialized before pygame UI.</li>
         </ul>
     </div>
 
@@ -58,45 +59,52 @@
         <h2>🔧 Main Functions (high level)</h2>
         <ul>
             <li><code>play_video_with_cuts()</code> — main UI/player and cut workflow.</li>
-            <li><code>save_cuts_to_toml()</code> — writes TOML (1-based frames, .6f times, frame-count duration).</li>
-            <li><code>load_cuts_from_toml()</code> / <code>load_cuts_from_toml_file()</code> — reads TOML; legacy <code>.txt</code> as fallback.</li>
-            <li><code>cut_video_with_ffmpeg()</code> (precise) and <code>cut_video_with_opencv()</code> (fallback).</li>
-            <li><code>batch_process_videos()</code> and <code>batch_process_sync_videos()</code> — reuse marked cuts across files.</li>
-            <li><code>get_precise_video_metadata()</code> — ffprobe-first, OpenCV fallback.</li>
-            <li><code>run_cutvideo()</code> — entry point.</li>
+            <li><code>timeline_x_for_frame()</code> / <code>frame_index_from_cut_timeline_x()</code> — strip drawing and marker-aware click mapping.</li>
+            <li><code>adjacent_cut_marker_frame()</code> — Shift+Left/Right previous/next cut-marker lookup with wraparound.</li>
+            <li><code>RenderProgressDialog</code> — responsive, cancellable export feedback.</li>
+            <li><code>sanitize_output_basename()</code>, <code>effective_cut_basename()</code>, <code>cut_output_filename()</code> — output naming.</li>
+            <li><code>prompt_output_basename_dialog()</code> — Tk dialog for single base name.</li>
+            <li><code>prompt_output_basenames_csv()</code>, <code>parse_basename_list()</code>, <code>build_cut_output_filenames()</code> — per-cut name list (N / Names CSV) and collision-safe filename resolution.</li>
+            <li><code>save_cuts_to_toml()</code> — writes TOML (1-based frames, .6f times).</li>
+            <li><code>load_cuts_from_toml()</code> / <code>load_cuts_from_toml_file()</code> — reads TOML; legacy <code>.txt</code> fallback.</li>
+            <li><code>cut_video_with_ffmpeg()</code> / <code>cut_video_with_opencv()</code> — cutting backends.</li>
+            <li><code>batch_process_videos()</code>, <code>batch_process_sync_videos()</code> — batch workflows.</li>
+            <li><code>get_precise_video_metadata()</code> — ffprobe-first metadata.</li>
+            <li><code>run_cutvideo()</code> — GUI entry point.</li>
         </ul>
     </div>
 
     <div class="card">
         <h2>🎮 Controls (UI)</h2>
+        <h3>Bottom control bar</h3>
         <ul>
-            <li><strong>Playback/Navigation:</strong> Space (play/pause), →/← (frame step), ↑/↓ (±60 frames), slider click (jump).</li>
-            <li><strong>Audio Controls:</strong> <code>A</code> (toggle audio waveform panel), <code>M</code> (mute/unmute audio), Loop button (enable/disable looping).</li>
-            <li><strong>Window Controls:</strong> <code>0</code> (auto-fit window to screen), drag window edges (manual resize).</li>
-            <li><strong>Markers/Cuts:</strong> S (start), E (end), R (reset start), D or Delete (remove last cut), L (list cuts).</li>
-            <li><strong>Marker navigation:</strong> PageUp/PageDown (prev/next marker), Home/End (start/end of current or first/last cut).</li>
-            <li><strong>Jump inputs:</strong> G (frame), T (time), I or P (manual FPS input).</li>
-            <li><strong>File ops:</strong> F (load cuts TOML or sync TXT), ESC (save TOML, optionally render cuts; batch prompt).</li>
-            <li><strong>Help:</strong> H or click "Help" button (scrollable overlay with mouse wheel or arrow keys).</li>
+            <li><strong>Left:</strong> clickable cut strip above slider, frame/time (.6f), hint <code>Out: {prefix}_frame_…</code> (or <code>Out: per-cut CSV names (n)</code>). Strip: blue range, green start, orange end, yellow pending, white playhead.</li>
+            <li><strong>Right:</strong> <strong>Loop</strong>, <strong>Help</strong>, then <strong>Names CSV</strong> (<strong>Names ✓n</strong> when a list is loaded) + <strong>Base name</strong> (<strong>Base ✓</strong> when custom prefix is set).</li>
+        </ul>
+        <h3>Keyboard</h3>
+        <ul>
+            <li><strong>Playback:</strong> Space, →/←, Shift+→/← (previous/next cut marker with wraparound), ↑/↓ (±60), slider click, cut-strip click/drag with marker snap.</li>
+            <li><strong>Audio:</strong> <code>A</code> panel, <code>M</code> mute.</li>
+            <li><strong>Window:</strong> <code>0</code> auto-fit; +/- / wheel zoom; MMB pan.</li>
+            <li><strong>Cuts:</strong> S, E, R, D/Delete, L, C (labels CSV).</li>
+            <li><strong>Markers:</strong> Shift+Left/Right, PageUp/PageDown, Home/End.</li>
+            <li><strong>Jump:</strong> G (frame), T (time), I/P (FPS).</li>
+            <li><strong>Files:</strong> F (load TOML/sync), <strong>B</strong> (single base name), <strong>N</strong> (per-cut base-name CSV/TXT), ESC (save + optional render).</li>
+            <li><strong>Help:</strong> H or Help button.</li>
         </ul>
     </div>
 
     <div class="card">
         <h2>📁 Formats</h2>
         <ul>
-            <li><strong>Input videos:</strong> .mp4, .avi, .mov, .mkv (ffmpeg/OpenCV-readable).</li>
-            <li><strong>Cuts file:</strong> <code>{basename}_cuts.toml</code>
-                <ul>
-                    <li>Metadata: <code>video_name</code>, <code>fps</code> (.6f), <code>created</code>, <code>source_file</code> (POSIX path), <code>output_dir</code> (POSIX).</li>
-                    <li>Per cut (1-based): <code>index</code>, <code>start_frame</code>, <code>end_frame</code>, <code>frame_count</code>, <code>start_time</code>, <code>end_time</code>, <code>duration</code> (= frame_count / fps), <code>output_file</code>, <code>output_dir</code> (POSIX).</li>
-                </ul>
-            </li>
-            <li><strong>Sync TXT:</strong> <code>video_file new_name initial_frame final_frame</code> (integers).</li>
+            <li><strong>Input videos:</strong> .mp4, .avi, .mov, .mkv.</li>
+            <li><strong>Cuts file:</strong> <code>{basename}_cuts.toml</code> (1-based frames, <code>output_file</code> per cut).</li>
+            <li><strong>Sync TXT:</strong> <code>video_file new_name initial_frame final_frame</code>.</li>
             <li><strong>Outputs:</strong>
                 <ul>
-                    <li>Folder (single): <code>{video}_vailacut_{timestamp}</code> (or <code>{video}_sync_vailacut_{timestamp}</code> when using sync).</li>
-                    <li>Folder (batch): <code>vailacut_{prefix}{source}_batch_{timestamp}</code>.</li>
-                    <li>Files: <code>{video}_frame_{start}_to_{end}.mp4</code> (1-based in names).</li>
+                    <li>Folder: <code>{video}_vailacut_{timestamp}</code> (or <code>_sync_vailacut_</code> in sync mode).</li>
+                    <li>Files: <code>{base}_frame_{start}_to_{end}.mp4</code> (1-based; custom <code>{base}</code> via B).</li>
+                    <li>Files (per-cut CSV via N): <code>{name}.mp4</code>, one name per cut, de-duplicated.</li>
                 </ul>
             </li>
         </ul>
@@ -105,27 +113,24 @@
     <div class="card">
         <h2>🔬 Precision Notes</h2>
         <ul>
-            <li>FPS stored/written with .6f; duration uses frame counts to include the last frame.</li>
-            <li>All time displays use .6f precision (6 decimal places) for scientific accuracy in biomechanics.</li>
-            <li>UI displays frames as 1-based; internal math is 0-based.</li>
-            <li>PageUp/PageDown iterate over every start and end marker (sorted, deduped).</li>
-            <li>Audio waveform displays synchronized audio data with orange line visualization; playback matches video frame position.</li>
+            <li>FPS and times use .6f; duration from inclusive <code>frame_count</code>.</li>
+            <li>UI frames are 1-based; internal math is 0-based.</li>
         </ul>
     </div>
 
     <div class="card">
         <h2>🐛 Troubleshooting Quick Hits</h2>
         <ul>
-            <li><strong>No ffmpeg:</strong> Falls back to OpenCV; install ffmpeg for frame-accurate cuts and audio extraction.</li>
-            <li><strong>Windows paths in TOML:</strong> Stored with <code>/</code> to avoid escape issues.</li>
-            <li><strong>Cannot load cuts:</strong> Ensure file is <code>.toml</code> with <code>[[cuts]]</code>; legacy <code>.txt</code> still loads but is deprecated.</li>
-            <li><strong>No audio playback:</strong> Check if video file contains audio track; audio panel (A key) shows "No Audio Data" if unavailable.</li>
-            <li><strong>Audio not syncing:</strong> Ensure audio is loaded (A key) and not muted (M key); audio syncs on play/pause and frame navigation.</li>
+            <li><strong>Main vailá window froze / needed <code>kill</code> after cutting:</strong> Fixed — separate process plus responsive cancellable progress dialog during final export.</li>
+            <li><strong>Player does not open after metadata:</strong> Use v0.3.47+ (output_basename init fix).</li>
+            <li><strong>No ffmpeg:</strong> OpenCV fallback; install ffmpeg for precise cuts and audio.</li>
+            <li><strong>Cannot load cuts:</strong> Use <code>.toml</code> with <code>[[cuts]]</code>; legacy <code>.txt</code> deprecated.</li>
+            <li><strong>No audio:</strong> Video may lack audio track; panel shows "No Audio Data".</li>
         </ul>
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 23 May 2026 (v0.3.45 - Audio waveform, loop control, auto-fit, portrait video distortion fixes)</p>
+        <p>📅 Last Updated: 02 June 2026 (v0.3.47 - Shift+Left/Right cut-marker navigation; timeline feedback; responsive cancellable final render)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>

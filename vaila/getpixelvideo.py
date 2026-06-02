@@ -1833,7 +1833,7 @@ def play_video_with_controls(
         When ``prefer_fifa_dataset`` is True, the loader prefers the FIFA-dataset
         layout CSV (``soccerfield_ref3d_fifa_dataset.csv``) which has 32 keypoints
         starting at ``point_number = 0`` (``top_left_corner``) and matches the
-        layout of ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``.
+        layout of ``<dataset_root>/unified``.
         """
         import pandas as _pd
 
@@ -2045,7 +2045,7 @@ def play_video_with_controls(
         Used when ``pitch_guide_fifa_mode`` is True. Field is drawn from the FIFA
         dataset point names (top_left_corner / midfield_top / center_circle_*,
         left_pen_box_*_outer / inner, etc.). Indexing matches the ``unified/``
-        layout of ``/home/preto/data/FIFA/dataset_vaila_fifa``.
+        layout of ``<dataset_root>``.
         """
         if not pitch_guide_points:
             return None
@@ -9691,7 +9691,7 @@ names: {class_names}
 
 def _detect_dataset_layout(dataset_dir: str) -> str:
     """Return ``"fifa"`` for ``<dir>/{images,labels}/{split}`` (the FIFA dataset
-    layout used at ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``) or
+    layout used at ``<dataset_root>/unified``) or
     ``"vaila"`` for the legacy ``<dir>/{split}/{images,labels}`` layout.
 
     Heuristics, in order:
@@ -9774,7 +9774,7 @@ def export_pose_dataset(
             val/images/*.jpg|png      val/labels/*.txt
             test/images/*.jpg|png     test/labels/*.txt
 
-    * ``layout="fifa"`` (matches ``/home/preto/data/FIFA/dataset_vaila_fifa/unified``)::
+    * ``layout="fifa"`` (matches ``<dataset_root>/unified``)::
 
         dataset_dir/
             data.yaml      # path: <dir>, train: images/train, ...
@@ -10100,7 +10100,7 @@ def _write_pose_data_yaml(
     * ``"vaila"`` - absolute paths to ``<dir>/{split}/images``
       (legacy / standalone export).
     * ``"fifa"`` - relative ``images/{split}`` (matches
-      ``/home/preto/data/FIFA/dataset_vaila_fifa/unified/data.yaml``).
+      ``<dataset_root>/unified/data.yaml``).
     """
     classes_file = os.path.join(dataset_dir, "classes.txt")
     class_names: list[str] = []
