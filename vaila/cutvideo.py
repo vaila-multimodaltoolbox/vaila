@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 23 May 2026
-Version: 0.3.45
+Update Date: 02 June 2026
+Version: 0.3.47
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -28,10 +28,17 @@ Features:
 - Added support for loop control.
 - Added support for auto-fit window.
 - Added support for marker navigation.
+- Added clickable timeline feedback for cut ranges, start/end markers, and pending start.
+- Added Shift+Left/Right navigation across cut start/end timeline markers.
+- Added responsive, cancellable progress dialogs while final video cuts render.
 - Added support for manual FPS input.
 - Added support for help dialog.
 - Added support for save and generate videos.
 - Added support for batch processing of videos.
+- Optional custom output base name for cut files (GUI button or B key).
+- Optional per-cut output names from a CSV/TXT list (GUI "Names CSV" button or N
+  key): cut 1 -> name 1, cut 2 -> name 2, ... saved as "<name>.mp4". Names are
+  sanitized and de-duplicated automatically.
 
 Usage:
 - Run the script to open a graphical interface for selecting the input directory
@@ -67,6 +74,7 @@ License:
     This project is licensed under the terms of AGPLv3.
 """
 
+import bisect
 import contextlib
 import datetime
 import json
@@ -85,8 +93,10 @@ if platform.system() == "Linux":
 import subprocess
 import tempfile
 import threading
+import time
 import tomllib
 import wave
+from collections.abc import Callable
 from pathlib import Path
 
 import cv2
@@ -96,6 +106,235 @@ from rich import print
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 MAX_RENDER_PIXELS = 4_000_000
+CUT_RANGE_COLOR = (42, 86, 112)
+CUT_START_COLOR = (70, 220, 110)
+CUT_END_COLOR = (255, 135, 70)
+CUT_PENDING_COLOR = (255, 220, 70)
+CUT_PLAYHEAD_COLOR = (245, 245, 245)
+
+# SDL2 on Linux often posts WINDOWCLOSE instead of (or without) QUIT for the title-bar X.
+_CLOSE_EVENTS: tuple[int, ...] = (pygame.QUIT,)
+if hasattr(pygame, "WINDOWCLOSE"):
+    _CLOSE_EVENTS = (pygame.QUIT, pygame.WINDOWCLOSE)
+
+
+def clamp_frame_index(frame_idx: int, total_frames: int) -> int:
+    """Clamp a zero-based frame index to a video timeline."""
+    if total_frames <= 0:
+        return 0
+    return max(0, min(int(frame_idx), total_frames - 1))
+
+
+def timeline_x_for_frame(
+    frame_idx: int, total_frames: int, strip_left: int, strip_width: int
+) -> int:
+    """Map a zero-based frame index to an X coordinate on a timeline strip."""
+    if strip_width <= 0 or total_frames <= 1:
+        return strip_left
+    frame_idx = clamp_frame_index(frame_idx, total_frames)
+    return strip_left + int(round((frame_idx / (total_frames - 1)) * strip_width))
+
+
+def frame_index_from_cut_timeline_x(
+    *,
+    mouse_x: int,
+    strip_left: int,
+    strip_width: int,
+    total_frames: int,
+    cut_markers: list[int],
+) -> int:
+    """Map a timeline click to a frame, snapping to a cut marker in that pixel column."""
+    if strip_width <= 0 or total_frames <= 1:
+        return 0
+    rel_x = max(0.0, min(float(mouse_x - strip_left), float(strip_width)))
+    px_col = min(strip_width - 1, int(rel_x))
+    marker_frames = sorted(
+        {
+            clamp_frame_index(marker, total_frames)
+            for marker in cut_markers
+            if 0 <= marker < total_frames
+        }
+    )
+    f0 = int(px_col * total_frames / strip_width)
+    f1 = int((px_col + 1) * total_frames / strip_width)
+    f1 = max(f0 + 1, min(f1, total_frames))
+    lo = bisect.bisect_left(marker_frames, f0)
+    hi = bisect.bisect_left(marker_frames, f1)
+    markers_in_column = marker_frames[lo:hi]
+    if markers_in_column:
+        return markers_in_column[len(markers_in_column) // 2]
+    target = int(round((rel_x / strip_width) * (total_frames - 1)))
+    return clamp_frame_index(target, total_frames)
+
+
+def adjacent_cut_marker_frame(frame_idx: int, cut_markers: list[int], direction: int) -> int | None:
+    """Return previous/next cut marker with wraparound, or None when no markers exist."""
+    markers = sorted(set(cut_markers))
+    if not markers:
+        return None
+    if direction > 0:
+        return next((marker for marker in markers if marker > frame_idx), markers[0])
+    if direction < 0:
+        return next((marker for marker in reversed(markers) if marker < frame_idx), markers[-1])
+    raise ValueError("direction must be negative or positive")
+
+
+def _continue_processing(progress_callback: Callable[[], bool | None] | None) -> bool:
+    """Run an optional UI callback and report whether processing should continue."""
+    return progress_callback is None or progress_callback() is not False
+
+
+class RenderProgressDialog:
+    """Small Tk progress window kept responsive while ffmpeg renders cuts."""
+
+    def __init__(self, title: str, total_steps: int):
+        self.cancelled = False
+        self._root = None
+        self._status = None
+        self._progress = None
+        root = None
+        try:
+            from tkinter import Tk, ttk
+
+            root = Tk()
+            root.title(title)
+            root.geometry("520x155")
+            root.resizable(False, False)
+            root.protocol("WM_DELETE_WINDOW", self.request_cancel)
+
+            ttk.Label(root, text=title, font=("Arial", 11, "bold")).pack(pady=(18, 8))
+            self._status = ttk.Label(root, text="Preparing...")
+            self._status.pack(pady=(0, 8))
+            self._progress = ttk.Progressbar(
+                root,
+                orient="horizontal",
+                length=450,
+                mode="determinate",
+                maximum=max(1, total_steps),
+            )
+            self._progress.pack(pady=(0, 10))
+            ttk.Button(root, text="Cancel", command=self.request_cancel).pack()
+            self._root = root
+            self.update()
+        except Exception as exc:
+            print(f"Could not create render progress dialog: {exc}")
+            if root is not None:
+                with contextlib.suppress(Exception):
+                    root.destroy()
+
+    def request_cancel(self):
+        """Request cancellation; active ffmpeg subprocess is terminated by its polling loop."""
+        self.cancelled = True
+        if self._status is not None:
+            with contextlib.suppress(Exception):
+                self._status.config(text="Cancelling after active operation stops...")
+
+    def update(self, message: str | None = None, completed_steps: int | None = None) -> bool:
+        """Refresh window and return False when user requested cancellation."""
+        if self._root is None:
+            return not self.cancelled
+        try:
+            if message is not None and self._status is not None:
+                self._status.config(text=message)
+            if completed_steps is not None and self._progress is not None:
+                self._progress["value"] = completed_steps
+            self._root.update_idletasks()
+            self._root.update()
+        except Exception as exc:
+            print(f"Render progress dialog closed: {exc}")
+            self._root = None
+        return not self.cancelled
+
+    def close(self):
+        """Close progress window if it was created."""
+        if self._root is not None:
+            with contextlib.suppress(Exception):
+                self._root.destroy()
+            self._root = None
+
+
+def sanitize_output_basename(name: str) -> str:
+    """Return a filesystem-safe base name (no extension, no frame range suffix)."""
+    cleaned = name.strip().rstrip("._- ")
+    if not cleaned:
+        return ""
+    safe = "".join(c if c.isalnum() or c in "_-" else "_" for c in cleaned)
+    safe = safe.strip("._- ")
+    return safe
+
+
+def effective_cut_basename(video_path: str | Path, custom_basename: str | None) -> str:
+    """Resolve the prefix used in generated cut filenames."""
+    stem = Path(video_path).stem
+    if custom_basename:
+        safe = sanitize_output_basename(custom_basename)
+        if safe:
+            return safe
+    return stem
+
+
+def cut_output_filename(basename: str, start_frame: int, end_frame: int, ext: str = ".mp4") -> str:
+    """Build output filename with 1-based inclusive frame range (matches TOML/UI)."""
+    return f"{basename}_frame_{start_frame + 1}_to_{end_frame + 1}{ext}"
+
+
+def parse_basename_list(file_path: str | Path) -> list[str]:
+    """Read a CSV/TXT list of output base names (one per cut).
+
+    Accepts either a single comma-separated line or one name per line. When a
+    line has several comma-separated fields, the first non-empty field is used
+    (so a 2-column ``name,label`` CSV also works). Returns sanitized names;
+    empty/invalid entries are kept as ``""`` so positions still map to cuts.
+    """
+    names: list[str] = []
+    with open(file_path, encoding="utf-8") as f:
+        content = f.read().strip()
+    if not content:
+        return names
+    if "," in content and "\n" not in content:
+        raw_items = content.split(",")
+    else:
+        raw_items = [line for line in content.splitlines() if line.strip()]
+    for item in raw_items:
+        first_field = item.split(",")[0]
+        names.append(sanitize_output_basename(first_field))
+    return names
+
+
+def build_cut_output_filenames(
+    video_path: str | Path,
+    cuts: list[tuple[int, int]],
+    custom_basename: str | None,
+    per_cut_basenames: list[str] | None = None,
+    ext: str = ".mp4",
+) -> list[str]:
+    """Return one output filename per cut, collision-safe.
+
+    Priority per cut: CSV per-cut basename > single custom basename > video stem.
+    When a per-cut basename is supplied it names the file exactly
+    ``<basename><ext>`` (clean, professional); otherwise the classic
+    ``<base>_frame_<start>_to_<end><ext>`` keeps full frame traceability.
+    Duplicate names are disambiguated with ``_2``, ``_3`` suffixes.
+    """
+    names: list[str] = []
+    used: dict[str, int] = {}
+    for i, (start, end) in enumerate(cuts):
+        per_cut = per_cut_basenames[i] if per_cut_basenames and i < len(per_cut_basenames) else ""
+        if per_cut:
+            candidate = f"{per_cut}{ext}"
+        else:
+            base = effective_cut_basename(video_path, custom_basename)
+            candidate = cut_output_filename(base, start, end, ext)
+        key = candidate.lower()
+        if key in used:
+            used[key] += 1
+            stem = candidate[: -len(ext)] if ext and candidate.endswith(ext) else candidate
+            candidate = f"{stem}_{used[key]}{ext}"
+            used[candidate.lower()] = 1
+        else:
+            used[key] = 1
+        names.append(candidate)
+    return names
 
 
 def get_precise_video_metadata(video_path):
@@ -197,10 +436,8 @@ def get_precise_video_metadata(video_path):
         if rotation == 0 and "tags" in video_stream:
             rotate_tag = video_stream["tags"].get("rotate")
             if rotate_tag:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     rotation = int(float(rotate_tag))
-                except (ValueError, TypeError):
-                    pass
 
         rotation = rotation % 360
         raw_width = int(video_stream.get("width"))
@@ -278,13 +515,16 @@ def check_and_rotate_frame(frame, metadata):
     return frame
 
 
-def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metadata):
-    """
-    Cut video using ffmpeg to preserve precise metadata.
-    Uses frame-accurate cutting with copy codec when possible.
-    """
+def cut_video_with_ffmpeg(
+    video_path,
+    output_path,
+    start_frame,
+    end_frame,
+    metadata,
+    progress_callback: Callable[[], bool | None] | None = None,
+):
+    """Cut video with ffmpeg while keeping an optional progress UI responsive."""
     try:
-        # Check if ffmpeg is available (use UTF-8 to avoid UnicodeDecodeError on Windows cp1252)
         subprocess.run(
             ["ffmpeg", "-version"],
             capture_output=True,
@@ -294,16 +534,18 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
             check=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
-        # Fallback to OpenCV if ffmpeg not available
-        return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
+        return cut_video_with_opencv(
+            video_path,
+            output_path,
+            start_frame,
+            end_frame,
+            metadata,
+            progress_callback=progress_callback,
+        )
 
     fps = metadata["fps"]
-
-    # Calculate precise frame count (inclusive) and start time
     frame_count = end_frame - start_frame + 1
     start_time = start_frame / fps if fps > 0 else 0.0
-
-    # Frame-accurate cutting using ffmpeg with re-encoding and explicit frame count
     cmd_reencode = [
         "ffmpeg",
         "-y",
@@ -314,43 +556,58 @@ def cut_video_with_ffmpeg(video_path, output_path, start_frame, end_frame, metad
         "-frames:v",
         str(frame_count),
         "-c:v",
-        "libx264",  # Re-encode for accuracy
+        "libx264",
         "-preset",
         "medium",
         "-crf",
-        "18",  # High quality
+        "18",
         "-c:a",
         "aac",
         "-b:a",
         "192k",
         "-r",
-        f"{fps:.6f}",  # Preserve fps
+        f"{fps:.6f}",
         "-avoid_negative_ts",
         "make_zero",
         str(output_path),
     ]
     try:
-        # Let ffmpeg print progress to terminal (no silent run)
-        subprocess.run(
-            cmd_reencode,
-            capture_output=False,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=True,
+        process = subprocess.Popen(cmd_reencode)
+        while process.poll() is None:
+            if not _continue_processing(progress_callback):
+                print("Video cut cancelled by user")
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                return False
+            time.sleep(0.05)
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, cmd_reencode)
+        return _continue_processing(progress_callback)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"Error with ffmpeg re-encoding: {exc}")
+        return cut_video_with_opencv(
+            video_path,
+            output_path,
+            start_frame,
+            end_frame,
+            metadata,
+            progress_callback=progress_callback,
         )
-        return True
-    except subprocess.CalledProcessError as e2:
-        err = getattr(e2, "stderr", None) or str(e2)
-        print(f"Error with ffmpeg re-encoding: {err}")
-        # Final fallback to OpenCV
-        return cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata)
 
 
-def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metadata):
-    """
-    Fallback function to cut video using OpenCV (less precise but always available).
-    """
+def cut_video_with_opencv(
+    video_path,
+    output_path,
+    start_frame,
+    end_frame,
+    metadata,
+    progress_callback: Callable[[], bool | None] | None = None,
+):
+    """Fallback video cutter with cooperative progress UI updates."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return False
@@ -358,22 +615,27 @@ def cut_video_with_opencv(video_path, output_path, start_frame, end_frame, metad
     fps = metadata["fps"]
     width = metadata["width"]
     height = metadata["height"]
-
-    # Use float FPS, not int
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+    if not out.isOpened():
+        cap.release()
+        return False
 
-    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-    for _ in range(end_frame - start_frame + 1):
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame = check_and_rotate_frame(frame, metadata)
-        out.write(frame)
-
-    out.release()
-    cap.release()
-    return True
+    try:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        for frame_offset in range(end_frame - start_frame + 1):
+            if frame_offset % 10 == 0 and not _continue_processing(progress_callback):
+                print("Video cut cancelled by user")
+                return False
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame = check_and_rotate_frame(frame, metadata)
+            out.write(frame)
+        return _continue_processing(progress_callback)
+    finally:
+        out.release()
+        cap.release()
 
 
 def save_cuts_to_toml(
@@ -771,9 +1033,8 @@ def write_wav_from_pcm(audio_data: np.ndarray, sample_rate: int) -> str:
     """
     Write mono float32 PCM (-1..1) to a temp WAV file and return its path.
     """
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    tmp_path = tmp.name
-    tmp.close()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        tmp_path = tmp.name
 
     pcm_int16 = np.clip(audio_data * 32767.0, -32768, 32767).astype(np.int16)
     with wave.open(tmp_path, "wb") as wf:
@@ -838,6 +1099,7 @@ def load_sync_file_from_dialog(video_path):
         ],
         initialdir=Path(video_path).parent,
     )
+    root.destroy()
 
     if not selected_file:
         return [], False, None
@@ -887,7 +1149,7 @@ def load_sync_file_from_dialog(video_path):
 
 
 def batch_process_sync_videos(video_path, sync_data):
-    """Process all videos in directory according to sync file."""
+    """Process all videos in a sync file with visible, cancellable progress."""
     if not sync_data:
         return False
 
@@ -898,53 +1160,64 @@ def batch_process_sync_videos(video_path, sync_data):
     output_dir.mkdir(exist_ok=True)
 
     processed_count = 0
-
-    for video_file, sync_info in sync_data.items():
-        video_path_full = video_dir / video_file
-
-        if not video_path_full.exists():
-            print(f"Warning: Video file {video_file} not found")
-            continue
-
-        try:
-            # Get precise video metadata
-            metadata = get_precise_video_metadata(video_path_full)
-            total_frames = metadata.get("nb_frames") or (
-                int(metadata.get("duration", 0) * metadata["fps"])
-                if metadata.get("duration")
-                else int(cv2.VideoCapture(str(video_path_full)).get(cv2.CAP_PROP_FRAME_COUNT))
-            )
-
-            # Process the cut
-            start_frame = sync_info["initial_frame"]
-            end_frame = sync_info["final_frame"]
-
-            # Skip if start frame is beyond video length
-            if start_frame >= total_frames:
-                print(f"Warning: Start frame {start_frame} beyond video length for {video_file}")
+    progress_dialog = RenderProgressDialog("Processing synchronized videos", len(sync_data))
+    try:
+        for item_idx, (video_file, sync_info) in enumerate(sync_data.items()):
+            if not progress_dialog.update(f"Preparing {video_file}", item_idx):
+                break
+            video_path_full = video_dir / video_file
+            if not video_path_full.exists():
+                print(f"Warning: Video file {video_file} not found")
                 continue
 
-            # Adjust end frame if needed
-            actual_end_frame = min(end_frame, total_frames - 1)
-
-            output_path = output_dir / sync_info["new_name"]
-
-            # Use ffmpeg for precise cutting
-            success = cut_video_with_ffmpeg(
-                video_path_full, output_path, start_frame, actual_end_frame, metadata
-            )
-
-            if success:
-                processed_count += 1
-                print(
-                    f"Processed: {video_file} -> {sync_info['new_name']} (FPS: {metadata['fps']:.6f})"
+            try:
+                metadata = get_precise_video_metadata(video_path_full)
+                total_frames = metadata.get("nb_frames") or (
+                    int(metadata.get("duration", 0) * metadata["fps"])
+                    if metadata.get("duration")
+                    else int(cv2.VideoCapture(str(video_path_full)).get(cv2.CAP_PROP_FRAME_COUNT))
                 )
-            else:
-                print(f"Error processing: {video_file}")
+                start_frame = sync_info["initial_frame"]
+                end_frame = sync_info["final_frame"]
+                if start_frame >= total_frames:
+                    print(
+                        f"Warning: Start frame {start_frame} beyond video length for {video_file}"
+                    )
+                    continue
 
-        except Exception as e:
-            print(f"Error processing {video_file}: {str(e)}")
+                actual_end_frame = min(end_frame, total_frames - 1)
+                output_path = output_dir / sync_info["new_name"]
+                progress_dialog.update(
+                    f"Rendering {video_file} ({item_idx + 1}/{len(sync_data)})",
+                    item_idx,
+                )
+                success = cut_video_with_ffmpeg(
+                    video_path_full,
+                    output_path,
+                    start_frame,
+                    actual_end_frame,
+                    metadata,
+                    progress_callback=progress_dialog.update,
+                )
+                if progress_dialog.cancelled:
+                    break
+                if success:
+                    processed_count += 1
+                    print(
+                        f"Processed: {video_file} -> {sync_info['new_name']} "
+                        f"(FPS: {metadata['fps']:.6f})"
+                    )
+                else:
+                    print(f"Error processing: {video_file}")
+            except Exception as exc:
+                print(f"Error processing {video_file}: {exc}")
+            finally:
+                progress_dialog.update(completed_steps=item_idx + 1)
+    finally:
+        progress_dialog.close()
 
+    if progress_dialog.cancelled:
+        print("Synchronized video processing cancelled by user")
     return processed_count > 0
 
 
@@ -969,13 +1242,15 @@ def play_video_with_cuts(video_path):
         cap.release()
         print(f"Error opening or reading video: {video_path}")
 
-        # Initialize Tk root if needed for the dialog
+        # Initialize Tk root if needed for the dialog.
+        root = None
         try:
             root = Tk()
             root.withdraw()
         except Exception:
-            # If Tk is already initialized or fails, proceed with what we have
-            root.destroy()
+            if root is not None:
+                with contextlib.suppress(Exception):
+                    root.destroy()
             return
 
         if messagebox.askyesno(
@@ -1005,12 +1280,10 @@ def play_video_with_cuts(video_path):
                 progress_win.resizable(False, False)
                 if root:
                     # Center relative to parent if possible, otherwise screen center
-                    try:
+                    with contextlib.suppress(Exception):
                         x = root.winfo_x() + (root.winfo_width() // 2) - 200
                         y = root.winfo_y() + (root.winfo_height() // 2) - 75
                         progress_win.geometry(f"+{x}+{y}")
-                    except:
-                        pass
 
                 ttk.Label(
                     progress_win,
@@ -1119,6 +1392,7 @@ def play_video_with_cuts(video_path):
                     messagebox.showerror(
                         "Error", "Could not open the converted video.", parent=root
                     )
+                    root.destroy()
                     return
             else:
                 error_msg = error if error else "Unknown error during conversion"
@@ -1128,9 +1402,12 @@ def play_video_with_cuts(video_path):
                     f"Failed to convert video:\n{error_msg}\n\nEnsure ffmpeg is installed.",
                     parent=root,
                 )
+                root.destroy()
                 return
         else:
+            root.destroy()
             return
+        root.destroy()
 
     # Get precise video metadata using ffprobe
     metadata = get_precise_video_metadata(video_path)
@@ -1181,8 +1458,12 @@ def play_video_with_cuts(video_path):
     window_width = max(640, min(window_width, max_width))
     window_height = max(480, min(window_height, max_height))
 
-    # UI layout constants
-    control_height = 80
+    # UI layout constants (cut-marker strip + scrub slider + option buttons)
+    control_height = 104
+    CUT_TIMELINE_ROW_Y = 28
+    CUT_TIMELINE_HEIGHT = 9
+    SLIDER_ROW_Y = 45
+    BUTTON_ROW_Y = 74
     audio_height = 150
     show_audio = False
     audio_data = None
@@ -1196,14 +1477,33 @@ def play_video_with_cuts(video_path):
 
     # Get video filename for window title
     video_filename = Path(video_path).name
+    output_basename = (
+        None  # Must exist before nested funcs that read it (update_caption, draw_controls)
+    )
+    output_basenames: list[str] = []  # Optional per-cut base names loaded from a CSV/TXT list
 
     def set_display_mode():
         total_h = window_height + control_height + (audio_height if show_audio else 0)
         return pygame.display.set_mode((window_width, total_h), pygame.RESIZABLE)
 
+    def restore_pygame_display():
+        """Re-open the display after pygame.display.quit() (required on Linux for WM events)."""
+        if not pygame.display.get_init():
+            pygame.display.init()
+        screen_local = set_display_mode()
+        update_caption()
+        return screen_local
+
     def update_caption():
+        if output_basenames:
+            base_info = f"Names:CSV({len(output_basenames)})"
+        else:
+            base_info = f"Base:{effective_cut_basename(video_path, output_basename)}"
         pygame.display.set_caption(
-            f"{video_filename} (FPS: {fps:.2f}) | A:Audio M:Mute 0:AutoFit +/-:Zoom Wheel:Zoom MMB:Pan | Space:Play/Pause | ←→:Frame | S:Start E:End R:Reset DEL/D:Remove | L:List | F:Load TOML/Sync | Home/End:Jump Cut | PgUp/PgDn:Next Marker | G:Frame T:Time I/P:FPS | H:Help ESC:Save"
+            f"{video_filename} (FPS: {fps:.2f}) | {base_info} | "
+            "A:Audio M:Mute B:BaseName N:NamesCSV 0:AutoFit +/-:Zoom | Space:Play/Pause | ←→:Frame | "
+            "S:Start E:End R:Reset DEL/D:Remove | L:List | F:Load | Home/End | PgUp/PgDn | "
+            "G:Frame T:Time I/P:FPS Shift+←/→:Markers | H:Help ESC:Save"
         )
 
     def auto_fit_window():
@@ -1249,6 +1549,7 @@ def play_video_with_cuts(video_path):
     offset_x = 0.0
     offset_y = 0.0
     panning = False
+    dragging_cut_timeline = False
 
     def clamp_pan_offsets():
         nonlocal offset_x, offset_y
@@ -1396,19 +1697,66 @@ def play_video_with_cuts(video_path):
         slider_surface = pygame.Surface((window_width, control_height))
         slider_surface.fill((30, 30, 30))
 
-        # Draw slider bar
+        # Draw clickable cut-marker strip above main scrub slider, matching getpixelvideo.
         slider_width = int(window_width * 0.8)
         slider_x = (window_width - slider_width) // 2
-        slider_y = 30
+        slider_y = SLIDER_ROW_Y
         slider_height = 10
+        cut_timeline_rect = pygame.Rect(
+            slider_x,
+            CUT_TIMELINE_ROW_Y,
+            slider_width,
+            CUT_TIMELINE_HEIGHT,
+        )
+        pygame.draw.rect(slider_surface, (48, 48, 48), cut_timeline_rect)
+        for start, end in cuts:
+            start_x = timeline_x_for_frame(start, total_frames, slider_x, slider_width)
+            end_x = timeline_x_for_frame(end, total_frames, slider_x, slider_width)
+            pygame.draw.line(
+                slider_surface,
+                CUT_RANGE_COLOR,
+                (start_x, cut_timeline_rect.centery),
+                (end_x, cut_timeline_rect.centery),
+                5,
+            )
+            pygame.draw.line(
+                slider_surface,
+                CUT_START_COLOR,
+                (start_x, cut_timeline_rect.top),
+                (start_x, cut_timeline_rect.bottom - 1),
+                2,
+            )
+            pygame.draw.line(
+                slider_surface,
+                CUT_END_COLOR,
+                (end_x, cut_timeline_rect.top),
+                (end_x, cut_timeline_rect.bottom - 1),
+                2,
+            )
+        if current_start is not None:
+            pending_x = timeline_x_for_frame(current_start, total_frames, slider_x, slider_width)
+            pygame.draw.line(
+                slider_surface,
+                CUT_PENDING_COLOR,
+                (pending_x, cut_timeline_rect.top - 2),
+                (pending_x, cut_timeline_rect.bottom + 1),
+                3,
+            )
+        playhead_x = timeline_x_for_frame(frame_count, total_frames, slider_x, slider_width)
+        pygame.draw.line(
+            slider_surface,
+            CUT_PLAYHEAD_COLOR,
+            (playhead_x, cut_timeline_rect.top),
+            (playhead_x, cut_timeline_rect.bottom - 1),
+            1,
+        )
+
         pygame.draw.rect(
             slider_surface,
             (60, 60, 60),
             (slider_x, slider_y, slider_width, slider_height),
         )
-
-        # Draw slider handle
-        slider_pos = slider_x + int((frame_count / total_frames) * slider_width)
+        slider_pos = timeline_x_for_frame(frame_count, total_frames, slider_x, slider_width)
         pygame.draw.circle(
             slider_surface,
             (255, 255, 255),
@@ -1427,39 +1775,83 @@ def play_video_with_cuts(video_path):
         )
         slider_surface.blit(frame_text, (10, 10))
 
-        # Draw current cut information
-        if current_start is not None:
-            cut_text = font.render(f"Current Cut Start: {current_start + 1}", True, (0, 255, 0))
-            slider_surface.blit(cut_text, (10, 50))
-
-        # Draw number of cuts and sync status
+        # Draw cut status on the right without overlapping pending-start feedback.
+        status_font = pygame.font.Font(None, 20)
         sync_status = " (SYNC)" if using_sync_file else ""
-        cuts_text = font.render(f"Cuts: {len(cuts)}{sync_status}", True, (255, 255, 255))
-        slider_surface.blit(cuts_text, (window_width - 150, 50))
+        cuts_text = status_font.render(f"Cuts: {len(cuts)}{sync_status}", True, (255, 255, 255))
+        cuts_x = max(10, window_width - cuts_text.get_width() - 12)
+        slider_surface.blit(cuts_text, (cuts_x, 8))
+        if current_start is not None:
+            cut_text = status_font.render(
+                f"Current Cut Start: {current_start + 1}", True, CUT_PENDING_COLOR
+            )
+            cut_x = max(10, cuts_x - cut_text.get_width() - 18)
+            slider_surface.blit(cut_text, (cut_x, 8))
 
-        # Smaller font for buttons
+        # Smaller font for option buttons (second row, below timeline)
         button_font = pygame.font.Font(None, 15)
-
-        # Button width and x position (aligned)
         button_width = 70
-        button_x = window_width - button_width - 10
+        button_h = 22
+        button_gap = 6
+        buttons_right = window_width - 10
 
-        # Loop button (above Help)
-        loop_button_rect = pygame.Rect(button_x, 10, button_width, 22)
+        base_button_rect = pygame.Rect(
+            buttons_right - button_width, BUTTON_ROW_Y, button_width, button_h
+        )
+        names_button_rect = pygame.Rect(
+            base_button_rect.left - button_gap - button_width,
+            BUTTON_ROW_Y,
+            button_width,
+            button_h,
+        )
+        help_button_rect = pygame.Rect(
+            names_button_rect.left - button_gap - button_width,
+            BUTTON_ROW_Y,
+            button_width,
+            button_h,
+        )
+        loop_button_rect = pygame.Rect(
+            help_button_rect.left - button_gap - button_width,
+            BUTTON_ROW_Y,
+            button_width,
+            button_h,
+        )
+
         loop_color = (60, 120, 60) if loop_enabled else (90, 90, 90)
         pygame.draw.rect(slider_surface, loop_color, loop_button_rect)
         loop_text = button_font.render(
             "Loop" if loop_enabled else "Loop off", True, (255, 255, 255)
         )
-        loop_text_rect = loop_text.get_rect(center=loop_button_rect.center)
-        slider_surface.blit(loop_text, loop_text_rect)
+        slider_surface.blit(loop_text, loop_text.get_rect(center=loop_button_rect.center))
 
-        # Help button (below Loop)
-        help_button_rect = pygame.Rect(button_x, 35, button_width, 22)
         pygame.draw.rect(slider_surface, (100, 100, 100), help_button_rect)
         help_text = button_font.render("Help", True, (255, 255, 255))
-        text_rect = help_text.get_rect(center=help_button_rect.center)
-        slider_surface.blit(help_text, text_rect)
+        slider_surface.blit(help_text, help_text.get_rect(center=help_button_rect.center))
+
+        base_active = output_basename is not None and bool(
+            sanitize_output_basename(output_basename)
+        )
+        base_color = (80, 100, 140) if base_active else (70, 70, 70)
+        pygame.draw.rect(slider_surface, base_color, base_button_rect)
+        base_label = "Base ✓" if base_active else "Base name"
+        base_text = button_font.render(base_label, True, (255, 255, 255))
+        slider_surface.blit(base_text, base_text.get_rect(center=base_button_rect.center))
+
+        names_active = bool(output_basenames)
+        names_color = (140, 110, 70) if names_active else (70, 70, 70)
+        pygame.draw.rect(slider_surface, names_color, names_button_rect)
+        names_label = f"Names ✓{len(output_basenames)}" if names_active else "Names CSV"
+        names_text = button_font.render(names_label, True, (255, 255, 255))
+        slider_surface.blit(names_text, names_text.get_rect(center=names_button_rect.center))
+
+        base_hint_font = pygame.font.Font(None, 18)
+        if output_basenames:
+            hint_str = f"Out: per-cut CSV names ({len(output_basenames)})"
+        else:
+            file_base = effective_cut_basename(video_path, output_basename)
+            hint_str = f"Out: {file_base}_frame_…"
+        base_hint = base_hint_font.render(hint_str, True, (180, 200, 255))
+        slider_surface.blit(base_hint, (10, BUTTON_ROW_Y + 2))
 
         if show_audio:
             audio_indicator = font.render("[AUDIO ON]", True, (0, 255, 0))
@@ -1471,8 +1863,11 @@ def play_video_with_cuts(video_path):
             slider_width,
             slider_y,
             slider_height,
+            cut_timeline_rect,
             help_button_rect,
             loop_button_rect,
+            base_button_rect,
+            names_button_rect,
             base_y,
         )
 
@@ -1533,6 +1928,8 @@ def play_video_with_cuts(video_path):
             "- Space: Play/Pause",
             "- Right Arrow: Next Frame (when paused)",
             "- Left Arrow: Previous Frame (when paused)",
+            "- Shift+Right / Shift+Left: Jump to next/previous cut marker",
+            "    (start/end points shown in the timeline strip)",
             "- Up Arrow: Fast Forward (60 frames)",
             "- Down Arrow: Rewind (60 frames)",
             "- G: Go to Frame Number (enter frame number as int)",
@@ -1561,7 +1958,11 @@ def play_video_with_cuts(video_path):
             "",
             "File Operations:",
             "- F: Load Sync File or Cuts TOML File",
-            "- C: Load Cut Labels from CSV",
+            "- C: Load Cut Labels from CSV (shown in cut list / TOML)",
+            "- B: Set a single output base name for all cuts (or 'Base name' button)",
+            "- N: Load a CSV/TXT list of base names, one per cut (or 'Names CSV' button)",
+            "     cut 1 -> name 1, cut 2 -> name 2 ... files saved as <name>.mp4",
+            "     (single comma-separated line OR one name per line; 'name,label' OK)",
             "- I or P: Input Manual FPS",
             "- ESC: Save cuts to TOML file and optionally generate videos",
             "",
@@ -1569,9 +1970,11 @@ def play_video_with_cuts(video_path):
             "- H: Show this help dialog",
             "",
             "Mouse Controls:",
+            "- Click or drag cut strip: Jump to cut markers (green start / orange end)",
+            "- Yellow strip marker: Pending start selected with S",
             "- Click on slider: Jump to frame",
-            "- Click 'Loop' button: Toggle looping",
-            "- Click 'Help' button: Show this dialog",
+            "- Click 'Loop' / 'Help' / 'Names CSV' / 'Base name' (row below the timeline):",
+            "  Loop, Help, per-cut Names CSV, single Base name",
             "- Mouse Wheel (video area): Zoom in/out",
             "- Middle mouse drag (video area): Pan when zoomed",
             "- Mouse Wheel in this help: Scroll help text",
@@ -1579,6 +1982,7 @@ def play_video_with_cuts(video_path):
             "- Drag window edges: Resize window",
             "",
             "Display Features:",
+            "- Cut strip: blue ranges, green starts, orange ends, yellow pending start",
             "- Audio waveform shows synchronized audio with orange line",
             "- Time precision: 6 decimal places (.6f) for scientific accuracy",
             "- Auto-fit adjusts window to maximize use of screen space",
@@ -1662,10 +2066,114 @@ def play_video_with_cuts(video_path):
                     scroll_offset = max(
                         0, min(max_scroll, scroll_offset - event.y * line_height * 3)
                     )
-                elif event.type == pygame.QUIT:
+                elif event.type in _CLOSE_EVENTS:
                     waiting_for_input = False
-                    global running
+                    nonlocal running
                     running = False
+
+    def prompt_output_basename_dialog():
+        """Ask user for custom output file prefix (Tk dialog; pygame display paused)."""
+        nonlocal output_basename
+        stem = Path(video_path).stem
+        current = output_basename if output_basename is not None else ""
+        pygame.display.quit()
+        root_bn = Tk()
+        root_bn.withdraw()
+        new_val = simpledialog.askstring(
+            "Output base name",
+            "Base name for cut output files (prefix before _frame_X_to_Y.mp4):\n\n"
+            f"Leave empty to use video name: {stem}\n"
+            "Example: trial01 → trial01_frame_10_to_20.mp4",
+            initialvalue=current,
+        )
+        root_bn.destroy()
+        screen_local = restore_pygame_display()
+        pygame.display.flip()
+        if new_val is None:
+            return screen_local
+        if not new_val.strip():
+            output_basename = None
+            print(f"Output base name reset to video stem: {stem}")
+        else:
+            safe = sanitize_output_basename(new_val)
+            if not safe:
+                msg_root = Tk()
+                msg_root.withdraw()
+                messagebox.showwarning(
+                    "Invalid base name",
+                    "Use letters, numbers, underscore, or hyphen only.",
+                    parent=msg_root,
+                )
+                msg_root.destroy()
+            else:
+                output_basename = safe
+                print(f"Output base name set: {safe}")
+        return screen_local
+
+    def prompt_output_basenames_csv():
+        """Load a CSV/TXT list of per-cut output base names (pygame display paused).
+
+        Each line/field becomes the base name of the corresponding cut, in order:
+        cut 1 -> name[0], cut 2 -> name[1], ... Files are then written as
+        ``<name>.mp4`` instead of ``<video>_frame_X_to_Y.mp4``.
+        """
+        nonlocal output_basenames
+        pygame.display.quit()
+        root_csv = Tk()
+        root_csv.withdraw()
+        csv_file = filedialog.askopenfilename(
+            title="Select base-name list (one per cut)",
+            filetypes=[
+                ("CSV files", "*.csv"),
+                ("TXT files", "*.txt"),
+                ("All files", "*.*"),
+            ],
+            parent=root_csv,
+        )
+        names: list[str] = []
+        load_error = None
+        if csv_file:
+            try:
+                names = parse_basename_list(csv_file)
+            except Exception as exc:  # noqa: BLE001 - surfaced to the user below
+                load_error = str(exc)
+        root_csv.destroy()
+        screen_local = restore_pygame_display()
+        pygame.display.flip()
+
+        if not csv_file:
+            return screen_local
+
+        msg_root = Tk()
+        msg_root.withdraw()
+        if load_error is not None:
+            messagebox.showerror(
+                "Base-name list", f"Could not read file:\n{load_error}", parent=msg_root
+            )
+        elif not names:
+            messagebox.showwarning(
+                "Base-name list", "No usable base names found in the file.", parent=msg_root
+            )
+        else:
+            output_basenames = names
+            n_cuts = len(cuts)
+            extra = ""
+            if n_cuts and len(names) < n_cuts:
+                extra = (
+                    f"\n\nNote: {len(names)} name(s) for {n_cuts} cut(s); "
+                    "remaining cuts use the default name."
+                )
+            elif n_cuts and len(names) > n_cuts:
+                extra = f"\n\nNote: {len(names)} name(s) for {n_cuts} cut(s); extras are ignored."
+            preview = ", ".join(names[:10]) + (" …" if len(names) > 10 else "")
+            messagebox.showinfo(
+                "Base-name list loaded",
+                f"Loaded {len(names)} base name(s):\n{preview}{extra}",
+                parent=msg_root,
+            )
+            print(f"Per-cut base names loaded ({len(names)}): {names}")
+        msg_root.destroy()
+        return screen_local
 
     def save_and_generate_videos():
         nonlocal cuts, video_path, using_sync_file, sync_data, fps, cut_labels
@@ -1685,7 +2193,9 @@ def play_video_with_cuts(video_path):
             else f"{video_name}_vailacut_{timestamp_now}"
         )
         planned_output_dir = Path(video_path).parent / planned_dir_name
-        per_cut_files = [f"{video_name}_frame_{start + 1}_to_{end + 1}.mp4" for start, end in cuts]
+        per_cut_files = build_cut_output_filenames(
+            video_path, cuts, output_basename, output_basenames
+        )
 
         save_cuts_to_toml(
             video_path,
@@ -1791,10 +2301,28 @@ def play_video_with_cuts(video_path):
         output_dir.mkdir(exist_ok=True)
 
         processed_count = 0
+        batch_cancelled = False
+
+        def request_batch_cancel():
+            nonlocal batch_cancelled
+            batch_cancelled = True
+            status_label.config(text="Cancelling batch...")
+
+        def refresh_batch_progress():
+            root.update_idletasks()
+            root.update()
+            return not batch_cancelled
+
+        root.protocol("WM_DELETE_WINDOW", request_batch_cancel)
+        ttk.Button(root, text="Cancel", command=request_batch_cancel).pack()
 
         def process_next_video():
             nonlocal processed_count
 
+            if batch_cancelled:
+                status_label.config(text="Batch processing cancelled")
+                root.after(300, root.destroy)
+                return
             if processed_count < len(video_files):
                 video_path = str(video_files[processed_count])
                 video_name = Path(video_path).stem
@@ -1833,8 +2361,15 @@ def play_video_with_cuts(video_path):
                             f"  Cut {idx + 1}/{len(valid_cuts)}: frames {start_frame}-{actual_end_frame} -> {output_path.name}"
                         )
                         success = cut_video_with_ffmpeg(
-                            video_path, output_path, start_frame, actual_end_frame, metadata
+                            video_path,
+                            output_path,
+                            start_frame,
+                            actual_end_frame,
+                            metadata,
+                            progress_callback=refresh_batch_progress,
                         )
+                        if batch_cancelled:
+                            break
                         if not success:
                             status_label.config(
                                 text=f"Warning: Cut {i + 1} failed for {video_name}"
@@ -1857,10 +2392,13 @@ def play_video_with_cuts(video_path):
         root.after(100, process_next_video)
         root.mainloop()
 
-        messagebox.showinfo(
-            "Batch Complete",
-            f"Processed {processed_count} videos. Output saved to {output_dir}",
-        )
+        if batch_cancelled:
+            messagebox.showinfo("Batch Cancelled", f"Processed {processed_count} videos.")
+        else:
+            messagebox.showinfo(
+                "Batch Complete",
+                f"Processed {processed_count} videos. Output saved to {output_dir}",
+            )
 
     def save_cuts(video_path, cuts, from_sync_file=False, fixed_timestamp=None):
         if not cuts:
@@ -1879,32 +2417,61 @@ def play_video_with_cuts(video_path):
             output_dir = Path(video_path).parent / f"{video_name}_vailacut_{timestamp}"
         output_dir.mkdir(exist_ok=True)
 
-        print(f"Saving {len(cuts)} cut(s) to {output_dir}")
+        # Resolve one output filename per cut (per-cut CSV names take priority)
+        out_names = build_cut_output_filenames(video_path, cuts, output_basename, output_basenames)
+        naming_mode = (
+            "per-cut CSV names"
+            if output_basenames
+            else effective_cut_basename(video_path, output_basename)
+        )
+        print(f"Saving {len(cuts)} cut(s) to {output_dir} (naming: {naming_mode})")
         # Get precise video metadata
         metadata = get_precise_video_metadata(video_path)
 
-        # Process each cut
+        # Process each cut with visible progress after the pygame display closes.
         n_cuts = len(cuts)
-        for i, (start_frame, end_frame) in enumerate(cuts):
-            # Use 1-based numbering in filenames to match TOML/UI and avoid off-by-one confusion
-            output_path = (
-                output_dir / f"{video_name}_frame_{start_frame + 1}_to_{end_frame + 1}.mp4"
-            )
-            print(
-                f"Processing cut {i + 1}/{n_cuts}: frames {start_frame + 1}-{end_frame + 1} -> {output_path.name}"
-            )
-            success = cut_video_with_ffmpeg(
-                video_path, output_path, start_frame, end_frame, metadata
-            )
-            if not success:
-                print(f"Warning: Failed to create cut {i + 1} for {video_name}")
-            else:
-                print(f"  Done: {output_path.name}")
+        progress_dialog = RenderProgressDialog("Generating cut videos", n_cuts)
+        try:
+            for i, (start_frame, end_frame) in enumerate(cuts):
+                output_path = output_dir / out_names[i]
+                status = f"Rendering cut {i + 1}/{n_cuts}: {output_path.name}"
+                if not progress_dialog.update(status, i):
+                    print("Video cut generation cancelled by user")
+                    return False
+                print(
+                    f"Processing cut {i + 1}/{n_cuts}: frames {start_frame + 1}-{end_frame + 1} -> {output_path.name}"
+                )
+                success = cut_video_with_ffmpeg(
+                    video_path,
+                    output_path,
+                    start_frame,
+                    end_frame,
+                    metadata,
+                    progress_callback=progress_dialog.update,
+                )
+                if progress_dialog.cancelled:
+                    print("Video cut generation cancelled by user")
+                    return False
+                if not success:
+                    print(f"Warning: Failed to create cut {i + 1} for {video_name}")
+                else:
+                    print(f"  Done: {output_path.name}")
+                progress_dialog.update(completed_steps=i + 1)
+        finally:
+            progress_dialog.close()
 
         return True
 
     running = True
     while running:
+        # Handle title-bar X early (Linux SDL2 often sends WINDOWCLOSE, not QUIT).
+        for close_event in pygame.event.get(_CLOSE_EVENTS):
+            if close_event.type in _CLOSE_EVENTS:
+                running = False
+                break
+        if not running:
+            break
+
         if paused:
             # Quando pausado, vamos usar o método set para posicionar no frame exato
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
@@ -1980,14 +2547,17 @@ def play_video_with_cuts(video_path):
             slider_width,
             slider_y,
             slider_height,
+            cut_timeline_rect,
             help_button_rect,
             loop_button_rect,
+            base_button_rect,
+            names_button_rect,
             base_y,
         ) = draw_controls()
         pygame.display.flip()
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if event.type in _CLOSE_EVENTS:
                 running = False
 
             elif event.type == pygame.VIDEORESIZE:
@@ -2090,9 +2660,29 @@ def play_video_with_cuts(video_path):
                         ):
                             start_audio_playback(frame_count)
                 elif event.key == pygame.K_RIGHT and paused:
-                    frame_count = min(frame_count + 1, total_frames - 1)
+                    if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                        next_marker = adjacent_cut_marker_frame(
+                            frame_count, get_all_cut_markers(), 1
+                        )
+                        if next_marker is not None:
+                            frame_count = next_marker
+                            print(f"Jumped to next marker: Frame {next_marker + 1}")
+                        else:
+                            print("No markers available")
+                    else:
+                        frame_count = min(frame_count + 1, total_frames - 1)
                 elif event.key == pygame.K_LEFT and paused:
-                    frame_count = max(frame_count - 1, 0)
+                    if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                        previous_marker = adjacent_cut_marker_frame(
+                            frame_count, get_all_cut_markers(), -1
+                        )
+                        if previous_marker is not None:
+                            frame_count = previous_marker
+                            print(f"Jumped to previous marker: Frame {previous_marker + 1}")
+                        else:
+                            print("No markers available")
+                    else:
+                        frame_count = max(frame_count - 1, 0)
                 elif event.key == pygame.K_UP and paused:
                     frame_count = min(frame_count + 60, total_frames - 1)
                 elif event.key == pygame.K_DOWN and paused:
@@ -2250,8 +2840,7 @@ def play_video_with_cuts(video_path):
                         initialvalue=str(fps),
                     )
                     root_fps.destroy()
-                    # Reinitialize pygame display
-                    screen = set_display_mode()
+                    screen = restore_pygame_display()
                     if new_fps_str:
                         try:
                             val = None
@@ -2290,6 +2879,10 @@ def play_video_with_cuts(video_path):
                     pygame.display.flip()
                 elif event.key == pygame.K_h:  # Show help dialog
                     show_help_dialog()
+                elif event.key == pygame.K_b:  # Set output base name for cut files
+                    screen = prompt_output_basename_dialog()
+                elif event.key == pygame.K_n:  # Load per-cut base names from CSV/TXT
+                    screen = prompt_output_basenames_csv()
                 elif event.key == pygame.K_g and paused:  # Go to frame number
                     # Temporarily close pygame display to show tkinter dialog
                     pygame.display.quit()
@@ -2303,9 +2896,7 @@ def play_video_with_cuts(video_path):
                         maxvalue=total_frames,
                     )
                     root_frame.destroy()
-                    # Reinitialize pygame display
-                    screen = set_display_mode()
-                    update_caption()
+                    screen = restore_pygame_display()
                     if target_frame is not None:
                         # Convert to 0-based frame index
                         frame_count = min(max(0, target_frame - 1), total_frames - 1)
@@ -2327,9 +2918,7 @@ def play_video_with_cuts(video_path):
                         maxvalue=max_time,
                     )
                     root_time.destroy()
-                    # Reinitialize pygame display
-                    screen = set_display_mode()
-                    update_caption()
+                    screen = restore_pygame_display()
                     if target_time is not None and fps > 0:
                         # Convert time to frame (0-based)
                         if fps == original_fps and fps_num and fps_den:
@@ -2349,6 +2938,10 @@ def play_video_with_cuts(video_path):
                 elif event.button == 1:
                     if help_button_rect.collidepoint(x, y - base_y):
                         show_help_dialog()
+                    elif base_button_rect.collidepoint(x, y - base_y):
+                        screen = prompt_output_basename_dialog()
+                    elif names_button_rect.collidepoint(x, y - base_y):
+                        screen = prompt_output_basenames_csv()
                     elif loop_button_rect.collidepoint(x, y - base_y):
                         loop_enabled = not loop_enabled
                         if not loop_enabled:
@@ -2356,16 +2949,47 @@ def play_video_with_cuts(video_path):
                         screen = set_display_mode()
                         clamp_pan_offsets()
                         update_caption()
+                    elif cut_timeline_rect.collidepoint(x, y - base_y):
+                        dragging_cut_timeline = True
+                        markers = get_all_cut_markers()
+                        if current_start is not None:
+                            markers.append(current_start)
+                        frame_count = frame_index_from_cut_timeline_x(
+                            mouse_x=x,
+                            strip_left=slider_x,
+                            strip_width=slider_width,
+                            total_frames=total_frames,
+                            cut_markers=markers,
+                        )
+                        paused = True
                     elif slider_y <= y - base_y <= slider_y + slider_height:
-                        rel_x = x - slider_x
-                        frame_count = int((rel_x / slider_width) * total_frames)
-                        frame_count = max(0, min(frame_count, total_frames - 1))
+                        frame_count = frame_index_from_cut_timeline_x(
+                            mouse_x=x,
+                            strip_left=slider_x,
+                            strip_width=slider_width,
+                            total_frames=total_frames,
+                            cut_markers=[],
+                        )
                         paused = True
             elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 2:
+                if event.button == 1:
+                    dragging_cut_timeline = False
+                elif event.button == 2:
                     panning = False
             elif event.type == pygame.MOUSEMOTION:
-                if panning:
+                if dragging_cut_timeline:
+                    markers = get_all_cut_markers()
+                    if current_start is not None:
+                        markers.append(current_start)
+                    frame_count = frame_index_from_cut_timeline_x(
+                        mouse_x=event.pos[0],
+                        strip_left=slider_x,
+                        strip_width=slider_width,
+                        total_frames=total_frames,
+                        cut_markers=markers,
+                    )
+                    paused = True
+                elif panning:
                     rel_dx, rel_dy = pygame.mouse.get_rel()
                     offset_x -= rel_dx
                     offset_y -= rel_dy
@@ -2414,11 +3038,13 @@ def get_video_path():
 
     root = Tk()
     root.withdraw()
-    video_path = filedialog.askopenfilename(
-        title="Select Video File",
-        filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")],
-    )
-    return video_path
+    try:
+        return filedialog.askopenfilename(
+            title="Select Video File",
+            filetypes=[("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV")],
+        )
+    finally:
+        root.destroy()
 
 
 def cleanup_resources():

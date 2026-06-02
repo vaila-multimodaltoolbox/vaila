@@ -5,7 +5,7 @@
 - **Category:** Tools / Brainstorm
 - **File:** `vaila/transcribe_pdfs.py`
 - **Version:** 0.3.47
-- **Updated:** 29/05/2026
+- **Updated:** 01/06/2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** Yes — **Frame B -> Brainstorm -> Transcribe PDFs**
 - **CLI Interface:** Yes
@@ -20,11 +20,11 @@
 - one `.txt` transcription and one `.report.json` per PDF;
 - a `batch_report.csv` summary with pages, low-confidence pages, blank pages, and errors.
 
-The Brainstorm button opens a Tkinter launcher with defaults for the PAE Biomec1 workflow:
+The Brainstorm button opens a Tkinter launcher with configurable default folders:
 
 ```text
-~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais
-~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/transcritas_originais
+/path/to/your/pdf_originals
+/path/to/your/pdf_transcriptions
 ```
 
 ## GUI Workflow
@@ -86,12 +86,12 @@ Open the GUI directly:
 uv run python -m vaila.transcribe_pdfs --gui
 ```
 
-Batch transcribe the default PAE folder:
+Batch transcribe a folder:
 
 ```bash
 uv run python -m vaila.transcribe_pdfs \
-  --input-dir ~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais \
-  --output-dir ~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/transcritas_originais \
+  --input-dir /path/to/your/pdf_originals \
+  --output-dir /path/to/your/pdf_transcriptions \
   --mode auto
 ```
 
@@ -120,5 +120,5 @@ Vision output is meant to accelerate review, not replace it. Check any pages lis
 
 ---
 
-Updated: 29/05/2026  
+Updated: 01/06/2026  
 Part of vailá - Multimodal Toolbox

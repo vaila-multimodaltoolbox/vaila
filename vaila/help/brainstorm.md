@@ -5,7 +5,7 @@
 - **Category:** Tools
 - **File:** `vaila/brainstorm.py`
 - **Version:** 0.3.47
-- **Updated:** 29/05/2026
+- **Updated:** 01/06/2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** Yes — **Frame B -> Brainstorm**
 - **License:** AGPL-3.0
@@ -26,11 +26,11 @@
 
 ## PDF Transcription Button
 
-Use the separate **PDF Transcription** section near the top of Brainstorm and click **Transcribe PDFs** to open the PDF transcription dialog. Defaults target the PAE Biomec1 folder when present:
+Use the separate **PDF Transcription** section near the top of Brainstorm and click **Transcribe PDFs** to open the PDF transcription dialog. Default folders are configurable via the `VAILA_PAE_ROOT` environment variable:
 
 ```text
-~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais
-~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/transcritas_originais
+/path/to/your/pdf_originals
+/path/to/your/pdf_transcriptions
 ```
 
 Detailed help: [`transcribe_pdfs.md`](transcribe_pdfs.md) / [`transcribe_pdfs.html`](transcribe_pdfs.html).
@@ -62,5 +62,5 @@ PDF transcription:
 
 ---
 
-Updated: 29/05/2026  
+Updated: 01/06/2026  
 Part of vailá - Multimodal Toolbox
