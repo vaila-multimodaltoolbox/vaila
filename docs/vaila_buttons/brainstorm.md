@@ -14,11 +14,11 @@ Opens the Brainstorm workspace for audio transcription, prompt editing, creative
 
 Inside Brainstorm, use the separate **PDF Transcription** section near the top and click **Transcribe PDFs** to launch `vaila/transcribe_pdfs.py`. The dialog can process a directory of PDFs or a single PDF and writes `.txt`, `.report.json`, and `batch_report.csv` outputs.
 
-Default PAE workflow folders when present:
+Example workflow folders:
 
 ```text
-~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/originais
-~/Preto/USP_RP/Alunos/PAE_USP/PAE_Biomec1/transcritas_originais
+/path/to/your/pdf_originals
+/path/to/your/pdf_transcriptions
 ```
 
 ## Usage
@@ -43,6 +43,6 @@ Default PAE workflow folders when present:
 
 ---
 
-**Last Updated:** 2026-05-29  
+**Last Updated:** 2026-06-01  
 **Part of vailá - Multimodal Toolbox**  
 **License:** AGPLv3.0
