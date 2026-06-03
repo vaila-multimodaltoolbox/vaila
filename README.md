@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-03
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -124,7 +124,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 02.Jun.2026 v0.3.47 (Python 3.12.13)
+vailá - 03.Jun.2026 v0.3.47 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
