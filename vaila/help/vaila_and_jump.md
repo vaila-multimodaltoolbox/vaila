@@ -4,7 +4,7 @@
 
 - **Category:** Analysis
 - **File:** `vaila\vaila_and_jump.py`
-- **Lines:** 6039
+- **Lines:** 6051
 - **Size:** ~150000 characters
 - **Version:** 0.3.47
 - **Author:** Prof. Paulo R. P. Santiago
@@ -47,7 +47,7 @@ For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to 
 - **CMJ height quality control (v0.3.47):**
   - `height_cg_method_m > 0.80` is flagged for manual review
   - `height_cg_method_m > 1.00` is flagged as probable error
-  - When available, `height_qc_recommended_m` uses foot-contact flight time (last foot takeoff to first foot landing) to correct suspicious CoM heights
+  - All modes export `height_qc_status`; MediaPipe mode can set `height_qc_recommended_m` from foot-contact flight time (last foot takeoff to first foot landing) when CoM height is suspicious
   - Raw CoM height remains exported for audit in `height_cg_method_m`
 
 - **Advanced Kinematic Analysis:**
