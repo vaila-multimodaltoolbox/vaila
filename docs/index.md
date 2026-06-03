@@ -34,7 +34,7 @@ Optional stacks (CUDA/GPU templates, extras) are documented in the repository RE
 Long-form descriptions of individual GUI buttons live under `docs/vaila_buttons/`: [Button documentation index](vaila_buttons/README.md).
 
 ### PDF transcription from Brainstorm
-Brainstorm now includes **Transcribe PDFs** for typed, scanned, and handwritten exam PDFs: [docs/pdf_transcription.md](pdf_transcription.md) / [HTML](pdf_transcription.html).
+Brainstorm now includes **Transcribe PDFs** for typed, scanned, and handwritten exam PDFs: [vaila/help/transcribe_pdfs.md](../vaila/help/transcribe_pdfs.md) / [HTML](../vaila/help/transcribe_pdfs.html).
 
 ### Quick run (after install)
 ```bash

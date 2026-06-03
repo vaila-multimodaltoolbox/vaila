@@ -44,11 +44,21 @@ For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to 
   - Applies median smoothing only to the event-detection signal
   - Supports robust initial baseline rectification through optional `[jump_phase]` TOML settings
 
+- **macOS GUI handling (v0.3.47):**
+  - When launched from the main vailá GUI, reuses the existing Tk root instead of creating a second `Tk()` window.
+  - Keeps directory, batch, and MediaPipe parameter dialogs movable and correctly focused on macOS.
+
 - **CMJ height quality control (v0.3.47):**
   - `height_cg_method_m > 0.80` is flagged for manual review
   - `height_cg_method_m > 1.00` is flagged as probable error
   - All modes export `height_qc_status`; MediaPipe mode can set `height_qc_recommended_m` from foot-contact flight time (last foot takeoff to first foot landing) when CoM height is suspicious
-  - Raw CoM height remains exported for audit in `height_cg_method_m`
+  - If CoM height/timing is inconsistent with foot-contact timing, MediaPipe mode can also recommend corrected `flight_time_s`, takeoff frame, and landing frame from last-foot-off to first-foot-contact
+  - Raw CoM height/time remain exported for audit in `height_cg_method_m` and `flight_time_com_method_s`
+
+- **Team comparison visuals (v0.3.47):**
+  - Team batch reports include a height beeswarm/distribution plot, a Z-score matrix, and a color-coded QC/Z-score table.
+  - Corrected trials are highlighted in orange; review-only trials are highlighted in red.
+  - `team_jump_quality_zscores_<timestamp>.csv` stores group z-scores and `team_qc_flag`.
 
 - **Advanced Kinematic Analysis:**
   - **FPPA (Frontal Plane Projection Angle):** Rigorous 2D vector-based calculation
@@ -211,6 +221,7 @@ Process a whole team/squad in one run, then get a consolidated report.
    directory containing:
    - `team_jump_results_<ts>.csv` — one row per processed jump (all athletes),
    - `team_jump_summary_<ts>.csv` — team descriptive stats (n, mean, SD, min, median, max),
+   - `team_jump_quality_zscores_<ts>.csv` — team z-scores and QC flags,
    - `team_jump_report_<ts>.html` — team report with rankings and per-athlete charts,
    - `team_plots/` — bar charts, plus per-athlete subfolders with the individual reports.
 

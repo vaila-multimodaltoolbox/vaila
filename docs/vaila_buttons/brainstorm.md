@@ -34,7 +34,6 @@ Example workflow folders:
 - `vaila/transcribe_pdfs.py`
 - `vaila/help/brainstorm.md`
 - `vaila/help/transcribe_pdfs.md`
-- `docs/pdf_transcription.md`
 
 ## Requirements
 

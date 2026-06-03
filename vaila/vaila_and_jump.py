@@ -160,6 +160,7 @@ import base64
 import contextlib
 import math
 import os
+import tkinter as tk
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -178,11 +179,41 @@ except Exception:  # pragma: no cover
 CMJ_HEIGHT_HIGH_THRESHOLD_M = 0.60
 CMJ_HEIGHT_REVIEW_THRESHOLD_M = 0.80
 CMJ_HEIGHT_ERROR_THRESHOLD_M = 1.00
+CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M = 0.12
+CMJ_HEIGHT_DISCREPANCY_RATIO = 0.25
 
 # -----------------------
 # Jump context management
 # -----------------------
 _JUMP_CONTEXT: dict[str, float] | None = None
+
+
+def _dialog_parent() -> tuple[tk.Misc, bool]:
+    """Return the active Tk parent, creating one only for standalone execution."""
+    default_root = tk._default_root  # ty: ignore[attr-defined]
+    if default_root is not None and bool(default_root.winfo_exists()):
+        return default_root, False
+
+    root = Tk()
+    root.withdraw()
+    return root, True
+
+
+def _prepare_dialog_parent(parent: tk.Misc, owns_parent: bool) -> None:
+    if owns_parent:
+        with contextlib.suppress(Exception):
+            parent.attributes("-topmost", True)  # type: ignore[attr-defined]
+        return
+
+    with contextlib.suppress(Exception):
+        parent.lift()
+        parent.focus_force()
+
+
+def _destroy_dialog_parent(parent: tk.Misc, owns_parent: bool) -> None:
+    if owns_parent:
+        with contextlib.suppress(Exception):
+            parent.destroy()
 
 
 def _parse_locale_float(value: object) -> float:
@@ -361,10 +392,8 @@ def _get_or_ask_jump_context(
         )
         return _JUMP_CONTEXT
     # Ask once via dialogs
-    root = Tk()
-    root.withdraw()
-    with contextlib.suppress(Exception):
-        root.attributes("-topmost", True)
+    root, owns_root = _dialog_parent()
+    _prepare_dialog_parent(root, owns_root)
     try:
         mass = _ask_locale_float(
             "Mass (kg)",
@@ -409,8 +438,7 @@ def _get_or_ask_jump_context(
             pass
         return _JUMP_CONTEXT
     finally:
-        with contextlib.suppress(Exception):
-            root.destroy()
+        _destroy_dialog_parent(root, owns_root)
 
 
 def calculate_force(mass, gravity=9.81):
@@ -765,10 +793,23 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
 
     recommended = cg_height
     recommended_source = "cg_method"
+    recommended_flight_time = _as_float_or_none(phase_results.get("flight_time_s"))
+    recommended_takeoff_frame = _as_int_or_none(phase_results.get("takeoff_frame"))
+    recommended_landing_frame = _as_int_or_none(phase_results.get("landing_frame"))
     correction_applied = False
     note_parts = [cg_note]
 
+    max_height_frame = _as_int_or_none(phase_results.get("max_height_frame"))
+    takeoff_frame = _as_int_or_none(phase_results.get("takeoff_frame"))
     landing_frame = _as_int_or_none(phase_results.get("landing_frame"))
+    temporal_inconsistent = False
+    if takeoff_frame is not None and max_height_frame is not None and takeoff_frame > max_height_frame:
+        temporal_inconsistent = True
+        note_parts.append("CoM takeoff occurs after CoM peak; phase sequence is inconsistent.")
+    if landing_frame is not None and max_height_frame is not None and landing_frame <= max_height_frame:
+        temporal_inconsistent = True
+        note_parts.append("CoM landing occurs before or at CoM peak; phase sequence is inconsistent.")
+
     com_landing_after_foot_s = None
     if landing_frame is not None and foot_landing_frame is not None and landing_frame > foot_landing_frame:
         fps_value = _as_float_or_none(fps)
@@ -778,19 +819,59 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
                 f"CoM landing was {com_landing_after_foot_s:.3f} s after first foot contact."
             )
 
-    if cg_status in {"manual_review", "probable_error"}:
-        if foot_height is not None and cg_height is not None and foot_height < cg_height:
-            if foot_height <= CMJ_HEIGHT_REVIEW_THRESHOLD_M:
-                recommended = foot_height
-                recommended_source = "foot_contact_flight_time"
-                correction_applied = True
-                note_parts.append(
-                    "Recommended height uses foot-contact flight time because the CoM height is suspicious."
-                )
-            else:
-                note_parts.append(
-                    "Foot-contact correction is also above 0.80 m; keep manual review."
-                )
+    height_discrepancy = None
+    height_discrepancy_ratio = None
+    if cg_height is not None and foot_height is not None:
+        height_discrepancy = abs(cg_height - foot_height)
+        if max(abs(cg_height), abs(foot_height)) > 0:
+            height_discrepancy_ratio = height_discrepancy / max(abs(cg_height), abs(foot_height))
+        if (
+            height_discrepancy >= CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M
+            or (
+                height_discrepancy_ratio is not None
+                and height_discrepancy_ratio >= CMJ_HEIGHT_DISCREPANCY_RATIO
+            )
+        ):
+            note_parts.append(
+                f"CoM and foot-contact heights differ by {height_discrepancy:.3f} m."
+            )
+
+    should_use_foot_contact = (
+        foot_height is not None
+        and foot_flight_time is not None
+        and foot_height > 0
+        and foot_height <= CMJ_HEIGHT_REVIEW_THRESHOLD_M
+        and (
+            cg_status in {"manual_review", "probable_error"}
+            or temporal_inconsistent
+            or (
+                cg_status == "plausible"
+                and
+                height_discrepancy is not None
+                and height_discrepancy >= CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M
+            )
+            or (
+                cg_status == "plausible"
+                and
+                height_discrepancy_ratio is not None
+                and height_discrepancy_ratio >= CMJ_HEIGHT_DISCREPANCY_RATIO
+            )
+        )
+    )
+
+    if should_use_foot_contact:
+        recommended = foot_height
+        recommended_source = "foot_contact_flight_time"
+        recommended_flight_time = foot_flight_time
+        recommended_takeoff_frame = foot_takeoff_frame
+        recommended_landing_frame = foot_landing_frame
+        correction_applied = True
+        note_parts.append(
+            "Recommended height and flight time use last-foot-off to first-foot-contact."
+        )
+    elif cg_status in {"manual_review", "probable_error"}:
+        if foot_height is not None and foot_height > CMJ_HEIGHT_REVIEW_THRESHOLD_M:
+            note_parts.append("Foot-contact correction is also above 0.80 m; keep manual review.")
         else:
             note_parts.append(
                 "Foot-contact correction unavailable; check scale, FPS, shank_length_m, and trial crop."
@@ -806,6 +887,12 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
         "height_qc_note": " ".join(note_parts),
         "height_qc_review_threshold_m": CMJ_HEIGHT_REVIEW_THRESHOLD_M,
         "height_qc_error_threshold_m": CMJ_HEIGHT_ERROR_THRESHOLD_M,
+        "height_qc_discrepancy_m": height_discrepancy,
+        "height_qc_discrepancy_ratio": height_discrepancy_ratio,
+        "phase_temporal_inconsistent": temporal_inconsistent,
+        "flight_time_qc_recommended_s": recommended_flight_time,
+        "takeoff_frame_qc_recommended": recommended_takeoff_frame,
+        "landing_frame_qc_recommended": recommended_landing_frame,
         "takeoff_frame_foot_contact": foot_takeoff_frame,
         "landing_frame_foot_contact": foot_landing_frame,
         "flight_time_foot_contact_s": foot_flight_time,
@@ -2905,7 +2992,10 @@ def _height_qc_report_html(results: dict) -> str:
         <table>
             <tr><th>Metric</th><th>Value</th><th>Unit / Source</th></tr>
             <tr><td>Recommended height</td><td>{_format_optional_float(results.get("height_qc_recommended_m"))}</td><td>m ({results.get("height_qc_recommended_source", "N/A")})</td></tr>
+            <tr><td>Recommended flight time</td><td>{_format_optional_float(results.get("flight_time_qc_recommended_s"))}</td><td>s ({results.get("height_qc_recommended_source", "N/A")})</td></tr>
+            <tr><td>Recommended takeoff / landing frames</td><td>{results.get("takeoff_frame_qc_recommended", "N/A")} / {results.get("landing_frame_qc_recommended", "N/A")}</td><td>frames used for corrected flight time</td></tr>
             <tr><td>Original CG height</td><td>{_format_optional_float(results.get("height_cg_method_m"))}</td><td>m (raw CoM method)</td></tr>
+            <tr><td>CoM vs foot height difference</td><td>{_format_optional_float(results.get("height_qc_discrepancy_m"))}</td><td>m</td></tr>
             <tr><td>Foot-contact flight-time height</td><td>{_format_optional_float(results.get("height_foot_contact_method_m"))}</td><td>m</td></tr>
             <tr><td>Foot-contact flight time</td><td>{_format_optional_float(results.get("flight_time_foot_contact_s"))}</td><td>s</td></tr>
             <tr><td>Foot takeoff / landing frames</td><td>{results.get("takeoff_frame_foot_contact", "N/A")} / {results.get("landing_frame_foot_contact", "N/A")}</td><td>last foot off / first foot contact</td></tr>
@@ -3689,6 +3779,11 @@ def process_mediapipe_data(input_file, output_dir):
             "fps": fps,
             "conversion_factor": round(conversion_factor, 6),
             "flight_time_s": (
+                round(jump_phase_results.get("flight_time_qc_recommended_s", 0), 3)
+                if jump_phase_results.get("flight_time_qc_recommended_s") is not None
+                else None
+            ),
+            "flight_time_com_method_s": (
                 round(jump_phase_results.get("flight_time_s", 0), 3)
                 if jump_phase_results.get("flight_time_s") is not None
                 else None
@@ -3718,13 +3813,23 @@ def process_mediapipe_data(input_file, output_dir):
                 if jump_phase_results.get("propulsion_start_frame") is not None
                 else None
             ),
-            "takeoff_frame": int(takeoff_frame) if takeoff_frame is not None else None,
+            "takeoff_frame": (
+                int(jump_phase_results.get("takeoff_frame_qc_recommended"))
+                if jump_phase_results.get("takeoff_frame_qc_recommended") is not None
+                else None
+            ),
+            "takeoff_frame_com_method": int(takeoff_frame) if takeoff_frame is not None else None,
             "max_height_frame": (
                 int(jump_phase_results.get("max_height_frame"))
                 if jump_phase_results.get("max_height_frame") is not None
                 else None
             ),
             "landing_frame": (
+                int(jump_phase_results.get("landing_frame_qc_recommended"))
+                if jump_phase_results.get("landing_frame_qc_recommended") is not None
+                else None
+            ),
+            "landing_frame_com_method": (
                 int(jump_phase_results.get("landing_frame"))
                 if jump_phase_results.get("landing_frame") is not None
                 else None
@@ -4158,6 +4263,9 @@ _TEAM_METRICS = {
     "height_qc_recommended_m": "Recommended jump height [m]",
     "height_cg_method_m": "Jump height (CG raw) [m]",
     "flight_time_s": "Flight time [s]",
+    "flight_time_com_method_s": "Flight time (CoM raw) [s]",
+    "flight_time_foot_contact_s": "Flight time (foot contact) [s]",
+    "height_qc_discrepancy_m": "CoM vs foot height difference [m]",
     "velocity_takeoff_m/s": "Takeoff velocity [m/s]",
     "max_power_W": "Peak power [W]",
     "max_power_W_per_kg": "Peak power [W/kg]",
@@ -4352,6 +4460,184 @@ def _team_bar_plot(df: pd.DataFrame, metric: str, label: str, output_path: Path)
     return str(output_path)
 
 
+def _series_zscore(series: pd.Series) -> pd.Series:
+    values = pd.to_numeric(series, errors="coerce")
+    mean = values.mean(skipna=True)
+    std = values.std(skipna=True, ddof=0)
+    if pd.isna(std) or std == 0:
+        return pd.Series(0.0, index=series.index)
+    return (values - mean) / std
+
+
+def _team_quality_table(df: pd.DataFrame) -> pd.DataFrame:
+    table = df.copy()
+    metrics = [
+        ("height_qc_recommended_m", "height_zscore"),
+        ("flight_time_s", "flight_time_zscore"),
+        ("max_power_W_per_kg", "power_zscore"),
+    ]
+    score_parts = []
+    for metric, z_col in metrics:
+        if metric in table.columns:
+            table[z_col] = _series_zscore(table[metric])
+            score_parts.append(table[z_col])
+    if score_parts:
+        table["jump_composite_zscore"] = pd.concat(score_parts, axis=1).mean(axis=1)
+    else:
+        table["jump_composite_zscore"] = 0.0
+
+    correction = table.get("height_qc_correction_applied", False)
+    correction_mask = pd.Series(correction, index=table.index).fillna(False).astype(bool)
+    discrepancy = pd.to_numeric(table.get("height_qc_discrepancy_m", np.nan), errors="coerce")
+    status = table.get("height_qc_status", "")
+    status_text = pd.Series(status, index=table.index).astype(str)
+    table["team_qc_flag"] = "ok"
+    table.loc[correction_mask, "team_qc_flag"] = "corrected_by_feet"
+    table.loc[
+        (table["team_qc_flag"] == "ok")
+        & (
+            discrepancy.ge(CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M)
+            | status_text.isin(["manual_review", "probable_error"])
+        ),
+        "team_qc_flag",
+    ] = "review"
+    table = table.sort_values("jump_composite_zscore", ascending=False).reset_index(drop=True)
+    table.index += 1
+    return table
+
+
+def _team_zscore_html_table(quality_df: pd.DataFrame) -> str:
+    def z_color(z: object) -> tuple[str, str]:
+        val = _as_float_or_none(z)
+        if val is None:
+            return "#ffffff", "#111111"
+        if val > 1.5:
+            return "#1e8449", "#ffffff"
+        if val > 0.5:
+            return "#27ae60", "#ffffff"
+        if val > -0.5:
+            return "#f9e79f", "#111111"
+        if val > -1.5:
+            return "#e67e22", "#111111"
+        return "#922b21", "#ffffff"
+
+    cols = [
+        ("athlete", "Athlete"),
+        ("trial", "Trial"),
+        ("height_qc_recommended_m", "Height [m]"),
+        ("height_zscore", "Height Z"),
+        ("flight_time_s", "Flight [s]"),
+        ("flight_time_zscore", "Flight Z"),
+        ("max_power_W_per_kg", "Power [W/kg]"),
+        ("power_zscore", "Power Z"),
+        ("jump_composite_zscore", "Composite Z"),
+        ("team_qc_flag", "QC"),
+    ]
+    cols = [(c, label) for c, label in cols if c in quality_df.columns]
+    html = '<table class="zscore-table"><thead><tr><th>#</th>'
+    html += "".join(f"<th>{label}</th>" for _, label in cols)
+    html += "</tr></thead><tbody>"
+    for idx, row in quality_df.iterrows():
+        flag = str(row.get("team_qc_flag", "ok"))
+        row_class = "qc-corrected" if flag == "corrected_by_feet" else "qc-review" if flag == "review" else ""
+        html += f'<tr class="{row_class}"><td><strong>{idx}</strong></td>'
+        for col, _label in cols:
+            val = row.get(col)
+            if col.endswith("_zscore"):
+                bg, fg = z_color(val)
+                text = "" if pd.isna(val) else f"{float(val):+.2f}"
+                html += (
+                    f'<td style="background:{bg};color:{fg};font-weight:700;">{text}</td>'
+                )
+            elif isinstance(val, (int, float)) and pd.notna(val):
+                html += f"<td>{val:.3f}</td>"
+            else:
+                html += f"<td>{'' if pd.isna(val) else val}</td>"
+        html += "</tr>"
+    html += "</tbody></table>"
+    return html
+
+
+def _team_beeswarm_plot(df: pd.DataFrame, output_path: Path) -> str | None:
+    required = {"height_qc_recommended_m", "athlete", "trial"}
+    if not required.issubset(df.columns):
+        return None
+    sub = df.copy()
+    sub["_height"] = pd.to_numeric(sub["height_qc_recommended_m"], errors="coerce")
+    sub = sub.dropna(subset=["_height"])
+    if sub.empty:
+        return None
+    sub["_z"] = _series_zscore(sub["_height"])
+    sub["_x"] = 1.0
+    if len(sub) > 1:
+        sub["_x"] += np.linspace(-0.18, 0.18, len(sub))
+    correction_mask = pd.Series(
+        sub.get("height_qc_correction_applied", False), index=sub.index
+    ).fillna(False).astype(bool)
+    colors = np.where(
+        correction_mask,
+        "#e67e22",
+        np.where(sub["_z"].abs() >= 1.5, "#c0392b", "#2980b9"),
+    )
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    ax.scatter(sub["_x"], sub["_height"], s=90, c=colors, edgecolor="#2c3e50", alpha=0.9)
+    mean_val = float(sub["_height"].mean())
+    std_val = float(sub["_height"].std(ddof=0)) if len(sub) > 1 else 0.0
+    ax.axhline(mean_val, color="#2c3e50", linestyle="-", linewidth=1.5, label=f"mean {mean_val:.3f} m")
+    if std_val > 0:
+        ax.axhspan(mean_val - std_val, mean_val + std_val, color="#27ae60", alpha=0.12, label="±1 SD")
+        ax.axhspan(mean_val + std_val, mean_val + 2 * std_val, color="#f1c40f", alpha=0.10)
+        ax.axhspan(mean_val - 2 * std_val, mean_val - std_val, color="#f1c40f", alpha=0.10)
+    for _, row in sub.iterrows():
+        ax.annotate(
+            str(row["athlete"]),
+            (row["_x"], row["_height"]),
+            textcoords="offset points",
+            xytext=(4, 4),
+            fontsize=8,
+        )
+    ax.set_xlim(0.55, 1.45)
+    ax.set_xticks([])
+    ax.set_ylabel("Recommended jump height [m]")
+    ax.set_title("Team Height Distribution with QC Highlights")
+    ax.legend(loc="best", fontsize=8)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return str(output_path)
+
+
+def _team_heatmap_plot(quality_df: pd.DataFrame, output_path: Path) -> str | None:
+    z_cols = [
+        c
+        for c in ["height_zscore", "flight_time_zscore", "power_zscore", "jump_composite_zscore"]
+        if c in quality_df.columns
+    ]
+    if not z_cols:
+        return None
+    matrix = quality_df[z_cols].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    if matrix.empty:
+        return None
+    labels = [f"{r['athlete']} | {r['trial']}" for _, r in quality_df.iterrows()]
+    fig_h = max(3.5, 0.42 * len(matrix) + 1.4)
+    fig, ax = plt.subplots(figsize=(9, fig_h))
+    im = ax.imshow(matrix.to_numpy(dtype=float), aspect="auto", cmap="RdYlGn", vmin=-2, vmax=2)
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_xticks(np.arange(len(z_cols)))
+    ax.set_xticklabels([c.replace("_zscore", " Z").replace("jump_composite", "composite") for c in z_cols], rotation=25, ha="right")
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            ax.text(j, i, f"{matrix.iat[i, j]:+.1f}", ha="center", va="center", fontsize=8)
+    ax.set_title("Team Jump Z-score Matrix")
+    fig.colorbar(im, ax=ax, shrink=0.8, label="Z-score")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return str(output_path)
+
+
 def _img_to_base64(path: str | Path) -> str:
     try:
         with open(path, "rb") as f:
@@ -4367,6 +4653,21 @@ def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str
     """
     output_dir = Path(output_dir)
     df = pd.DataFrame(team_rows)
+    correction_mask = pd.Series(
+        df.get("height_qc_correction_applied", False), index=df.index
+    ).fillna(False).astype(bool)
+    discrepancy = pd.to_numeric(df.get("height_qc_discrepancy_m", np.nan), errors="coerce")
+    status_text = pd.Series(df.get("height_qc_status", ""), index=df.index).astype(str)
+    df["team_qc_flag"] = "ok"
+    df.loc[correction_mask, "team_qc_flag"] = "corrected_by_feet"
+    df.loc[
+        (df["team_qc_flag"] == "ok")
+        & (
+            discrepancy.ge(CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M)
+            | status_text.isin(["manual_review", "probable_error"])
+        ),
+        "team_qc_flag",
+    ] = "review"
 
     # 1) Full consolidated table (one row per processed jump)
     team_csv = output_dir / f"team_jump_results_{timestamp}.csv"
@@ -4379,6 +4680,11 @@ def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str
     summary_df.to_csv(summary_csv, index=False, float_format="%.6f")
     print(f"Team summary CSV: {summary_csv}")
 
+    quality_df = _team_quality_table(df)
+    quality_csv = output_dir / f"team_jump_quality_zscores_{timestamp}.csv"
+    quality_df.to_csv(quality_csv, index=True, index_label="rank", float_format="%.6f")
+    print(f"Team quality/z-score CSV: {quality_csv}")
+
     # 3) Bar charts for the most relevant metrics
     plots_dir = output_dir / "team_plots"
     plots_dir.mkdir(exist_ok=True)
@@ -4387,6 +4693,7 @@ def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str
         ("height_cg_method_m", "Jump height (CG raw) [m]"),
         ("max_power_W_per_kg", "Peak power [W/kg]"),
         ("flight_time_s", "Flight time [s]"),
+        ("flight_time_com_method_s", "Flight time (CoM raw) [s]"),
         ("velocity_takeoff_m/s", "Takeoff velocity [m/s]"),
     ]
     plot_files = []
@@ -4396,15 +4703,23 @@ def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str
         if made:
             plot_files.append((label, made))
 
+    beeswarm = _team_beeswarm_plot(df, plots_dir / f"team_height_beeswarm_qc_{timestamp}.png")
+    if beeswarm:
+        plot_files.insert(0, ("Height distribution with QC", beeswarm))
+    heatmap = _team_heatmap_plot(quality_df, plots_dir / f"team_jump_zscore_matrix_{timestamp}.png")
+    if heatmap:
+        plot_files.insert(1 if beeswarm else 0, ("Team Z-score matrix", heatmap))
+
     # 4) HTML report
     report_path = output_dir / f"team_jump_report_{timestamp}.html"
-    _write_team_html(df, summary_df, plot_files, report_path, timestamp)
+    _write_team_html(df, summary_df, quality_df, plot_files, report_path, timestamp)
     return str(report_path)
 
 
 def _write_team_html(
     df: pd.DataFrame,
     summary_df: pd.DataFrame,
+    quality_df: pd.DataFrame,
     plot_files: list[tuple[str, str]],
     report_path: Path,
     timestamp: str,
@@ -4419,6 +4734,12 @@ def _write_team_html(
 
     n_athletes = df["athlete"].nunique() if "athlete" in df.columns else 0
     n_jumps = len(df)
+    corrected_count = (
+        int(pd.Series(df.get("height_qc_correction_applied", False)).fillna(False).astype(bool).sum())
+        if n_jumps
+        else 0
+    )
+    review_count = int((quality_df.get("team_qc_flag", pd.Series(dtype=str)) == "review").sum())
 
     # Ranking tables (best to worst)
     def ranking_html(metric: str, label: str, ascending: bool = False) -> str:
@@ -4492,20 +4813,37 @@ def _write_team_html(
   .img-container img {{ max-width: 100%; height: auto; }}
   .cols {{ display: flex; gap: 30px; flex-wrap: wrap; }}
   .cols > div {{ flex: 1; min-width: 320px; }}
+  .qc-corrected td {{ border-left: 4px solid #e67e22; }}
+  .qc-review td {{ border-left: 4px solid #c0392b; }}
+  .qc-note {{ background: #fff8e1; border-left: 5px solid #f39c12; padding: 12px 14px;
+              border-radius: 0 4px 4px 0; }}
 </style>
 </head>
 <body>
   <div class="header">{logo_html}<h1>Team Jump Analysis Report</h1></div>
   <div class="meta">
     <strong>Generated:</strong> {timestamp}<br>
-    <strong>Athletes:</strong> {n_athletes} &nbsp;|&nbsp; <strong>Jumps analyzed:</strong> {n_jumps}
+    <strong>Athletes:</strong> {n_athletes} &nbsp;|&nbsp; <strong>Jumps analyzed:</strong> {n_jumps}<br>
+    <strong>Corrected by foot-contact flight time:</strong> {corrected_count}
+    &nbsp;|&nbsp; <strong>Needs manual review:</strong> {review_count}
   </div>
+  <div class="qc-note">
+    Orange rows were recalculated from last-foot-off to first-foot-contact because CoM height,
+    CoM timing, or CoM-vs-feet agreement was inconsistent. Raw CoM values remain in the CSV/table
+    for audit.
+  </div>
+
+  <h2>Overview — Height &amp; Flight Time</h2>
+  {_team_overview_table_html(df)}
 
   <h2>Team Summary</h2>
   {summary_table}
 
   <h2>Performance Charts</h2>
   {plots_html if plots_html else "<p>No charts available.</p>"}
+
+  <h2>Group Comparison and QC Z-scores</h2>
+  {_team_zscore_html_table(quality_df)}
 
   <h2>Rankings</h2>
   <div class="cols">
@@ -4530,6 +4868,42 @@ def _write_team_html(
     print(f"Team HTML report: {report_path}")
 
 
+def _team_overview_table_html(df: pd.DataFrame) -> str:
+    """Simple per-analysis table with only jump height and flight time.
+
+    Shown at the top of the team report as a quick overview before the
+    detailed summaries and charts.
+    """
+    height_col = (
+        "height_qc_recommended_m"
+        if "height_qc_recommended_m" in df.columns
+        else ("height_m" if "height_m" in df.columns else None)
+    )
+    flight_col = "flight_time_s" if "flight_time_s" in df.columns else None
+
+    body_rows = []
+    for _, r in df.iterrows():
+        athlete = "" if "athlete" not in df.columns or pd.isna(r["athlete"]) else r["athlete"]
+        trial = "" if "trial" not in df.columns or pd.isna(r["trial"]) else r["trial"]
+        height_val = pd.to_numeric(r[height_col], errors="coerce") if height_col else np.nan
+        flight_val = pd.to_numeric(r[flight_col], errors="coerce") if flight_col else np.nan
+        height_cell = f"{height_val:.3f}" if pd.notna(height_val) else ""
+        flight_cell = f"{flight_val:.3f}" if pd.notna(flight_val) else ""
+        body_rows.append(
+            f"<tr><td>{athlete}</td><td>{trial}</td>"
+            f"<td>{height_cell}</td><td>{flight_cell}</td></tr>"
+        )
+
+    if not body_rows:
+        return "<p>No analyses available.</p>"
+
+    return (
+        "<table><tr><th>Athlete</th><th>Trial</th>"
+        "<th>Jump height [m]</th><th>Flight time [s]</th></tr>"
+        f"{''.join(body_rows)}</table>"
+    )
+
+
 def _team_full_table_html(df: pd.DataFrame) -> str:
     """Compact per-trial table with the headline metrics."""
     cols = [
@@ -4538,7 +4912,11 @@ def _team_full_table_html(df: pd.DataFrame) -> str:
         "height_qc_status",
         "height_qc_recommended_source",
         "height_qc_correction_applied",
+        "team_qc_flag",
         "mass_kg",
+        "flight_time_com_method_s",
+        "flight_time_foot_contact_s",
+        "height_qc_discrepancy_m",
         *[c for c in _TEAM_METRICS if c not in ("mass_kg",)],
     ]
     cols = [c for c in cols if c in df.columns]
@@ -5846,78 +6224,77 @@ def plot_jump_stickfigures_subplot(
 def vaila_and_jump():
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
-    root = Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)  # Force dialogs to be on top
+    root, owns_root = _dialog_parent()
+    _prepare_dialog_parent(root, owns_root)
 
-    target_dir = filedialog.askdirectory(
-        title="Select the target directory containing .csv files", parent=root
-    )
-    root.lift()  # Bring window to the front
+    try:
+        target_dir = filedialog.askdirectory(
+            title="Select the target directory containing .csv files", parent=root
+        )
+        with contextlib.suppress(Exception):
+            root.lift()
 
-    if not target_dir:
-        messagebox.showwarning("Warning", "No target directory selected.", parent=root)
-        root.destroy()
-        return
+        if not target_dir:
+            messagebox.showwarning("Warning", "No target directory selected.", parent=root)
+            return
 
-    # Now with options 3 and 4!
-    data_type = simpledialog.askinteger(
-        "Select Data Type",
-        "Select the type of data in your CSV files:\n\n"
-        "1. Time of Flight Data\n"
-        "2. Jump Height Data\n"
-        "3. MediaPipe Shank Length Data\n"
-        "4. Team Batch (MediaPipe; one config TOML per athlete folder)",
-        parent=root,  # Set parent window
-        minvalue=1,
-        maxvalue=4,
-    )
-    root.lift()  # Bring window to the front
+        # Now with options 3 and 4!
+        data_type = simpledialog.askinteger(
+            "Select Data Type",
+            "Select the type of data in your CSV files:\n\n"
+            "1. Time of Flight Data\n"
+            "2. Jump Height Data\n"
+            "3. MediaPipe Shank Length Data\n"
+            "4. Team Batch (MediaPipe; one config TOML per athlete folder)",
+            parent=root,  # Set parent window
+            minvalue=1,
+            maxvalue=4,
+        )
+        with contextlib.suppress(Exception):
+            root.lift()
 
-    if data_type is None:
-        messagebox.showwarning("Warning", "No data type selected. Exiting.", parent=root)
-        root.destroy()
-        return
+        if data_type is None:
+            messagebox.showwarning("Warning", "No data type selected. Exiting.", parent=root)
+            return
 
-    team_report = None
-    if data_type == 1 or data_type == 2:
-        use_time_of_flight = data_type == 1
-        process_all_files_in_directory(target_dir, use_time_of_flight)
-    elif data_type == 3:
-        process_all_mediapipe_files(target_dir)
-    elif data_type == 4:
-        team_report = process_team_batch(target_dir)
+        team_report = None
+        if data_type == 1 or data_type == 2:
+            use_time_of_flight = data_type == 1
+            process_all_files_in_directory(target_dir, use_time_of_flight)
+        elif data_type == 3:
+            process_all_mediapipe_files(target_dir)
+        elif data_type == 4:
+            team_report = process_team_batch(target_dir)
 
-    if data_type == 4:
-        if team_report:
-            msg = (
-                "Team batch finished.\n\n"
-                f"Team report (HTML): {team_report}\n"
-                "Per-athlete results are inside the same vaila_team_jump_* folder."
-            )
-            messagebox.showinfo("Success", msg, parent=root)
-            with contextlib.suppress(Exception):
-                webbrowser.open_new_tab(Path(team_report).as_uri())
+        if data_type == 4:
+            if team_report:
+                msg = (
+                    "Team batch finished.\n\n"
+                    f"Team report (HTML): {team_report}\n"
+                    "Per-athlete results are inside the same vaila_team_jump_* folder."
+                )
+                messagebox.showinfo("Success", msg, parent=root)
+                with contextlib.suppress(Exception):
+                    webbrowser.open_new_tab(Path(team_report).as_uri())
+            else:
+                messagebox.showwarning(
+                    "Warning",
+                    "No athlete folders with 'vaila_and_jump_config.toml' + CSV were found.",
+                    parent=root,
+                )
+            return
+
+        msg = "All CSV files have been processed and results saved.\n\n"
+        if data_type == 1:
+            msg += "Input data type: Time of Flight\n"
+        elif data_type == 2:
+            msg += "Input data type: Jump Height\n"
         else:
-            messagebox.showwarning(
-                "Warning",
-                "No athlete folders with 'vaila_and_jump_config.toml' + CSV were found.",
-                parent=root,
-            )
-        root.destroy()
-        return
-
-    msg = "All CSV files have been processed and results saved.\n\n"
-    if data_type == 1:
-        msg += "Input data type: Time of Flight\n"
-    elif data_type == 2:
-        msg += "Input data type: Jump Height\n"
-    else:
-        msg += "Input data type: MediaPipe Shank Length\n"
-    msg += f"Output directory: {os.path.join(target_dir, 'vaila_verticaljump_*')}"
-    messagebox.showinfo("Success", msg, parent=root)
-
-    root.destroy()
+            msg += "Input data type: MediaPipe Shank Length\n"
+        msg += f"Output directory: {os.path.join(target_dir, 'vaila_verticaljump_*')}"
+        messagebox.showinfo("Success", msg, parent=root)
+    finally:
+        _destroy_dialog_parent(root, owns_root)
 
 
 def _run_cli_mediapipe(args):

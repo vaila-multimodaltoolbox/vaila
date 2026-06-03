@@ -882,7 +882,7 @@ The help documentation includes detailed information about:
 
 - **[AGENTS.md](AGENTS.md)** - `uv run` recipes, hybrid CPU vs CUDA `pyproject` templates, SAM 3 / FIFA pointers
 - **[Project Documentation](docs/index.md)** - Overview and module documentation
-- **[PDF Transcription](docs/pdf_transcription.md)** - Brainstorm PDF exam transcription workflow
+- **[PDF Transcription](vaila/help/transcribe_pdfs.md)** - Brainstorm PDF exam transcription workflow
 - **[Help Guide](docs/help.md)** - User guide and installation instructions
 - **[GUI Button Documentation](docs/vaila_buttons/README.md)** - Complete documentation for all GUI buttons
 

@@ -66,7 +66,9 @@
             <h3>🆕 New Features in v0.3.47</h3>
             <ul>
                 <li><strong>Robust CMJ phase detection:</strong> CoM peak anchors propulsion/takeoff before maximum height, with median-smoothed event detection and robust initial baseline options</li>
-                <li><strong>CMJ height quality control:</strong> flags &gt;0.80 m for review and &gt;1.00 m as probable error; MediaPipe mode recommends foot-contact flight-time height when CoM height is suspicious</li>
+                <li><strong>CMJ height quality control:</strong> flags &gt;0.80 m for review and &gt;1.00 m as probable error; MediaPipe mode can recommend height, flight time, takeoff frame, and landing frame from last-foot-off to first-foot-contact when CoM timing/height is inconsistent</li>
+                <li><strong>Team comparison visuals:</strong> team reports include a height distribution plot, Z-score matrix, and color-coded QC table; corrected trials are highlighted in orange and review-only trials in red</li>
+                <li><strong>macOS GUI handling:</strong> when launched from the main vailá GUI, reuses the existing Tk root so directory, batch, and MediaPipe dialogs stay movable and correctly focused</li>
                 <li><strong>FPPA (Frontal Plane Projection Angle):</strong> Rigorous 2D vector-based calculation for clinical validity</li>
                 <li><strong>Landing Phase Analysis:</strong> Multiple time points (IC, IC+40ms, IC+100ms, Max Valgus) based on scientific literature</li>
                 <li><strong>Risk Classification:</strong> Evidence-based categorization (< 5° Good, 5°-10° Moderate, > 10° High Risk)</li>
