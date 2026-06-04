@@ -47,12 +47,12 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Analysis</p>
             <p><strong>File:</strong> vaila\vaila_and_jump.py</p>
-            <p><strong>Lines:</strong> 4514</p>
+            <p><strong>Lines:</strong> 6051</p>
             <p><strong>Size:</strong> ~150000 characters</p>
-            <p><strong>Version:</strong> 0.1.1</p>
+            <p><strong>Version:</strong> 0.3.47</p>
             <p><strong>Author:</strong> Prof. Paulo R. P. Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
-            <p><strong>Last Update:</strong> 04 Jan 2026</p>
+            <p><strong>Last Update:</strong> 03 June 2026</p>
         </div>
 
         <div class="docstring">
@@ -63,8 +63,12 @@
         </div>
 
         <div class="new-feature">
-            <h3>🆕 New Features in v0.1.1</h3>
+            <h3>🆕 New Features in v0.3.47</h3>
             <ul>
+                <li><strong>Robust CMJ phase detection:</strong> CoM peak anchors propulsion/takeoff before maximum height, with median-smoothed event detection and robust initial baseline options</li>
+                <li><strong>CMJ height quality control:</strong> flags &gt;0.80 m for review and &gt;1.00 m as probable error; MediaPipe mode can recommend height, flight time, takeoff frame, and landing frame from last-foot-off to first-foot-contact when CoM timing/height is inconsistent</li>
+                <li><strong>Team comparison visuals:</strong> team reports include a height distribution plot, Z-score matrix, and color-coded QC table; corrected trials are highlighted in orange and review-only trials in red</li>
+                <li><strong>macOS GUI handling:</strong> when launched from the main vailá GUI, reuses the existing Tk root so directory, batch, and MediaPipe dialogs stay movable and correctly focused</li>
                 <li><strong>FPPA (Frontal Plane Projection Angle):</strong> Rigorous 2D vector-based calculation for clinical validity</li>
                 <li><strong>Landing Phase Analysis:</strong> Multiple time points (IC, IC+40ms, IC+100ms, Max Valgus) based on scientific literature</li>
                 <li><strong>Risk Classification:</strong> Evidence-based categorization (< 5° Good, 5°-10° Moderate, > 10° High Risk)</li>
@@ -125,6 +129,14 @@
                 <li><code>calculate_potential_energy</code> - Calculate potential energy</li>
             </ul>
 
+            <h4>Phase Identification <span class="badge badge-new">UPDATED</span>:</h4>
+            <ul>
+                <li><code>identify_jump_phases</code> - Identifies CMJ phases with propulsion/takeoff constrained before the CoM peak</li>
+                <li><code>_robust_baseline_value</code> - Stabilizes initial baseline windows against short MediaPipe spikes</li>
+                <li><code>_cmj_phase_signal</code> - Median-smoothed CoM signal used only for event detection</li>
+                <li><code>_cmj_height_quality_check</code> - Flags implausible CMJ heights and recommends foot-contact correction when appropriate</li>
+            </ul>
+
             <h4>Kinematic Analysis <span class="badge badge-new">NEW</span>:</h4>
             <ul>
                 <li><code>calculate_kinematics</code> - Calculate advanced kinematic metrics for injury screening
@@ -158,6 +170,8 @@
             <ul>
                 <li><code>process_mediapipe_data</code> - Process MediaPipe data and generate visualizations</li>
                 <li><code>process_all_mediapipe_files</code> - Process all MediaPipe CSV files in directory</li>
+                <li><code>process_team_batch</code> - Walk athlete folders (one TOML each) and build a team report</li>
+                <li><code>generate_team_report</code> - Consolidated team CSV + summary + HTML report with charts</li>
                 <li><code>calc_fator_convert_mediapipe</code> - Calculate conversion factor from normalized to meters</li>
             </ul>
 
@@ -178,6 +192,7 @@
                         <li><strong>Option 1:</strong> Time of Flight Data</li>
                         <li><strong>Option 2:</strong> Jump Height Data</li>
                         <li><strong>Option 3:</strong> MediaPipe Shank Length Data</li>
+                        <li><strong>Option 4:</strong> Team Batch (MediaPipe; one config TOML per athlete folder)</li>
                     </ul>
                 </li>
                 <li>For MediaPipe data, provide:
@@ -189,17 +204,36 @@
                 </li>
                 <li>The script processes all files and generates comprehensive reports</li>
             </ol>
+            <h4>Team Batch (mode 4)</h4>
+            <p>Organize each athlete/collection in its <strong>own folder</strong> under one MAIN directory; each folder must contain its own <code>vaila_and_jump_config.toml</code> (with <code>[jump_context]</code>) plus one or more MediaPipe CSVs. Mode 4 walks every folder, runs the MediaPipe analysis with that folder's TOML, and writes a timestamped <code>vaila_team_jump_&lt;timestamp&gt;/</code> at the root of the MAIN directory containing:</p>
+            <ul>
+                <li><code>team_jump_results_&lt;ts&gt;.csv</code> — one row per processed jump (all athletes)</li>
+                <li><code>team_jump_summary_&lt;ts&gt;.csv</code> — team descriptive stats (n, mean, SD, min, median, max)</li>
+                <li><code>team_jump_report_&lt;ts&gt;.html</code> — team report with rankings and per-athlete charts</li>
+                <li><code>team_plots/</code> + per-athlete subfolders with the individual reports</li>
+            </ul>
             <h4>CLI (linha de comando)</h4>
             <p>Argumentos unificados para todos os modos. Use <code>-d</code> para o tipo de dado:</p>
             <ul>
-                <li><code>-i</code> — Entrada: arquivo CSV (modo 3) ou diretório de CSVs (modos 1 e 2)</li>
+                <li><code>-i</code> — Entrada: arquivo CSV (modo 3), diretório de CSVs (modos 1 e 2) ou diretório PRINCIPAL com pastas de atletas (modo 4)</li>
                 <li><code>-c</code> — Config TOML (obrigatório para modo 3 MediaPipe)</li>
                 <li><code>-o</code> — Diretório de saída (opcional)</li>
-                <li><code>-d</code> — Tipo: 1 = Tempo de Voo, 2 = Altura, 3 = MediaPipe</li>
+                <li><code>-d</code> — Tipo: 1 = Tempo de Voo, 2 = Altura, 3 = MediaPipe, 4 = Team Batch</li>
+                <li><code>--batch</code> — Atalho para <code>-d 4</code> (lote da equipe sobre subpastas de <code>-i</code>)</li>
                 <li><code>--gui</code> — Forçar modo gráfico</li>
             </ul>
             <p>Exemplo MediaPipe: <code>python vaila_and_jump.py -i ficheiro.csv -c config.toml -o saida/ -d 3</code></p>
             <p>Exemplo batch (modo 1 ou 2): <code>-i &lt;dir&gt; -o &lt;out&gt; -d 1</code> ou <code>-d 2</code>.</p>
+            <p>Exemplo team batch: <code>python vaila_and_jump.py -i &lt;main_dir&gt; --batch</code></p>
+            <h4>Optional CMJ phase settings</h4>
+            <pre>[jump_phase]
+baseline_rectify_start = true
+baseline_start_frame = 10
+baseline_end_frame = 20
+phase_smoothing_window_s = 0.06
+baseline_tolerance_m = 0.02
+anchor_events_to_com_peak = true</pre>
+            <p>Keep <code>anchor_events_to_com_peak = true</code> for CMJ data so propulsion and ascent events cannot be placed after maximum CoM height.</p>
         </div>
 
         <div class="docstring">
@@ -247,11 +281,12 @@
                 <li>Shank length calibration is critical for accurate metric calculations</li>
                 <li>FPPA calculations use rigorous vector-based methods for clinical validity</li>
                 <li>Right side FPPA values are inverted for consistent visualization (both sides show valgus as positive)</li>
+                <li>Robust CMJ phase detection anchors propulsion and takeoff before the maximum CoM height</li>
             </ul>
         </div>
 
         <div class="footer">
-            <p>📅 <strong>Last Updated:</strong> 04 Jan 2026</p>
+            <p>📅 <strong>Last Updated:</strong> 03 June 2026</p>
             <p>🔗 <strong>Part of vailá - Multimodal Toolbox</strong></p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

@@ -50,7 +50,7 @@ use_nvenc = false                  # true só se quiseres offload do encode e ac
 
 ## Ficheiros de saída (por vídeo)
 
-Subpasta timestampada sob o output escolhido; por vídeo: `*_annotated.mp4`, CSVs MediaPipe, `configuration_used.toml`, etc.
+Subpasta timestampada sob o output escolhido; por vídeo: `*_mp.mp4`, CSVs MediaPipe, `configuration_used.toml`, etc.
 
 ## Data da sessão
 

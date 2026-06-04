@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 21 May 2026
-Version: 0.1.3
+Update Date: 03 June 2026
+Version: 0.3.47
 Python Version: 3.12.13
 
 Description:
@@ -58,14 +58,25 @@ Dependencies:
 Usage:
 ------
 - GUI: Run with no arguments or --gui; select directory and data type (1=Time of Flight,
-  2=Jump Height, 3=MediaPipe).
+  2=Jump Height, 3=MediaPipe, 4=Team Batch).
 - CLI: Use -i (input), -o (output dir), -d (data type). For mode 3 (MediaPipe), also pass -c (config TOML).
 
+Team Batch (mode 4):
+  Point -i at a MAIN directory whose subfolders are athlete/collection folders.
+  Each folder must contain its own ``vaila_and_jump_config.toml`` (with [jump_context])
+  plus one or more MediaPipe CSVs. The tool walks every folder, runs the MediaPipe
+  analysis using that folder's TOML, and writes a consolidated TEAM report
+  (team_jump_results_*.csv, team_jump_summary_*.csv, team_jump_report_*.html) at the
+  root of the timestamped output directory ``vaila_team_jump_<timestamp>/``.
+
 Arguments:
-  -i, --input    Input: CSV file (mode 3) or directory of CSVs (modes 1 and 2).
+  -i, --input    Input: CSV file (mode 3), directory of CSVs (modes 1 and 2), or
+                 main directory of athlete folders (mode 4).
   -c, --config   Path to vaila_and_jump_config.toml (required for mode 3).
   -o, --output   Output directory (optional; default: next to input, timestamped).
-  -d, --data-type  1=Time of Flight, 2=Jump Height, 3=MediaPipe (default: 3 when -i and -c given).
+  -d, --data-type  1=Time of Flight, 2=Jump Height, 3=MediaPipe, 4=Team Batch
+                 (default: 3 when -i and -c given).
+  --batch        Shortcut for -d 4 (team batch over subfolders of -i).
   --gui          Force GUI mode.
 
 Examples:
@@ -82,6 +93,10 @@ CLI mode 1 (Time of Flight, batch over directory):
 
 CLI mode 2 (Jump Height, batch over directory):
   $ python vaila_and_jump.py -i <path_to_directory_with_csvs> -o <output_dir> -d 2
+
+CLI mode 4 (Team batch over athlete subfolders, each with its own TOML):
+  $ python vaila_and_jump.py -i <path_to_main_dir> --batch
+  $ python vaila_and_jump.py -i <path_to_main_dir> -o <output_dir> -d 4
 
 Input File Format:
 -----------------
@@ -145,6 +160,7 @@ import base64
 import contextlib
 import math
 import os
+import tkinter as tk
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -160,10 +176,60 @@ try:  # Python 3.11+
 except Exception:  # pragma: no cover
     _toml_reader = None  # type: ignore[assignment]
 
+CMJ_HEIGHT_HIGH_THRESHOLD_M = 0.60
+CMJ_HEIGHT_REVIEW_THRESHOLD_M = 0.80
+CMJ_HEIGHT_ERROR_THRESHOLD_M = 1.00
+CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M = 0.12
+CMJ_HEIGHT_DISCREPANCY_RATIO = 0.25
+
+
+def _display_path(path: object) -> str:
+    """Return a path relative to the current working directory for display.
+
+    Relative paths are portable across operating systems and avoid leaking
+    absolute machine paths into logs/reports. Falls back to the original
+    path when a relative form is not possible (e.g. different Windows drive).
+    """
+    if path is None:
+        return ""
+    try:
+        return os.path.relpath(os.fspath(path))
+    except (ValueError, TypeError):
+        return str(path)
+
+
 # -----------------------
 # Jump context management
 # -----------------------
 _JUMP_CONTEXT: dict[str, float] | None = None
+
+
+def _dialog_parent() -> tuple[tk.Misc, bool]:
+    """Return the active Tk parent, creating one only for standalone execution."""
+    default_root = tk._default_root  # ty: ignore[attr-defined]
+    if default_root is not None and bool(default_root.winfo_exists()):
+        return default_root, False
+
+    root = Tk()
+    root.withdraw()
+    return root, True
+
+
+def _prepare_dialog_parent(parent: tk.Misc, owns_parent: bool) -> None:
+    if owns_parent:
+        with contextlib.suppress(Exception):
+            parent.attributes("-topmost", True)  # type: ignore[attr-defined]
+        return
+
+    with contextlib.suppress(Exception):
+        parent.lift()
+        parent.focus_force()
+
+
+def _destroy_dialog_parent(parent: tk.Misc, owns_parent: bool) -> None:
+    if owns_parent:
+        with contextlib.suppress(Exception):
+            parent.destroy()
 
 
 def _parse_locale_float(value: object) -> float:
@@ -315,6 +381,14 @@ def _save_jump_context_template(dest: Path, ctx: dict[str, float]) -> None:
         f"mass_kg = {ctx.get('mass_kg', 75.0):.3f}\n"
         f"fps = {float(ctx.get('fps', 240)):.3f}\n"
         f"shank_length_m = {ctx.get('shank_length_m', 0.40):.3f}\n"
+        "\n[jump_phase]\n"
+        "# Keep robust defaults for CMJ videos with initial MediaPipe jitter.\n"
+        "baseline_rectify_start = true\n"
+        "baseline_start_frame = 10\n"
+        "baseline_end_frame = 20\n"
+        "phase_smoothing_window_s = 0.06\n"
+        "baseline_tolerance_m = 0.02\n"
+        "anchor_events_to_com_peak = true\n"
     )
     dest.write_text(content, encoding="utf-8")
 
@@ -334,10 +408,8 @@ def _get_or_ask_jump_context(
         )
         return _JUMP_CONTEXT
     # Ask once via dialogs
-    root = Tk()
-    root.withdraw()
-    with contextlib.suppress(Exception):
-        root.attributes("-topmost", True)
+    root, owns_root = _dialog_parent()
+    _prepare_dialog_parent(root, owns_root)
     try:
         mass = _ask_locale_float(
             "Mass (kg)",
@@ -382,8 +454,7 @@ def _get_or_ask_jump_context(
             pass
         return _JUMP_CONTEXT
     finally:
-        with contextlib.suppress(Exception):
-            root.destroy()
+        _destroy_dialog_parent(root, owns_root)
 
 
 def calculate_force(mass, gravity=9.81):
@@ -526,6 +597,336 @@ def calculate_time_of_flight(height, gravity=9.81):
     return math.sqrt(8 * height / gravity)
 
 
+_DEFAULT_JUMP_PHASE_OPTIONS: dict[str, float | bool] = {
+    "baseline_rectify_start": True,
+    "baseline_start_frame": 10.0,
+    "baseline_end_frame": 20.0,
+    "phase_smoothing_window_s": 0.06,
+    "baseline_tolerance_m": 0.02,
+    "anchor_events_to_com_peak": True,
+}
+
+
+def _parse_config_bool(value: object, default: bool) -> bool:
+    """Parse bool-like TOML/user values without treating arbitrary text as True."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "sim", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "nao", "não", "off"}:
+            return False
+    return default
+
+
+def _jump_phase_options_from_cfg(cfg: dict | None) -> dict[str, float | bool]:
+    """Load optional robust CMJ phase-detection settings."""
+    opts = dict(_DEFAULT_JUMP_PHASE_OPTIONS)
+    if not isinstance(cfg, dict):
+        return opts
+
+    opts["baseline_rectify_start"] = _parse_config_bool(
+        cfg.get("baseline_rectify_start"), bool(opts["baseline_rectify_start"])
+    )
+    opts["anchor_events_to_com_peak"] = _parse_config_bool(
+        cfg.get("anchor_events_to_com_peak"), bool(opts["anchor_events_to_com_peak"])
+    )
+
+    numeric_keys = (
+        "baseline_start_frame",
+        "baseline_end_frame",
+        "phase_smoothing_window_s",
+        "baseline_tolerance_m",
+    )
+    for key in numeric_keys:
+        if key in cfg:
+            try:
+                parsed = _parse_locale_float(cfg[key])
+            except (TypeError, ValueError):
+                continue
+            if key.endswith("_frame") or key == "phase_smoothing_window_s":
+                opts[key] = max(0.0, parsed)
+            elif key == "baseline_tolerance_m":
+                opts[key] = max(0.001, parsed)
+
+    if float(opts["baseline_end_frame"]) <= float(opts["baseline_start_frame"]):
+        opts["baseline_start_frame"] = _DEFAULT_JUMP_PHASE_OPTIONS["baseline_start_frame"]
+        opts["baseline_end_frame"] = _DEFAULT_JUMP_PHASE_OPTIONS["baseline_end_frame"]
+    return opts
+
+
+def _load_jump_phase_options_from_toml(base_dir: Path | None = None) -> dict[str, float | bool]:
+    """Try to load optional [jump_phase] settings, with robust defaults otherwise."""
+    search_paths = []
+    if base_dir is not None:
+        search_paths.append(Path(base_dir) / "vaila_and_jump_config.toml")
+    search_paths.extend(
+        [
+            Path(__file__).parent / "vaila_and_jump_config.toml",
+            Path(__file__).parent / "models" / "vaila_and_jump_config.toml",
+        ]
+    )
+    for p in search_paths:
+        if p.exists():
+            try:
+                if _toml_reader is None:
+                    import toml
+
+                    data = toml.load(str(p))
+                else:
+                    with open(p, "rb") as f:
+                        data = _toml_reader.load(f)
+                cfg = data.get("jump_phase", {})
+                return _jump_phase_options_from_cfg(cfg)
+            except Exception:
+                pass
+    return dict(_DEFAULT_JUMP_PHASE_OPTIONS)
+
+
+def _robust_baseline_value(
+    values: pd.Series,
+    start_frame: int,
+    end_frame: int,
+    *,
+    rectify: bool = True,
+) -> float:
+    """Return a baseline resistant to short MediaPipe spikes in the initial stance window."""
+    series = pd.to_numeric(pd.Series(values), errors="coerce")
+    n = len(series)
+    if n == 0:
+        return 0.0
+    start = max(0, min(int(start_frame), n - 1))
+    end = max(start + 1, min(int(end_frame), n))
+    window = series.iloc[start:end].dropna()
+    if window.empty:
+        window = series.dropna()
+    if window.empty:
+        return 0.0
+    if not rectify or len(window) < 3:
+        return float(window.mean())
+
+    median = float(window.median())
+    mad = float((window - median).abs().median())
+    if mad <= 1e-12:
+        return median
+    robust_sigma = 1.4826 * mad
+    keep = window[(window - median).abs() <= max(3.0 * robust_sigma, 1e-9)]
+    return float(keep.mean()) if not keep.empty else median
+
+
+def _odd_rolling_window(fps: float, seconds: float, n_samples: int) -> int:
+    """Convert a duration to an odd rolling window bounded by the signal length."""
+    if seconds <= 0 or n_samples < 3:
+        return 1
+    frames = max(3, int(round(float(fps) * float(seconds))))
+    if frames % 2 == 0:
+        frames += 1
+    if frames > n_samples:
+        frames = n_samples if n_samples % 2 == 1 else n_samples - 1
+    return max(1, frames)
+
+
+def _cmj_phase_signal(series: pd.Series, fps: float, smooth_window_s: float) -> pd.Series:
+    """Median-smoothed CG signal used only for event detection, not for reported height."""
+    signal = pd.to_numeric(pd.Series(series), errors="coerce")
+    signal = signal.interpolate(limit_direction="both").bfill().ffill()
+    if signal.empty:
+        return signal
+    window = _odd_rolling_window(fps, smooth_window_s, len(signal))
+    if window <= 1:
+        return signal
+    return signal.rolling(window=window, center=True, min_periods=1).median()
+
+
+def _as_float_or_none(value: object) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _as_int_or_none(value: object) -> int | None:
+    parsed = _as_float_or_none(value)
+    return int(parsed) if parsed is not None else None
+
+
+def _latest_valid_frame(*frames: object) -> int | None:
+    valid = [f for f in (_as_int_or_none(frame) for frame in frames) if f is not None]
+    return max(valid) if valid else None
+
+
+def _earliest_valid_frame(*frames: object) -> int | None:
+    valid = [f for f in (_as_int_or_none(frame) for frame in frames) if f is not None]
+    return min(valid) if valid else None
+
+
+def _height_from_flight_frames(
+    takeoff_frame: object, landing_frame: object, fps: float
+) -> tuple[float | None, float | None]:
+    takeoff = _as_int_or_none(takeoff_frame)
+    landing = _as_int_or_none(landing_frame)
+    fps_value = _as_float_or_none(fps)
+    if takeoff is None or landing is None or fps_value is None or fps_value <= 0:
+        return None, None
+    if landing <= takeoff:
+        return None, None
+    flight_time = (landing - takeoff) / fps_value
+    return flight_time, (9.81 * flight_time**2) / 8
+
+
+def _cmj_height_status(height_m: float | None) -> tuple[str, str]:
+    if height_m is None:
+        return "missing", "Missing height value."
+    if height_m > CMJ_HEIGHT_ERROR_THRESHOLD_M:
+        return "probable_error", "Above 1.00 m: probable scale, phase, or tracking error."
+    if height_m > CMJ_HEIGHT_REVIEW_THRESHOLD_M:
+        return "manual_review", "Above 0.80 m: verify CMJ trial manually."
+    if height_m > CMJ_HEIGHT_HIGH_THRESHOLD_M:
+        return (
+            "very_high_plausible",
+            "Above 0.60 m: very high CMJ; plausible for exceptional athletes.",
+        )
+    return "plausible", "Within the expected CMJ markerless range."
+
+
+def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, object]:
+    """Flag implausible CMJ heights and prefer foot-contact flight time when useful."""
+    cg_height = _as_float_or_none(phase_results.get("height_cg_method_m"))
+    cg_status, cg_note = _cmj_height_status(cg_height)
+
+    foot_takeoff_frame = _latest_valid_frame(
+        phase_results.get("left_takeoff_frame"),
+        phase_results.get("right_takeoff_frame"),
+    )
+    foot_landing_frame = _earliest_valid_frame(
+        phase_results.get("left_landing_frame"),
+        phase_results.get("right_landing_frame"),
+    )
+    foot_flight_time, foot_height = _height_from_flight_frames(
+        foot_takeoff_frame, foot_landing_frame, fps
+    )
+
+    recommended = cg_height
+    recommended_source = "cg_method"
+    recommended_flight_time = _as_float_or_none(phase_results.get("flight_time_s"))
+    recommended_takeoff_frame = _as_int_or_none(phase_results.get("takeoff_frame"))
+    recommended_landing_frame = _as_int_or_none(phase_results.get("landing_frame"))
+    correction_applied = False
+    note_parts = [cg_note]
+
+    max_height_frame = _as_int_or_none(phase_results.get("max_height_frame"))
+    takeoff_frame = _as_int_or_none(phase_results.get("takeoff_frame"))
+    landing_frame = _as_int_or_none(phase_results.get("landing_frame"))
+    temporal_inconsistent = False
+    if (
+        takeoff_frame is not None
+        and max_height_frame is not None
+        and takeoff_frame > max_height_frame
+    ):
+        temporal_inconsistent = True
+        note_parts.append("CoM takeoff occurs after CoM peak; phase sequence is inconsistent.")
+    if (
+        landing_frame is not None
+        and max_height_frame is not None
+        and landing_frame <= max_height_frame
+    ):
+        temporal_inconsistent = True
+        note_parts.append(
+            "CoM landing occurs before or at CoM peak; phase sequence is inconsistent."
+        )
+
+    com_landing_after_foot_s = None
+    if (
+        landing_frame is not None
+        and foot_landing_frame is not None
+        and landing_frame > foot_landing_frame
+    ):
+        fps_value = _as_float_or_none(fps)
+        if fps_value and fps_value > 0:
+            com_landing_after_foot_s = (landing_frame - foot_landing_frame) / fps_value
+            note_parts.append(
+                f"CoM landing was {com_landing_after_foot_s:.3f} s after first foot contact."
+            )
+
+    height_discrepancy = None
+    height_discrepancy_ratio = None
+    if cg_height is not None and foot_height is not None:
+        height_discrepancy = abs(cg_height - foot_height)
+        if max(abs(cg_height), abs(foot_height)) > 0:
+            height_discrepancy_ratio = height_discrepancy / max(abs(cg_height), abs(foot_height))
+        if height_discrepancy >= CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M or (
+            height_discrepancy_ratio is not None
+            and height_discrepancy_ratio >= CMJ_HEIGHT_DISCREPANCY_RATIO
+        ):
+            note_parts.append(f"CoM and foot-contact heights differ by {height_discrepancy:.3f} m.")
+
+    should_use_foot_contact = (
+        foot_height is not None
+        and foot_flight_time is not None
+        and foot_height > 0
+        and foot_height <= CMJ_HEIGHT_REVIEW_THRESHOLD_M
+        and (
+            cg_status in {"manual_review", "probable_error"}
+            or temporal_inconsistent
+            or (
+                cg_status == "plausible"
+                and height_discrepancy is not None
+                and height_discrepancy >= CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M
+            )
+            or (
+                cg_status == "plausible"
+                and height_discrepancy_ratio is not None
+                and height_discrepancy_ratio >= CMJ_HEIGHT_DISCREPANCY_RATIO
+            )
+        )
+    )
+
+    if should_use_foot_contact:
+        recommended = foot_height
+        recommended_source = "foot_contact_flight_time"
+        recommended_flight_time = foot_flight_time
+        recommended_takeoff_frame = foot_takeoff_frame
+        recommended_landing_frame = foot_landing_frame
+        correction_applied = True
+        note_parts.append(
+            "Recommended height and flight time use last-foot-off to first-foot-contact."
+        )
+    elif cg_status in {"manual_review", "probable_error"}:
+        if foot_height is not None and foot_height > CMJ_HEIGHT_REVIEW_THRESHOLD_M:
+            note_parts.append("Foot-contact correction is also above 0.80 m; keep manual review.")
+        else:
+            note_parts.append(
+                "Foot-contact correction unavailable; check scale, FPS, shank_length_m, and trial crop."
+            )
+
+    recommended_status, _recommended_note = _cmj_height_status(recommended)
+    return {
+        "height_qc_status": cg_status,
+        "height_qc_recommended_status": recommended_status,
+        "height_qc_recommended_m": recommended,
+        "height_qc_recommended_source": recommended_source,
+        "height_qc_correction_applied": correction_applied,
+        "height_qc_note": " ".join(note_parts),
+        "height_qc_review_threshold_m": CMJ_HEIGHT_REVIEW_THRESHOLD_M,
+        "height_qc_error_threshold_m": CMJ_HEIGHT_ERROR_THRESHOLD_M,
+        "height_qc_discrepancy_m": height_discrepancy,
+        "height_qc_discrepancy_ratio": height_discrepancy_ratio,
+        "phase_temporal_inconsistent": temporal_inconsistent,
+        "flight_time_qc_recommended_s": recommended_flight_time,
+        "takeoff_frame_qc_recommended": recommended_takeoff_frame,
+        "landing_frame_qc_recommended": recommended_landing_frame,
+        "takeoff_frame_foot_contact": foot_takeoff_frame,
+        "landing_frame_foot_contact": foot_landing_frame,
+        "flight_time_foot_contact_s": foot_flight_time,
+        "height_foot_contact_method_m": foot_height,
+        "com_landing_after_foot_s": com_landing_after_foot_s,
+    }
+
+
 def calculate_baseline(data, n_frames=10):
     """
     Calculate the baseline using the first n frames.
@@ -548,82 +949,118 @@ def calculate_baseline(data, n_frames=10):
     return feet_baseline, cg_y_baseline
 
 
-def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
+def identify_jump_phases(
+    data,
+    feet_baseline,
+    _cg_baseline,
+    fps,
+    *,
+    smooth_window_s=0.06,
+    baseline_tolerance_m=0.02,
+    anchor_events_to_com_peak=True,
+):
     """
-    Improved identification of jump phases with three different height calculation methods.
+    Robust CMJ phase identification with the CoM peak as an anatomical anchor.
 
-    Methods:
-    1. CG Method: From initial CG position to maximum CG height
-    2. Flight Time Method: Based on CG flight time (time in air)
-    3. Feet Method: Based on feet height (left and right foot_index)
-
-    Args:
-        data (pd.DataFrame): DataFrame with the data
-        feet_baseline (float): Baseline for the feet (e.g., average foot position during initial frames 10-20)
-        cg_baseline (float): Baseline for the CG (e.g., average CG Y position during initial frames 10-20, used for normalization)
-        fps (int): Frames per second
-
-    Returns:
-        dict: Dictionary with comprehensive jump phase information including all three height methods
+    The CG peak is found first. Propulsion start (deepest countermovement) and
+    takeoff are then searched before or at that peak, so landing oscillations or
+    late tracking artifacts cannot be misclassified as propulsion/ascent.
     """
-    # METHOD 1: CG-based height (from initial position to maximum)
-    max_cg_height = data["cg_y_normalized"].max()
-    min_cg_height = data["cg_y_normalized"].min()  # For squat depth
+    empty_result = {
+        "propulsion_start_frame": 0,
+        "takeoff_frame": 0,
+        "max_height_frame": 0,
+        "landing_frame": 0,
+        "flight_time_s": 0,
+        "max_height_m": 0,
+        "propulsion_time_s": 0,
+        "ascent_time_s": 0,
+        "descent_time_s": 0,
+        "height_cg_method_m": 0,
+        "squat_depth_m": 0,
+        "height_flight_time_method_m": 0,
+        "height_left_foot_m": None,
+        "height_right_foot_m": None,
+        "height_avg_feet_m": None,
+        "left_takeoff_frame": None,
+        "right_takeoff_frame": None,
+        "left_landing_frame": None,
+        "right_landing_frame": None,
+        "left_takeoff_time_s": None,
+        "right_takeoff_time_s": None,
+        "left_landing_time_s": None,
+        "right_landing_time_s": None,
+    }
+    if len(data) == 0 or "cg_y_normalized" not in data.columns:
+        return empty_result
 
-    # Find max height frame
-    max_height_frame = data["cg_y_normalized"].idxmax()
+    cg_raw = pd.to_numeric(data["cg_y_normalized"], errors="coerce")
+    cg_raw = cg_raw.interpolate(limit_direction="both").bfill().ffill()
+    cg_event = _cmj_phase_signal(cg_raw, fps, smooth_window_s)
+    cg_values = cg_event.to_numpy(dtype=float)
+    raw_values = cg_raw.to_numpy(dtype=float)
+    n_samples = len(cg_values)
 
-    # Find squat frame (minimum position) - This is the start of propulsion
-    squat_frame = data["cg_y_normalized"].idxmin()
+    if n_samples == 0 or np.all(np.isnan(cg_values)):
+        return empty_result
 
-    # CORRECTED: Find takeoff between squat and peak, closest to baseline (0)
-    takeoff_frame = squat_frame  # Default if no better found
-    if squat_frame <= max_height_frame:
-        squat_to_peak_range = data.loc[squat_frame:max_height_frame]
-        if not squat_to_peak_range.empty:
-            baseline_tolerance = 0.02  # 2cm tolerance
-            baseline_candidates = squat_to_peak_range[
-                abs(squat_to_peak_range["cg_y_normalized"]) <= baseline_tolerance
-            ]
+    peak_pos = int(np.nanargmax(cg_values))
+    peak_refine_radius = max(1, _odd_rolling_window(fps, smooth_window_s, n_samples) // 2)
+    peak_start = max(0, peak_pos - peak_refine_radius)
+    peak_end = min(n_samples, peak_pos + peak_refine_radius + 1)
+    local_peak_values = raw_values[peak_start:peak_end]
+    if np.isfinite(local_peak_values).any():
+        peak_pos = peak_start + int(np.nanargmax(local_peak_values))
 
-            if len(baseline_candidates) > 0:
-                takeoff_frame = baseline_candidates.index[0]
-            elif not squat_to_peak_range["cg_y_normalized"].empty:
-                closest_to_baseline_idx = (squat_to_peak_range["cg_y_normalized"]).abs().idxmin()
-                takeoff_frame = closest_to_baseline_idx
+    max_height_frame = int(data.index[peak_pos])
+    max_cg_height = float(raw_values[peak_pos])
 
-    # Improved landing detection: when CG returns close to baseline
-    landing_frame = len(data) - 1 if len(data) > 0 else 0  # Default to last frame
-    if max_height_frame < len(data) - 1:
-        post_peak_data = data[data.index > max_height_frame]
-        if not post_peak_data.empty:
-            landing_candidates = post_peak_data[
-                post_peak_data["cg_y_normalized"] <= 0.02
-            ]  # 2cm tolerance
-            if len(landing_candidates) > 0:
-                landing_frame = landing_candidates.index[0]
-            elif not post_peak_data["cg_y_normalized"].empty:  # Check if series is not empty
-                closest_to_baseline_landing_idx = (post_peak_data["cg_y_normalized"]).abs().idxmin()
-                landing_frame = closest_to_baseline_landing_idx
+    squat_search_end = peak_pos + 1 if anchor_events_to_com_peak else n_samples
+    squat_search_end = max(1, min(squat_search_end, n_samples))
+    squat_pos = int(np.nanargmin(cg_values[:squat_search_end]))
+    squat_frame = int(data.index[squat_pos])
+    min_cg_height = float(raw_values[squat_pos])
 
-    # METHOD 2: Flight time-based height calculation
+    baseline_tolerance = max(0.001, float(baseline_tolerance_m))
+    takeoff_pos = squat_pos
+    if squat_pos <= peak_pos:
+        segment = raw_values[squat_pos : peak_pos + 1]
+        finite_mask = np.isfinite(segment)
+        if finite_mask.any():
+            candidates = np.flatnonzero(np.abs(segment) <= baseline_tolerance)
+            if len(candidates) > 0:
+                takeoff_pos = squat_pos + int(candidates[0])
+            else:
+                takeoff_pos = squat_pos + int(np.nanargmin(np.abs(segment)))
+    takeoff_pos = max(squat_pos, min(takeoff_pos, peak_pos))
+    takeoff_frame = int(data.index[takeoff_pos])
+
+    landing_pos = n_samples - 1
+    if peak_pos < n_samples - 1:
+        post_peak = cg_values[peak_pos + 1 :]
+        landing_candidates = np.flatnonzero(post_peak <= baseline_tolerance)
+        if len(landing_candidates) > 0:
+            landing_pos = peak_pos + 1 + int(landing_candidates[0])
+        elif np.isfinite(post_peak).any():
+            landing_pos = peak_pos + 1 + int(np.nanargmin(np.abs(post_peak)))
+    landing_frame = int(data.index[landing_pos])
+
     flight_time = 0
     if takeoff_frame is not None and landing_frame is not None and landing_frame > takeoff_frame:
         flight_time = (landing_frame - takeoff_frame) / fps
     height_from_flight_time = (9.81 * flight_time**2) / 8 if flight_time > 0 else 0
 
-    # METHOD 3: Feet-based height calculations (USING THE feet_baseline PARAMETER)
     left_foot_height = None
     right_foot_height = None
     avg_feet_height = None
 
     if "left_foot_index_y_m" in data.columns:
         left_foot_max = data["left_foot_index_y_m"].max()
-        left_foot_height = left_foot_max - feet_baseline  # Use passed feet_baseline
+        left_foot_height = left_foot_max - feet_baseline
 
     if "right_foot_index_y_m" in data.columns:
         right_foot_max = data["right_foot_index_y_m"].max()
-        right_foot_height = right_foot_max - feet_baseline  # Use passed feet_baseline
+        right_foot_height = right_foot_max - feet_baseline
 
     if left_foot_height is not None and right_foot_height is not None:
         avg_feet_height = (left_foot_height + right_foot_height) / 2
@@ -632,47 +1069,47 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
     elif right_foot_height is not None:
         avg_feet_height = right_foot_height
 
-    # Individual foot takeoff detection (USING THE feet_baseline PARAMETER)
     left_takeoff_idx = None
     right_takeoff_idx = None
+    foot_threshold = feet_baseline + 0.02
 
-    if "left_foot_index_y_m" in data.columns:
-        # Using feet_baseline + 0.02m threshold
-        left_takeoff_candidates = data[data["left_foot_index_y_m"] > feet_baseline + 0.02]
-        if not left_takeoff_candidates.empty:
-            left_takeoff_idx = left_takeoff_candidates.index[0]
+    def _first_foot_takeoff(col_name):
+        if col_name not in data.columns or n_samples == 0:
+            return None
+        foot = pd.to_numeric(data[col_name], errors="coerce").reset_index(drop=True)
+        start_pos = max(0, min(squat_pos, n_samples - 1))
+        end_pos = max(start_pos + 1, min(peak_pos + 1, n_samples))
+        candidates = np.flatnonzero(
+            foot.iloc[start_pos:end_pos].to_numpy(dtype=float) > foot_threshold
+        )
+        if len(candidates) == 0:
+            return None
+        return int(data.index[start_pos + int(candidates[0])])
 
-    if "right_foot_index_y_m" in data.columns:
-        # Using feet_baseline + 0.02m threshold
-        right_takeoff_candidates = data[data["right_foot_index_y_m"] > feet_baseline + 0.02]
-        if not right_takeoff_candidates.empty:
-            right_takeoff_idx = right_takeoff_candidates.index[0]
+    left_takeoff_idx = _first_foot_takeoff("left_foot_index_y_m")
+    right_takeoff_idx = _first_foot_takeoff("right_foot_index_y_m")
 
-    # Individual foot landing detection (USING THE feet_baseline PARAMETER)
     left_landing_idx = None
     right_landing_idx = None
 
     post_peak_data_for_feet = (
-        data[data.index > max_height_frame] if max_height_frame < len(data) - 1 else pd.DataFrame()
+        data.iloc[peak_pos + 1 :] if peak_pos < n_samples - 1 else pd.DataFrame()
     )
 
     if "left_foot_index_y_m" in data.columns and not post_peak_data_for_feet.empty:
-        # Using feet_baseline + 0.02m threshold
         left_landing_candidates = post_peak_data_for_feet[
-            post_peak_data_for_feet["left_foot_index_y_m"] <= feet_baseline + 0.02
+            post_peak_data_for_feet["left_foot_index_y_m"] <= foot_threshold
         ]
         if not left_landing_candidates.empty:
-            left_landing_idx = left_landing_candidates.index[0]
+            left_landing_idx = int(left_landing_candidates.index[0])
 
     if "right_foot_index_y_m" in data.columns and not post_peak_data_for_feet.empty:
-        # Using feet_baseline + 0.02m threshold
         right_landing_candidates = post_peak_data_for_feet[
-            post_peak_data_for_feet["right_foot_index_y_m"] <= feet_baseline + 0.02
+            post_peak_data_for_feet["right_foot_index_y_m"] <= foot_threshold
         ]
         if not right_landing_candidates.empty:
-            right_landing_idx = right_landing_candidates.index[0]
+            right_landing_idx = int(right_landing_candidates.index[0])
 
-    # CORRECTED Propulsion time calculation
     propulsion_time_value = 0
     if takeoff_frame is not None and squat_frame is not None and takeoff_frame > squat_frame:
         propulsion_time_value = (takeoff_frame - squat_frame) / fps
@@ -721,6 +1158,9 @@ def identify_jump_phases(data, feet_baseline, _cg_baseline, fps):
         "right_landing_time_s": (
             right_landing_idx / fps if right_landing_idx is not None else None
         ),
+        "phase_smoothing_window_s": smooth_window_s,
+        "baseline_tolerance_m": baseline_tolerance_m,
+        "phase_detection_anchored_to_peak": bool(anchor_events_to_com_peak),
     }
 
 
@@ -841,7 +1281,7 @@ def calculate_kinematics(data, results):
             fppa_angle = -abs(deviation) if cross_product > 0 else abs(deviation)
         return fppa_angle
 
-    propulsion_frame = results.get("propulsion_start_frame")
+    propulsion_frame = results.get("propulsion_start_frame", results.get("squat_frame"))
     landing_frame = results.get("landing_frame")
 
     # Time series for Valgus Ratio and FPPA (For plotting)
@@ -1177,7 +1617,7 @@ def plot_valgus_ratio(data, results, output_dir, base_name):
     plt.axhline(y=0.8, color="red", linestyle="--", alpha=0.5, label="High Risk (< 0.8)")
 
     # Mark events
-    propulsion_frame = results.get("propulsion_start_frame")
+    propulsion_frame = results.get("propulsion_start_frame", results.get("squat_frame"))
     landing_frame = results.get("landing_frame")
 
     if propulsion_frame is not None and propulsion_frame < len(time_axis):
@@ -1268,7 +1708,7 @@ def plot_fppa_time_series(data, results, output_dir, base_name):
     ax.axhline(y=-10, color="red", linestyle=":", linewidth=1, alpha=0.5)
 
     # Mark key events
-    propulsion_frame = results.get("propulsion_start_frame")
+    propulsion_frame = results.get("propulsion_start_frame", results.get("squat_frame"))
     takeoff_frame = results.get("takeoff_frame")
     landing_40ms_frame = results.get("landing_40ms_frame")
     landing_100ms_frame = results.get("landing_100ms_frame")
@@ -1386,7 +1826,7 @@ def plot_fppa_time_series(data, results, output_dir, base_name):
     # Labels and formatting
     ax.set_xlabel("Time (ms) relative to Initial Contact (IC)", fontsize=12)
     ax.set_ylabel(
-        "FPPA (degrees)\nPositive = Varus (Abduction/Lateral), Negative = Valgus (Adduction/Medial)",
+        "FPPA (degrees)\nPositive = Valgus (medial collapse), Negative = Varus (lateral deviation)",
         fontsize=12,
     )
     ax.set_title(
@@ -1442,7 +1882,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
 
     plot_paths = []
 
-    propulsion_frame = results.get("propulsion_start_frame")
+    propulsion_frame = results.get("propulsion_start_frame", results.get("squat_frame"))
     landing_frame = results.get("landing_frame")
     fps = results.get("fps", 30)
 
@@ -2180,10 +2620,22 @@ def generate_jump_plots(data, results, output_dir, base_name):
 
 
 def plot_jump_phases_analysis(
-    data, takeoff_frame, max_height_frame, landing_frame, fps, output_dir, base_name
+    data,
+    takeoff_frame,
+    max_height_frame,
+    landing_frame,
+    fps,
+    output_dir,
+    base_name,
+    squat_frame=None,
 ):
     """
     Generate a visualization showing jump phases with colored regions.
+
+    The phases always follow the physiological CMJ sequence:
+    Propulsion (squat -> takeoff) -> Ascent (takeoff -> peak) ->
+    Descent (peak -> landing). The Flight phase always equals the
+    airborne interval (takeoff -> landing) = Ascent + Descent.
 
     Args:
         data (pd.DataFrame): The jump data
@@ -2193,14 +2645,28 @@ def plot_jump_phases_analysis(
         fps (int): Frames per second
         output_dir (str): Directory to save the output
         base_name (str): Base name for the output file
+        squat_frame (int, optional): Propulsion-start frame (deepest
+            countermovement). When omitted it is derived from the CG signal
+            restricted to before takeoff, so propulsion is always first.
 
     Returns:
         str: Path to the saved plot
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Find squat frame (minimum CG position)
-    squat_frame = data["cg_y_normalized"].idxmin()
+    # Determine the propulsion-start (squat) frame. Prefer the anchored value
+    # computed in identify_jump_phases; otherwise search the CG minimum only
+    # up to takeoff so the propulsion phase can never be placed after takeoff.
+    cg_series = data["cg_y_normalized"]
+    if squat_frame is None:
+        pre_takeoff = cg_series.loc[cg_series.index <= takeoff_frame]
+        squat_frame = (pre_takeoff if not pre_takeoff.empty else cg_series).idxmin()
+
+    # Enforce the correct chronological order of the key events so the colored
+    # regions are always Propulsion -> Ascent -> Descent (Flight on top).
+    squat_frame = min(squat_frame, takeoff_frame)
+    max_height_frame = max(takeoff_frame, min(max_height_frame, landing_frame))
+    landing_frame = max(landing_frame, max_height_frame)
 
     # Create figure
     fig, ax = plt.subplots(figsize=(14, 8))
@@ -2223,7 +2689,7 @@ def plot_jump_phases_analysis(
     landing_time = landing_frame / fps
     max_height_time = max_height_frame / fps
 
-    # Shade the propulsion phase (from squat to takeoff)
+    # Shade the propulsion phase (from squat to takeoff) — always first
     ax.axvspan(
         squat_time,
         takeoff_time,
@@ -2233,35 +2699,41 @@ def plot_jump_phases_analysis(
         zorder=0,
     )
 
-    # Color the flight phase with a light blue background
-    ax.axvspan(
-        takeoff_time,
-        landing_time,
-        alpha=0.15,
-        color="lightblue",
-        label="Flight Phase",
-    )
-
-    # Color the ascent with a light green background
+    # Color the ascent with a light green background (takeoff -> peak)
     ax.axvspan(
         takeoff_time,
         max_height_time,
         alpha=0.15,
         color="lightgreen",
-        label="Ascent",
+        label=f"Ascent: {max_height_time - takeoff_time:.3f} s",
     )
 
-    # Color the descent with a light red background
+    # Color the descent with a light red background (peak -> landing)
     ax.axvspan(
         max_height_time,
         landing_time,
         alpha=0.15,
         color="mistyrose",
-        label="Descent",
+        label=f"Descent: {landing_time - max_height_time:.3f} s",
+    )
+
+    # Outline the flight phase (takeoff -> landing = ascent + descent)
+    ax.axvspan(
+        takeoff_time,
+        landing_time,
+        alpha=0.0,
+        facecolor="none",
+        edgecolor="steelblue",
+        linewidth=1.5,
+        linestyle="--",
+        label=f"Flight Phase: {landing_time - takeoff_time:.3f} s",
     )
 
     # Mark the highest point
-    max_height = data["cg_y_normalized"].iloc[max_height_frame]
+    if max_height_frame in cg_series.index:
+        max_height = cg_series.loc[max_height_frame]
+    else:
+        max_height = cg_series.iloc[max_height_frame]
     ax.plot(
         max_height_time,
         max_height,
@@ -2549,6 +3021,48 @@ def _format_fppa_with_risk(fppa_angle):
     return f'<span style="color: {color}; font-weight: bold;">{fppa_angle:.1f}°</span>'
 
 
+def _format_optional_float(value: object, digits: int = 3) -> str:
+    parsed = _as_float_or_none(value)
+    return f"{parsed:.{digits}f}" if parsed is not None else "N/A"
+
+
+def _height_qc_report_html(results: dict) -> str:
+    status = results.get("height_qc_status")
+    if not status:
+        return ""
+
+    colors = {
+        "plausible": "#2e7d32",
+        "very_high_plausible": "#ef6c00",
+        "manual_review": "#c62828",
+        "probable_error": "#b71c1c",
+        "missing": "#616161",
+    }
+    color = colors.get(str(status), "#616161")
+    correction = "Yes" if results.get("height_qc_correction_applied") else "No"
+    return f"""
+        <h2>CMJ Height Quality Control</h2>
+        <div class="note" style="border-left-color: {color};">
+            <p><strong>Status:</strong> <span style="color: {color}; font-weight: bold;">{status}</span></p>
+            <p><strong>Rule:</strong> &gt;0.80 m = manual review; &gt;1.00 m = probable error.</p>
+            <p><strong>Note:</strong> {results.get("height_qc_note", "N/A")}</p>
+        </div>
+        <table>
+            <tr><th>Metric</th><th>Value</th><th>Unit / Source</th></tr>
+            <tr><td>Recommended height</td><td>{_format_optional_float(results.get("height_qc_recommended_m"))}</td><td>m ({results.get("height_qc_recommended_source", "N/A")})</td></tr>
+            <tr><td>Recommended flight time</td><td>{_format_optional_float(results.get("flight_time_qc_recommended_s"))}</td><td>s ({results.get("height_qc_recommended_source", "N/A")})</td></tr>
+            <tr><td>Recommended takeoff / landing frames</td><td>{results.get("takeoff_frame_qc_recommended", "N/A")} / {results.get("landing_frame_qc_recommended", "N/A")}</td><td>frames used for corrected flight time</td></tr>
+            <tr><td>Original CG height</td><td>{_format_optional_float(results.get("height_cg_method_m"))}</td><td>m (raw CoM method)</td></tr>
+            <tr><td>CoM vs foot height difference</td><td>{_format_optional_float(results.get("height_qc_discrepancy_m"))}</td><td>m</td></tr>
+            <tr><td>Foot-contact flight-time height</td><td>{_format_optional_float(results.get("height_foot_contact_method_m"))}</td><td>m</td></tr>
+            <tr><td>Foot-contact flight time</td><td>{_format_optional_float(results.get("flight_time_foot_contact_s"))}</td><td>s</td></tr>
+            <tr><td>Foot takeoff / landing frames</td><td>{results.get("takeoff_frame_foot_contact", "N/A")} / {results.get("landing_frame_foot_contact", "N/A")}</td><td>last foot off / first foot contact</td></tr>
+            <tr><td>CoM landing after foot contact</td><td>{_format_optional_float(results.get("com_landing_after_foot_s"))}</td><td>s</td></tr>
+            <tr><td>Correction applied</td><td>{correction}</td><td>recommended height used for velocity/energy/power</td></tr>
+        </table>
+    """
+
+
 def generate_html_report(data, results, plot_files, output_dir, base_name):
     """
     Generate an HTML report with jump metrics and plots.
@@ -2762,6 +3276,8 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </p>
         </div>
 
+        {_height_qc_report_html(results)}
+
         <h2>Jump Metrics</h2>
         <table>
             <tr>
@@ -2775,9 +3291,14 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 <td>kg</td>
             </tr>
             <tr>
+                <td>Jump Height - QC Recommended</td>
+                <td>{_format_optional_float(results.get("height_qc_recommended_m"))}</td>
+                <td>m ({results.get("height_qc_recommended_source", "N/A")})</td>
+            </tr>
+            <tr>
                 <td>Jump Height - CG Method</td>
                 <td>{results.get("height_cg_method_m", "N/A")}</td>
-                <td>m (from initial CG position)</td>
+                <td>m (from initial CG position; raw CoM)</td>
             </tr>
             <tr>
                 <td>Jump Height - Flight Time Method</td>
@@ -2903,7 +3424,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
         <h3>Dynamic Valgus & Alignment</h3>
         <p>Reference values: <strong>Ratio < 0.8</strong> indicates excessive knee approximation (Valgus).</p>
         <p><strong>FPPA Risk Classification:</strong> &lt; 5° = Good alignment (Green), 5°-10° = Moderate risk (Yellow), &gt; 10° = High risk / Excessive dynamic valgus or varus (Red)</p>
-        <p><strong>FPPA Convention:</strong> Positive = Varus (Abduction/Lateral collapse), Negative = Valgus (Adduction/Medial collapse)</p>
+        <p><strong>FPPA Convention:</strong> Positive = Valgus (medial collapse), Negative = Varus (lateral deviation)</p>
 
         <table>
             <tr>
@@ -3098,6 +3619,13 @@ def process_mediapipe_data(input_file, output_dir):
         mass = ctx["mass_kg"]
         fps = ctx["fps"]
         shank_length_real = ctx["shank_length_m"]
+        phase_options = _load_jump_phase_options_from_toml(base_dir=data_folder)
+        baseline_rectify_start = bool(phase_options["baseline_rectify_start"])
+        baseline_start_frame = int(phase_options["baseline_start_frame"])
+        baseline_end_frame = int(phase_options["baseline_end_frame"])
+        phase_smoothing_window_s = float(phase_options["phase_smoothing_window_s"])
+        baseline_tolerance_m = float(phase_options["baseline_tolerance_m"])
+        anchor_events_to_com_peak = bool(phase_options["anchor_events_to_com_peak"])
 
         # Calculate the conversion factor for normalized pixels to meters
         # Use keyword argument to avoid misplacing into 'knee'
@@ -3149,13 +3677,19 @@ def process_mediapipe_data(input_file, output_dir):
         conv_df = pd.DataFrame(cols_to_convert)
         data = pd.concat([data, conv_df], axis=1)
 
-        # Calculate the reference (averages of the first 10 frames)
-        n_baseline_frames_start = 10
-        n_baseline_frames_end = 20
-
-        # Calculate reference for the CG (to be used as zero)
-        cg_y_ref = data["cg_y_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
-        cg_x_ref = data["cg_x_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
+        # Calculate a robust reference for the initial quiet stance.
+        cg_y_ref = _robust_baseline_value(
+            data["cg_y_m"],
+            baseline_start_frame,
+            baseline_end_frame,
+            rectify=baseline_rectify_start,
+        )
+        cg_x_ref = _robust_baseline_value(
+            data["cg_x_m"],
+            baseline_start_frame,
+            baseline_end_frame,
+            rectify=baseline_rectify_start,
+        )
 
         # Add this block to create relative versions of all y-coordinates
         print("Creating relative coordinates referenced to initial CG position...")
@@ -3179,13 +3713,21 @@ def process_mediapipe_data(input_file, output_dir):
         data["cg_x_normalized"] = data["cg_x_m"] - cg_x_ref
         data["cg_y_normalized"] = data["cg_y_m"] - cg_y_ref
 
-        # Calculate the reference (averages of the first 10 frames)
-        n_baseline_frames_start = 10
-        n_baseline_frames_end = 20
-
-        # Calculate reference for the CG (to be used as zero)
-        cg_y_ref = data["cg_y_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
-        cg_x_ref = data["cg_x_m"].iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
+        # Reconfirm reference values before phase detection.
+        cg_y_ref = _robust_baseline_value(
+            data["cg_y_m"],
+            baseline_start_frame,
+            baseline_end_frame,
+            rectify=baseline_rectify_start,
+        )
+        cg_x_ref = _robust_baseline_value(
+            data["cg_x_m"],
+            baseline_start_frame,
+            baseline_end_frame,
+            rectify=baseline_rectify_start,
+        )
+        data["cg_x_normalized"] = data["cg_x_m"] - cg_x_ref
+        data["cg_y_normalized"] = data["cg_y_m"] - cg_y_ref
 
         # Calculate baseline for the feet
         has_left_foot = "left_foot_index_y_m" in data.columns
@@ -3208,7 +3750,12 @@ def process_mediapipe_data(input_file, output_dir):
             else:
                 feet_y_values = data["cg_y_m"] * 0.8  # Estimate
 
-        feet_baseline = feet_y_values.iloc[n_baseline_frames_start:n_baseline_frames_end].mean()
+        feet_baseline = _robust_baseline_value(
+            feet_y_values,
+            baseline_start_frame,
+            baseline_end_frame,
+            rectify=baseline_rectify_start,
+        )
 
         # Add basic information
         data["mass_kg"] = mass
@@ -3218,7 +3765,17 @@ def process_mediapipe_data(input_file, output_dir):
         data["reference_feet_y"] = feet_baseline
 
         # --- Identify all jump phases using the robust function ---
-        jump_phase_results = identify_jump_phases(data, feet_baseline, cg_y_ref, fps)
+        jump_phase_results = identify_jump_phases(
+            data,
+            feet_baseline,
+            cg_y_ref,
+            fps,
+            smooth_window_s=phase_smoothing_window_s,
+            baseline_tolerance_m=baseline_tolerance_m,
+            anchor_events_to_com_peak=anchor_events_to_com_peak,
+        )
+        height_qc_results = _cmj_height_quality_check(jump_phase_results, fps)
+        jump_phase_results.update(height_qc_results)
 
         # Calculate power metrics first
         dt = 1 / fps
@@ -3259,8 +3816,11 @@ def process_mediapipe_data(input_file, output_dir):
             time_max_power = 0
             power_takeoff = 0
 
-        # Calculate energies
-        jump_height = jump_phase_results["height_cg_method_m"]
+        # Calculate energies. Use QC-recommended height when CoM height is implausible.
+        raw_jump_height = _as_float_or_none(jump_phase_results.get("height_cg_method_m")) or 0
+        jump_height = _as_float_or_none(jump_phase_results.get("height_qc_recommended_m"))
+        if jump_height is None:
+            jump_height = raw_jump_height
         velocity_takeoff = calculate_velocity(jump_height) if jump_height else 0
         potential_energy = calculate_potential_energy(mass, jump_height) if jump_height else 0
         kinetic_energy = calculate_kinetic_energy(mass, velocity_takeoff)
@@ -3277,6 +3837,11 @@ def process_mediapipe_data(input_file, output_dir):
             "fps": fps,
             "conversion_factor": round(conversion_factor, 6),
             "flight_time_s": (
+                round(jump_phase_results.get("flight_time_qc_recommended_s", 0), 3)
+                if jump_phase_results.get("flight_time_qc_recommended_s") is not None
+                else None
+            ),
+            "flight_time_com_method_s": (
                 round(jump_phase_results.get("flight_time_s", 0), 3)
                 if jump_phase_results.get("flight_time_s") is not None
                 else None
@@ -3296,13 +3861,33 @@ def process_mediapipe_data(input_file, output_dir):
             "max_power_W": round(max_power, 3) if max_power is not None else None,
             "frame_max_power": (int(idx_max_power) if idx_max_power is not None else None),
             "time_max_power_s": (round(time_max_power, 3) if time_max_power is not None else None),
-            "takeoff_frame": int(takeoff_frame) if takeoff_frame is not None else None,
+            "propulsion_start_frame": (
+                int(jump_phase_results.get("propulsion_start_frame"))
+                if jump_phase_results.get("propulsion_start_frame") is not None
+                else None
+            ),
+            "squat_frame": (
+                int(jump_phase_results.get("propulsion_start_frame"))
+                if jump_phase_results.get("propulsion_start_frame") is not None
+                else None
+            ),
+            "takeoff_frame": (
+                int(jump_phase_results.get("takeoff_frame_qc_recommended"))
+                if jump_phase_results.get("takeoff_frame_qc_recommended") is not None
+                else None
+            ),
+            "takeoff_frame_com_method": int(takeoff_frame) if takeoff_frame is not None else None,
             "max_height_frame": (
                 int(jump_phase_results.get("max_height_frame"))
                 if jump_phase_results.get("max_height_frame") is not None
                 else None
             ),
             "landing_frame": (
+                int(jump_phase_results.get("landing_frame_qc_recommended"))
+                if jump_phase_results.get("landing_frame_qc_recommended") is not None
+                else None
+            ),
+            "landing_frame_com_method": (
                 int(jump_phase_results.get("landing_frame"))
                 if jump_phase_results.get("landing_frame") is not None
                 else None
@@ -3370,7 +3955,9 @@ def process_mediapipe_data(input_file, output_dir):
                 if jump_phase_results.get("right_landing_time_s") is not None
                 else None
             ),
+            "height_used_for_power_m": round(jump_height, 3) if jump_height is not None else None,
         }
+        results.update(height_qc_results)
 
         # Collect all relevant data for the database (complete CSV)
         db_row = {
@@ -3508,6 +4095,7 @@ def process_mediapipe_data(input_file, output_dir):
             fps,
             output_dir,
             base_name,
+            squat_frame=jump_phase_results.get("propulsion_start_frame"),
         )
         plot_files.append(phases_plot)
 
@@ -3635,7 +4223,7 @@ def process_mediapipe_data(input_file, output_dir):
             combined_row.pop(k, None)
         output_results_file = os.path.join(output_dir, f"{base_name}_jump_results_{timestamp}.csv")
         pd.DataFrame([combined_row]).to_csv(output_results_file, index=False, float_format="%.6f")
-        print(f"Jump results (scalars) saved at: {output_results_file}")
+        print(f"Jump results (scalars) saved at: {_display_path(output_results_file)}")
 
         # Save time series in a separate CSV: one row per frame, columns = series names (same layout as calibrated CSV)
         _SERIES_COLUMNS = [
@@ -3666,15 +4254,21 @@ def process_mediapipe_data(input_file, output_dir):
                 output_dir, f"{base_name}_jump_timeseries_{timestamp}.csv"
             )
             ts_df.to_csv(output_ts_file, index=False, float_format="%.6f")
-            print(f"Jump time series (one row per frame) saved at: {output_ts_file}")
-        print(f"Calibrated data (in meters) saved at: {output_calibrated_file}")
-        print(f"Jump analysis plots saved in: {output_dir}")
-        print(f"HTML report generated: {report_path}")
+            print(f"Jump time series (one row per frame) saved at: {_display_path(output_ts_file)}")
+        print(f"Calibrated data (in meters) saved at: {_display_path(output_calibrated_file)}")
+        print(f"Jump analysis plots saved in: {_display_path(output_dir)}")
+        print(f"HTML report generated: {_display_path(report_path)}")
 
         # Print diagnostic information
         print("Diagnostic info:")
         print(f"  Reference CG position: {cg_y_ref:.3f} m")
         print(f"  Jump height (CG method): {jump_phase_results.get('height_cg_method_m', 0):.3f} m")
+        print(
+            f"  Jump height (QC recommended): {jump_phase_results.get('height_qc_recommended_m', 0):.3f} m "
+            f"[{jump_phase_results.get('height_qc_status', 'N/A')}]"
+        )
+        if jump_phase_results.get("height_qc_correction_applied"):
+            print(f"  Height QC correction: {jump_phase_results.get('height_qc_note')}")
         print(f"  Flight time: {jump_phase_results.get('flight_time_s', 0):.3f} s")
         print(f"  Max power: {max_power:.1f} W")
 
@@ -3696,12 +4290,730 @@ def process_all_mediapipe_files(target_dir):
     csv_files = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.endswith(".csv")]
 
     for input_file in csv_files:
-        print(f"Processing MediaPipe file: {input_file}")
+        print(f"Processing MediaPipe file: {_display_path(input_file)}")
         base_name = os.path.splitext(os.path.basename(input_file))[0]
         per_file_dir = os.path.join(output_dir, base_name)
         os.makedirs(per_file_dir, exist_ok=True)
         process_mediapipe_data(input_file, per_file_dir)
     print("All MediaPipe files have been processed successfully.")
+
+
+# =============================================================================
+# Team batch (walk subdirectories, one TOML per data folder, team-level report)
+# =============================================================================
+
+# Output-file suffixes produced by vailá that must never be re-analyzed as input
+_VAILA_OUTPUT_CSV_SUFFIXES = (
+    "_calibrated_",
+    "_jump_results_",
+    "_jump_timeseries_",
+    "_vjump_",
+)
+# Names of vailá output directories to skip while walking the tree
+_VAILA_OUTPUT_DIR_PREFIXES = (
+    "vaila_team_jump_",
+    "vaila_mediapipejump_",
+    "vaila_verticaljump_",
+    "mediapipe_",
+)
+
+# Metrics highlighted in the team report (column -> human label)
+_TEAM_METRICS = {
+    "height_qc_recommended_m": "Recommended jump height [m]",
+    "height_cg_method_m": "Jump height (CG raw) [m]",
+    "flight_time_s": "Flight time [s]",
+    "flight_time_com_method_s": "Flight time (CoM raw) [s]",
+    "flight_time_foot_contact_s": "Flight time (foot contact) [s]",
+    "height_qc_discrepancy_m": "CoM vs foot height difference [m]",
+    "velocity_takeoff_m/s": "Takeoff velocity [m/s]",
+    "max_power_W": "Peak power [W]",
+    "max_power_W_per_kg": "Peak power [W/kg]",
+    "power_avg_propulsion_W": "Avg propulsion power [W]",
+    "squat_depth_m": "Countermovement depth [m]",
+    "bilateral_height_diff_m": "Bilateral height asymmetry [m]",
+    "mass_kg": "Mass [kg]",
+}
+
+
+def _looks_like_vaila_output_csv(path: Path) -> bool:
+    """True when a CSV looks like a vailá result file rather than raw input."""
+    name = path.name
+    return any(s in name for s in _VAILA_OUTPUT_CSV_SUFFIXES)
+
+
+def _iter_jump_data_dirs(main_dir: Path) -> list[Path]:
+    """Return data folders under main_dir that hold a config TOML + raw CSV(s).
+
+    A data folder is any directory containing ``vaila_and_jump_config.toml`` and
+    at least one non-output ``.csv``. vailá output directories are skipped.
+    """
+    found: list[Path] = []
+    main_dir = Path(main_dir)
+    for root, dirs, files in os.walk(main_dir):
+        # Prune vailá output directories in-place so os.walk does not descend
+        dirs[:] = [d for d in dirs if not d.startswith(_VAILA_OUTPUT_DIR_PREFIXES)]
+        if "vaila_and_jump_config.toml" not in files:
+            continue
+        root_path = Path(root)
+        csvs = [
+            root_path / f
+            for f in files
+            if f.lower().endswith(".csv") and not _looks_like_vaila_output_csv(root_path / f)
+        ]
+        if csvs:
+            found.append(root_path)
+    return sorted(found)
+
+
+def _read_latest_results_row(out_dir: Path) -> dict | None:
+    """Read the scalar ``*_jump_results_*.csv`` produced for one jump."""
+    matches = sorted(Path(out_dir).glob("*_jump_results_*.csv"))
+    if not matches:
+        return None
+    latest = matches[-1]
+    try:
+        df = pd.read_csv(latest)
+        if df.empty:
+            return None
+        return df.iloc[0].to_dict()
+    except Exception as e:
+        print(f"Warning: could not read results from {latest}: {e}")
+        return None
+
+
+def process_team_batch(main_dir, output_parent=None):
+    """Batch-process every athlete folder under ``main_dir`` and build a team report.
+
+    Each athlete folder must contain ``vaila_and_jump_config.toml`` (with its own
+    [jump_context]) and one or more MediaPipe CSV files. Per-jump artifacts are
+    written under ``vaila_team_jump_<timestamp>/<athlete>/<file>/`` and a
+    consolidated team report (CSV + summary + HTML) is saved at the root of the
+    batch output directory.
+
+    Returns the path to the HTML team report, or None when nothing was processed.
+    """
+    global _JUMP_CONTEXT
+
+    main_dir = Path(main_dir)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    parent = Path(output_parent) if output_parent else main_dir
+    batch_out = parent / f"vaila_team_jump_{timestamp}"
+    batch_out.mkdir(parents=True, exist_ok=True)
+
+    data_dirs = _iter_jump_data_dirs(main_dir)
+    if not data_dirs:
+        print(
+            "No data folders found. Each athlete folder needs a "
+            "'vaila_and_jump_config.toml' plus at least one MediaPipe CSV."
+        )
+        return None
+
+    print(f"Found {len(data_dirs)} data folder(s) under {_display_path(main_dir)}")
+
+    team_rows: list[dict] = []
+    saved_context = _JUMP_CONTEXT
+    try:
+        for data_dir in data_dirs:
+            toml_path = data_dir / "vaila_and_jump_config.toml"
+            ctx = _load_jump_context_from_file(toml_path)
+            if ctx is None:
+                print(
+                    f"Skipping {_display_path(data_dir)}: invalid [jump_context] in {toml_path.name}."
+                )
+                continue
+            athlete = data_dir.name
+            csv_files = sorted(
+                p for p in data_dir.glob("*.csv") if not _looks_like_vaila_output_csv(p)
+            )
+            for csv_file in csv_files:
+                # Force this folder's context so process_mediapipe_data never prompts
+                _JUMP_CONTEXT = dict(ctx)
+                out_dir = batch_out / athlete / csv_file.stem
+                out_dir.mkdir(parents=True, exist_ok=True)
+                print(f"Processing {athlete} / {csv_file.name} ...")
+                ok = process_mediapipe_data(str(csv_file), str(out_dir))
+                if not ok:
+                    print(f"  Failed to process {csv_file}")
+                    continue
+                row = _read_latest_results_row(out_dir)
+                if row is None:
+                    print(f"  No results row produced for {csv_file}")
+                    continue
+                team_rows.append(
+                    {
+                        "athlete": athlete,
+                        "trial": csv_file.stem,
+                        "data_dir": _display_path(data_dir),
+                        **row,
+                    }
+                )
+    finally:
+        _JUMP_CONTEXT = saved_context
+
+    if not team_rows:
+        print("No jumps were successfully processed; team report not generated.")
+        return None
+
+    report_path = generate_team_report(team_rows, batch_out, timestamp)
+    print(f"Processed {len(team_rows)} jump(s) across {len(data_dirs)} folder(s).")
+    print(f"Team report: {_display_path(report_path)}")
+    return report_path
+
+
+def _team_summary_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Descriptive statistics (n, mean, std, min, median, max) per team metric."""
+    rows = []
+    for col, label in _TEAM_METRICS.items():
+        if col not in df.columns:
+            continue
+        series = pd.to_numeric(df[col], errors="coerce").dropna()
+        if series.empty:
+            continue
+        rows.append(
+            {
+                "metric": label,
+                "n": int(series.count()),
+                "mean": round(float(series.mean()), 3),
+                "std": round(float(series.std(ddof=0)), 3),
+                "min": round(float(series.min()), 3),
+                "median": round(float(series.median()), 3),
+                "max": round(float(series.max()), 3),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _team_bar_plot(df: pd.DataFrame, metric: str, label: str, output_path: Path) -> str | None:
+    """Horizontal bar chart of one metric per athlete/trial; returns PNG path."""
+    if metric not in df.columns:
+        return None
+    values = pd.to_numeric(df[metric], errors="coerce")
+    mask = values.notna()
+    if not mask.any():
+        return None
+    sub = df.loc[mask].copy()
+    sub["_val"] = values[mask]
+    sub = sub.sort_values("_val", ascending=True)
+    labels = [f"{a} | {t}" for a, t in zip(sub["athlete"], sub["trial"], strict=False)]
+
+    fig_h = max(2.5, 0.45 * len(sub) + 1.2)
+    fig, ax = plt.subplots(figsize=(9, fig_h))
+    bars = ax.barh(labels, sub["_val"], color="#3498db", edgecolor="#2c3e50")
+    mean_val = float(sub["_val"].mean())
+    ax.axvline(
+        mean_val, color="#e74c3c", linestyle="--", linewidth=1.5, label=f"mean = {mean_val:.3f}"
+    )
+    ax.set_xlabel(label)
+    ax.set_title(label)
+    ax.legend(loc="lower right", fontsize=8)
+    for bar, val in zip(bars, sub["_val"], strict=False):
+        ax.text(
+            bar.get_width(),
+            bar.get_y() + bar.get_height() / 2,
+            f" {val:.3f}",
+            va="center",
+            ha="left",
+            fontsize=8,
+        )
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+    return str(output_path)
+
+
+def _series_zscore(series: pd.Series) -> pd.Series:
+    values = pd.to_numeric(series, errors="coerce")
+    mean = values.mean(skipna=True)
+    std = values.std(skipna=True, ddof=0)
+    if pd.isna(std) or std == 0:
+        return pd.Series(0.0, index=series.index)
+    return (values - mean) / std
+
+
+def _team_quality_table(df: pd.DataFrame) -> pd.DataFrame:
+    table = df.copy()
+    metrics = [
+        ("height_qc_recommended_m", "height_zscore"),
+        ("flight_time_s", "flight_time_zscore"),
+        ("max_power_W_per_kg", "power_zscore"),
+    ]
+    score_parts = []
+    for metric, z_col in metrics:
+        if metric in table.columns:
+            table[z_col] = _series_zscore(table[metric])
+            score_parts.append(table[z_col])
+    if score_parts:
+        table["jump_composite_zscore"] = pd.concat(score_parts, axis=1).mean(axis=1)
+    else:
+        table["jump_composite_zscore"] = 0.0
+
+    correction = table.get("height_qc_correction_applied", False)
+    correction_mask = pd.Series(correction, index=table.index).fillna(False).astype(bool)
+    discrepancy = pd.to_numeric(table.get("height_qc_discrepancy_m", np.nan), errors="coerce")
+    status = table.get("height_qc_status", "")
+    status_text = pd.Series(status, index=table.index).astype(str)
+    table["team_qc_flag"] = "ok"
+    table.loc[correction_mask, "team_qc_flag"] = "corrected_by_feet"
+    table.loc[
+        (table["team_qc_flag"] == "ok")
+        & (
+            discrepancy.ge(CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M)
+            | status_text.isin(["manual_review", "probable_error"])
+        ),
+        "team_qc_flag",
+    ] = "review"
+    table = table.sort_values("jump_composite_zscore", ascending=False).reset_index(drop=True)
+    table.index += 1
+    return table
+
+
+def _team_zscore_html_table(quality_df: pd.DataFrame) -> str:
+    def z_color(z: object) -> tuple[str, str]:
+        val = _as_float_or_none(z)
+        if val is None:
+            return "#ffffff", "#111111"
+        if val > 1.5:
+            return "#1e8449", "#ffffff"
+        if val > 0.5:
+            return "#27ae60", "#ffffff"
+        if val > -0.5:
+            return "#f9e79f", "#111111"
+        if val > -1.5:
+            return "#e67e22", "#111111"
+        return "#922b21", "#ffffff"
+
+    cols = [
+        ("athlete", "Athlete"),
+        ("trial", "Trial"),
+        ("height_qc_recommended_m", "Height [m]"),
+        ("height_zscore", "Height Z"),
+        ("flight_time_s", "Flight [s]"),
+        ("flight_time_zscore", "Flight Z"),
+        ("max_power_W_per_kg", "Power [W/kg]"),
+        ("power_zscore", "Power Z"),
+        ("jump_composite_zscore", "Composite Z"),
+        ("team_qc_flag", "QC"),
+    ]
+    cols = [(c, label) for c, label in cols if c in quality_df.columns]
+    html = '<table class="zscore-table"><thead><tr><th>#</th>'
+    html += "".join(f"<th>{label}</th>" for _, label in cols)
+    html += "</tr></thead><tbody>"
+    for idx, row in quality_df.iterrows():
+        flag = str(row.get("team_qc_flag", "ok"))
+        row_class = (
+            "qc-corrected"
+            if flag == "corrected_by_feet"
+            else "qc-review"
+            if flag == "review"
+            else ""
+        )
+        html += f'<tr class="{row_class}"><td><strong>{idx}</strong></td>'
+        for col, _label in cols:
+            val = row.get(col)
+            if col.endswith("_zscore"):
+                bg, fg = z_color(val)
+                text = "" if pd.isna(val) else f"{float(val):+.2f}"
+                html += f'<td style="background:{bg};color:{fg};font-weight:700;">{text}</td>'
+            elif isinstance(val, (int, float)) and pd.notna(val):
+                html += f"<td>{val:.3f}</td>"
+            else:
+                html += f"<td>{'' if pd.isna(val) else val}</td>"
+        html += "</tr>"
+    html += "</tbody></table>"
+    return html
+
+
+def _team_beeswarm_plot(df: pd.DataFrame, output_path: Path) -> str | None:
+    required = {"height_qc_recommended_m", "athlete", "trial"}
+    if not required.issubset(df.columns):
+        return None
+    sub = df.copy()
+    sub["_height"] = pd.to_numeric(sub["height_qc_recommended_m"], errors="coerce")
+    sub = sub.dropna(subset=["_height"])
+    if sub.empty:
+        return None
+    sub["_z"] = _series_zscore(sub["_height"])
+    sub["_x"] = 1.0
+    if len(sub) > 1:
+        sub["_x"] += np.linspace(-0.18, 0.18, len(sub))
+    correction_mask = (
+        pd.Series(sub.get("height_qc_correction_applied", False), index=sub.index)
+        .fillna(False)
+        .astype(bool)
+    )
+    colors = np.where(
+        correction_mask,
+        "#e67e22",
+        np.where(sub["_z"].abs() >= 1.5, "#c0392b", "#2980b9"),
+    )
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    ax.scatter(sub["_x"], sub["_height"], s=90, c=colors, edgecolor="#2c3e50", alpha=0.9)
+    mean_val = float(sub["_height"].mean())
+    std_val = float(sub["_height"].std(ddof=0)) if len(sub) > 1 else 0.0
+    ax.axhline(
+        mean_val, color="#2c3e50", linestyle="-", linewidth=1.5, label=f"mean {mean_val:.3f} m"
+    )
+    if std_val > 0:
+        ax.axhspan(
+            mean_val - std_val, mean_val + std_val, color="#27ae60", alpha=0.12, label="±1 SD"
+        )
+        ax.axhspan(mean_val + std_val, mean_val + 2 * std_val, color="#f1c40f", alpha=0.10)
+        ax.axhspan(mean_val - 2 * std_val, mean_val - std_val, color="#f1c40f", alpha=0.10)
+    for _, row in sub.iterrows():
+        ax.annotate(
+            str(row["athlete"]),
+            (row["_x"], row["_height"]),
+            textcoords="offset points",
+            xytext=(4, 4),
+            fontsize=8,
+        )
+    ax.set_xlim(0.55, 1.45)
+    ax.set_xticks([])
+    ax.set_ylabel("Recommended jump height [m]")
+    ax.set_title("Team Height Distribution with QC Highlights")
+    ax.legend(loc="best", fontsize=8)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return str(output_path)
+
+
+def _team_heatmap_plot(quality_df: pd.DataFrame, output_path: Path) -> str | None:
+    z_cols = [
+        c
+        for c in ["height_zscore", "flight_time_zscore", "power_zscore", "jump_composite_zscore"]
+        if c in quality_df.columns
+    ]
+    if not z_cols:
+        return None
+    matrix = quality_df[z_cols].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    if matrix.empty:
+        return None
+    labels = [f"{r['athlete']} | {r['trial']}" for _, r in quality_df.iterrows()]
+    fig_h = max(3.5, 0.42 * len(matrix) + 1.4)
+    fig, ax = plt.subplots(figsize=(9, fig_h))
+    im = ax.imshow(matrix.to_numpy(dtype=float), aspect="auto", cmap="RdYlGn", vmin=-2, vmax=2)
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_xticks(np.arange(len(z_cols)))
+    ax.set_xticklabels(
+        [c.replace("_zscore", " Z").replace("jump_composite", "composite") for c in z_cols],
+        rotation=25,
+        ha="right",
+    )
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            ax.text(j, i, f"{matrix.iat[i, j]:+.1f}", ha="center", va="center", fontsize=8)
+    ax.set_title("Team Jump Z-score Matrix")
+    fig.colorbar(im, ax=ax, shrink=0.8, label="Z-score")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return str(output_path)
+
+
+def _img_to_base64(path: str | Path) -> str:
+    try:
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    except Exception:
+        return ""
+
+
+def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str) -> str:
+    """Build the consolidated team report (CSV + summary CSV + HTML with plots).
+
+    Returns the path to the generated HTML report.
+    """
+    output_dir = Path(output_dir)
+    df = pd.DataFrame(team_rows)
+    correction_mask = (
+        pd.Series(df.get("height_qc_correction_applied", False), index=df.index)
+        .fillna(False)
+        .astype(bool)
+    )
+    discrepancy = pd.to_numeric(df.get("height_qc_discrepancy_m", np.nan), errors="coerce")
+    status_text = pd.Series(df.get("height_qc_status", ""), index=df.index).astype(str)
+    df["team_qc_flag"] = "ok"
+    df.loc[correction_mask, "team_qc_flag"] = "corrected_by_feet"
+    df.loc[
+        (df["team_qc_flag"] == "ok")
+        & (
+            discrepancy.ge(CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M)
+            | status_text.isin(["manual_review", "probable_error"])
+        ),
+        "team_qc_flag",
+    ] = "review"
+
+    # 1) Full consolidated table (one row per processed jump)
+    team_csv = output_dir / f"team_jump_results_{timestamp}.csv"
+    df.to_csv(team_csv, index=False, float_format="%.6f")
+    print(f"Team results CSV: {_display_path(team_csv)}")
+
+    # 2) Descriptive summary across the whole team
+    summary_df = _team_summary_table(df)
+    summary_csv = output_dir / f"team_jump_summary_{timestamp}.csv"
+    summary_df.to_csv(summary_csv, index=False, float_format="%.6f")
+    print(f"Team summary CSV: {_display_path(summary_csv)}")
+
+    quality_df = _team_quality_table(df)
+    quality_csv = output_dir / f"team_jump_quality_zscores_{timestamp}.csv"
+    quality_df.to_csv(quality_csv, index=True, index_label="rank", float_format="%.6f")
+    print(f"Team quality/z-score CSV: {_display_path(quality_csv)}")
+
+    # 3) Bar charts for the most relevant metrics
+    plots_dir = output_dir / "team_plots"
+    plots_dir.mkdir(exist_ok=True)
+    plot_specs = [
+        ("height_qc_recommended_m", "Recommended jump height [m]"),
+        ("height_cg_method_m", "Jump height (CG raw) [m]"),
+        ("max_power_W_per_kg", "Peak power [W/kg]"),
+        ("flight_time_s", "Flight time [s]"),
+        ("flight_time_com_method_s", "Flight time (CoM raw) [s]"),
+        ("velocity_takeoff_m/s", "Takeoff velocity [m/s]"),
+    ]
+    plot_files = []
+    for metric, label in plot_specs:
+        png = plots_dir / f"team_{metric.replace('/', '_per_')}_{timestamp}.png"
+        made = _team_bar_plot(df, metric, label, png)
+        if made:
+            plot_files.append((label, made))
+
+    beeswarm = _team_beeswarm_plot(df, plots_dir / f"team_height_beeswarm_qc_{timestamp}.png")
+    if beeswarm:
+        plot_files.insert(0, ("Height distribution with QC", beeswarm))
+    heatmap = _team_heatmap_plot(quality_df, plots_dir / f"team_jump_zscore_matrix_{timestamp}.png")
+    if heatmap:
+        plot_files.insert(1 if beeswarm else 0, ("Team Z-score matrix", heatmap))
+
+    # 4) HTML report
+    report_path = output_dir / f"team_jump_report_{timestamp}.html"
+    _write_team_html(df, summary_df, quality_df, plot_files, report_path, timestamp)
+    return str(report_path)
+
+
+def _write_team_html(
+    df: pd.DataFrame,
+    summary_df: pd.DataFrame,
+    quality_df: pd.DataFrame,
+    plot_files: list[tuple[str, str]],
+    report_path: Path,
+    timestamp: str,
+) -> None:
+    logo_b64 = ""
+    try:
+        logo_path = Path(__file__).resolve().parent.parent / "docs" / "images" / "vaila.png"
+        if logo_path.exists():
+            logo_b64 = _img_to_base64(logo_path)
+    except Exception:
+        pass
+
+    n_athletes = df["athlete"].nunique() if "athlete" in df.columns else 0
+    n_jumps = len(df)
+    corrected_count = (
+        int(
+            pd.Series(df.get("height_qc_correction_applied", False))
+            .fillna(False)
+            .astype(bool)
+            .sum()
+        )
+        if n_jumps
+        else 0
+    )
+    review_count = int((quality_df.get("team_qc_flag", pd.Series(dtype=str)) == "review").sum())
+
+    # Ranking tables (best to worst)
+    def ranking_html(metric: str, label: str, ascending: bool = False) -> str:
+        if metric not in df.columns:
+            return ""
+        sub = df.copy()
+        sub[metric] = pd.to_numeric(sub[metric], errors="coerce")
+        sub = sub.dropna(subset=[metric]).sort_values(metric, ascending=ascending)
+        if sub.empty:
+            return ""
+        rows = "".join(
+            f"<tr><td>{i + 1}</td><td>{r['athlete']}</td><td>{r['trial']}</td>"
+            f"<td>{r[metric]:.3f}</td></tr>"
+            for i, (_, r) in enumerate(sub.iterrows())
+        )
+        return (
+            f"<h3>{label}</h3><table><tr><th>#</th><th>Athlete</th>"
+            f"<th>Trial</th><th>{label}</th></tr>{rows}</table>"
+        )
+
+    summary_rows = "".join(
+        "<tr>"
+        f"<td>{r['metric']}</td><td>{int(r['n'])}</td><td>{r['mean']:.3f}</td>"
+        f"<td>{r['std']:.3f}</td><td>{r['min']:.3f}</td><td>{r['median']:.3f}</td>"
+        f"<td>{r['max']:.3f}</td></tr>"
+        for _, r in summary_df.iterrows()
+    )
+    summary_table = (
+        "<table><tr><th>Metric</th><th>n</th><th>Mean</th><th>SD</th>"
+        "<th>Min</th><th>Median</th><th>Max</th></tr>"
+        f"{summary_rows}</table>"
+        if not summary_df.empty
+        else "<p>No numeric metrics available.</p>"
+    )
+
+    plots_html = "".join(
+        f'<div class="img-container"><h3>{label}</h3>'
+        f'<img src="data:image/png;base64,{_img_to_base64(path)}" alt="{label}"></div>'
+        for label, path in plot_files
+    )
+
+    logo_html = (
+        f'<img src="data:image/png;base64,{logo_b64}" alt="vailá" style="height:60px;">'
+        if logo_b64
+        else "<h2 style='margin:0;'>vailá</h2>"
+    )
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vailá - Team Jump Report</title>
+<style>
+  body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6;
+         max-width: 1200px; margin: 0 auto; padding: 20px; color: #333; background: #fcfcfc; }}
+  h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
+  h2 {{ color: #2980b9; margin-top: 40px; border-bottom: 1px solid #eee; padding-bottom: 5px; }}
+  h3 {{ color: #34495e; margin-top: 25px; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 20px 0;
+           box-shadow: 0 1px 3px rgba(0,0,0,0.1); background: #fff; }}
+  th, td {{ border: 1px solid #e0e0e0; padding: 8px 12px; text-align: left; }}
+  th {{ background: #f8f9fa; font-weight: 600; color: #2c3e50; }}
+  tr:nth-child(even) {{ background: #f9f9f9; }}
+  tr:hover {{ background: #f1f1f1; }}
+  .header {{ display: flex; align-items: center; gap: 20px; }}
+  .meta {{ background: #e8f5e9; border-left: 5px solid #4caf50; padding: 15px;
+           margin: 20px 0; border-radius: 0 4px 4px 0; }}
+  .img-container {{ text-align: center; margin: 30px 0; background: #fff; padding: 10px;
+                    border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }}
+  .img-container img {{ max-width: 100%; height: auto; }}
+  .cols {{ display: flex; gap: 30px; flex-wrap: wrap; }}
+  .cols > div {{ flex: 1; min-width: 320px; }}
+  .qc-corrected td {{ border-left: 4px solid #e67e22; }}
+  .qc-review td {{ border-left: 4px solid #c0392b; }}
+  .qc-note {{ background: #fff8e1; border-left: 5px solid #f39c12; padding: 12px 14px;
+              border-radius: 0 4px 4px 0; }}
+</style>
+</head>
+<body>
+  <div class="header">{logo_html}<h1>Team Jump Analysis Report</h1></div>
+  <div class="meta">
+    <strong>Generated:</strong> {timestamp}<br>
+    <strong>Athletes:</strong> {n_athletes} &nbsp;|&nbsp; <strong>Jumps analyzed:</strong> {n_jumps}<br>
+    <strong>Corrected by foot-contact flight time:</strong> {corrected_count}
+    &nbsp;|&nbsp; <strong>Needs manual review:</strong> {review_count}
+  </div>
+  <div class="qc-note">
+    Orange rows were recalculated from last-foot-off to first-foot-contact because CoM height,
+    CoM timing, or CoM-vs-feet agreement was inconsistent. Raw CoM values remain in the CSV/table
+    for audit.
+  </div>
+
+  <h2>Overview — Height &amp; Flight Time</h2>
+  {_team_overview_table_html(df)}
+
+  <h2>Team Summary</h2>
+  {summary_table}
+
+  <h2>Performance Charts</h2>
+  {plots_html if plots_html else "<p>No charts available.</p>"}
+
+  <h2>Group Comparison and QC Z-scores</h2>
+  {_team_zscore_html_table(quality_df)}
+
+  <h2>Rankings</h2>
+  <div class="cols">
+    <div>{ranking_html("height_qc_recommended_m", "Recommended jump height [m]")}</div>
+    <div>{ranking_html("max_power_W_per_kg", "Peak power [W/kg]")}</div>
+  </div>
+  <div class="cols">
+    <div>{ranking_html("flight_time_s", "Flight time [s]")}</div>
+    <div>{ranking_html("bilateral_height_diff_m", "Bilateral asymmetry [m] (lower is better)", ascending=True)}</div>
+  </div>
+
+  <h2>All Trials</h2>
+  {_team_full_table_html(df)}
+
+  <p style="margin-top:40px; font-size:0.85em; color:#777;">
+    Generated by vailá — vaila_and_jump.py team batch.
+  </p>
+</body>
+</html>"""
+
+    report_path.write_text(html, encoding="utf-8")
+    print(f"Team HTML report: {_display_path(report_path)}")
+
+
+def _team_overview_table_html(df: pd.DataFrame) -> str:
+    """Simple per-analysis table with only jump height and flight time.
+
+    Shown at the top of the team report as a quick overview before the
+    detailed summaries and charts.
+    """
+    height_col = (
+        "height_qc_recommended_m"
+        if "height_qc_recommended_m" in df.columns
+        else ("height_m" if "height_m" in df.columns else None)
+    )
+    flight_col = "flight_time_s" if "flight_time_s" in df.columns else None
+
+    body_rows = []
+    for _, r in df.iterrows():
+        athlete = "" if "athlete" not in df.columns or pd.isna(r["athlete"]) else r["athlete"]
+        trial = "" if "trial" not in df.columns or pd.isna(r["trial"]) else r["trial"]
+        height_val = pd.to_numeric(r[height_col], errors="coerce") if height_col else np.nan
+        flight_val = pd.to_numeric(r[flight_col], errors="coerce") if flight_col else np.nan
+        height_cell = f"{height_val:.3f}" if pd.notna(height_val) else ""
+        flight_cell = f"{flight_val:.3f}" if pd.notna(flight_val) else ""
+        body_rows.append(
+            f"<tr><td>{athlete}</td><td>{trial}</td>"
+            f"<td>{height_cell}</td><td>{flight_cell}</td></tr>"
+        )
+
+    if not body_rows:
+        return "<p>No analyses available.</p>"
+
+    return (
+        "<table><tr><th>Athlete</th><th>Trial</th>"
+        "<th>Jump height [m]</th><th>Flight time [s]</th></tr>"
+        f"{''.join(body_rows)}</table>"
+    )
+
+
+def _team_full_table_html(df: pd.DataFrame) -> str:
+    """Compact per-trial table with the headline metrics."""
+    cols = [
+        "athlete",
+        "trial",
+        "height_qc_status",
+        "height_qc_recommended_source",
+        "height_qc_correction_applied",
+        "team_qc_flag",
+        "mass_kg",
+        "flight_time_com_method_s",
+        "flight_time_foot_contact_s",
+        "height_qc_discrepancy_m",
+        *[c for c in _TEAM_METRICS if c not in ("mass_kg",)],
+    ]
+    cols = [c for c in cols if c in df.columns]
+    headers = "".join(f"<th>{c}</th>" for c in cols)
+    body_rows = []
+    for _, r in df.iterrows():
+        cells = []
+        for c in cols:
+            v = r[c]
+            if isinstance(v, (int, float)) and pd.notna(v):
+                cells.append(f"<td>{v:.3f}</td>")
+            else:
+                cells.append(f"<td>{'' if pd.isna(v) else v}</td>")
+        body_rows.append("<tr>" + "".join(cells) + "</tr>")
+    return f"<table><tr>{headers}</tr>{''.join(body_rows)}</table>"
 
 
 def process_jump_data(input_file, output_dir, use_time_of_flight):
@@ -3753,6 +5065,9 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
                 time_of_flight = calculate_time_of_flight(height)
 
             # Perform calculations
+            height_status, height_note = _cmj_height_status(_as_float_or_none(height))
+            if height_status in {"manual_review", "probable_error"}:
+                height_note += " Foot-contact correction is unavailable in this input mode."
             velocity = calculate_velocity(height)
             potential_energy = calculate_potential_energy(mass, height)
             kinetic_energy = calculate_kinetic_energy(mass, velocity)
@@ -3772,6 +5087,15 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
             results.append(
                 {
                     "height_m": round(height, 3) if height is not None else None,
+                    "height_qc_status": height_status,
+                    "height_qc_recommended_m": round(height, 3) if height is not None else None,
+                    "height_qc_recommended_source": (
+                        "time_of_flight" if use_time_of_flight else "input_height"
+                    ),
+                    "height_qc_correction_applied": False,
+                    "height_qc_note": height_note,
+                    "height_qc_review_threshold_m": CMJ_HEIGHT_REVIEW_THRESHOLD_M,
+                    "height_qc_error_threshold_m": CMJ_HEIGHT_ERROR_THRESHOLD_M,
                     "liftoff_force_N": (
                         round(liftoff_force, 3) if liftoff_force is not None else None
                     ),
@@ -3806,7 +5130,7 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
         output_file_path = os.path.join(output_dir, f"{base_name}_vjump_{timestamp}.csv")
         results_df.to_csv(output_file_path, index=False)
 
-        print(f"Results saved successfully at: {output_file_path}")
+        print(f"Results saved successfully at: {_display_path(output_file_path)}")
     except Exception as e:
         print(f"An error occurred while processing {input_file}: {str(e)}")
 
@@ -4021,7 +5345,7 @@ def process_all_files_in_directory(target_dir, use_time_of_flight, output_parent
 
     # Process each .csv file
     for input_file in csv_files:
-        print(f"Processing file: {input_file}")
+        print(f"Processing file: {_display_path(input_file)}")
         base_name = os.path.splitext(os.path.basename(input_file))[0]
         per_file_dir = os.path.join(output_dir, base_name)
         os.makedirs(per_file_dir, exist_ok=True)
@@ -4601,7 +5925,7 @@ def generate_jump_animation_gif(
     try:
         # loop=0 makes the GIF loop infinitely
         imageio.mimsave(gif_path, images, duration=0.08, loop=0)
-        print(f"Saved GIF animation: {gif_path}")
+        print(f"Saved GIF animation: {_display_path(gif_path)}")
         return gif_path
     except Exception as e:
         print(f"Failed to save GIF: {e}")
@@ -4982,55 +6306,79 @@ def plot_jump_stickfigures_subplot(
 def vaila_and_jump():
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent.resolve()}")
-    root = Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)  # Force dialogs to be on top
+    root, owns_root = _dialog_parent()
+    _prepare_dialog_parent(root, owns_root)
 
-    target_dir = filedialog.askdirectory(
-        title="Select the target directory containing .csv files", parent=root
-    )
-    root.lift()  # Bring window to the front
+    try:
+        target_dir = filedialog.askdirectory(
+            title="Select the target directory containing .csv files", parent=root
+        )
+        with contextlib.suppress(Exception):
+            root.lift()
 
-    if not target_dir:
-        messagebox.showwarning("Warning", "No target directory selected.", parent=root)
-        root.destroy()
-        return
+        if not target_dir:
+            messagebox.showwarning("Warning", "No target directory selected.", parent=root)
+            return
 
-    # Now with option 3!
-    data_type = simpledialog.askinteger(
-        "Select Data Type",
-        "Select the type of data in your CSV files:\n\n"
-        "1. Time of Flight Data\n"
-        "2. Jump Height Data\n"
-        "3. MediaPipe Shank Length Data",
-        parent=root,  # Set parent window
-        minvalue=1,
-        maxvalue=3,
-    )
-    root.lift()  # Bring window to the front
+        # Now with options 3 and 4!
+        data_type = simpledialog.askinteger(
+            "Select Data Type",
+            "Select the type of data in your CSV files:\n\n"
+            "1. Time of Flight Data\n"
+            "2. Jump Height Data\n"
+            "3. MediaPipe Shank Length Data\n"
+            "4. Team Batch (MediaPipe; one config TOML per athlete folder)",
+            parent=root,  # Set parent window
+            minvalue=1,
+            maxvalue=4,
+        )
+        with contextlib.suppress(Exception):
+            root.lift()
 
-    if data_type is None:
-        messagebox.showwarning("Warning", "No data type selected. Exiting.", parent=root)
-        root.destroy()
-        return
+        if data_type is None:
+            messagebox.showwarning("Warning", "No data type selected. Exiting.", parent=root)
+            return
 
-    if data_type == 1 or data_type == 2:
-        use_time_of_flight = data_type == 1
-        process_all_files_in_directory(target_dir, use_time_of_flight)
-    elif data_type == 3:
-        process_all_mediapipe_files(target_dir)
+        team_report = None
+        if data_type == 1 or data_type == 2:
+            use_time_of_flight = data_type == 1
+            process_all_files_in_directory(target_dir, use_time_of_flight)
+        elif data_type == 3:
+            process_all_mediapipe_files(target_dir)
+        elif data_type == 4:
+            team_report = process_team_batch(target_dir)
 
-    msg = "All CSV files have been processed and results saved.\n\n"
-    if data_type == 1:
-        msg += "Input data type: Time of Flight\n"
-    elif data_type == 2:
-        msg += "Input data type: Jump Height\n"
-    else:
-        msg += "Input data type: MediaPipe Shank Length\n"
-    msg += f"Output directory: {os.path.join(target_dir, 'vaila_verticaljump_*')}"
-    messagebox.showinfo("Success", msg, parent=root)
+        if data_type == 4:
+            if team_report:
+                msg = (
+                    "Team batch finished.\n\n"
+                    f"Team report (HTML): {team_report}\n"
+                    "Per-athlete results are inside the same vaila_team_jump_* folder."
+                )
+                messagebox.showinfo("Success", msg, parent=root)
+                with contextlib.suppress(Exception):
+                    webbrowser.open_new_tab(Path(team_report).as_uri())
+            else:
+                messagebox.showwarning(
+                    "Warning",
+                    "No athlete folders with 'vaila_and_jump_config.toml' + CSV were found.",
+                    parent=root,
+                )
+            return
 
-    root.destroy()
+        msg = "All CSV files have been processed and results saved.\n\n"
+        if data_type == 1:
+            msg += "Input data type: Time of Flight\n"
+        elif data_type == 2:
+            msg += "Input data type: Jump Height\n"
+        else:
+            msg += "Input data type: MediaPipe Shank Length\n"
+        msg += (
+            f"Output directory: {_display_path(os.path.join(target_dir, 'vaila_verticaljump_*'))}"
+        )
+        messagebox.showinfo("Success", msg, parent=root)
+    finally:
+        _destroy_dialog_parent(root, owns_root)
 
 
 def _run_cli_mediapipe(args):
@@ -5089,9 +6437,18 @@ if __name__ == "__main__":
         "-d",
         "--data-type",
         type=int,
-        choices=[1, 2, 3],
+        choices=[1, 2, 3, 4],
         default=None,
-        help="Data type: 1=Time of Flight, 2=Jump Height, 3=MediaPipe (default: 3 when -i and -c given).",
+        help=(
+            "Data type: 1=Time of Flight, 2=Jump Height, 3=MediaPipe (single CSV + -c), "
+            "4=Team batch MediaPipe (walk subfolders, one config TOML per athlete folder). "
+            "Default: 3 when -i and -c given."
+        ),
+    )
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Shortcut for -d 4: team batch over subfolders of -i (each with its own TOML).",
     )
     parser.add_argument(
         "--gui",
@@ -5100,16 +6457,27 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.gui or (not args.input and not args.config):
+    if args.gui or (not args.input and not args.config and not args.batch):
         vaila_and_jump()
         exit(0)
 
     # Infer data type when -i and -c given but -d omitted (backward compatible)
     data_type = args.data_type
+    if args.batch and data_type is None:
+        data_type = 4
     if data_type is None and args.input and args.config:
         data_type = 3
 
-    if data_type == 3:
+    if data_type == 4:
+        if not args.input:
+            print("For mode 4 (Team batch), provide -i (main directory of athlete folders).")
+            exit(1)
+        if not os.path.isdir(args.input):
+            print(f"Error: -i must be a directory for mode 4, got: {args.input}")
+            exit(1)
+        report = process_team_batch(args.input, output_parent=args.output)
+        exit(0 if report else 1)
+    elif data_type == 3:
         if not args.input or not args.config:
             print("For mode 3 (MediaPipe), provide both -i (input CSV) and -c (config TOML).")
             exit(1)
