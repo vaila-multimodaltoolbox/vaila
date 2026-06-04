@@ -2594,10 +2594,22 @@ def generate_jump_plots(data, results, output_dir, base_name):
 
 
 def plot_jump_phases_analysis(
-    data, takeoff_frame, max_height_frame, landing_frame, fps, output_dir, base_name
+    data,
+    takeoff_frame,
+    max_height_frame,
+    landing_frame,
+    fps,
+    output_dir,
+    base_name,
+    squat_frame=None,
 ):
     """
     Generate a visualization showing jump phases with colored regions.
+
+    The phases always follow the physiological CMJ sequence:
+    Propulsion (squat -> takeoff) -> Ascent (takeoff -> peak) ->
+    Descent (peak -> landing). The Flight phase always equals the
+    airborne interval (takeoff -> landing) = Ascent + Descent.
 
     Args:
         data (pd.DataFrame): The jump data
@@ -2607,14 +2619,28 @@ def plot_jump_phases_analysis(
         fps (int): Frames per second
         output_dir (str): Directory to save the output
         base_name (str): Base name for the output file
+        squat_frame (int, optional): Propulsion-start frame (deepest
+            countermovement). When omitted it is derived from the CG signal
+            restricted to before takeoff, so propulsion is always first.
 
     Returns:
         str: Path to the saved plot
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Find squat frame (minimum CG position)
-    squat_frame = data["cg_y_normalized"].idxmin()
+    # Determine the propulsion-start (squat) frame. Prefer the anchored value
+    # computed in identify_jump_phases; otherwise search the CG minimum only
+    # up to takeoff so the propulsion phase can never be placed after takeoff.
+    cg_series = data["cg_y_normalized"]
+    if squat_frame is None:
+        pre_takeoff = cg_series.loc[cg_series.index <= takeoff_frame]
+        squat_frame = (pre_takeoff if not pre_takeoff.empty else cg_series).idxmin()
+
+    # Enforce the correct chronological order of the key events so the colored
+    # regions are always Propulsion -> Ascent -> Descent (Flight on top).
+    squat_frame = min(squat_frame, takeoff_frame)
+    max_height_frame = max(takeoff_frame, min(max_height_frame, landing_frame))
+    landing_frame = max(landing_frame, max_height_frame)
 
     # Create figure
     fig, ax = plt.subplots(figsize=(14, 8))
@@ -2637,7 +2663,7 @@ def plot_jump_phases_analysis(
     landing_time = landing_frame / fps
     max_height_time = max_height_frame / fps
 
-    # Shade the propulsion phase (from squat to takeoff)
+    # Shade the propulsion phase (from squat to takeoff) — always first
     ax.axvspan(
         squat_time,
         takeoff_time,
@@ -2647,35 +2673,41 @@ def plot_jump_phases_analysis(
         zorder=0,
     )
 
-    # Color the flight phase with a light blue background
-    ax.axvspan(
-        takeoff_time,
-        landing_time,
-        alpha=0.15,
-        color="lightblue",
-        label="Flight Phase",
-    )
-
-    # Color the ascent with a light green background
+    # Color the ascent with a light green background (takeoff -> peak)
     ax.axvspan(
         takeoff_time,
         max_height_time,
         alpha=0.15,
         color="lightgreen",
-        label="Ascent",
+        label=f"Ascent: {max_height_time - takeoff_time:.3f} s",
     )
 
-    # Color the descent with a light red background
+    # Color the descent with a light red background (peak -> landing)
     ax.axvspan(
         max_height_time,
         landing_time,
         alpha=0.15,
         color="mistyrose",
-        label="Descent",
+        label=f"Descent: {landing_time - max_height_time:.3f} s",
+    )
+
+    # Outline the flight phase (takeoff -> landing = ascent + descent)
+    ax.axvspan(
+        takeoff_time,
+        landing_time,
+        alpha=0.0,
+        facecolor="none",
+        edgecolor="steelblue",
+        linewidth=1.5,
+        linestyle="--",
+        label=f"Flight Phase: {landing_time - takeoff_time:.3f} s",
     )
 
     # Mark the highest point
-    max_height = data["cg_y_normalized"].iloc[max_height_frame]
+    if max_height_frame in cg_series.index:
+        max_height = cg_series.loc[max_height_frame]
+    else:
+        max_height = cg_series.iloc[max_height_frame]
     ax.plot(
         max_height_time,
         max_height,
@@ -4037,6 +4069,7 @@ def process_mediapipe_data(input_file, output_dir):
             fps,
             output_dir,
             base_name,
+            squat_frame=jump_phase_results.get("propulsion_start_frame"),
         )
         plot_files.append(phases_plot)
 
