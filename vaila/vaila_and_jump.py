@@ -182,6 +182,22 @@ CMJ_HEIGHT_ERROR_THRESHOLD_M = 1.00
 CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M = 0.12
 CMJ_HEIGHT_DISCREPANCY_RATIO = 0.25
 
+
+def _display_path(path: object) -> str:
+    """Return a path relative to the current working directory for display.
+
+    Relative paths are portable across operating systems and avoid leaking
+    absolute machine paths into logs/reports. Falls back to the original
+    path when a relative form is not possible (e.g. different Windows drive).
+    """
+    if path is None:
+        return ""
+    try:
+        return os.path.relpath(os.fspath(path))
+    except (ValueError, TypeError):
+        return str(path)
+
+
 # -----------------------
 # Jump context management
 # -----------------------
@@ -770,7 +786,10 @@ def _cmj_height_status(height_m: float | None) -> tuple[str, str]:
     if height_m > CMJ_HEIGHT_REVIEW_THRESHOLD_M:
         return "manual_review", "Above 0.80 m: verify CMJ trial manually."
     if height_m > CMJ_HEIGHT_HIGH_THRESHOLD_M:
-        return "very_high_plausible", "Above 0.60 m: very high CMJ; plausible for exceptional athletes."
+        return (
+            "very_high_plausible",
+            "Above 0.60 m: very high CMJ; plausible for exceptional athletes.",
+        )
     return "plausible", "Within the expected CMJ markerless range."
 
 
@@ -803,15 +822,29 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
     takeoff_frame = _as_int_or_none(phase_results.get("takeoff_frame"))
     landing_frame = _as_int_or_none(phase_results.get("landing_frame"))
     temporal_inconsistent = False
-    if takeoff_frame is not None and max_height_frame is not None and takeoff_frame > max_height_frame:
+    if (
+        takeoff_frame is not None
+        and max_height_frame is not None
+        and takeoff_frame > max_height_frame
+    ):
         temporal_inconsistent = True
         note_parts.append("CoM takeoff occurs after CoM peak; phase sequence is inconsistent.")
-    if landing_frame is not None and max_height_frame is not None and landing_frame <= max_height_frame:
+    if (
+        landing_frame is not None
+        and max_height_frame is not None
+        and landing_frame <= max_height_frame
+    ):
         temporal_inconsistent = True
-        note_parts.append("CoM landing occurs before or at CoM peak; phase sequence is inconsistent.")
+        note_parts.append(
+            "CoM landing occurs before or at CoM peak; phase sequence is inconsistent."
+        )
 
     com_landing_after_foot_s = None
-    if landing_frame is not None and foot_landing_frame is not None and landing_frame > foot_landing_frame:
+    if (
+        landing_frame is not None
+        and foot_landing_frame is not None
+        and landing_frame > foot_landing_frame
+    ):
         fps_value = _as_float_or_none(fps)
         if fps_value and fps_value > 0:
             com_landing_after_foot_s = (landing_frame - foot_landing_frame) / fps_value
@@ -825,16 +858,11 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
         height_discrepancy = abs(cg_height - foot_height)
         if max(abs(cg_height), abs(foot_height)) > 0:
             height_discrepancy_ratio = height_discrepancy / max(abs(cg_height), abs(foot_height))
-        if (
-            height_discrepancy >= CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M
-            or (
-                height_discrepancy_ratio is not None
-                and height_discrepancy_ratio >= CMJ_HEIGHT_DISCREPANCY_RATIO
-            )
+        if height_discrepancy >= CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M or (
+            height_discrepancy_ratio is not None
+            and height_discrepancy_ratio >= CMJ_HEIGHT_DISCREPANCY_RATIO
         ):
-            note_parts.append(
-                f"CoM and foot-contact heights differ by {height_discrepancy:.3f} m."
-            )
+            note_parts.append(f"CoM and foot-contact heights differ by {height_discrepancy:.3f} m.")
 
     should_use_foot_contact = (
         foot_height is not None
@@ -846,14 +874,12 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
             or temporal_inconsistent
             or (
                 cg_status == "plausible"
-                and
-                height_discrepancy is not None
+                and height_discrepancy is not None
                 and height_discrepancy >= CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M
             )
             or (
                 cg_status == "plausible"
-                and
-                height_discrepancy_ratio is not None
+                and height_discrepancy_ratio is not None
                 and height_discrepancy_ratio >= CMJ_HEIGHT_DISCREPANCY_RATIO
             )
         )
@@ -4197,7 +4223,7 @@ def process_mediapipe_data(input_file, output_dir):
             combined_row.pop(k, None)
         output_results_file = os.path.join(output_dir, f"{base_name}_jump_results_{timestamp}.csv")
         pd.DataFrame([combined_row]).to_csv(output_results_file, index=False, float_format="%.6f")
-        print(f"Jump results (scalars) saved at: {output_results_file}")
+        print(f"Jump results (scalars) saved at: {_display_path(output_results_file)}")
 
         # Save time series in a separate CSV: one row per frame, columns = series names (same layout as calibrated CSV)
         _SERIES_COLUMNS = [
@@ -4228,10 +4254,10 @@ def process_mediapipe_data(input_file, output_dir):
                 output_dir, f"{base_name}_jump_timeseries_{timestamp}.csv"
             )
             ts_df.to_csv(output_ts_file, index=False, float_format="%.6f")
-            print(f"Jump time series (one row per frame) saved at: {output_ts_file}")
-        print(f"Calibrated data (in meters) saved at: {output_calibrated_file}")
-        print(f"Jump analysis plots saved in: {output_dir}")
-        print(f"HTML report generated: {report_path}")
+            print(f"Jump time series (one row per frame) saved at: {_display_path(output_ts_file)}")
+        print(f"Calibrated data (in meters) saved at: {_display_path(output_calibrated_file)}")
+        print(f"Jump analysis plots saved in: {_display_path(output_dir)}")
+        print(f"HTML report generated: {_display_path(report_path)}")
 
         # Print diagnostic information
         print("Diagnostic info:")
@@ -4264,7 +4290,7 @@ def process_all_mediapipe_files(target_dir):
     csv_files = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.endswith(".csv")]
 
     for input_file in csv_files:
-        print(f"Processing MediaPipe file: {input_file}")
+        print(f"Processing MediaPipe file: {_display_path(input_file)}")
         base_name = os.path.splitext(os.path.basename(input_file))[0]
         per_file_dir = os.path.join(output_dir, base_name)
         os.makedirs(per_file_dir, exist_ok=True)
@@ -4382,7 +4408,7 @@ def process_team_batch(main_dir, output_parent=None):
         )
         return None
 
-    print(f"Found {len(data_dirs)} data folder(s) under {main_dir}")
+    print(f"Found {len(data_dirs)} data folder(s) under {_display_path(main_dir)}")
 
     team_rows: list[dict] = []
     saved_context = _JUMP_CONTEXT
@@ -4391,7 +4417,9 @@ def process_team_batch(main_dir, output_parent=None):
             toml_path = data_dir / "vaila_and_jump_config.toml"
             ctx = _load_jump_context_from_file(toml_path)
             if ctx is None:
-                print(f"Skipping {data_dir}: invalid [jump_context] in {toml_path.name}.")
+                print(
+                    f"Skipping {_display_path(data_dir)}: invalid [jump_context] in {toml_path.name}."
+                )
                 continue
             athlete = data_dir.name
             csv_files = sorted(
@@ -4415,7 +4443,7 @@ def process_team_batch(main_dir, output_parent=None):
                     {
                         "athlete": athlete,
                         "trial": csv_file.stem,
-                        "data_dir": str(data_dir),
+                        "data_dir": _display_path(data_dir),
                         **row,
                     }
                 )
@@ -4428,7 +4456,7 @@ def process_team_batch(main_dir, output_parent=None):
 
     report_path = generate_team_report(team_rows, batch_out, timestamp)
     print(f"Processed {len(team_rows)} jump(s) across {len(data_dirs)} folder(s).")
-    print(f"Team report: {report_path}")
+    print(f"Team report: {_display_path(report_path)}")
     return report_path
 
 
@@ -4572,16 +4600,20 @@ def _team_zscore_html_table(quality_df: pd.DataFrame) -> str:
     html += "</tr></thead><tbody>"
     for idx, row in quality_df.iterrows():
         flag = str(row.get("team_qc_flag", "ok"))
-        row_class = "qc-corrected" if flag == "corrected_by_feet" else "qc-review" if flag == "review" else ""
+        row_class = (
+            "qc-corrected"
+            if flag == "corrected_by_feet"
+            else "qc-review"
+            if flag == "review"
+            else ""
+        )
         html += f'<tr class="{row_class}"><td><strong>{idx}</strong></td>'
         for col, _label in cols:
             val = row.get(col)
             if col.endswith("_zscore"):
                 bg, fg = z_color(val)
                 text = "" if pd.isna(val) else f"{float(val):+.2f}"
-                html += (
-                    f'<td style="background:{bg};color:{fg};font-weight:700;">{text}</td>'
-                )
+                html += f'<td style="background:{bg};color:{fg};font-weight:700;">{text}</td>'
             elif isinstance(val, (int, float)) and pd.notna(val):
                 html += f"<td>{val:.3f}</td>"
             else:
@@ -4604,9 +4636,11 @@ def _team_beeswarm_plot(df: pd.DataFrame, output_path: Path) -> str | None:
     sub["_x"] = 1.0
     if len(sub) > 1:
         sub["_x"] += np.linspace(-0.18, 0.18, len(sub))
-    correction_mask = pd.Series(
-        sub.get("height_qc_correction_applied", False), index=sub.index
-    ).fillna(False).astype(bool)
+    correction_mask = (
+        pd.Series(sub.get("height_qc_correction_applied", False), index=sub.index)
+        .fillna(False)
+        .astype(bool)
+    )
     colors = np.where(
         correction_mask,
         "#e67e22",
@@ -4617,9 +4651,13 @@ def _team_beeswarm_plot(df: pd.DataFrame, output_path: Path) -> str | None:
     ax.scatter(sub["_x"], sub["_height"], s=90, c=colors, edgecolor="#2c3e50", alpha=0.9)
     mean_val = float(sub["_height"].mean())
     std_val = float(sub["_height"].std(ddof=0)) if len(sub) > 1 else 0.0
-    ax.axhline(mean_val, color="#2c3e50", linestyle="-", linewidth=1.5, label=f"mean {mean_val:.3f} m")
+    ax.axhline(
+        mean_val, color="#2c3e50", linestyle="-", linewidth=1.5, label=f"mean {mean_val:.3f} m"
+    )
     if std_val > 0:
-        ax.axhspan(mean_val - std_val, mean_val + std_val, color="#27ae60", alpha=0.12, label="±1 SD")
+        ax.axhspan(
+            mean_val - std_val, mean_val + std_val, color="#27ae60", alpha=0.12, label="±1 SD"
+        )
         ax.axhspan(mean_val + std_val, mean_val + 2 * std_val, color="#f1c40f", alpha=0.10)
         ax.axhspan(mean_val - 2 * std_val, mean_val - std_val, color="#f1c40f", alpha=0.10)
     for _, row in sub.iterrows():
@@ -4659,7 +4697,11 @@ def _team_heatmap_plot(quality_df: pd.DataFrame, output_path: Path) -> str | Non
     ax.set_yticks(np.arange(len(labels)))
     ax.set_yticklabels(labels, fontsize=8)
     ax.set_xticks(np.arange(len(z_cols)))
-    ax.set_xticklabels([c.replace("_zscore", " Z").replace("jump_composite", "composite") for c in z_cols], rotation=25, ha="right")
+    ax.set_xticklabels(
+        [c.replace("_zscore", " Z").replace("jump_composite", "composite") for c in z_cols],
+        rotation=25,
+        ha="right",
+    )
     for i in range(matrix.shape[0]):
         for j in range(matrix.shape[1]):
             ax.text(j, i, f"{matrix.iat[i, j]:+.1f}", ha="center", va="center", fontsize=8)
@@ -4686,9 +4728,11 @@ def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str
     """
     output_dir = Path(output_dir)
     df = pd.DataFrame(team_rows)
-    correction_mask = pd.Series(
-        df.get("height_qc_correction_applied", False), index=df.index
-    ).fillna(False).astype(bool)
+    correction_mask = (
+        pd.Series(df.get("height_qc_correction_applied", False), index=df.index)
+        .fillna(False)
+        .astype(bool)
+    )
     discrepancy = pd.to_numeric(df.get("height_qc_discrepancy_m", np.nan), errors="coerce")
     status_text = pd.Series(df.get("height_qc_status", ""), index=df.index).astype(str)
     df["team_qc_flag"] = "ok"
@@ -4705,18 +4749,18 @@ def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str
     # 1) Full consolidated table (one row per processed jump)
     team_csv = output_dir / f"team_jump_results_{timestamp}.csv"
     df.to_csv(team_csv, index=False, float_format="%.6f")
-    print(f"Team results CSV: {team_csv}")
+    print(f"Team results CSV: {_display_path(team_csv)}")
 
     # 2) Descriptive summary across the whole team
     summary_df = _team_summary_table(df)
     summary_csv = output_dir / f"team_jump_summary_{timestamp}.csv"
     summary_df.to_csv(summary_csv, index=False, float_format="%.6f")
-    print(f"Team summary CSV: {summary_csv}")
+    print(f"Team summary CSV: {_display_path(summary_csv)}")
 
     quality_df = _team_quality_table(df)
     quality_csv = output_dir / f"team_jump_quality_zscores_{timestamp}.csv"
     quality_df.to_csv(quality_csv, index=True, index_label="rank", float_format="%.6f")
-    print(f"Team quality/z-score CSV: {quality_csv}")
+    print(f"Team quality/z-score CSV: {_display_path(quality_csv)}")
 
     # 3) Bar charts for the most relevant metrics
     plots_dir = output_dir / "team_plots"
@@ -4768,7 +4812,12 @@ def _write_team_html(
     n_athletes = df["athlete"].nunique() if "athlete" in df.columns else 0
     n_jumps = len(df)
     corrected_count = (
-        int(pd.Series(df.get("height_qc_correction_applied", False)).fillna(False).astype(bool).sum())
+        int(
+            pd.Series(df.get("height_qc_correction_applied", False))
+            .fillna(False)
+            .astype(bool)
+            .sum()
+        )
         if n_jumps
         else 0
     )
@@ -4898,7 +4947,7 @@ def _write_team_html(
 </html>"""
 
     report_path.write_text(html, encoding="utf-8")
-    print(f"Team HTML report: {report_path}")
+    print(f"Team HTML report: {_display_path(report_path)}")
 
 
 def _team_overview_table_html(df: pd.DataFrame) -> str:
@@ -5081,7 +5130,7 @@ def process_jump_data(input_file, output_dir, use_time_of_flight):
         output_file_path = os.path.join(output_dir, f"{base_name}_vjump_{timestamp}.csv")
         results_df.to_csv(output_file_path, index=False)
 
-        print(f"Results saved successfully at: {output_file_path}")
+        print(f"Results saved successfully at: {_display_path(output_file_path)}")
     except Exception as e:
         print(f"An error occurred while processing {input_file}: {str(e)}")
 
@@ -5296,7 +5345,7 @@ def process_all_files_in_directory(target_dir, use_time_of_flight, output_parent
 
     # Process each .csv file
     for input_file in csv_files:
-        print(f"Processing file: {input_file}")
+        print(f"Processing file: {_display_path(input_file)}")
         base_name = os.path.splitext(os.path.basename(input_file))[0]
         per_file_dir = os.path.join(output_dir, base_name)
         os.makedirs(per_file_dir, exist_ok=True)
@@ -5876,7 +5925,7 @@ def generate_jump_animation_gif(
     try:
         # loop=0 makes the GIF loop infinitely
         imageio.mimsave(gif_path, images, duration=0.08, loop=0)
-        print(f"Saved GIF animation: {gif_path}")
+        print(f"Saved GIF animation: {_display_path(gif_path)}")
         return gif_path
     except Exception as e:
         print(f"Failed to save GIF: {e}")
@@ -6324,7 +6373,9 @@ def vaila_and_jump():
             msg += "Input data type: Jump Height\n"
         else:
             msg += "Input data type: MediaPipe Shank Length\n"
-        msg += f"Output directory: {os.path.join(target_dir, 'vaila_verticaljump_*')}"
+        msg += (
+            f"Output directory: {_display_path(os.path.join(target_dir, 'vaila_verticaljump_*'))}"
+        )
         messagebox.showinfo("Success", msg, parent=root)
     finally:
         _destroy_dialog_parent(root, owns_root)
