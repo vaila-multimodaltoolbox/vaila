@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-06-03
+**Last updated:** 2026-06-04
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -213,7 +213,7 @@ vaila
 ├── pyproject.toml                # Active manifest (default: universal CPU; Hatchling + uv)
 ├── pyproject_*.toml              # Platform templates (Linux/Windows CUDA, macOS, CPU)
 ├── uv.lock                       # Locked deps (re-run uv lock after template switch)
-├── bin/                          # use_pyproject_linux_cuda.sh, universal_cpu, macOS, Windows
+├── bin/                          # setup_pyproject.sh/.ps1 (unified) + legacy use_pyproject_*.sh/.ps1 shims
 ├── install_vaila_linux.sh        # Linux installer (uv primary; Conda legacy)
 ├── install_vaila_mac.sh          # macOS installer (uv primary; Conda legacy)
 ├── install_vaila_win.ps1         # Windows installer
@@ -265,7 +265,17 @@ _vailá_ uses a **template-based configuration system** that automatically selec
 - **`pyproject_macos.toml`**: macOS with Metal/MPS acceleration (Apple Silicon optimized)
 - **`pyproject_universal_cpu.toml`**: Universal CPU-only fallback (backup template)
 
-**Manual template switch (developers / second machine):** from the repo root, use `bin/use_pyproject_linux_cuda.sh`, `bin/use_pyproject_universal_cpu.sh`, `bin/use_pyproject_macos_metal.sh`, or the Windows PowerShell equivalents — then `uv lock` and `uv sync`. See **[AGENTS.md](AGENTS.md)** for the full hybrid workflow.
+**Manual template switch (developers / second machine):** prefer the **unified interactive bootstrap** which auto-detects OS + NVIDIA + arch and runs `uv lock` + `uv sync`:
+
+```bash
+bash bin/setup_pyproject.sh                                       # Linux / macOS / WSL / Git Bash
+pwsh bin/setup_pyproject.ps1                                      # Windows PowerShell
+bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes   # non-interactive
+```
+
+Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`, `--help`.
+
+Legacy per-platform shims (thin wrappers around the bootstrap, kept for backward compatibility): `bin/use_pyproject_linux_cuda.sh`, `bin/use_pyproject_universal_cpu.sh`, `bin/use_pyproject_macos_metal.sh`, plus the Windows PowerShell equivalents. See **[AGENTS.md](AGENTS.md)** for the full hybrid workflow.
 
 **How it works (step-by-step):**
 
@@ -326,7 +336,14 @@ The **Segment Anything Model 3** stack is not installed by default. If the GUI s
 uv sync --extra sam
 ```
 
-**Workstation with NVIDIA CUDA** (after you have switched to the Linux/Windows CUDA `pyproject` template — see install scripts or `bin/use_pyproject_*.sh` / `.ps1`):
+**Workstation with NVIDIA CUDA** — recommended one-liner (auto-detects + switches template + syncs):
+
+```bash
+bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes   # Linux
+pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes        # Windows
+```
+
+Or do it manually after switching the `pyproject` template (legacy `bin/use_pyproject_*.sh / .ps1` shims):
 
 ```bash
 uv sync --extra gpu --extra sam
