@@ -4,12 +4,12 @@
 
 - **Category:** Analysis
 - **File:** `vaila\vaila_and_jump.py`
-- **Lines:** 4514
+- **Lines:** 6051
 - **Size:** ~150000 characters
-- **Version:** 0.1.1
+- **Version:** 0.3.47
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
-- **Last Update:** 04 Jan 2026
+- **Last Update:** 03 June 2026
 
 ## 📖 Description
 
@@ -38,7 +38,29 @@ For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to 
   - Jump Performance Index (JPI)
   - Total time (if time of flight and contact time are available)
 
-- **Advanced Kinematic Analysis (NEW in v0.1.1):**
+- **Robust CMJ phase detection (v0.3.47):**
+  - Uses the maximum CoM height as an anatomical anchor
+  - Searches propulsion start and takeoff only before or at the CoM peak
+  - Applies median smoothing only to the event-detection signal
+  - Supports robust initial baseline rectification through optional `[jump_phase]` TOML settings
+
+- **macOS GUI handling (v0.3.47):**
+  - When launched from the main vailá GUI, reuses the existing Tk root instead of creating a second `Tk()` window.
+  - Keeps directory, batch, and MediaPipe parameter dialogs movable and correctly focused on macOS.
+
+- **CMJ height quality control (v0.3.47):**
+  - `height_cg_method_m > 0.80` is flagged for manual review
+  - `height_cg_method_m > 1.00` is flagged as probable error
+  - All modes export `height_qc_status`; MediaPipe mode can set `height_qc_recommended_m` from foot-contact flight time (last foot takeoff to first foot landing) when CoM height is suspicious
+  - If CoM height/timing is inconsistent with foot-contact timing, MediaPipe mode can also recommend corrected `flight_time_s`, takeoff frame, and landing frame from last-foot-off to first-foot-contact
+  - Raw CoM height/time remain exported for audit in `height_cg_method_m` and `flight_time_com_method_s`
+
+- **Team comparison visuals (v0.3.47):**
+  - Team batch reports include a height beeswarm/distribution plot, a Z-score matrix, and a color-coded QC/Z-score table.
+  - Corrected trials are highlighted in orange; review-only trials are highlighted in red.
+  - `team_jump_quality_zscores_<timestamp>.csv` stores group z-scores and `team_qc_flag`.
+
+- **Advanced Kinematic Analysis:**
   - **FPPA (Frontal Plane Projection Angle):** Rigorous 2D vector-based calculation
     - Vector v1: HIP → KNEE (Femur)
     - Vector v2: KNEE → ANKLE (Tibia)
@@ -69,8 +91,8 @@ For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to 
   - Jump phase analysis plots
   - CG and feet position analysis
   - Power curves
-  - **FPPA Time Series Plot (NEW):** Shows adduction/abduction angles over time with key events highlighted
-  - **Valgus Event Stick Figures (NEW):** Multi-moment landing analysis with FPPA values, knee/ankle separation, and risk classification
+  - **FPPA Time Series Plot:** Shows adduction/abduction angles over time with key events highlighted
+  - **Valgus Event Stick Figures:** Multi-moment landing analysis with FPPA values, knee/ankle separation, and risk classification
   - Animated GIF of jump cycle
   - Comprehensive HTML report with all metrics and visualizations
 
@@ -98,9 +120,12 @@ For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to 
 
 ### Phase Identification:
 - `calculate_baseline` - Calculate baseline using first n frames
-- `identify_jump_phases` - Identify all jump phases (squat, takeoff, peak, landing)
+- `identify_jump_phases` - Identify CMJ phases with propulsion/takeoff constrained before the CoM peak
+- `_robust_baseline_value` - Robust baseline estimate for initial stance windows with short MediaPipe spikes
+- `_cmj_phase_signal` - Median-smoothed CoM signal used only for event detection
+- `_cmj_height_quality_check` - Flags implausible CMJ heights and recommends foot-contact correction when appropriate
 
-### Kinematic Analysis (NEW):
+### Kinematic Analysis:
 - `calculate_kinematics` - Calculate advanced kinematic metrics for injury screening
   - FPPA (Frontal Plane Projection Angle) using rigorous 2D vector method
   - Valgus Ratio (Knee-Hip Separation Ratio)
@@ -125,6 +150,8 @@ For MediaPipe data, the script automatically inverts y-coordinates (1.0 - y) to 
 ### Data Processing:
 - `process_mediapipe_data` - Process MediaPipe data and generate visualizations
 - `process_all_mediapipe_files` - Process all MediaPipe CSV files in directory
+- `process_team_batch` - Walk athlete folders (one TOML each) and build a team report
+- `generate_team_report` - Consolidated team CSV + summary CSV + HTML report with charts
 - `process_jump_data` - Process jump data from input file
 - `calc_fator_convert_mediapipe` - Calculate conversion factor from normalized to meters
 - `calc_fator_convert_mediapipe_simple` - Simplified conversion factor calculation
@@ -173,23 +200,71 @@ Based on "Mechanisms for Noncontact Anterior Cruciate Ligament Injury":
    - **Option 1:** Time of Flight Data
    - **Option 2:** Jump Height Data
    - **Option 3:** MediaPipe Shank Length Data
+   - **Option 4:** Team Batch (MediaPipe; one config TOML per athlete folder)
 4. For MediaPipe data, provide:
    - Subject mass (kg)
    - Video FPS (frames per second)
    - Shank length (m) for calibration
 5. The script processes all files and generates comprehensive reports
 
+### Team Batch (mode 4)
+
+Process a whole team/squad in one run, then get a consolidated report.
+
+1. Organize your data so each athlete/collection has its **own folder** under one
+   MAIN directory. Each folder must contain:
+   - its own `vaila_and_jump_config.toml` (with `[jump_context]` mass/fps/shank), and
+   - one or more MediaPipe CSV files.
+2. Run mode 4 (GUI option 4, or CLI `--batch` / `-d 4`) and select the MAIN directory.
+3. vailá walks every folder, runs the MediaPipe analysis with that folder's TOML, and
+   writes a timestamped output dir `vaila_team_jump_<timestamp>/` at the root of the MAIN
+   directory containing:
+   - `team_jump_results_<ts>.csv` — one row per processed jump (all athletes),
+   - `team_jump_summary_<ts>.csv` — team descriptive stats (n, mean, SD, min, median, max),
+   - `team_jump_quality_zscores_<ts>.csv` — team z-scores and QC flags,
+   - `team_jump_report_<ts>.html` — team report with rankings and per-athlete charts,
+   - `team_plots/` — bar charts, plus per-athlete subfolders with the individual reports.
+
+Example MAIN directory layout:
+
+```
+team_2026/
+├── S01_joao/
+│   ├── S01_joao.csv
+│   └── vaila_and_jump_config.toml
+├── S02_maria/
+│   ├── S02_maria.csv
+│   └── vaila_and_jump_config.toml
+└── ...
+```
+
 ### CLI (command line)
 Unified arguments for all modes. Use `-d` for data type:
 
-- `-i` — Input: CSV file (mode 3) or directory of CSVs (modes 1 and 2)
+- `-i` — Input: CSV file (mode 3), directory of CSVs (modes 1 and 2), or MAIN directory of athlete folders (mode 4)
 - `-c` — Config TOML (required for mode 3 MediaPipe)
 - `-o` — Output directory (optional)
-- `-d` — Data type: 1 = Time of Flight, 2 = Jump Height, 3 = MediaPipe
+- `-d` — Data type: 1 = Time of Flight, 2 = Jump Height, 3 = MediaPipe, 4 = Team Batch
+- `--batch` — Shortcut for `-d 4` (team batch over subfolders of `-i`)
 - `--gui` — Force GUI mode
 
 Example (MediaPipe): `python vaila_and_jump.py -i file.csv -c config.toml -o out/ -d 3`  
-Example (batch): `-i <dir> -o <out> -d 1` or `-d 2`
+Example (batch CSV dir): `-i <dir> -o <out> -d 1` or `-d 2`  
+Example (team batch): `python vaila_and_jump.py -i <main_dir> --batch`
+
+Optional CMJ phase settings in `vaila_and_jump_config.toml`:
+
+```toml
+[jump_phase]
+baseline_rectify_start = true
+baseline_start_frame = 10
+baseline_end_frame = 20
+phase_smoothing_window_s = 0.06
+baseline_tolerance_m = 0.02
+anchor_events_to_com_peak = true
+```
+
+Keep `anchor_events_to_com_peak = true` for CMJ data so propulsion and ascent events cannot be placed after maximum CoM height.
 
 ## 📁 Input File Formats
 
@@ -231,6 +306,7 @@ The script generates:
 - Shank length calibration is critical for accurate metric calculations
 - FPPA calculations use rigorous vector-based methods for clinical validity
 - Right side FPPA values are inverted for consistent visualization (both sides show valgus as positive)
+- Robust CMJ phase detection anchors propulsion and takeoff before the maximum CoM height
 
 ## 📄 License
 
@@ -238,6 +314,6 @@ This script is licensed under the GNU General Public License v3.0.
 
 ---
 
-📅 **Last Updated:** 04 Jan 2026  
+📅 **Last Updated:** 03 June 2026
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

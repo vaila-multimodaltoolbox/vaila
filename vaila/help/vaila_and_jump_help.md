@@ -8,6 +8,7 @@ This guide explains how to use the Vertical Jump Analysis tool in vailá. It cov
   - Jump-Height: use measured jump height directly
   - MediaPipe Pose: read 2D pose CSVs, convert to meters, compute Center of Gravity (CG), and derive metrics
 - Outputs include plots, calibrated CSVs, and an HTML report
+- Team batch outputs include visual group comparison, z-score/QC tables, and optional correction of height/flight time from foot-contact frames when CoM timing is inconsistent
 
 ### Accepted MediaPipe Inputs (CSV)
 - File naming (vailá style): landmark columns like `nose_x`, `nose_y`, `right_ankle_x`, `right_ankle_y`, etc.
@@ -24,6 +25,7 @@ This guide explains how to use the Vertical Jump Analysis tool in vailá. It cov
 ### Quick Start
 1) Run the tool
    - From vailá GUI or: `python vaila/vaila_and_jump.py`
+   - On macOS, the GUI launch reuses the main Tk window so prompts remain movable and focused.
 2) Choose the directory with your CSV files
 3) Select the data type: (1) Time of Flight, (2) Jump Height, or (3) MediaPipe
 4) MediaPipe mode requires subject constants (asked once per batch):
@@ -69,6 +71,7 @@ Example (Time of Flight batch): `-i <dir> -o <out> -d 1`. Example (Jump Height b
   - Stick-figure phases (with Time and Jump Height annotation)
   - Valgus event analysis (with risk metrics text outside plot area)
 - HTML: `<name>_report_<timestamp>.html` — comprehensive report with risk screening table
+- Team batch: `team_jump_quality_zscores_<timestamp>.csv` and `team_jump_report_<timestamp>.html` with height distribution, Z-score matrix, and QC highlights
 
 ### Equations
 - Height from time of flight: \( h = \frac{g\, t^2}{8} \)

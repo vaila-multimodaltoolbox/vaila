@@ -1,0 +1,154 @@
+# vailá Scout configuration (TOML)
+# This file controls the integrated scouting GUI behavior and visuals.
+# All values are in English and documented below for clarity.
+
+[program]
+# Metadata about this tool
+name = "vaila_scout"
+version = "0.1.5"
+author = "Paulo Roberto Pereira Santiago and Rafael Luiz Martins Monteiro"
+email = "paulosantiago@usp.br and rafaell_mmonteiro@usp.br"
+description = "Integrated scouting (annotation + analysis) for soccer."
+repository = "https://github.com/vaila-multimodaltoolbox/vaila"
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/vaila-multimodaltoolbox/vaila"
+created = "2025-08-12"
+updated = "2025-08-22"
+
+[project]
+# Field size in meters (FIFA standard is 105 x 68)
+name = "vaila_scout"
+field_width_m = 105.0
+field_height_m = 68.0
+sport = "soccer"
+field_units = "meters"
+field_standard = "FIFA"
+description = "Default soccer field and teams for scouting."
+
+[teams.home]
+# Home team settings: display name, color, roster, and player name mapping
+name = "HOME"
+color = "#1f77b4"  # jersey color used for player circles
+players = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"]
+
+[teams.home.players_names]
+# Map shirt numbers to player names (optional). Example: "10" = "Playmaker"
+"1" = "Taffarel"
+"2" = "Cafu"
+"3" = "Aldair"
+"4" = "Djalma Santos"
+"5" = "Falcão"
+"6" = "Roberto Carlos"
+"7" = "Garrincha"
+"8" = "Sócrates"
+"9" = "Ronaldo"
+"10" = "Pelé"
+"11" = "Neymar"
+"12" = "Rivaldo"
+"13" = "Nilton Santos"
+"14" = "Zico"
+"15" = "Romário"
+"16" = "Rivelino"
+"17" = "Kaká"
+"18" = "Jairzinho"
+"19" = "Tostão"
+"20" = "Didi"
+
+[teams.away]
+name = "AWAY"
+color = "#d62728"
+players = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"]
+
+[teams.away.players_names]
+"1" = "Gianluigi Buffon"
+"2" = "Philipp Lahm"
+"3" = "Paolo Maldini"
+"4" = "Franz Beckenbauer"
+"5" = "Bobby Moore"
+"6" = "Franco Baresi"
+"7" = "Cristiano Ronaldo"
+"8" = "Andrés Iniesta"
+"9" = "Marco van Basten"
+"10" = "Diego Maradona"
+"11" = "Lionel Messi"
+"12" = "Zinedine Zidane"
+"13" = "Eusébio"
+"14" = "Johan Cruyff"
+"15" = "Thierry Henry"
+"16" = "Michel Platini"
+"17" = "George Best"
+"18" = "Ferenc Puskás"
+"19" = "Alfredo Di Stéfano"
+"20" = "Xavi"
+
+[drawing]
+# Visual defaults for drawing players and action symbols on the field
+player_circle_radius_m = 0.6
+player_edge_color = "black"
+player_number_color = "white"
+player_number_size = 8
+action_symbol_size = 90.0
+show_player_name = true  # draw small label near circle
+player_name_size = 8
+
+# Results are generic and independent from actions. Use any labels you need.
+results = ["success", "fail", "neutral"]
+
+# Actions are listed at the end for readability. Each action has a display name,
+# a plot symbol/marker, and a color used for the symbol.
+# Common symbols: o, *, +, x, ^, s (square), P (plus filled), D (diamond), h (hexagon).
+[[actions]]
+name = "Pass"
+code = 1
+symbol = "o"
+color = "#FFD700"
+[[actions]]
+name = "First touch"
+code = 2
+symbol = "P"
+color = "#8c564b"
+[[actions]]
+name = "Control"
+code = 3
+symbol = "s"
+color = "#9467bd"
+[[actions]]
+name = "Dribble"
+code = 4
+symbol = "D"
+color = "#17becf"
+[[actions]]
+name = "Shield"
+code = 5
+symbol = "h"
+color = "#7f7f7f"
+[[actions]]
+name = "Shot"
+code = 6
+symbol = "*"
+color = "#FF4500"
+[[actions]]
+name = "Header"
+code = 7
+symbol = "^"
+color = "#2ca02c"
+[[actions]]
+name = "Cross"
+code = 8
+symbol = "+"
+color = "#1f77b4"
+[[actions]]
+name = "Tackle"
+code = 9
+symbol = "x"
+color = "#d62728"
+[[actions]]
+name = "Interception"
+code = 10
+symbol = "X"
+color = "#bcbd22"
+[[actions]]
+name = "Goalkeeping"
+code = 11
+symbol = "s"
+color = "#8c564b"

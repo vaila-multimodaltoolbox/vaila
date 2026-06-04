@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 01 June 2026
-Version: 0.3.45
+Update Date: 03 June 2026
+Version: 0.3.47
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -4796,7 +4796,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         psutil.cpu_percent(interval=0.05)
 
     # Output files
-    output_dir / f"{video_path.stem}_mp.mp4"
+    annotated_output_path = output_dir / f"{video_path.stem}_mp.mp4"
     output_file_path = output_dir / f"{video_path.stem}_mp_norm.csv"
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
 
@@ -4869,7 +4869,6 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     if fps <= 0:
         fps = 30.0
     fps_out = max(1.0, round(fps))  # normalise to integer FPS for MP4 timebase
-    annotated_output_path = output_dir / f"{video_path.stem}_annotated.mp4"
 
     _ffmpeg_proc = None
     _use_ffmpeg_pipe = False
@@ -4977,7 +4976,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         _use_ffmpeg_pipe = False
         fourcc_fn = getattr(cv2, "VideoWriter_fourcc", None) or cv2.VideoWriter.fourcc
         fourcc = fourcc_fn(*"XVID")
-        _avi_path = output_dir / f"{video_path.stem}_annotated.avi"
+        _avi_path = output_dir / f"{video_path.stem}_mp.avi"
         out_video = cv2.VideoWriter(str(_avi_path), fourcc, fps_out, (width, height))
         if not out_video.isOpened():
             print("[WARNING] XVID also failed — video output disabled.")
@@ -5602,7 +5601,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     f"  - Multiple ROI Ranges: {len(pose_config.get('bounding_box_ranges', []))}\n"
                 )
             f.write("\nOutput Files:\n")
-            f.write(f"  - Annotated Video: {video_path.stem}_annotated.mp4\n")
+            f.write(f"  - Annotated Video: {video_path.stem}_mp.mp4\n")
             f.write(f"  - Normalized CSV: {video_path.stem}_mp_norm.csv\n")
             f.write(f"  - Pixel CSV: {video_path.stem}_mp_pixel.csv\n")
             f.write(f"  - vailá Format CSV: {video_path.stem}_pixel_vaila.csv\n")
