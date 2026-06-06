@@ -41,6 +41,17 @@ If you accidentally committed a secret:
 
 - Lockfile [`uv.lock`](uv.lock) is committed for reproducible installs.
 - Prefer `uv add` / `uv sync` over ad-hoc `pip install` in documentation for this repo.
+- When Dependabot reports a vulnerable package, update both the active [`pyproject.toml`](pyproject.toml) and all `pyproject_*.toml` platform templates if the dependency is declared there, then regenerate [`uv.lock`](uv.lock).
+- If a patched package version conflicts with an unused dependency, prefer removing the unused dependency over keeping a vulnerable transitive constraint.
+
+Recommended verification after dependency security updates:
+
+```bash
+uv lock --check
+uv sync
+uv pip check
+uv run pytest tests/ -q
+```
 
 ---
 
@@ -53,5 +64,7 @@ If you accidentally committed a secret:
 **Segredos:** nunca commitar chaves de API, palavras-passe, tokens ou ficheiros de autenticação locais (ex.: credenciais de ferramentas no diretório home). O projeto é AGPL e público — trate qualquer chave como comprometida se tiver sido exposta e **rode-a** no fornecedor.
 
 **Se expuser uma chave por engano:** revogue-a de imediato e limpe o histórico do Git se já tiver sido enviado para o remoto.
+
+**Dependabot:** quando houver alerta de pacote vulnerável, atualize o [`pyproject.toml`](pyproject.toml) ativo e todos os templates `pyproject_*.toml` que declaram a dependência, regenere o [`uv.lock`](uv.lock), rode `uv pip check` e os testes relevantes. Se a versão corrigida conflitar com uma dependência sem uso no código, remova a dependência sem uso em vez de manter a restrição vulnerável.
 
 Consulte também [CONTRIBUTING.md](CONTRIBUTING.md).
