@@ -28,7 +28,7 @@ dependencies = [
     "matplotlib",
     "seaborn",
     "plotly",
-    "pillow",
+    "pillow>=12.2.0",
     "pycairo",
     # Data processing
     "dask",
@@ -56,7 +56,6 @@ dependencies = [
     "opencv-contrib-python",
     "imageio",
     "imageio-ffmpeg",
-    "moviepy",
     # Machine learning and AI
     "jax",
     "jaxlib",
@@ -132,7 +131,8 @@ dev = [
     "pytest>=8.0.0",
 ]
 upscaler = [
-    "diffusers",
+    "diffusers>=0.38.0",
+    "safetensors>=0.8.0rc1",
 ]
 sam = [
     "sam3==0.1.3",
