@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 14 May 2026
-Version: 0.3.44
+Update Date: 05 June 2026
+Version: 0.3.47
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -32,6 +32,7 @@ Requirements:
     - Additional dependencies as imported (numpy, csv, etc.)
 
 Change History:
+    - 2026-06: Added "Max tracked IDs" post-tracking rerank cap (global rerank by persistence, applies to all sub-trackers via CSVs); clarified that BoT-SORT w/ ReID uses yolo26n-cls.pt for appearance features (not as detector) when model head is end2end.
     - 2026-05: Ultralytics dir bootstrap before YOLO import; recursive tracking-dir discovery; TRT10-style trtexec; SAM-shaped yolo_contours + manifest columns; FFmpeg for seg/all overlays.
     - 2026-01: Added ROI selection with improved visibility on macOS.
     - 2023-10: Initial version implemented, integrating detection and tracking with various configurable options.
@@ -1433,6 +1434,41 @@ class TrackerConfigDialog(simpledialog.Dialog):
         )
         btn_load_roi.pack(side="left", padx=5)
 
+        # Max tracked IDs (post-tracking rerank cap)
+        tk.Label(master, text="Max tracked IDs (cap):").grid(
+            row=9, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.max_tracked_ids = tk.Entry(master, width=10)
+        self.max_tracked_ids.insert(0, "0")
+        self.max_tracked_ids.grid(row=9, column=1, padx=5, pady=5, sticky="w")
+        help_text_max_ids = tk.Label(master, text="?", cursor="hand2", fg="blue")
+        help_text_max_ids.grid(row=9, column=2, padx=5, pady=5, sticky="w")
+        max_ids_tooltip = (
+            "Max tracked IDs (post-tracking rerank cap):\n"
+            "0  - Disabled (keep all IDs from BoT-SORT)\n"
+            "N  - After tracking, keep only the top-N IDs ranked\n"
+            "     by number of frames detected (persistence).\n\n"
+            "Recommended for football (soccer 11x11 + 4 referees):\n"
+            "    22 to 26\n\n"
+            "How it works:\n"
+            "  1. First pass: BoT-SORT runs normally (yolo26x detector +\n"
+            "     ReID via yolo26n-cls, with GMC) and writes the full\n"
+            "     per-ID stream to memory.\n"
+            "  2. Count frames per raw tracker ID across the whole video.\n"
+            "  3. Keep the N most persistent raw IDs; re-map them to\n"
+            "     stable sequential IDs (1..N) by persistence rank.\n"
+            "  4. All other IDs (short tracklets, noise, ghost tracks)\n"
+            "     are dropped (label them '?').\n\n"
+            "Side effects:\n"
+            "  - Output CSVs and annotated video reflect the cleaned IDs.\n"
+            "  - Applied uniformly to detection, pose and segmentation\n"
+            "     sub-trackers.\n"
+            "  - Increases total processing time because results are\n"
+            "     buffered and a second pass re-renders outputs."
+        )
+        help_text_max_ids.bind("<Enter>", lambda e: self.show_help(e, max_ids_tooltip))
+        help_text_max_ids.bind("<Leave>", self.hide_help)
+
         help_text = tk.Label(master, text="?", cursor="hand2", fg="blue")
         help_text.grid(row=7, column=2, padx=5, pady=5)
         roi_tooltip = (
@@ -1630,6 +1666,7 @@ class TrackerConfigDialog(simpledialog.Dialog):
                 "persist": True,
                 "verbose": False,
                 "stream": True,
+                "max_tracked_ids": int(self.max_tracked_ids.get()),
             }
             return True
         except ValueError:
@@ -2119,6 +2156,206 @@ def get_color_for_id(tracker_id):
     # Use modulo to reuse colors if we have more IDs than colors
     color_idx = tracker_id % len(COLORS)
     return COLORS[color_idx]
+
+
+# ---------------------------------------------------------------------------
+# Post-tracking ID cap (global rerank)
+# ---------------------------------------------------------------------------
+# BoT-SORT with ReID emits many short tracklets (entry/exit, occlusions, the
+# ball, the referee near the bench, etc.). When the user knows roughly how many
+# real objects are in the scene (e.g. 22 players + 4 referees = 26 for soccer
+# 11x11), we can keep only the N most persistent raw IDs and re-map them to
+# stable sequential IDs 1..N by persistence rank. Everything else is dropped.
+#
+# Strategy: "Rerank global pós-track"
+#   1. Buffer the full Ultralytics Results stream (frame index + per-detection
+#      data + the rendered annotated frame, if any).
+#   2. Walk through detections once and count how many frames each raw ID
+#      survived.
+#   3. Sort raw IDs by persistence (desc) and keep the top-N. The remainder is
+#      treated as noise/short tracklets.
+#   4. Build a mapping {raw_id -> new_id 1..N} in persistence order. The
+#      rerank is **deterministic** (no ties broken by raw id) so two runs over
+#      the same input give the same output.
+#   5. Re-emit results frame by frame, applying the mapping. Detections whose
+#      raw id is not in the top-N are kept only if `keep_dropped=True` (they
+#      are re-labeled to -1 and a placeholder label "?"). Default: dropped from
+#      CSVs and from the annotated frame to keep outputs clean.
+#   6. ID cap = 0 disables the entire pass and just yields the original stream
+#      unchanged (so the feature is opt-in).
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _BufferedFrame:
+    """One frame worth of tracking data captured from a YOLO Results stream."""
+
+    frame_idx: int
+    detections: list[dict]  # one per detection in this frame
+    annotated_frame: np.ndarray | None  # BGR (post-plot), or None to skip
+    raw_result: Any | None  # original Ultralytics Results object (for re-plot)
+
+
+def buffer_tracking_stream(
+    results_iter: Any,
+    save_annotated: bool = True,
+    progress_cb: Any | None = None,
+) -> tuple[list[_BufferedFrame], dict[int, int]]:
+    """Materialize a YOLO `Results` stream into per-frame detection records.
+
+    Args:
+        results_iter: iterable of Ultralytics `Results` (e.g. from
+            ``model.track(..., stream=True)``).
+        save_annotated: when True, also keep the BGR frame produced by
+            ``result.plot()`` so we can re-emit the annotated video after the
+            rerank.
+        progress_cb: optional ``callable(frame_idx)`` for progress reporting.
+
+    Returns:
+        Tuple ``(buffer, id_counts)`` where ``buffer`` is the list of
+        ``_BufferedFrame`` and ``id_counts`` maps ``raw_tracker_id`` ->
+        number of frames where the id was observed.
+    """
+    buffer: list[_BufferedFrame] = []
+    id_counts: dict[int, int] = {}
+
+    for frame_idx, result in enumerate(results_iter):
+        detections: list[dict] = []
+        boxes = getattr(result, "boxes", None)
+        if boxes is not None and boxes.id is not None:
+            raw_ids = boxes.id.int().cpu().tolist()
+            xyxy = boxes.xyxy.cpu().numpy()
+            confs = boxes.conf.cpu().numpy() if boxes.conf is not None else np.zeros(len(raw_ids))
+            clses = boxes.cls.cpu().numpy() if boxes.cls is not None else np.zeros(len(raw_ids))
+            for raw_id, (x1, y1, x2, y2), conf, cls in zip(
+                raw_ids, xyxy, confs, clses, strict=True
+            ):
+                rid = int(raw_id)
+                detections.append(
+                    {
+                        "raw_id": rid,
+                        "xyxy": (float(x1), float(y1), float(x2), float(y2)),
+                        "conf": float(conf),
+                        "cls": int(cls),
+                    }
+                )
+                id_counts[rid] = id_counts.get(rid, 0) + 1
+
+        annotated = result.plot() if save_annotated else None
+        buffer.append(
+            _BufferedFrame(
+                frame_idx=frame_idx,
+                detections=detections,
+                annotated_frame=annotated,
+                raw_result=result,
+            )
+        )
+        if progress_cb is not None:
+            with contextlib.suppress(Exception):
+                progress_cb(frame_idx)
+
+    return buffer, id_counts
+
+
+def build_id_rerank_map(id_counts: dict[int, int], max_ids: int) -> dict[int, int]:
+    """Build ``{raw_id -> new_id 1..N}`` keeping the top-N most persistent.
+
+    Args:
+        id_counts: mapping ``raw_id -> frame_count`` produced by
+            :func:`buffer_tracking_stream`.
+        max_ids: maximum number of IDs to keep. ``<= 0`` returns an empty
+            mapping (cap disabled).
+
+    Returns:
+        Dictionary from raw id to a new sequential id starting at 1. Order is
+        by ``(frame_count desc, raw_id asc)`` for determinism.
+    """
+    if max_ids <= 0 or not id_counts:
+        return {}
+
+    sorted_ids = sorted(id_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    kept = sorted_ids[:max_ids]
+    return {raw_id: new_id for new_id, (raw_id, _cnt) in enumerate(kept, start=1)}
+
+
+def rerank_buffered_stream(
+    buffer: list[_BufferedFrame],
+    rerank_map: dict[int, int],
+) -> list[_BufferedFrame]:
+    """Return a copy of ``buffer`` with each detection's ``raw_id`` re-mapped.
+
+    Detections whose raw id is not in ``rerank_map`` are dropped (default
+    behavior of "Rerank global pós-track"). ``annotated_frame`` is left as-is;
+    callers that need a clean re-render should re-plot from the re-mapped
+    detections.
+    """
+    if not rerank_map:
+        return buffer
+
+    out: list[_BufferedFrame] = []
+    for bf in buffer:
+        kept: list[dict] = []
+        for det in bf.detections:
+            new_id = rerank_map.get(det["raw_id"])
+            if new_id is None:
+                continue
+            kept.append({**det, "raw_id": new_id})
+        out.append(
+            _BufferedFrame(
+                frame_idx=bf.frame_idx,
+                detections=kept,
+                annotated_frame=bf.annotated_frame,
+                raw_result=bf.raw_result,
+            )
+        )
+    return out
+
+
+def rewrite_ultralytics_boxes_id(
+    result: Any,
+    rerank_map: dict[int, int],
+) -> Any:
+    """In-place rewrite of ``result.boxes.id`` using ``rerank_map``.
+
+    Detections whose raw id is not in the map have their box **removed** from
+    ``result.boxes`` so the rendered annotated frame does not show ghost
+    tracks. Returns the (possibly modified) result.
+    """
+    if not rerank_map:
+        return result
+    boxes = getattr(result, "boxes", None)
+    if boxes is None or boxes.id is None:
+        return result
+    import torch as _torch
+
+    raw_ids = boxes.id.int().cpu().tolist()
+    new_ids: list[int] = []
+    keep_mask: list[bool] = []
+    for rid in raw_ids:
+        mapped = rerank_map.get(int(rid))
+        if mapped is None:
+            keep_mask.append(False)
+            new_ids.append(-1)
+        else:
+            keep_mask.append(True)
+            new_ids.append(mapped)
+    if all(keep_mask):
+        boxes.id = _torch.as_tensor(new_ids, dtype=_torch.int32, device=boxes.id.device)
+        return result
+    keep_idx = [i for i, k in enumerate(keep_mask) if k]
+    if not keep_idx:
+        boxes.id = _torch.zeros((0, 0), dtype=_torch.int32, device=boxes.id.device)
+        return result
+    keep_tensor = _torch.as_tensor(keep_idx, dtype=_torch.long, device=boxes.id.device)
+    boxes.xyxy = boxes.xyxy[keep_tensor]
+    if boxes.conf is not None:
+        boxes.conf = boxes.conf[keep_tensor]
+    if boxes.cls is not None:
+        boxes.cls = boxes.cls[keep_tensor]
+    boxes.id = _torch.as_tensor(
+        [new_ids[i] for i in keep_idx], dtype=_torch.int32, device=boxes.id.device
+    )
+    return result
 
 
 def create_combined_detection_csv(output_dir):
@@ -4414,6 +4651,47 @@ def run_yolov26track():
                 else:
                     raise e
 
+            # Post-tracking ID cap (global rerank).
+            # When max_tracked_ids > 0, we materialize the full stream once,
+            # rank raw IDs by persistence (frames observed), keep the top-N
+            # and re-map them to stable sequential ids 1..N. All other
+            # detections are dropped from the annotated frame and from the
+            # per-id CSVs.
+            max_tracked_ids = int(config.get("max_tracked_ids", 0) or 0)
+            if max_tracked_ids > 0:
+                print(
+                    f"ID cap: buffering tracking stream to keep top-{max_tracked_ids} "
+                    f"most persistent IDs..."
+                )
+                _buffer, _id_counts = buffer_tracking_stream(results, save_annotated=False)
+                rerank_map = build_id_rerank_map(_id_counts, max_tracked_ids)
+                if rerank_map:
+                    kept_ids = sorted(rerank_map.values())
+                    print(
+                        f"ID cap: kept raw ids {sorted(rerank_map.keys())} "
+                        f"-> new ids {kept_ids} (frames per id: "
+                        f"{[(rid, _id_counts[rid]) for rid in sorted(rerank_map.keys())]})"
+                    )
+                else:
+                    print("ID cap: no IDs to keep (empty stream).")
+                # Rewrite boxes.id in place on each buffered result, then
+                # re-emit as a fresh stream the loop can iterate over.
+                for _bf in _buffer:
+                    if _bf.raw_result is not None:
+                        rewrite_ultralytics_boxes_id(_bf.raw_result, rerank_map)
+                results = (_bf.raw_result for _bf in _buffer)
+                # Disable the per-label seq re-numbering: rerank already
+                # produced clean global ids 1..N, so the existing
+                # ``label_to_raw2seq`` pass-through is an identity mapping.
+                label_to_raw2seq = {"__rerank__": rerank_map}
+                label_to_next = {"__rerank__": 1}
+                # Helper closure: when the rerank map is active, return the
+                # new id directly instead of consulting ``label_to_raw2seq``.
+                _rerank_active = True
+                del _buffer, _id_counts
+            else:
+                _rerank_active = False
+
             frame_idx = 0
             seg_writer: cv2.VideoWriter | None = None
             all_writer: cv2.VideoWriter | None = None
@@ -4501,10 +4779,14 @@ def run_yolov26track():
                     if label not in label_to_raw2seq:
                         label_to_raw2seq[label] = {}
                         label_to_next[label] = 1
-                    if raw_id not in label_to_raw2seq[label]:
-                        label_to_raw2seq[label][raw_id] = label_to_next[label]
-                        label_to_next[label] += 1
-                    tracker_id = label_to_raw2seq[label][raw_id]
+                    if _rerank_active:
+                        # Rerank already produced global ids 1..N; keep them as-is.
+                        tracker_id = raw_id
+                    else:
+                        if raw_id not in label_to_raw2seq[label]:
+                            label_to_raw2seq[label][raw_id] = label_to_next[label]
+                            label_to_next[label] += 1
+                        tracker_id = label_to_raw2seq[label][raw_id]
 
                     color = get_color_for_id(tracker_id)
 

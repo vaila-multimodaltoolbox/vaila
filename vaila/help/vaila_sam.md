@@ -4,7 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.44
+- **Version:** 0.3.47
+- **Updated:** 06 June 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -141,6 +142,61 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run
 - If SAM3 exhausts its in-process OOM retry ladder (frame caps and long-edge caps), the per-video subprocess exits and the **coordinator process** automatically runs the **chunked divide-and-conquer** fallback from a clean GPU state.
 - Chunked fallback uses a conservative chunk size (≤48 frames) and clamps chunk subprocesses to `--max-frames=<chunk_size>` and `--max-input-long-edge=1280` to avoid repeating the same OOM ladder inside each chunk.
 
+### Common errors (CLI **and** GUI)
+
+| Symptom in the terminal / GUI log | Most likely cause | Fix |
+|-----------------------------------|-------------------|-----|
+| `ERROR on <video>: subprocess killed by SIGKILL (exit=-9). Likely the Linux OOM killer (SYSTEM RAM, not VRAM)…` | **Host RAM** OOM killer — the temporal subsample plus SAM3's CPU-side video tensor demanded more system RAM than the OS could provide. Long broadcast clips (16 k+ frames @ 1080 p) easily peak >30 GiB on host RAM. | Lower `--max-frames` (try 256 → 128 → 64), add `--max-input-long-edge 1280`, close other heavy apps, and re-run. Confirm with `dmesg \| tail` / `journalctl -k -n 50`. |
+| `subprocess killed by SIGSEGV (exit=-11)` | Native segfault inside CUDA / Torch / OpenCV. | Check `nvidia-smi`, update GPU driver, rerun with `--dry-run` / `--preflight` to isolate. |
+| `subprocess killed by SIGABRT (exit=-6)` | C++ abort from Torch / Triton destructor running on the wrong thread. | Reproduce from the CLI (no Tk), attach `gdb` to the child if persistent. |
+| `subprocess killed by SIGBUS (exit=-7)` | Corrupted video file or broken mmap. | Re-encode the input with `ffmpeg -i in.mp4 -c:v libx264 -c:a copy out.mp4`. |
+| `CUDA out of memory` (Python exception, GPU side) | VRAM OOM during inference. | Lower `--max-input-long-edge` (1280/960), or add `--frame-by-frame` (loses temporal tracking). |
+| `subprocess exit=7 (EXIT_NEEDS_CHUNKING)` | Per-video child exhausted its OOM ladder. | The coordinator already retries with the **chunked divide-and-conquer** fallback automatically — wait for the next log line. |
+| GUI dialog opens but the SAM run fails immediately with `[GUI] subprocess exited with code 0` and `Failed (1/1)` | Worker subprocess died **after** SAM3 model load but before producing any output (frequently SIGKILL by the OOM killer). The GUI now also prints `[GUI] subprocess killed by SIGKILL …` and the path to the full log. | Same as `SIGKILL` row above — lower `--max-frames`. |
+
+> **Pro tip:** the CLI now prints a runtime banner with **GPU VRAM** and **Host RAM** numbers at startup; combine that with `--print-examples` to pick the right `--max-frames` for your machine.
+
+### CLI cheat sheet (copy/paste recipes)
+
+```bash
+# Print this sheet again at any time (no GPU work):
+uv run vaila/vaila_sam.py --print-examples
+
+# Open this help page in the default browser:
+uv run vaila/vaila_sam.py --open-help
+
+# Dry-run / smoke (effective settings, detected weights, OOM ladder):
+uv run vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person --dry-run
+
+# Short clip, 24 GiB GPU (auto everything):
+uv run vaila/vaila_sam.py -i path/to/video.mp4 -o out_parent/ -t player
+
+# Long broadcast clip (~15 k+ frames) — avoid host-RAM OOM (exit=-9):
+uv run vaila/vaila_sam.py \
+  -i path/to/long_match.mp4 -o out_parent/ -t player \
+  --max-frames 128 --max-input-long-edge 1280 --postprocess-points all
+
+# Batch over a directory of clips (subprocess-per-video isolation is ON by default):
+uv run vaila/vaila_sam.py \
+  -i path/to/clips_dir/ -o out_parent/ -t player \
+  --max-frames 256 --postprocess-points foot
+
+# Low-VRAM GPU (e.g. 8 GiB) — never OOM, no temporal tracking:
+uv run vaila/vaila_sam.py \
+  -i path/to/video.mp4 -o out_parent/ -t person \
+  --frame-by-frame --no-png --no-overlay
+
+# Use a specific checkpoint or the SAM 3.1 Multiplex weights:
+uv run vaila/vaila_sam.py \
+  -i video.mp4 -o out_parent/ -t player \
+  -w vaila/models/sam3/sam3.1_multiplex.pt
+
+# Preflight scan only (writes SAM3_PREFLIGHT.csv):
+uv run vaila/vaila_sam.py -i path/to/clips_dir/ --preflight -o out_parent/
+```
+
+> Equivalent GUI: launch `vaila.py`, **Frame B → Video AI tools → SAM (Segment Anything)**, fill **Input**, **Output**, **Text prompt**, **Max frames** and click **Run**. The progress window now mirrors every CLI banner and prints the same exit-code diagnosis.
+
 ### Companion AI seed for the soccer field
 
 Pair SAM 3 with the bundled YOLO-pose detector for the 32 pitch
@@ -172,20 +228,23 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 | `--weights` / `--checkpoint` | `-w` | Path | auto | SAM 3 checkpoint (file or folder); auto-detected if omitted |
 | `--no-overlay` | — | flag | — | Skip overlay MP4 output |
 | `--no-png` | — | flag | — | Skip mask PNG output |
+| `--tracks-only` | — | flag | — | Fast profile: skip overlay, PNG masks and contours; write bbox/centroid CSV only |
+| `--delete-mask-png` | — | flag | — | Delete bulky `masks/` and `sam_masks_manifest.csv` after exports finish |
+| `--stabilize-ids` | — | flag | — | Rewrite SAM object IDs by short-term IoU/centroid continuity after export; helps chunk ID resets |
 | `--[no-]overlay-rich` | — | bool | `true` | Enrich overlay with bbox/ID/score/contours (on top of the colored masks) |
 | `--[no-]draw-contour` | — | bool | `true` | Draw mask contours on the overlay |
 | `--[no-]draw-box` | — | bool | `true` | Draw bounding boxes on the overlay |
 | `--[no-]draw-id` | — | bool | `true` | Draw `#obj_id score` label on the overlay |
 | `--draw-centroid` | — | flag | — | Draw the mask centroid on the overlay |
 | `--[no-]save-contours` | — | bool | `true` | Write `sam_contours.json` (polygons per frame/object in pixels) |
-| `--[no-]save-tracks-csv` | — | bool | `true` | Write `sam_tracks.csv` (long format, bbox in pixels + area + polygon stats) |
+| `--[no-]save-tracks-csv` | — | bool | `true` | Write `sam_tracks.csv` (long format, bbox, area, polygon stats and mask centroid `cx_px/cy_px`) |
 | `--contours-format` | — | choice | `json` | `json` or `jsonl` (`sam_contours.json` vs `sam_contours.jsonl`) |
 | `--contours-gzip` | — | flag | — | Write gzipped contours output (`.json.gz` / `.jsonl.gz`) |
 | `--frame-by-frame` | — | flag | — | Process each frame individually (prevents OOM but loses temporal tracking) |
 | `--max-frames` | — | int | auto | Max frames passed to SAM3 on GPU (VRAM cap); `0` = full clip |
 | `--max-input-long-edge` | — | int | auto | Max long edge (px) for frames fed to SAM3; `0` = native resolution; try `1280`/`960` for 4K+ or OOM |
 | `--dry-run` / `--smoke` | — | flag | — | Print effective settings/caps/checkpoint and exit (does not run SAM3) |
-| `--postprocess-points` | — | choice | `none` | Build per-video vailá-format pixel CSVs (`sam_points.csv`) after batch: `foot` (bottom-center of bbox, best for soccer-field homography + `rec2d`), `center` (bbox center), `mask` (mask PNG centroid), `all` (foot + extra cx/cy/mx/my columns), `none` |
+| `--postprocess-points` | — | choice | `none` | Build per-video vailá-format pixel CSVs (`sam_points.csv`) after batch: `foot` (bottom-center of bbox, best for soccer-field homography + `rec2d`), `center` (bbox center), `mask` (mask centroid from PNG or `sam_tracks.csv`), `all` (foot + extra cx/cy/mx/my columns), `none` |
 | `--download-weights` | — | flag | — | Download facebook/sam3 into `vaila/models/sam3/` |
 | `--open-help` | — | flag | — | Open help page in the browser |
 | `--no-isolate-batch` | — | flag | — | Disable subprocess-per-video isolation (not recommended; can cause cascading OOM after a failure). Default behavior is isolation-enabled for both single-video and batch runs. |
@@ -250,7 +309,7 @@ output/
       <video_stem>_sam_overlay.mp4   (unless --no-overlay)
       sam_frames_meta.csv
       sam_contours.json             (unless --no-save-contours)
-      sam_tracks.csv                (unless --no-save-tracks-csv)
+      sam_tracks.csv                (bbox + centroid, unless --no-save-tracks-csv)
       sam_masks_manifest.csv        (written when masks are saved; index of mask PNGs)
       README_sam.txt
 ```
@@ -775,6 +834,7 @@ Place a short MP4 at `tests/SAM/test1000.mp4` for smoke tests (see `tests/SAM/RE
 
 ## Version History
 
+- **v0.3.47 (05 June 2026):** Subprocess-exit diagnostics (SIGKILL/SIGSEGV/SIGABRT/SIGBUS/EXIT_NEEDS_CHUNKING shown by name + actionable hint) in both CLI batch and GUI poller; runtime banner at startup (VRAM, host RAM, effective config, video queue); host-RAM heads-up for long broadcast clips; new `--print-examples` CLI flag + argparse epilog with copy/paste recipes; updated help with **Common errors** matrix.
 - **v0.3.43 (07 May 2026):** Fix GUI batch output directory — GUI now passes exact `processed_sam_...` folder to subprocess so no empty sibling folder is created.
 - **v0.0.4 (April 2026):** `fifa dlt-export` / `vaila.fifa_to_dlt` — FIFA `cameras/*.npz` → per-frame `.dlt2d` / `.dlt3d` for `rec2d.py` / `rec3d.py` (moving broadcast camera); help section **Full broadcast pipeline**; GUI button **FIFA cams→DLT**
 - **v0.0.3 (17 April 2026):** `SamVideoDialog` Help button + editable prompt combobox (14 presets); `SamBatchProgress` Help button; `fifa bootstrap` subcommand (symlinks + sequences + pitch_points); `bin/setup_fifa_sam3d.sh/ps1` for SAM 3D Body cloning and gated weights download; `vaila/fifa_starter_lib/` vendorised (MIT); companion **Soccer-field DLT2D calibration** in `vaila/soccerfield_calib.py`
@@ -800,7 +860,7 @@ the script and will ship in a follow-up.
 
 ---
 
-Generated: May 15, 2026
+Generated: June 05, 2026
 Part of vailá - Multimodal Toolbox
 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 Contact: paulosantiago@usp.br
