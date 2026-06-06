@@ -3,8 +3,9 @@
 Reads the artifacts written by :mod:`vaila.vaila_sam` for each video:
 
     {sam_dir}/sam_frames_meta.csv      # wide table with normalized bbox + prob per obj_id
-    {sam_dir}/masks/frame_{f:06d}_obj_{oid}.png   # binary mask in original pixel space
-    {sam_dir}/{stem}_sam_overlay.mp4   # used only to read frame width/height
+    {sam_dir}/masks/frame_{f:06d}_obj_{oid}.png   # optional binary mask in original pixel space
+    {sam_dir}/sam_tracks.csv           # optional bbox + mask centroid in pixels
+    {sam_dir}/{stem}_sam_overlay.mp4   # optional, used only to read frame width/height
 
 and writes:
 
@@ -22,7 +23,11 @@ and writes:
 
 The bbox in ``sam_frames_meta.csv`` is normalized (fractions of W and H, see
 :mod:`vaila.vaila_sam`). All exported coordinates are in **pixels** at the
-original video resolution.
+original video resolution. In fast SAM runs without mask PNGs, mask-centroid
+columns are read from ``sam_tracks.csv`` when available.
+
+Update Date: 06 June 2026
+Version: 0.3.47
 
 Author: Paulo R. P. Santiago - vaila project
 Created: 19 April 2026
@@ -59,6 +64,8 @@ class SamRunArtifacts:
     meta_csv: Path
     masks_dir: Path
     overlay_mp4: Path | None
+    tracks_csv: Path | None
+    readme_txt: Path | None
     stem: str
 
 
@@ -78,6 +85,8 @@ def discover_sam_run(sam_dir: Path) -> SamRunArtifacts:
 
     overlays = sorted(sam_dir.glob("*_sam_overlay.mp4"))
     overlay = overlays[0] if overlays else None
+    tracks = sam_dir / "sam_tracks.csv"
+    readme = sam_dir / "README_sam.txt"
     stem = overlay.stem.removesuffix("_sam_overlay") if overlay else sam_dir.name
 
     return SamRunArtifacts(
@@ -85,8 +94,67 @@ def discover_sam_run(sam_dir: Path) -> SamRunArtifacts:
         meta_csv=meta,
         masks_dir=masks_dir,
         overlay_mp4=overlay,
+        tracks_csv=tracks if tracks.is_file() else None,
+        readme_txt=readme if readme.is_file() else None,
         stem=stem,
     )
+
+
+def _read_readme_value(path: Path | None, key: str) -> str | None:
+    if path is None or not path.is_file():
+        return None
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            k, sep, v = line.partition("=")
+            if sep and k.strip() == key:
+                return v.strip()
+    except OSError:
+        return None
+    return None
+
+
+def _frame_size_from_video(path_text: str | None) -> tuple[int, int] | None:
+    if not path_text:
+        return None
+    p = Path(path_text)
+    if not p.is_file():
+        return None
+    cap = cv2.VideoCapture(str(p))
+    try:
+        if not cap.isOpened():
+            return None
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    finally:
+        cap.release()
+    if w > 0 and h > 0:
+        return w, h
+    return None
+
+
+def _read_track_centroids(art: SamRunArtifacts) -> dict[tuple[int, int], tuple[float, float]]:
+    """Return {(frame, obj_id): (cx_px, cy_px)} from sam_tracks.csv when present."""
+    if art.tracks_csv is None or not art.tracks_csv.is_file():
+        return {}
+    try:
+        df = pd.read_csv(art.tracks_csv)
+    except Exception:
+        return {}
+    required = {"frame", "obj_id", "cx_px", "cy_px"}
+    if not required.issubset(df.columns):
+        return {}
+    out: dict[tuple[int, int], tuple[float, float]] = {}
+    for row in df.itertuples(index=False):
+        try:
+            frame = int(row.frame)
+            oid = int(row.obj_id)
+            cx = float(row.cx_px)
+            cy = float(row.cy_px)
+        except Exception:
+            continue
+        if np.isfinite([cx, cy]).all():
+            out[(frame, oid)] = (cx, cy)
+    return out
 
 
 def read_sam_meta(sam_dir: Path) -> tuple[pd.DataFrame, list[int]]:
@@ -125,9 +193,13 @@ def frame_size(art: SamRunArtifacts) -> tuple[int, int]:
         if m is not None:
             return int(m.shape[1]), int(m.shape[0])
 
+    size = _frame_size_from_video(_read_readme_value(art.readme_txt, "source_original"))
+    if size is not None:
+        return size
+
     raise RuntimeError(
         f"Cannot determine frame size for SAM run at {art.sam_dir}: "
-        "no readable overlay MP4 nor mask PNG."
+        "no readable overlay MP4, mask PNG, nor source_original video in README_sam.txt."
     )
 
 
@@ -217,6 +289,7 @@ def extract_points_from_sam_run(
 
     rows: list[str] = []
     id_stats: dict[int, dict[str, int]] = {oid: {"n": 0, "first": -1, "last": -1} for oid in oids}
+    track_centroids = _read_track_centroids(art) if mode in ("mask", "all") else {}
 
     for _, row in df.iterrows():
         frame_idx = int(row["frame"])
@@ -248,7 +321,10 @@ def extract_points_from_sam_run(
 
             if present and mode in ("mask", "all"):
                 png = art.masks_dir / f"frame_{frame_idx:06d}_obj_{oid}.png"
-                mask_c = mask_centroid(png) if png.is_file() else None
+                if png.is_file():
+                    mask_c = mask_centroid(png)
+                else:
+                    mask_c = track_centroids.get((frame_idx, oid))
             else:
                 mask_c = None
 
