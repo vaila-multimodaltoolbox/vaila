@@ -42,7 +42,14 @@ uv sync                        # default: universal CPU pyproject
 uv sync --extra gpu            # only after CUDA template is active (see AGENTS.md Hybrid)
 uv sync --extra sam            # SAM 3 optional stack; video still needs NVIDIA CUDA
 uv sync --frozen               # CI mode: fail if lock is outdated
-# Switch templates: bin/use_pyproject_universal_cpu.sh | use_pyproject_linux_cuda.sh (etc.)
+
+# RECOMMENDED: unified interactive bootstrap (auto-detects OS + NVIDIA + extras)
+bash bin/setup_pyproject.sh                                      # Linux / macOS / WSL / Git Bash
+pwsh bin/setup_pyproject.ps1                                     # Windows PowerShell
+bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+# Legacy per-platform wrappers (thin shims):
+# bin/use_pyproject_universal_cpu.sh | use_pyproject_linux_cuda.sh | use_pyproject_macos_metal.sh
+# bin/use_pyproject_universal_cpu.ps1 | use_pyproject_win_cuda.ps1
 
 # Manage dependencies
 uv add <package>               # Add runtime dependency

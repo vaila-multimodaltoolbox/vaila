@@ -48,6 +48,19 @@ uv export --format requirements-txt > requirements.txt
 > machines must switch to the universal template before `uv sync`
 > (`bash bin/use_pyproject_universal_cpu.sh`).
 
+> **Recommended (v0.3.45):** use the unified interactive bootstrap which
+> auto-detects OS + NVIDIA and runs `uv lock` + `uv sync`:
+>
+> ```bash
+> bash bin/setup_pyproject.sh                                     # Linux / macOS / WSL
+> pwsh bin/setup_pyproject.ps1                                    # Windows
+> bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+> ```
+>
+> Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`,
+> `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`.
+> The legacy `bin/use_pyproject_*.sh/.ps1` helpers are kept as thin wrappers.
+
 ---
 
 ## ruff Commands
@@ -280,9 +293,10 @@ Copy the correct template **before** `uv python pin` / `uv venv`:
 
 The checked-in `pyproject.toml` mirrors **`pyproject_linux_cuda12.toml`**
 (version `0.3.44`): PyTorch resolves from the explicit `pytorch-cu128` index.
-Use the `bin/use_pyproject_*.sh` / `.ps1` helpers to switch templates; each
-helper runs `uv lock` and regenerates `uv.lock` for the chosen hardware
-matrix.
+Use `bin/setup_pyproject.sh` (Linux/macOS/WSL) or `bin/setup_pyproject.ps1`
+(Windows) — the unified interactive bootstrap that detects OS + NVIDIA,
+copies the right template, runs `uv lock` and regenerates `uv.lock`. Legacy
+`bin/use_pyproject_*.sh/.ps1` are now thin wrappers around the bootstrap.
 
 ---
 

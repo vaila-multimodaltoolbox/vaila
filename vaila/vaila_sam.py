@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 15 May 2026
-Version: 0.3.44
+Update Date: 06 June 2026
+Version: 0.3.47
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -22,6 +22,15 @@ VRAM / resolution:
     - Long clips: ``--max-frames`` / ``SAM3_MAX_FRAMES`` / GUI field; **empty = auto** from free VRAM (cap scales up on 16–24 GiB GPUs). **0 = full clip** (every frame to SAM — best overlay sync; needs enough VRAM). Heavy temporal subsample reuses masks across many original frames → motion looks “late”; fix is more frames or **0**.
     - Large frames (e.g. 4K): ``--max-input-long-edge`` / ``SAM3_MAX_INPUT_LONG_EDGE`` (defaults depend on GPU size).
     - Heavy OOM: ``--frame-by-frame`` (CUDA VRAM tradeoff only; not a CPU mode).
+
+Host RAM (not VRAM) — **subprocess exit=-9 / SIGKILL**:
+    - Long broadcast clips (e.g. 16k+ frames at 1080p) decoded into the temp
+      ``_sam3_subsample_input.mp4`` and then loaded by SAM3 can easily peak
+      well over **30 GiB of system RAM**. On smaller hosts the Linux OOM
+      killer terminates the SAM subprocess with ``SIGKILL`` (exit code
+      ``-9``). This is **not a VRAM problem** — lowering ``--max-frames`` to
+      e.g. ``256`` / ``128`` fixes it. See ``--print-examples`` and
+      ``vaila/help/vaila_sam.md`` § *Common errors*.
 
 Usage (quick):
     uv run vaila/vaila_sam.py                      # Tkinter: pick video, prompt, output folder
@@ -64,11 +73,13 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import csv
 import datetime as dt
 import importlib.util
 import json
 import os
 import platform
+import shutil
 import sys
 import threading
 import time
@@ -219,6 +230,98 @@ def _print_sam3_install_instructions() -> None:
     print(msg, file=sys.stderr)
 
 
+SAM3_CLI_EXAMPLES = """\
+SAM 3 — copy/paste CLI recipes
+==============================
+
+# 0. Open help / setup page in your default browser
+uv run vaila/vaila_sam.py --open-help
+
+# 1. Print these examples again (no GPU work)
+uv run vaila/vaila_sam.py --print-examples
+
+# 2. Download gated facebook/sam3 weights into vaila/models/sam3/
+#    (needs 'uv run hf auth login' or HF_TOKEN with access to the model)
+uv run vaila/vaila_sam.py --download-weights
+
+# 3. Smoke / dry-run on a single video (prints effective settings, OOM ladder)
+uv run vaila/vaila_sam.py \\
+  -i tests/SAM/test1000.mp4 \\
+  -o tests/SAM/ \\
+  -t person \\
+  --dry-run
+
+# 4. Single video — short clip on a 24 GiB GPU (auto everything)
+uv run vaila/vaila_sam.py \\
+  -i path/to/video.mp4 \\
+  -o path/to/output_parent/ \\
+  -t player
+
+# 5. LONG broadcast clip (~15k+ frames). The default auto cap can demand more
+#    HOST RAM than the OS has, which results in subprocess exit=-9 (SIGKILL by
+#    the Linux OOM killer). Force a conservative cap:
+uv run vaila/vaila_sam.py \\
+  -i path/to/long_match.mp4 \\
+  -o path/to/output_parent/ \\
+  -t player \\
+  --max-frames 128 \\
+  --max-input-long-edge 1280 \\
+  --postprocess-points all
+
+# 6. Batch over a directory of clips (subprocess-per-video isolation is ON by
+#    default; each clip starts with a clean CUDA context).
+uv run vaila/vaila_sam.py \\
+  -i path/to/clips_dir/ \\
+  -o path/to/output_parent/ \\
+  -t player \\
+  --max-frames 256 \\
+  --postprocess-points foot
+
+# 7. Low-VRAM GPU (e.g. RTX 5050 8 GiB) — disable temporal tracking but never OOM
+uv run vaila/vaila_sam.py \\
+  -i path/to/video.mp4 \\
+  -o path/to/output_parent/ \\
+  -t person \\
+  --frame-by-frame --no-png --no-overlay
+
+# 8. Use a specific checkpoint or SAM 3.1 multiplex weights
+uv run vaila/vaila_sam.py \\
+  -i path/to/video.mp4 \\
+  -o path/to/output_parent/ \\
+  -t player \\
+  -w vaila/models/sam3/sam3.1_multiplex.pt
+
+# 9. Preflight scan only — write SAM3_PREFLIGHT.csv (resolution/fps/duration)
+uv run vaila/vaila_sam.py --input path/to/clips_dir/ --preflight \\
+  --output path/to/output_parent/
+
+# 10. FIFA Skeletal Tracking Light subcommand (needs --extra fifa, CUDA, SAM 3D Body weights)
+uv run vaila/vaila_sam.py fifa --help
+uv run vaila/vaila_sam.py fifa bootstrap  --videos-dir DIR --data-root data/
+uv run vaila/vaila_sam.py fifa prepare    --video-source DIR --data-root data/
+uv run vaila/vaila_sam.py fifa boxes      --data-root data/ --sequences data/sequences_val.txt
+uv run vaila/vaila_sam.py fifa preprocess --data-root data/ --sequences data/sequences_val.txt
+uv run vaila/vaila_sam.py fifa baseline   --data-root data/ --sequences data/sequences_val.txt \\
+  --output outputs/submission_val.npz --export-camera
+uv run vaila/vaila_sam.py fifa dlt-export --cameras-dir data/cameras --output-dir outputs/dlt
+uv run vaila/vaila_sam.py fifa pack       --submission-full outputs/submission_val.npz \\
+  --data-root data/ --output-dir outputs/ --split val
+
+Tips
+----
+* GUI (no args)              : uv run vaila/vaila_sam.py
+* Common error 'subprocess exit=-9' = host-RAM OOM killer; lower --max-frames.
+* Common error 'CUDA out of memory' = drop --max-input-long-edge to 1280/960
+  or add --frame-by-frame as a last resort.
+* Full reference            : vaila/help/vaila_sam.md  (or --open-help).
+"""
+
+
+def _print_sam3_cli_examples() -> None:
+    """Dump the copy-paste cheat sheet to stdout (used by ``--print-examples``)."""
+    print(SAM3_CLI_EXAMPLES, flush=True)
+
+
 # Exit codes for the per-video isolated subprocess (see batch CLI loop).
 # When the per-video subprocess exhausts its OOM retry ladder while running
 # under ``--no-chunked-fallback``, it exits with this code so the *coordinator*
@@ -227,6 +330,68 @@ def _print_sam3_install_instructions() -> None:
 # coordinator separate from the OOM victim is the only way to free the ~13 GiB
 # of orphan SAM3 C++ workspace tensors that no in-process gc can reach.
 EXIT_NEEDS_CHUNKING = 7
+
+
+# Common POSIX signals returned as negative exit codes by ``subprocess.call`` /
+# ``Popen.poll`` on Unix; the GUI / CLI batch monitors translate them to human
+# advice (host-RAM OOM, segfault, manual kill, …) instead of just printing the
+# raw ``subprocess exit=-9``.
+_SUBPROCESS_SIGNAL_HINTS: dict[int, tuple[str, str]] = {
+    -9: (
+        "SIGKILL",
+        "Likely the Linux OOM killer (SYSTEM RAM, not VRAM). "
+        "Long broadcast clips load the temporal subsample into host RAM and "
+        "easily peak above 20-30 GiB. Lower --max-frames (try 256, 128 or 64) "
+        "and/or --max-input-long-edge 1280, or close other heavy apps. "
+        "Run `dmesg | tail` or `journalctl -k -n 50` to confirm an oom-kill event.",
+    ),
+    -11: (
+        "SIGSEGV",
+        "Native segmentation fault in CUDA / Torch / OpenCV. Verify the GPU "
+        "driver, try `nvidia-smi`, and rerun with --dry-run / --preflight to "
+        "isolate the failing video.",
+    ),
+    -15: (
+        "SIGTERM",
+        "External termination (you, the OS, or a parent process killed the run).",
+    ),
+    -2: ("SIGINT", "Cancelled by user (Ctrl+C)."),
+    -6: (
+        "SIGABRT",
+        "C++ abort — usually a torch / Triton / CUDA destructor running on the "
+        "wrong thread. If reproducible, attach gdb to the child or run from "
+        "the CLI to get the traceback.",
+    ),
+    -7: (
+        "SIGBUS",
+        "Bus error — typically corrupted video file or a broken shared mmap. "
+        "Try re-encoding the input video with ffmpeg.",
+    ),
+}
+
+
+def _format_subprocess_exit_diagnosis(rc: int) -> str:
+    """Human-readable explanation for a subprocess return code.
+
+    Negative codes on Unix correspond to terminating signals (``rc == -signum``);
+    positive codes are application exit codes (we recognise ``EXIT_NEEDS_CHUNKING``).
+    """
+    if rc == 0:
+        return "subprocess exited cleanly (exit=0)."
+    if rc == EXIT_NEEDS_CHUNKING:
+        return (
+            f"subprocess exit={rc} (EXIT_NEEDS_CHUNKING) — per-video child "
+            "exhausted its OOM retry ladder; coordinator will run the chunked "
+            "divide-and-conquer fallback from a clean GPU."
+        )
+    if rc < 0:
+        name, hint = _SUBPROCESS_SIGNAL_HINTS.get(
+            rc,
+            (f"SIG{-rc}", "Process killed by signal; check `dmesg` / system logs."),
+        )
+        return f"subprocess killed by {name} (exit={rc}). {hint}"
+    return f"subprocess exit={rc} — non-zero exit, see logs above for the SAM3 traceback."
+
 
 _SAM3_CUDA_REQUIRED_BODY = (
     "SAM 3 video in vailá requires an NVIDIA GPU with CUDA "
@@ -553,6 +718,185 @@ def _sam3_vram_profile() -> dict[str, float] | None:
         "headroom_gib": headroom_gib,
         "per_frame_mib": per_frame_mib,
     }
+
+
+def _host_ram_profile() -> dict[str, float] | None:
+    """Best-effort host (system) RAM probe; falls back to ``/proc/meminfo``."""
+    try:
+        import psutil  # ty: ignore[unresolved-import]
+
+        vm = psutil.virtual_memory()
+        return {
+            "total_gib": float(vm.total) / (1024**3),
+            "available_gib": float(vm.available) / (1024**3),
+            "used_pct": float(vm.percent),
+        }
+    except Exception:
+        pass
+    try:
+        info: dict[str, int] = {}
+        with open("/proc/meminfo", encoding="ascii") as fh:
+            for line in fh:
+                key, _, rest = line.partition(":")
+                value = rest.strip().split()
+                if len(value) >= 1 and value[0].isdigit():
+                    info[key.strip()] = int(value[0])  # KiB
+        total = info.get("MemTotal", 0) / (1024**2)
+        avail = info.get("MemAvailable", info.get("MemFree", 0)) / (1024**2)
+        if total <= 0:
+            return None
+        used_pct = 100.0 * (1.0 - (avail / total))
+        return {
+            "total_gib": float(total),
+            "available_gib": float(avail),
+            "used_pct": float(used_pct),
+        }
+    except Exception:
+        return None
+
+
+def _estimate_subsample_host_ram_gib(
+    n_frames: int, width: int, height: int, channels: int = 3
+) -> float:
+    """Worst-case host-RAM estimate for the SAM3 video tensor (CPU side).
+
+    SAM3 / OpenCV typically materialises one **decoded** uint8 frame buffer per
+    session frame on the CPU before the tensor is moved to GPU. ``float32``
+    backbone work then transiently doubles peak usage. We report **2.5x** the
+    raw uint8 byte count as a single-number budget that users can compare with
+    available RAM before launching long clips.
+    """
+    raw_bytes = max(0, int(n_frames)) * max(1, int(width)) * max(1, int(height)) * int(channels)
+    return 2.5 * (raw_bytes / (1024**3))
+
+
+def _warn_host_ram_for_videos(video_files: list[Path], *, max_input_frames: int | None) -> None:
+    """Warn (without aborting) when the planned SAM3 session may exceed host RAM.
+
+    Subprocess exit=-9 (SIGKILL) on long broadcast clips is almost always the
+    Linux OOM killer firing on **host RAM**, not VRAM. We estimate the worst
+    case from each clip's resolution and the resolved temporal cap, and print
+    a clear hint with the recommended ``--max-frames`` reduction.
+    """
+    if not video_files:
+        return
+    host = _host_ram_profile()
+    if host is None:
+        return
+    available_gib = float(host["available_gib"])
+    resolved_cap = _resolve_max_input_frames_value(max_input_frames)
+    cap_label = "FULL CLIP (no temporal cap)" if resolved_cap <= 0 else f"max_frames={resolved_cap}"
+
+    warned = False
+    for vf in video_files:
+        try:
+            meta = _video_basic_meta(vf)
+        except Exception:
+            continue
+        n_total = int(meta.get("frames", meta.get("frame_count", 0)) or 0)
+        w = int(meta.get("width", 0) or 0)
+        h = int(meta.get("height", 0) or 0)
+        if n_total <= 0 or w <= 0 or h <= 0:
+            continue
+        n_session = n_total if resolved_cap <= 0 else min(n_total, resolved_cap)
+        ram_est = _estimate_subsample_host_ram_gib(n_session, w, h)
+        if ram_est > 0.6 * available_gib or ram_est > 20.0:
+            if not warned:
+                print("", flush=True)
+                print("[SAM3 RAM] Host-RAM heads-up (helps avoid SIGKILL / exit=-9):", flush=True)
+                warned = True
+            print(
+                f"  - {vf.name}: {w}x{h} x {n_session} frames "
+                f"(of {n_total}) -> est. peak ~{ram_est:.1f} GiB host RAM "
+                f"vs {available_gib:.1f} GiB available  [{cap_label}]",
+                flush=True,
+            )
+    if warned:
+        suggested_cap = max(64, min(512, resolved_cap // 4)) if resolved_cap > 256 else 128
+        print(
+            "  Tip: long broadcast clips often need --max-frames "
+            f"{suggested_cap} (or 64/32) and --max-input-long-edge 1280 "
+            "to fit in host RAM. exit=-9 means the OS killed the SAM "
+            "subprocess (oom-killer), not a CUDA error.",
+            flush=True,
+        )
+        print("", flush=True)
+
+
+def _format_runtime_banner(args: argparse.Namespace, video_files: list[Path] | None) -> str:
+    """Compact, copy-paste-friendly summary printed at the start of every CLI run."""
+    lines: list[str] = []
+    lines.append("=" * 62)
+    lines.append("vailá SAM 3 — runtime configuration")
+    lines.append("=" * 62)
+    lines.append(f"  input          : {args.input}")
+    lines.append(f"  output (parent): {args.output}")
+    if getattr(args, "output_base", None):
+        lines.append(f"  output_base    : {args.output_base}")
+    if getattr(args, "chunk_size", None):
+        lines.append(f"  chunk_size     : {args.chunk_size}")
+    lines.append(f"  text prompt    : {args.text!r}    (frame index={args.frame})")
+    mf_disp = (
+        "auto"
+        if args.max_frames is None
+        else ("FULL CLIP" if args.max_frames == 0 else str(args.max_frames))
+    )
+    le_disp = (
+        "auto"
+        if args.max_input_long_edge is None
+        else ("native" if args.max_input_long_edge == 0 else f"{args.max_input_long_edge}px")
+    )
+    lines.append(f"  max_frames     : {mf_disp}   max_input_long_edge: {le_disp}")
+    lines.append(
+        f"  overlay_rich={bool(args.overlay_rich)}  draw(contour={bool(args.draw_contour)},"
+        f" box={bool(args.draw_box)}, id={bool(args.draw_id)}, centroid={bool(args.draw_centroid)})"
+    )
+    lines.append(
+        f"  save_overlay_mp4={not args.no_overlay}  save_mask_png={not args.no_png}"
+        f"  save_contours={bool(args.save_contours)}  save_tracks_csv={bool(args.save_tracks_csv)}"
+    )
+    lines.append(
+        f"  contours_format={args.contours_format}  contours_gzip={bool(args.contours_gzip)}"
+        f"  postprocess_points={args.postprocess_points}"
+    )
+    if getattr(args, "tracks_only", False) or getattr(args, "delete_mask_png", False) or getattr(args, "stabilize_ids", False):
+        lines.append(
+            f"  tracks_only={bool(getattr(args, 'tracks_only', False))}  "
+            f"delete_mask_png={bool(getattr(args, 'delete_mask_png', False))}  "
+            f"stabilize_ids={bool(getattr(args, 'stabilize_ids', False))}"
+        )
+    if args.checkpoint is not None:
+        lines.append(f"  checkpoint     : {args.checkpoint}")
+
+    vram = _sam3_vram_profile()
+    if vram is not None:
+        lines.append(
+            f"  GPU VRAM       : {vram['total_gib']:.1f} GiB total / "
+            f"{vram['free_gib']:.1f} GiB free  (safe auto frames={int(vram['safe_frames'])})"
+        )
+    else:
+        lines.append("  GPU VRAM       : CUDA unavailable (SAM3 video will refuse to run).")
+
+    host = _host_ram_profile()
+    if host is not None:
+        lines.append(
+            f"  Host RAM       : {host['total_gib']:.1f} GiB total / "
+            f"{host['available_gib']:.1f} GiB available ({host['used_pct']:.0f}% used)"
+        )
+    else:
+        lines.append("  Host RAM       : (psutil + /proc/meminfo unavailable)")
+
+    if video_files:
+        lines.append(f"  videos queued  : {len(video_files)}")
+        if len(video_files) <= 5:
+            for vf in video_files:
+                lines.append(f"      - {vf.name}")
+        else:
+            for vf in video_files[:3]:
+                lines.append(f"      - {vf.name}")
+            lines.append(f"      … (+{len(video_files) - 3} more)")
+    lines.append("=" * 62)
+    return "\n".join(lines)
 
 
 def _release_sam3_gpu_memory() -> None:
@@ -1298,6 +1642,8 @@ def _merge_chunk_outputs(
                     continue
                 with contextlib.suppress(ValueError):
                     parts[0] = str(start_frame + int(parts[0]))
+                    if len(parts) == 10:
+                        parts.extend(["", ""])
                     merged_tracks_rows.append(",".join(parts))
 
         # Merge mask manifest if present (rewrite path to the merged masks dir)
@@ -1385,7 +1731,7 @@ def _merge_chunk_outputs(
             )
         )
         (final_output_dir / "sam_tracks.csv").write_text(
-            "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts\n"
+            "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts,cx_px,cy_px\n"
             + "\n".join(merged_tracks_rows)
             + "\n",
             encoding="utf-8",
@@ -1482,6 +1828,8 @@ def _process_video_chunked(
     draw_centroid: bool = False,
     save_contours: bool = True,
     save_tracks_csv: bool = True,
+    delete_mask_png: bool = False,
+    stabilize_ids: bool = False,
     contours_format: str = "json",
     contours_gzip: bool = False,
     chunk_size: int | None = None,
@@ -1622,6 +1970,10 @@ def _process_video_chunked(
             cmd += ["--contours-format", str(contours_format)]
         if contours_gzip:
             cmd.append("--contours-gzip")
+        if delete_mask_png:
+            cmd.append("--delete-mask-png")
+        if stabilize_ids:
+            cmd.append("--stabilize-ids")
 
         env = os.environ.copy()
         env.setdefault("TQDM_DISABLE", "1")
@@ -1664,6 +2016,10 @@ def _process_video_chunked(
             save_overlay_mp4=save_overlay_mp4,
             save_mask_png=save_mask_png,
         )
+        if stabilize_ids:
+            _stabilize_sam_track_ids(output_dir, width=_video_basic_meta(video_file).get("width", 0), height=_video_basic_meta(video_file).get("height", 0))
+        if delete_mask_png:
+            _delete_mask_artifacts(output_dir)
     except Exception as e:
         _log(f"  [SAM3-CHUNK] Merge error: {e}")
         return False, f"Chunk merge failed: {e}"
@@ -1862,6 +2218,170 @@ def _composite_masks_bgr(
     return out_u8
 
 
+def _mask_centroid_xy(mask: np.ndarray) -> tuple[float, float] | None:
+    """Centroid of a boolean/uint8 mask in pixel coordinates, or None for empty masks."""
+    ys, xs = np.nonzero(mask)
+    if xs.size <= 0:
+        return None
+    return float(xs.mean()), float(ys.mean())
+
+
+def _delete_mask_artifacts(output_dir: Path) -> None:
+    """Remove bulky per-object mask PNG outputs after CSV exports are complete."""
+    masks_dir = output_dir / "masks"
+    if masks_dir.exists():
+        shutil.rmtree(str(masks_dir), ignore_errors=True)
+    with contextlib.suppress(OSError):
+        (output_dir / "sam_masks_manifest.csv").unlink(missing_ok=True)
+
+
+
+def _bbox_iou_xywh(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ax2, ay2 = ax + aw, ay + ah
+    bx2, by2 = bx + bw, by + bh
+    ix1, iy1 = max(ax, bx), max(ay, by)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+    inter = iw * ih
+    union = max(0.0, aw * ah) + max(0.0, bw * bh) - inter
+    return inter / union if union > 0.0 else 0.0
+
+
+def _stabilize_sam_track_ids(
+    output_dir: Path,
+    *,
+    width: int,
+    height: int,
+    max_gap: int = 12,
+    max_centroid_dist_px: float = 180.0,
+) -> None:
+    """Rewrite SAM object IDs by short-term bbox/centroid continuity.
+
+    This is not appearance ReID. It is a conservative geometric linker that helps
+    when SAM/chunk IDs reset or flicker for nearby frames.
+    """
+    tracks_path = output_dir / "sam_tracks.csv"
+    if not tracks_path.is_file() or width <= 0 or height <= 0:
+        return
+    with tracks_path.open(encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        rows = [dict(row) for row in reader]
+        fieldnames = list(reader.fieldnames or [])
+    if not rows:
+        return
+    needed = {"frame", "obj_id", "x_px", "y_px", "w_px", "h_px"}
+    if not needed.issubset(fieldnames):
+        return
+    if "cx_px" not in fieldnames:
+        fieldnames.append("cx_px")
+    if "cy_px" not in fieldnames:
+        fieldnames.append("cy_px")
+
+    by_frame: dict[int, list[dict[str, str]]] = {}
+    for row in rows:
+        with contextlib.suppress(Exception):
+            by_frame.setdefault(int(float(row["frame"])), []).append(row)
+
+    active: dict[int, dict[str, Any]] = {}
+    next_tid = 0
+    links: list[str] = ["frame,old_obj_id,obj_id"]
+    remapped_rows: list[dict[str, str]] = []
+
+    for frame in sorted(by_frame):
+        detections = by_frame[frame]
+        assigned_tracks: set[int] = set()
+        for row in detections:
+            try:
+                x = float(row["x_px"])
+                y = float(row["y_px"])
+                w_box = float(row["w_px"])
+                h_box = float(row["h_px"])
+            except Exception:
+                continue
+            cx = float(row.get("cx_px") or x + w_box * 0.5)
+            cy = float(row.get("cy_px") or y + h_box * 0.5)
+            bbox = (x, y, w_box, h_box)
+            best_tid: int | None = None
+            best_cost = float("inf")
+            for tid, tr in active.items():
+                if tid in assigned_tracks:
+                    continue
+                gap = frame - int(tr["frame"])
+                if gap < 0 or gap > max_gap:
+                    continue
+                prev_cx, prev_cy = tr["centroid"]
+                dist = float(np.hypot(cx - prev_cx, cy - prev_cy))
+                iou = _bbox_iou_xywh(bbox, tr["bbox"])
+                if dist > max_centroid_dist_px and iou < 0.05:
+                    continue
+                cost = (dist / max_centroid_dist_px) + (1.0 - iou)
+                if cost < best_cost:
+                    best_cost = cost
+                    best_tid = tid
+            if best_tid is None:
+                best_tid = next_tid
+                next_tid += 1
+            assigned_tracks.add(best_tid)
+            old_oid = row.get("obj_id", "")
+            row["obj_id"] = str(best_tid)
+            row["cx_px"] = f"{cx:.3f}"
+            row["cy_px"] = f"{cy:.3f}"
+            active[best_tid] = {"frame": frame, "bbox": bbox, "centroid": (cx, cy)}
+            links.append(f"{frame},{old_oid},{best_tid}")
+            remapped_rows.append(row)
+
+    remapped_rows.sort(key=lambda r: (int(float(r["frame"])), int(float(r["obj_id"]))))
+    with tracks_path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(remapped_rows)
+    (output_dir / "sam_reid_links.csv").write_text("\n".join(links) + "\n", encoding="utf-8")
+
+    meta_frames: dict[int, dict[int, tuple[float, float, float, float, float]]] = {}
+    stable_ids: set[int] = set()
+    for row in remapped_rows:
+        try:
+            frame = int(float(row["frame"]))
+            oid = int(float(row["obj_id"]))
+            x = float(row["x_px"]) / float(width)
+            y = float(row["y_px"]) / float(height)
+            w_box = float(row["w_px"]) / float(width)
+            h_box = float(row["h_px"]) / float(height)
+            score = float(row.get("score") or "nan")
+        except Exception:
+            continue
+        stable_ids.add(oid)
+        meta_frames.setdefault(frame, {})[oid] = (x, y, w_box, h_box, score)
+
+    existing_meta = output_dir / "sam_frames_meta.csv"
+    frame_numbers = sorted(meta_frames)
+    if existing_meta.is_file():
+        with contextlib.suppress(Exception), existing_meta.open(encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                frame_numbers.append(int(float(row["frame"])))
+    frame_numbers = sorted(set(frame_numbers))
+    ids_sorted = sorted(stable_ids)
+    header = ["frame"]
+    for oid in ids_sorted:
+        header.extend([f"box_x_{oid}", f"box_y_{oid}", f"box_w_{oid}", f"box_h_{oid}", f"prob_{oid}"])
+    lines = [",".join(header)]
+    for frame in frame_numbers:
+        parts = [str(frame)]
+        frame_map = meta_frames.get(frame, {})
+        for oid in ids_sorted:
+            vals = frame_map.get(oid)
+            if vals is None:
+                parts.extend(["", "", "", "", ""])
+            else:
+                x, y, w_box, h_box, score = vals
+                parts.extend([f"{x:.6f}", f"{y:.6f}", f"{w_box:.6f}", f"{h_box:.6f}", f"{score:.6f}"])
+        lines.append(",".join(parts))
+    existing_meta.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"[SAM3-ReID] geometric ID stabilization: {next_tid} track(s) -> sam_reid_links.csv")
+
+
 def _sam3_cuda_oom_help(
     *,
     max_input_frames: int,
@@ -1959,6 +2479,8 @@ def run_sam3_on_video(
     draw_centroid: bool = False,
     save_contours: bool = True,
     save_tracks_csv: bool = True,
+    delete_mask_png: bool = False,
+    stabilize_ids: bool = False,
     contours_format: str = "json",
     contours_gzip: bool = False,
 ) -> None:
@@ -2290,8 +2812,10 @@ def run_sam3_on_video(
         # If we subsampled for VRAM, SAM3 only produced masks for the session clip frames.
         # For the final overlay, we repeat the closest available session mask between those
         # sampled frames so the output MP4 matches the original timeline.
-        cap = cv2.VideoCapture(vp_orig)
-        nframes_to_write = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap = cv2.VideoCapture(vp_orig) if writer is not None else None
+        nframes_to_write = int(nframes)
+        if cap is not None:
+            nframes_to_write = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or int(nframes)
 
         sess_to_orig = np.asarray(sess_to_orig, dtype=np.int64)
         if sess_to_orig.size <= 0:
@@ -2309,10 +2833,8 @@ def run_sam3_on_video(
                 f"[SAM3] Overlay: {nframes_to_write} frames, "
                 f"{n_unique_masks} frames with mask outputs."
             )
-        print(
-            f"[SAM3] Rendering overlay + exporting CSV/JSON "
-            f"({nframes_to_write} frames at {w}x{h})..."
-        )
+        export_label = "rendering overlay + exporting CSV/JSON" if writer is not None else "exporting CSV/JSON"
+        print(f"[SAM3] {export_label} ({nframes_to_write} frames at {w}x{h})...")
         sys.stdout.flush()
 
         _overlay_log_interval = max(1, nframes_to_write // 20)  # ~5% increments
@@ -2325,15 +2847,17 @@ def run_sam3_on_video(
 
         frame_idx = 0
         while frame_idx < nframes_to_write:
-            ok, bgr = cap.read()
-            if not ok or bgr is None:
-                frame_idx += 1
-                continue
+            bgr = None
+            if cap is not None:
+                ok, bgr = cap.read()
+                if not ok or bgr is None:
+                    frame_idx += 1
+                    continue
 
             if frame_idx % _overlay_log_interval == 0 or frame_idx == nframes_to_write - 1:
                 pct = 100.0 * (frame_idx + 1) / nframes_to_write
                 print(
-                    f"  overlay: frame {frame_idx + 1}/{nframes_to_write} ({pct:.0f}%)", flush=True
+                    f"  export: frame {frame_idx + 1}/{nframes_to_write} ({pct:.0f}%)", flush=True
                 )
 
             sess_idx = _nearest_sess_idx_for_orig_frame(frame_idx, sess_to_orig)
@@ -2381,12 +2905,12 @@ def run_sam3_on_video(
             boxes = last_boxes
             boxes_px = last_boxes_px
             if masks is None or oids is None or getattr(masks, "size", 0) == 0:
-                if writer is not None:
+                if writer is not None and bgr is not None:
                     writer.write(bgr)
                 frame_idx += 1
                 continue
 
-            if writer is not None:
+            if writer is not None and bgr is not None:
                 if overlay_rich:
                     comp = _composite_masks_bgr(
                         bgr,
@@ -2421,6 +2945,10 @@ def run_sam3_on_video(
                 if save_contours or save_tracks_csv:
                     m = masks[i]
                     area_px = int(m.sum())
+                    centroid = _mask_centroid_xy(m)
+                    cx_px = cy_px = float("nan")
+                    if centroid is not None:
+                        cx_px, cy_px = centroid
                     polys: list[list[list[int]]] = []
                     if save_contours and draw_contour:
                         mu8 = (m.astype(np.uint8)) * 255
@@ -2440,7 +2968,7 @@ def run_sam3_on_video(
 
                     mask_rel = (
                         f"masks/frame_{frame_idx:06d}_obj_{oid}.png"
-                        if save_mask_png and int(sess_to_orig[sess_idx]) == int(frame_idx)
+                        if save_mask_png and not delete_mask_png and int(sess_to_orig[sess_idx]) == int(frame_idx)
                         else ""
                     )
                     if mask_rel:
@@ -2450,7 +2978,7 @@ def run_sam3_on_video(
                         largest_pts = max((len(p) for p in polys), default=0)
                         tracks_rows.append(
                             f"{frame_idx},{oid},{bx_px:.3f},{by_px:.3f},{bw_px:.3f},{bh_px:.3f},"
-                            f"{pr:.6f},{area_px},{n_polys},{largest_pts}"
+                            f"{pr:.6f},{area_px},{n_polys},{largest_pts},{cx_px:.3f},{cy_px:.3f}"
                         )
                     if save_contours:
                         objects_for_json.append(
@@ -2492,7 +3020,8 @@ def run_sam3_on_video(
 
             frame_idx += 1
 
-        cap.release()
+        if cap is not None:
+            cap.release()
         if writer is not None:
             writer.release()
 
@@ -2505,7 +3034,7 @@ def run_sam3_on_video(
         if save_tracks_csv:
             tracks_path = output_dir / "sam_tracks.csv"
             tracks_path.write_text(
-                "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts\n"
+                "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts,cx_px,cy_px\n"
                 + "\n".join(tracks_rows)
                 + ("\n" if tracks_rows else ""),
                 encoding="utf-8",
@@ -2517,6 +3046,12 @@ def run_sam3_on_video(
                 "\n".join(mask_manifest_rows) + "\n",
                 encoding="utf-8",
             )
+
+        if stabilize_ids:
+            _stabilize_sam_track_ids(output_dir, width=w, height=h)
+
+        if delete_mask_png:
+            _delete_mask_artifacts(output_dir)
 
         if save_contours:
             payload = {
@@ -2705,9 +3240,12 @@ def _process_one_video_with_oom_retry(
     draw_centroid: bool = False,
     save_contours: bool = True,
     save_tracks_csv: bool = True,
+    delete_mask_png: bool = False,
+    stabilize_ids: bool = False,
     contours_format: str = "json",
     contours_gzip: bool = False,
     no_chunked_fallback: bool = False,
+    chunk_size: int | None = None,
     log: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Run one video; on CUDA OOM retry with descending frame caps
@@ -2765,6 +3303,8 @@ def _process_one_video_with_oom_retry(
                 draw_centroid=draw_centroid,
                 save_contours=save_contours,
                 save_tracks_csv=save_tracks_csv,
+                delete_mask_png=delete_mask_png,
+                stabilize_ids=stabilize_ids,
                 contours_format=contours_format,
                 contours_gzip=contours_gzip,
             )
@@ -2832,6 +3372,8 @@ def _process_one_video_with_oom_retry(
                 draw_centroid=draw_centroid,
                 save_contours=save_contours,
                 save_tracks_csv=save_tracks_csv,
+                delete_mask_png=delete_mask_png,
+                stabilize_ids=stabilize_ids,
                 contours_format=contours_format,
                 contours_gzip=contours_gzip,
             )
@@ -2885,8 +3427,11 @@ def _process_one_video_with_oom_retry(
         draw_centroid=draw_centroid,
         save_contours=save_contours,
         save_tracks_csv=save_tracks_csv,
+        delete_mask_png=delete_mask_png,
+        stabilize_ids=stabilize_ids,
         contours_format=contours_format,
         contours_gzip=contours_gzip,
+        chunk_size=chunk_size,
         log=log,
     )
     if ok:
@@ -3666,12 +4211,18 @@ def _start_sam_batch_subprocess(
         state["finished"] = True
         with contextlib.suppress(Exception):
             log_handle.close()
+        diagnosis = _format_subprocess_exit_diagnosis(rc)
         with contextlib.suppress(tk.TclError):
             progress._append_log(f"[GUI] subprocess exited with code {rc}")
+            if rc != 0:
+                # Wrap long advice lines for readability inside the Tk log widget.
+                for ln in diagnosis.splitlines():
+                    progress._append_log(f"[GUI] {ln}")
+                progress._append_log("[GUI] Full subprocess stdout/stderr captured at: " + log_path)
         if rc != 0:
             failed_list = state["failed"]
             if isinstance(failed_list, list) and not failed_list:
-                failed_list.append(f"subprocess exit code {rc}")
+                failed_list.append(diagnosis)
         with contextlib.suppress(tk.TclError):
             progress._finish()
         try:
@@ -3861,7 +4412,14 @@ def main() -> None:
         main_fifa_cli(sys.argv[2:])
         return
 
-    parser = argparse.ArgumentParser(description="SAM 3 video segmentation (vailá)")
+    parser = argparse.ArgumentParser(
+        description=(
+            "SAM 3 video segmentation (vailá). Pass --print-examples for a "
+            "copy-paste recipe sheet, --open-help for the full HTML reference."
+        ),
+        epilog=SAM3_CLI_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "-i",
         "--input",
@@ -3888,6 +4446,21 @@ def main() -> None:
     parser.add_argument("-f", "--frame", type=int, default=0, help="Frame index for prompt")
     parser.add_argument("--no-overlay", action="store_true", help="Skip overlay MP4")
     parser.add_argument("--no-png", action="store_true", help="Skip mask PNGs")
+    parser.add_argument(
+        "--tracks-only",
+        action="store_true",
+        help="Fast export profile: skip overlay MP4, mask PNGs and contours; write bbox/centroid CSV only.",
+    )
+    parser.add_argument(
+        "--delete-mask-png",
+        action="store_true",
+        help="Delete masks/ and sam_masks_manifest.csv after CSV/JSON exports finish.",
+    )
+    parser.add_argument(
+        "--stabilize-ids",
+        action="store_true",
+        help="Rewrite SAM IDs with geometric continuity (IoU/centroid) after export; helps chunk ID resets.",
+    )
     parser.add_argument(
         "--overlay-rich",
         dest="overlay_rich",
@@ -3973,6 +4546,13 @@ def main() -> None:
         help="Max frames passed to SAM3 on GPU (VRAM). Overrides SAM3_MAX_FRAMES; 0 = full clip.",
     )
     parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Chunk size for divide-and-conquer fallback. Larger values reduce model reloads but can OOM.",
+    )
+    parser.add_argument(
         "--max-input-long-edge",
         type=int,
         default=None,
@@ -4007,6 +4587,11 @@ def main() -> None:
         help="Open SAM 3 setup instructions (HTML) in the default browser and exit.",
     )
     parser.add_argument(
+        "--print-examples",
+        action="store_true",
+        help="Print copy-paste CLI recipes (single video, batch, OOM tips, FIFA) and exit.",
+    )
+    parser.add_argument(
         "--postprocess-points",
         choices=["none", "foot", "center", "mask", "all"],
         default="none",
@@ -4037,8 +4622,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.tracks_only:
+        args.no_overlay = True
+        args.no_png = True
+        args.overlay_rich = False
+        args.draw_contour = False
+        args.save_contours = False
+        args.save_tracks_csv = True
+
     if args.open_help:
         open_sam3_install_help_in_browser()
+        return
+
+    if args.print_examples:
+        _print_sam3_cli_examples()
         return
 
     if args.download_weights:
@@ -4071,6 +4668,8 @@ def main() -> None:
             raise SystemExit(2)
         out_dir = args.video_output_dir.resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
+        print(_format_runtime_banner(args, [single]), flush=True)
+        _warn_host_ram_for_videos([single], max_input_frames=args.max_frames)
         if args.dry_run:
             report = _sam3_dry_run_report(
                 single,
@@ -4113,9 +4712,12 @@ def main() -> None:
             draw_centroid=bool(args.draw_centroid),
             save_contours=bool(args.save_contours),
             save_tracks_csv=bool(args.save_tracks_csv),
+            delete_mask_png=bool(args.delete_mask_png),
+            stabilize_ids=bool(args.stabilize_ids),
             contours_format=str(args.contours_format),
             contours_gzip=bool(args.contours_gzip),
             no_chunked_fallback=bool(args.no_chunked_fallback),
+            chunk_size=args.chunk_size,
         )
         if ok:
             print(f"  Done: {out_dir}")
@@ -4153,9 +4755,13 @@ def main() -> None:
             output_base = args.output / f"processed_sam_{ts}"
         output_base.mkdir(parents=True, exist_ok=True)
 
+        print(_format_runtime_banner(args, video_files), flush=True)
         print(f"\nSAM 3 batch — {len(video_files)} video(s) to process")
         for idx, vf in enumerate(video_files, 1):
             print(f"  {idx}. {vf.name}")
+        # Host-RAM heads-up for very long broadcast clips — the most common cause
+        # of subprocess exit=-9 (SIGKILL by the Linux OOM killer).
+        _warn_host_ram_for_videos(video_files, max_input_frames=args.max_frames)
 
         if args.dry_run:
             report = _sam3_dry_run_report(
@@ -4260,6 +4866,12 @@ def main() -> None:
                     cmd_local += ["--contours-format", str(args.contours_format)]
                 if args.contours_gzip:
                     cmd_local.append("--contours-gzip")
+                if args.tracks_only:
+                    cmd_local.append("--tracks-only")
+                if args.delete_mask_png:
+                    cmd_local.append("--delete-mask-png")
+                if args.stabilize_ids:
+                    cmd_local.append("--stabilize-ids")
                 return cmd_local
 
             for idx, video_file in enumerate(video_files, 1):
@@ -4314,8 +4926,11 @@ def main() -> None:
                         draw_centroid=bool(args.draw_centroid),
                         save_contours=bool(args.save_contours),
                         save_tracks_csv=bool(args.save_tracks_csv),
+                        delete_mask_png=bool(args.delete_mask_png),
+                        stabilize_ids=bool(args.stabilize_ids),
                         contours_format=str(args.contours_format),
                         contours_gzip=bool(args.contours_gzip),
+                        chunk_size=args.chunk_size,
                     )
                     if chunk_ok:
                         print(f"  Done (chunked): {out_dir} — {chunk_msg}")
@@ -4324,7 +4939,7 @@ def main() -> None:
                         print(f"  ERROR on {video_file.name}: {err_msg}")
                         failed_cli.append(f"{video_file.name}: {err_msg}")
                 else:
-                    err_msg = f"subprocess exit={rc}"
+                    err_msg = _format_subprocess_exit_diagnosis(rc)
                     print(f"  ERROR on {video_file.name}: {err_msg}")
                     failed_cli.append(f"{video_file.name}: {err_msg}")
         else:
@@ -4352,9 +4967,12 @@ def main() -> None:
                     draw_centroid=bool(args.draw_centroid),
                     save_contours=bool(args.save_contours),
                     save_tracks_csv=bool(args.save_tracks_csv),
+                    delete_mask_png=bool(args.delete_mask_png),
+                    stabilize_ids=bool(args.stabilize_ids),
                     contours_format=str(args.contours_format),
                     contours_gzip=bool(args.contours_gzip),
                     no_chunked_fallback=bool(args.no_chunked_fallback),
+                    chunk_size=args.chunk_size,
                 )
                 if ok:
                     print(f"  Done: {out_dir}")

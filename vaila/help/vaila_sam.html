@@ -48,7 +48,8 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.3.44</p>
+            <p><strong>Version:</strong> 0.3.47</p>
+            <p><strong>Updated:</strong> 06 June 2026</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
             <p><strong>CLI Interface:</strong> Yes (<code>-i</code>, <code>-o</code>, <code>-t</code>, ...)</p>
@@ -176,11 +177,98 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run</code></pr
             </ul>
         </div>
 
-# Download weights only
-uv run vaila/vaila_sam.py --download-weights
+        <h3>Common errors (CLI <strong>and</strong> GUI)</h3>
+        <table style="width:100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background:#f6f8fa;">
+              <th style="text-align:left; padding:6px; border:1px solid #ddd;">Symptom</th>
+              <th style="text-align:left; padding:6px; border:1px solid #ddd;">Likely cause</th>
+              <th style="text-align:left; padding:6px; border:1px solid #ddd;">Fix</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:6px; border:1px solid #ddd;"><code>ERROR on &lt;video&gt;: subprocess killed by SIGKILL (exit=-9)</code> — and possibly <code>[GUI] subprocess exited with code 0</code> with <code>Failed (1/1)</code></td>
+              <td style="padding:6px; border:1px solid #ddd;"><strong>Host RAM</strong> OOM killer. Long broadcast clips (16k+ frames @ 1080p) push the temp subsample + SAM3 CPU tensor above the OS RAM budget, and Linux <code>oom-killer</code> terminates the SAM subprocess.</td>
+              <td style="padding:6px; border:1px solid #ddd;">Lower <code>--max-frames</code> (try <code>256 → 128 → 64</code>), add <code>--max-input-long-edge 1280</code>, close other heavy apps, re-run. Confirm via <code>dmesg | tail</code> or <code>journalctl -k -n 50</code>.</td>
+            </tr>
+            <tr>
+              <td style="padding:6px; border:1px solid #ddd;"><code>subprocess killed by SIGSEGV (exit=-11)</code></td>
+              <td style="padding:6px; border:1px solid #ddd;">Native segfault inside CUDA / Torch / OpenCV.</td>
+              <td style="padding:6px; border:1px solid #ddd;">Check <code>nvidia-smi</code>, update the driver, rerun with <code>--dry-run</code> / <code>--preflight</code> to isolate the failing clip.</td>
+            </tr>
+            <tr>
+              <td style="padding:6px; border:1px solid #ddd;"><code>subprocess killed by SIGABRT (exit=-6)</code></td>
+              <td style="padding:6px; border:1px solid #ddd;">C++ abort, usually a Torch/Triton destructor on the wrong thread.</td>
+              <td style="padding:6px; border:1px solid #ddd;">Reproduce from the CLI (no Tk). The GUI already runs SAM in a subprocess to limit this class of failure.</td>
+            </tr>
+            <tr>
+              <td style="padding:6px; border:1px solid #ddd;"><code>subprocess killed by SIGBUS (exit=-7)</code></td>
+              <td style="padding:6px; border:1px solid #ddd;">Corrupted video file or broken mmap.</td>
+              <td style="padding:6px; border:1px solid #ddd;">Re-encode: <code>ffmpeg -i in.mp4 -c:v libx264 -c:a copy out.mp4</code>.</td>
+            </tr>
+            <tr>
+              <td style="padding:6px; border:1px solid #ddd;"><code>CUDA out of memory</code> (Python exception)</td>
+              <td style="padding:6px; border:1px solid #ddd;">VRAM OOM during inference.</td>
+              <td style="padding:6px; border:1px solid #ddd;">Drop <code>--max-input-long-edge</code> to <code>1280</code>/<code>960</code>, or add <code>--frame-by-frame</code> (loses temporal tracking).</td>
+            </tr>
+            <tr>
+              <td style="padding:6px; border:1px solid #ddd;"><code>subprocess exit=7 (EXIT_NEEDS_CHUNKING)</code></td>
+              <td style="padding:6px; border:1px solid #ddd;">Per-video child exhausted its OOM ladder.</td>
+              <td style="padding:6px; border:1px solid #ddd;">The coordinator already runs the chunked divide-and-conquer fallback automatically — wait for the next log line.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="info-box">
+            <strong>Pro tip:</strong> the CLI now prints a runtime banner at startup with the <strong>GPU VRAM</strong>, <strong>Host RAM</strong>, effective settings, and the queue of videos. Combine it with <code>uv run vaila/vaila_sam.py --print-examples</code> to pick the right <code>--max-frames</code> for your machine.
+        </div>
 
-# Open help in browser
-uv run vaila/vaila_sam.py --open-help</code></pre>
+        <h3>CLI cheat sheet (copy/paste recipes)</h3>
+        <pre><code># Print this sheet again at any time (no GPU work):
+uv run vaila/vaila_sam.py --print-examples
+
+# Open this help page in the default browser:
+uv run vaila/vaila_sam.py --open-help
+
+# Dry-run / smoke (effective settings, detected weights, OOM ladder):
+uv run vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person --dry-run
+
+# Short clip, 24 GiB GPU (auto everything):
+uv run vaila/vaila_sam.py -i path/to/video.mp4 -o out_parent/ -t player
+
+# LONG broadcast clip (~15k+ frames) — avoid host-RAM OOM (exit=-9):
+uv run vaila/vaila_sam.py \
+  -i path/to/long_match.mp4 -o out_parent/ -t player \
+  --max-frames 128 --max-input-long-edge 1280 --postprocess-points all
+
+# Batch over a directory (subprocess-per-video isolation is ON by default):
+uv run vaila/vaila_sam.py \
+  -i path/to/clips_dir/ -o out_parent/ -t player \
+  --max-frames 256 --postprocess-points foot
+
+# Low-VRAM GPU (e.g. 8 GiB) — never OOM, no temporal tracking:
+uv run vaila/vaila_sam.py \
+  -i path/to/video.mp4 -o out_parent/ -t person \
+  --frame-by-frame --no-png --no-overlay
+
+# Use a specific checkpoint or SAM 3.1 Multiplex weights:
+uv run vaila/vaila_sam.py \
+  -i video.mp4 -o out_parent/ -t player \
+  -w vaila/models/sam3/sam3.1_multiplex.pt
+
+# Preflight scan only (writes SAM3_PREFLIGHT.csv):
+uv run vaila/vaila_sam.py -i path/to/clips_dir/ --preflight -o out_parent/
+
+# Download weights only:
+uv run vaila/vaila_sam.py --download-weights</code></pre>
+        <div class="info-box">
+            <strong>Equivalent GUI:</strong> launch <code>vaila.py</code>, open
+            <em>Frame B → Video AI tools → SAM (Segment Anything)</em>, fill
+            <strong>Input</strong>, <strong>Output</strong>,
+            <strong>Text prompt</strong>, <strong>Max frames</strong> and
+            click <strong>Run</strong>. The progress window mirrors every
+            terminal banner and prints the same exit-code diagnosis.
+        </div>
 
         <h3>Companion AI seed for the soccer field</h3>
         <p>Pair SAM 3 with the bundled YOLO-pose detector for the 32 pitch keypoints:</p>
@@ -256,6 +344,27 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td>Skip mask PNG output</td>
             </tr>
             <tr>
+                <td><code>--tracks-only</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td>Fast profile: skip overlay, PNG masks and contours; write bbox/centroid CSV only</td>
+            </tr>
+            <tr>
+                <td><code>--delete-mask-png</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td>Delete bulky <code>masks/</code> and <code>sam_masks_manifest.csv</code> after exports finish</td>
+            </tr>
+            <tr>
+                <td><code>--stabilize-ids</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td>Rewrite SAM object IDs by short-term IoU/centroid continuity after export; helps chunk ID resets</td>
+            </tr>
+            <tr>
                 <td><code>--overlay-rich</code> / <code>--no-overlay-rich</code></td>
                 <td>—</td>
                 <td>bool</td>
@@ -302,7 +411,7 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
                 <td>—</td>
                 <td>bool</td>
                 <td><code>true</code></td>
-                <td>Write <code>sam_tracks.csv</code> (long format, bbox in pixels + area + polygon stats)</td>
+                <td>Write <code>sam_tracks.csv</code> (bbox, area, polygon stats and mask centroid <code>cx_px/cy_px</code>)</td>
             </tr>
             <tr>
                 <td><code>--contours-format</code></td>
@@ -451,7 +560,7 @@ uv run vaila/vaila_sam.py --open-help</code></pre>
       &lt;video_stem&gt;_sam_overlay.mp4   (unless --no-overlay)
       sam_frames_meta.csv
       sam_contours.json             (unless --no-save-contours)
-      sam_tracks.csv                (unless --no-save-tracks-csv)
+      sam_tracks.csv                (bbox + centroid, unless --no-save-tracks-csv)
       sam_masks_manifest.csv        (written when masks are saved; index of mask PNGs)
       README_sam.txt</div>
 
@@ -931,8 +1040,18 @@ uv run pytest tests/test_vaila_sam.py -v -k sam3_smoke</code></pre>
             <li><strong>v0.0.1:</strong> Initial SAM 3 video segmentation with text prompts</li>
         </ul>
 
+        <h3>Recent updates</h3>
+        <ul>
+            <li><strong>v0.3.47 (05 June 2026):</strong> Subprocess-exit diagnostics
+            (SIGKILL/SIGSEGV/SIGABRT/SIGBUS/EXIT_NEEDS_CHUNKING shown by name + actionable hint)
+            in both CLI batch and GUI poller; runtime banner at startup (VRAM, host RAM,
+            effective config, video queue); host-RAM heads-up for long broadcast clips;
+            new <code>--print-examples</code> flag + argparse epilog with copy/paste recipes;
+            updated help with <strong>Common errors</strong> matrix and CLI cheat sheet.</li>
+        </ul>
+
         <div class="footer">
-            <p>Generated: May 15, 2026</p>
+            <p>Generated: June 05, 2026</p>
             <p>Part of vailá - Multimodal Toolbox</p>
             <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
             <p>Contact: paulosantiago@usp.br</p>

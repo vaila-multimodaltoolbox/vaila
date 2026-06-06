@@ -12,7 +12,22 @@ This file provides guidance to **AI Agents** (Antigravity, Cursor, Claude Code, 
 
 The repo ships **several `pyproject_*.toml` templates**. The checked-in **`pyproject.toml` matches `pyproject_universal_cpu.toml`**: portable **CPU** PyTorch (laptops / no CUDA). That manifest defines optional extras `dev`, `upscaler`, `sam`, and **`fifa`** (FIFA Skeletal Tracking Light pipeline: vendored `sam_3d_body` + PyTorch Lightning stack) — it does **not** define `gpu` (so `uv sync --extra gpu` fails until you switch templates).
 
-**Workstation with NVIDIA CUDA** — copy the platform template, regenerate the lock, then sync:
+**Recommended for any dev (Linux / macOS / WSL / Windows):** use the unified interactive bootstrap. It auto-detects OS + NVIDIA, suggests the right template + extras, then runs `uv lock` + `uv sync`:
+
+```bash
+# Linux / macOS / WSL / Git Bash
+bash bin/setup_pyproject.sh                           # interactive, auto-detect
+bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+bash bin/setup_pyproject.sh --target=cpu --non-interactive
+
+# Windows PowerShell
+pwsh bin/setup_pyproject.ps1                          # interactive, auto-detect
+pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes
+```
+
+Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`, `--help`. Use `--non-interactive --no-sync` in CI to just swap the template + lock without installing.
+
+**Legacy per-platform switchers** (kept as thin wrappers around `setup_pyproject.sh/.ps1` for backward compatibility):
 
 | Platform | Switch (from repo root) | Then |
 |----------|-------------------------|------|

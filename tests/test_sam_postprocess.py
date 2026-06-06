@@ -207,6 +207,29 @@ class TestExtractPointsFootOnly:
         assert row0["p1_x"] == pytest.approx(cx0, abs=1.0)
         assert row0["p1_y"] == pytest.approx(cy0, abs=1.0)
 
+    def test_mask_mode_uses_tracks_centroid_without_png_masks(self, tmp_path: Path) -> None:
+        src = tmp_path / "source.mp4"
+        _write_overlay_mp4(src, n_frames=2)
+        sam_dir = tmp_path / "tracks_only"
+        sam_dir.mkdir()
+        (sam_dir / "README_sam.txt").write_text(f"source_original={src}\n", encoding="utf-8")
+        (sam_dir / "sam_frames_meta.csv").write_text(
+            "frame,box_x_3,box_y_3,box_w_3,box_h_3,prob_3\n"
+            "0,0.100000,0.200000,0.300000,0.400000,0.900000\n",
+            encoding="utf-8",
+        )
+        (sam_dir / "sam_tracks.csv").write_text(
+            "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts,cx_px,cy_px\n"
+            "0,3,80,120,240,240,0.9,123,0,0,222.5,333.5\n",
+            encoding="utf-8",
+        )
+
+        out = extract_points_from_sam_run(sam_dir, mode="mask")
+        df = pd.read_csv(out)
+        row0 = df.loc[0]
+        assert row0["p1_x"] == pytest.approx(222.5, abs=1e-3)
+        assert row0["p1_y"] == pytest.approx(333.5, abs=1e-3)
+
 
 class TestExtractBatch:
     def test_batch_runs_all_subdirs(self, tmp_path: Path) -> None:
