@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 03 June 2026
+Update Date: 06 June 2026
 Version: 0.3.47
 
 Example of usage:
@@ -72,6 +72,37 @@ from tkinter import Button, Label, Radiobutton, Toplevel, messagebox, simpledial
 
 from PIL import Image, ImageTk
 from rich import print
+
+
+def _sam3_install_instructions() -> str:
+    """SAM 3 setup text shared by terminal output and GUI error dialogs."""
+    return (
+        "SAM 3 is not installed.\n\n"
+        "Install the optional stack, then restart vailá:\n"
+        "  uv sync --extra sam\n\n"
+        "NVIDIA CUDA workstation:\n"
+        "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes\n"
+        "  # or, after CUDA template is active:\n"
+        "  uv sync --extra gpu --extra sam\n\n"
+        "Windows NVIDIA CUDA workstation:\n"
+        "  pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes\n\n"
+        "After install, accept the gated Hugging Face model and authenticate:\n"
+        "  uv run hf auth login\n"
+        "  uv run vaila/vaila_sam.py --download-weights\n\n"
+        "CLI help / examples:\n"
+        "  uv run vaila/vaila_sam.py --open-help\n"
+        "  uv run vaila/vaila_sam.py --print-examples\n\n"
+        "Runtime note: SAM 3 video requires NVIDIA CUDA. CPU and macOS Metal/MPS are "
+        "not supported for this integration.\n"
+        "See also: AGENTS.md - Hybrid CPU vs NVIDIA workstation."
+    )
+
+
+def _print_sam3_install_instructions() -> None:
+    print("\n" + "=" * 72, file=sys.stderr)
+    print(_sam3_install_instructions(), file=sys.stderr)
+    print("=" * 72 + "\n", file=sys.stderr)
+
 
 # Add the vaila directory to Python path to ensure modules can be found
 # This is especially important when vaila is installed and not run from the source directory
@@ -2935,13 +2966,10 @@ class Vaila(tk.Tk):
     def sam_video(self):
         """Runs SAM 3 text-prompt video segmentation (optional extra: sam)."""
         if importlib.util.find_spec("sam3") is None:
+            _print_sam3_install_instructions()
             messagebox.showerror(
                 "SAM 3 not installed",
-                "Install the optional stack, then restart vailá:\n"
-                "  uv sync --extra sam\n\n"
-                "Workstation (NVIDIA CUDA template):\n"
-                "  uv sync --extra gpu --extra sam\n\n"
-                "See AGENTS.md — Hybrid CPU vs NVIDIA workstation.",
+                _sam3_install_instructions(),
                 parent=self,
             )
             return

@@ -4,9 +4,9 @@
 
 - **Category:** Processing
 - **File:** `vaila\reid_markers.py`
-- **Lines:** 2171
-- **Size:** 75597 characters
-- **Version:** 0.1.0
+- **Lines:** 2474
+- **Size:** 90473 characters
+- **Version:** 0.3.47
 - **Author:** Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -17,8 +17,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Date: Current
-Version: 0.1.0
+Update Date: 06 June 2026
+Version: 0.3.47
 Python Version: 3.12.9
 
 Description:
@@ -29,13 +29,14 @@ by getpixelvideo.py. It offers the following functionalities:
 1. Marker merging: Combine markers that represent the same object
 2. Gap filling: Fill gaps where a marker temporarily disappears
 3. Swaps: Fix cases where IDs were swapped in certain frame intervals
+4. Geometric ReID: stabilize marker IDs using 2D distance, velocity direction, and optional homography
 
 ================================================================================
 
 
 ## 🔧 Main Functions
 
-**Total functions found:** 20
+**Total functions found:** 31
 
 - `load_markers_file`
 - `save_markers_file`
@@ -52,17 +53,24 @@ by getpixelvideo.py. It offers the following functionalities:
 - `visualize_markers`
 - `detect_markers_dynamic`
 - `get_marker_coords_dynamic`
+- `load_homography_matrix`
+- `geometric_reid_align_markers`
 - `detect_gaps_dynamic`
 - `visualize_markers_dynamic`
 - `select_columns_dialog`
+- `run_geometric_reid_with_data`
 - `create_gui_menu`
 - `run_reid_swap_auto_with_data`
+- `run_reid_swap_manual_with_data`
+- `advanced_reid_gui_with_data`
+- `fill_gaps_arima`
+- `auto_fill_gaps_arima`
 
 
 
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
+📅 **Generated automatically on:** 06/06/2026
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

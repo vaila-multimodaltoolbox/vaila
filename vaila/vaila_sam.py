@@ -221,13 +221,30 @@ def open_sam3_install_help_in_browser() -> None:
 
 def _print_sam3_install_instructions() -> None:
     msg = (
-        "SAM 3 is not installed.\n"
-        "  Standard:  uv sync --extra sam\n"
-        "  CUDA host: uv sync --extra gpu --extra sam   (after CUDA pyproject template)\n"
-        "Opening setup instructions in your browser…\n"
-        "See also: AGENTS.md (Hybrid CPU vs NVIDIA workstation).\n"
+        "SAM 3 is not installed.\n\n"
+        "Install the optional stack, then restart vailá:\n"
+        "  uv sync --extra sam\n\n"
+        "NVIDIA CUDA workstation:\n"
+        "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes\n"
+        "  # or, after CUDA template is active:\n"
+        "  uv sync --extra gpu --extra sam\n\n"
+        "Windows NVIDIA CUDA workstation:\n"
+        "  pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes\n\n"
+        "After install, accept the gated Hugging Face model and authenticate:\n"
+        "  uv run hf auth login\n"
+        "  uv run vaila/vaila_sam.py --download-weights\n\n"
+        "CLI help / examples:\n"
+        "  uv run vaila/vaila_sam.py --open-help\n"
+        "  uv run vaila/vaila_sam.py --print-examples\n\n"
+        "Runtime note: SAM 3 video requires NVIDIA CUDA. CPU and macOS Metal/MPS are "
+        "not supported for this integration.\n"
+        "A GUI dialog/browser help may also open, but this terminal output is the "
+        "copy/paste install path.\n"
+        "See also: AGENTS.md - Hybrid CPU vs NVIDIA workstation.\n"
     )
+    print("\n" + "=" * 72, file=sys.stderr)
     print(msg, file=sys.stderr)
+    print("=" * 72 + "\n", file=sys.stderr)
 
 
 SAM3_CLI_EXAMPLES = """\
@@ -768,6 +785,98 @@ def _estimate_subsample_host_ram_gib(
     """
     raw_bytes = max(0, int(n_frames)) * max(1, int(width)) * max(1, int(height)) * int(channels)
     return 2.5 * (raw_bytes / (1024**3))
+
+
+def _max_frames_was_explicit(cli_value: int | None) -> bool:
+    """True when user/env explicitly set max frames; false means auto mode."""
+    if cli_value is not None:
+        return True
+    raw = os.environ.get("SAM3_MAX_FRAMES", "").strip()
+    return bool(raw)
+
+
+def _scaled_dims_for_long_edge(width: int, height: int, long_edge_cap: int) -> tuple[int, int]:
+    """Return dimensions after the SAM3 input long-edge cap is applied."""
+    width = max(1, int(width))
+    height = max(1, int(height))
+    if long_edge_cap <= 0:
+        return width, height
+    long_edge = max(width, height)
+    if long_edge <= long_edge_cap:
+        return width, height
+    scale = float(long_edge_cap) / float(long_edge)
+    return max(1, int(round(width * scale))), max(1, int(round(height * scale)))
+
+
+def _host_ram_adjusted_auto_max_frames(
+    video_files: list[Path],
+    *,
+    max_input_frames: int | None,
+    max_input_long_edge: int | None,
+) -> int | None:
+    """Lower auto max_frames when the host-RAM estimate already predicts SIGKILL.
+
+    This only changes true auto mode. CLI ``--max-frames`` and ``SAM3_MAX_FRAMES``
+    remain authoritative because those are explicit user choices.
+    """
+    if not video_files or _max_frames_was_explicit(max_input_frames):
+        return None
+    host = _host_ram_profile()
+    if host is None:
+        return None
+    available_gib = float(host["available_gib"])
+    if available_gib <= 0.0:
+        return None
+
+    current = _resolve_max_input_frames_value(max_input_frames)
+    if current <= 0:
+        return None
+    long_edge_cap = _read_max_input_long_edge(max_input_long_edge)
+
+    suggested = current
+    worst_est = 0.0
+    worst_name = ""
+    for vf in video_files:
+        try:
+            meta = _video_basic_meta(vf)
+        except Exception:
+            continue
+        n_total = int(meta.get("frames", meta.get("frame_count", 0)) or 0)
+        w = int(meta.get("width", 0) or 0)
+        h = int(meta.get("height", 0) or 0)
+        if n_total <= 0 or w <= 0 or h <= 0:
+            continue
+        eff_w, eff_h = _scaled_dims_for_long_edge(w, h, long_edge_cap)
+        n_session = min(n_total, current)
+        ram_est = _estimate_subsample_host_ram_gib(n_session, eff_w, eff_h)
+        if ram_est > worst_est:
+            worst_est = ram_est
+            worst_name = vf.name
+        if ram_est <= 0.80 * available_gib:
+            continue
+
+        per_frame_gib = _estimate_subsample_host_ram_gib(1, eff_w, eff_h)
+        ram_cap = int((0.45 * available_gib) / per_frame_gib) if per_frame_gib > 0 else current
+        conservative_cap = max(32, min(512, current // 4))
+        suggested = min(suggested, max(32, min(conservative_cap, ram_cap)))
+
+    if suggested >= current:
+        return None
+
+    print("", flush=True)
+    print("[SAM3 RAM] Auto max_frames adjusted to avoid host-RAM OOM:", flush=True)
+    print(
+        f"  max_frames auto {current} -> {suggested} "
+        f"(worst estimate: {worst_name or 'video'} ~{worst_est:.1f} GiB "
+        f"vs {available_gib:.1f} GiB available)",
+        flush=True,
+    )
+    print(
+        "  Override if needed with --max-frames N or SAM3_MAX_FRAMES=N. "
+        "Use --max-frames 0 only when host RAM is enough for the full clip.",
+        flush=True,
+    )
+    return suggested
 
 
 def _warn_host_ram_for_videos(video_files: list[Path], *, max_input_frames: int | None) -> None:
@@ -3855,8 +3964,12 @@ class SamBatchProgress(tk.Toplevel):
         self.after(0, self._finish)
 
     def _append_log(self, line: str) -> None:
+        clean = line.rstrip()
+        if clean:
+            sys.stdout.write(clean + "\n")
+            sys.stdout.flush()
         self.log_text.config(state="normal")
-        self.log_text.insert("end", line.rstrip() + "\n")
+        self.log_text.insert("end", clean + "\n")
         self.log_text.see("end")
         self.log_text.config(state="disabled")
 
@@ -4353,7 +4466,14 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
 
     def _on_done(succeeded: int, total: int, failed: list[str], out_base: Path) -> None:
         summary = f"Processed {succeeded}/{total} video(s).\nOutput: {out_base}"
+        print("\nSAM 3 GUI batch finished")
+        print(summary)
         if failed:
+            print(f"Failed ({len(failed)}):")
+            for item in failed[:20]:
+                print(f"  {item}")
+            if len(failed) > 20:
+                print(f"  ...and {len(failed) - 20} more")
             summary += f"\n\nFailed ({len(failed)}):\n" + "\n".join(failed[:20])
             if len(failed) > 20:
                 summary += f"\n…and {len(failed) - 20} more (see FAILED_sam.txt in each folder)."
@@ -4755,6 +4875,14 @@ def main() -> None:
             output_base = args.output / f"processed_sam_{ts}"
         output_base.mkdir(parents=True, exist_ok=True)
 
+        adjusted_max_frames = _host_ram_adjusted_auto_max_frames(
+            video_files,
+            max_input_frames=args.max_frames,
+            max_input_long_edge=args.max_input_long_edge,
+        )
+        if adjusted_max_frames is not None:
+            args.max_frames = adjusted_max_frames
+
         print(_format_runtime_banner(args, video_files), flush=True)
         print(f"\nSAM 3 batch — {len(video_files)} video(s) to process")
         for idx, vf in enumerate(video_files, 1):
@@ -4986,7 +5114,8 @@ def main() -> None:
             for line in failed_cli:
                 print(f"  - {line}")
 
-        if args.postprocess_points != "none":
+        all_failed = len(failed_cli) >= len(video_files)
+        if args.postprocess_points != "none" and not all_failed:
             ob = output_base
             try:
                 from vaila.sam_postprocess import extract_points_for_batch
@@ -4996,6 +5125,13 @@ def main() -> None:
                 print(f"[postprocess] wrote {len(outs)} sam_points.csv file(s).")
             except Exception as exc:
                 print(f"[postprocess] FAILED: {exc}")
+                if not failed_cli:
+                    failed_cli.append(f"postprocess: {exc}")
+        elif args.postprocess_points != "none" and all_failed:
+            print("\n[postprocess] skipped because all SAM 3 video runs failed.")
+
+        if failed_cli:
+            raise SystemExit(3)
         return
 
     run_sam_video()
