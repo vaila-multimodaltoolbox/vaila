@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vaila - vaila_deadlift_imu</title>
+<style>
+body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5;color:#222}.container{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1)}h1{color:#1f2937;border-bottom:3px solid #2563eb;padding-bottom:10px}h2{color:#374151;margin-top:30px}h3{color:#4b5563;margin-top:20px}.module-info,.metrics,.usage{background:#f8fafc;padding:15px;border-left:4px solid #2563eb;margin:15px 0}code{background:#e5e7eb;padding:2px 5px;border-radius:3px}pre{background:#111827;color:#f9fafb;padding:14px;border-radius:6px;overflow:auto}.footer{margin-top:35px;padding-top:15px;border-top:1px solid #ddd;color:#666;font-size:.9em}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #e2e8f0;padding:8px 10px;text-align:left}th{background:#f1f5f9;color:#1f2937}
+</style>
+</head>
+<body><div class="container">
+<h1>vaila_deadlift_imu</h1>
+<div class="module-info">
+<p><strong>Category:</strong> Analysis</p>
+<p><strong>File:</strong> vaila/vaila_deadlift_imu.py</p>
+<p><strong>Version:</strong> 0.3.48</p>
+<p><strong>Updated:</strong> 2026-06-09</p>
+<p><strong>GUI Interface:</strong> Yes - Frame B - <strong>Deadlift IMU</strong> (B6_r7_c1),
+   or via <strong>Deadlift</strong> (B5_r6_c5) &rarr; choose <em>IMU (AHRS)</em> in the data-source dialog</p>
+</div>
+
+<h2>Description</h2>
+<p>Dedicated IMU-only Deadlift / RDL analysis using AHRS sensor fusion. This is the companion to
+<a href="vaila_deadlift.html">vaila_deadlift</a>, specialised for barbell-mounted inertial sensors.
+Unlike the simple "project the raw accelerometer onto the static gravity axis" approach, this
+module tracks the sensor orientation as a quaternion and rotates the accelerometer into the
+<strong>Earth frame</strong> before integrating velocity / displacement. The result is robust to
+arbitrary barbell rotations during the pull.</p>
+
+<p>Two industry-standard AHRS filters are ported directly from the
+<a href="https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/">x-io Technologies</a>
+open-source C reference:</p>
+<ul>
+<li><strong>Madgwick AHRS</strong> &mdash; gradient-descent quaternion update (Madgwick S.O.H., 2010).
+    IMU branch (no magnetometer) and full AHRS branch (with magnetometer) are both implemented.</li>
+<li><strong>Mahony AHRS</strong> &mdash; complementary-style proportional + integral quaternion update
+    (Mahony R., Hamel T., Pflimlin J.-M., 2008). IMU branch.</li>
+</ul>
+
+<p>Reference C code lives under <code>tests/Deadlift/madgwick_algorithm_c/MadgwickAHRS/</code> and
+<code>MahonyAHRS/</code> (C sources from the
+<a href="https://github.com/xioTechnologies/Fusion/tree/main">xioTechnologies/Fusion</a> repository).
+A friendly walk-through is available on the
+<a href="https://medium.com/@k66115704/imu-madgwick-filter-explanation-556fbe7f02e3">Medium Madgwick explanation</a>.</p>
+
+<h2>Pipeline</h2>
+<ol>
+<li>Detect a low-motion <strong>static window</strong> at the start of the recording and estimate
+    gyroscope bias + the gravity vector in the sensor frame.</li>
+<li>Initialise the quaternion from gravity using
+    <code>roll = atan2(ay, az)</code>,
+    <code>pitch = atan2(-ax, sqrt(ay&sup2; + az&sup2;))</code>, <code>yaw = 0</code>.</li>
+<li>Run the AHRS filter sample-by-sample to track orientation as a quaternion
+    <code>q = [w, x, y, z]</code> (sensor frame relative to Earth frame).</li>
+<li>Rotate the raw accelerometer to the Earth frame, subtract the measured static gravity
+    &rarr; <strong>linear acceleration</strong> in Earth coordinates.</li>
+<li>Detect repetitions from the filtered vertical linear acceleration (heavy ~1.2 Hz low-pass for
+    detection, light ~5 Hz low-pass for metrics).</li>
+<li>Per-rep integration with ZUPT-style linear drift correction (velocity and displacement
+    re-zeroed at start/end of each rep).</li>
+<li>Per-rep metrics &mdash; peak / mean velocity, peak / mean power, work, ROM, peak / mean force,
+    impulse &mdash; using either the barbell weight or the total system mass.</li>
+<li>PNG plots and a self-contained HTML report.</li>
+</ol>
+
+<h2>Inputs</h2>
+<p>CSV with at minimum:</p>
+<pre><code>acc_x, acc_y, acc_z, gyr_x, gyr_y, gyr_z</code></pre>
+<p>Optional magnetometer columns <code>mag_x, mag_y, mag_z</code> enable Madgwick's full AHRS branch
+(with heading correction).</p>
+
+<table>
+<tr><th>Column</th><th>Units</th></tr>
+<tr><td><code>acc_x/y/z</code></td><td>m/s&sup2; (gravity included)</td></tr>
+<tr><td><code>gyr_x/y/z</code></td><td>deg/s by default; pass <code>--gyro-units rad</code> for rad/s</td></tr>
+<tr><td><code>mag_x/y/z</code> (optional)</td><td>any consistent unit (normalised internally)</td></tr>
+</table>
+
+<div class="usage">
+<h2>Usage</h2>
+<p><strong>GUI:</strong> run <code>uv run vaila.py</code>, then either click <strong>Deadlift IMU</strong>,
+or click <strong>Deadlift</strong> and choose <em>IMU (barbell accelerometer + gyroscope CSV)</em>
+in the data-source dialog. Select a folder of IMU CSV files.</p>
+<pre><code>uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/deadlift_imu.csv
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --filter mahony --beta 0.05
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --fps 100 --gyro-units rad
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --weight 60 --mass 75
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --reps 14   # pin a known rep count</code></pre>
+<p>Repetitions are detected automatically (concentric vertical-acceleration peaks with
+leading/trailing static-window rejection). When the athlete's true rep count is known,
+<code>--reps N</code> trims any lead-in/trailing partial cycles to exactly <code>N</code>.</p>
+</div>
+
+<h2>Configuration</h2>
+<p>Optional <code>vaila_deadlift_config.toml</code> beside the input CSV or in <code>vaila/</code>:</p>
+<pre><code>[deadlift_context]
+imu_fps = 25.0
+weight_kg = 20.0
+mass_kg = 75.0
+use_total_mass_for_power = true</code></pre>
+
+<p>Optional <code>deadlift_parameters.txt</code> beside the input CSV (auto-loaded):</p>
+<pre><code>weight,20
+real_repetition_count,10</code></pre>
+
+<h2>Outputs</h2>
+<p>Each input CSV produces a sibling folder named
+<code>vaila_deadlift_imu_ahrs_YYYYMMDD_HHMMSS/&lt;input_basename&gt;/</code> containing:</p>
+<ul>
+<li><code>*_imu_ahrs_processed_*.csv</code> &mdash; per-sample time series (quaternion, Euler angles,
+    Earth-frame acc, linear acc, vertical velocity, displacement)</li>
+<li><code>*_imu_ahrs_rep_metrics_*.csv</code> &mdash; per-rep summary (peak / mean velocity, power,
+    work, ROM, peak / mean force, impulse)</li>
+<li><code>*_imu_raw_acc_axes_*.png</code> &mdash; raw <code>acc_x</code> / <code>acc_y</code> /
+    <code>acc_z</code> (gravity included); the dominant (likely vertical) axis is highlighted and the
+    detected repetition peaks are marked</li>
+<li><code>*_imu_ahrs_orientation_*.png</code> &mdash; roll / pitch / yaw, Earth acc components,
+    vertical linear acceleration</li>
+<li><code>*_imu_vel_disp_*.png</code> &mdash; vertical velocity and displacement</li>
+<li><code>*_imu_rep_bars_*.png</code> &mdash; per-rep bar charts</li>
+<li><code>*_imu_velocity_overlay_*.png</code> &mdash; velocity profile overlay</li>
+<li><code>*_imu_ahrs_report.html</code> &mdash; self-contained HTML report</li>
+</ul>
+
+<h2>References</h2>
+<ul>
+<li>Madgwick, S. O. H. (2010). <em>An efficient orientation filter for inertial and inertial/magnetic sensor arrays.</em></li>
+<li>Mahony, R., Hamel, T., &amp; Pflimlin, J.-M. (2008). <em>Nonlinear complementary filters on the special orthogonal group.</em>
+    IEEE Trans. Auto. Control, 53(5), 1203&ndash;1218.</li>
+<li>x-io Technologies open-source AHRS reference C code:
+    <a href="https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/">x-io.co.uk</a></li>
+<li>xioTechnologies/Fusion repository (modern C/C++ port):
+    <a href="https://github.com/xioTechnologies/Fusion/tree/main">github.com/xioTechnologies/Fusion</a></li>
+<li>x-IMU3 user manual &amp; downloads:
+    <a href="https://x-io.co.uk/x-imu3/#downloads">x-io.co.uk/x-imu3</a></li>
+<li>Friendly tutorial on the Madgwick filter:
+    <a href="https://medium.com/@k66115704/imu-madgwick-filter-explanation-556fbe7f02e3">k66115704 on Medium</a></li>
+</ul>
+
+<h2>Publication History &amp; Tribute to Prof. René Jean Brenzikofer</h2>
+<p>The quaternion-based 3D kinematic modeling used by this module traces back to a close academic
+collaboration with Professor <strong>René Jean Brenzikofer</strong> (UNICAMP), which led to the first
+publication of quaternion-based three-dimensional modeling data in the book
+<em>"Modelos Matemáticos nas Ciências Não-Exatas"</em> (Editora Blucher, 2007). Quaternions solve the
+<em>gimbal lock</em> singularity and are the exact basis for the AHRS data-fusion algorithms in IMUs
+used in wearables and player GPS+IMU trackers. This module is dedicated to his memory.</p>
+<ul>
+<li>Tribute &amp; publication history: <a href="https://lnkd.in/eZUcgbNT">https://lnkd.in/eZUcgbNT</a></li>
+<li>Doctoral thesis (Quaternions in Biomechanics): <a href="https://lnkd.in/eSjuDjnw">https://lnkd.in/eSjuDjnw</a></li>
+<li>Reference book (Editora Blucher, 2007), <em>Modelos Matemáticos nas Ciências Não-Exatas</em>:
+    <a href="https://lnkd.in/ejKpHWzK">https://lnkd.in/ejKpHWzK</a></li>
+</ul>
+
+<div class="footer">Generated on 2026-06-09 for vaila 0.3.48.</div>
+</div></body></html>

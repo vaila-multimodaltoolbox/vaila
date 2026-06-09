@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 06 June 2026
-Version: 0.3.47
+Update Date: 09 June 2026
+Version: 0.3.48
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -203,7 +203,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 03.Jun.2026 v0.3.47 (Python 3.12.13)
+vailá - 09.Jun.2026 v0.3.48 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -314,7 +314,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 03.Jun.2026 v0.3.47 (Python 3.12.13)")
+        self.title("vailá - 09.Jun.2026 v0.3.48 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -977,9 +977,9 @@ class Vaila(tk.Tk):
         row7_frame.pack(fill="x")
         vaila_b6_r7_c1 = tk.Button(
             row7_frame,
-            text="vailá",
+            text="Deadlift IMU",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.deadlift_imu_analysis,
         )
         vaila_b6_r7_c2 = tk.Button(
             row7_frame,
@@ -1945,10 +1945,92 @@ class Vaila(tk.Tk):
 
     # B_r6_c5
     def deadlift_analysis(self):
-        """Run the Deadlift/RDL biomechanical analysis module."""
-        from vaila import vaila_deadlift
+        """Run the Deadlift/RDL analysis, letting the user pick the data source.
 
-        vaila_deadlift.main_gui()
+        Two pipelines are offered:
+
+        * **Kinematics (MediaPipe)** -> :mod:`vaila.vaila_deadlift`
+          (pose-landmark CSV: angles, COM, bar path, variant classification).
+        * **IMU (Madgwick/Mahony AHRS)** -> :mod:`vaila.vaila_deadlift_imu`
+          (barbell accelerometer + gyroscope CSV: orientation-stabilised
+          velocity / power / work).
+        """
+        dialog = Toplevel(self)
+        dialog.title("Deadlift Analysis - Select Data Source")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True)
+
+        Label(
+            main_frame,
+            text="Select the Deadlift / RDL data source",
+            font=("Arial", 12, "bold"),
+        ).pack(pady=(0, 15))
+
+        choice_var = tk.StringVar(value="kinematics")
+
+        kin_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        kin_frame.pack(fill="x", pady=5)
+        tk.Radiobutton(
+            kin_frame,
+            text="Kinematics (MediaPipe pose CSV)",
+            variable=choice_var,
+            value="kinematics",
+            font=("Arial", 10),
+        ).pack(anchor="w")
+        Label(
+            kin_frame,
+            text="Joint angles, whole-body COM, bar path, variant classification, form checks",
+            font=("Arial", 9),
+            fg="gray",
+        ).pack(anchor="w", padx=(25, 0))
+
+        imu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        imu_frame.pack(fill="x", pady=5)
+        tk.Radiobutton(
+            imu_frame,
+            text="IMU (barbell accelerometer + gyroscope CSV)",
+            variable=choice_var,
+            value="imu",
+            font=("Arial", 10),
+        ).pack(anchor="w")
+        Label(
+            imu_frame,
+            text="Madgwick/Mahony AHRS fusion: orientation-stabilised velocity, power, work",
+            font=("Arial", 9),
+            fg="gray",
+        ).pack(anchor="w", padx=(25, 0))
+
+        def _run():
+            selection = choice_var.get()
+            dialog.destroy()
+            if selection == "imu":
+                from vaila import vaila_deadlift_imu
+
+                vaila_deadlift_imu.main_gui()
+            else:
+                from vaila import vaila_deadlift
+
+                vaila_deadlift.main_gui()
+
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(pady=(15, 0))
+        Button(btn_frame, text="Run", width=12, command=_run).pack(side="left", padx=5)
+        Button(btn_frame, text="Cancel", width=12, command=dialog.destroy).pack(side="left", padx=5)
+
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+    # B_r7_c1
+    def deadlift_imu_analysis(self):
+        """Run the IMU-only Deadlift/RDL analysis with Madgwick/Mahony AHRS fusion."""
+        from vaila import vaila_deadlift_imu
+
+        vaila_deadlift_imu.main_gui()
 
     # B_r3_c5
     def animal_open_field(self):
