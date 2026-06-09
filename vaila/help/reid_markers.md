@@ -17,7 +17,7 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 08 June 2026
+Update Date: 09 June 2026
 Version: 0.3.47
 Python Version: 3.12.9
 
@@ -78,6 +78,6 @@ If `sam_tracks.csv` is selected, the loader now normalizes SAM long-format track
 
 ---
 
-📅 **Generated automatically on:** 08/06/2026
+📅 **Generated automatically on:** 09/06/2026
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
