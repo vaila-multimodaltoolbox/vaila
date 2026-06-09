@@ -108,12 +108,15 @@ Pipeline
 3. Rotate the raw accelerometer to the Earth frame, subtract the
    measured static gravity to obtain the **linear acceleration** vector and,
    in particular, the linear vertical acceleration ``a_v(t)``.
-4. Segment repetitions from the filtered vertical acceleration / velocity
-   envelope (zero-velocity update style drift correction per rep).
-5. Per-rep metrics: peak / mean velocity, peak / mean power, work, ROM,
+4. Lock repetition count and brackets from the dominant raw accelerometer
+   component (largest peak-to-peak range). Close subpeaks caused by a small
+   in-repetition jerk are merged before counting.
+5. Use the AHRS vertical acceleration for per-rep ZUPT integration, velocity,
+   displacement and kinetics inside those locked rep brackets.
+6. Per-rep metrics: peak / mean velocity, peak / mean power, work, ROM,
    peak / mean force - using either the barbell weight only or the
    total system mass.
-6. Generate PNG plots and a self-contained HTML report.
+7. Generate PNG plots and a self-contained HTML report.
 
 Inputs
 ------
@@ -906,12 +909,143 @@ def _valid_lowpass_cutoff(cutoff_hz: float, fps: float) -> float:
     return max(0.01, min(float(cutoff_hz), nyq * 0.9))
 
 
+def _merge_close_rep_peaks(
+    peaks: np.ndarray,
+    prominences: np.ndarray,
+    fps: float,
+) -> np.ndarray:
+    """Merge short-interval subpeaks that belong to the same repetition."""
+    if len(peaks) <= 1:
+        return peaks.astype(int)
+
+    gaps = np.diff(peaks)
+    median_gap = float(np.median(gaps)) if len(gaps) else float(fps)
+    close_gap = int(max(0.75 * fps, min(1.6 * fps, 0.70 * median_gap)))
+
+    clusters: list[list[int]] = []
+    current = [0]
+    for i, gap in enumerate(gaps, start=1):
+        if int(gap) <= close_gap:
+            current.append(i)
+        else:
+            clusters.append(current)
+            current = [i]
+    clusters.append(current)
+
+    keep: list[int] = []
+    for cluster in clusters:
+        best = max(cluster, key=lambda idx: float(prominences[idx]))
+        keep.append(int(peaks[best]))
+    return np.array(keep, dtype=int)
+
+
+def _reps_from_peak_frames(
+    peaks: np.ndarray,
+    signal: np.ndarray,
+    fps: float,
+) -> list[dict]:
+    """Build rep brackets from a 1D detection signal and already chosen peaks."""
+    reps: list[dict] = []
+    n = len(signal)
+    if len(peaks) > 1:
+        edge_radius = int(max(1, round(0.55 * float(np.median(np.diff(peaks))))))
+    else:
+        edge_radius = int(max(1, round(1.5 * fps)))
+    for i, pk in enumerate(peaks):
+        pk = int(pk)
+        if i == 0:
+            left = max(0, pk - edge_radius)
+            start = left + int(np.argmin(signal[left : pk + 1])) if pk > 0 else 0
+        else:
+            prev_pk = int(peaks[i - 1])
+            start = prev_pk + int(np.argmin(signal[prev_pk : pk + 1]))
+        if i == len(peaks) - 1:
+            right = min(n, pk + edge_radius + 1)
+            end = pk + int(np.argmin(signal[pk:right])) if pk < n - 1 else n - 1
+        else:
+            next_pk = int(peaks[i + 1])
+            end = pk + int(np.argmin(signal[pk : next_pk + 1]))
+        reps.append(
+            {
+                "rep_number": i + 1,
+                "start_frame": start,
+                "peak_frame": pk,
+                "end_frame": end,
+                "duration_s": (end - start) / fps,
+            }
+        )
+    return _reject_static_window_reps(reps)
+
+
+def detect_reps_from_dominant_raw_acc(
+    raw_acc: np.ndarray,
+    fps: float,
+    min_rep_s: float = 1.5,
+    prominence_frac: float = 0.10,
+) -> tuple[list[dict], int, str, np.ndarray]:
+    """Count repetitions from the dominant raw accelerometer component.
+
+    The AHRS vertical acceleration is still used for velocity, displacement and
+    kinetics. This detector is only a robust rep counter/bracketer. It uses the
+    raw component with the largest peak-to-peak amplitude, keeps the peak
+    direction aligned with that component's mean gravity sign, and merges close
+    subpeaks such as a small jerk inside the first repetition.
+    """
+    if raw_acc.ndim != 2 or raw_acc.shape[1] != 3:
+        raise ValueError("raw_acc must have shape (N, 3)")
+
+    axis_idx = int(np.argmax(np.ptp(raw_acc, axis=0)))
+    x = raw_acc[:, axis_idx].astype(float)
+    nyq = fps / 2.0
+    cutoff = min(2.0, nyq * 0.9)
+    pad = min(50, len(x) - 1)
+    b_raw, a_raw = butter(2, cutoff / nyq)
+    x_filt = filtfilt(b_raw, a_raw, x, padlen=pad)
+
+    direction = 1.0 if float(np.mean(x_filt)) >= 0.0 else -1.0
+    signal = direction * (x_filt - float(np.median(x_filt)))
+    min_dist = max(int(min_rep_s * fps), 3)
+    prom = max(float(np.ptp(signal)) * prominence_frac, 0.1)
+    peaks, props = find_peaks(signal, distance=min_dist, prominence=prom)
+    if len(peaks):
+        peaks = _merge_close_rep_peaks(peaks.astype(int), props["prominences"], fps)
+
+    reps = _reps_from_peak_frames(peaks, signal, fps) if len(peaks) else []
+    direction_label = "positive" if direction > 0 else "negative"
+    return reps, axis_idx, direction_label, signal
+
+
+def _integrate_vertical_acc_by_reps(
+    a_filt: np.ndarray,
+    fps: float,
+    reps: list[dict],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-rep ZUPT-style integration using externally supplied rep brackets."""
+    n = len(a_filt)
+    dt = 1.0 / fps
+    velocity = np.zeros(n)
+    disp = np.zeros(n)
+    for rep in reps:
+        s, e = int(rep["start_frame"]), min(int(rep["end_frame"]), n - 1)
+        if e <= s:
+            continue
+        a_seg = a_filt[s : e + 1]
+        v_seg = np.cumsum(a_seg) * dt
+        v_seg -= np.linspace(v_seg[0], v_seg[-1], len(v_seg))
+        velocity[s : e + 1] = v_seg
+        d_seg = np.cumsum(v_seg) * dt
+        d_seg -= np.linspace(d_seg[0], d_seg[-1], len(d_seg))
+        disp[s : e + 1] = d_seg
+    return velocity, disp
+
+
 def detect_reps_from_vertical_acc(
     a_vert: np.ndarray,
     fps: float,
     min_rep_s: float = 1.5,
     prominence_frac: float = 0.10,
     cutoff_hz: float = DEFAULT_IMU_CUTOFF_HZ,
+    fixed_reps: list[dict] | None = None,
 ) -> tuple[list[dict], np.ndarray, np.ndarray, np.ndarray]:
     """Segment lifts from gravity-free vertical acceleration.
 
@@ -940,55 +1074,18 @@ def detect_reps_from_vertical_acc(
     b_det, a_det = butter(2, cutoff_detect / nyq)
     a_detect = filtfilt(b_det, a_det, a_vert, padlen=pad)
 
-    min_dist = max(int(min_rep_s * fps), 3)
-    prom = np.ptp(a_detect) * prominence_frac
+    if fixed_reps is None:
+        min_dist = max(int(min_rep_s * fps), 3)
+        prom = np.ptp(a_detect) * prominence_frac
+        peaks, _ = find_peaks(a_detect, distance=min_dist, prominence=max(prom, 0.1))
+        reps = _reps_from_peak_frames(peaks.astype(int), a_detect, fps)
+    else:
+        reps = [dict(rep) for rep in fixed_reps]
+        for i, rep in enumerate(reps, start=1):
+            rep["rep_number"] = i
+            rep["duration_s"] = (int(rep["end_frame"]) - int(rep["start_frame"])) / fps
 
-    peaks, _ = find_peaks(a_detect, distance=min_dist, prominence=max(prom, 0.1))
-
-    # One rep per concentric peak. The boundary between two adjacent reps is the
-    # lowest point (eccentric bottom) of the detection signal between them. This
-    # guarantees exactly ``len(peaks)`` reps with no duplicated brackets even
-    # when an intermediate valley is too shallow for ``find_peaks`` to flag.
-    reps: list[dict] = []
-    n_det = len(a_detect)
-    for i, pk in enumerate(peaks):
-        pk = int(pk)
-        if i == 0:
-            start = int(np.argmin(a_detect[: pk + 1])) if pk > 0 else 0
-        else:
-            prev_pk = int(peaks[i - 1])
-            start = prev_pk + int(np.argmin(a_detect[prev_pk : pk + 1]))
-        if i == len(peaks) - 1:
-            end = pk + int(np.argmin(a_detect[pk:])) if pk < n_det - 1 else n_det - 1
-        else:
-            next_pk = int(peaks[i + 1])
-            end = pk + int(np.argmin(a_detect[pk : next_pk + 1]))
-        reps.append(
-            {
-                "rep_number": i + 1,
-                "start_frame": start,
-                "peak_frame": pk,
-                "end_frame": end,
-                "duration_s": (end - start) / fps,
-            }
-        )
-
-    reps = _reject_static_window_reps(reps)
-
-    n = len(a_filt)
-    dt = 1.0 / fps
-    velocity = np.zeros(n)
-    disp = np.zeros(n)
-    for rep in reps:
-        s, e = rep["start_frame"], min(rep["end_frame"], n - 1)
-        a_seg = a_filt[s : e + 1]
-        v_seg = np.cumsum(a_seg) * dt
-        v_seg -= np.linspace(v_seg[0], v_seg[-1], len(v_seg))
-        velocity[s : e + 1] = v_seg
-        d_seg = np.cumsum(v_seg) * dt
-        d_seg -= np.linspace(d_seg[0], d_seg[-1], len(d_seg))
-        disp[s : e + 1] = d_seg
-
+    velocity, disp = _integrate_vertical_acc_by_reps(a_filt, fps, reps)
     return reps, velocity, disp, a_filt
 
 
@@ -1264,13 +1361,19 @@ def _draw_rigidbody_cube_frame(
         (np.array([0.0, 0.0, 1.0]), "#2563eb", "Z"),
     ]
     for vec, color, label in earth_axes:
-        ax.quiver(0, 0, 0, vec[0], vec[1], vec[2], color=color, linewidth=1.6, arrow_length_ratio=0.12)
+        ax.quiver(
+            0, 0, 0, vec[0], vec[1], vec[2], color=color, linewidth=1.6, arrow_length_ratio=0.12
+        )
         ax.text(*(vec * 1.08), f"{label}e", color=color, fontsize=8)
 
     body_labels = ["Xb", "Yb", "Zb"]
-    for k, (color, label) in enumerate(zip(["#f87171", "#4ade80", "#60a5fa"], body_labels, strict=True)):
+    for k, (color, label) in enumerate(
+        zip(["#f87171", "#4ade80", "#60a5fa"], body_labels, strict=True)
+    ):
         vec = R[:, k] * 0.72
-        ax.quiver(0, 0, 0, vec[0], vec[1], vec[2], color=color, linewidth=2.6, arrow_length_ratio=0.16)
+        ax.quiver(
+            0, 0, 0, vec[0], vec[1], vec[2], color=color, linewidth=2.6, arrow_length_ratio=0.16
+        )
         ax.text(*(vec * 1.10), label, color=color, fontsize=8)
 
     axis_vec = np.asarray(axis_vec, dtype=float)
@@ -1350,7 +1453,9 @@ def _generate_quaternion_rigidbody_animation_html(
         "display_samples": int(len(idx)),
     }
     data_json = json.dumps(payload, separators=(",", ":"))
-    html_path = os.path.join(output_dir, f"{base_name}_imu_quaternion_rigidbody_animation_{ts}.html")
+    html_path = os.path.join(
+        output_dir, f"{base_name}_imu_quaternion_rigidbody_animation_{ts}.html"
+    )
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1588,7 +1693,9 @@ def _generate_plots(
     axes[3].plot(time_axis, longitude_unwrapped_deg, color="#7e22ce", linewidth=1.0)
     axes[3].set_ylabel("Longitude (deg)")
     axes[3].set_xlabel("Time (s)")
-    axes[3].set_title("Quaternion unit axis longitude: atan2(n_y, n_x), unwrapped for line continuity")
+    axes[3].set_title(
+        "Quaternion unit axis longitude: atan2(n_y, n_x), unwrapped for line continuity"
+    )
     axes[3].grid(True, alpha=0.3)
 
     for rep in reps:
@@ -1767,7 +1874,9 @@ def _generate_html_report(
                 f'title="{name}"></iframe><p><a href="{name}">Open 3D animation in a new tab</a></p></div>\n'
             )
         else:
-            media_blocks.append(f'<div class="img-container"><img src="{name}" alt="{name}"></div>\n')
+            media_blocks.append(
+                f'<div class="img-container"><img src="{name}" alt="{name}"></div>\n'
+            )
     images_html = "".join(media_blocks)
 
     body_mass_str = (
@@ -2345,10 +2454,28 @@ def process_imu_file(
         f"[IMU-AHRS] |g| sensor={fusion.g_mag:.3f} m/s²  g_earth={fusion.g_earth.round(3).tolist()}"
     )
 
+    raw_acc = df[["acc_x", "acc_y", "acc_z"]].to_numpy(dtype=float)
+    raw_reps, raw_axis_idx, raw_direction, _raw_rep_signal = detect_reps_from_dominant_raw_acc(
+        raw_acc, fps=fps
+    )
+    axis_name = ["acc_x", "acc_y", "acc_z"][raw_axis_idx]
+    if raw_reps:
+        raw_reps = _trim_reps_to_expected(raw_reps, expected_reps)
+        print(
+            f"[IMU-AHRS] Rep lock from raw {axis_name} ({raw_direction} peaks): "
+            f"{len(raw_reps)} repetitions"
+        )
+        fixed_reps = raw_reps
+    else:
+        print("[IMU-AHRS] Raw acceleration rep lock failed; falling back to AHRS vertical peaks")
+        fixed_reps = None
+
     reps, velocity, disp, a_filt = detect_reps_from_vertical_acc(
-        fusion.acc_vert_ms2, fps=fps, cutoff_hz=cutoff_hz
+        fusion.acc_vert_ms2, fps=fps, cutoff_hz=cutoff_hz, fixed_reps=fixed_reps
     )
     reps = _trim_reps_to_expected(reps, expected_reps)
+    if fixed_reps is not None:
+        velocity, disp = _integrate_vertical_acc_by_reps(a_filt, fps, reps)
     print(f"[IMU-AHRS] Detected {len(reps)} repetitions (expected: {expected_reps})")
     fusion.velocity_ms[:] = velocity
     fusion.displacement_m[:] = disp
@@ -2377,7 +2504,7 @@ def process_imu_file(
         base_name,
         fps,
         filter_name,
-        raw_acc=df[["acc_x", "acc_y", "acc_z"]].to_numpy(dtype=float),
+        raw_acc=raw_acc,
     )
     report = _generate_html_report(
         rep_metrics,
@@ -2442,6 +2569,8 @@ def process_imu_file(
             "translation_world_x_m": np.zeros_like(fusion.time_s),
             "translation_world_y_m": np.zeros_like(fusion.time_s),
             "translation_world_z_m": disp,
+            "rep_detection_axis": np.full(len(fusion.time_s), axis_name, dtype=object),
+            "rep_detection_direction": np.full(len(fusion.time_s), raw_direction, dtype=object),
         }
     )
     proc_path = os.path.join(output_dir, f"{base_name}_imu_ahrs_processed_{ts_stamp}.csv")
@@ -2500,7 +2629,9 @@ def _write_filter_choice_index(
         report = reports.get(name)
         proc = processed_csvs.get(name)
         if report is None:
-            rows.append(f"<tr><td>{name.title()}</td><td colspan='2'>failed or not generated</td></tr>")
+            rows.append(
+                f"<tr><td>{name.title()}</td><td colspan='2'>failed or not generated</td></tr>"
+            )
             continue
         report_rel = report.relative_to(out).as_posix()
         proc_rel = proc.relative_to(out).as_posix() if proc else ""
@@ -2514,7 +2645,8 @@ def _write_filter_choice_index(
         md_lines.append(f"- **{name.title()}**: [HTML report]({report_rel})")
         if proc_rel:
             md_lines.append(f"  - [Processed CSV]({proc_rel})")
-    html = """<!DOCTYPE html>
+    html = (
+        """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2530,10 +2662,13 @@ a{color:#0369a1}.note{color:#475569;line-height:1.45}
 <h1>Deadlift IMU AHRS filter outputs</h1>
 <p class="note">Both Madgwick and Mahony were processed from the same IMU file. Open either report to compare orientation, quaternion animation, velocity, displacement and repetition metrics.</p>
 <table><tr><th>Filter</th><th>Report</th><th>Processed data</th></tr>
-""" + "\n".join(rows) + """
+"""
+        + "\n".join(rows)
+        + """
 </table>
 </div></body></html>
 """
+    )
     html_path.write_text(html, encoding="utf-8")
     (out / f"{base_name}_imu_ahrs_filter_index.md").write_text(
         "\n".join(md_lines), encoding="utf-8"
@@ -2696,9 +2831,13 @@ def _print_cli_help_banner() -> None:
     print("  # single file:")
     print("  uv run python vaila/vaila_deadlift_imu.py -i deadlift_imu.csv  # runs both filters")
     print("  # single file with explicit params file:")
-    print("  uv run python vaila/vaila_deadlift_imu.py -i deadlift_imu.csv -p deadlift_parameters.txt")
+    print(
+        "  uv run python vaila/vaila_deadlift_imu.py -i deadlift_imu.csv -p deadlift_parameters.txt"
+    )
     print("  # whole directory (batch, same as the GUI):")
-    print("  uv run python vaila/vaila_deadlift_imu.py -d /path/to/csv_dir -o /path/to/out -p /path/to/deadlift_parameters.txt")
+    print(
+        "  uv run python vaila/vaila_deadlift_imu.py -d /path/to/csv_dir -o /path/to/out -p /path/to/deadlift_parameters.txt"
+    )
     print("  # full help:")
     print("  uv run python vaila/vaila_deadlift_imu.py --help")
     print()
@@ -2826,26 +2965,26 @@ def _show_deadlift_imu_dialog() -> _GuiResult:
             "1) Open this same Tkinter form from a terminal:\n"
             "   uv run python vaila/vaila_deadlift_imu.py\n"
             "\n"
-            '2) Single CSV file:\n'
-            '   uv run python vaila/vaila_deadlift_imu.py \\\n'
-            '     -i /path/to/deadlift_imu.csv \\\n'
-            '     -o /path/to/output_dir \\\n'
-            '     -p /path/to/deadlift_parameters.txt \\\n'
-            '     --filter both --beta 0.1 --gyro-units deg \\\n'
-            '     --weight 20.0 --mass 75.0 --height 1.75 --fps 25.0\n'
-            '\n'
-            '3) Whole directory (batch, mirrors the GUI - processes every *.csv):\n'
-            '   uv run python vaila/vaila_deadlift_imu.py \\\n'
-            '     -d /path/to/csv_dir -o /path/to/output_dir \\\n'
-            '     -p /path/to/deadlift_parameters.txt \\\n'
-            '     --filter both --beta 0.1 --gyro-units deg\n'
-            '\n'
-            '4) Reuse the bundled example params file explicitly:\n'
-            '   uv run python vaila/vaila_deadlift_imu.py \\\n'
-            '     -d tests/Deadlift/imu \\\n'
-            '     -p tests/Deadlift/imu/deadlift_parameters.txt \\\n'
-            '     -o /tmp/dlift_out\n'
-            '\n'
+            "2) Single CSV file:\n"
+            "   uv run python vaila/vaila_deadlift_imu.py \\\n"
+            "     -i /path/to/deadlift_imu.csv \\\n"
+            "     -o /path/to/output_dir \\\n"
+            "     -p /path/to/deadlift_parameters.txt \\\n"
+            "     --filter both --beta 0.1 --gyro-units deg \\\n"
+            "     --weight 20.0 --mass 75.0 --height 1.75 --fps 25.0\n"
+            "\n"
+            "3) Whole directory (batch, mirrors the GUI - processes every *.csv):\n"
+            "   uv run python vaila/vaila_deadlift_imu.py \\\n"
+            "     -d /path/to/csv_dir -o /path/to/output_dir \\\n"
+            "     -p /path/to/deadlift_parameters.txt \\\n"
+            "     --filter both --beta 0.1 --gyro-units deg\n"
+            "\n"
+            "4) Reuse the bundled example params file explicitly:\n"
+            "   uv run python vaila/vaila_deadlift_imu.py \\\n"
+            "     -d tests/Deadlift/imu \\\n"
+            "     -p tests/Deadlift/imu/deadlift_parameters.txt \\\n"
+            "     -o /tmp/dlift_out\n"
+            "\n"
             "Params file format (CSV header preferred)\n"
             "-----------------------------------------\n"
             "  subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz\n"
@@ -3526,27 +3665,27 @@ def _build_argparser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            'Examples:\n'
-            '  Single file (default runs Madgwick + Mahony):\n'
-            '    uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/imu/deadlift_imu.csv\n'
-            '\n'
-            '  Single file with explicit params .txt:\n'
-            '    uv run python vaila/vaila_deadlift_imu.py \\\n'
-            '      -i tests/Deadlift/imu/deadlift_imu.csv \\\n'
-            '      -p tests/Deadlift/imu/deadlift_parameters.txt\n'
-            '\n'
-            '  Whole dir with explicit params .txt (default runs both filters):\n'
-            '    uv run python vaila/vaila_deadlift_imu.py \\\n'
-            '      -d tests/Deadlift/imu \\\n'
-            '      -p tests/Deadlift/imu/deadlift_parameters.txt \\\n'
-            '      -o /tmp/dlift_out\n'
-            '\n'
-            '  Force GUI:\n'
-            '    uv run python vaila/vaila_deadlift_imu.py --gui\n'
-            '\n'
-            'deadlift_parameters.txt CSV-header format:\n'
-            '  subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz\n'
-            '  75.0,1.77,20.0,21.0\n'
+            "Examples:\n"
+            "  Single file (default runs Madgwick + Mahony):\n"
+            "    uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/imu/deadlift_imu.csv\n"
+            "\n"
+            "  Single file with explicit params .txt:\n"
+            "    uv run python vaila/vaila_deadlift_imu.py \\\n"
+            "      -i tests/Deadlift/imu/deadlift_imu.csv \\\n"
+            "      -p tests/Deadlift/imu/deadlift_parameters.txt\n"
+            "\n"
+            "  Whole dir with explicit params .txt (default runs both filters):\n"
+            "    uv run python vaila/vaila_deadlift_imu.py \\\n"
+            "      -d tests/Deadlift/imu \\\n"
+            "      -p tests/Deadlift/imu/deadlift_parameters.txt \\\n"
+            "      -o /tmp/dlift_out\n"
+            "\n"
+            "  Force GUI:\n"
+            "    uv run python vaila/vaila_deadlift_imu.py --gui\n"
+            "\n"
+            "deadlift_parameters.txt CSV-header format:\n"
+            "  subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz\n"
+            "  75.0,1.77,20.0,21.0\n"
         ),
     )
     p.add_argument("-i", "--input", type=str, help="Path to a single input IMU CSV file")
@@ -3634,19 +3773,51 @@ def main() -> None:
         default_height = float(DEFAULT_SETTINGS["subject_height_m"])  # type: ignore[arg-type]
         default_bar = float(DEFAULT_SETTINGS["deadlift_mass_kg"])  # type: ignore[arg-type]
         default_fs = float(DEFAULT_SETTINGS["fs_hz"])  # type: ignore[arg-type]
+
+        params_path = args.params_file or ""
+        if not params_path:
+            candidate = Path(args.input_dir) / "deadlift_parameters.txt"
+            if candidate.exists():
+                params_path = str(candidate)
+        params = _parse_parameters_file(Path(params_path)) if params_path else {}
+
+        def _param_float(key: str, default: float) -> float:
+            value = params.get(key)
+            with contextlib.suppress(TypeError, ValueError):
+                if value is not None:
+                    return float(value)
+            return default
+
+        resolved_mass = (
+            float(args.mass)
+            if args.mass is not None
+            else _param_float("subject_mass_kg", default_mass)
+        )
+        resolved_height = (
+            float(args.height)
+            if args.height is not None
+            else _param_float("subject_height_m", default_height)
+        )
+        resolved_bar = (
+            float(args.weight)
+            if args.weight is not None
+            else _param_float("deadlift_mass_kg", _param_float("weight", default_bar))
+        )
+        resolved_fs = float(args.fps) if args.fps is not None else _param_float("fs_hz", default_fs)
+
         _batch_process_directory(
             input_dir=args.input_dir,
             output_dir=out_dir,
             filter_name=args.filter,
             beta=args.beta,
             gyro_units=args.gyro_units,
-            subject_mass_kg=args.mass if args.mass is not None else default_mass,
-            subject_height_m=args.height if args.height is not None else default_height,
-            deadlift_mass_kg=args.weight if args.weight is not None else default_bar,
-            fs_hz=args.fps if args.fps is not None else default_fs,
+            subject_mass_kg=resolved_mass,
+            subject_height_m=resolved_height,
+            deadlift_mass_kg=resolved_bar,
+            fs_hz=resolved_fs,
             reps=args.reps,
             cutoff_hz=args.cutoff,
-            params_file=args.params_file or "",
+            params_file=params_path,
             source="CLI batch mode (-d)",
         )
         return

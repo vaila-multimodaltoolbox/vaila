@@ -100,7 +100,12 @@ from tkinter import filedialog, messagebox
 
 from rich import print
 
-from vaila.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
+from vaila.ffmpeg_utils import (
+    get_ffmpeg_path,
+    get_ffprobe_path,
+    probe_video_duration,
+    run_ffmpeg_with_progress,
+)
 
 # Resolve FFmpeg/FFprobe paths (local static → venv → system)
 FFMPEG = get_ffmpeg_path()
@@ -358,8 +363,18 @@ def compress_video_worker_h264(video_info):
         # Add audio settings and output path
         cmd.extend(["-c:a", "copy", "-hide_banner", "-nostats", output_path])
 
-        # Run compression
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        # Probe duration for % / ETA reporting (0.0 => helper skips % / ETA)
+        duration_sec = probe_video_duration(video_path)
+        label = f"[{index}/{total}] {basename}"
+
+        returncode, stderr_text = run_ffmpeg_with_progress(
+            cmd,
+            total_duration_sec=duration_sec,
+            label=label,
+            progress_interval_sec=2.0,
+        )
+        if returncode != 0:
+            raise subprocess.CalledProcessError(returncode, cmd, stderr=stderr_text)
 
         # Verify output and check for adaptive compression
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
