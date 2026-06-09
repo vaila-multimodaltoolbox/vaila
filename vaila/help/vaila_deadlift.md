@@ -2,7 +2,7 @@
 
 - **Category:** Analysis
 - **File:** `vaila/vaila_deadlift.py`
-- **Version:** 0.3.48
+- **Version:** 0.3.49
 - **Updated:** 2026-06-09
 - **GUI Interface:** Yes - Frame B -> **Deadlift** (B5_r6_c5). The button opens a data-source dialog: *Kinematics (MediaPipe)* routes here; *IMU (AHRS)* routes to [`vaila_deadlift_imu`](vaila_deadlift_imu.md).
 
@@ -81,11 +81,11 @@ Optional legacy file: `deadlift_parameters.txt` beside the input CSV or one of i
 
 Kinematics/camera parameter file (`kinematics_parameter.txt`) can be selected in GUI or passed by CLI. The parser reads values such as `Recommended Hz`, `Display FPS`, `Avg FPS`, `Frames`, `Duration`, and `Resolution`. FPS/Hz is used to create `time_s`, and MediaPipe plots use seconds on the x-axis.
 
-Subject/load parameter file (`subject_parameters.txt`) can be selected in GUI or passed by CLI. CSV format example:
+Subject/load parameter file (`subject_parameters.txt`) can be selected in GUI or passed by CLI. The kinematics folder can also contain `deadlift_kinematics_parameters.txt` (the historical typo `deadlifit_kinematics_parameters.txt` is still auto-detected). CSV format example:
 
 ```csv
-subjectmass_kg,shank_len_meter,loadmass_kg
-75,0.44,20
+subject_mass_kg,subject_height_m,shank_m,deadlift_mass_kg,fps_hz
+75.0,1.75,0.40,20.0,59.866844999
 ```
 
 ## Usage
@@ -101,12 +101,14 @@ Then click **Deadlift** in Frame B. A data-source dialog appears:
 - **Kinematics (MediaPipe pose CSV)** — runs this module (`vaila_deadlift.py`).
 - **IMU (barbell accelerometer + gyroscope CSV)** — runs the AHRS companion [`vaila_deadlift_imu`](vaila_deadlift_imu.md).
 
-Select the matching option, then choose a folder containing the CSV files.
+Select the matching option, then choose a folder containing the CSV files. Kinematics mode opens one parameter window where you can point to the `.txt/.csv` config file or edit FPS, subject mass, shank length, deadlift mass, and GIF interval together.
 
 CLI:
 
 ```bash
 uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output
+uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output \
+  --config-params tests/Deadlift/kinematics/deadlifit_kinematics_parameters.txt
 uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output \
   --kinematics-params path/to/kinematics_parameter.txt \
   --subject-params path/to/subject_parameters.txt \

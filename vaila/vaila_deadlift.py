@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 28 May 2026
 Update Date: 09 June 2026
-Version: 0.3.48
+Version: 0.3.49
 
 Companion module:
 -----------------
@@ -61,7 +61,7 @@ Dependencies:
 Usage:
 ------
 - GUI: Run with no arguments or --gui.
-- CLI: Use -i <path_to.csv> -c <path_to_config.toml> -o <output_dir>
+- CLI: Use -i <path_to.csv> --config-params <path_to_parameters.txt> -o <output_dir>
 ===============================================================================
 
 """
@@ -70,6 +70,7 @@ import contextlib
 import datetime
 import math
 import os
+import tkinter as tk
 from pathlib import Path
 from tkinter import Tk, filedialog, messagebox, simpledialog
 
@@ -168,10 +169,15 @@ def _load_parameters_file(base_dir: Path) -> dict | None:
 
 
 def _load_text_parameters(path: Path) -> dict:
-    """Load simple comma or colon separated text parameters."""
+    """Load simple key/value text or one-row CSV parameters."""
     params: dict[str, str] = {}
     if not path.exists():
         return params
+    with contextlib.suppress(Exception):
+        df = pd.read_csv(path)
+        if not df.empty:
+            row = df.iloc[0]
+            return {str(key).strip().lower(): str(row[key]).strip() for key in row.index}
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
@@ -190,21 +196,35 @@ def _load_text_parameters(path: Path) -> dict:
     return params
 
 
-def _find_nearby_file(base_dir: Path, filename: str) -> Path | None:
+def _find_nearby_file(base_dir: Path, filename: str | tuple[str, ...]) -> Path | None:
+    filenames = (filename,) if isinstance(filename, str) else filename
     for directory in [base_dir, *base_dir.parents[:3]]:
-        p = directory / filename
-        if p.exists():
-            return p
+        for name in filenames:
+            p = directory / name
+            if p.exists():
+                return p
     return None
 
 
 def _load_kinematics_parameters(base_dir: Path, explicit_path: str | None = None) -> dict:
-    path = Path(explicit_path) if explicit_path else _find_nearby_file(base_dir, "kinematics_parameter.txt")
+    path = (
+        Path(explicit_path)
+        if explicit_path
+        else _find_nearby_file(
+            base_dir,
+            (
+                "kinematics_parameter.txt",
+                "kinematics_parameters.txt",
+                "deadlift_kinematics_parameters.txt",
+                "deadlifit_kinematics_parameters.txt",
+            ),
+        )
+    )
     if path is None:
         return {}
     raw = _load_text_parameters(path)
     params: dict[str, float | str] = {"kinematics_parameter_file": str(path)}
-    fps_keys = ("recommended hz", "display fps", "avg fps", "capture fps", "fps")
+    fps_keys = ("recommended hz", "display fps", "avg fps", "capture fps", "fps", "fps_hz")
     for key in fps_keys:
         if key in raw:
             try:
@@ -222,7 +242,20 @@ def _load_kinematics_parameters(base_dir: Path, explicit_path: str | None = None
 
 
 def _load_subject_parameters(base_dir: Path, explicit_path: str | None = None) -> dict:
-    path = Path(explicit_path) if explicit_path else _find_nearby_file(base_dir, "subject_parameters.txt")
+    path = (
+        Path(explicit_path)
+        if explicit_path
+        else _find_nearby_file(
+            base_dir,
+            (
+                "subject_parameters.txt",
+                "subject_parameter.txt",
+                "deadlift_parameters.txt",
+                "deadlift_kinematics_parameters.txt",
+                "deadlifit_kinematics_parameters.txt",
+            ),
+        )
+    )
     if path is None:
         return {}
     params: dict[str, float | str] = {"subject_parameter_file": str(path)}
@@ -231,14 +264,19 @@ def _load_subject_parameters(base_dir: Path, explicit_path: str | None = None) -
         if not df.empty:
             row = df.iloc[0]
             column_map = {
+                "subject_mass_kg": "mass_kg",
                 "subjectmass_kg": "mass_kg",
                 "mass_kg": "mass_kg",
                 "body_mass_kg": "mass_kg",
+                "shank_m": "shank_length_m",
                 "shank_len_meter": "shank_length_m",
                 "shank_length_m": "shank_length_m",
+                "deadlift_mass_kg": "weight_kg",
                 "loadmass_kg": "weight_kg",
                 "barbell_mass_kg": "weight_kg",
                 "weight_kg": "weight_kg",
+                "fps_hz": "fps",
+                "fps": "fps",
             }
             for src, dst in column_map.items():
                 if src in row.index:
@@ -250,14 +288,19 @@ def _load_subject_parameters(base_dir: Path, explicit_path: str | None = None) -
 
     raw = _load_text_parameters(path)
     key_map = {
+        "subject_mass_kg": "mass_kg",
         "subjectmass_kg": "mass_kg",
         "mass_kg": "mass_kg",
         "body_mass_kg": "mass_kg",
+        "shank_m": "shank_length_m",
         "shank_len_meter": "shank_length_m",
         "shank_length_m": "shank_length_m",
+        "deadlift_mass_kg": "weight_kg",
         "loadmass_kg": "weight_kg",
         "barbell_mass_kg": "weight_kg",
         "weight_kg": "weight_kg",
+        "fps_hz": "fps",
+        "fps": "fps",
     }
     for src, dst in key_map.items():
         if src in raw:
@@ -274,8 +317,11 @@ def _merge_deadlift_overrides(
     merged = dict(ctx)
     overrides = overrides or {}
 
-    kin_params = _load_kinematics_parameters(base_dir, overrides.get("kinematics_params"))
-    subject_params = _load_subject_parameters(base_dir, overrides.get("subject_params"))
+    config_params = overrides.get("config_params")
+    kin_params = _load_kinematics_parameters(
+        base_dir, overrides.get("kinematics_params") or config_params
+    )
+    subject_params = _load_subject_parameters(base_dir, overrides.get("subject_params") or config_params)
     for src in (kin_params, subject_params):
         for key, value in src.items():
             if key in {"fps", "mass_kg", "shank_length_m", "weight_kg"}:
@@ -2211,54 +2257,106 @@ def process_deadlift_file(input_file: str, output_dir: str, overrides: dict | No
 
 
 
-def _ask_optional_float(title: str, prompt: str, initial: float | None = None) -> float | None:
-    value = simpledialog.askstring(
-        title,
-        prompt,
-        initialvalue=("" if initial is None else str(initial)),
-    )
-    if value is None or not value.strip():
-        return None
-    try:
-        return _parse_locale_float(value)
-    except Exception:
-        messagebox.showwarning("Invalid value", f"Ignored invalid numeric value: {value}")
-        return None
-
-
-def _collect_gui_overrides(root: Tk) -> dict:
+def _collect_gui_overrides(root: Tk, base_dir: str | None = None) -> dict:
+    """Collect kinematics parameters in one modal window instead of chained dialogs."""
     overrides: dict = {}
-    if messagebox.askyesno("Kinematics parameters", "Select a kinematics_parameter.txt file?"):
-        path = filedialog.askopenfilename(
-            title="Select kinematics_parameter.txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-        )
-        if path:
-            overrides["kinematics_params"] = path
-    if messagebox.askyesno("Subject parameters", "Select a subject_parameters.txt file?"):
-        path = filedialog.askopenfilename(
-            title="Select subject_parameters.txt",
-            filetypes=[("Text/CSV files", "*.txt *.csv"), ("All files", "*.*")],
-        )
-        if path:
-            overrides["subject_params"] = path
-    if messagebox.askyesno("Manual overrides", "Enter camera/subject/load values manually?"):
-        value = _ask_optional_float("Camera FPS", "FPS / Hz:")
-        if value is not None:
-            overrides["fps"] = value
-        value = _ask_optional_float("Subject mass", "Subject mass (kg):")
-        if value is not None:
-            overrides["mass_kg"] = value
-        value = _ask_optional_float("Shank length", "Shank length (m):")
-        if value is not None:
-            overrides["shank_length_m"] = value
-        value = _ask_optional_float("Bar load", "Deadlift bar + plates mass (kg):")
-        if value is not None:
-            overrides["barbell_mass_kg"] = value
-        value = _ask_optional_float("GIF interval", "GIF viewing interval per keyframe (s):", 1.2)
-        if value is not None:
-            overrides["gif_duration_s"] = value
-    return overrides
+    base_path = Path(base_dir) if base_dir else Path.cwd()
+    defaults = _merge_deadlift_overrides(
+        {
+            "fps": 30.0,
+            "mass_kg": 75.0,
+            "shank_length_m": 0.40,
+            "weight_kg": 20.0,
+            "gif_duration_s": 1.2,
+        },
+        base_path,
+    )
+
+    dialog = tk.Toplevel(root)
+    dialog.title("Deadlift kinematics parameters")
+    dialog.transient(root)
+    dialog.grab_set()
+    dialog.attributes("-topmost", True)
+    dialog.resizable(False, False)
+
+    entries: dict[str, tk.Entry] = {}
+    file_entries: dict[str, tk.Entry] = {}
+    result: dict[str, bool] = {"ok": False}
+
+    def add_file_row(row: int, label: str, key: str, title: str) -> None:
+        tk.Label(dialog, text=label, anchor="w").grid(row=row, column=0, sticky="w", padx=8, pady=4)
+        entry = tk.Entry(dialog, width=54)
+        entry.grid(row=row, column=1, sticky="ew", padx=8, pady=4)
+        file_entries[key] = entry
+
+        def browse() -> None:
+            path = filedialog.askopenfilename(
+                title=title,
+                filetypes=[("Text/CSV files", "*.txt *.csv"), ("All files", "*.*")],
+            )
+            if path:
+                entry.delete(0, tk.END)
+                entry.insert(0, path)
+
+        tk.Button(dialog, text="Browse", command=browse).grid(row=row, column=2, padx=8, pady=4)
+
+    def add_value_row(row: int, label: str, key: str, default: object) -> None:
+        tk.Label(dialog, text=label, anchor="w").grid(row=row, column=0, sticky="w", padx=8, pady=4)
+        entry = tk.Entry(dialog, width=18)
+        entry.grid(row=row, column=1, sticky="w", padx=8, pady=4)
+        entry.insert(0, str(default))
+        entries[key] = entry
+
+    auto_file = _find_nearby_file(
+        base_path,
+        ("deadlift_kinematics_parameters.txt", "deadlifit_kinematics_parameters.txt"),
+    )
+    add_file_row(0, "Config parameters (.txt/.csv)", "config_params", "Select deadlift parameters file")
+    if auto_file:
+        file_entries["config_params"].insert(0, str(auto_file))
+    add_file_row(1, "Kinematics parameters", "kinematics_params", "Select kinematics parameters file")
+    add_file_row(2, "Subject/load parameters", "subject_params", "Select subject/load parameters file")
+
+    add_value_row(3, "FPS / Hz", "fps", defaults.get("fps", 30.0))
+    add_value_row(4, "Subject mass (kg)", "mass_kg", defaults.get("mass_kg", 75.0))
+    add_value_row(5, "Shank length (m)", "shank_length_m", defaults.get("shank_length_m", 0.40))
+    add_value_row(6, "Deadlift mass (kg)", "barbell_mass_kg", defaults.get("weight_kg", 20.0))
+    add_value_row(7, "GIF interval (s)", "gif_duration_s", defaults.get("gif_duration_s", 1.2))
+
+    tk.Label(
+        dialog,
+        text="Use the config file, edit values here, or leave fields blank to use defaults/autodetect.",
+        anchor="w",
+    ).grid(row=8, column=0, columnspan=3, sticky="w", padx=8, pady=(8, 4))
+
+    def apply() -> None:
+        result["ok"] = True
+        for key, entry in file_entries.items():
+            value = entry.get().strip()
+            if value:
+                overrides[key] = value
+        for key, entry in entries.items():
+            value = entry.get().strip()
+            if not value:
+                continue
+            try:
+                overrides[key] = _parse_locale_float(value)
+            except Exception:
+                messagebox.showwarning("Invalid value", f"Invalid numeric value for {key}: {value}")
+                return
+        dialog.destroy()
+
+    def cancel() -> None:
+        dialog.destroy()
+
+    buttons = tk.Frame(dialog)
+    buttons.grid(row=9, column=0, columnspan=3, sticky="e", padx=8, pady=8)
+    tk.Button(buttons, text="Cancel", command=cancel).pack(side="right", padx=4)
+    tk.Button(buttons, text="Run", command=apply).pack(side="right", padx=4)
+
+    dialog.protocol("WM_DELETE_WINDOW", cancel)
+    root.wait_window(dialog)
+    return overrides if result["ok"] else {}
 
 def main_gui():
     root = Tk()
@@ -2276,7 +2374,7 @@ def main_gui():
         messagebox.showerror("Error", "No CSV files found in selected directory.")
         return
 
-    overrides = _collect_gui_overrides(root)
+    overrides = _collect_gui_overrides(root, target_dir)
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_parent = os.path.join(target_dir, f"vaila_deadlift_analysis_{timestamp}")
@@ -2307,6 +2405,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--kinematics-params", type=str, help="Path to kinematics_parameter.txt with camera FPS/metadata")
     parser.add_argument("--subject-params", type=str, help="Path to subject_parameters.txt with subject mass, shank length, and load mass")
+    parser.add_argument("--config-params", type=str, help="Path to one-row deadlift config .txt/.csv with subject_mass_kg, subject_height_m, shank_m, deadlift_mass_kg, fps_hz")
     parser.add_argument("--fps", type=float, help="Override camera sampling rate in Hz")
     parser.add_argument("--mass-kg", type=float, help="Override subject body mass in kg")
     parser.add_argument("--shank-length-m", type=float, help="Override shank length calibration in meters")
@@ -2322,6 +2421,7 @@ if __name__ == "__main__":
     else:
         out = args.output or os.path.dirname(os.path.abspath(args.input))
         overrides = {
+            "config_params": args.config_params,
             "kinematics_params": args.kinematics_params,
             "subject_params": args.subject_params,
             "fps": args.fps,
