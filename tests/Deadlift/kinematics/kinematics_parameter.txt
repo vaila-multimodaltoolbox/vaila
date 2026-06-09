@@ -1,5 +1,5 @@
 Video Metadata Summary
-Directory: /home/preto/Preto/vaila/tests/Deadlift
+Directory: tests/Deadlift
 ============================
 
 File: deadlift_559_to_3055.mp4

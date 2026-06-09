@@ -170,7 +170,7 @@ B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
 B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
 
-B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - vailá
+B6_r7_c1 - Deadlift IMU   B6_r7_c2 - vailá           B6_r7_c3 - vailá
 B6_r7_c4 - vailá          B6_r7_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================

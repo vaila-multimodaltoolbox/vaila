@@ -1,0 +1,2 @@
+subjectmass_kg,shank_len_meter,loadmass_kg
+75,0.44,20
