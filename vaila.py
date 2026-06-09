@@ -977,9 +977,9 @@ class Vaila(tk.Tk):
         row7_frame.pack(fill="x")
         vaila_b6_r7_c1 = tk.Button(
             row7_frame,
-            text="vailá",
+            text="Deadlift IMU",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.deadlift_imu_analysis,
         )
         vaila_b6_r7_c2 = tk.Button(
             row7_frame,

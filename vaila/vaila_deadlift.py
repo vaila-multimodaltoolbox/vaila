@@ -72,7 +72,7 @@ import math
 import os
 import tkinter as tk
 from pathlib import Path
-from tkinter import Tk, filedialog, messagebox
+from tkinter import Tk, filedialog, messagebox, simpledialog
 
 import matplotlib.pyplot as plt
 import numpy as np

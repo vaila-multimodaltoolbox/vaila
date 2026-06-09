@@ -1,0 +1,15 @@
+Video Metadata Summary
+Directory: tests/Deadlift
+============================
+
+File: deadlift_559_to_3055.mp4
+  Frames:        2497
+  Duration:      41.730 seconds
+  Resolution:    1080x1920
+  Display FPS:   59.866844999
+  Avg FPS:       59.866844999
+  Capture FPS:   N/A
+  Recommended Hz:59.86684499925695
+  Codec:         h264 (H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10)
+  Container:     mov,mp4,m4a,3gp,3g2,mj2 (QuickTime / MOV)
+
