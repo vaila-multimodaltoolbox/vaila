@@ -73,7 +73,7 @@ body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5
 <div class="usage">
 <h2>Usage</h2>
 <p>GUI: run <code>uv run vaila.py</code>, click <strong>Deadlift</strong>, choose the data source
-(<em>Kinematics (MediaPipe)</em> for this module or <em>IMU (AHRS)</em> for the companion), then select a folder containing CSV files. Kinematics mode opens one parameter window for config file selection and manual values.</p>
+(<em>Kinematics (MediaPipe)</em> for this module or <em>IMU (AHRS)</em> for the companion), then select a folder containing CSV files. Kinematics mode prints progress in the terminal and opens one centered parameter window with one parameters-file selector and manual values. Click <strong>Run</strong> to start or <strong>Cancel</strong> to abort before output folders are created.</p>
 <pre><code>uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output
 uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output \
   --config-params tests/Deadlift/kinematics/deadlifit_kinematics_parameters.txt
@@ -81,7 +81,23 @@ uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output \
   --kinematics-params path/to/kinematics_parameter.txt \
   --subject-params path/to/subject_parameters.txt \
   --fps 59.94 --mass-kg 75 --shank-length-m 0.44 --barbell-mass-kg 20 \
-  --gif-duration-s 1.5</code></pre>
+  --cutoff 6 --gif-duration-s 7.2</code></pre>
+<h3>GIF playback speed</h3>
+<p>The <strong>GIF interval (s)</strong> field controls how many seconds each keyframe of the
+stick-figure animation stays on screen. The current default is <strong>7.2&nbsp;s</strong>
+(6&times; slower than the legacy 1.2&nbsp;s value), which is comfortable for
+technique review. Click the <strong>?</strong> button next to the field for an in-app cheat sheet.</p>
+<ul>
+<li>Higher value &rarr; <strong>slower</strong> playback (each pose lingers longer)</li>
+<li>Lower value &rarr; <strong>faster</strong> playback</li>
+<li>0.5&nbsp;s &rarr; very fast preview</li>
+<li>1.2&nbsp;s &rarr; legacy default (fast)</li>
+<li>3.6&nbsp;s &rarr; 3&times; slower than legacy</li>
+<li>7.2&nbsp;s &rarr; current default (6&times; slower than legacy)</li>
+<li>12.0&nbsp;s &rarr; very slow, good for technique review</li>
+</ul>
+<p>To make the GIF N times slower than the current default, multiply the value by N
+(for example, <code>7.2 &times; 2 = 14.4&nbsp;s</code> for 2&times; slower).</p>
 </div>
 
 <h2>Configuration</h2>
@@ -93,7 +109,7 @@ mass_kg = 75
 weight_kg = 20
 use_total_mass_for_power = true
 imu_fps = 25</code></pre>
-<p><code>kinematics_parameter.txt</code> supplies camera FPS/Hz for <code>time_s</code> and time-based plots. <code>subject_parameters.txt</code> supplies subject mass, shank length, and bar plus plates mass. Kinematics folders may also use one-row CSV text files such as <code>deadlift_kinematics_parameters.txt</code> or the legacy typo <code>deadlifit_kinematics_parameters.txt</code>:</p>
+<p>The GUI uses one parameters-file selector. <code>deadlift_kinematics_parameters.txt</code> can supply camera FPS/Hz plus subject mass, shank length, and bar plus plates mass. Kinematics folders may also use one-row CSV text files such as <code>deadlift_kinematics_parameters.txt</code> or the legacy typo <code>deadlifit_kinematics_parameters.txt</code>:</p>
 <pre><code>subject_mass_kg,subject_height_m,shank_m,deadlift_mass_kg,fps_hz
 75.0,1.75,0.40,20.0,59.866844999</code></pre>
 

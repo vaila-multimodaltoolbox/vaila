@@ -81,7 +81,7 @@ Optional legacy file: `deadlift_parameters.txt` beside the input CSV or one of i
 
 Kinematics/camera parameter file (`kinematics_parameter.txt`) can be selected in GUI or passed by CLI. The parser reads values such as `Recommended Hz`, `Display FPS`, `Avg FPS`, `Frames`, `Duration`, and `Resolution`. FPS/Hz is used to create `time_s`, and MediaPipe plots use seconds on the x-axis.
 
-Subject/load parameter file (`subject_parameters.txt`) can be selected in GUI or passed by CLI. The kinematics folder can also contain `deadlift_kinematics_parameters.txt` (the historical typo `deadlifit_kinematics_parameters.txt` is still auto-detected). CSV format example:
+The GUI uses one parameters-file selector. That file can be `deadlift_kinematics_parameters.txt` (the historical typo `deadlifit_kinematics_parameters.txt` is still auto-detected) and may include subject/load fields too. CSV format example:
 
 ```csv
 subject_mass_kg,subject_height_m,shank_m,deadlift_mass_kg,fps_hz
@@ -101,7 +101,21 @@ Then click **Deadlift** in Frame B. A data-source dialog appears:
 - **Kinematics (MediaPipe pose CSV)** — runs this module (`vaila_deadlift.py`).
 - **IMU (barbell accelerometer + gyroscope CSV)** — runs the AHRS companion [`vaila_deadlift_imu`](vaila_deadlift_imu.md).
 
-Select the matching option, then choose a folder containing the CSV files. Kinematics mode opens one parameter window where you can point to the `.txt/.csv` config file or edit FPS, subject mass, shank length, deadlift mass, and GIF interval together.
+Select the matching option, then choose a folder containing the CSV files. Kinematics mode prints progress in the terminal and opens one centered parameter window where you can point to the `.txt/.csv` config file or edit FPS, subject mass, shank length, deadlift mass, GIF interval, and Butterworth cutoff together. Click **Run** to start or **Cancel** to abort before output folders are created.
+
+### GIF playback speed
+
+The **GIF interval (s)** field controls how many seconds each keyframe of the stick-figure animation stays on screen. The current default is **7.2 s** (6× slower than the legacy 1.2 s value), which is comfortable for technique review. Click the **?** button next to the field for an in-app cheat sheet:
+
+- Higher value → **slower** playback (each pose lingers longer)
+- Lower value → **faster** playback
+- 0.5 s → very fast preview
+- 1.2 s → legacy default (fast)
+- 3.6 s → 3× slower than legacy
+- 7.2 s → current default (6× slower than legacy)
+- 12.0 s → very slow, good for technique review
+
+To make the GIF N times slower than the current default, multiply the value by N (for example, `7.2 × 2 = 14.4 s` for 2× slower).
 
 CLI:
 
@@ -113,7 +127,7 @@ uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output \
   --kinematics-params path/to/kinematics_parameter.txt \
   --subject-params path/to/subject_parameters.txt \
   --fps 59.94 --mass-kg 75 --shank-length-m 0.44 --barbell-mass-kg 20 \
-  --gif-duration-s 1.5
+  --gif-duration-s 7.2 --cutoff 6
 ```
 
 ## Outputs

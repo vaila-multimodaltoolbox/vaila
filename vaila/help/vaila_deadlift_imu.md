@@ -2,7 +2,7 @@
 
 - **Category:** Analysis
 - **File:** `vaila/vaila_deadlift_imu.py`
-- **Version:** 0.3.48
+- **Version:** 0.3.50
 - **Updated:** 2026-06-09
 - **GUI Interface:** Yes — Frame B → **Deadlift IMU** (B6_r7_c1), or **Deadlift** (B5_r6_c5) → choose *IMU (AHRS)* in the data-source dialog
 
@@ -43,7 +43,7 @@ repository). A friendly walk-through is also available on the
 4. Rotate the raw accelerometer to the Earth frame, subtract the measured
    static gravity → **linear acceleration** in Earth coordinates.
 5. Detect repetitions from the filtered vertical linear acceleration
-   (heavy ~1.2 Hz low-pass for detection, light ~5 Hz low-pass for metrics).
+   (heavy ~1.2 Hz low-pass for detection, configurable light low-pass for metrics; default 4 Hz).
 6. Per-rep integration with ZUPT-style linear drift correction
    (velocity and displacement re-zeroed at start/end of each rep).
 7. Per-rep metrics — peak / mean velocity, peak / mean power, work, ROM,
@@ -114,46 +114,110 @@ Then either click **Deadlift IMU** in Frame B, or click **Deadlift** and choose
 *IMU (barbell accelerometer + gyroscope CSV)* in the data-source dialog. A
 **single Tkinter window** opens with all inputs in one place: input directory,
 output directory, params-file picker (loads numeric fields automatically),
-subject mass, subject height, deadlift bar mass, sample rate, AHRS filter,
-Madgwick `beta`, gyro units, and optional expected-reps count.
+subject mass, subject height, deadlift bar mass, sample rate, Butterworth cutoff,
+Madgwick `beta`, gyro units, and optional expected-reps count. The GUI does not
+ask the user to choose a filter: it runs **Madgwick and Mahony** and writes both
+sets of results.
+
+The current dialog also exposes:
+
+- a **live "Equivalent CLI command" preview** that updates as you fill the
+  form — copy/paste-ready so the GUI is also a CLI tutor;
+- a **"Status / Log" panel** mirrored to the terminal, plus a blue current-status
+  line near the top of the dialog, so picking input/output dirs, auto-detecting
+  `deadlift_parameters.txt`, validating numeric fields and starting the run all
+  leave a clear `[GUI] ...` trail in **both** the dialog and the shell that
+  launched `vaila.py`;
+- pre-filled defaults visible next to each numeric field
+  (75 kg / 1.75 m / 20 kg / 25 Hz / 4 Hz cutoff / β=0.1 / deg), with both
+  AHRS filters processed by default;
+- a **"CLI help"** button that opens a popup with the full CLI reference.
+
+![Deadlift IMU dialog (v0.3.50) - defaults pre-filled, live CLI preview, log mirrored to terminal](../../docs/images/vaila_deadlift_imu_dialog.png)
+
+**GUI browser / HiDPI fixes:**
+
+- the directory / params browsers open at the already selected path (or the current working directory), so repeated picks start in the right place;
+- the GUI shows a **CSV preview** immediately after selecting the input directory, including count and file names;
+- the three directory / params Entry widgets are now **70 chars wide** and
+  expand with the dialog (`columnconfigure weight=1`), so the full
+  `C:\Users\<name>\Documents\<...>\imu_data`-style path fits visually;
+- after every "Browse..." pick the Entry is scrolled to the end
+  (`xview_moveto(1.0)`), so the meaningful trailing portion of long paths
+  is always visible instead of a truncated drive prefix;
+- the dialog is opened as a modal `Toplevel` when launched from `vaila.py`,
+  avoiding a nested Tk `mainloop`; after **Run analysis** the control returns
+  immediately to the batch processor and terminal progress continues;
+- on dialog open, every numeric default (`mass=75 kg`, `height=1.75 m`,
+  `bar=20 kg`, `fs=25 Hz`, `cutoff=4 Hz`, `beta=0.1`, `gyro=deg`) is
+  re-asserted with a 50 ms `root.after` callback, which
+  works around an occasional Tk 8.6 + Windows HiDPI race where Entry
+  widgets render blank until first focus.
+
+Launching the module always prints a short banner with the defaults and the
+canonical CLI invocations to the terminal — useful when the user wants
+to reproduce or script the same run later.
 
 **CLI:**
 
 ```bash
-# Auto-detects deadlift_parameters.txt beside the CSV
+# Open the unified Tkinter dialog (no args)
+uv run python vaila/vaila_deadlift_imu.py
+
+# Single CSV file: runs Madgwick + Mahony by default
 uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/imu/deadlift_imu.csv
 
-# Explicit params file (-p / --params-file)
-uv run python vaila/vaila_deadlift_imu.py -i data.csv -p /path/to/deadlift_parameters.txt
+# Batch mode: process every *.csv in a directory (mirrors the GUI, both filters)
+uv run python vaila/vaila_deadlift_imu.py -d tests/Deadlift/imu -o /tmp/dlift_out
+
+# Explicit params file (-p / --params-file), same syntax shown by --help
+uv run python vaila/vaila_deadlift_imu.py \
+  -i tests/Deadlift/imu/deadlift_imu.csv \
+  -p tests/Deadlift/imu/deadlift_parameters.txt
+
+# Batch with explicit params file
+uv run python vaila/vaila_deadlift_imu.py \
+  -d tests/Deadlift/imu \
+  -p tests/Deadlift/imu/deadlift_parameters.txt \
+  -o /tmp/dlift_out
 
 # Inline overrides (win over params file)
 uv run python vaila/vaila_deadlift_imu.py -i data.csv --mass 80 --height 1.80 --weight 60
-uv run python vaila/vaila_deadlift_imu.py -i data.csv --filter mahony --beta 0.05
-uv run python vaila/vaila_deadlift_imu.py -i data.csv --fps 100 --gyro-units rad
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --filter mahony --beta 0.05  # restrict to one filter
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --fps 100 --cutoff 4 --gyro-units rad
 uv run python vaila/vaila_deadlift_imu.py -i data.csv --reps 14   # pin a known rep count
 
 # Force the unified GUI dialog
 uv run python vaila/vaila_deadlift_imu.py --gui
+
+# Full CLI help (lists every flag with its default + description)
+uv run python vaila/vaila_deadlift_imu.py --help
 ```
 
 Options:
 
-| Flag                 | Default       | Description                                          |
-|----------------------|---------------|------------------------------------------------------|
-| `-i / --input`       | —             | Input IMU CSV (acc_x/y/z, gyr_x/y/z required)        |
-| `-o / --output`      | input parent  | Destination directory for plots/CSVs/HTML/Markdown   |
-| `-p / --params-file` | auto-detect   | Path to `deadlift_parameters.txt` (any supported fmt)|
-| `--filter`           | `madgwick`    | `madgwick` or `mahony`                               |
-| `--beta`             | `0.1`         | Madgwick proportional gain                           |
-| `--gyro-units`       | `deg`         | `deg` or `rad`                                       |
-| `--fps`              | params / 25Hz | Override IMU sample rate (wins over params)          |
-| `--weight`           | params / 20kg | Override barbell weight in kg                        |
-| `--mass`             | params / 75kg | Override athlete body mass in kg                     |
-| `--height`           | params        | Override athlete body height in meters (informational)|
-| `--reps`             | auto-detect   | Force the expected repetition count                  |
-| `--gui`              | —             | Force the Tkinter single-form dialog                 |
+| Flag                 | Default       | Description                                              |
+|----------------------|---------------|----------------------------------------------------------|
+| `-i / --input`       | —             | Single input IMU CSV (acc_x/y/z, gyr_x/y/z required)     |
+| `-d / --input-dir`   | —             | Process every `*.csv` in this directory (batch, GUI-like)|
+| `-o / --output`      | input parent  | Destination directory for plots/CSVs/HTML/Markdown       |
+| `-p / --params-file` | auto-detect   | Path to `deadlift_parameters.txt` (any supported fmt)    |
+| `--filter`           | `both`        | `both`, `madgwick`, or `mahony`; default runs both        |
+| `--beta`             | `0.1`         | Madgwick proportional gain                               |
+| `--gyro-units`       | `deg`         | `deg` or `rad`                                           |
+| `--fps`              | params / 25Hz | Override IMU sample rate (wins over params)              |
+| `--cutoff`           | 4 Hz          | Butterworth low-pass cutoff for metrics; clamped below Nyquist |
+| `--weight`           | params / 20kg | Override barbell weight in kg                            |
+| `--mass`             | params / 75kg | Override athlete body mass in kg                         |
+| `--height`           | params        | Override athlete body height in meters (informational)   |
+| `--reps`             | auto-detect   | Force the expected repetition count                      |
+| `--gui`              | —             | Force the Tkinter single-form dialog                     |
 
 Precedence (highest first): CLI / GUI override → params file → TOML → defaults.
+
+Both `-d` (CLI batch) and the GUI print an identical, copy/paste-ready
+**"Equivalent CLI command"** block before processing, so it is trivial to
+move a one-off GUI run into a script or scheduled job.
 
 ### Repetition detection
 
@@ -163,16 +227,21 @@ leading/trailing **static-window rejection** so the barbell-at-rest periods at
 the start/end of a set are not counted. The shared `deadlift_parameters.txt`
 rep count is **not** used to trim the AHRS detection (it often describes a
 different capture); use `--reps N` to pin a known count. On the bundled
-`tests/Deadlift/deadlift_imu.csv` example (14 reps), the detector reports 14.
+`tests/Deadlift/deadlift_imu.csv` example, the detector reports 14 when run with
+`--fps 25` (the default form value); changing `fs_hz` in the params file changes
+the time base and can change the detected count.
 
 ## Outputs
 
 Each input CSV produces a sibling folder named
-`vaila_deadlift_imu_ahrs_YYYYMMDD_HHMMSS/<input_basename>/` containing:
+`vaila_deadlift_imu_ahrs_YYYYMMDD_HHMMSS/<input_basename>/` containing a
+`*_imu_ahrs_filter_index.html` chooser plus separate `madgwick/` and `mahony/`
+subfolders. Each filter subfolder contains:
 
 - `*_imu_ahrs_processed_YYYYMMDD_HHMMSS.csv` — per-sample time series
-  (quaternion, Euler angles, Earth-frame acceleration, linear acceleration,
-  vertical velocity, displacement)
+  (quaternion, Euler angles, quaternion axis-angle spherical columns,
+  Earth-frame acceleration, linear acceleration, vertical velocity, displacement,
+  and `translation_world_x/y/z_m` used by the animation)
 - `*_imu_ahrs_rep_metrics_YYYYMMDD_HHMMSS.csv` — per-rep summary
   (peak / mean velocity, power, work, ROM, peak / mean force, impulse)
 - `*_imu_raw_acc_axes_YYYYMMDD_HHMMSS.png` — raw `acc_x` / `acc_y` / `acc_z`
@@ -180,13 +249,13 @@ Each input CSV produces a sibling folder named
   the detected repetition peaks marked
 - `*_imu_ahrs_orientation_YYYYMMDD_HHMMSS.png` — roll / pitch / yaw, Earth
   acceleration components, vertical linear acceleration
-- `*_imu_quaternion_didactic_YYYYMMDD_HHMMSS.png` — **didactic quaternion
-  figure** with the four components `q = [w, x, y, z]`, the norm `|q|` (should
-  stay numerically at 1), the total rotation angle
-  `θ = 2·arccos(|q₀|)` in degrees, and the instantaneous rotation axis
-  `n = (nₓ, nᵧ, n_z)`
-- `*_imu_quaternion_axis_xy_YYYYMMDD_HHMMSS.png` — XY view of the rotation
-  axis `n(t)` on the unit sphere, coloured by sample index (time progression)
+- `*_imu_quaternion_spherical_YYYYMMDD_HHMMSS.png` — unit quaternion line graph
+  with `|q|`, rigid-body `rotation_deg`, axis `latitude_deg`, and axis
+  `longitude_deg` (unwrapped for continuous plotting)
+- `*_imu_quaternion_rigidbody_animation_YYYYMMDD_HHMMSS.html` — standalone 3D
+  canvas animation with fixed real-world Cartesian axes, cube translation from
+  AHRS/ZUPT vertical displacement, cube/body orientation from `q(t)`, unit axis
+  `n(q)`, latitude, longitude, and rotation angle in degrees
 - `*_imu_vel_disp_YYYYMMDD_HHMMSS.png` — vertical velocity and displacement
 - `*_imu_rep_bars_YYYYMMDD_HHMMSS.png` — per-rep bar charts
 - `*_imu_velocity_overlay_YYYYMMDD_HHMMSS.png` — velocity profile overlay
@@ -195,18 +264,22 @@ Each input CSV produces a sibling folder named
 - `*_imu_ahrs_report.md` — Markdown sibling of the HTML report (same tables,
   same figures, same references)
 
-### Didactic quaternion figures
+### Quaternion spherical coordinates and rigid-body animation
 
 A unit quaternion
-`q = [q₀, q₁, q₂, q₃] = [cos(θ/2), nₓ·sin(θ/2), nᵧ·sin(θ/2), n_z·sin(θ/2)]`
-represents a rotation by angle `θ` around the unit axis `n`. The two extra
-quaternion figures above expose this geometry directly: the AHRS filter
-produces `q(t)` sample by sample, and the report makes the abstract algebra
-visible (norm check `|q| ≈ 1`, rotation angle `θ(t)`, and the trajectory of
-the rotation axis `n(t)` on the unit sphere). Unlike Euler angles, quaternions
-are *singularity-free* — no gimbal lock, no discontinuous unwrapping. This is
-why every modern IMU/AHRS chip, every game engine and every 3D animation
-system uses quaternions internally.
+`q = [w, x, y, z] = [cos(theta/2), nx*sin(theta/2), ny*sin(theta/2), nz*sin(theta/2)]`
+represents a rigid-body rotation by `theta` around the unit axis `n`. Because
+`|q| = 1`, the axis is represented on the unit sphere as latitude and longitude:
+
+- `quat_rotation_deg`: `theta`, the rotation angle in degrees.
+- `quat_axis_latitude_deg`: `asin(nz)` in degrees.
+- `quat_axis_longitude_deg`: `atan2(ny, nx)` in degrees.
+
+The report includes a line graph for those spherical coordinates and a standalone
+HTML animation. In the animation the real-world axes stay fixed (Xe, Ye, Ze),
+the cube center translates by the AHRS/ZUPT vertical displacement, and the sensor
+cube/body axes (Xb, Yb, Zb) are rotated by `q(t)`. The black vector is the unit
+quaternion axis `n(q)`.
 
 ## Reference
 
