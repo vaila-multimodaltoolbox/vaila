@@ -977,9 +977,9 @@ class Vaila(tk.Tk):
         row7_frame.pack(fill="x")
         vaila_b6_r7_c1 = tk.Button(
             row7_frame,
-            text="Deadlift IMU",
+            text="vailá",
             width=button_width,
-            command=self.deadlift_imu_analysis,
+            command=self.show_vaila_message,
         )
         vaila_b6_r7_c2 = tk.Button(
             row7_frame,
@@ -2024,7 +2024,6 @@ class Vaila(tk.Tk):
         x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
-
 
     # B_r3_c5
     def animal_open_field(self):
