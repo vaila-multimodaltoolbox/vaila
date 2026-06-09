@@ -78,30 +78,55 @@ A friendly walk-through is available on the
 
 <div class="usage">
 <h2>Usage</h2>
-<p><strong>GUI:</strong> run <code>uv run vaila.py</code>, then either click <strong>Deadlift IMU</strong>,
-or click <strong>Deadlift</strong> and choose <em>IMU (barbell accelerometer + gyroscope CSV)</em>
-in the data-source dialog. Select a folder of IMU CSV files.</p>
-<pre><code>uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/deadlift_imu.csv
+<p><strong>GUI (single unified form):</strong> run <code>uv run vaila.py</code>, then click
+<strong>Deadlift IMU</strong> in Frame B (or <strong>Deadlift</strong> &rarr; <em>IMU (barbell
+accelerometer + gyroscope CSV)</em>). A <strong>single Tkinter window</strong> opens with all
+inputs in one place: input directory, output directory, params-file picker (loads numeric fields
+automatically), subject mass, subject height, deadlift bar mass, sample rate, AHRS filter,
+Madgwick <code>beta</code>, gyro units and optional expected reps. No more chained pop-ups.</p>
+
+<p><strong>CLI:</strong></p>
+<pre><code># Auto-detects deadlift_parameters.txt beside the CSV
+uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/imu/deadlift_imu.csv
+
+# Explicit params file (-p / --params-file)
+uv run python vaila/vaila_deadlift_imu.py -i data.csv -p /path/to/deadlift_parameters.txt
+
+# Inline overrides (win over params file)
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --mass 80 --height 1.80 --weight 60
 uv run python vaila/vaila_deadlift_imu.py -i data.csv --filter mahony --beta 0.05
 uv run python vaila/vaila_deadlift_imu.py -i data.csv --fps 100 --gyro-units rad
-uv run python vaila/vaila_deadlift_imu.py -i data.csv --weight 60 --mass 75
-uv run python vaila/vaila_deadlift_imu.py -i data.csv --reps 14   # pin a known rep count</code></pre>
-<p>Repetitions are detected automatically (concentric vertical-acceleration peaks with
-leading/trailing static-window rejection). When the athlete's true rep count is known,
-<code>--reps N</code> trims any lead-in/trailing partial cycles to exactly <code>N</code>.</p>
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --reps 14   # pin a known rep count
+
+# Force the unified GUI dialog
+uv run python vaila/vaila_deadlift_imu.py --gui</code></pre>
+<p>Precedence (highest first): CLI / GUI override &rarr; params file &rarr; TOML &rarr; defaults.</p>
 </div>
 
 <h2>Configuration</h2>
-<p>Optional <code>vaila_deadlift_config.toml</code> beside the input CSV or in <code>vaila/</code>:</p>
+
+<h3>1. Single-row CSV params (preferred)</h3>
+<p><code>deadlift_parameters.txt</code> beside the input CSV (auto-loaded; can also be pointed to
+explicitly with <code>-p</code>/<code>--params-file</code>):</p>
+<pre><code>subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz
+75.0,1.75,20.0,25.0</code></pre>
+<p>Tolerated column aliases (case-insensitive):
+<code>subject_mass</code>/<code>body_mass_kg</code>/<code>mass_kg</code>/<code>mass</code>,
+<code>subject_height</code>/<code>height_m</code>/<code>height</code>,
+<code>deadlift_mass</code>/<code>barbell_kg</code>/<code>weight_kg</code>/<code>weight</code>,
+and <code>fs</code>/<code>fps</code>/<code>imu_fps</code>/<code>sample_rate</code>.</p>
+
+<h3>2. Legacy <code>key,value</code> format (still supported)</h3>
+<pre><code>weight,20
+real_repetition_count,10</code></pre>
+
+<h3>3. Optional TOML</h3>
+<p><code>vaila_deadlift_config.toml</code> beside the input CSV or in <code>vaila/</code>:</p>
 <pre><code>[deadlift_context]
 imu_fps = 25.0
 weight_kg = 20.0
 mass_kg = 75.0
 use_total_mass_for_power = true</code></pre>
-
-<p>Optional <code>deadlift_parameters.txt</code> beside the input CSV (auto-loaded):</p>
-<pre><code>weight,20
-real_repetition_count,10</code></pre>
 
 <h2>Outputs</h2>
 <p>Each input CSV produces a sibling folder named
@@ -116,11 +141,35 @@ real_repetition_count,10</code></pre>
     detected repetition peaks are marked</li>
 <li><code>*_imu_ahrs_orientation_*.png</code> &mdash; roll / pitch / yaw, Earth acc components,
     vertical linear acceleration</li>
+<li><code>*_imu_quaternion_didactic_*.png</code> &mdash; <strong>didactic quaternion figure</strong>
+    with components <code>q = [w, x, y, z]</code>, the norm <code>|q|</code> (should stay numerically
+    at 1), the total rotation angle <code>&theta; = 2&middot;arccos(|q<sub>0</sub>|)</code> in
+    degrees, and the instantaneous rotation axis
+    <code>n = (n<sub>x</sub>, n<sub>y</sub>, n<sub>z</sub>)</code></li>
+<li><code>*_imu_quaternion_axis_xy_*.png</code> &mdash; XY view of the rotation axis
+    <code>n(t)</code> on the unit sphere, coloured by sample index (time progression)</li>
 <li><code>*_imu_vel_disp_*.png</code> &mdash; vertical velocity and displacement</li>
 <li><code>*_imu_rep_bars_*.png</code> &mdash; per-rep bar charts</li>
 <li><code>*_imu_velocity_overlay_*.png</code> &mdash; velocity profile overlay</li>
-<li><code>*_imu_ahrs_report.html</code> &mdash; self-contained HTML report</li>
+<li><code>*_imu_ahrs_report.html</code> &mdash; self-contained HTML report (with the didactic
+    quaternion section and BibTeX-ready references)</li>
+<li><code>*_imu_ahrs_report.md</code> &mdash; Markdown sibling of the HTML report (same tables,
+    same figures, same references)</li>
 </ul>
+
+<h3>Didactic quaternion figures</h3>
+<p>A unit quaternion
+<code>q = [q<sub>0</sub>, q<sub>1</sub>, q<sub>2</sub>, q<sub>3</sub>]
+       = [cos(&theta;/2), n<sub>x</sub>sin(&theta;/2),
+          n<sub>y</sub>sin(&theta;/2), n<sub>z</sub>sin(&theta;/2)]</code>
+represents a rotation by angle <code>&theta;</code> around the unit axis
+<code>n = (n<sub>x</sub>, n<sub>y</sub>, n<sub>z</sub>)</code>. The two extra quaternion figures
+above expose this geometry directly: the AHRS filter produces <code>q(t)</code> sample by sample,
+and the report makes the abstract algebra visible (norm check <code>|q| &asymp; 1</code>, rotation
+angle <code>&theta;(t)</code>, and the trajectory of the rotation axis <code>n(t)</code> on the
+unit sphere). Unlike Euler angles, quaternions are <em>singularity-free</em> &mdash; no gimbal
+lock, no discontinuous unwrapping. This is why every modern IMU/AHRS chip, every game engine and
+every 3D animation system uses quaternions internally.</p>
 
 <h2>References</h2>
 <ul>
@@ -141,15 +190,52 @@ real_repetition_count,10</code></pre>
 <p>The quaternion-based 3D kinematic modeling used by this module traces back to a close academic
 collaboration with Professor <strong>René Jean Brenzikofer</strong> (UNICAMP), which led to the first
 publication of quaternion-based three-dimensional modeling data in the book
-<em>"Modelos Matemáticos nas Ciências Não-Exatas"</em> (Editora Blucher, 2007). Quaternions solve the
-<em>gimbal lock</em> singularity and are the exact basis for the AHRS data-fusion algorithms in IMUs
-used in wearables and player GPS+IMU trackers. This module is dedicated to his memory.</p>
+<em>"Modelos Matemáticos nas Ciências Não-Exatas, vol. 1"</em> (Editora Blucher, 2007). Quaternions
+solve the <em>gimbal lock</em> singularity and are the exact basis for the AHRS data-fusion
+algorithms in IMUs used in wearables and player GPS+IMU trackers. This module is dedicated to his
+memory.</p>
+
+<p><strong>Primary references (BibTeX-ready):</strong></p>
 <ul>
-<li>Tribute &amp; publication history: <a href="https://lnkd.in/eZUcgbNT">https://lnkd.in/eZUcgbNT</a></li>
-<li>Doctoral thesis (Quaternions in Biomechanics): <a href="https://lnkd.in/eSjuDjnw">https://lnkd.in/eSjuDjnw</a></li>
-<li>Reference book (Editora Blucher, 2007), <em>Modelos Matemáticos nas Ciências Não-Exatas</em>:
-    <a href="https://lnkd.in/ejKpHWzK">https://lnkd.in/ejKpHWzK</a></li>
+<li>Nogueira, E. A., Martins, L. E. B., &amp; Brenzikofer, R. (2007). <em>Modelos Matemáticos nas
+    Ciências Não-Exatas &mdash; vol. 1.</em> São Paulo: Editora Blucher. ISBN 978-85-212-0419-0.
+    <a href="https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190">
+    blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1</a></li>
+<li>Santiago, P. R. P. (2009). <em>Rotações tridimensionais em biomecânica via quatérnions:
+    aplicações na análise dos movimentos esportivos.</em> Tese (Doutorado) &mdash; Universidade
+    Estadual Paulista (Unesp), Instituto de Biociências de Rio Claro.
+    <a href="http://hdl.handle.net/11449/100404">hdl.handle.net/11449/100404</a> &middot;
+    <a href="https://repositorio.unesp.br/server/api/core/bitstreams/41603fa7-545b-4e74-a045-57ce94885e0c/content">PDF</a></li>
 </ul>
+
+<p><strong>Tribute &amp; social-media coverage:</strong></p>
+<ul>
+<li>Instagram post (tribute &amp; publication history):
+    <a href="https://www.instagram.com/p/DZLogIJoFbF/">instagram.com/p/DZLogIJoFbF</a></li>
+<li>LinkedIn post (publication history &amp; tribute to Prof. Brenzikofer):
+    <a href="https://www.linkedin.com/posts/paulo-roberto-pereira-santiago-132619112_hist%C3%B3rico-de-publica%C3%A7%C3%A3o-e-homenagem-ao-prof-ugcPost-7468670091845472257-3tzD/">linkedin.com/posts/paulo-roberto-pereira-santiago - homenagem ao Prof. Brenzikofer</a></li>
+</ul>
+
+<pre style="background:#fff5e6;border:1px solid #f6ad55;padding:10px;border-radius:6px;font-size:.85em;overflow-x:auto;">
+@book{nogueira2007modelos,
+  title     = {Modelos matem\'aticos nas ci\^encias n\~ao-exatas - vol. 1},
+  author    = {Nogueira, Eduardo Arantes and Martins, Luiz Eduardo Barreto
+               and Brenzikofer, Ren\'e},
+  year      = {2007},
+  publisher = {Editora Blucher},
+  isbn      = {9788521204190},
+  url       = {https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190}
+}
+
+@phdthesis{santiago2009rotaccoes,
+  title    = {Rota\c{c}\~oes tridimensionais em biomec\^anica via quat\'ernions:
+              aplica\c{c}\~oes na an\'alise dos movimentos esportivos},
+  author   = {Santiago, Paulo Roberto Pereira},
+  school   = {Universidade Estadual Paulista (Unesp),
+              Instituto de Bioci\^encias de Rio Claro},
+  year     = {2009},
+  url      = {http://hdl.handle.net/11449/100404}
+}</pre>
 
 <div class="footer">Generated on 2026-06-09 for vaila 0.3.48.</div>
 </div></body></html>

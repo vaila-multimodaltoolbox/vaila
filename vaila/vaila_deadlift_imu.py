@@ -46,12 +46,46 @@ Quaternion modeling - publication history & tribute
 The quaternion-based 3D kinematic modeling used here traces back to a close
 academic collaboration with Prof. René Jean Brenzikofer (UNICAMP), which led to
 the first publication of quaternion-based three-dimensional modeling data in the
-book *"Modelos Matemáticos nas Ciências Não-Exatas"* (Editora Blucher, 2007).
-This module is dedicated to his memory.
+book *"Modelos Matemáticos nas Ciências Não-Exatas, vol. 1"* (Editora Blucher,
+2007). This module is dedicated to his memory.
 
-* Tribute & publication history: https://lnkd.in/eZUcgbNT
-* Doctoral thesis (Quaternions in Biomechanics): https://lnkd.in/eSjuDjnw
-* Reference book (Editora Blucher, 2007): https://lnkd.in/ejKpHWzK
+BibTeX references
+^^^^^^^^^^^^^^^^^
+
+.. code-block:: bibtex
+
+    @book{nogueira2007modelos,
+      title     = {Modelos matem\'aticos nas ci\\^encias n\\~ao-exatas - vol. 1},
+      author    = {Nogueira, Eduardo Arantes and Martins, Luiz Eduardo Barreto
+                   and Brenzikofer, Ren\'e},
+      year      = {2007},
+      publisher = {Editora Blucher},
+      isbn      = {9788521204190},
+      url       = {https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190}
+    }
+
+    @phdthesis{santiago2009rotaccoes,
+      title    = {Rota\\c{c}\\~oes tridimensionais em biomec\\^anica via
+                  quat\'ernions: aplica\\c{c}\\~oes na an\'alise dos movimentos
+                  esportivos},
+      author   = {Santiago, Paulo Roberto Pereira},
+      school   = {Universidade Estadual Paulista (Unesp),
+                  Instituto de Bioci\\^encias de Rio Claro},
+      year     = {2009},
+      url      = {http://hdl.handle.net/11449/100404}
+    }
+
+Tribute & social media coverage
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Instagram post (tribute & publication history):
+  https://www.instagram.com/p/DZLogIJoFbF/
+* LinkedIn post (publication history & tribute to Prof. Brenzikofer):
+  https://www.linkedin.com/posts/paulo-roberto-pereira-santiago-132619112_hist%C3%B3rico-de-publica%C3%A7%C3%A3o-e-homenagem-ao-prof-ugcPost-7468670091845472257-3tzD/
+* Doctoral thesis PDF (open access, UNESP repository):
+  https://repositorio.unesp.br/server/api/core/bitstreams/41603fa7-545b-4e74-a045-57ce94885e0c/content
+* Reference book (Editora Blucher, 2007):
+  https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190
 
 Quaternion convention
 ---------------------
@@ -107,9 +141,10 @@ import contextlib
 import datetime
 import math
 import os
+import tkinter as tk
 from dataclasses import dataclass, field
 from pathlib import Path
-from tkinter import Tk, filedialog, messagebox
+from tkinter import Tk, filedialog, messagebox, ttk
 
 import matplotlib
 
@@ -516,23 +551,138 @@ def _load_context_from_toml(base_dir: Path | None = None) -> dict:
     return {}
 
 
-def _load_parameters_file(base_dir: Path) -> dict:
-    """Load external parameters (deadlift_parameters.txt) if present."""
+def _parse_parameters_file(path: Path) -> dict:
+    """Parse a ``deadlift_parameters.txt`` file.
+
+    Two formats are accepted:
+
+    * **New CSV-style header format** (preferred, single row of values)::
+
+          subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz
+          75.0,1.75,20.0,25.0
+
+      Known column aliases are normalised to the canonical keys
+      ``subject_mass_kg`` / ``subject_height_m`` / ``deadlift_mass_kg`` /
+      ``fs_hz``. Any extra column is preserved with its original header name.
+
+    * **Legacy key,value format** (one parameter per line)::
+
+          weight,20
+          real_repetition_count,10
+
+      Each line is stored as ``key -> value`` (string).
+
+    The returned dict always carries one extra key ``__source__`` pointing to
+    the resolved file path (string) so callers can report it back to the user.
+    """
+    if not path.exists():
+        return {}
+
+    text = path.read_text(encoding="utf-8")
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return {}
+
+    # Aliases tolerated in the new format (case-insensitive). The canonical
+    # column names are the keys.
+    alias_map = {
+        "subject_mass_kg": {
+            "subject_mass_kg",
+            "subject_mass",
+            "body_mass_kg",
+            "body_mass",
+            "mass_kg",
+            "mass",
+            "athlete_mass_kg",
+            "athlete_mass",
+        },
+        "subject_height_m": {
+            "subject_height_m",
+            "subject_height",
+            "height_m",
+            "height",
+            "athlete_height_m",
+            "athlete_height",
+            "stature_m",
+            "stature",
+        },
+        "deadlift_mass_kg": {
+            "deadlift_mass_kg",
+            "deadlift_mass",
+            "barbell_kg",
+            "barbell_mass_kg",
+            "weight_kg",
+            "weight",
+        },
+        "fs_hz": {
+            "fs_hz",
+            "fs",
+            "fps",
+            "imu_fps",
+            "sample_rate",
+            "sample_rate_hz",
+            "sampling_rate",
+            "sampling_rate_hz",
+        },
+        "real_repetition_count": {
+            "real_repetition_count",
+            "repetition_count",
+            "rep_count",
+            "reps",
+        },
+    }
+
+    first = lines[0]
+    has_header = (
+        "," in first
+        and not first.split(",", 1)[1].strip().replace(".", "", 1).replace("-", "", 1).isdigit()
+    )
+
+    params: dict = {"__source__": str(path)}
+
+    if has_header and len(lines) >= 2:
+        headers = [h.strip() for h in first.split(",")]
+        values = [v.strip() for v in lines[1].split(",")]
+        if len(values) == len(headers):
+            for h, v in zip(headers, values, strict=False):
+                canonical = h.lower()
+                for canon, aliases in alias_map.items():
+                    if canonical in aliases:
+                        canonical = canon
+                        break
+                params[canonical] = v
+            # Back-compat shortcut: expose ``weight`` for callers that still
+            # read the legacy key.
+            if "deadlift_mass_kg" in params and "weight" not in params:
+                params["weight"] = params["deadlift_mass_kg"]
+            return params
+
+    # Legacy ``key,value`` per-line format.
+    for line in lines:
+        if "," not in line:
+            continue
+        key, val = line.split(",", 1)
+        params[key.strip().lower()] = val.strip()
+    return params
+
+
+def _load_parameters_file(base_dir: Path, explicit_path: str | os.PathLike | None = None) -> dict:
+    """Load ``deadlift_parameters.txt`` from an explicit path or by searching.
+
+    If ``explicit_path`` is provided and exists, it is used directly.
+    Otherwise the function looks for a file named ``deadlift_parameters.txt``
+    in ``base_dir`` and up to three parent directories (legacy behaviour).
+    """
+    if explicit_path is not None:
+        p = Path(explicit_path)
+        if p.exists():
+            return _parse_parameters_file(p)
+
     search_dirs = [base_dir, *base_dir.parents[:3]]
     for directory in search_dirs:
         p = directory / "deadlift_parameters.txt"
-        if not p.exists():
-            continue
-        try:
-            params: dict = {}
-            with open(p, encoding="utf-8") as f:
-                for line in f:
-                    if "," in line:
-                        key, val = line.strip().split(",", 1)
-                        params[key.strip()] = val.strip()
-            return params
-        except Exception:
-            pass
+        if p.exists():
+            return _parse_parameters_file(p)
     return {}
 
 
@@ -1062,6 +1212,143 @@ def _generate_plots(
     plt.close(fig)
     out.append(p1)
 
+    # 1b. Didactic quaternion figure (q components, |q|, angle, axis)
+    # The unit quaternion q = [q0, q1, q2, q3] = [cos(theta/2), sin(theta/2) * n]
+    # encodes a rotation by angle theta around unit axis n. Plotting all four
+    # components plus the derived (theta, n) makes the abstract algebra concrete
+    # for users who only know Euler angles.
+    quat = fusion.quaternion  # (N, 4)
+    q_norm = np.linalg.norm(quat, axis=1)
+    q0_clip = np.clip(np.abs(quat[:, 0]), 0.0, 1.0)
+    theta_deg = np.degrees(2.0 * np.arccos(q0_clip))  # rotation angle [0, 360]
+    sin_half = np.sqrt(np.clip(1.0 - q0_clip**2, 1e-12, 1.0))
+    axis = np.zeros_like(quat[:, 1:])  # (N, 3) unit rotation axis
+    axis[:, 0] = quat[:, 1] / sin_half
+    axis[:, 1] = quat[:, 2] / sin_half
+    axis[:, 2] = quat[:, 3] / sin_half
+
+    fig, axes = plt.subplots(4, 1, figsize=(12, 11), sharex=True)
+
+    axes[0].plot(
+        time_axis, quat[:, 0], color="#1a365d", linewidth=1.0, label=r"$q_0 = w = \cos(\theta/2)$"
+    )
+    axes[0].plot(
+        time_axis,
+        quat[:, 1],
+        color="#c0392b",
+        linewidth=1.0,
+        label=r"$q_1 = x = n_x \sin(\theta/2)$",
+    )
+    axes[0].plot(
+        time_axis,
+        quat[:, 2],
+        color="#27ae60",
+        linewidth=1.0,
+        label=r"$q_2 = y = n_y \sin(\theta/2)$",
+    )
+    axes[0].plot(
+        time_axis,
+        quat[:, 3],
+        color="#8e44ad",
+        linewidth=1.0,
+        label=r"$q_3 = z = n_z \sin(\theta/2)$",
+    )
+    axes[0].axhline(0.0, color="gray", linewidth=0.5, alpha=0.5)
+    axes[0].set_ylabel("Quaternion components")
+    axes[0].set_title(
+        rf"Quaternion orientation $q = [w, x, y, z]$ - {base_name} "
+        rf"(filter: {filter_name.title()} AHRS)"
+    )
+    axes[0].legend(fontsize=8, ncol=4, loc="upper right")
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].plot(
+        time_axis,
+        q_norm,
+        color="#2c5282",
+        linewidth=1.0,
+        label=r"$|q| = \sqrt{q_0^2 + q_1^2 + q_2^2 + q_3^2}$",
+    )
+    axes[1].axhline(
+        1.0, color="red", linestyle="--", alpha=0.5, label=r"Unit norm $|q| = 1$ (rigid rotation)"
+    )
+    norm_dev = float(np.max(np.abs(q_norm - 1.0)))
+    axes[1].set_ylabel("Quaternion norm")
+    axes[1].set_title(
+        rf"Norm check: $\max\,|\,|q| - 1\,| = {norm_dev:.2e}$ "
+        rf"(should stay numerically at 1)"
+    )
+    axes[1].legend(fontsize=8, loc="upper right")
+    axes[1].grid(True, alpha=0.3)
+
+    axes[2].plot(
+        time_axis, theta_deg, color="#b7791f", linewidth=1.0, label=r"$\theta = 2\,\arccos(|q_0|)$"
+    )
+    axes[2].set_ylabel("Rotation angle θ (deg)")
+    axes[2].set_title(r"Total rotation angle from sensor frame to Earth frame")
+    axes[2].legend(fontsize=8, loc="upper right")
+    axes[2].grid(True, alpha=0.3)
+
+    axes[3].plot(time_axis, axis[:, 0], color="#c0392b", linewidth=0.9, label=r"$n_x$ (axis X)")
+    axes[3].plot(time_axis, axis[:, 1], color="#27ae60", linewidth=0.9, label=r"$n_y$ (axis Y)")
+    axes[3].plot(time_axis, axis[:, 2], color="#8e44ad", linewidth=0.9, label=r"$n_z$ (axis Z)")
+    axes[3].axhline(0.0, color="gray", linewidth=0.5, alpha=0.5)
+    axes[3].set_ylabel("Rotation axis n")
+    axes[3].set_xlabel("Time (s)")
+    axes[3].set_title(
+        r"Instantaneous rotation axis $\mathbf{n} = (n_x, n_y, n_z)$ "
+        r"with $q_{1..3} = \mathbf{n}\sin(\theta/2)$"
+    )
+    axes[3].legend(fontsize=8, ncol=3, loc="upper right")
+    axes[3].grid(True, alpha=0.3)
+
+    for rep in reps:
+        for ax in axes:
+            ax.axvline(rep["peak_frame"] / fps, color="red", linestyle=":", alpha=0.35)
+
+    fig.suptitle(
+        "Quaternion-based 3D orientation (didactic view) - "
+        r"$q = \cos(\theta/2) + \sin(\theta/2)\,(n_x i + n_y j + n_z k)$",
+        fontsize=12,
+        y=1.005,
+    )
+    fig.tight_layout()
+    p1b = os.path.join(output_dir, f"{base_name}_imu_quaternion_didactic_{ts}.png")
+    fig.savefig(p1b, dpi=150)
+    plt.close(fig)
+    out.append(p1b)
+
+    # 1c. Quaternion polar view: rotation axis on the unit sphere (top-down)
+    # Project the unit axis n(t) onto the XY plane and colour by time. This is a
+    # compact, didactic "where is the rotation axis pointing right now?" plot.
+    fig, ax = plt.subplots(figsize=(7, 7))
+    nx = axis[:, 0]
+    ny = axis[:, 1]
+    nz = axis[:, 2]
+    colors = np.arange(len(nx))
+    sc = ax.scatter(nx, ny, c=colors, cmap="viridis", s=6, alpha=0.7)
+    cbar = fig.colorbar(sc, ax=ax, shrink=0.8)
+    cbar.set_label("Sample index (time progression)")
+    circle = plt.Circle((0.0, 0.0), 1.0, color="gray", fill=False, linestyle="--", linewidth=1.0)
+    ax.add_patch(circle)
+    ax.axhline(0.0, color="gray", linewidth=0.5, alpha=0.5)
+    ax.axvline(0.0, color="gray", linewidth=0.5, alpha=0.5)
+    ax.set_xlim(-1.1, 1.1)
+    ax.set_ylim(-1.1, 1.1)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel(r"$n_x$  (X component of rotation axis)")
+    ax.set_ylabel(r"$n_y$  (Y component of rotation axis)")
+    ax.set_title(
+        f"Rotation axis n(t) on the unit sphere (XY view) - {base_name}\n"
+        rf"Z (out-of-plane) component shown as size: mean $n_z$ = {float(np.mean(nz)):.2f}"
+    )
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    p1c = os.path.join(output_dir, f"{base_name}_imu_quaternion_axis_xy_{ts}.png")
+    fig.savefig(p1c, dpi=150)
+    plt.close(fig)
+    out.append(p1c)
+
     # 2. Vertical velocity / displacement
     fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
     axes[0].plot(time_axis, velocity, color="darkorange", linewidth=0.9)
@@ -1152,6 +1439,7 @@ def _generate_html_report(
     fps: float,
     filter_name: str,
     g_mag: float,
+    body_height_m: float | None = None,
 ) -> str:
     report_path = os.path.join(output_dir, f"{base_name}_imu_ahrs_report.html")
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1210,6 +1498,7 @@ def _generate_html_report(
     body_mass_str = (
         f"{body_mass_kg:.1f} kg" if body_mass_kg is not None else "n/a (barbell-only power)"
     )
+    body_height_str = f"{body_height_m:.2f} m" if body_height_m is not None else "n/a"
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -1245,7 +1534,8 @@ def _generate_html_report(
         &nbsp;|&nbsp; <strong>Sample rate:</strong> {fps:.1f} Hz
         &nbsp;|&nbsp; <strong>|g| (sensor):</strong> {g_mag:.3f} m/s²</p>
     <p><strong>Barbell weight:</strong> {barbell_kg:.1f} kg
-        &nbsp;|&nbsp; <strong>Body mass:</strong> {body_mass_str}</p>
+        &nbsp;|&nbsp; <strong>Body mass:</strong> {body_mass_str}
+        &nbsp;|&nbsp; <strong>Body height:</strong> {body_height_str}</p>
 
     <div class="summary-box">
         <strong>Repetitions detected:</strong> {cadence["n_reps"]}
@@ -1277,6 +1567,35 @@ def _generate_html_report(
 
     <h2>Time-series and rep visualizations</h2>
     {images_html}
+
+    <div class="quat-didactic" style="background:#f0f9ff; border-left:6px solid #0e7490;
+         padding:15px 20px; margin:25px 0; font-size:0.95em;">
+        <h2 style="margin-top:0; color:#155e75;">Why quaternions? (didactic note)</h2>
+        <p>A unit quaternion
+        <code>q = [q<sub>0</sub>, q<sub>1</sub>, q<sub>2</sub>, q<sub>3</sub>] =
+        [cos(θ/2), n<sub>x</sub> sin(θ/2), n<sub>y</sub> sin(θ/2),
+        n<sub>z</sub> sin(θ/2)]</code> represents a rotation by angle
+        <code>θ</code> around the unit axis
+        <code>n = (n<sub>x</sub>, n<sub>y</sub>, n<sub>z</sub>)</code>. The
+        figures above visualise:</p>
+        <ul>
+            <li><strong>Quaternion components (q<sub>0..3</sub>):</strong> raw
+                output of the AHRS filter, sample by sample.</li>
+            <li><strong>Norm |q| ≈ 1:</strong> a numerical sanity check that the
+                tracker is producing a rigid rotation (no scaling, no shear).</li>
+            <li><strong>Rotation angle θ(t):</strong> the total angular distance
+                between the sensor frame and the Earth frame at each instant.</li>
+            <li><strong>Rotation axis n(t):</strong> the instantaneous direction
+                around which the barbell is rotating; the unit-sphere XY view
+                makes its trajectory visible at a glance.</li>
+        </ul>
+        <p>Unlike Euler angles, quaternions are <em>singularity-free</em>: no
+        gimbal lock, no discontinuous unwrapping, and no ambiguous axis order.
+        This is precisely why every modern IMU/AHRS chip, every game engine and
+        every 3D animation system uses quaternions internally - and why the
+        AHRS pipeline of this report stores orientation as
+        <code>q = [w, x, y, z]</code> rather than (roll, pitch, yaw).</p>
+    </div>
 
     <div class="refs">
         <h2>References &amp; Credits</h2>
@@ -1341,16 +1660,52 @@ def _generate_html_report(
         René's legacy of dedication to science inspire the academic trajectory of
         all of you.</p>
 
-        <p><strong>References for further reading:</strong></p>
+        <p><strong>Primary references (BibTeX-ready):</strong></p>
         <ul>
-            <li>Tribute &amp; publication history:
-                <a href="https://lnkd.in/eZUcgbNT">https://lnkd.in/eZUcgbNT</a></li>
-            <li>Doctoral thesis (Quaternions in Biomechanics):
-                <a href="https://lnkd.in/eSjuDjnw">https://lnkd.in/eSjuDjnw</a></li>
-            <li>Reference book (Editora Blucher, 2007) &mdash; <em>Modelos
-                Matemáticos nas Ciências Não-Exatas</em>:
-                <a href="https://lnkd.in/ejKpHWzK">https://lnkd.in/ejKpHWzK</a></li>
+            <li>Nogueira, E. A., Martins, L. E. B., &amp; Brenzikofer, R.
+                (2007). <em>Modelos Matemáticos nas Ciências Não-Exatas - vol. 1.</em>
+                São Paulo: Editora Blucher. ISBN 978-85-212-0419-0.
+                <a href="https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190">
+                blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1</a></li>
+            <li>Santiago, P. R. P. (2009). <em>Rotações tridimensionais em
+                biomecânica via quatérnions: aplicações na análise dos
+                movimentos esportivos.</em> Tese (Doutorado) &mdash;
+                Universidade Estadual Paulista (Unesp), Instituto de
+                Biociências de Rio Claro.
+                <a href="http://hdl.handle.net/11449/100404">hdl.handle.net/11449/100404</a>
+                &middot;
+                <a href="https://repositorio.unesp.br/server/api/core/bitstreams/41603fa7-545b-4e74-a045-57ce94885e0c/content">PDF</a></li>
         </ul>
+        <p><strong>Tribute &amp; social-media coverage:</strong></p>
+        <ul>
+            <li>Instagram post (tribute &amp; publication history):
+                <a href="https://www.instagram.com/p/DZLogIJoFbF/">instagram.com/p/DZLogIJoFbF</a></li>
+            <li>LinkedIn post (publication history &amp; tribute to
+                Prof. Brenzikofer):
+                <a href="https://www.linkedin.com/posts/paulo-roberto-pereira-santiago-132619112_hist%C3%B3rico-de-publica%C3%A7%C3%A3o-e-homenagem-ao-prof-ugcPost-7468670091845472257-3tzD/">
+                linkedin.com/posts/paulo-roberto-pereira-santiago - homenagem ao Prof. Brenzikofer</a></li>
+        </ul>
+        <pre style="background:#fff5e6; border:1px solid #f6ad55; padding:10px;
+                    border-radius:6px; font-size:0.85em; overflow-x:auto;">
+@book{{nogueira2007modelos,
+  title     = {{Modelos matem\\'aticos nas ci\\^encias n\\~ao-exatas - vol. 1}},
+  author    = {{Nogueira, Eduardo Arantes and Martins, Luiz Eduardo Barreto
+               and Brenzikofer, Ren\\'e}},
+  year      = {{2007}},
+  publisher = {{Editora Blucher}},
+  isbn      = {{9788521204190}},
+  url       = {{https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190}}
+}}
+
+@phdthesis{{santiago2009rotaccoes,
+  title    = {{Rota\\c{{c}}\\~oes tridimensionais em biomec\\^anica via quat\\'ernions:
+              aplica\\c{{c}}\\~oes na an\\'alise dos movimentos esportivos}},
+  author   = {{Santiago, Paulo Roberto Pereira}},
+  school   = {{Universidade Estadual Paulista (Unesp),
+              Instituto de Bioci\\^encias de Rio Claro}},
+  year     = {{2009}},
+  url      = {{http://hdl.handle.net/11449/100404}}
+}}</pre>
         <p style="text-align:right; font-style:italic; color:#975a16;">
         &mdash; Prof. Paulo R. P. Santiago</p>
     </div>
@@ -1371,6 +1726,258 @@ def _generate_html_report(
     return report_path
 
 
+def _generate_md_report(
+    rep_metrics: list[dict],
+    cadence: dict,
+    comparison: dict[str, dict],
+    plot_files: list[str],
+    output_dir: str,
+    base_name: str,
+    barbell_kg: float,
+    body_mass_kg: float | None,
+    fps: float,
+    filter_name: str,
+    g_mag: float,
+    body_height_m: float | None = None,
+) -> str:
+    """Generate a Markdown sibling of the HTML report (same data, plain text)."""
+    report_path = os.path.join(output_dir, f"{base_name}_imu_ahrs_report.md")
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    body_mass_str = (
+        f"{body_mass_kg:.1f} kg" if body_mass_kg is not None else "n/a (barbell-only power)"
+    )
+    body_height_str = f"{body_height_m:.2f} m" if body_height_m is not None else "n/a"
+
+    label_map = {
+        "peak_velocity_ms": "Peak Velocity (m/s)",
+        "mean_velocity_ms": "Mean Velocity (m/s)",
+        "peak_power_W": "Peak Power (W)",
+        "mean_power_W": "Mean Power (W)",
+        "work_J": "Work (J)",
+        "rom_m": "ROM (m)",
+        "duration_s": "Duration (s)",
+        "concentric_s": "Concentric (s)",
+        "eccentric_s": "Eccentric (s)",
+        "peak_force_N": "Peak Force (N)",
+        "impulse_Ns": "Impulse (N·s)",
+    }
+
+    lines: list[str] = []
+    lines.append(f"# IMU Deadlift Biomechanical Report (AHRS) - {base_name}")
+    lines.append("")
+    lines.append(f"- **File:** `{base_name}`")
+    lines.append(f"- **Date:** {now}")
+    lines.append(
+        f"- **Filter:** {filter_name.title()} AHRS  |  **Sample rate:** {fps:.1f} Hz  "
+        f"|  **|g| (sensor):** {g_mag:.3f} m/s²"
+    )
+    lines.append(
+        f"- **Barbell weight:** {barbell_kg:.1f} kg  |  **Body mass:** {body_mass_str}  "
+        f"|  **Body height:** {body_height_str}"
+    )
+    lines.append("")
+    lines.append(
+        f"> **Repetitions detected:** {cadence['n_reps']}  |  "
+        f"**Cadence:** {cadence.get('cadence_rpm', 0):.1f} reps/min  |  "
+        f"**Mean rep time:** {cadence.get('mean_rep_time_s', 0):.2f} "
+        f"± {cadence.get('std_rep_time_s', 0):.2f} s"
+    )
+    lines.append("")
+
+    lines.append("## Per-Repetition Metrics")
+    lines.append("")
+    lines.append(
+        "| Rep | Duration (s) | Conc. (s) | Ecc. (s) | Peak Vel (m/s) | Mean Vel (m/s) "
+        "| Peak Power (W) | Mean Power (W) | Work (J) | ROM (m) | Peak Force (N) | "
+        "Impulse (N·s) |"
+    )
+    lines.append(
+        "|-----|--------------|-----------|----------|---------------|---------------"
+        "|----------------|----------------|----------|---------|----------------|"
+        "----------------|"
+    )
+    for r in rep_metrics:
+        lines.append(
+            f"| {r['rep_number']} | {r['duration_s']:.2f} | {r['concentric_s']:.2f} | "
+            f"{r['eccentric_s']:.2f} | {r['peak_velocity_ms']:.3f} | "
+            f"{r['mean_velocity_ms']:.3f} | {r['peak_power_W']:.1f} | "
+            f"{r['mean_power_W']:.1f} | {r['work_J']:.2f} | {r['rom_m']:.3f} | "
+            f"{r['peak_force_N']:.1f} | {r['impulse_Ns']:.2f} |"
+        )
+    lines.append("")
+
+    if comparison:
+        lines.append("## Rep-to-Rep Comparison")
+        lines.append("")
+        lines.append("| Metric | Max | Min | Range | Mean | Std | CV% | Best Rep | Worst Rep |")
+        lines.append("|--------|-----|-----|-------|------|-----|-----|----------|-----------|")
+        for key, stats in comparison.items():
+            name = label_map.get(key, key)
+            lines.append(
+                f"| {name} | {stats['max']:.3f} | {stats['min']:.3f} | "
+                f"{stats['range']:.3f} | {stats['mean']:.3f} | {stats['std']:.3f} | "
+                f"{stats['cv_pct']:.1f}% | #{stats['best_rep']} | #{stats['worst_rep']} |"
+            )
+        lines.append("")
+
+    lines.append("## Time-series and rep visualizations")
+    lines.append("")
+    for p in plot_files:
+        rel = os.path.basename(p)
+        lines.append(f"![{rel}]({rel})")
+        lines.append("")
+
+    lines.append("## Why quaternions? (didactic note)")
+    lines.append("")
+    lines.append(
+        "A unit quaternion `q = [q0, q1, q2, q3] = [cos(θ/2), nx sin(θ/2), "
+        "ny sin(θ/2), nz sin(θ/2)]` represents a rotation by angle `θ` around the "
+        "unit axis `n = (nx, ny, nz)`. The figures above visualise:"
+    )
+    lines.append("")
+    lines.append(
+        "- **Quaternion components q0..q3** — raw output of the AHRS filter, sample by sample."
+    )
+    lines.append(
+        "- **Norm |q| ≈ 1** — numerical sanity check that the tracker is producing "
+        "a rigid rotation (no scaling, no shear)."
+    )
+    lines.append(
+        "- **Rotation angle θ(t)** — total angular distance between sensor frame "
+        "and Earth frame at each instant."
+    )
+    lines.append(
+        "- **Rotation axis n(t)** — instantaneous direction around which the "
+        "barbell is rotating; the unit-sphere XY view makes its trajectory visible "
+        "at a glance."
+    )
+    lines.append("")
+    lines.append(
+        "Unlike Euler angles, quaternions are *singularity-free*: no gimbal lock, "
+        "no discontinuous unwrapping, no ambiguous axis order. That is why every "
+        "modern IMU/AHRS chip, every game engine and every 3D animation system "
+        "uses quaternions internally — and why the AHRS pipeline of this report "
+        "stores orientation as `q = [w, x, y, z]` rather than (roll, pitch, yaw)."
+    )
+    lines.append("")
+
+    lines.append("## References & Credits")
+    lines.append("")
+    lines.append(
+        "This report was produced by the **vailá** IMU Deadlift AHRS pipeline "
+        "(`vaila_deadlift_imu.py`). The orientation tracking is a direct Python "
+        "port of the open-source x-io Technologies AHRS C reference."
+    )
+    lines.append("")
+    lines.append("**Method credits:**")
+    lines.append("")
+    lines.append(
+        "- Madgwick, S. O. H. (2010). *An efficient orientation filter for inertial "
+        "and inertial/magnetic sensor arrays.* Technical report, University of "
+        "Bristol."
+    )
+    lines.append(
+        "- Mahony, R., Hamel, T., & Pflimlin, J.-M. (2008). *Nonlinear complementary "
+        "filters on the special orthogonal group.* IEEE Transactions on Automatic "
+        "Control, 53(5), 1203–1218."
+    )
+    lines.append(
+        "- x-io Technologies — Open-source IMU and AHRS algorithms: "
+        "<https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/>"
+    )
+    lines.append(
+        "- xioTechnologies/Fusion (modern C/C++ reference): "
+        "<https://github.com/xioTechnologies/Fusion/tree/main>"
+    )
+    lines.append(
+        "- Madgwick filter walk-through (cross-check): "
+        "<https://medium.com/@k66115704/imu-madgwick-filter-explanation-556fbe7f02e3>"
+    )
+    lines.append("")
+
+    lines.append("## Publication History & Tribute to Prof. René Jean Brenzikofer")
+    lines.append("")
+    lines.append(
+        "Modern biomechanics is grounded in solid physical–mathematical foundations "
+        "for modeling human movement. I leave here my profound tribute and final "
+        "farewell to one of the greatest exponents of this scientific rigor in "
+        "Brazil, Professor **René Jean Brenzikofer** (UNICAMP). It is an honor to "
+        "have known him and to have shared creative ideas that demonstrated a "
+        "biomechanics that truly makes a difference. This close collaboration "
+        "enabled the **first publication of three-dimensional modeling data based "
+        'on Quaternions** in the book *"Modelos Matemáticos nas Ciências '
+        'Não-Exatas, vol. 1"* (Editora Blucher, 2007).'
+    )
+    lines.append("")
+    lines.append("**Primary references (BibTeX-ready):**")
+    lines.append("")
+    lines.append(
+        "- Nogueira, E. A., Martins, L. E. B., & Brenzikofer, R. (2007). "
+        "*Modelos Matemáticos nas Ciências Não-Exatas — vol. 1.* São Paulo: "
+        "Editora Blucher. ISBN 978-85-212-0419-0. "
+        "<https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190>"
+    )
+    lines.append(
+        "- Santiago, P. R. P. (2009). *Rotações tridimensionais em biomecânica via "
+        "quatérnions: aplicações na análise dos movimentos esportivos.* Tese "
+        "(Doutorado) — Universidade Estadual Paulista (Unesp), Instituto de "
+        "Biociências de Rio Claro. <http://hdl.handle.net/11449/100404> · "
+        "[PDF](https://repositorio.unesp.br/server/api/core/bitstreams/41603fa7-545b-4e74-a045-57ce94885e0c/content)"
+    )
+    lines.append("")
+    lines.append("**Tribute & social-media coverage:**")
+    lines.append("")
+    lines.append(
+        "- Instagram post (tribute & publication history): "
+        "<https://www.instagram.com/p/DZLogIJoFbF/>"
+    )
+    lines.append(
+        "- LinkedIn post (publication history & tribute to Prof. Brenzikofer): "
+        "<https://www.linkedin.com/posts/paulo-roberto-pereira-santiago-132619112_hist%C3%B3rico-de-publica%C3%A7%C3%A3o-e-homenagem-ao-prof-ugcPost-7468670091845472257-3tzD/>"
+    )
+    lines.append("")
+    lines.append("```bibtex")
+    lines.append("@book{nogueira2007modelos,")
+    lines.append("  title     = {Modelos matem\\'aticos nas ci\\^encias n\\~ao-exatas - vol. 1},")
+    lines.append("  author    = {Nogueira, Eduardo Arantes and Martins, Luiz Eduardo Barreto")
+    lines.append("               and Brenzikofer, Ren\\'e},")
+    lines.append("  year      = {2007},")
+    lines.append("  publisher = {Editora Blucher},")
+    lines.append("  isbn      = {9788521204190},")
+    lines.append(
+        "  url       = {https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190}"
+    )
+    lines.append("}")
+    lines.append("")
+    lines.append("@phdthesis{santiago2009rotaccoes,")
+    lines.append(
+        "  title    = {Rota\\c{c}\\~oes tridimensionais em biomec\\^anica via quat\\'ernions:"
+    )
+    lines.append("              aplica\\c{c}\\~oes na an\\'alise dos movimentos esportivos},")
+    lines.append("  author   = {Santiago, Paulo Roberto Pereira},")
+    lines.append("  school   = {Universidade Estadual Paulista (Unesp),")
+    lines.append("              Instituto de Bioci\\^encias de Rio Claro},")
+    lines.append("  year     = {2009},")
+    lines.append("  url      = {http://hdl.handle.net/11449/100404}")
+    lines.append("}")
+    lines.append("```")
+    lines.append("")
+    lines.append("— Prof. Paulo R. P. Santiago")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.append(
+        f"Generated by **vailá** — Versatile Anarcho Integrated Liberation Ánalysis · "
+        f"`vaila_deadlift_imu.py` v{VAILA_VERSION} · "
+        "Author: Prof. Paulo R. P. Santiago · "
+        "<https://github.com/vaila-multimodaltoolbox/vaila> · AGPL-3.0"
+    )
+
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    return report_path
+
+
 # ---------------------------------------------------------------------------
 # Top-level pipeline
 # ---------------------------------------------------------------------------
@@ -1385,9 +1992,19 @@ def process_imu_file(
     sample_rate: float | None = None,
     barbell_kg_override: float | None = None,
     body_mass_kg_override: float | None = None,
+    body_height_m_override: float | None = None,
     reps_override: int | None = None,
+    params_file: str | os.PathLike | None = None,
 ) -> bool:
-    """Run the full AHRS deadlift IMU pipeline on a single CSV file."""
+    """Run the full AHRS deadlift IMU pipeline on a single CSV file.
+
+    Parameter precedence (highest first):
+    1. Explicit ``*_override`` arguments (CLI flags / GUI form).
+    2. ``deadlift_parameters.txt`` (``params_file`` if given, otherwise the
+       first match in the CSV's directory or up to three parents).
+    3. ``vaila_deadlift_config.toml`` (legacy fallback).
+    4. Hard-coded defaults (75 kg body mass, 20 kg barbell, 25 Hz).
+    """
     os.makedirs(output_dir, exist_ok=True)
     df = pd.read_csv(input_file)
     required = {"acc_x", "acc_y", "acc_z", "gyr_x", "gyr_y", "gyr_z"}
@@ -1399,11 +2016,12 @@ def process_imu_file(
     base_name = os.path.splitext(os.path.basename(input_file))[0]
 
     ctx = _load_context_from_toml(Path(input_file).parent)
-    params = _load_parameters_file(Path(input_file).parent)
+    params = _load_parameters_file(Path(input_file).parent, explicit_path=params_file)
 
-    fps = float(sample_rate) if sample_rate else float(ctx.get("imu_fps", 25.0))
+    fps = float(ctx.get("imu_fps", 25.0))
     barbell_kg = float(ctx.get("weight_kg", 20.0))
     body_mass_kg: float | None = float(ctx.get("mass_kg", 75.0)) if ctx else None
+    body_height_m: float | None = None
     use_total_mass = bool(ctx.get("use_total_mass_for_power", True))
 
     # The shared ``deadlift_parameters.txt`` rep count is only used to read the
@@ -1415,17 +2033,40 @@ def process_imu_file(
 
     if params:
         with contextlib.suppress(ValueError, TypeError):
-            barbell_kg = float(params.get("weight", barbell_kg))
+            if "deadlift_mass_kg" in params:
+                barbell_kg = float(params["deadlift_mass_kg"])
+            elif "weight" in params:
+                barbell_kg = float(params["weight"])
+        with contextlib.suppress(ValueError, TypeError):
+            if "subject_mass_kg" in params:
+                body_mass_kg = float(params["subject_mass_kg"])
+        with contextlib.suppress(ValueError, TypeError):
+            if "subject_height_m" in params:
+                body_height_m = float(params["subject_height_m"])
+        with contextlib.suppress(ValueError, TypeError):
+            if "fs_hz" in params:
+                fps = float(params["fs_hz"])
+        with contextlib.suppress(ValueError, TypeError):
+            if "real_repetition_count" in params and expected_reps is None:
+                # do NOT auto-trim by default (kept opt-in via --reps); just log
+                pass
 
+    # Explicit overrides from CLI/GUI win over everything.
+    if sample_rate is not None:
+        fps = float(sample_rate)
     if barbell_kg_override is not None:
         barbell_kg = float(barbell_kg_override)
     if body_mass_kg_override is not None:
         body_mass_kg = float(body_mass_kg_override)
+    if body_height_m_override is not None:
+        body_height_m = float(body_height_m_override)
 
+    src_label = params.get("__source__", "<defaults>") if params else "<defaults>"
     print(
         f"[IMU-AHRS] {base_name}: filter={filter_name}, fps={fps:.2f} Hz, "
         f"barbell={barbell_kg:.1f} kg, body_mass={body_mass_kg}, "
-        f"use_total_mass={use_total_mass}"
+        f"height={body_height_m} m, use_total_mass={use_total_mass} "
+        f"(params: {src_label})"
     )
 
     fusion = run_ahrs_fusion(df, fps=fps, filter_name=filter_name, beta=beta, gyro_units=gyro_units)
@@ -1477,6 +2118,21 @@ def process_imu_file(
         fps=fps,
         filter_name=filter_name,
         g_mag=fusion.g_mag,
+        body_height_m=body_height_m,
+    )
+    report_md = _generate_md_report(
+        rep_metrics,
+        cadence,
+        comparison,
+        plot_files,
+        output_dir,
+        base_name,
+        barbell_kg=barbell_kg,
+        body_mass_kg=body_mass_kg,
+        fps=fps,
+        filter_name=filter_name,
+        g_mag=fusion.g_mag,
+        body_height_m=body_height_m,
     )
 
     ts_stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1520,7 +2176,8 @@ def process_imu_file(
         best_p = max(r["peak_power_W"] for r in rep_metrics)
         print(f"  Best peak velocity: {best_v:.3f} m/s")
         print(f"  Best peak power: {best_p:.1f} W")
-    print(f"  Report: {report}")
+    print(f"  Report (HTML): {report}")
+    print(f"  Report (Markdown): {report_md}")
     print(f"  Processed CSV: {proc_path}")
     return True
 
@@ -1530,18 +2187,246 @@ def process_imu_file(
 # ---------------------------------------------------------------------------
 
 
-def main_gui() -> None:
-    """Tkinter GUI: pick a directory of IMU CSVs and process them with Madgwick AHRS."""
-    root = Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
+@dataclass
+class _GuiResult:
+    """Container for the values returned by the unified Deadlift IMU dialog."""
 
-    target_dir = filedialog.askdirectory(
-        title="Select directory containing Deadlift IMU CSV files (acc + gyr)"
+    input_dir: str = ""
+    output_dir: str = ""
+    params_file: str = ""
+    subject_mass_kg: float = 75.0
+    subject_height_m: float = 1.75
+    deadlift_mass_kg: float = 20.0
+    fs_hz: float = 25.0
+    filter_name: str = "madgwick"
+    beta: float = 0.1
+    gyro_units: str = "deg"
+    reps: int | None = None
+    cancelled: bool = True
+
+
+def _show_deadlift_imu_dialog() -> _GuiResult:
+    """Single-window Tkinter form for Deadlift IMU analysis.
+
+    Returns a :class:`_GuiResult` with ``cancelled=True`` if the user closed the
+    dialog or clicked "Cancel". All inputs are validated; invalid numeric
+    fields are rejected with a ``messagebox.showerror``.
+    """
+    result = _GuiResult()
+
+    root = Tk()
+    root.title("vailá - Deadlift IMU (AHRS) - Single-form input")
+    root.attributes("-topmost", True)
+    with contextlib.suppress(Exception):  # non-graphical envs
+        root.geometry("640x520")
+
+    PX, PY = 8, 4
+
+    header = tk.Label(
+        root,
+        text="Deadlift IMU (AHRS) - fill the form once, then click Run.",
+        font=("TkDefaultFont", 11, "bold"),
+        justify="left",
     )
-    if not target_dir:
+    header.grid(row=0, column=0, columnspan=3, sticky="w", padx=PX, pady=PY)
+
+    # ---- Directory pickers ---------------------------------------------------
+    in_var = tk.StringVar()
+    out_var = tk.StringVar()
+    params_var = tk.StringVar()
+
+    def _pick_input_dir() -> None:
+        d = filedialog.askdirectory(
+            title="Select directory containing Deadlift IMU CSV files (acc + gyr)",
+            parent=root,
+        )
+        if d:
+            in_var.set(d)
+            if not out_var.get():
+                out_var.set(d)
+            # Auto-detect a sibling params file
+            candidate = Path(d) / "deadlift_parameters.txt"
+            if candidate.exists() and not params_var.get():
+                params_var.set(str(candidate))
+                _load_params_into_form(str(candidate))
+
+    def _pick_output_dir() -> None:
+        d = filedialog.askdirectory(title="Select output directory", parent=root)
+        if d:
+            out_var.set(d)
+
+    def _pick_params_file() -> None:
+        f = filedialog.askopenfilename(
+            title="Select deadlift_parameters.txt",
+            parent=root,
+            filetypes=[("Parameters", "*.txt"), ("All files", "*.*")],
+        )
+        if f:
+            params_var.set(f)
+            _load_params_into_form(f)
+
+    def _load_params_into_form(path: str) -> None:
+        params = _parse_parameters_file(Path(path))
+        if not params:
+            return
+        with contextlib.suppress(ValueError, TypeError):
+            if "subject_mass_kg" in params:
+                mass_var.set(f"{float(params['subject_mass_kg']):.2f}")
+        with contextlib.suppress(ValueError, TypeError):
+            if "subject_height_m" in params:
+                height_var.set(f"{float(params['subject_height_m']):.2f}")
+        with contextlib.suppress(ValueError, TypeError):
+            if "deadlift_mass_kg" in params:
+                bar_var.set(f"{float(params['deadlift_mass_kg']):.2f}")
+            elif "weight" in params:
+                bar_var.set(f"{float(params['weight']):.2f}")
+        with contextlib.suppress(ValueError, TypeError):
+            if "fs_hz" in params:
+                fs_var.set(f"{float(params['fs_hz']):.2f}")
+        with contextlib.suppress(ValueError, TypeError):
+            if "real_repetition_count" in params:
+                reps_var.set(str(int(float(params["real_repetition_count"]))))
+
+    tk.Label(root, text="Input dir (CSVs):").grid(row=1, column=0, sticky="e", padx=PX, pady=PY)
+    tk.Entry(root, textvariable=in_var, width=46).grid(row=1, column=1, padx=PX, pady=PY)
+    tk.Button(root, text="Browse...", command=_pick_input_dir).grid(
+        row=1, column=2, padx=PX, pady=PY
+    )
+
+    tk.Label(root, text="Output dir:").grid(row=2, column=0, sticky="e", padx=PX, pady=PY)
+    tk.Entry(root, textvariable=out_var, width=46).grid(row=2, column=1, padx=PX, pady=PY)
+    tk.Button(root, text="Browse...", command=_pick_output_dir).grid(
+        row=2, column=2, padx=PX, pady=PY
+    )
+
+    tk.Label(root, text="Params file (optional):").grid(
+        row=3, column=0, sticky="e", padx=PX, pady=PY
+    )
+    tk.Entry(root, textvariable=params_var, width=46).grid(row=3, column=1, padx=PX, pady=PY)
+    tk.Button(root, text="Load .txt...", command=_pick_params_file).grid(
+        row=3, column=2, padx=PX, pady=PY
+    )
+
+    ttk.Separator(root, orient="horizontal").grid(
+        row=4, column=0, columnspan=3, sticky="ew", padx=8, pady=8
+    )
+
+    # ---- Numeric subject / bar / fps parameters -----------------------------
+    mass_var = tk.StringVar(value="75.0")
+    height_var = tk.StringVar(value="1.75")
+    bar_var = tk.StringVar(value="20.0")
+    fs_var = tk.StringVar(value="25.0")
+    reps_var = tk.StringVar(value="")
+
+    def _row(label: str, var: tk.StringVar, row: int, hint: str = "") -> None:
+        tk.Label(root, text=label).grid(row=row, column=0, sticky="e", padx=PX, pady=PY)
+        tk.Entry(root, textvariable=var, width=14).grid(
+            row=row, column=1, sticky="w", padx=PX, pady=PY
+        )
+        if hint:
+            tk.Label(root, text=hint, fg="#666").grid(
+                row=row, column=2, sticky="w", padx=PX, pady=PY
+            )
+
+    _row("Subject mass (kg):", mass_var, 5, hint="e.g. 75.0")
+    _row("Subject height (m):", height_var, 6, hint="e.g. 1.75 (informational)")
+    _row("Deadlift bar mass (kg):", bar_var, 7, hint="barbell weight, e.g. 20.0")
+    _row("Sample rate (Hz):", fs_var, 8, hint="IMU sampling frequency, e.g. 25.0")
+    _row("Expected reps (optional):", reps_var, 9, hint="leave blank for auto-detect")
+
+    ttk.Separator(root, orient="horizontal").grid(
+        row=10, column=0, columnspan=3, sticky="ew", padx=8, pady=8
+    )
+
+    # ---- AHRS filter settings ----------------------------------------------
+    filter_var = tk.StringVar(value="madgwick")
+    beta_var = tk.StringVar(value="0.1")
+    gyro_units_var = tk.StringVar(value="deg")
+
+    tk.Label(root, text="AHRS filter:").grid(row=11, column=0, sticky="e", padx=PX, pady=PY)
+    ttk.Combobox(
+        root,
+        textvariable=filter_var,
+        values=["madgwick", "mahony"],
+        width=12,
+        state="readonly",
+    ).grid(row=11, column=1, sticky="w", padx=PX, pady=PY)
+    tk.Label(root, text="Madgwick gradient gain", fg="#666").grid(
+        row=11, column=2, sticky="w", padx=PX, pady=PY
+    )
+
+    tk.Label(root, text="Beta (Madgwick):").grid(row=12, column=0, sticky="e", padx=PX, pady=PY)
+    tk.Entry(root, textvariable=beta_var, width=14).grid(
+        row=12, column=1, sticky="w", padx=PX, pady=PY
+    )
+    tk.Label(root, text="default 0.1", fg="#666").grid(
+        row=12, column=2, sticky="w", padx=PX, pady=PY
+    )
+
+    tk.Label(root, text="Gyro units:").grid(row=13, column=0, sticky="e", padx=PX, pady=PY)
+    ttk.Combobox(
+        root,
+        textvariable=gyro_units_var,
+        values=["deg", "rad"],
+        width=12,
+        state="readonly",
+    ).grid(row=13, column=1, sticky="w", padx=PX, pady=PY)
+    tk.Label(root, text="deg/s (default) or rad/s", fg="#666").grid(
+        row=13, column=2, sticky="w", padx=PX, pady=PY
+    )
+
+    # ---- Action buttons -----------------------------------------------------
+    btn_frame = tk.Frame(root)
+    btn_frame.grid(row=14, column=0, columnspan=3, pady=14)
+
+    def _on_run() -> None:
+        if not in_var.get():
+            messagebox.showerror("Error", "Input directory is required.", parent=root)
+            return
+        try:
+            result.subject_mass_kg = float(mass_var.get())
+            result.subject_height_m = float(height_var.get())
+            result.deadlift_mass_kg = float(bar_var.get())
+            result.fs_hz = float(fs_var.get())
+            result.beta = float(beta_var.get())
+        except ValueError as e:
+            messagebox.showerror("Error", f"Invalid numeric field: {e}", parent=root)
+            return
+        if reps_var.get().strip():
+            try:
+                result.reps = int(reps_var.get())
+            except ValueError:
+                messagebox.showerror("Error", "Expected reps must be an integer.", parent=root)
+                return
+        result.input_dir = in_var.get()
+        result.output_dir = out_var.get() or in_var.get()
+        result.params_file = params_var.get()
+        result.filter_name = filter_var.get()
+        result.gyro_units = gyro_units_var.get()
+        result.cancelled = False
+        root.destroy()
+
+    def _on_cancel() -> None:
+        result.cancelled = True
+        root.destroy()
+
+    tk.Button(
+        btn_frame, text="Run analysis", command=_on_run, width=16, bg="#2563eb", fg="white"
+    ).pack(side="left", padx=6)
+    tk.Button(btn_frame, text="Cancel", command=_on_cancel, width=10).pack(side="left", padx=6)
+
+    root.protocol("WM_DELETE_WINDOW", _on_cancel)
+    root.mainloop()
+    return result
+
+
+def main_gui() -> None:
+    """Single unified Tkinter form for Deadlift IMU batch analysis."""
+    cfg = _show_deadlift_imu_dialog()
+    if cfg.cancelled or not cfg.input_dir:
         return
 
+    target_dir = cfg.input_dir
     csv_files = [
         os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.lower().endswith(".csv")
     ]
@@ -1550,7 +2435,7 @@ def main_gui() -> None:
         return
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_parent = os.path.join(target_dir, f"vaila_deadlift_imu_ahrs_{timestamp}")
+    output_parent = os.path.join(cfg.output_dir, f"vaila_deadlift_imu_ahrs_{timestamp}")
     os.makedirs(output_parent, exist_ok=True)
 
     processed = 0
@@ -1559,7 +2444,19 @@ def main_gui() -> None:
         per_file = os.path.join(output_parent, base)
         os.makedirs(per_file, exist_ok=True)
         try:
-            process_imu_file(f, per_file)
+            process_imu_file(
+                f,
+                per_file,
+                filter_name=cfg.filter_name,
+                beta=cfg.beta,
+                gyro_units=cfg.gyro_units,
+                sample_rate=cfg.fs_hz,
+                barbell_kg_override=cfg.deadlift_mass_kg,
+                body_mass_kg_override=cfg.subject_mass_kg,
+                body_height_m_override=cfg.subject_height_m,
+                reps_override=cfg.reps,
+                params_file=cfg.params_file or None,
+            )
             processed += 1
         except Exception as e:  # keep going on per-file errors
             print(f"[ERROR] Failed to process {f}: {e}")
@@ -1598,15 +2495,32 @@ def _build_argparser() -> argparse.ArgumentParser:
         default="deg",
         help="Units of the gyroscope columns in the CSV",
     )
-    p.add_argument("--fps", type=float, help="Override IMU sample rate in Hz (defaults to TOML/25)")
-    p.add_argument("--weight", type=float, help="Override barbell weight in kg")
-    p.add_argument("--mass", type=float, help="Override athlete body mass in kg")
+    p.add_argument(
+        "-p",
+        "--params-file",
+        type=str,
+        help=(
+            "Path to a deadlift_parameters.txt with one of:\n"
+            "  - CSV header format: "
+            "'subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz' then a values row, "
+            "or\n  - legacy 'key,value' lines (e.g. 'weight,20'). "
+            "Auto-detected beside the CSV when omitted."
+        ),
+    )
+    p.add_argument("--fps", type=float, help="Override IMU sample rate in Hz (overrides params)")
+    p.add_argument("--weight", type=float, help="Override barbell weight in kg (overrides params)")
+    p.add_argument("--mass", type=float, help="Override athlete body mass in kg (overrides params)")
+    p.add_argument(
+        "--height",
+        type=float,
+        help="Override athlete body height in meters (overrides params; informational)",
+    )
     p.add_argument(
         "--reps",
         type=int,
         help="Force the expected repetition count (trims lead-in/trailing cycles)",
     )
-    p.add_argument("--gui", action="store_true", help="Force the Tkinter file picker")
+    p.add_argument("--gui", action="store_true", help="Force the Tkinter single-form dialog")
     return p
 
 
@@ -1625,7 +2539,9 @@ def main() -> None:
         sample_rate=args.fps,
         barbell_kg_override=args.weight,
         body_mass_kg_override=args.mass,
+        body_height_m_override=args.height,
         reps_override=args.reps,
+        params_file=args.params_file,
     )
 
 
