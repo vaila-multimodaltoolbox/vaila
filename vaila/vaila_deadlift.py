@@ -71,8 +71,9 @@ import datetime
 import math
 import os
 import tkinter as tk
+import traceback
 from pathlib import Path
-from tkinter import Tk, filedialog, messagebox, simpledialog
+from tkinter import Tk, filedialog, messagebox
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -85,6 +86,8 @@ except Exception:
     _toml_reader = None
 
 _DEADLIFT_CONTEXT = None
+DEFAULT_KINEMATICS_CUTOFF_HZ = 6.0
+DEFAULT_IMU_CUTOFF_HZ = 4.0
 
 # De Leva (1996) segment mass fractions for 2D whole-body COM estimation.
 # Keys map to MediaPipe landmark pairs: (proximal, distal) → midpoint.
@@ -336,6 +339,7 @@ def _merge_deadlift_overrides(
         "barbell_mass_kg": "weight_kg",
         "weight_kg": "weight_kg",
         "gif_duration_s": "gif_duration_s",
+        "cutoff_hz": "cutoff_hz",
     }
     for src, dst in scalar_map.items():
         if overrides.get(src) is not None:
@@ -406,11 +410,20 @@ def _compute_vertical_acc(df: pd.DataFrame, g_unit: np.ndarray, g_mag: float) ->
     return a_vert - g_mag
 
 
+def _valid_lowpass_cutoff(cutoff_hz: float, fps: float) -> float:
+    """Clamp a low-pass cutoff below Nyquist for Butterworth filtering."""
+    nyq = fps / 2.0
+    if nyq <= 0:
+        raise ValueError(f"Invalid sampling frequency: {fps}")
+    return max(0.01, min(float(cutoff_hz), nyq * 0.9))
+
+
 def detect_reps_imu(
     a_vert: np.ndarray,
     fps: float,
     min_rep_s: float = 2.5,
     prominence_frac: float = 0.05,
+    cutoff_hz: float = DEFAULT_IMU_CUTOFF_HZ,
 ) -> tuple[list[dict], np.ndarray, np.ndarray, np.ndarray]:
     """
     Detect repetition boundaries from vertical acceleration.
@@ -424,8 +437,8 @@ def detect_reps_imu(
     dt = 1.0 / fps
     nyq = fps / 2.0
 
-    # Light filter for metrics (preserve dynamics)
-    b_hi, a_hi = butter(2, min(5.0, nyq * 0.9) / nyq)
+    # Light filter for metrics/integration (deadlift IMU default: 4 Hz).
+    b_hi, a_hi = butter(2, _valid_lowpass_cutoff(cutoff_hz, fps) / nyq)
     a_filt = filtfilt(b_hi, a_hi, a_vert, padlen=min(50, len(a_vert) - 1))
 
     # Heavier filter for rep detection (smooth envelope, ~1.2 Hz)
@@ -721,6 +734,7 @@ def detect_reps_mediapipe(
     min_rep_s: float = 1.0,
     prominence_frac: float = 0.20,
     expected_reps: int | None = None,
+    cutoff_hz: float = DEFAULT_KINEMATICS_CUTOFF_HZ,
 ) -> list[dict]:
     """Detect completed repetitions from averaged wrist/bar-height maxima.
 
@@ -735,7 +749,7 @@ def detect_reps_mediapipe(
         signal = (df["right_wrist_y_m"].values + df["left_wrist_y_m"].values) / 2.0
 
     nyq = fps / 2.0
-    cutoff = min(1.5, nyq * 0.9)
+    cutoff = _valid_lowpass_cutoff(cutoff_hz, fps)
     b, a = butter(2, cutoff / nyq)
     sig_filt = filtfilt(b, a, signal, padlen=min(50, len(signal) - 1))
 
@@ -1677,7 +1691,7 @@ def generate_deadlift_animation_gif(
     fps: float,
     frames_between: int = 2,
     figsize=(5, 5),
-    duration_s: float = 1.2,
+    duration_s: float = 7.2,
 ) -> str | None:
     try:
         import imageio
@@ -1998,7 +2012,11 @@ def generate_html_report(
 # ---------------------------------------------------------------------------
 
 
-def process_imu_deadlift_data(input_file: str, output_dir: str) -> bool:
+def process_imu_deadlift_data(
+    input_file: str,
+    output_dir: str,
+    cutoff_hz: float = DEFAULT_IMU_CUTOFF_HZ,
+) -> bool:
     """Full IMU-based deadlift analysis pipeline."""
     os.makedirs(output_dir, exist_ok=True)
     df = pd.read_csv(input_file)
@@ -2016,12 +2034,16 @@ def process_imu_deadlift_data(input_file: str, output_dir: str) -> bool:
         with contextlib.suppress(ValueError, TypeError):
             weight_kg = float(params.get("weight", weight_kg))
 
-    print(f"[IMU] Barbell weight: {weight_kg:.1f} kg | Sample rate: {fps:.1f} Hz")
+    cutoff_hz = _valid_lowpass_cutoff(cutoff_hz, fps)
+    print(
+        f"[IMU] Barbell weight: {weight_kg:.1f} kg | Sample rate: {fps:.1f} Hz | "
+        f"Butterworth cutoff: {cutoff_hz:.2f} Hz"
+    )
 
     g_unit, g_mag = _estimate_gravity(df, n_static=min(30, len(df) // 4))
     a_vert = _compute_vertical_acc(df, g_unit, g_mag)
 
-    reps, velocity, disp, a_filt = detect_reps_imu(a_vert, fps)
+    reps, velocity, disp, a_filt = detect_reps_imu(a_vert, fps, cutoff_hz=cutoff_hz)
     print(f"[IMU] Detected {len(reps)} repetitions")
 
     rep_metrics = compute_rep_imu_metrics(a_filt, velocity, disp, fps, weight_kg, reps)
@@ -2092,6 +2114,13 @@ def process_mediapipe_deadlift_data(input_file, output_dir, overrides: dict | No
     barbell_kg = ctx.get("weight_kg", 20.0)
     use_total_mass_for_power = ctx.get("use_total_mass_for_power", True)
     expected_reps = None
+    cutoff_hz = _valid_lowpass_cutoff(
+        float(ctx.get("cutoff_hz", DEFAULT_KINEMATICS_CUTOFF_HZ)), fps
+    )
+    df["butterworth_cutoff_hz"] = cutoff_hz
+    print(
+        f"[MediaPipe] Sample rate: {fps:.1f} Hz | Butterworth cutoff: {cutoff_hz:.2f} Hz"
+    )
 
     if params:
         with contextlib.suppress(ValueError, TypeError):
@@ -2129,7 +2158,7 @@ def process_mediapipe_deadlift_data(input_file, output_dir, overrides: dict | No
     variant = classify_variant_at_bottom(df, phases["bottom_frame"])
 
     # Multi-rep detection from averaged wrist/bar-height Y.
-    reps = detect_reps_mediapipe(df, fps, expected_reps=expected_reps)
+    reps = detect_reps_mediapipe(df, fps, expected_reps=expected_reps, cutoff_hz=cutoff_hz)
     print(f"[MediaPipe] Detected {len(reps)} repetitions")
 
     # Per-rep metrics (COM-based power/work, distances, bar ROM)
@@ -2167,7 +2196,7 @@ def process_mediapipe_deadlift_data(input_file, output_dir, overrides: dict | No
         fps,
         frames_between=2,
         figsize=(5, 5),
-        duration_s=float(ctx.get("gif_duration_s", 1.2)),
+        duration_s=float(ctx.get("gif_duration_s", 7.2)),
     )
 
     report_path = generate_html_report(
@@ -2242,13 +2271,19 @@ def process_deadlift_file(input_file: str, output_dir: str, overrides: dict | No
 
     if dtype == "imu":
         print(f"[AUTO] Detected IMU data in {os.path.basename(input_file)}")
-        return process_imu_deadlift_data(input_file, output_dir)
+        cutoff = DEFAULT_IMU_CUTOFF_HZ
+        if overrides and overrides.get("cutoff_hz") is not None:
+            cutoff = float(overrides["cutoff_hz"])
+        return process_imu_deadlift_data(input_file, output_dir, cutoff_hz=cutoff)
     elif dtype == "mediapipe":
         print(f"[AUTO] Detected MediaPipe pose data in {os.path.basename(input_file)}")
         return process_mediapipe_deadlift_data(input_file, output_dir, overrides=overrides)
     else:
         print(f"[WARN] Unknown data format in {os.path.basename(input_file)}. Trying IMU...")
-        return process_imu_deadlift_data(input_file, output_dir)
+        cutoff = DEFAULT_IMU_CUTOFF_HZ
+        if overrides and overrides.get("cutoff_hz") is not None:
+            cutoff = float(overrides["cutoff_hz"])
+        return process_imu_deadlift_data(input_file, output_dir, cutoff_hz=cutoff)
 
 
 # ---------------------------------------------------------------------------
@@ -2257,7 +2292,7 @@ def process_deadlift_file(input_file: str, output_dir: str, overrides: dict | No
 
 
 
-def _collect_gui_overrides(root: Tk, base_dir: str | None = None) -> dict:
+def _collect_gui_overrides(root: Tk, base_dir: str | None = None) -> dict | None:
     """Collect kinematics parameters in one modal window instead of chained dialogs."""
     overrides: dict = {}
     base_path = Path(base_dir) if base_dir else Path.cwd()
@@ -2267,14 +2302,16 @@ def _collect_gui_overrides(root: Tk, base_dir: str | None = None) -> dict:
             "mass_kg": 75.0,
             "shank_length_m": 0.40,
             "weight_kg": 20.0,
-            "gif_duration_s": 1.2,
+            "gif_duration_s": 7.2,
+            "cutoff_hz": DEFAULT_KINEMATICS_CUTOFF_HZ,
         },
         base_path,
     )
 
     dialog = tk.Toplevel(root)
     dialog.title("Deadlift kinematics parameters")
-    dialog.transient(root)
+    if root.winfo_viewable():
+        dialog.transient(root)
     dialog.grab_set()
     dialog.attributes("-topmost", True)
     dialog.resizable(False, False)
@@ -2300,34 +2337,80 @@ def _collect_gui_overrides(root: Tk, base_dir: str | None = None) -> dict:
 
         tk.Button(dialog, text="Browse", command=browse).grid(row=row, column=2, padx=8, pady=4)
 
-    def add_value_row(row: int, label: str, key: str, default: object) -> None:
+    def add_value_row(
+        row: int,
+        label: str,
+        key: str,
+        default: object,
+        info_text: str | None = None,
+    ) -> None:
         tk.Label(dialog, text=label, anchor="w").grid(row=row, column=0, sticky="w", padx=8, pady=4)
         entry = tk.Entry(dialog, width=18)
         entry.grid(row=row, column=1, sticky="w", padx=8, pady=4)
         entry.insert(0, str(default))
         entries[key] = entry
+        if info_text:
+            def _show_info(text=info_text, title=label) -> None:
+                messagebox.showinfo(f"Info - {title}", text, parent=dialog)
+
+            tk.Button(
+                dialog,
+                text="?",
+                width=2,
+                command=_show_info,
+            ).grid(row=row, column=2, sticky="w", padx=8, pady=4)
 
     auto_file = _find_nearby_file(
         base_path,
         ("deadlift_kinematics_parameters.txt", "deadlifit_kinematics_parameters.txt"),
     )
-    add_file_row(0, "Config parameters (.txt/.csv)", "config_params", "Select deadlift parameters file")
+    add_file_row(
+        0,
+        "Kinematics parameters (.txt/.csv)",
+        "config_params",
+        "Select kinematics parameters file",
+    )
     if auto_file:
         file_entries["config_params"].insert(0, str(auto_file))
-    add_file_row(1, "Kinematics parameters", "kinematics_params", "Select kinematics parameters file")
-    add_file_row(2, "Subject/load parameters", "subject_params", "Select subject/load parameters file")
 
-    add_value_row(3, "FPS / Hz", "fps", defaults.get("fps", 30.0))
-    add_value_row(4, "Subject mass (kg)", "mass_kg", defaults.get("mass_kg", 75.0))
-    add_value_row(5, "Shank length (m)", "shank_length_m", defaults.get("shank_length_m", 0.40))
-    add_value_row(6, "Deadlift mass (kg)", "barbell_mass_kg", defaults.get("weight_kg", 20.0))
-    add_value_row(7, "GIF interval (s)", "gif_duration_s", defaults.get("gif_duration_s", 1.2))
+    add_value_row(1, "FPS / Hz", "fps", defaults.get("fps", 30.0))
+    add_value_row(2, "Subject mass (kg)", "mass_kg", defaults.get("mass_kg", 75.0))
+    add_value_row(3, "Shank length (m)", "shank_length_m", defaults.get("shank_length_m", 0.40))
+    add_value_row(4, "Deadlift mass (kg)", "barbell_mass_kg", defaults.get("weight_kg", 20.0))
+    add_value_row(
+        5,
+        "GIF interval (s)",
+        "gif_duration_s",
+        defaults.get("gif_duration_s", 7.2),
+        info_text=(
+            "GIF playback speed control\n"
+            "----------------------------------------\n"
+            "This value is the time in seconds that each keyframe of the\n"
+            "stick-figure GIF stays on screen.\n\n"
+            "Higher value  ->  SLOWER playback (each pose lingers longer).\n"
+            "Lower value   ->  FASTER playback (poses change more quickly).\n\n"
+            "Reference values:\n"
+            "  0.5 s  ->  very fast preview\n"
+            "  1.2 s  ->  legacy default (fast)\n"
+            "  3.6 s  ->  3x slower than legacy\n"
+            "  7.2 s  ->  current default (6x slower than legacy)\n"
+            " 12.0 s  ->  very slow, good for technique review\n\n"
+            "Tip: to make the GIF N times slower than the current default,\n"
+            "multiply the value by N (e.g. 7.2 x 2 = 14.4 s for 2x slower)."
+        ),
+    )
+    add_value_row(
+        6,
+        "Butterworth cutoff (Hz)",
+        "cutoff_hz",
+        defaults.get("cutoff_hz", DEFAULT_KINEMATICS_CUTOFF_HZ),
+    )
 
     tk.Label(
         dialog,
-        text="Use the config file, edit values here, or leave fields blank to use defaults/autodetect.",
+        text="Use the parameters file, edit values here, or leave fields blank to use defaults/autodetect.",
         anchor="w",
-    ).grid(row=8, column=0, columnspan=3, sticky="w", padx=8, pady=(8, 4))
+    ).grid(row=7, column=0, columnspan=3, sticky="w", padx=8, pady=(8, 4))
 
     def apply() -> None:
         result["ok"] = True
@@ -2350,47 +2433,87 @@ def _collect_gui_overrides(root: Tk, base_dir: str | None = None) -> dict:
         dialog.destroy()
 
     buttons = tk.Frame(dialog)
-    buttons.grid(row=9, column=0, columnspan=3, sticky="e", padx=8, pady=8)
+    buttons.grid(row=8, column=0, columnspan=3, sticky="e", padx=8, pady=8)
     tk.Button(buttons, text="Cancel", command=cancel).pack(side="right", padx=4)
     tk.Button(buttons, text="Run", command=apply).pack(side="right", padx=4)
 
     dialog.protocol("WM_DELETE_WINDOW", cancel)
+    dialog.update_idletasks()
+    screen_w = dialog.winfo_screenwidth()
+    screen_h = dialog.winfo_screenheight()
+    win_w = dialog.winfo_reqwidth()
+    win_h = dialog.winfo_reqheight()
+    x = max(0, (screen_w - win_w) // 2)
+    y = max(0, (screen_h - win_h) // 3)
+    dialog.geometry(f"+{x}+{y}")
+    dialog.lift()
+    dialog.focus_force()
+    root.update()
     root.wait_window(dialog)
-    return overrides if result["ok"] else {}
+    return overrides if result["ok"] else None
 
 def main_gui():
     root = Tk()
     root.withdraw()
     root.attributes("-topmost", True)
+    print("[Deadlift] Select input directory in the file dialog.", flush=True)
 
     target_dir = filedialog.askdirectory(
         title="Select directory containing Deadlift CSV files (IMU or MediaPipe)"
     )
     if not target_dir:
+        print("[Deadlift] No input directory selected. Cancelled.", flush=True)
+        root.destroy()
         return
 
     csv_files = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.endswith(".csv")]
     if not csv_files:
+        print(f"[Deadlift] No CSV files found in: {target_dir}", flush=True)
         messagebox.showerror("Error", "No CSV files found in selected directory.")
+        root.destroy()
         return
 
+    print(f"[Deadlift] Selected directory: {target_dir}", flush=True)
+    print(f"[Deadlift] Found {len(csv_files)} CSV file(s). Opening parameter dialog...", flush=True)
     overrides = _collect_gui_overrides(root, target_dir)
+    if overrides is None:
+        print("[Deadlift] Parameter dialog cancelled. Analysis not started.", flush=True)
+        root.destroy()
+        return
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_parent = os.path.join(target_dir, f"vaila_deadlift_analysis_{timestamp}")
     os.makedirs(output_parent, exist_ok=True)
+    print(f"[Deadlift] Output directory: {output_parent}", flush=True)
 
+    failures: list[tuple[str, str]] = []
     for f in csv_files:
-        print(f"Analyzing File: {f}")
+        print(f"[Deadlift] Analyzing file: {f}", flush=True)
         file_base = os.path.splitext(os.path.basename(f))[0]
         per_file_dir = os.path.join(output_parent, file_base)
         os.makedirs(per_file_dir, exist_ok=True)
-        process_deadlift_file(f, per_file_dir, overrides=overrides)
+        try:
+            process_deadlift_file(f, per_file_dir, overrides=overrides)
+        except Exception as exc:
+            failures.append((f, str(exc)))
+            print(f"[Deadlift][ERROR] Failed: {f}", flush=True)
+            traceback.print_exc()
+
+    if failures:
+        failed_names = "\n".join(f"- {os.path.basename(path)}: {err}" for path, err in failures)
+        messagebox.showerror(
+            "Analysis finished with errors",
+            f"{len(failures)} file(s) failed.\n\n{failed_names}\n\nResults directory:\n{output_parent}",
+        )
+        root.destroy()
+        return
 
     messagebox.showinfo(
         "Analysis Complete",
         f"All files evaluated successfully!\nResults directory:\n{output_parent}",
     )
+    print("[Deadlift] Analysis complete.", flush=True)
+    root.destroy()
 
 
 if __name__ == "__main__":
@@ -2410,7 +2533,22 @@ if __name__ == "__main__":
     parser.add_argument("--mass-kg", type=float, help="Override subject body mass in kg")
     parser.add_argument("--shank-length-m", type=float, help="Override shank length calibration in meters")
     parser.add_argument("--barbell-mass-kg", type=float, help="Override deadlift bar + plates mass in kg")
-    parser.add_argument("--gif-duration-s", type=float, default=None, help="GIF viewing interval per keyframe in seconds (default: 1.2)")
+    parser.add_argument(
+        "--gif-duration-s",
+        type=float,
+        default=None,
+        help=(
+            "GIF viewing interval per keyframe in seconds (default: 7.2). "
+            "Higher = slower playback, lower = faster. "
+            "Use 1.2 for legacy fast speed."
+        ),
+    )
+    parser.add_argument(
+        "--cutoff",
+        type=float,
+        default=None,
+        help="Butterworth low-pass cutoff in Hz (default: 6 Hz for kinematics, 4 Hz for IMU)",
+    )
     parser.add_argument(
         "--gui", action="store_true", help="Force graphical file manager interface layout"
     )
@@ -2429,5 +2567,6 @@ if __name__ == "__main__":
             "shank_length_m": args.shank_length_m,
             "barbell_mass_kg": args.barbell_mass_kg,
             "gif_duration_s": args.gif_duration_s,
+            "cutoff_hz": args.cutoff,
         }
         process_deadlift_file(args.input, out, overrides=overrides)
