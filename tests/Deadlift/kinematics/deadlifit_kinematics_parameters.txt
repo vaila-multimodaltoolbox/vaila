@@ -1,0 +1,2 @@
+subject_mass_kg,subject_height_m,shank_m,deadlift_mass_kg,fps_hz
+75.0,1.75,0.40,20.0,59.866844999

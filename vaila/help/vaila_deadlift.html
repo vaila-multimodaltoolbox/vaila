@@ -13,7 +13,7 @@ body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5
 <div class="module-info">
 <p><strong>Category:</strong> Analysis</p>
 <p><strong>File:</strong> vaila/vaila_deadlift.py</p>
-<p><strong>Version:</strong> 0.3.48</p>
+<p><strong>Version:</strong> 0.3.49</p>
 <p><strong>Updated:</strong> 2026-06-09</p>
 <p><strong>GUI Interface:</strong> Yes - Frame B - <strong>Deadlift</strong> (B5_r6_c5).
    The button opens a data-source dialog: <em>Kinematics (MediaPipe)</em> routes here;
@@ -73,8 +73,10 @@ body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5
 <div class="usage">
 <h2>Usage</h2>
 <p>GUI: run <code>uv run vaila.py</code>, click <strong>Deadlift</strong>, choose the data source
-(<em>Kinematics (MediaPipe)</em> for this module or <em>IMU (AHRS)</em> for the companion), then select a folder containing CSV files.</p>
+(<em>Kinematics (MediaPipe)</em> for this module or <em>IMU (AHRS)</em> for the companion), then select a folder containing CSV files. Kinematics mode opens one parameter window for config file selection and manual values.</p>
 <pre><code>uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output
+uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output \
+  --config-params tests/Deadlift/kinematics/deadlifit_kinematics_parameters.txt
 uv run python vaila/vaila_deadlift.py -i path/to/data.csv -o path/to/output \
   --kinematics-params path/to/kinematics_parameter.txt \
   --subject-params path/to/subject_parameters.txt \
@@ -91,7 +93,9 @@ mass_kg = 75
 weight_kg = 20
 use_total_mass_for_power = true
 imu_fps = 25</code></pre>
-<p><code>kinematics_parameter.txt</code> supplies camera FPS/Hz for <code>time_s</code> and time-based plots. <code>subject_parameters.txt</code> supplies subject mass, shank length, and bar plus plates mass.</p>
+<p><code>kinematics_parameter.txt</code> supplies camera FPS/Hz for <code>time_s</code> and time-based plots. <code>subject_parameters.txt</code> supplies subject mass, shank length, and bar plus plates mass. Kinematics folders may also use one-row CSV text files such as <code>deadlift_kinematics_parameters.txt</code> or the legacy typo <code>deadlifit_kinematics_parameters.txt</code>:</p>
+<pre><code>subject_mass_kg,subject_height_m,shank_m,deadlift_mass_kg,fps_hz
+75.0,1.75,0.40,20.0,59.866844999</code></pre>
 
 <h2>Outputs</h2>
 <h3>IMU mode</h3>
@@ -110,5 +114,5 @@ imu_fps = 25</code></pre>
 <li>Biomechanical HTML report with variant classification</li>
 </ul>
 
-<div class="footer">Generated on 2026-06-09 for vaila 0.3.48.</div>
+<div class="footer">Generated on 2026-06-09 for vaila 0.3.49.</div>
 </div></body></html>

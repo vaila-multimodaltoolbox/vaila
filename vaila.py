@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 09 June 2026
-Version: 0.3.48
+Version: 0.3.49
 
 Example of usage:
 uv run vaila.py (recommended)
@@ -203,7 +203,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 09.Jun.2026 v0.3.48 (Python 3.12.13)
+vailá - 09.Jun.2026 v0.3.49 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -314,7 +314,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 09.Jun.2026 v0.3.48 (Python 3.12.13)")
+        self.title("vailá - 09.Jun.2026 v0.3.49 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -2025,12 +2025,6 @@ class Vaila(tk.Tk):
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
 
-    # B_r7_c1
-    def deadlift_imu_analysis(self):
-        """Run the IMU-only Deadlift/RDL analysis with Madgwick/Mahony AHRS fusion."""
-        from vaila import vaila_deadlift_imu
-
-        vaila_deadlift_imu.main_gui()
 
     # B_r3_c5
     def animal_open_field(self):

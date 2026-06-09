@@ -79,7 +79,23 @@ mass_kg = 75.0          # athlete body mass (for total-mass power)
 use_total_mass_for_power = true
 ```
 
-Optional `deadlift_parameters.txt` beside the input CSV (auto-loaded):
+Optional `deadlift_parameters.txt` beside the input CSV (auto-loaded; can also
+be pointed to explicitly with `--params-file/-p`).
+
+**Preferred CSV-header format** (one row of values, mass + height + barbell +
+sample rate):
+
+```
+subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz
+75.0,1.75,20.0,25.0
+```
+
+Tolerated column aliases (case-insensitive): `subject_mass`/`body_mass_kg`
+/`mass_kg`/`mass`, `subject_height`/`height_m`/`height`,
+`deadlift_mass`/`barbell_kg`/`weight_kg`/`weight`, and
+`fs`/`fps`/`imu_fps`/`sample_rate`.
+
+**Legacy key,value format** (still supported, one parameter per line):
 
 ```
 weight,20
@@ -88,38 +104,56 @@ real_repetition_count,10
 
 ## Usage
 
-**GUI:**
+**GUI (single unified form):**
 
 ```bash
 uv run vaila.py
 ```
 
 Then either click **Deadlift IMU** in Frame B, or click **Deadlift** and choose
-*IMU (barbell accelerometer + gyroscope CSV)* in the data-source dialog. Select
-a folder of IMU CSVs.
+*IMU (barbell accelerometer + gyroscope CSV)* in the data-source dialog. A
+**single Tkinter window** opens with all inputs in one place: input directory,
+output directory, params-file picker (loads numeric fields automatically),
+subject mass, subject height, deadlift bar mass, sample rate, AHRS filter,
+Madgwick `beta`, gyro units, and optional expected-reps count.
 
 **CLI:**
 
 ```bash
-uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/deadlift_imu.csv
+# Auto-detects deadlift_parameters.txt beside the CSV
+uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/imu/deadlift_imu.csv
+
+# Explicit params file (-p / --params-file)
+uv run python vaila/vaila_deadlift_imu.py -i data.csv -p /path/to/deadlift_parameters.txt
+
+# Inline overrides (win over params file)
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --mass 80 --height 1.80 --weight 60
 uv run python vaila/vaila_deadlift_imu.py -i data.csv --filter mahony --beta 0.05
 uv run python vaila/vaila_deadlift_imu.py -i data.csv --fps 100 --gyro-units rad
-uv run python vaila/vaila_deadlift_imu.py -i data.csv --weight 60 --mass 75
 uv run python vaila/vaila_deadlift_imu.py -i data.csv --reps 14   # pin a known rep count
+
+# Force the unified GUI dialog
+uv run python vaila/vaila_deadlift_imu.py --gui
 ```
 
 Options:
 
-| Flag              | Default      | Description                                         |
-|-------------------|--------------|-----------------------------------------------------|
-| `--filter`        | `madgwick`   | `madgwick` or `mahony`                              |
-| `--beta`          | `0.1`        | Madgwick proportional gain                          |
-| `--gyro-units`    | `deg`        | `deg` or `rad`                                      |
-| `--fps`           | TOML / 25 Hz | Override IMU sample rate                            |
-| `--weight`        | TOML / params| Barbell weight (kg)                                 |
-| `--mass`          | TOML         | Athlete body mass (kg)                              |
-| `--reps`          | auto-detect  | Force the expected repetition count                 |
-| `--gui`           | —            | Force Tkinter file picker                           |
+| Flag                 | Default       | Description                                          |
+|----------------------|---------------|------------------------------------------------------|
+| `-i / --input`       | —             | Input IMU CSV (acc_x/y/z, gyr_x/y/z required)        |
+| `-o / --output`      | input parent  | Destination directory for plots/CSVs/HTML/Markdown   |
+| `-p / --params-file` | auto-detect   | Path to `deadlift_parameters.txt` (any supported fmt)|
+| `--filter`           | `madgwick`    | `madgwick` or `mahony`                               |
+| `--beta`             | `0.1`         | Madgwick proportional gain                           |
+| `--gyro-units`       | `deg`         | `deg` or `rad`                                       |
+| `--fps`              | params / 25Hz | Override IMU sample rate (wins over params)          |
+| `--weight`           | params / 20kg | Override barbell weight in kg                        |
+| `--mass`             | params / 75kg | Override athlete body mass in kg                     |
+| `--height`           | params        | Override athlete body height in meters (informational)|
+| `--reps`             | auto-detect   | Force the expected repetition count                  |
+| `--gui`              | —             | Force the Tkinter single-form dialog                 |
+
+Precedence (highest first): CLI / GUI override → params file → TOML → defaults.
 
 ### Repetition detection
 
@@ -146,10 +180,33 @@ Each input CSV produces a sibling folder named
   the detected repetition peaks marked
 - `*_imu_ahrs_orientation_YYYYMMDD_HHMMSS.png` — roll / pitch / yaw, Earth
   acceleration components, vertical linear acceleration
+- `*_imu_quaternion_didactic_YYYYMMDD_HHMMSS.png` — **didactic quaternion
+  figure** with the four components `q = [w, x, y, z]`, the norm `|q|` (should
+  stay numerically at 1), the total rotation angle
+  `θ = 2·arccos(|q₀|)` in degrees, and the instantaneous rotation axis
+  `n = (nₓ, nᵧ, n_z)`
+- `*_imu_quaternion_axis_xy_YYYYMMDD_HHMMSS.png` — XY view of the rotation
+  axis `n(t)` on the unit sphere, coloured by sample index (time progression)
 - `*_imu_vel_disp_YYYYMMDD_HHMMSS.png` — vertical velocity and displacement
 - `*_imu_rep_bars_YYYYMMDD_HHMMSS.png` — per-rep bar charts
 - `*_imu_velocity_overlay_YYYYMMDD_HHMMSS.png` — velocity profile overlay
-- `*_imu_ahrs_report.html` — self-contained HTML report
+- `*_imu_ahrs_report.html` — self-contained HTML report (with the didactic
+  quaternion section and the BibTeX-ready reference list)
+- `*_imu_ahrs_report.md` — Markdown sibling of the HTML report (same tables,
+  same figures, same references)
+
+### Didactic quaternion figures
+
+A unit quaternion
+`q = [q₀, q₁, q₂, q₃] = [cos(θ/2), nₓ·sin(θ/2), nᵧ·sin(θ/2), n_z·sin(θ/2)]`
+represents a rotation by angle `θ` around the unit axis `n`. The two extra
+quaternion figures above expose this geometry directly: the AHRS filter
+produces `q(t)` sample by sample, and the report makes the abstract algebra
+visible (norm check `|q| ≈ 1`, rotation angle `θ(t)`, and the trajectory of
+the rotation axis `n(t)` on the unit sphere). Unlike Euler angles, quaternions
+are *singularity-free* — no gimbal lock, no discontinuous unwrapping. This is
+why every modern IMU/AHRS chip, every game engine and every 3D animation
+system uses quaternions internally.
 
 ## Reference
 
@@ -172,12 +229,48 @@ Each input CSV produces a sibling folder named
 The quaternion-based 3D kinematic modeling used by this module traces back to a
 close academic collaboration with Professor **René Jean Brenzikofer** (UNICAMP),
 which led to the first publication of quaternion-based three-dimensional modeling
-data in the book *"Modelos Matemáticos nas Ciências Não-Exatas"* (Editora
-Blucher, 2007). Quaternions solve the *gimbal lock* singularity and are the exact
-basis for the AHRS data-fusion algorithms in IMUs used in wearables and player
-GPS+IMU trackers. This module is dedicated to his memory.
+data in the book *"Modelos Matemáticos nas Ciências Não-Exatas, vol. 1"*
+(Editora Blucher, 2007). Quaternions solve the *gimbal lock* singularity and are
+the exact basis for the AHRS data-fusion algorithms in IMUs used in wearables and
+player GPS+IMU trackers. This module is dedicated to his memory.
 
-- Tribute & publication history: <https://lnkd.in/eZUcgbNT>
-- Doctoral thesis (Quaternions in Biomechanics): <https://lnkd.in/eSjuDjnw>
-- Reference book (Editora Blucher, 2007), *Modelos Matemáticos nas Ciências
-  Não-Exatas*: <https://lnkd.in/ejKpHWzK>
+**Primary references (BibTeX-ready):**
+
+- Nogueira, E. A., Martins, L. E. B., & Brenzikofer, R. (2007). *Modelos
+  Matemáticos nas Ciências Não-Exatas — vol. 1.* São Paulo: Editora Blucher.
+  ISBN 978-85-212-0419-0.
+  <https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190>
+- Santiago, P. R. P. (2009). *Rotações tridimensionais em biomecânica via
+  quatérnions: aplicações na análise dos movimentos esportivos.* Tese
+  (Doutorado) — Universidade Estadual Paulista (Unesp), Instituto de Biociências
+  de Rio Claro. <http://hdl.handle.net/11449/100404> ·
+  [PDF](https://repositorio.unesp.br/server/api/core/bitstreams/41603fa7-545b-4e74-a045-57ce94885e0c/content)
+
+**Tribute & social-media coverage:**
+
+- Instagram post (tribute & publication history):
+  <https://www.instagram.com/p/DZLogIJoFbF/>
+- LinkedIn post (publication history & tribute to Prof. Brenzikofer):
+  <https://www.linkedin.com/posts/paulo-roberto-pereira-santiago-132619112_hist%C3%B3rico-de-publica%C3%A7%C3%A3o-e-homenagem-ao-prof-ugcPost-7468670091845472257-3tzD/>
+
+```bibtex
+@book{nogueira2007modelos,
+  title     = {Modelos matem\'aticos nas ci\^encias n\~ao-exatas - vol. 1},
+  author    = {Nogueira, Eduardo Arantes and Martins, Luiz Eduardo Barreto
+               and Brenzikofer, Ren\'e},
+  year      = {2007},
+  publisher = {Editora Blucher},
+  isbn      = {9788521204190},
+  url       = {https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190}
+}
+
+@phdthesis{santiago2009rotaccoes,
+  title    = {Rota\c{c}\~oes tridimensionais em biomec\^anica via quat\'ernions:
+              aplica\c{c}\~oes na an\'alise dos movimentos esportivos},
+  author   = {Santiago, Paulo Roberto Pereira},
+  school   = {Universidade Estadual Paulista (Unesp),
+              Instituto de Bioci\^encias de Rio Claro},
+  year     = {2009},
+  url      = {http://hdl.handle.net/11449/100404}
+}
+```
