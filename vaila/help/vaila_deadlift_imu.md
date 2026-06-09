@@ -42,10 +42,12 @@ repository). A friendly walk-through is also available on the
    `q = [w, x, y, z]` (sensor frame relative to Earth frame).
 4. Rotate the raw accelerometer to the Earth frame, subtract the measured
    static gravity → **linear acceleration** in Earth coordinates.
-5. Detect repetitions from the filtered vertical linear acceleration
-   (heavy ~1.2 Hz low-pass for detection, configurable light low-pass for metrics; default 4 Hz).
-6. Per-rep integration with ZUPT-style linear drift correction
-   (velocity and displacement re-zeroed at start/end of each rep).
+5. Lock repetition count and brackets from the **dominant raw accelerometer
+   component** (largest peak-to-peak range). The detector low-passes this raw
+   axis, follows the gravity-sign peak direction and merges close subpeaks
+   caused by a small in-repetition jerk.
+6. Use the AHRS vertical linear acceleration for per-rep ZUPT integration,
+   velocity, displacement and kinetics inside those locked rep brackets.
 7. Per-rep metrics — peak / mean velocity, peak / mean power, work, ROM,
    peak / mean force, impulse — using either the barbell weight or the total
    system mass.
@@ -221,15 +223,21 @@ move a one-off GUI run into a script or scheduled job.
 
 ### Repetition detection
 
-Repetitions are segmented automatically from concentric vertical-acceleration
-peaks (one rep per peak, boundaries at the eccentric bottom between peaks), with
-leading/trailing **static-window rejection** so the barbell-at-rest periods at
-the start/end of a set are not counted. The shared `deadlift_parameters.txt`
-rep count is **not** used to trim the AHRS detection (it often describes a
-different capture); use `--reps N` to pin a known count. On the bundled
-`tests/Deadlift/deadlift_imu.csv` example, the detector reports 14 when run with
-`--fps 25` (the default form value); changing `fs_hz` in the params file changes
-the time base and can change the detected count.
+Repetitions are counted from the raw accelerometer component with the largest
+peak-to-peak range, not separately from each AHRS filter. The selected axis is
+low-passed at 2 Hz, the peak direction follows the component's mean gravity
+sign, and close subpeaks are merged so a small jerk inside the same repetition
+does not become an extra rep. The resulting brackets are then reused by both
+Madgwick and Mahony, while AHRS vertical acceleration still supplies velocity,
+displacement and kinetics.
+
+Leading/trailing static windows are limited so the barbell-at-rest periods at
+the start/end of a set are not counted or used to discard a valid edge rep. The
+shared `deadlift_parameters.txt` rep count is **not** used to trim detection by
+default (it often describes a different capture); use `--reps N` to pin a known
+count. On the bundled `tests/Deadlift/imu/deadlift_imu.csv` example with
+`fs_hz=21.0`, the raw `acc_x` negative peaks lock the set to 14 repetitions for
+both filters.
 
 ## Outputs
 
@@ -241,12 +249,13 @@ subfolders. Each filter subfolder contains:
 - `*_imu_ahrs_processed_YYYYMMDD_HHMMSS.csv` — per-sample time series
   (quaternion, Euler angles, quaternion axis-angle spherical columns,
   Earth-frame acceleration, linear acceleration, vertical velocity, displacement,
-  and `translation_world_x/y/z_m` used by the animation)
+  `translation_world_x/y/z_m` used by the animation, plus `rep_detection_axis`
+  and `rep_detection_direction`)
 - `*_imu_ahrs_rep_metrics_YYYYMMDD_HHMMSS.csv` — per-rep summary
   (peak / mean velocity, power, work, ROM, peak / mean force, impulse)
 - `*_imu_raw_acc_axes_YYYYMMDD_HHMMSS.png` — raw `acc_x` / `acc_y` / `acc_z`
-  (gravity included) with the dominant (likely vertical) axis highlighted and
-  the detected repetition peaks marked
+  (gravity included) with the dominant rep-detection axis highlighted and the
+  locked repetition peaks marked
 - `*_imu_ahrs_orientation_YYYYMMDD_HHMMSS.png` — roll / pitch / yaw, Earth
   acceleration components, vertical linear acceleration
 - `*_imu_quaternion_spherical_YYYYMMDD_HHMMSS.png` — unit quaternion line graph
