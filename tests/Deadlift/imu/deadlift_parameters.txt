@@ -1,2 +1,2 @@
 subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz
-75.0,1.75,20.0,25.0
+75.0,1.75,20.0,21.0
