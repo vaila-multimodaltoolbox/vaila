@@ -4,8 +4,8 @@
 
 - **Category:** Processing
 - **File:** `vaila\reid_markers.py`
-- **Lines:** 2474
-- **Size:** 90473 characters
+- **Lines:** 2585
+- **Size:** 94499 characters
 - **Version:** 0.3.47
 - **Author:** Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
@@ -17,7 +17,7 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 06 June 2026
+Update Date: 08 June 2026
 Version: 0.3.47
 Python Version: 3.12.9
 
@@ -33,12 +33,19 @@ by getpixelvideo.py. It offers the following functionalities:
 
 ================================================================================
 
+### SAM tracking CSV support
+
+If `sam_tracks.csv` is selected, the loader now normalizes SAM long-format tracks to vailá wide marker columns. When a sibling `sam_points.csv` exists, it is used directly; otherwise the loader writes `sam_tracks_reid_points.csv` and `sam_tracks_reid_id_map.csv`.
+
 
 ## 🔧 Main Functions
 
-**Total functions found:** 31
+**Total functions found:** 34
 
 - `load_markers_file`
+- `is_sam_tracks_file`
+- `sam_tracks_to_marker_points`
+- `normalize_marker_input`
 - `save_markers_file`
 - `create_temp_dir`
 - `create_temp_file`
@@ -71,6 +78,6 @@ by getpixelvideo.py. It offers the following functionalities:
 
 ---
 
-📅 **Generated automatically on:** 06/06/2026
+📅 **Generated automatically on:** 08/06/2026
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

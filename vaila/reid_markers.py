@@ -3,7 +3,7 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 06 June 2026
+Update Date: 08 June 2026
 Version: 0.3.47
 Python Version: 3.12.9
 
@@ -60,11 +60,122 @@ def load_markers_file():
 
     try:
         df = pd.read_csv(file_path)
+        df, file_path = normalize_marker_input(df, file_path)
         print(f"File loaded: {file_path}")
         return df, file_path
     except Exception as e:
         print(f"Error loading file: {e}")
         return None, None
+
+
+SAM_TRACKS_COLUMNS = {
+    "frame",
+    "obj_id",
+    "x_px",
+    "y_px",
+    "w_px",
+    "h_px",
+    "score",
+    "cx_px",
+    "cy_px",
+}
+
+
+def is_sam_tracks_file(df: pd.DataFrame) -> bool:
+    """Return True for SAM long-format tracking CSVs."""
+    return SAM_TRACKS_COLUMNS.issubset(set(df.columns))
+
+
+def sam_tracks_to_marker_points(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Convert SAM long tracks to vailá wide marker columns.
+
+    ``reid_markers`` edits marker trajectories in the classic vailá layout:
+    ``frame,p1_x,p1_y,p2_x,p2_y,...``. SAM writes ``sam_tracks.csv`` as one
+    row per object per frame. This adapter maps sorted SAM ``obj_id`` values to
+    stable ``pN`` columns and uses bbox bottom-center as ``pN_x/pN_y``. Extra
+    center/mask-centroid columns are kept for inspection.
+    """
+    if not is_sam_tracks_file(df):
+        raise ValueError("Input is not a SAM sam_tracks.csv table.")
+
+    tracks = df.copy()
+    tracks["frame"] = pd.to_numeric(tracks["frame"], errors="coerce")
+    tracks["obj_id"] = pd.to_numeric(tracks["obj_id"], errors="coerce")
+    tracks = tracks.dropna(subset=["frame", "obj_id"]).copy()
+    tracks["frame"] = tracks["frame"].astype(int)
+    tracks["obj_id"] = tracks["obj_id"].astype(int)
+    if tracks.empty:
+        raise ValueError("SAM tracks table has no valid frame/obj_id rows.")
+
+    for col in ("x_px", "y_px", "w_px", "h_px", "cx_px", "cy_px"):
+        tracks[col] = pd.to_numeric(tracks[col], errors="coerce")
+
+    obj_ids = sorted(tracks["obj_id"].unique())
+    frames = pd.Index(
+        range(int(tracks["frame"].min()), int(tracks["frame"].max()) + 1), name="frame"
+    )
+    out = pd.DataFrame({"frame": frames.to_numpy(dtype=int)})
+    id_rows: list[dict[str, int]] = []
+
+    for pn, obj_id in enumerate(obj_ids, start=1):
+        one = tracks.loc[tracks["obj_id"] == obj_id].copy()
+        one = one.sort_values(["frame", "score"], ascending=[True, False])
+        one = one.drop_duplicates(subset=["frame"], keep="first").set_index("frame")
+
+        foot_x = one["x_px"] + one["w_px"] * 0.5
+        foot_y = one["y_px"] + one["h_px"]
+        aligned = pd.DataFrame(
+            {
+                f"p{pn}_x": foot_x,
+                f"p{pn}_y": foot_y,
+                f"p{pn}_cx": one["cx_px"],
+                f"p{pn}_cy": one["cy_px"],
+            }
+        )
+        if "mx_px" in one.columns and "my_px" in one.columns:
+            aligned[f"p{pn}_mx"] = pd.to_numeric(one["mx_px"], errors="coerce")
+            aligned[f"p{pn}_my"] = pd.to_numeric(one["my_px"], errors="coerce")
+        aligned = aligned.reindex(frames)
+        for col in aligned.columns:
+            out[col] = aligned[col].to_numpy()
+
+        id_rows.append(
+            {
+                "pN": pn,
+                "obj_id": int(obj_id),
+                "n_frames": int(len(one)),
+                "first_frame": int(one.index.min()),
+                "last_frame": int(one.index.max()),
+            }
+        )
+
+    return out, pd.DataFrame(id_rows)
+
+
+def normalize_marker_input(df: pd.DataFrame, file_path: str) -> tuple[pd.DataFrame, str]:
+    """Normalize supported non-marker inputs before the ReID GUI opens."""
+    path = Path(file_path)
+    if not is_sam_tracks_file(df):
+        return df, file_path
+
+    sibling_points = path.with_name("sam_points.csv")
+    if sibling_points.is_file():
+        print(
+            "[ReID Marker] SAM tracks selected; using sibling sam_points.csv "
+            "because ReID expects wide pN_x/pN_y marker columns."
+        )
+        return pd.read_csv(sibling_points), str(sibling_points)
+
+    points, id_map = sam_tracks_to_marker_points(df)
+    out_points = path.with_name(f"{path.stem}_reid_points.csv")
+    out_map = path.with_name(f"{path.stem}_reid_id_map.csv")
+    points.to_csv(out_points, index=False)
+    id_map.to_csv(out_map, index=False)
+    print(
+        "[ReID Marker] Converted SAM long tracks to wide marker points: "
+        f"{out_points} (map: {out_map})"
+    )
+    return points, str(out_points)
 
 
 def save_markers_file(df, original_path, suffix="_reid"):
@@ -640,7 +751,9 @@ def geometric_reid_align_markers(
             continue
 
         det_px = np.vstack([np.asarray(det["xy"], dtype=float) for det in detections])
-        trk_px = np.vstack([np.asarray(track_state[name]["pos"], dtype=float) for name in active_names])
+        trk_px = np.vstack(
+            [np.asarray(track_state[name]["pos"], dtype=float) for name in active_names]
+        )
         det_cost_xy = _apply_homography_to_xy(det_px, homography_matrix)
         trk_cost_xy = _apply_homography_to_xy(trk_px, homography_matrix)
 
@@ -654,7 +767,9 @@ def geometric_reid_align_markers(
                 prev_vel_px = np.asarray(track_state[name]["vel"], dtype=float)
                 est_vel_px = det_px[i] - trk_px[j]
                 norm_prod = float(np.linalg.norm(prev_vel_px) * np.linalg.norm(est_vel_px))
-                cosine = float(np.dot(est_vel_px, prev_vel_px) / norm_prod) if norm_prod > 1e-9 else 1.0
+                cosine = (
+                    float(np.dot(est_vel_px, prev_vel_px) / norm_prod) if norm_prod > 1e-9 else 1.0
+                )
                 cosine = max(-1.0, min(1.0, cosine))
                 alignment_penalty = 1.0 - cosine
                 cost[i, j] = d * (1.0 + float(direction_weight) * alignment_penalty)
@@ -698,8 +813,7 @@ def geometric_reid_align_markers(
                         "frame": frame_idx,
                     }
                     row_values[source_name] = {
-                        coord: df.at[frame_idx, col]
-                        for coord, col in markers[source_name].items()
+                        coord: df.at[frame_idx, col] for coord, col in markers[source_name].items()
                     }
                 else:
                     unmatched += 1
@@ -1084,9 +1198,7 @@ def run_geometric_reid_with_data(df, file_path, frame_col, coord_cols):
     """Run 2D geometric ReID from the main menu and save a corrected CSV."""
     try:
         markers = detect_markers_dynamic(df, coord_cols)
-        marker_names = [
-            name for name, info in markers.items() if "x" in info and "y" in info
-        ]
+        marker_names = [name for name, info in markers.items() if "x" in info and "y" in info]
         if len(marker_names) < 2:
             messagebox.showerror("Geometric ReID", "Need at least two markers with x/y columns.")
             return
@@ -1130,8 +1242,7 @@ def run_geometric_reid_with_data(df, file_path, frame_col, coord_cols):
         homography = None
         if messagebox.askyesno(
             "Geometric ReID",
-            "Use a homography matrix for distance/velocity cost?\n\n"
-            "No uses image pixels directly.",
+            "Use a homography matrix for distance/velocity cost?\n\nNo uses image pixels directly.",
         ):
             h_path = filedialog.askopenfilename(
                 title="Select 3x3 homography matrix",
