@@ -38,9 +38,9 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila\reid_markers.py</p>
-            <p><strong>Lines:</strong> 2171</p>
-            <p><strong>Size:</strong> 75597 characters</p>
-            <p><strong>Version:</strong> 0.1.0</p>
+            <p><strong>Lines:</strong> 2585</p>
+            <p><strong>Size:</strong> 94499 characters</p>
+            <p><strong>Version:</strong> 0.3.47</p>
             <p><strong>Author:</strong> Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -54,8 +54,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Date: Current
-Version: 0.1.0
+Update Date: 09 June 2026
+Version: 0.3.47
 Python Version: 3.12.9
 
 Description:
@@ -66,19 +66,23 @@ by getpixelvideo.py. It offers the following functionalities:
 1. Marker merging: Combine markers that represent the same object
 2. Gap filling: Fill gaps where a marker temporarily disappears
 3. Swaps: Fix cases where IDs were swapped in certain frame intervals
+4. Geometric ReID: stabilize marker IDs using 2D distance, velocity direction, and optional homography
 
 ================================================================================
 </pre>
         </div>
 
+        <h3>SAM tracking CSV support</h3>
+        <p>If <code>sam_tracks.csv</code> is selected, the loader now normalizes SAM long-format tracks to vailá wide marker columns. When a sibling <code>sam_points.csv</code> exists, it is used directly; otherwise the loader writes <code>sam_tracks_reid_points.csv</code> and <code>sam_tracks_reid_id_map.csv</code>.</p>
+
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>load_markers_file</code></li><li><code>save_markers_file</code></li><li><code>create_temp_dir</code></li><li><code>create_temp_file</code></li><li><code>clear_temp_dir</code></li><li><code>detect_markers</code></li><li><code>get_marker_coords</code></li><li><code>detect_gaps</code></li><li><code>fill_gaps</code></li><li><code>merge_markers</code></li><li><code>swap_markers</code></li><li><code>save_operations_log</code></li><li><code>visualize_markers</code></li><li><code>detect_markers_dynamic</code></li><li><code>get_marker_coords_dynamic</code></li><li><code>detect_gaps_dynamic</code></li><li><code>visualize_markers_dynamic</code></li><li><code>select_columns_dialog</code></li><li><code>create_gui_menu</code></li><li><code>run_reid_swap_auto_with_data</code></li></ul>
+            <p><strong>Total functions found:</strong> 34</p>
+            <ul><li><code>load_markers_file</code></li><li><code>is_sam_tracks_file</code></li><li><code>sam_tracks_to_marker_points</code></li><li><code>normalize_marker_input</code></li><li><code>save_markers_file</code></li><li><code>create_temp_dir</code></li><li><code>create_temp_file</code></li><li><code>clear_temp_dir</code></li><li><code>detect_markers</code></li><li><code>get_marker_coords</code></li><li><code>detect_gaps</code></li><li><code>fill_gaps</code></li><li><code>merge_markers</code></li><li><code>swap_markers</code></li><li><code>save_operations_log</code></li><li><code>visualize_markers</code></li><li><code>detect_markers_dynamic</code></li><li><code>get_marker_coords_dynamic</code></li><li><code>load_homography_matrix</code></li><li><code>geometric_reid_align_markers</code></li><li><code>detect_gaps_dynamic</code></li><li><code>visualize_markers_dynamic</code></li><li><code>select_columns_dialog</code></li><li><code>run_geometric_reid_with_data</code></li><li><code>create_gui_menu</code></li><li><code>run_reid_swap_auto_with_data</code></li><li><code>run_reid_swap_manual_with_data</code></li><li><code>advanced_reid_gui_with_data</code></li><li><code>fill_gaps_arima</code></li><li><code>auto_fill_gaps_arima</code></li></ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Generated automatically on: 09/06/2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
