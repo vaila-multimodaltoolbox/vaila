@@ -4,11 +4,11 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 124 | **Categories:** 7 | **Generated on:** 09/06/2026
+**Total documented modules:** 125 | **Categories:** 7 | **Generated on:** 09/06/2026
 
 ---
 
-## Analysis (14 modules)
+## Analysis (15 modules)
 
 - **animal_open_field**
   - [📄 HTML](animal_open_field.html)
@@ -52,6 +52,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **vaila_deadlift**
   - [📄 HTML](vaila_deadlift.html)
   - [📝 Markdown](vaila_deadlift.md)
+- **vaila_deadlift_imu**
+  - [📄 HTML](vaila_deadlift_imu.html)
+  - [📝 Markdown](vaila_deadlift_imu.md)
 - **pynalty**
   - [📄 HTML](pynalty_help.html)
   - [📝 Markdown](pynalty_help.md)
