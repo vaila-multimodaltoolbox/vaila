@@ -6,7 +6,8 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 **Version:** 0.3.46  
 **Date:** 28 May 2026  
-**Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
+**Updated:** 10 June 2026  
+**Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** vailá - Multimodal Toolbox
 
 ## Key Features
@@ -305,8 +306,17 @@ uv run yolo pose train \
 | **Ctrl+G**      | Go KP — jump to a keypoint index by number |
 | **DELETE**      | Delete selected marker           |
 | **A**           | Add new empty marker to file     |
-| **R**           | Remove **selected** marker in current frame (same idea as right click) |
-| **D**           | Mark **all** keypoint slots in the **current frame** as deleted (bulk clear) |
+| **R**           | Remove **selected** marker in current frame (same as right click) |
+| **D**           | Remove **selected** marker in current frame (same as **R** and right click) |
+
+### Playback Speed
+
+| Key   | Action                                               |
+| ----- | ---------------------------------------------------- |
+| **]** | Increase playback speed (doubles: 1× → 2× → 4× → … max 16×) |
+| **[** | Decrease playback speed (halves: 1× → 0.5× → 0.25× … min 0.0625×) |
+
+Current speed is shown in the top-right corner of the window. Speed resets to 1× when you reopen a video.
 
 ### Mode Controls
 
@@ -326,6 +336,7 @@ uv run yolo pose train \
 | **F8**          | Open another video (keeps dataset; no need to close app) |
 | **F9**          | Export YOLO-pose dataset from clicked markers (see Pose dataset section) |
 | **Ctrl+E**      | Save ML: choose split, export PNG dataset + `all_labels/` didactic view |
+| **W**           | Open Swap Markers dialog (multi-rule range swap)  |
 | **1**           | Decrease persistence frames                       |
 | **2**           | Increase persistence frames                      |
 | **3**           | Toggle full persistence                           |
@@ -538,6 +549,10 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.3.46 (10 June 2026)
+
+- **Help updated:** added `[` / `]` playback speed keys to all documentation; corrected `R`/`D` key descriptions (both remove the **selected** marker in the current frame); added `W` (Swap dialog) to Mode Controls table.
 
 ### Version 0.6.0 (April 2026)
 

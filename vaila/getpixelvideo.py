@@ -7831,13 +7831,10 @@ def play_video_with_controls(
                 elif event.key == pygame.K_r or event.key == pygame.K_d:
                     remove_marker()
 
-                # Playback Speed Control
                 elif event.key == pygame.K_RIGHTBRACKET:  # ]
                     playback_speed *= 2.0
                     if playback_speed > 16.0:
                         playback_speed = 16.0
-                    save_message_text = f"Speed: {playback_speed}X"
-                    showing_save_message = True
                     save_message_text = f"Speed: {playback_speed}X"
                     showing_save_message = True
                     save_message_timer = 30
@@ -7873,8 +7870,6 @@ def play_video_with_controls(
                         playback_speed = 0.0625
                     save_message_text = f"Speed: {playback_speed}X"
                     showing_save_message = True
-                    save_message_timer = 30
-
                     save_message_timer = 30
 
                 # Swap Hotkey (W) and Load Config (Shift+W)

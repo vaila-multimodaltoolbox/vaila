@@ -4,8 +4,9 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Versão:** 0.3.45  
-**Data:** 22 de Maio de 2026  
+**Versão:** 0.3.46  
+**Data:** 28 de Maio de 2026  
+**Atualizado:** 10 de Junho de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Projeto:** vailá - Multimodal Toolbox
 
@@ -56,7 +57,7 @@ pip install opencv-python pygame pandas numpy
    - **Formato MediaPipe:** Para dados de landmarks com visualização de stick figure
    - **Formato YOLO tracking:** Para dados de tracking com visualização de bounding box
    - **Formato vailá padrão:** Para dados de coordenadas padrão
-5. **Navegue e anote:** Use a interface para navegar, fazer zoom e editar marcadores
+5. **Navegue e anote:** Use a interface para navegar, fazer zoom e editar marcadores (**TAB** / **SHIFT+TAB**, **Ctrl+G** para saltar para um keypoint pelo número; botão **Del Range** apaga um ou mais marcadores por lista/intervalo; botão **Swap Range** troca pares de marcadores em um intervalo de quadros)
 6. **Salve resultados:** Salve os dados anotados em formato CSV
 
 ## Interface
@@ -204,13 +205,24 @@ Para gerar dataset de **keypoints / pose** (ex.: campo de futebol com 32 pontos)
 
 | Tecla               | Ação                                     |
 | ------------------- | ---------------------------------------- |
-| **Clique Esquerdo** | Adicionar/atualizar marcador             |
-| **Clique Direito**  | Remover último marcador                  |
+| **Clique Esquerdo** | Adicionar/atualizar marcador no slot **selecionado** |
+| **Clique Direito**  | Remover marcador **selecionado** no quadro atual (vai ao anterior) |
 | **TAB**             | Próximo marcador no quadro atual         |
 | **SHIFT+TAB**       | Marcador anterior no quadro atual        |
+| **Ctrl+G**          | Go KP — saltar para um keypoint pelo número |
 | **DELETE**          | Excluir marcador selecionado             |
 | **A**               | Adicionar novo marcador vazio ao arquivo |
-| **R** ou **D**       | Remover último marcador do arquivo       |
+| **R**               | Remover marcador **selecionado** no quadro atual (igual ao clique direito) |
+| **D**               | Remover marcador **selecionado** no quadro atual (igual a **R** e clique direito) |
+
+### Velocidade de Reprodução
+
+| Tecla | Ação                                                       |
+| ----- | ----------------------------------------------------------- |
+| **]** | Aumentar velocidade (dobra: 1× → 2× → 4× … máx. 16×)     |
+| **[** | Diminuir velocidade (metade: 1× → 0.5× → 0.25× … mín. 0.0625×) |
+
+A velocidade atual é exibida no canto superior direito da janela. Ela volta a 1× ao reabrir um vídeo.
 
 ### Controles de Modo
 
@@ -220,13 +232,17 @@ Para gerar dataset de **keypoints / pose** (ex.: campo de futebol com 32 pontos)
 | **O** ou **S**  | Alternar modo Sequencial (apenas no modo Normal)          |
 | **P**           | Alternar modo Persistência                                |
 | **L**           | Alternar modo Labeling (Bounding Boxes)                    |
-| **Z / R-Click** | Remover última caixa delimitadora (modo Labeling)          |
+| **G**           | Alternar Guia (overlay visual do template; `V` alterna mapa FIFA) |
+| **FIFA** / **K** | Carregar/criar **TOML FIFA** ao lado do vídeo (`n_keypoints`, `start`, `base`) |
+| **W**           | Abrir diálogo de Swap de Marcadores (troca por intervalo) |
+| **Z**           | Remover última caixa delimitadora (modo Labeling)          |
 | **N**           | Renomear label do objeto (Apenas Modo Labeling)            |
 | **F5**          | Salvar Projeto e exportar dataset (Apenas Modo Labeling)  |
 | **F6**          | Carregar Projeto de Labeling (JSON) (Apenas Modo Labeling) |
 | **F7**          | Carregar pasta do dataset – próximo Save anexa (Modo Labeling) |
 | **F8**          | Abrir outro vídeo (mantém dataset; não precisa fechar o app) |
-| **F9**          | Exportar dataset YOLO-pose a partir dos marcadores (ver secção acima) |
+| **F9**          | Exportar dataset YOLO-pose a partir dos marcadores (ver seção acima) |
+| **Ctrl+E**      | Salvar ML: escolher split, exportar dataset PNG + `all_labels/` |
 | **1**           | Diminuir quadros de persistência                           |
 | **2**           | Aumentar quadros de persistência                           |
 | **3**           | Alternar persistência completa                             |
@@ -236,7 +252,7 @@ Para gerar dataset de **keypoints / pose** (ex.: campo de futebol com 32 pontos)
 | Tecla | Ação                                                |
 | ----- | --------------------------------------------------- |
 | **H** | Mostrar diálogo de ajuda                            |
-| **R** ou **D** | Remover último marcador do arquivo            |
+| **?** | Abrir **documentação HTML** no navegador (`vaila/help/getpixelvideo.html`) |
 | **Salvar/Carregar** | Use os botões do painel inferior (sem tecla dedicada) |
 
 ### Outros
@@ -455,6 +471,10 @@ Sistema de backup integrado para segurança dos dados:
 - **Repositório do Projeto:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Histórico de Versões
+
+### Versão 0.3.46 (10 de Junho de 2026)
+
+- **Help atualizado:** adicionadas teclas `[` / `]` para controle de velocidade de reprodução em toda a documentação; corrigidas descrições das teclas `R`/`D` (ambas removem o marcador **selecionado** no quadro atual); adicionado `W` (diálogo de Swap), `Ctrl+G` (Go KP) e `Ctrl+E` (Save ML) ao guide de teclas.
 
 ### Versão 0.3.45 (22 de Maio de 2026)
 

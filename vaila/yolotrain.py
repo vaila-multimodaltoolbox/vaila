@@ -6,12 +6,12 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 May 2025
-Update Date: 09 June 2025
-Version: 0.0.4
+Update Date: 10 June 2026
+Version: 0.3.51
 
 Description:
-    Simplified YOLO training interface specifically designed for AnyLabeling exports.
-    Automatically detects AnyLabeling structure and creates minimal YAML files.
+    YOLO training interface for vailá/getpixelvideo and YOLO-format datasets.
+    Creates training datasets from getpixelvideo pixel CSVs and trains Ultralytics models.
 
 Usage:
     Run the script from the command line:
@@ -26,6 +26,7 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.3.51: Added getpixelvideo/sam_points_georeid CSV to YOLO tracking dataset builder
     - v0.0.4: Simplified interface, AnyLabeling-focused, minimal YAML generation
     - v0.0.3: Added support for AnyLabeling data, improved UI
     - v0.0.2: Added validation and threading support
@@ -34,11 +35,15 @@ Change History:
 
 import os
 import pathlib
+import random
 import sys
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+from datetime import datetime
+from tkinter import filedialog, messagebox, scrolledtext, simpledialog
 
+import cv2
+import pandas as pd
 import torch
 from ultralytics import YOLO
 
@@ -71,11 +76,11 @@ class ConsoleRedirector:
 
 # --- Main Application Class ---
 class YOLOTrainApp(tk.Tk):
-    """Simplified YOLO Training Interface for AnyLabeling."""
+    """YOLO Training Interface for vailá/getpixelvideo and YOLO datasets."""
 
     def __init__(self):
         super().__init__()
-        self.title("YOLO Training - AnyLabeling Interface")
+        self.title("YOLO Training - vailá getpixelvideo / YOLO")
         self.geometry("800x600")
         self.configure(padx=10, pady=10)
 
@@ -118,13 +123,13 @@ class YOLOTrainApp(tk.Tk):
     def create_widgets(self):
         """Creates simplified widgets."""
         # Configure grid
-        self.grid_rowconfigure(8, weight=1)
+        self.grid_rowconfigure(9, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
         # Title
         title_label = tk.Label(
             self,
-            text="YOLO Training - AnyLabeling Interface",
+            text="YOLO Training - vailá getpixelvideo / YOLO",
             font=("Arial", 16, "bold"),
         )
         title_label.grid(row=0, column=0, columnspan=3, pady=10)
@@ -132,7 +137,7 @@ class YOLOTrainApp(tk.Tk):
         # Help Button
         help_button = tk.Button(
             self,
-            text="AnyLabeling Guide",
+            text="Dataset Guide",
             command=self.show_anylabeling_help,
             bg="#2196F3",
             fg="white",
@@ -150,7 +155,7 @@ class YOLOTrainApp(tk.Tk):
         model_info_label.grid(row=2, column=0, columnspan=3, pady=2)
 
         # Dataset Path
-        tk.Label(self, text="AnyLabeling Dataset Folder:").grid(
+        tk.Label(self, text="YOLO Dataset Folder:").grid(
             row=3, column=0, sticky="e", padx=5, pady=5
         )
         dataset_entry = tk.Entry(self, textvariable=self.dataset_path, width=50, state="readonly")
@@ -159,9 +164,18 @@ class YOLOTrainApp(tk.Tk):
             row=3, column=2, padx=5, pady=5
         )
 
+        csv_button = tk.Button(
+            self,
+            text="Create Dataset from getpixelvideo CSV",
+            command=self.create_dataset_from_getpixelvideo_csv,
+            bg="#673AB7",
+            fg="white",
+        )
+        csv_button.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
+
         # YAML Options Frame
         yaml_frame = tk.Frame(self)
-        yaml_frame.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
+        yaml_frame.grid(row=5, column=0, columnspan=3, pady=5, sticky="ew")
 
         tk.Label(yaml_frame, text="YAML Configuration:").grid(row=0, column=0, sticky="w", padx=5)
 
@@ -193,14 +207,14 @@ class YOLOTrainApp(tk.Tk):
             font=("Arial", 12, "bold"),
             height=2,
         )
-        self.start_button.grid(row=5, column=0, columnspan=3, pady=10, sticky="ew")
+        self.start_button.grid(row=6, column=0, columnspan=3, pady=10, sticky="ew")
 
         # Console
         tk.Label(self, text="Training Output:").grid(
-            row=6, column=0, columnspan=3, sticky="w", padx=5, pady=5
+            row=7, column=0, columnspan=3, sticky="w", padx=5, pady=5
         )
         self.console = scrolledtext.ScrolledText(self, height=15, wrap="word", font=("Consolas", 9))
-        self.console.grid(row=7, column=0, columnspan=3, padx=10, pady=5, sticky="nsew")
+        self.console.grid(row=8, column=0, columnspan=3, padx=10, pady=5, sticky="nsew")
 
     def _update_model_list(self, event=None):
         """Updates the model list based on selected category."""
@@ -270,41 +284,37 @@ For more info: https://docs.ultralytics.com/models/yolo26/
         messagebox.showinfo("YOLO Model Guide", help_text)
 
     def show_anylabeling_help(self):
-        """Shows AnyLabeling help."""
+        """Shows supported dataset help."""
         help_text = """
-ANYLABELING TO YOLO TRAINING GUIDE
-==================================
+YOLO DATASET GUIDE
+==================
 
-1. EXPORT FROM ANYLABELING:
-   • Complete your annotations in AnyLabeling
-   • File → Export → Export YOLO Format
-   • This creates: images/, labels/, classes.txt
+1. GETPIXELVIDEO / SAM POINTS CSV:
+   • Click "Create Dataset from getpixelvideo CSV"
+   • Select sam_points_georeid.csv or any CSV with frame,p1_x,p1_y,... columns
+   • Select the source video used to create the CSV
+   • Enter the class name (for example: athlete, player, ball)
+   • The tool extracts frames and writes YOLO labels for tracking/detection retrain
 
-2. DATASET STRUCTURE:
+2. EXISTING YOLO DATASET:
    your_dataset/
-   ├── images/
-   │   ├── image1.jpg
-   │   └── ...
-   ├── labels/
-   │   ├── image1.txt
-   │   └── ...
-   └── classes.txt
+   ├── train/images and train/labels
+   ├── val/images and val/labels
+   ├── test/images and test/labels (optional)
+   ├── classes.txt
+   └── data.yaml
 
 3. USING THIS TOOL:
-   • Click "Browse" and select your dataset folder
-   • Tool automatically detects classes.txt
-   • Creates minimal data.yaml
-   • Start training!
+   • Browse a dataset folder or create one from CSV
+   • Select or create data.yaml
+   • Start training
 
-4. TROUBLESHOOTING:
-   • Ensure classes.txt exists
-   • Check image/label file correspondence
-   • Use CPU if GPU issues occur
-
-For more info: https://github.com/vietanhdev/anylabeling
+4. NOTE:
+   getpixelvideo point CSVs do not contain full boxes, so this builder creates
+   fixed-size boxes centered on each visible point. Adjust box size when prompted.
         """
 
-        messagebox.showinfo("AnyLabeling Guide", help_text)
+        messagebox.showinfo("Dataset Guide", help_text)
 
     def browse_dataset(self):
         """Browse for AnyLabeling dataset folder."""
@@ -364,6 +374,246 @@ For more info: https://github.com/vietanhdev/anylabeling
             success = self._auto_detect_and_create_yaml(self.dataset_path.get())
             if success:
                 print(f"New YAML created: {self.yaml_path.get()}")
+
+    def create_dataset_from_getpixelvideo_csv(self):
+        """Create a YOLO detection/tracking dataset from getpixelvideo point CSV + video."""
+        csv_path = filedialog.askopenfilename(
+            title="Select getpixelvideo / sam_points_georeid CSV",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not csv_path:
+            return
+
+        video_path = filedialog.askopenfilename(
+            title="Select source video for this CSV",
+            filetypes=[
+                ("Video files", "*.mp4 *.avi *.mov *.mkv *.MP4 *.AVI *.MOV *.MKV"),
+                ("All files", "*.*"),
+            ],
+            initialdir=os.path.dirname(csv_path),
+        )
+        if not video_path:
+            return
+
+        class_name = simpledialog.askstring(
+            "Class name",
+            "YOLO class name for each marked point:",
+            initialvalue="object",
+            parent=self,
+        )
+        if not class_name:
+            return
+        class_name = " ".join(class_name.strip().split()) or "object"
+
+        box_size = simpledialog.askinteger(
+            "Box size",
+            "Fixed box size in pixels around each point:",
+            initialvalue=48,
+            minvalue=4,
+            maxvalue=512,
+            parent=self,
+        )
+        if not box_size:
+            return
+
+        output_parent = filedialog.askdirectory(
+            title="Select output folder for the generated dataset",
+            initialdir=os.path.dirname(csv_path),
+        )
+        if not output_parent:
+            return
+
+        try:
+            dataset_dir, yaml_file, message = self._build_tracking_dataset_from_pixel_csv(
+                csv_path=csv_path,
+                video_path=video_path,
+                output_parent=output_parent,
+                class_name=class_name,
+                box_size=float(box_size),
+            )
+        except Exception as exc:
+            messagebox.showerror("Dataset Error", f"Failed to create dataset:\n\n{exc}")
+            return
+
+        self.dataset_path.set(dataset_dir)
+        self.yaml_path.set(yaml_file)
+        self.console.insert(tk.END, message + "\n")
+        self.console.see(tk.END)
+        messagebox.showinfo("Dataset Created", message)
+
+    def _build_tracking_dataset_from_pixel_csv(
+        self,
+        csv_path,
+        video_path,
+        output_parent,
+        class_name,
+        box_size,
+    ):
+        """Convert frame,pN_x,pN_y CSV markers into YOLO detect labels."""
+        df = pd.read_csv(csv_path)
+        if "frame" not in df.columns:
+            raise ValueError("CSV must contain a 'frame' column.")
+
+        point_ids = sorted(
+            {
+                col[1:-2]
+                for col in df.columns
+                if col.startswith("p") and col.endswith("_x") and col[1:-2].isdigit()
+            },
+            key=lambda value: int(value),
+        )
+        if not point_ids:
+            raise ValueError("No pN_x/pN_y columns found in CSV.")
+
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise ValueError(f"Could not open video: {video_path}")
+
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if width <= 0 or height <= 0:
+            cap.release()
+            raise ValueError("Could not read video width/height.")
+
+        video_stem = pathlib.Path(video_path).stem
+        out_dir = (
+            pathlib.Path(output_parent)
+            / f"yolo_tracking_{video_stem}_{datetime.now():%Y%m%d_%H%M%S}"
+        )
+        for split in ("train", "val", "test"):
+            (out_dir / split / "images").mkdir(parents=True, exist_ok=True)
+            (out_dir / split / "labels").mkdir(parents=True, exist_ok=True)
+
+        valid_rows = []
+        for row_index, row in df.iterrows():
+            frame_value = pd.to_numeric(row.get("frame"), errors="coerce")
+            if pd.isna(frame_value):
+                continue
+            labels = []
+            for point_id in point_ids:
+                point = self._row_point(row, point_id)
+                if point is None:
+                    continue
+                x_px, y_px = point
+                labels.append(self._point_to_yolo_label(x_px, y_px, box_size, width, height))
+            if labels:
+                valid_rows.append((int(frame_value), row_index, labels))
+
+        if not valid_rows:
+            cap.release()
+            raise ValueError("CSV has no visible points to export.")
+
+        random.shuffle(valid_rows)
+        n_total = len(valid_rows)
+        n_train = max(1, int(n_total * 0.7))
+        n_val = max(1, int(n_total * 0.2)) if n_total > 2 else 0
+        split_rows = {
+            "train": valid_rows[:n_train],
+            "val": valid_rows[n_train : n_train + n_val],
+            "test": valid_rows[n_train + n_val :],
+        }
+        if not split_rows["val"]:
+            split_rows["val"] = split_rows["train"][:1]
+
+        written = {"train": 0, "val": 0, "test": 0}
+        for split, rows in split_rows.items():
+            for frame_num, _row_index, labels in rows:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    continue
+                image_name = f"{video_stem}_frame_{frame_num:06d}.jpg"
+                label_name = f"{video_stem}_frame_{frame_num:06d}.txt"
+                cv2.imwrite(str(out_dir / split / "images" / image_name), frame)
+                with open(out_dir / split / "labels" / label_name, "w", encoding="utf-8") as f:
+                    f.write("\n".join(labels) + "\n")
+                written[split] += 1
+
+        cap.release()
+        if written["train"] == 0 or written["val"] == 0:
+            raise ValueError("Could not extract enough video frames for train/val splits.")
+
+        with open(out_dir / "classes.txt", "w", encoding="utf-8") as f:
+            f.write(class_name + "\n")
+
+        train_path = (out_dir / "train" / "images").resolve().as_posix()
+        val_path = (out_dir / "val" / "images").resolve().as_posix()
+        test_path = (out_dir / "test" / "images").resolve().as_posix()
+        yaml_file = out_dir / "data.yaml"
+        yaml_file.write_text(
+            "# YOLO detection/tracking dataset - generated by vaila yolotrain\n"
+            f"path: {out_dir.resolve().as_posix()}\n"
+            f"train: {train_path}\n"
+            f"val: {val_path}\n"
+            f"test: {test_path}\n"
+            "nc: 1\n"
+            f"names: {[class_name]!r}\n"
+            "\n"
+            "# Training defaults editable before Start Training\n"
+            "model: yolo26m.pt\n"
+            "epochs: 100\n"
+            "batch: 16\n"
+            "imgsz: 640\n"
+            "device: cpu\n",
+            encoding="utf-8",
+        )
+
+        message = (
+            "YOLO tracking dataset created from getpixelvideo CSV:\n"
+            f"  Dataset: {out_dir}\n"
+            f"  CSV: {csv_path}\n"
+            f"  Video: {video_path}\n"
+            f"  Class: {class_name}\n"
+            f"  Points exported as fixed {int(box_size)} px boxes\n"
+            f"  Train/Val/Test images: {written['train']}/{written['val']}/{written['test']}\n"
+            f"  YAML: {yaml_file}"
+        )
+        return str(out_dir), str(yaml_file), message
+
+    @staticmethod
+    def _row_point(row, point_id):
+        """Return pN point, preferring edited x/y and falling back to mask/centroid columns."""
+        candidates = (
+            (f"p{point_id}_x", f"p{point_id}_y"),
+            (f"p{point_id}_mx", f"p{point_id}_my"),
+            (f"p{point_id}_cx", f"p{point_id}_cy"),
+        )
+        for x_col, y_col in candidates:
+            if x_col not in row.index or y_col not in row.index:
+                continue
+            x_val = pd.to_numeric(row.get(x_col), errors="coerce")
+            y_val = pd.to_numeric(row.get(y_col), errors="coerce")
+            if pd.isna(x_val) or pd.isna(y_val):
+                continue
+            return float(x_val), float(y_val)
+        return None
+
+    @staticmethod
+    def _point_to_yolo_label(x_px, y_px, box_size, width, height):
+        """Build one YOLO detect label line from a center point and fixed box size."""
+        half = box_size / 2.0
+        x1 = max(0.0, x_px - half)
+        y1 = max(0.0, y_px - half)
+        x2 = min(float(width), x_px + half)
+        y2 = min(float(height), y_px + half)
+        box_w = max(1.0, x2 - x1)
+        box_h = max(1.0, y2 - y1)
+        cx = (x1 + box_w / 2.0) / float(width)
+        cy = (y1 + box_h / 2.0) / float(height)
+        return f"0 {cx:.6f} {cy:.6f} {box_w / width:.6f} {box_h / height:.6f}"
+
+    @staticmethod
+    def _resolve_yaml_path(yaml_data, dataset_dir, key):
+        """Resolve Ultralytics train/val/test path entries."""
+        value = str(yaml_data.get(key, "")).strip()
+        if not value:
+            return value
+        if os.path.isabs(value):
+            return value
+        base = str(yaml_data.get("path") or dataset_dir).strip() or dataset_dir
+        if not os.path.isabs(base):
+            base = os.path.join(dataset_dir, base)
+        return os.path.normpath(os.path.join(base, value.lstrip("./")))
 
     def _auto_detect_and_create_yaml(self, dataset_path):
         """Automatically detects AnyLabeling structure and creates YAML."""
@@ -712,11 +962,10 @@ names: {names_str}  # class names
                 train_path = yaml_data.get("train", "")
                 val_path = yaml_data.get("val", "")
 
-                # Convert relative paths to absolute
-                if train_path.startswith("./"):
-                    train_path = os.path.join(dataset_folder, train_path[2:])
-                if val_path.startswith("./"):
-                    val_path = os.path.join(dataset_folder, val_path[2:])
+                # Convert YAML paths to absolute paths. Supports absolute paths, ./x,
+                # train/images, and Ultralytics path: + images/train layouts.
+                train_path = self._resolve_yaml_path(yaml_data, os.path.dirname(yaml_file), "train")
+                val_path = self._resolve_yaml_path(yaml_data, os.path.dirname(yaml_file), "val")
 
                 print(f"Absolute train path: {train_path}")
                 print(f"Absolute val path: {val_path}")
@@ -1130,11 +1379,10 @@ names: {names_str}  # class names
             train_path = yaml_data["train"]
             val_path = yaml_data["val"]
 
-            # Convert relative paths to absolute
-            if train_path.startswith("./"):
-                train_path = os.path.join(dataset_dir, train_path[2:])
-            if val_path.startswith("./"):
-                val_path = os.path.join(dataset_dir, val_path[2:])
+            # Convert YAML paths to absolute paths. Supports absolute paths, ./x,
+            # train/images, and Ultralytics path: + images/train layouts.
+            train_path = self._resolve_yaml_path(yaml_data, dataset_dir, "train")
+            val_path = self._resolve_yaml_path(yaml_data, dataset_dir, "val")
 
             if not os.path.exists(train_path):
                 messagebox.showerror("Invalid YAML", f"Train path not found: {train_path}")
