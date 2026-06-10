@@ -1,14 +1,14 @@
 <#
     Script: uninstall_vaila_win.ps1
-    Description: Uninstalls the vaila - Multimodal Toolbox from Windows,
-                 removing both uv virtual environment (.venv) and Conda environment (legacy),
-                 deleting program files from installation locations, removing FFmpeg if installed,
-                 removing vaila profiles from Windows Terminal, and deleting
-                 Start Menu and Desktop shortcuts.
+    Description: Uninstalls the vaila - Multimodal Toolbox from Windows. Removes the
+                 uv virtual environment (.venv), program files, FFmpeg if installed,
+                 Windows Terminal 'vaila' profile, and Start Menu / Desktop shortcuts.
+                 Legacy Conda environments (if any) are detected and removed best-effort,
+                 but conda is no longer the supported install path.
     Creation Date: 10 Jan 2025
-    Last Update: 22 April 2026
+    Last Update: 09 June 2026
     Author: Paulo R. P. Santiago
-    Version: 0.3.38
+    Version: 0.3.51
 #>
 
 $ErrorActionPreference = "Continue"
@@ -70,32 +70,19 @@ If ($vailaProgramPath -and (Test-Path "$vailaProgramPath\.venv")) {
     Write-Host "No uv virtual environment (.venv) found." -ForegroundColor Yellow
 }
 
-# Remove Conda environment (legacy) if Conda is installed
+# Best-effort: remove any legacy 'vaila' Conda environment from past installs.
+# Conda is no longer the supported install path; uv is the only method going forward.
 If (Get-Command conda -ErrorAction SilentlyContinue) {
-    Write-Host "Checking for Conda environment (legacy)..." -ForegroundColor Yellow
     Try {
         $envExists = conda env list 2>$null | Select-String -Pattern "^vaila"
         If ($envExists) {
-            Write-Host "Removing the 'vaila' Conda environment (legacy)..." -ForegroundColor Yellow
+            Write-Host "Found legacy Conda environment 'vaila'. Removing..." -ForegroundColor Yellow
             conda env remove -n vaila -y 2>$null
-            Write-Host "'vaila' Conda environment removed successfully." -ForegroundColor Green
-        } Else {
-            Write-Host "'vaila' Conda environment does not exist." -ForegroundColor Yellow
+            Write-Host "Legacy Conda environment removed." -ForegroundColor Green
         }
     } Catch {
-        Write-Warning "Could not check/remove Conda environment: $_"
+        Write-Warning "Could not remove legacy Conda environment: $_"
     }
-    
-    # Cleanup Conda cache (optional)
-    Write-Host "Cleaning Conda cache (if applicable)..." -ForegroundColor Yellow
-    Try {
-        conda clean --all -y 2>$null | Out-Null
-        Write-Host "Conda cache cleaned." -ForegroundColor Green
-    } Catch {
-        Write-Host "Conda cache cleanup skipped (not critical)." -ForegroundColor Yellow
-    }
-} Else {
-    Write-Host "Conda is not installed. Skipping Conda environment removal." -ForegroundColor Yellow
 }
 
 # Uninstall FFmpeg if installed by the script

@@ -67,7 +67,7 @@ If you use a one-liner that points to `https://vaila.io/install.ps1`, use the sa
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; iwr -useb https://vaila.io/install.ps1 | iex
 ```
 
-**Windows SSL/TLS error?** If you see "could not establish trust relationship for the SSL/TLS secure channel", the line above enables TLS 1.2 before the download. This is unrelated to Conda being activated.
+**Windows SSL/TLS error?** If you see "could not establish trust relationship for the SSL/TLS secure channel", the line above enables TLS 1.2 before the download.
 
 ## Introduction
 
@@ -124,7 +124,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 03.Jun.2026 v0.3.47 (Python 3.12.13)
+vailá - 09.Jun.2026 v0.3.51 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -214,9 +214,9 @@ vaila
 ├── pyproject_*.toml              # Platform templates (Linux/Windows CUDA, macOS, CPU)
 ├── uv.lock                       # Locked deps (re-run uv lock after template switch)
 ├── bin/                          # setup_pyproject.sh/.ps1 (unified) + legacy use_pyproject_*.sh/.ps1 shims
-├── install_vaila_linux.sh        # Linux installer (uv primary; Conda legacy)
-├── install_vaila_mac.sh          # macOS installer (uv primary; Conda legacy)
-├── install_vaila_win.ps1         # Windows installer
+├── install_vaila_linux.sh        # Linux installer (uv-only)
+├── install_vaila_mac.sh          # macOS installer (uv-only)
+├── install_vaila_win.ps1         # Windows installer (uv-only)
 ├── uninstall_vaila_linux.sh
 ├── uninstall_vaila_mac.sh
 ├── uninstall_vaila_win.ps1
@@ -239,21 +239,18 @@ vaila
 
 ## Installation and Setup
 
-### ⚡ New Engine: Powered by _uv_
+### ⚡ Engine: Powered by _uv_
 
-_vailá_ has migrated to **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is now the recommended installation method for all platforms** (Windows, Linux, macOS).
+_vailá_ uses **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is the single, official installation method for all platforms** (Windows, Linux, macOS). Conda is no longer supported.
 
-**Why uv is recommended:**
+**Why uv:**
 
-- **Speed:** Installation is **10-100x faster** than traditional Conda setups.
-- **Performance:** **Faster execution times** compared to Conda environments.
-- **Simplicity:** You no longer _need_ to pre-install Anaconda or Miniconda manually.
+- **Speed:** Installation is **10-100x faster** than legacy Conda setups.
+- **Simplicity:** You no longer need to pre-install Anaconda or Miniconda.
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
-- **Dynamic Hardware Optimization**: Automatically detects hardware (NVIDIA GPU, Apple Silicon) and selects the optimized configuration template for your system.
-- **Cross-Platform**: **Windows** (CUDA 12.1 + TensorRT where applicable), **Linux** (CUDA 12.8 + TensorRT), and **macOS** (Metal/MPS for the general PyTorch stack). **Exception:** [SAM 3 video](#optional-sam-3-video-segmentation) (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime — it does not use MPS and has no CPU-only path.
-
-**Note:** Conda installation methods are still available but are now considered legacy due to slower installation and execution times.
+- **Dynamic Hardware Optimization:** Automatically detects hardware (NVIDIA GPU, Apple Silicon) and selects the optimized configuration template for your system.
+- **Cross-Platform:** **Windows** (CUDA 12.1 + TensorRT where applicable), **Linux** (CUDA 12.8 + TensorRT), and **macOS** (Metal/MPS for the general PyTorch stack). **Exception:** [SAM 3 video](#optional-sam-3-video-segmentation) (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime — it does not use MPS and has no CPU-only path.
 
 #### 🎯 Smart Configuration System
 
@@ -440,9 +437,9 @@ The installation script automatically:
 - The installation script requires **administrative privileges** to install system components (FFmpeg, Windows Terminal)
 - If you run without admin privileges, some features may be skipped, but _vailá_ will still be installed
 - The script dynamically configures paths, so no manual adjustments are necessary
-- **No Conda required:** The new installation method does not require Anaconda or Miniconda
+- **No Conda required:** Conda is no longer supported; the installer uses `uv` only.
 
-**Erro de SSL/TLS ao baixar o script?** Se aparecer "could not establish trust relationship for the SSL/TLS secure channel", use o one-liner da seção [Install Now](#-install-now-one-line) (com a linha que ativa TLS 1.2). Isso não tem relação com o Conda estar ativado.
+**Erro de SSL/TLS ao baixar o script?** Se aparecer "could not establish trust relationship for the SSL/TLS secure channel", use o one-liner da seção [Install Now](#-install-now-one-line) (com a linha que ativa TLS 1.2).
 
 ### 4. **Launching _vailá_**
 
@@ -462,9 +459,9 @@ After installation, you can launch _vailá_:
 
 ## 🐧 For Linux
 
-Installation using **uv** is recommended for faster installation and execution times.
+Installation uses **uv** (Conda is no longer supported).
 
-### Using uv (Recommended)
+### Using uv
 
 We provide an automated installation script that handles everything for you (dependencies, uv installation, virtual environment, etc.).
 
@@ -528,43 +525,13 @@ uv run vaila.py
 
 **⚠️ Critical Note:** When installing manually, you **MUST** copy the appropriate template to `pyproject.toml` **BEFORE** running `uv python pin` and `uv venv`. The installation scripts do this automatically, but for manual installation you need to do it yourself. The order matters because `uv` reads `pyproject.toml` when creating the virtual environment.
 
-### Legacy Conda Installation
-
-If you prefer the legacy Conda method (slower installation and execution):
-
-1. **Make the installation script executable**:
-
-```bash
-sudo chmod +x install_vaila_linux.sh
-```
-
-1. **Run installation script**:
-
-```bash
-./install_vaila_linux.sh
-```
-
-- The script will:
-  - Set up the Conda environment using `./yaml_for_conda_env/vaila_linux.yaml`.
-  - Copy program files to your home directory (`~/vaila`).
-  - Install ffmpeg from system repositories.
-  - Create a desktop entry for easy access.
-
-1. **Notes**:
-
-- Run the script as your regular user, not with sudo.
-- Ensure that Conda (Anaconda or Miniconda) is added to your PATH and accessible from the command line.
-- The script automatically detects your conda installation directory.
-
 ---
 
 ## 🍎 For macOS
 
-We provide a unified installation script that supports both **uv** (recommended) and **Conda** (legacy) installation methods.
+Installation uses **uv** (Conda is no longer supported).
 
-### Unified Installation Script
-
-The installer will prompt you to choose your preferred installation method:
+### Installation Script
 
 1. **Make the script executable**:
 
@@ -586,19 +553,6 @@ The installer will prompt you to choose your preferred installation method:
       - **Intel or user chooses CPU-only**: Uses `pyproject_universal_cpu.toml` (CPU-only)
    4. Install **uv** and all dependencies with the selected configuration.
 
-3. **Choose your installation method when prompted**:
-   - **Option 1: uv** (recommended - modern, fast, requires Homebrew)
-   - **Option 2: Conda** (legacy - for compatibility with existing Conda installations)
-
-### Installation Methods Details
-
-#### Method 1: uv (Recommended)
-
-- **Fast installation and execution times**
-- **Automatic dependency management**
-- **Modern Python package management**
-- **Requires Homebrew** for system dependencies
-
 The uv installer will automatically:
 
 - Install/update uv if needed
@@ -607,50 +561,11 @@ The uv installer will automatically:
 - Install all dependencies
 - Set up the macOS application bundle with icon
 - Create a launcher in Applications folder
-
-#### Method 2: Conda (Legacy)
-
-- **Compatibility with existing Conda environments**
-- **Slower installation and execution times**
-- **Useful if you already have Conda set up**
-- **Requires Conda** to be installed
-
-The Conda installer will automatically:
-
-- Create/update the Conda environment
-- Install all dependencies from `yaml_for_conda_env/vaila_mac.yaml`
-- Set up the macOS application bundle
 - Install system dependencies via Homebrew (if needed)
 
-### Manual Installation (Alternative)
-
-If you prefer to install manually using uv:
-
-1. **Make the installation script executable**:
-
-```bash
-sudo chmod +x install_vaila_mac.sh
-```
-
-1. **Run the installation script**:
-
-```bash
-./install_vaila_mac.sh
-```
-
-- The script will:
-  - Set up the Conda environment using `./yaml_for_conda_env/vaila_mac.yaml`.
-  - Copy program files to your home directory (`~/vaila`).
-  - Install ffmpeg using Homebrew.
-  - Convert the .iconset folder to an .icns file for the app icon.
-  - Create an application bundle (`vaila.app`) in your Applications folder.
-  - Create a symbolic link in `/Applications` to the app in your home directory.
-
-1. **Notes**:
+**Notes:**
 
 - You may be prompted for your password when the script uses sudo to create the symbolic link.
-- Ensure that Conda (Anaconda or Miniconda) is added to your PATH and accessible from the command line.
-- **Important for Miniconda users**: The macOS script currently has a hardcoded path that assumes Anaconda installation. This will be fixed in the next update to automatically detect conda installation paths.
 
 ---
 
@@ -728,7 +643,7 @@ The installation scripts automatically create a `run_vaila.sh` script in the ins
 ~/vaila/run_vaila.sh
 ```
 
-The script will automatically use the correct Python environment (uv or conda) based on your installation method.
+The script uses the `uv` virtual environment created during installation.
 
 ##### 🪟 Windows
 
@@ -749,7 +664,7 @@ run_vaila.bat
 #### Notes
 
 - The launch scripts (`run_vaila.sh`, `run_vaila.ps1`, `run_vaila.bat`) are automatically created during installation.
-- These scripts work with both installation methods (uv and conda).
+- These scripts run vaila through the `uv`-managed virtual environment.
 - The scripts are located in the installation directory (`~/vaila` on Linux/macOS, or the Program Files/user directory on Windows).
 
 ---
@@ -792,89 +707,62 @@ _vailá_ includes a **HardwareManager** that automatically optimizes performance
 1. **Run the uninstall script**:
 
 ```bash
-sudo chmod +x uninstall_vaila_linux.sh
+chmod +x uninstall_vaila_linux.sh
 ./uninstall_vaila_linux.sh
 ```
 
 - The script will:
-  - Remove the `vaila` Conda environment.
+  - Remove the uv virtual environment (`.venv`).
   - Delete the `~/vaila` directory.
   - Remove the desktop entry.
+  - Best-effort: remove any leftover legacy `vaila` Conda environment from old installs.
 
-1. **Notes**:
+**Notes:**
 
-- Run the script `./uninstall_vaila_linux.sh` as your regular user, not with sudo.
-- Ensure that Conda is added to your PATH and accessible from the command line.
+- Run the script as your regular user, not with sudo.
 
 ### For Uninstallation on macOS 🍎
 
 1. **Run the uninstall script**:
 
 ```bash
-sudo chmod +x uninstall_vaila_mac.sh
+chmod +x uninstall_vaila_mac.sh
 ./uninstall_vaila_mac.sh
 ```
 
 - The script will:
-  - Remove the `vaila` Conda environment.
+  - Remove the uv virtual environment (`.venv`).
   - Delete the `~/vaila` directory.
-  - Remove `vaila.app` from /Applications.
+  - Remove `vaila.app` from `/Applications` and `~/Applications`.
   - Refresh the Launchpad to remove cached icons.
+  - Best-effort: remove any leftover legacy `vaila` Conda environment from old installs.
 
-1. **Notes**:
+**Notes:**
 
 - Run the script as your regular user, not with sudo.
 - You will be prompted for your password when the script uses `sudo` to remove the app from `/Applications`.
 
 ### For Uninstallation on Windows 🪟
 
-### If you installed using uv (New Method)
+1. **Run the uninstallation script** (PowerShell, Administrator recommended):
 
-1. **Manual Removal**:
-   - Delete the installation directory:
-     - If installed as Administrator: `C:\Program Files\vaila`
-     - If installed as Standard User: `C:\Users\<YourUser>\vaila`
-   - Remove the Desktop shortcut
-   - Remove the Start Menu shortcut
-   - Remove the Windows Terminal profile manually (if needed)
-
-2. **Windows Terminal Profile Removal**:
-   - Open Windows Terminal settings (JSON)
-   - Remove the `vaila` profile entry from `profiles.list`
-
-### If you installed using Conda (Legacy Method)
-
-1. **Run the uninstallation script as Administrator in Anaconda/Miniconda PowerShell Prompt**:
-
-- PowerShell Script:
-
-  ```powershell
-  .\uninstall_vaila_win.ps1
-  ```
-
-  **Note:** If you encounter execution policy restrictions, run:
-
-  ```powershell
-  powershell -ExecutionPolicy Bypass -File .\uninstall_vaila_win.ps1
-  ```
-
-1. **Follow the Instructions Displayed by the Script**:
-
-- The script will:
-  - Remove the `vaila` Conda environment.
-  - Delete the `C:\Users\your_user_name_here\AppData\Local\vaila` directory.
-  - Remove the Windows Terminal profile (settings.json file).
-  - Delete the desktop shortcut if it exists.
-
-1. **Manual Removal of Windows Terminal Profile (if necessary)**:
-
-- If the Windows Terminal profile is not removed automatically (e.g., when using the `uninstall_vaila_win.ps1` script), you may need to remove it manually:
-
-```Anaconda/Miniconda PowerShell Prompt
-conda remove -n vaila --all
+```powershell
+.\uninstall_vaila_win.ps1
 ```
 
-Remove directory `vaila` inside `C:\Users\your_user_name_here\AppData\Local\vaila`.
+If you encounter execution policy restrictions, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\uninstall_vaila_win.ps1
+```
+
+The script will:
+
+- Remove the uv virtual environment (`.venv`).
+- Delete the installation directory (`C:\Program Files\vaila` or `C:\Users\<YourUser>\vaila`).
+- Remove the Windows Terminal `vaila` profile (settings.json).
+- Delete the Desktop and Start Menu shortcuts if they exist.
+- Best-effort: remove any leftover legacy `vaila` Conda environment from old installs.
 
 ---
 
@@ -966,7 +854,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current line in the checked-in tree: **`0.3.38`** (see also the `vaila.py` window title string).
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current line in the checked-in tree: **`0.3.51`** (see also the `vaila.py` window title string).
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 
