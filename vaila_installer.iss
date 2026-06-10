@@ -2,7 +2,7 @@
 ; vaila Installer Script
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.3.38"
+#define MyAppVersion "0.3.51"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 
@@ -51,8 +51,6 @@ Source: "pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
 ; Template pyproject files — the install script selects the right one at runtime based on GPU detection
 Source: "pyproject_win_cuda12.toml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "pyproject_universal_cpu.toml"; DestDir: "{app}"; Flags: ignoreversion
-; Conda environment YAML (needed if user chooses legacy Conda installation method)
-Source: "yaml_for_conda_env\*"; DestDir: "{app}\yaml_for_conda_env"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: ".python-version"; DestDir: "{app}"; Flags: ignoreversion
@@ -69,7 +67,7 @@ Name: "{app}"; Permissions: users-modify
 ; Since PrivilegesRequired=admin, the PowerShell process will inherit admin privileges
 ; This ensures the script can create .venv in Program Files and install rsync/scp
 ; The script will automatically detect admin privileges and install rsync via winget/Chocolatey or scp via OpenSSH Client
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_vaila_win.ps1"""; WorkingDir: "{app}"; Flags: shellexec waituntilterminated postinstall; Description: "Run vaila installation (uv or Conda) and install dependencies (rsync/scp)"
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\install_vaila_win.ps1"""; WorkingDir: "{app}"; Flags: shellexec waituntilterminated postinstall; Description: "Run vaila installation (uv) and install dependencies (rsync/scp)"
 
 [Code]
 // This code is executed before installation begins

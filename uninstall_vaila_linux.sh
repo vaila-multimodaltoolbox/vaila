@@ -3,9 +3,10 @@
 #########################################################################################
 #                                                                                       #
 # Script: uninstall_vaila_linux.sh                                                      #
-# Description: Uninstalls the vaila - Multimodal Toolbox from Ubuntu Linux, including   #
-#              removing the Conda environment, deleting program files from the user's   #
-#              home directory, and removing the desktop entry.                          #
+# Description: Uninstalls the vaila - Multimodal Toolbox from Linux. Removes the uv     #
+#              virtual environment (.venv), program files in ~/vaila, and the desktop   #
+#              entries. Legacy Conda environments (if any) are detected and removed     #
+#              best-effort but conda is no longer the supported install path.           #
 #                                                                                       #
 # Usage:                                                                                #
 #   1. Make the script executable:                                                      #
@@ -15,31 +16,19 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024                                                              #
-# Updated Date: 20 March 2026                                                            #
-# Version: 0.3.38                                                                        #
+# Updated Date: 09 June 2026                                                            #
+# Version: 0.3.51                                                                       #
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc.                              #
 #########################################################################################
 
 echo "Starting uninstallation of vaila - Multimodal Toolbox on Linux..."
 
-# Get Conda base path
-CONDA_BASE=$(conda info --base 2>/dev/null)
-
-# Check if Conda is installed
-if ! command -v conda &> /dev/null; then
-    echo "Conda is not installed. Cannot proceed with environment removal."
-else
-    # Remove the 'vaila' Conda environment if it exists
-    if conda env list | grep -q "^vaila"; then
-        echo "Removing 'vaila' Conda environment..."
-        conda remove --name vaila --all -y
-        if [ $? -eq 0 ]; then
-            echo "'vaila' environment removed successfully."
-        else
-            echo "Failed to remove 'vaila' environment."
-        fi
-    else
-        echo "'vaila' environment does not exist. Skipping environment removal."
+# Best-effort: remove any legacy 'vaila' Conda environment from past installs.
+# Conda is no longer the supported install path; uv is the only method going forward.
+if command -v conda &> /dev/null; then
+    if conda env list 2>/dev/null | grep -q "^vaila"; then
+        echo "Found legacy Conda environment 'vaila'. Removing..."
+        conda remove --name vaila --all -y 2>/dev/null || echo "Warning: failed to remove legacy Conda environment."
     fi
 fi
 
