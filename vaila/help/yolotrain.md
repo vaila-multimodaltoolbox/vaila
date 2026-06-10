@@ -5,7 +5,7 @@
 - **Category:** Ml
 - **File:** `vaila/yolotrain.py`
 - **Lines:** 1170+
-- **Version:** 0.0.5
+- **Version:** 0.3.51
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -13,11 +13,13 @@
 
 ## 📖 Description
 
-Simplified YOLO training interface specifically designed for AnyLabeling exports. Automatically detects AnyLabeling structure and creates minimal YAML files.
+YOLO training interface for vailá/getpixelvideo and YOLO-format datasets. It can create a tracking/detection dataset from `sam_points_georeid.csv` or any `getpixelvideo.py` CSV with `frame,pN_x,pN_y,...` columns, then train Ultralytics YOLO from the generated `data.yaml`.
 
 ### Key Features
 - Support for **YOLO26** (latest), YOLO11, YOLOv9, and YOLOv8 models
-- Simplified interface for AnyLabeling YOLO format exports
+- Create YOLO tracking/detection datasets from `getpixelvideo.py` / `sam_points_georeid.csv` pixel data
+- Fixed-size box labels centered on marked points for YOLO tracker retraining
+- Support for existing YOLO format exports
 - Automatic YAML file generation with comprehensive options
 - GPU auto-detection (CUDA, MPS, CPU)
 - Model download management to `vaila/models/` directory
@@ -54,13 +56,19 @@ Run with `uv` (do not activate venv manually):
 uv run python -m vaila.yolotrain
 ```
 
+### getpixelvideo CSV to YOLO tracking dataset
+
+Use the GUI button **Create Dataset from getpixelvideo CSV**. Select the CSV, the source video, enter the class name, and choose a fixed box size. The generated dataset is selected automatically for **Start Training**.
+
+Expected CSV columns include `frame` and point pairs such as `p1_x,p1_y,p2_x,p2_y,...`; `pN_mx/pN_my` and `pN_cx/pN_cy` are used as fallbacks when present.
+
 ### CLI (Ultralytics train / val / test / predict)
 
 This module is a Tk GUI wrapper. If you want fully headless runs (train/val/test),
 use the Ultralytics CLI directly:
 
 ```bash
-# Detect training (AnyLabeling YOLO export)
+# Detect/tracking training (vaila getpixelvideo CSV export or YOLO dataset)
 uv run yolo detect train model=yolo11n.pt data=/ABS/path/to/data.yaml epochs=100 imgsz=640 device=0
 
 # Validate on val split
@@ -97,7 +105,8 @@ Notes:
 - `create_widgets()` - Create GUI elements
 - `_update_model_list()` - Filter models by category (YOLO26, YOLO11, YOLOv8, YOLOv9)
 - `show_model_help()` - Show model selection guide
-- `show_anylabeling_help()` - Show AnyLabeling export guide
+- `show_anylabeling_help()` - Show dataset guide
+- `create_dataset_from_getpixelvideo_csv()` - Build YOLO dataset from pixel CSV + video
 - `browse_dataset()` - Browse for dataset folder
 - `browse_yaml()` / `create_new_yaml()` - YAML configuration
 - `start_training_thread()` - Start training in background thread
@@ -116,7 +125,7 @@ This includes:
 
 ## 🔬 Dataset Structure
 
-Expected AnyLabeling export structure:
+Expected YOLO export structure:
 ```
 your_dataset/
 ├── train/
@@ -133,7 +142,7 @@ your_dataset/
 
 ---
 
-📅 **Last Updated:** January 2026 (v0.0.5 - YOLO26 support, GPU auto-detection)  
+📅 **Last Updated:** 2026-06-10 (v0.3.51 - getpixelvideo CSV tracking dataset builder)  
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 
