@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 May 2025
-Update Date: 10 June 2026
-Version: 0.3.51
+Update Date: 12 June 2026
+Version: 0.3.53
 
 Description:
     YOLO training interface for vailá/getpixelvideo and YOLO-format datasets.
@@ -26,6 +26,12 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.3.53: Dataset build now runs in a worker thread with sequential video
+               decode (no more shuffled cap.set seeks that froze the GUI on
+               large CSVs); train/val splits no longer duplicate a train row
+               into val; _resolve_yaml_path uses removeprefix("./") so
+               "../images/train" and list-valued train/val entries resolve
+               correctly.
     - v0.3.51: Added getpixelvideo/sam_points_georeid CSV to YOLO tracking dataset builder
     - v0.0.4: Simplified interface, AnyLabeling-focused, minimal YAML generation
     - v0.0.3: Added support for AnyLabeling data, improved UI
@@ -33,6 +39,7 @@ Change History:
     - v0.0.1: First version
 """
 
+import contextlib
 import os
 import pathlib
 import random
@@ -164,14 +171,14 @@ class YOLOTrainApp(tk.Tk):
             row=3, column=2, padx=5, pady=5
         )
 
-        csv_button = tk.Button(
+        self.csv_button = tk.Button(
             self,
             text="Create Dataset from getpixelvideo CSV",
             command=self.create_dataset_from_getpixelvideo_csv,
             bg="#673AB7",
             fg="white",
         )
-        csv_button.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
+        self.csv_button.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
 
         # YAML Options Frame
         yaml_frame = tk.Frame(self)
@@ -376,7 +383,11 @@ YOLO DATASET GUIDE
                 print(f"New YAML created: {self.yaml_path.get()}")
 
     def create_dataset_from_getpixelvideo_csv(self):
-        """Create a YOLO detection/tracking dataset from getpixelvideo point CSV + video."""
+        """Create a YOLO detection/tracking dataset from getpixelvideo point CSV + video.
+
+        Heavy work (CSV parsing + sequential frame extraction) runs in a worker
+        thread to keep the Tk main loop responsive on large CSVs.
+        """
         csv_path = filedialog.askopenfilename(
             title="Select getpixelvideo / sam_points_georeid CSV",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
@@ -423,22 +434,59 @@ YOLO DATASET GUIDE
         if not output_parent:
             return
 
+        self._set_dataset_button_state("disabled")
+        self._append_console("Building YOLO dataset in background thread...")
+        worker = threading.Thread(
+            target=self._dataset_build_worker,
+            kwargs={
+                "csv_path": csv_path,
+                "video_path": video_path,
+                "output_parent": output_parent,
+                "class_name": class_name,
+                "box_size": float(box_size),
+            },
+            daemon=True,
+        )
+        worker.start()
+
+    def _set_dataset_button_state(self, state):
+        """Toggle the CSV-dataset button so the user can't queue parallel builds."""
+        button = getattr(self, "csv_button", None)
+        if button is not None:
+            with contextlib.suppress(tk.TclError):
+                button.configure(state=state)
+
+    def _append_console(self, message):
+        """Thread-safe-friendly console append (call only from the Tk main thread)."""
+        self.console.insert(tk.END, message + "\n")
+        self.console.see(tk.END)
+
+    def _dataset_build_worker(self, csv_path, video_path, output_parent, class_name, box_size):
+        """Run the dataset build off the Tk main thread; marshal results back via after()."""
         try:
             dataset_dir, yaml_file, message = self._build_tracking_dataset_from_pixel_csv(
                 csv_path=csv_path,
                 video_path=video_path,
                 output_parent=output_parent,
                 class_name=class_name,
-                box_size=float(box_size),
+                box_size=box_size,
+                progress_callback=lambda msg: self.after(0, self._append_console, msg),
             )
         except Exception as exc:
-            messagebox.showerror("Dataset Error", f"Failed to create dataset:\n\n{exc}")
+            self.after(0, self._on_dataset_build_failed, str(exc))
             return
+        self.after(0, self._on_dataset_build_succeeded, dataset_dir, yaml_file, message)
 
+    def _on_dataset_build_failed(self, exc_msg):
+        self._set_dataset_button_state("normal")
+        self._append_console(f"Dataset build failed: {exc_msg}")
+        messagebox.showerror("Dataset Error", f"Failed to create dataset:\n\n{exc_msg}")
+
+    def _on_dataset_build_succeeded(self, dataset_dir, yaml_file, message):
+        self._set_dataset_button_state("normal")
         self.dataset_path.set(dataset_dir)
         self.yaml_path.set(yaml_file)
-        self.console.insert(tk.END, message + "\n")
-        self.console.see(tk.END)
+        self._append_console(message)
         messagebox.showinfo("Dataset Created", message)
 
     def _build_tracking_dataset_from_pixel_csv(
@@ -448,8 +496,24 @@ YOLO DATASET GUIDE
         output_parent,
         class_name,
         box_size,
+        progress_callback=None,
     ):
-        """Convert frame,pN_x,pN_y CSV markers into YOLO detect labels."""
+        """Convert frame,pN_x,pN_y CSV markers into YOLO detect labels.
+
+        Frames are read **sequentially** with cap.grab()/retrieve(); the previous
+        implementation seeked in shuffled order via cap.set(POS_FRAMES, ...),
+        which is both slow (keyframe re-decode per row) and codec-inaccurate
+        (target frame may land on a neighbor). Iterating in ascending frame
+        order also makes the build O(max_frame) instead of O(N_rows * seek).
+        Split assignment is still random, but each frame is decoded once and
+        each frame belongs to exactly one split (no train -> val duplication).
+        """
+
+        def report(msg):
+            if progress_callback is not None:
+                with contextlib.suppress(Exception):
+                    progress_callback(msg)
+
         df = pd.read_csv(csv_path)
         if "frame" not in df.columns:
             raise ValueError("CSV must contain a 'frame' column.")
@@ -469,106 +533,173 @@ YOLO DATASET GUIDE
         if not cap.isOpened():
             raise ValueError(f"Could not open video: {video_path}")
 
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        if width <= 0 or height <= 0:
-            cap.release()
-            raise ValueError("Could not read video width/height.")
+        try:
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if width <= 0 or height <= 0:
+                raise ValueError("Could not read video width/height.")
 
-        video_stem = pathlib.Path(video_path).stem
-        out_dir = (
-            pathlib.Path(output_parent)
-            / f"yolo_tracking_{video_stem}_{datetime.now():%Y%m%d_%H%M%S}"
-        )
-        for split in ("train", "val", "test"):
-            (out_dir / split / "images").mkdir(parents=True, exist_ok=True)
-            (out_dir / split / "labels").mkdir(parents=True, exist_ok=True)
+            video_stem = pathlib.Path(video_path).stem
+            out_dir = (
+                pathlib.Path(output_parent)
+                / f"yolo_tracking_{video_stem}_{datetime.now():%Y%m%d_%H%M%S}"
+            )
 
-        valid_rows = []
-        for row_index, row in df.iterrows():
-            frame_value = pd.to_numeric(row.get("frame"), errors="coerce")
-            if pd.isna(frame_value):
-                continue
-            labels = []
-            for point_id in point_ids:
-                point = self._row_point(row, point_id)
-                if point is None:
+            valid_rows = []
+            for _row_index, row in df.iterrows():
+                frame_value = pd.to_numeric(row.get("frame"), errors="coerce")
+                if pd.isna(frame_value) or frame_value < 0:
                     continue
-                x_px, y_px = point
-                labels.append(self._point_to_yolo_label(x_px, y_px, box_size, width, height))
-            if labels:
-                valid_rows.append((int(frame_value), row_index, labels))
+                labels = []
+                for point_id in point_ids:
+                    point = self._row_point(row, point_id)
+                    if point is None:
+                        continue
+                    x_px, y_px = point
+                    labels.append(self._point_to_yolo_label(x_px, y_px, box_size, width, height))
+                if labels:
+                    valid_rows.append((int(frame_value), labels))
 
-        if not valid_rows:
-            cap.release()
-            raise ValueError("CSV has no visible points to export.")
+            if not valid_rows:
+                raise ValueError("CSV has no visible points to export.")
 
-        random.shuffle(valid_rows)
-        n_total = len(valid_rows)
-        n_train = max(1, int(n_total * 0.7))
-        n_val = max(1, int(n_total * 0.2)) if n_total > 2 else 0
-        split_rows = {
-            "train": valid_rows[:n_train],
-            "val": valid_rows[n_train : n_train + n_val],
-            "test": valid_rows[n_train + n_val :],
-        }
-        if not split_rows["val"]:
-            split_rows["val"] = split_rows["train"][:1]
+            n_total = len(valid_rows)
+            if n_total < 2:
+                # Refuse to fabricate val by duplicating the single train row,
+                # which would silently leak training data into validation.
+                raise ValueError(
+                    "Need at least 2 frames with visible points to build a "
+                    "train/val split (got 1). Annotate more frames first."
+                )
 
-        written = {"train": 0, "val": 0, "test": 0}
-        for split, rows in split_rows.items():
-            for frame_num, _row_index, labels in rows:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            # Allocate train and val first (both guaranteed >=1), test takes the rest.
+            n_train = max(1, round(n_total * 0.7))
+            n_train = min(n_train, n_total - 1)  # always leave at least 1 row for val
+            remaining = n_total - n_train
+            n_val = max(1, round(n_total * 0.2))
+            n_val = min(n_val, remaining)
+            n_test = remaining - n_val
+
+            # Shuffle once for split assignment, then sort *within each split*
+            # so the actual video decode below is purely ascending.
+            shuffled = list(valid_rows)
+            random.shuffle(shuffled)
+            train_rows = sorted(shuffled[:n_train], key=lambda x: x[0])
+            val_rows = sorted(shuffled[n_train : n_train + n_val], key=lambda x: x[0])
+            test_rows = sorted(shuffled[n_train + n_val :], key=lambda x: x[0])
+
+            # Materialize the per-frame split assignment. Disjoint slices of
+            # `shuffled` guarantee a given frame never appears in two splits.
+            frame_to_split: dict[int, tuple[str, list[str]]] = {}
+            for frame_num, labels in train_rows:
+                frame_to_split[frame_num] = ("train", labels)
+            for frame_num, labels in val_rows:
+                frame_to_split[frame_num] = ("val", labels)
+            for frame_num, labels in test_rows:
+                frame_to_split[frame_num] = ("test", labels)
+
+            # Only create directories for splits we will actually populate.
+            active_splits = {split for split, _ in frame_to_split.values()}
+            for split in active_splits:
+                (out_dir / split / "images").mkdir(parents=True, exist_ok=True)
+                (out_dir / split / "labels").mkdir(parents=True, exist_ok=True)
+
+            sorted_targets = sorted(frame_to_split.keys())
+            report(
+                f"Extracting {len(sorted_targets)} frames sequentially "
+                f"(train={n_train}, val={n_val}, test={n_test})..."
+            )
+
+            written = {"train": 0, "val": 0, "test": 0}
+            target_idx = 0
+            current_frame = 0
+            progress_every = max(1, len(sorted_targets) // 20)
+
+            while target_idx < len(sorted_targets):
+                target = sorted_targets[target_idx]
+                # Skip frames before the target with grab() (no decode cost).
+                reached = True
+                while current_frame < target:
+                    if not cap.grab():
+                        reached = False
+                        break
+                    current_frame += 1
+                if not reached:
+                    unreachable = len(sorted_targets) - target_idx
+                    report(
+                        f"Reached end of video; {unreachable} target frames "
+                        f"are beyond the last decoded frame ({current_frame - 1})."
+                    )
+                    break
+
                 ok, frame = cap.read()
+                current_frame += 1
                 if not ok or frame is None:
+                    target_idx += 1
                     continue
-                image_name = f"{video_stem}_frame_{frame_num:06d}.jpg"
-                label_name = f"{video_stem}_frame_{frame_num:06d}.txt"
+
+                split, labels = frame_to_split[target]
+                image_name = f"{video_stem}_frame_{target:06d}.jpg"
+                label_name = f"{video_stem}_frame_{target:06d}.txt"
                 cv2.imwrite(str(out_dir / split / "images" / image_name), frame)
                 with open(out_dir / split / "labels" / label_name, "w", encoding="utf-8") as f:
                     f.write("\n".join(labels) + "\n")
                 written[split] += 1
+                target_idx += 1
 
-        cap.release()
-        if written["train"] == 0 or written["val"] == 0:
-            raise ValueError("Could not extract enough video frames for train/val splits.")
+                if target_idx % progress_every == 0:
+                    report(
+                        f"  {target_idx}/{len(sorted_targets)} frames extracted "
+                        f"(train={written['train']}, val={written['val']}, "
+                        f"test={written['test']})"
+                    )
 
-        with open(out_dir / "classes.txt", "w", encoding="utf-8") as f:
-            f.write(class_name + "\n")
+            if written["train"] == 0 or written["val"] == 0:
+                raise ValueError(
+                    "Could not extract enough video frames for train/val splits "
+                    f"(written train={written['train']}, val={written['val']}). "
+                    "Check that CSV frame numbers match the video."
+                )
 
-        train_path = (out_dir / "train" / "images").resolve().as_posix()
-        val_path = (out_dir / "val" / "images").resolve().as_posix()
-        test_path = (out_dir / "test" / "images").resolve().as_posix()
-        yaml_file = out_dir / "data.yaml"
-        yaml_file.write_text(
-            "# YOLO detection/tracking dataset - generated by vaila yolotrain\n"
-            f"path: {out_dir.resolve().as_posix()}\n"
-            f"train: {train_path}\n"
-            f"val: {val_path}\n"
-            f"test: {test_path}\n"
-            "nc: 1\n"
-            f"names: {[class_name]!r}\n"
-            "\n"
-            "# Training defaults editable before Start Training\n"
-            "model: yolo26m.pt\n"
-            "epochs: 100\n"
-            "batch: 16\n"
-            "imgsz: 640\n"
-            "device: cpu\n",
-            encoding="utf-8",
-        )
+            with open(out_dir / "classes.txt", "w", encoding="utf-8") as f:
+                f.write(class_name + "\n")
 
-        message = (
-            "YOLO tracking dataset created from getpixelvideo CSV:\n"
-            f"  Dataset: {out_dir}\n"
-            f"  CSV: {csv_path}\n"
-            f"  Video: {video_path}\n"
-            f"  Class: {class_name}\n"
-            f"  Points exported as fixed {int(box_size)} px boxes\n"
-            f"  Train/Val/Test images: {written['train']}/{written['val']}/{written['test']}\n"
-            f"  YAML: {yaml_file}"
-        )
-        return str(out_dir), str(yaml_file), message
+            train_path = (out_dir / "train" / "images").resolve().as_posix()
+            val_path = (out_dir / "val" / "images").resolve().as_posix()
+            test_path = (out_dir / "test" / "images").resolve().as_posix()
+            yaml_file = out_dir / "data.yaml"
+            yaml_file.write_text(
+                "# YOLO detection/tracking dataset - generated by vaila yolotrain\n"
+                f"path: {out_dir.resolve().as_posix()}\n"
+                f"train: {train_path}\n"
+                f"val: {val_path}\n"
+                f"test: {test_path}\n"
+                "nc: 1\n"
+                f"names: {[class_name]!r}\n"
+                "\n"
+                "# Training defaults editable before Start Training\n"
+                "model: yolo26m.pt\n"
+                "epochs: 100\n"
+                "batch: 16\n"
+                "imgsz: 640\n"
+                "device: cpu\n",
+                encoding="utf-8",
+            )
+
+            message = (
+                "YOLO tracking dataset created from getpixelvideo CSV:\n"
+                f"  Dataset: {out_dir}\n"
+                f"  CSV: {csv_path}\n"
+                f"  Video: {video_path}\n"
+                f"  Class: {class_name}\n"
+                f"  Points exported as fixed {int(box_size)} px boxes\n"
+                f"  Train/Val/Test images: "
+                f"{written['train']}/{written['val']}/{written['test']}\n"
+                f"  YAML: {yaml_file}"
+            )
+            return str(out_dir), str(yaml_file), message
+        finally:
+            cap.release()
 
     @staticmethod
     def _row_point(row, point_id):
@@ -604,8 +735,22 @@ YOLO DATASET GUIDE
 
     @staticmethod
     def _resolve_yaml_path(yaml_data, dataset_dir, key):
-        """Resolve Ultralytics train/val/test path entries."""
-        value = str(yaml_data.get(key, "")).strip()
+        """Resolve Ultralytics train/val/test path entries.
+
+        Supports absolute paths, ``./x``, ``../x``, bare ``train/images``,
+        and the Ultralytics ``path: + images/train`` layout.
+        """
+        raw = yaml_data.get(key, "")
+        # Ultralytics also allows a list of dirs; resolve the first non-empty one.
+        if isinstance(raw, (list, tuple)):
+            for item in raw:
+                value = str(item).strip()
+                if value:
+                    break
+            else:
+                value = ""
+        else:
+            value = str(raw).strip()
         if not value:
             return value
         if os.path.isabs(value):
@@ -613,7 +758,10 @@ YOLO DATASET GUIDE
         base = str(yaml_data.get("path") or dataset_dir).strip() or dataset_dir
         if not os.path.isabs(base):
             base = os.path.join(dataset_dir, base)
-        return os.path.normpath(os.path.join(base, value.lstrip("./")))
+        # Strip a leading "./" only; the previous str.lstrip("./") removed any
+        # combination of '.' and '/' chars, corrupting e.g. "../images/train"
+        # into "images/train" or ".datasets/x" into "datasets/x".
+        return os.path.normpath(os.path.join(base, value.removeprefix("./")))
 
     def _auto_detect_and_create_yaml(self, dataset_path):
         """Automatically detects AnyLabeling structure and creates YAML."""
