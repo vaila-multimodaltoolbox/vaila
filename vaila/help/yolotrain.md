@@ -4,8 +4,8 @@
 
 - **Category:** Ml
 - **File:** `vaila/yolotrain.py`
-- **Lines:** 1170+
-- **Version:** 0.3.51
+- **Lines:** 1400+
+- **Version:** 0.3.53
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -106,7 +106,9 @@ Notes:
 - `_update_model_list()` - Filter models by category (YOLO26, YOLO11, YOLOv8, YOLOv9)
 - `show_model_help()` - Show model selection guide
 - `show_anylabeling_help()` - Show dataset guide
-- `create_dataset_from_getpixelvideo_csv()` - Build YOLO dataset from pixel CSV + video
+- `create_dataset_from_getpixelvideo_csv()` - Build YOLO dataset from pixel CSV + video (runs in worker thread; sequential frame decode; no train/val leakage)
+- `_dataset_build_worker()` / `_on_dataset_build_succeeded()` / `_on_dataset_build_failed()` - Threaded build lifecycle helpers
+- `_resolve_yaml_path()` - Resolve Ultralytics `train`/`val`/`test` entries (absolute, `./x`, `../x`, list-of-dirs)
 - `browse_dataset()` - Browse for dataset folder
 - `browse_yaml()` / `create_new_yaml()` - YAML configuration
 - `start_training_thread()` - Start training in background thread
@@ -142,7 +144,7 @@ your_dataset/
 
 ---
 
-📅 **Last Updated:** 2026-06-10 (v0.3.51 - getpixelvideo CSV tracking dataset builder)  
+📅 **Last Updated:** 2026-06-12 (v0.3.53 - dataset build runs in worker thread with sequential video decode; train/val leakage fix; `_resolve_yaml_path` handles `../` and list-valued entries)  
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 
