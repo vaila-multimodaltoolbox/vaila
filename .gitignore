@@ -240,3 +240,4 @@ tests/markerless_2d_analysis/temp/
 # Local test data (large videos, generated outputs); keep local-only
 !tests/Deadlift/
 tests/Deadlift/**/*.mp4
+tests/Train_yolo/processed_sam_20260614_121915/

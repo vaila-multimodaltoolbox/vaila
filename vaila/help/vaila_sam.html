@@ -48,8 +48,8 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.3.47</p>
-            <p><strong>Updated:</strong> 06 June 2026</p>
+            <p><strong>Version:</strong> 0.3.55</p>
+            <p><strong>Updated:</strong> 15 June 2026</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
             <p><strong>CLI Interface:</strong> Yes (<code>-i</code>, <code>-o</code>, <code>-t</code>, ...)</p>
@@ -73,6 +73,7 @@
                 <li>Per-frame mask PNG output</li>
                 <li>Frame-by-frame fallback for low-VRAM GPUs</li>
                 <li>GUI mode (Tkinter dialog) and headless CLI mode</li>
+                <li>SAM ID stabilization/ReID export (<code>--stabilize-ids</code>) with cross-chunk overlap linking, final <code>sam_tracks.csv</code>, <code>sam_reid_links.csv</code>, <code>sam_points.csv</code>, <code>sam_id_map.csv</code>, and <code>*_georeid.csv</code> aliases for YOLOTrain outputs</li>
                 <li><strong>FIFA Skeletal Tracking Light</strong> pipeline via <code>fifa</code> subcommand</li>
             </ul>
         </div>
@@ -359,10 +360,10 @@ uv run vaila/vaila_sam.py --download-weights</code></pre>
             </tr>
             <tr>
                 <td><code>--stabilize-ids</code></td>
-                <td>—</td>
+                <td>GUI: <code>ReID/Stabilize SAM IDs + final CSVs</code></td>
                 <td>flag</td>
-                <td>—</td>
-                <td>Rewrite SAM object IDs by short-term IoU/centroid continuity after export; helps chunk ID resets</td>
+                <td>off in CLI; on by default in GUI</td>
+                <td>Rewrite SAM object IDs by short-term IoU/centroid continuity after export; enables <code>sam_tracks.csv</code> and, when no point mode is selected, automatically writes <code>sam_points.csv</code>/<code>sam_id_map.csv</code> plus <code>sam_points_georeid.csv</code>/<code>sam_id_map_georeid.csv</code> with mode <code>all</code></td>
             </tr>
             <tr>
                 <td><code>--overlay-rich</code> / <code>--no-overlay-rich</code></td>
@@ -561,17 +562,20 @@ uv run vaila/vaila_sam.py --download-weights</code></pre>
       sam_frames_meta.csv
       sam_contours.json             (unless --no-save-contours)
       sam_tracks.csv                (bbox + centroid, unless --no-save-tracks-csv)
+      sam_bbox_tracks.csv           (hardlink/copy of sam_tracks.csv; discoverable alias)
       sam_masks_manifest.csv        (written when masks are saved; index of mask PNGs)
-      README_sam.txt</div>
+      README_sam.txt                (verbose: every file explained &mdash; schema, units, role)</div>
 
         <h3>Additional outputs: <code>sam_points.csv</code> / <code>sam_id_map.csv</code> (optional)</h3>
-        <p>If you pass <code>--postprocess-points</code> (anything other than <code>none</code>), vailá post-processes each per-video
+        <p>If you pass <code>--postprocess-points</code> (anything other than <code>none</code>) or run with <code>--stabilize-ids</code>, vailá post-processes each per-video
           output directory and writes <strong>pixel CSVs</strong> that can be loaded directly by <code>getpixelvideo.py</code> and
           <code>rec2d.py</code>:</p>
         <div class="tree">output/processed_sam_YYYYMMDD_HHMMSS/
   video_name/
     sam_points.csv
-    sam_id_map.csv</div>
+    sam_id_map.csv
+    sam_points_georeid.csv      # written when --stabilize-ids/ReID is active
+    sam_id_map_georeid.csv      # written when --stabilize-ids/ReID is active</div>
 
         <h4><code>sam_points.csv</code> schema</h4>
         <ul>
@@ -1042,6 +1046,28 @@ uv run pytest tests/test_vaila_sam.py -v -k sam3_smoke</code></pre>
 
         <h3>Recent updates</h3>
         <ul>
+            <li><strong>v0.3.55 (15 June 2026):</strong>
+            <strong>Verbose <code>README_sam.txt</code></strong> &mdash; every
+            run now ships a README that documents every produced file
+            (<code>sam_tracks.csv</code>, <code>sam_frames_meta.csv</code>,
+            <code>sam_points.csv</code>, <code>sam_id_map.csv</code>,
+            <code>sam_contours.json</code>, <code>sam_masks_manifest.csv</code>,
+            <code>&lt;video&gt;_sam_overlay.mp4</code>, <code>masks/</code>,
+            <code>FAILED_sam.txt</code>) with schema, units, and downstream
+            role. New <strong><code>sam_bbox_tracks.csv</code></strong>
+            discoverable alias (POSIX hardlink, copy fallback) makes the
+            bbox file easy to spot. Shared helpers
+            <code>_write_sam_run_readme</code> /
+            <code>_make_sam_bbox_tracks_alias</code> are reused by both the
+            chunked merge path and the single-pass writer.</li>
+            <li><strong>v0.3.54 (14 June 2026):</strong> <strong>Cross-Chunk Tracklet
+            Linking</strong> with sliding-window overlap (2 frames between adjacent
+            chunks) - chunk-local SAM IDs are linked into persistent global IDs via a
+            bipartite IoU + centroid-distance cost matrix solved with the Hungarian
+            algorithm (<code>scipy.optimize.linear_sum_assignment</code>; greedy
+            fallback when SciPy missing). Fixes <code>NameError</code> in the chunked
+            merge path (<code>_assignment_min_cost</code> was referenced but not
+            defined). Cross-IDE help / docstring refreshed.</li>
             <li><strong>v0.3.47 (05 June 2026):</strong> Subprocess-exit diagnostics
             (SIGKILL/SIGSEGV/SIGABRT/SIGBUS/EXIT_NEEDS_CHUNKING shown by name + actionable hint)
             in both CLI batch and GUI poller; runtime banner at startup (VRAM, host RAM,
@@ -1051,7 +1077,7 @@ uv run pytest tests/test_vaila_sam.py -v -k sam3_smoke</code></pre>
         </ul>
 
         <div class="footer">
-            <p>Generated: June 05, 2026</p>
+            <p>Generated: June 14, 2026</p>
             <p>Part of vailá - Multimodal Toolbox</p>
             <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
             <p>Contact: paulosantiago@usp.br</p>
