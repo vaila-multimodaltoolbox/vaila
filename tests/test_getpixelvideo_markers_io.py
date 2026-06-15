@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from vaila import getpixelvideo as gpv
@@ -99,3 +101,81 @@ def test_sorted_frames_with_visible_markers_respects_deleted() -> None:
         total_frames=1,
     )
     assert got == []
+
+
+def test_sam_tracks_bboxes_parse_and_keep_id_separate() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "frame": 0,
+                "obj_id": 7,
+                "x_px": 10.5,
+                "y_px": 20.0,
+                "w_px": 30.0,
+                "h_px": 40.0,
+                "score": 0.876,
+            }
+        ]
+    )
+    assert gpv._detect_tracking_format(df) == "sam_tracks"
+    rows = gpv._iter_bboxes_from_df(df, "sam_tracks", video_width=100, video_height=100)
+    assert rows == [
+        {
+            "frame": 0,
+            "obj_id": 7,
+            "x1": 10.5,
+            "y1": 20.0,
+            "x2": 40.5,
+            "y2": 60.0,
+            "label": "id7",
+            "score": 0.876,
+        }
+    ]
+
+
+def test_tracking_bbox_label_text_modes_do_not_duplicate_sam_id() -> None:
+    box = {"label": "object", "id": 7, "conf": 0.876}
+    assert gpv.tracking_bbox_label_text(box, "colors") == ""
+    assert gpv.tracking_bbox_label_text(box, "id") == "ID 7"
+    assert gpv.tracking_bbox_label_text(box, "id_conf") == "ID 7 0.88"
+
+
+def test_normalize_bboxes_for_labeling_accepts_tracking_xyxy() -> None:
+    tracking = {
+        0: [
+            {"x1": 10.4, "y1": 20.4, "x2": 40.6, "y2": 60.6, "label": "object", "id": 7}
+        ]
+    }
+    assert gpv.normalize_bboxes_for_labeling(tracking) == {
+        0: [{"x": 10, "y": 20, "w": 30, "h": 40, "label": "object", "id": 7}]
+    }
+
+
+def test_export_labeling_dataset_accepts_loaded_tracking_bboxes(tmp_path) -> None:
+    import cv2
+    import numpy as np
+
+    video_path = tmp_path / "sample.mp4"
+    writer = cv2.VideoWriter(
+        str(video_path), cv2.VideoWriter_fourcc(*"mp4v"), 5.0, (64, 48)
+    )
+    assert writer.isOpened()
+    for i in range(3):
+        frame = np.full((48, 64, 3), i * 30, dtype=np.uint8)
+        writer.write(frame)
+    writer.release()
+
+    tracking = {0: [{"x1": 8, "y1": 10, "x2": 28, "y2": 30, "label": "object", "id": 2}]}
+    bboxes = gpv.normalize_bboxes_for_labeling(tracking)
+    dataset_dir, msg = gpv.export_labeling_dataset(
+        str(video_path), bboxes, 3, 64, 48, output_dataset_dir=None
+    )
+
+    assert dataset_dir is not None, msg
+    dataset = Path(dataset_dir)
+    assert (dataset / "data.yaml").is_file()
+    labels = list(dataset.glob("*/labels/*.txt"))
+    assert len(labels) == 1
+    parts = labels[0].read_text(encoding="utf-8").strip().split()
+    assert parts[0] == "0"
+    assert len(parts) == 5
