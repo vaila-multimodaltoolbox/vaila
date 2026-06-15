@@ -154,9 +154,9 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.46<br />
-        <strong>Date:</strong> 28 May 2026<br />
-        <strong>Updated:</strong> 10 June 2026<br />
+        <strong>Version:</strong> 0.3.55<br />
+        <strong>Date:</strong> 15 June 2026<br />
+        <strong>Updated:</strong> 15 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
@@ -223,7 +223,7 @@
             </li>
             <li>
               <strong>Advanced Visualization:</strong> Stick figures for
-              MediaPipe, bounding boxes for YOLO tracking
+              MediaPipe, bounding boxes for YOLO/SAM tracking with colored-ID, ID-only, or ID+confidence overlay modes
             </li>
             <li>
               <strong>Flexible Marking:</strong> Multiple marker modes for
@@ -1037,7 +1037,7 @@ uv run yolo pose train \<br/>
 
         <h3>YOLO Tracking Visualization</h3>
         <p>
-          When loading YOLO tracking data, the tool displays bounding boxes:
+          When loading YOLO or SAM tracking data, the tool displays bounding boxes. The loader asks for colored boxes only, ID only, or ID + confidence. Save exports loaded tracking bboxes as a YOLO detection dataset when Labeling mode is not active:
         </p>
         <ul>
           <li>
@@ -1375,6 +1375,49 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.3.55 (15 June 2026)</h3>
+        <ul>
+          <li><strong>Save no longer freezes the GUI after loading SAM3/YOLO bboxes.</strong>
+            When the smart loader converts bboxes into markers (anchor
+            center / bottom / top / left / right), the <strong>Save</strong>
+            button now writes a regular vail&aacute;
+            <code>*_markers.csv</code> via the vectorised
+            <code>save_coordinates</code> instead of routing through
+            <code>export_labeling_dataset</code>, which extracts every
+            annotated frame and froze the pygame loop for tens of minutes on
+            long broadcast clips.</li>
+          <li><code>save_coordinates</code> is now <strong>vectorised</strong>:
+            NumPy bulk assignment replaces the per-cell <code>df.at[]</code>
+            loop. A 16&nbsp;693-frame clip with 62 SAM3 obj_ids
+            (~248&nbsp;K bboxes) now writes in ~0.5&nbsp;s instead of
+            minutes.</li>
+          <li>New <em>&ldquo;Saving&hellip;&rdquo;</em> banner is painted
+            <strong>before</strong> any long save begins, so the GUI clearly
+            signals work-in-progress and users no longer assume it&rsquo;s
+            hung.</li>
+          <li><strong>Terminal progress feedback</strong> for the slow ML
+            dataset writers (<code>export_labeling_dataset</code>,
+            <code>export_pose_dataset</code>,
+            <code>_export_all_labels_view</code>): each writer prints a
+            <code>&gt;&gt; vaila/getpixelvideo</code> banner with the
+            destination, frame count and split breakdown, then shows a
+            <code>tqdm</code> progress bar per split (train / val / test).
+            While the pygame window appears frozen (Python is blocked
+            writing thousands of files), the terminal makes it obvious work
+            is in progress. Square-bracket prefixes were avoided because
+            <code>absl</code> logging (mediapipe / opencv) eats <code>[...]</code>
+            tags from stdout.</li>
+          <li>Bbox dataset export (YOLO) still available when bboxes are
+            kept as overlay only (anchor prompt answered with Enter).</li>
+        </ul>
+
+        <h3>Version 0.3.54 (15 June 2026)</h3>
+        <ul>
+          <li>SAM3/YOLO tracking bbox loader adds overlay choices: colored boxes only, ID only, or ID + confidence.</li>
+          <li>Save button exports loaded tracking bboxes as a YOLO detection dataset when Labeling mode is not active.</li>
+          <li>SAM IDs stay as tracking IDs instead of duplicating in labels or becoming one detection class per ID.</li>
+        </ul>
 
         <h3>Version 0.3.46 (10 June 2026)</h3>
         <ul>

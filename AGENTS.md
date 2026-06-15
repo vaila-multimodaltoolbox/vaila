@@ -281,6 +281,134 @@ Do not use shell `open`/`xdg-open` through `os.system` for this button; on Linux
 that can open an IDE/editor instead of the browser depending on user file
 associations.
 
+### Save-freeze fix + verbose README + sam_bbox_tracks alias (June 2026, v0.3.55)
+
+After yesterday's smart-loader work users could **load** SAM3 `sam_tracks.csv`
+into `getpixelvideo.py` and convert bboxes → markers, but clicking **Save**
+froze the pygame GUI for 10+ minutes on long broadcast clips, forcing
+`sudo kill -9`. Three issues fixed today:
+
+1. **Wrong Save branch.** After the smart loader converted bboxes to markers,
+   the Save handler still hit `elif csv_loaded and tracking_data:` and called
+   `export_labeling_dataset`, which extracts every annotated frame to disk
+   (`cv2.VideoCapture` seek + decode per frame + 3 file writes per frame).
+   For a 16 693-frame clip with 248 K bboxes this is tens of minutes of
+   blocking I/O on the main pygame thread. **Fix:** new state flag
+   `bbox_converted_to_markers` (set in `load_tracking_csv` after a successful
+   anchor conversion) routes Save through `save_coordinates`
+   (regular `*_markers.csv`) instead. Users who *want* the YOLO dataset
+   export simply answer the anchor prompt with Enter (keep bboxes as overlay
+   only); Save then takes the dataset path.
+
+2. **`save_coordinates` itself was O(N×slots) pandas `.at[]` calls.** On the
+   same 248 K-bbox case this was minutes of `df.at[frame, "pN_x"] = …`. Now
+   vectorised with NumPy bulk assignment into a `(n_frames, max_points*2)`
+   `float64` array, then wrapped in a single `pd.DataFrame`. **Benchmark on a
+   16 693 × 62 grid with 248 310 entries: 0.56 s** (vs. effectively hung).
+
+3. **GUI never told the user a save was in flight.** New
+   `_flush_save_message(screen, text)` helper paints a yellow banner directly
+   to the pygame surface and flips the display **before** any long save
+   begins (both the dataset export path and the marker save path). No more
+   "is it frozen?" panic.
+
+**Discoverability + provenance** (same release):
+
+- New shared helpers in `vaila/vaila_sam.py`: `_write_sam_run_readme()` and
+  `_make_sam_bbox_tracks_alias()` (plus `SAM_OUTPUT_FILE_GLOSSARY` constant).
+  Both the chunked merge path (`_merge_chunk_outputs` caller) and the
+  single-pass writer (`run_sam3_on_video`) now go through them.
+- Every SAM3 run now writes a **verbose `README_sam.txt`** — explicit schema,
+  units and downstream role for every produced file (`sam_tracks.csv`,
+  `sam_frames_meta.csv`, `sam_points.csv`, `sam_id_map.csv`,
+  `sam_contours.json`, `sam_masks_manifest.csv`, `<video>_sam_overlay.mp4`,
+  `masks/`, `FAILED_sam.txt`). The previous README was 8 lines and only
+  named the chunk stats.
+- A sibling **`sam_bbox_tracks.csv`** is created as a POSIX hardlink
+  (zero disk cost, same inode) or copy fallback. Discoverable name with
+  `bbox` in it; consumers that still read `sam_tracks.csv` are unaffected.
+  Smart loader detects formats by columns, not filename, so both names just
+  work.
+
+Version sync: `0.3.55 / 15 June 2026` on `vaila.py`, `vaila/vaila_sam.py`,
+`vaila/sam_postprocess.py`, `vaila/getpixelvideo.py`,
+`vaila/help/vaila_sam.{md,html}`, `vaila/help/getpixelvideo.{md,html}`.
+Tests: 338 passed, 1 skipped, 1 deselected (the unrelated `tugturn`
+Qt-platform `xcb` env failure).
+
+Skill: `.claude/skills/getpixelvideo-tracking-loader/SKILL.md` § *Save
+behaviour (v0.3.55)*. SAM3 helper section:
+`.claude/skills/sam3-video/SKILL.md` § *Output Format*.
+
+**Follow-up later same day:** the ML dataset writers
+(`export_labeling_dataset`, `export_pose_dataset`,
+`_export_all_labels_view`) are *legitimately* slow — they extract +
+re-encode thousands of video frames + write 3 files per frame. Without
+terminal output users still assumed the GUI hung mid-save. Added three
+top-level helpers in `vaila/getpixelvideo.py`: `_save_banner(title, detail)`
+(boxed banner with destination + counts before each save begins),
+`_save_done(message)` (completion tail), `_try_import_tqdm()` (soft import,
+`tqdm` is already transitive via ultralytics/pytorch). Wired into all three
+writers with a `tqdm` bar per train/val/test split. **Note for future
+agents:** absl logging (installed by mediapipe / opencv on import) eats
+`[bracketed]` prefixes from stdout, so the banner uses `>>
+vaila/getpixelvideo:` instead. tqdm writes to stderr and is unaffected.
+Documented in `docs/sessions/2026-06-15-getpixel-savefreeze-readme-bbox-alias.md`
+§ 8.
+
+### Cross-Chunk Tracklet Linking + getpixelvideo smart loader (June 2026, v0.3.54)
+
+Two related items shipped together on `reidtrain`. Full transcript:
+`docs/sessions/2026-06-14-getpixel-sam3-crosschunk.md`.
+
+**1. `vaila/vaila_sam.py` — Cross-Chunk Tracklet Linking.**
+
+Symptom: when the coordinator fell back to `_process_video_chunked` on long
+1080p clips (see *Coordinator pattern + chunked fallback* above), each chunk
+allocated its own local object IDs starting at 1. The merged
+`sam_tracks.csv` therefore had random IDs across chunk boundaries, breaking
+any downstream Re-ID / trajectory analysis.
+
+Root cause: `_build_cross_chunk_id_maps` called `_assignment_min_cost`, but
+that helper was never defined in `vaila_sam.py` (it was assumed importable
+from `reid_markers.py`). Result: `NameError` at runtime — the entire stitch
+silently no-op'd.
+
+Fix: defined `_assignment_min_cost` inline (SciPy Hungarian +
+greedy fallback). Wired the full 5-step pipeline that the user specified:
+sliding-window overlap of **2 frames** between adjacent chunks,
+per-local-id feature cache, bipartite IoU + centroid-distance cost matrix,
+Hungarian assignment, linked-list merging with `min_iou ≥ 0.05` and
+`max_centroid_dist_px ≤ 180` gates. Tunable defaults at
+`_build_cross_chunk_id_maps(max_centroid_dist_px=180.0, min_iou=0.05)`; no
+CLI flags yet. Test:
+`tests/test_vaila_sam.py::test_merge_chunk_outputs` (assertions updated
+for the new 0-indexed global IDs).
+
+**2. `vaila/getpixelvideo.py` — Intelligent Load Tracking CSV.**
+
+Replaced the brittle “must have a `Frame` column” loader with
+auto-detection of 5 formats: `sam_tracks`, `sam_frames_meta` (normalised
+bbox, converted to pixel using video w/h), `sam_points`, `yolo_multi`
+(`all_id_detection.csv`), `yolo_single` (`person_id_NN.csv`). Unknown
+files still fall back to the legacy YOLO parser.
+
+Added bbox → marker **anchor prompt** via `show_input_dialog`
+(`1=center 2=bottom 3=top 4=left 5=right`, Enter = keep overlay only).
+Helpers: `_BBOX_ANCHOR_ALIASES`, `_anchor_xy_from_bbox`,
+`_detect_frame_col`, `_detect_tracking_format`, `_iter_bboxes_from_df`,
+`bboxes_to_marker_coordinates`. Once an anchor is chosen the bboxes become
+regular editable / saveable vailá markers. Skill:
+`.claude/skills/getpixelvideo-tracking-loader/SKILL.md`.
+
+Version sync (`0.3.54` / `14 June 2026`) applied to `vaila.py`,
+`vaila/vaila_sam.py`, `vaila/sam_postprocess.py`, `vaila/getpixelvideo.py`,
+`vaila/help/vaila_sam.{md,html}`, `vaila/help/index.{md,html}`, and
+`README.md`. Tests pass except for the unrelated
+`tests/test_tugturn_integration.py::test_cli_end_to_end` Qt-plugin
+environment failure (already documented in *Sports field CLI and GUI
+integration fixes*).
+
 ## Caveman mode (optional)
 
 [Caveman](https://github.com/JuliusBrussee/caveman) is a skills/plugin pack for AI coding agents (Claude Code, Cursor, Gemini CLI, Windsurf, Copilot, and 30+ others). It steers the model toward terse replies: fewer filler words and articles, typically **~65–75% fewer output tokens** while keeping technical content intact.

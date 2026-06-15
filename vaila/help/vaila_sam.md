@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.47
-- **Updated:** 06 June 2026
+- **Version:** 0.3.55
+- **Updated:** 15 June 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -26,6 +26,8 @@
 - Per-frame mask PNG output
 - Frame-by-frame fallback for low-VRAM GPUs
 - GUI mode (Tkinter dialog) and headless CLI mode
+- SAM ID stabilization/ReID export (`--stabilize-ids`) with cross-chunk overlap linking, final `sam_tracks.csv`, `sam_reid_links.csv`, `sam_points.csv`, `sam_id_map.csv`, and `*_georeid.csv` aliases for YOLOTrain outputs
+- **Cross-Chunk Tracklet Linking** (sliding-window overlap = 2 frames between adjacent chunks; chunk-local SAM IDs are matched into persistent global IDs using a bipartite IoU + centroid-distance cost matrix solved with Hungarian assignment via `scipy.optimize.linear_sum_assignment`)
 - **FIFA Skeletal Tracking Light** pipeline via `fifa` subcommand
 
 ---
@@ -140,7 +142,7 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run
 
 - The script runs each video in an **isolated subprocess** by default (even for a single video). This prevents SAM3's CUDA state from leaking into subsequent runs.
 - If SAM3 exhausts its in-process OOM retry ladder (frame caps and long-edge caps), the per-video subprocess exits and the **coordinator process** automatically runs the **chunked divide-and-conquer** fallback from a clean GPU state.
-- Chunked fallback uses a conservative chunk size (≤48 frames) and clamps chunk subprocesses to `--max-frames=<chunk_size>` and `--max-input-long-edge=1280` to avoid repeating the same OOM ladder inside each chunk.
+- Chunked fallback uses a conservative chunk size (≤48 frames), shares 2 overlap frames between adjacent chunks, links chunk-local IDs by same-frame IoU/centroid matching, drops duplicate overlap frames, and regenerates the final overlay from remapped masks so displayed IDs match the final CSVs.
 
 ### Common errors (CLI **and** GUI)
 
@@ -230,7 +232,7 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 | `--no-png` | — | flag | — | Skip mask PNG output |
 | `--tracks-only` | — | flag | — | Fast profile: skip overlay, PNG masks and contours; write bbox/centroid CSV only |
 | `--delete-mask-png` | — | flag | — | Delete bulky `masks/` and `sam_masks_manifest.csv` after exports finish |
-| `--stabilize-ids` | — | flag | — | Rewrite SAM object IDs by short-term IoU/centroid continuity after export; helps chunk ID resets |
+| `--stabilize-ids` | GUI: `ReID/Stabilize SAM IDs + final CSVs` | flag | off in CLI; on by default in GUI | Rewrite SAM object IDs by short-term IoU/centroid continuity after export; enables `sam_tracks.csv` and, when no point mode is selected, automatically writes `sam_points.csv`/`sam_id_map.csv` plus `sam_points_georeid.csv`/`sam_id_map_georeid.csv` with mode `all` |
 | `--[no-]overlay-rich` | — | bool | `true` | Enrich overlay with bbox/ID/score/contours (on top of the colored masks) |
 | `--[no-]draw-contour` | — | bool | `true` | Draw mask contours on the overlay |
 | `--[no-]draw-box` | — | bool | `true` | Draw bounding boxes on the overlay |
@@ -310,13 +312,26 @@ output/
       sam_frames_meta.csv
       sam_contours.json             (unless --no-save-contours)
       sam_tracks.csv                (bbox + centroid, unless --no-save-tracks-csv)
+      sam_bbox_tracks.csv           (hardlink/copy of sam_tracks.csv; discoverable alias)
       sam_masks_manifest.csv        (written when masks are saved; index of mask PNGs)
-      README_sam.txt
+      README_sam.txt                (verbose: every file explained — schema, units, role)
 ```
+
+Since **v0.3.55**, every SAM3 run writes:
+
+- A **verbose `README_sam.txt`** that documents every file produced in the
+  output directory: schema, units, role in the downstream pipeline (vailá
+  pixel tool, rec2d/rec3d, ReID, …). Open it first when you come back to an
+  old run.
+- **`sam_bbox_tracks.csv`** — a sibling **hardlink** (or copy, if the
+  filesystem doesn't allow hardlinking) of `sam_tracks.csv`. Same bytes,
+  same inode on POSIX; the extra name makes the bbox file easy to spot in a
+  long directory listing. `getpixelvideo.py`'s smart loader accepts either
+  name (detection is column-based, not filename-based).
 
 ### Additional outputs: `sam_points.csv` / `sam_id_map.csv` (optional)
 
-If you pass `--postprocess-points` (anything other than `none`), vailá post-processes each
+If you pass `--postprocess-points` (anything other than `none`) or run with `--stabilize-ids`, vailá post-processes each
 per-video output directory and writes **pixel CSVs** that can be loaded directly by
 `getpixelvideo.py` and `rec2d.py`:
 
@@ -325,6 +340,8 @@ output/processed_sam_YYYYMMDD_HHMMSS/
   video_name/
     sam_points.csv
     sam_id_map.csv
+    sam_points_georeid.csv      # written when --stabilize-ids/ReID is active
+    sam_id_map_georeid.csv      # written when --stabilize-ids/ReID is active
 ```
 
 #### `sam_points.csv` schema
