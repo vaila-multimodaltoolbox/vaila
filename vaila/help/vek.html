@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vaila-ElasticKick (VEK)</title>
+<style>
+body { font-family: Arial, sans-serif; max-width: 980px; margin: 28px auto; line-height: 1.55; color: #172033; }
+code, pre { background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; }
+code { padding: 0.1em 0.35em; }
+pre { padding: 12px; overflow-x: auto; }
+.notice { background: #fff6d8; border-left: 5px solid #d79d00; padding: 12px 14px; }
+</style>
+</head>
+<body>
+<h1>vaila-ElasticKick (VEK)</h1>
+<p><strong>Module:</strong> <code>vaila.vek</code><br>
+<strong>Version:</strong> 0.3.56<br>
+<strong>Updated:</strong> 16 June 2026</p>
+<p>VEK estimates biomechanical and mechanical variables from a soccer/futsal kick performed with elastic-band resistance.</p>
+<h2>Inputs</h2>
+<ul>
+<li>Markerless pose CSV with hip, knee, ankle, heel and foot-index landmarks.</li>
+<li>Optional ball tracking CSV with <code>frame_index</code>, <code>ball_x</code>, <code>ball_y</code>.</li>
+<li>Elastic-band calibration CSV with <code>length_m</code>, <code>force_n</code>.</li>
+<li>TOML configuration with athlete, trial, camera, band, ball, filter and contact settings.</li>
+</ul>
+<h2>TOML Template</h2>
+<p>Generate this starter file from the CLI:</p>
+<pre><code>python -m vaila.vek --write-default-config vek_config.toml</code></pre>
+<p>Example:</p>
+<pre><code>[athlete]
+id = "001"
+name = "Athlete"
+body_mass_kg = 75.0
+shank_length_m = 0.43
+
+[trial]
+id = "01"
+condition = "resisted"
+dominant_limb = "right"
+kicking_limb = "right"
+
+[camera]
+fps = 240.0
+coordinate_mode = "normalized_shank"  # meters | pixels | normalized_shank
+invert_y = true
+# image_height_px = 1080
+# pixels_per_meter = 520.0
+
+[band]
+anchor_x_m = 0.00
+anchor_y_m = 0.25
+attachment_landmark = "ankle"
+slack_length_m = 1.00
+calibration_csv = "vek_band_calibration.csv"
+model = "pchip"  # pchip | linear | polynomial
+polynomial_degree = 2
+# k_n_per_m = 850.0
+
+[ball]
+mass_kg = 0.43
+initially_stationary = true
+
+[filter]
+human_cutoff_hz = 12.0
+foot_cutoff_hz = 15.0
+ball_cutoff_hz = 24.0
+band_cutoff_hz = 12.0
+
+[analysis]
+contact_method = "combined"
+contact_threshold_m = 0.18
+pre_contact_frames = 10
+post_contact_frames = 10
+contact_duration_frames = 3
+# contact_frame = 418</code></pre>
+<h2>Band Calibration Example</h2>
+<pre><code>length_m,force_n
+1.00,0
+1.10,55
+1.20,125
+1.30,210
+1.40,310
+1.50,425
+1.60,555</code></pre>
+<h2>CLI</h2>
+<pre><code>python -m vaila.vek \
+  --input pose.csv \
+  --ball ball.csv \
+  --band-calibration vek_band_calibration.csv \
+  --config vek_config.toml \
+  --output results</code></pre>
+<p>Create a starter configuration:</p>
+<pre><code>python -m vaila.vek --write-default-config vek_config.toml</code></pre>
+<p>Batch/team processing:</p>
+<pre><code>python -m vaila.vek --batch team_dir --output results</code></pre>
+<h2>Outputs</h2>
+<ul>
+<li><code>*_timeseries.csv</code>: synchronized kinematics, band mechanics and ball variables.</li>
+<li><code>*_summary.csv</code>: trial-level performance and quality-control metrics.</li>
+<li><code>*_report.html</code>: dashboard with KPI cards and trend plots.</li>
+<li>PNG plots for force, power, band length, foot velocity, ball velocity, knee angle and contact detection.</li>
+</ul>
+<div class="notice"><strong>Scientific note:</strong> Band tension and power are estimated from the calibration curve. They are not direct measurements of muscle force or total kicking power. For validation, prefer a manually confirmed impact frame.</div>
+</body>
+</html>
