@@ -21,11 +21,13 @@ import pytest
 yolotrain = pytest.importorskip("vaila.yolotrain")
 _resolve_yaml_path = yolotrain.YOLOTrainApp._resolve_yaml_path
 _point_to_yolo_label = yolotrain.YOLOTrainApp._point_to_yolo_label
+_resolve_training_config = yolotrain._resolve_training_config
 
 
 # ---------------------------------------------------------------------------
 # _resolve_yaml_path
 # ---------------------------------------------------------------------------
+
 
 def test_resolve_yaml_path_handles_dot_slash_prefix(tmp_path: Path) -> None:
     yaml_data = {"path": str(tmp_path), "train": "./train/images"}
@@ -69,8 +71,88 @@ def test_resolve_yaml_path_empty_returns_empty(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Task/model auto-detection for getpixelvideo/SAM datasets
+# ---------------------------------------------------------------------------
+
+
+def test_training_config_pose_yaml_uses_yolo26_pose_and_yaml_relative_path(tmp_path: Path) -> None:
+    (tmp_path / "train" / "images").mkdir(parents=True)
+    (tmp_path / "val" / "images").mkdir(parents=True)
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text(
+        "path: .\ntrain: train/images\nval: val/images\nnames: [field]\nkpt_shape: [32, 3]\n",
+        encoding="utf-8",
+    )
+
+    cfg = _resolve_training_config(str(yaml_path), task="auto", model="auto", device="cpu")
+
+    assert cfg.dataset_dir == str(tmp_path.resolve())
+    assert cfg.task == "pose"
+    assert cfg.model_name == "yolo26m-pose.pt"
+    assert cfg.train_path == str(tmp_path / "train" / "images")
+    assert cfg.val_path == str(tmp_path / "val" / "images")
+
+
+def test_training_config_fifa_pose_layout_uses_yolo26_pose(tmp_path: Path) -> None:
+    (tmp_path / "images" / "train").mkdir(parents=True)
+    (tmp_path / "images" / "val").mkdir(parents=True)
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text(
+        f"path: {tmp_path}\n"
+        "train: images/train\n"
+        "val: images/val\n"
+        "names:\n"
+        "  0: football_pitch\n"
+        "kpt_shape: [32, 3]\n",
+        encoding="utf-8",
+    )
+
+    cfg = _resolve_training_config(str(yaml_path), task="auto", model="auto", device="cpu")
+
+    assert cfg.task == "pose"
+    assert cfg.model_name == "yolo26m-pose.pt"
+    assert cfg.train_path == str(tmp_path / "images" / "train")
+    assert cfg.val_path == str(tmp_path / "images" / "val")
+
+
+def test_training_config_pose_yaml_rejects_detect_model(tmp_path: Path) -> None:
+    (tmp_path / "train" / "images").mkdir(parents=True)
+    (tmp_path / "val" / "images").mkdir(parents=True)
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text(
+        "path: .\ntrain: train/images\nval: val/images\nnames: [object]\nkpt_shape: [62, 3]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Model/task mismatch.*yolo26x-pose"):
+        _resolve_training_config(str(yaml_path), task="auto", model="yolo26x.pt", device="cpu")
+
+
+def test_training_config_segment_label_uses_yolo26_seg(tmp_path: Path) -> None:
+    (tmp_path / "train" / "images").mkdir(parents=True)
+    labels = tmp_path / "train" / "labels"
+    labels.mkdir(parents=True)
+    (tmp_path / "val" / "images").mkdir(parents=True)
+    (labels / "frame_000001.txt").write_text(
+        "0 0.10 0.10 0.20 0.10 0.20 0.20 0.10 0.20\n",
+        encoding="utf-8",
+    )
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text(
+        "path: .\ntrain: train/images\nval: val/images\nnames: [object]\n",
+        encoding="utf-8",
+    )
+
+    cfg = _resolve_training_config(str(yaml_path), task="auto", model="auto", device="cpu")
+
+    assert cfg.task == "segment"
+    assert cfg.model_name == "yolo26m-seg.pt"
+
+
+# ---------------------------------------------------------------------------
 # _point_to_yolo_label (smoke checks on the existing math)
 # ---------------------------------------------------------------------------
+
 
 def test_point_to_yolo_label_centered_box_is_normalized() -> None:
     line = _point_to_yolo_label(100.0, 200.0, 50.0, 400, 400)
@@ -85,6 +167,7 @@ def test_point_to_yolo_label_centered_box_is_normalized() -> None:
 # ---------------------------------------------------------------------------
 # Dataset build: split has no train/val leakage and stays responsive
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_csv_and_video(tmp_path: Path) -> tuple[Path, Path, int]:
@@ -171,9 +254,7 @@ def test_build_dataset_refuses_single_frame(tmp_path: Path) -> None:
 
     width, height = 64, 48
     video = tmp_path / "tiny.mp4"
-    writer = cv2.VideoWriter(
-        str(video), cv2.VideoWriter_fourcc(*"mp4v"), 10.0, (width, height)
-    )
+    writer = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"), 10.0, (width, height))
     if not writer.isOpened():
         pytest.skip("OpenCV cannot write mp4v on this environment")
     writer.write(np.zeros((height, width, 3), dtype=np.uint8))

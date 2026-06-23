@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-06-15
+**Last updated:** 2026-06-23
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -123,7 +123,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
-vailá - 12.Jun.2026 v0.3.53 (Python 3.12.13)
+vailá - 16.Jun.2026 v0.3.56 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -168,6 +168,7 @@ B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
 B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
 B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
+  Soccer Tools includes Field KPs (AI), Soccer-Field Calib, VEK ElasticKick, FIFA cams->DLT and dataset utilities.
 
 B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - vailá
 B6_r7_c4 - vailá          B6_r7_c5 - vailá
@@ -853,7 +854,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current line in the checked-in tree: **`0.3.53`** (see also the `vaila.py` window title string).
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current package line in the checked-in tree: **`0.3.53`**. The app/header version shown in `vaila.py` may move faster for GUI/script milestones.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 
