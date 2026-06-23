@@ -338,6 +338,41 @@ def test_toml_spatial_block_overrides_defaults(tmp_path):
         assert e >= s
 
 
+def test_cli_missing_input_exits_nonzero(tmp_path):
+    script = REPO_ROOT / "vaila" / "tugturn.py"
+    missing = tmp_path / "missing.csv"
+    proc = subprocess.run(
+        [sys.executable, str(script), "-i", str(missing)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=30,
+        check=False,
+    )
+
+    assert proc.returncode != 0
+    assert "Input path does not exist" in proc.stderr
+
+
+def test_cli_missing_config_exits_nonzero(tmp_path):
+    script = REPO_ROOT / "vaila" / "tugturn.py"
+    csv_path = tmp_path / "trial.csv"
+    missing_cfg = tmp_path / "missing.toml"
+    csv_path.write_text("frame,p1_x,p1_y,p1_z\n0,0,0,0\n", encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, str(script), "-i", str(csv_path), "-c", str(missing_cfg)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=30,
+        check=False,
+    )
+
+    assert proc.returncode != 0
+    assert "Config TOML file does not exist" in proc.stderr
+
+
 # ---------------------------------------------------------------------------
 # E. End-to-End — invoke the CLI as a subprocess
 # ---------------------------------------------------------------------------

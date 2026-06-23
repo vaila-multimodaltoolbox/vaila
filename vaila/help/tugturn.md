@@ -6,7 +6,7 @@ Vector Coding, and Extrapolated Center of Mass (XCoM) dynamic-stability metrics.
 
 > **Module:** `vaila/tugturn.py`
 > **Authors:** Paulo R. P. Santiago, Abel G. Chinaglia
-> **Version:** 0.1.2 (27 April 2026)
+> **Version:** 0.3.56 (23 June 2026)
 > **Python:** 3.12
 > **License:** AGPL-3.0
 > **Reference:** Chinaglia AG, Cesar GM, Santiago PRP. *Automating Timed Up and Go
@@ -203,7 +203,7 @@ A complete CLI test case ships with the repository under `tests/tugturn/`:
 - `s26_m1_t1.toml` — subject metadata
 - `skeleton_pose_mediapipe.json` — 33-landmark connection schema
 
-It is exercised by 51 automated tests covering unit, integration, regression,
+It is exercised by 54 automated tests covering unit, integration, regression,
 and end-to-end (CLI subprocess) levels:
 
 ```bash

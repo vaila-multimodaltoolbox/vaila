@@ -6,8 +6,8 @@ Authors:
     - Paulo R. P. Santiago
     - Abel G. Chinaglia
 Created: 20 February 2026
-Updated: 27 April 2026
-Version: 0.1.2
+Updated: 23 June 2026
+Version: 0.3.56
 Python Version: 3.12.13
 
 Description:
@@ -309,6 +309,16 @@ def phase_display_name(phase_name: str) -> str:
 def write_single_row_csv(filepath: Path, data: dict):
     """Write one-row CSV (overwrite mode)."""
     pd.DataFrame([data]).to_csv(filepath, index=False)
+
+
+def discover_csv_files(input_path: Path) -> list[Path]:
+    """Return the CSV files selected by a CLI/GUI input path in deterministic order."""
+    if input_path.is_file():
+        return [input_path] if input_path.suffix.lower() == ".csv" else []
+    return sorted(
+        (p for p in input_path.iterdir() if p.is_file() and p.suffix.lower() == ".csv"),
+        key=lambda p: p.name.lower(),
+    )
 
 
 def _format_html_value(value):
@@ -3164,6 +3174,10 @@ def process_tug_file(
     csv_path: Path, out_dir: Path, config_file: Path | None = None, y_chair_tol: float = 0.2
 ):
 
+    csv_path = Path(csv_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"\nProcessing {csv_path.name}...")
     try:
         df = pd.read_csv(csv_path)
@@ -3282,7 +3296,7 @@ def process_tug_file(
                     )
                     continue
                 phase_label = "first_gait"
-            elif pause_s <= t < pause_e and pause_s < pause_e or turn_s <= t < turn_e:
+            elif (pause_s <= t < pause_e and pause_s < pause_e) or (turn_s <= t < turn_e):
                 continue
             elif wb_s <= t < wb_e:
                 if not valid_spatial:
@@ -3625,6 +3639,15 @@ def main():
     output_path = args.output
     config_path = Path(args.config) if args.config else None
 
+    if input_provided_cli:
+        input_path_cli = Path(input_path)
+        if not input_path_cli.exists():
+            parser.error(f"Input path does not exist: {input_path_cli}")
+        if input_path_cli.is_file() and input_path_cli.suffix.lower() != ".csv":
+            parser.error(f"Input file must be a CSV file: {input_path_cli}")
+        if config_path is not None and not config_path.exists():
+            parser.error(f"Config TOML file does not exist: {config_path}")
+
     if not input_path:
         print("No input specified. Opening GUI for selection...")
         root = tk.Tk()
@@ -3707,7 +3730,7 @@ def main():
             pass
         output_path_explicit.mkdir(parents=True, exist_ok=True)
 
-    files_to_process = [input_path] if input_path.is_file() else list(input_path.glob("*.csv"))
+    files_to_process = discover_csv_files(input_path)
 
     if not files_to_process:
         print(f"No CSV files found in {input_path}")
