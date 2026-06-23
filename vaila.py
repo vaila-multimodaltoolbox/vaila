@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 16 June 2026
+Update Date: 23 June 2026
 Version: 0.3.56
 
 Example of usage:
@@ -2107,12 +2107,14 @@ class Vaila(tk.Tk):
                     f"Error: {str(e)}",
                 )
 
-        def use_train_yolov11():
+        def use_train_yolov26():
             dialog.destroy()
             try:
-                from vaila import yolotrain
-
-                yolotrain.run_yolotrain_gui()
+                # Isolate Tk/Ultralytics training UI from the main vailá GUI process.
+                run_vaila_module(
+                    "vaila.yolotrain",
+                    extra_py_flags=("-u",),
+                )
             except Exception as e:
                 messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
@@ -2154,7 +2156,7 @@ class Vaila(tk.Tk):
         ).pack(pady=6)
         tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
         tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
-        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=16).pack(pady=6)
+        tk.Button(dialog, text="Train YOLOv26", command=use_train_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
         # Wait for the dialog to be closed
