@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 15 June 2026
-Version: 0.3.55
+Update Date: 23 June 2026
+Version: 0.3.56
 
 Example of usage:
 uv run vaila.py
@@ -200,7 +200,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 15.Jun.2026 v0.3.55 (Python 3.12.13)
+    vailá - 16.Jun.2026 v0.3.56 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -311,7 +311,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 15.Jun.2026 v0.3.55 (Python 3.12.13)")
+        self.title("vailá - 16.Jun.2026 v0.3.56 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -2107,12 +2107,14 @@ class Vaila(tk.Tk):
                     f"Error: {str(e)}",
                 )
 
-        def use_train_yolov11():
+        def use_train_yolov26():
             dialog.destroy()
             try:
-                from vaila import yolotrain
-
-                yolotrain.run_yolotrain_gui()
+                # Isolate Tk/Ultralytics training UI from the main vailá GUI process.
+                run_vaila_module(
+                    "vaila.yolotrain",
+                    extra_py_flags=("-u",),
+                )
             except Exception as e:
                 messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
@@ -2154,7 +2156,7 @@ class Vaila(tk.Tk):
         ).pack(pady=6)
         tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
         tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
-        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=16).pack(pady=6)
+        tk.Button(dialog, text="Train YOLOv26", command=use_train_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
         # Wait for the dialog to be closed
@@ -3092,7 +3094,7 @@ class Vaila(tk.Tk):
         ).pack(anchor="w")
         tk.Label(
             frm,
-            text="Field keypoints (YOLO pose), calibration (DLT2D) e utilitários FIFA.",
+            text="Field keypoints (YOLO pose), calibration (DLT2D), VEK e utilitários FIFA.",
             font=("default", self.font_size),
         ).pack(anchor="w", pady=(4, 10))
 
@@ -3125,10 +3127,16 @@ class Vaila(tk.Tk):
         ).grid(row=1, column=1, padx=4, pady=4, sticky="we")
         tk.Button(
             btn_frame,
+            text="VEK ElasticKick",
+            command=lambda: (win.destroy(), self.vek()),
+            width=22,
+        ).grid(row=2, column=0, padx=4, pady=4, sticky="we", columnspan=2)
+        tk.Button(
+            btn_frame,
             text="FIFA: merge manual labels",
             command=lambda: (win.destroy(), self.fifa_manual_merge()),
             width=22,
-        ).grid(row=2, column=0, padx=4, pady=4, sticky="we", columnspan=2)
+        ).grid(row=3, column=0, padx=4, pady=4, sticky="we", columnspan=2)
 
         for col in (0, 1):
             btn_frame.grid_columnconfigure(col, weight=1)
@@ -3148,6 +3156,13 @@ class Vaila(tk.Tk):
         x = (win.winfo_screenwidth() - w) // 2
         y = (win.winfo_screenheight() - h) // 3
         win.geometry(f"+{x}+{y}")
+
+    def vek(self):
+        """Launch vaila-ElasticKick (VEK) resisted soccer/futsal kick analysis."""
+        print("Launching: vaila.vek")
+        print("Features: elastic-band resisted kick biomechanics, ball velocity and reports")
+        print("Help:     vaila/help/vek.html")
+        run_vaila_module("vaila.vek", "vaila/vek.py")
 
     def _open_fifa_workflow(self) -> None:
         webbrowser.open("file://" + str(Path(__file__).parent / "docs" / "fifa_workflow.md"))

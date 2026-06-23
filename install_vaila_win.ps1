@@ -16,8 +16,8 @@
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 09 June 2026
-    Version: 0.3.51
+    Updated: 23 June 2026
+    Version: 0.3.56
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
