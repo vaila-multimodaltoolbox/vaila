@@ -3,10 +3,11 @@
 #########################################################################################
 #                                                                                       #
 # Script: uninstall_vaila_mac.sh                                                        #
-# Description: Uninstalls the vaila - Multimodal Toolbox from macOS, including the      #
-#              uv virtual environment removal, deletion of program files from the       #
-#              user's home directory, and removal of the application from Applications. #
-#              Also refreshes Launchpad to remove the icon.                             #
+# Description: Uninstalls the vaila - Multimodal Toolbox from macOS. Removes the uv     #
+#              virtual environment (.venv), program files, the application bundle in    #
+#              /Applications and ~/Applications, and refreshes Launchpad to remove the  #
+#              icon. Legacy Conda environments (if any) are removed best-effort but     #
+#              conda is no longer the supported install path.                           #
 #                                                                                       #
 # Usage:                                                                                #
 #   1. Make the script executable:                                                      #
@@ -17,9 +18,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Date: September 17, 2024                                                              #
-# Updated Date: 30 December 2025                                                        #
-# Update: 20 March 2026                                                                 #
-# Version: 0.3.38                                                                        #
+# Updated Date: 09 June 2026                                                            #
+# Version: 0.3.51                                                                       #
 # OS: macOS                                                                             #
 #########################################################################################
 

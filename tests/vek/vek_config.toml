@@ -1,0 +1,41 @@
+# vailá-ElasticKick (VEK) — example configuration
+
+[athlete]
+id = "001"
+name = "João Silva"
+shank_length_m = 0.43
+
+[trial]
+id = "01"
+condition = "resisted"       # control | resisted_low | resisted_medium | resisted_high
+kicking_side = "right"       # right | left
+
+[camera]
+fps = 240.0
+coordinate_mode = "normalized_shank"  # meters | pixels | normalized_shank
+invert_y = true
+# Required only for pixel coordinates:
+# image_height_px = 1080
+# pixels_per_meter = 520.0
+
+[band]
+anchor_x_m = 0.00
+anchor_y_m = 0.25
+attachment_landmark = "ankle"  # ankle | heel | foot_index | foot_center
+slack_length_m = 1.00
+calibration_csv = "vek_band_calibration.csv"
+# Linear fallback when no calibration CSV is available:
+# k_n_per_m = 850.0
+
+[ball]
+mass_kg = 0.43
+initially_stationary = true
+
+[analysis]
+cutoff_hz = 10.0
+contact_threshold_m = 0.18
+pre_contact_frames = 10
+post_contact_frames = 10
+# Prefer manual confirmation during validation:
+# contact_frame = 418
+# contact_duration_frames = 3

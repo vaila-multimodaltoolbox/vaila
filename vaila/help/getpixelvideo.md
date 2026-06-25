@@ -4,9 +4,10 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.46  
-**Date:** 28 May 2026  
-**Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
+**Version:** 0.3.55  
+**Date:** 15 June 2026  
+**Updated:** 15 June 2026  
+**Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** vailá - Multimodal Toolbox
 
 ## Key Features
@@ -16,12 +17,12 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
   - **MediaPipe Pose:** 33 pose landmarks
   - **YOLO Pose:** COCO-17 keypoints
 - **Multi-format Support:** Load and visualize MediaPipe, YOLO tracking, vailá standard formats, and markerless 2D named-landmark CSVs (`frame_index,nose_x,nose_y,nose_z,...`)
-- **Advanced Visualization:** Stick figures for MediaPipe, bounding boxes for YOLO tracking
+- **Advanced Visualization:** Stick figures for MediaPipe, bounding boxes for YOLO/SAM tracking with colored-ID, ID-only, or ID+confidence overlay modes
 - **Flexible Marking:** Multiple marker modes for different annotation needs
 - **Del Range:** Button to delete one or more marker/keypoint numbers across an inclusive frame range; use commas (`0,3,7`) and sequential ranges (`1:10`)
 - **Swap Range:** Button to swap marker/keypoint pairs over a frame range; first marker line maps pairwise to the second (`26,28` with `27,29`, or `1:10` with `11:20`)
 - **Labeling Mode:** Create bounding box annotations for Machine Learning datasets
-- **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations
+- **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations; loaded tracking bboxes can be saved directly as a YOLO detection dataset
 - **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8; may write `keypoints.json` when keypoint names are known
 - **Save ML (button / Ctrl+E):** Export a PNG pose dataset with user-selected `train/val/test` split and create `all_labels/` with split-prefixed label copies for didactic review
 - **FIFA Labeling Mode:** Configure via **TOML** (FIFA button or `K` key — no separate Tk config dialog). Default **31** FIFA pitch keypoints (`idx 0 = top_left_corner`); fixed `N`, optional `start` skip, header base `0/1`; sparse CSV with **integer** pixels and empty cells for unmarked KPs. Optional `--fifa-dataset DIR` to append into an existing unified / pose tree.
@@ -126,7 +127,9 @@ Frame,Tracker ID,Label,X_min,Y_min,X_max,Y_max,Confidence,Color_R,Color_G,Color_
 0,2,person,300,400,400,500,0.8,0,255,0
 ```
 
-**Visualization:** Bounding boxes with labels and tracker IDs
+**Visualization:** Bounding boxes colored by ID, with selectable text mode: colored boxes only, ID only, or ID + confidence.
+
+**Save:** After loading bbox tracking CSVs such as SAM3 `sam_tracks.csv`, the **Save** button exports those bboxes as a YOLO detection dataset when Labeling mode is not active.
 
 ### vailá Standard Format
 
@@ -305,8 +308,17 @@ uv run yolo pose train \
 | **Ctrl+G**      | Go KP — jump to a keypoint index by number |
 | **DELETE**      | Delete selected marker           |
 | **A**           | Add new empty marker to file     |
-| **R**           | Remove **selected** marker in current frame (same idea as right click) |
-| **D**           | Mark **all** keypoint slots in the **current frame** as deleted (bulk clear) |
+| **R**           | Remove **selected** marker in current frame (same as right click) |
+| **D**           | Remove **selected** marker in current frame (same as **R** and right click) |
+
+### Playback Speed
+
+| Key   | Action                                               |
+| ----- | ---------------------------------------------------- |
+| **]** | Increase playback speed (doubles: 1× → 2× → 4× → … max 16×) |
+| **[** | Decrease playback speed (halves: 1× → 0.5× → 0.25× … min 0.0625×) |
+
+Current speed is shown in the top-right corner of the window. Speed resets to 1× when you reopen a video.
 
 ### Mode Controls
 
@@ -326,6 +338,7 @@ uv run yolo pose train \
 | **F8**          | Open another video (keeps dataset; no need to close app) |
 | **F9**          | Export YOLO-pose dataset from clicked markers (see Pose dataset section) |
 | **Ctrl+E**      | Save ML: choose split, export PNG dataset + `all_labels/` didactic view |
+| **W**           | Open Swap Markers dialog (multi-rule range swap)  |
 | **1**           | Decrease persistence frames                       |
 | **2**           | Increase persistence frames                      |
 | **3**           | Toggle full persistence                           |
@@ -538,6 +551,43 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.3.55 (15 June 2026)
+
+- **Save no longer freezes the GUI after loading SAM3/YOLO bboxes.** When the
+  smart loader converts bboxes into markers (anchor center / bottom / top /
+  left / right), the **Save** button now writes a regular vailá
+  ``*_markers.csv`` via the vectorised ``save_coordinates`` instead of
+  re-routing through ``export_labeling_dataset`` (which extracts every
+  annotated frame to disk and froze the pygame loop for tens of minutes on
+  long broadcast clips).
+- ``save_coordinates`` is now **vectorised**: NumPy bulk assignment replaces
+  the per-cell ``df.at[]`` loop. A 16 693-frame clip with 62 SAM3 obj_ids
+  (~248 K bboxes) now writes in ~0.5 s instead of minutes.
+- New "Saving…" banner is painted **before** any long save begins, so the
+  GUI clearly signals work-in-progress and users no longer assume it's hung.
+- **Terminal progress feedback** for the slow ML dataset writers
+  (``export_labeling_dataset``, ``export_pose_dataset``,
+  ``_export_all_labels_view``): each writer prints a `>> vaila/getpixelvideo`
+  banner with the destination, frame count and split breakdown, then shows a
+  `tqdm` progress bar per split (train / val / test) so the user can see
+  frames-per-second and an ETA. While the pygame window appears frozen
+  (Python is blocked writing thousands of files), the terminal makes it
+  obvious that work is in progress. Square-bracket prefixes are avoided in
+  the banner because `absl` logging (installed by mediapipe / opencv) eats
+  `[...]` tags from stdout.
+- Bbox dataset export (YOLO) still available when bboxes are kept as overlay
+  only (anchor prompt answered with Enter).
+
+### Version 0.3.54 (15 June 2026)
+
+- SAM3/YOLO tracking bbox loader adds overlay choices: colored boxes only, ID only, or ID + confidence.
+- Save button exports loaded tracking bboxes as a YOLO detection dataset when Labeling mode is not active.
+- SAM IDs stay as tracking IDs instead of duplicating in labels or becoming one detection class per ID.
+
+### Version 0.3.46 (10 June 2026)
+
+- **Help updated:** added `[` / `]` playback speed keys to all documentation; corrected `R`/`D` key descriptions (both remove the **selected** marker in the current frame); added `W` (Swap dialog) to Mode Controls table.
 
 ### Version 0.6.0 (April 2026)
 

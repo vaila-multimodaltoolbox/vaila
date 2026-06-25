@@ -216,16 +216,12 @@ def test_split_video_into_chunks(tmp_path: Path) -> None:
     chunk_dir = tmp_path / "chunks"
     chunks = _split_video_into_chunks(vid_path, chunk_dir, chunk_size=10)
 
-    assert len(chunks) == 3
-    # First chunk: frames 0-9
-    assert chunks[0][1] == 0
-    assert chunks[0][2] == 10
-    # Second chunk: frames 10-19
-    assert chunks[1][1] == 10
-    assert chunks[1][2] == 20
-    # Third chunk: frames 20-29
-    assert chunks[2][1] == 20
-    assert chunks[2][2] == 30
+    assert len(chunks) == 4
+    # Default overlap is 2 frames: starts advance by chunk_size - overlap.
+    assert chunks[0][1:] == (0, 10)
+    assert chunks[1][1:] == (8, 18)
+    assert chunks[2][1:] == (16, 26)
+    assert chunks[3][1:] == (24, 30)
 
     # Verify each chunk file exists and has correct frame count
     for chunk_path, start, end in chunks:
@@ -340,14 +336,15 @@ def test_merge_chunk_outputs(tmp_path: Path) -> None:
         save_mask_png=True,
     )
 
-    # Check merged masks exist with global frame indices
+    # Check merged masks exist with global frame indices. NOTE: the two chunks
+    # don't share any frames in this test, so cross-chunk linking can't bridge
+    # the local_oid=1 across them - each chunk's local ID 1 is mapped to a
+    # fresh global ID (chunk 0 -> 0, chunk 1 -> 1).
     merged_masks = final_out / "masks"
     assert merged_masks.is_dir()
-    # Should have 20 mask files (0-19)
     mask_files = sorted(merged_masks.glob("frame_*_obj_*.png"))
     assert len(mask_files) == 20
-    # Verify first file is frame 0 and last is frame 19
-    assert "frame_000000_obj_1.png" in mask_files[0].name
+    assert "frame_000000_obj_0.png" in mask_files[0].name
     assert "frame_000019_obj_1.png" in mask_files[-1].name
 
     # Check merged metadata CSV
@@ -369,7 +366,8 @@ def test_merge_chunk_outputs(tmp_path: Path) -> None:
     assert payload["schema"] == "vaila_sam_contours_v1"
     assert payload["frames"][0]["frame"] == 0
     assert payload["frames"][-1]["frame"] == 19
-    # merged mask_png should point to global frame indices
+    # merged mask_png should point to global frame indices and remapped global IDs.
+    # In this non-overlap test, the second chunk receives global ID 1.
     assert payload["frames"][-1]["objects"][0]["mask_png"].endswith("frame_000019_obj_1.png")
 
 
@@ -396,3 +394,67 @@ def test_maybe_downscale_video_long_edge_noop_small_video(tmp_path: Path) -> Non
     assert p == vid.resolve()
     assert w0 == 320 and h0 == 240
     assert n >= 1
+
+
+def test_merge_chunk_outputs_links_ids_across_overlap(tmp_path: Path) -> None:
+    """Overlap frames link chunk-local IDs and duplicate overlap rows are dropped."""
+    import cv2
+
+    from vaila.vaila_sam import _merge_chunk_outputs
+
+    video_path = tmp_path / "test.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(str(video_path), fourcc, 30.0, (64, 64))
+    for i in range(6):
+        writer.write(np.full((64, 64, 3), i * 20, dtype=np.uint8))
+    writer.release()
+
+    final_out = tmp_path / "merged_overlap"
+    final_out.mkdir()
+    chunks = [(tmp_path / "c0.mp4", 0, 4), (tmp_path / "c1.mp4", 2, 6)]
+    chunk_dirs = []
+    for ci, local_oid in enumerate((1, 7)):
+        d = tmp_path / f"overlap_out_{ci}"
+        d.mkdir()
+        chunk_dirs.append(d)
+        masks_dir = d / "masks"
+        masks_dir.mkdir()
+        n_local = chunks[ci][2] - chunks[ci][1]
+        header = f"frame,box_x_{local_oid},box_y_{local_oid},box_w_{local_oid},box_h_{local_oid},prob_{local_oid}"
+        meta_rows = []
+        track_rows = [
+            "frame,obj_id,x_px,y_px,w_px,h_px,score,area_px,n_polygons,largest_polygon_pts,cx_px,cy_px"
+        ]
+        manifest_rows = ["frame,obj_id,area_px,mask_png"]
+        for local_fi in range(n_local):
+            mask = np.zeros((64, 64), dtype=np.uint8)
+            mask[16:48, 20:44] = 255
+            cv2.imwrite(str(masks_dir / f"frame_{local_fi:06d}_obj_{local_oid}.png"), mask)
+            meta_rows.append(f"{local_fi},0.3125,0.25,0.375,0.5,0.95")
+            track_rows.append(f"{local_fi},{local_oid},20,16,24,32,0.95,768,1,4,32,32")
+            manifest_rows.append(
+                f"{local_fi},{local_oid},768,masks/frame_{local_fi:06d}_obj_{local_oid}.png"
+            )
+        (d / "sam_frames_meta.csv").write_text(
+            header + "\n" + "\n".join(meta_rows) + "\n", encoding="utf-8"
+        )
+        (d / "sam_tracks.csv").write_text("\n".join(track_rows) + "\n", encoding="utf-8")
+        (d / "sam_masks_manifest.csv").write_text("\n".join(manifest_rows) + "\n", encoding="utf-8")
+
+    _merge_chunk_outputs(
+        chunks,
+        chunk_dirs,
+        final_out,
+        video_path,
+        save_overlay_mp4=True,
+        save_mask_png=True,
+    )
+
+    tracks = (final_out / "sam_tracks.csv").read_text(encoding="utf-8").strip().splitlines()
+    assert len(tracks) == 7  # header + six unique global frames
+    assert {line.split(",")[1] for line in tracks[1:]} == {"0"}
+    assert [int(line.split(",")[0]) for line in tracks[1:]] == list(range(6))
+    mask_files = sorted((final_out / "masks").glob("frame_*_obj_*.png"))
+    assert len(mask_files) == 6
+    assert all(path.name.endswith("_obj_0.png") for path in mask_files)
+    assert (final_out / "test_sam_overlay.mp4").is_file()

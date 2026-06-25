@@ -19,6 +19,13 @@ pose and Codabench submission:
 
 → [docs/fifa_workflow.md](fifa_workflow.md)
 
+### ⚽ vaila-ElasticKick (VEK)
+
+Elastic-band resisted soccer/futsal kicking assessment from pose CSV, ball
+tracking and band calibration:
+
+→ [docs/vek.md](vek.md)
+
 ---
 
 ## 🇬🇧 English — Project Overview

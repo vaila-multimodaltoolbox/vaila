@@ -24,9 +24,13 @@
 #
 #   subprocess.run([FFMPEG, "-i", "video.mp4", ...])
 
+import contextlib
 import os
 import shutil
 import subprocess
+import sys
+import time
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 
@@ -152,6 +156,240 @@ def print_ffmpeg_info():
         print("Source:         Virtual environment")
     else:
         print("Source:         System PATH")
+
+
+def probe_video_duration(path: str, ffprobe: str | None = None) -> float:
+    """Probe video duration in seconds using ffprobe.
+
+    Args:
+        path: Absolute path to the input media file.
+        ffprobe: Optional ffprobe binary; defaults to ``get_ffprobe_path()``.
+
+    Returns:
+        Duration in seconds; ``0.0`` if ffprobe fails (caller must treat
+        zero as "unknown" — progress reporter will skip % / ETA).
+    """
+    if ffprobe is None:
+        ffprobe = get_ffprobe_path()
+    try:
+        result = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            value = (result.stdout or "").strip()
+            if value and value.upper() != "N/A":
+                return float(value)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _format_hms(sec: float) -> str:
+    """Format seconds as ``H:MM:SS`` (or ``M:SS`` below 1 h)."""
+    if sec is None or sec < 0 or sec != sec:  # NaN guard
+        return "--:--"
+    total = int(sec)
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h > 0:
+        return f"{h:d}:{m:02d}:{s:02d}"
+    return f"{m:d}:{s:02d}"
+
+
+def _format_bytes(num: float) -> str:
+    """Format a byte count with binary multiples (B/KB/MB/GB/TB)."""
+    num = float(num)
+    for unit in ("B", "KB", "MB", "GB"):
+        if abs(num) < 1024.0:
+            return f"{num:.1f} {unit}"
+        num /= 1024.0
+    return f"{num:.1f} TB"
+
+
+def run_ffmpeg_with_progress(
+    cmd: list[str],
+    total_duration_sec: float = 0.0,
+    label: str = "ffmpeg",
+    progress_interval_sec: float = 2.0,
+    on_progress: Callable[[dict], None] | None = None,
+    stream=None,
+) -> tuple[int, str]:
+    """Run an ffmpeg command and emit periodic progress lines on ``stream``.
+
+    The helper injects ``-progress pipe:1`` (and ``-nostats``) immediately
+    before the output path so it works with the existing per-encoder commands
+    in ``compress_videos_h264.py`` / ``h265.py`` / ``h266.py``.
+
+    Progress lines look like:
+
+    ``[1/3] my.mp4]:  37.4% | speed=2.10x | fps= 60.0 | enc=0:01:12/0:03:13 | ETA 0:00:58 | size=42.3 MB | elapsed 0:00:35``
+
+    Args:
+        cmd: Full ffmpeg invocation (output path must be the last positional).
+        total_duration_sec: Duration from ``probe_video_duration``; pass ``0``
+            to disable percent / ETA (only ``frame`` / ``speed`` are shown).
+        label: Short prefix printed before each progress line.
+        progress_interval_sec: Minimum wall-clock seconds between prints.
+        on_progress: Optional callback invoked with the parsed progress dict
+            (keys: ``encoded_sec``, ``total_sec``, ``percent``, ``speed``,
+            ``fps``, ``frame``, ``size_bytes``, ``eta_sec``, ``elapsed_sec``).
+        stream: File-like target for progress prints; defaults to ``sys.stdout``.
+
+    Returns:
+        Tuple ``(returncode, stderr_tail)`` where ``stderr_tail`` keeps the
+        last ~1000 chars of ffmpeg stderr (useful for error messages).
+    """
+    if stream is None:
+        stream = sys.stdout
+
+    cmd = list(cmd)
+    if "-progress" not in cmd:
+        cmd.insert(-1, "-progress")
+        cmd.insert(-1, "pipe:1")
+    if "-nostats" not in cmd:
+        cmd.insert(-1, "-nostats")
+
+    start = time.time()
+    last_print = 0.0
+    state: dict[str, str] = {}
+
+    proc = subprocess.Popen(  # noqa: SIM117
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    try:
+        assert proc.stdout is not None
+        for raw_line in proc.stdout:
+            line = raw_line.strip()
+            if not line or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            state[key] = value
+
+            if key != "progress":
+                continue
+
+            now = time.time()
+            force = value == "end"
+            if not force and (now - last_print) < progress_interval_sec:
+                continue
+
+            try:
+                out_time_us = int(state.get("out_time_us", "0") or "0")
+            except ValueError:
+                out_time_us = 0
+            encoded_sec = out_time_us / 1_000_000.0
+
+            speed_str = (state.get("speed") or "0x").rstrip("x")
+            try:
+                speed = float(speed_str)
+            except ValueError:
+                speed = 0.0
+
+            try:
+                fps = float(state.get("fps", "0") or "0")
+            except ValueError:
+                fps = 0.0
+
+            try:
+                size_bytes = int(state.get("total_size", "0") or "0")
+            except ValueError:
+                size_bytes = 0
+
+            try:
+                frame = int(state.get("frame", "0") or "0")
+            except ValueError:
+                frame = 0
+
+            percent = 0.0
+            eta_sec = -1.0
+            if total_duration_sec > 0:
+                percent = min(100.0, 100.0 * encoded_sec / total_duration_sec)
+                if speed > 0.0:
+                    remaining = max(0.0, total_duration_sec - encoded_sec)
+                    eta_sec = remaining / speed
+
+            elapsed = now - start
+
+            if total_duration_sec > 0:
+                pct_str = f"{percent:5.1f}%"
+                enc_str = f"{_format_hms(encoded_sec)}/{_format_hms(total_duration_sec)}"
+            else:
+                pct_str = "  --.-%"
+                enc_str = f"{_format_hms(encoded_sec)}"
+
+            eta_str = _format_hms(eta_sec) if eta_sec >= 0 else "--:--"
+            size_disp = _format_bytes(size_bytes) if size_bytes > 0 else "--"
+
+            msg = (
+                f"{label}: {pct_str}"
+                f" | speed={speed:5.2f}x"
+                f" | fps={fps:6.1f}"
+                f" | enc={enc_str}"
+                f" | ETA {eta_str}"
+                f" | size={size_disp}"
+                f" | elapsed {_format_hms(elapsed)}"
+            )
+            with contextlib.suppress(Exception):
+                print(msg, file=stream, flush=True)
+
+            if on_progress is not None:
+                with contextlib.suppress(Exception):
+                    on_progress(
+                        {
+                            "encoded_sec": encoded_sec,
+                            "total_sec": total_duration_sec,
+                            "percent": percent,
+                            "speed": speed,
+                            "fps": fps,
+                            "frame": frame,
+                            "size_bytes": size_bytes,
+                            "eta_sec": eta_sec,
+                            "elapsed_sec": elapsed,
+                        }
+                    )
+
+            last_print = now
+            if force:
+                state = {}
+
+        stderr_text = proc.stderr.read() if proc.stderr is not None else ""
+        proc.wait()
+        return proc.returncode, (stderr_text or "")[-1000:]
+    finally:
+        try:
+            if proc.stdout is not None:
+                proc.stdout.close()
+        except Exception:
+            pass
+        try:
+            if proc.stderr is not None:
+                proc.stderr.close()
+        except Exception:
+            pass
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except Exception:
+                with contextlib.suppress(Exception):
+                    proc.kill()
 
 
 if __name__ == "__main__":

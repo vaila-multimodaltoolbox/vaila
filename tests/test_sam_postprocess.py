@@ -180,6 +180,17 @@ class TestExtractPointsAll:
         row2 = id_map.set_index("pN").loc[2]
         assert row2["n_frames"] == 1
 
+    def test_georeid_aliases_when_reid_links_exist(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        (sam_dir / "sam_reid_links.csv").write_text("frame,old_obj_id,obj_id\n0,3,1\n", encoding="utf-8")
+        out = extract_points_from_sam_run(sam_dir, mode="all")
+        alias = sam_dir / "sam_points_georeid.csv"
+        alias_map = sam_dir / "sam_id_map_georeid.csv"
+        assert alias.is_file()
+        assert alias_map.is_file()
+        assert alias.read_text(encoding="utf-8") == out.read_text(encoding="utf-8")
+        assert alias_map.read_text(encoding="utf-8") == (sam_dir / "sam_id_map.csv").read_text(encoding="utf-8")
+
 
 class TestExtractPointsFootOnly:
     def test_foot_mode_excludes_extras(self, tmp_path: Path) -> None:

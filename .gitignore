@@ -50,6 +50,8 @@ vaila/models/trackers/*
 # SAM GPU smoke sample (often >20 MiB; see tests/SAM/README.md)
 tests/SAM/*.mp4
 tests/sport_fields/*.mp4
+# Ignore mp4 in Train_yolo directory
+tests/Train_yolo/*.mp4
 
 # General temporary files
 .DS_Store
@@ -238,3 +240,4 @@ tests/markerless_2d_analysis/temp/
 # Local test data (large videos, generated outputs); keep local-only
 !tests/Deadlift/
 tests/Deadlift/**/*.mp4
+tests/Train_yolo/processed_sam_20260614_121915/

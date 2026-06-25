@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vaila - vaila_deadlift_imu</title>
+<style>
+body{font-family:Arial,sans-serif;margin:40px;line-height:1.6;background:#f5f5f5;color:#222}.container{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.1)}h1{color:#1f2937;border-bottom:3px solid #2563eb;padding-bottom:10px}h2{color:#374151;margin-top:30px}h3{color:#4b5563;margin-top:20px}.module-info,.metrics,.usage{background:#f8fafc;padding:15px;border-left:4px solid #2563eb;margin:15px 0}code{background:#e5e7eb;padding:2px 5px;border-radius:3px}pre{background:#111827;color:#f9fafb;padding:14px;border-radius:6px;overflow:auto}.footer{margin-top:35px;padding-top:15px;border-top:1px solid #ddd;color:#666;font-size:.9em}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #e2e8f0;padding:8px 10px;text-align:left}th{background:#f1f5f9;color:#1f2937}
+</style>
+</head>
+<body><div class="container">
+<h1>vaila_deadlift_imu</h1>
+<div class="module-info">
+<p><strong>Category:</strong> Analysis</p>
+<p><strong>File:</strong> vaila/vaila_deadlift_imu.py</p>
+<p><strong>Version:</strong> 0.3.50</p>
+<p><strong>Updated:</strong> 2026-06-09</p>
+<p><strong>GUI Interface:</strong> Yes - Frame B - <strong>Deadlift IMU</strong> (B6_r7_c1),
+   or via <strong>Deadlift</strong> (B5_r6_c5) &rarr; choose <em>IMU (AHRS)</em> in the data-source dialog</p>
+</div>
+
+<h2>Description</h2>
+<p>Dedicated IMU-only Deadlift / RDL analysis using AHRS sensor fusion. This is the companion to
+<a href="vaila_deadlift.html">vaila_deadlift</a>, specialised for barbell-mounted inertial sensors.
+Unlike the simple "project the raw accelerometer onto the static gravity axis" approach, this
+module tracks the sensor orientation as a quaternion and rotates the accelerometer into the
+<strong>Earth frame</strong> before integrating velocity / displacement. The result is robust to
+arbitrary barbell rotations during the pull.</p>
+
+<p>Two industry-standard AHRS filters are ported directly from the
+<a href="https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/">x-io Technologies</a>
+open-source C reference:</p>
+<ul>
+<li><strong>Madgwick AHRS</strong> &mdash; gradient-descent quaternion update (Madgwick S.O.H., 2010).
+    IMU branch (no magnetometer) and full AHRS branch (with magnetometer) are both implemented.</li>
+<li><strong>Mahony AHRS</strong> &mdash; complementary-style proportional + integral quaternion update
+    (Mahony R., Hamel T., Pflimlin J.-M., 2008). IMU branch.</li>
+</ul>
+
+<p>Reference C code lives under <code>tests/Deadlift/madgwick_algorithm_c/MadgwickAHRS/</code> and
+<code>MahonyAHRS/</code> (C sources from the
+<a href="https://github.com/xioTechnologies/Fusion/tree/main">xioTechnologies/Fusion</a> repository).
+A friendly walk-through is available on the
+<a href="https://medium.com/@k66115704/imu-madgwick-filter-explanation-556fbe7f02e3">Medium Madgwick explanation</a>.</p>
+
+<h2>Pipeline</h2>
+<ol>
+<li>Detect a low-motion <strong>static window</strong> at the start of the recording and estimate
+    gyroscope bias + the gravity vector in the sensor frame.</li>
+<li>Initialise the quaternion from gravity using
+    <code>roll = atan2(ay, az)</code>,
+    <code>pitch = atan2(-ax, sqrt(ay&sup2; + az&sup2;))</code>, <code>yaw = 0</code>.</li>
+<li>Run the AHRS filter sample-by-sample to track orientation as a quaternion
+    <code>q = [w, x, y, z]</code> (sensor frame relative to Earth frame).</li>
+<li>Rotate the raw accelerometer to the Earth frame, subtract the measured static gravity
+    &rarr; <strong>linear acceleration</strong> in Earth coordinates.</li>
+<li>Lock repetition count and brackets from the <strong>dominant raw accelerometer component</strong>
+    (largest peak-to-peak range). The detector low-passes this raw axis, follows the gravity-sign
+    peak direction and merges close subpeaks caused by a small in-repetition jerk.</li>
+<li>Use the AHRS vertical linear acceleration for per-rep ZUPT integration, velocity, displacement
+    and kinetics inside those locked rep brackets.</li>
+<li>Per-rep metrics &mdash; peak / mean velocity, peak / mean power, work, ROM, peak / mean force,
+    impulse &mdash; using either the barbell weight or the total system mass.</li>
+<li>PNG plots and a self-contained HTML report.</li>
+</ol>
+
+<h2>Inputs</h2>
+<p>CSV with at minimum:</p>
+<pre><code>acc_x, acc_y, acc_z, gyr_x, gyr_y, gyr_z</code></pre>
+<p>Optional magnetometer columns <code>mag_x, mag_y, mag_z</code> enable Madgwick's full AHRS branch
+(with heading correction).</p>
+
+<table>
+<tr><th>Column</th><th>Units</th></tr>
+<tr><td><code>acc_x/y/z</code></td><td>m/s&sup2; (gravity included)</td></tr>
+<tr><td><code>gyr_x/y/z</code></td><td>deg/s by default; pass <code>--gyro-units rad</code> for rad/s</td></tr>
+<tr><td><code>mag_x/y/z</code> (optional)</td><td>any consistent unit (normalised internally)</td></tr>
+</table>
+
+<div class="usage">
+<h2>Usage</h2>
+<p><strong>GUI (single unified form):</strong> run <code>uv run vaila.py</code>, then click
+<strong>Deadlift IMU</strong> in Frame B (or <strong>Deadlift</strong> &rarr; <em>IMU (barbell
+accelerometer + gyroscope CSV)</em>). A <strong>single Tkinter window</strong> opens with all
+inputs in one place: input directory, output directory, params-file picker (loads numeric fields
+automatically), subject mass, subject height, deadlift bar mass, sample rate, Butterworth cutoff,
+Madgwick <code>beta</code>, gyro units and optional expected reps. The GUI does not ask the user
+to choose a filter: it runs <strong>Madgwick and Mahony</strong> and writes both sets of results.</p>
+
+<p>The current dialog also exposes:</p>
+<ul>
+<li>a <strong>live "Equivalent CLI command" preview</strong> that updates as you fill the form
+    (copy/paste-ready &mdash; the GUI doubles as a CLI tutor);</li>
+<li>a <strong>"Status / Log" panel mirrored to the terminal</strong>, plus a blue current-status
+    line near the top of the dialog, so picking input/output directories, auto-detecting
+    <code>deadlift_parameters.txt</code>, validating numeric fields and starting the run all leave
+    a clear <code>[GUI] ...</code> trail both inside the dialog and in the shell that launched
+    <code>vaila.py</code>;</li>
+<li>defaults shown next to every numeric field (75 kg / 1.75 m / 20 kg / 25 Hz / 4 Hz cutoff /
+    &beta;=0.1 / deg), with both AHRS filters processed by default;</li>
+<li>a <strong>"CLI help"</strong> button that opens a popup with the full CLI reference.</li>
+</ul>
+<p align="center">
+  <img src="../../docs/images/vaila_deadlift_imu_dialog.png"
+       alt="Deadlift IMU dialog (v0.3.50) - defaults pre-filled, live CLI preview, log mirrored to terminal"
+       width="640"/>
+</p>
+
+<p><strong>GUI browser / HiDPI fixes:</strong></p>
+<ul>
+<li>the directory / params browsers open at the already selected path (or the current working directory),
+    so repeated picks start in the right place;</li>
+<li>the GUI shows a <strong>CSV preview</strong> immediately after selecting the input directory,
+    including count and file names;</li>
+<li>the three directory / params Entry widgets are now <strong>70 chars wide</strong> and
+    expand with the dialog (<code>columnconfigure weight=1</code>), so the full
+    <code>C:\Users\&lt;name&gt;\Documents\&lt;...&gt;\imu_data</code>-style path fits visually;</li>
+<li>after every "Browse..." pick the Entry is scrolled to the end
+    (<code>xview_moveto(1.0)</code>), so the meaningful trailing portion of long paths is
+    always visible instead of a truncated drive prefix;</li>
+<li>the dialog is opened as a modal <code>Toplevel</code> when launched from <code>vaila.py</code>,
+    avoiding a nested Tk <code>mainloop</code>; after <strong>Run analysis</strong> the control
+    returns immediately to the batch processor and terminal progress continues;</li>
+<li>on dialog open, every numeric default (<code>mass=75 kg</code>, <code>height=1.75 m</code>,
+    <code>bar=20 kg</code>, <code>fs=25 Hz</code>, <code>cutoff=4 Hz</code>,
+    <code>beta=0.1</code>, <code>gyro=deg</code>) is re-asserted
+    with a 50 ms <code>root.after</code> callback, which works around an occasional Tk 8.6 +
+    Windows HiDPI race where Entry widgets render blank until first focus.</li>
+</ul>
+<p>Launching the module always prints a short banner with the defaults and the canonical CLI
+invocations to the terminal &mdash; useful when the user wants to reproduce or script the same
+run later.</p>
+
+<p><strong>CLI:</strong></p>
+<pre><code># Open the unified Tkinter dialog (no args)
+uv run python vaila/vaila_deadlift_imu.py
+
+# Single CSV file: runs Madgwick + Mahony by default
+uv run python vaila/vaila_deadlift_imu.py -i tests/Deadlift/imu/deadlift_imu.csv
+
+# Batch mode: process every *.csv in a directory (mirrors the GUI, both filters)
+uv run python vaila/vaila_deadlift_imu.py -d tests/Deadlift/imu -o /tmp/dlift_out
+
+# Explicit params file (-p / --params-file), same syntax shown by --help
+uv run python vaila/vaila_deadlift_imu.py \
+  -i tests/Deadlift/imu/deadlift_imu.csv \
+  -p tests/Deadlift/imu/deadlift_parameters.txt
+
+# Batch with explicit params file
+uv run python vaila/vaila_deadlift_imu.py \
+  -d tests/Deadlift/imu \
+  -p tests/Deadlift/imu/deadlift_parameters.txt \
+  -o /tmp/dlift_out
+
+# Inline overrides (win over params file)
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --mass 80 --height 1.80 --weight 60
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --filter mahony --beta 0.05  # restrict to one filter
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --fps 100 --cutoff 4 --gyro-units rad
+uv run python vaila/vaila_deadlift_imu.py -i data.csv --reps 14   # pin a known rep count
+
+# Force the unified GUI dialog
+uv run python vaila/vaila_deadlift_imu.py --gui
+
+# Full CLI help (lists every flag with its default + description)
+uv run python vaila/vaila_deadlift_imu.py --help</code></pre>
+
+<p>New flag <code>-d / --input-dir</code> processes every <code>*.csv</code> in a directory
+exactly the way the GUI does (single timestamped <code>vaila_deadlift_imu_ahrs_*</code>
+sub-directory, per-file progress lines, identical reports). Both <code>-d</code> and the GUI
+print an <strong>"Equivalent CLI command"</strong> block before processing, so any one-off
+interactive run can be replayed verbatim in a script.</p>
+
+<p>Precedence (highest first): CLI / GUI override &rarr; params file &rarr; TOML &rarr; defaults.</p>
+</div>
+
+<h2>Configuration</h2>
+
+<h3>1. Single-row CSV params (preferred)</h3>
+<p><code>deadlift_parameters.txt</code> beside the input CSV (auto-loaded; can also be pointed to
+explicitly with <code>-p</code>/<code>--params-file</code>):</p>
+<pre><code>subject_mass_kg,subject_height_m,deadlift_mass_kg,fs_hz
+75.0,1.75,20.0,25.0</code></pre>
+<p>Tolerated column aliases (case-insensitive):
+<code>subject_mass</code>/<code>body_mass_kg</code>/<code>mass_kg</code>/<code>mass</code>,
+<code>subject_height</code>/<code>height_m</code>/<code>height</code>,
+<code>deadlift_mass</code>/<code>barbell_kg</code>/<code>weight_kg</code>/<code>weight</code>,
+and <code>fs</code>/<code>fps</code>/<code>imu_fps</code>/<code>sample_rate</code>.</p>
+
+<h3>2. Legacy <code>key,value</code> format (still supported)</h3>
+<pre><code>weight,20
+real_repetition_count,10</code></pre>
+
+<h3>3. Optional TOML</h3>
+<p><code>vaila_deadlift_config.toml</code> beside the input CSV or in <code>vaila/</code>:</p>
+<pre><code>[deadlift_context]
+imu_fps = 25.0
+weight_kg = 20.0
+mass_kg = 75.0
+use_total_mass_for_power = true</code></pre>
+
+<h2>Repetition detection</h2>
+<p>Repetitions are counted from the raw accelerometer component with the largest peak-to-peak
+range, not separately from each AHRS filter. The selected axis is low-passed at 2 Hz, the peak
+direction follows the component's mean gravity sign, and close subpeaks are merged so a small jerk
+inside the same repetition does not become an extra rep. The resulting brackets are then reused by
+both Madgwick and Mahony, while AHRS vertical acceleration still supplies velocity, displacement
+and kinetics.</p>
+<p>Leading/trailing static windows are limited so the barbell-at-rest periods at the start/end of
+a set are not counted or used to discard a valid edge rep. The shared
+<code>deadlift_parameters.txt</code> rep count is <strong>not</strong> used to trim detection by default
+(it often describes a different capture); use <code>--reps N</code> to pin a known count. On the
+bundled <code>tests/Deadlift/imu/deadlift_imu.csv</code> example with <code>fs_hz=21.0</code>,
+the raw <code>acc_x</code> negative peaks lock the set to 14 repetitions for both filters.</p>
+
+<h2>Outputs</h2>
+<p>Each input CSV produces a sibling folder named
+<code>vaila_deadlift_imu_ahrs_YYYYMMDD_HHMMSS/&lt;input_basename&gt;/</code> containing a
+<code>*_imu_ahrs_filter_index.html</code> chooser plus separate <code>madgwick/</code> and
+<code>mahony/</code> subfolders. Each filter subfolder contains:</p>
+<ul>
+<li><code>*_imu_ahrs_processed_*.csv</code> &mdash; per-sample time series (quaternion, Euler angles,
+    quaternion axis-angle spherical columns, Earth-frame acc, linear acc, vertical velocity,
+    displacement, <code>translation_world_x/y/z_m</code> used by the animation, plus
+    <code>rep_detection_axis</code> and <code>rep_detection_direction</code>)</li>
+<li><code>*_imu_ahrs_rep_metrics_*.csv</code> &mdash; per-rep summary (peak / mean velocity, power,
+    work, ROM, peak / mean force, impulse)</li>
+<li><code>*_imu_raw_acc_axes_*.png</code> &mdash; raw <code>acc_x</code> / <code>acc_y</code> /
+    <code>acc_z</code> (gravity included); the dominant rep-detection axis is highlighted and the
+    locked repetition peaks are marked</li>
+<li><code>*_imu_ahrs_orientation_*.png</code> &mdash; roll / pitch / yaw, Earth acc components,
+    vertical linear acceleration</li>
+<li><code>*_imu_quaternion_spherical_*.png</code> &mdash; unit quaternion line graph with
+    <code>|q|</code>, rigid-body <code>rotation_deg</code>, axis <code>latitude_deg</code>, and axis
+    <code>longitude_deg</code> (unwrapped for continuous plotting)</li>
+<li><code>*_imu_quaternion_rigidbody_animation_*.html</code> &mdash; standalone 3D canvas animation
+    with fixed real-world Cartesian axes, cube translation from AHRS/ZUPT vertical displacement,
+    cube/body orientation from <code>q(t)</code>, unit axis <code>n(q)</code>, latitude, longitude,
+    and rotation angle in degrees</li>
+<li><code>*_imu_vel_disp_*.png</code> &mdash; vertical velocity and displacement</li>
+<li><code>*_imu_rep_bars_*.png</code> &mdash; per-rep bar charts</li>
+<li><code>*_imu_velocity_overlay_*.png</code> &mdash; velocity profile overlay</li>
+<li><code>*_imu_ahrs_report.html</code> &mdash; self-contained HTML report (with the didactic
+    quaternion section and BibTeX-ready references)</li>
+<li><code>*_imu_ahrs_report.md</code> &mdash; Markdown sibling of the HTML report (same tables,
+    same figures, same references)</li>
+</ul>
+
+<h3>Quaternion spherical coordinates and rigid-body animation</h3>
+<p>A unit quaternion
+<code>q = [w, x, y, z] = [cos(theta/2), n<sub>x</sub>sin(theta/2),
+          n<sub>y</sub>sin(theta/2), n<sub>z</sub>sin(theta/2)]</code>
+represents a rigid-body rotation by <code>theta</code> around the unit axis
+<code>n</code>. Because <code>|q| = 1</code>, the axis is represented on the unit sphere as
+latitude and longitude:</p>
+<ul>
+<li><code>quat_rotation_deg</code>: rotation angle in degrees.</li>
+<li><code>quat_axis_latitude_deg</code>: <code>asin(n<sub>z</sub>)</code> in degrees.</li>
+<li><code>quat_axis_longitude_deg</code>: <code>atan2(n<sub>y</sub>, n<sub>x</sub>)</code> in degrees.</li>
+</ul>
+<p>The report includes a line graph for those spherical coordinates and a standalone HTML animation.
+In the animation the real-world axes stay fixed (Xe, Ye, Ze), the cube center translates by the
+AHRS/ZUPT vertical displacement, and the sensor cube/body axes (Xb, Yb, Zb) are rotated by
+<code>q(t)</code>. The black vector is the unit quaternion axis <code>n(q)</code>.</p>
+
+<h2>References</h2>
+<ul>
+<li>Madgwick, S. O. H. (2010). <em>An efficient orientation filter for inertial and inertial/magnetic sensor arrays.</em></li>
+<li>Mahony, R., Hamel, T., &amp; Pflimlin, J.-M. (2008). <em>Nonlinear complementary filters on the special orthogonal group.</em>
+    IEEE Trans. Auto. Control, 53(5), 1203&ndash;1218.</li>
+<li>x-io Technologies open-source AHRS reference C code:
+    <a href="https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/">x-io.co.uk</a></li>
+<li>xioTechnologies/Fusion repository (modern C/C++ port):
+    <a href="https://github.com/xioTechnologies/Fusion/tree/main">github.com/xioTechnologies/Fusion</a></li>
+<li>x-IMU3 user manual &amp; downloads:
+    <a href="https://x-io.co.uk/x-imu3/#downloads">x-io.co.uk/x-imu3</a></li>
+<li>Friendly tutorial on the Madgwick filter:
+    <a href="https://medium.com/@k66115704/imu-madgwick-filter-explanation-556fbe7f02e3">k66115704 on Medium</a></li>
+</ul>
+
+<h2>Publication History &amp; Tribute to Prof. René Jean Brenzikofer</h2>
+<p>The quaternion-based 3D kinematic modeling used by this module traces back to a close academic
+collaboration with Professor <strong>René Jean Brenzikofer</strong> (UNICAMP), which led to the first
+publication of quaternion-based three-dimensional modeling data in the book
+<em>"Modelos Matemáticos nas Ciências Não-Exatas, vol. 1"</em> (Editora Blucher, 2007). Quaternions
+solve the <em>gimbal lock</em> singularity and are the exact basis for the AHRS data-fusion
+algorithms in IMUs used in wearables and player GPS+IMU trackers. This module is dedicated to his
+memory.</p>
+
+<p><strong>Primary references (BibTeX-ready):</strong></p>
+<ul>
+<li>Nogueira, E. A., Martins, L. E. B., &amp; Brenzikofer, R. (2007). <em>Modelos Matemáticos nas
+    Ciências Não-Exatas &mdash; vol. 1.</em> São Paulo: Editora Blucher. ISBN 978-85-212-0419-0.
+    <a href="https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190">
+    blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1</a></li>
+<li>Santiago, P. R. P. (2009). <em>Rotações tridimensionais em biomecânica via quatérnions:
+    aplicações na análise dos movimentos esportivos.</em> Tese (Doutorado) &mdash; Universidade
+    Estadual Paulista (Unesp), Instituto de Biociências de Rio Claro.
+    <a href="http://hdl.handle.net/11449/100404">hdl.handle.net/11449/100404</a> &middot;
+    <a href="https://repositorio.unesp.br/server/api/core/bitstreams/41603fa7-545b-4e74-a045-57ce94885e0c/content">PDF</a></li>
+</ul>
+
+<p><strong>Tribute &amp; social-media coverage:</strong></p>
+<ul>
+<li>Instagram post (tribute &amp; publication history):
+    <a href="https://www.instagram.com/p/DZLogIJoFbF/">instagram.com/p/DZLogIJoFbF</a></li>
+<li>LinkedIn post (publication history &amp; tribute to Prof. Brenzikofer):
+    <a href="https://www.linkedin.com/posts/paulo-roberto-pereira-santiago-132619112_hist%C3%B3rico-de-publica%C3%A7%C3%A3o-e-homenagem-ao-prof-ugcPost-7468670091845472257-3tzD/">linkedin.com/posts/paulo-roberto-pereira-santiago - homenagem ao Prof. Brenzikofer</a></li>
+</ul>
+
+<pre style="background:#fff5e6;border:1px solid #f6ad55;padding:10px;border-radius:6px;font-size:.85em;overflow-x:auto;">
+@book{nogueira2007modelos,
+  title     = {Modelos matem\'aticos nas ci\^encias n\~ao-exatas - vol. 1},
+  author    = {Nogueira, Eduardo Arantes and Martins, Luiz Eduardo Barreto
+               and Brenzikofer, Ren\'e},
+  year      = {2007},
+  publisher = {Editora Blucher},
+  isbn      = {9788521204190},
+  url       = {https://www.blucher.com.br/modelos-matematicos-nas-ciencias-nao-exatas-vol-1_9788521204190}
+}
+
+@phdthesis{santiago2009rotaccoes,
+  title    = {Rota\c{c}\~oes tridimensionais em biomec\^anica via quat\'ernions:
+              aplica\c{c}\~oes na an\'alise dos movimentos esportivos},
+  author   = {Santiago, Paulo Roberto Pereira},
+  school   = {Universidade Estadual Paulista (Unesp),
+              Instituto de Bioci\^encias de Rio Claro},
+  year     = {2009},
+  url      = {http://hdl.handle.net/11449/100404}
+}</pre>
+
+<div class="footer">Generated on 2026-06-09 for vaila 0.3.50.</div>
+</div></body></html>

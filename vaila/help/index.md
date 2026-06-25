@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 125 | **Categories:** 7 | **Generated on:** 25/06/2026
+**Total documented modules:** 126 | **Categories:** 7 | **Generated on:** 23/06/2026
 
 ---
 
@@ -55,6 +55,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **vaila_deadlift**
   - [📄 HTML](vaila_deadlift.html)
   - [📝 Markdown](vaila_deadlift.md)
+- **vaila_deadlift_imu**
+  - [📄 HTML](vaila_deadlift_imu.html)
+  - [📝 Markdown](vaila_deadlift_imu.md)
 - **pynalty**
   - [📄 HTML](pynalty_help.html)
   - [📝 Markdown](pynalty_help.md)
@@ -73,6 +76,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **soccerfield_calib (Soccer-Field Calib)**
   - [📄 HTML](soccerfield_calib.html)
   - [📝 Markdown](soccerfield_calib.md)
+- **vek (vaila-ElasticKick)**
+  - [📄 HTML](vek.html)
+  - [📝 Markdown](vek.md)
 - **startblock (Start Block Analysis)**
   - [📄 HTML](startblock.html)
   - [📝 Markdown](startblock.md)

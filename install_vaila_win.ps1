@@ -1,24 +1,23 @@
 <#
     Script: install_vaila_win.ps1
-    Description: Installs the vaila - Multimodal Toolbox on Windows
-                 Supports both uv (recommended) and Conda (legacy) installation methods
+    Description: Installs the vaila - Multimodal Toolbox on Windows using uv (Astral).
+                 Conda is no longer supported; uv is the single install method.
     Usage:
-        1. Download the repository from GitHub manually and extract it.
-        2. Open PowerShell (Administrator recommended for full installation)
-        3. Navigate to the root directory of the extracted repository
+        1. Download/clone the repository.
+        2. Open PowerShell (Administrator recommended for full installation).
+        3. Navigate to the root directory of the repository.
         4. Run: .\install_vaila_win.ps1
     Notes:
-        - uv method: uv will be automatically installed if not present
-        - conda method: Requires Conda (Anaconda or Miniconda) to be installed
-        - Python 3.12.13 will be installed via uv or conda depending on method chosen
+        - uv will be automatically installed if not present.
+        - Python 3.12.13 will be installed via `uv python install`.
         - Installation location:
           * With admin: C:\Program Files\vaila (Windows standard location)
           * Without admin: C:\Users\<user>\vaila (user directory)
-        - Can run without administrator privileges (some features may be skipped)
+        - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 07 May 2026
-    Version: 0.3.43
+    Updated: 23 June 2026
+    Version: 0.3.56
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
 #>
@@ -38,41 +37,24 @@ trap {
     exit 1
 }
 
-# Enable TLS 1.2 (and 1.3 if available) for HTTPS; avoids "could not establish trust relationship" on some Windows setups
+# Enable TLS 1.2 (and 1.3 if available) for HTTPS
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
 
 # Check if running as administrator
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "vaila - Multimodal Toolbox Installation/Update" -ForegroundColor Cyan
+Write-Host "vaila - Multimodal Toolbox Installation/Update (uv)" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "This script will install or update vaila."
 Write-Host "If vaila is already installed, it will be updated with the latest code."
 Write-Host ""
 
-# Prompt user to choose installation method
-Write-Host "---------------------------------------------" -ForegroundColor Cyan
-Write-Host "Installation Method Selection" -ForegroundColor Cyan
-Write-Host "  [1] uv (recommended - modern, fast)" -ForegroundColor Yellow
-Write-Host "  [2] Conda (legacy - for compatibility)" -ForegroundColor Yellow
-Write-Host "---------------------------------------------" -ForegroundColor Cyan
-$installMethod = Read-Host "Choose an option [1-2] (default: 1)"
-If ([string]::IsNullOrWhiteSpace($installMethod)) {
-    $installMethod = "1"
-}
-If ($installMethod -notin @("1", "2")) {
-    Write-Host "Invalid option. Defaulting to uv (option 1)." -ForegroundColor Yellow
-    $installMethod = "1"
-}
-
-# Define paths (common to both methods)
 # ============================================================================
 # INSTALL LOCATION
 # ============================================================================
 
-Write-Host ""
 Write-Host "---------------------------------------------" -ForegroundColor Cyan
 Write-Host "Install Location Selection" -ForegroundColor Cyan
 Write-Host "  [1] Default (User Profile or Program Files) - Recommended" -ForegroundColor Yellow
@@ -96,9 +78,7 @@ If ($installLocOption -eq "2") {
         $vailaProgramPath = "$env:USERPROFILE\vaila"
         Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Yellow
         Write-Host "(No administrator privileges - using user directory)" -ForegroundColor Yellow
-        If ($installMethod -eq "1") {
-            Write-Host "Note: Some features (FFmpeg, Windows Terminal installation) may be skipped." -ForegroundColor Yellow
-        }
+        Write-Host "Note: Some features (FFmpeg, Windows Terminal installation) may be skipped." -ForegroundColor Yellow
         Write-Host "Run as administrator for installation to Program Files (recommended)." -ForegroundColor Yellow
     }
 }
@@ -107,29 +87,27 @@ Write-Host ""
 $sourcePath = (Get-Location).Path
 $projectDir = $sourcePath
 
-# Check if pyproject.toml exists (for uv method)
-If ($installMethod -eq "1") {
-    If (-Not (Test-Path "$projectDir\pyproject.toml")) {
-        Write-Host "Bootstrap Mode: vaila source not found locally." -ForegroundColor Cyan
-        Write-Host "Cloning vaila repository from GitHub..." -ForegroundColor Cyan
-        
-        If (-Not (Get-Command git -ErrorAction SilentlyContinue)) {
-             Write-Error "git is not installed. Please install git first."
-             Exit 1
-        }
-        
-        $tempDir = [System.IO.Path]::GetTempPath()
-        $tempVailaDir = Join-Path $tempDir "vaila_install_temp"
-        If (Test-Path $tempVailaDir) { Remove-Item -Path $tempVailaDir -Recurse -Force -ErrorAction SilentlyContinue }
-        
-        Write-Host "Downloading to temporary directory: $tempVailaDir" -ForegroundColor Yellow
-        git clone --depth 1 https://github.com/vaila-multimodaltoolbox/vaila.git $tempVailaDir
-        
-        Write-Host "Running installer from downloaded source..." -ForegroundColor Cyan
-        Set-Location $tempVailaDir
-        & ".\install_vaila_win.ps1"
-        Exit $LASTEXITCODE
+# Bootstrap: clone repo if pyproject.toml is missing locally
+If (-Not (Test-Path "$projectDir\pyproject.toml")) {
+    Write-Host "Bootstrap Mode: vaila source not found locally." -ForegroundColor Cyan
+    Write-Host "Cloning vaila repository from GitHub..." -ForegroundColor Cyan
+
+    If (-Not (Get-Command git -ErrorAction SilentlyContinue)) {
+         Write-Error "git is not installed. Please install git first."
+         Exit 1
     }
+
+    $tempDir = [System.IO.Path]::GetTempPath()
+    $tempVailaDir = Join-Path $tempDir "vaila_install_temp"
+    If (Test-Path $tempVailaDir) { Remove-Item -Path $tempVailaDir -Recurse -Force -ErrorAction SilentlyContinue }
+
+    Write-Host "Downloading to temporary directory: $tempVailaDir" -ForegroundColor Yellow
+    git clone --depth 1 https://github.com/vaila-multimodaltoolbox/vaila.git $tempVailaDir
+
+    Write-Host "Running installer from downloaded source..." -ForegroundColor Cyan
+    Set-Location $tempVailaDir
+    & ".\install_vaila_win.ps1"
+    Exit $LASTEXITCODE
 }
 
 # Check Windows version
@@ -168,7 +146,7 @@ Try {
 }
 
 # ============================================================================
-# COMMON FUNCTIONS (used by both methods)
+# SHORTCUT / TERMINAL HELPERS
 # ============================================================================
 
 function New-DesktopShortcut {
@@ -178,7 +156,7 @@ function New-DesktopShortcut {
         [string]$IconPath,
         [string]$WorkingDirectory
     )
-    
+
     Write-Host "Creating Desktop shortcut for 'vaila'..." -ForegroundColor Yellow
     $desktopPath = [Environment]::GetFolderPath("Desktop")
     $desktopShortcutPath = Join-Path $desktopPath "vaila.lnk"
@@ -186,8 +164,7 @@ function New-DesktopShortcut {
     $desktopShortcut = $wshell.CreateShortcut($desktopShortcutPath)
     $desktopShortcut.TargetPath = $TargetPath
     $desktopShortcut.Arguments = $Arguments
-    
-    # Find icon file (.ico format required for Windows shortcuts)
+
     $iconFile = $null
     $possibleIconPaths = @(
         "$vailaProgramPath\vaila\images\vaila.ico",
@@ -210,7 +187,7 @@ function New-DesktopShortcut {
     } Else {
         Write-Warning "Icon file not found. Shortcut will use default icon."
     }
-    
+
     $desktopShortcut.WorkingDirectory = $WorkingDirectory
     $desktopShortcut.Save()
     Write-Host "Desktop shortcut for 'vaila' created at $desktopShortcutPath." -ForegroundColor Green
@@ -223,7 +200,7 @@ function New-StartMenuShortcut {
         [string]$IconPath,
         [string]$WorkingDirectory
     )
-    
+
     Write-Host "Creating Start Menu shortcut for 'vaila'..." -ForegroundColor Yellow
     If ($isAdmin) {
         $startMenuPath = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\vaila"
@@ -238,8 +215,7 @@ function New-StartMenuShortcut {
     $startMenuShortcut = $wshell.CreateShortcut($startMenuShortcutPath)
     $startMenuShortcut.TargetPath = $TargetPath
     $startMenuShortcut.Arguments = $Arguments
-    
-    # Find icon file
+
     $iconFile = $null
     $possibleIconPaths = @(
         "$vailaProgramPath\vaila\images\vaila.ico",
@@ -259,7 +235,7 @@ function New-StartMenuShortcut {
     } ElseIf ($IconPath) {
         $startMenuShortcut.IconLocation = "$IconPath,0"
     }
-    
+
     $startMenuShortcut.WorkingDirectory = $WorkingDirectory
     $startMenuShortcut.Save()
     Write-Host "Start Menu shortcut for 'vaila' created at $startMenuShortcutPath." -ForegroundColor Green
@@ -270,23 +246,20 @@ function Set-WindowsTerminalProfile {
         [string]$CommandLine,
         [string]$IconPath
     )
-    
+
     $wtPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe"
     If (Test-Path $wtPath) {
         Write-Host "Configuring the 'vaila' profile in Windows Terminal..." -ForegroundColor Yellow
         $settingsPath = "$wtPath\LocalState\settings.json"
         $settingsBackupPath = "$wtPath\LocalState\settings_backup.json"
 
-        # Backup current settings.json
         If (Test-Path $settingsPath) {
             Copy-Item -Path $settingsPath -Destination $settingsBackupPath -Force -ErrorAction SilentlyContinue
             $settingsContent = Get-Content -Path $settingsPath -Raw
             $settingsJson = $settingsContent | ConvertFrom-Json
 
-            # Remove any existing 'vaila' profile
             $settingsJson.profiles.list = $settingsJson.profiles.list | Where-Object { $_.name -ne "vaila" }
 
-            # Add new 'vaila' profile
             $vailaProfile = @{
                 name = "vaila"
                 commandline = $CommandLine
@@ -294,7 +267,6 @@ function Set-WindowsTerminalProfile {
                 guid = "{17ce5bfe-17ed-5f3a-ab15-5cd5baafed5b}"
                 hidden = $false
             }
-            # Add icon only if found
             If ($IconPath -and (Test-Path $IconPath)) {
                 $vailaProfile.icon = $IconPath
             }
@@ -308,350 +280,338 @@ function Set-WindowsTerminalProfile {
     }
 }
 
-
 # ============================================================================
-# UV INSTALLATION METHOD
+# UV INSTALLATION
 # ============================================================================
 
-function Install-WithUv {
-    Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "Installing vaila using uv (recommended method)" -ForegroundColor Cyan
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host ""
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "Installing vaila using uv" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
 
-    # Install uv if not present
-    Write-Host "Checking for uv installation..." -ForegroundColor Yellow
-    $uvInstalled = Get-Command uv -ErrorAction SilentlyContinue
+# Install uv if not present
+Write-Host "Checking for uv installation..." -ForegroundColor Yellow
+$uvInstalled = Get-Command uv -ErrorAction SilentlyContinue
 
-    If (-Not $uvInstalled) {
-        Write-Host "uv is not installed. Installing uv..." -ForegroundColor Yellow
-        
-        $uvInstalledSuccessfully = $false
-        
-        # Try winget first if available and running as admin
-        If ($isAdmin) {
-            $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-            If ($wingetAvailable) {
-                Write-Host "Attempting to install uv via winget..." -ForegroundColor Cyan
-                Try {
-                    & winget install --id=astral-sh.uv -e --silent
-                    Start-Sleep -Seconds 3
-                    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-                    $uvInstalled = Get-Command uv -ErrorAction SilentlyContinue
-                    If ($uvInstalled) {
-                        $uvInstalledSuccessfully = $true
-                        Write-Host "uv installed successfully via winget!" -ForegroundColor Green
-                    }
-                } Catch {
-                    Write-Host "winget installation failed, trying official installer..." -ForegroundColor Yellow
+If (-Not $uvInstalled) {
+    Write-Host "uv is not installed. Installing uv..." -ForegroundColor Yellow
+
+    $uvInstalledSuccessfully = $false
+
+    If ($isAdmin) {
+        $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+        If ($wingetAvailable) {
+            Write-Host "Attempting to install uv via winget..." -ForegroundColor Cyan
+            Try {
+                & winget install --id=astral-sh.uv -e --silent
+                Start-Sleep -Seconds 3
+                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+                $uvInstalled = Get-Command uv -ErrorAction SilentlyContinue
+                If ($uvInstalled) {
+                    $uvInstalledSuccessfully = $true
+                    Write-Host "uv installed successfully via winget!" -ForegroundColor Green
                 }
+            } Catch {
+                Write-Host "winget installation failed, trying official installer..." -ForegroundColor Yellow
             }
         }
-        
-        # Fallback to official installer if winget failed or not available
-        If (-Not $uvInstalledSuccessfully) {
-            Write-Host "Using official installer..." -ForegroundColor Cyan
-            Try {
-                powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-                $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-                Start-Sleep -Seconds 3
-                $uvInstalled = Get-Command uv -ErrorAction SilentlyContinue
-                
-                If (-Not $uvInstalled) {
-                    Write-Error "uv installation failed. Please install manually:"
-                    Write-Host "  powershell -ExecutionPolicy ByPass -c `"irm https://astral.sh/uv/install.ps1 | iex`"" -ForegroundColor Yellow
-                    Exit 1
-                }
-                Write-Host "uv installed successfully!" -ForegroundColor Green
-            } Catch {
-                Write-Error "Failed to install uv. Please install manually."
+    }
+
+    If (-Not $uvInstalledSuccessfully) {
+        Write-Host "Using official installer..." -ForegroundColor Cyan
+        Try {
+            powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+            Start-Sleep -Seconds 3
+            $uvInstalled = Get-Command uv -ErrorAction SilentlyContinue
+
+            If (-Not $uvInstalled) {
+                Write-Error "uv installation failed. Please install manually:"
+                Write-Host "  powershell -ExecutionPolicy ByPass -c `"irm https://astral.sh/uv/install.ps1 | iex`"" -ForegroundColor Yellow
                 Exit 1
             }
-        }
-    } Else {
-        Write-Host "uv is already installed." -ForegroundColor Green
-        Write-Host "Updating uv..." -ForegroundColor Yellow
-        Try {
-            & uv self update
-            Write-Host "uv updated successfully." -ForegroundColor Green
+            Write-Host "uv installed successfully!" -ForegroundColor Green
         } Catch {
-            Write-Warning "Failed to update uv. Continuing with current version."
-        }
-    }
-
-    $uvVersion = & uv --version 2>$null
-    If ($uvVersion) {
-        Write-Host "uv version: $uvVersion" -ForegroundColor Green
-    }
-    Write-Host ""
-
-    # Install Python 3.12.13 via uv if needed
-    Write-Host "Checking Python version..." -ForegroundColor Yellow
-    Try {
-        $pythonVersion = & uv python list 2>$null | Select-String "3.12.13"
-        If (-Not $pythonVersion) {
-            Write-Host "Python 3.12.13 not found. Installing via uv..." -ForegroundColor Yellow
-            & uv python install 3.12.13
-            Write-Host "Python 3.12.13 installed successfully." -ForegroundColor Green
-        } Else {
-            Write-Host "Python 3.12.13 found." -ForegroundColor Green
-        }
-    } Catch {
-        Write-Warning "Could not verify Python 3.12.13 installation. Continuing..."
-    }
-
-    # Check if we're already in the installation directory
-    $normalizedProjectDir = (Resolve-Path $projectDir -ErrorAction SilentlyContinue).Path
-    $normalizedVailaPath = (Resolve-Path $vailaProgramPath -ErrorAction SilentlyContinue).Path
-    If (-Not $normalizedProjectDir) { $normalizedProjectDir = $projectDir }
-    If (-Not $normalizedVailaPath) { $normalizedVailaPath = $vailaProgramPath }
-    $isAlreadyInstalled = ($normalizedProjectDir -eq $normalizedVailaPath)
-
-    If ($isAlreadyInstalled -or ($installLocOption -eq "2")) {
-        Write-Host "Script is running from installation directory (or local install selected). Files are already in place." -ForegroundColor Green
-        Write-Host "Skipping file copy step." -ForegroundColor Green
-    } Else {
-        # Clean destination directory and copy files
-        Write-Host ""
-        If (Test-Path $vailaProgramPath) {
-            Write-Host "Updating existing vaila installation in $vailaProgramPath..." -ForegroundColor Yellow
-            Write-Host "Removing old files (keeping .venv to be recreated)..." -ForegroundColor Yellow
-            Get-ChildItem -Path $vailaProgramPath -Exclude ".venv" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        } Else {
-            Write-Host "Installing vaila to $vailaProgramPath..." -ForegroundColor Yellow
-            New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
-        }
-
-        Write-Host "Copying vaila files..." -ForegroundColor Yellow
-        $excludeItems = @(".venv", "__pycache__", "*.pyc", ".git", "uv.lock", ".python-version")
-        Get-ChildItem -Path $projectDir -Force | Where-Object {
-            $item = $_
-            $shouldExclude = $false
-            ForEach ($exclude in $excludeItems) {
-                If ($item.Name -like $exclude -or $item.Name -eq $exclude) {
-                    $shouldExclude = $true
-                    Break
-                }
-            }
-            -Not $shouldExclude
-        } | ForEach-Object {
-            $targetPath = Join-Path $vailaProgramPath $_.Name
-            If ($_.PSIsContainer) {
-                Copy-Item -Path $_.FullName -Destination $targetPath -Recurse -Force -Exclude $excludeItems
-            } Else {
-                Copy-Item -Path $_.FullName -Destination $targetPath -Force
-            }
-        }
-    }
-
-    # Ensure no stale uv.lock is copied over
-    If (Test-Path "$vailaProgramPath\uv.lock") {
-        Write-Host "Removing existing uv.lock to avoid stale dependency locks..." -ForegroundColor Yellow
-        Remove-Item -Path "$vailaProgramPath\uv.lock" -Force -ErrorAction SilentlyContinue
-    }
-
-    # Change to vaila home directory for uv operations
-    Set-Location $vailaProgramPath
-
-    # Set permissions for installation directory if needed
-    If ($isAdmin -and $vailaProgramPath -like "*Program Files*") {
-        Write-Host "Setting permissions for installation directory..." -ForegroundColor Yellow
-        Try {
-            $acl = Get-Acl $vailaProgramPath
-            # Grant FullControl to 'Users' group so standard users can update .venv and run uv
-            $userGroup = "BUILTIN\Users"
-            $permission = $userGroup, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-            $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule $permission
-            $acl.AddAccessRule($accessRule)
-            
-            # Ensure Administrators also have full control
-            $adminGroup = "BUILTIN\Administrators"
-            $adminPermission = $adminGroup, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-            $adminAccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule $adminPermission
-            $acl.AddAccessRule($adminAccessRule)
-            
-            Set-Acl $vailaProgramPath $acl
-            Write-Host "Permissions set successfully (Users group granted FullControl)." -ForegroundColor Green
-        } Catch {
-            Write-Warning "Could not set permissions: $_"
-            Write-Warning "You may need to manually grant 'Full Control' to 'Users' for '$vailaProgramPath'"
-        }
-    }
-
-    # Select appropriate pyproject.toml template based on GPU detection and user choice
-    Write-Host ""
-    Write-Host "Selecting pyproject.toml configuration..." -ForegroundColor Yellow
-    
-    # Detect NVIDIA GPU
-    $hasNvidiaGPU = Get-Command nvidia-smi -ErrorAction SilentlyContinue
-    $useGPU = $false
-    
-    # Ask user if GPU detected
-    If ($hasNvidiaGPU) {
-        Write-Host "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]" -ForegroundColor Cyan
-        $gpuChoice = Read-Host
-        $useGPU = ($gpuChoice -ne "n" -and $gpuChoice -ne "N")
-    } Else {
-        Write-Host "No NVIDIA GPU detected. Using CPU-only configuration." -ForegroundColor Yellow
-    }
-
-    $useSamExtra = $false
-    Write-Host ""
-    Write-Host "Install optional SAM 3 (Meta) segmentation stack (extra 'sam')? [y/N]" -ForegroundColor Cyan
-    $samChoice = Read-Host
-    if ($samChoice -eq "y" -or $samChoice -eq "Y") {
-        $useSamExtra = $true
-    }
-    
-    # Choose template
-    If ($useGPU) {
-        If (Test-Path "$vailaProgramPath\pyproject_win_cuda12.toml") {
-            Copy-Item "$vailaProgramPath\pyproject_win_cuda12.toml" "$vailaProgramPath\pyproject.toml" -Force
-            Write-Host "Using Windows CUDA 12.1 configuration." -ForegroundColor Green
-        } Else {
-            Write-Warning "pyproject_win_cuda12.toml not found. Using CPU-only configuration."
-            Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
-            $useGPU = $false
-        }
-    } Else {
-        Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
-        Write-Host "Using CPU-only configuration." -ForegroundColor Green
-    }
-
-    # Initialize uv project
-    Write-Host ""
-    Write-Host "Initializing uv project..." -ForegroundColor Yellow
-    If (-Not (Test-Path ".python-version")) {
-        & uv python pin 3.12.13
-    }
-
-    # Create virtual environment
-    Write-Host ""
-    Write-Host "Creating virtual environment (.venv)..." -ForegroundColor Yellow
-    If (Test-Path ".venv") {
-        Write-Host "Virtual environment already exists. Removing old one..." -ForegroundColor Yellow
-        Try {
-            Remove-Item -Path ".venv" -Recurse -Force -ErrorAction Stop
-        } Catch {
-            Write-Warning "Could not remove existing .venv. Attempting to create new .venv anyway..."
-        }
-    }
-
-    Try {
-        & uv venv --python 3.12.13
-        If ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to create virtual environment."
+            Write-Error "Failed to install uv. Please install manually."
             Exit 1
         }
-        Write-Host "Virtual environment created successfully." -ForegroundColor Green
+    }
+} Else {
+    Write-Host "uv is already installed." -ForegroundColor Green
+    Write-Host "Updating uv..." -ForegroundColor Yellow
+    Try {
+        & uv self update
+        Write-Host "uv updated successfully." -ForegroundColor Green
     } Catch {
-        Write-Error "Failed to create virtual environment: $_"
-        Exit 1
+        Write-Warning "Failed to update uv. Continuing with current version."
+    }
+}
+
+$uvVersion = & uv --version 2>$null
+If ($uvVersion) {
+    Write-Host "uv version: $uvVersion" -ForegroundColor Green
+}
+Write-Host ""
+
+# Install Python 3.12.13 via uv if needed
+Write-Host "Checking Python version..." -ForegroundColor Yellow
+Try {
+    $pythonVersion = & uv python list 2>$null | Select-String "3.12.13"
+    If (-Not $pythonVersion) {
+        Write-Host "Python 3.12.13 not found. Installing via uv..." -ForegroundColor Yellow
+        & uv python install 3.12.13
+        Write-Host "Python 3.12.13 installed successfully." -ForegroundColor Green
+    } Else {
+        Write-Host "Python 3.12.13 found." -ForegroundColor Green
+    }
+} Catch {
+    Write-Warning "Could not verify Python 3.12.13 installation. Continuing..."
+}
+
+# Check if we're already in the installation directory
+$normalizedProjectDir = (Resolve-Path $projectDir -ErrorAction SilentlyContinue).Path
+$normalizedVailaPath = (Resolve-Path $vailaProgramPath -ErrorAction SilentlyContinue).Path
+If (-Not $normalizedProjectDir) { $normalizedProjectDir = $projectDir }
+If (-Not $normalizedVailaPath) { $normalizedVailaPath = $vailaProgramPath }
+$isAlreadyInstalled = ($normalizedProjectDir -eq $normalizedVailaPath)
+
+If ($isAlreadyInstalled -or ($installLocOption -eq "2")) {
+    Write-Host "Script is running from installation directory (or local install selected). Files are already in place." -ForegroundColor Green
+    Write-Host "Skipping file copy step." -ForegroundColor Green
+} Else {
+    Write-Host ""
+    If (Test-Path $vailaProgramPath) {
+        Write-Host "Updating existing vaila installation in $vailaProgramPath..." -ForegroundColor Yellow
+        Write-Host "Removing old files (keeping .venv to be recreated)..." -ForegroundColor Yellow
+        Get-ChildItem -Path $vailaProgramPath -Exclude ".venv" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    } Else {
+        Write-Host "Installing vaila to $vailaProgramPath..." -ForegroundColor Yellow
+        New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
     }
 
-    # Generate lock file
-    Write-Host ""
-    Write-Host "Generating lock file (uv.lock)..." -ForegroundColor Yellow
-    & uv lock --upgrade
-
-    # Sync dependencies
-    Write-Host ""
-    Write-Host "Installing vaila dependencies with uv..." -ForegroundColor Yellow
-    Write-Host "This may take a few minutes on first run..." -ForegroundColor Yellow
-
-    # Execute uv sync with appropriate extras
-    Try {
-        if ($useGPU -and $useSamExtra) {
-            & uv sync --extra gpu --extra sam
-        } elseif ($useGPU) {
-            & uv sync --extra gpu
-        } elseif ($useSamExtra) {
-            & uv sync --extra sam
-        } else {
-            & uv sync
-        }
-        $syncExitCode = $LASTEXITCODE
-        
-        If ($syncExitCode -ne 0) {
-            throw "uv sync failed with exit code $syncExitCode"
-        }
-        Write-Host "Dependencies installed successfully." -ForegroundColor Green
-
-        if ($useSamExtra) {
-            Write-Host ""
-            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
-            Write-Host "SAM 3: accept https://huggingface.co/facebook/sam3 then run:" -ForegroundColor Cyan
-            Write-Host "  cd `"$vailaProgramPath`" ; uv run hf auth login" -ForegroundColor Cyan
-            Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
-            $hfNow = Read-Host "Run 'uv run hf auth login' now? [y/N]"
-            if ($hfNow -eq "y" -or $hfNow -eq "Y") {
-                Set-Location $vailaProgramPath
-                try {
-                    & uv run hf auth login
-                } catch {
-                    Write-Warning "hf auth login failed or was cancelled."
-                }
+    Write-Host "Copying vaila files..." -ForegroundColor Yellow
+    $excludeItems = @(".venv", "__pycache__", "*.pyc", ".git", "uv.lock", ".python-version")
+    Get-ChildItem -Path $projectDir -Force | Where-Object {
+        $item = $_
+        $shouldExclude = $false
+        ForEach ($exclude in $excludeItems) {
+            If ($item.Name -like $exclude -or $item.Name -eq $exclude) {
+                $shouldExclude = $true
+                Break
             }
         }
+        -Not $shouldExclude
+    } | ForEach-Object {
+        $targetPath = Join-Path $vailaProgramPath $_.Name
+        If ($_.PSIsContainer) {
+            Copy-Item -Path $_.FullName -Destination $targetPath -Recurse -Force -Exclude $excludeItems
+        } Else {
+            Copy-Item -Path $_.FullName -Destination $targetPath -Force
+        }
+    }
+}
+
+If (Test-Path "$vailaProgramPath\uv.lock") {
+    Write-Host "Removing existing uv.lock to avoid stale dependency locks..." -ForegroundColor Yellow
+    Remove-Item -Path "$vailaProgramPath\uv.lock" -Force -ErrorAction SilentlyContinue
+}
+
+Set-Location $vailaProgramPath
+
+# Set permissions for installation directory if needed
+If ($isAdmin -and $vailaProgramPath -like "*Program Files*") {
+    Write-Host "Setting permissions for installation directory..." -ForegroundColor Yellow
+    Try {
+        $acl = Get-Acl $vailaProgramPath
+        $userGroup = "BUILTIN\Users"
+        $permission = $userGroup, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+        $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule $permission
+        $acl.AddAccessRule($accessRule)
+
+        $adminGroup = "BUILTIN\Administrators"
+        $adminPermission = $adminGroup, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+        $adminAccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule $adminPermission
+        $acl.AddAccessRule($adminAccessRule)
+
+        Set-Acl $vailaProgramPath $acl
+        Write-Host "Permissions set successfully (Users group granted FullControl)." -ForegroundColor Green
     } Catch {
-        Write-Warning "uv sync failed. Restoring universal CPU configuration..."
+        Write-Warning "Could not set permissions: $_"
+        Write-Warning "You may need to manually grant 'Full Control' to 'Users' for '$vailaProgramPath'"
+    }
+}
+
+# Select appropriate pyproject.toml template based on GPU detection and user choice
+Write-Host ""
+Write-Host "Selecting pyproject.toml configuration..." -ForegroundColor Yellow
+
+$hasNvidiaGPU = Get-Command nvidia-smi -ErrorAction SilentlyContinue
+$useGPU = $false
+
+If ($hasNvidiaGPU) {
+    Write-Host "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]" -ForegroundColor Cyan
+    $gpuChoice = Read-Host
+    $useGPU = ($gpuChoice -ne "n" -and $gpuChoice -ne "N")
+} Else {
+    Write-Host "No NVIDIA GPU detected. Using CPU-only configuration." -ForegroundColor Yellow
+}
+
+$useSamExtra = $false
+Write-Host ""
+Write-Host "Install optional SAM 3 (Meta) segmentation stack (extra 'sam')? [y/N]" -ForegroundColor Cyan
+$samChoice = Read-Host
+if ($samChoice -eq "y" -or $samChoice -eq "Y") {
+    $useSamExtra = $true
+}
+
+# Choose template
+If ($useGPU) {
+    If (Test-Path "$vailaProgramPath\pyproject_win_cuda12.toml") {
+        Copy-Item "$vailaProgramPath\pyproject_win_cuda12.toml" "$vailaProgramPath\pyproject.toml" -Force
+        Write-Host "Using Windows CUDA 12.1 configuration." -ForegroundColor Green
+    } Else {
+        Write-Warning "pyproject_win_cuda12.toml not found. Using CPU-only configuration."
         Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
-        Write-Error "Installation failed. Please check the error messages above."
+        $useGPU = $false
+    }
+} Else {
+    Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
+    Write-Host "Using CPU-only configuration." -ForegroundColor Green
+}
+
+# Initialize uv project
+Write-Host ""
+Write-Host "Initializing uv project..." -ForegroundColor Yellow
+If (-Not (Test-Path ".python-version")) {
+    & uv python pin 3.12.13
+}
+
+# Create virtual environment
+Write-Host ""
+Write-Host "Creating virtual environment (.venv)..." -ForegroundColor Yellow
+If (Test-Path ".venv") {
+    Write-Host "Virtual environment already exists. Removing old one..." -ForegroundColor Yellow
+    Try {
+        Remove-Item -Path ".venv" -Recurse -Force -ErrorAction Stop
+    } Catch {
+        Write-Warning "Could not remove existing .venv. Attempting to create new .venv anyway..."
+    }
+}
+
+Try {
+    & uv venv --python 3.12.13
+    If ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to create virtual environment."
         Exit 1
     }
+    Write-Host "Virtual environment created successfully." -ForegroundColor Green
+} Catch {
+    Write-Error "Failed to create virtual environment: $_"
+    Exit 1
+}
 
-    Write-Host ""
-    Write-Host "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are already installed via uv sync from pyproject.toml." -ForegroundColor Green
+# Generate lock file
+Write-Host ""
+Write-Host "Generating lock file (uv.lock)..." -ForegroundColor Yellow
+& uv lock --upgrade
 
-    # Install pycairo
-    Write-Host ""
-    Write-Host "Installing pycairo..." -ForegroundColor Yellow
+# Sync dependencies
+Write-Host ""
+Write-Host "Installing vaila dependencies with uv..." -ForegroundColor Yellow
+Write-Host "This may take a few minutes on first run..." -ForegroundColor Yellow
+
+Try {
+    if ($useGPU -and $useSamExtra) {
+        & uv sync --extra gpu --extra sam
+    } elseif ($useGPU) {
+        & uv sync --extra gpu
+    } elseif ($useSamExtra) {
+        & uv sync --extra sam
+    } else {
+        & uv sync
+    }
+    $syncExitCode = $LASTEXITCODE
+
+    If ($syncExitCode -ne 0) {
+        throw "uv sync failed with exit code $syncExitCode"
+    }
+    Write-Host "Dependencies installed successfully." -ForegroundColor Green
+
+    if ($useSamExtra) {
+        Write-Host ""
+        Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+        Write-Host "SAM 3: accept https://huggingface.co/facebook/sam3 then run:" -ForegroundColor Cyan
+        Write-Host "  cd `"$vailaProgramPath`" ; uv run hf auth login" -ForegroundColor Cyan
+        Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+        $hfNow = Read-Host "Run 'uv run hf auth login' now? [y/N]"
+        if ($hfNow -eq "y" -or $hfNow -eq "Y") {
+            Set-Location $vailaProgramPath
+            try {
+                & uv run hf auth login
+            } catch {
+                Write-Warning "hf auth login failed or was cancelled."
+            }
+        }
+    }
+} Catch {
+    Write-Warning "uv sync failed. Restoring universal CPU configuration..."
+    Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
+    Write-Error "Installation failed. Please check the error messages above."
+    Exit 1
+}
+
+Write-Host ""
+Write-Host "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are installed via uv sync from pyproject.toml." -ForegroundColor Green
+
+# Install pycairo
+Write-Host ""
+Write-Host "Installing pycairo..." -ForegroundColor Yellow
+Try {
+    & uv pip install pycairo
+    Write-Host "pycairo installed successfully." -ForegroundColor Green
+} Catch {
+    Write-Warning "pycairo installation failed. Trying with force-reinstall..."
     Try {
-        & uv pip install pycairo
+        & uv pip install --force-reinstall --no-cache-dir pycairo
         Write-Host "pycairo installed successfully." -ForegroundColor Green
     } Catch {
-        Write-Warning "pycairo installation failed. Trying with force-reinstall..."
-        Try {
-            & uv pip install --force-reinstall --no-cache-dir pycairo
-            Write-Host "pycairo installed successfully." -ForegroundColor Green
-        } Catch {
-            Write-Warning "pycairo installation failed. This may cause issues with the application."
-        }
+        Write-Warning "pycairo installation failed. This may cause issues with the application."
     }
-    
-    # Verify environment is properly set up by checking for PIL (Pillow)
-    Write-Host ""
-    Write-Host "Verifying environment setup..." -ForegroundColor Yellow
-    Try {
-        $testResult = & uv run python -c "import PIL; print('PIL OK')" 2>&1
-        If ($testResult -match "PIL OK") {
-            Write-Host "Environment verification successful." -ForegroundColor Green
-        } Else {
-            Write-Warning "Environment verification failed. PIL module not found. Running uv sync again..."
-            If ($useGPU -and $useSamExtra) {
-                & uv sync --extra gpu --extra sam
-            } ElseIf ($useGPU) {
-                & uv sync --extra gpu
-            } ElseIf ($useSamExtra) {
-                & uv sync --extra sam
-            } Else {
-                & uv sync
-            }
-            If ($LASTEXITCODE -ne 0) {
-                Write-Error "Failed to sync dependencies during verification."
-                Exit 1
-            }
-        }
-    } Catch {
-        Write-Warning "Could not verify environment. Continuing anyway..."
-    }
+}
 
-    # Create run_vaila.ps1 script
-    $runScript = Join-Path $vailaProgramPath "run_vaila.ps1"
-    Write-Host ""
-    Write-Host "Creating run_vaila.ps1 script..." -ForegroundColor Yellow
-    @"
+# Verify environment is properly set up by checking for PIL (Pillow)
+Write-Host ""
+Write-Host "Verifying environment setup..." -ForegroundColor Yellow
+Try {
+    $testResult = & uv run python -c "import PIL; print('PIL OK')" 2>&1
+    If ($testResult -match "PIL OK") {
+        Write-Host "Environment verification successful." -ForegroundColor Green
+    } Else {
+        Write-Warning "Environment verification failed. PIL module not found. Running uv sync again..."
+        If ($useGPU -and $useSamExtra) {
+            & uv sync --extra gpu --extra sam
+        } ElseIf ($useGPU) {
+            & uv sync --extra gpu
+        } ElseIf ($useSamExtra) {
+            & uv sync --extra sam
+        } Else {
+            & uv sync
+        }
+        If ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to sync dependencies during verification."
+            Exit 1
+        }
+    }
+} Catch {
+    Write-Warning "Could not verify environment. Continuing anyway..."
+}
+
+# Create run_vaila.ps1 script
+$runScript = Join-Path $vailaProgramPath "run_vaila.ps1"
+Write-Host ""
+Write-Host "Creating run_vaila.ps1 script..." -ForegroundColor Yellow
+@"
 # Run vaila using uv
 Set-Location "$vailaProgramPath"
 & uv run --no-sync "$vailaProgramPath\vaila.py"
@@ -661,303 +621,44 @@ Write-Host "Program finished. Press Enter to close this window..." -ForegroundCo
 Read-Host
 "@ | Out-File -FilePath $runScript -Encoding UTF8
 
-    # Create run_vaila.bat script
-    $runScriptBat = Join-Path $vailaProgramPath "run_vaila.bat"
-    Write-Host "Creating run_vaila.bat script..." -ForegroundColor Yellow
-    @"
+# Create run_vaila.bat script
+$runScriptBat = Join-Path $vailaProgramPath "run_vaila.bat"
+Write-Host "Creating run_vaila.bat script..." -ForegroundColor Yellow
+@"
 @echo off
 cd /d "$vailaProgramPath"
 pwsh.exe -ExecutionPolicy Bypass -File "run_vaila.ps1"
 pause
 "@ | Out-File -FilePath $runScriptBat -Encoding ASCII
 
-    # Find icon for Windows Terminal
-    $wtIconPath = $null
-    $possibleWtIconPaths = @(
-        "$vailaProgramPath\vaila\images\vaila_ico.png",
-        "$vailaProgramPath\vaila\images\vaila.ico",
-        "$vailaProgramPath\vaila\images\vaila_ico_trans.ico",
-        "$vailaProgramPath\docs\images\vaila_ico.ico",
-        "$vailaProgramPath\docs\images\vaila_ico.png"
-    )
-    ForEach ($path in $possibleWtIconPaths) {
-        If (Test-Path $path) {
-            $wtIconPath = $path
-            Break
-        }
+# Find icon for Windows Terminal
+$wtIconPath = $null
+$possibleWtIconPaths = @(
+    "$vailaProgramPath\vaila\images\vaila_ico.png",
+    "$vailaProgramPath\vaila\images\vaila.ico",
+    "$vailaProgramPath\vaila\images\vaila_ico_trans.ico",
+    "$vailaProgramPath\docs\images\vaila_ico.ico",
+    "$vailaProgramPath\docs\images\vaila_ico.png"
+)
+ForEach ($path in $possibleWtIconPaths) {
+    If (Test-Path $path) {
+        $wtIconPath = $path
+        Break
     }
-
-    # Setup Windows Terminal profile
-    $wtCommandLine = "pwsh.exe -ExecutionPolicy Bypass -NoExit -File `"$runScript`""
-    Set-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
-
-    # Create shortcuts
-    New-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
-    New-StartMenuShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
-
-    return $runScript
 }
 
-# ============================================================================
-# CONDA INSTALLATION METHOD
-# ============================================================================
+# Setup Windows Terminal profile
+$wtCommandLine = "pwsh.exe -ExecutionPolicy Bypass -NoExit -File `"$runScript`""
+Set-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
 
-function Install-WithConda {
-    Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "Installing vaila using Conda (legacy method)" -ForegroundColor Cyan
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host ""
-
-    # Check if conda is installed
-    If (-Not (Get-Command conda -ErrorAction SilentlyContinue)) {
-        Write-Error "Conda is not installed or not in the PATH. Please install Conda first."
-        Write-Host "Please install Conda (Anaconda or Miniconda) first:" -ForegroundColor Yellow
-        Write-Host "  https://www.anaconda.com/products/individual" -ForegroundColor Cyan
-        Exit 1
-    }
-
-    # Check if running as administrator (required for Conda method)
-    If (-NOT $isAdmin) {
-        Write-Warning "Conda installation method requires Administrator privileges."
-        Write-Host "Please run this script as Administrator." -ForegroundColor Yellow
-        Exit 1
-    }
-
-    # Update conda
-    Write-Host "Updating conda and all base packages..." -ForegroundColor Yellow
-    Try {
-        conda update conda -y
-        conda update --all -y
-        Write-Host "Conda and base packages updated." -ForegroundColor Green
-    } Catch {
-        Write-Warning "Failed to update conda or packages. Continuing anyway."
-    }
-
-    # Check if 'vaila' environment exists
-    Write-Host "Checking for existing 'vaila' environment..." -ForegroundColor Yellow
-    $envExists = conda env list | Select-String -Pattern "^vaila"
-    $choice = ""
-
-    If ($envExists) {
-        Write-Host ""
-        Write-Host "============================================================" -ForegroundColor Cyan
-        Write-Host "vaila environment already exists!" -ForegroundColor Cyan
-        Write-Host "============================================================" -ForegroundColor Cyan
-        Write-Host ""
-        Write-Host "Choose installation type:"
-        Write-Host "1. UPDATE - Keep existing environment and update vaila files only"
-        Write-Host "   (Preserves NVIDIA CUDA installations and other custom packages)"
-        Write-Host "2. RESET - Remove existing environment and create fresh installation"
-        Write-Host "   (Will require reinstalling NVIDIA CUDA and other custom packages)"
-        Write-Host ""
-        
-        Do {
-            $choice = Read-Host "Enter your choice (1 for UPDATE, 2 for RESET)"
-        } While ($choice -notin @("1", "2"))
-        
-        If ($choice -eq "1") {
-            Write-Host ""
-            Write-Host "Selected: UPDATE - Keeping existing environment" -ForegroundColor Green
-            Write-Host "Updating existing 'vaila' environment..."
-            conda activate vaila
-            
-            Try {
-                & conda env update -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
-                Write-Host "Environment updated successfully." -ForegroundColor Green
-            } Catch {
-                Write-Warning "Failed to update environment from YAML. Continuing anyway."
-            }
-        } Else {
-            Write-Host ""
-            Write-Host "Selected: RESET - Creating fresh environment" -ForegroundColor Green
-            Write-Host "Removing old 'vaila' environment..."
-            Try {
-                conda deactivate
-                conda env remove -n vaila -y
-                Write-Host "Old 'vaila' environment removed successfully." -ForegroundColor Green
-            } Catch {
-                Write-Warning "Could not remove old environment. Continuing anyway."
-            }
-            
-            Write-Host "Cleaning conda cache..." -ForegroundColor Yellow
-            conda clean --all -y
-            
-            Try {
-                Write-Host "Creating 'vaila' environment from YAML..." -ForegroundColor Yellow
-                & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
-                Write-Host "'vaila' environment created successfully." -ForegroundColor Green
-            } Catch {
-                Write-Error "Failed to create the 'vaila' environment."
-                Exit 1
-            }
-        }
-    } Else {
-        Write-Host "'vaila' environment does not exist. Creating new environment..." -ForegroundColor Yellow
-        
-        Write-Host "Cleaning conda cache..." -ForegroundColor Yellow
-        conda clean --all -y
-        
-        Try {
-            Write-Host "Creating 'vaila' environment from YAML..." -ForegroundColor Yellow
-            & conda env create -f "$vailaProgramPath\yaml_for_conda_env\vaila_win.yaml"
-            Write-Host "'vaila' environment created successfully." -ForegroundColor Green
-        } Catch {
-            Write-Error "Failed to create the 'vaila' environment."
-            Exit 1
-        }
-    }
-
-    # Check for NVIDIA GPU and install PyTorch with CUDA if available
-    If (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-        Write-Host "NVIDIA GPU detected. Installing PyTorch with CUDA support..." -ForegroundColor Yellow
-        Try {
-            conda install pytorch torchvision torchaudio pytorch-cuda -c pytorch -c nvidia -n vaila -y
-            Write-Host "PyTorch with CUDA support installed successfully." -ForegroundColor Green
-        } Catch {
-            Write-Warning "Failed to install PyTorch with CUDA support."
-        }
-    } Else {
-        Write-Host "No NVIDIA GPU detected. Skipping PyTorch with CUDA installation." -ForegroundColor Yellow
-    }
-
-    # Clean destination directory and copy files
-    # Clean destination directory and copy files
-    Write-Host ""
-    
-    If ($installLocOption -eq "2") {
-        Write-Host "Local install selected. Skipping file copy." -ForegroundColor Green
-        Write-Host "Using current directory as vaila location." -ForegroundColor Green
-    } Else {
-        Write-Host "Cleaning destination directory and copying vaila program..." -ForegroundColor Yellow
-        If (Test-Path $vailaProgramPath) {
-            Write-Host "Removing existing files from destination directory..." -ForegroundColor Yellow
-            Get-ChildItem -Path $vailaProgramPath -Recurse -Force | Remove-Item -Force -Recurse
-        } Else {
-            New-Item -ItemType Directory -Force -Path $vailaProgramPath | Out-Null
-        }
-        Get-ChildItem -Path $sourcePath -Recurse -Force | Where-Object {
-            -not ($_.PSIsContainer -and $_.Name -eq '__pycache__') -and
-            -not ($_.Extension -eq '.pyc')
-        } | ForEach-Object {
-            $target = $_.FullName.Replace($sourcePath, $vailaProgramPath)
-            if ($_.PSIsContainer) {
-                if (-not (Test-Path $target)) {
-                    New-Item -ItemType Directory -Force -Path $target | Out-Null
-                }
-            } else {
-                Copy-Item -Path $_.FullName -Destination $target -Force
-            }
-        }
-    }
-
-    # Remove ffmpeg from conda
-    Write-Host "Removing ffmpeg from conda (if present)..." -ForegroundColor Yellow
-    conda remove -n vaila ffmpeg -y
-
-    # Activate vaila environment
-    If ($choice -eq "1") {
-        Write-Host "Environment already activated for UPDATE mode." -ForegroundColor Green
-    } Else {
-        Write-Host "Activating 'vaila' environment..." -ForegroundColor Yellow
-        conda activate vaila
-    }
-
-    # Upgrade pip and install dependencies
-    Write-Host "Upgrading pip and required pip packages..." -ForegroundColor Yellow
-    Try {
-        python -m pip install --upgrade pip
-        pip install --upgrade mediapipe moviepy
-        Write-Host "pip, mediapipe, and moviepy installed/upgraded successfully." -ForegroundColor Green
-    } Catch {
-        Write-Warning "Error upgrading pip or pip dependencies."
-    }
-
-    # Install Cairo dependencies and pycairo
-    Write-Host "Installing pycairo..." -ForegroundColor Yellow
-    Try {
-        pip install pycairo
-        Write-Host "pycairo installed successfully." -ForegroundColor Green
-    } Catch {
-        Write-Warning "pycairo installation failed. Trying with force-reinstall..."
-        Try {
-            pip install --force-reinstall --no-cache-dir pycairo
-            Write-Host "pycairo installed successfully." -ForegroundColor Green
-        } Catch {
-            Write-Warning "pycairo installation failed. This may cause issues with the application."
-        }
-    }
-
-    # Get Conda base path
-    $condaPath = (& conda info --base).Trim()
-
-    # Create run_vaila.ps1 script
-    $runScript = Join-Path $vailaProgramPath "run_vaila.ps1"
-    Write-Host ""
-    Write-Host "Creating run_vaila.ps1 script..." -ForegroundColor Yellow
-    @"
-# Run vaila using Conda
-& '$condaPath\shell\condabin\conda-hook.ps1'
-conda activate vaila
-Set-Location "$vailaProgramPath"
-python "$vailaProgramPath\vaila.py"
-# Keep terminal open after execution
-Write-Host ""
-Write-Host "Program finished. Press Enter to close this window..." -ForegroundColor Yellow
-Read-Host
-"@ | Out-File -FilePath $runScript -Encoding UTF8
-
-    # Find icon for Windows Terminal
-    $wtIconPath = $null
-    $possibleWtIconPaths = @(
-        "$vailaProgramPath\vaila\images\vaila_ico.png",
-        "$vailaProgramPath\vaila\images\vaila.ico",
-        "$vailaProgramPath\vaila\images\vaila_ico_trans.ico",
-        "$vailaProgramPath\docs\images\vaila_ico.ico",
-        "$vailaProgramPath\docs\images\vaila_ico.png"
-    )
-    ForEach ($path in $possibleWtIconPaths) {
-        If (Test-Path $path) {
-            $wtIconPath = $path
-            Break
-        }
-    }
-
-    # Setup Windows Terminal profile
-    $wtCommandLine = "pwsh.exe -ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`""
-    Set-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
-
-    # Create shortcuts
-    New-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`"" -IconPath "$vailaProgramPath\docs\images\vaila_ico.ico" -WorkingDirectory $vailaProgramPath
-    New-StartMenuShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -Command `"& `'$condaPath\shell\condabin\conda-hook.ps1`'; conda activate `'vaila`'; cd `'$vailaProgramPath`'; python `'vaila.py`'`"" -IconPath "$vailaProgramPath\docs\images\vaila_ico.ico" -WorkingDirectory $vailaProgramPath
-
-    # Adjust site-packages permissions
-    $vailaSitePackagesDir = Join-Path $condaPath "envs\vaila\Lib\site-packages"
-    Write-Host "Adjusting permissions on site-packages directory..." -ForegroundColor Yellow
-    If (Test-Path $vailaSitePackagesDir) {
-        Try {
-            Start-Process "icacls.exe" -ArgumentList "`"$vailaSitePackagesDir`" /grant Users:(OI)(CI)F /T" -Wait -NoNewWindow
-            Write-Host "Permissions successfully adjusted." -ForegroundColor Green
-        } Catch {
-            Write-Warning "Failed to adjust permissions."
-        }
-    }
-
-    return $runScript
-}
+# Create shortcuts
+New-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
+New-StartMenuShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
 
 # ============================================================================
-# MAIN EXECUTION
+# SYSTEM DEPENDENCIES (FFmpeg, Windows Terminal, rsync/scp)
 # ============================================================================
 
-# Execute installation based on chosen method
-If ($installMethod -eq "1") {
-    $runScript = Install-WithUv
-} Else {
-    $runScript = Install-WithConda
-}
-
-# Install system dependencies (common to both methods)
 Write-Host ""
 Write-Host "Checking/installing system dependencies (FFmpeg, Windows Terminal, rsync)..." -ForegroundColor Yellow
 
@@ -1002,18 +703,15 @@ If ($isAdmin) {
     Write-Host "Checking for file transfer tools (rsync/scp)..." -ForegroundColor Yellow
     $rsyncInstalled = Get-Command rsync -ErrorAction SilentlyContinue
     $scpInstalled = Get-Command scp -ErrorAction SilentlyContinue
-    
-    # Check rsync first
+
     If (-Not $rsyncInstalled) {
         Write-Host "rsync is not installed. Attempting installation..." -ForegroundColor Yellow
-        
-        # Method 1: Try winget (Windows Package Manager)
+
         $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
         If ($wingetAvailable) {
             Write-Host "Trying to install rsync via winget..." -ForegroundColor Cyan
             Try {
                 & winget install --id=Git.Git -e --silent --accept-package-agreements --accept-source-agreements
-                # Git for Windows includes rsync
                 Start-Sleep -Seconds 3
                 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
                 $rsyncInstalled = Get-Command rsync -ErrorAction SilentlyContinue
@@ -1024,8 +722,7 @@ If ($isAdmin) {
                 Write-Host "winget installation failed, trying Chocolatey..." -ForegroundColor Yellow
             }
         }
-        
-        # Method 2: Try Chocolatey if winget failed
+
         If (-Not $rsyncInstalled) {
             $chocoInstalled = Get-Command choco -ErrorAction SilentlyContinue
             If (-Not $chocoInstalled) {
@@ -1039,7 +736,7 @@ If ($isAdmin) {
                     Write-Warning "Failed to install Chocolatey."
                 }
             }
-            
+
             If (Get-Command choco -ErrorAction SilentlyContinue) {
                 Write-Host "Installing rsync via Chocolatey..." -ForegroundColor Yellow
                 Try {
@@ -1060,12 +757,10 @@ If ($isAdmin) {
     } Else {
         Write-Host "rsync is already installed." -ForegroundColor Green
     }
-    
-    # Check/Install OpenSSH Client (includes scp) as fallback
+
     If (-Not $scpInstalled) {
         Write-Host "Checking for OpenSSH Client (includes scp)..." -ForegroundColor Yellow
         Try {
-            # Check if OpenSSH Client capability is installed
             $opensshStatus = Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Client*'
             If ($opensshStatus -and $opensshStatus.State -ne 'Installed') {
                 Write-Host "Installing OpenSSH Client (includes scp)..." -ForegroundColor Yellow
@@ -1076,7 +771,6 @@ If ($isAdmin) {
                     Write-Host "OpenSSH Client installed successfully. scp is now available." -ForegroundColor Green
                 }
             } ElseIf ($opensshStatus -and $opensshStatus.State -eq 'Installed') {
-                # OpenSSH is installed but scp not in PATH - refresh PATH
                 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
                 $scpInstalled = Get-Command scp -ErrorAction SilentlyContinue
                 If ($scpInstalled) {
@@ -1091,8 +785,7 @@ If ($isAdmin) {
     } Else {
         Write-Host "scp (OpenSSH Client) is already installed." -ForegroundColor Green
     }
-    
-    # Summary
+
     Write-Host ""
     If ($rsyncInstalled) {
         Write-Host "[OK] rsync is available for file transfers." -ForegroundColor Green
@@ -1133,9 +826,7 @@ Write-Host "You can now launch vaila using:" -ForegroundColor Cyan
 Write-Host "  - Desktop shortcut" -ForegroundColor Yellow
 Write-Host "  - Start Menu shortcut" -ForegroundColor Yellow
 Write-Host "  - Windows Terminal profile 'vaila'" -ForegroundColor Yellow
-If ($installMethod -eq "1") {
-    Write-Host "  - Double-click run_vaila.bat" -ForegroundColor Yellow
-}
+Write-Host "  - Double-click run_vaila.bat" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Restart your computer to ensure all changes take effect." -ForegroundColor Yellow
 Write-Host ""

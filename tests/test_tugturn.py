@@ -38,6 +38,7 @@ from vaila.tugturn import (
     calculate_axial_vector_coding,
     calculate_limb_vector_coding_y,
     canonical_phase_name,
+    discover_csv_files,
     get_connection_color,
     load_mediapipe_pose_connections,
     ordered_phase_ranges,
@@ -320,6 +321,18 @@ def test_write_single_row_csv_roundtrip(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # 6. Geometry primitives
 # ---------------------------------------------------------------------------
+
+
+def test_discover_csv_files_sorts_and_filters(tmp_path):
+    csv_b = tmp_path / "b.CSV"
+    csv_a = tmp_path / "a.csv"
+    txt = tmp_path / "notes.txt"
+    for path in (csv_b, csv_a, txt):
+        path.write_text("x\n", encoding="utf-8")
+
+    assert discover_csv_files(csv_b) == [csv_b]
+    assert discover_csv_files(txt) == []
+    assert discover_csv_files(tmp_path) == [csv_a, csv_b]
 
 
 def test_calculate_angle_3d_basic_cases():

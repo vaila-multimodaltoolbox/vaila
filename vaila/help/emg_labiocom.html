@@ -1,96 +1,212 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vailá - emg_labiocom</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background-color: #f5f5f5; color: #222; }
+        .container { max-width: 960px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
+        h2 { color: #34495e; margin-top: 32px; border-bottom: 1px solid #e1e4e8; padding-bottom: 6px; }
+        h3 { color: #34495e; margin-top: 24px; }
         .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 0.93em; }
+        pre { background: #f4f6f8; padding: 14px 16px; border-radius: 5px; overflow-x: auto; border: 1px solid #e1e4e8; font-size: 0.92em; }
+        table { border-collapse: collapse; margin: 14px 0; width: 100%; font-size: 0.94em; }
+        th, td { border: 1px solid #d0d7de; padding: 7px 10px; text-align: left; vertical-align: top; }
+        th { background: #f1f5f9; }
+        .footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.78em; background: #e8f4fd; color: #1565c0; margin-right: 6px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>vailá - emg_labiocom</h1>
+<div class="container">
 
-        <div class="module-info">
-            <h3>📋 Module Information</h3>
-            <p><strong>Category:</strong> Analysis</p>
-            <p><strong>File:</strong> vaila\emg_labiocom.py</p>
-            <p><strong>Lines:</strong> 1810</p>
-            <p><strong>Size:</strong> 62309 characters</p>
-            <p><strong>Version:</strong> 2025</p>
-            <p><strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
-        </div>
+<h1>vailá - emg_labiocom</h1>
+<p>
+    <span class="badge">Analysis</span>
+    <span class="badge">GUI</span>
+    <span class="badge">CLI</span>
+    <span class="badge">v0.3.50</span>
+</p>
 
-        
+<div class="module-info">
+    <h3>Module information</h3>
+    <table>
+        <tr><th>File</th><td><code>vaila/emg_labiocom.py</code></td></tr>
+        <tr><th>Version</th><td>0.3.50</td></tr>
+        <tr><th>Updated</th><td>2026-06-09</td></tr>
+        <tr><th>Author</th><td>Prof. Dr. Paulo R. P. Santiago</td></tr>
+        <tr><th>Markdown help</th><td><a href="emg_labiocom.md">emg_labiocom.md</a></td></tr>
+    </table>
+</div>
 
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-================================================================================
-EMG Analysis Toolkit - emg_labiocom (Improved Version)
-================================================================================
-Author: Prof. Dr. Paulo R. P. Santiago
-Improved Version: 2025
-Created: 01.Oct.2024
-Updated: 28.May.2025
-Version: 0.1.0
-Python Version: 3.12.9
+<h2>Overview</h2>
+<p>
+    EMG (Electromyography) analysis toolkit. Computes time-, frequency-, and
+    time-frequency-domain features, produces CSV results, PNG/SVG figures,
+    a statistical summary and an optional HTML report. The CSV reader
+    auto-detects multiple acquisition-system layouts.
+</p>
 
-Description:
-------------
-This improved toolkit provides advanced functionalities to analyze EMG (Electromyography) signals.
-Improvements include:
-- Fixed duplicate plotting issue on Linux
-- Interactive selection with mouse clicks
-- Multiple segment selection support
-- CSV output format for results
-- Statistical summary generation
-- No special characters in column names
-- Advanced EMG analysis techniques (wavelets, fatigue analysis)
+<h2>Supported CSV input formats</h2>
 
-Key New Features:
------------------
-1. Interactive Selection: Click-based interval selection with mouse
-2. Multiple Segments: Select multiple intervals for analysis
-3. Mouse Controls:
-   - Left click: ...</pre>
-        </div>
+<h3>1. Standard CSV (Anglo-Saxon decimal)</h3>
+<pre>time,EMG_volts
+0.0000,0.000123
+0.0005,-0.000087</pre>
+<p><code>.</code> decimal, <code>,</code> field separator. The first column containing <em>EMG</em> or <em>Volt</em> in its name is auto-selected.</p>
 
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>butter_lowpass</code></li><li><code>butter_lowpass_filter</code></li><li><code>butter_bandpass</code></li><li><code>butter_bandpass_filter</code></li><li><code>full_wave_rectification</code></li><li><code>linear_envelope</code></li><li><code>calculate_rms</code></li><li><code>calculate_median_frequency</code></li><li><code>calculate_median_frequency_for_window</code></li><li><code>polynomial_fit</code></li><li><code>create_statistical_summary</code></li><li><code>plot_and_save_figures</code></li><li><code>emg_analysis_segment</code></li><li><code>emg_analysis</code></li><li><code>get_interactive_selection</code></li><li><code>get_manual_selection</code></li><li><code>run_emg_gui</code></li><li><code>create_index_html</code></li><li><code>calculate_entropy</code></li><li><code>calculate_fatigue_indices</code></li></ul>
-        </div>
+<h3>2. Trigno / Delsys EMGworks (European decimal)</h3>
+<pre>X_s,Trigno_sensor_14:_EMG_14_Volts,X_s,Trigno_sensor_14:_Acc_14.X_g,...
+0,00000e+000,0,00000e+000,0,00000e+000,0,00000e+000,...
+5,19231e-004,0,00000e+000,6,75000e-003,0,00000e+000,...</pre>
+<p>
+    The comma is both decimal separator and CSV separator. The header has
+    <code>N</code> fields but every data row has <code>2N</code> fields.
+    The reader recombines field pairs (<code>"5"</code> + <code>"19231e-004"</code>
+    → <code>"5.19231e-004"</code>) and re-parses the buffer.
+    Interleaved EMG + accelerometer channels are supported: only the EMG
+    column is auto-picked.
+</p>
 
-        <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
-        </div>
-    </div>
+<h3>3. Generic multi-column CSV</h3>
+<p>Pass <code>--channel &lt;name|substring|index&gt;</code> to force a specific column.</p>
+
+<h2>Sample rate auto-detection</h2>
+<p>
+    <code>fs = 1 / median(Δt)</code> computed from the time column.
+    Override with <code>--fs &lt;Hz&gt;</code>.
+</p>
+<table>
+    <tr><th>System</th><th>Typical fs (Hz)</th></tr>
+    <tr><td>Trigno EMG</td><td>1925.93</td></tr>
+    <tr><td>EMGworks Delsys</td><td>2000</td></tr>
+    <tr><td>Biopac</td><td>1000 – 2000</td></tr>
+    <tr><td>Noraxon</td><td>1500 – 2000</td></tr>
+</table>
+
+<h2>CLI usage</h2>
+<pre># GUI (no arguments)
+uv run vaila/emg_labiocom.py
+
+# Inspect a file
+uv run vaila/emg_labiocom.py --inspect /path/to/file.csv
+
+# Single file, full signal, headless, with HTML report
+uv run vaila/emg_labiocom.py \
+    -i /home/preto/Desktop/aula_fim/emg_aula_26.csv \
+    -o ./results --full --no-plot --report
+
+# Batch, force fs=2000 Hz, force channel by substring
+uv run vaila/emg_labiocom.py -i ./emg_dir -o ./out --fs 2000 -c EMG_14 --full
+
+# Explicit segments (sample indices)
+uv run vaila/emg_labiocom.py -i file.csv -o out -s "1000,5000;10000,15000"
+
+# Data already in microVolts
+uv run vaila/emg_labiocom.py -i file.csv -o out --unit-scale 1.0 --full</pre>
+
+<h3>CLI flags</h3>
+<table>
+    <tr><th>Flag</th><th>Purpose</th></tr>
+    <tr><td><code>-i, --input</code></td><td>Input CSV/TXT file or directory of CSV/TXT files.</td></tr>
+    <tr><td><code>-o, --output</code></td><td>Output directory (a <code>emg_labiocom_&lt;timestamp&gt;/</code> is created inside).</td></tr>
+    <tr><td><code>--fs</code></td><td>Sample rate (Hz). Defaults to auto-detected.</td></tr>
+    <tr><td><code>-c, --channel</code></td><td>Column name, substring (case-insensitive), or 0-based index.</td></tr>
+    <tr><td><code>-s, --selections</code></td><td>Explicit segments <code>"start1,end1;start2,end2;..."</code>.</td></tr>
+    <tr><td><code>--full</code></td><td>Analyse the whole signal as one segment.</td></tr>
+    <tr><td><code>--report</code></td><td>Render HTML report per file + <code>index.html</code>.</td></tr>
+    <tr><td><code>--no-plot</code></td><td>Headless: no interactive plots (PNG/SVG still saved).</td></tr>
+    <tr><td><code>--unit-scale</code></td><td>Signal multiplier (default <code>1e6</code>, i.e. V → µV; use <code>1.0</code> if already µV).</td></tr>
+    <tr><td><code>--inspect FILE</code></td><td>Print detected layout for <code>FILE</code> and exit.</td></tr>
+    <tr><td><code>--gui</code></td><td>Force GUI mode.</td></tr>
+</table>
+
+<h2>GUI usage</h2>
+<p>Launch from <code>vaila.py</code> → Frame B → <strong>EMG Analysis</strong>, or directly:</p>
+<pre>uv run vaila/emg_labiocom.py</pre>
+<ol>
+    <li>Select an <strong>input directory</strong> containing CSV/TXT files.</li>
+    <li>Select a <strong>reference EMG file</strong> for segmentation.</li>
+    <li>The reader auto-detects layout and pre-fills the EMG channel and sample rate.</li>
+    <li>Confirm or change the <strong>EMG channel</strong> (substring match).</li>
+    <li>Confirm or change the <strong>sample rate</strong>.</li>
+    <li>Choose <strong>Interactive</strong> (mouse) or <strong>Manual</strong> selection mode.</li>
+    <li>Choose whether to show plots and whether to generate HTML reports.</li>
+    <li>Select the <strong>output directory</strong>.</li>
+</ol>
+
+<h3>Mouse controls (Interactive mode)</h3>
+<table>
+    <tr><th>Action</th><th>Effect</th></tr>
+    <tr><td>Left click</td><td>Set segment start</td></tr>
+    <tr><td>Shift + Left click</td><td>Set segment end (commits segment)</td></tr>
+    <tr><td>Right click</td><td>Remove last segment</td></tr>
+    <tr><td><code>Esc</code></td><td>Cancel current start point</td></tr>
+    <tr><td><strong>Clear All</strong> / <strong>Done</strong></td><td>Reset / confirm and close</td></tr>
+</table>
+
+<h2>Analyses computed per segment</h2>
+<ul>
+    <li>Band-pass filter (Butterworth 4th-order, 10 – 450 Hz)</li>
+    <li>Full-wave rectification + linear envelope (10 Hz low-pass)</li>
+    <li>RMS (250 ms window, 50 % overlap) with polynomial fit</li>
+    <li>Median frequency (Welch PSD) with polynomial fit</li>
+    <li>Power spectral density (Welch) with peak frequency</li>
+    <li>Spectrogram (STFT)</li>
+    <li>Continuous wavelet transform (Morlet) — when PyWavelets is installed</li>
+    <li>Time-domain features: ZCR, MAV, VAR, WL, Wilson amplitude, slope-sign changes</li>
+    <li>Frequency-domain features: mean / peak frequency, spectral variance, band powers, power ratio, MMFP</li>
+    <li>Fatigue indices: classic FI, modified FI, Dimitrov FI, MF slope</li>
+    <li>Statistical features: skewness, kurtosis, Hjorth mobility &amp; complexity</li>
+</ul>
+
+<h2>Outputs</h2>
+<pre>emg_labiocom_&lt;YYYYMMDD_HHMMSS&gt;/
+├── index.html                                  # links to all reports (when --report)
+└── &lt;filename&gt;/
+    ├── &lt;filename&gt;_results_emg_labiocom.csv     # per-window results
+    ├── &lt;filename&gt;_statistical_summary.csv      # summary stats
+    ├── &lt;filename&gt;_segment_&lt;k&gt;_filtered_emg.{png,svg}
+    ├── &lt;filename&gt;_segment_&lt;k&gt;_rectified_emg.{png,svg}
+    ├── &lt;filename&gt;_segment_&lt;k&gt;_rms.{png,svg}
+    ├── &lt;filename&gt;_segment_&lt;k&gt;_median_frequency.{png,svg}
+    ├── &lt;filename&gt;_segment_&lt;k&gt;_pwelch.{png,svg}
+    ├── &lt;filename&gt;_segment_&lt;k&gt;_spectrogram.{png,svg}
+    ├── &lt;filename&gt;_segment_&lt;k&gt;_wavelet.{png,svg}      # when PyWavelets is available
+    └── &lt;filename&gt;_emg_report.html              # when --report</pre>
+
+<h2>Programmatic API</h2>
+<pre>from vaila.emg_labiocom import (
+    _read_emg_csv_smart,     # raw DataFrame loader
+    _select_emg_channel,     # (time, emg, t_col, e_col, fs_est)
+    _load_emg_signal,        # (emg_microvolts, fs_est, e_col)
+    emg_analysis,            # full pipeline on one file
+    run_emg_cli,             # argparse entry point
+    run_emg_gui,             # Tkinter entry point
+)
+
+df = _read_emg_csv_smart("emg_aula_26.csv")
+time, emg, t_col, e_col, fs = _select_emg_channel(df)
+print(t_col, e_col, fs)</pre>
+
+<h2>Troubleshooting</h2>
+<table>
+    <tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+    <tr><td><code>Channel 'X' not found</code></td><td>Channel name typo.</td><td>Use <code>--inspect FILE</code> to list columns.</td></tr>
+    <tr><td>Signal looks flat / too small</td><td>File is already in microVolts.</td><td><code>--unit-scale 1.0</code></td></tr>
+    <tr><td><code>fs</code> printed as <code>1923</code> instead of <code>2000</code></td><td>Trigno true rate is ~1925.93 Hz.</td><td>Accept auto-detected value or <code>--fs 2000</code>.</td></tr>
+    <tr><td>Segment too short warnings</td><td>Segment &lt; 2 s.</td><td>Pick longer segments or use <code>--full</code>.</td></tr>
+    <tr><td>Empty output / no figures</td><td>Channel has all NaNs.</td><td>Pass <code>--channel</code> explicitly.</td></tr>
+</table>
+
+<div class="footer">
+    Generated 2026-06-09. Part of
+    <a href="https://github.com/vaila-multimodaltoolbox/vaila">vailá Multimodal Toolbox</a>.
+</div>
+
+</div>
 </body>
 </html>
