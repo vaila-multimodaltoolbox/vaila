@@ -3,49 +3,72 @@
 EMG Analysis Toolkit - emg_labiocom (Improved Version)
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
-Improved Version: 2025
+Improved Version: 2026
 Created: 01.Oct.2024
-Updated: 28.May.2025
-Version: 0.1.0
-Python Version: 3.12.9
+Updated: 09.Jun.2026
+Version: 0.3.50
+Python Version: 3.12
 
 Description:
 ------------
-This improved toolkit provides advanced functionalities to analyze EMG (Electromyography) signals.
-Improvements include:
-- Fixed duplicate plotting issue on Linux
-- Interactive selection with mouse clicks
-- Multiple segment selection support
-- CSV output format for results
-- Statistical summary generation
-- No special characters in column names
-- Advanced EMG analysis techniques (wavelets, fatigue analysis)
+Advanced EMG (Electromyography) analysis toolkit with smart CSV reader
+that handles multiple acquisition-system formats and a unified CLI + GUI.
 
-Key New Features:
------------------
-1. Interactive Selection: Click-based interval selection with mouse
-2. Multiple Segments: Select multiple intervals for analysis
+Supported CSV input formats (auto-detected):
+- Standard vailá / Biopac / open delsys format (`.` decimal, `,` separator),
+  typically 2 columns: ``time, EMG_volts``.
+- Trigno / EMGworks Delsys export with European decimal notation
+  (e.g. ``5,19231e-004``) where the comma is both decimal point AND CSV
+  separator, and EMG/accelerometer channels are interleaved with their
+  own time columns. The reader recombines paired CSV fields and selects
+  the first EMG-named channel (or the user-specified one).
+- Generic multi-column CSV: a specific channel name (substring) or
+  0-based column index can be passed via ``--channel``.
+
+Time / sample rate:
+- Sample rate is auto-estimated from the median ``Δt`` of the detected
+  time column (e.g. Trigno EMG ≈ 1925.93 Hz, Delsys EMGworks 2000 Hz,
+  Biopac 1000–2000 Hz). The user may override with ``--fs``.
+
+Run modes:
+- ``run_emg_gui()`` — Tkinter GUI: pick input dir + reference file,
+  interactive or manual segment selection, batch-process all CSV/TXT.
+- ``run_emg_cli()`` — argparse CLI: headless single-file or batch,
+  ``--inspect`` to debug auto-detection, ``--full`` to analyze the whole
+  signal, ``--selections "s1,e1;s2,e2;..."`` for explicit segments.
+
+Key analysis features:
+1. Interactive segment selection with mouse (GUI)
+2. Multiple segment selection support
 3. Mouse Controls:
    - Left click: Set start point
    - Shift + Left click: Set end point
    - Right click: Remove last selection
-4. Enhanced Output: CSV format with statistical summaries
-5. Cross-platform compatibility improvements
-6. Advanced time-frequency analysis with wavelets
-7. Improved fatigue detection algorithms
-8. Spectogram visualization
+4. CSV + statistical-summary output
+5. Cross-platform (Linux/macOS/Windows) plotting
+6. Time-frequency analysis with wavelets (CWT)
+7. Fatigue indices (FI, MFI, Dimitrov FI)
+8. Spectogram (STFT) visualization
+9. HTML report with images and tables
 
 Dependencies:
 -------------
-- Python Standard Libraries: os, datetime, tkinter
-- External Libraries: numpy, scipy, matplotlib, pandas, PyWavelets
-Install via: pip install numpy scipy matplotlib pandas PyWavelets
+- Stdlib: os, sys, re, io, argparse, datetime, pathlib, tkinter
+- Third-party: numpy, scipy, matplotlib, pandas; optional: PyWavelets
+Install via vailá toolchain:
+    uv add numpy scipy matplotlib pandas PyWavelets
 ================================================================================
 """
 
+from __future__ import annotations
+
+import argparse
 import os
 import re
+import sys
 from datetime import datetime
+from io import StringIO
+from pathlib import Path
 from tkinter import Tk, filedialog, messagebox, simpledialog
 
 import matplotlib.patches as patches
@@ -357,6 +380,188 @@ HTML_REPORT_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
+# ---------------------------------------------------------------------------
+# Smart CSV reader (handles standard CSV + Trigno/EMGworks European decimal)
+# ---------------------------------------------------------------------------
+
+# Regex matching one numeric field that uses comma as decimal separator
+# (plain or scientific notation). Examples it must accept:
+#   "0,00000e+000", "-2,35150e+000", "1,234", "5,19231e-004"
+_EUROPEAN_DECIMAL_RE = re.compile(r"^-?\d+,\d+(?:[eE][+-]?\d+)?$")
+
+
+def _read_emg_csv_smart(emg_file: str | os.PathLike) -> pd.DataFrame:
+    """Read an EMG CSV file with auto-detection of the field format.
+
+    Two main layouts are supported:
+
+    1. **Standard CSV** (``.`` decimal, ``,`` separator). Parsed directly
+       with ``pandas.read_csv``.
+    2. **Trigno / EMGworks Delsys** export where the comma is used as both
+       decimal separator AND CSV field separator (European locale). In
+       that case the first data row has ``2 * n_header`` fields. The
+       reader recombines field pairs ``(fields[2i], fields[2i+1])`` into
+       ``"<int>.<frac>"`` (e.g. ``"5"`` + ``"19231e-004"`` →
+       ``"5.19231e-004"``) and re-parses the resulting buffer.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with the original (header) column names. Header column
+        names that contain spaces are kept as-is.
+
+    Raises
+    ------
+    ValueError
+        If the file is empty or contains no data rows.
+    """
+    path = Path(emg_file)
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        raw_lines = fh.readlines()
+
+    if not raw_lines:
+        raise ValueError(f"Empty file: {path}")
+
+    header_line = raw_lines[0].rstrip("\r\n")
+    data_line = None
+    for line in raw_lines[1:]:
+        if line.strip():
+            data_line = line.rstrip("\r\n")
+            break
+    if data_line is None:
+        raise ValueError(f"No data rows in: {path}")
+
+    n_header = header_line.count(",") + 1
+    n_data = data_line.count(",") + 1
+
+    if n_data == 2 * n_header and n_header >= 1:
+        # European decimal notation: combine pairs of CSV fields.
+        fixed_lines: list[str] = [header_line]
+        for line in raw_lines[1:]:
+            stripped = line.rstrip("\r\n")
+            if not stripped.strip():
+                continue
+            fields = stripped.split(",")
+            if len(fields) != 2 * n_header:
+                # Tolerate ragged trailing rows: pad or skip
+                if len(fields) < 2 * n_header:
+                    continue
+                fields = fields[: 2 * n_header]
+            combined = [f"{fields[2 * i]}.{fields[2 * i + 1]}" for i in range(n_header)]
+            fixed_lines.append(",".join(combined))
+        buf = "\n".join(fixed_lines) + "\n"
+        df = pd.read_csv(StringIO(buf))
+    else:
+        # Standard CSV. Use python engine to be lenient with weird whitespace.
+        df = pd.read_csv(path)
+
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
+
+def _select_emg_channel(
+    df: pd.DataFrame,
+    channel: str | int | None = None,
+) -> tuple[np.ndarray, np.ndarray, str, str, float | None]:
+    """Select the time and EMG-signal columns from a parsed DataFrame.
+
+    Parameters
+    ----------
+    df:
+        DataFrame returned by :func:`_read_emg_csv_smart`.
+    channel:
+        Optional channel selector. Can be:
+          * ``int`` — 0-based column index of the EMG channel.
+          * ``str`` — exact column name or case-insensitive substring.
+          * ``None`` — auto-detect (first column matching ``emg`` or
+            ``volt`` that is not an accelerometer / gyro / mag channel,
+            or fall back to column index 1).
+
+    Returns
+    -------
+    (time, emg, time_col_name, emg_col_name, fs_estimate)
+        ``time`` and ``emg`` are 1-D ``float`` arrays. ``fs_estimate`` is
+        ``1 / median(Δt)`` in Hz, or ``None`` if the time column is not
+        monotonically increasing.
+    """
+    cols = list(df.columns)
+    if not cols:
+        raise ValueError("DataFrame has no columns")
+
+    time_kw = ("time", "x_s", "x (s)", "x[s]", "tempo", "_s", " s")
+    emg_kw = ("emg", "volt")
+    skip_kw = ("acc", "gyro", "mag", "rot", "quat", "ori")
+
+    def _is_time(name: str) -> bool:
+        ln = name.lower()
+        return any(k in ln for k in time_kw) and not any(s in ln for s in skip_kw)
+
+    def _is_emg(name: str) -> bool:
+        ln = name.lower()
+        return any(k in ln for k in emg_kw) and not any(s in ln for s in skip_kw)
+
+    if channel is None:
+        candidates = [c for c in cols if _is_emg(c)]
+        emg_col = candidates[0] if candidates else (cols[1] if len(cols) > 1 else cols[0])
+    elif isinstance(channel, int):
+        if not 0 <= channel < len(cols):
+            raise ValueError(f"Channel index {channel} out of range (0..{len(cols) - 1})")
+        emg_col = cols[channel]
+    else:
+        if channel in cols:
+            emg_col = channel
+        else:
+            matches = [c for c in cols if channel.lower() in c.lower()]
+            if not matches:
+                raise ValueError(f"Channel '{channel}' not found. Available columns: {cols}")
+            emg_col = matches[0]
+
+    emg_idx = cols.index(emg_col)
+    if emg_idx > 0 and _is_time(cols[emg_idx - 1]):
+        time_col = cols[emg_idx - 1]
+    else:
+        time_candidates = [c for c in cols if _is_time(c)]
+        time_col = time_candidates[0] if time_candidates else cols[0]
+
+    time = pd.to_numeric(df[time_col], errors="coerce").to_numpy(dtype=float)
+    emg = pd.to_numeric(df[emg_col], errors="coerce").to_numpy(dtype=float)
+
+    # Drop trailing NaNs (often appear in raggedly terminated exports)
+    mask = ~np.isnan(emg)
+    if mask.any():
+        last = np.where(mask)[0][-1] + 1
+        time = time[:last]
+        emg = emg[:last]
+    emg = np.nan_to_num(emg, nan=0.0)
+
+    fs_estimate: float | None = None
+    if time.size > 2 and np.all(np.diff(time[:1000]) > 0):
+        dt = np.diff(time)
+        dt = dt[dt > 0]
+        if dt.size > 0:
+            fs_estimate = float(1.0 / np.median(dt))
+
+    return time, emg, time_col, emg_col, fs_estimate
+
+
+def _load_emg_signal(
+    emg_file: str | os.PathLike,
+    channel: str | int | None = None,
+    unit_scale: float = 1_000_000.0,
+) -> tuple[np.ndarray, float | None, str]:
+    """High-level helper used by both GUI and CLI paths.
+
+    Returns ``(emg_microvolts, fs_estimate, emg_column_name)``.
+
+    The signal is multiplied by ``unit_scale`` (default ``1e6`` to go
+    from Volts → microVolts). Pass ``unit_scale=1.0`` if the data is
+    already in microVolts.
+    """
+    df = _read_emg_csv_smart(emg_file)
+    _time, emg, _tcol, ecol, fs_est = _select_emg_channel(df, channel=channel)
+    return emg * unit_scale, fs_est, ecol
+
+
 class EMGSelector:
     def __init__(self, fig, ax, emg_signal, samples):
         self.fig = fig
@@ -418,11 +623,10 @@ class EMGSelector:
                 self.clear_temp_patches()
                 self.add_temp_patch(self.current_start)
 
-        elif event.button == 3:  # Right click - remove last selection
-            if self.selections:
-                removed = self.selections.pop()
-                self.remove_last_patch()
-                print(f"Removed selection: {removed[0]} to {removed[1]}")
+        elif event.button == 3 and self.selections:
+            removed = self.selections.pop()
+            self.remove_last_patch()
+            print(f"Removed selection: {removed[0]} to {removed[1]}")
 
         self.fig.canvas.draw()
 
@@ -930,14 +1134,52 @@ def emg_analysis_segment(emg_signal, fs, start_index, end_index, segment_name):
         return None
 
 
-def emg_analysis(emg_file, fs, selections, no_plot, output_dir, generate_report=False):
-    """Main EMG analysis function with multiple segment support"""
+def emg_analysis(
+    emg_file,
+    fs,
+    selections,
+    no_plot,
+    output_dir,
+    generate_report=False,
+    channel=None,
+    unit_scale=1_000_000.0,
+):
+    """Main EMG analysis function with multiple segment support.
 
-    # Load EMG data
-    emg_signal = np.genfromtxt(emg_file, delimiter=",", skip_header=1, filling_values=0.0)
-    emg_signal[:, 1] = emg_signal[:, 1] * 1000000  # Convert to microVolts
+    Parameters
+    ----------
+    emg_file:
+        Path to a CSV/TXT file in any format supported by
+        :func:`_read_emg_csv_smart` (standard or Trigno European decimal).
+    fs:
+        Sampling rate (Hz). If ``None``, auto-detected from the time
+        column when present, otherwise defaults to 2000 Hz.
+    selections:
+        List of ``(start_sample, end_sample)`` tuples. Use a single
+        ``(0, len(signal))`` to analyze the full signal.
+    no_plot:
+        If ``True``, suppress interactive ``plt.show()`` (PNG/SVG are
+        still written to disk).
+    output_dir:
+        Root output directory; a sub-directory named after the file is
+        created inside.
+    generate_report:
+        If ``True``, also render the HTML report.
+    channel:
+        Optional EMG channel selector forwarded to
+        :func:`_select_emg_channel` (name substring or 0-based index).
+    unit_scale:
+        Multiplier applied to the raw signal (default ``1e6`` to convert
+        Volts → microVolts; pass ``1.0`` if the file is already in µV).
+    """
+
+    emg_signal, fs_est, ecol = _load_emg_signal(emg_file, channel=channel, unit_scale=unit_scale)
+    if fs is None or fs <= 0:
+        fs = int(round(fs_est)) if fs_est else 2000
+        print(f"Auto-detected sample rate for {os.path.basename(str(emg_file))}: {fs} Hz")
+    print(f"Using EMG channel: {ecol!r}")
+
     time_full = np.linspace(0, len(emg_signal) - 1, len(emg_signal))
-    emg_signal = emg_signal[:, 1]
 
     base = os.path.basename(emg_file)
     filename = os.path.splitext(base)[0]
@@ -1055,14 +1297,11 @@ def emg_analysis(emg_file, fs, selections, no_plot, output_dir, generate_report=
     print(f"Analysis completed for {filename}")
 
 
-def get_interactive_selection(emg_file, fs):
+def get_interactive_selection(emg_file, fs, channel=None):
     """Get interactive selection using mouse clicks"""
 
-    # Load EMG data for display
-    emg_signal = np.genfromtxt(emg_file, delimiter=",", skip_header=1, filling_values=0.0)
-    emg_signal[:, 1] = emg_signal[:, 1] * 1000000
+    emg_signal, _fs_est, _ecol = _load_emg_signal(emg_file, channel=channel)
     samples = np.arange(len(emg_signal))
-    emg_signal = emg_signal[:, 1]
 
     # Create interactive plot
     fig, ax = plt.subplots(figsize=(15, 8))
@@ -1080,13 +1319,10 @@ def get_interactive_selection(emg_file, fs):
     return selector.selections
 
 
-def get_manual_selection(emg_file, fs):
+def get_manual_selection(emg_file, fs, channel=None):
     """Get manual selection after showing the signal"""
-    # Show the signal first
-    emg_signal = np.genfromtxt(emg_file, delimiter=",", skip_header=1, filling_values=0.0)
-    emg_signal[:, 1] = emg_signal[:, 1] * 1000000
+    emg_signal, _fs_est, _ecol = _load_emg_signal(emg_file, channel=channel)
     samples = np.arange(len(emg_signal))
-    emg_signal = emg_signal[:, 1]
 
     # Create plot for visualization
     plt.figure(figsize=(15, 8))
@@ -1141,9 +1377,40 @@ def run_emg_gui():
         messagebox.showerror("No Reference File", "No reference file selected. Exiting.")
         return
 
-    # Get sampling rate
+    # Inspect the reference file to suggest fs + channels
+    try:
+        ref_df = _read_emg_csv_smart(ref_file)
+        _t, _s, t_col, e_col, fs_est = _select_emg_channel(ref_df)
+        avail_cols = list(ref_df.columns)
+    except Exception as exc:
+        messagebox.showerror(
+            "Read Error",
+            f"Could not read reference file:\n{exc}",
+        )
+        return
+
+    fs_default = int(round(fs_est)) if fs_est else 2000
+    print(
+        f"[emg_labiocom] Reference file columns: {avail_cols}\n"
+        f"[emg_labiocom] Detected time column: {t_col!r}, EMG column: {e_col!r},"
+        f" fs≈{fs_default} Hz"
+    )
+
+    # Ask user to confirm / override EMG channel (substring or column name)
+    channel_input = simpledialog.askstring(
+        "EMG Channel",
+        "EMG channel name (substring match) or empty for auto-detect.\n"
+        "Available columns:\n  " + "\n  ".join(avail_cols) + f"\n\nDetected: {e_col}",
+        initialvalue=e_col,
+    )
+    channel = channel_input.strip() if channel_input and channel_input.strip() else None
+
+    # Get sampling rate (pre-filled with auto-detected value)
     fs = simpledialog.askinteger(
-        "Input", "Enter Sampling Rate (Hz):", initialvalue=2000, minvalue=1
+        "Sampling Rate",
+        f"Enter Sampling Rate (Hz):\n(Auto-detected from time column: {fs_default} Hz)",
+        initialvalue=fs_default,
+        minvalue=1,
     )
     if fs is None:
         messagebox.showerror("No Sampling Rate", "No sampling rate provided. Exiting.")
@@ -1161,9 +1428,9 @@ def run_emg_gui():
     # Get segments from reference file
     print(f"\nProcessing reference file: {os.path.basename(ref_file)}")
     if selection_method:  # Interactive
-        selections = get_interactive_selection(ref_file, fs)
+        selections = get_interactive_selection(ref_file, fs, channel=channel)
     else:  # Manual
-        selections = get_manual_selection(ref_file, fs)
+        selections = get_manual_selection(ref_file, fs, channel=channel)
 
     if not selections:
         messagebox.showerror("No Selections", "No segments selected. Exiting.")
@@ -1197,14 +1464,25 @@ def run_emg_gui():
     # Process all CSV/TXT files in directory using the same segments
     processed_files = 0
 
-    for filename in os.listdir(input_path):
-        if filename.endswith((".txt", ".csv")):
+    for filename in sorted(os.listdir(input_path)):
+        if filename.lower().endswith((".txt", ".csv")):
             emg_file = os.path.join(input_path, filename)
             print(f"\nProcessing file: {filename}")
 
             # Analyze EMG using segments from reference file
-            emg_analysis(emg_file, fs, selections, no_plot, output_dir, generate_report)
-            processed_files += 1
+            try:
+                emg_analysis(
+                    emg_file,
+                    fs,
+                    selections,
+                    no_plot,
+                    output_dir,
+                    generate_report,
+                    channel=channel,
+                )
+                processed_files += 1
+            except Exception as exc:
+                print(f"  ! Failed to process {filename}: {exc}")
 
     if processed_files > 0:
         # Create index.html that links to all reports if HTML reports were generated
@@ -1694,9 +1972,6 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
             # Convert DataFrame to HTML with formatted numbers
             summary_html = summary_df.to_html(classes="dataframe", border=0, formatters=formatters)
 
-            # Replace scientific notation in the entire HTML content
-            import re
-
             html_content = re.sub(
                 r"(\d+\.\d+)e[+-]\d+",
                 lambda m: f"{float(m.group(0)):.6f}",
@@ -1730,5 +2005,217 @@ def generate_html_report(output_dir, filename_prefix, summary_df, fs):
         traceback.print_exc()
 
 
+# ---------------------------------------------------------------------------
+# Command-line interface
+# ---------------------------------------------------------------------------
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="emg_labiocom",
+        description=(
+            "EMG analysis toolkit (vailá): supports standard CSV and Trigno / "
+            "EMGworks European decimal format. Runs in GUI mode when called "
+            "without arguments, CLI mode otherwise."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+Examples
+--------
+  # GUI mode (no arguments)
+  uv run vaila/emg_labiocom.py
+
+  # Inspect a file (debug auto-detection) without running analysis
+  uv run vaila/emg_labiocom.py --inspect /home/preto/Desktop/aula_fim/emg_aula_26.csv
+
+  # CLI: single file, auto-detect fs + EMG channel, full signal
+  uv run vaila/emg_labiocom.py \\
+      -i /home/preto/Desktop/aula_fim/emg_aula_26.csv \\
+      -o ./results --full --no-plot --report
+
+  # Batch directory, force fs=2000 Hz, pick channel by substring
+  uv run vaila/emg_labiocom.py -i ./emg_dir -o ./out --fs 2000 -c EMG_14 --full
+
+  # Explicit selections (sample indices)
+  uv run vaila/emg_labiocom.py -i file.csv -o out -s "1000,5000;10000,15000"
+
+  # The file is already in microVolts (skip default Volts → µV scaling)
+  uv run vaila/emg_labiocom.py -i file.csv -o out --unit-scale 1.0 --full
+""",
+    )
+    parser.add_argument(
+        "--input",
+        "-i",
+        help="Input EMG CSV/TXT file or a directory containing CSV/TXT files.",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        help="Output directory (a timestamped emg_labiocom_<ts>/ subfolder is created).",
+    )
+    parser.add_argument(
+        "--fs",
+        type=float,
+        default=None,
+        help="Sampling rate (Hz). If omitted, auto-detected from the time column.",
+    )
+    parser.add_argument(
+        "--channel",
+        "-c",
+        default=None,
+        help="EMG channel: column name, case-insensitive substring, or 0-based index.",
+    )
+    parser.add_argument(
+        "--selections",
+        "-s",
+        default=None,
+        help='Segment selections in samples, "start1,end1;start2,end2;...".',
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Use the full signal as a single segment (overrides --selections).",
+    )
+    parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Generate an HTML report for each file.",
+    )
+    parser.add_argument(
+        "--no-plot",
+        action="store_true",
+        help="Headless mode: do not call plt.show() (PNG / SVG still saved).",
+    )
+    parser.add_argument(
+        "--unit-scale",
+        type=float,
+        default=1_000_000.0,
+        help=(
+            "Multiplier applied to the raw signal. Default 1e6 converts Volts → "
+            "microVolts. Use 1.0 if the file is already in microVolts."
+        ),
+    )
+    parser.add_argument(
+        "--inspect",
+        metavar="FILE",
+        help="Print detected format info for FILE and exit (no analysis).",
+    )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Force GUI mode (default when no other arguments are given).",
+    )
+    return parser
+
+
+def _parse_selections_string(text: str) -> list[tuple[int, int]]:
+    sels: list[tuple[int, int]] = []
+    for pair in text.split(";"):
+        pair = pair.strip()
+        if not pair:
+            continue
+        try:
+            a, b = pair.split(",")
+            sels.append((int(a), int(b)))
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid selection '{pair}'. Expected 'start,end' (integers)."
+            ) from exc
+    return sels
+
+
+def _gather_input_files(in_path: Path) -> list[Path]:
+    if in_path.is_file():
+        return [in_path]
+    if in_path.is_dir():
+        return sorted(p for p in in_path.iterdir() if p.suffix.lower() in (".csv", ".txt"))
+    raise FileNotFoundError(f"Input does not exist: {in_path}")
+
+
+def run_emg_cli(argv: list[str] | None = None) -> int:
+    """Headless / scripted entry point. Returns a Unix exit code."""
+    args = _build_arg_parser().parse_args(argv)
+
+    if args.inspect:
+        df = _read_emg_csv_smart(args.inspect)
+        _t, _emg, t_col, e_col, fs_est = _select_emg_channel(df, channel=args.channel)
+        print(f"File          : {args.inspect}")
+        print(f"Rows          : {len(df)}")
+        print(f"Columns ({len(df.columns)}) : {list(df.columns)}")
+        print(f"Detected time : {t_col!r}")
+        print(f"Detected EMG  : {e_col!r}")
+        if fs_est is not None:
+            print(f"Est. sample rate: {fs_est:.2f} Hz")
+        else:
+            print("Est. sample rate: N/A (no monotonic time column)")
+        print("First 3 data rows:")
+        print(df.head(3).to_string(index=False))
+        return 0
+
+    if args.gui or args.input is None:
+        run_emg_gui()
+        return 0
+
+    if not args.output:
+        print("ERROR: --output is required when --input is given.", file=sys.stderr)
+        return 2
+
+    in_path = Path(args.input).expanduser().resolve()
+    out_root = Path(args.output).expanduser().resolve()
+    out_root.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = out_root / f"emg_labiocom_{timestamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    files = _gather_input_files(in_path)
+    if not files:
+        print(f"ERROR: no CSV/TXT files in {in_path}", file=sys.stderr)
+        return 1
+
+    explicit_sels: list[tuple[int, int]] | None = None
+    if args.selections and not args.full:
+        explicit_sels = _parse_selections_string(args.selections)
+
+    processed = 0
+    for f in files:
+        print(f"\n=== {f.name} ===")
+        try:
+            emg_signal_uv, fs_est, ecol = _load_emg_signal(
+                f, channel=args.channel, unit_scale=args.unit_scale
+            )
+        except Exception as exc:
+            print(f"  ! Skipped (read error): {exc}")
+            continue
+
+        fs = int(round(args.fs)) if args.fs else (int(round(fs_est)) if fs_est else 2000)
+        sels = explicit_sels or [(0, len(emg_signal_uv))]
+        print(f"  channel={ecol!r}, fs={fs} Hz, samples={len(emg_signal_uv)}, segments={sels}")
+
+        try:
+            emg_analysis(
+                str(f),
+                fs,
+                sels,
+                args.no_plot,
+                str(output_dir),
+                generate_report=args.report,
+                channel=args.channel,
+                unit_scale=args.unit_scale,
+            )
+            processed += 1
+        except Exception as exc:
+            print(f"  ! Analysis failed: {exc}")
+
+    if args.report and processed:
+        create_index_html(str(output_dir))
+
+    print(f"\nDone. {processed}/{len(files)} files processed. Results: {output_dir}")
+    return 0 if processed else 1
+
+
 if __name__ == "__main__":
+    # If called with any argument, use the CLI (which falls back to GUI
+    # when only --gui is given). With no arguments at all, launch the GUI.
+    if len(sys.argv) > 1:
+        sys.exit(run_emg_cli())
     run_emg_gui()

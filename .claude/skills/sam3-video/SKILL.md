@@ -195,6 +195,60 @@ Multi-video batches kept failing with cascading `CUDA OOM while loading the vide
 
 If you need to revisit this with full context, see the agent transcript: [SAM3 OOM cascade debug](42b4a5fd-2701-458b-b7ec-e554e2265426).
 
+### Cross-Chunk Tracklet Linking with Overlap (v0.3.54, June 2026)
+
+When the coordinator falls back to `_process_video_chunked`, each chunk runs
+its **own** SAM3 session and therefore allocates **chunk-local object IDs**
+starting from 1. Without stitching, the merged output would assign random IDs
+to the same person across chunks. v0.3.54 fixes this with a 5-step pipeline
+implemented entirely in `vaila/vaila_sam.py`:
+
+1. **Sliding window overlap** — `_split_video_into_chunks(..., overlap_frames=2)`
+   makes adjacent chunks share **exactly 2 frames** at the boundary. Default
+   from `_process_video_chunked` is also `overlap_frames=2`.
+2. **Feature caching** — for each chunk we read its `sam_tracks.csv` and
+   collect, per local-id, a list of `(global_frame, bbox, centroid)` rows for
+   the overlap frames.
+3. **Graph-based association** — at every boundary N → N+1, candidate
+   chunk-N+1 *local* IDs (with detections in the overlap zone) form one side
+   of a bipartite graph; previously-assigned chunk-N *global* IDs form the
+   other.
+4. **Cost matrix** — per shared frame the score is
+   `(1 − IoU) + min(1, dist / max_centroid_dist_px)` averaged across overlap
+   frames. Gates: `min_iou ≥ 0.05` **or** `mean_centroid_dist ≤ 180 px`.
+5. **Optimal matching** — solved by `_assignment_min_cost(cost_matrix)` which
+   uses `scipy.optimize.linear_sum_assignment` (Hungarian) when SciPy is
+   available, with a greedy minimum-cost fallback otherwise. Matched local IDs
+   inherit the persistent global ID from chunk N; unmatched IDs get a fresh
+   `next_gid`. Mappings are stored in `maps[ci]` and applied when assembling
+   the final `sam_tracks.csv` and mask filenames.
+
+#### Bug that caused the rewrite
+
+`_build_cross_chunk_id_maps` previously called `_assignment_min_cost`, but
+that helper was **never defined in `vaila_sam.py`** — it was assumed to be
+importable from `reid_markers.py`. Result: `NameError` at runtime, and the
+chunked path silently produced random per-chunk IDs. The fix defines the
+helper inline next to `_build_cross_chunk_id_maps`.
+
+#### Tunable knobs
+
+`_build_cross_chunk_id_maps(max_centroid_dist_px=180.0, min_iou=0.05)`. There
+are no CLI flags yet — change the defaults or expose them as
+`--xchunk-min-iou` / `--xchunk-max-centroid-px` if you need looser/stricter
+gating. Spec calls for an additional **Re-ID embedding** term (Cosine
+distance) — not yet implemented because SAM3 does not expose a stable Re-ID
+head.
+
+#### Tests
+
+`tests/test_vaila_sam.py::test_merge_chunk_outputs` validates the remapping:
+with non-overlapping synthetic chunks, chunk-0 local ID 1 → global ID 0 and
+chunk-1 local ID 1 → global ID 1, so the merged mask folder contains
+`frame_000000_obj_0.png` and `frame_000019_obj_1.png`.
+
+Full session: `docs/sessions/2026-06-14-getpixel-sam3-crosschunk.md`.
+
 ### Coordinator pattern + chunked fallback (debug session 2026-04-30)
 
 A second OOM cascade was hit on a single 1080p × 1189-frame clip on a clean RTX 4090 (`~/Videos/CRO_MOR_182145.mp4`, 22 MB):
@@ -238,11 +292,32 @@ If you need to revisit this with full context, see the agent transcripts: [SAM3 
 ```
 output/processed_sam_YYYYMMDD_HHMMSS/
   video_name/
-    masks/              PNG per frame (unless --no-png)
+    masks/                          PNG per frame (unless --no-png)
     <video_stem>_sam_overlay.mp4    coloured mask overlay (unless --no-overlay)
-    sam_frames_meta.csv frame-level metadata
-    README_sam.txt      run parameters
+    sam_frames_meta.csv             per-frame metadata (normalised bbox)
+    sam_tracks.csv                  long bbox+area+centroid per (frame, obj_id)
+    sam_bbox_tracks.csv             hardlink/copy of sam_tracks.csv (discoverable)
+    sam_points.csv                  optional vailá pixel-marker CSV
+    sam_id_map.csv                  obj_id -> p{N} column slot mapping
+    sam_contours.json               polygon vertices per object/frame
+    sam_masks_manifest.csv          index of mask PNGs (when written)
+    README_sam.txt                  verbose, explains every file
 ```
+
+Since **v0.3.55** every run writes a **verbose `README_sam.txt`** (schema,
+units, role) plus **`sam_bbox_tracks.csv`** as a sibling **hardlink** (or
+copy on filesystems that disallow hardlinking) of `sam_tracks.csv`. Same
+bytes, different name; helps users spot the bbox file in a long directory
+listing without breaking any consumer that already reads `sam_tracks.csv`.
+
+Helpers (single source of truth, reused by both chunked and single-pass
+paths):
+
+| Function | Role |
+|----------|------|
+| `_write_sam_run_readme(output_dir, *, header)` | Append run-specific `header` to the shared `SAM_OUTPUT_FILE_GLOSSARY` and write `README_sam.txt`. |
+| `_make_sam_bbox_tracks_alias(output_dir)` | Create `sam_bbox_tracks.csv` next to `sam_tracks.csv` (POSIX `os.link`, falls back to `shutil.copy2`). |
+| `SAM_OUTPUT_FILE_GLOSSARY` | Plain-text glossary of every produced file, embedded in the README. |
 
 ---
 

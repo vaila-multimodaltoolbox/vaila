@@ -7,13 +7,10 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 23 June 2026
-Version: 0.3.49
+Version: 0.3.56
 
 Example of usage:
-uv run vaila.py (recommended)
-or activate the vaila environment:
-conda activate vaila (legacy)
-python vaila.py
+uv run vaila.py
 
 
 Description:
@@ -72,6 +69,37 @@ from tkinter import Button, Label, Radiobutton, Toplevel, messagebox, simpledial
 
 from PIL import Image, ImageTk
 from rich import print
+
+
+def _sam3_install_instructions() -> str:
+    """SAM 3 setup text shared by terminal output and GUI error dialogs."""
+    return (
+        "SAM 3 is not installed.\n\n"
+        "Install the optional stack, then restart vailá:\n"
+        "  uv sync --extra sam\n\n"
+        "NVIDIA CUDA workstation:\n"
+        "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes\n"
+        "  # or, after CUDA template is active:\n"
+        "  uv sync --extra gpu --extra sam\n\n"
+        "Windows NVIDIA CUDA workstation:\n"
+        "  pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes\n\n"
+        "After install, accept the gated Hugging Face model and authenticate:\n"
+        "  uv run hf auth login\n"
+        "  uv run vaila/vaila_sam.py --download-weights\n\n"
+        "CLI help / examples:\n"
+        "  uv run vaila/vaila_sam.py --open-help\n"
+        "  uv run vaila/vaila_sam.py --print-examples\n\n"
+        "Runtime note: SAM 3 video requires NVIDIA CUDA. CPU and macOS Metal/MPS are "
+        "not supported for this integration.\n"
+        "See also: AGENTS.md - Hybrid CPU vs NVIDIA workstation."
+    )
+
+
+def _print_sam3_install_instructions() -> None:
+    print("\n" + "=" * 72, file=sys.stderr)
+    print(_sam3_install_instructions(), file=sys.stderr)
+    print("=" * 72 + "\n", file=sys.stderr)
+
 
 # Add the vaila directory to Python path to ensure modules can be found
 # This is especially important when vaila is installed and not run from the source directory
@@ -172,7 +200,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-vailá - 23.Jun.2026 v0.3.49 (Python 3.12.13)
+    vailá - 23.Jun.2026 v0.3.56 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -283,7 +311,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 03.Jun.2026 v0.3.47 (Python 3.12.13)")
+        self.title("vailá - 23.Jun.2026 v0.3.56 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -1922,10 +1950,85 @@ class Vaila(tk.Tk):
 
     # B_r6_c5
     def deadlift_analysis(self):
-        """Run the Deadlift/RDL biomechanical analysis module."""
-        from vaila import vaila_deadlift
+        """Run the Deadlift/RDL analysis, letting the user pick the data source.
 
-        vaila_deadlift.main_gui()
+        Two pipelines are offered:
+
+        * **Kinematics (MediaPipe)** -> :mod:`vaila.vaila_deadlift`
+          (pose-landmark CSV: angles, COM, bar path, variant classification).
+        * **IMU (Madgwick/Mahony AHRS)** -> :mod:`vaila.vaila_deadlift_imu`
+          (barbell accelerometer + gyroscope CSV: orientation-stabilised
+          velocity / power / work).
+        """
+        dialog = Toplevel(self)
+        dialog.title("Deadlift Analysis - Select Data Source")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        main_frame = tk.Frame(dialog, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True)
+
+        Label(
+            main_frame,
+            text="Select the Deadlift / RDL data source",
+            font=("Arial", 12, "bold"),
+        ).pack(pady=(0, 15))
+
+        choice_var = tk.StringVar(value="kinematics")
+
+        kin_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        kin_frame.pack(fill="x", pady=5)
+        tk.Radiobutton(
+            kin_frame,
+            text="Kinematics (MediaPipe pose CSV)",
+            variable=choice_var,
+            value="kinematics",
+            font=("Arial", 10),
+        ).pack(anchor="w")
+        Label(
+            kin_frame,
+            text="Joint angles, whole-body COM, bar path, variant classification, form checks",
+            font=("Arial", 9),
+            fg="gray",
+        ).pack(anchor="w", padx=(25, 0))
+
+        imu_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
+        imu_frame.pack(fill="x", pady=5)
+        tk.Radiobutton(
+            imu_frame,
+            text="IMU (barbell accelerometer + gyroscope CSV)",
+            variable=choice_var,
+            value="imu",
+            font=("Arial", 10),
+        ).pack(anchor="w")
+        Label(
+            imu_frame,
+            text="Madgwick/Mahony AHRS fusion: orientation-stabilised velocity, power, work",
+            font=("Arial", 9),
+            fg="gray",
+        ).pack(anchor="w", padx=(25, 0))
+
+        def _run():
+            selection = choice_var.get()
+            dialog.destroy()
+            if selection == "imu":
+                from vaila import vaila_deadlift_imu
+
+                vaila_deadlift_imu.main_gui()
+            else:
+                from vaila import vaila_deadlift
+
+                vaila_deadlift.main_gui()
+
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(pady=(15, 0))
+        Button(btn_frame, text="Run", width=12, command=_run).pack(side="left", padx=5)
+        Button(btn_frame, text="Cancel", width=12, command=dialog.destroy).pack(side="left", padx=5)
+
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
 
     # B_r3_c5
     def animal_open_field(self):
@@ -2012,12 +2115,14 @@ class Vaila(tk.Tk):
                     f"Error: {str(e)}",
                 )
 
-        def use_train_yolov11():
+        def use_train_yolov26():
             dialog.destroy()
             try:
-                from vaila import yolotrain
-
-                yolotrain.run_yolotrain_gui()
+                # Isolate Tk/Ultralytics training UI from the main vailá GUI process.
+                run_vaila_module(
+                    "vaila.yolotrain",
+                    extra_py_flags=("-u",),
+                )
             except Exception as e:
                 messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
@@ -2059,7 +2164,7 @@ class Vaila(tk.Tk):
         ).pack(pady=6)
         tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
         tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
-        tk.Button(dialog, text="Train YOLO", command=use_train_yolov11, width=16).pack(pady=6)
+        tk.Button(dialog, text="Train YOLOv26", command=use_train_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
         # Wait for the dialog to be closed
@@ -2943,13 +3048,10 @@ class Vaila(tk.Tk):
     def sam_video(self):
         """Runs SAM 3 text-prompt video segmentation (optional extra: sam)."""
         if importlib.util.find_spec("sam3") is None:
+            _print_sam3_install_instructions()
             messagebox.showerror(
                 "SAM 3 not installed",
-                "Install the optional stack, then restart vailá:\n"
-                "  uv sync --extra sam\n\n"
-                "Workstation (NVIDIA CUDA template):\n"
-                "  uv sync --extra gpu --extra sam\n\n"
-                "See AGENTS.md — Hybrid CPU vs NVIDIA workstation.",
+                _sam3_install_instructions(),
                 parent=self,
             )
             return
@@ -3000,7 +3102,7 @@ class Vaila(tk.Tk):
         ).pack(anchor="w")
         tk.Label(
             frm,
-            text="Field keypoints (YOLO pose), calibration (DLT2D) e utilitários FIFA.",
+            text="Field keypoints (YOLO pose), calibration (DLT2D), VEK e utilitários FIFA.",
             font=("default", self.font_size),
         ).pack(anchor="w", pady=(4, 10))
 
@@ -3033,10 +3135,16 @@ class Vaila(tk.Tk):
         ).grid(row=1, column=1, padx=4, pady=4, sticky="we")
         tk.Button(
             btn_frame,
+            text="VEK ElasticKick",
+            command=lambda: (win.destroy(), self.vek()),
+            width=22,
+        ).grid(row=2, column=0, padx=4, pady=4, sticky="we", columnspan=2)
+        tk.Button(
+            btn_frame,
             text="FIFA: merge manual labels",
             command=lambda: (win.destroy(), self.fifa_manual_merge()),
             width=22,
-        ).grid(row=2, column=0, padx=4, pady=4, sticky="we", columnspan=2)
+        ).grid(row=3, column=0, padx=4, pady=4, sticky="we", columnspan=2)
 
         for col in (0, 1):
             btn_frame.grid_columnconfigure(col, weight=1)
@@ -3056,6 +3164,13 @@ class Vaila(tk.Tk):
         x = (win.winfo_screenwidth() - w) // 2
         y = (win.winfo_screenheight() - h) // 3
         win.geometry(f"+{x}+{y}")
+
+    def vek(self):
+        """Launch vaila-ElasticKick (VEK) resisted soccer/futsal kick analysis."""
+        print("Launching: vaila.vek")
+        print("Features: elastic-band resisted kick biomechanics, ball velocity and reports")
+        print("Help:     vaila/help/vek.html")
+        run_vaila_module("vaila.vek", "vaila/vek.py")
 
     def _open_fifa_workflow(self) -> None:
         webbrowser.open("file://" + str(Path(__file__).parent / "docs" / "fifa_workflow.md"))

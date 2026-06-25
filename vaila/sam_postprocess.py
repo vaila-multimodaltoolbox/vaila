@@ -21,13 +21,17 @@ and writes:
 
     {sam_dir}/sam_id_map.csv   # 'pN, obj_id, n_frames, first_frame, last_frame'
 
+When ``sam_reid_links.csv`` exists (``vaila_sam.py --stabilize-ids``), matching
+``sam_points_georeid.csv`` and ``sam_id_map_georeid.csv`` aliases are also written
+for the getpixelvideo/yolotrain retraining workflow.
+
 The bbox in ``sam_frames_meta.csv`` is normalized (fractions of W and H, see
 :mod:`vaila.vaila_sam`). All exported coordinates are in **pixels** at the
 original video resolution. In fast SAM runs without mask PNGs, mask-centroid
 columns are read from ``sam_tracks.csv`` when available.
 
-Update Date: 06 June 2026
-Version: 0.3.47
+Update Date: 15 June 2026
+Version: 0.3.55
 
 Author: Paulo R. P. Santiago - vaila project
 Created: 19 April 2026
@@ -350,6 +354,12 @@ def extract_points_from_sam_run(
             f"{id_to_pn[oid]},{oid},{s['n']},{s['first'] if s['n'] else ''},{s['last'] if s['n'] else ''}"
         )
     out_id_map.write_text("\n".join(id_rows) + "\n", encoding="utf-8")
+
+    if (art.sam_dir / "sam_reid_links.csv").is_file():
+        georeid_csv = art.sam_dir / "sam_points_georeid.csv"
+        georeid_map = art.sam_dir / "sam_id_map_georeid.csv"
+        georeid_csv.write_text(out_csv.read_text(encoding="utf-8"), encoding="utf-8")
+        georeid_map.write_text(out_id_map.read_text(encoding="utf-8"), encoding="utf-8")
 
     print(
         f"[sam_postprocess] {art.sam_dir.name}: {len(oids)} ids, {n_frames} frames, "

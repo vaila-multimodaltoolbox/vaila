@@ -52,6 +52,7 @@ Each button in the vailá GUI has its own documentation file:
 | B_r6_c3 | tugturn | `tugturn` | [tugturn.md](tugturn.md) |
 | B_r6_c4 | Field KPs (AI) | `soccerfield_keypoints_ai` | [soccerfield-keypoints-ai.md](soccerfield-keypoints-ai.md) |
 | B_r6_c5 | Soccer-Field Calib | `soccerfield_calib` | [soccerfield-calib.md](soccerfield-calib.md) |
+| Soccer Tools | VEK ElasticKick | `vek` | [vek-elastickick.md](vek-elastickick.md) |
 | B_r7_c1 | FIFA cams→DLT | `fifa_cams_to_dlt_per_frame` | [fifa-to-dlt.md](fifa-to-dlt.md) |
 | B_r7_c2 | FIFA Dataset Builder | `fifa_dataset_builder` | [fifa-dataset-builder.md](fifa-dataset-builder.md) |
 | C_A_r1_c1 | Edit CSV | `reorder_csv_data` | [reorder-csv-data.md](reorder-csv-data.md) |

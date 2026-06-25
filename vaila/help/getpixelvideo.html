@@ -154,8 +154,9 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.46<br />
-        <strong>Date:</strong> 28 May 2026<br />
+        <strong>Version:</strong> 0.3.55<br />
+        <strong>Date:</strong> 15 June 2026<br />
+        <strong>Updated:</strong> 15 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
@@ -188,9 +189,9 @@
         <h3>Table of Contents</h3>
         <ul>
           <li><a href="#overview">1. Overview</a></li>
-          <li><a href="#installation">2. Installation & Requirements</a></li>
+          <li><a href="#installation">2. Installation &amp; Requirements</a></li>
           <li><a href="#usage">3. Basic Usage</a></li>
-          <li><a href="#controls">4. Controls & Interface</a></li>
+          <li><a href="#controls">4. Controls &amp; Interface</a></li>
           <li><a href="#formats">5. Supported File Formats</a></li>
           <li><a href="#modes">6. Marker Modes</a></li>
           <li><a href="#pitch-guide">6b. Guide Mode (Soccer Field / Pose Skeleton)</a></li>
@@ -199,6 +200,7 @@
           <li><a href="#saving">8. Saving Options</a></li>
           <li><a href="#advanced">9. Advanced Features</a></li>
           <li><a href="#troubleshooting">10. Troubleshooting</a></li>
+          <li><a href="#version-history">11. Version History</a></li>
         </ul>
       </div>
 
@@ -221,7 +223,7 @@
             </li>
             <li>
               <strong>Advanced Visualization:</strong> Stick figures for
-              MediaPipe, bounding boxes for YOLO tracking
+              MediaPipe, bounding boxes for YOLO/SAM tracking with colored-ID, ID-only, or ID+confidence overlay modes
             </li>
             <li>
               <strong>Flexible Marking:</strong> Multiple marker modes for
@@ -236,7 +238,7 @@
               an inclusive frame range; first marker line maps pairwise to the second (<code>26,28</code> with <code>27,29</code>, or <code>1:10</code> with <code>11:20</code>)
             </li>
             <li>
-              <strong>Zoom & Navigation:</strong> Full zoom capabilities with
+              <strong>Zoom &amp; Navigation:</strong> Full zoom capabilities with
               frame-by-frame navigation
             </li>
             <li>
@@ -268,12 +270,16 @@
               the TOML; <strong>Ctrl+E</strong> / Save ML and <strong>F9</strong> for
               pose export; backups under <code>.vaila_markers_history/</code>
             </li>
+            <li>
+              <strong>Playback Speed:</strong> <span class="key">]</span> doubles speed (up to 16×);
+              <span class="key">[</span> halves speed (down to 0.0625×). Current speed shown top-right.
+            </li>
           </ul>
         </div>
       </section>
 
       <section id="installation">
-        <h2>2. Installation & Requirements</h2>
+        <h2>2. Installation &amp; Requirements</h2>
 
         <h3>Required Dependencies:</h3>
         <ul>
@@ -372,7 +378,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
             </ul>
           </li>
           <li>
-            <strong>Navigate & Annotate:</strong> Use the interface to navigate,
+            <strong>Navigate &amp; Annotate:</strong> Use the interface to navigate,
             zoom, and edit markers; use <strong>Del Range</strong> to delete one marker/keypoint, comma-separated marker list, or <code>A:B</code> range; use <strong>Swap Range</strong> to swap paired marker lists/ranges over a frame interval
           </li>
           <li>
@@ -382,7 +388,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
       </section>
 
       <section id="controls">
-        <h2>4. Controls & Interface</h2>
+        <h2>4. Controls &amp; Interface</h2>
 
         <div class="controls-grid">
           <div class="control-section">
@@ -428,7 +434,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
           </div>
 
           <div class="control-section">
-            <h3>Zoom & Pan</h3>
+            <h3>Zoom &amp; Pan</h3>
             <table>
               <tr>
                 <td><span class="key">+</span></td>
@@ -454,11 +460,11 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
             <table>
               <tr>
                 <td><span class="key">Left Click</span></td>
-                <td>Add Marker</td>
+                <td>Add/update marker at <strong>selected</strong> slot</td>
               </tr>
               <tr>
                 <td><span class="key">Right Click</span></td>
-                <td>Remove Last Marker</td>
+                <td>Remove <strong>selected</strong> marker in current frame (then select previous)</td>
               </tr>
               <tr>
                 <td><span class="key">TAB</span></td>
@@ -467,6 +473,10 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               <tr>
                 <td><span class="key">SHIFT+TAB</span></td>
                 <td>Previous marker in current frame</td>
+              </tr>
+              <tr>
+                <td><span class="key">Ctrl+G</span></td>
+                <td>Go KP — jump to a keypoint index by number</td>
               </tr>
               <tr>
                 <td><span class="key">DELETE</span></td>
@@ -485,8 +495,12 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td>Add new empty marker to file</td>
               </tr>
               <tr>
-                <td><span class="key">R</span> or <span class="key">D</span></td>
-                <td>Remove last marker from file</td>
+                <td><span class="key">R</span></td>
+                <td>Remove <strong>selected</strong> marker in current frame (same as right click)</td>
+              </tr>
+              <tr>
+                <td><span class="key">D</span></td>
+                <td>Remove <strong>selected</strong> marker in current frame (same as <strong>R</strong> and right click)</td>
               </tr>
               <tr>
                 <td><span class="key">L</span></td>
@@ -550,11 +564,112 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
           </div>
 
           <div class="control-section">
+            <h3>Playback Speed</h3>
+            <table>
+              <tr>
+                <td><span class="key">]</span></td>
+                <td>Increase playback speed (doubles: 1× → 2× → 4× → … max 16×)</td>
+              </tr>
+              <tr>
+                <td><span class="key">[</span></td>
+                <td>Decrease playback speed (halves: 1× → 0.5× → 0.25× … min 0.0625×)</td>
+              </tr>
+            </table>
+            <p>Current speed is shown in the top-right corner of the window. Speed resets to 1× when you reopen a video.</p>
+          </div>
+
+          <div class="control-section">
+            <h3>Mode Controls</h3>
+            <table>
+              <tr>
+                <td><span class="key">C</span></td>
+                <td>Toggle "1 Line" mode</td>
+              </tr>
+              <tr>
+                <td><span class="key">O</span> or <span class="key">S</span></td>
+                <td>Toggle Sequential mode (Normal mode only)</td>
+              </tr>
+              <tr>
+                <td><span class="key">P</span></td>
+                <td>Toggle Persistence mode</td>
+              </tr>
+              <tr>
+                <td><span class="key">L</span></td>
+                <td>Toggle Labeling mode (Bounding Boxes)</td>
+              </tr>
+              <tr>
+                <td><span class="key">G</span></td>
+                <td>Toggle Guide (<strong>visual</strong> overlay for template; <code>V</code> toggles map)</td>
+              </tr>
+              <tr>
+                <td><span class="key">FIFA</span> / <span class="key">K</span></td>
+                <td>Load or create <strong>FIFA TOML</strong> beside the video (<code>n_keypoints</code>, <code>start</code>, <code>base</code>)</td>
+              </tr>
+              <tr>
+                <td><span class="key">W</span></td>
+                <td>Open Swap Markers dialog (multi-rule range swap)</td>
+              </tr>
+              <tr>
+                <td><span class="key">Z</span></td>
+                <td>Remove last bounding box (Labeling mode)</td>
+              </tr>
+              <tr>
+                <td><span class="key">N</span></td>
+                <td>Rename object label (Labeling Mode Only)</td>
+              </tr>
+              <tr>
+                <td><span class="key">F5</span></td>
+                <td>Save Labeling Project &amp; export dataset (Labeling Mode Only)</td>
+              </tr>
+              <tr>
+                <td><span class="key">F6</span></td>
+                <td>Load Labeling Project (JSON) (Labeling Mode Only)</td>
+              </tr>
+              <tr>
+                <td><span class="key">F7</span></td>
+                <td>Load dataset folder – next Save appends (Labeling Mode Only)</td>
+              </tr>
+              <tr>
+                <td><span class="key">F8</span></td>
+                <td>Open another video (keeps dataset; no need to close app)</td>
+              </tr>
+              <tr>
+                <td><span class="key">F9</span></td>
+                <td>Export YOLO-pose dataset from clicked markers (see Pose dataset section)</td>
+              </tr>
+              <tr>
+                <td><span class="key">Ctrl+E</span></td>
+                <td>Save ML: choose split, export PNG dataset + <code>all_labels/</code> didactic view</td>
+              </tr>
+              <tr>
+                <td><span class="key">1</span></td>
+                <td>Decrease persistence frames</td>
+              </tr>
+              <tr>
+                <td><span class="key">2</span></td>
+                <td>Increase persistence frames</td>
+              </tr>
+              <tr>
+                <td><span class="key">3</span></td>
+                <td>Toggle full persistence</td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="control-section">
             <h3>File Operations &amp; Help</h3>
             <table>
               <tr>
                 <td><span class="key">H</span></td>
                 <td>Show help dialog</td>
+              </tr>
+              <tr>
+                <td><span class="key">?</span></td>
+                <td>Open <strong>HTML</strong> help in the default browser (<code>vaila/help/getpixelvideo.html</code>)</td>
+              </tr>
+              <tr>
+                <td><span class="key">ESC</span></td>
+                <td>Save and exit</td>
               </tr>
               <tr>
                 <td><span class="key">Save</span> / <span class="key">Load</span></td>
@@ -660,16 +775,16 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
           </li>
         </ul>
 
-        <h3>Sequential Mode (S key)</h3>
+        <h3>Sequential Mode (S or O key)</h3>
         <p>
-          Each click creates a new marker with incrementing IDs. No need to
-          select markers first. Only available in Normal mode.
+          Only in <strong>Normal</strong> mode. First click fills the
+          <strong>currently selected</strong> keypoint slot (choose with <strong>TAB</strong> / <strong>SHIFT+TAB</strong> or <strong>Ctrl+G</strong> / Go KP) if that slot is still empty — including <strong>keypoint 0</strong>. Next clicks advance to <code>selected + 1</code>, etc.
         </p>
         <ul>
           <li>
-            <strong>Use case:</strong> Quick annotation of multiple points
+            <strong>Use case:</strong> Fast sparse FIFA-style labeling while jumping between indices
           </li>
-          <li><strong>Activation:</strong> Press S key to toggle</li>
+          <li><strong>Activation:</strong> Press <strong>S</strong> or <strong>O</strong> to toggle</li>
           <li>
             <strong>Behavior:</strong> Automatic ID increment for each new
             marker
@@ -922,7 +1037,7 @@ uv run yolo pose train \<br/>
 
         <h3>YOLO Tracking Visualization</h3>
         <p>
-          When loading YOLO tracking data, the tool displays bounding boxes:
+          When loading YOLO or SAM tracking data, the tool displays bounding boxes. The loader asks for colored boxes only, ID only, or ID + confidence. Save exports loaded tracking bboxes as a YOLO detection dataset when Labeling mode is not active:
         </p>
         <ul>
           <li>
@@ -1172,11 +1287,8 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
         <h3>Backup and Recovery</h3>
         <p>Built-in backup system for data safety:</p>
         <ul>
-          <li><strong>Backup:</strong> Press B to create backup</li>
-          <li><strong>Reload:</strong> Press L to reload from file</li>
           <li>
-            <strong>Auto-backup:</strong> Automatic backups before major
-            operations
+            <strong>Auto-backup:</strong> Timestamped copies are written automatically before major edits (see <code>make_backup()</code> in the module)
           </li>
           <li>
             <strong>Hidden history:</strong> Backups are stored in
@@ -1185,6 +1297,16 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
           <li>
             <strong>Retention:</strong> Keeps only the latest 100 backups per video
           </li>
+          <li>
+            <strong>Reload coordinates:</strong> Use the <strong>Load</strong> button and pick your CSV again (there is no dedicated "reload" hotkey — <strong>L</strong> toggles <strong>Labeling</strong> mode)
+          </li>
+        </ul>
+
+        <h3>Documentation Access</h3>
+        <ul>
+          <li><strong>Quick Help:</strong> Press <strong>H</strong> for the in-app overlay</li>
+          <li><strong>HTML guide:</strong> Press <strong>?</strong> (Help Web) to open <code>vaila/help/getpixelvideo.html</code> in your browser</li>
+          <li><strong>Canonical docs:</strong> <code>vaila/help/getpixelvideo.md</code> (Markdown) and <code>vaila/help/getpixelvideo.html</code> (browser)</li>
         </ul>
       </section>
 
@@ -1221,10 +1343,139 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
           <li>Verify landmark connections for MediaPipe data</li>
         </ul>
 
+        <h3>Error Messages</h3>
+        <table>
+          <tr>
+            <th>Error</th>
+            <th>Solution</th>
+          </tr>
+          <tr>
+            <td>"Error opening video file"</td>
+            <td>Check video format and file integrity</td>
+          </tr>
+          <tr>
+            <td>"No keypoint file selected"</td>
+            <td>Select a valid CSV file or start fresh</td>
+          </tr>
+          <tr>
+            <td>"Unknown format"</td>
+            <td>Use manual format selection</td>
+          </tr>
+          <tr>
+            <td>"Error loading coordinates"</td>
+            <td>Check CSV file format and structure</td>
+          </tr>
+        </table>
+
         <div class="warning">
           <strong>Support:</strong> For additional help, check the vailá project
           documentation or create an issue on the GitHub repository.
         </div>
+      </section>
+
+      <section id="version-history">
+        <h2>11. Version History</h2>
+
+        <h3>Version 0.3.55 (15 June 2026)</h3>
+        <ul>
+          <li><strong>Save no longer freezes the GUI after loading SAM3/YOLO bboxes.</strong>
+            When the smart loader converts bboxes into markers (anchor
+            center / bottom / top / left / right), the <strong>Save</strong>
+            button now writes a regular vail&aacute;
+            <code>*_markers.csv</code> via the vectorised
+            <code>save_coordinates</code> instead of routing through
+            <code>export_labeling_dataset</code>, which extracts every
+            annotated frame and froze the pygame loop for tens of minutes on
+            long broadcast clips.</li>
+          <li><code>save_coordinates</code> is now <strong>vectorised</strong>:
+            NumPy bulk assignment replaces the per-cell <code>df.at[]</code>
+            loop. A 16&nbsp;693-frame clip with 62 SAM3 obj_ids
+            (~248&nbsp;K bboxes) now writes in ~0.5&nbsp;s instead of
+            minutes.</li>
+          <li>New <em>&ldquo;Saving&hellip;&rdquo;</em> banner is painted
+            <strong>before</strong> any long save begins, so the GUI clearly
+            signals work-in-progress and users no longer assume it&rsquo;s
+            hung.</li>
+          <li><strong>Terminal progress feedback</strong> for the slow ML
+            dataset writers (<code>export_labeling_dataset</code>,
+            <code>export_pose_dataset</code>,
+            <code>_export_all_labels_view</code>): each writer prints a
+            <code>&gt;&gt; vaila/getpixelvideo</code> banner with the
+            destination, frame count and split breakdown, then shows a
+            <code>tqdm</code> progress bar per split (train / val / test).
+            While the pygame window appears frozen (Python is blocked
+            writing thousands of files), the terminal makes it obvious work
+            is in progress. Square-bracket prefixes were avoided because
+            <code>absl</code> logging (mediapipe / opencv) eats <code>[...]</code>
+            tags from stdout.</li>
+          <li>Bbox dataset export (YOLO) still available when bboxes are
+            kept as overlay only (anchor prompt answered with Enter).</li>
+        </ul>
+
+        <h3>Version 0.3.54 (15 June 2026)</h3>
+        <ul>
+          <li>SAM3/YOLO tracking bbox loader adds overlay choices: colored boxes only, ID only, or ID + confidence.</li>
+          <li>Save button exports loaded tracking bboxes as a YOLO detection dataset when Labeling mode is not active.</li>
+          <li>SAM IDs stay as tracking IDs instead of duplicating in labels or becoming one detection class per ID.</li>
+        </ul>
+
+        <h3>Version 0.3.46 (10 June 2026)</h3>
+        <ul>
+          <li><strong>Help updated:</strong> added <code>[</code> / <code>]</code> playback speed keys to all documentation; corrected <strong>R</strong>/<strong>D</strong> key descriptions (both remove the <strong>selected</strong> marker in the current frame); added <strong>W</strong> (Swap dialog) to Mode Controls table.</li>
+        </ul>
+
+        <h3>Version 0.6.0 (April 2026)</h3>
+        <ul>
+          <li><strong>FIFA labeling:</strong> TOML-driven <code>n_keypoints</code> / <code>start_keypoint</code> / <code>base_index</code> (<strong>K</strong> or <strong>FIFA</strong> button); default <strong>31</strong> FIFA field KPs in vailá; sparse integer CSV; <code>--fifa-dataset</code> / <code>--fifa</code> CLI</li>
+          <li><strong><code>FIFA</code></strong> button in the control cluster; <strong>F7</strong> accepts vailá and FIFA dataset layouts</li>
+          <li>Reference geometry: <code>vaila/models/soccerfield_ref3d_fifa_dataset.csv</code> (and related dataset metadata)</li>
+          <li><strong>Guide (<code>G</code>):</strong> visual overlay (FIFA field or pose skeleton); <strong><code>V</code></strong> toggles the reference map</li>
+          <li><strong>Sequential mode:</strong> fills the <strong>selected</strong> empty slot first (including index <strong>0</strong>), then advances</li>
+          <li><strong>Ctrl+G</strong> (Go KP), <strong>Ctrl+E</strong> / Save ML, <code>.vaila_markers_history/</code> backups (100 newest per video)</li>
+        </ul>
+
+        <h3>Version 0.5.0 (April 2026)</h3>
+        <ul>
+          <li><strong>F9 — YOLO-pose dataset export</strong> from clicked markers (train/val/test, <code>data.yaml</code> with <code>kpt_shape</code> and <code>flip_idx</code>)</li>
+          <li>Multi-video append via existing <strong>F7</strong> dataset folder + <strong>F8</strong> new video; optional <strong><code>--dataset</code></strong> on CLI</li>
+          <li>Writes <code>&lt;video_stem&gt;_pose_project.json</code> alongside exports for reproducibility</li>
+          <li>In-app help (H) updated with Pose dataset + F9</li>
+        </ul>
+
+        <h3>Version 0.3.0 (January 2026)</h3>
+        <ul>
+          <li>Added Labeling Mode (Bounding Boxes) for creating Machine Learning datasets</li>
+          <li>Implemented structured dataset export (train/val/test)</li>
+          <li>Dataset naming: new exports use <code>dataset_YYYYMMDD_HHMMSS/</code>; load existing via F7 to append (multi-video)</li>
+          <li>Added F8: Open another video without closing the app (keeps dataset; auto-loads project when present)</li>
+          <li>Added "Labeling" button to interface</li>
+          <li>Enhanced help dialog with detailed labeling mode instructions</li>
+          <li><strong>Improvements:</strong>
+            <ul>
+              <li>F5/F6: Save/Load Labeling Project (JSON). F7: Load dataset folder (next Save appends). F8: Open another video.</li>
+              <li>Added ability to Rename object labels (N key)</li>
+              <li>Added Scrolling to Help Dialog</li>
+              <li>Improved Linux compatibility (pygame file browser for Dataset/Open video; no Tkinter for dialogs on Linux)</li>
+            </ul>
+          </li>
+        </ul>
+
+        <h3>Version 0.0.8 (27 July 2025)</h3>
+        <ul>
+          <li>Added support for multiple CSV formats (MediaPipe, YOLO tracking, vailá standard)</li>
+          <li>Implemented auto-detection of CSV format</li>
+          <li>Added visualization for MediaPipe stick figures and YOLO bounding boxes</li>
+          <li>Created comprehensive HTML documentation</li>
+          <li>Added quick access to full documentation via 'D' key</li>
+          <li>Improved help dialog with format information</li>
+          <li>Enhanced error handling and user feedback</li>
+        </ul>
+
+        <h3>Previous Versions</h3>
+        <ul>
+          <li>Version 0.0.7: Basic functionality with zoom and marker modes</li>
+          <li>Version 0.0.6: Initial implementation with video navigation</li>
+        </ul>
       </section>
 
       <div class="feature-box">
@@ -1238,6 +1489,8 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
           <li><span class="key">H</span> - Help</li>
           <li><span class="key">F9</span> - Export YOLO-pose dataset from markers</li>
           <li><span class="key">Ctrl+E</span> - Save ML (PNG split + all_labels)</li>
+          <li><span class="key">]</span> / <span class="key">[</span> - Double / halve playback speed</li>
+          <li><span class="key">W</span> - Open Swap Markers dialog</li>
           <li><span class="key">Guide button</span> - Visual reference map (FIFA field or pose skeleton)</li>
         </ul>
       </div>

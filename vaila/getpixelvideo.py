@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 28 May 2026
-Version: 0.3.46
+Update: 15 June 2026
+Version: 0.3.55
 Python Version: 3.12.13
 
 Description:
@@ -42,6 +42,18 @@ How to use:
 1. Run ``uv run vaila/getpixelvideo.py`` (no args opens the media picker), or pass CLI paths.
 2. Optional: Load existing markers (Load button).
 3. Mark, TAB between slots, **Ctrl+G** to jump to a keypoint number, Save.
+
+Load Track CSV (smart loader, button next to the Load Track CSV button):
+  - Auto-detects: SAM3 ``sam_tracks.csv`` / ``sam_frames_meta.csv`` (normalised)
+    / ``sam_points.csv``, vailá YOLO ``all_id_detection.csv``, per-id YOLO
+    ``person_id_NN.csv``.
+  - For bbox formats, a dialog first chooses overlay text:
+    ``1=colored boxes only 2=ID 3=ID+confidence``. A second dialog asks the
+    anchor for bbox -> marker conversion: ``1=center 2=bottom 3=top 4=left
+    5=right`` (Enter = skip conversion, keep bbox overlay only). The chosen
+    anchor lets you save detections as regular vailá markers. The Save button
+    exports loaded bboxes as a YOLO detection dataset when tracking CSV bboxes
+    are loaded outside Labeling mode.
 
 CLI (non-exhaustive; ``-h`` / ``--help`` prints a short summary):
   ``-f, --file`` — video, single ``.png``, or directory of PNG frames (subfolder
@@ -158,8 +170,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.46"
-GETPIXELVIDEO_UPDATE_DATE = "28 May 2026"
+GETPIXELVIDEO_VERSION = "0.3.54"
+GETPIXELVIDEO_UPDATE_DATE = "15 June 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -558,6 +570,71 @@ def check_and_rotate_frame(frame, metadata):
     return frame
 
 
+def _save_banner(title: str, detail: str = "") -> None:
+    """Print a clearly-formatted "save in progress" banner to stdout.
+
+    Used by the slow ML-dataset writers (``export_labeling_dataset``,
+    ``export_pose_dataset``, ``_export_all_labels_view``) so the user sees in
+    the terminal that the process is running, not hung. The pygame window
+    will appear frozen while Python is blocked writing thousands of files,
+    so terminal feedback is the only reliable signal.
+
+    Note: we avoid a ``[bracket]`` prefix here because absl logging (pulled
+    in by mediapipe / opencv) eats square-bracket tags from stdout on import.
+    Plain ``>>`` prefixes survive intact.
+    """
+    bar = "=" * 70
+    print(f"\n{bar}", flush=True)
+    print(f">> vaila/getpixelvideo: {title}", flush=True)
+    if detail:
+        print(f"   {detail}", flush=True)
+    print(f"{bar}", flush=True)
+
+
+def _save_done(message: str) -> None:
+    """Print a 'done' tail after a slow ML-dataset save."""
+    print(f">> vaila/getpixelvideo DONE: {message}\n", flush=True)
+
+
+def _try_import_tqdm():
+    """Return tqdm class or None. Kept local so the module still works
+    without the optional tqdm dependency (it ships as a transitive of
+    ultralytics / pytorch, so in practice it is always present)."""
+    try:
+        from tqdm import tqdm
+
+        return tqdm
+    except Exception:
+        return None
+
+
+def _flush_save_message(screen: pygame.Surface | None, text: str) -> None:
+    """Paint a single "Saving..." banner on top of the current frame.
+
+    Called before long-running save operations (``save_coordinates`` on a
+    huge marker grid, or ``export_labeling_dataset`` which extracts every
+    annotated frame) so the user sees a status line BEFORE the pygame loop
+    blocks. Without this, the GUI looks frozen and people end up running
+    ``sudo kill -9`` mid-write.
+    """
+    if screen is None:
+        return
+    try:
+        sw, sh = screen.get_size()
+        banner_h = 36
+        banner = pygame.Surface((sw, banner_h))
+        banner.set_alpha(220)
+        banner.fill((30, 30, 30))
+        screen.blit(banner, (0, sh - banner_h))
+        font = pygame.font.SysFont("Arial", 18, bold=True)
+        msg = font.render(text, True, (255, 215, 0))
+        screen.blit(msg, (10, sh - banner_h + 8))
+        pygame.display.flip()
+        pygame.event.pump()
+    except Exception:
+        pass
+
+
 def get_color_for_id(marker_id):
     """Generate a consistent color for a given marker ID."""
     colors = [
@@ -572,7 +649,87 @@ def get_color_for_id(marker_id):
         (0, 128, 255),  # Light Blue
         (128, 255, 0),  # Lime
     ]
-    return colors[marker_id % len(colors)]
+    return colors[int(marker_id) % len(colors)]
+
+
+def _bbox_xywh(bbox: dict[str, Any]) -> tuple[float, float, float, float] | None:
+    """Return bbox as x, y, w, h for labeling export and dataset writes."""
+    try:
+        if all(k in bbox for k in ("x", "y", "w", "h")):
+            x = float(bbox["x"])
+            y = float(bbox["y"])
+            w = float(bbox["w"])
+            h = float(bbox["h"])
+        elif all(k in bbox for k in ("x1", "y1", "x2", "y2")):
+            x = float(bbox["x1"])
+            y = float(bbox["y1"])
+            w = float(bbox["x2"]) - x
+            h = float(bbox["y2"]) - y
+        else:
+            return None
+    except (TypeError, ValueError):
+        return None
+    if not (np.isfinite([x, y, w, h]).all() and w > 0 and h > 0):
+        return None
+    return x, y, w, h
+
+
+def normalize_bboxes_for_labeling(
+    bboxes_by_frame: dict[int, list[dict[str, Any]]],
+    *,
+    label_fallback: str = "object",
+) -> dict[int, list[dict[str, Any]]]:
+    """Convert tracking or labeling bboxes into the canonical x/y/w/h layout."""
+    out: dict[int, list[dict[str, Any]]] = {}
+    for frame_num, frame_boxes in (bboxes_by_frame or {}).items():
+        norm_boxes: list[dict[str, Any]] = []
+        for bbox in frame_boxes or []:
+            xywh = _bbox_xywh(bbox)
+            if xywh is None:
+                continue
+            x, y, w, h = xywh
+            norm = {
+                "x": int(round(x)),
+                "y": int(round(y)),
+                "w": int(round(w)),
+                "h": int(round(h)),
+                "label": str(bbox.get("label") or label_fallback),
+            }
+            if bbox.get("id") is not None:
+                norm["id"] = bbox.get("id")
+            if bbox.get("conf") is not None:
+                norm["conf"] = bbox.get("conf")
+            norm_boxes.append(norm)
+        if norm_boxes:
+            out[int(frame_num)] = norm_boxes
+    return out
+
+
+def tracking_bbox_label_text(box: dict[str, Any], display_mode: str = "id_conf") -> str:
+    """Return compact overlay text for loaded tracking bboxes."""
+    mode = str(display_mode or "id_conf").strip().lower()
+    if mode in {"none", "box", "boxes", "colors", "color"}:
+        return ""
+    tracker_id = box.get("id")
+    label = str(box.get("label") or "object")
+    if tracker_id is not None:
+        try:
+            base = f"ID {int(float(tracker_id))}"
+        except (TypeError, ValueError):
+            base = f"ID {tracker_id}"
+    elif label.lower().startswith("id"):
+        base = label.upper().replace("ID", "ID ", 1).strip()
+    else:
+        base = label
+    if mode in {"id", "ids"}:
+        return base
+    conf = box.get("conf")
+    if conf is not None:
+        try:
+            return f"{base} {float(conf):.2f}"
+        except (TypeError, ValueError):
+            pass
+    return base
 
 
 def apply_swap_config(coordinates, swap_config):
@@ -2178,7 +2335,13 @@ def play_video_with_controls(
     # YOLO tracking visualization variables
     tracking_data = {}  # Structure: {frame_index: [{'x1': int, 'y1': int, 'x2': int, 'y2': int, 'label': str, 'conf': float, 'color': (r, g, b)}, ...]}
     show_tracking = True  # Toggle to show/hide tracking boxes
+    tracking_display_mode = "id_conf"  # colors | id | id_conf
     csv_loaded = False  # Flag to indicate if tracking CSV was loaded
+    # When True, the smart-loader bbox->marker anchor step succeeded, so Save
+    # must write a regular vailá *_markers.csv (via ``save_coordinates``) and
+    # NOT trigger ``export_labeling_dataset`` (which extracts every annotated
+    # frame to disk and freezes the GUI on long videos).
+    bbox_converted_to_markers = False
 
     def export_video_with_annotations():
         """Export video with all annotations (markers, tracking boxes, labeling boxes) preserving audio"""
@@ -2326,18 +2489,7 @@ def play_video_with_controls(
                         # Draw rectangle
                         cv2.rectangle(frame, (x1, y1), (x2, y2), box_color_bgr, 2)
 
-                        # Build label text
-                        label = box.get("label", "object")
-                        tracker_id = box.get("id")
-                        conf = box.get("conf", 0)
-
-                        label_parts = [f"Label:{label}"]
-                        if tracker_id is not None:
-                            label_parts.append(f"id:{tracker_id}")
-                        if conf > 0:
-                            label_parts.append(f"conf:{conf:.2f}")
-
-                        label_text = " ".join(label_parts)
+                        label_text = tracking_bbox_label_text(box, tracking_display_mode)
 
                         # Draw text above box
                         if label_text:
@@ -2554,13 +2706,34 @@ def play_video_with_controls(
                     os.remove(temp_video)
 
     def load_tracking_csv():
-        """Load YOLO tracking CSV file (all_id_detection.csv format)"""
+        """Load any tracking CSV — auto-detects SAM3 / YOLO / generic formats.
+
+        Recognised formats:
+          * SAM3 ``sam_tracks.csv``       (frame, obj_id, x_px, y_px, w_px, h_px)
+          * SAM3 ``sam_frames_meta.csv``  (normalised box_x_<oid> / box_y_<oid> / ...)
+          * SAM3 ``sam_points.csv``       (frame, p1_x, p1_y, p2_x, p2_y, ...)
+          * vailá YOLO ``all_id_detection.csv``  (Frame, X_min_<label>, ...)
+          * Per-id YOLO ``person_id_NN.csv``     (Frame, X_min, Y_min, X_max, Y_max)
+
+        After bboxes load, a small in-app dialog asks the user whether to also
+        convert each bbox to a single marker point (anchor:
+        ``center | bottom | top | left | right | corners``). Choosing an anchor
+        materialises the bboxes as keypoint **markers** that can be saved /
+        exported / overlaid like manually-clicked markers.
+        """
         nonlocal \
             tracking_data, \
+            tracking_display_mode, \
             csv_loaded, \
             save_message_text, \
             showing_save_message, \
-            save_message_timer
+            save_message_timer, \
+            coordinates, \
+            labels, \
+            deleted_positions, \
+            selected_marker_idx, \
+            one_line_mode, \
+            bbox_converted_to_markers
 
         # Use platform-specific file dialog to avoid pygame/tkinter conflicts
         import platform
@@ -2638,8 +2811,138 @@ def play_video_with_controls(
 
             # Clear old tracking data
             tracking_data = {}
+            bbox_converted_to_markers = False
 
-            # Check if CSV has the expected format
+            # --- Smart format detection (SAM3, YOLO single / multi, generic) ---
+            detected_fmt = _detect_tracking_format(df)
+            print(f"[Load Track CSV] detected format: {detected_fmt or 'unknown (legacy parser)'}")
+
+            if detected_fmt == "sam_points":
+                # Direct marker CSV - load as keypoints with no bbox / anchor step.
+                coords_new, labels_new, msg = load_marker_csv_df(
+                    df,
+                    total_frames=total_frames,
+                    input_file=csv_path,
+                    video_width=original_width,
+                    video_height=original_height,
+                )
+                coordinates = coords_new
+                labels = labels_new
+                deleted_positions = {i: set() for i in range(total_frames)}
+                selected_marker_idx = 0
+                one_line_mode = False
+                # sam_points is already a marker file; Save must use the
+                # marker writer, not export_labeling_dataset.
+                bbox_converted_to_markers = True
+                save_message_text = f"Loaded SAM points: {msg}"
+                showing_save_message = True
+                save_message_timer = 120
+                csv_loaded = True
+                print(f"[OK] Loaded sam_points.csv as markers ({len(labels_new)} obj IDs).")
+                return
+
+            if detected_fmt in {"sam_tracks", "sam_frames_meta", "yolo_single", "yolo_multi"}:
+                bboxes = _iter_bboxes_from_df(
+                    df,
+                    detected_fmt,
+                    video_width=original_width,
+                    video_height=original_height,
+                )
+                if not bboxes:
+                    save_message_text = f"Detected {detected_fmt} but no valid bbox rows."
+                    showing_save_message = True
+                    save_message_timer = 120
+                    print(f"WARNING: {detected_fmt} detected but no rows parsed.")
+                    return
+
+                # Build tracking_data overlay structure.
+                for b in bboxes:
+                    fr = int(b["frame"])
+                    tracking_data.setdefault(fr, []).append(
+                        {
+                            "x1": int(round(b["x1"])),
+                            "y1": int(round(b["y1"])),
+                            "x2": int(round(b["x2"])),
+                            "y2": int(round(b["y2"])),
+                            "conf": float(b.get("score", 1.0)),
+                            "label": (
+                                (current_label or "object")
+                                if detected_fmt.startswith("sam_")
+                                else str(b.get("label", "object"))
+                            ),
+                            "id": int(b["obj_id"]),
+                            "color": get_color_for_id(int(b["obj_id"])),
+                        }
+                    )
+                csv_loaded = True
+                total_boxes = sum(len(v) for v in tracking_data.values())
+                n_ids = len({b["obj_id"] for b in bboxes})
+
+                # Prompt user for bbox overlay text mode, then optional anchor -> markers conversion.
+                display_prompt = "BBox display: 1=colors only 2=ID 3=ID+conf"
+                display_raw = show_input_dialog(display_prompt, "3")
+                display_choice = (display_raw or "3").strip().lower()
+                tracking_display_mode = {
+                    "1": "colors",
+                    "color": "colors",
+                    "colors": "colors",
+                    "2": "id",
+                    "id": "id",
+                    "3": "id_conf",
+                    "id+conf": "id_conf",
+                    "conf": "id_conf",
+                }.get(display_choice, "id_conf")
+
+                anchor_prompt = (
+                    "Convert bboxes to markers? Anchor: 1=center 2=bottom 3=top "
+                    "4=left 5=right (Enter=skip)"
+                )
+                anchor_raw = show_input_dialog(anchor_prompt, "2")
+                anchor_choice = (anchor_raw or "").strip().lower()
+                if anchor_choice in _BBOX_ANCHOR_ALIASES:
+                    anchor_name = _BBOX_ANCHOR_ALIASES[anchor_choice]
+                    coords_new, labels_new = bboxes_to_marker_coordinates(
+                        bboxes,
+                        total_frames=total_frames,
+                        anchor=anchor_name,
+                    )
+                    coordinates = coords_new
+                    labels = labels_new
+                    deleted_positions = {i: set() for i in range(total_frames)}
+                    selected_marker_idx = 0
+                    one_line_mode = False
+                    # User explicitly converted bboxes to markers -> Save must
+                    # write a regular *_markers.csv via save_coordinates and
+                    # NOT trigger export_labeling_dataset (which would extract
+                    # every annotated frame to disk and freeze the GUI for
+                    # tens of minutes on long broadcast clips).
+                    bbox_converted_to_markers = True
+                    save_message_text = (
+                        f"Loaded {detected_fmt}: {len(tracking_data)} frames, "
+                        f"{total_boxes} bboxes, {n_ids} IDs -> markers ({anchor_name}); "
+                        f"bbox display={tracking_display_mode}"
+                    )
+                    print(
+                        f"[OK] Converted {total_boxes} bboxes to markers using "
+                        f"anchor='{anchor_name}' across {n_ids} object IDs. "
+                        f"Save will write *_markers.csv."
+                    )
+                else:
+                    save_message_text = (
+                        f"Loaded {detected_fmt}: {len(tracking_data)} frames, "
+                        f"{total_boxes} bboxes (overlay only); "
+                        f"bbox display={tracking_display_mode}"
+                    )
+                    print(
+                        "[OK] Bboxes loaded for overlay only "
+                        "(no anchor selected - markers unchanged). "
+                        "Save (if clicked) will export a YOLO dataset."
+                    )
+                showing_save_message = True
+                save_message_timer = 150
+                return
+
+            # --- Legacy YOLO parser (older formats not caught above) ---
             if "Frame" not in df.columns:
                 save_message_text = "CSV missing 'Frame' column"
                 showing_save_message = True
@@ -3717,14 +4020,29 @@ def play_video_with_controls(
         layout = _detect_dataset_layout(dataset_dir)
         out_dir = os.path.join(dataset_dir, "all_labels")
         os.makedirs(out_dir, exist_ok=True)
+        _save_banner(
+            f"Building all_labels view -> {out_dir}",
+            "copying *.txt from train/val/test for didactic review",
+        )
+        tqdm_cls = _try_import_tqdm()
         copied = 0
         for split in ("train", "val", "test"):
             _, labels_dir = _split_paths(dataset_dir, split, layout)
             if not os.path.isdir(labels_dir):
                 continue
-            for name in os.listdir(labels_dir):
-                if not name.lower().endswith(".txt"):
-                    continue
+            names = [n for n in os.listdir(labels_dir) if n.lower().endswith(".txt")]
+            iterator = (
+                tqdm_cls(
+                    names,
+                    desc=f"[all_labels] {split:5s}",
+                    unit="file",
+                    dynamic_ncols=True,
+                    leave=False,
+                )
+                if tqdm_cls is not None
+                else names
+            )
+            for name in iterator:
                 src = os.path.join(labels_dir, name)
                 dst = os.path.join(out_dir, f"{split}_{name}")
                 try:
@@ -3733,7 +4051,9 @@ def play_video_with_controls(
                 except Exception:
                     continue
         if copied == 0:
+            _save_done("all_labels not built (no .txt files found)")
             return False, "No label files found to build all_labels."
+        _save_done(f"all_labels ready: {out_dir} ({copied} files)")
         return True, f"all_labels ready: {out_dir} ({copied} files)"
 
     def _save_fifa_template_toml(path: str) -> str:
@@ -4714,8 +5034,7 @@ def play_video_with_controls(
         marker_label = ",".join(str(m) for m in marker_displays)
         if changed == 0:
             return False, (
-                f"Markers {marker_label} not found in frames "
-                f"{start_frame + 1}-{end_frame + 1}."
+                f"Markers {marker_label} not found in frames {start_frame + 1}-{end_frame + 1}."
             )
         return True, (
             f"Deleted markers {marker_label} in frames {start_frame + 1}-{end_frame + 1} "
@@ -4742,7 +5061,11 @@ def play_video_with_controls(
             else:
                 default_a = selected_marker_idx
             default_a = max(marker_low, min(default_a, marker_high))
-            default_b = min(marker_high, default_a + 1) if default_a < marker_high else max(marker_low, default_a - 1)
+            default_b = (
+                min(marker_high, default_a + 1)
+                if default_a < marker_high
+                else max(marker_low, default_a - 1)
+            )
 
         inputs = {
             "Start Frame": str(frame_count + 1),
@@ -4952,7 +5275,10 @@ def play_video_with_controls(
                 swap_count += 1
 
         if swap_count == 0:
-            return False, f"No matching marker pairs found in frames {start_frame + 1}-{end_frame + 1}."
+            return (
+                False,
+                f"No matching marker pairs found in frames {start_frame + 1}-{end_frame + 1}.",
+            )
         pairs_label = ", ".join(f"{a}<->{b}" for a, b in pairs_display)
         return True, (
             f"Swapped {pairs_label} in frames {start_frame + 1}-{end_frame + 1} "
@@ -7036,19 +7362,7 @@ def play_video_with_controls(
                         2,
                     )
 
-                    # Build complete label text: "Label:person id:1 conf:0.85"
-                    label = box.get("label", "object")
-                    tracker_id = box.get("id")
-                    conf = box.get("conf", 0)
-
-                    # Build text string
-                    label_parts = [f"Label:{label}"]
-                    if tracker_id is not None:
-                        label_parts.append(f"id:{tracker_id}")
-                    if conf > 0:
-                        label_parts.append(f"conf:{conf:.2f}")
-
-                    label_text = " ".join(label_parts)
+                    label_text = tracking_bbox_label_text(box, tracking_display_mode)
 
                     # Draw complete label text above the box
                     if label_text:
@@ -7831,13 +8145,10 @@ def play_video_with_controls(
                 elif event.key == pygame.K_r or event.key == pygame.K_d:
                     remove_marker()
 
-                # Playback Speed Control
                 elif event.key == pygame.K_RIGHTBRACKET:  # ]
                     playback_speed *= 2.0
                     if playback_speed > 16.0:
                         playback_speed = 16.0
-                    save_message_text = f"Speed: {playback_speed}X"
-                    showing_save_message = True
                     save_message_text = f"Speed: {playback_speed}X"
                     showing_save_message = True
                     save_message_timer = 30
@@ -7873,8 +8184,6 @@ def play_video_with_controls(
                         playback_speed = 0.0625
                     save_message_text = f"Speed: {playback_speed}X"
                     showing_save_message = True
-                    save_message_timer = 30
-
                     save_message_timer = 30
 
                 # Swap Hotkey (W) and Load Config (Shift+W)
@@ -8055,6 +8364,38 @@ def play_video_with_controls(
                             save_labeling_project()
                             showing_save_message = True
                             save_message_timer = 60
+                        elif csv_loaded and tracking_data and not bbox_converted_to_markers:
+                            # Show "Saving..." immediately so the user knows
+                            # the dataset export (frame extraction + label
+                            # writing) is in progress, not hung.
+                            save_message_text = (
+                                f"Saving YOLO dataset from {len(tracking_data)} "
+                                "annotated frames - this can take minutes..."
+                            )
+                            showing_save_message = True
+                            save_message_timer = 240
+                            _flush_save_message(screen, save_message_text)
+                            export_boxes = normalize_bboxes_for_labeling(
+                                tracking_data, label_fallback=current_label or "object"
+                            )
+                            dataset_dir, message = export_labeling_dataset(
+                                video_path,
+                                export_boxes,
+                                total_frames,
+                                original_width,
+                                original_height,
+                                output_dataset_dir=current_dataset_dir,
+                            )
+                            if dataset_dir:
+                                saved = True
+                                save_message_text = (
+                                    f"BBox dataset saved: {os.path.basename(dataset_dir)}"
+                                    + (" (appended)" if current_dataset_dir else "")
+                                )
+                            else:
+                                save_message_text = f"BBox export failed: {message}"
+                            showing_save_message = True
+                            save_message_timer = 120
                         elif one_line_mode:
                             output_file = save_1_line_coordinates(
                                 video_path, one_line_markers, deleted_markers
@@ -8064,6 +8405,20 @@ def play_video_with_controls(
                             showing_save_message = True
                             save_message_timer = 90  # Show for about 3 seconds at 30fps
                         else:
+                            # On long videos with many slots (e.g. SAM3 bbox
+                            # converted to markers across 60+ obj_ids and
+                            # 15000+ frames) the marker CSV write can take a
+                            # few seconds. Show "Saving..." so the user does
+                            # not assume the GUI is frozen and kill the
+                            # process.
+                            save_message_text = (
+                                f"Saving markers ({len(coordinates)} frames"
+                                f" x {max((len(p) for p in coordinates.values()), default=0)} "
+                                "slots)..."
+                            )
+                            showing_save_message = True
+                            save_message_timer = 240
+                            _flush_save_message(screen, save_message_text)
                             output_file = save_coordinates(
                                 video_path,
                                 coordinates,
@@ -9026,6 +9381,377 @@ def load_marker_csv_df(
     return coordinates, labels, msg
 
 
+# ============================================================================
+# Smart tracking CSV detection + bbox -> marker anchor helpers
+#
+# Recognised formats (auto-detected by column names):
+#
+#   * "sam_tracks"        SAM3 ``sam_tracks.csv``
+#                         frame, obj_id, x_px, y_px, w_px, h_px, [score, cx_px, cy_px]
+#   * "sam_frames_meta"   SAM3 ``sam_frames_meta.csv`` (normalised 0..1)
+#                         frame, box_x_<oid>, box_y_<oid>, box_w_<oid>, box_h_<oid>, prob_<oid>
+#   * "sam_points"        SAM3 ``sam_points.csv``   (already marker format)
+#                         frame, p1_x, p1_y, [p1_cx, p1_cy, p1_mx, p1_my], p2_x, p2_y, ...
+#   * "yolo_multi"        vailá YOLO ``all_id_detection.csv`` style
+#                         Frame, X_min_<label>, Y_min_<label>, X_max_<label>, Y_max_<label>, ...
+#   * "yolo_single"       per-id YOLO export (``person_id_01.csv``)
+#                         Frame, X_min, Y_min, X_max, Y_max, [Confidence, Label, ID]
+# ============================================================================
+
+_BBOX_ANCHOR_ALIASES: dict[str, str] = {
+    "1": "center",
+    "c": "center",
+    "center": "center",
+    "2": "bottom",
+    "b": "bottom",
+    "bottom": "bottom",
+    "foot": "bottom",
+    "3": "top",
+    "t": "top",
+    "top": "top",
+    "head": "top",
+    "4": "left",
+    "l": "left",
+    "left": "left",
+    "5": "right",
+    "r": "right",
+    "right": "right",
+    "6": "top-left",
+    "tl": "top-left",
+    "top-left": "top-left",
+    "7": "top-right",
+    "tr": "top-right",
+    "top-right": "top-right",
+    "8": "bottom-left",
+    "bl": "bottom-left",
+    "bottom-left": "bottom-left",
+    "9": "bottom-right",
+    "br": "bottom-right",
+    "bottom-right": "bottom-right",
+}
+
+
+def _anchor_xy_from_bbox(
+    x1: float, y1: float, x2: float, y2: float, anchor: str
+) -> tuple[float, float]:
+    """Compute (x, y) anchor coordinate for a bbox (top-left x1y1, bottom-right x2y2).
+
+    Supported anchor names: ``center``, ``bottom`` (bottom-center / foot),
+    ``top`` (top-center), ``left`` (center-left), ``right`` (center-right),
+    ``top-left``, ``top-right``, ``bottom-left``, ``bottom-right``.
+    """
+    cx = 0.5 * (x1 + x2)
+    cy = 0.5 * (y1 + y2)
+    a = (anchor or "center").strip().lower()
+    a = _BBOX_ANCHOR_ALIASES.get(a, a)
+    if a == "center":
+        return cx, cy
+    if a == "bottom":
+        return cx, y2
+    if a == "top":
+        return cx, y1
+    if a == "left":
+        return x1, cy
+    if a == "right":
+        return x2, cy
+    if a == "top-left":
+        return x1, y1
+    if a == "top-right":
+        return x2, y1
+    if a == "bottom-left":
+        return x1, y2
+    if a == "bottom-right":
+        return x2, y2
+    return cx, cy
+
+
+def _detect_frame_col(columns: list[str]) -> str | None:
+    """Return the frame column name regardless of capitalisation."""
+    for c in columns:
+        if str(c).strip().lower() in {"frame", "frame_index", "frame_number", "frame_num"}:
+            return str(c)
+    return None
+
+
+def _detect_tracking_format(df: Any) -> str:
+    """Classify a tracking CSV by its column names. Returns format key or ``""``.
+
+    See module docstring above for the recognised format keys.
+    """
+    cols = [str(c) for c in df.columns]
+    cols_lower = {c.lower() for c in cols}
+    has_frame = _detect_frame_col(cols) is not None
+
+    if has_frame:
+        sam_tracks_required = {"obj_id", "x_px", "y_px", "w_px", "h_px"}
+        if sam_tracks_required.issubset(cols_lower):
+            return "sam_tracks"
+
+        meta_pat = re.compile(r"^box_x_\d+$", re.IGNORECASE)
+        if any(meta_pat.match(c) for c in cols):
+            return "sam_frames_meta"
+
+        pn_pat = re.compile(r"^p\d+_x$", re.IGNORECASE)
+        if any(pn_pat.match(c) for c in cols):
+            return "sam_points"
+
+        if {"x_min", "y_min", "x_max", "y_max"}.issubset(cols_lower):
+            return "yolo_single"
+
+        suffix_pat = re.compile(r"^X_min_(.+)$")
+        if any(suffix_pat.match(c) for c in cols):
+            return "yolo_multi"
+
+    return ""
+
+
+def _iter_bboxes_from_df(
+    df: Any,
+    fmt: str,
+    *,
+    video_width: int | float | None = None,
+    video_height: int | float | None = None,
+) -> list[dict[str, Any]]:
+    """Yield uniform ``{frame, obj_id, x1, y1, x2, y2, label}`` rows from any
+    supported tracking CSV. Returns ``[]`` for unsupported formats.
+
+    Coordinates are returned in **pixel space**. For ``sam_frames_meta`` the
+    normalised fractions are scaled by ``video_width`` / ``video_height``; if
+    those are missing the function returns ``[]`` so callers can fall back.
+    """
+    out: list[dict[str, Any]] = []
+    frame_col = _detect_frame_col([str(c) for c in df.columns])
+    if frame_col is None:
+        return out
+    cols_lower = {str(c).lower(): str(c) for c in df.columns}
+
+    if fmt == "sam_tracks":
+        x_col = cols_lower.get("x_px")
+        y_col = cols_lower.get("y_px")
+        w_col = cols_lower.get("w_px")
+        h_col = cols_lower.get("h_px")
+        oid_col = cols_lower.get("obj_id")
+        if not (x_col and y_col and w_col and h_col and oid_col):
+            return out
+        score_col = cols_lower.get("score")
+        for _, row in df.iterrows():
+            try:
+                fr = int(float(row[frame_col]))
+                oid = int(float(row[oid_col]))
+                x = float(row[x_col])
+                y = float(row[y_col])
+                w = float(row[w_col])
+                h = float(row[h_col])
+            except (TypeError, ValueError):
+                continue
+            if not (np.isfinite([x, y, w, h]).all() and w > 0 and h > 0):
+                continue
+            out.append(
+                {
+                    "frame": fr,
+                    "obj_id": oid,
+                    "x1": x,
+                    "y1": y,
+                    "x2": x + w,
+                    "y2": y + h,
+                    "label": f"id{oid}",
+                    "score": float(row[score_col])
+                    if score_col and pd.notna(row.get(score_col))
+                    else 1.0,
+                }
+            )
+        return out
+
+    if fmt == "sam_frames_meta":
+        if not video_width or not video_height:
+            return out
+        W = float(video_width)
+        H = float(video_height)
+        pat = re.compile(r"^box_x_(\d+)$", re.IGNORECASE)
+        oid_columns: list[tuple[int, str, str, str, str, str | None]] = []
+        for c in df.columns:
+            m = pat.match(str(c))
+            if not m:
+                continue
+            oid = int(m.group(1))
+            suffix = m.group(1)
+            x_col = str(c)
+            y_col = f"box_y_{suffix}"
+            w_col = f"box_w_{suffix}"
+            h_col = f"box_h_{suffix}"
+            p_col = f"prob_{suffix}"
+            if {y_col, w_col, h_col}.issubset(df.columns):
+                oid_columns.append(
+                    (oid, x_col, y_col, w_col, h_col, p_col if p_col in df.columns else None)
+                )
+        for _, row in df.iterrows():
+            try:
+                fr = int(float(row[frame_col]))
+            except (TypeError, ValueError):
+                continue
+            for oid, x_col, y_col, w_col, h_col, p_col in oid_columns:
+                x = row.get(x_col)
+                y = row.get(y_col)
+                w = row.get(w_col)
+                h = row.get(h_col)
+                if not (pd.notna(x) and pd.notna(y) and pd.notna(w) and pd.notna(h)):
+                    continue
+                try:
+                    xf = float(x) * W
+                    yf = float(y) * H
+                    wf = float(w) * W
+                    hf = float(h) * H
+                except (TypeError, ValueError):
+                    continue
+                if not (np.isfinite([xf, yf, wf, hf]).all() and wf > 0 and hf > 0):
+                    continue
+                out.append(
+                    {
+                        "frame": fr,
+                        "obj_id": oid,
+                        "x1": xf,
+                        "y1": yf,
+                        "x2": xf + wf,
+                        "y2": yf + hf,
+                        "label": f"id{oid}",
+                        "score": float(row[p_col]) if p_col and pd.notna(row.get(p_col)) else 1.0,
+                    }
+                )
+        return out
+
+    if fmt == "yolo_single":
+        x1c = cols_lower.get("x_min")
+        y1c = cols_lower.get("y_min")
+        x2c = cols_lower.get("x_max")
+        y2c = cols_lower.get("y_max")
+        id_col = cols_lower.get("id") or cols_lower.get("tracker_id") or cols_lower.get("track_id")
+        lbl_col = cols_lower.get("label")
+        conf_col = cols_lower.get("confidence") or cols_lower.get("conf")
+        for _, row in df.iterrows():
+            try:
+                fr = int(float(row[frame_col]))
+                x1 = float(row[x1c])
+                y1 = float(row[y1c])
+                x2 = float(row[x2c])
+                y2 = float(row[y2c])
+            except (TypeError, ValueError, KeyError):
+                continue
+            if not (np.isfinite([x1, y1, x2, y2]).all() and x2 > x1 and y2 > y1):
+                continue
+            oid = 0
+            if id_col and pd.notna(row.get(id_col)):
+                with suppress(ValueError, TypeError):
+                    oid = int(float(row[id_col]))
+            out.append(
+                {
+                    "frame": fr,
+                    "obj_id": oid,
+                    "x1": x1,
+                    "y1": y1,
+                    "x2": x2,
+                    "y2": y2,
+                    "label": str(row[lbl_col])
+                    if lbl_col and pd.notna(row.get(lbl_col))
+                    else "object",
+                    "score": float(row[conf_col])
+                    if conf_col and pd.notna(row.get(conf_col))
+                    else 1.0,
+                }
+            )
+        return out
+
+    if fmt == "yolo_multi":
+        suffix_pat = re.compile(r"^X_min_(.+)$")
+        suffixes: list[str] = []
+        for c in df.columns:
+            m = suffix_pat.match(str(c))
+            if m:
+                suffixes.append(m.group(1))
+        for _, row in df.iterrows():
+            try:
+                fr = int(float(row[frame_col]))
+            except (TypeError, ValueError):
+                continue
+            for suffix in suffixes:
+                x1c = f"X_min_{suffix}"
+                y1c = f"Y_min_{suffix}"
+                x2c = f"X_max_{suffix}"
+                y2c = f"Y_max_{suffix}"
+                if not all(c in df.columns for c in (x1c, y1c, x2c, y2c)):
+                    continue
+                if not (
+                    pd.notna(row.get(x1c))
+                    and pd.notna(row.get(y1c))
+                    and pd.notna(row.get(x2c))
+                    and pd.notna(row.get(y2c))
+                ):
+                    continue
+                try:
+                    x1 = float(row[x1c])
+                    y1 = float(row[y1c])
+                    x2 = float(row[x2c])
+                    y2 = float(row[y2c])
+                except (TypeError, ValueError):
+                    continue
+                if not (np.isfinite([x1, y1, x2, y2]).all() and x2 > x1 and y2 > y1):
+                    continue
+                oid = 0
+                id_match = re.search(r"id[_\s]*(\d+)", suffix, re.IGNORECASE)
+                if id_match:
+                    with suppress(ValueError, TypeError):
+                        oid = int(id_match.group(1))
+                out.append(
+                    {
+                        "frame": fr,
+                        "obj_id": oid,
+                        "x1": x1,
+                        "y1": y1,
+                        "x2": x2,
+                        "y2": y2,
+                        "label": suffix,
+                        "score": 1.0,
+                    }
+                )
+        return out
+
+    return out
+
+
+def bboxes_to_marker_coordinates(
+    bboxes: list[dict[str, Any]],
+    *,
+    total_frames: int,
+    anchor: str = "bottom",
+) -> tuple[dict[int, list[Any]], list[str]]:
+    """Convert a flat list of bbox rows to vailá marker coordinates + labels.
+
+    Each unique ``obj_id`` is mapped to a stable slot (sorted ascending). For
+    each frame, slots without a detection are filled with ``(None, None)``.
+    The point per bbox uses :func:`_anchor_xy_from_bbox` (``anchor`` controls
+    center / bottom-center / top-center / left / right / corners).
+    """
+    if not bboxes:
+        return {i: [] for i in range(max(0, total_frames))}, []
+
+    oids = sorted({int(b["obj_id"]) for b in bboxes})
+    slot_by_oid = {oid: i for i, oid in enumerate(oids)}
+    n_slots = len(oids)
+    coordinates: dict[int, list[Any]] = {
+        i: [(None, None)] * n_slots for i in range(max(0, total_frames))
+    }
+    for b in bboxes:
+        fr = int(b["frame"])
+        if fr < 0 or fr >= total_frames:
+            continue
+        slot = slot_by_oid[int(b["obj_id"])]
+        x, y = _anchor_xy_from_bbox(
+            float(b["x1"]), float(b["y1"]), float(b["x2"]), float(b["y2"]), anchor
+        )
+        coordinates[fr][slot] = (x, y)
+    labels = [f"id{oid}" for oid in oids]
+    return coordinates, labels
+
+
 def sorted_frames_with_visible_markers(
     *,
     coordinates: dict[int, list[Any]] | None,
@@ -9443,55 +10169,64 @@ def save_coordinates(
     start_idx = max(0, int(keypoint_start_idx))
     base_idx = 0 if int(keypoint_index_base) == 0 else 1
 
-    # Cria o cabeçalho: a primeira coluna é 'frame' e para cada ponto,
-    # adiciona as colunas 'p{i}_x' e 'p{i}_y'
+    # Build columns: 'frame' + (p{i}_x, p{i}_y) pairs.
     columns = ["frame"]
     for i in range(max_points):
         kp_idx = start_idx + i + base_idx
         columns.append(f"p{kp_idx}_x")
         columns.append(f"p{kp_idx}_y")
 
-    # Cria o DataFrame inicializado com NaN para todos os frames.
-    df = pd.DataFrame(np.nan, index=range(total_frames), columns=pd.Index(columns))
-    df["frame"] = df.index
-
-    # Preenche o DataFrame com os pontos marcados
+    # ----- Vectorised fill (NumPy bulk assignment instead of df.at[] loop) -----
+    # The legacy implementation looped over every (frame, slot) pair and called
+    # ``df.at[frame_num, f"p{N}_x"]``, which is O(N_frames * N_slots) pandas
+    # label lookups. On a 16k-frame video with 62 SAM3 obj_ids (~1M cells,
+    # ~500k actual writes), that froze the GUI for many minutes. We now write
+    # straight into a 2-D float64 array and only build the DataFrame once.
+    n_frames = int(total_frames)
+    n_cols = int(max_points) * 2
+    arr = np.full((n_frames, n_cols), np.nan, dtype=np.float64)
     for frame_num, points in coordinates.items():
-        for i, (x, y) in enumerate(points):
-            if (
-                i not in deleted_positions[frame_num]
-                and x is not None
-                and y is not None
-                and i >= start_idx
-                and (i - start_idx) < max_points
-            ):
-                out_idx = (i - start_idx) + start_idx + base_idx
-                df.at[frame_num, f"p{out_idx}_x"] = float(x)
-                df.at[frame_num, f"p{out_idx}_y"] = float(y)
-            # Se for None, deixar como NaN (o que se tornará "" no CSV)
+        if not 0 <= int(frame_num) < n_frames:
+            continue
+        deleted_here = deleted_positions.get(frame_num, set())
+        for i, p in enumerate(points):
+            if p is None:
+                continue
+            if i in deleted_here:
+                continue
+            if i < start_idx or (i - start_idx) >= max_points:
+                continue
+            x, y = p[0], p[1]
+            if x is None or y is None:
+                continue
+            slot = (i - start_idx) * 2
+            try:
+                arr[int(frame_num), slot] = float(x)
+                arr[int(frame_num), slot + 1] = float(y)
+            except (TypeError, ValueError):
+                continue
+
+    df = pd.DataFrame(arr, columns=pd.Index(columns[1:]))
+    df.insert(0, "frame", np.arange(n_frames, dtype=np.int64))
 
     coord_format = str(coord_format).strip().lower()
     if coord_format not in ("int", "float"):
         coord_format = "int"
     coord_decimals = max(0, int(coord_decimals))
 
-    # Ensure frame is integer.
-    df["frame"] = pd.to_numeric(df["frame"], errors="coerce").fillna(0).astype(int)
-
-    # Force a compact representation in the CSV:
-    # - "int": write integer pixels without `.0`
-    # - "float": write floats with fixed decimals (configurable)
     float_format = None
-    for col in df.columns:
-        if col == "frame":
-            continue
-        if coord_format == "int":
+    if coord_format == "int":
+        for col in df.columns:
+            if col == "frame":
+                continue
             df[col] = pd.to_numeric(df[col], errors="coerce").round(0).astype("Int64")
-        else:
+    else:
+        for col in df.columns:
+            if col == "frame":
+                continue
             df[col] = pd.to_numeric(df[col], errors="coerce").round(coord_decimals)
-            float_format = f"%.{coord_decimals}f"
+        float_format = f"%.{coord_decimals}f"
 
-    # Salva o CSV com valores vazios representados como strings vazias
     df.to_csv(output_file, index=False, na_rep="", float_format=float_format)
     print(f"Coordinates saved to: {output_file}")
     return output_file
@@ -9585,9 +10320,33 @@ def export_labeling_dataset(
     # Get precise metadata for rotation check
     metadata_export = get_precise_video_metadata(video_path)
 
+    # Terminal feedback: the per-frame extraction + 3 file writes per frame can
+    # take several minutes on long broadcast clips loaded from a SAM3 export.
+    # Without progress output the user sees a frozen pygame window AND a quiet
+    # terminal and assumes the process hung. We print a banner + a tqdm bar
+    # per split so it is obvious work is happening.
+    _save_banner(
+        f"YOLO detection dataset -> {dataset_dir}",
+        f"{n_total} annotated frames -> "
+        f"train={len(splits['train'])} val={len(splits['val'])} test={len(splits['test'])}; "
+        f"{len(class_names)} class(es); writing JPG + JSON + .txt per frame",
+    )
+    tqdm_cls = _try_import_tqdm()
+
     # Process each split
     for split_name, frames in splits.items():
-        for frame_num in frames:
+        iterator = (
+            tqdm_cls(
+                frames,
+                desc=f"[ML save] {split_name:5s}",
+                unit="frame",
+                dynamic_ncols=True,
+                leave=False,
+            )
+            if tqdm_cls is not None
+            else frames
+        )
+        for frame_num in iterator:
             # Extract frame
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
             ret, frame = cap.read()
@@ -9645,6 +10404,7 @@ def export_labeling_dataset(
     # Write data.yaml so yolotrain can use the dataset directly
     _write_data_yaml(dataset_dir)
 
+    _save_done(f"YOLO detection dataset written to {dataset_dir}")
     return (
         dataset_dir,
         f"Dataset exported: {len(annotated_frames)} frames (train: {len(splits['train'])}, val: {len(splits['val'])}, test: {len(splits['test'])})",
@@ -9983,9 +10743,28 @@ def export_pose_dataset(
     # Get precise metadata for rotation check
     metadata_export = get_precise_video_metadata(video_path)
 
+    _save_banner(
+        f"YOLO pose dataset -> {dataset_dir}",
+        f"{n_total} annotated frames -> "
+        f"train={len(splits['train'])} val={len(splits['val'])} test={len(splits['test'])}; "
+        f"{nkp} keypoints; writing {image_ext.upper()} + .txt per frame",
+    )
+    tqdm_cls = _try_import_tqdm()
+
     written = 0
     for split_name, frames in splits.items():
-        for frame_num in frames:
+        iterator = (
+            tqdm_cls(
+                frames,
+                desc=f"[ML pose] {split_name:5s}",
+                unit="frame",
+                dynamic_ncols=True,
+                leave=False,
+            )
+            if tqdm_cls is not None
+            else frames
+        )
+        for frame_num in iterator:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
             ret, frame = cap.read()
             if not ret:
@@ -10077,6 +10856,7 @@ def export_pose_dataset(
         except Exception:
             pass
 
+    _save_done(f"YOLO pose dataset written to {dataset_dir} ({written} frames)")
     return (
         dataset_dir,
         "Pose dataset exported: "

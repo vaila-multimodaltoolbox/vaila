@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 06 June 2026
-Version: 0.3.47
+Update Date: 15 June 2026
+Version: 0.3.55
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -221,13 +221,30 @@ def open_sam3_install_help_in_browser() -> None:
 
 def _print_sam3_install_instructions() -> None:
     msg = (
-        "SAM 3 is not installed.\n"
-        "  Standard:  uv sync --extra sam\n"
-        "  CUDA host: uv sync --extra gpu --extra sam   (after CUDA pyproject template)\n"
-        "Opening setup instructions in your browser…\n"
-        "See also: AGENTS.md (Hybrid CPU vs NVIDIA workstation).\n"
+        "SAM 3 is not installed.\n\n"
+        "Install the optional stack, then restart vailá:\n"
+        "  uv sync --extra sam\n\n"
+        "NVIDIA CUDA workstation:\n"
+        "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes\n"
+        "  # or, after CUDA template is active:\n"
+        "  uv sync --extra gpu --extra sam\n\n"
+        "Windows NVIDIA CUDA workstation:\n"
+        "  pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes\n\n"
+        "After install, accept the gated Hugging Face model and authenticate:\n"
+        "  uv run hf auth login\n"
+        "  uv run vaila/vaila_sam.py --download-weights\n\n"
+        "CLI help / examples:\n"
+        "  uv run vaila/vaila_sam.py --open-help\n"
+        "  uv run vaila/vaila_sam.py --print-examples\n\n"
+        "Runtime note: SAM 3 video requires NVIDIA CUDA. CPU and macOS Metal/MPS are "
+        "not supported for this integration.\n"
+        "A GUI dialog/browser help may also open, but this terminal output is the "
+        "copy/paste install path.\n"
+        "See also: AGENTS.md - Hybrid CPU vs NVIDIA workstation.\n"
     )
+    print("\n" + "=" * 72, file=sys.stderr)
     print(msg, file=sys.stderr)
+    print("=" * 72 + "\n", file=sys.stderr)
 
 
 SAM3_CLI_EXAMPLES = """\
@@ -770,6 +787,98 @@ def _estimate_subsample_host_ram_gib(
     return 2.5 * (raw_bytes / (1024**3))
 
 
+def _max_frames_was_explicit(cli_value: int | None) -> bool:
+    """True when user/env explicitly set max frames; false means auto mode."""
+    if cli_value is not None:
+        return True
+    raw = os.environ.get("SAM3_MAX_FRAMES", "").strip()
+    return bool(raw)
+
+
+def _scaled_dims_for_long_edge(width: int, height: int, long_edge_cap: int) -> tuple[int, int]:
+    """Return dimensions after the SAM3 input long-edge cap is applied."""
+    width = max(1, int(width))
+    height = max(1, int(height))
+    if long_edge_cap <= 0:
+        return width, height
+    long_edge = max(width, height)
+    if long_edge <= long_edge_cap:
+        return width, height
+    scale = float(long_edge_cap) / float(long_edge)
+    return max(1, int(round(width * scale))), max(1, int(round(height * scale)))
+
+
+def _host_ram_adjusted_auto_max_frames(
+    video_files: list[Path],
+    *,
+    max_input_frames: int | None,
+    max_input_long_edge: int | None,
+) -> int | None:
+    """Lower auto max_frames when the host-RAM estimate already predicts SIGKILL.
+
+    This only changes true auto mode. CLI ``--max-frames`` and ``SAM3_MAX_FRAMES``
+    remain authoritative because those are explicit user choices.
+    """
+    if not video_files or _max_frames_was_explicit(max_input_frames):
+        return None
+    host = _host_ram_profile()
+    if host is None:
+        return None
+    available_gib = float(host["available_gib"])
+    if available_gib <= 0.0:
+        return None
+
+    current = _resolve_max_input_frames_value(max_input_frames)
+    if current <= 0:
+        return None
+    long_edge_cap = _read_max_input_long_edge(max_input_long_edge)
+
+    suggested = current
+    worst_est = 0.0
+    worst_name = ""
+    for vf in video_files:
+        try:
+            meta = _video_basic_meta(vf)
+        except Exception:
+            continue
+        n_total = int(meta.get("frames", meta.get("frame_count", 0)) or 0)
+        w = int(meta.get("width", 0) or 0)
+        h = int(meta.get("height", 0) or 0)
+        if n_total <= 0 or w <= 0 or h <= 0:
+            continue
+        eff_w, eff_h = _scaled_dims_for_long_edge(w, h, long_edge_cap)
+        n_session = min(n_total, current)
+        ram_est = _estimate_subsample_host_ram_gib(n_session, eff_w, eff_h)
+        if ram_est > worst_est:
+            worst_est = ram_est
+            worst_name = vf.name
+        if ram_est <= 0.80 * available_gib:
+            continue
+
+        per_frame_gib = _estimate_subsample_host_ram_gib(1, eff_w, eff_h)
+        ram_cap = int((0.45 * available_gib) / per_frame_gib) if per_frame_gib > 0 else current
+        conservative_cap = max(32, min(512, current // 4))
+        suggested = min(suggested, max(32, min(conservative_cap, ram_cap)))
+
+    if suggested >= current:
+        return None
+
+    print("", flush=True)
+    print("[SAM3 RAM] Auto max_frames adjusted to avoid host-RAM OOM:", flush=True)
+    print(
+        f"  max_frames auto {current} -> {suggested} "
+        f"(worst estimate: {worst_name or 'video'} ~{worst_est:.1f} GiB "
+        f"vs {available_gib:.1f} GiB available)",
+        flush=True,
+    )
+    print(
+        "  Override if needed with --max-frames N or SAM3_MAX_FRAMES=N. "
+        "Use --max-frames 0 only when host RAM is enough for the full clip.",
+        flush=True,
+    )
+    return suggested
+
+
 def _warn_host_ram_for_videos(video_files: list[Path], *, max_input_frames: int | None) -> None:
     """Warn (without aborting) when the planned SAM3 session may exceed host RAM.
 
@@ -859,7 +968,11 @@ def _format_runtime_banner(args: argparse.Namespace, video_files: list[Path] | N
         f"  contours_format={args.contours_format}  contours_gzip={bool(args.contours_gzip)}"
         f"  postprocess_points={args.postprocess_points}"
     )
-    if getattr(args, "tracks_only", False) or getattr(args, "delete_mask_png", False) or getattr(args, "stabilize_ids", False):
+    if (
+        getattr(args, "tracks_only", False)
+        or getattr(args, "delete_mask_png", False)
+        or getattr(args, "stabilize_ids", False)
+    ):
         lines.append(
             f"  tracks_only={bool(getattr(args, 'tracks_only', False))}  "
             f"delete_mask_png={bool(getattr(args, 'delete_mask_png', False))}  "
@@ -1463,16 +1576,14 @@ def _split_video_into_chunks(
     video_path: Path,
     chunk_dir: Path,
     chunk_size: int,
+    overlap_frames: int = 2,
 ) -> list[tuple[Path, int, int]]:
-    """Split a video into temporal chunks of ``chunk_size`` frames.
+    """Split a video into overlapping temporal chunks.
 
-    Returns a list of ``(chunk_mp4_path, start_frame_inclusive, end_frame_exclusive)``
-    tuples.  Each chunk is a self-contained MP4 with contiguous frames from the
-    original video.
-
-    This is the *divide* half of the divide-and-conquer OOM strategy: when a
-    video is too large for SAM3's all-at-once GPU loading, we split it into
-    manageable pieces that each fit in VRAM.
+    Returns ``(chunk_mp4_path, start_frame_inclusive, end_frame_exclusive)``.
+    Adjacent chunks share ``overlap_frames`` frames so the merge stage can link
+    chunk-local SAM IDs by exact same-frame IoU/centroid association before
+    duplicate overlap frames are dropped from the final output.
     """
     vp = str(video_path.resolve())
     cap = cv2.VideoCapture(vp)
@@ -1488,19 +1599,23 @@ def _split_video_into_chunks(
     if n <= 0:
         raise OSError(f"Video has 0 frames: {vp}")
 
+    chunk_size = max(1, int(chunk_size))
+    overlap_frames = max(0, min(int(overlap_frames), chunk_size - 1))
+    step = max(1, chunk_size - overlap_frames)
+
     chunk_dir.mkdir(parents=True, exist_ok=True)
     chunks: list[tuple[Path, int, int]] = []
     cap = cv2.VideoCapture(vp)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
 
-    for chunk_idx in range(0, n, chunk_size):
-        start = chunk_idx
-        end = min(chunk_idx + chunk_size, n)
-        chunk_path = chunk_dir / f"_chunk_{chunk_idx:06d}.mp4"
+    start = 0
+    while start < n:
+        end = min(start + chunk_size, n)
+        chunk_path = chunk_dir / f"_chunk_{start:06d}.mp4"
         writer = cv2.VideoWriter(str(chunk_path), fourcc, float(fps), (w, h))
         if not writer.isOpened():
             cap.release()
-            raise OSError(f"Could not open VideoWriter for chunk {chunk_idx}")
+            raise OSError(f"Could not open VideoWriter for chunk {start}")
         cap.set(cv2.CAP_PROP_POS_FRAMES, start)
         written = 0
         for _ in range(start, end):
@@ -1513,8 +1628,302 @@ def _split_video_into_chunks(
         writer.release()
         if written > 0:
             chunks.append((chunk_path.resolve(), start, start + written))
+        if end >= n:
+            break
+        start += step
     cap.release()
     return chunks
+
+
+def _csv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    if not path.is_file():
+        return [], []
+    with path.open(encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        return list(reader.fieldnames or []), [dict(row) for row in reader]
+
+
+def _row_float(row: dict[str, str], key: str, default: float = float("nan")) -> float:
+    try:
+        return float(row.get(key, ""))
+    except Exception:
+        return default
+
+
+def _track_row_detection(
+    row: dict[str, str], global_frame: int, obj_id: int
+) -> dict[str, Any] | None:
+    try:
+        x = float(row["x_px"])
+        y = float(row["y_px"])
+        w_box = float(row["w_px"])
+        h_box = float(row["h_px"])
+    except Exception:
+        return None
+    if not np.isfinite([x, y, w_box, h_box]).all():
+        return None
+    cx = _row_float(row, "cx_px", x + w_box * 0.5)
+    cy = _row_float(row, "cy_px", y + h_box * 0.5)
+    return {
+        "frame": int(global_frame),
+        "obj_id": int(obj_id),
+        "bbox": (x, y, w_box, h_box),
+        "centroid": (float(cx), float(cy)),
+    }
+
+
+def _collect_chunk_local_ids(chunk_out: Path) -> set[int]:
+    ids: set[int] = set()
+    tracks_fields, tracks_rows = _csv_rows(chunk_out / "sam_tracks.csv")
+    if {"obj_id"}.issubset(tracks_fields):
+        for row in tracks_rows:
+            with contextlib.suppress(Exception):
+                ids.add(int(float(row["obj_id"])))
+    meta = chunk_out / "sam_frames_meta.csv"
+    if meta.is_file():
+        header = meta.read_text(encoding="utf-8", errors="replace").splitlines()[0]
+        for col in header.split(","):
+            col = col.strip()
+            if col.startswith("box_x_"):
+                with contextlib.suppress(ValueError):
+                    ids.add(int(col.split("_")[-1]))
+    return ids
+
+
+def _assignment_min_cost(cost_matrix: np.ndarray) -> list[tuple[int, int]]:
+    """Solve rectangular 1:1 assignment.
+
+    Uses SciPy's Hungarian (``scipy.optimize.linear_sum_assignment``) when
+    available, with a greedy minimum-cost fallback when SciPy is missing.
+
+    Returns ``[(row_idx, col_idx), ...]`` for the optimal pairing.
+    """
+    if cost_matrix.size == 0:
+        return []
+    try:
+        from scipy.optimize import linear_sum_assignment
+
+        rows, cols = linear_sum_assignment(cost_matrix)
+        return [(int(r), int(c)) for r, c in zip(rows, cols, strict=True)]
+    except Exception:
+        remaining_rows = set(range(cost_matrix.shape[0]))
+        remaining_cols = set(range(cost_matrix.shape[1]))
+        pairs: list[tuple[int, int]] = []
+        while remaining_rows and remaining_cols:
+            best: tuple[float, int, int] | None = None
+            for r in remaining_rows:
+                for c in remaining_cols:
+                    val = float(cost_matrix[r, c])
+                    if best is None or val < best[0]:
+                        best = (val, r, c)
+            if best is None:
+                break
+            _val, r_best, c_best = best
+            pairs.append((r_best, c_best))
+            remaining_rows.remove(r_best)
+            remaining_cols.remove(c_best)
+        return pairs
+
+
+def _build_cross_chunk_id_maps(
+    chunks: list[tuple[Path, int, int]],
+    chunk_output_dirs: list[Path],
+    *,
+    max_centroid_dist_px: float = 180.0,
+    min_iou: float = 0.05,
+) -> list[dict[int, int]]:
+    """Map each chunk-local object ID to a global ID using overlap frames.
+
+    Implements the **Cross-Chunk Tracklet Linking with Overlap** spec:
+
+    1. **Sliding window overlap** — adjacent chunks share 1-2 frames written by
+       :func:`_split_video_into_chunks` (``overlap_frames=2`` default).
+    2. **Feature caching** — for each chunk, the last overlap frame keeps a
+       cache of ``(obj_id, bbox, centroid)`` from ``sam_tracks.csv``.
+    3. **Graph-based association** — at chunk boundary N→N+1, a bipartite
+       cost matrix combines spatial IoU and centroid distance on shared frames.
+    4. **Optimal matching** — :func:`_assignment_min_cost` (Hungarian when
+       SciPy present) finds the 1:1 mapping.
+    5. **Linked-list merging** — matched chunk-local IDs of N+1 inherit the
+       persistent global ID from N; unmatched IDs allocate a new global ID.
+    """
+    maps: list[dict[int, int]] = []
+    history_by_frame: dict[int, list[dict[str, Any]]] = {}
+    next_gid = 0
+
+    for ci, (chunk_info, chunk_out) in enumerate(zip(chunks, chunk_output_dirs, strict=True)):
+        _, start_frame, _end_frame = chunk_info
+        write_start = start_frame if ci == 0 else max(start_frame, chunks[ci - 1][2])
+        local_ids = _collect_chunk_local_ids(chunk_out)
+        _fields, track_rows = _csv_rows(chunk_out / "sam_tracks.csv")
+
+        detections_by_local: dict[int, list[dict[str, Any]]] = {oid: [] for oid in local_ids}
+        for row in track_rows:
+            with contextlib.suppress(Exception):
+                local_frame = int(float(row["frame"]))
+                oid = int(float(row["obj_id"]))
+                global_frame = start_frame + local_frame
+                det = _track_row_detection(row, global_frame, oid)
+                if det is not None:
+                    detections_by_local.setdefault(oid, []).append(det)
+
+        mapping: dict[int, int] = {}
+        if ci > 0 and detections_by_local:
+            candidate_locals = sorted(
+                oid
+                for oid, dets in detections_by_local.items()
+                if any(d["frame"] < write_start for d in dets)
+            )
+            candidate_globals = sorted(
+                {
+                    int(prev["obj_id"])
+                    for gf, prevs in history_by_frame.items()
+                    if start_frame <= gf < write_start
+                    for prev in prevs
+                }
+            )
+            if candidate_locals and candidate_globals:
+                cost = np.full((len(candidate_locals), len(candidate_globals)), 1e6, dtype=float)
+                ok_pair: dict[tuple[int, int], bool] = {}
+                for li, local_oid in enumerate(candidate_locals):
+                    dets = [
+                        d
+                        for d in detections_by_local.get(local_oid, [])
+                        if d["frame"] < write_start
+                    ]
+                    for gi, global_oid in enumerate(candidate_globals):
+                        vals: list[float] = []
+                        ious: list[float] = []
+                        dists: list[float] = []
+                        for det in dets:
+                            for prev in history_by_frame.get(int(det["frame"]), []):
+                                if int(prev["obj_id"]) != global_oid:
+                                    continue
+                                iou = _bbox_iou_xywh(det["bbox"], prev["bbox"])
+                                dcx = float(det["centroid"][0]) - float(prev["centroid"][0])
+                                dcy = float(det["centroid"][1]) - float(prev["centroid"][1])
+                                dist = float(np.hypot(dcx, dcy))
+                                vals.append((1.0 - iou) + min(1.0, dist / max_centroid_dist_px))
+                                ious.append(iou)
+                                dists.append(dist)
+                        if vals:
+                            mean_iou = float(np.mean(ious))
+                            mean_dist = float(np.mean(dists))
+                            ok_pair[(li, gi)] = (
+                                mean_iou >= min_iou or mean_dist <= max_centroid_dist_px
+                            )
+                            cost[li, gi] = float(np.mean(vals))
+                for li, gi in _assignment_min_cost(cost):
+                    if cost[li, gi] >= 1e5 or not ok_pair.get((li, gi), False):
+                        continue
+                    mapping[candidate_locals[li]] = candidate_globals[gi]
+
+        for oid in sorted(local_ids):
+            if oid not in mapping:
+                mapping[oid] = next_gid
+                next_gid += 1
+        if mapping:
+            next_gid = max(next_gid, max(mapping.values()) + 1)
+        maps.append(mapping)
+
+        for oid, dets in detections_by_local.items():
+            gid = mapping.get(oid)
+            if gid is None:
+                continue
+            for det in dets:
+                det2 = dict(det)
+                det2["obj_id"] = gid
+                history_by_frame.setdefault(int(det2["frame"]), []).append(det2)
+
+    return maps
+
+
+def _render_overlay_from_merged_masks(
+    final_output_dir: Path,
+    video_path: Path,
+    *,
+    draw_contour: bool = True,
+    draw_box: bool = True,
+    draw_id: bool = True,
+    draw_centroid: bool = False,
+) -> bool:
+    """Render final overlay from original frames and remapped mask filenames."""
+    masks_dir = final_output_dir / "masks"
+    tracks_path = final_output_dir / "sam_tracks.csv"
+    if not masks_dir.is_dir() or not tracks_path.is_file():
+        return False
+    fields, rows = _csv_rows(tracks_path)
+    if not rows or not {"frame", "obj_id", "x_px", "y_px", "w_px", "h_px"}.issubset(fields):
+        return False
+
+    by_frame: dict[int, list[dict[str, str]]] = {}
+    for row in rows:
+        with contextlib.suppress(Exception):
+            by_frame.setdefault(int(float(row["frame"])), []).append(row)
+
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return False
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out_path = final_output_dir / f"{video_path.stem}_sam_overlay.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
+    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (w, h))
+    if not writer.isOpened():
+        cap.release()
+        return False
+
+    frame_idx = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            break
+        frame_rows = by_frame.get(frame_idx, [])
+        masks: list[np.ndarray] = []
+        oids: list[int] = []
+        probs: list[float] = []
+        boxes: list[list[float]] = []
+        for row in frame_rows:
+            try:
+                oid = int(float(row["obj_id"]))
+                mask_path = masks_dir / f"frame_{frame_idx:06d}_obj_{oid}.png"
+                mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+                if mask is None:
+                    continue
+                masks.append(mask > 127)
+                oids.append(oid)
+                probs.append(_row_float(row, "score"))
+                boxes.append(
+                    [
+                        _row_float(row, "x_px"),
+                        _row_float(row, "y_px"),
+                        _row_float(row, "w_px"),
+                        _row_float(row, "h_px"),
+                    ]
+                )
+            except Exception:
+                continue
+        if masks:
+            comp = _composite_masks_bgr(
+                frame,
+                np.asarray(masks, dtype=bool),
+                np.asarray(oids, dtype=np.int32),
+                probs=np.asarray(probs, dtype=np.float32),
+                boxes_xywh=np.asarray(boxes, dtype=np.float32),
+                draw_box=draw_box,
+                draw_id=draw_id,
+                draw_contour=draw_contour,
+                draw_centroid=draw_centroid,
+            )
+            writer.write(comp)
+        else:
+            writer.write(frame)
+        frame_idx += 1
+
+    cap.release()
+    writer.release()
+    return True
 
 
 def _merge_chunk_outputs(
@@ -1525,43 +1934,25 @@ def _merge_chunk_outputs(
     *,
     save_overlay_mp4: bool = True,
     save_mask_png: bool = True,
+    draw_contour: bool = True,
+    draw_box: bool = True,
+    draw_id: bool = True,
+    draw_centroid: bool = False,
 ) -> None:
-    """Merge SAM3 results from temporal chunks into a unified output directory.
-
-    This is the *conquer* half of the divide-and-conquer OOM strategy.
-    Mask PNGs are renumbered from chunk-local indices to global frame indices.
-    The ``sam_frames_meta.csv`` rows are concatenated with corrected frame numbers.
-    An overlay MP4 is stitched from the per-chunk overlays if requested.
-    """
+    """Merge overlapping SAM3 chunks and link chunk-local IDs into global IDs."""
     import shutil
 
     final_masks_dir = final_output_dir / "masks"
     if save_mask_png:
         final_masks_dir.mkdir(parents=True, exist_ok=True)
 
-    all_meta_rows: list[str] = []
-    header_line: str = ""
+    id_maps = _build_cross_chunk_id_maps(chunks, chunk_output_dirs)
     all_unique_oids: set[int] = set()
-    merged_tracks_rows: list[str] = []
-    merged_manifest_rows: list[str] = ["frame,obj_id,area_px,mask_png"]
-    merged_contours_frames: list[dict[str, Any]] = []
-    merged_contour_oids: set[int] = set()
-
-    # First pass: collect all object IDs across chunks for a unified header
-    for chunk_out in chunk_output_dirs:
-        meta_csv = chunk_out / "sam_frames_meta.csv"
-        if meta_csv.is_file():
-            lines = meta_csv.read_text(encoding="utf-8").strip().split("\n")
-            if lines:
-                hdr = lines[0]
-                # Extract OIDs from header columns like box_x_1, box_y_1, ...
-                for col in hdr.split(","):
-                    col = col.strip()
-                    if col.startswith("box_x_"):
-                        with contextlib.suppress(ValueError):
-                            all_unique_oids.add(int(col.split("_")[-1]))
-
+    for m in id_maps:
+        all_unique_oids.update(m.values())
     sorted_oids = sorted(all_unique_oids)
+
+    header_line = ""
     if sorted_oids:
         header_cols = ["frame"]
         for oid in sorted_oids:
@@ -1570,25 +1961,27 @@ def _merge_chunk_outputs(
             )
         header_line = ",".join(header_cols)
 
-    # Second pass: renumber frames and copy masks
-    for ci, (chunk_info, chunk_out) in enumerate(zip(chunks, chunk_output_dirs, strict=True)):
-        _, start_frame, end_frame = chunk_info
-        meta_csv = chunk_out / "sam_frames_meta.csv"
-        chunk_masks = chunk_out / "masks"
+    all_meta_rows: list[str] = []
+    merged_tracks_rows: list[str] = []
+    merged_manifest_rows: list[str] = ["frame,obj_id,area_px,mask_png"]
+    merged_contours_frames: list[dict[str, Any]] = []
+    merged_contour_oids: set[int] = set()
 
-        if meta_csv.is_file():
+    for ci, (chunk_info, chunk_out) in enumerate(zip(chunks, chunk_output_dirs, strict=True)):
+        _, start_frame, _end_frame = chunk_info
+        write_start = start_frame if ci == 0 else max(start_frame, chunks[ci - 1][2])
+        id_map = id_maps[ci] if ci < len(id_maps) else {}
+
+        meta_csv = chunk_out / "sam_frames_meta.csv"
+        if meta_csv.is_file() and header_line:
             lines = meta_csv.read_text(encoding="utf-8").strip().split("\n")
-            chunk_header = lines[0] if lines else ""
-            chunk_oid_cols = {}
-            # Build a map from chunk column positions to OIDs
-            chunk_cols = chunk_header.split(",")
+            chunk_cols = lines[0].split(",") if lines else []
+            chunk_oid_cols: dict[int, int] = {}
             for col_idx, col in enumerate(chunk_cols):
                 col = col.strip()
                 if col.startswith("box_x_"):
                     with contextlib.suppress(ValueError):
-                        oid = int(col.split("_")[-1])
-                        chunk_oid_cols[oid] = col_idx
-
+                        chunk_oid_cols[int(col.split("_")[-1])] = col_idx
             for row_line in lines[1:]:
                 parts = row_line.split(",")
                 if not parts:
@@ -1598,39 +1991,36 @@ def _merge_chunk_outputs(
                 except ValueError:
                     continue
                 global_frame = start_frame + local_frame
-
-                # Build unified row
+                if global_frame < write_start:
+                    continue
+                values_by_gid: dict[int, list[str]] = {}
+                for local_oid, ci_start in chunk_oid_cols.items():
+                    gid = id_map.get(local_oid, local_oid)
+                    vals = parts[ci_start : ci_start + 5]
+                    while len(vals) < 5:
+                        vals.append("")
+                    if any(v.strip() for v in vals):
+                        values_by_gid[gid] = vals
                 row_parts = [str(global_frame)]
                 for oid in sorted_oids:
-                    if oid in chunk_oid_cols:
-                        ci_start = chunk_oid_cols[oid]
-                        # 5 columns per OID: box_x, box_y, box_w, box_h, prob
-                        vals = parts[ci_start : ci_start + 5]
-                        while len(vals) < 5:
-                            vals.append("")
-                        row_parts.extend(vals)
-                    else:
-                        row_parts.extend(["", "", "", "", ""])
+                    row_parts.extend(values_by_gid.get(oid, ["", "", "", "", ""]))
                 all_meta_rows.append(",".join(row_parts))
 
-        # Copy and renumber mask PNGs
-        if save_mask_png and chunk_masks.is_dir():
-            for png in sorted(chunk_masks.glob("frame_*_obj_*.png")):
-                # Parse chunk-local frame index: frame_000005_obj_1.png
+        if save_mask_png and (chunk_out / "masks").is_dir():
+            for png in sorted((chunk_out / "masks").glob("frame_*_obj_*.png")):
                 parts_name = png.stem.split("_")
-                # Expected: frame, NNNNNN, obj, OID
                 try:
                     local_idx = int(parts_name[1])
-                    obj_suffix = "_".join(parts_name[2:])  # obj_1
-                    global_idx = start_frame + local_idx
-                    dest = final_masks_dir / f"frame_{global_idx:06d}_{obj_suffix}.png"
-                    shutil.copy2(str(png), str(dest))
+                    local_oid = int(parts_name[3])
                 except (ValueError, IndexError):
-                    # Fallback: just copy with a prefix
-                    dest = final_masks_dir / f"chunk{ci}_{png.name}"
-                    shutil.copy2(str(png), str(dest))
+                    continue
+                global_idx = start_frame + local_idx
+                if global_idx < write_start:
+                    continue
+                gid = id_map.get(local_oid, local_oid)
+                dest = final_masks_dir / f"frame_{global_idx:06d}_obj_{gid}.png"
+                shutil.copy2(str(png), str(dest))
 
-        # Merge tracks (long format) if present
         tracks_csv = chunk_out / "sam_tracks.csv"
         if tracks_csv.is_file():
             lines = tracks_csv.read_text(encoding="utf-8").strip().split("\n")
@@ -1638,15 +2028,22 @@ def _merge_chunk_outputs(
                 if not ln.strip():
                     continue
                 parts = ln.split(",")
-                if not parts:
+                if len(parts) < 2:
                     continue
-                with contextlib.suppress(ValueError):
-                    parts[0] = str(start_frame + int(parts[0]))
-                    if len(parts) == 10:
-                        parts.extend(["", ""])
-                    merged_tracks_rows.append(",".join(parts))
+                try:
+                    local_f = int(float(parts[0]))
+                    local_oid = int(float(parts[1]))
+                except ValueError:
+                    continue
+                global_f = start_frame + local_f
+                if global_f < write_start:
+                    continue
+                parts[0] = str(global_f)
+                parts[1] = str(id_map.get(local_oid, local_oid))
+                if len(parts) == 10:
+                    parts.extend(["", ""])
+                merged_tracks_rows.append(",".join(parts))
 
-        # Merge mask manifest if present (rewrite path to the merged masks dir)
         manifest_csv = chunk_out / "sam_masks_manifest.csv"
         if manifest_csv.is_file():
             lines = manifest_csv.read_text(encoding="utf-8").strip().split("\n")
@@ -1658,15 +2055,18 @@ def _merge_chunk_outputs(
                     continue
                 try:
                     local_f = int(parts[0])
-                    oid = int(parts[1])
+                    local_oid = int(parts[1])
                 except ValueError:
                     continue
                 global_f = start_frame + local_f
+                if global_f < write_start:
+                    continue
+                gid = id_map.get(local_oid, local_oid)
                 parts[0] = str(global_f)
-                parts[3] = f"masks/frame_{global_f:06d}_obj_{oid}.png"
+                parts[1] = str(gid)
+                parts[3] = f"masks/frame_{global_f:06d}_obj_{gid}.png"
                 merged_manifest_rows.append(",".join(parts[:4]))
 
-        # Merge contours if present (json / jsonl, optional gzip)
         contours_candidates = [
             ("json", chunk_out / "sam_contours.json"),
             ("json", chunk_out / "sam_contours.json.gz"),
@@ -1688,37 +2088,34 @@ def _merge_chunk_outputs(
                 frames = payload.get("frames") or []
             else:
                 lines = [ln for ln in raw.split("\n") if ln.strip()]
-                frames = []
-                for ln in lines[1:]:
-                    frames.append(json.loads(ln))
-
+                frames = [json.loads(ln) for ln in lines[1:]]
             for fr in frames:
                 try:
                     local_f = int(fr.get("frame"))
                 except Exception:
                     continue
                 global_f = start_frame + local_f
+                if global_f < write_start:
+                    continue
                 fr2 = dict(fr)
                 fr2["frame"] = global_f
                 objs = []
                 for obj in fr.get("objects") or []:
                     obj2 = dict(obj)
-                    oid = obj2.get("obj_id")
-                    if isinstance(oid, int):
-                        merged_contour_oids.add(oid)
-                        mask_png = obj2.get("mask_png")
-                        if save_mask_png and mask_png:
-                            obj2["mask_png"] = f"masks/frame_{global_f:06d}_obj_{oid}.png"
+                    local_oid = obj2.get("obj_id")
+                    if isinstance(local_oid, int):
+                        gid = id_map.get(local_oid, local_oid)
+                        obj2["obj_id"] = gid
+                        merged_contour_oids.add(gid)
+                        if save_mask_png and obj2.get("mask_png"):
+                            obj2["mask_png"] = f"masks/frame_{global_f:06d}_obj_{gid}.png"
                     objs.append(obj2)
                 fr2["objects"] = objs
                 merged_contours_frames.append(fr2)
 
-    # Write unified meta CSV
     if header_line and all_meta_rows:
-        meta_path = final_output_dir / "sam_frames_meta.csv"
-        # Sort rows by global frame index
         all_meta_rows.sort(key=lambda r: int(r.split(",")[0]) if r.split(",")[0].isdigit() else 0)
-        meta_path.write_text(
+        (final_output_dir / "sam_frames_meta.csv").write_text(
             header_line + "\n" + "\n".join(all_meta_rows) + "\n",
             encoding="utf-8",
         )
@@ -1767,19 +2164,35 @@ def _merge_chunk_outputs(
             encoding="utf-8",
         )
 
-    # Stitch overlay MP4s in order
     if save_overlay_mp4:
-        overlay_parts = []
-        for chunk_out in chunk_output_dirs:
-            overlays = list(chunk_out.glob("*_sam_overlay.mp4"))
-            if overlays:
-                overlay_parts.append(overlays[0])
-        if overlay_parts:
-            _stitch_overlay_mp4s(overlay_parts, final_output_dir, video_path)
+        rendered = False
+        if save_mask_png:
+            rendered = _render_overlay_from_merged_masks(
+                final_output_dir,
+                video_path,
+                draw_contour=draw_contour,
+                draw_box=draw_box,
+                draw_id=draw_id,
+                draw_centroid=draw_centroid,
+            )
+        if not rendered:
+            overlay_parts = []
+            for chunk_out in chunk_output_dirs:
+                overlays = list(chunk_out.glob("*_sam_overlay.mp4"))
+                if overlays:
+                    overlay_parts.append(overlays[0])
+            if overlay_parts:
+                _stitch_overlay_mp4s(overlay_parts, final_output_dir, video_path, chunks=chunks)
 
 
-def _stitch_overlay_mp4s(parts: list[Path], final_output_dir: Path, video_path: Path) -> None:
-    """Concatenate multiple overlay MP4 segments into a single file."""
+def _stitch_overlay_mp4s(
+    parts: list[Path],
+    final_output_dir: Path,
+    video_path: Path,
+    *,
+    chunks: list[tuple[Path, int, int]] | None = None,
+) -> None:
+    """Concatenate overlay MP4 segments, skipping duplicated overlap frames."""
     out_path = final_output_dir / f"{video_path.stem}_sam_overlay.mp4"
     if len(parts) == 1:
         import shutil
@@ -1799,12 +2212,22 @@ def _stitch_overlay_mp4s(parts: list[Path], final_output_dir: Path, video_path: 
     writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (w, h))
     if not writer.isOpened():
         return
-    for part in parts:
+    for pi, part in enumerate(parts):
         cap = cv2.VideoCapture(str(part))
+        local_idx = 0
+        start_frame = 0
+        write_start = 0
+        if chunks is not None and pi < len(chunks):
+            _chunk_path, start_frame, _end_frame = chunks[pi]
+            write_start = start_frame if pi == 0 else max(start_frame, chunks[pi - 1][2])
         while True:
             ok, frame = cap.read()
             if not ok or frame is None:
                 break
+            global_frame = start_frame + local_idx
+            local_idx += 1
+            if global_frame < write_start:
+                continue
             writer.write(frame)
         cap.release()
     writer.release()
@@ -1871,20 +2294,30 @@ def _process_video_chunked(
     if n_total <= 0:
         return False, f"Could not read frame count from {video_file}"
 
-    n_chunks = (n_total + chunk_size - 1) // chunk_size
+    overlap_frames = 2
     _log(
         f"  [SAM3-CHUNK] Divide and conquer: {n_total} frames → "
-        f"{n_chunks} chunks of ≤{chunk_size} frames each"
+        f"chunks of ≤{chunk_size} frames with {overlap_frames}-frame overlap"
     )
 
     # Create chunk working directory
     chunk_work_dir = output_dir / "_chunks"
     chunk_work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Split video into chunks
-    _log("  [SAM3-CHUNK] Splitting video into chunks...")
+    # Split video into chunks. Adjacent chunks share 2 frames (sliding-window
+    # overlap) so cross-chunk ID linking can match identical spatial detections
+    # at the boundary; see :func:`_build_cross_chunk_id_maps` for the
+    # IoU+centroid Hungarian assignment that converts chunk-local SAM IDs into
+    # persistent global IDs.
+    overlap_frames = 2
+    _log(
+        f"  [SAM3-CHUNK] Splitting video into chunks "
+        f"(overlap_frames={overlap_frames} for tracklet linking)..."
+    )
     try:
-        chunks = _split_video_into_chunks(video_file, chunk_work_dir, chunk_size)
+        chunks = _split_video_into_chunks(
+            video_file, chunk_work_dir, chunk_size, overlap_frames=overlap_frames
+        )
     except Exception as e:
         return False, f"Failed to split video: {e}"
     _log(f"  [SAM3-CHUNK] Created {len(chunks)} chunk(s)")
@@ -1972,8 +2405,9 @@ def _process_video_chunked(
             cmd.append("--contours-gzip")
         if delete_mask_png:
             cmd.append("--delete-mask-png")
-        if stabilize_ids:
-            cmd.append("--stabilize-ids")
+        # Do not run per-chunk stabilization: it rewrites chunk CSV IDs but not mask
+        # filenames. Cross-chunk linking below remaps CSVs, contours, masks, and
+        # the regenerated final overlay in one consistent pass.
 
         env = os.environ.copy()
         env.setdefault("TQDM_DISABLE", "1")
@@ -2015,28 +2449,32 @@ def _process_video_chunked(
             video_file,
             save_overlay_mp4=save_overlay_mp4,
             save_mask_png=save_mask_png,
+            draw_contour=draw_contour,
+            draw_box=draw_box,
+            draw_id=draw_id,
+            draw_centroid=draw_centroid,
         )
-        if stabilize_ids:
-            _stabilize_sam_track_ids(output_dir, width=_video_basic_meta(video_file).get("width", 0), height=_video_basic_meta(video_file).get("height", 0))
         if delete_mask_png:
             _delete_mask_artifacts(output_dir)
     except Exception as e:
         _log(f"  [SAM3-CHUNK] Merge error: {e}")
         return False, f"Chunk merge failed: {e}"
 
-    # Write README
-    readme = output_dir / "README_sam.txt"
-    readme.write_text(
-        f"SAM 3 video export (chunked divide-and-conquer)\n"
-        f"source={video_file.resolve()}\n"
-        f"total_frames={n_total}\n"
-        f"chunk_size={chunk_size}\n"
-        f"total_chunks={len(chunks)}\n"
-        f"successful_chunks={successful_chunks}\n"
-        f"failed_chunks={len(failed_chunks)}\n"
-        f"prompt={text_prompt!r}\n",
-        encoding="utf-8",
+    # Write verbose README + bbox-discoverability alias for sam_tracks.csv
+    _write_sam_run_readme(
+        output_dir,
+        header=(
+            "SAM 3 video export (chunked divide-and-conquer)\n"
+            f"source={video_file.resolve()}\n"
+            f"total_frames={n_total}\n"
+            f"chunk_size={chunk_size}\n"
+            f"total_chunks={len(chunks)}\n"
+            f"successful_chunks={successful_chunks}\n"
+            f"failed_chunks={len(failed_chunks)}\n"
+            f"prompt={text_prompt!r}\n"
+        ),
     )
+    _make_sam_bbox_tracks_alias(output_dir)
 
     # Clean up chunk work dir (keep outputs in final dir)
     import shutil
@@ -2235,8 +2673,107 @@ def _delete_mask_artifacts(output_dir: Path) -> None:
         (output_dir / "sam_masks_manifest.csv").unlink(missing_ok=True)
 
 
+SAM_OUTPUT_FILE_GLOSSARY = """\
+Output files reference (only files that were actually written exist in this dir):
 
-def _bbox_iou_xywh(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+  sam_tracks.csv            Long-format **bounding-box** table (also aliased as
+                            ``sam_bbox_tracks.csv``). One row per
+                            (frame, obj_id). Columns:
+                              frame                  Frame index (0-based)
+                              obj_id                 Persistent SAM object ID
+                                                     (chunked runs: global ID
+                                                     after cross-chunk
+                                                     tracklet linking)
+                              x_px,y_px,w_px,h_px    Bounding box in pixel
+                                                     space (top-left + size)
+                              score                  SAM confidence (0..1)
+                              area_px                Mask area in pixels
+                              n_polygons             # contours in the mask
+                              largest_polygon_pts    Vertex count of the
+                                                     largest contour
+                              cx_px,cy_px            Mask centroid (pixels)
+                            This is the file the vailá pixel tool
+                            (getpixelvideo.py) consumes for the
+                            ``Load Tracking CSV`` button.
+
+  sam_bbox_tracks.csv       Discoverability alias (hardlink or copy) of
+                            ``sam_tracks.csv`` — same contents, ``bbox`` in
+                            the name so users can spot it quickly.
+
+  sam_frames_meta.csv       Per-frame metadata with **normalised** bbox
+                            (xc, yc, w, h in [0,1]) — useful for
+                            resolution-independent downstream code.
+
+  sam_points.csv            vailá pixel-marker format (wide). One row per
+                            frame, columns frame, p0_x, p0_y, p1_x, p1_y, …
+                            One column-pair per obj_id; ready for direct
+                            loading in getpixelvideo or rec2d. Only present
+                            when ``--postprocess-points`` was set
+                            (foot/center/mask/all).
+
+  sam_id_map.csv            Maps SAM obj_id to the column slot (p{N}) used in
+                            ``sam_points.csv``.
+
+  sam_masks_manifest.csv    Index of per-frame mask PNGs (when written).
+
+  sam_contours.json[.gz]    Polygon vertices per object, per frame
+                            (schema ``vaila_sam_contours_v1``). Suitable for
+                            silhouette analysis / mesh fitting.
+
+  <video>_sam_overlay.mp4   Coloured-mask overlay video (when written).
+
+  masks/                    Per-frame, per-object binary mask PNGs (when
+                            ``--save-mask-png`` was on). Named
+                            ``frame_NNNNNN_obj_K.png``.
+
+  FAILED_sam.txt            Only present if the run failed irrecoverably;
+                            contains the reason (e.g. OOM exhaustion).
+"""
+
+
+def _write_sam_run_readme(output_dir: Path, *, header: str) -> None:
+    """Write a verbose ``README_sam.txt`` describing every produced file.
+
+    ``header`` is the run-specific block (source, chunk size, prompt, etc.).
+    The shared glossary (:data:`SAM_OUTPUT_FILE_GLOSSARY`) is appended so any
+    user opening the run dir can identify the role of each CSV / JSON / MP4
+    without consulting the source code.
+    """
+    readme = output_dir / "README_sam.txt"
+    with contextlib.suppress(OSError):
+        readme.write_text(
+            header.rstrip() + "\n\n" + SAM_OUTPUT_FILE_GLOSSARY,
+            encoding="utf-8",
+        )
+
+
+def _make_sam_bbox_tracks_alias(output_dir: Path) -> None:
+    """Create ``sam_bbox_tracks.csv`` next to ``sam_tracks.csv``.
+
+    Prefers a POSIX hardlink (zero disk cost, both names stay in sync); falls
+    back to a regular copy when hardlink is not allowed (different filesystem
+    or Windows without dev-mode). Silently no-ops when ``sam_tracks.csv`` is
+    missing (e.g. ``--no-save-tracks-csv``).
+    """
+    src = output_dir / "sam_tracks.csv"
+    dst = output_dir / "sam_bbox_tracks.csv"
+    if not src.is_file():
+        return
+    with contextlib.suppress(OSError):
+        if dst.exists() or dst.is_symlink():
+            dst.unlink()
+    try:
+        os.link(str(src), str(dst))
+        return
+    except OSError:
+        pass
+    with contextlib.suppress(OSError):
+        shutil.copy2(str(src), str(dst))
+
+
+def _bbox_iou_xywh(
+    a: tuple[float, float, float, float], b: tuple[float, float, float, float]
+) -> float:
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
     ax2, ay2 = ax + aw, ay + ah
@@ -2365,7 +2902,9 @@ def _stabilize_sam_track_ids(
     ids_sorted = sorted(stable_ids)
     header = ["frame"]
     for oid in ids_sorted:
-        header.extend([f"box_x_{oid}", f"box_y_{oid}", f"box_w_{oid}", f"box_h_{oid}", f"prob_{oid}"])
+        header.extend(
+            [f"box_x_{oid}", f"box_y_{oid}", f"box_w_{oid}", f"box_h_{oid}", f"prob_{oid}"]
+        )
     lines = [",".join(header)]
     for frame in frame_numbers:
         parts = [str(frame)]
@@ -2376,7 +2915,9 @@ def _stabilize_sam_track_ids(
                 parts.extend(["", "", "", "", ""])
             else:
                 x, y, w_box, h_box, score = vals
-                parts.extend([f"{x:.6f}", f"{y:.6f}", f"{w_box:.6f}", f"{h_box:.6f}", f"{score:.6f}"])
+                parts.extend(
+                    [f"{x:.6f}", f"{y:.6f}", f"{w_box:.6f}", f"{h_box:.6f}", f"{score:.6f}"]
+                )
         lines.append(",".join(parts))
     existing_meta.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"[SAM3-ReID] geometric ID stabilization: {next_tid} track(s) -> sam_reid_links.csv")
@@ -2833,7 +3374,9 @@ def run_sam3_on_video(
                 f"[SAM3] Overlay: {nframes_to_write} frames, "
                 f"{n_unique_masks} frames with mask outputs."
             )
-        export_label = "rendering overlay + exporting CSV/JSON" if writer is not None else "exporting CSV/JSON"
+        export_label = (
+            "rendering overlay + exporting CSV/JSON" if writer is not None else "exporting CSV/JSON"
+        )
         print(f"[SAM3] {export_label} ({nframes_to_write} frames at {w}x{h})...")
         sys.stdout.flush()
 
@@ -2968,7 +3511,9 @@ def run_sam3_on_video(
 
                     mask_rel = (
                         f"masks/frame_{frame_idx:06d}_obj_{oid}.png"
-                        if save_mask_png and not delete_mask_png and int(sess_to_orig[sess_idx]) == int(frame_idx)
+                        if save_mask_png
+                        and not delete_mask_png
+                        and int(sess_to_orig[sess_idx]) == int(frame_idx)
                         else ""
                     )
                     if mask_rel:
@@ -3093,22 +3638,27 @@ def run_sam3_on_video(
                 else:
                     out_path.write_text(text, encoding="utf-8")
 
-        readme = output_dir / "README_sam.txt"
         ckpt_note = (
             str(ckpt_file) if ckpt_file is not None else "Hugging Face facebook/sam3 (cached)"
         )
-        readme.write_text(
-            f"SAM 3 video export\n"
-            f"source_original={vp_orig}\n"
-            f"session_resource={vp}\n"
-            f"subsampled_to_disk={temp_clip is not None} spatial_downscale={temp_spatial is not None} "
-            f"max_input_long_edge_cap={le_cap} max_input_frames_cap={mf} session_frames={n_sess}\n"
-            f"checkpoint={ckpt_note}\n"
-            f"prompt={text_prompt!r}\n"
-            f"prompt_frame_requested={frame_index} prompt_frame_used={fi_run}\n"
-            f"frames_with_outputs={len(outputs_by_frame)} / {nframes}\n",
-            encoding="utf-8",
+        _write_sam_run_readme(
+            output_dir,
+            header=(
+                "SAM 3 video export\n"
+                f"source_original={vp_orig}\n"
+                f"session_resource={vp}\n"
+                f"subsampled_to_disk={temp_clip is not None} "
+                f"spatial_downscale={temp_spatial is not None} "
+                f"max_input_long_edge_cap={le_cap} "
+                f"max_input_frames_cap={mf} session_frames={n_sess}\n"
+                f"checkpoint={ckpt_note}\n"
+                f"prompt={text_prompt!r}\n"
+                f"prompt_frame_requested={frame_index} "
+                f"prompt_frame_used={fi_run}\n"
+                f"frames_with_outputs={len(outputs_by_frame)} / {nframes}\n"
+            ),
         )
+        _make_sam_bbox_tracks_alias(output_dir)
 
         # Summary for the user.
         _written_files = [
@@ -3476,6 +4026,7 @@ class SamVideoDialog(tk.Toplevel):
                 bool,  # save_tracks_csv
                 str,  # contours_format
                 bool,  # contours_gzip
+                bool,  # stabilize_ids
                 bool,  # frame_fallback
                 bool,  # dry_run
             ]
@@ -3589,6 +4140,7 @@ class SamVideoDialog(tk.Toplevel):
         self.save_tracks_csv_var = tk.BooleanVar(value=True)
         self.contours_format_var = tk.StringVar(value="json")
         self.contours_gzip_var = tk.BooleanVar(value=False)
+        self.stabilize_ids_var = tk.BooleanVar(value=True)
 
         ttk.Checkbutton(
             out_opts,
@@ -3624,6 +4176,11 @@ class SamVideoDialog(tk.Toplevel):
         ttk.Checkbutton(out_opts, text="Gzip contours", variable=self.contours_gzip_var).grid(
             row=5, column=0, sticky="w"
         )
+        ttk.Checkbutton(
+            out_opts,
+            text="ReID/Stabilize SAM IDs + final CSVs",
+            variable=self.stabilize_ids_var,
+        ).grid(row=5, column=1, sticky="w")
 
         ttk.Checkbutton(
             frm,
@@ -3746,6 +4303,16 @@ class SamVideoDialog(tk.Toplevel):
                 return
         ck = self.ckpt_var.get().strip()
         ckpt_path: Path | None = Path(ck) if ck else None
+        stabilize_ids = self.stabilize_ids_var.get()
+        save_tracks_csv = self.save_tracks_csv_var.get()
+        postprocess_points = self.postprocess_var.get().strip() or "none"
+        save_png = self.png_var.get()
+        if stabilize_ids:
+            save_tracks_csv = True
+            if self.overlay_var.get():
+                save_png = True
+            if postprocess_points == "none":
+                postprocess_points = "all"
         self.result = (
             inp,
             Path(o),
@@ -3754,18 +4321,19 @@ class SamVideoDialog(tk.Toplevel):
             fi,
             max_frames,
             max_long_edge,
-            self.postprocess_var.get().strip() or "none",
+            postprocess_points,
             self.overlay_var.get(),
-            self.png_var.get(),
+            save_png,
             self.overlay_rich_var.get(),
             self.draw_contour_var.get(),
             self.draw_box_var.get(),
             self.draw_id_var.get(),
             self.draw_centroid_var.get(),
             self.save_contours_var.get(),
-            self.save_tracks_csv_var.get(),
+            save_tracks_csv,
             self.contours_format_var.get().strip() or "json",
             self.contours_gzip_var.get(),
+            stabilize_ids,
             self.fallback_var.get(),
             self.dry_run_var.get(),
         )
@@ -3855,8 +4423,12 @@ class SamBatchProgress(tk.Toplevel):
         self.after(0, self._finish)
 
     def _append_log(self, line: str) -> None:
+        clean = line.rstrip()
+        if clean:
+            sys.stdout.write(clean + "\n")
+            sys.stdout.flush()
         self.log_text.config(state="normal")
-        self.log_text.insert("end", line.rstrip() + "\n")
+        self.log_text.insert("end", clean + "\n")
         self.log_text.see("end")
         self.log_text.config(state="disabled")
 
@@ -3959,6 +4531,7 @@ def _run_sam_batch_in_thread(
     save_tracks_csv: bool,
     contours_format: str,
     contours_gzip: bool,
+    stabilize_ids: bool,
     frame_fallback: bool,
     max_frames: int | None,
     max_input_long_edge: int | None,
@@ -3988,7 +4561,7 @@ def _run_sam_batch_in_thread(
             text_prompt=prompt,
             frame_index=frame_idx,
             checkpoint=ckpt_opt,
-            max_input_frames=None,
+            max_input_frames=max_frames,
             max_input_long_edge=max_input_long_edge,
             save_overlay_mp4=save_ov,
             save_mask_png=save_png,
@@ -4000,6 +4573,7 @@ def _run_sam_batch_in_thread(
             draw_centroid=draw_centroid,
             save_contours=save_contours,
             save_tracks_csv=save_tracks_csv,
+            stabilize_ids=stabilize_ids,
             contours_format=contours_format,
             contours_gzip=contours_gzip,
             log=log,
@@ -4012,6 +4586,17 @@ def _run_sam_batch_in_thread(
             log(f"  ERROR on {video_file.name}: {err}")
         progress.schedule_progress(idx)
         _release_sam3_gpu_memory()
+
+    if postprocess_points and postprocess_points != "none" and succeeded > 0:
+        try:
+            from vaila.sam_postprocess import extract_points_for_batch
+
+            log(f"[postprocess] mode={postprocess_points}")
+            outs = extract_points_for_batch(output_base, mode=postprocess_points)
+            log(f"[postprocess] wrote {len(outs)} sam_points.csv file(s).")
+        except Exception as exc:
+            failed.append(f"postprocess: {exc}")
+            log(f"[postprocess] FAILED: {exc}")
 
     progress.schedule_finish()
     on_done(succeeded, len(video_files), failed, output_base)
@@ -4037,6 +4622,7 @@ def _start_sam_batch_subprocess(
     save_tracks_csv: bool,
     contours_format: str,
     contours_gzip: bool,
+    stabilize_ids: bool,
     frame_fallback: bool,
     max_frames: int | None,
     max_input_long_edge: int | None,
@@ -4108,6 +4694,8 @@ def _start_sam_batch_subprocess(
         cmd += ["--contours-format", str(contours_format)]
     if contours_gzip:
         cmd.append("--contours-gzip")
+    if stabilize_ids:
+        cmd.append("--stabilize-ids")
 
     progress.schedule_log(f"[GUI] launching subprocess: {shlex.join(cmd)}")
 
@@ -4287,6 +4875,7 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         save_tracks_csv,
         contours_format,
         contours_gzip,
+        stabilize_ids,
         frame_fallback,
         dry_run,
     ) = dlg.result
@@ -4353,7 +4942,14 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
 
     def _on_done(succeeded: int, total: int, failed: list[str], out_base: Path) -> None:
         summary = f"Processed {succeeded}/{total} video(s).\nOutput: {out_base}"
+        print("\nSAM 3 GUI batch finished")
+        print(summary)
         if failed:
+            print(f"Failed ({len(failed)}):")
+            for item in failed[:20]:
+                print(f"  {item}")
+            if len(failed) > 20:
+                print(f"  ...and {len(failed) - 20} more")
             summary += f"\n\nFailed ({len(failed)}):\n" + "\n".join(failed[:20])
             if len(failed) > 20:
                 summary += f"\n…and {len(failed) - 20} more (see FAILED_sam.txt in each folder)."
@@ -4385,6 +4981,7 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         save_tracks_csv=bool(save_tracks_csv),
         contours_format=str(contours_format),
         contours_gzip=bool(contours_gzip),
+        stabilize_ids=bool(stabilize_ids),
         frame_fallback=frame_fallback,
         max_frames=max_frames,
         max_input_long_edge=max_input_long_edge,
@@ -4629,6 +5226,14 @@ def main() -> None:
         args.draw_contour = False
         args.save_contours = False
         args.save_tracks_csv = True
+    if args.stabilize_ids:
+        if not args.save_tracks_csv:
+            print(
+                "[SAM3-ReID] --stabilize-ids requires sam_tracks.csv; enabling --save-tracks-csv."
+            )
+            args.save_tracks_csv = True
+        if args.postprocess_points == "none":
+            args.postprocess_points = "all"
 
     if args.open_help:
         open_sam3_install_help_in_browser()
@@ -4721,6 +5326,16 @@ def main() -> None:
         )
         if ok:
             print(f"  Done: {out_dir}")
+            if args.postprocess_points != "none":
+                try:
+                    from vaila.sam_postprocess import extract_points_from_sam_run
+
+                    print(f"[postprocess] mode={args.postprocess_points}")
+                    out_csv = extract_points_from_sam_run(out_dir, mode=args.postprocess_points)
+                    print(f"[postprocess] wrote {out_csv}")
+                except Exception as exc:
+                    print(f"[postprocess] FAILED: {exc}")
+                    raise SystemExit(3) from exc
             raise SystemExit(0)
         # If we are running under --no-chunked-fallback (i.e. either as a chunk
         # spawned by ``_process_video_chunked`` *or* as a per-video isolated
@@ -4754,6 +5369,14 @@ def main() -> None:
             ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
             output_base = args.output / f"processed_sam_{ts}"
         output_base.mkdir(parents=True, exist_ok=True)
+
+        adjusted_max_frames = _host_ram_adjusted_auto_max_frames(
+            video_files,
+            max_input_frames=args.max_frames,
+            max_input_long_edge=args.max_input_long_edge,
+        )
+        if adjusted_max_frames is not None:
+            args.max_frames = adjusted_max_frames
 
         print(_format_runtime_banner(args, video_files), flush=True)
         print(f"\nSAM 3 batch — {len(video_files)} video(s) to process")
@@ -4986,7 +5609,8 @@ def main() -> None:
             for line in failed_cli:
                 print(f"  - {line}")
 
-        if args.postprocess_points != "none":
+        all_failed = len(failed_cli) >= len(video_files)
+        if args.postprocess_points != "none" and not all_failed:
             ob = output_base
             try:
                 from vaila.sam_postprocess import extract_points_for_batch
@@ -4996,6 +5620,13 @@ def main() -> None:
                 print(f"[postprocess] wrote {len(outs)} sam_points.csv file(s).")
             except Exception as exc:
                 print(f"[postprocess] FAILED: {exc}")
+                if not failed_cli:
+                    failed_cli.append(f"postprocess: {exc}")
+        elif args.postprocess_points != "none" and all_failed:
+            print("\n[postprocess] skipped because all SAM 3 video runs failed.")
+
+        if failed_cli:
+            raise SystemExit(3)
         return
 
     run_sam_video()
