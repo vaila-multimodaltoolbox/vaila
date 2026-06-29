@@ -24,6 +24,8 @@ if str(_REPO) not in sys.path:
 
 from vaila.yolov26track import (  # noqa: E402
     _BufferedFrame,
+    _memory_snapshot,
+    _release_yolo_gpu_memory,
     build_id_rerank_map,
     buffer_tracking_stream,
     rerank_buffered_stream,
@@ -91,6 +93,18 @@ def test_buffer_tracking_stream_counts_ids():
     assert [len(bf.detections) for bf in buffer] == [2, 2, 2, 2]
 
 
+def test_buffer_tracking_stream_lightweight_drops_raw_result():
+    frames = [([1], [(0, 0, 1, 1)])]
+    buffer, _ = buffer_tracking_stream(
+        _stream(frames),
+        save_annotated=False,
+        keep_raw_result=False,
+    )
+    assert len(buffer) == 1
+    assert buffer[0].raw_result is None
+    assert buffer[0].detections[0]["raw_id"] == 1
+
+
 def test_rerank_buffered_stream_drops_unmapped_ids():
     frames = [
         ([1, 2, 7], [(0, 0, 1, 1), (2, 2, 3, 3), (9, 9, 10, 10)]),
@@ -135,3 +149,13 @@ def test_rewrite_ultralytics_boxes_id_no_op_when_empty_map():
     rewrite_ultralytics_boxes_id(result, {})
     assert result.boxes.xyxy.shape[0] == n_before
     assert result.boxes.id.tolist() == [1, 2]
+
+
+def test_release_yolo_gpu_memory_smoke():
+    _release_yolo_gpu_memory()
+
+
+def test_memory_snapshot_returns_ram_or_vram_keys():
+    snap = _memory_snapshot()
+    assert isinstance(snap, dict)
+    assert snap  # at least RAM on any test runner

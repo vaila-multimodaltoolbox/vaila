@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá - sam_to_yolo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f5f5f5; }
+    .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
+    code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+    pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    .warn { background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px 15px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>vailá - sam_to_yolo</h1>
+    <p><strong>File:</strong> vaila/sam_to_yolo.py</p>
+    <p><strong>Version:</strong> 0.3.67 | <strong>Updated:</strong> 2026-06-29</p>
+
+    <h2>Description</h2>
+    <p>Converts a <strong>SAM 3 video tracking export</strong> (<code>sam_tracks.csv</code> or its <code>sam_bbox_tracks.csv</code> alias) into a <strong>YOLO detection dataset</strong>: one bounding box per tracked instance per frame, a single class (<code>person</code> by default). The per-instance IDs <code>1..N</code> are assigned by the <strong>tracker</strong> (BoT-SORT) at inference — not by detector classes.</p>
+
+    <h2 class="warn">Why this module exists</h2>
+    <p class="warn">A common mistake: run SAM 3 → load tracks into getpixelvideo → convert each bbox to one marker → press <strong>F9</strong> (pose export). That collapses all instances of a frame into <strong>one</strong> object whose keypoints are the markers (<code>nc: 1, names: ['object'], kpt_shape: [N, 3]</code>). A model trained that way predicts one box + N keypoints and never detects N separate people. <code>sam_to_yolo</code> skips that detour.</p>
+
+    <h2>Label format</h2>
+    <pre><code>0 cx cy w h      # instance 1 (class 0 = person)
+0 cx cy w h      # instance 2
+...              # ~N lines, one per SAM track in the frame</code></pre>
+    <p><code>data.yaml</code>: <code>nc: 1</code>, <code>names: ['person']</code>, <strong>no <code>kpt_shape</code></strong>.</p>
+
+    <h2>Variable number of instances</h2>
+    <p>The detector + tracker do <strong>not</strong> require a fixed count. Each frame's label holds exactly as many boxes as SAM tracked in that frame (7, 16, 18, ...). Nothing is hard-coded to 16.</p>
+
+    <h2>Class name is metadata (rename anytime)</h2>
+    <p>YOLO detection labels store only the class <strong>index</strong> (<code>0</code>), never the text. So <code>object</code> → <code>person</code> is a metadata edit — the thousands of <code>.txt</code> files never change. Pick the name at build time, rename the dataset before training, or rename the trained weights after training.</p>
+
+    <h2>CLI</h2>
+    <p>Build a detection dataset:</p>
+    <pre><code>uv run python -m vaila.sam_to_yolo build \
+  --sam-tracks /path/processed_sam_*/&lt;video&gt;/sam_tracks.csv \
+  --video /path/&lt;video&gt;.mp4 \
+  --class-name person \
+  --reuse-images-dir /path/vaila_dataset_*   # optional, reuse extracted frames \
+  --output /path/out_dataset                 # optional</code></pre>
+    <p>(A bare <code>--sam-tracks ...</code> with no subcommand still implies <code>build</code>.)</p>
+    <p>Rename the class of an existing dataset (metadata only; labels untouched):</p>
+    <pre><code>uv run python -m vaila.sam_to_yolo rename-dataset --dataset /path/out_dataset --class-name person</code></pre>
+    <p>Rename the class baked into a trained <code>.pt</code> (no retraining):</p>
+    <pre><code>uv run python -m vaila.sam_to_yolo rename-model --weights best.pt --class-name person --output best_person.pt</code></pre>
+    <ul>
+      <li><code>--split-mode {temporal,random}</code>: <strong>temporal is the default</strong> &mdash; chronological train/val/test blocks (first frames train, middle val, last test). On video a random split leaks near-duplicate consecutive frames across train/val and inflates mAP. Use <code>random</code> only for the old shuffle behaviour.</li>
+      <li><code>--frame-stride N</code>: keep only every Nth frame (10 keeps 0,10,20,...). <code>1</code> (default) = full extract. Larger = smaller, less-redundant labelling set from the SAM3 tracks. A banner + <code>tqdm</code> bar show progress; extraction is a single sequential decode pass (much faster than per-frame seeking).</li>
+      <li><code>--reuse-images-dir DIR</code>: hardlink already-extracted <code>frame_NNNNNN.*</code> images (zero extra disk) instead of re-decoding the video; falls back to copy/symlink.</li>
+      <li><code>--min-box-px N</code> / <code>--min-score S</code>: drop tiny or low-confidence boxes.</li>
+      <li><code>--width / --height</code>: override frame size; <code>--seed</code>: deterministic 70/20/10 split (only affects <code>random</code>).</li>
+    </ul>
+
+    <h2>GUI</h2>
+    <pre><code>uv run python -m vaila.sam_to_yolo</code></pre>
+    <p>File pickers: SAM tracks CSV → source video → optional reuse-images dir.</p>
+
+    <h2>Train the resulting dataset</h2>
+    <p>Task auto-detects to <code>detect</code> (no <code>kpt_shape</code>):</p>
+    <pre><code>uv run python -m vaila.yolotrain --data /path/out_dataset/data.yaml --task detect --model yolo26x.pt --epochs 100 --imgsz 1280 --device 0</code></pre>
+    <p>After training, track with <code>yolov26track</code> using your <code>best.pt</code>; BoT-SORT assigns the persistent IDs.</p>
+
+    <h2>Output layout</h2>
+    <pre><code>out_dataset/
+├── data.yaml          # nc: 1, names: ['person'], no kpt_shape
+├── classes.txt        # person
+├── README_dataset.txt # provenance + ready-to-run train command
+├── train/images  train/labels
+├── val/images    val/labels
+└── test/images   test/labels</code></pre>
+
+    <p><strong>Generated/updated on:</strong> 24/06/2026</p>
+  </div>
+</body>
+</html>

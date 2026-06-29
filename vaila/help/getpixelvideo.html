@@ -154,9 +154,9 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.55<br />
-        <strong>Date:</strong> 15 June 2026<br />
-        <strong>Updated:</strong> 15 June 2026<br />
+        <strong>Version:</strong> 0.3.67<br />
+        <strong>Date:</strong> 23 June 2026<br />
+        <strong>Updated:</strong> 29 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
@@ -178,7 +178,7 @@
         <strong>Swap Range</strong> swaps paired marker/keypoint lists over an inclusive frame range, for example <code>26,28</code> with <code>27,29</code>, or <code>1:10</code> with <code>11:20</code>.<br />
         <strong>New in 0.5.0:</strong> <strong>F9</strong> exports a YOLO-pose
         training dataset from clicked markers (<code>data.yaml</code> with
-        <code>kpt_shape</code>, train/val/test). Append across videos with
+        <code>kpt_shape</code>, train/val/test). The terminal now prints the exact <code>data.yaml</code> path plus a <code>vaila.yolotrain --dry-run</code> validation command. Append across videos with
         <strong>F7</strong> + <strong>F8</strong> or <code>--dataset</code> on
         launch.<br />
         <strong>New in 0.3.0:</strong> Labeling Mode for ML dataset creation
@@ -1055,6 +1055,35 @@ uv run yolo pose train \<br/>
           </li>
         </ul>
 
+        <h3>SAM3 boxes &rarr; player DETECTION dataset (recommended flow)</h3>
+        <ol>
+          <li>Open the video, then <strong>Load Track CSV</strong> and pick
+            <code>sam_tracks.csv</code>.</li>
+          <li>"BBox display" prompt: pick any (e.g. <code>3</code> = ID+confidence) &mdash; visual only.</li>
+          <li>"Convert boxes to markers?" prompt: <strong>press Enter to SKIP</strong>
+            &mdash; this KEEPS the boxes (correct for per-player tracking).
+            Choosing an anchor (1&ndash;5) turns each player into a keypoint of
+            ONE object (a POSE dataset that cannot detect players individually;
+            <code>yolotrain</code> will block it).</li>
+          <li><strong>Save</strong> &rarr; writes a YOLO <strong>detection</strong>
+            dataset (<code>data.yaml</code>, <code>classes.txt</code>,
+            <code>train/val/test</code>, one box per player per frame).</li>
+        </ol>
+        <p>
+          <strong>Temporal split (default since v0.3.65):</strong> detection and
+          pose exports split frames into <strong>chronological</strong>
+          train/val/test blocks (first &rarr; train, middle &rarr; val, last
+          &rarr; test) instead of a random shuffle, so near-duplicate
+          consecutive video frames do not leak across train/val and inflate mAP.
+          The terminal prints <code>split=temporal</code> (or
+          <code>split=random</code>).
+        </p>
+        <p>Equivalent CLI (no GUI):</p>
+        <pre><code>uv run python -m vaila.sam_to_yolo build \
+  --sam-tracks /ABS/path/sam_tracks.csv \
+  --video /ABS/path/video.mp4 \
+  --class-name person          # --split-mode temporal is the default</code></pre>
+
         <h3>vailá Standard Visualization</h3>
         <p>Standard point marker visualization:</p>
         <ul>
@@ -1375,6 +1404,16 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.3.62 (24 June 2026)</h3>
+        <ul>
+          <li><strong>Detection vs pose guidance + guard.</strong> The in-app help now has a "DETECTION vs POSE" section explaining that the F9 pose export builds ONE object per frame (markers become its keypoints) and is NOT how you detect N separate people. To detect/track N people/objects, keep the boxes and export a detection dataset, or convert a SAM3 export directly with <code>python -m vaila.sam_to_yolo</code>. Pressing F9 right after converting SAM3 bboxes to markers now prints a terminal WARNING pointing to <code>vaila.sam_to_yolo</code>.</li>
+        </ul>
+
+        <h3>Version 0.3.56 (23 June 2026)</h3>
+        <ul>
+          <li>YOLO detection and pose dataset exports now print the exact <code>data.yaml</code> path and a <code>uv run python -m vaila.yolotrain --dry-run</code> command after writing the YAML. The F9 pose export success message also includes the YAML path so the trainer GUI/CLI handoff is explicit.</li>
+        </ul>
 
         <h3>Version 0.3.55 (15 June 2026)</h3>
         <ul>

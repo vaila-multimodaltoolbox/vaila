@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -77,3 +78,76 @@ def test_configure_ultralytics_dirs_creates_tree(tmp_path: Path) -> None:
     models_dir = tmp_path / "models"
     _configure_ultralytics_dirs(models_dir)
     assert (models_dir / "ultralytics").is_dir()
+
+
+def test_is_custom_model_path_absolute_and_relative(tmp_path: Path) -> None:
+    from vaila.yolov26track import _is_custom_model_path
+
+    weights = tmp_path / "runs" / "exp" / "weights" / "best.pt"
+    weights.parent.mkdir(parents=True)
+    weights.write_bytes(b"x")
+
+    assert _is_custom_model_path(str(weights))
+    assert _is_custom_model_path("runs/exp/weights/best.pt")
+    assert not _is_custom_model_path("yolo26m.pt")
+
+
+def test_progress_chunk_size_short_and_long_video() -> None:
+    from vaila.yolov26track import PROGRESS_FRAME_CHUNK, _progress_chunk_size
+
+    assert _progress_chunk_size(500) == PROGRESS_FRAME_CHUNK
+    assert _progress_chunk_size(16_693) > PROGRESS_FRAME_CHUNK
+    assert _progress_chunk_size(16_693) % PROGRESS_FRAME_CHUNK == 0
+
+
+def test_emit_frame_progress_writes_to_stdout() -> None:
+    import io
+
+    from vaila.yolov26track import _emit_frame_progress
+
+    buf = io.StringIO()
+    old = sys.__stdout__
+    sys.__stdout__ = buf
+    try:
+        _emit_frame_progress(99, 1000, phase="Track inference", chunk_frames=100)
+        _emit_frame_progress(199, 1000, phase="Track inference", chunk_frames=100)
+        out = buf.getvalue()
+    finally:
+        sys.__stdout__ = old
+
+    assert ">> yolov26track: Track inference: 10% (100/1000)" in out
+    assert ">> yolov26track: Track inference: 20% (200/1000)" in out
+    assert out.count(">> yolov26track:") == 2
+
+
+def test_make_frame_progress_logger_invokes_emit() -> None:
+    import io
+
+    from vaila.yolov26track import _make_frame_progress_logger
+
+    buf = io.StringIO()
+    old = sys.__stdout__
+    sys.__stdout__ = buf
+    try:
+        cb = _make_frame_progress_logger(1000, "Track inference", chunk_frames=100)
+        cb(99)
+        cb(150)  # between chunks — no log
+        out = buf.getvalue()
+    finally:
+        sys.__stdout__ = old
+
+    assert "10% (100/1000)" in out
+    assert out.count(">> yolov26track:") == 1
+
+
+def test_auto_export_custom_path_uses_source_pt(tmp_path: Path) -> None:
+    from vaila.hardware_manager import HardwareManager
+
+    custom = tmp_path / "external" / "best.pt"
+    custom.parent.mkdir(parents=True)
+    custom.write_bytes(b"not-a-real-pt")
+
+    hw = HardwareManager(models_dir=tmp_path / "models")
+    hw.gpu_info["cuda_capable"] = False
+    resolved = hw.auto_export(str(custom))
+    assert resolved == str(custom.resolve())

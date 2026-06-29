@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.55  
-**Date:** 15 June 2026  
-**Updated:** 15 June 2026  
+**Version:** 0.3.67  
+**Date:** 23 June 2026  
+**Updated:** 29 June 2026  
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** vailá - Multimodal Toolbox
 
@@ -23,7 +23,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 - **Swap Range:** Button to swap marker/keypoint pairs over a frame range; first marker line maps pairwise to the second (`26,28` with `27,29`, or `1:10` with `11:20`)
 - **Labeling Mode:** Create bounding box annotations for Machine Learning datasets
 - **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations; loaded tracking bboxes can be saved directly as a YOLO detection dataset
-- **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8; may write `keypoints.json` when keypoint names are known
+- **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8; may write `keypoints.json` when keypoint names are known; terminal output prints the exact `data.yaml` path and a `vaila.yolotrain --dry-run` validation command
 - **Save ML (button / Ctrl+E):** Export a PNG pose dataset with user-selected `train/val/test` split and create `all_labels/` with split-prefixed label copies for didactic review
 - **FIFA Labeling Mode:** Configure via **TOML** (FIFA button or `K` key — no separate Tk config dialog). Default **31** FIFA pitch keypoints (`idx 0 = top_left_corner`); fixed `N`, optional `start` skip, header base `0/1`; sparse CSV with **integer** pixels and empty cells for unmarked KPs. Optional `--fifa-dataset DIR` to append into an existing unified / pose tree.
 - **Guide (`G`):** **Visual only** overlay for active template:
@@ -130,6 +130,30 @@ Frame,Tracker ID,Label,X_min,Y_min,X_max,Y_max,Confidence,Color_R,Color_G,Color_
 **Visualization:** Bounding boxes colored by ID, with selectable text mode: colored boxes only, ID only, or ID + confidence.
 
 **Save:** After loading bbox tracking CSVs such as SAM3 `sam_tracks.csv`, the **Save** button exports those bboxes as a YOLO detection dataset when Labeling mode is not active.
+
+**SAM3 boxes → player DETECTION dataset (recommended flow):**
+1. Open the video, then **Load Track CSV** and pick `sam_tracks.csv`.
+2. "BBox display" prompt: pick any (e.g. `3` = ID+confidence) — visual only.
+3. "Convert boxes to markers?" prompt: **press Enter to SKIP** — this KEEPS the
+   boxes. This is the correct choice for per-player tracking. Choosing an anchor
+   (1–5) turns each player into a keypoint of ONE object (a POSE dataset that
+   cannot detect players individually, and `yolotrain` will block it).
+4. **Save** → writes a YOLO **detection** dataset (`data.yaml`, `classes.txt`,
+   `train/val/test`, one box per player per frame).
+
+**Temporal split (default since v0.3.65):** detection and pose exports now split
+frames into **chronological** train/val/test blocks (first frames → train,
+middle → val, last → test) instead of a random shuffle. On video, consecutive
+frames are near-duplicates, so a random split leaks them across train and val
+and inflates mAP. The terminal prints `split=temporal` (or `split=random`).
+
+**Equivalent CLI (no GUI):**
+```bash
+uv run python -m vaila.sam_to_yolo build \
+  --sam-tracks /ABS/path/sam_tracks.csv \
+  --video /ABS/path/video.mp4 \
+  --class-name person          # --split-mode temporal is the default
+```
 
 ### vailá Standard Format
 
@@ -551,6 +575,14 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.3.62 (24 June 2026)
+
+- **Detection vs pose guidance + guard.** The in-app help now has a "DETECTION vs POSE" section explaining that the F9 pose export builds ONE object per frame (your markers become its keypoints) and is NOT how you detect N separate people. To detect/track N people/objects, keep the boxes and export a detection dataset, or convert a SAM3 export directly with `python -m vaila.sam_to_yolo`. When you press F9 right after converting SAM3 bboxes to markers, getpixelvideo now prints a terminal WARNING pointing to `vaila.sam_to_yolo`.
+
+### Version 0.3.56 (23 June 2026)
+
+- YOLO detection and pose dataset exports now print the exact `data.yaml` path and a `uv run python -m vaila.yolotrain --dry-run` command after writing the YAML. The F9 pose export success message also includes the YAML path so the trainer GUI/CLI handoff is explicit.
 
 ### Version 0.3.55 (15 June 2026)
 

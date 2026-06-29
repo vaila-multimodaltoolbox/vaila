@@ -22,6 +22,69 @@ yolotrain = pytest.importorskip("vaila.yolotrain")
 _resolve_yaml_path = yolotrain.YOLOTrainApp._resolve_yaml_path
 _point_to_yolo_label = yolotrain.YOLOTrainApp._point_to_yolo_label
 _resolve_training_config = yolotrain._resolve_training_config
+_find_dataset_yaml_candidates = yolotrain._find_dataset_yaml_candidates
+_format_trainer_metrics = yolotrain._format_trainer_metrics
+_attach_yolo_progress_callbacks = yolotrain._attach_yolo_progress_callbacks
+_print_class_name_hints = yolotrain._print_class_name_hints
+_is_custom_weights_path = yolotrain._is_custom_weights_path
+_model_path_for_training = yolotrain._model_path_for_training
+_model_scale = yolotrain._model_scale
+_raise_for_suspicious_pose_dataset = yolotrain._raise_for_suspicious_pose_dataset
+_task_guide_text = yolotrain._task_guide_text
+_training_help_uri = yolotrain._training_help_uri
+_training_quick_guide_text = yolotrain._training_quick_guide_text
+_format_training_cli_command = yolotrain._format_training_cli_command
+_inspect_label_schema = yolotrain._inspect_label_schema
+
+
+# ---------------------------------------------------------------------------
+# _find_dataset_yaml_candidates (GUI folder auto-discovery)
+# ---------------------------------------------------------------------------
+
+
+def test_find_dataset_yaml_in_dataset_root(tmp_path: Path) -> None:
+    dataset = tmp_path / "vaila_dataset_20260101_120000"
+    dataset.mkdir()
+    yaml_path = dataset / "data.yaml"
+    yaml_path.write_text("path: .\ntrain: train/images\nval: val/images\n", encoding="utf-8")
+
+    found = _find_dataset_yaml_candidates(dataset)
+    assert found == [str(yaml_path.resolve())]
+
+
+def test_find_dataset_yaml_from_parent_folder(tmp_path: Path) -> None:
+    older = tmp_path / "vaila_dataset_old"
+    newer = tmp_path / "vaila_dataset_new"
+    older.mkdir()
+    newer.mkdir()
+    older_yaml = older / "data.yaml"
+    newer_yaml = newer / "data.yaml"
+    older_yaml.write_text("path: .\ntrain: train/images\nval: val/images\n", encoding="utf-8")
+    newer_yaml.write_text("path: .\ntrain: train/images\nval: val/images\n", encoding="utf-8")
+    newer_yaml.touch()
+
+    found = _find_dataset_yaml_candidates(tmp_path)
+    assert found[0] == str(newer_yaml.resolve())
+    assert str(older_yaml.resolve()) in found
+
+
+def test_find_dataset_yaml_skips_train_val_subfolders(tmp_path: Path) -> None:
+    dataset = tmp_path / "my_dataset"
+    (dataset / "train" / "images").mkdir(parents=True)
+    root_yaml = dataset / "data.yaml"
+    root_yaml.write_text("path: .\ntrain: train/images\nval: val/images\n", encoding="utf-8")
+    # A stray yaml under train/ must not be picked up (depth-limited walk skips train/).
+    (dataset / "train" / "data.yaml").write_text("path: .\n", encoding="utf-8")
+
+    found = _find_dataset_yaml_candidates(dataset)
+    assert found == [str(root_yaml.resolve())]
+
+
+def test_find_dataset_yaml_accepts_yaml_file_path(tmp_path: Path) -> None:
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text("path: .\n", encoding="utf-8")
+    found = _find_dataset_yaml_candidates(yaml_path)
+    assert found == [str(yaml_path.resolve())]
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +136,85 @@ def test_resolve_yaml_path_empty_returns_empty(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Task/model auto-detection for getpixelvideo/SAM datasets
 # ---------------------------------------------------------------------------
+
+
+def test_pose_looks_like_misexported_detection_flags_single_class_many_kpts() -> None:
+    # SAM3-tracks-collapsed-to-keypoints mistake: nc=1 + many keypoints.
+    suspect, nkp = yolotrain.pose_looks_like_misexported_detection(
+        {"names": ["object"], "kpt_shape": [62, 3]}
+    )
+    assert suspect is True
+    assert nkp == 62
+
+
+def test_pose_looks_like_misexported_detection_ok_for_real_pose() -> None:
+    # A genuine multi-class or few-keypoint pose set should NOT be flagged.
+    suspect_field, _ = yolotrain.pose_looks_like_misexported_detection(
+        {"names": ["field"], "kpt_shape": [4, 3]}
+    )
+    assert suspect_field is False
+    # No kpt_shape at all -> detection dataset, never flagged.
+    suspect_detect, nkp = yolotrain.pose_looks_like_misexported_detection({"names": ["person"]})
+    assert suspect_detect is False
+    assert nkp == 0
+
+
+def test_pose_looks_like_misexported_detection_allows_named_body_keypoints() -> None:
+    suspect, nkp = yolotrain.pose_looks_like_misexported_detection(
+        {
+            "names": ["person"],
+            "kpt_shape": [17, 3],
+            "kpt_names": [f"joint_{idx}" for idx in range(17)],
+        }
+    )
+    assert suspect is False
+    assert nkp == 17
+
+
+def test_pose_looks_like_misexported_detection_flags_generic_keypoint_slots() -> None:
+    suspect, nkp = yolotrain.pose_looks_like_misexported_detection(
+        {
+            "names": ["person"],
+            "kpt_shape": [32, 3],
+            "kpt_names": [f"kp_{idx}" for idx in range(1, 33)],
+        }
+    )
+    assert suspect is True
+    assert nkp == 32
+
+
+def test_suspicious_pose_requires_explicit_override() -> None:
+    yaml_data = {"names": ["person"], "kpt_shape": [62, 3]}
+    with pytest.raises(ValueError, match="Training blocked.*individual player"):
+        _raise_for_suspicious_pose_dataset(yaml_data)
+    _raise_for_suspicious_pose_dataset(yaml_data, allow=True)
+
+
+def test_task_guide_explains_tracking_task_distinction() -> None:
+    assert "one box per player" in _task_guide_text("detect")
+    assert "not a tracking algorithm" in _task_guide_text("auto")
+    warning = _task_guide_text("pose", {"names": ["person"], "kpt_shape": [62, 3]})
+    assert warning.startswith("STOP:")
+
+
+def test_training_help_uri_points_to_local_html() -> None:
+    uri = _training_help_uri("model-guide")
+    assert uri.startswith("file:")
+    assert uri.endswith("yolotrain.html#model-guide")
+
+
+def test_model_scale_ignores_pose_and_segment_suffix_text() -> None:
+    assert _model_scale("yolo26m-pose.pt") == "m"
+    assert _model_scale("yolo26s-seg.pt") == "s"
+    assert _model_scale("yolov9e.pt") == "e"
+
+
+def test_model_characteristics_reports_pose_m_as_general_purpose(capsys) -> None:
+    app = yolotrain.YOLOTrainApp.__new__(yolotrain.YOLOTrainApp)
+    app._show_model_characteristics("yolo26m-pose.pt")
+    output = capsys.readouterr().out
+    assert "General purpose (recommended)" in output
+    assert "Mobile applications" not in output
 
 
 def test_training_config_pose_yaml_uses_yolo26_pose_and_yaml_relative_path(tmp_path: Path) -> None:
@@ -147,6 +289,72 @@ def test_training_config_segment_label_uses_yolo26_seg(tmp_path: Path) -> None:
 
     assert cfg.task == "segment"
     assert cfg.model_name == "yolo26m-seg.pt"
+
+
+def test_training_config_rejects_non_positive_epochs(tmp_path: Path) -> None:
+    (tmp_path / "train" / "images").mkdir(parents=True)
+    (tmp_path / "val" / "images").mkdir(parents=True)
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text(
+        "path: .\ntrain: train/images\nval: val/images\nnames: [person]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Epochs must be at least 1"):
+        _resolve_training_config(str(yaml_path), epochs=0, device="cpu")
+
+
+def test_cli_help_contains_didactic_task_and_epochs_guide() -> None:
+    help_text = yolotrain.build_arg_parser().format_help()
+    assert "detect  One box per player" in help_text
+    assert "Maximum training epochs" in help_text
+    assert "--allow-suspicious-pose" in help_text
+    assert "--print-guide" in help_text
+
+
+def test_quick_guide_has_correct_sam_build_and_train_commands() -> None:
+    guide = _training_quick_guide_text()
+    assert "vaila.sam_to_yolo build" in guide
+    assert "--class-name person" in guide
+    assert "kpt_shape: [62, 3] still means POSE" in guide
+
+
+def test_format_training_cli_command_matches_resolved_config(tmp_path: Path) -> None:
+    (tmp_path / "train" / "images").mkdir(parents=True)
+    (tmp_path / "val" / "images").mkdir(parents=True)
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text(
+        "path: .\ntrain: train/images\nval: val/images\nnames: [person]\n",
+        encoding="utf-8",
+    )
+    config = _resolve_training_config(
+        str(yaml_path), task="auto", model="auto", epochs=20, device="cpu"
+    )
+    command = _format_training_cli_command(config, dry_run=True)
+    assert "vaila.yolotrain" in command
+    assert "--task detect" in command
+    assert "--model yolo26m.pt" in command
+    assert "--epochs 20" in command
+    assert command.endswith("--dry-run")
+
+
+def test_inspect_label_schema_distinguishes_detect_and_pose(tmp_path: Path) -> None:
+    images = tmp_path / "train" / "images"
+    labels = tmp_path / "train" / "labels"
+    images.mkdir(parents=True)
+    labels.mkdir(parents=True)
+    (labels / "frame_000001.txt").write_text(
+        "0 0.5 0.5 0.2 0.3\n0 0.2 0.4 0.1 0.2\n", encoding="utf-8"
+    )
+    detect = _inspect_label_schema(str(images), "detect", {"names": ["person"]})
+    assert detect["rows_max"] == 2
+    assert detect["token_counts"] == {5: 2}
+    assert detect["invalid_rows"] == 0
+
+    pose = _inspect_label_schema(
+        str(images), "pose", {"names": ["person"], "kpt_shape": [62, 3]}
+    )
+    assert pose["invalid_rows"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -274,3 +482,112 @@ def test_build_dataset_refuses_single_frame(tmp_path: Path) -> None:
             class_name="athlete",
             box_size=20.0,
         )
+
+
+# ---------------------------------------------------------------------------
+# Training progress helpers (v0.3.57)
+# ---------------------------------------------------------------------------
+
+
+class _FakeTrainer:
+    def __init__(self) -> None:
+        self.epoch = 4
+        self.epochs = 100
+        self.device = "cuda:0"
+        self.tloss = 1.2345
+        self.metrics = {
+            "metrics/pose/mAP50": 0.8123,
+            "metrics/pose/mAP50-95": 0.4567,
+        }
+
+
+def test_format_trainer_metrics_pose() -> None:
+    text = _format_trainer_metrics(_FakeTrainer())
+    assert "train_loss=1.2345" in text
+    assert "mAP50=0.8123" in text
+
+
+def test_attach_yolo_progress_callbacks_registers_events() -> None:
+    class _FakeModel:
+        def __init__(self) -> None:
+            self.callbacks: dict[str, list] = {}
+
+        def add_callback(self, event: str, func) -> None:
+            self.callbacks.setdefault(event, []).append(func)
+
+    model = _FakeModel()
+    lines: list[str] = []
+    _attach_yolo_progress_callbacks(model, emit=lines.append)
+    assert "on_fit_epoch_end" in model.callbacks
+    model.callbacks["on_fit_epoch_end"][0](_FakeTrainer())
+    assert any("Epoch 5/100 complete" in line for line in lines)
+
+
+def test_print_class_name_hints_detect_object(capsys) -> None:
+    _print_class_name_hints("detect", ["object"])
+    captured = capsys.readouterr().out
+    assert "person" in captured
+
+
+# ---------------------------------------------------------------------------
+# Custom weights path resolution (v0.3.58)
+# ---------------------------------------------------------------------------
+
+
+def test_is_custom_weights_path_detects_absolute_and_relative(tmp_path: Path) -> None:
+    weights = tmp_path / "runs" / "exp" / "weights" / "best.pt"
+    weights.parent.mkdir(parents=True)
+    weights.write_bytes(b"fake")
+
+    assert _is_custom_weights_path(str(weights))
+    assert _is_custom_weights_path("runs/exp/weights/best.pt")
+    assert _is_custom_weights_path("./best.pt")
+    assert not _is_custom_weights_path("yolo26m.pt")
+    assert not _is_custom_weights_path("auto")
+
+
+def test_model_path_for_training_uses_custom_absolute_path(tmp_path: Path) -> None:
+    weights = tmp_path / "my_best.pt"
+    weights.write_bytes(b"fake")
+
+    resolved = _model_path_for_training(str(weights))
+    assert resolved == str(weights.resolve())
+
+
+def test_model_path_for_training_uses_cwd_best_pt_before_vaila_models(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"fake")
+    monkeypatch.chdir(tmp_path)
+
+    resolved = _model_path_for_training("best.pt")
+    assert resolved == str(weights.resolve())
+
+
+def test_model_path_for_training_relative_run_weights(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rel = tmp_path / "runs" / "yolo_training" / "weights" / "last.pt"
+    rel.parent.mkdir(parents=True)
+    rel.write_bytes(b"fake")
+    monkeypatch.chdir(tmp_path)
+
+    resolved = _model_path_for_training("runs/yolo_training/weights/last.pt")
+    assert resolved == str(rel.resolve())
+
+
+def test_training_config_accepts_custom_weights_path(tmp_path: Path) -> None:
+    (tmp_path / "train" / "images").mkdir(parents=True)
+    (tmp_path / "val" / "images").mkdir(parents=True)
+    weights = tmp_path / "external" / "fine_tuned.pt"
+    weights.parent.mkdir()
+    weights.write_bytes(b"fake")
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text(
+        "path: .\ntrain: train/images\nval: val/images\nnames: [object]\n",
+        encoding="utf-8",
+    )
+
+    cfg = _resolve_training_config(str(yaml_path), task="detect", model=str(weights), device="cpu")
+    assert cfg.model_name == str(weights.resolve())

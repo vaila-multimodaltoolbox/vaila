@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 15 June 2026
-Version: 0.3.55
+Update: 29 June 2026
+Version: 0.3.67
 Python Version: 3.12.13
 
 Description:
@@ -50,10 +50,13 @@ Load Track CSV (smart loader, button next to the Load Track CSV button):
   - For bbox formats, a dialog first chooses overlay text:
     ``1=colored boxes only 2=ID 3=ID+confidence``. A second dialog asks the
     anchor for bbox -> marker conversion: ``1=center 2=bottom 3=top 4=left
-    5=right`` (Enter = skip conversion, keep bbox overlay only). The chosen
-    anchor lets you save detections as regular vailá markers. The Save button
-    exports loaded bboxes as a YOLO detection dataset when tracking CSV bboxes
-    are loaded outside Labeling mode.
+    5=right``. **Enter now defaults to SKIP** (keep the boxes): this is the
+    right choice for SAM/YOLO multi-object tracks, because Save then exports a
+    one-box-per-player YOLO **DETECTION** dataset. Converting boxes to markers
+    is only for keypoints; F9 would then make a single-object POSE dataset that
+    cannot detect players individually (yolotrain blocks it). For per-player
+    detection prefer ``uv run python -m vaila.sam_to_yolo build --sam-tracks
+    sam_tracks.csv --video VIDEO.mp4 --class-name person``.
 
 CLI (non-exhaustive; ``-h`` / ``--help`` prints a short summary):
   ``-f, --file`` — video, single ``.png``, or directory of PNG frames (subfolder
@@ -76,6 +79,12 @@ Key bindings (see in-app **H** help for full list):
   Shift+← / Shift+→     Jump prev/next frame that has markers
   Marker timeline strip Click or drag (above scrub bar) to jump
   Marker toolbar       Template (FIFA/MediaPipe/YOLO; right-click TOML when FIFA); Mode (Mark/Seq/1-line)
+
+New in 0.3.65:
+  YOLO dataset exports (detect + pose) now default to a **temporal** split
+  (chronological train/val/test blocks) instead of a random shuffle, so
+  near-duplicate consecutive video frames no longer leak between train and val
+  and inflate mAP. Pass ``split_mode="random"`` to restore the old behaviour.
 
 New in 0.5.x / earlier:
   F9 pose export; labeling mode; swap markers; playback tweaks.
@@ -170,8 +179,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.54"
-GETPIXELVIDEO_UPDATE_DATE = "15 June 2026"
+GETPIXELVIDEO_VERSION = "0.3.62"
+GETPIXELVIDEO_UPDATE_DATE = "24 June 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -2893,11 +2902,33 @@ def play_video_with_controls(
                     "conf": "id_conf",
                 }.get(display_choice, "id_conf")
 
+                # For SAM/YOLO multi-object tracks the per-player boxes are the
+                # whole point: keeping them (Enter = skip) lets Save export a
+                # proper DETECTION dataset (one box per player). Converting to
+                # markers turns each object into a keypoint, which F9 then
+                # exports as a single-object POSE set — useless for tracking N
+                # players. So default to skip and shout about it in the terminal.
+                if detected_fmt.startswith(("sam_", "yolo_")) and n_ids > 1:
+                    print(
+                        "\n>> vaila/getpixelvideo: STOP/READ — loaded "
+                        f"{n_ids} tracked objects ({detected_fmt}).\n"
+                        ">> For DETECTION/tracking of N players: press Enter "
+                        "(skip anchor) to KEEP the boxes, then Save to export a "
+                        "one-box-per-player YOLO DETECT dataset.\n"
+                        ">> Converting boxes to markers makes a POSE dataset "
+                        "(one object whose keypoints are the players) that "
+                        "cannot detect players individually.\n"
+                        ">> Equivalent CLI (does not need the GUI):\n"
+                        ">>   uv run python -m vaila.sam_to_yolo build "
+                        "--sam-tracks sam_tracks.csv --video VIDEO.mp4 "
+                        "--class-name person\n"
+                    )
                 anchor_prompt = (
-                    "Convert bboxes to markers? Anchor: 1=center 2=bottom 3=top "
-                    "4=left 5=right (Enter=skip)"
+                    "Convert boxes to markers (POSE keypoints)? "
+                    "Enter=SKIP -> keep boxes for DETECT dataset. "
+                    "1=center 2=bottom 3=top 4=left 5=right"
                 )
-                anchor_raw = show_input_dialog(anchor_prompt, "2")
+                anchor_raw = show_input_dialog(anchor_prompt, "")
                 anchor_choice = (anchor_raw or "").strip().lower()
                 if anchor_choice in _BBOX_ANCHOR_ALIASES:
                     anchor_name = _BBOX_ANCHOR_ALIASES[anchor_choice]
@@ -2927,6 +2958,19 @@ def play_video_with_controls(
                         f"anchor='{anchor_name}' across {n_ids} object IDs. "
                         f"Save will write *_markers.csv."
                     )
+                    if detected_fmt.startswith(("sam_", "yolo_")) and n_ids > 1:
+                        print(
+                            ">> vaila/getpixelvideo: STOP — you converted "
+                            f"{n_ids} tracked objects into markers. F9 (pose) "
+                            "will collapse them into the keypoints of ONE "
+                            "object; the resulting dataset CANNOT detect "
+                            "players individually.\n"
+                            ">> For per-player tracking rebuild a DETECT "
+                            "dataset instead:\n"
+                            ">>   uv run python -m vaila.sam_to_yolo build "
+                            "--sam-tracks sam_tracks.csv --video VIDEO.mp4 "
+                            "--class-name person\n"
+                        )
                 else:
                     save_message_text = (
                         f"Loaded {detected_fmt}: {len(tracking_data)} frames, "
@@ -4403,12 +4447,23 @@ def play_video_with_controls(
             "  - Press ESC key",
             "  - Dataset saved: train/val/test",
             "",
+            "=== DETECTION vs POSE (read before exporting) ===",
+            "  Detection (track N people/objects): keep BOXES, one per",
+            "    instance; export via labeling Save/ESC (export_labeling_",
+            "    dataset) -> data.yaml nc>=1, NO kpt_shape. Tracker (BoT-",
+            "    SORT) assigns IDs 1..N at inference. From SAM3 tracks use:",
+            "    uv run python -m vaila.sam_to_yolo --sam-tracks sam_tracks.csv",
+            "  Pose (keypoints of ONE object): F9 below. WARNING: pose makes",
+            "    ONE object per frame whose keypoints ARE your markers. It is",
+            "    NOT how you detect 16 separate people.",
+            "",
             "=== POSE DATASET (Keypoints) ===",
             "  F9: Export YOLO-pose dataset from markers",
             "      -> vaila_dataset_YYYYMMDD_HHMMSS/",
             "      (or append to dataset loaded with F7)",
             "      Click N markers on each frame; F9 builds",
             "      images/ + labels/ + data.yaml (kpt_shape).",
+            "      ONE object/frame; markers become its keypoints.",
             "      May write keypoints.json in dataset (names).",
             "  Ctrl+E: Save ML dataset (PNG + split chooser).",
             "  Save ML button: export split + all_labels view",
@@ -4489,6 +4544,9 @@ def play_video_with_controls(
             "  - F8: Open another video (keep dataset; no need to close app)",
             "  - F9: Export YOLO-pose dataset from markers (keypoints)",
             "       -> retrain YOLO pose (e.g. soccer field, 31/32 kp)",
+            "       NOTE: pose = ONE object/frame (markers = its keypoints).",
+            "       To DETECT/track N people, export a detection dataset",
+            "       (boxes) or: python -m vaila.sam_to_yolo --sam-tracks ...",
             "  - N:  Rename Object Class",
             "",
             "Swap Markers:",
@@ -5763,6 +5821,25 @@ def play_video_with_controls(
         """
         nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
 
+        # Guard against the most common mistake: exporting a POSE dataset after
+        # loading SAM3 bbox tracks and converting them to markers. Pose makes a
+        # SINGLE object per frame whose keypoints are the markers, so a model
+        # trained on it never learns N separate detections. For tracking N
+        # people use a DETECTION dataset (vaila.sam_to_yolo) instead.
+        if bbox_converted_to_markers:
+            print(
+                ">> vaila/getpixelvideo: STOP — F9 exports a POSE dataset "
+                "(ONE object/frame; your markers become its keypoints).\n"
+                ">> vaila/getpixelvideo: If these markers came from SAM/YOLO "
+                "per-player boxes, this dataset CANNOT detect players "
+                "individually (yolotrain will block it as a mis-export).\n"
+                ">> vaila/getpixelvideo: For DETECTION/tracking of N people use "
+                "the boxes instead:\n"
+                ">> vaila/getpixelvideo:   uv run python -m vaila.sam_to_yolo "
+                "build --sam-tracks sam_tracks.csv --video VIDEO.mp4 "
+                "--class-name person"
+            )
+
         class_for_pose = current_label if current_label else "object"
         pitch_keypoint_names = [p["point_name"] for p in pitch_guide_points] or None
         was_appending = current_dataset_dir is not None
@@ -6335,9 +6412,25 @@ def play_video_with_controls(
 
         # Auto-load the project JSON for the current video (if it exists in this dataset)
         base_name = os.path.splitext(os.path.basename(video_path))[0]
-        project_file = os.path.join(current_dataset_dir, f"{base_name}_labeling_project.json")
-        if os.path.exists(project_file):
+        labeling_project = os.path.join(current_dataset_dir, f"{base_name}_labeling_project.json")
+        pose_project = os.path.join(current_dataset_dir, f"{base_name}_pose_project.json")
+        if os.path.exists(labeling_project):
             load_labeling_project()  # will use current_dataset_dir we just set
+        elif os.path.exists(pose_project):
+            yaml_hint = os.path.join(current_dataset_dir, "data.yaml")
+            save_message_text = (
+                f"Dataset set: {os.path.basename(folder)}. "
+                f"Pose project found (train via yolotrain + data.yaml)."
+            )
+            showing_save_message = True
+            save_message_timer = 150
+            print(f"[getpixelvideo] Pose project: {pose_project}")
+            if os.path.exists(yaml_hint):
+                print(f"[getpixelvideo] YOLO training config: {yaml_hint}")
+                print(
+                    ">> validate: uv run python -m vaila.yolotrain "
+                    f"--data {yaml_hint} --task auto --model auto --dry-run"
+                )
         else:
             save_message_text = (
                 f"Dataset set: {os.path.basename(folder)}. No previous labels for this video."
@@ -6375,10 +6468,20 @@ def play_video_with_controls(
             if os.path.exists(alt_project):
                 project_file = alt_project
             else:
-                save_message_text = "No project file for this video in dataset."
+                pose_project = os.path.join(dataset_dir, f"{base_name}_pose_project.json")
+                yaml_hint = os.path.join(dataset_dir, "data.yaml")
+                save_message_text = "No labeling project for this video in dataset."
                 showing_save_message = True
                 save_message_timer = 60
                 print(f"Tried loading: {project_file}")
+                if os.path.exists(pose_project):
+                    print(f"[getpixelvideo] Found pose project instead: {pose_project}")
+                    if os.path.exists(yaml_hint):
+                        print(f"[getpixelvideo] For YOLO training use data.yaml: {yaml_hint}")
+                        print(
+                            ">> validate: uv run python -m vaila.yolotrain "
+                            f"--data {yaml_hint} --task auto --model auto --dry-run"
+                        )
                 return
 
         try:
@@ -10239,6 +10342,7 @@ def export_labeling_dataset(
     original_width,
     original_height,
     output_dataset_dir=None,
+    split_mode="temporal",
 ):
     """
     Export bounding boxes to structured dataset format.
@@ -10247,6 +10351,13 @@ def export_labeling_dataset(
 
     If output_dataset_dir is set, appends to that dataset (multi-video): uses video
     base name as prefix for filenames and merges class names with existing classes.txt.
+
+    ``split_mode`` controls how frames are assigned to train/val/test:
+      * ``"temporal"`` (default) — chronological blocks (first frames train,
+        middle val, last test). Recommended for video: consecutive frames are
+        near-duplicates, so a random split leaks them across train/val and
+        inflates mAP.
+      * ``"random"`` — shuffle frames before splitting.
     """
     import json
     import random
@@ -10290,8 +10401,16 @@ def export_labeling_dataset(
 
     label_to_id = {name: i for i, name in enumerate(class_names)}
 
-    # Create split indices (70/20/10 for this export only)
-    random.shuffle(annotated_frames)
+    # Create split indices (70/20/10 for this export only).
+    if str(split_mode).lower() == "random":
+        random.shuffle(annotated_frames)
+        print(">> vaila/getpixelvideo: split=random (frames shuffled)")
+    else:
+        annotated_frames = sorted(annotated_frames)
+        print(
+            ">> vaila/getpixelvideo: split=temporal "
+            "(chronological train/val/test; no video frame leakage)"
+        )
     n_total = len(annotated_frames)
     n_train = int(n_total * 0.7)
     n_val = int(n_total * 0.2)
@@ -10407,7 +10526,8 @@ def export_labeling_dataset(
     _save_done(f"YOLO detection dataset written to {dataset_dir}")
     return (
         dataset_dir,
-        f"Dataset exported: {len(annotated_frames)} frames (train: {len(splits['train'])}, val: {len(splits['val'])}, test: {len(splits['test'])})",
+        f"Dataset exported: {len(annotated_frames)} frames (train: {len(splits['train'])}, val: {len(splits['val'])}, test: {len(splits['test'])})\n"
+        f"YAML: {os.path.join(dataset_dir, 'data.yaml')}",
     )
 
 
@@ -10445,8 +10565,14 @@ names: {class_names}
     try:
         with open(yaml_path, "w", encoding="utf-8") as f:
             f.write(yaml_content)
-    except Exception:
-        pass
+        print(f">> vaila/getpixelvideo: YOLO data.yaml -> {yaml_path}")
+        print(
+            ">> vaila/getpixelvideo: validate with: "
+            f"uv run python -m vaila.yolotrain --data {yaml_path} "
+            "--task auto --model auto --dry-run"
+        )
+    except Exception as exc:
+        print(f"ERROR: failed to write YOLO data.yaml at {yaml_path}: {exc}")
 
 
 def _detect_dataset_layout(dataset_dir: str) -> str:
@@ -10520,6 +10646,7 @@ def export_pose_dataset(
     coord_decimals: int = 1,
     layout=None,
     image_format="jpg",
+    split_mode="temporal",
 ):
     """Export a YOLO-pose training dataset from the markers clicked in `coordinates`.
 
@@ -10725,15 +10852,23 @@ def export_pose_dataset(
         split_ratios = (0.7, 0.2, 0.1)
         ratio_sum = 1.0
     r_train, r_val, _ = (float(v) / ratio_sum for v in split_ratios)
-    frames_shuffled = list(annotated_frames)
-    random.shuffle(frames_shuffled)
-    n_total = len(frames_shuffled)
+    frames_ordered = list(annotated_frames)
+    if str(split_mode).lower() == "random":
+        random.shuffle(frames_ordered)
+        print(">> vaila/getpixelvideo: pose split=random (frames shuffled)")
+    else:
+        frames_ordered = sorted(frames_ordered)
+        print(
+            ">> vaila/getpixelvideo: pose split=temporal "
+            "(chronological train/val/test; no video frame leakage)"
+        )
+    n_total = len(frames_ordered)
     n_train = int(round(n_total * r_train))
     n_val = int(round(n_total * r_val))
     splits = {
-        "train": frames_shuffled[:n_train],
-        "val": frames_shuffled[n_train : n_train + n_val],
-        "test": frames_shuffled[n_train + n_val :],
+        "train": frames_ordered[:n_train],
+        "val": frames_ordered[n_train : n_train + n_val],
+        "test": frames_ordered[n_train + n_val :],
     }
 
     cap = cv2.VideoCapture(video_path)
@@ -10842,6 +10977,7 @@ def export_pose_dataset(
         flip_idx=flip_idx_final,
         layout=layout_to_use,
     )
+    yaml_path = os.path.join(dataset_dir, "data.yaml")
     if keypoint_names:
         metadata_path = os.path.join(dataset_dir, "keypoints.json")
         metadata = {
@@ -10861,7 +10997,8 @@ def export_pose_dataset(
         dataset_dir,
         "Pose dataset exported: "
         f"{written} frames, Nkp={nkp} (train: {len(splits['train'])}, "
-        f"val: {len(splits['val'])}, test: {len(splits['test'])}, images: {image_ext})",
+        f"val: {len(splits['val'])}, test: {len(splits['test'])}, images: {image_ext})\n"
+        f"YAML: {yaml_path}",
     )
 
 
@@ -10972,11 +11109,18 @@ def _write_pose_data_yaml(
             f"flip_idx: {flip_idx_use}\n"
             f"kpt_names: {keypoint_names}\n"
         )
+    yaml_path = os.path.join(dataset_dir, "data.yaml")
     try:
-        with open(os.path.join(dataset_dir, "data.yaml"), "w", encoding="utf-8") as f:
+        with open(yaml_path, "w", encoding="utf-8") as f:
             f.write(yaml_content)
-    except Exception:
-        pass
+        print(f">> vaila/getpixelvideo: YOLO pose data.yaml -> {yaml_path}")
+        print(
+            ">> vaila/getpixelvideo: validate with: "
+            f"uv run python -m vaila.yolotrain --data {yaml_path} "
+            "--task auto --model auto --dry-run"
+        )
+    except Exception as exc:
+        print(f"ERROR: failed to write YOLO pose data.yaml at {yaml_path}: {exc}")
 
 
 def _get_media_path_linux():

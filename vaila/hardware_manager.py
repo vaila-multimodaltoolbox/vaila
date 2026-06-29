@@ -6,8 +6,8 @@
 # HardwareManager.py
 # Manages hardware detection (GPU/CPU/RAM) and auto-optimizes models for the current system.
 #
-# Update Date: 07 May 2026
-# Version: 0.3.43 (matches vailá app)
+# Update Date: 29 June 2026
+# Version: 0.3.67
 """
 
 import logging
@@ -156,16 +156,24 @@ class HardwareManager:
         Checks for and automatically exports models to .engine format optimized for the current GPU.
 
         Args:
-            model_input (str): Name of the model (e.g., 'yolo11n-pose.pt' or just 'yolo11n-pose')
+            model_input (str): Catalog name (``yolo11n-pose.pt``) or absolute path to a
+                custom ``.pt`` / ``.onnx`` / ``.engine`` file.
             imgsz (int): Image size for export (default: 640).
 
         Returns:
             str: Path to the optimal model to load (.engine if available/created, else .pt).
         """
-        model_name = Path(model_input).stem  # Remove extension if present
+        import hashlib
 
-        # Base paths
-        pt_path = self.models_dir / f"{model_name}.pt"
+        raw = Path(str(model_input)).expanduser()
+        if raw.is_file():
+            pt_path = raw.resolve()
+            # Unique engine stem per absolute path (avoids ``best.pt`` collisions).
+            path_hash = hashlib.sha1(str(pt_path).encode()).hexdigest()[:10]
+            model_name = f"{pt_path.stem}_{path_hash}"
+        else:
+            model_name = raw.stem
+            pt_path = self.models_dir / f"{model_name}.pt"
 
         # If no CUDA capability, just return the PT file (CPU execution)
         if not self.gpu_info["cuda_capable"]:
