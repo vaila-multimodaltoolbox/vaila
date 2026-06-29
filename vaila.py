@@ -1368,6 +1368,14 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
+        # C_C_r5_c2 - Visualization: vailá
+        vaila_btn22 = tk.Button(
+            tools_col3,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
         # Packing Visualization buttons
         show_c3d_btn.grid(row=0, column=0, padx=2, pady=2)
         show_csv_btn.grid(row=0, column=1, padx=2, pady=2)
@@ -1378,6 +1386,7 @@ class Vaila(tk.Tk):
         vaila_btn19.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn20.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn21.grid(row=4, column=0, padx=2, pady=2)
+        vaila_btn22.grid(row=4, column=1, padx=2, pady=2)
         tools_col3.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         # Help and Exit Buttons Frame
         bottom_frame = tk.Frame(scrollable_frame)
