@@ -156,5 +156,5 @@ uv run python -m vaila.loadcell_treadmill --input-dir /path/to/csv_folder --step
 Common `--step` values are `all`, `adjust`, `filter`, and `process`.
 
 ---
-- **Version**: 0.3.49
-- **Updated**: 25 June 2026
+- **Version**: 0.3.56
+- **Updated**: 29 June 2026

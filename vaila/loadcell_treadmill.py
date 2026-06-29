@@ -9,8 +9,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 25 June 2026
-Version: 0.3.49
+Update Date: 29 June 2026
+Version: 0.3.56
 
 Description:
 ------------

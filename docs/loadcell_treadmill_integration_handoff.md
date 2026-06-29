@@ -1,12 +1,12 @@
 # Load Cells Treadmill Integration Handoff
 
-Last updated: 2026-06-23
+Last updated: 2026-06-29
 
 This file documents the current treadmill load-cell processing integration in vailá. It is intended as handoff material for future agents and maintainers. It describes what is implemented now, how the workflow is organized, and which behavior must be preserved.
 
 ## Current State
 
-The integration is implemented as the **Frame B -> B6_r7_c1 - Load Cells** button and as the module `vaila/loadcell_treadmill.py`.
+The integration is implemented as the **Frame B -> B6_r7_c3 - Load Cells** button and as the module `vaila/loadcell_treadmill.py`.
 
 ### Primary Files
 
