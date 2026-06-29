@@ -51,23 +51,11 @@ wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/i
 
 **🪟 Windows:**
 
-```powershell
-irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
-```
-
-or
+Run the following command in PowerShell to automatically configure TLS 1.2/1.3, download, and execute the Windows installer:
 
 ```powershell
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
 ```
-
-If you use a one-liner that points to `https://vaila.io/install.ps1`, use the same TLS fix first:
-
-```powershell
-[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; iwr -useb https://vaila.io/install.ps1 | iex
-```
-
-**Windows SSL/TLS error?** If you see "could not establish trust relationship for the SSL/TLS secure channel", the line above enables TLS 1.2 before the download.
 
 ## Introduction
 
