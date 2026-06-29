@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-06-29
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -171,7 +171,7 @@ B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
 B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
   Soccer Tools includes Field KPs (AI), Soccer-Field Calib, VEK ElasticKick, FIFA cams->DLT and dataset utilities.
 
-B6_r7_c1 - Load Cells     B6_r7_c2 - vailá           B6_r7_c3 - vailá
+B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - Load Cells
 B6_r7_c4 - vailá          B6_r7_c5 - vailá
 
 Load Cells opens a step-based treadmill ground-reaction-force workflow for instrumented treadmill data. It uses reusable TOML configurations for edge-safe low-pass filtering, optional 50/60 Hz mains-noise removal, cell-specific artifact marking/removal, interpolation, calibration, body-weight normalization, COP, step metrics, and asymmetry summaries. The GUI can read participant weight from Borg TXT metadata, flag trials marked with `Tent` values such as `T02*` for manual review, use same-day `tara`, `peso`, and optional plate-weight calibration files as complementary calibration points anchored by the participant weight, average calibration files over their central 5 seconds to avoid edge transients, and save calibration audit reports for each trial. The full pipeline runs in the practical order adjust+interpolate -> filter -> process metrics; filtering previews one calibration file and one running file before applying the same settings in batch, and processing writes timestamped output folders for every stage, with stage-explicit names (`*_processing_steps.csv`, `*_processing_metrics.csv`, `processing_overview.png`, `processing_cop_trajectory.png`) while filtering diagnostics use `filter_*` names, preventing spectrum metrics from being confused with biomechanical metrics. COP uses the fixed 58 x 113 cm treadmill geometry with COP X medio-lateral on the horizontal axis and COP Y anterior-posterior on the vertical axis; COP figures and optional interactive reports show the contact-load center over the instrumented deck, not belt displacement or stride length.
