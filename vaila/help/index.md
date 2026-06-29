@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 126 | **Categories:** 7 | **Generated on:** 23/06/2026
+**Total documented modules:** 127 | **Categories:** 7 | **Generated on:** 29/06/2026
 
 ---
 
@@ -348,11 +348,14 @@ Automatically generated documentation for all Python modules in vailá Multimoda
   - [📄 HTML](reid_markers.html)
   - [📝 Markdown](reid_markers.md)
 
-## Ml (10 modules)
+## Ml (11 modules)
 
 - **markerless2d_analysis_v2**
   - [📄 HTML](markerless2d_analysis_v2.html)
   - [📝 Markdown](markerless2d_analysis_v2.md)
+- **sam_to_yolo**
+  - [📄 HTML](sam_to_yolo.html)
+  - [📝 Markdown](sam_to_yolo.md)
 - **markerless2d_mpyolo**
   - [📄 HTML](markerless2d_mpyolo.html)
   - [📝 Markdown](markerless2d_mpyolo.md)

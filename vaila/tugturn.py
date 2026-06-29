@@ -6,8 +6,8 @@ Authors:
     - Paulo R. P. Santiago
     - Abel G. Chinaglia
 Created: 20 February 2026
-Updated: 23 June 2026
-Version: 0.3.56
+Updated: 29 June 2026
+Version: 0.3.67
 Python Version: 3.12.13
 
 Description:
@@ -54,6 +54,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 try:

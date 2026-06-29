@@ -105,7 +105,7 @@
             <p><strong>Category:</strong> Ml</p>
             <p><strong>File:</strong> vaila/yolov26track.py</p>
             <p><strong>Lines:</strong> 3980+</p>
-            <p><strong>Version:</strong> 0.3.43</p>
+            <p><strong>Version:</strong> 0.3.67</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -122,7 +122,8 @@
                 <li>CSV generation with frame-by-frame tracking data</li>
                 <li>Pose estimation within tracked bounding boxes</li>
                 <li>Automatic GPU detection (CUDA/MPS/CPU)</li>
-                <li>Run modes: <code>track</code>, <code>track+pose</code>, <code>track+seg</code>, <code>run_all (track+seg+pose)</code></li>
+                <li>Run modes: <code>track</code>, <code>track+pose</code> (default), <code>track+seg</code>, <code>run_all (track+seg+pose)</code></li>
+                <li>Single-pass track+pose (v0.3.66): geometric ID stabilize, upscaled bbox ROI, <code>all_id_pose.csv</code>, <code>yolo_reid_links.csv</code>, <code>&lt;stem&gt;_track_pose_overlay.mp4</code></li>
                 <li>Segmentation exports (when masks available): <code>yolo_masks_manifest.csv</code> (<code>frame,id,area,mask_png</code>), <code>yolo_contours.json</code> (SAM-style top-level metadata + <code>frames</code>), <code>yolo_masks/</code>; <code>processed_*_seg.mp4</code> / <code>_all.mp4</code> via H.264 FFmpeg like bbox outputs</li>
                 <li>Tracking-directory discovery for pose-from-tracking: recursive scan for <code>*_id_*.csv</code> under a chosen root (e.g. <code>vailatracker_*</code>)</li>
                 <li>TensorRT: <code>trtexec</code> args match TRT 10; full stderr on failure; fallback to <code>.pt</code></li>
@@ -160,8 +161,26 @@
             <p>GUI: Frame B → <strong>Video AI tools</strong> → <strong>Tracker (v26)</strong> / <strong>Pose (video)</strong> / <strong>Pose (tracking)</strong> / <strong>Seg (v26)</strong> / <strong>SAM 3 video</strong> / <strong>Roboflow trackers (v2.4)</strong>.</p>
         </div>
 
+        <div class="docstring">
+            <h3>🖥️ Headless CLI (<code>track</code>) — export biomechanics CSVs</h3>
+            <p>Run detection + tracking on a video and export the CSVs vailá's kinematics pipeline needs. Ultralytics' own <code>yolo track</code> saves only a video; this subcommand also writes the <strong>REC2D/REC3D markers CSV</strong> and the per-ID bbox tracks.</p>
+            <pre><code>uv run python -m vaila.yolov26track track \
+  --model /ABS/runs/&lt;run&gt;/weights/best.pt \
+  --source /ABS/video.mp4 \
+  --class-name person --conf 0.25 --imgsz 1280 \
+  --tracker botsort.yaml --max-ids 26 --anchor bottom</code></pre>
+            <p>Outputs in <code>&lt;video_dir&gt;/processed_yolotrack_&lt;stem&gt;_&lt;timestamp&gt;/</code> (or <code>--output DIR</code>):</p>
+            <ul>
+                <li><code>&lt;stem&gt;_markers.csv</code> — getpixelvideo point format <code>frame,p1_x,p1_y,...,pN_x,pN_y</code> (one anchor point per player). <strong>Feed this into REC2D (<code>rec2d.py</code>) / REC3D (<code>rec3d.py</code>)</strong> with your DLT parameters.</li>
+                <li><code>{label}_id_NN.csv</code> + <code>all_id_detection.csv</code> — per-ID bbox tracks; load <code>all_id_detection.csv</code> in getpixelvideo to edit/inspect.</li>
+                <li><code>&lt;stem&gt;_track_overlay.mp4</code> — annotated <strong>H.264 MP4</strong> (never a bulky <code>.avi</code>; <code>--no-save-video</code> to skip).</li>
+            </ul>
+            <p>Flags: <code>--anchor center|bottom|top|left|right|corners</code> (marker point of bbox; default <code>bottom</code> = foot), <code>--max-ids N</code> (keep N most persistent IDs, re-rank 1..N → stable <code>p1..pN</code>), <code>--classes 0 32</code>, <code>--vid-stride N</code>, <code>--device auto|cuda|cpu</code>, <code>--conf/--iou/--imgsz</code>.</p>
+            <p><strong>Kinematics flow:</strong> use the <em>same</em> <code>--anchor</code> and <code>--max-ids</code> for every camera so <code>p1..pN</code> columns line up across views for REC3D.</p>
+        </div>
+
         <div class="footer">
-            <p>📅 Last Updated: May 07, 2026 (v0.3.43)</p>
+            <p>📅 Last Updated: June 29, 2026 (v0.3.67)</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

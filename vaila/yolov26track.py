@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 05 June 2026
-Version: 0.3.47
+Update Date: 29 June 2026
+Version: 0.3.67
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -32,6 +32,36 @@ Requirements:
     - Additional dependencies as imported (numpy, csv, etc.)
 
 Change History:
+    - v0.3.66: Single-pass track+pose pipeline — geometric ID linker (SAM3-style
+               IoU+centroid), upscaled bbox ROI for YOLO pose, global keypoint
+               remap, ``all_id_pose.csv``, ``yolo_reid_links.csv``, and
+               ``<stem>_track_pose_overlay.mp4``. GUI default mode is
+               ``track+pose``; CLI adds ``--pose`` / ``--no-pose`` and related flags.
+    - v0.3.65: Added headless ``track`` CLI subcommand
+               (``python -m vaila.yolov26track track --model best.pt --source video.mp4``).
+               Unlike Ultralytics ``yolo track`` (video only), it writes the biomechanics
+               CSVs vailá's reconstruction pipeline needs:
+                 * ``<stem>_markers.csv`` — getpixelvideo point format
+                   ``frame,p1_x,p1_y,...,pN_x,pN_y`` (one ``--anchor`` point per player) →
+                   direct input to REC2D (``rec2d.py``) / REC3D (``rec3d.py``);
+                 * per-ID bbox CSVs (``{label}_id_NN.csv``) + wide ``all_id_detection.csv``
+                   (loads straight into getpixelvideo);
+                 * H.264 ``<stem>_track_overlay.mp4`` — always ``.mp4`` now (temp ``.avi``
+                   is encoded then deleted; OpenCV ``mp4v`` fallback if FFmpeg missing), no
+                   bulky AVI left on disk.
+               Flags: ``--anchor``, ``--max-ids`` (global ID-cap rerank → stable ``p1..pN``),
+               ``--classes``, ``--vid-stride``, ``--conf/--iou/--imgsz``. Vectorised per-ID
+               and markers CSV writers (NumPy pre-fill, one ``to_csv`` each).
+    - v0.3.61: ID-cap phase-1 buffer no longer retains full Ultralytics ``Results``
+               (drops ``orig_img`` / GPU tensors per frame); phase-2 re-reads video from
+               disk. Periodic ``gc`` + ``torch.cuda.empty_cache`` during long CUDA runs
+               (SAM3-style); VRAM + host RAM logged at phase boundaries.
+    - v0.3.60: Tracking terminal progress summarized by frame chunks (~100) with
+               percentage only — no frame-by-frame spam; Ultralytics tqdm off.
+    - v0.3.59: Terminal progress during tracking — phase banners and frame counters for
+               YOLO inference (incl. ID-cap buffering) and output writing.
+    - v0.3.58: Custom trained .pt paths no longer collapse to vaila/models/{stem}.pt during
+               TensorRT auto-export; skip TRT for user-selected weights and load path directly.
     - 2026-06: Added "Max tracked IDs" post-tracking rerank cap (global rerank by persistence, applies to all sub-trackers via CSVs); clarified that BoT-SORT w/ ReID uses yolo26n-cls.pt for appearance features (not as detector) when model head is end2end.
     - 2026-05: Ultralytics dir bootstrap before YOLO import; recursive tracking-dir discovery; TRT10-style trtexec; SAM-shaped yolo_contours + manifest columns; FFmpeg for seg/all overlays.
     - 2026-01: Added ROI selection with improved visibility on macOS.
@@ -60,6 +90,7 @@ import contextlib
 import csv
 import datetime
 import faulthandler
+import gc
 import glob
 import json
 import logging
@@ -84,6 +115,19 @@ from rich import print
 # Must set Ultralytics home before importing YOLO (avoids weights in repo root / CWD).
 VAILA_MODELS_DIR = Path(__file__).resolve().parent / "models"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _is_custom_model_path(model_name: str) -> bool:
+    """True when the user picked a concrete weights file outside the catalog list."""
+    text = os.path.expanduser(str(model_name or "").strip())
+    if not text:
+        return False
+    if os.path.isabs(text):
+        return True
+    if os.sep in text or text.startswith(("./", ".\\")):
+        return True
+    lower = text.lower()
+    return lower.endswith((".pt", ".onnx", ".engine")) and os.path.isfile(text)
 
 
 @dataclass(frozen=True)
@@ -1339,7 +1383,7 @@ class TrackerConfigDialog(simpledialog.Dialog):
         run_frame.grid(row=5, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
 
         tk.Label(run_frame, text="Mode:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.run_mode_var = tk.StringVar(value="track")
+        self.run_mode_var = tk.StringVar(value="track+pose")
         run_mode_combo = ttk.Combobox(
             run_frame,
             textvariable=self.run_mode_var,
@@ -1393,6 +1437,23 @@ class TrackerConfigDialog(simpledialog.Dialog):
         self.pose_iou = tk.Entry(pose_frame, width=10)
         self.pose_iou.insert(0, "0.70")
         self.pose_iou.grid(row=1, column=3, padx=5, pady=5, sticky="w")
+
+        tk.Label(pose_frame, text="ROI pad %:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.pose_pad_pct = tk.Entry(pose_frame, width=10)
+        self.pose_pad_pct.insert(0, "0.15")
+        self.pose_pad_pct.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+
+        tk.Label(pose_frame, text="Min ROI px:").grid(row=2, column=2, padx=5, pady=5, sticky="w")
+        self.pose_min_roi = tk.Entry(pose_frame, width=10)
+        self.pose_min_roi.insert(0, "256")
+        self.pose_min_roi.grid(row=2, column=3, padx=5, pady=5, sticky="w")
+
+        self.stabilize_ids_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            pose_frame,
+            text="Geometric ID stabilize (SAM3-style)",
+            variable=self.stabilize_ids_var,
+        ).grid(row=3, column=0, columnspan=2, padx=5, pady=2, sticky="w")
 
         # ROI selection section
         tk.Label(master, text="Region of Interest (ROI):").grid(row=7, column=0, padx=5, pady=5)
@@ -1661,6 +1722,9 @@ class TrackerConfigDialog(simpledialog.Dialog):
                 "pose_model_name": self.pose_model_var.get(),
                 "pose_conf": float(self.pose_conf.get()),
                 "pose_iou": float(self.pose_iou.get()),
+                "pose_pad_pct": float(self.pose_pad_pct.get()),
+                "pose_min_roi": int(self.pose_min_roi.get()),
+                "stabilize_ids": bool(self.stabilize_ids_var.get()),
                 "roi_file": self.roi_file_path,  # Path to saved ROI TOML file
                 "half": True,
                 "persist": True,
@@ -2185,6 +2249,357 @@ def get_color_for_id(tracker_id):
 #      unchanged (so the feature is opt-in).
 # ---------------------------------------------------------------------------
 
+POSE_KEYPOINT_NAMES: tuple[str, ...] = (
+    "nose",
+    "left_eye",
+    "right_eye",
+    "left_ear",
+    "right_ear",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+)
+
+
+def _bbox_iou_xyxy(
+    a: tuple[int, int, int, int],
+    b: tuple[int, int, int, int],
+) -> float:
+    """IoU between two axis-aligned boxes in xyxy pixel coordinates."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1 = max(ax1, bx1)
+    iy1 = max(ay1, by1)
+    ix2 = min(ax2, bx2)
+    iy2 = min(ay2, by2)
+    iw = max(0, ix2 - ix1)
+    ih = max(0, iy2 - iy1)
+    inter = float(iw * ih)
+    if inter <= 0.0:
+        return 0.0
+    area_a = float(max(0, ax2 - ax1) * max(0, ay2 - ay1))
+    area_b = float(max(0, bx2 - bx1) * max(0, by2 - by1))
+    union = area_a + area_b - inter
+    return inter / union if union > 0.0 else 0.0
+
+
+def _centroid_xyxy(bbox: tuple[int, int, int, int]) -> tuple[float, float]:
+    x_min, y_min, x_max, y_max = bbox
+    return (x_min + x_max) * 0.5, (y_min + y_max) * 0.5
+
+
+def _assignment_min_cost(cost_matrix: np.ndarray) -> list[tuple[int, int]]:
+    """Rectangular minimum-cost assignment (Hungarian with greedy fallback)."""
+    if cost_matrix.size == 0:
+        return []
+    try:
+        from scipy.optimize import linear_sum_assignment
+
+        rows, cols = linear_sum_assignment(cost_matrix)
+        return [(int(r), int(c)) for r, c in zip(rows, cols, strict=True)]
+    except Exception:
+        remaining_rows = set(range(cost_matrix.shape[0]))
+        remaining_cols = set(range(cost_matrix.shape[1]))
+        pairs: list[tuple[int, int]] = []
+        while remaining_rows and remaining_cols:
+            best: tuple[float, int, int] | None = None
+            for r in remaining_rows:
+                for c in remaining_cols:
+                    val = float(cost_matrix[r, c])
+                    if best is None or val < best[0]:
+                        best = (val, r, c)
+            if best is None:
+                break
+            _val, r_best, c_best = best
+            pairs.append((r_best, c_best))
+            remaining_rows.remove(r_best)
+            remaining_cols.remove(c_best)
+        return pairs
+
+
+def prepare_pose_roi(
+    frame: np.ndarray,
+    xyxy: tuple[int, int, int, int],
+    *,
+    pad_pct: float = 0.15,
+    min_side: int = 256,
+    max_side: int = 1280,
+) -> tuple[np.ndarray, float, int, int]:
+    """Crop bbox (with padding), upscale so min side >= min_side; return ROI + map params."""
+    x_min, y_min, x_max, y_max = xyxy
+    fh, fw = frame.shape[:2]
+    bw = max(1, x_max - x_min)
+    bh = max(1, y_max - y_min)
+    pad_x = int(bw * pad_pct)
+    pad_y = int(bh * pad_pct)
+    x0 = max(0, x_min - pad_x)
+    y0 = max(0, y_min - pad_y)
+    x1 = min(fw, x_max + pad_x)
+    y1 = min(fh, y_max + pad_y)
+    roi = frame[y0:y1, x0:x1].copy()
+    rh, rw = roi.shape[:2]
+    scale = 1.0
+    if min(rh, rw) < min_side:
+        scale = min_side / float(min(rh, rw))
+    if max(rh, rw) * scale > max_side:
+        scale = min(scale, max_side / float(max(rh, rw)))
+    if abs(scale - 1.0) > 1e-6:
+        new_w = max(1, int(round(rw * scale)))
+        new_h = max(1, int(round(rh * scale)))
+        roi = cv2.resize(roi, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    return roi, scale, x0, y0
+
+
+def map_pose_keypoints_to_global(
+    kps_roi: np.ndarray,
+    scale: float,
+    offset_x: int,
+    offset_y: int,
+) -> list[tuple[float, float, float]]:
+    """Map ROI keypoints back to full-frame coordinates."""
+    out: list[tuple[float, float, float]] = []
+    inv_scale = 1.0 / scale if scale else 1.0
+    for kp in kps_roi:
+        x = float(kp[0]) * inv_scale + offset_x
+        y = float(kp[1]) * inv_scale + offset_y
+        conf = float(kp[2]) if len(kp) > 2 else 1.0
+        out.append((x, y, conf))
+    return out
+
+
+def select_pose_person(kps_list: np.ndarray, roi_wh: tuple[int, int]) -> int:
+    """Pick the pose detection whose centroid is closest to the ROI center."""
+    rw, rh = roi_wh
+    cx, cy = rw * 0.5, rh * 0.5
+    best_i = 0
+    best_dist = float("inf")
+    for i, person in enumerate(kps_list):
+        xs: list[float] = []
+        ys: list[float] = []
+        for kp in person:
+            if len(kp) >= 3 and float(kp[2]) > 0.1:
+                xs.append(float(kp[0]))
+                ys.append(float(kp[1]))
+        if not xs:
+            continue
+        px = sum(xs) / len(xs)
+        py = sum(ys) / len(ys)
+        dist = (px - cx) ** 2 + (py - cy) ** 2
+        if dist < best_dist:
+            best_dist = dist
+            best_i = i
+    return best_i
+
+
+class _GeometricTrackLinker:
+    """Frame-to-frame geometric ID stabilizer (SAM3-style, appearance-free)."""
+
+    def __init__(
+        self,
+        *,
+        enabled: bool = True,
+        max_gap: int = 12,
+        max_centroid_dist_px: float = 180.0,
+        min_iou: float = 0.05,
+    ) -> None:
+        self.enabled = enabled
+        self.max_gap = max_gap
+        self.max_centroid_dist_px = max_centroid_dist_px
+        self.min_iou = min_iou
+        self.active: dict[int, dict[str, Any]] = {}
+        self.next_stable_id = 1
+        self.reid_links: list[tuple[int, int, int]] = []
+
+    def assign_frame(self, frame_idx: int, detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Assign ``stable_id`` to each detection; log ``(frame, raw_id, stable_id)``."""
+        if not self.enabled:
+            for det in detections:
+                det["stable_id"] = int(det["tracker_id"])
+            return detections
+
+        assigned_tracks: set[int] = set()
+        out: list[dict[str, Any]] = []
+        for det in detections:
+            x_min, y_min, x_max, y_max = det["xyxy"]
+            bbox = (int(x_min), int(y_min), int(x_max), int(y_max))
+            cx, cy = _centroid_xyxy(bbox)
+            best_tid: int | None = None
+            best_cost = float("inf")
+            for tid, tr in self.active.items():
+                if tid in assigned_tracks:
+                    continue
+                gap = frame_idx - int(tr["frame"])
+                if gap < 0 or gap > self.max_gap:
+                    continue
+                prev_cx, prev_cy = tr["centroid"]
+                dist = float(np.hypot(cx - prev_cx, cy - prev_cy))
+                iou = _bbox_iou_xyxy(bbox, tr["bbox"])
+                if dist > self.max_centroid_dist_px and iou < self.min_iou:
+                    continue
+                cost = (dist / self.max_centroid_dist_px) + (1.0 - iou)
+                if cost < best_cost:
+                    best_cost = cost
+                    best_tid = tid
+            if best_tid is None:
+                best_tid = self.next_stable_id
+                self.next_stable_id += 1
+            assigned_tracks.add(best_tid)
+            self.active[best_tid] = {
+                "frame": frame_idx,
+                "bbox": bbox,
+                "centroid": (cx, cy),
+            }
+            raw_id = int(det["raw_id"])
+            self.reid_links.append((frame_idx, raw_id, best_tid))
+            det_out = dict(det)
+            det_out["stable_id"] = best_tid
+            out.append(det_out)
+        return out
+
+
+def _pose_csv_headers() -> list[str]:
+    headers: list[str] = ["Frame", "Tracker_ID", "Label"]
+    for name in POSE_KEYPOINT_NAMES:
+        headers.extend([f"{name}_x", f"{name}_y", f"{name}_conf"])
+    return headers
+
+
+def _pose_row_from_keypoints(
+    frame_idx: int,
+    stable_id: int,
+    label: str,
+    abs_kps: list[tuple[float, float, float]] | None,
+) -> list[Any]:
+    row: list[Any] = [frame_idx, stable_id, label]
+    if abs_kps is None:
+        for _ in POSE_KEYPOINT_NAMES:
+            row.extend([np.nan, np.nan, np.nan])
+        return row
+    for i, _ in enumerate(POSE_KEYPOINT_NAMES):
+        if i < len(abs_kps):
+            x, y, c = abs_kps[i]
+            row.extend([x, y, c])
+        else:
+            row.extend([np.nan, np.nan, np.nan])
+    return row
+
+
+def _load_pose_model(pose_model_name: str, models_dir: str) -> Any | None:
+    """Load YOLO pose weights; prefer .pt when ROI sizes vary (skip broken TRT)."""
+    _configure_ultralytics_dirs(VAILA_MODELS_DIR)
+    os.makedirs(models_dir, exist_ok=True)
+    pose_model_path = os.path.join(models_dir, pose_model_name)
+    if not os.path.exists(pose_model_path):
+        try:
+            print(f"Downloading pose model {pose_model_name}...")
+            current_dir = os.getcwd()
+            os.chdir(models_dir)
+            YOLO(pose_model_path)
+            os.chdir(current_dir)
+        except Exception as e:
+            print(f"Failed to download pose model: {e}")
+            return None
+    hw = HardwareManager(models_dir=models_dir)
+    try:
+        pt_path = Path(models_dir) / pose_model_name
+        if pt_path.is_file():
+            pose_model_path = str(pt_path)
+        else:
+            exported = hw.auto_export(pose_model_name, imgsz=640)
+            pose_model_path = (
+                str(pt_path) if str(exported).endswith(".engine") else str(exported)
+            )
+        return YOLO(pose_model_path, task="pose")
+    except TypeError:
+        return YOLO(pose_model_path)
+    except Exception as e:
+        print(f"Failed to load pose model: {e}")
+        return None
+
+
+def _infer_pose_in_bbox(
+    pose_model: Any,
+    frame: np.ndarray,
+    xyxy: tuple[int, int, int, int],
+    *,
+    device: str,
+    conf: float,
+    iou: float,
+    pad_pct: float,
+    min_side: int,
+) -> list[tuple[float, float, float]] | None:
+    """Run upscaled pose inside bbox; return global keypoints or None."""
+    roi, scale, off_x, off_y = prepare_pose_roi(
+        frame, xyxy, pad_pct=pad_pct, min_side=min_side
+    )
+    if roi.size == 0:
+        return None
+    results = pose_model.predict(
+        roi,
+        conf=conf,
+        iou=iou,
+        device=device,
+        verbose=False,
+        show=False,
+        save=False,
+    )
+    if not results or results[0].keypoints is None:
+        return None
+    kp_data = results[0].keypoints.data
+    if kp_data is None or len(kp_data) == 0:
+        return None
+    if hasattr(kp_data, "cpu"):
+        kp_data = cast(Any, kp_data).cpu().numpy()
+    elif hasattr(kp_data, "numpy"):
+        kp_data = cast(Any, kp_data).numpy()
+    roi_h, roi_w = roi.shape[:2]
+    person_idx = select_pose_person(kp_data, (roi_w, roi_h))
+    return map_pose_keypoints_to_global(kp_data[person_idx], scale, off_x, off_y)
+
+
+def _write_yolo_reid_links_csv(output_dir: str, links: list[tuple[int, int, int]]) -> str | None:
+    if not links:
+        return None
+    path = os.path.join(output_dir, "yolo_reid_links.csv")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["frame", "raw_id", "stable_id"])
+        for frame, raw_id, stable_id in links:
+            writer.writerow([frame, raw_id, stable_id])
+    return path
+
+
+def _write_all_id_pose_csv(output_dir: str, rows: list[list[Any]]) -> str | None:
+    if not rows:
+        return None
+    path = os.path.join(output_dir, "all_id_pose.csv")
+    pd.DataFrame(rows, columns=cast(Any, _pose_csv_headers())).to_csv(path, index=False)
+    return path
+
+
+def _flush_pose_csv_buffers(
+    output_dir: str,
+    video_basename: str,
+    pose_buffers: dict[tuple[str, int], list[list[Any]]],
+) -> list[str]:
+    written: list[str] = []
+    for (_label, stable_id), rows in sorted(pose_buffers.items()):
+        if not rows:
+            continue
+        out_path = os.path.join(output_dir, f"{video_basename}_id_{stable_id:02d}_pose.csv")
+        pd.DataFrame(rows, columns=cast(Any, _pose_csv_headers())).to_csv(out_path, index=False)
+        written.append(out_path)
+    return written
+
 
 @dataclass
 class _BufferedFrame:
@@ -2196,10 +2611,22 @@ class _BufferedFrame:
     raw_result: Any | None  # original Ultralytics Results object (for re-plot)
 
 
+@dataclass
+class _LightweightTrackFrame:
+    """Phase-2 write item: video frame re-read from disk + lightweight detections."""
+
+    frame_idx: int
+    frame: np.ndarray
+    detections: list[dict]
+
+
 def buffer_tracking_stream(
     results_iter: Any,
     save_annotated: bool = True,
     progress_cb: Any | None = None,
+    *,
+    keep_raw_result: bool = True,
+    gpu_gc_every: int = 0,
 ) -> tuple[list[_BufferedFrame], dict[int, int]]:
     """Materialize a YOLO `Results` stream into per-frame detection records.
 
@@ -2210,6 +2637,10 @@ def buffer_tracking_stream(
             ``result.plot()`` so we can re-emit the annotated video after the
             rerank.
         progress_cb: optional ``callable(frame_idx)`` for progress reporting.
+        keep_raw_result: when False, only detection metadata is kept (no
+            ``orig_img`` / GPU tensors) — required for long clips with ID cap.
+        gpu_gc_every: when > 0, run :func:`_release_yolo_gpu_memory` every N
+            buffered frames during CUDA inference.
 
     Returns:
         Tuple ``(buffer, id_counts)`` where ``buffer`` is the list of
@@ -2218,6 +2649,7 @@ def buffer_tracking_stream(
     """
     buffer: list[_BufferedFrame] = []
     id_counts: dict[int, int] = {}
+    gc_interval = max(0, int(gpu_gc_every))
 
     for frame_idx, result in enumerate(results_iter):
         detections: list[dict] = []
@@ -2242,19 +2674,60 @@ def buffer_tracking_stream(
                 id_counts[rid] = id_counts.get(rid, 0) + 1
 
         annotated = result.plot() if save_annotated else None
+        raw_keep = result if keep_raw_result else None
         buffer.append(
             _BufferedFrame(
                 frame_idx=frame_idx,
                 detections=detections,
                 annotated_frame=annotated,
-                raw_result=result,
+                raw_result=raw_keep,
             )
         )
+        if not keep_raw_result:
+            with contextlib.suppress(Exception):
+                result.orig_img = None
+            del result
+        if gc_interval > 0 and (frame_idx + 1) % gc_interval == 0:
+            _release_yolo_gpu_memory()
         if progress_cb is not None:
             with contextlib.suppress(Exception):
                 progress_cb(frame_idx)
 
+    if gc_interval > 0:
+        _release_yolo_gpu_memory()
+
     return buffer, id_counts
+
+
+def _iter_idcap_write_frames(
+    video_path: str,
+    buffer: list[_BufferedFrame],
+    *,
+    vid_stride: int = 1,
+) -> Any:
+    """Re-read source video for ID-cap phase 2 (no in-RAM ``orig_img`` buffer)."""
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video for ID-cap write pass: {video_path}")
+    stride = max(1, int(vid_stride))
+    try:
+        for bf in buffer:
+            src_idx = bf.frame_idx * stride
+            if stride > 1:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, float(src_idx))
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                _track_log(
+                    f"ID-cap write pass: stopped at buffered frame {bf.frame_idx} (read failed)"
+                )
+                break
+            yield _LightweightTrackFrame(
+                frame_idx=bf.frame_idx,
+                frame=frame,
+                detections=bf.detections,
+            )
+    finally:
+        cap.release()
 
 
 def build_id_rerank_map(id_counts: dict[int, int], max_ids: int) -> dict[int, int]:
@@ -2607,6 +3080,124 @@ def _console_hint(msg: str) -> None:
     if out is not None:
         out.write(f"{msg}\n")
         out.flush()
+
+
+def _track_log(message: str, *, flush: bool = True) -> None:
+    """Emit a tracking progress line (``>>`` prefix survives absl logging)."""
+    out = sys.__stdout__
+    if out is not None:
+        out.write(f">> yolov26track: {message}\n")
+        if flush:
+            out.flush()
+
+
+def _track_banner(title: str, detail: str = "") -> None:
+    """Boxed banner before long-running tracking phases."""
+    out = sys.__stdout__
+    if out is None:
+        return
+    bar = "=" * 70
+    out.write(f"\n{bar}\n")
+    out.write(f">> yolov26track: {title}\n")
+    if detail:
+        out.write(f"   {detail}\n")
+    out.write(f"{bar}\n")
+    out.flush()
+
+
+def _release_yolo_gpu_memory() -> None:
+    """Best-effort CUDA release between long YOLO track passes (SAM3-style).
+
+      Ultralytics keeps per-frame tensors and allocator pools across a streaming
+    ``model.track`` loop.  Periodic ``gc`` + ``empty_cache`` avoids VRAM climbing
+      until the driver OOMs on long broadcast clips.
+    """
+    gc.collect()
+    if torch.cuda.is_available():
+        with contextlib.suppress(Exception):
+            torch.cuda.empty_cache()
+        with contextlib.suppress(Exception):
+            torch.cuda.ipc_collect()
+
+
+def _memory_snapshot() -> dict[str, float]:
+    """Non-throwing VRAM + host RAM probe for terminal logging."""
+    snap: dict[str, float] = {}
+    try:
+        import psutil
+
+        vm = psutil.virtual_memory()
+        snap["ram_available_gib"] = float(vm.available) / (1024**3)
+        snap["ram_used_pct"] = float(vm.percent)
+    except Exception:
+        pass
+    if torch.cuda.is_available():
+        with contextlib.suppress(Exception):
+            free_b, total_b = torch.cuda.mem_get_info()
+            snap["vram_free_gib"] = float(free_b) / (1024**3)
+            snap["vram_total_gib"] = float(total_b) / (1024**3)
+    return snap
+
+
+def _log_memory_status(label: str) -> None:
+    """Log VRAM (nvidia-smi aligned) and host RAM for operator monitoring."""
+    snap = _memory_snapshot()
+    if not snap:
+        return
+    parts: list[str] = []
+    if "vram_free_gib" in snap and "vram_total_gib" in snap:
+        parts.append(f"VRAM {snap['vram_free_gib']:.1f}/{snap['vram_total_gib']:.1f} GiB free")
+    if "ram_available_gib" in snap:
+        pct = snap.get("ram_used_pct", 0.0)
+        parts.append(f"RAM {snap['ram_available_gib']:.1f} GiB avail ({pct:.0f}% used)")
+    if parts:
+        _track_log(f"{label}: " + " | ".join(parts))
+
+
+PROGRESS_FRAME_CHUNK = 100
+PROGRESS_MAX_LINES = 40
+
+
+def _progress_chunk_size(total_frames: int) -> int:
+    """Return frame interval between terminal progress lines (multiples of 100)."""
+    chunk = PROGRESS_FRAME_CHUNK
+    if total_frames <= chunk:
+        return chunk
+    # Long broadcast clips: cap terminal updates (~40 lines) instead of one per 100 frames.
+    coarse = (total_frames + PROGRESS_MAX_LINES - 1) // PROGRESS_MAX_LINES
+    if coarse <= chunk:
+        return chunk
+    return ((coarse + chunk - 1) // chunk) * chunk
+
+
+def _emit_frame_progress(
+    frame_idx: int,
+    total_frames: int,
+    *,
+    phase: str,
+    chunk_frames: int = PROGRESS_FRAME_CHUNK,
+) -> None:
+    """Emit summarized progress at chunk boundaries and on the last frame."""
+    current = frame_idx + 1
+    if total_frames > 0:
+        at_chunk = current % chunk_frames == 0
+        at_end = current >= total_frames
+        if not at_chunk and not at_end:
+            return
+        pct = min(100.0, 100.0 * current / total_frames)
+        _track_log(f"{phase}: {pct:.0f}% ({current}/{total_frames})")
+    elif current % chunk_frames == 0:
+        _track_log(f"{phase}: frame {current}")
+
+
+def _make_frame_progress_logger(total_frames: int, phase: str, chunk_frames: int | None = None):
+    """Build a ``progress_cb`` for :func:`buffer_tracking_stream`."""
+    chunk = chunk_frames if chunk_frames is not None else _progress_chunk_size(total_frames)
+
+    def _cb(frame_idx: int) -> None:
+        _emit_frame_progress(frame_idx, total_frames, phase=phase, chunk_frames=chunk)
+
+    return _cb
 
 
 def run_yolov26pose_video(parent: tk.Misc | None = None) -> None:
@@ -4288,14 +4879,14 @@ def run_yolov26track():
 
     models_dir = str(VAILA_MODELS_DIR)
 
+    is_custom_model = _is_custom_model_path(model_name)
+
     # Handle model path based on whether it's a custom model or pre-trained
-    if os.path.isabs(model_name) or model_name.startswith("./") or model_name.startswith("../"):
-        # Custom model - use the path directly
-        model_path = model_name
+    if is_custom_model:
+        model_path = os.path.abspath(os.path.expanduser(model_name))
         print(f"Using custom model: {model_path}")
 
-        # Validate custom model file
-        if not os.path.exists(model_path):
+        if not os.path.isfile(model_path):
             messagebox.showerror("Error", f"Custom model file not found: {model_path}")
             return
     else:
@@ -4356,29 +4947,41 @@ def run_yolov26track():
             return "pose"
         return "detect"
 
+    pt_fallback_path = (
+        model_path if is_custom_model else str(Path(models_dir) / f"{Path(model_name).stem}.pt")
+    )
+
     try:
-        # Auto-export if needed (creates .engine optimized for this GPU)
-        model_path = hw.auto_export(model_name, imgsz=640)
-        # Guard: some failed exports leave a 0-byte engine, which will crash inside `track()`.
-        if str(model_path).endswith(".engine"):
-            p = Path(model_path)
-            with contextlib.suppress(OSError):
-                if p.exists() and p.stat().st_size == 0:
-                    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    broken_dst = p.with_suffix(f".broken_{ts}.engine")
-                    with contextlib.suppress(Exception):
-                        p.replace(broken_dst)
-                        print(f"[warning] Zero-byte TensorRT engine moved to: {broken_dst}")
-                    model_path = str(Path(models_dir) / f"{Path(model_name).stem}.pt")
-                    print(f"[warning] Falling back to PT weights: {model_path}")
-        task = _guess_task(model_name)
-        # Ultralytics sometimes cannot infer task for TensorRT engines; pass explicit task.
-        model = YOLO(model_path, task=task)
-        print(f"Model loaded successfully: {model_path} (task={task})")
+        if is_custom_model:
+            task = _guess_task(model_path)
+            model = YOLO(model_path, task=task)
+            print(f"Model loaded successfully: {model_path} (task={task}, custom weights)")
+        else:
+            # Auto-export if needed (creates .engine optimized for this GPU)
+            model_path = hw.auto_export(model_name, imgsz=640)
+            # Guard: some failed exports leave a 0-byte engine, which will crash inside `track()`.
+            if str(model_path).endswith(".engine"):
+                p = Path(model_path)
+                with contextlib.suppress(OSError):
+                    if p.exists() and p.stat().st_size == 0:
+                        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        broken_dst = p.with_suffix(f".broken_{ts}.engine")
+                        with contextlib.suppress(Exception):
+                            p.replace(broken_dst)
+                            print(f"[warning] Zero-byte TensorRT engine moved to: {broken_dst}")
+                        model_path = pt_fallback_path
+                        print(f"[warning] Falling back to PT weights: {model_path}")
+            task = _guess_task(model_name)
+            # Ultralytics sometimes cannot infer task for TensorRT engines; pass explicit task.
+            model = YOLO(model_path, task=task)
+            print(f"Model loaded successfully: {model_path} (task={task})")
     except TypeError:
         # Back-compat if installed Ultralytics does not accept `task=` kwarg.
-        model_path = hw.auto_export(model_name, imgsz=640)
-        model = YOLO(model_path)
+        if is_custom_model:
+            model = YOLO(model_path)
+        else:
+            model_path = hw.auto_export(model_name, imgsz=640)
+            model = YOLO(model_path)
         print(f"Model loaded successfully: {model_path} (task=auto)")
     except Exception as e:
         # TensorRT engines can become stale/corrupt across Ultralytics/TensorRT updates.
@@ -4393,10 +4996,11 @@ def run_yolov26track():
                 print(f"[warning] Corrupt TensorRT engine moved to: {broken_dst}")
 
             # Fall back to PT weights (no TensorRT) so tracking can run.
-            pt_path = Path(models_dir) / f"{Path(model_name).stem}.pt"
+            pt_path = Path(pt_fallback_path)
             try:
-                task = _guess_task(model_name)
+                task = _guess_task(model_path if is_custom_model else model_name)
                 model = YOLO(str(pt_path), task=task)
+                model_path = str(pt_path)
                 print(f"[warning] Falling back to PT weights: {pt_path} (task={task})")
             except Exception:
                 logging.exception("Failed to fall back to PT after engine JSONDecodeError")
@@ -4426,8 +5030,12 @@ def run_yolov26track():
     for video_file in os.listdir(video_dir):
         if video_file.endswith((".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")):
             video_count += 1
-            video_path = os.path.join(video_dir, video_file)
+            video_path = os.path.abspath(os.path.join(video_dir, video_file))
+            if not os.path.isfile(video_path):
+                print(f"[yolov26track] Skipping missing video: {video_path}")
+                continue
             video_name = os.path.splitext(os.path.basename(video_path))[0]
+            print(f"[yolov26track] Tracking video: {video_path}")
 
             # Create a subdirectory for this specific video
             output_dir = os.path.join(main_output_dir, video_name)
@@ -4460,6 +5068,8 @@ def run_yolov26track():
             all_video_path = os.path.join(output_dir, f"processed_{video_name}_all.mp4")
             temp_seg_avi_path = os.path.join(output_dir, f"processed_{video_name}_seg_temp.avi")
             temp_all_avi_path = os.path.join(output_dir, f"processed_{video_name}_all_temp.avi")
+            track_pose_overlay_path = os.path.join(output_dir, f"{video_name}_track_pose_overlay.mp4")
+            temp_pose_avi_path = os.path.join(output_dir, f"{video_name}_track_pose_temp.avi")
 
             # Use MJPG codec for AVI (highly compatible and reliable)
             # This ensures the video is written correctly without corruption
@@ -4601,27 +5211,70 @@ def run_yolov26track():
                 # Fallback: use tracker name directly (Ultralytics will use defaults)
                 tracker_config = tracker_name
 
-            print(f"Tracking with {tracker_name} (YOLO built-in tracker)")
+            print(f"[yolov26track] Tracking video: {video_path}")
+
+            pose_model = None
+            if do_pose:
+                pose_model = _load_pose_model(
+                    str(config.get("pose_model_name", "yolo26n-pose.pt")),
+                    models_dir,
+                )
+                if pose_model is None:
+                    messagebox.showerror(
+                        "Error",
+                        f"Failed to load pose model: {config.get('pose_model_name')}",
+                    )
+                    continue
+                print(f"Pose model loaded for inline inference: {config.get('pose_model_name')}")
+
+            geo_linker = _GeometricTrackLinker(enabled=bool(config.get("stabilize_ids", True)))
+            pose_buffers: dict[tuple[str, int], list[list[Any]]] = {}
+            all_pose_rows: list[list[Any]] = []
+            pose_pad_pct = float(config.get("pose_pad_pct", 0.15))
+            pose_min_roi = int(config.get("pose_min_roi", 256))
+            pose_conf = float(config.get("pose_conf", 0.10))
+            pose_iou = float(config.get("pose_iou", 0.70))
+
+            _track_banner(
+                "Starting video tracking",
+                f"video={os.path.basename(video_path)} | frames≈{total_frames} | "
+                f"tracker={tracker_name} | device={config['device']}",
+            )
+            if max_tracked_ids := int(config.get("max_tracked_ids", 0) or 0):
+                _track_log(
+                    f"ID cap enabled (top-{max_tracked_ids}): phase 1 = YOLO inference, "
+                    "phase 2 = write overlays/CSVs"
+                )
+            else:
+                _track_log("Streaming track + writing overlays/CSVs in one pass")
 
             tracker_csv_files = {}
             # Map raw tracker IDs (from YOLO) to sequential per-label IDs starting at 1
             label_to_raw2seq = {}
             label_to_next = {}
 
+            track_kwargs: dict[str, Any] = {
+                "source": str(video_path),
+                "conf": config["conf"],
+                "iou": config["iou"],
+                "device": config["device"],
+                "vid_stride": config["vid_stride"],
+                "save": False,
+                "stream": True,
+                "persist": True,
+                "tracker": tracker_config,
+                "verbose": False,
+            }
+            if target_classes is not None:
+                track_kwargs["classes"] = target_classes
+
+            _track_log(
+                "Running YOLO track inference — progress every "
+                f"~{_progress_chunk_size(total_frames)} frames on stdout"
+            )
+
             try:
-                results = model.track(
-                    source=video_path,
-                    conf=config["conf"],
-                    iou=config["iou"],
-                    device=config["device"],
-                    vid_stride=config["vid_stride"],
-                    save=False,
-                    stream=True,
-                    persist=True,
-                    tracker=tracker_config,
-                    classes=target_classes,
-                    verbose=False,
-                )
+                results = model.track(**track_kwargs)
             except json.JSONDecodeError as e:
                 # AutoBackend(TensorRT) can throw JSONDecodeError if engine metadata is empty/corrupt.
                 if str(model_path).endswith(".engine"):
@@ -4631,68 +5284,70 @@ def run_yolov26track():
                     with contextlib.suppress(Exception):
                         broken.replace(broken_dst)
                         print(f"[warning] Corrupt TensorRT engine moved to: {broken_dst}")
-                    pt_path = Path(models_dir) / f"{Path(model_name).stem}.pt"
-                    task = _guess_task(model_name)
+                    pt_path = Path(pt_fallback_path)
+                    task = _guess_task(model_path if is_custom_model else model_name)
                     model = YOLO(str(pt_path), task=task)
+                    model_path = str(pt_path)
                     print(f"[warning] Retrying tracking with PT weights: {pt_path} (task={task})")
-                    results = model.track(
-                        source=video_path,
-                        conf=config["conf"],
-                        iou=config["iou"],
-                        device=config["device"],
-                        vid_stride=config["vid_stride"],
-                        save=False,
-                        stream=True,
-                        persist=True,
-                        tracker=tracker_config,
-                        classes=target_classes,
-                        verbose=False,
-                    )
+                    results = model.track(**track_kwargs)
                 else:
                     raise e
 
             # Post-tracking ID cap (global rerank).
-            # When max_tracked_ids > 0, we materialize the full stream once,
-            # rank raw IDs by persistence (frames observed), keep the top-N
-            # and re-map them to stable sequential ids 1..N. All other
-            # detections are dropped from the annotated frame and from the
-            # per-id CSVs.
-            max_tracked_ids = int(config.get("max_tracked_ids", 0) or 0)
+            write_progress_chunk = _progress_chunk_size(total_frames)
             if max_tracked_ids > 0:
-                print(
-                    f"ID cap: buffering tracking stream to keep top-{max_tracked_ids} "
-                    f"most persistent IDs..."
+                progress_chunk = write_progress_chunk
+                _log_memory_status("Before phase 1/2")
+                _track_log(
+                    f"Phase 1/2 — buffering detections only (keep top-{max_tracked_ids} IDs; "
+                    "video re-read in phase 2)..."
                 )
-                _buffer, _id_counts = buffer_tracking_stream(results, save_annotated=False)
+                _buffer, _id_counts = buffer_tracking_stream(
+                    results,
+                    save_annotated=False,
+                    keep_raw_result=False,
+                    gpu_gc_every=progress_chunk,
+                    progress_cb=_make_frame_progress_logger(
+                        total_frames,
+                        "Track inference",
+                        chunk_frames=progress_chunk,
+                    ),
+                )
+                del results
+                _release_yolo_gpu_memory()
+                _log_memory_status("After phase 1/2 buffer")
+                _track_log(
+                    f"Inference buffered {len(_buffer)} frames, "
+                    f"{len(_id_counts)} unique raw tracker IDs"
+                )
                 rerank_map = build_id_rerank_map(_id_counts, max_tracked_ids)
                 if rerank_map:
                     kept_ids = sorted(rerank_map.values())
-                    print(
+                    _track_log(
                         f"ID cap: kept raw ids {sorted(rerank_map.keys())} "
                         f"-> new ids {kept_ids} (frames per id: "
                         f"{[(rid, _id_counts[rid]) for rid in sorted(rerank_map.keys())]})"
                     )
                 else:
-                    print("ID cap: no IDs to keep (empty stream).")
-                # Rewrite boxes.id in place on each buffered result, then
-                # re-emit as a fresh stream the loop can iterate over.
-                for _bf in _buffer:
-                    if _bf.raw_result is not None:
-                        rewrite_ultralytics_boxes_id(_bf.raw_result, rerank_map)
-                results = (_bf.raw_result for _bf in _buffer)
-                # Disable the per-label seq re-numbering: rerank already
-                # produced clean global ids 1..N, so the existing
-                # ``label_to_raw2seq`` pass-through is an identity mapping.
-                label_to_raw2seq = {"__rerank__": rerank_map}
+                    _track_log("ID cap: no IDs to keep (empty stream).")
+                _reranked_buffer = rerank_buffered_stream(_buffer, rerank_map)
+                del _buffer, _id_counts, rerank_map
+                _release_yolo_gpu_memory()
+                results = _iter_idcap_write_frames(
+                    video_path,
+                    _reranked_buffer,
+                    vid_stride=int(config.get("vid_stride", 1) or 1),
+                )
+                label_to_raw2seq = {"__rerank__": {}}
                 label_to_next = {"__rerank__": 1}
-                # Helper closure: when the rerank map is active, return the
-                # new id directly instead of consulting ``label_to_raw2seq``.
                 _rerank_active = True
-                del _buffer, _id_counts
+                _track_log("Phase 2/2 — writing annotated video and per-ID CSVs...")
             else:
                 _rerank_active = False
 
+            output_phase = "Writing output" if max_tracked_ids > 0 else "Track+write"
             frame_idx = 0
+            stream_gc_every = write_progress_chunk if max_tracked_ids <= 0 else 0
             seg_writer: cv2.VideoWriter | None = None
             all_writer: cv2.VideoWriter | None = None
             if do_seg:
@@ -4723,14 +5378,34 @@ def run_yolov26track():
                         fps,
                         (width, height),
                     )
-            for result in results:
-                frame = result.orig_img
+            pose_overlay_writer: cv2.VideoWriter | None = None
+            if do_pose:
+                pose_overlay_writer = cv2.VideoWriter(
+                    temp_pose_avi_path,
+                    cv2.VideoWriter_fourcc(*"MJPG"),  # ty: ignore[unresolved-attribute]
+                    fps,
+                    (width, height),
+                )
+                if not pose_overlay_writer.isOpened():
+                    pose_overlay_writer = cv2.VideoWriter(
+                        temp_pose_avi_path,
+                        cv2.VideoWriter_fourcc(*"XVID"),  # ty: ignore[unresolved-attribute]
+                        fps,
+                        (width, height),
+                    )
+            for write_item in results:
+                lightweight = isinstance(write_item, _LightweightTrackFrame)
+                if lightweight:
+                    frame = write_item.frame
+                    frame_idx = write_item.frame_idx
+                else:
+                    frame = write_item.orig_img
                 frame_seg = frame.copy() if do_seg else frame
                 frame_all = frame.copy() if (do_seg or do_pose) else frame
                 frame_contours: dict[str, Any] | None = None
                 masks_data = None
-                if do_seg and getattr(result, "masks", None) is not None:
-                    masks_data = getattr(result.masks, "data", None)
+                if not lightweight and do_seg and getattr(write_item, "masks", None) is not None:
+                    masks_data = getattr(write_item.masks, "data", None)
                     if masks_data is not None and hasattr(masks_data, "cpu"):
                         masks_data = cast(Any, masks_data).cpu().numpy()
 
@@ -4742,31 +5417,76 @@ def run_yolov26track():
                     if do_seg or do_pose:
                         cv2.polylines(frame_all, [roi_poly], True, (255, 255, 0), 2)
 
-                boxes = result.boxes if result.boxes is not None else getattr(result, "obbs", None)
+                if lightweight:
+                    det_list = write_item.detections
+                else:
+                    boxes = (
+                        write_item.boxes
+                        if write_item.boxes is not None
+                        else getattr(write_item, "obbs", None)
+                    )
+                    det_list = None
 
-                if boxes is None:
+                if lightweight and not det_list:
                     writer.write(frame)
                     if seg_writer is not None:
                         seg_writer.write(frame_seg)
                     if all_writer is not None:
                         all_writer.write(frame_all)
-                    if frame_idx % 20 == 0:
-                        print(f"Processing frame {frame_idx}/{total_frames}", end="\r")
+                    if pose_overlay_writer is not None:
+                        pose_overlay_writer.write(frame_all)
+                    _emit_frame_progress(
+                        frame_idx,
+                        total_frames,
+                        phase=output_phase,
+                        chunk_frames=write_progress_chunk,
+                    )
                     frame_idx += 1
                     continue
 
-                for det_i, box in enumerate(cast(Any, boxes)):
-                    box = cast(Any, box)
-                    x_min, y_min, x_max, y_max = map(int, box.xyxy[0].tolist())
-                    conf = box.conf[0].item()
-                    raw_id = int(box.id[0]) if box.id is not None else -1
-                    class_id = int(box.cls[0].item()) if box.cls is not None else -1
+                if not lightweight and boxes is None:
+                    writer.write(frame)
+                    if seg_writer is not None:
+                        seg_writer.write(frame_seg)
+                    if all_writer is not None:
+                        all_writer.write(frame_all)
+                    if pose_overlay_writer is not None:
+                        pose_overlay_writer.write(frame_all)
+                    _emit_frame_progress(
+                        frame_idx,
+                        total_frames,
+                        phase=output_phase,
+                        chunk_frames=write_progress_chunk,
+                    )
+                    frame_idx += 1
+                    if stream_gc_every > 0 and frame_idx % stream_gc_every == 0:
+                        _release_yolo_gpu_memory()
+                    continue
+
+                if lightweight:
+                    det_iter: Any = enumerate(det_list)
+                else:
+                    det_iter = enumerate(cast(Any, boxes))
+
+                frame_dets: list[dict[str, Any]] = []
+                for det_i, box in det_iter:
+                    if lightweight:
+                        det = cast(dict[str, Any], box)
+                        x_min, y_min, x_max, y_max = map(int, det["xyxy"])
+                        conf = float(det["conf"])
+                        raw_id = int(det["raw_id"])
+                        class_id = int(det["cls"])
+                    else:
+                        box = cast(Any, box)
+                        x_min, y_min, x_max, y_max = map(int, box.xyxy[0].tolist())
+                        conf = box.conf[0].item()
+                        raw_id = int(box.id[0]) if box.id is not None else -1
+                        class_id = int(box.cls[0].item()) if box.cls is not None else -1
                     label = model.names.get(class_id, "unknown")
 
                     if raw_id < 0:
                         continue
 
-                    # If ROI is defined, skip detections whose center is outside the polygon
                     if mask_img is not None:
                         cx = (x_min + x_max) // 2
                         cy = (y_min + y_max) // 2
@@ -4780,7 +5500,6 @@ def run_yolov26track():
                         label_to_raw2seq[label] = {}
                         label_to_next[label] = 1
                     if _rerank_active:
-                        # Rerank already produced global ids 1..N; keep them as-is.
                         tracker_id = raw_id
                     else:
                         if raw_id not in label_to_raw2seq[label]:
@@ -4788,7 +5507,30 @@ def run_yolov26track():
                             label_to_next[label] += 1
                         tracker_id = label_to_raw2seq[label][raw_id]
 
-                    color = get_color_for_id(tracker_id)
+                    frame_dets.append(
+                        {
+                            "raw_id": raw_id,
+                            "tracker_id": tracker_id,
+                            "xyxy": (x_min, y_min, x_max, y_max),
+                            "conf": conf,
+                            "label": label,
+                            "det_i": det_i,
+                        }
+                    )
+
+                if geo_linker.enabled:
+                    frame_dets = geo_linker.assign_frame(frame_idx, frame_dets)
+                else:
+                    for det in frame_dets:
+                        det["stable_id"] = det["tracker_id"]
+
+                for det in frame_dets:
+                    stable_id = int(det["stable_id"])
+                    x_min, y_min, x_max, y_max = det["xyxy"]
+                    conf = float(det["conf"])
+                    label = str(det["label"])
+                    det_i = int(det["det_i"])
+                    color = get_color_for_id(stable_id)
 
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
                     if do_seg:
@@ -4797,7 +5539,7 @@ def run_yolov26track():
                         cv2.rectangle(frame_all, (x_min, y_min), (x_max, y_max), color, 2)
                     cv2.putText(
                         frame,
-                        f"id {tracker_id} {label}",
+                        f"id {stable_id} {label}",
                         (x_min, y_min - 10),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.5,
@@ -4807,7 +5549,7 @@ def run_yolov26track():
                     if do_seg:
                         cv2.putText(
                             frame_seg,
-                            f"id {tracker_id} {label}",
+                            f"id {stable_id} {label}",
                             (x_min, y_min - 10),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.5,
@@ -4817,7 +5559,7 @@ def run_yolov26track():
                     if do_seg or do_pose:
                         cv2.putText(
                             frame_all,
-                            f"id {tracker_id} {label}",
+                            f"id {stable_id} {label}",
                             (x_min, y_min - 10),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.5,
@@ -4825,18 +5567,18 @@ def run_yolov26track():
                             2,
                         )
 
-                    key = (tracker_id, label)
+                    key = (stable_id, label)
                     if key not in tracker_csv_files:
                         tracker_csv_files[key] = initialize_csv(
                             output_dir,
                             label,
-                            tracker_id,
+                            stable_id,
                             total_frames,
                         )
                     update_csv(
                         tracker_csv_files[key],
                         frame_idx,
-                        tracker_id,
+                        stable_id,
                         label,
                         x_min,
                         y_min,
@@ -4845,17 +5587,35 @@ def run_yolov26track():
                         conf,
                     )
 
+                    if do_pose and pose_model is not None:
+                        abs_kps = _infer_pose_in_bbox(
+                            pose_model,
+                            frame,
+                            (x_min, y_min, x_max, y_max),
+                            device=str(config["device"]),
+                            conf=pose_conf,
+                            iou=pose_iou,
+                            pad_pct=pose_pad_pct,
+                            min_side=pose_min_roi,
+                        )
+                        pose_row = _pose_row_from_keypoints(frame_idx, stable_id, label, abs_kps)
+                        pose_key = (label, stable_id)
+                        pose_buffers.setdefault(pose_key, []).append(pose_row)
+                        all_pose_rows.append(pose_row)
+                        if abs_kps:
+                            frame_all = _draw_keypoints_and_skeleton(frame_all, abs_kps, color=color)
+
                     if do_seg and masks_data is not None and det_i < len(masks_data):
                         mask_u8 = _to_mask_u8(masks_data[det_i])
                         area_px = int(np.count_nonzero(mask_u8))
                         mask_rel = ""
                         if save_masks:
-                            mask_name = f"frame_{frame_idx:06d}_id_{tracker_id:02d}.png"
+                            mask_name = f"frame_{frame_idx:06d}_id_{stable_id:02d}.png"
                             mask_path = seg_masks_dir / mask_name
                             cv2.imwrite(str(mask_path), mask_u8)
                             mask_rel = str(mask_path.relative_to(Path(output_dir)))
                             mask_manifest_rows.append(
-                                f"{frame_idx},{tracker_id},{area_px},{mask_rel}"
+                                f"{frame_idx},{stable_id},{area_px},{mask_rel}"
                             )
 
                         if save_contours:
@@ -4864,8 +5624,8 @@ def run_yolov26track():
                                 if frame_contours is None:
                                     frame_contours = {"frame": frame_idx, "objects": []}
                                 obj_entry: dict[str, Any] = {
-                                    "id": tracker_id,
-                                    "obj_id": tracker_id,
+                                    "id": stable_id,
+                                    "obj_id": stable_id,
                                     "label": label,
                                     "bbox_xyxy": [x_min, y_min, x_max, y_max],
                                     "area_px": area_px,
@@ -4887,13 +5647,25 @@ def run_yolov26track():
                     seg_writer.write(frame_seg)
                 if all_writer is not None:
                     all_writer.write(frame_all)
+                if pose_overlay_writer is not None:
+                    pose_overlay_writer.write(frame_all)
                 if frame_contours is not None:
                     contours_out["frames"].append(frame_contours)
 
-                if frame_idx % 20 == 0:
-                    print(f"Processing frame {frame_idx}/{total_frames}", end="\r")
+                _emit_frame_progress(
+                    frame_idx,
+                    total_frames,
+                    phase=output_phase,
+                    chunk_frames=write_progress_chunk,
+                )
 
                 frame_idx += 1
+                if stream_gc_every > 0 and frame_idx % stream_gc_every == 0:
+                    _release_yolo_gpu_memory()
+
+            _release_yolo_gpu_memory()
+            if max_tracked_ids > 0:
+                _log_memory_status("After phase 2/2 write")
 
             writer.release()
             if seg_writer is not None:
@@ -4920,7 +5692,20 @@ def run_yolov26track():
                         os.remove(temp_all_avi_path)
                     else:
                         print(f"Combined FFmpeg failed; keeping {temp_all_avi_path}")
-            print("")  # newline after progress
+            if pose_overlay_writer is not None:
+                pose_overlay_writer.release()
+                if (
+                    os.path.exists(temp_pose_avi_path)
+                    and os.path.getsize(temp_pose_avi_path) > 0
+                ):
+                    print("Converting track+pose overlay to MP4...")
+                    if _ffmpeg_temp_avi_to_h264_mp4(temp_pose_avi_path, track_pose_overlay_path):
+                        os.remove(temp_pose_avi_path)
+                    else:
+                        print(f"Pose overlay FFmpeg failed; keeping {temp_pose_avi_path}")
+            if frame_idx > 0 and total_frames > 0:
+                _track_log(f"{output_phase}: 100% ({frame_idx}/{total_frames}) — done writing AVI")
+            _track_log(f"Wrote {frame_idx} frames to {temp_avi_path}")
 
             if do_seg:
                 if save_masks and len(mask_manifest_rows) > 1:
@@ -4951,6 +5736,7 @@ def run_yolov26track():
                 continue
 
             # Convert AVI to MP4 using FFmpeg with robust settings for VLC compatibility
+            _track_log("Converting annotated AVI to MP4 (FFmpeg)...")
             print("Converting video to MP4 format for maximum compatibility...")
             try:
                 # Use subprocess for better security and error handling
@@ -5031,15 +5817,24 @@ def run_yolov26track():
             if merged_csv:
                 print(f"Merged detection tracking file created: {merged_csv}")
 
+            if do_pose:
+                links_path = _write_yolo_reid_links_csv(output_dir, geo_linker.reid_links)
+                if links_path:
+                    print(f"Geometric Re-ID links saved: {links_path}")
+                all_pose_path = _write_all_id_pose_csv(output_dir, all_pose_rows)
+                if all_pose_path:
+                    print(f"Combined pose CSV saved: {all_pose_path}")
+                per_id_pose = _flush_pose_csv_buffers(output_dir, video_name, pose_buffers)
+                for pose_csv_path in per_id_pose:
+                    print(f"  Per-ID pose CSV: {os.path.basename(pose_csv_path)}")
+                if track_pose_overlay_path and os.path.isfile(track_pose_overlay_path):
+                    print(f"Track+pose overlay video: {track_pose_overlay_path}")
+                pose_model = None
+                _release_yolo_gpu_memory()
+
             processed_count += 1
 
-            if do_pose:
-                print("\nRUN POSE IN BBOXES (post)")
-                process_pose_in_bboxes(
-                    output_dir,
-                    device=config.get("device"),
-                    pose_model_name=config.get("pose_model_name", "yolo26n-pose.pt"),
-                )
+            # Legacy offline pose pass removed — pose runs inline in the tracking loop.
 
     # Show completion message
     if video_count == 0:
@@ -5196,7 +5991,695 @@ def run_yolov26track():
     root.destroy()
 
 
+_BBOX_ANCHOR_ALIASES_CLI: dict[str, str] = {
+    "c": "center",
+    "centre": "center",
+    "middle": "center",
+    "foot": "bottom",
+    "feet": "bottom",
+    "bottom-center": "bottom",
+    "bottom-centre": "bottom",
+    "head": "top",
+    "top-center": "top",
+    "top-centre": "top",
+}
+
+
+def _anchor_xy_from_bbox_cli(
+    x1: float, y1: float, x2: float, y2: float, anchor: str
+) -> tuple[float, float]:
+    """Pixel anchor point of a bbox (mirrors getpixelvideo ``_anchor_xy_from_bbox``).
+
+    ``center`` (centroid), ``bottom`` (foot/bottom-center), ``top`` (head),
+    ``left``, ``right``, and the four corners. Used to reduce each tracked box
+    to ONE marker point for REC2D/REC3D.
+    """
+    cx = 0.5 * (x1 + x2)
+    cy = 0.5 * (y1 + y2)
+    a = _BBOX_ANCHOR_ALIASES_CLI.get(
+        (anchor or "center").strip().lower(), (anchor or "center").strip().lower()
+    )
+    if a == "center":
+        return cx, cy
+    if a == "bottom":
+        return cx, y2
+    if a == "top":
+        return cx, y1
+    if a == "left":
+        return x1, cy
+    if a == "right":
+        return x2, cy
+    if a == "top-left":
+        return x1, y1
+    if a == "top-right":
+        return x2, y1
+    if a == "bottom-left":
+        return x1, y2
+    if a == "bottom-right":
+        return x2, y2
+    return cx, cy
+
+
+def _write_markers_csv_from_buffer(
+    buffer: list[_BufferedFrame],
+    output_dir: str,
+    video_stem: str,
+    anchor: str = "bottom",
+) -> tuple[str, int]:
+    """Write a getpixelvideo-style ``<stem>_markers.csv`` for REC2D/REC3D.
+
+    Format: ``frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y`` — exactly the vailá
+    pixel-coordinate header that ``rec2d.py`` / ``rec3d.py`` consume. Each
+    tracked ID becomes one stable marker slot (sorted by ID); empty cells are
+    blank (NaN) so missing detections do not corrupt the reconstruction.
+    """
+    total_frames = len(buffer)
+    oids = sorted({int(det["raw_id"]) for bf in buffer for det in bf.detections})
+    slot_by_oid = {oid: i for i, oid in enumerate(oids)}
+    n_slots = len(oids)
+
+    arr = np.full((total_frames, n_slots * 2), np.nan, dtype=np.float64)
+    for bf in buffer:
+        for det in bf.detections:
+            slot = slot_by_oid[int(det["raw_id"])]
+            x1, y1, x2, y2 = det["xyxy"]
+            x, y = _anchor_xy_from_bbox_cli(float(x1), float(y1), float(x2), float(y2), anchor)
+            arr[bf.frame_idx, slot * 2] = x
+            arr[bf.frame_idx, slot * 2 + 1] = y
+
+    columns: list[str] = []
+    for i in range(n_slots):
+        columns.append(f"p{i + 1}_x")
+        columns.append(f"p{i + 1}_y")
+    df = pd.DataFrame(arr, columns=pd.Index(columns))
+    df.insert(0, "frame", np.arange(total_frames, dtype=np.int64))
+
+    out_path = os.path.join(output_dir, f"{video_stem}_markers.csv")
+    df.to_csv(out_path, index=False, float_format="%.3f")
+    return out_path, n_slots
+
+
+def _write_per_id_csvs_from_buffer(
+    buffer: list[_BufferedFrame],
+    output_dir: str,
+    class_name: str,
+    names: dict[int, str] | None = None,
+) -> list[str]:
+    """Write one ``{label}_id_NN.csv`` per tracked ID from a buffered stream.
+
+    Vectorised (NumPy pre-fill, single ``to_csv`` per ID) so 16k-frame clips
+    write in well under a second — unlike the legacy per-frame ``update_csv``.
+    Output schema matches the GUI tracker so ``create_combined_detection_csv``
+    and ``getpixelvideo`` consume the files unchanged.
+    """
+    total_frames = len(buffer)
+    id_rows: dict[int, list[tuple[int, float, float, float, float, float]]] = {}
+    id_label: dict[int, str] = {}
+    for bf in buffer:
+        for det in bf.detections:
+            rid = int(det["raw_id"])
+            x1, y1, x2, y2 = det["xyxy"]
+            id_rows.setdefault(rid, []).append(
+                (bf.frame_idx, float(x1), float(y1), float(x2), float(y2), float(det["conf"]))
+            )
+            if rid not in id_label:
+                cls = det.get("cls")
+                if names and cls is not None and int(cls) in names:
+                    id_label[rid] = str(names[int(cls)])
+                else:
+                    id_label[rid] = class_name
+
+    written: list[str] = []
+    for rid in sorted(id_rows):
+        label = id_label.get(rid, class_name)
+        color = get_color_for_id(rid)  # BGR
+        color_r, color_g, color_b = color[2], color[1], color[0]
+        n = total_frames
+        x_min = np.full(n, np.nan)
+        y_min = np.full(n, np.nan)
+        x_max = np.full(n, np.nan)
+        y_max = np.full(n, np.nan)
+        conf = np.full(n, np.nan)
+        for f_idx, x1, y1, x2, y2, c in id_rows[rid]:
+            x_min[f_idx] = x1
+            y_min[f_idx] = y1
+            x_max[f_idx] = x2
+            y_max[f_idx] = y2
+            conf[f_idx] = c
+        df = pd.DataFrame(
+            {
+                "Frame": np.arange(n),
+                "Tracker ID": np.full(n, rid),
+                "Label": [label] * n,
+                "X_min": x_min,
+                "Y_min": y_min,
+                "X_max": x_max,
+                "Y_max": y_max,
+                "Confidence": conf,
+                "Color_R": np.full(n, color_r),
+                "Color_G": np.full(n, color_g),
+                "Color_B": np.full(n, color_b),
+            }
+        )
+        out_path = os.path.join(output_dir, f"{label}_id_{rid:02d}.csv")
+        df.to_csv(out_path, index=False)
+        written.append(out_path)
+    return written
+
+
+def _export_overlay_video_from_buffer(
+    buffer: list[_BufferedFrame],
+    output_dir: str,
+    video_stem: str,
+    fps: float,
+) -> str | None:
+    """Write annotated frames to an **H.264 .mp4** (small, compatible).
+
+    Primary path: MJPG into a temp ``.avi`` placed in the OS temp dir, then
+    FFmpeg → H.264 ``.mp4``; the bulky AVI is always deleted. If FFmpeg is
+    missing, fall back to OpenCV ``mp4v`` writing straight to ``.mp4``. The
+    output directory therefore never keeps a large ``.avi``.
+    """
+    import tempfile
+
+    frames = [bf.annotated_frame for bf in buffer if bf.annotated_frame is not None]
+    if not frames:
+        return None
+    height, width = frames[0].shape[:2]
+    out_mp4 = os.path.join(output_dir, f"{video_stem}_track_overlay.mp4")
+    fps_val = float(fps or 30.0)
+
+    tmp_dir = tempfile.mkdtemp(prefix="vaila_track_")
+    temp_avi = os.path.join(tmp_dir, f"{video_stem}_track_tmp.avi")
+    try:
+        fourcc = cv2.VideoWriter_fourcc(*"MJPG")  # ty: ignore[unresolved-attribute]
+        writer = cv2.VideoWriter(temp_avi, fourcc, fps_val, (width, height))
+        try:
+            for frame in frames:
+                writer.write(frame)
+        finally:
+            writer.release()
+
+        if _ffmpeg_temp_avi_to_h264_mp4(temp_avi, out_mp4):
+            return out_mp4
+
+        # FFmpeg unavailable/failed: write .mp4 directly with OpenCV (mp4v).
+        print("[yolov26track] FFmpeg unavailable; encoding .mp4 directly with OpenCV mp4v.")
+        fourcc_mp4 = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
+        writer = cv2.VideoWriter(out_mp4, fourcc_mp4, fps_val, (width, height))
+        try:
+            for frame in frames:
+                writer.write(frame)
+        finally:
+            writer.release()
+        if os.path.exists(out_mp4) and os.path.getsize(out_mp4) > 0:
+            return out_mp4
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            if os.path.exists(temp_avi):
+                os.remove(temp_avi)
+            os.rmdir(tmp_dir)
+
+
+def _emit_track_pose_from_buffer(
+    buffer: list[_BufferedFrame],
+    video_path: str,
+    output_dir: str,
+    video_stem: str,
+    *,
+    device: str,
+    names_map: dict[int, str] | None,
+    class_name: str,
+    pose_model_name: str,
+    pose_conf: float,
+    pose_iou: float,
+    pose_pad_pct: float,
+    pose_min_roi: int,
+    stabilize_ids: bool,
+    fps: float,
+    save_overlay: bool = True,
+) -> dict[str, Any]:
+    """Single-pass pose + optional geometric Re-ID from a buffered track stream."""
+    models_dir = str(VAILA_MODELS_DIR)
+    pose_model = _load_pose_model(pose_model_name, models_dir)
+    if pose_model is None:
+        return {}
+
+    total_frames = len(buffer)
+    geo_linker = _GeometricTrackLinker(enabled=stabilize_ids)
+    label_to_raw2seq: dict[str, dict[int, int]] = {}
+    label_to_next: dict[str, int] = {}
+    pose_buffers: dict[tuple[str, int], list[list[Any]]] = {}
+    all_pose_rows: list[list[Any]] = []
+    id_rows: dict[tuple[str, int], list[tuple[int, float, float, float, float, float]]] = {}
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"[yolov26track] ERROR: cannot open video for pose pass: {video_path}")
+        return {}
+
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    temp_pose_avi = os.path.join(output_dir, f"{video_stem}_track_pose_temp.avi")
+    track_pose_overlay_path = os.path.join(output_dir, f"{video_stem}_track_pose_overlay.mp4")
+    writer: cv2.VideoWriter | None = None
+    if save_overlay:
+        writer = cv2.VideoWriter(
+            temp_pose_avi,
+            cv2.VideoWriter_fourcc(*"MJPG"),  # ty: ignore[unresolved-attribute]
+            fps if fps > 0 else 25.0,
+            (width, height),
+        )
+        if not writer.isOpened():
+            writer = cv2.VideoWriter(
+                temp_pose_avi,
+                cv2.VideoWriter_fourcc(*"XVID"),  # ty: ignore[unresolved-attribute]
+                fps if fps > 0 else 25.0,
+                (width, height),
+            )
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    for bf in buffer:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        overlay = frame.copy()
+        frame_dets: list[dict[str, Any]] = []
+        for det in bf.detections:
+            raw_id = int(det["raw_id"])
+            x1, y1, x2, y2 = det["xyxy"]
+            x_min, y_min, x_max, y_max = int(x1), int(y1), int(x2), int(y2)
+            cls = det.get("cls")
+            if names_map and cls is not None and int(cls) in names_map:
+                label = str(names_map[int(cls)])
+            else:
+                label = class_name
+            if label not in label_to_raw2seq:
+                label_to_raw2seq[label] = {}
+                label_to_next[label] = 1
+            if raw_id not in label_to_raw2seq[label]:
+                label_to_raw2seq[label][raw_id] = label_to_next[label]
+                label_to_next[label] += 1
+            tracker_id = label_to_raw2seq[label][raw_id]
+            frame_dets.append(
+                {
+                    "raw_id": raw_id,
+                    "tracker_id": tracker_id,
+                    "xyxy": (x_min, y_min, x_max, y_max),
+                    "conf": float(det["conf"]),
+                    "label": label,
+                }
+            )
+
+        if geo_linker.enabled:
+            frame_dets = geo_linker.assign_frame(bf.frame_idx, frame_dets)
+        else:
+            for det in frame_dets:
+                det["stable_id"] = det["tracker_id"]
+
+        for det in frame_dets:
+            stable_id = int(det["stable_id"])
+            x_min, y_min, x_max, y_max = det["xyxy"]
+            label = str(det["label"])
+            conf = float(det["conf"])
+            color = get_color_for_id(stable_id)
+            cv2.rectangle(overlay, (x_min, y_min), (x_max, y_max), color, 2)
+            cv2.putText(
+                overlay,
+                f"id {stable_id} {label}",
+                (x_min, y_min - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                2,
+            )
+            key = (label, stable_id)
+            id_rows.setdefault(key, []).append(
+                (bf.frame_idx, float(x_min), float(y_min), float(x_max), float(y_max), conf)
+            )
+            abs_kps = _infer_pose_in_bbox(
+                pose_model,
+                frame,
+                (x_min, y_min, x_max, y_max),
+                device=device,
+                conf=pose_conf,
+                iou=pose_iou,
+                pad_pct=pose_pad_pct,
+                min_side=pose_min_roi,
+            )
+            pose_row = _pose_row_from_keypoints(bf.frame_idx, stable_id, label, abs_kps)
+            pose_buffers.setdefault(key, []).append(pose_row)
+            all_pose_rows.append(pose_row)
+            if abs_kps:
+                overlay = _draw_keypoints_and_skeleton(overlay, abs_kps, color=color)
+
+        if writer is not None:
+            writer.write(overlay)
+
+    cap.release()
+    if writer is not None:
+        writer.release()
+        if (
+            os.path.exists(temp_pose_avi)
+            and os.path.getsize(temp_pose_avi) > 0
+            and _ffmpeg_temp_avi_to_h264_mp4(temp_pose_avi, track_pose_overlay_path)
+        ):
+            os.remove(temp_pose_avi)
+
+    written_bbox: list[str] = []
+    for (label, stable_id), rows in sorted(id_rows.items()):
+        color = get_color_for_id(stable_id)
+        color_r, color_g, color_b = color[2], color[1], color[0]
+        n = total_frames
+        x_min_a = np.full(n, np.nan)
+        y_min_a = np.full(n, np.nan)
+        x_max_a = np.full(n, np.nan)
+        y_max_a = np.full(n, np.nan)
+        conf_a = np.full(n, np.nan)
+        for f_idx, x1, y1, x2, y2, c in rows:
+            x_min_a[f_idx] = x1
+            y_min_a[f_idx] = y1
+            x_max_a[f_idx] = x2
+            y_max_a[f_idx] = y2
+            conf_a[f_idx] = c
+        df = pd.DataFrame(
+            {
+                "Frame": np.arange(n),
+                "Tracker ID": np.full(n, stable_id),
+                "Label": [label] * n,
+                "X_min": x_min_a,
+                "Y_min": y_min_a,
+                "X_max": x_max_a,
+                "Y_max": y_max_a,
+                "Confidence": conf_a,
+                "Color_R": np.full(n, color_r),
+                "Color_G": np.full(n, color_g),
+                "Color_B": np.full(n, color_b),
+            }
+        )
+        out_path = os.path.join(output_dir, f"{label}_id_{stable_id:02d}.csv")
+        df.to_csv(out_path, index=False)
+        written_bbox.append(out_path)
+
+    links_path = _write_yolo_reid_links_csv(output_dir, geo_linker.reid_links)
+    all_pose_path = _write_all_id_pose_csv(output_dir, all_pose_rows)
+    per_id_pose = _flush_pose_csv_buffers(output_dir, video_stem, pose_buffers)
+    _release_yolo_gpu_memory()
+
+    return {
+        "bbox_csvs": written_bbox,
+        "all_id_pose": all_pose_path,
+        "yolo_reid_links": links_path,
+        "per_id_pose": per_id_pose,
+        "track_pose_overlay": track_pose_overlay_path if os.path.isfile(track_pose_overlay_path) else None,
+    }
+
+
+def run_track_cli(argv: list[str] | None = None) -> int:
+    """CLI: run YOLO detection+tracking and export biomechanics-ready CSVs.
+
+    Outputs (for kinematics / REC2D / REC3D):
+      * ``{label}_id_NN.csv`` + ``all_id_detection.csv`` — per-ID bbox tracks,
+        loadable in ``getpixelvideo`` (same schema as the GUI tracker).
+      * ``<stem>_markers.csv`` — getpixelvideo point format
+        ``frame,p1_x,p1_y,...,pN_x,pN_y`` (one anchor point per player); feeds
+        ``rec2d.py`` / ``rec3d.py`` directly.
+      * ``<stem>_track_overlay.mp4`` — H.264 overlay (never a bulky ``.avi``).
+
+    Unlike Ultralytics ``yolo track`` (which only saves a video), this emits the
+    CSVs vailá's reconstruction pipeline needs.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="python -m vaila.yolov26track track",
+        description=(
+            "Run YOLO tracking and export per-ID bbox CSVs + a getpixelvideo "
+            "markers CSV (frame,p1_x,p1_y,... for REC2D/REC3D) + an H.264 .mp4."
+        ),
+    )
+    parser.add_argument(
+        "--model", required=True, help="Path to trained weights (best.pt / .engine)."
+    )
+    parser.add_argument(
+        "--source", "--video", dest="source", required=True, help="Input video file."
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output dir. Default: <video_dir>/processed_yolotrack_<stem>_<timestamp>.",
+    )
+    parser.add_argument("--class-name", default="person", help="Fallback label when names missing.")
+    parser.add_argument(
+        "--conf", type=float, default=0.25, help="Confidence threshold (default 0.25)."
+    )
+    parser.add_argument("--iou", type=float, default=0.7, help="NMS IoU threshold (default 0.7).")
+    parser.add_argument(
+        "--imgsz", type=int, default=None, help="Inference image size (match training)."
+    )
+    parser.add_argument("--device", default="auto", help="auto|cuda|mps|cpu (default auto).")
+    parser.add_argument(
+        "--tracker", default="botsort.yaml", help="Tracker config: botsort.yaml or bytetrack.yaml."
+    )
+    parser.add_argument(
+        "--vid-stride", type=int, default=1, help="Process every Nth frame (default 1)."
+    )
+    parser.add_argument(
+        "--classes",
+        type=int,
+        nargs="*",
+        default=None,
+        help="Restrict to these class indices (space separated).",
+    )
+    parser.add_argument(
+        "--max-ids",
+        type=int,
+        default=0,
+        help="Keep only the N most persistent IDs, re-ranked 1..N (0 = no cap).",
+    )
+    parser.add_argument(
+        "--anchor",
+        default="bottom",
+        help=(
+            "Marker point per bbox for the REC2D/REC3D markers CSV: "
+            "center|bottom|top|left|right|corners (default bottom = foot)."
+        ),
+    )
+    parser.add_argument(
+        "--save-video",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Write annotated overlay MP4 (default on; use --no-save-video to skip).",
+    )
+    parser.add_argument(
+        "--pose",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run inline upscaled pose inside tracked bboxes (default on).",
+    )
+    parser.add_argument(
+        "--pose-model",
+        default="yolo26n-pose.pt",
+        help="YOLO pose weights filename under vaila/models/ (default yolo26n-pose.pt).",
+    )
+    parser.add_argument("--pose-conf", type=float, default=0.10, help="Pose confidence threshold.")
+    parser.add_argument("--pose-iou", type=float, default=0.70, help="Pose NMS IoU threshold.")
+    parser.add_argument(
+        "--pose-min-roi",
+        type=int,
+        default=256,
+        help="Minimum ROI side (px) before YOLO pose inference (default 256).",
+    )
+    parser.add_argument(
+        "--pose-pad-pct",
+        type=float,
+        default=0.15,
+        help="Fractional padding around bbox crop (default 0.15).",
+    )
+    parser.add_argument(
+        "--stabilize-ids",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Geometric ID linker after tracker (SAM3-style, default on).",
+    )
+    args = parser.parse_args(argv)
+
+    source = os.path.abspath(args.source)
+    if not os.path.isfile(source):
+        print(f"[yolov26track] ERROR: video not found: {source}")
+        return 2
+    if not os.path.isfile(os.path.abspath(args.model)):
+        print(f"[yolov26track] ERROR: model not found: {os.path.abspath(args.model)}")
+        return 2
+    model_path = os.path.abspath(args.model)
+
+    if args.device.lower() == "auto":
+        device = detect_optimal_device()
+    else:
+        ok, msg = validate_device_choice(args.device)
+        device = args.device.lower() if ok else "cpu"
+        print(f"[yolov26track] device: {msg}")
+
+    video_stem = os.path.splitext(os.path.basename(source))[0]
+    if args.output:
+        output_dir = os.path.abspath(args.output)
+    else:
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = os.path.join(os.path.dirname(source), f"processed_yolotrack_{video_stem}_{ts}")
+    os.makedirs(output_dir, exist_ok=True)
+
+    cap = cv2.VideoCapture(source)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if cap.isOpened() else 0
+    fps = cap.get(cv2.CAP_PROP_FPS) if cap.isOpened() else 30.0
+    cap.release()
+
+    _track_banner(
+        "YOLO track (CLI)",
+        f"model={os.path.basename(model_path)} | video={os.path.basename(source)} | "
+        f"frames≈{total_frames} | tracker={args.tracker} | device={device}",
+    )
+    print(f"[yolov26track] output dir: {output_dir}")
+
+    task = "detect"
+    with contextlib.suppress(Exception):
+        task = _guess_task_for_cli(model_path)
+    model = YOLO(model_path, task=task)
+
+    track_kwargs: dict[str, Any] = {
+        "source": source,
+        "conf": args.conf,
+        "iou": args.iou,
+        "device": device,
+        "vid_stride": max(1, int(args.vid_stride)),
+        "save": False,
+        "stream": True,
+        "persist": True,
+        "tracker": args.tracker,
+        "verbose": False,
+    }
+    if args.imgsz:
+        track_kwargs["imgsz"] = int(args.imgsz)
+    if args.classes:
+        track_kwargs["classes"] = list(args.classes)
+
+    progress_cb = _make_frame_progress_logger(total_frames or 0, "Track inference")
+    results = model.track(**track_kwargs)
+    buffer, id_counts = buffer_tracking_stream(
+        results,
+        save_annotated=bool(args.save_video),
+        keep_raw_result=False,
+        gpu_gc_every=_progress_chunk_size(total_frames or 1) if device == "cuda" else 0,
+        progress_cb=progress_cb,
+    )
+
+    if args.max_ids and args.max_ids > 0:
+        rerank_map = build_id_rerank_map(id_counts, int(args.max_ids))
+        kept = len(rerank_map)
+        print(f"[yolov26track] ID cap: keeping top-{kept} of {len(id_counts)} raw IDs.")
+        buffer = rerank_buffered_stream(buffer, rerank_map)
+
+    names = getattr(model, "names", None)
+    if isinstance(names, dict):
+        names_map = {int(k): str(v) for k, v in names.items()}
+    elif isinstance(names, (list, tuple)):
+        names_map = {i: str(v) for i, v in enumerate(names)}
+    else:
+        names_map = None
+
+    pose_outputs: dict[str, Any] = {}
+    if args.pose:
+        _track_banner(
+            "Inline track+pose (upscaled ROI)",
+            f"pose={args.pose_model} | stabilize_ids={args.stabilize_ids}",
+        )
+        pose_outputs = _emit_track_pose_from_buffer(
+            buffer,
+            source,
+            output_dir,
+            video_stem,
+            device=device,
+            names_map=names_map,
+            class_name=args.class_name,
+            pose_model_name=args.pose_model,
+            pose_conf=float(args.pose_conf),
+            pose_iou=float(args.pose_iou),
+            pose_pad_pct=float(args.pose_pad_pct),
+            pose_min_roi=int(args.pose_min_roi),
+            stabilize_ids=bool(args.stabilize_ids),
+            fps=float(fps),
+            save_overlay=bool(args.save_video),
+        )
+        written = pose_outputs.get("bbox_csvs") or []
+    else:
+        _track_banner("Writing per-ID CSVs", f"frames buffered={len(buffer)}")
+        written = _write_per_id_csvs_from_buffer(buffer, output_dir, args.class_name, names_map)
+
+    combined = create_combined_detection_csv(output_dir)
+
+    _track_banner("Writing REC2D/REC3D markers CSV", f"anchor={args.anchor}")
+    markers_csv, n_markers = _write_markers_csv_from_buffer(
+        buffer, output_dir, video_stem, args.anchor
+    )
+
+    overlay = None
+    if args.save_video:
+        _track_banner("Encoding overlay video (.mp4)", "")
+        overlay = _export_overlay_video_from_buffer(buffer, output_dir, video_stem, fps)
+
+    _track_banner(
+        "DONE",
+        f"IDs={len(written)} | markers={n_markers} | output in {output_dir}",
+    )
+    print(f"[yolov26track] per-ID bbox CSVs: {len(written)} files")
+    if combined:
+        print(f"[yolov26track] combined bbox CSV (getpixelvideo): {combined}")
+    print(f"[yolov26track] REC2D/REC3D markers CSV (frame,p1_x,p1_y,...): {markers_csv}")
+    if overlay:
+        print(f"[yolov26track] overlay video (.mp4): {overlay}")
+    if pose_outputs.get("all_id_pose"):
+        print(f"[yolov26track] combined pose CSV: {pose_outputs['all_id_pose']}")
+    if pose_outputs.get("yolo_reid_links"):
+        print(f"[yolov26track] geometric Re-ID links: {pose_outputs['yolo_reid_links']}")
+    if pose_outputs.get("track_pose_overlay"):
+        print(f"[yolov26track] track+pose overlay: {pose_outputs['track_pose_overlay']}")
+    for p in pose_outputs.get("per_id_pose") or []:
+        print(f"[yolov26track] per-ID pose CSV: {p}")
+    print(
+        "[yolov26track] Kinematics flow: feed the *_markers.csv into "
+        "REC2D (rec2d.py) / REC3D (rec3d.py) with your DLT params."
+    )
+    print(
+        "[yolov26track] To edit/inspect: open the video in getpixelvideo, "
+        "Load Tracking CSV -> all_id_detection.csv (bbox) or the *_markers.csv (points)."
+    )
+    return 0
+
+
+def _guess_task_for_cli(model_path: str) -> str:
+    """Best-effort task guess from a weights filename for the CLI loader."""
+    stem = os.path.basename(model_path).lower()
+    if "pose" in stem:
+        return "pose"
+    if "seg" in stem:
+        return "segment"
+    if "cls" in stem:
+        return "classify"
+    return "detect"
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "track":
+        try:
+            sys.exit(run_track_cli(sys.argv[2:]))
+        except KeyboardInterrupt:
+            print("\n\nTracking interrupted by user.")
+            sys.exit(0)
+        except Exception as e:  # noqa: BLE001
+            print(f"\n\nAn error occurred: {e}")
+            traceback.print_exc()
+            sys.exit(1)
+
     # Launch GUI-based tracker application
     try:
         run_yolov26track()
