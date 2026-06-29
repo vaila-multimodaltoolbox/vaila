@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 23 June 2026
+Update Date: 29 June 2026
 Version: 0.3.56
 
 Example of usage:
@@ -200,7 +200,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 23.Jun.2026 v0.3.56 (Python 3.12.13)
+    vailá - 29.Jun.2026 v0.3.56 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -244,9 +244,9 @@ B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
 B5_r5_c4 - Start Block    B5_r5_c5 - Pynalty
 
 B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
-B5_r6_c4 - Soccer Tools   B5_r6_c5 - vailá
+B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
 
-B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - vailá
+B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - Load Cells
 B6_r7_c4 - vailá          B6_r7_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
@@ -311,7 +311,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 23.Jun.2026 v0.3.56 (Python 3.12.13)")
+        self.title("vailá - 29.Jun.2026 v0.3.56 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -637,7 +637,8 @@ class Vaila(tk.Tk):
             - SAM
             - Soccer-Field Calib
             B6_r7:
-            - vailá (×5 placeholders)
+            - Load Cells (col 3)
+            - vailá (×4 placeholders)
         """
         # B - Multimodal Analysis FRAME
         analysis_frame = tk.LabelFrame(
@@ -986,9 +987,9 @@ class Vaila(tk.Tk):
         )
         vaila_b6_r7_c3 = tk.Button(
             row7_frame,
-            text="vailá",
+            text="Load Cells",
             width=button_width,
-            command=self.show_vaila_message,
+            command=self.loadcell_treadmill,
         )
         vaila_b6_r7_c4 = tk.Button(
             row7_frame,
@@ -1852,6 +1853,13 @@ class Vaila(tk.Tk):
         from vaila import forceplate_analysis
 
         forceplate_analysis.run_force_analysis()
+
+    # B6_r7_c3
+    def loadcell_treadmill(self):
+        """Run load-cell treadmill GRF processing with step-based TOML workflow."""
+        from vaila import loadcell_treadmill
+
+        loadcell_treadmill.run_loadcell_treadmill_gui(parent=self)
 
     # B_r2_c4
     def gnss_analysis(self):
