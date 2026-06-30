@@ -1,16 +1,16 @@
 """
 ===============================================================================
-loadcell_treadmill.py
+treadmill_lc.py
 ===============================================================================
 Project: vailá Multimodal Toolbox
-Script: loadcell_treadmill.py
+Script: treadmill_lc.py
 
 Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 29 June 2026
-Version: 0.3.56
+Update Date: 30 June 2026
+Version: 0.3.68
 
 Description:
 ------------
@@ -21,10 +21,10 @@ body-weight normalization, COP calculation, step detection, and running metrics.
 Usage:
 ------
 GUI:
-    uv run python -m vaila.loadcell_treadmill
+    uv run python -m vaila.treadmill_lc
 
 CLI:
-    uv run python -m vaila.loadcell_treadmill --input-dir data --step all
+    uv run python -m vaila.treadmill_lc --input-dir data --step all
 
 License:
 --------
@@ -385,7 +385,6 @@ def save_adjustment_metadata(file_path, interval_records, mode, interpolation_me
     return [str(json_path), str(toml_path), str(csv_path)]
 
 
-
 def clean_signal_with_clicks(file_path, parent=None):
     """Mark artifacts and immediately choose the best interpolation method."""
     df = pd.read_csv(file_path, header=None)
@@ -462,7 +461,6 @@ def clean_signal_with_clicks(file_path, parent=None):
                             {"start": idx_start, "end": idx_end, "cells": [cell]}
                         )
 
-
             plt.close("all")
 
             if not intervalos_marcados:
@@ -496,7 +494,9 @@ def clean_signal_with_clicks(file_path, parent=None):
                 dialog_parent = parent or tk._default_root or tk.Tk()
                 if parent is None and dialog_parent is not tk._default_root:
                     dialog_parent.withdraw()
-                dialog = InterpDialog(dialog_parent, max_selection=interp_config["max_comparison_methods"])
+                dialog = InterpDialog(
+                    dialog_parent, max_selection=interp_config["max_comparison_methods"]
+                )
                 dialog_parent.wait_window(dialog)
                 selected_methods = dialog.selected_methods or ["linear"]
 
@@ -509,7 +509,9 @@ def clean_signal_with_clicks(file_path, parent=None):
 
                 fig_comp, ax_comp = plt.subplots(figsize=(12, 8))
                 fig_comp.suptitle("Comparison of Summed Signals (Post-Interpolation)", fontsize=16)
-                ax_comp.plot(t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum")
+                ax_comp.plot(
+                    t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum"
+                )
                 ax_comp.plot(
                     t,
                     np.nansum(df_gaps.values, axis=1),
@@ -563,11 +565,19 @@ def clean_signal_with_clicks(file_path, parent=None):
             fig_final, ax = plt.subplots(5, 1, figsize=(14, 10), sharex=True)
             for i in range(4):
                 ax[i].plot(t, dados[:, i], color="gray", alpha=0.45, label="Original")
-                ax[i].plot(t, dados_adjusted[:, i], color=cores[i], lw=1.5, label="Adjusted + Interpolated")
+                ax[i].plot(
+                    t, dados_adjusted[:, i], color=cores[i], lw=1.5, label="Adjusted + Interpolated"
+                )
                 ax[i].legend()
                 ax[i].grid(True)
             ax[4].plot(t, np.sum(dados, axis=1), "gray", alpha=0.45, label="Original Sum")
-            ax[4].plot(t, np.sum(dados_adjusted, axis=1), "black", lw=2, label="Adjusted + Interpolated Sum")
+            ax[4].plot(
+                t,
+                np.sum(dados_adjusted, axis=1),
+                "black",
+                lw=2,
+                label="Adjusted + Interpolated Sum",
+            )
             ax[4].legend()
             ax[4].set_xlabel("Time (s)")
             plt.suptitle("Preview - Adjusted and interpolated signal", fontsize=16)
@@ -607,6 +617,7 @@ def clean_signal_with_clicks(file_path, parent=None):
     finally:
         plt.close("all")
         gc.collect()
+
 
 def is_trial_file(filename: str) -> bool:
     """Return True only for load-cell running signal CSVs.
@@ -1495,7 +1506,9 @@ def preprocess_file_interp(file_path, config, fs=1000, root=None):
     applied_intervals = apply_adjustment_metadata_as_nan(df_filtered, metadata)
 
     if not applied_intervals or not df_filtered.isna().any().any():
-        print(f"No valid interpolation intervals for {os.path.basename(file_path)}. Copying unchanged.")
+        print(
+            f"No valid interpolation intervals for {os.path.basename(file_path)}. Copying unchanged."
+        )
         return df.values, raw, t, False
 
     try:
@@ -1738,9 +1751,7 @@ def normalize_filter_config(config):
     filters["bandpass_highcut"] = float(
         filters_in.get("bandpass_highcut", filters["bandpass_highcut"])
     )
-    filters["lowpass_cutoff"] = float(
-        filters_in.get("lowpass_cutoff", filters["bandpass_highcut"])
-    )
+    filters["lowpass_cutoff"] = float(filters_in.get("lowpass_cutoff", filters["bandpass_highcut"]))
     filters["filter_order"] = int(filters_in.get("filter_order", filters["filter_order"]))
 
     edge_mode = str(filters_in.get("edge_mode", filters["edge_mode"])).lower().strip()
@@ -1994,11 +2005,17 @@ def apply_filter(signal, filter_type="lowpass", fs=1000, **kwargs):
     order = int(kwargs.get("order", 4))
     if filter_type == "lowpass":
         sos = _butter_sos(
-            "lowpass", fs, order=order, cutoff=kwargs.get("lowpass_cutoff", kwargs.get("highcut", 40.0))
+            "lowpass",
+            fs,
+            order=order,
+            cutoff=kwargs.get("lowpass_cutoff", kwargs.get("highcut", 40.0)),
         )
     elif filter_type == "highpass":
         sos = _butter_sos(
-            "highpass", fs, order=order, cutoff=kwargs.get("highpass_cutoff", kwargs.get("lowcut", 0.5))
+            "highpass",
+            fs,
+            order=order,
+            cutoff=kwargs.get("highpass_cutoff", kwargs.get("lowcut", 0.5)),
         )
     else:
         sos = _butter_sos(
@@ -2392,9 +2409,9 @@ class ProcessConfigDialog(simpledialog.Dialog):
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=5)
 
         self.gen_fig_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(
-            params_frame, text="Generate Trial Figures", variable=self.gen_fig_var
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=5)
+        tk.Checkbutton(params_frame, text="Generate Trial Figures", variable=self.gen_fig_var).grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=5
+        )
 
         self.interactive_report_var = tk.BooleanVar(value=True)
         tk.Checkbutton(
@@ -2729,7 +2746,9 @@ def select_analysis_window(grf_total_raw, file_name, parent=None):
                 label = "START" if idx == 0 else "END" if idx == 1 else f"EXTRA {idx + 1}"
                 color = "green" if idx == 0 else "red" if idx == 1 else "orange"
                 marker_artists.append(
-                    ax.axvline(point[0] / FS, color=color, linestyle="--", linewidth=1.2, label=label)
+                    ax.axvline(
+                        point[0] / FS, color=color, linestyle="--", linewidth=1.2, label=label
+                    )
                 )
             if marker_artists:
                 ax.legend(loc="upper right")
@@ -2751,7 +2770,9 @@ def select_analysis_window(grf_total_raw, file_name, parent=None):
                 return
             if event.button != 1:
                 return
-            clicked_points.append((event.xdata * FS, event.ydata if event.ydata is not None else 0.0))
+            clicked_points.append(
+                (event.xdata * FS, event.ydata if event.ydata is not None else 0.0)
+            )
             redraw_markers()
 
         def on_key(event):
@@ -3012,8 +3033,6 @@ def calculate_asymmetry(values_d, values_e):
     }
 
 
-
-
 def _representative_steps(steps, max_steps=4):
     """Return a small set of representative steps for lightweight diagnostic figures."""
     if not steps:
@@ -3109,7 +3128,9 @@ def _plot_strike_attribute_panel(ax_force, ax_derivative, signal, title, fs=FS):
     if len(derivative):
         ax_derivative.plot(pos_maxdiff / fs, val_maxdiff, "gv", markersize=7)
     if pos_transient is not None and pos_transient > 0 and pos_transient - 1 < len(derivative):
-        ax_derivative.plot((pos_transient - 1) / fs, derivative[pos_transient - 1], "rv", markersize=7)
+        ax_derivative.plot(
+            (pos_transient - 1) / fs, derivative[pos_transient - 1], "rv", markersize=7
+        )
     if pos_peak > 0 and pos_peak - 1 < len(derivative):
         ax_derivative.plot((pos_peak - 1) / fs, derivative[pos_peak - 1], "yv", markersize=7)
     ax_derivative.axhline(0, color="0.5", linewidth=0.8)
@@ -3153,7 +3174,9 @@ def _plot_strike_diagnostics(grf_total, steps, file_name, output_dir, fs=FS):
                 )
                 peak = step.get("legacy_peak_index")
                 if peak is not None and np.isfinite(peak):
-                    ax_full.axvline(float(peak) / fs, color="tab:orange", linewidth=0.45, alpha=0.55)
+                    ax_full.axvline(
+                        float(peak) / fs, color="tab:orange", linewidth=0.45, alpha=0.55
+                    )
             ax_full.set_title(f"Detected support regions and internal peaks: {file_name}")
             ax_full.set_ylabel("Total GRF (BW)")
             ax_full.grid(True, alpha=0.25)
@@ -3463,6 +3486,7 @@ def plot_trial_figures(
         )
     gc.collect()
 
+
 def run_process_stage(parent=None, initial_dir=None) -> str | None:
     """Executes the biomechanical analysis and calibration stage."""
     folder = initial_dir or filedialog.askdirectory(
@@ -3747,13 +3771,21 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                     )
 
                 df_file = pd.DataFrame(file_rows)
-                df_d = df_file[df_file["foot"] == "D"].copy() if len(df_file) > 0 else pd.DataFrame()
-                df_e = df_file[df_file["foot"] == "E"].copy() if len(df_file) > 0 else pd.DataFrame()
+                df_d = (
+                    df_file[df_file["foot"] == "D"].copy() if len(df_file) > 0 else pd.DataFrame()
+                )
+                df_e = (
+                    df_file[df_file["foot"] == "E"].copy() if len(df_file) > 0 else pd.DataFrame()
+                )
 
                 asymmetry_metrics = {}
                 for col in colunas_orig + colunas_cinempo:
-                    vals_d = df_d[col].dropna().tolist() if col in df_d.columns and len(df_d) > 0 else []
-                    vals_e = df_e[col].dropna().tolist() if col in df_e.columns and len(df_e) > 0 else []
+                    vals_d = (
+                        df_d[col].dropna().tolist() if col in df_d.columns and len(df_d) > 0 else []
+                    )
+                    vals_e = (
+                        df_e[col].dropna().tolist() if col in df_e.columns and len(df_e) > 0 else []
+                    )
                     asi = calculate_asymmetry(vals_d, vals_e)
                     asymmetry_metrics[f"{col}_ASI"] = asi["ASI"]
                     asymmetry_metrics[f"{col}_mean_D"] = asi["mean_D"]
@@ -3820,7 +3852,7 @@ class LoadCellTreadmillDialog(tk.Toplevel):
 
     def __init__(self, parent: tk.Misc | None = None) -> None:
         super().__init__(parent)
-        self.title("Load Cells - Treadmill GRF")
+        self.title("Treadmill LC - Treadmill GRF")
         self.geometry("600x460")
         self.minsize(560, 440)
         self.transient(parent)
@@ -3853,7 +3885,7 @@ class LoadCellTreadmillDialog(tk.Toplevel):
 
         ttk.Label(
             frame,
-            text="Load Cells - Treadmill GRF",
+            text="Treadmill LC - Treadmill GRF",
             font=("Helvetica", 14, "bold"),
             foreground="#1e293b",
         ).pack(pady=(0, 10))
@@ -3977,14 +4009,14 @@ class LoadCellTreadmillDialog(tk.Toplevel):
         )
 
     def _open_help(self) -> None:
-        help_path = Path(__file__).resolve().parent / "help" / "loadcell_treadmill.html"
+        help_path = Path(__file__).resolve().parent / "help" / "treadmill_lc.html"
         if help_path.exists():
             webbrowser.open_new_tab(help_path.as_uri())
         else:
             messagebox.showinfo("Help", f"Help file not found:\n{help_path}", parent=self)
 
 
-def run_loadcell_treadmill_gui(parent: tk.Misc | None = None) -> None:
+def run_treadmill_lc_gui(parent: tk.Misc | None = None) -> None:
     """Entry point used by vaila.py."""
     owns_root = parent is None
     root = tk.Tk() if owns_root else parent
@@ -4043,7 +4075,7 @@ def main(argv: list[str] | None = None) -> int:
         root.destroy()
         return 0
 
-    run_loadcell_treadmill_gui()
+    run_treadmill_lc_gui()
     return 0
 
 

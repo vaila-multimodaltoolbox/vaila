@@ -1,19 +1,19 @@
-# Load Cells Treadmill Integration Handoff
+# Treadmill LC Integration Handoff
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 This file documents the current treadmill load-cell processing integration in vailá. It is intended as handoff material for future agents and maintainers. It describes what is implemented now, how the workflow is organized, and which behavior must be preserved.
 
 ## Current State
 
-The integration is implemented as the **Frame B -> B6_r7_c3 - Load Cells** button and as the module `vaila/loadcell_treadmill.py`.
+The integration is implemented as the **Frame B -> B6_r7_c3 - Treadmill LC** button and as the module `vaila/treadmill_lc.py`.
 
 ### Primary Files
 
-- `vaila/loadcell_treadmill.py`: Main module with GUI/CLI entry points and processing stages.
-- `tests/test_loadcell_treadmill.py`: Unit tests for calibration helpers, filtering config, interpolation helpers, COP layout, figure generation, and window selection.
-- `vaila/help/loadcell_treadmill.md` and `vaila/help/loadcell_treadmill.html`: User-facing documentation.
-- `vaila.py`: Main GUI entry point wired to the Load Cells button.
+- `vaila/treadmill_lc.py`: Main module with GUI/CLI entry points and processing stages.
+- `tests/test_treadmill_lc.py`: Unit tests for calibration helpers, filtering config, interpolation helpers, COP layout, figure generation, and window selection.
+- `vaila/help/treadmill_lc.md` and `vaila/help/treadmill_lc.html`: User-facing documentation.
+- `vaila.py`: Main GUI entry point wired to the Treadmill LC button.
 - `README.md` and `vaila/help/index.*`: Main documentation entries.
 
 ## Workflow
@@ -139,7 +139,7 @@ Important defaults:
 Common command:
 
 ```bash
-uv run python -m vaila.loadcell_treadmill --input-dir /path/to/csv_folder --step all
+uv run python -m vaila.treadmill_lc --input-dir /path/to/csv_folder --step all
 ```
 
 Common steps: `all`, `adjust`, `filter`, and `process`.
@@ -149,7 +149,7 @@ Common steps: `all`, `adjust`, `filter`, and `process`.
 Run:
 
 ```bash
-uv run pytest tests/test_loadcell_treadmill.py -v
+uv run pytest tests/test_treadmill_lc.py -v
 ```
 
 The tests should cover:

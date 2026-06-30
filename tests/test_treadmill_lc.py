@@ -6,8 +6,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import vaila.loadcell_treadmill as lct
-from vaila.loadcell_treadmill import (
+import vaila.treadmill_lc as lct
+from vaila.treadmill_lc import (
     adjustment_metadata_to_interval_specs,
     analyze_spectrum_filt,
     apply_adjustment_intervals,
@@ -128,7 +128,10 @@ def test_canonical_trial_filename_normalizes_legacy_limpo_names():
     assert canonical_trial_filename("s01_d01_t05.csv") == "s01_d01_t05.csv"
     assert canonical_trial_filename("s01_d01_t05_LIMPO.csv") == "s01_d01_t05.csv"
     assert canonical_trial_filename("S01_D01_T05_LIMPO.CSV") == "s01_d01_t05.csv"
-    assert canonical_trial_filename("s01_d01_t05_adjust_intervals.csv") == "s01_d01_t05_adjust_intervals.csv"
+    assert (
+        canonical_trial_filename("s01_d01_t05_adjust_intervals.csv")
+        == "s01_d01_t05_adjust_intervals.csv"
+    )
 
 
 def test_deduplicate_trial_files_prefers_standard_name():
@@ -251,8 +254,6 @@ def test_read_calibration_cells_uses_middle_sample_window_without_valid_time(tmp
     np.testing.assert_allclose(cells.mean(axis=0), [-10.0, -20.0, -30.0, -40.0])
 
 
-
-
 def test_detect_steps_legacy_valley_segments_cut_to_cut_with_internal_peak():
     contact = np.array(
         [
@@ -355,8 +356,6 @@ def test_calculate_cop_system_uses_declared_cell_layout():
 
     np.testing.assert_allclose(cop_x, [-29.0, -29.0, 29.0, 29.0, 0.0])
     np.testing.assert_allclose(cop_y, [56.5, -56.5, 56.5, -56.5, 0.0])
-
-
 
 
 def test_apply_adjustment_intervals_nan_preserves_length():
@@ -462,7 +461,6 @@ def test_save_adjustment_metadata_json_toml_csv(tmp_path):
     assert loaded["interpolation"]["final_method"] == "pchip"
 
 
-
 def test_find_and_load_adjustment_metadata_for_limpo_file(tmp_path):
     limpo = tmp_path / "s01_d01_t01_LIMPO.csv"
     limpo.write_text("0,1,2,3,4\n")
@@ -511,7 +509,6 @@ def test_apply_adjustment_metadata_as_nan_selected_cells_only():
     assert not np.isnan(df.loc[2:3, 3]).any()
 
 
-
 def test_adjustment_metadata_to_interval_specs_uses_shared_shape():
     metadata = {
         "intervals": [
@@ -526,7 +523,6 @@ def test_adjustment_metadata_to_interval_specs_uses_shared_shape():
     specs = adjustment_metadata_to_interval_specs(metadata)
 
     assert specs == [{"start": 2, "end": 4, "cells": [2]}]
-
 
 
 def test_preprocess_file_interp_skips_already_interpolated_sidecar(tmp_path):
@@ -560,6 +556,7 @@ def test_preprocess_file_interp_skips_already_interpolated_sidecar(tmp_path):
 
     assert did_interpolate is False
     np.testing.assert_allclose(saved, data)
+
 
 def test_lowpass_filter_preserves_constant_signal_edges():
     signal = np.full(1000, 42.0)
@@ -600,6 +597,7 @@ def test_old_filter_toml_defaults_to_lowpass(tmp_path):
     assert filters["filter_order"] == 4
     assert filters["edge_mode"] == "nearest"
 
+
 def test_normalize_analysis_window_points_enter_after_start_uses_signal_end():
     assert normalize_analysis_window_points([(123.4, 1.0)], 1000) == (123, 1000)
 
@@ -612,6 +610,7 @@ def test_normalize_analysis_window_points_invalid_selection_returns_none():
     assert normalize_analysis_window_points([], 1000) is None
     assert normalize_analysis_window_points([(1, 1.0), (2, 1.0), (3, 1.0)], 1000) is None
     assert normalize_analysis_window_points([(800, 1.0), (200, 1.0)], 1000) is None
+
 
 def test_plot_trial_figures_writes_overview_and_full_cop(tmp_path):
     grf_total = np.linspace(0.0, 1.0, 20)
@@ -648,4 +647,3 @@ def test_analyze_spectrum_filt_uses_filter_specific_output_names(tmp_path):
     assert (tmp_path / "s01_d01_t01_filter_sum_spectrum.png").exists()
     assert (tmp_path / "s01_d01_t01_filter_spectrum_metrics.csv").exists()
     assert not (tmp_path / "s01_d01_t01_metrics.csv").exists()
-
