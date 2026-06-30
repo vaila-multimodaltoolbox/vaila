@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 127 | **Categories:** 7 | **Generated on:** 29/06/2026
+**Total documented modules:** 127 | **Categories:** 7 | **Generated on:** 30/06/2026
 
 ---
 
@@ -25,9 +25,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **forceplate_analysis**
   - [📄 HTML](forceplate_analysis.html)
   - [📝 Markdown](forceplate_analysis.md)
-- **loadcell_treadmill**
-  - [📄 HTML](loadcell_treadmill.html)
-  - [📝 Markdown](loadcell_treadmill.md)
+- **treadmill_lc**
+  - [📄 HTML](treadmill_lc.html)
+  - [📝 Markdown](treadmill_lc.md)
 - **gnss_analysis**
   - [📄 HTML](gnss_analysis.html)
   - [📝 Markdown](gnss_analysis.md)
