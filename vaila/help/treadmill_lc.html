@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Load Cells - vailá Help</title>
+    <title>Treadmill LC - vailá Help</title>
     <style>
         body { font-family: Arial, sans-serif; line-height: 1.55; margin: 0; padding: 24px; background: #f7f7f7; color: #222; }
         main { max-width: 980px; margin: 0 auto; background: #fff; padding: 28px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
@@ -19,9 +19,9 @@
 </head>
 <body>
 <main>
-    <h1>Load Cells - Treadmill GRF</h1>
-    <p>The <strong>Load Cells</strong> tool processes instrumented treadmill load-cell data in a guided workflow for running analysis. It supports artifact adjustment with interpolation review, signal filtering, calibration, body-weight normalization, center of pressure (COP), step detection, per-step metrics, and subject-day summaries.</p>
-    <p>Use it from <strong>Multimodal Analysis -&gt; Load Cells</strong>. The full workflow is <strong>Adjust + Interpolate -&gt; Filter -&gt; Process Metrics</strong>. The tool is TOML-configurable so the same settings can be reused for batch processing.</p>
+    <h1>Treadmill LC - Treadmill GRF</h1>
+    <p>The <strong>Treadmill LC</strong> tool processes instrumented treadmill load-cell data in a guided workflow for running analysis. It supports artifact adjustment with interpolation review, signal filtering, calibration, body-weight normalization, center of pressure (COP), step detection, per-step metrics, and subject-day summaries.</p>
+    <p>Use it from <strong>Multimodal Analysis -&gt; Treadmill LC</strong>. The full workflow is <strong>Adjust + Interpolate -&gt; Filter -&gt; Process Metrics</strong>. The tool is TOML-configurable so the same settings can be reused for batch processing.</p>
 
     <h2>Expected Files</h2>
     <p>The input folder can contain trial files, calibration files, and Borg metadata files. The tool separates these automatically by filename.</p>
@@ -111,11 +111,11 @@
     </ul>
 
     <h2>CLI Usage</h2>
-    <pre><code>uv run python -m vaila.loadcell_treadmill --input-dir /path/to/csv_folder --step all</code></pre>
+    <pre><code>uv run python -m vaila.treadmill_lc --input-dir /path/to/csv_folder --step all</code></pre>
     <p>Common <code>--step</code> values are <code>all</code>, <code>adjust</code>, <code>filter</code>, and <code>process</code>.</p>
 
     <div class="footer">
-        <p>Version: 0.3.56 | Updated: 29 June 2026</p>
+        <p>Version: 0.3.68 | Updated: 30 June 2026</p>
     </div>
 </main>
 </body>

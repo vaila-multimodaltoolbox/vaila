@@ -1,10 +1,10 @@
-# Load Cells - Treadmill GRF Help
+# Treadmill LC - Treadmill GRF Help
 
 ## Overview
 
-The **Load Cells** tool processes instrumented treadmill load-cell data in a guided workflow for running analysis. It supports artifact adjustment with interpolation review, signal filtering, calibration, body-weight normalization, center of pressure (COP), step detection, per-step metrics, and subject-day summaries.
+The **Treadmill LC** tool processes instrumented treadmill load-cell data in a guided workflow for running analysis. It supports artifact adjustment with interpolation review, signal filtering, calibration, body-weight normalization, center of pressure (COP), step detection, per-step metrics, and subject-day summaries.
 
-Use it from **Multimodal Analysis -> Load Cells**. The full workflow is:
+Use it from **Multimodal Analysis -> Treadmill LC**. The full workflow is:
 
 1. **Adjust + Interpolate**
 2. **Filter**
@@ -136,7 +136,7 @@ For batch processing, create a TOML once, review it in the GUI editor, then reus
 
 ## GUI Usage
 
-Open **Multimodal Analysis -> Load Cells** and choose:
+Open **Multimodal Analysis -> Treadmill LC** and choose:
 
 - **Run Full Pipeline**: Adjust + Interpolate -> Filter -> Process Metrics.
 - **Adjust + Interpolate**: Only artifact correction and interpolation review.
@@ -150,11 +150,11 @@ Open **Multimodal Analysis -> Load Cells** and choose:
 Run the tool from a terminal:
 
 ```bash
-uv run python -m vaila.loadcell_treadmill --input-dir /path/to/csv_folder --step all
+uv run python -m vaila.treadmill_lc --input-dir /path/to/csv_folder --step all
 ```
 
 Common `--step` values are `all`, `adjust`, `filter`, and `process`.
 
 ---
-- **Version**: 0.3.56
-- **Updated**: 29 June 2026
+- **Version**: 0.3.68
+- **Updated**: 30 June 2026
