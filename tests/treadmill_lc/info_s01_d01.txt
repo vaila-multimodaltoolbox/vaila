@@ -1,0 +1,2 @@
+Suj,Dia,Tent,BORG,Vel,Peso
+S01,01,T01,3,15,61.6
