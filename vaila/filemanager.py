@@ -7,8 +7,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 19 February 2026
-Version: 0.3.26
+Update Date: 01 July 2026
+Version: 0.3.67
 
 Description:
 This script is designed to manage files and directories through a graphical user
@@ -113,15 +113,26 @@ def copy_file():
     if not file_extension:
         file_extension = None
 
+    # Get existing root window
+    parent_root = None
+    if hasattr(tk, "_default_root") and tk._default_root is not None:
+        parent_root = tk._default_root
+
     # Create a new window for pattern entry
-    pattern_window = tk.Tk()
+    if parent_root:
+        pattern_window = tk.Toplevel(parent_root)
+        pattern_window.transient(parent_root)
+        pattern_window.grab_set()
+    else:
+        pattern_window = tk.Tk()
+
     pattern_window.title("Enter File Patterns")
 
     # Text box for entering multiple patterns, one per line
     pattern_label = tk.Label(pattern_window, text="Enter file patterns (one per line):")
     pattern_label.pack()
 
-    pattern_text = tk.Text(pattern_window, height=44, width=60)
+    pattern_text = tk.Text(pattern_window, height=10, width=50)
     pattern_text.pack()
 
     def on_submit():
@@ -134,7 +145,10 @@ def copy_file():
     submit_button = tk.Button(pattern_window, text="Submit", command=on_submit)
     submit_button.pack()
 
-    pattern_window.mainloop()
+    if parent_root:
+        parent_root.wait_window(pattern_window)
+    else:
+        pattern_window.mainloop()
 
 
 def process_copy(src_directory, file_extension, patterns):
@@ -247,8 +261,19 @@ def move_file():
         messagebox.showerror("Error", "No file extension provided.")
         return
 
+    # Get existing root window
+    parent_root = None
+    if hasattr(tk, "_default_root") and tk._default_root is not None:
+        parent_root = tk._default_root
+
     # Create a new window for pattern entry
-    pattern_window = tk.Tk()
+    if parent_root:
+        pattern_window = tk.Toplevel(parent_root)
+        pattern_window.transient(parent_root)
+        pattern_window.grab_set()
+    else:
+        pattern_window = tk.Tk()
+
     pattern_window.title("Enter File Patterns")
 
     # Text box for entering multiple patterns, one per line
@@ -266,7 +291,10 @@ def move_file():
     submit_button = tk.Button(pattern_window, text="Submit", command=on_submit)
     submit_button.pack()
 
-    pattern_window.mainloop()
+    if parent_root:
+        parent_root.wait_window(pattern_window)
+    else:
+        pattern_window.mainloop()
 
 
 def process_move(src_directory, file_extension, patterns):
@@ -508,9 +536,20 @@ def import_file():
         messagebox.showinfo("Data Export", "You selected to export to TRC.")
         # Add your TRC export logic here
 
-    # Create the main GUI window
-    root = tk.Tk()
-    root.title("File Manager - Import/Export Options")
+    # Get existing root window
+    parent_root = None
+    if hasattr(tk, "_default_root") and tk._default_root is not None:
+        parent_root = tk._default_root
+
+    # Create the dialog window
+    if parent_root:
+        dialog = tk.Toplevel(parent_root)
+        dialog.transient(parent_root)
+        dialog.grab_set()
+    else:
+        dialog = tk.Tk()
+
+    dialog.title("File Manager - Import/Export Options")
 
     # Create buttons for each file type or operation
     buttons = [
@@ -528,11 +567,14 @@ def import_file():
 
     # Create a grid of buttons
     for i, (label, command) in enumerate(buttons):
-        btn = tk.Button(root, text=label, command=command, width=40)
+        btn = tk.Button(dialog, text=label, command=command, width=40)
         btn.grid(row=i // 2, column=i % 2, padx=10, pady=10)
 
-    # Start the GUI event loop
-    root.mainloop()
+    # Start the GUI event loop or wait
+    if parent_root:
+        parent_root.wait_window(dialog)
+    else:
+        dialog.mainloop()
 
 
 def rename_files():
@@ -848,10 +890,7 @@ def find_file():
         file_extension = f"*{file_extension}"
 
     # Combine pattern and extension into a complete search pattern
-    if pattern:
-        full_pattern = f"*{pattern}*{file_extension}"
-    else:
-        full_pattern = file_extension  # Use extension only if no pattern is provided
+    full_pattern = f"*{pattern}*{file_extension}" if pattern else file_extension
 
     # Prompt the user to select the destination directory where the .txt file will be saved
     dest_directory = ask_directory(title="Select Destination Directory")
@@ -916,6 +955,9 @@ def find_file():
         messagebox.showerror("Error", f"Error finding files: {e}")
 
 
+_active_transfer_window = None
+
+
 def transfer_file():
     """Transfer files to remote server using rsync or scp."""
     print("Run def transfer_file")
@@ -933,27 +975,37 @@ def transfer_file():
 
 def _transfer_file_gui():
     """Cross-platform file transfer implementation using Python with GUI."""
+    global _active_transfer_window
+    print("DEBUG [filemanager]: _transfer_file_gui started")
     import shutil
 
     # Check for rsync or scp
     rsync_path = shutil.which("rsync")
     scp_path = shutil.which("scp")
+    print(f"DEBUG [filemanager]: rsync_path={rsync_path}, scp_path={scp_path}")
 
     # Create GUI window first (needed for messagebox parent)
     # Get or create root window
     root = None
+    _created_new_root = False
     try:
         # Try to get existing root window
         if hasattr(tk, "_default_root") and tk._default_root is not None:
             root = tk._default_root
+            print(f"DEBUG [filemanager]: root is existing _default_root: {root}")
         else:
             # Create a temporary root window if none exists
             root = tk.Tk()
             root.withdraw()  # Hide it
-    except Exception:
+            _created_new_root = True
+            print(f"DEBUG [filemanager]: root is new Tk: {root}")
+    except Exception as root_err:
+        print(f"DEBUG [filemanager]: Error getting root: {root_err}")
         # Fallback: create new root
         root = tk.Tk()
         root.withdraw()
+        _created_new_root = True
+        print(f"DEBUG [filemanager]: root fallback Tk created: {root}")
 
     if not rsync_path and not scp_path:
         error_msg = (
@@ -977,42 +1029,53 @@ def _transfer_file_gui():
 
         # Use print if root is not available to avoid the error
         if root is None:
-            print(f"ERROR: {error_msg}")
+            print(f"ERROR [filemanager]: {error_msg}")
             return
         try:
+            print("DEBUG [filemanager]: Showing error messagebox (rsync/scp missing)")
             messagebox.showerror("Transfer Tool Not Found", error_msg, parent=root)
-        except Exception:
-            print(f"ERROR: {error_msg}")
+            print("DEBUG [filemanager]: Error messagebox shown")
+        except Exception as e:
+            print(f"ERROR [filemanager]: {error_msg} (Failed to show messagebox: {e})")
         return
 
     # Determine which tool to use
     use_rsync = rsync_path is not None
     transfer_method = "RSYNC" if use_rsync else "SCP"
+    print(f"DEBUG [filemanager]: use_rsync={use_rsync}, transfer_method={transfer_method}")
 
     # Ensure root is properly initialized before creating Toplevel
     if root is None:
-        print("ERROR: Cannot create transfer window - no root window available")
+        print("ERROR [filemanager]: Cannot create transfer window - no root window available")
         return
 
     # Update root window to ensure it's ready
+    print("DEBUG [filemanager]: Updating root idletasks")
     with contextlib.suppress(BaseException):
         root.update_idletasks()
+    print("DEBUG [filemanager]: Root idletasks updated")
 
     # Create GUI window for transfer configuration
     try:
+        print("DEBUG [filemanager]: Creating tk.Toplevel(root)")
         transfer_window = tk.Toplevel(root)
+        _active_transfer_window = transfer_window
+        print("DEBUG [filemanager]: tk.Toplevel created")
         transfer_window.title("File Transfer Configuration")
         transfer_window.geometry("600x500")
         transfer_window.resizable(True, True)
+        print("DEBUG [filemanager]: transfer_window configured")
     except Exception as toplevel_error:
-        print(f"ERROR: Failed to create transfer window: {toplevel_error}")
+        print(f"ERROR [filemanager]: Failed to create transfer window: {toplevel_error}")
         # Try to show error via print instead of messagebox to avoid recursion
         return
 
     # Default local directory
     default_local_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+    print(f"DEBUG [filemanager]: default_local_dir={default_local_dir}")
 
     # Variables
+    print("DEBUG [filemanager]: Creating StringVars")
     local_dir_var = tk.StringVar(value=default_local_dir)
     remote_user_var = tk.StringVar()
     remote_host_var = tk.StringVar()
@@ -1022,10 +1085,24 @@ def _transfer_file_gui():
     mode_var = tk.StringVar(value="upload")  # Transfer mode: upload or download
     local_label_var = tk.StringVar(value="Local Directory (Source):")
     remote_label_var = tk.StringVar(value="Remote Directory (Destination):")
+    print("DEBUG [filemanager]: StringVars created")
+
+    # Prevent garbage collection of variables by binding them to the window object
+    transfer_window.local_dir_var = local_dir_var
+    transfer_window.remote_user_var = remote_user_var
+    transfer_window.remote_host_var = remote_host_var
+    transfer_window.remote_port_var = remote_port_var
+    transfer_window.remote_dir_var = remote_dir_var
+    transfer_window.ssh_password_var = ssh_password_var
+    transfer_window.mode_var = mode_var
+    transfer_window.local_label_var = local_label_var
+    transfer_window.remote_label_var = remote_label_var
 
     # Main frame
+    print("DEBUG [filemanager]: Creating main_frame")
     main_frame = tk.Frame(transfer_window, padx=10, pady=10)
     main_frame.pack(fill=tk.BOTH, expand=True)
+    print("DEBUG [filemanager]: main_frame packed")
 
     # Title
     title_label = tk.Label(
@@ -1388,6 +1465,14 @@ def _transfer_file_gui():
     close_btn = tk.Button(buttons_frame, text="Close", command=transfer_window.destroy)
     close_btn.pack(side=tk.RIGHT)
 
+    # Register window destroy callback to clean up global reference
+    def on_destroy(event):
+        if event.widget == transfer_window:
+            global _active_transfer_window
+            _active_transfer_window = None
+
+    transfer_window.bind("<Destroy>", on_destroy)
+
     # Center window
     transfer_window.update_idletasks()
     width = transfer_window.winfo_width()
@@ -1395,3 +1480,18 @@ def _transfer_file_gui():
     x = (transfer_window.winfo_screenwidth() // 2) - (width // 2)
     y = (transfer_window.winfo_screenheight() // 2) - (height // 2)
     transfer_window.geometry(f"{width}x{height}+{x}+{y}")
+    # Keep the window alive until the user closes it.
+    # When running standalone (subprocess / __main__), no outer mainloop exists
+    # yet, so we must start one.  When called from the main vailá GUI, the
+    # outer mainloop is already running and we just need a nested wait.
+    if _created_new_root:
+        print("DEBUG [filemanager]: standalone mode — entering root.mainloop()")
+        root.mainloop()
+    else:
+        print("DEBUG [filemanager]: embedded mode — entering root.wait_window()")
+        root.wait_window(transfer_window)
+    print("DEBUG [filemanager]: transfer_window closed, _transfer_file_gui finished successfully")
+
+
+if __name__ == "__main__":
+    transfer_file()
