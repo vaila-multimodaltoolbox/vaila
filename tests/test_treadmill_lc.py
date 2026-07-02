@@ -108,6 +108,7 @@ def test_is_trial_file():
     assert is_trial_file("s01_d03_t12.csv") is True
     assert is_trial_file("S99_D99_T99.CSV") is True
     assert is_trial_file("s01_d01_t05_LIMPO.csv") is True
+    assert is_trial_file("s01_d01_t05_clean.csv") is True
 
     # Calibration files
     assert is_trial_file("s02_d01_tara.csv") is False
@@ -118,6 +119,7 @@ def test_is_trial_file():
     # Sidecars, outputs, Borg / other files
     assert is_trial_file("s01_d01_t05_adjust_intervals.csv") is False
     assert is_trial_file("s01_d01_t05_LIMPO_adjust_intervals.csv") is False
+    assert is_trial_file("s01_d01_t05_clean_adjust_intervals.csv") is False
     assert is_trial_file("s01_d01_t05_filter_spectrum_metrics.csv") is False
     assert is_trial_file("s01_d01_t05_processing_steps.csv") is False
     assert is_trial_file("borg_s02_d01.txt") is False
@@ -128,6 +130,8 @@ def test_canonical_trial_filename_normalizes_legacy_limpo_names():
     assert canonical_trial_filename("s01_d01_t05.csv") == "s01_d01_t05.csv"
     assert canonical_trial_filename("s01_d01_t05_LIMPO.csv") == "s01_d01_t05.csv"
     assert canonical_trial_filename("S01_D01_T05_LIMPO.CSV") == "s01_d01_t05.csv"
+    assert canonical_trial_filename("s01_d01_t05_clean.csv") == "s01_d01_t05.csv"
+    assert canonical_trial_filename("S01_D01_T05_CLEAN.CSV") == "s01_d01_t05.csv"
     assert (
         canonical_trial_filename("s01_d01_t05_adjust_intervals.csv")
         == "s01_d01_t05_adjust_intervals.csv"
@@ -135,9 +139,9 @@ def test_canonical_trial_filename_normalizes_legacy_limpo_names():
 
 
 def test_deduplicate_trial_files_prefers_standard_name():
-    files = ["s01_d01_t02_LIMPO.csv", "s01_d01_t01_LIMPO.csv", "s01_d01_t01.csv"]
+    files = ["s01_d01_t02_clean.csv", "s01_d01_t01_clean.csv", "s01_d01_t01.csv"]
 
-    assert deduplicate_trial_files(files) == ["s01_d01_t01.csv", "s01_d01_t02_LIMPO.csv"]
+    assert deduplicate_trial_files(files) == ["s01_d01_t01.csv", "s01_d01_t02_clean.csv"]
 
 
 def test_run_adjust_stage_writes_homogeneous_trial_names(tmp_path, monkeypatch):
@@ -151,7 +155,7 @@ def test_run_adjust_stage_writes_homogeneous_trial_names(tmp_path, monkeypatch):
     def fake_clean_signal(file_path, parent=None):
         source = Path(file_path)
         if source.name == "s01_d01_t01.csv":
-            adjusted = source.with_name("s01_d01_t01_LIMPO.csv")
+            adjusted = source.with_name("s01_d01_t01_clean.csv")
             adjusted.write_text("0,9,9,9,9\n")
             return str(adjusted), None, []
         return None, None, []
@@ -163,11 +167,11 @@ def test_run_adjust_stage_writes_homogeneous_trial_names(tmp_path, monkeypatch):
     output_folder = Path(lct.run_adjust_stage(parent=None, initial_dir=str(tmp_path)))
 
     assert output_folder.parent == tmp_path
-    assert output_folder.name.startswith("LIMPOS_")
+    assert output_folder.name.startswith("clean_")
     assert (output_folder / "s01_d01_t01.csv").read_text() == "0,9,9,9,9\n"
     assert (output_folder / "s01_d01_t02.csv").read_text() == "0,5,6,7,8\n"
     assert (output_folder / "s01_d01_tara.csv").exists()
-    assert not (output_folder / "s01_d01_t01_LIMPO.csv").exists()
+    assert not (output_folder / "s01_d01_t01_clean.csv").exists()
 
 
 def test_is_calibration_file():
@@ -621,11 +625,11 @@ def test_plot_trial_figures_writes_overview_and_full_cop(tmp_path):
 
     plot_trial_figures(grf_total, cop_x, cop_y, steps, peaks, "s01_d01_t01.csv", tmp_path)
 
-    assert (tmp_path / "processing_overview.png").exists()
-    assert (tmp_path / "processing_strike_attributes.png").exists()
-    assert (tmp_path / "processing_stride_map.png").exists()
-    assert (tmp_path / "processing_cop_trajectory.png").exists()
-    report = tmp_path / "processing_cop_report_interactive.html"
+    assert (tmp_path / "s01_d01_t01_processing_overview.png").exists()
+    assert (tmp_path / "s01_d01_t01_processing_strike_attributes.png").exists()
+    assert (tmp_path / "s01_d01_t01_processing_stride_map.png").exists()
+    assert (tmp_path / "s01_d01_t01_processing_cop_trajectory.png").exists()
+    report = tmp_path / "s01_d01_t01_processing_cop_report_interactive.html"
     assert report.exists()
     report_text = report.read_text(encoding="utf-8")
     assert "COP X - Medio-Lateral (cm)" in report_text

@@ -47,7 +47,7 @@
         <li>Choose the final interpolation method.</li>
         <li>Approve the preview before saving. If rejected, the same file is reopened for correction.</li>
     </ul>
-    <p>A timestamped <code>LIMPOS_YYYYMMDD_HHMMSS</code> folder is created for each adjustment run so previous runs are not overwritten. Every running trial is written there with its original name (<code>sXX_dYY_tZZ.csv</code>): adjusted/interpolated trials contain the corrected signal, and trials without marked intervals are copied unchanged. Adjustment and interpolation metadata are saved beside the CSV as <code>*_adjust_intervals.json</code>, <code>*_adjust_intervals.toml</code>, and <code>*_adjust_intervals.csv</code>.</p>
+    <p>A timestamped <code>clean_YYYYMMDD_HHMMSS</code> folder is created for each adjustment run so previous runs are not overwritten. Every running trial is written there with its original name (<code>sXX_dYY_tZZ.csv</code>): adjusted/interpolated trials contain the corrected signal, and trials without marked intervals are copied unchanged. Adjustment and interpolation metadata are saved beside the CSV as <code>*_adjust_intervals.json</code>, <code>*_adjust_intervals.toml</code>, and <code>*_adjust_intervals.csv</code>.</p>
 
     <h3>2. Filter</h3>
     <ul>
@@ -57,7 +57,7 @@
         <li>Optional mains-noise notch filtering supports 50 Hz and 60 Hz power grids.</li>
         <li>Available <code>filter_type</code> values: <code>lowpass</code>, <code>bandpass</code>, <code>highpass</code>, <code>median</code>, and <code>none</code>.</li>
     </ul>
-    <p>During batch filtering, the GUI previews one calibration file and one running file. After approval, the same filter settings are applied to the remaining files without opening a plot for every file. Filtered running CSV files are saved inside <code>filtrado_YYYYMMDD_HHMMSS</code> with the canonical <code>sXX_dYY_tZZ.csv</code> name, even if the input folder contains a legacy <code>*_LIMPO.csv</code> file. Calibration files keep their calibration names. Frequency diagnostics are saved to <code>filter_analysis_YYYYMMDD_HHMMSS</code> with explicit <code>filter_</code> names, such as <code>s01_d01_t01_filter_spectrum_metrics.csv</code> and <code>s01_d01_t01_filter_Cell_1_spectrum.png</code>.</p>
+    <p>During batch filtering, the GUI previews one calibration file and one running file. After approval, the same filter settings are applied to the remaining files without opening a plot for every file. Filtered running CSV files are saved inside <code>filtered_YYYYMMDD_HHMMSS</code> with the canonical <code>sXX_dYY_tZZ.csv</code> name, even if the input folder contains a legacy <code>*_LIMPO.csv</code> or <code>*_clean.csv</code> file. Calibration files keep their calibration names. Frequency diagnostics are saved to <code>filter_analysis_YYYYMMDD_HHMMSS</code> with explicit <code>filter_</code> names, such as <code>s01_d01_t01_filter_spectrum_metrics.csv</code> and <code>s01_d01_t01_filter_Cell_1_spectrum.png</code>.</p>
 
     <h3>3. Process Metrics</h3>
     <ul>
@@ -88,13 +88,13 @@
     <h2>Output Naming</h2>
     <p>Output names include the stage whenever the file contains derived diagnostics or metrics. Signal stages treat <code>sXX_dYY_tZZ.csv</code> as the standard running-trial name. Legacy <code>sXX_dYY_tZZ_LIMPO.csv</code> files are still accepted as input, but the current adjustment and filtering stages write corrected, unchanged, and filtered trials with the canonical original trial name so the next stage sees one homogeneous set. Sidecar CSV files such as <code>*_adjust_intervals.csv</code>, <code>*_filter_spectrum_metrics.csv</code>, and <code>*_processing_steps.csv</code> are ignored by later stages.</p>
     <ul>
-        <li>Adjusted/interpolated data for the next stage: <code>LIMPOS_YYYYMMDD_HHMMSS/s01_d01_t01.csv</code></li>
-        <li>Filtered data for the next stage: <code>filtrado_YYYYMMDD_HHMMSS/s01_d01_t01.csv</code></li>
+        <li>Adjusted/interpolated data for the next stage: <code>clean_YYYYMMDD_HHMMSS/s01_d01_t01.csv</code></li>
+        <li>Filtered data for the next stage: <code>filtered_YYYYMMDD_HHMMSS/s01_d01_t01.csv</code></li>
         <li>Filtering spectrum figure: <code>filter_analysis_YYYYMMDD_HHMMSS/s01_d01_t01_filter_Cell_1_spectrum.png</code></li>
         <li>Filtering spectrum metrics: <code>filter_analysis_YYYYMMDD_HHMMSS/s01_d01_t01_filter_spectrum_metrics.csv</code></li>
         <li>Processing step table: <code>results_YYYYMMDD_HHMMSS/s01_d01_t01_processing_steps.csv</code></li>
         <li>Processing daily metrics: <code>results_YYYYMMDD_HHMMSS/s01_d01_processing_metrics.csv</code></li>
-        <li>Processing figures: <code>figures_YYYYMMDD_HHMMSS/s01_d01_t01/processing_overview.png</code>, <code>processing_strike_attributes.png</code>, <code>processing_stride_map.png</code>, and <code>processing_cop_trajectory.png</code></li>
+        <li>Processing figures: saved directly in the figures folder with trial prefix (e.g. <code>figures_YYYYMMDD_HHMMSS/s01_d01_t01_processing_overview.png</code>, <code>s01_d01_t01_processing_strike_attributes.png</code>, <code>s01_d01_t01_processing_stride_map.png</code>, <code>s01_d01_t01_processing_cop_trajectory.png</code>, and <code>s01_d01_t01_processing_cop_report_interactive.html</code>)</li>
     </ul>
 
     <h2>TOML Configuration</h2>
@@ -115,7 +115,7 @@
     <p>Common <code>--step</code> values are <code>all</code>, <code>adjust</code>, <code>filter</code>, and <code>process</code>.</p>
 
     <div class="footer">
-        <p>Version: 0.3.68 | Updated: 30 June 2026</p>
+        <p>Version: 0.3.68 | Updated: 02 July 2026</p>
     </div>
 </main>
 </body>
