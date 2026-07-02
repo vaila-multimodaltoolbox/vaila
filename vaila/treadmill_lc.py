@@ -9,7 +9,7 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 30 June 2026
+Update Date: 02 July 2026
 Version: 0.3.68
 
 Description:
@@ -55,7 +55,7 @@ from scipy.ndimage import median_filter
 from scipy.signal import butter, find_peaks, sosfiltfilt, welch
 
 FS = 1000
-VERSION = "0.3.49"
+VERSION = "0.3.68"
 
 
 # =============================================================================
@@ -605,7 +605,7 @@ def clean_signal_with_clicks(file_path, parent=None):
             )
 
             output_data = np.column_stack((t, dados_adjusted))
-            output_name = file_path.replace(".csv", "_LIMPO.csv")
+            output_name = file_path.replace(".csv", "_clean.csv")
             np.savetxt(output_name, output_data, delimiter=",", fmt="%.8f", header="", comments="")
             messagebox.showinfo(
                 "Completed",
@@ -619,6 +619,29 @@ def clean_signal_with_clicks(file_path, parent=None):
         gc.collect()
 
 
+def get_output_base_folder(folder):
+    """
+    Returns the base directory where output subdirectories should be placed.
+    If the current folder's name matches a pipeline stage output pattern, we place
+    outputs in its parent folder (the 'dxx' level) to avoid nested folders.
+    Otherwise, we place outputs inside the folder itself.
+    """
+    folder_abs = os.path.abspath(folder)
+    name = os.path.basename(folder_abs).lower()
+    # Support both English and Portuguese prefixes to handle legacy and new folders
+    prefixes = [
+        "limpos", "clean", "cleaned",
+        "ajustado", "adjusted",
+        "filtrado", "filtered", "filter_analysis",
+        "results", "figures"
+    ]
+    # Check if the folder name starts with one of the prefixes, possibly followed by a timestamp
+    pattern = r"^(" + "|".join(prefixes) + r")(?:_\d{8}_\d{6})?(?:_\d+)?$"
+    if re.match(pattern, name):
+        return os.path.dirname(folder_abs)
+    return folder_abs
+
+
 def is_trial_file(filename: str) -> bool:
     """Return True only for load-cell running signal CSVs.
 
@@ -629,13 +652,13 @@ def is_trial_file(filename: str) -> bool:
     name_lower = Path(filename).name.lower()
     if not name_lower.endswith(".csv"):
         return False
-    return re.fullmatch(r"s\d+_d\d+_t\d+(?:_limpo)?\.csv", name_lower) is not None
+    return re.fullmatch(r"s\d+_d\d+_t\d+(?:_limpo|_clean)?\.csv", name_lower) is not None
 
 
 def canonical_trial_filename(filename: str) -> str:
     """Return the standard trial filename used between pipeline stages."""
     name = Path(filename).name
-    match = re.fullmatch(r"(s\d+_d\d+_t\d+)(?:_limpo)?\.csv", name, flags=re.IGNORECASE)
+    match = re.fullmatch(r"(s\d+_d\d+_t\d+)(?:_limpo|_clean)?\.csv", name, flags=re.IGNORECASE)
     if not match:
         return name
     return f"{match.group(1).lower()}.csv"
@@ -650,7 +673,7 @@ def deduplicate_trial_files(files: list[str]) -> list[str]:
         if current is None:
             selected[canonical] = file_name
             continue
-        if current.lower().endswith("_limpo.csv") and file_name.lower() == canonical:
+        if (current.lower().endswith("_limpo.csv") or current.lower().endswith("_clean.csv")) and file_name.lower() == canonical:
             print(f"Skipping duplicate legacy adjusted trial during filtering: {current}")
             selected[canonical] = file_name
         else:
@@ -825,14 +848,15 @@ def run_adjust_stage(parent=None, initial_dir=None) -> str | None:
     if not folder:
         return None
 
-    output_folder = make_timestamped_output_dir(folder, "LIMPOS")
+    base_folder = get_output_base_folder(folder)
+    output_folder = make_timestamped_output_dir(base_folder, "clean")
 
     trial_files = []
     calibration_files = []
 
     for f in os.listdir(folder):
         name_lower = f.lower()
-        if not name_lower.endswith(".csv") or "limpo" in name_lower:
+        if not name_lower.endswith(".csv") or "limpo" in name_lower or "clean" in name_lower:
             continue
         if is_calibration_file(f):
             calibration_files.append(f)
@@ -1317,6 +1341,8 @@ def _base_trial_stem_from_adjusted(file_path):
     stem = Path(file_path).stem
     if stem.endswith("_LIMPO"):
         return stem[: -len("_LIMPO")]
+    if stem.endswith("_clean"):
+        return stem[: -len("_clean")]
     return stem
 
 
@@ -1646,7 +1672,8 @@ def run_interpolate_stage(parent=None, initial_dir=None) -> str | None:
     if not folder:
         return None
 
-    path_interp = make_timestamped_output_dir(folder, "ajustado")
+    base_folder = get_output_base_folder(folder)
+    path_interp = make_timestamped_output_dir(base_folder, "adjusted")
 
     dialog = InterpConfigDialog(parent)
     if not dialog.result:
@@ -1700,7 +1727,7 @@ def run_interpolate_stage(parent=None, initial_dir=None) -> str | None:
     finally:
         plt.close("all")
         messagebox.showinfo(
-            "Completed", "Processing completed. Check 'ajustado' folder.", parent=parent
+            "Completed", "Processing completed. Check 'adjusted' folder.", parent=parent
         )
 
     return path_interp
@@ -2201,13 +2228,14 @@ def run_filter_stage(parent=None, initial_dir=None) -> str | None:
     if not folder:
         return None
 
+    base_folder = get_output_base_folder(folder)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path_filt = os.path.join(folder, f"filtrado_{timestamp}")
-    path_analise = os.path.join(folder, f"filter_analysis_{timestamp}")
+    path_filt = os.path.join(base_folder, f"filtered_{timestamp}")
+    path_analise = os.path.join(base_folder, f"filter_analysis_{timestamp}")
     suffix = 1
     while os.path.exists(path_filt) or os.path.exists(path_analise):
-        path_filt = os.path.join(folder, f"filtrado_{timestamp}_{suffix:02d}")
-        path_analise = os.path.join(folder, f"filter_analysis_{timestamp}_{suffix:02d}")
+        path_filt = os.path.join(base_folder, f"filtered_{timestamp}_{suffix:02d}")
+        path_analise = os.path.join(base_folder, f"filter_analysis_{timestamp}_{suffix:02d}")
         suffix += 1
     os.makedirs(path_filt, exist_ok=False)
     os.makedirs(path_analise, exist_ok=False)
@@ -3153,9 +3181,10 @@ def _plot_strike_diagnostics(grf_total, steps, file_name, output_dir, fs=FS):
             handles, labels = axes[0, 0].get_legend_handles_labels()
             if handles:
                 fig.legend(handles, labels, loc="upper center", ncol=4, fontsize=8)
+            base_name = _base_trial_stem_from_adjusted(file_name)
             fig.suptitle(f"Original-style Strike Attributes: {file_name}", fontsize=14)
             plt.tight_layout(rect=[0, 0, 1, 0.94])
-            fig.savefig(os.path.join(output_dir, "processing_strike_attributes.png"), dpi=150)
+            fig.savefig(os.path.join(output_dir, f"{base_name}_processing_strike_attributes.png"), dpi=150)
         finally:
             plt.close(fig)
 
@@ -3199,8 +3228,9 @@ def _plot_strike_diagnostics(grf_total, steps, file_name, output_dir, fs=FS):
             ax_norm.set_xlabel("Support phase (%)")
             ax_norm.set_ylabel("Vertical GRF (BW)")
             ax_norm.grid(True, alpha=0.25)
+            base_name = _base_trial_stem_from_adjusted(file_name)
             plt.tight_layout()
-            fig_map.savefig(os.path.join(output_dir, "processing_stride_map.png"), dpi=150)
+            fig_map.savefig(os.path.join(output_dir, f"{base_name}_processing_stride_map.png"), dpi=150)
         finally:
             plt.close(fig_map)
 
@@ -3229,7 +3259,6 @@ def _write_interactive_cop_report(
     deck_length_cm = 113.0
     half_width_cm = deck_width_cm / 2.0
     half_length_cm = deck_length_cm / 2.0
-    axis_margin_cm = 6.0
     cell_x = [-half_width_cm, -half_width_cm, half_width_cm, half_width_cm]
     cell_y = [half_length_cm, -half_length_cm, half_length_cm, -half_length_cm]
     cell_labels = ["Cell 1", "Cell 2", "Cell 3", "Cell 4"]
@@ -3290,8 +3319,8 @@ def _write_interactive_cop_report(
             "x_max": half_width_cm,
             "y_min": -half_length_cm,
             "y_max": half_length_cm,
-            "x_range": [-half_width_cm - axis_margin_cm, half_width_cm + axis_margin_cm],
-            "y_range": [-half_length_cm - axis_margin_cm, half_length_cm + axis_margin_cm],
+            "x_range": [-50.0, 50.0],
+            "y_range": [-100.0, 100.0],
         },
     }
     html = f"""<!DOCTYPE html>
@@ -3366,7 +3395,8 @@ Plotly.newPlot('cop', [{{
 </body>
 </html>
 """
-    report_path = os.path.join(output_dir, "processing_cop_report_interactive.html")
+    base_name = _base_trial_stem_from_adjusted(file_name)
+    report_path = os.path.join(output_dir, f"{base_name}_processing_cop_report_interactive.html")
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(html)
     return report_path
@@ -3411,8 +3441,9 @@ def plot_trial_figures(
         ax_der.set_xlabel("Time (s)")
         ax_der.set_title("First Derivative")
         ax_der.grid(True, alpha=0.3)
+        base_name = _base_trial_stem_from_adjusted(file_name)
         plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, "processing_overview.png"), dpi=150)
+        plt.savefig(os.path.join(output_dir, f"{base_name}_processing_overview.png"), dpi=150)
     finally:
         plt.close(fig_all)
 
@@ -3425,7 +3456,6 @@ def plot_trial_figures(
         deck_length_cm = 113.0
         half_width_cm = deck_width_cm / 2.0
         half_length_cm = deck_length_cm / 2.0
-        margin_cm = 6.0
         cell_positions = [
             (-half_width_cm, half_length_cm, "Cell 1"),
             (-half_width_cm, -half_length_cm, "Cell 2"),
@@ -3463,8 +3493,8 @@ def plot_trial_figures(
         if len(cop_x) > 0:
             ax_cop.scatter(cop_x[0], cop_y[0], c="green", s=50, marker="o", label="Start")
             ax_cop.scatter(cop_x[-1], cop_y[-1], c="red", s=50, marker="x", label="End")
-        ax_cop.set_xlim(-half_width_cm - margin_cm, half_width_cm + margin_cm)
-        ax_cop.set_ylim(-half_length_cm - margin_cm, half_length_cm + margin_cm)
+        ax_cop.set_xlim(-50, 50)
+        ax_cop.set_ylim(-100, 100)
         ax_cop.set_xlabel("COP X - Medio-Lateral (cm)")
         ax_cop.set_ylabel("COP Y - Anterior-Posterior (cm)")
         ax_cop.set_title(
@@ -3475,8 +3505,9 @@ def plot_trial_figures(
         ax_cop.grid(True, alpha=0.3)
         ax_cop.legend(loc="best")
         fig_cop.colorbar(scatter, ax=ax_cop, label="Time (s)")
+        base_name = _base_trial_stem_from_adjusted(file_name)
         plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, "processing_cop_trajectory.png"), dpi=150)
+        plt.savefig(os.path.join(output_dir, f"{base_name}_processing_cop_trajectory.png"), dpi=150)
     finally:
         plt.close(fig_cop)
 
@@ -3523,9 +3554,10 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
             groups[key] = []
         groups[key].append(f)
 
+    base_folder = get_output_base_folder(folder)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path_figures = os.path.join(folder, f"figures_{timestamp}")
-    path_results = os.path.join(folder, f"results_{timestamp}")
+    path_figures = os.path.join(base_folder, f"figures_{timestamp}")
+    path_results = os.path.join(base_folder, f"results_{timestamp}")
     os.makedirs(path_figures, exist_ok=True)
     os.makedirs(path_results, exist_ok=True)
 
@@ -3727,7 +3759,7 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                             steps,
                             peaks,
                             file,
-                            os.path.join(path_figures, base_name),
+                            path_figures,
                             generate_interactive_report=generate_interactive_report,
                         )
                     plt.close("all")
@@ -3816,7 +3848,7 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                         steps,
                         peaks,
                         file,
-                        os.path.join(path_figures, base_name),
+                        path_figures,
                         generate_interactive_report=generate_interactive_report,
                     )
                 print(f"   Saved: {base_name}_processing_steps.csv")
@@ -3982,14 +4014,14 @@ class LoadCellTreadmillDialog(tk.Toplevel):
         self._write_log("Executing Stage 1: Artifact Adjustment + Interpolation...")
         limpos_folder = run_adjust_stage(parent=self, initial_dir=raw_folder)
         if not limpos_folder:
-            self._write_log("Pipeline stopped after Stage 1 (Ajuste+Interpolação).")
+            self._write_log("Pipeline stopped after Stage 1 (Adjustment+Interpolation).")
             return
 
         # 3. Stage 2: Filter adjusted/interpolated signals
         self._write_log(f"Executing Stage 2: Signal Filtering on folder '{limpos_folder}'...")
         filtrado_folder = run_filter_stage(parent=self, initial_dir=limpos_folder)
         if not filtrado_folder:
-            self._write_log("Pipeline stopped after Stage 2 (Filtragem).")
+            self._write_log("Pipeline stopped after Stage 2 (Filtering).")
             return
 
         # 4. Stage 3: Process Metrics
@@ -3998,7 +4030,7 @@ class LoadCellTreadmillDialog(tk.Toplevel):
         )
         results_folder = run_process_stage(parent=self, initial_dir=filtrado_folder)
         if not results_folder:
-            self._write_log("Pipeline stopped after Stage 3 (Processamento).")
+            self._write_log("Pipeline stopped after Stage 3 (Processing).")
             return
 
         self._write_log("Pipeline completed successfully!")
