@@ -39,7 +39,7 @@ This stage is used to correct artifacts before filtering and metric extraction.
 - Choose the final interpolation method.
 - Approve the preview before saving. If rejected, the same file is reopened for correction.
 
-A timestamped `LIMPOS_YYYYMMDD_HHMMSS` folder is created for each adjustment run so previous runs are not overwritten. Every running trial is written there with its original name (`sXX_dYY_tZZ.csv`): adjusted/interpolated trials contain the corrected signal, and trials without marked intervals are copied unchanged. Adjustment and interpolation metadata are saved beside the CSV as:
+A timestamped `clean_YYYYMMDD_HHMMSS` folder is created for each adjustment run so previous runs are not overwritten. Every running trial is written there with its original name (`sXX_dYY_tZZ.csv`): adjusted/interpolated trials contain the corrected signal, and trials without marked intervals are copied unchanged. Adjustment and interpolation metadata are saved beside the CSV as:
 
 - `*_adjust_intervals.json`
 - `*_adjust_intervals.toml`
@@ -59,7 +59,7 @@ This stage smooths the signal while preserving treadmill force behavior.
 
 During batch filtering, the GUI previews one calibration file and one running file. After approval, the same filter settings are applied to the remaining files without opening a plot for every file.
 
-Filtered running CSV files are saved inside `filtrado_YYYYMMDD_HHMMSS` with the canonical `sXX_dYY_tZZ.csv` name, even if the input folder contains a legacy `*_LIMPO.csv` file. Calibration files keep their calibration names. Frequency diagnostics are saved to `filter_analysis_YYYYMMDD_HHMMSS` with explicit `filter_` names, such as `s01_d01_t01_filter_spectrum_metrics.csv` and `s01_d01_t01_filter_Cell_1_spectrum.png`.
+Filtered running CSV files are saved inside `filtered_YYYYMMDD_HHMMSS` with the canonical `sXX_dYY_tZZ.csv` name, even if the input folder contains a legacy `*_LIMPO.csv` or `*_clean.csv` file. Calibration files keep their calibration names. Frequency diagnostics are saved to `filter_analysis_YYYYMMDD_HHMMSS` with explicit `filter_` names, such as `s01_d01_t01_filter_spectrum_metrics.csv` and `s01_d01_t01_filter_Cell_1_spectrum.png`.
 
 ### 3. Process Metrics
 
@@ -112,13 +112,13 @@ All time axes and time colorbars use seconds, based on the configured sample rat
 
 Output names include the stage whenever the file contains derived diagnostics or metrics. Signal stages treat `sXX_dYY_tZZ.csv` as the standard running-trial name. Legacy `sXX_dYY_tZZ_LIMPO.csv` files are still accepted as input, but the current adjustment and filtering stages write corrected, unchanged, and filtered trials with the canonical original trial name so the next stage sees one homogeneous set. Sidecar CSV files such as `*_adjust_intervals.csv`, `*_filter_spectrum_metrics.csv`, and `*_processing_steps.csv` are ignored by later stages.
 
-- Adjusted/interpolated data for the next stage: `LIMPOS_YYYYMMDD_HHMMSS/s01_d01_t01.csv`
-- Filtered data for the next stage: `filtrado_YYYYMMDD_HHMMSS/s01_d01_t01.csv`
+- Adjusted/interpolated data for the next stage: `clean_YYYYMMDD_HHMMSS/s01_d01_t01.csv`
+- Filtered data for the next stage: `filtered_YYYYMMDD_HHMMSS/s01_d01_t01.csv`
 - Filtering spectrum figure: `filter_analysis_YYYYMMDD_HHMMSS/s01_d01_t01_filter_Cell_1_spectrum.png`
 - Filtering spectrum metrics: `filter_analysis_YYYYMMDD_HHMMSS/s01_d01_t01_filter_spectrum_metrics.csv`
 - Processing step table: `results_YYYYMMDD_HHMMSS/s01_d01_t01_processing_steps.csv`
 - Processing daily metrics: `results_YYYYMMDD_HHMMSS/s01_d01_processing_metrics.csv`
-- Processing figures: `figures_YYYYMMDD_HHMMSS/s01_d01_t01/processing_overview.png`, `processing_strike_attributes.png`, `processing_stride_map.png`, and `processing_cop_trajectory.png`
+- Processing figures: saved directly in the figures folder with trial prefix (e.g. `figures_YYYYMMDD_HHMMSS/s01_d01_t01_processing_overview.png`, `s01_d01_t01_processing_strike_attributes.png`, `s01_d01_t01_processing_stride_map.png`, `s01_d01_t01_processing_cop_trajectory.png`, and `s01_d01_t01_processing_cop_report_interactive.html`)
 
 
 ## TOML Configuration
@@ -157,4 +157,4 @@ Common `--step` values are `all`, `adjust`, `filter`, and `process`.
 
 ---
 - **Version**: 0.3.68
-- **Updated**: 30 June 2026
+- **Updated**: 02 July 2026
