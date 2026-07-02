@@ -407,7 +407,7 @@ def clean_signal_with_clicks(file_path, parent=None):
             plt.tight_layout()
             plt.show(block=False)
 
-            if not messagebox.askyesno(
+            if not ask_yes_no_english(
                 "Artifact Adjustment + Interpolation",
                 "Do you want to mark bad segments and choose an interpolation method?",
                 parent=parent,
@@ -584,7 +584,7 @@ def clean_signal_with_clicks(file_path, parent=None):
             plt.tight_layout()
             plt.show()
 
-            approved = messagebox.askyesno(
+            approved = ask_yes_no_english(
                 "Approve Adjustment + Interpolation",
                 "Do you approve this adjusted and interpolated signal?\n\n"
                 "Yes = save this final signal and TOML/JSON/CSV metadata.\n"
@@ -617,6 +617,70 @@ def clean_signal_with_clicks(file_path, parent=None):
     finally:
         plt.close("all")
         gc.collect()
+
+
+def ask_yes_no_english(title, message, parent=None) -> bool:
+    """A custom Yes/No dialog window to force English 'Yes' and 'No' buttons."""
+    # Find active root/parent window
+    dialog_parent = parent or tk._default_root or tk.Tk()
+
+    result = [False]  # Store result
+
+    dialog = tk.Toplevel(dialog_parent)
+    dialog.title(title)
+    dialog.transient(dialog_parent)
+    dialog.grab_set()
+
+    # Configure spacing and padding
+    frame = ttk.Frame(dialog, padding=20)
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    # Message
+    lbl_msg = ttk.Label(frame, text=message, justify=tk.LEFT, wraplength=450)
+    lbl_msg.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
+
+    # Button Frame
+    btn_frame = ttk.Frame(frame)
+    btn_frame.pack(anchor=tk.E)
+
+    def on_yes():
+        result[0] = True
+        dialog.destroy()
+
+    def on_no():
+        result[0] = False
+        dialog.destroy()
+
+    btn_yes = ttk.Button(btn_frame, text="Yes", command=on_yes, width=10)
+    btn_yes.pack(side=tk.LEFT, padx=5)
+
+    btn_no = ttk.Button(btn_frame, text="No", command=on_no, width=10)
+    btn_no.pack(side=tk.LEFT, padx=5)
+
+    # Center dialog on parent
+    dialog.update_idletasks()
+    dialog_width = dialog.winfo_width()
+    dialog_height = dialog.winfo_height()
+
+    parent_x = dialog_parent.winfo_rootx()
+    parent_y = dialog_parent.winfo_rooty()
+    parent_width = dialog_parent.winfo_width()
+    parent_height = dialog_parent.winfo_height()
+
+    try:
+        px = parent_x + (parent_width - dialog_width) // 2
+        py = parent_y + (parent_height - dialog_height) // 2
+        dialog.geometry(f"+{px}+{py}")
+    except Exception:
+        pass
+
+    # Set focus and key binds
+    btn_yes.focus_set()
+    dialog.bind("<Return>", lambda e: on_yes())
+    dialog.bind("<Escape>", lambda e: on_no())
+
+    dialog.wait_window()
+    return result[0]
 
 
 def get_output_base_folder(folder):
@@ -1655,7 +1719,7 @@ def preprocess_file_interp(file_path, config, fs=1000, root=None):
         plt.show()
         plt.close(fig)
 
-        save = messagebox.askyesno("Save", "Save final interpolated signal?", parent=root)
+        save = ask_yes_no_english("Save", "Save final interpolated signal?", parent=root)
         if save:
             res = np.column_stack((t, filtered))
             return res, filtered, t, True
@@ -2212,7 +2276,7 @@ def preprocess_file_filt(file_path, config, fs=1000, root=None, preview=True, co
             plt.close(fig)
 
             message = confirm_message or "Save final processed signal?"
-            save = messagebox.askyesno("Batch Filter Approval", message, parent=root)
+            save = ask_yes_no_english("Batch Filter Approval", message, parent=root)
             if not save:
                 return None, filtered, t
 
