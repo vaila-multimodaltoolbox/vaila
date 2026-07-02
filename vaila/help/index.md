@@ -25,9 +25,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **forceplate_analysis**
   - [📄 HTML](forceplate_analysis.html)
   - [📝 Markdown](forceplate_analysis.md)
-- **loadcell_treadmill**
-  - [📄 HTML](loadcell_treadmill.html)
-  - [📝 Markdown](loadcell_treadmill.md)
+- **treadmill_lc**
+  - [📄 HTML](treadmill_lc.html)
+  - [📝 Markdown](treadmill_lc.md)
 - **gnss_analysis**
   - [📄 HTML](gnss_analysis.html)
   - [📝 Markdown](gnss_analysis.md)
