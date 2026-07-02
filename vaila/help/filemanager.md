@@ -4,7 +4,7 @@
 
 - **Category:** Tools  
 - **File:** `vaila/filemanager.py`  
-- **Version:** 0.1.1  
+- **Version:** 0.3.67  
 - **Author:** Paulo Roberto Pereira Santiago  
 - **GUI Interface:** ✅ Yes  
 - **License:** AGPLv3  
@@ -37,6 +37,6 @@ GUI toolkit for file operations (copy, move, remove, import/export, rename, tree
 - Normalize uses topdown=False to rename children before parents.  
 
 ## 🔗 Project
-📅 **Last Updated:** Jan 2026  
+📅 **Last Updated:** 01 July 2026  
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
