@@ -8,9 +8,9 @@
 # === It then exits the script ===
 # === Author: Paulo Santiago
 # === Date: 2025-06-24
-# === Updated: 2025-01-11
+# === Updated: 2026-07-01
 # === Contact: paulosantiago@usp.br
-# === Version: 0.1.0
+# === Version: 0.3.67
 # === Description: This script is used to transfer a folder to a remote server using SSH
 # === It prompts the user for the remote username, host, port, local directory, and remote directory
 # === It then uses rsync command to transfer the folder to the remote server
@@ -28,6 +28,7 @@ echo
 # Ask user if they want to use Downloads directory or choose another
 read -p "Do you want to use Downloads directory? (Y/N) [Y]: " USE_DOWNLOADS
 USE_DOWNLOADS=${USE_DOWNLOADS:-Y}
+USE_DOWNLOADS=$(echo "$USE_DOWNLOADS" | xargs)
 
 if [[ "$USE_DOWNLOADS" =~ ^[Yy]$ ]]; then
     DEF_LOCAL_DIR="$(pwd)"
@@ -52,6 +53,13 @@ read -p "Enter SSH port [22]: " REMOTE_PORT
 read -p "Enter FULL path to local folder [$DEF_LOCAL_DIR]: " LOCAL_DIR
 read -p "Enter FULL path to destination on server: " REMOTE_DIR
 
+# Trim leading/trailing whitespace using xargs
+REMOTE_USER=$(echo "$REMOTE_USER" | xargs)
+REMOTE_HOST=$(echo "$REMOTE_HOST" | xargs)
+REMOTE_PORT=$(echo "$REMOTE_PORT" | xargs)
+LOCAL_DIR=$(echo "$LOCAL_DIR" | xargs)
+REMOTE_DIR=$(echo "$REMOTE_DIR" | xargs)
+
 # Set defaults if empty
 if [ -z "$REMOTE_PORT" ]; then
     REMOTE_PORT="$DEF_REMOTE_PORT"
@@ -60,6 +68,10 @@ fi
 if [ -z "$LOCAL_DIR" ]; then
     LOCAL_DIR="$DEF_LOCAL_DIR"
 fi
+
+# Trim again in case default paths had spaces
+LOCAL_DIR=$(echo "$LOCAL_DIR" | xargs)
+REMOTE_PORT=$(echo "$REMOTE_PORT" | xargs)
 
 echo
 echo "============================================"

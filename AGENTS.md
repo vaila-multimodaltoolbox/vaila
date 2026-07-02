@@ -401,13 +401,32 @@ Helpers: `_BBOX_ANCHOR_ALIASES`, `_anchor_xy_from_bbox`,
 regular editable / saveable vailá markers. Skill:
 `.claude/skills/getpixelvideo-tracking-loader/SKILL.md`.
 
-Version sync (`0.3.54` / `14 June 2026`) applied to `vaila.py`,
+Version sync (`0.3.54` / 14 June 2026) applied to `vaila.py`,
 `vaila/vaila_sam.py`, `vaila/sam_postprocess.py`, `vaila/getpixelvideo.py`,
 `vaila/help/vaila_sam.{md,html}`, `vaila/help/index.{md,html}`, and
-`README.md`. Tests pass except for the unrelated
-`tests/test_tugturn_integration.py::test_cli_end_to_end` Qt-plugin
-environment failure (already documented in *Sports field CLI and GUI
-integration fixes*).
+`README.md`. Tests pass except for the unrelated `tests/test_tugturn_integration.py::test_cli_end_to_end` Qt-plugin environment failure (already documented in *Sports field CLI and GUI integration fixes*).
+
+### File Manager Tkinter fixes and hybrid SSH Transfer (July 2026, session 2026-07-01)
+
+**Module:** `vaila/filemanager.py` and `vaila.py`.
+
+Symptom 1: Clicking the **Transfer** button on the main GUI printed debug messages and then immediately closed/crashed the entire Python/Tkinter GUI process with exit code 139 (Segmentation Fault).
+Symptom 2: Executing `vaila/transfer.sh` via the CLI failed with `rsync: [sender] change_dir "/mnt/disco2tb1/Downloads" failed: No such file or directory` when the user typed or copy-pasted trailing spaces.
+Symptom 3: Buttons like **Copy**, **Move**, and **Import** caused UI freezes or Tcl/Tk crashes on Linux X11 due to creating duplicate `tk.Tk()` root instances and starting secondary event loops (`root.mainloop()`).
+
+Root cause 1: `_transfer_file_gui()` returned immediately without blocking. When the local variables (specifically the `StringVar` variables bound to entry fields) went out of scope, Python garbage-collected them. Their `__del__` destructor unregistered the variables from the Tcl interpreter. When the Tk event loop tried to render or process events for the widgets bound to those deleted variables, it dereferenced a NULL pointer and segfaulted.
+Root cause 2: Interactive user input in the shell script kept trailing whitespace (e.g. `/mnt/disco2tb1/Downloads         `), causing `rsync` to search for a non-existent path.
+Root cause 3: Python's Tkinter wrapper does not support multiple `tk.Tk()` root window loops running simultaneously in the same process.
+
+Fixes:
+- **Tcl/Tk Segmentation Fault Fix**: Bound the `StringVar` instances to the window object as attributes, and blocked returning from `_transfer_file_gui()` using `root.wait_window(transfer_window)` when run in embedded mode to keep the local scope alive.
+- **CLI Trailing Spaces Fix**: Added automatic leading/trailing whitespace trimming to all user inputs in `vaila/transfer.sh` using `xargs`.
+- **Duplicate Root Window Fixes**: Refactored `copy_file()`, `move_file()`, and `import_file()` to use a hybrid window management pattern: they detect the existing `tk._default_root`, spawn a transient modal `tk.Toplevel` dialog, and wait using `root.wait_window()`. They only fall back to `tk.Tk()` and `mainloop()` when run standalone outside the main GUI.
+- **Hybrid GUI-Terminal Transfer**: Because `rsync` requires a real interactive terminal (TTY) for SSH password input, the Transfer button was rewritten to collect parameters in a transient modal GUI dialog, write them to a temp script, and launch the script in a new terminal emulator window (`gnome-terminal`, etc.) so the user can safely type their password.
+
+Version sync: `0.3.67 / 01 July 2026` on `vaila.py`, `vaila/filemanager.py`, `vaila/transfer.sh`, `vaila/help/filemanager.{md,html}`, `vaila/help/index.{md,html}`, and `README.md`.
+Tests: 430 passed, 1 skipped.
+Skill: `.claude/skills/filemanager-tkinter-and-ssh-transfer/SKILL.md`.
 
 ## Caveman mode (optional)
 
