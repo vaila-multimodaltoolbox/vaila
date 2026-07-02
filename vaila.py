@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 30 June 2026
-Version: 0.3.68
+Update Date: 01 July 2026
+Version: 0.3.67
 
 Example of usage:
 uv run vaila.py
@@ -65,7 +65,16 @@ import sys
 import tkinter as tk
 import webbrowser
 from pathlib import Path
-from tkinter import Button, Label, Radiobutton, Toplevel, messagebox, simpledialog, ttk
+from tkinter import (
+    Button,
+    Label,
+    Radiobutton,
+    Toplevel,
+    filedialog,
+    messagebox,
+    simpledialog,
+    ttk,
+)
 
 from PIL import Image, ImageTk
 from rich import print
@@ -200,7 +209,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 30.Jun.2026 v0.3.68 (Python 3.12.13)
+    vailá - 01.Jul.2026 v0.3.67 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -311,7 +320,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 30.Jun.2026 v0.3.68 (Python 3.12.13)")
+        self.title("vailá - 01.Jul.2026 v0.3.67 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -1555,18 +1564,242 @@ class Vaila(tk.Tk):
     def transfer_file(self):
         """Transfer files between a local machine and a remote server using SSH.
 
-        This function will prompt the user to select Upload or Download, and then
-        select a source file or directory for upload or specify a destination
-        directory for download.
-
-        The function supports both local and remote file transfers, and will
-        automatically create subdirectories in the destination directory to
-        organize the transferred files.
-
+        Shows a Tkinter dialog to collect transfer parameters (local/remote
+        paths, username, host, port, upload/download mode), then launches the
+        rsync/scp command in a real terminal window so the user can type the
+        SSH password interactively.
         """
-        from vaila.filemanager import transfer_file
+        import shutil as _shutil
+        import tempfile
 
-        transfer_file()
+        # --- check for rsync / scp -------------------------------------------
+        rsync_path = _shutil.which("rsync")
+        scp_path = _shutil.which("scp")
+        if not rsync_path and not scp_path:
+            messagebox.showerror(
+                "Transfer Tool Not Found",
+                "Neither rsync nor scp is found in PATH.\n\n"
+                "Linux: sudo apt install rsync openssh-client\n"
+                "macOS: brew install rsync",
+            )
+            return
+        use_rsync = rsync_path is not None
+        method = "RSYNC" if use_rsync else "SCP"
+
+        # --- modal dialog ----------------------------------------------------
+        dialog = tk.Toplevel(self)
+        dialog.title(f"File Transfer Configuration ({method})")
+        dialog.geometry("620x520")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        default_local = os.path.join(os.path.expanduser("~"), "Downloads")
+        local_dir_var = tk.StringVar(value=default_local)
+        remote_user_var = tk.StringVar()
+        remote_host_var = tk.StringVar()
+        remote_port_var = tk.StringVar(value="22")
+        remote_dir_var = tk.StringVar()
+        mode_var = tk.StringVar(value="upload")
+
+        main_frame = tk.Frame(dialog, padx=15, pady=15)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(
+            main_frame,
+            text=f"File Transfer Tool ({method})",
+            font=("Arial", 13, "bold"),
+        ).pack(pady=(0, 10))
+
+        # -- mode selector --
+        mode_frame = tk.LabelFrame(main_frame, text="Transfer Mode", padx=5, pady=5)
+        mode_frame.pack(fill=tk.X, pady=(0, 10))
+        local_lbl_var = tk.StringVar(value="Local Directory (Source):")
+        remote_lbl_var = tk.StringVar(value="Remote Directory (Destination):")
+
+        def _update_labels():
+            if mode_var.get() == "upload":
+                local_lbl_var.set("Local Directory (Source):")
+                remote_lbl_var.set("Remote Directory (Destination):")
+            else:
+                local_lbl_var.set("Local Directory (Destination):")
+                remote_lbl_var.set("Remote Directory (Source):")
+
+        tk.Radiobutton(
+            mode_frame, text="Upload (Send to Remote)",
+            variable=mode_var, value="upload", command=_update_labels,
+        ).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(
+            mode_frame, text="Download (Receive from Remote)",
+            variable=mode_var, value="download", command=_update_labels,
+        ).pack(side=tk.LEFT, padx=10)
+
+        # -- helper to add labelled entry fields --
+        def _field(label_var_or_str, var, *, browse=False):
+            if isinstance(label_var_or_str, tk.StringVar):
+                tk.Label(main_frame, textvariable=label_var_or_str, anchor="w").pack(
+                    fill=tk.X, pady=(5, 2)
+                )
+            else:
+                tk.Label(main_frame, text=label_var_or_str, anchor="w").pack(
+                    fill=tk.X, pady=(5, 2)
+                )
+            row = tk.Frame(main_frame)
+            row.pack(fill=tk.X, pady=(0, 5))
+            tk.Entry(row, textvariable=var).pack(
+                side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5)
+            )
+            if browse:
+
+                def _browse():
+                    d = filedialog.askdirectory(
+                        title="Select Directory",
+                        initialdir=var.get() or default_local,
+                        parent=dialog,
+                    )
+                    if d:
+                        var.set(d)
+
+                tk.Button(row, text="Browse…", command=_browse).pack(side=tk.LEFT)
+
+        _field(local_lbl_var, local_dir_var, browse=True)
+        _field("Remote Username:", remote_user_var)
+        _field("Remote Host (IP or hostname):", remote_host_var)
+        _field("SSH Port:", remote_port_var)
+        _field(remote_lbl_var, remote_dir_var)
+
+        tk.Label(
+            main_frame,
+            text="⬇ Password will be prompted in the terminal window that opens next.",
+            fg="blue",
+            font=("Arial", 9, "italic"),
+        ).pack(fill=tk.X, pady=(8, 10))
+
+        # -- start transfer callback ------------------------------------------
+        def _start():
+            local = local_dir_var.get().strip()
+            user = remote_user_var.get().strip()
+            host = remote_host_var.get().strip()
+            port = remote_port_var.get().strip() or "22"
+            remote = remote_dir_var.get().strip()
+            mode = mode_var.get()
+
+            # validate
+            errors = []
+            if not local:
+                errors.append("Local directory is required.")
+            elif mode == "upload" and not os.path.exists(local):
+                errors.append(f"Local directory not found:\n  {local}")
+            if not user:
+                errors.append("Remote username is required.")
+            if not host:
+                errors.append("Remote host is required.")
+            if not remote:
+                errors.append("Remote directory is required.")
+            if errors:
+                messagebox.showerror("Validation Error", "\n".join(errors), parent=dialog)
+                return
+
+            # build command
+            local_n = local.rstrip("/")
+            remote_n = remote.rstrip("/")
+            if use_rsync:
+                ssh_flag = f'"ssh -p {port}"'
+                if mode == "upload":
+                    cmd = f'rsync -avzhP -e {ssh_flag} "{local_n}" "{user}@{host}:{remote_n}/"'
+                else:
+                    cmd = f'rsync -avzhP -e {ssh_flag} "{user}@{host}:{remote_n}/" "{local_n}"'
+            else:
+                if mode == "upload":
+                    cmd = f'scp -P {port} -r "{local_n}" "{user}@{host}:{remote_n}/"'
+                else:
+                    cmd = f'scp -P {port} -r "{user}@{host}:{remote_n}/" "{local_n}"'
+
+            # write temp script
+            src_desc = local_n if mode == "upload" else f"{user}@{host}:{remote_n}"
+            dst_desc = f"{user}@{host}:{remote_n}" if mode == "upload" else local_n
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix="_vaila_transfer.sh", delete=False, prefix="vaila_"
+            ) as tmp:
+                tmp.write("#!/bin/bash\n")
+                tmp.write('echo "============================================"\n')
+                tmp.write(f'echo "vailá File Transfer — {mode.upper()}"\n')
+                tmp.write('echo "============================================"\n')
+                tmp.write(f'echo "From: {src_desc}"\n')
+                tmp.write(f'echo "To:   {dst_desc}"\n')
+                tmp.write(f'echo "Port: {port}  |  Method: {method}"\n')
+                tmp.write('echo "============================================"\n')
+                tmp.write("echo\n")
+                tmp.write(f"{cmd}\n")
+                tmp.write("echo\n")
+                tmp.write('if [ $? -eq 0 ]; then\n')
+                tmp.write('    echo "✅ Transfer completed successfully!"\n')
+                tmp.write("else\n")
+                tmp.write('    echo "❌ Transfer failed!"\n')
+                tmp.write("fi\n")
+                tmp.write("echo\n")
+                tmp.write('read -p "Press Enter to close..."\n')
+                script_path = tmp.name
+            os.chmod(script_path, 0o755)
+
+            # launch terminal
+            launched = False
+            if platform.system() == "Linux":
+                terminals = [
+                    ("gnome-terminal", ["--", "bash", script_path]),
+                    ("konsole", ["-e", "bash", script_path]),
+                    ("xfce4-terminal", ["-e", f"bash {script_path}"]),
+                    ("x-terminal-emulator", ["-e", f"bash {script_path}"]),
+                    ("xterm", ["-hold", "-e", "bash", script_path]),
+                ]
+                for tname, targs in terminals:
+                    if _shutil.which(tname):
+                        try:
+                            subprocess.Popen([tname, *targs])
+                            print(f"Launched transfer in {tname}")
+                            launched = True
+                            break
+                        except Exception:
+                            continue
+            elif platform.system() == "Darwin":
+                try:
+                    subprocess.Popen(["open", "-a", "Terminal", script_path])
+                    launched = True
+                except Exception:
+                    pass
+            elif platform.system() == "Windows":
+                try:
+                    subprocess.Popen(["cmd", "/c", "start", "bash", script_path])
+                    launched = True
+                except Exception:
+                    pass
+
+            if not launched:
+                messagebox.showerror(
+                    "Error",
+                    f"Could not open terminal.\nRun manually:\n  bash {script_path}",
+                    parent=dialog,
+                )
+                return
+
+            dialog.destroy()
+
+        # -- buttons -----------------------------------------------------------
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+        tk.Button(
+            btn_frame, text="▶ Start Transfer", command=_start,
+            bg="#4CAF50", fg="white", font=("Arial", 10, "bold"),
+        ).pack(side=tk.LEFT, padx=(0, 5))
+        tk.Button(btn_frame, text="Close", command=dialog.destroy).pack(side=tk.RIGHT)
+
+        # center dialog
+        dialog.update_idletasks()
+        w, h = dialog.winfo_width(), dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (w // 2)
+        y = (dialog.winfo_screenheight() // 2) - (h // 2)
+        dialog.geometry(f"{w}x{h}+{x}+{y}")
+
+        self.wait_window(dialog)
 
     # B Second FRAME Block
     # B_r1_c1
