@@ -462,6 +462,7 @@ def test_merge_chunk_outputs_links_ids_across_overlap(tmp_path: Path) -> None:
 
 def test_delete_mask_artifacts(tmp_path):
     from vaila.vaila_sam import _delete_mask_artifacts
+
     masks_dir = tmp_path / "masks"
     masks_dir.mkdir()
     (masks_dir / "frame_000000_obj_1.png").touch()
@@ -476,3 +477,22 @@ def test_delete_mask_artifacts(tmp_path):
     assert not masks_dir.exists()
     assert not manifest_csv.exists()
 
+
+def test_open_sam3_video_writer_creates_file(tmp_path: Path) -> None:
+    from vaila.vaila_sam import _open_sam3_video_writer
+
+    target = tmp_path / "_sam3_subsample_input.mp4"
+    writer, actual = _open_sam3_video_writer(
+        target,
+        30.0,
+        (640, 480),
+        purpose="unit test",
+    )
+    try:
+        assert writer.isOpened()
+        assert actual.parent == tmp_path.resolve()
+        assert actual.suffix in {".mp4", ".avi"}
+    finally:
+        writer.release()
+    assert actual.is_file()
+    assert actual.stat().st_size > 0

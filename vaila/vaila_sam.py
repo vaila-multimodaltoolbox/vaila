@@ -1429,6 +1429,53 @@ def _nearest_sess_idx_for_orig_frame(frame_idx: int, sess_to_orig: np.ndarray) -
     return int(min(candidates, key=lambda j: (abs(int(a[j]) - frame_idx), -int(a[j]))))
 
 
+_SAM3_WRITER_FALLBACKS: tuple[tuple[str, str], ...] = (
+    ("MJPG", ".avi"),
+    ("XVID", ".avi"),
+    ("mp4v", ".mp4"),
+)
+
+
+def _open_sam3_video_writer(
+    path: Path,
+    fps: float,
+    size: tuple[int, int],
+    *,
+    purpose: str = "SAM3 video",
+) -> tuple[cv2.VideoWriter, Path]:
+    """Open ``cv2.VideoWriter`` with MJPG → XVID → mp4v fallback.
+
+    Removes any stale destination file first. Returns ``(writer, actual_path)``;
+    ``actual_path`` may use ``.avi`` when ``mp4v`` fails (same pattern as
+    ``yolov26track`` overlay export).
+    """
+    w, h = size
+    if w <= 0 or h <= 0:
+        raise OSError(f"{purpose}: invalid frame size {w}x{h}")
+    tried: list[str] = []
+    parent = path.parent
+    stem = path.stem
+    for fourcc_name, ext in _SAM3_WRITER_FALLBACKS:
+        candidate = parent / f"{stem}{ext}"
+        with contextlib.suppress(OSError):
+            candidate.unlink(missing_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*fourcc_name)  # ty: ignore[unresolved-attribute]
+        writer = cv2.VideoWriter(str(candidate), fourcc, float(fps), (w, h))
+        if writer.isOpened():
+            if ext != path.suffix.lower():
+                print(
+                    f"[SAM3] VideoWriter ({purpose}): {fourcc_name} -> {candidate.name}",
+                    flush=True,
+                )
+            return writer, candidate.resolve()
+        writer.release()
+        tried.append(f"{fourcc_name}({candidate.name})")
+    raise OSError(
+        f"Could not open VideoWriter for {purpose} ({w}x{h} @ {fps:.3f} fps). "
+        f"Tried: {', '.join(tried)}"
+    )
+
+
 def _maybe_subsample_video_for_vram(
     video_path: Path,
     output_dir: Path,
@@ -1469,16 +1516,17 @@ def _maybe_subsample_video_for_vram(
     cap = cv2.VideoCapture(vp)
     if not cap.isOpened():
         raise OSError(f"Could not open video: {vp}")
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
     # Preserve *duration* when subsampling: we keep fewer frames that represent the full clip,
     # so we must reduce the output FPS proportionally; otherwise the clip (and SAM overlay)
     # plays back faster than real time.
     fps_out = float(fps) * (float(len(indices)) / float(n)) if n > 0 else float(fps)
     fps_out = max(1e-3, fps_out)
-    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps_out), (w, h))
-    if not writer.isOpened():
-        cap.release()
-        raise OSError("Could not open VideoWriter for SAM3 subsample (try another codec/OS path)")
+    writer, out_path = _open_sam3_video_writer(
+        out_path,
+        fps_out,
+        (w, h),
+        purpose="SAM3 subsample",
+    )
     written_orig: list[int] = []
     fi = 0
     while True:
@@ -1569,11 +1617,12 @@ def _maybe_downscale_video_long_edge(
 
     out_path = output_dir / "_sam3_spatial_downscale_input.mp4"
     cap = cv2.VideoCapture(vp)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
-    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (new_w, new_h))
-    if not writer.isOpened():
-        cap.release()
-        raise OSError("Could not open VideoWriter for SAM3 spatial downscale (try another codec)")
+    writer, out_path = _open_sam3_video_writer(
+        out_path,
+        float(fps),
+        (new_w, new_h),
+        purpose="SAM3 spatial downscale",
+    )
 
     written = 0
     while True:
@@ -1630,16 +1679,17 @@ def _split_video_into_chunks(
     chunk_dir.mkdir(parents=True, exist_ok=True)
     chunks: list[tuple[Path, int, int]] = []
     cap = cv2.VideoCapture(vp)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
 
     start = 0
     while start < n:
         end = min(start + chunk_size, n)
         chunk_path = chunk_dir / f"_chunk_{start:06d}.mp4"
-        writer = cv2.VideoWriter(str(chunk_path), fourcc, float(fps), (w, h))
-        if not writer.isOpened():
-            cap.release()
-            raise OSError(f"Could not open VideoWriter for chunk {start}")
+        writer, chunk_path = _open_sam3_video_writer(
+            chunk_path,
+            float(fps),
+            (w, h),
+            purpose=f"SAM3 chunk {start}",
+        )
         cap.set(cv2.CAP_PROP_POS_FRAMES, start)
         written = 0
         for _ in range(start, end):
@@ -1885,9 +1935,14 @@ def _render_overlay_from_merged_masks(
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     out_path = final_output_dir / f"{video_path.stem}_sam_overlay.mp4"
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
-    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (w, h))
-    if not writer.isOpened():
+    try:
+        writer, out_path = _open_sam3_video_writer(
+            out_path,
+            float(fps),
+            (w, h),
+            purpose="SAM3 merged overlay",
+        )
+    except OSError:
         cap.release()
         return False
 
@@ -2225,10 +2280,12 @@ def _stitch_overlay_mp4s(
     h = int(first_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     first_cap.release()
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
-    writer = cv2.VideoWriter(str(out_path), fourcc, float(fps), (w, h))
-    if not writer.isOpened():
-        return
+    writer, out_path = _open_sam3_video_writer(
+        out_path,
+        float(fps),
+        (w, h),
+        purpose="SAM3 stitched overlay",
+    )
     for pi, part in enumerate(parts):
         cap = cv2.VideoCapture(str(part))
         local_idx = 0
@@ -3173,8 +3230,12 @@ def run_sam3_on_video(
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 temp_vid = temp_dir / f"frame_{fi_eval}.mp4"
 
-                fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
-                tmp_writer = cv2.VideoWriter(str(temp_vid), fourcc, float(fps_sess), (new_w, new_h))
+                tmp_writer, temp_vid = _open_sam3_video_writer(
+                    temp_vid,
+                    float(fps_sess),
+                    (new_w, new_h),
+                    purpose=f"SAM3 frame-by-frame {fi_eval}",
+                )
                 tmp_writer.write(bgr_small)
                 tmp_writer.release()
 
@@ -3348,9 +3409,15 @@ def run_sam3_on_video(
         writer = None
         overlay_path = output_dir / f"{video_path.stem}_sam_overlay.mp4"
         if save_overlay_mp4:
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
-            writer = cv2.VideoWriter(str(overlay_path), fourcc, float(fps), (w, h))
-            if not writer.isOpened():
+            try:
+                writer, overlay_path = _open_sam3_video_writer(
+                    overlay_path,
+                    float(fps),
+                    (w, h),
+                    purpose="SAM3 overlay",
+                )
+            except OSError as exc:
+                print(f"[SAM3] WARNING: overlay VideoWriter unavailable: {exc}")
                 writer = None
 
         masks_dir = output_dir / "masks"

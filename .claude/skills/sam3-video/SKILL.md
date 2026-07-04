@@ -242,6 +242,11 @@ chunked path silently produced random per-chunk IDs.
 (Hungarian, IoU, velocity, mask IoU). `vaila_sam.py` imports from there via
 `from .geometric_reid import assignment_min_cost, bbox_iou_xywh, ...`.
 
+**VideoWriter subsample (v0.3.69):** `_open_sam3_video_writer()` tries
+**MJPG → XVID → mp4v** when writing temp clips (`_sam3_subsample_input.*`,
+spatial downscale, chunks, overlay). Stale destination files are removed
+before open. Error text includes `w×h`, fps, and codecs tried.
+
 #### Tunable knobs (v0.3.68)
 
 `_build_cross_chunk_id_maps(max_centroid_dist_px=180.0, min_iou=0.05, mask_iou_weight=0.25)`.
