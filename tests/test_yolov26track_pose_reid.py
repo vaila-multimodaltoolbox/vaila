@@ -51,7 +51,12 @@ def test_select_pose_person_picks_center() -> None:
 
 
 def test_geometric_linker_merges_id_switch() -> None:
-    linker = _GeometricTrackLinker(enabled=True, max_gap=12)
+    from vaila.geometric_reid import GeometricLinkerConfig
+
+    linker = _GeometricTrackLinker(
+        enabled=True,
+        config=GeometricLinkerConfig(max_gap=12),
+    )
     det0 = {
         "raw_id": 5,
         "tracker_id": 1,
@@ -80,3 +85,43 @@ def test_geometric_linker_disabled_passthrough() -> None:
     det = {"raw_id": 3, "tracker_id": 7, "xyxy": (0, 0, 50, 50), "label": "person", "conf": 0.5}
     out = linker.assign_frame(0, [det])
     assert out[0]["stable_id"] == 7
+
+
+def test_apply_geometric_stabilize_writes_links_csv(tmp_path) -> None:
+    from vaila.yolov26track import (
+        _apply_geometric_stabilize_to_buffer,
+        _BufferedFrame,
+    )
+
+    buffer = [
+        _BufferedFrame(
+            frame_idx=0,
+            detections=[
+                {"raw_id": 1, "xyxy": (10, 10, 30, 30), "conf": 0.9, "cls": 0},
+            ],
+            annotated_frame=None,
+            raw_result=None,
+        ),
+        _BufferedFrame(
+            frame_idx=1,
+            detections=[
+                {"raw_id": 2, "xyxy": (12, 12, 32, 32), "conf": 0.9, "cls": 0},
+            ],
+            annotated_frame=None,
+            raw_result=None,
+        ),
+    ]
+    out_dir = tmp_path / "track_out"
+    out_dir.mkdir()
+    written, links_path = _apply_geometric_stabilize_to_buffer(
+        buffer,
+        str(out_dir),
+        "person",
+        {0: "person"},
+        stabilize_ids=True,
+    )
+    assert written
+    assert links_path is not None
+    assert (out_path := out_dir / "yolo_reid_links.csv").is_file()
+    text = out_path.read_text(encoding="utf-8")
+    assert "frame" in text.lower()

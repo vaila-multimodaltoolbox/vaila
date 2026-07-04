@@ -6,7 +6,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
 Update Date: 04 July 2026
-Version: 0.3.68
+Version: 0.3.69
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -81,7 +81,6 @@ import os
 import platform
 import shutil
 import sys
-import threading
 import time
 import tkinter as tk
 import webbrowser
@@ -92,6 +91,25 @@ from typing import Any
 
 import cv2
 import numpy as np
+
+try:
+    from .geometric_reid import (
+        GeometricFrameLinker,
+        GeometricLinkerConfig,
+        assignment_min_cost,
+        bbox_iou_xywh,
+        mask_iou_u8,
+        write_reid_links_csv,
+    )
+except ImportError:
+    from geometric_reid import (  # ty: ignore[unresolved-import]
+        GeometricFrameLinker,
+        GeometricLinkerConfig,
+        assignment_min_cost,
+        bbox_iou_xywh,
+        mask_iou_u8,
+        write_reid_links_csv,
+    )
 
 SAM3_DEFAULT_CKPT_NAME = "sam3.pt"
 SAM3_MULTIPLEX_CKPT_NAME = "sam3.1_multiplex.pt"
@@ -186,7 +204,7 @@ def _patch_sam3_force_fp32_tracker_backbone_features() -> None:
                 sam3_image_out[key] = t.float()
         return out
 
-    _Sam3ImageOnVideoMultiGPU.forward_video_grounding_multigpu = _forward_with_fp32_tracker_fpn  # ty: ignore[invalid-assignment]
+    _Sam3ImageOnVideoMultiGPU.forward_video_grounding_multigpu = _forward_with_fp32_tracker_fpn
     _SAM3_BACKBONE_FPN_FP32_PATCHED = True
 
 
@@ -740,7 +758,7 @@ def _sam3_vram_profile() -> dict[str, float] | None:
 def _host_ram_profile() -> dict[str, float] | None:
     """Best-effort host (system) RAM probe; falls back to ``/proc/meminfo``."""
     try:
-        import psutil  # ty: ignore[unresolved-import]
+        import psutil
 
         vm = psutil.virtual_memory()
         return {
@@ -1673,6 +1691,7 @@ def _track_row_detection(
     return {
         "frame": int(global_frame),
         "obj_id": int(obj_id),
+        "local_obj_id": int(obj_id),
         "bbox": (x, y, w_box, h_box),
         "centroid": (float(cx), float(cy)),
     }
@@ -1696,39 +1715,13 @@ def _collect_chunk_local_ids(chunk_out: Path) -> set[int]:
     return ids
 
 
-def _assignment_min_cost(cost_matrix: np.ndarray) -> list[tuple[int, int]]:
-    """Solve rectangular 1:1 assignment.
-
-    Uses SciPy's Hungarian (``scipy.optimize.linear_sum_assignment``) when
-    available, with a greedy minimum-cost fallback when SciPy is missing.
-
-    Returns ``[(row_idx, col_idx), ...]`` for the optimal pairing.
-    """
-    if cost_matrix.size == 0:
-        return []
-    try:
-        from scipy.optimize import linear_sum_assignment
-
-        rows, cols = linear_sum_assignment(cost_matrix)
-        return [(int(r), int(c)) for r, c in zip(rows, cols, strict=True)]
-    except Exception:
-        remaining_rows = set(range(cost_matrix.shape[0]))
-        remaining_cols = set(range(cost_matrix.shape[1]))
-        pairs: list[tuple[int, int]] = []
-        while remaining_rows and remaining_cols:
-            best: tuple[float, int, int] | None = None
-            for r in remaining_rows:
-                for c in remaining_cols:
-                    val = float(cost_matrix[r, c])
-                    if best is None or val < best[0]:
-                        best = (val, r, c)
-            if best is None:
-                break
-            _val, r_best, c_best = best
-            pairs.append((r_best, c_best))
-            remaining_rows.remove(r_best)
-            remaining_cols.remove(c_best)
-        return pairs
+def _load_chunk_mask_u8(chunk_out: Path, local_frame: int, obj_id: int) -> np.ndarray | None:
+    """Load a chunk-local binary mask PNG when present."""
+    mask_path = chunk_out / "masks" / f"frame_{local_frame:06d}_obj_{obj_id}.png"
+    if not mask_path.is_file():
+        return None
+    img = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+    return img if img is not None else None
 
 
 def _build_cross_chunk_id_maps(
@@ -1737,6 +1730,7 @@ def _build_cross_chunk_id_maps(
     *,
     max_centroid_dist_px: float = 180.0,
     min_iou: float = 0.05,
+    mask_iou_weight: float = 0.25,
 ) -> list[dict[int, int]]:
     """Map each chunk-local object ID to a global ID using overlap frames.
 
@@ -1805,11 +1799,28 @@ def _build_cross_chunk_id_maps(
                             for prev in history_by_frame.get(int(det["frame"]), []):
                                 if int(prev["obj_id"]) != global_oid:
                                     continue
-                                iou = _bbox_iou_xywh(det["bbox"], prev["bbox"])
+                                iou = bbox_iou_xywh(det["bbox"], prev["bbox"])
                                 dcx = float(det["centroid"][0]) - float(prev["centroid"][0])
                                 dcy = float(det["centroid"][1]) - float(prev["centroid"][1])
                                 dist = float(np.hypot(dcx, dcy))
-                                vals.append((1.0 - iou) + min(1.0, dist / max_centroid_dist_px))
+                                cost_val = (1.0 - iou) + min(1.0, dist / max_centroid_dist_px)
+                                if mask_iou_weight > 0.0:
+                                    local_oid = int(det.get("local_obj_id", 0))
+                                    local_frame = int(det["frame"]) - start_frame
+                                    det_mask = _load_chunk_mask_u8(
+                                        chunk_out, local_frame, local_oid
+                                    )
+                                    prev_local_frame = int(det["frame"]) - chunks[ci - 1][1]
+                                    prev_local_oid = int(prev.get("local_obj_id", global_oid))
+                                    prev_mask = _load_chunk_mask_u8(
+                                        chunk_output_dirs[ci - 1],
+                                        prev_local_frame,
+                                        prev_local_oid,
+                                    )
+                                    if det_mask is not None and prev_mask is not None:
+                                        miou = mask_iou_u8(det_mask, prev_mask)
+                                        cost_val += float(mask_iou_weight) * (1.0 - miou)
+                                vals.append(cost_val)
                                 ious.append(iou)
                                 dists.append(dist)
                         if vals:
@@ -1819,7 +1830,7 @@ def _build_cross_chunk_id_maps(
                                 mean_iou >= min_iou or mean_dist <= max_centroid_dist_px
                             )
                             cost[li, gi] = float(np.mean(vals))
-                for li, gi in _assignment_min_cost(cost):
+                for li, gi in assignment_min_cost(cost):
                     if cost[li, gi] >= 1e5 or not ok_pair.get((li, gi), False):
                         continue
                     mapping[candidate_locals[li]] = candidate_globals[gi]
@@ -2262,6 +2273,7 @@ def _process_video_chunked(
     contours_format: str = "json",
     contours_gzip: bool = False,
     chunk_size: int | None = None,
+    overlap_frames: int = 2,
     log: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Divide-and-conquer: split video into temporal chunks, process each in a
@@ -2302,7 +2314,7 @@ def _process_video_chunked(
     if n_total <= 0:
         return False, f"Could not read frame count from {video_file}"
 
-    overlap_frames = 2
+    overlap_frames = max(0, int(overlap_frames))
     _log(
         f"  [SAM3-CHUNK] Divide and conquer: {n_total} frames → "
         f"chunks of ≤{chunk_size} frames with {overlap_frames}-frame overlap"
@@ -2312,12 +2324,11 @@ def _process_video_chunked(
     chunk_work_dir = output_dir / "_chunks"
     chunk_work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Split video into chunks. Adjacent chunks share 2 frames (sliding-window
+    # Split video into chunks. Adjacent chunks share overlap frames (sliding-window
     # overlap) so cross-chunk ID linking can match identical spatial detections
     # at the boundary; see :func:`_build_cross_chunk_id_maps` for the
     # IoU+centroid Hungarian assignment that converts chunk-local SAM IDs into
     # persistent global IDs.
-    overlap_frames = 2
     _log(
         f"  [SAM3-CHUNK] Splitting video into chunks "
         f"(overlap_frames={overlap_frames} for tracklet linking)..."
@@ -2720,12 +2731,19 @@ Output files reference (only files that were actually written exist in this dir)
   sam_points.csv            vailá pixel-marker format (wide). One row per
                             frame, columns frame, p0_x, p0_y, p1_x, p1_y, …
                             One column-pair per obj_id; ready for direct
-                            loading in getpixelvideo or rec2d. Only present
-                            when ``--postprocess-points`` was set
-                            (foot/center/mask/all).
+                            loading in getpixelvideo or rec2d. Written by
+                            default (``--postprocess-points all``).
 
   sam_id_map.csv            Maps SAM obj_id to the column slot (p{N}) used in
                             ``sam_points.csv``.
+
+  sam_vaila_center.csv      Simple vailá-style ``frame,x1,y1,...,xN,yN`` —
+                            one (x,y) per object using the **bbox center**
+                            as anchor. Ready for rec2d / getpixelvideo.
+  sam_vaila_bottom.csv      Same format — **bottom-center** (foot) anchor.
+  sam_vaila_top.csv         Same format — **top-center** anchor.
+  sam_vaila_left.csv        Same format — **left-center** anchor.
+  sam_vaila_right.csv       Same format — **right-center** anchor.
 
   sam_masks_manifest.csv    Index of per-frame mask PNGs (when written).
 
@@ -2806,12 +2824,10 @@ def _stabilize_sam_track_ids(
     height: int,
     max_gap: int = 12,
     max_centroid_dist_px: float = 180.0,
+    min_iou: float = 0.05,
+    direction_weight: float = 0.5,
 ) -> None:
-    """Rewrite SAM object IDs by short-term bbox/centroid continuity.
-
-    This is not appearance ReID. It is a conservative geometric linker that helps
-    when SAM/chunk IDs reset or flicker for nearby frames.
-    """
+    """Rewrite SAM object IDs using :class:`GeometricFrameLinker` (Hungarian + velocity)."""
     tracks_path = output_dir / "sam_tracks.csv"
     if not tracks_path.is_file() or width <= 0 or height <= 0:
         return
@@ -2834,52 +2850,47 @@ def _stabilize_sam_track_ids(
         with contextlib.suppress(Exception):
             by_frame.setdefault(int(float(row["frame"])), []).append(row)
 
-    active: dict[int, dict[str, Any]] = {}
-    next_tid = 0
-    links: list[str] = ["frame,old_obj_id,obj_id"]
+    linker = GeometricFrameLinker(
+        enabled=True,
+        config=GeometricLinkerConfig(
+            max_gap=max_gap,
+            max_centroid_dist_px=max_centroid_dist_px,
+            min_iou=min_iou,
+            direction_weight=direction_weight,
+        ),
+        start_stable_id=0,
+    )
     remapped_rows: list[dict[str, str]] = []
 
     for frame in sorted(by_frame):
         detections = by_frame[frame]
-        assigned_tracks: set[int] = set()
+        valid_rows: list[dict[str, str]] = []
+        frame_dets: list[dict[str, Any]] = []
         for row in detections:
             try:
                 x = float(row["x_px"])
                 y = float(row["y_px"])
                 w_box = float(row["w_px"])
                 h_box = float(row["h_px"])
+                old_oid = int(float(row["obj_id"]))
             except Exception:
                 continue
-            cx = float(row.get("cx_px") or x + w_box * 0.5)
-            cy = float(row.get("cy_px") or y + h_box * 0.5)
-            bbox = (x, y, w_box, h_box)
-            best_tid: int | None = None
-            best_cost = float("inf")
-            for tid, tr in active.items():
-                if tid in assigned_tracks:
-                    continue
-                gap = frame - int(tr["frame"])
-                if gap < 0 or gap > max_gap:
-                    continue
-                prev_cx, prev_cy = tr["centroid"]
-                dist = float(np.hypot(cx - prev_cx, cy - prev_cy))
-                iou = _bbox_iou_xywh(bbox, tr["bbox"])
-                if dist > max_centroid_dist_px and iou < 0.05:
-                    continue
-                cost = (dist / max_centroid_dist_px) + (1.0 - iou)
-                if cost < best_cost:
-                    best_cost = cost
-                    best_tid = tid
-            if best_tid is None:
-                best_tid = next_tid
-                next_tid += 1
-            assigned_tracks.add(best_tid)
-            old_oid = row.get("obj_id", "")
-            row["obj_id"] = str(best_tid)
+            valid_rows.append(row)
+            frame_dets.append(
+                {
+                    "raw_id": old_oid,
+                    "tracker_id": old_oid,
+                    "xyxy": (x, y, x + w_box, y + h_box),
+                }
+            )
+        linked = linker.assign_frame(frame, frame_dets)
+        for row, det in zip(valid_rows, linked, strict=True):
+            x_min, y_min, x_max, y_max = det["xyxy"]
+            cx = (float(x_min) + float(x_max)) * 0.5
+            cy = (float(y_min) + float(y_max)) * 0.5
+            row["obj_id"] = str(int(det["stable_id"]))
             row["cx_px"] = f"{cx:.3f}"
             row["cy_px"] = f"{cy:.3f}"
-            active[best_tid] = {"frame": frame, "bbox": bbox, "centroid": (cx, cy)}
-            links.append(f"{frame},{old_oid},{best_tid}")
             remapped_rows.append(row)
 
     remapped_rows.sort(key=lambda r: (int(float(r["frame"])), int(float(r["obj_id"]))))
@@ -2887,7 +2898,11 @@ def _stabilize_sam_track_ids(
         writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(remapped_rows)
-    (output_dir / "sam_reid_links.csv").write_text("\n".join(links) + "\n", encoding="utf-8")
+    write_reid_links_csv(
+        str(output_dir / "sam_reid_links.csv"),
+        linker.reid_links,
+        ("frame", "old_obj_id", "obj_id"),
+    )
 
     meta_frames: dict[int, dict[int, tuple[float, float, float, float, float]]] = {}
     stable_ids: set[int] = set()
@@ -2933,7 +2948,9 @@ def _stabilize_sam_track_ids(
                 )
         lines.append(",".join(parts))
     existing_meta.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"[SAM3-ReID] geometric ID stabilization: {next_tid} track(s) -> sam_reid_links.csv")
+    print(
+        f"[SAM3-ReID] geometric ID stabilization: {len(stable_ids)} track(s) -> sam_reid_links.csv"
+    )
 
 
 def _sam3_cuda_oom_help(
@@ -3809,6 +3826,7 @@ def _process_one_video_with_oom_retry(
     contours_gzip: bool = False,
     no_chunked_fallback: bool = False,
     chunk_size: int | None = None,
+    overlap_frames: int = 2,
     log: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Run one video; on CUDA OOM retry with descending frame caps
@@ -3995,6 +4013,7 @@ def _process_one_video_with_oom_retry(
         contours_format=contours_format,
         contours_gzip=contours_gzip,
         chunk_size=chunk_size,
+        overlap_frames=overlap_frames,
         log=log,
     )
     if ok:
@@ -4121,7 +4140,7 @@ class SamVideoDialog(tk.Toplevel):
             row=7, column=1, sticky="w", pady=4
         )
         ttk.Label(frm, text="Post-process points:").grid(row=8, column=0, sticky="w", pady=4)
-        self.postprocess_var = tk.StringVar(value="none")
+        self.postprocess_var = tk.StringVar(value="all")
         ttk.Combobox(
             frm,
             textvariable=self.postprocess_var,
@@ -4318,12 +4337,10 @@ class SamVideoDialog(tk.Toplevel):
         ckpt_path: Path | None = Path(ck) if ck else None
         stabilize_ids = self.stabilize_ids_var.get()
         save_tracks_csv = self.save_tracks_csv_var.get()
-        postprocess_points = self.postprocess_var.get().strip() or "none"
+        postprocess_points = self.postprocess_var.get().strip() or "all"
         save_png = self.png_var.get()
         if stabilize_ids:
             save_tracks_csv = True
-            if postprocess_points == "none":
-                postprocess_points = "all"
         self.result = (
             inp,
             Path(o),
@@ -4395,17 +4412,10 @@ class SamBatchProgress(tk.Toplevel):
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.config(yscrollcommand=sb.set)
 
-        post_frame = ttk.LabelFrame(frm, text="Post-processing (enabled after batch finishes)")
-        post_frame.pack(fill=tk.X, pady=(6, 0))
-        self.postproc_btn = ttk.Button(
-            post_frame,
-            text="Build sam_points.csv (foot+center+mask)",
-            command=self._on_build_points,
-            state="disabled",
-        )
-        self.postproc_btn.pack(side=tk.LEFT, padx=4, pady=4)
+        calib_frame = ttk.LabelFrame(frm, text="Field calibration (after batch finishes)")
+        calib_frame.pack(fill=tk.X, pady=(6, 0))
         self.calib_btn = ttk.Button(
-            post_frame,
+            calib_frame,
             text="Calibrate field (DLT2D)",
             command=self._on_calibrate,
             state="disabled",
@@ -4457,50 +4467,12 @@ class SamBatchProgress(tk.Toplevel):
             self.cancel_btn.config(state="disabled")
             self.close_btn.config(state="normal")
             if self._output_base is not None and self._output_base.is_dir():
-                self.postproc_btn.config(state="normal")
                 self.calib_btn.config(state="normal")
 
         self.after(0, _done)
 
     def set_output_base(self, output_base: Path) -> None:
         self._output_base = output_base
-
-    def _on_build_points(self) -> None:
-        ob = self._output_base
-        if ob is None or not ob.is_dir():
-            messagebox.showwarning(
-                "Post-processing", "Output directory not available.", parent=self
-            )
-            return
-        self.postproc_btn.config(state="disabled")
-        self._append_log("[postprocess] Building sam_points.csv (mode=all)...")
-
-        def _worker() -> None:
-            try:
-                from vaila.sam_postprocess import extract_points_for_batch
-
-                outs = extract_points_for_batch(ob, mode="all")
-                msg = f"Wrote {len(outs)} sam_points.csv file(s) under {self._output_base}"
-                self.after(
-                    0,
-                    lambda: (
-                        self._append_log(f"[postprocess] {msg}"),
-                        self.postproc_btn.config(state="normal"),
-                        messagebox.showinfo("Post-processing done", msg, parent=self),
-                    ),
-                )
-            except Exception as exc:
-                err = str(exc)
-                self.after(
-                    0,
-                    lambda: (
-                        self._append_log(f"[postprocess] FAILED: {err}"),
-                        self.postproc_btn.config(state="normal"),
-                        messagebox.showerror("Post-processing failed", err, parent=self),
-                    ),
-                )
-
-        threading.Thread(target=_worker, daemon=True).start()
 
     def _on_calibrate(self) -> None:
         if self._output_base is None or not self._output_base.is_dir():
@@ -4600,11 +4572,18 @@ def _run_sam_batch_in_thread(
 
     if postprocess_points and postprocess_points != "none" and succeeded > 0:
         try:
-            from vaila.sam_postprocess import extract_points_for_batch
+            from vaila.sam_postprocess import (
+                extract_points_for_batch,
+                write_vaila_anchor_csvs_for_batch,
+            )
 
             log(f"[postprocess] mode={postprocess_points}")
             outs = extract_points_for_batch(output_base, mode=postprocess_points)
-            log(f"[postprocess] wrote {len(outs)} sam_points.csv file(s).")
+            vaila_outs = write_vaila_anchor_csvs_for_batch(output_base)
+            log(
+                f"[postprocess] wrote {len(outs)} sam_points.csv + "
+                f"{len(vaila_outs)} vailá anchor CSV(s)."
+            )
         except Exception as exc:
             failed.append(f"postprocess: {exc}")
             log(f"[postprocess] FAILED: {exc}")
@@ -5173,6 +5152,13 @@ def main() -> None:
         help="Chunk size for divide-and-conquer fallback. Larger values reduce model reloads but can OOM.",
     )
     parser.add_argument(
+        "--overlap-frames",
+        type=int,
+        default=2,
+        metavar="N",
+        help="Shared frames between adjacent SAM chunks for cross-chunk Re-ID (default: 2).",
+    )
+    parser.add_argument(
         "--max-input-long-edge",
         type=int,
         default=None,
@@ -5214,11 +5200,13 @@ def main() -> None:
     parser.add_argument(
         "--postprocess-points",
         choices=["none", "foot", "center", "mask", "all"],
-        default="none",
-        help="After the batch finishes, build vailá-format pixel CSVs (sam_points.csv) "
-        "per video subdirectory. 'foot' = bottom-center of bbox (best for soccer-field "
-        "homography rec2d); 'center' = bbox center; 'mask' = real centroid of the mask "
-        "PNG; 'all' = canonical foot pair plus extra cx/cy/mx/my columns. Default: none.",
+        default="all",
+        help="After the batch finishes, build vailá-format pixel CSVs (sam_points.csv + "
+        "five sam_vaila_*.csv anchor files) per video subdirectory. "
+        "'foot' = bottom-center of bbox (best for soccer-field homography rec2d); "
+        "'center' = bbox center; 'mask' = real centroid of the mask PNG; "
+        "'all' = canonical foot pair plus extra cx/cy/mx/my columns. "
+        "'none' = skip post-processing entirely. Default: all.",
     )
     parser.add_argument(
         "--no-isolate-batch",
@@ -5351,16 +5339,22 @@ def main() -> None:
             contours_gzip=bool(args.contours_gzip),
             no_chunked_fallback=bool(args.no_chunked_fallback),
             chunk_size=args.chunk_size,
+            overlap_frames=int(getattr(args, "overlap_frames", 2)),
         )
         if ok:
             print(f"  Done: {out_dir}")
             if args.postprocess_points != "none":
                 try:
-                    from vaila.sam_postprocess import extract_points_from_sam_run
+                    from vaila.sam_postprocess import (
+                        extract_points_from_sam_run,
+                        write_vaila_anchor_csvs,
+                    )
 
                     print(f"[postprocess] mode={args.postprocess_points}")
                     out_csv = extract_points_from_sam_run(out_dir, mode=args.postprocess_points)
                     print(f"[postprocess] wrote {out_csv}")
+                    vaila_outs = write_vaila_anchor_csvs(out_dir)
+                    print(f"[postprocess] wrote {len(vaila_outs)} vailá anchor CSV(s)")
                 except Exception as exc:
                     print(f"[postprocess] FAILED: {exc}")
                     raise SystemExit(3) from exc
@@ -5584,6 +5578,7 @@ def main() -> None:
                         contours_format=str(args.contours_format),
                         contours_gzip=bool(args.contours_gzip),
                         chunk_size=args.chunk_size,
+                        overlap_frames=int(getattr(args, "overlap_frames", 2)),
                     )
                     if chunk_ok:
                         print(f"  Done (chunked): {out_dir} — {chunk_msg}")
@@ -5626,6 +5621,7 @@ def main() -> None:
                     contours_gzip=bool(args.contours_gzip),
                     no_chunked_fallback=bool(args.no_chunked_fallback),
                     chunk_size=args.chunk_size,
+                    overlap_frames=int(getattr(args, "overlap_frames", 2)),
                 )
                 if ok:
                     print(f"  Done: {out_dir}")
@@ -5643,11 +5639,18 @@ def main() -> None:
         if args.postprocess_points != "none" and not all_failed:
             ob = output_base
             try:
-                from vaila.sam_postprocess import extract_points_for_batch
+                from vaila.sam_postprocess import (
+                    extract_points_for_batch,
+                    write_vaila_anchor_csvs_for_batch,
+                )
 
                 print(f"\n[postprocess] mode={args.postprocess_points}")
                 outs = extract_points_for_batch(ob, mode=args.postprocess_points)
-                print(f"[postprocess] wrote {len(outs)} sam_points.csv file(s).")
+                vaila_outs = write_vaila_anchor_csvs_for_batch(ob)
+                print(
+                    f"[postprocess] wrote {len(outs)} sam_points.csv + "
+                    f"{len(vaila_outs)} vailá anchor CSV(s)."
+                )
             except Exception as exc:
                 print(f"[postprocess] FAILED: {exc}")
                 if not failed_cli:

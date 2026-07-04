@@ -48,7 +48,7 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.3.68</p>
+            <p><strong>Version:</strong> 0.3.69</p>
             <p><strong>Updated:</strong> 04 July 2026</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
@@ -467,13 +467,13 @@ uv run vaila/vaila_sam.py --download-weights</code></pre>
                 <td><code>--postprocess-points</code></td>
                 <td>—</td>
                 <td>choice</td>
-                <td><code>none</code></td>
-                <td>After the batch finishes, build per-video vailá-format pixel CSVs (<code>sam_points.csv</code>):
+                <td><code>all</code></td>
+                <td>After the batch finishes, build per-video vailá-format pixel CSVs (<code>sam_points.csv</code> + five <code>sam_vaila_*.csv</code> anchor files):
                     <code>foot</code> (bottom-center of bbox; best for soccer-field homography + <code>rec2d</code>),
                     <code>center</code> (bbox center),
                     <code>mask</code> (mask PNG centroid),
                     <code>all</code> (foot + extra <code>cx/cy/mx/my</code> columns),
-                    <code>none</code></td>
+                    <code>none</code> (skip post-processing entirely)</td>
             </tr>
             <tr>
                 <td><code>--download-weights</code></td>
@@ -573,16 +573,36 @@ uv run vaila/vaila_sam.py --download-weights</code></pre>
       sam_masks_manifest.csv        (written when masks are saved; index of mask PNGs)
       README_sam.txt                (verbose: every file explained &mdash; schema, units, role)</div>
 
-        <h3>Additional outputs: <code>sam_points.csv</code> / <code>sam_id_map.csv</code> (optional)</h3>
-        <p>If you pass <code>--postprocess-points</code> (anything other than <code>none</code>) or run with <code>--stabilize-ids</code>, vailá post-processes each per-video
+        <h3>Additional outputs: <code>sam_points.csv</code> + vailá anchor CSVs (default)</h3>
+        <p>By default (<code>--postprocess-points all</code>), <em>vailá</em> post-processes each per-video
           output directory and writes <strong>pixel CSVs</strong> that can be loaded directly by <code>getpixelvideo.py</code> and
           <code>rec2d.py</code>:</p>
         <div class="tree">output/processed_sam_YYYYMMDD_HHMMSS/
   video_name/
     sam_points.csv
     sam_id_map.csv
+    sam_vaila_center.csv        # simple frame,x1,y1,...,xN,yN — bbox center
+    sam_vaila_bottom.csv        # simple frame,x1,y1,...,xN,yN — bottom-center (foot)
+    sam_vaila_top.csv           # simple frame,x1,y1,...,xN,yN — top-center
+    sam_vaila_left.csv          # simple frame,x1,y1,...,xN,yN — left-center
+    sam_vaila_right.csv         # simple frame,x1,y1,...,xN,yN — right-center
     sam_points_georeid.csv      # written when --stabilize-ids/ReID is active
     sam_id_map_georeid.csv      # written when --stabilize-ids/ReID is active</div>
+
+        <h4>vailá anchor CSVs (<code>sam_vaila_*.csv</code>)</h4>
+        <p>Five simple files with one (x, y) pair per tracked object per frame:</p>
+        <pre><code>frame,x1,y1,x2,y2,...,xN,yN
+0,960.5,540.0,1200.3,480.2,...
+1,961.1,541.0,1201.0,481.1,...</code></pre>
+        <p>Each file places the anchor at a different bbox point:</p>
+        <ul>
+            <li><strong>center</strong> — bbox center</li>
+            <li><strong>bottom</strong> — bottom-center of bbox (foot point, best for field homography)</li>
+            <li><strong>top</strong> — top-center of bbox (head)</li>
+            <li><strong>left</strong> — left-center of bbox</li>
+            <li><strong>right</strong> — right-center of bbox</li>
+        </ul>
+        <p>Empty cells indicate the object was not detected in that frame.</p>
 
         <h4><code>sam_points.csv</code> schema</h4>
         <ul>
@@ -1053,6 +1073,18 @@ uv run pytest tests/test_vaila_sam.py -v -k sam3_smoke</code></pre>
 
         <h3>Recent updates</h3>
         <ul>
+            <li><strong>v0.3.69 (04 July 2026):</strong>
+            <code>--postprocess-points</code> default changed from <code>none</code>
+            to <code>all</code> &mdash; <code>sam_points.csv</code> +
+            <code>sam_id_map.csv</code> are now generated automatically after every
+            batch/single-video run (CLI and GUI subprocess; no manual button). Five new
+            <strong>vailá-style anchor CSVs</strong>
+            (<code>sam_vaila_center.csv</code>, <code>sam_vaila_bottom.csv</code>,
+            <code>sam_vaila_top.csv</code>, <code>sam_vaila_left.csv</code>,
+            <code>sam_vaila_right.csv</code>) with simple
+            <code>frame,x1,y1,...,xN,yN</code> format are written alongside
+            <code>sam_points.csv</code>. GUI combobox default is <code>all</code>;
+            progress log shows <code>[postprocess]</code> lines when the batch finishes.</li>
             <li><strong>v0.3.55 (15 June 2026):</strong>
             <strong>Verbose <code>README_sam.txt</code></strong> &mdash; every
             run now ships a README that documents every produced file

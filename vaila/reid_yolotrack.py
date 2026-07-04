@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 10 August 2025
-Version: 0.1.0
+Update Date: 04 July 2026
+Version: 0.3.68
 
 Description:
 This script performs batch processing of videos for ReID using YOLOTrack. It processes videos from a specified input directory,
@@ -53,54 +53,66 @@ Notes:
 import colorsys
 import glob
 import os
+import re
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import cv2
 import pandas as pd
 import torch
-from boxmot.deep import StrongSORT
-from boxmot.reid_models.frameworks.torch import ReIdentifier
 from rich import print
 
 # Configuration to avoid library conflicts
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 torch.set_num_threads(1)
 
-# First, install boxmot if not already installed
-try:
-    import boxmot
-except ImportError:
-    import subprocess
+_PERSON_ID_FMT_RE = re.compile(r"^(.+)_id_(\d+)\.csv$", re.IGNORECASE)
+_PERSON_ID_LEGACY_RE = re.compile(r"^(.+)_id(\d+)\.csv$", re.IGNORECASE)
+_SKIP_CSV_SUBSTRINGS = (
+    "all_id_",
+    "_pose.csv",
+    "yolo_reid_links",
+    "sam_reid",
+    "reid_corrected",
+)
 
-    print("Installing boxmot package...")
-    subprocess.check_call(["pip", "install", "boxmot"])
 
-# Now use the correct imports based on the installed boxmot version
-try:
-    # Try current structure (newer versions)
-    from boxmot.appearance.reid_model_factory import ReIDFactory
-    from boxmot.trackers.strongsort.strong_sort import StrongSORT
+def parse_tracking_csv_filename(filename: str) -> tuple[str, int] | None:
+    """Parse ``person_id_01.csv`` (yolov26track) or legacy ``person_id3.csv`` names."""
+    base = os.path.basename(filename)
+    lower = base.lower()
+    if any(skip in lower for skip in _SKIP_CSV_SUBSTRINGS):
+        return None
+    match = _PERSON_ID_FMT_RE.match(base)
+    if match:
+        return match.group(1), int(match.group(2))
+    match = _PERSON_ID_LEGACY_RE.match(base)
+    if match:
+        return match.group(1), int(match.group(2))
+    return None
 
-    def get_reid_model(weights="osnet_x0_25_msmt17.pt", device="cpu"):
-        reid_factory = ReIDFactory()
-        return reid_factory.get_model(weights, device)
 
-except ImportError:
-    # Fall back to older structure if needed
+def iter_tracking_csv_paths(directory: str | Path) -> list[Path]:
+    """Per-ID bbox CSVs produced by yolov26track (excludes aggregates)."""
+    root = Path(directory)
+    hits: list[Path] = []
+    for path in sorted(root.glob("*.csv")):
+        if parse_tracking_csv_filename(path.name):
+            hits.append(path)
+    return hits
+
+
+def _get_reid_model(weights: str = "osnet_x0_25_msmt17.pt", device: str = "cpu"):
+    """Lazy-load boxmot OSNet ReID (optional extra; not in core uv sync)."""
     try:
-        from boxmot.deep import StrongSORT
-        from boxmot.reid_models.frameworks.torch import ReIdentifier
+        from boxmot.appearance.reid_model_factory import ReIDFactory
 
-        def get_reid_model(weights="osnet_x0_25_msmt17.pt", device="cpu"):
-            return ReIdentifier(model_weights=weights, device=device)
-
+        return ReIDFactory().get_model(weights, device)
     except ImportError:
-        print(
-            "Could not import required modules from boxmot. Please ensure it's installed correctly."
-        )
-        print("Try: pip install -U boxmot")
-        raise
+        from boxmot.reid_models.frameworks.torch import ReIdentifier  # ty: ignore
+
+        return ReIdentifier(model_weights=weights, device=device)
 
 
 def get_color_for_id(tracker_id):
@@ -188,7 +200,7 @@ class ReidProcessor:
         self.reid_weights = "osnet_x0_25_msmt17.pt"  # Default ReID model
 
         # Initialize ReID model
-        self.reid_model = get_reid_model(self.reid_weights, self.device)
+        self.reid_model = _get_reid_model(self.reid_weights, self.device)
 
         # Identify the original video file
         self.video_file = self._find_original_video()
@@ -196,9 +208,11 @@ class ReidProcessor:
             raise FileNotFoundError("No video file found in the input directory")
 
         # Load all CSV files
-        self.csv_files = glob.glob(os.path.join(input_dir, "*.csv"))
+        self.csv_files = [str(p) for p in iter_tracking_csv_paths(input_dir)]
         if not self.csv_files:
-            raise FileNotFoundError("No CSV files found in the input directory")
+            raise FileNotFoundError(
+                "No per-ID tracking CSV files found (expected person_id_01.csv pattern)"
+            )
 
         # Create output directory
         self.output_dir = os.path.join(input_dir, "reid_corrected")
@@ -235,22 +249,25 @@ class ReidProcessor:
         for csv_file in self.csv_files:
             try:
                 df = pd.read_csv(csv_file)
-                # Extract tracker ID and label from filename
-                filename = os.path.basename(csv_file)
-                if "_id" in filename:
-                    # Format is typically "{label}_id{tracker_id}.csv"
-                    label, id_part = filename.split("_id")
-                    tracker_id = int(id_part.split(".")[0])
+                parsed = parse_tracking_csv_filename(csv_file)
+                if parsed is None:
+                    continue
+                label, tracker_id = parsed
 
-                    # Add columns if they don't exist
-                    if "Tracker ID" not in df.columns:
-                        df["Tracker ID"] = tracker_id
-                    if "Label" not in df.columns:
-                        df["Label"] = label
+                if "Tracker ID" not in df.columns:
+                    df["Tracker ID"] = tracker_id
+                if "Label" not in df.columns:
+                    df["Label"] = label
 
-                # Keep only rows with valid bounding box data
-                df = df.dropna(subset=["X_min", "Y_min", "X_max", "Y_max"])
+                frame_col = "Frame" if "Frame" in df.columns else "frame"
+                if frame_col != "Frame":
+                    df = df.rename(columns={frame_col: "Frame"})
+                bbox_cols = ("X_min", "Y_min", "X_max", "Y_max")
+                if not all(c in df.columns for c in bbox_cols):
+                    print(f"Skipping {csv_file}: missing bbox columns {bbox_cols}")
+                    continue
 
+                df = df.dropna(subset=list(bbox_cols))
                 all_data.append(df)
                 print(f"Loaded {len(df)} tracks from {csv_file}")
 
@@ -422,7 +439,7 @@ class ReidProcessor:
             df = df.sort_values("Frame")
 
             # Save to CSV
-            output_file = os.path.join(self.output_dir, f"{label}_id{new_id}.csv")
+            output_file = os.path.join(self.output_dir, f"{label}_id_{new_id:02d}.csv")
             df.to_csv(output_file, index=False)
             print(f"Created {output_file}")
 
@@ -546,6 +563,34 @@ class ReidProcessor:
         self.create_visualization_video()
 
         print(f"ReID processing complete. Results saved in: {self.output_dir}")
+
+
+def run_appearance_reid_on_tracking_dir(
+    tracking_dir: str | Path,
+    video_path: str | Path | None = None,
+    *,
+    threshold: float = 0.6,
+) -> Path | None:
+    """Headless OSNet merge after yolov26track geometric stabilize.
+
+    Writes corrected CSVs under ``reid_corrected/`` inside ``tracking_dir``.
+    Requires optional ``boxmot`` (not part of core ``uv sync``).
+    """
+    tracking_dir = Path(tracking_dir)
+    if not iter_tracking_csv_paths(tracking_dir):
+        print(f"[reid_yolotrack] No per-ID CSVs in {tracking_dir}; skipping appearance ReID.")
+        return None
+    try:
+        processor = ReidProcessor(str(tracking_dir), reid_threshold=float(threshold))
+    except ImportError as exc:
+        print(f"[reid_yolotrack] boxmot not available; skip appearance ReID: {exc}")
+        return None
+    if video_path is not None:
+        vp = Path(video_path)
+        if vp.is_file():
+            processor.video_file = str(vp)
+    processor.process()
+    return Path(processor.output_dir)
 
 
 def run_reid_yolotrack():

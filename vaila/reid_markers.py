@@ -3,8 +3,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 09 June 2026
-Version: 0.3.47
+Update Date: 04 July 2026
+Version: 0.3.68
 Python Version: 3.12.9
 
 Description:
@@ -44,6 +44,11 @@ from statsmodels.tsa.arima.model import ARIMA
 
 matplotlib.use("TkAgg")  # Força backend interativo
 from pathlib import Path
+
+try:
+    from .geometric_reid import assignment_min_cost
+except ImportError:
+    from geometric_reid import assignment_min_cost  # ty: ignore[unresolved-import]
 
 
 def load_markers_file():
@@ -665,35 +670,6 @@ def load_homography_matrix(path: str | Path) -> np.ndarray:
     return H
 
 
-def _assignment_min_cost(cost_matrix: np.ndarray) -> list[tuple[int, int]]:
-    """Solve rectangular assignment; use SciPy when present, greedy fallback otherwise."""
-    if cost_matrix.size == 0:
-        return []
-    try:
-        from scipy.optimize import linear_sum_assignment
-
-        rows, cols = linear_sum_assignment(cost_matrix)
-        return [(int(r), int(c)) for r, c in zip(rows, cols, strict=True)]
-    except Exception:
-        remaining_rows = set(range(cost_matrix.shape[0]))
-        remaining_cols = set(range(cost_matrix.shape[1]))
-        pairs: list[tuple[int, int]] = []
-        while remaining_rows and remaining_cols:
-            best: tuple[float, int, int] | None = None
-            for r in remaining_rows:
-                for c in remaining_cols:
-                    val = float(cost_matrix[r, c])
-                    if best is None or val < best[0]:
-                        best = (val, r, c)
-            if best is None:
-                break
-            _, r_best, c_best = best
-            pairs.append((r_best, c_best))
-            remaining_rows.remove(r_best)
-            remaining_cols.remove(c_best)
-        return pairs
-
-
 def geometric_reid_align_markers(
     df: pd.DataFrame,
     markers: dict[str, dict[str, str]],
@@ -774,7 +750,7 @@ def geometric_reid_align_markers(
                 alignment_penalty = 1.0 - cosine
                 cost[i, j] = d * (1.0 + float(direction_weight) * alignment_penalty)
 
-        assignments = _assignment_min_cost(cost)
+        assignments = assignment_min_cost(cost)
         assigned_sources: set[str] = set()
         assigned_targets: set[str] = set()
         row_values: dict[str, dict[str, object]] = {}
@@ -835,6 +811,65 @@ def geometric_reid_align_markers(
         "max_dist": float(max_dist),
         "direction_weight": float(direction_weight),
         "max_gap": int(max_gap),
+    }
+    return out, stats
+
+
+def geometric_reid_align_markers_bidirectional(
+    df: pd.DataFrame,
+    markers: dict[str, dict[str, str]],
+    marker_names: list[str],
+    *,
+    start_frame: int = 0,
+    end_frame: int | None = None,
+    homography_matrix: np.ndarray | None = None,
+    max_dist: float = 150.0,
+    direction_weight: float = 0.5,
+    max_gap: int = 15,
+) -> tuple[pd.DataFrame, dict[str, int | float]]:
+    """Forward + backward geometric Re-ID; second half prefers backward pass."""
+    fwd, stats_fwd = geometric_reid_align_markers(
+        df,
+        markers,
+        marker_names,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        homography_matrix=homography_matrix,
+        max_dist=max_dist,
+        direction_weight=direction_weight,
+        max_gap=max_gap,
+    )
+    if end_frame is None:
+        end_frame = len(df) - 1
+    mid = (int(start_frame) + int(end_frame)) // 2
+    rev = df.iloc[::-1].reset_index(drop=True)
+    rev_end = len(rev) - 1
+    bwd, stats_bwd = geometric_reid_align_markers(
+        rev,
+        markers,
+        marker_names,
+        start_frame=0,
+        end_frame=rev_end,
+        homography_matrix=homography_matrix,
+        max_dist=max_dist,
+        direction_weight=direction_weight,
+        max_gap=max_gap,
+    )
+    bwd = bwd.iloc[::-1].reset_index(drop=True)
+    out = fwd.copy()
+    for frame_idx in range(mid + 1, int(end_frame) + 1):
+        for marker_name in marker_names:
+            if marker_name not in markers:
+                continue
+            for _coord, col in markers[marker_name].items():
+                val = bwd.at[frame_idx, col]
+                if pd.notna(val):
+                    out.at[frame_idx, col] = val
+    stats = {
+        **stats_fwd,
+        "backward_matches": stats_bwd.get("matches", 0),
+        "bidirectional": 1,
+        "merge_from_frame": mid + 1,
     }
     return out, stats
 
