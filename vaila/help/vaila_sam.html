@@ -189,6 +189,11 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run</code></pr
           </thead>
           <tbody>
             <tr>
+              <td style="padding:6px; border:1px solid #ddd;"><code>Could not open VideoWriter for SAM3 subsample</code> in <code>FAILED_sam.txt</code></td>
+              <td style="padding:6px; border:1px solid #ddd;">OpenCV failed to write the temporal subsample clip (<code>_sam3_subsample_input.*</code>) before inference — typical on long clips when auto <code>max_frames</code> triggers subsampling.</td>
+              <td style="padding:6px; border:1px solid #ddd;">Delete the failed output subfolder and re-run. v0.3.69+ uses MJPG → XVID → mp4v fallback. For 30k+ frame broadcasts also set <code>--max-frames 256</code> (or lower).</td>
+            </tr>
+            <tr>
               <td style="padding:6px; border:1px solid #ddd;"><code>ERROR on &lt;video&gt;: subprocess killed by SIGKILL (exit=-9)</code> — and possibly <code>[GUI] subprocess exited with code 0</code> with <code>Failed (1/1)</code></td>
               <td style="padding:6px; border:1px solid #ddd;"><strong>Host RAM</strong> OOM killer. Long broadcast clips (16k+ frames @ 1080p) push the temp subsample + SAM3 CPU tensor above the OS RAM budget, and Linux <code>oom-killer</code> terminates the SAM subprocess.</td>
               <td style="padding:6px; border:1px solid #ddd;">Lower <code>--max-frames</code> (try <code>256 → 128 → 64</code>), add <code>--max-input-long-edge 1280</code>, close other heavy apps, re-run. Confirm via <code>dmesg | tail</code> or <code>journalctl -k -n 50</code>.</td>
