@@ -5,7 +5,7 @@
 - **Category:** Ml
 - **File:** `vaila/yolov26track.py`
 - **Lines:** 3980+
-- **Version:** 0.3.67
+- **Version:** 0.3.68
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -28,6 +28,7 @@ This script performs object detection and tracking on video files using the **YO
 - **Automatic GPU detection** - Uses CUDA if available
 - **Run modes**: `track`, `track+pose` (**default**), `track+seg`, `run_all (track+seg+pose)`
 - **Single-pass track+pose (v0.3.66)**: geometric ID stabilize (SAM3-style IoU+centroid linker), upscaled bbox ROI for YOLO pose, global keypoint remap in the same tracking loop
+- **Unified geometric Re-ID (v0.3.68)**: shared `vaila/geometric_reid.py` module — Hungarian assignment + velocity-direction penalty + optional homography gate; replaces old greedy matching in YOLO, SAM, and markers. CLI exposes `--reid-max-gap`, `--reid-max-dist`, `--reid-min-iou`, `--reid-direction-weight`, `--reid-homography`, `--appearance-reid`
 - **New outputs (pose mode)**: `all_id_pose.csv`, `yolo_reid_links.csv`, `<stem>_track_pose_overlay.mp4`, `{label}_id_NN_pose.csv`
 - **Segmentation exports** (when model provides masks): `yolo_masks_manifest.csv` (`frame,id,area,mask_png`), `yolo_contours.json` (schema `vaila_yolo_contours_v1` with top-level `video`, `width`, `height`, `fps`, `n_frames`, `object_ids` aligned with SAM-style consumers), `yolo_masks/` PNGs
 
@@ -116,7 +117,14 @@ Key flags:
 
 - `--pose` / `--no-pose` — inline upscaled pose in tracked bboxes (default **on**)
 - `--pose-model`, `--pose-conf`, `--pose-iou`, `--pose-min-roi`, `--pose-pad-pct`
-- `--stabilize-ids` / `--no-stabilize-ids` — SAM3-style geometric ID linker after BoT-SORT (default on)
+- `--stabilize-ids` / `--no-stabilize-ids` — Hungarian geometric ID linker after BoT-SORT (default on)
+- `--reid-max-gap N` — max frame gap for Re-ID (default 12)
+- `--reid-max-dist PX` — max centroid distance in pixels (default 180)
+- `--reid-min-iou F` — minimum IoU gate (default 0.05)
+- `--reid-direction-weight F` — velocity-direction penalty (default 0.5, 0=off)
+- `--reid-homography FILE` — optional 3×3 homography (.npy/.npz/.csv) for pitch-plane distances
+- `--appearance-reid` / `--no-appearance-reid` — optional OSNet post-pass via reid_yolotrack (default off)
+- `--appearance-reid-threshold F` — cosine similarity threshold (default 0.6)
 
 - `--anchor center|bottom|top|left|right|corners` — which point of the bbox becomes the marker for REC2D/REC3D. Default `bottom` (foot/ground contact), best for planar gait/field kinematics; use `center` for centroid trajectories.
 - `--max-ids N` — keep only the N most persistent IDs, re-ranked 1..N (recommended to clean up fragmented tracklets; also gives stable `p1..pN` columns).
@@ -210,6 +218,6 @@ Terminal lines such as `VRAM 18.2/24.0 GiB free | RAM 42.1 GiB avail` help corre
 
 ---
 
-📅 **Last Updated:** 29 June 2026 (v0.3.67)  
+📅 **Last Updated:** 04 July 2026 (v0.3.68)  
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

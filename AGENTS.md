@@ -428,6 +428,69 @@ Version sync: `0.3.67 / 01 July 2026` on `vaila.py`, `vaila/filemanager.py`, `va
 Tests: 430 passed, 1 skipped.
 Skill: `.claude/skills/filemanager-tkinter-and-ssh-transfer/SKILL.md`.
 
+### Unified Geometric Re-ID module + full plan implementation (July 2026, v0.3.68)
+
+**New module:** `vaila/geometric_reid.py` — shared Hungarian matching, IoU
+helpers, velocity-direction cost, mask IoU, homography gate, and
+`GeometricFrameLinker` class. Eliminates 3× duplicate `_assignment_min_cost`
+and 2× near-identical greedy linker implementations.
+
+**Modules refactored:**
+- `vaila/yolov26track.py` — `_GeometricTrackLinker` is now an alias for
+  `GeometricFrameLinker`; greedy replaced by Hungarian; CLI gets
+  `--reid-max-gap`, `--reid-max-dist`, `--reid-min-iou`,
+  `--reid-direction-weight`, `--reid-homography`, `--appearance-reid`;
+  BoT-SORT custom YAML with `with_reid + GMC` in CLI via
+  `_build_botsort_custom_yaml`; `--no-pose` path calls
+  `_apply_geometric_stabilize_to_buffer` + writes `yolo_reid_links.csv`;
+  GUI: stabilize checkbox moved to Run Mode; ReID tuning fields + appearance
+  ReID checkbox added.
+- `vaila/vaila_sam.py` — `_stabilize_sam_track_ids` uses
+  `GeometricFrameLinker` (Hungarian + velocity); `_build_cross_chunk_id_maps`
+  imports `assignment_min_cost` + `bbox_iou_xywh` from shared module; new
+  `mask_iou_weight` cost term when mask PNGs exist; `--overlap-frames N`
+  CLI flag (default 2).
+- `vaila/reid_markers.py` — imports `assignment_min_cost` from
+  `geometric_reid`; local copy removed; new
+  `geometric_reid_align_markers_bidirectional()` (forward + backward merge).
+- `vaila/reid_yolotrack.py` — parser fixed for `person_id_01.csv` (zero-padded);
+  dead `StrongSORT` / `pip install` removed; new headless
+  `run_appearance_reid_on_tracking_dir()` for yolov26track hook; output CSVs
+  use `_id_{NN:02d}` naming.
+
+**Tests added:**
+- `tests/test_geometric_reid.py` — Hungarian crossing, velocity penalty, IoU
+- `tests/test_reid_yolotrack.py` — CSV filename parsing
+- Extended `tests/test_yolov26track_pose_reid.py` — stabilize buffer + links CSV
+
+Version sync: `0.3.68 / 04 July 2026`. Tests: 15 passed (Re-ID subset),
+full SAM chunk overlap test passes.
+
+### Default post-processing + VAILA anchor CSVs (July 2026, v0.3.69)
+
+**Changed defaults:**
+- `--postprocess-points` CLI default: `none` → `all`
+- GUI `Post-process points` combobox default: `none` → `all`
+
+`sam_points.csv` + `sam_id_map.csv` are now generated automatically after
+every SAM batch or single-video run. No need to pass `--postprocess-points`
+explicitly unless you want `none` to skip.
+
+**New outputs:** five simple VAILA-style anchor CSVs per video:
+`sam_vaila_center.csv`, `sam_vaila_bottom.csv`, `sam_vaila_top.csv`,
+`sam_vaila_left.csv`, `sam_vaila_right.csv`. Format: `frame,x1,y1,...,xN,yN`
+(one x,y pair per tracked object). Each file uses a different bbox anchor
+(center, foot, head, left, right). Ready for direct loading in
+`getpixelvideo` / `rec2d`.
+
+**Modules changed:** `vaila/sam_postprocess.py` (new `write_vaila_anchor_csvs`,
+`write_vaila_anchor_csvs_for_batch`, `VAILA_ANCHORS`), `vaila/vaila_sam.py`
+(all 4 postprocess call sites wired, glossary updated, GUI button relabelled).
+
+Tests: `tests/test_sam_postprocess.py` — 26 passed (10 new anchor tests).
+
+Version sync: `0.3.69 / 04 July 2026`.
+
 ## Caveman mode (optional)
 
 [Caveman](https://github.com/JuliusBrussee/caveman) is a skills/plugin pack for AI coding agents (Claude Code, Cursor, Gemini CLI, Windsurf, Copilot, and 30+ others). It steers the model toward terse replies: fewer filler words and articles, typically **~65–75% fewer output tokens** while keeping technical content intact.

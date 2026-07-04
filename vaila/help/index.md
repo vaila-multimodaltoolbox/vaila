@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 127 | **Categories:** 7 | **Generated on:** 04/07/2026
+**Total documented modules:** 127 | **Categories:** 7 | **Generated on:** 04/07/2026 (v0.3.69)
 
 ---
 
@@ -127,6 +127,8 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **native_file_dialog**
   - [📄 HTML](native_file_dialog.html)
   - [📝 Markdown](native_file_dialog.md)
+- **geometric_reid** *(new v0.3.68 — shared Re-ID helpers)*
+  - [📝 Markdown](geometric_reid.md)
 - **reid_yolotrack**
   - [📄 HTML](reid_yolotrack.html)
   - [📝 Markdown](reid_yolotrack.md)

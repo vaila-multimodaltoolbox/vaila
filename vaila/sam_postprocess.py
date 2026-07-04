@@ -21,6 +21,12 @@ and writes:
 
     {sam_dir}/sam_id_map.csv   # 'pN, obj_id, n_frames, first_frame, last_frame'
 
+    {sam_dir}/sam_vaila_center.csv   # simple 'frame,x1,y1,...,xN,yN' — bbox center
+    {sam_dir}/sam_vaila_bottom.csv   # simple 'frame,x1,y1,...,xN,yN' — bottom-center (foot)
+    {sam_dir}/sam_vaila_top.csv      # simple 'frame,x1,y1,...,xN,yN' — top-center
+    {sam_dir}/sam_vaila_left.csv     # simple 'frame,x1,y1,...,xN,yN' — left-center
+    {sam_dir}/sam_vaila_right.csv    # simple 'frame,x1,y1,...,xN,yN' — right-center
+
 When ``sam_reid_links.csv`` exists (``vaila_sam.py --stabilize-ids``), matching
 ``sam_points_georeid.csv`` and ``sam_id_map_georeid.csv`` aliases are also written
 for the getpixelvideo/yolotrain retraining workflow.
@@ -30,8 +36,8 @@ The bbox in ``sam_frames_meta.csv`` is normalized (fractions of W and H, see
 original video resolution. In fast SAM runs without mask PNGs, mask-centroid
 columns are read from ``sam_tracks.csv`` when available.
 
-Update Date: 15 June 2026
-Version: 0.3.55
+Update Date: 04 July 2026
+Version: 0.3.69
 
 Author: Paulo R. P. Santiago - vaila project
 Created: 19 April 2026
@@ -57,7 +63,11 @@ __all__ = [
     "mask_centroid",
     "extract_points_from_sam_run",
     "extract_points_for_batch",
+    "write_vaila_anchor_csvs",
+    "write_vaila_anchor_csvs_for_batch",
 ]
+
+VAILA_ANCHORS = ("center", "bottom", "top", "left", "right")
 
 PointMode = Literal["foot", "center", "mask", "all"]
 
@@ -366,6 +376,91 @@ def extract_points_from_sam_run(
         f"mode={mode}, canonical={canonical}, W={width}, H={height} -> {out_csv.name}"
     )
     return out_csv
+
+
+def _anchor_xy(px: float, py: float, pw: float, ph: float, anchor: str) -> tuple[float, float]:
+    """Compute anchor (x, y) in pixels from a bbox (top-left origin, pixel units)."""
+    cx = px + pw * 0.5
+    if anchor == "center":
+        return cx, py + ph * 0.5
+    if anchor == "bottom":
+        return cx, py + ph
+    if anchor == "top":
+        return cx, py
+    if anchor == "left":
+        return px, py + ph * 0.5
+    if anchor == "right":
+        return px + pw, py + ph * 0.5
+    return cx, py + ph * 0.5
+
+
+def write_vaila_anchor_csvs(sam_dir: Path) -> list[Path]:
+    """Write 5 simple vailá-style CSVs (``frame,x1,y1,...,xN,yN``) for one SAM run.
+
+    One file per anchor: center, bottom, top, left, right.
+    Returns the list of written paths.
+    """
+    art = discover_sam_run(sam_dir)
+    df, oids = read_sam_meta(sam_dir)
+    width, height = frame_size(art)
+
+    n_points = len(oids)
+    header_parts = ["frame"]
+    for i in range(1, n_points + 1):
+        header_parts.extend([f"x{i}", f"y{i}"])
+    header_line = ",".join(header_parts)
+
+    written: list[Path] = []
+    for anchor in VAILA_ANCHORS:
+        rows: list[str] = []
+        for _, row in df.iterrows():
+            frame_idx = int(row["frame"])
+            cells: list[str] = [str(frame_idx)]
+            for oid in oids:
+                bx = row.get(f"box_x_{oid}", float("nan"))
+                by = row.get(f"box_y_{oid}", float("nan"))
+                bw = row.get(f"box_w_{oid}", float("nan"))
+                bh = row.get(f"box_h_{oid}", float("nan"))
+                present = all(np.isfinite([bx, by, bw, bh]))
+                if present:
+                    px = float(bx) * width
+                    py = float(by) * height
+                    pw = float(bw) * width
+                    ph = float(bh) * height
+                    x, y = _anchor_xy(px, py, pw, ph, anchor)
+                    cells.append(_format_cell(x))
+                    cells.append(_format_cell(y))
+                else:
+                    cells.extend(["", ""])
+            rows.append(",".join(cells))
+
+        out_path = art.sam_dir / f"sam_vaila_{anchor}.csv"
+        out_path.write_text(
+            header_line + "\n" + "\n".join(rows) + ("\n" if rows else ""),
+            encoding="utf-8",
+        )
+        written.append(out_path)
+
+    print(
+        f"[sam_postprocess] {art.sam_dir.name}: wrote {len(written)} vailá anchor CSVs "
+        f"({', '.join(a for a in VAILA_ANCHORS)})"
+    )
+    return written
+
+
+def write_vaila_anchor_csvs_for_batch(batch_root: Path) -> list[Path]:
+    """Write vailá anchor CSVs for every per-video SAM subdir under *batch_root*."""
+    batch_root = Path(batch_root)
+    if not batch_root.is_dir():
+        raise FileNotFoundError(f"Batch root not found: {batch_root}")
+    out: list[Path] = []
+    for child in sorted(batch_root.iterdir()):
+        if child.is_dir() and (child / "sam_frames_meta.csv").is_file():
+            try:
+                out.extend(write_vaila_anchor_csvs(child))
+            except Exception as exc:
+                print(f"[sam_postprocess] FAILED vaila anchors {child.name}: {exc}")
+    return out
 
 
 def extract_points_for_batch(batch_root: Path, **kwargs) -> list[Path]:

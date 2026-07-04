@@ -10,12 +10,15 @@ import pandas as pd
 import pytest
 
 from vaila.sam_postprocess import (
+    VAILA_ANCHORS,
     discover_sam_run,
     extract_points_for_batch,
     extract_points_from_sam_run,
     frame_size,
     mask_centroid,
     read_sam_meta,
+    write_vaila_anchor_csvs,
+    write_vaila_anchor_csvs_for_batch,
 )
 
 W, H = 800, 600
@@ -182,14 +185,18 @@ class TestExtractPointsAll:
 
     def test_georeid_aliases_when_reid_links_exist(self, tmp_path: Path) -> None:
         sam_dir = _build_synthetic_run(tmp_path)
-        (sam_dir / "sam_reid_links.csv").write_text("frame,old_obj_id,obj_id\n0,3,1\n", encoding="utf-8")
+        (sam_dir / "sam_reid_links.csv").write_text(
+            "frame,old_obj_id,obj_id\n0,3,1\n", encoding="utf-8"
+        )
         out = extract_points_from_sam_run(sam_dir, mode="all")
         alias = sam_dir / "sam_points_georeid.csv"
         alias_map = sam_dir / "sam_id_map_georeid.csv"
         assert alias.is_file()
         assert alias_map.is_file()
         assert alias.read_text(encoding="utf-8") == out.read_text(encoding="utf-8")
-        assert alias_map.read_text(encoding="utf-8") == (sam_dir / "sam_id_map.csv").read_text(encoding="utf-8")
+        assert alias_map.read_text(encoding="utf-8") == (sam_dir / "sam_id_map.csv").read_text(
+            encoding="utf-8"
+        )
 
 
 class TestExtractPointsFootOnly:
@@ -240,6 +247,86 @@ class TestExtractPointsFootOnly:
         row0 = df.loc[0]
         assert row0["p1_x"] == pytest.approx(222.5, abs=1e-3)
         assert row0["p1_y"] == pytest.approx(333.5, abs=1e-3)
+
+
+class TestVailaAnchorCsvs:
+    """Tests for the five simple VAILA-style anchor CSV files."""
+
+    def test_writes_five_files(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        written = write_vaila_anchor_csvs(sam_dir)
+        assert len(written) == 5
+        for anchor in VAILA_ANCHORS:
+            assert (sam_dir / f"sam_vaila_{anchor}.csv").is_file()
+
+    def test_header_format(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        write_vaila_anchor_csvs(sam_dir)
+        df = pd.read_csv(sam_dir / "sam_vaila_center.csv")
+        assert list(df.columns) == ["frame", "x1", "y1", "x2", "y2"]
+
+    def test_center_values(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        write_vaila_anchor_csvs(sam_dir)
+        df = pd.read_csv(sam_dir / "sam_vaila_center.csv")
+        row0 = df.loc[0]
+        assert row0["x1"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
+        assert row0["y1"] == pytest.approx(0.10 * H + 0.10 * H * 0.5, abs=1e-3)
+
+    def test_bottom_values(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        write_vaila_anchor_csvs(sam_dir)
+        df = pd.read_csv(sam_dir / "sam_vaila_bottom.csv")
+        row0 = df.loc[0]
+        assert row0["x1"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
+        assert row0["y1"] == pytest.approx(0.10 * H + 0.10 * H, abs=1e-3)
+
+    def test_top_values(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        write_vaila_anchor_csvs(sam_dir)
+        df = pd.read_csv(sam_dir / "sam_vaila_top.csv")
+        row0 = df.loc[0]
+        assert row0["x1"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
+        assert row0["y1"] == pytest.approx(0.10 * H, abs=1e-3)
+
+    def test_left_values(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        write_vaila_anchor_csvs(sam_dir)
+        df = pd.read_csv(sam_dir / "sam_vaila_left.csv")
+        row0 = df.loc[0]
+        assert row0["x1"] == pytest.approx(0.10 * W, abs=1e-3)
+        assert row0["y1"] == pytest.approx(0.10 * H + 0.10 * H * 0.5, abs=1e-3)
+
+    def test_right_values(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        write_vaila_anchor_csvs(sam_dir)
+        df = pd.read_csv(sam_dir / "sam_vaila_right.csv")
+        row0 = df.loc[0]
+        assert row0["x1"] == pytest.approx(0.10 * W + 0.10 * W, abs=1e-3)
+        assert row0["y1"] == pytest.approx(0.10 * H + 0.10 * H * 0.5, abs=1e-3)
+
+    def test_missing_detections_are_empty(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        write_vaila_anchor_csvs(sam_dir)
+        df = pd.read_csv(sam_dir / "sam_vaila_center.csv")
+        assert pd.isna(df.loc[2, "x1"])
+        assert pd.isna(df.loc[2, "y1"])
+        assert pd.isna(df.loc[1, "x2"])
+
+
+class TestVailaAnchorBatch:
+    def test_batch_writes_anchor_csvs(self, tmp_path: Path) -> None:
+        batch = tmp_path / "processed_sam_TEST"
+        batch.mkdir()
+        run_a = _build_synthetic_run(batch)
+        run_a.rename(batch / "video_a")
+        run_b = _build_synthetic_run(batch)
+        run_b.rename(batch / "video_b")
+        outs = write_vaila_anchor_csvs_for_batch(batch)
+        assert len(outs) == 10
+        for anchor in VAILA_ANCHORS:
+            assert (batch / "video_a" / f"sam_vaila_{anchor}.csv").is_file()
+            assert (batch / "video_b" / f"sam_vaila_{anchor}.csv").is_file()
 
 
 class TestExtractBatch:

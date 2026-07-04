@@ -4,7 +4,7 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.68
+- **Version:** 0.3.69
 - **Updated:** 04 July 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
@@ -27,7 +27,8 @@
 - Frame-by-frame fallback for low-VRAM GPUs
 - GUI mode (Tkinter dialog) and headless CLI mode
 - SAM ID stabilization/ReID export (`--stabilize-ids`) with cross-chunk overlap linking, final `sam_tracks.csv`, `sam_reid_links.csv`, `sam_points.csv`, `sam_id_map.csv`, and `*_georeid.csv` aliases for YOLOTrain outputs
-- **Cross-Chunk Tracklet Linking** (sliding-window overlap = 2 frames between adjacent chunks; chunk-local SAM IDs are matched into persistent global IDs using a bipartite IoU + centroid-distance cost matrix solved with Hungarian assignment via `scipy.optimize.linear_sum_assignment`)
+- **Cross-Chunk Tracklet Linking** (sliding-window overlap between adjacent chunks, tunable with `--overlap-frames N` default 2; chunk-local SAM IDs are matched into persistent global IDs using bipartite IoU + centroid-distance + optional mask IoU cost matrix solved with Hungarian assignment)
+- **Unified geometric Re-ID (v0.3.68)**: `_stabilize_sam_track_ids` now uses `GeometricFrameLinker` from `vaila/geometric_reid.py` (Hungarian + velocity-direction penalty), consistent with the YOLO linker
 - **FIFA Skeletal Tracking Light** pipeline via `fifa` subcommand
 
 ---
@@ -247,7 +248,7 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 | `--max-frames` | — | int | auto | Max frames passed to SAM3 on GPU (VRAM cap); `0` = full clip |
 | `--max-input-long-edge` | — | int | auto | Max long edge (px) for frames fed to SAM3; `0` = native resolution; try `1280`/`960` for 4K+ or OOM |
 | `--dry-run` / `--smoke` | — | flag | — | Print effective settings/caps/checkpoint and exit (does not run SAM3) |
-| `--postprocess-points` | — | choice | `none` | Build per-video vailá-format pixel CSVs (`sam_points.csv`) after batch: `foot` (bottom-center of bbox, best for soccer-field homography + `rec2d`), `center` (bbox center), `mask` (mask centroid from PNG or `sam_tracks.csv`), `all` (foot + extra cx/cy/mx/my columns), `none` |
+| `--postprocess-points` | — | choice | `all` | Build per-video vailá-format pixel CSVs (`sam_points.csv` + five `sam_vaila_*.csv` anchor files) after batch: `foot` (bottom-center of bbox, best for soccer-field homography + `rec2d`), `center` (bbox center), `mask` (mask centroid from PNG or `sam_tracks.csv`), `all` (foot + extra cx/cy/mx/my columns), `none` (skip post-processing) |
 | `--download-weights` | — | flag | — | Download facebook/sam3 into `vaila/models/sam3/` |
 | `--open-help` | — | flag | — | Open help page in the browser |
 | `--no-isolate-batch` | — | flag | — | Disable subprocess-per-video isolation (not recommended; can cause cascading OOM after a failure). Default behavior is isolation-enabled for both single-video and batch runs. |
@@ -330,20 +331,42 @@ Since **v0.3.55**, every SAM3 run writes:
   long directory listing. `getpixelvideo.py`'s smart loader accepts either
   name (detection is column-based, not filename-based).
 
-### Additional outputs: `sam_points.csv` / `sam_id_map.csv` (optional)
+### Additional outputs: `sam_points.csv` + vailá anchor CSVs (default)
 
-If you pass `--postprocess-points` (anything other than `none`) or run with `--stabilize-ids`, vailá post-processes each
-per-video output directory and writes **pixel CSVs** that can be loaded directly by
-`getpixelvideo.py` and `rec2d.py`:
+By default (`--postprocess-points all`), *vailá* post-processes each per-video output directory and writes **pixel CSVs** that can be loaded directly by `getpixelvideo.py` and `rec2d.py`:
 
 ```
 output/processed_sam_YYYYMMDD_HHMMSS/
   video_name/
     sam_points.csv
     sam_id_map.csv
+    sam_vaila_center.csv        # simple frame,x1,y1,...,xN,yN — bbox center
+    sam_vaila_bottom.csv        # simple frame,x1,y1,...,xN,yN — bottom-center (foot)
+    sam_vaila_top.csv           # simple frame,x1,y1,...,xN,yN — top-center
+    sam_vaila_left.csv          # simple frame,x1,y1,...,xN,yN — left-center
+    sam_vaila_right.csv         # simple frame,x1,y1,...,xN,yN — right-center
     sam_points_georeid.csv      # written when --stabilize-ids/ReID is active
     sam_id_map_georeid.csv      # written when --stabilize-ids/ReID is active
 ```
+
+#### vailá anchor CSVs (`sam_vaila_*.csv`)
+
+These five files use a simple format with one (x, y) pair per tracked object:
+
+```
+frame,x1,y1,x2,y2,...,xN,yN
+0,960.5,540.0,1200.3,480.2,...
+1,961.1,541.0,1201.0,481.1,...
+```
+
+Each file places the anchor at a different bbox point:
+- **center** — bbox center
+- **bottom** — bottom-center of bbox (foot point, best for field homography)
+- **top** — top-center of bbox (head)
+- **left** — left-center of bbox
+- **right** — right-center of bbox
+
+Empty cells indicate the object was not detected in that frame.
 
 #### `sam_points.csv` schema
 
@@ -494,14 +517,16 @@ In the main vailá window, open it via:
 | [==========--------------------------------------------]  |
 | Log:                                                      |
 |  [14:21:03] Starting video 3/24: ARG_CRO_000737.mp4       |
+|  [postprocess] wrote 24 sam_points.csv + 120 vailá ...    |
 |  ...                                                      |
+|  [Field calibration (after batch finishes)]               |
+|    [Calibrate field (DLT2D)]                              |
 |  [Request cancel]  [Help]            [Close (disabled)]   |
 +-----------------------------------------------------------+
 ```
 
-- `Request cancel` finishes the current video cleanly, then stops.
-- `Help` opens this reference page.
-- `Close` enables when all videos are done.
+- When **Post-process points** is `all` (default), `sam_points.csv`, `sam_id_map.csv`, and the five `sam_vaila_*.csv` anchor files are written automatically at the end of the batch — look for `[postprocess]` lines in the log.
+- **Calibrate field (DLT2D)** enables after the batch finishes (optional soccer-field homography).
 
 ---
 
@@ -852,6 +877,7 @@ Place a short MP4 at `tests/SAM/test1000.mp4` for smoke tests (see `tests/SAM/RE
 
 ## Version History
 
+- **v0.3.69 (04 July 2026):** `--postprocess-points` default changed from `none` to `all` — `sam_points.csv` + `sam_id_map.csv` are now generated automatically after every batch/single-video run (CLI and GUI subprocess; no manual button). Five new **vailá-style anchor CSVs** (`sam_vaila_center.csv`, `sam_vaila_bottom.csv`, `sam_vaila_top.csv`, `sam_vaila_left.csv`, `sam_vaila_right.csv`) with simple `frame,x1,y1,...,xN,yN` format are written alongside `sam_points.csv`. GUI combobox default is `all`; progress log shows `[postprocess]` lines when the batch finishes.
 - **v0.3.47 (05 June 2026):** Subprocess-exit diagnostics (SIGKILL/SIGSEGV/SIGABRT/SIGBUS/EXIT_NEEDS_CHUNKING shown by name + actionable hint) in both CLI batch and GUI poller; runtime banner at startup (VRAM, host RAM, effective config, video queue); host-RAM heads-up for long broadcast clips; new `--print-examples` CLI flag + argparse epilog with copy/paste recipes; updated help with **Common errors** matrix.
 - **v0.3.43 (07 May 2026):** Fix GUI batch output directory — GUI now passes exact `processed_sam_...` folder to subprocess so no empty sibling folder is created.
 - **v0.0.4 (April 2026):** `fifa dlt-export` / `vaila.fifa_to_dlt` — FIFA `cameras/*.npz` → per-frame `.dlt2d` / `.dlt3d` for `rec2d.py` / `rec3d.py` (moving broadcast camera); help section **Full broadcast pipeline**; GUI button **FIFA cams→DLT**
@@ -878,7 +904,7 @@ the script and will ship in a follow-up.
 
 ---
 
-Generated: June 05, 2026
+Generated: July 04, 2026
 Part of vailá - Multimodal Toolbox
 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 Contact: paulosantiago@usp.br
