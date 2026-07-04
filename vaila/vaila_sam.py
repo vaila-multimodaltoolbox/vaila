@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 15 June 2026
-Version: 0.3.55
+Update Date: 04 July 2026
+Version: 0.3.68
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -971,11 +971,17 @@ def _format_runtime_banner(args: argparse.Namespace, video_files: list[Path] | N
     if (
         getattr(args, "tracks_only", False)
         or getattr(args, "delete_mask_png", False)
+        or getattr(args, "keep_mask_png", False)
+        or getattr(args, "keep_masks", False)
         or getattr(args, "stabilize_ids", False)
     ):
+        resolved_delete = (
+            not bool(getattr(args, "keep_mask_png", False))
+            and not bool(getattr(args, "keep_masks", False))
+        ) or bool(getattr(args, "delete_mask_png", False))
         lines.append(
             f"  tracks_only={bool(getattr(args, 'tracks_only', False))}  "
-            f"delete_mask_png={bool(getattr(args, 'delete_mask_png', False))}  "
+            f"delete_mask_png={resolved_delete}  "
             f"stabilize_ids={bool(getattr(args, 'stabilize_ids', False))}"
         )
     if args.checkpoint is not None:
@@ -2271,6 +2277,8 @@ def _process_video_chunked(
     """
     import subprocess as _sp
 
+    chunk_save_png = save_mask_png or save_overlay_mp4
+
     def _log(s: str) -> None:
         if log is not None:
             log(s)
@@ -2383,8 +2391,13 @@ def _process_video_chunked(
             cmd += ["--checkpoint", str(checkpoint)]
         if not save_overlay_mp4:
             cmd.append("--no-overlay")
-        if not save_mask_png:
+        if not chunk_save_png:
             cmd.append("--no-png")
+        else:
+            # We want the chunk subprocess to write mask PNGs so the coordinator
+            # can remap/merge them. But we explicitly tell it to keep them so it
+            # doesn't delete them before we can merge!
+            cmd.append("--keep-mask-png")
         if not overlay_rich:
             cmd.append("--no-overlay-rich")
         if not draw_contour:
@@ -2403,8 +2416,8 @@ def _process_video_chunked(
             cmd += ["--contours-format", str(contours_format)]
         if contours_gzip:
             cmd.append("--contours-gzip")
-        if delete_mask_png:
-            cmd.append("--delete-mask-png")
+        # Chunk subprocesses should NOT delete their masks (we keep them via --keep-mask-png
+        # above, and the coordinator deletes them at the very end when it removes chunk_work_dir).
         # Do not run per-chunk stabilization: it rewrites chunk CSV IDs but not mask
         # filenames. Cross-chunk linking below remaps CSVs, contours, masks, and
         # the regenerated final overlay in one consistent pass.
@@ -2448,13 +2461,13 @@ def _process_video_chunked(
             output_dir,
             video_file,
             save_overlay_mp4=save_overlay_mp4,
-            save_mask_png=save_mask_png,
+            save_mask_png=chunk_save_png,
             draw_contour=draw_contour,
             draw_box=draw_box,
             draw_id=draw_id,
             draw_centroid=draw_centroid,
         )
-        if delete_mask_png:
+        if delete_mask_png or not save_mask_png:
             _delete_mask_artifacts(output_dir)
     except Exception as e:
         _log(f"  [SAM3-CHUNK] Merge error: {e}")
@@ -4118,7 +4131,7 @@ class SamVideoDialog(tk.Toplevel):
         ).grid(row=8, column=1, sticky="w", pady=4)
 
         self.overlay_var = tk.BooleanVar(value=True)
-        self.png_var = tk.BooleanVar(value=True)
+        self.png_var = tk.BooleanVar(value=False)
         self.fallback_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             frm,
@@ -4309,8 +4322,6 @@ class SamVideoDialog(tk.Toplevel):
         save_png = self.png_var.get()
         if stabilize_ids:
             save_tracks_csv = True
-            if self.overlay_var.get():
-                save_png = True
             if postprocess_points == "none":
                 postprocess_points = "all"
         self.result = (
@@ -4674,6 +4685,8 @@ def _start_sam_batch_subprocess(
         cmd.append("--no-overlay")
     if not save_png:
         cmd.append("--no-png")
+    else:
+        cmd.append("--keep-mask-png")
     if frame_fallback:
         cmd.append("--frame-by-frame")
     if not overlay_rich:
@@ -5051,7 +5064,17 @@ def main() -> None:
     parser.add_argument(
         "--delete-mask-png",
         action="store_true",
-        help="Delete masks/ and sam_masks_manifest.csv after CSV/JSON exports finish.",
+        help="Delete masks/ and sam_masks_manifest.csv after CSV/JSON exports finish (this is now the default).",
+    )
+    parser.add_argument(
+        "--keep-mask-png",
+        action="store_true",
+        help="Keep masks/ and sam_masks_manifest.csv after exports finish (by default they are deleted).",
+    )
+    parser.add_argument(
+        "--keep-masks",
+        action="store_true",
+        help="Alias for --keep-mask-png.",
     )
     parser.add_argument(
         "--stabilize-ids",
@@ -5219,6 +5242,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    keep_mask_png = bool(args.keep_mask_png) or bool(args.keep_masks)
+    if args.delete_mask_png:
+        keep_mask_png = False
+    delete_mask_png = not keep_mask_png
+
     if args.tracks_only:
         args.no_overlay = True
         args.no_png = True
@@ -5317,7 +5345,7 @@ def main() -> None:
             draw_centroid=bool(args.draw_centroid),
             save_contours=bool(args.save_contours),
             save_tracks_csv=bool(args.save_tracks_csv),
-            delete_mask_png=bool(args.delete_mask_png),
+            delete_mask_png=delete_mask_png,
             stabilize_ids=bool(args.stabilize_ids),
             contours_format=str(args.contours_format),
             contours_gzip=bool(args.contours_gzip),
@@ -5491,7 +5519,9 @@ def main() -> None:
                     cmd_local.append("--contours-gzip")
                 if args.tracks_only:
                     cmd_local.append("--tracks-only")
-                if args.delete_mask_png:
+                if keep_mask_png:
+                    cmd_local.append("--keep-mask-png")
+                else:
                     cmd_local.append("--delete-mask-png")
                 if args.stabilize_ids:
                     cmd_local.append("--stabilize-ids")
@@ -5549,7 +5579,7 @@ def main() -> None:
                         draw_centroid=bool(args.draw_centroid),
                         save_contours=bool(args.save_contours),
                         save_tracks_csv=bool(args.save_tracks_csv),
-                        delete_mask_png=bool(args.delete_mask_png),
+                        delete_mask_png=delete_mask_png,
                         stabilize_ids=bool(args.stabilize_ids),
                         contours_format=str(args.contours_format),
                         contours_gzip=bool(args.contours_gzip),
@@ -5590,7 +5620,7 @@ def main() -> None:
                     draw_centroid=bool(args.draw_centroid),
                     save_contours=bool(args.save_contours),
                     save_tracks_csv=bool(args.save_tracks_csv),
-                    delete_mask_png=bool(args.delete_mask_png),
+                    delete_mask_png=delete_mask_png,
                     stabilize_ids=bool(args.stabilize_ids),
                     contours_format=str(args.contours_format),
                     contours_gzip=bool(args.contours_gzip),

@@ -48,8 +48,8 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.3.55</p>
-            <p><strong>Updated:</strong> 15 June 2026</p>
+            <p><strong>Version:</strong> 0.3.68</p>
+            <p><strong>Updated:</strong> 04 July 2026</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
             <p><strong>CLI Interface:</strong> Yes (<code>-i</code>, <code>-o</code>, <code>-t</code>, ...)</p>
@@ -356,7 +356,14 @@ uv run vaila/vaila_sam.py --download-weights</code></pre>
                 <td>—</td>
                 <td>flag</td>
                 <td>—</td>
-                <td>Delete bulky <code>masks/</code> and <code>sam_masks_manifest.csv</code> after exports finish</td>
+                <td>Delete bulky <code>masks/</code> and <code>sam_masks_manifest.csv</code> after exports finish (this is now the default behavior)</td>
+            </tr>
+            <tr>
+                <td><code>--keep-mask-png</code> / <code>--keep-masks</code></td>
+                <td>—</td>
+                <td>flag</td>
+                <td>—</td>
+                <td>Keep <code>masks/</code> and <code>sam_masks_manifest.csv</code> after exports finish (by default they are deleted to save disk space)</td>
             </tr>
             <tr>
                 <td><code>--stabilize-ids</code></td>
