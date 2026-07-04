@@ -6,7 +6,7 @@
 - **File:** `vaila\reid_markers.py`
 - **Lines:** 2585
 - **Size:** 94499 characters
-- **Version:** 0.3.47
+- **Version:** 0.3.68
 - **Author:** Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -62,6 +62,7 @@ If `sam_tracks.csv` is selected, the loader now normalizes SAM long-format track
 - `get_marker_coords_dynamic`
 - `load_homography_matrix`
 - `geometric_reid_align_markers`
+- `geometric_reid_align_markers_bidirectional`
 - `detect_gaps_dynamic`
 - `visualize_markers_dynamic`
 - `select_columns_dialog`
@@ -78,6 +79,6 @@ If `sam_tracks.csv` is selected, the loader now normalizes SAM long-format track
 
 ---
 
-📅 **Generated automatically on:** 09/06/2026
+📅 **Last Updated:** 04 July 2026 (v0.3.68)
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

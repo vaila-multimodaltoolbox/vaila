@@ -4,13 +4,15 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.67  
+**Version:** 0.3.69  
 **Date:** 23 June 2026  
-**Updated:** 29 June 2026  
+**Updated:** 04 July 2026  
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** vailá - Multimodal Toolbox
 
 ## Key Features
+
+- **BBox to Coordinates Export:** Convert loaded tracking bounding boxes or SAM3 contours (`sam_contours.json`) into 5 distinct coordinates CSV files (corresponding to `center`, `bottom`, `top`, `left`, and `right` anchors) in the standard vailá format (`frame,p0_x,p0_y,...`). Available via the GUI **BBox→Coords** button or CLI option `--export-bbox-coords PATH`.
 
 - **Template Marker Mode:** Choose fixed keypoint templates in the toolbar:
   - **FIFA Soccer-Field:** 32 pitch keypoints (`idx 0 = top_left_corner`) + TOML config (right-click or `K`)

@@ -235,17 +235,28 @@ implemented entirely in `vaila/vaila_sam.py`:
 `_build_cross_chunk_id_maps` previously called `_assignment_min_cost`, but
 that helper was **never defined in `vaila_sam.py`** — it was assumed to be
 importable from `reid_markers.py`. Result: `NameError` at runtime, and the
-chunked path silently produced random per-chunk IDs. The fix defines the
-helper inline next to `_build_cross_chunk_id_maps`.
+chunked path silently produced random per-chunk IDs.
 
-#### Tunable knobs
+**v0.3.54 fix:** defined the helper inline.
+**v0.3.68 fix:** all Re-ID helpers consolidated in `vaila/geometric_reid.py`
+(Hungarian, IoU, velocity, mask IoU). `vaila_sam.py` imports from there via
+`from .geometric_reid import assignment_min_cost, bbox_iou_xywh, ...`.
 
-`_build_cross_chunk_id_maps(max_centroid_dist_px=180.0, min_iou=0.05)`. There
-are no CLI flags yet — change the defaults or expose them as
-`--xchunk-min-iou` / `--xchunk-max-centroid-px` if you need looser/stricter
-gating. Spec calls for an additional **Re-ID embedding** term (Cosine
-distance) — not yet implemented because SAM3 does not expose a stable Re-ID
-head.
+#### Tunable knobs (v0.3.68)
+
+`_build_cross_chunk_id_maps(max_centroid_dist_px=180.0, min_iou=0.05, mask_iou_weight=0.25)`.
+
+- **`--overlap-frames N`** (CLI, default 2) — shared frames between adjacent
+  chunks for cross-chunk linking. Use 4 for fast camera motion.
+- **`mask_iou_weight`** — when mask PNGs exist, per-object binary mask IoU
+  is a cost term (`mask_iou_u8` from `geometric_reid.py`); reduces swap on
+  partial occlusions.
+
+`_stabilize_sam_track_ids` now uses `GeometricFrameLinker` from
+`vaila/geometric_reid.py` (Hungarian + velocity direction), consistent with
+the YOLO linker. Parameters: `max_gap=12`, `max_centroid_dist_px=180`,
+`min_iou=0.05`, `direction_weight=0.5`. No CLI flags yet for per-frame
+stabilize params (only the chunk overlap is tunable via `--overlap-frames`).
 
 #### Tests
 

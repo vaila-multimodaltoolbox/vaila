@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 29 June 2026
-Version: 0.3.67
+Update: 04 July 2026
+Version: 0.3.69
 Python Version: 3.12.13
 
 Description:
@@ -179,8 +179,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.62"
-GETPIXELVIDEO_UPDATE_DATE = "24 June 2026"
+GETPIXELVIDEO_VERSION = "0.3.69"
+GETPIXELVIDEO_UPDATE_DATE = "04 July 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -3316,6 +3316,91 @@ def play_video_with_controls(
 
             traceback.print_exc()
 
+    def load_bbox_and_export_coords():
+        """Prompts user to select a bbox tracking CSV or contours JSON, and exports 5 coordinate files."""
+        nonlocal \
+            save_message_text, \
+            showing_save_message, \
+            save_message_timer
+
+        import platform
+        initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+
+        if platform.system() == "Linux":
+            csv_path = pygame_file_dialog(
+                initial_dir=initial_dir,
+                file_extensions=[".csv", ".json", ".jsonl", ".gz"],
+                restore_size=(window_width, window_height + control_panel_height),
+            )
+        else:
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+
+                pygame.event.set_blocked(
+                    [
+                        pygame.MOUSEBUTTONDOWN,
+                        pygame.MOUSEBUTTONUP,
+                        pygame.MOUSEMOTION,
+                        pygame.KEYDOWN,
+                        pygame.KEYUP,
+                    ]
+                )
+                pygame.event.clear()
+
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                root.update_idletasks()
+
+                csv_path = filedialog.askopenfilename(
+                    title="Select BBox Tracking CSV or Contours JSON",
+                    filetypes=[
+                        ("Tracking/Contour Files", "*.csv;*.json;*.jsonl;*.gz"),
+                        ("CSV Files", "*.csv"),
+                        ("JSON Files", "*.json"),
+                        ("All Files", "*.*")
+                    ],
+                    initialdir=initial_dir,
+                )
+
+                root.destroy()
+
+                pygame.event.set_allowed(
+                    [
+                        pygame.MOUSEBUTTONDOWN,
+                        pygame.MOUSEBUTTONUP,
+                        pygame.MOUSEMOTION,
+                        pygame.KEYDOWN,
+                        pygame.KEYUP,
+                    ]
+                )
+                pygame.event.clear()
+            except Exception as e:
+                print(f"Error opening file dialog: {e}")
+                save_message_text = f"Error: {e}"
+                showing_save_message = True
+                save_message_timer = 120
+                return
+
+        if not csv_path:
+            return
+
+        _flush_save_message(screen, "Converting BBoxes...")
+        try:
+            res = do_export_bbox_coords(csv_path, video_path)
+            if res:
+                save_message_text = f"Exported 5 CSV files to {os.path.basename(csv_path)[:20]}..."
+                print(f"Successfully exported coordinates to: {res}")
+            else:
+                save_message_text = "Conversion failed (no valid data)"
+        except Exception as e:
+            save_message_text = f"Error converting: {e}"
+            print(f"Error converting bboxes to coordinates: {e}")
+
+        showing_save_message = True
+        save_message_timer = 200
+
     def _apply_template_mode(mode: str) -> None:
         """Apply Template Marker Mode. May reshape slot count; clears pitch guide unless FIFA."""
         nonlocal template_mode, template_keypoint_names
@@ -3685,6 +3770,7 @@ def play_video_with_controls(
         guide_button_width = 74  # Guide button (field / skeleton overlay)
         guide_toggle_size = 12
         tracking_csv_button_width = 120
+        bbox_coords_button_width = 110
         export_video_button_width = 100
         save_dataset_button_width = 100
         help_web_button_width = 30  # Width for '?' button
@@ -3705,6 +3791,8 @@ def play_video_with_controls(
             tracking_csv_button_width
             + 5
             + show_tracking_indicator_size
+            + button_gap
+            + bbox_coords_button_width
             + button_width
             + button_width
             + button_width
@@ -3889,6 +3977,21 @@ def play_video_with_controls(
             pygame.draw.rect(control_surface, (60, 60, 60), show_tracking_indicator_rect)
             pygame.draw.rect(control_surface, (150, 150, 150), show_tracking_indicator_rect, 1)
 
+        # 8b. BBox to Coords button
+        bbox_coords_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_bottom,
+            bbox_coords_button_width,
+            button_height,
+        )
+        current_x += bbox_coords_button_width + button_gap
+
+        pygame.draw.rect(control_surface, (120, 80, 160), bbox_coords_button_rect) # Purple color
+        bbox_coords_text = font.render("BBox→Coords", True, (255, 255, 255))
+        control_surface.blit(
+            bbox_coords_text, bbox_coords_text.get_rect(center=bbox_coords_button_rect.center)
+        )
+
         # 9. Load button (Moved here)
         load_button_rect = pygame.Rect(current_x, cluster_y_bottom, button_width, button_height)
         current_x += button_width + button_gap
@@ -4002,6 +4105,7 @@ def play_video_with_controls(
             guide_toggle_rect,  # Guide on/off indicator
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
+            bbox_coords_button_rect,  # Add BBox to Coords button to return
             export_video_button_rect,  # Add export video button to return
             save_dataset_button_rect,  # Export PNG ML dataset + all_labels
             help_web_button_rect,  # Add help web button to return
@@ -7525,6 +7629,7 @@ def play_video_with_controls(
             guide_toggle_rect,  # Guide on/off indicator
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
+            bbox_coords_button_rect,  # Add BBox to Coords button to return
             export_video_button_rect,  # Add export video button to return
             save_dataset_button_rect,  # Export PNG ML dataset + all_labels
             help_web_button_rect,  # Add help web button to return
@@ -8634,6 +8739,9 @@ def play_video_with_controls(
                     elif tracking_csv_button_rect.collidepoint(x, rel_y):
                         # Load tracking CSV
                         load_tracking_csv()
+                    elif bbox_coords_button_rect.collidepoint(x, rel_y):
+                        # Convert bbox/contour to coords CSVs
+                        load_bbox_and_export_coords()
                     elif show_tracking_indicator_rect.collidepoint(x, rel_y):
                         # Toggle show tracking
                         show_tracking = not show_tracking
@@ -9853,6 +9961,301 @@ def bboxes_to_marker_coordinates(
         coordinates[fr][slot] = (x, y)
     labels = [f"id{oid}" for oid in oids]
     return coordinates, labels
+
+
+def parse_contours_json(file_path):
+    """Parse JSON or JSONL format contours, supporting gzip compressed files (.gz)."""
+    import gzip
+    import json
+    from pathlib import Path
+
+    file_path = Path(file_path)
+    is_gz = file_path.suffix == ".gz"
+    real_suffix = Path(file_path.stem).suffix if is_gz else file_path.suffix
+
+    if is_gz:
+        with gzip.open(file_path, "rt", encoding="utf-8") as f:
+            content = f.read()
+    else:
+        with open(file_path, encoding="utf-8") as f:
+            content = f.read()
+
+    bboxes = []
+    content_stripped = content.strip()
+
+    # Check if JSONL (multiple lines of json records, or ends with jsonl)
+    if real_suffix == ".jsonl" or (content_stripped.startswith("{") and "\n" in content_stripped and not content_stripped.endswith("}")):
+        lines = [ln.strip() for ln in content_stripped.split("\n") if ln.strip()]
+        for line in lines:
+            try:
+                data = json.loads(line)
+                if "frame" in data:
+                    fr = int(data["frame"])
+                    for obj in data.get("objects") or []:
+                        oid = obj.get("obj_id")
+                        if oid is None:
+                            continue
+                        bbox = obj.get("bbox_xywh_px") or obj.get("bbox")
+                        x, y, w, h = None, None, None, None
+                        if bbox and len(bbox) == 4 and all(v is not None for v in bbox):
+                            x, y, w, h = bbox
+                        else:
+                            polys = obj.get("polygons") or obj.get("polygon")
+                            if polys:
+                                xs = []
+                                ys = []
+                                def extract_pts(p, x_list, y_list):
+                                    for item in p:
+                                        if isinstance(item, (list, tuple)):
+                                            if len(item) == 2 and isinstance(item[0], (int, float)):
+                                                x_list.append(item[0])
+                                                y_list.append(item[1])
+                                            else:
+                                                extract_pts(item, x_list, y_list)
+                                extract_pts(polys, xs, ys)
+                                if xs and ys:
+                                    x = min(xs)
+                                    y = min(ys)
+                                    w = max(xs) - x
+                                    h = max(ys) - y
+                        if x is not None and y is not None and w is not None and h is not None:
+                            bboxes.append({
+                                "frame": fr,
+                                "obj_id": int(oid),
+                                "x1": float(x),
+                                "y1": float(y),
+                                "x2": float(x) + float(w),
+                                "y2": float(y) + float(h),
+                                "score": float(obj.get("score") or 1.0)
+                            })
+            except Exception:
+                continue
+    else:
+        # Standard JSON
+        try:
+            data = json.loads(content)
+            frames = data.get("frames") or []
+            for fr_data in frames:
+                if "frame" in fr_data:
+                    fr = int(fr_data["frame"])
+                    for obj in fr_data.get("objects") or []:
+                        oid = obj.get("obj_id")
+                        if oid is None:
+                            continue
+                        bbox = obj.get("bbox_xywh_px") or obj.get("bbox")
+                        x, y, w, h = None, None, None, None
+                        if bbox and len(bbox) == 4 and all(v is not None for v in bbox):
+                            x, y, w, h = bbox
+                        else:
+                            polys = obj.get("polygons") or obj.get("polygon")
+                            if polys:
+                                xs = []
+                                ys = []
+                                def extract_pts(p, x_list, y_list):
+                                    for item in p:
+                                        if isinstance(item, (list, tuple)):
+                                            if len(item) == 2 and isinstance(item[0], (int, float)):
+                                                x_list.append(item[0])
+                                                y_list.append(item[1])
+                                            else:
+                                                extract_pts(item, x_list, y_list)
+                                extract_pts(polys, xs, ys)
+                                if xs and ys:
+                                    x = min(xs)
+                                    y = min(ys)
+                                    w = max(xs) - x
+                                    h = max(ys) - y
+                        if x is not None and y is not None and w is not None and h is not None:
+                            bboxes.append({
+                                "frame": fr,
+                                "obj_id": int(oid),
+                                "x1": float(x),
+                                "y1": float(y),
+                                "x2": float(x) + float(w),
+                                "y2": float(y) + float(h),
+                                "score": float(obj.get("score") or 1.0)
+                            })
+        except Exception as e:
+            print(f"Error parsing JSON contours file: {e}")
+    return bboxes
+
+
+def do_export_bbox_coords(input_file_path, video_file_path=None):
+    """
+    Parses tracking bounding boxes from input_file_path (contours JSON or tracking CSV)
+    and exports 5 CSV files of coordinates in standard vailá format:
+    center, bottom, top, left, and right.
+    """
+    import gzip
+    import json
+    from pathlib import Path
+
+    input_path = Path(input_file_path)
+    if not input_path.exists():
+        print(f"Error: Input file does not exist: {input_file_path}")
+        return False
+
+    print(f"Processing bbox/contour file: {input_path}")
+
+    # Determine base name and output directory
+    base_dir = input_path.parent
+    stem = input_path.name
+    if stem.endswith(".gz"):
+        stem = stem[:-3]
+    stem = os.path.splitext(stem)[0]
+
+    # Initialize variables
+    bboxes = []
+    width = None
+    height = None
+    total_frames = None
+
+    # Try resolving video file path
+    video_path_resolved = None
+    if video_file_path and os.path.isfile(video_file_path):
+        video_path_resolved = Path(video_file_path)
+    else:
+        # Check if there is a video file matching the input name in same directory
+        video_exts = {".mp4", ".avi", ".mov", ".mkv", ".mpeg", ".mpg"}
+        for ext in video_exts:
+            test_v = base_dir / f"{stem}{ext}"
+            if test_v.is_file():
+                video_path_resolved = test_v
+                break
+
+        if not video_path_resolved:
+            for f in base_dir.iterdir():
+                if f.suffix.lower() in video_exts:
+                    video_path_resolved = f
+                    break
+
+        if not video_path_resolved and base_dir.parent != base_dir:
+            for f in base_dir.parent.iterdir():
+                if f.suffix.lower() in video_exts:
+                    video_path_resolved = f
+                    break
+
+    lower_name = input_path.name.lower()
+    is_json = ".json" in lower_name
+
+    if is_json:
+        try:
+            is_gz = input_path.suffix == ".gz"
+            if is_gz:
+                with gzip.open(input_path, "rt", encoding="utf-8") as f:
+                    content = f.read(2000)
+            else:
+                with open(input_path, encoding="utf-8") as f:
+                    content = f.read(2000)
+
+            if content.strip().startswith("{"):
+                meta_part = content.split('"frames"')[0]
+                if not meta_part.endswith("{"):
+                    meta_part = meta_part.rstrip(", ") + "}"
+                try:
+                    data = json.loads(meta_part)
+                    width = data.get("width")
+                    height = data.get("height")
+                    total_frames = data.get("n_frames")
+                    v_name = data.get("video")
+                    if v_name and not video_path_resolved:
+                        test_v = base_dir / v_name
+                        if test_v.is_file():
+                            video_path_resolved = test_v
+                        else:
+                            test_v = base_dir.parent / v_name
+                            if test_v.is_file():
+                                video_path_resolved = test_v
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        bboxes = parse_contours_json(input_path)
+    else:
+        # CSV file
+        try:
+            df = pd.read_csv(input_path)
+            detected_fmt = _detect_tracking_format(df)
+            print(f"Detected CSV format: {detected_fmt}")
+
+            if video_path_resolved:
+                meta = get_precise_video_metadata(video_path_resolved)
+                width = meta.get("width")
+                height = meta.get("height")
+                total_frames = meta.get("nb_frames")
+
+            bboxes = _iter_bboxes_from_df(
+                df,
+                detected_fmt,
+                video_width=width,
+                video_height=height
+            )
+        except Exception as e:
+            print(f"Error parsing tracking CSV file: {e}")
+            return False
+
+    if not bboxes:
+        print("No bounding boxes found/parsed.")
+        return False
+
+    if total_frames is None and video_path_resolved:
+        meta = get_precise_video_metadata(video_path_resolved)
+        total_frames = meta.get("nb_frames")
+
+    max_frame = max(b["frame"] for b in bboxes)
+    total_frames = max_frame + 1 if total_frames is None else max(total_frames, max_frame + 1)
+
+    oids = sorted({int(b["obj_id"]) for b in bboxes})
+    n_slots = len(oids)
+    print(f"Total frames: {total_frames}, Tracked object IDs: {oids} ({n_slots} objects)")
+
+    # Create five such CSV files: center, bottom, top, left, and right
+    anchors = ["center", "bottom", "top", "left", "right"]
+    exported_files = []
+
+    for anchor in anchors:
+        output_file_name = f"{stem}_{anchor}.csv"
+        output_path = base_dir / output_file_name
+
+        coords_dict, _ = bboxes_to_marker_coordinates(
+            bboxes,
+            total_frames=total_frames,
+            anchor=anchor
+        )
+
+        columns = ["frame"]
+        for i in range(n_slots):
+            columns.append(f"p{i}_x")
+            columns.append(f"p{i}_y")
+
+        arr = np.full((total_frames, n_slots * 2), np.nan, dtype=np.float64)
+        for frame_num, points in coords_dict.items():
+            if 0 <= frame_num < total_frames:
+                for i, p in enumerate(points):
+                    if p is not None and p[0] is not None and p[1] is not None:
+                        arr[frame_num, i * 2] = p[0]
+                        arr[frame_num, i * 2 + 1] = p[1]
+
+        df_out = pd.DataFrame(arr, columns=pd.Index(columns[1:]))
+        df_out.insert(0, "frame", np.arange(total_frames, dtype=np.int64))
+
+        for c in df_out.columns:
+            if c == "frame":
+                continue
+            df_out[c] = (
+                df_out[c]
+                .round()
+                .astype(object)
+                .where(df_out[c].notna(), "")
+                .apply(lambda v: int(v) if isinstance(v, float) else v)
+            )
+
+        df_out.to_csv(output_path, index=False, na_rep="")
+        print(f"Saved: {output_path}")
+        exported_files.append(str(output_path))
+
+    return exported_files
 
 
 def sorted_frames_with_visible_markers(
@@ -11483,10 +11886,35 @@ if __name__ == "__main__":
             "  --sequence DIR      Folder of PNG frames\n"
             "  --dataset DIR       YOLO / multi-video dataset root\n"
             "  --fifa / --fifa-dataset [DIR]  FIFA labeling mode\n"
+            "  --export-bbox-coords PATH  Convert bbox tracking/contours to five coordinate CSVs and exit\n"
             "Run without arguments to open the media picker.\n"
             "Full options are documented in the module docstring (top of getpixelvideo.py)."
         )
         raise SystemExit(0)
+
+    if "--export-bbox-coords" in sys.argv:
+        idx = sys.argv.index("--export-bbox-coords")
+        if idx + 1 < len(sys.argv):
+            target_path = sys.argv[idx + 1]
+            video_path = None
+            if "-f" in sys.argv:
+                v_idx = sys.argv.index("-f")
+                if v_idx + 1 < len(sys.argv):
+                    video_path = sys.argv[v_idx + 1]
+            elif "--file" in sys.argv:
+                v_idx = sys.argv.index("--file")
+                if v_idx + 1 < len(sys.argv):
+                    video_path = sys.argv[v_idx + 1]
+            res = do_export_bbox_coords(target_path, video_path)
+            if res:
+                print(">> BBox / Contour conversion completed successfully!")
+                sys.exit(0)
+            else:
+                print(">> BBox / Contour conversion failed!")
+                sys.exit(1)
+        else:
+            print("Error: --export-bbox-coords requires a file path.")
+            sys.exit(1)
 
     initial_dataset_dir = None
     initial_media_path = None

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 29 June 2026
-Version: 0.3.67
+Update Date: 04 July 2026
+Version: 0.3.68
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -236,12 +236,22 @@ def _configure_ultralytics_dirs(models_dir: Path) -> None:
 
 _configure_ultralytics_dirs(VAILA_MODELS_DIR)
 
-from ultralytics import YOLO
+from ultralytics import YOLO  # noqa: E402
 
 # Mandatory dual-import pattern (package + standalone execution).
 try:
+    from .geometric_reid import (
+        GeometricFrameLinker,
+        GeometricLinkerConfig,
+        write_reid_links_csv,
+    )
     from .hardware_manager import HardwareManager
 except ImportError:  # pragma: no cover
+    from geometric_reid import (  # ty: ignore[unresolved-import]
+        GeometricFrameLinker,
+        GeometricLinkerConfig,
+        write_reid_links_csv,
+    )
     from hardware_manager import HardwareManager  # ty: ignore[unresolved-import]
 
 try:
@@ -266,7 +276,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 torch.set_num_threads(1)  # Limits the number of threads to avoid conflicts
 
-# ReID model paths
+# ReID model catalogue (reserved for future BoT-SORT weight picker).
+# Live tracking uses Ultralytics BoT-SORT ``with_reid`` (yolo26n-cls.pt via custom YAML).
+# Post-track appearance ReID uses OSNet in ``reid_yolotrack`` / GUI ``appearance_reid``.
 REID_MODELS = {
     "lmbn_n_cuhk03_d.pt": "Lightweight (LMBN CUHK03)",
     "osnet_x0_25_market1501.pt": "Lightweight (OSNet x0.25 Market1501)",
@@ -1407,6 +1419,44 @@ class TrackerConfigDialog(simpledialog.Dialog):
             run_frame, text="Save contours (JSON)", variable=self.save_contours_var
         ).grid(row=1, column=1, padx=5, pady=2, sticky="w")
 
+        self.stabilize_ids_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            run_frame,
+            text="Geometric ID stabilize (Hungarian + velocity)",
+            variable=self.stabilize_ids_var,
+        ).grid(row=2, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+
+        tk.Label(run_frame, text="ReID max gap:").grid(row=3, column=0, padx=5, pady=2, sticky="w")
+        self.reid_max_gap = tk.Entry(run_frame, width=8)
+        self.reid_max_gap.insert(0, "12")
+        self.reid_max_gap.grid(row=3, column=1, padx=5, pady=2, sticky="w")
+
+        tk.Label(run_frame, text="ReID max dist px:").grid(
+            row=3, column=2, padx=5, pady=2, sticky="w"
+        )
+        self.reid_max_dist = tk.Entry(run_frame, width=8)
+        self.reid_max_dist.insert(0, "180")
+        self.reid_max_dist.grid(row=3, column=3, padx=5, pady=2, sticky="w")
+
+        tk.Label(run_frame, text="ReID min IoU:").grid(row=4, column=0, padx=5, pady=2, sticky="w")
+        self.reid_min_iou = tk.Entry(run_frame, width=8)
+        self.reid_min_iou.insert(0, "0.05")
+        self.reid_min_iou.grid(row=4, column=1, padx=5, pady=2, sticky="w")
+
+        tk.Label(run_frame, text="Direction weight:").grid(
+            row=4, column=2, padx=5, pady=2, sticky="w"
+        )
+        self.reid_direction_weight = tk.Entry(run_frame, width=8)
+        self.reid_direction_weight.insert(0, "0.5")
+        self.reid_direction_weight.grid(row=4, column=3, padx=5, pady=2, sticky="w")
+
+        self.appearance_reid_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            run_frame,
+            text="Post-track OSNet appearance ReID (reid_yolotrack)",
+            variable=self.appearance_reid_var,
+        ).grid(row=5, column=0, columnspan=3, padx=5, pady=2, sticky="w")
+
         # Pose sub-config (used when mode includes pose)
         pose_frame = tk.LabelFrame(master, text="Pose (optional)", padx=5, pady=5)
         pose_frame.grid(row=6, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
@@ -1447,13 +1497,6 @@ class TrackerConfigDialog(simpledialog.Dialog):
         self.pose_min_roi = tk.Entry(pose_frame, width=10)
         self.pose_min_roi.insert(0, "256")
         self.pose_min_roi.grid(row=2, column=3, padx=5, pady=5, sticky="w")
-
-        self.stabilize_ids_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(
-            pose_frame,
-            text="Geometric ID stabilize (SAM3-style)",
-            variable=self.stabilize_ids_var,
-        ).grid(row=3, column=0, columnspan=2, padx=5, pady=2, sticky="w")
 
         # ROI selection section
         tk.Label(master, text="Region of Interest (ROI):").grid(row=7, column=0, padx=5, pady=5)
@@ -1725,6 +1768,11 @@ class TrackerConfigDialog(simpledialog.Dialog):
                 "pose_pad_pct": float(self.pose_pad_pct.get()),
                 "pose_min_roi": int(self.pose_min_roi.get()),
                 "stabilize_ids": bool(self.stabilize_ids_var.get()),
+                "reid_max_gap": int(self.reid_max_gap.get()),
+                "reid_max_dist": float(self.reid_max_dist.get()),
+                "reid_min_iou": float(self.reid_min_iou.get()),
+                "reid_direction_weight": float(self.reid_direction_weight.get()),
+                "appearance_reid": bool(self.appearance_reid_var.get()),
                 "roi_file": self.roi_file_path,  # Path to saved ROI TOML file
                 "half": True,
                 "persist": True,
@@ -1918,6 +1966,12 @@ class TrackerSelectorDialog(simpledialog.Dialog):
 
 
 class ReidModelSelectorDialog(simpledialog.Dialog):
+    """Optional BoT-SORT ReID weight picker (not wired in main GUI yet).
+
+    BoT-SORT online ReID uses Ultralytics defaults; offline OSNet merge is via
+    ``appearance_reid`` / ``reid_yolotrack.run_appearance_reid_on_tracking_dir``.
+    """
+
     def body(self, master):
         reid_models = list(REID_MODELS.items())
 
@@ -2270,60 +2324,62 @@ POSE_KEYPOINT_NAMES: tuple[str, ...] = (
 )
 
 
-def _bbox_iou_xyxy(
-    a: tuple[int, int, int, int],
-    b: tuple[int, int, int, int],
-) -> float:
-    """IoU between two axis-aligned boxes in xyxy pixel coordinates."""
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
-    ix1 = max(ax1, bx1)
-    iy1 = max(ay1, by1)
-    ix2 = min(ax2, bx2)
-    iy2 = min(ay2, by2)
-    iw = max(0, ix2 - ix1)
-    ih = max(0, iy2 - iy1)
-    inter = float(iw * ih)
-    if inter <= 0.0:
-        return 0.0
-    area_a = float(max(0, ax2 - ax1) * max(0, ay2 - ay1))
-    area_b = float(max(0, bx2 - bx1) * max(0, by2 - by1))
-    union = area_a + area_b - inter
-    return inter / union if union > 0.0 else 0.0
+# Backward-compatible alias used by tests and legacy call sites.
+_GeometricTrackLinker = GeometricFrameLinker
 
 
-def _centroid_xyxy(bbox: tuple[int, int, int, int]) -> tuple[float, float]:
-    x_min, y_min, x_max, y_max = bbox
-    return (x_min + x_max) * 0.5, (y_min + y_max) * 0.5
-
-
-def _assignment_min_cost(cost_matrix: np.ndarray) -> list[tuple[int, int]]:
-    """Rectangular minimum-cost assignment (Hungarian with greedy fallback)."""
-    if cost_matrix.size == 0:
-        return []
+def _load_reid_homography_from_config(config: dict[str, Any]) -> np.ndarray | None:
+    """Load optional pitch homography for geometric Re-ID distance gating."""
+    if isinstance(config.get("reid_homography"), np.ndarray):
+        return config["reid_homography"]
+    path = config.get("reid_homography_path") or config.get("reid_homography_file")
+    if not path:
+        return None
     try:
-        from scipy.optimize import linear_sum_assignment
+        try:
+            from .reid_markers import load_homography_matrix
+        except ImportError:
+            from reid_markers import load_homography_matrix  # ty: ignore[unresolved-import]
+        return load_homography_matrix(str(path))
+    except Exception as exc:
+        print(f"[yolov26track] WARNING: could not load ReID homography from {path}: {exc}")
+        return None
 
-        rows, cols = linear_sum_assignment(cost_matrix)
-        return [(int(r), int(c)) for r, c in zip(rows, cols, strict=True)]
-    except Exception:
-        remaining_rows = set(range(cost_matrix.shape[0]))
-        remaining_cols = set(range(cost_matrix.shape[1]))
-        pairs: list[tuple[int, int]] = []
-        while remaining_rows and remaining_cols:
-            best: tuple[float, int, int] | None = None
-            for r in remaining_rows:
-                for c in remaining_cols:
-                    val = float(cost_matrix[r, c])
-                    if best is None or val < best[0]:
-                        best = (val, r, c)
-            if best is None:
-                break
-            _val, r_best, c_best = best
-            pairs.append((r_best, c_best))
-            remaining_rows.remove(r_best)
-            remaining_cols.remove(c_best)
-        return pairs
+
+def _linker_config_from_dict(config: dict[str, Any]) -> GeometricLinkerConfig:
+    homography = _load_reid_homography_from_config(config)
+    return GeometricLinkerConfig(
+        max_gap=int(config.get("reid_max_gap", 12)),
+        max_centroid_dist_px=float(config.get("reid_max_dist", 180.0)),
+        min_iou=float(config.get("reid_min_iou", 0.05)),
+        direction_weight=float(config.get("reid_direction_weight", 0.5)),
+        homography_matrix=homography,
+        mask_iou_weight=float(config.get("reid_mask_iou_weight", 0.0)),
+    )
+
+
+def _build_botsort_custom_yaml(models_dir: str, tracker_name: str) -> str:
+    """Write BoT-SORT YAML with GMC + appearance ReID (mirrors GUI path)."""
+    trackers_dir = os.path.join(models_dir, "trackers")
+    os.makedirs(trackers_dir, exist_ok=True)
+    custom_yaml = os.path.join(trackers_dir, f"{tracker_name}_custom.yaml")
+    tracker_cfg: dict[str, Any] = {
+        "tracker_type": tracker_name,
+        "track_high_thresh": 0.5,
+        "track_low_thresh": 0.1,
+        "new_track_thresh": 0.6,
+        "track_buffer": 60,
+        "match_thresh": 0.8,
+        "fuse_score": True,
+    }
+    if tracker_name == "botsort":
+        tracker_cfg["gmc_method"] = "sparseOptFlow"
+        tracker_cfg["with_reid"] = True
+        tracker_cfg["proximity_thresh"] = 0.5
+        tracker_cfg["appearance_thresh"] = 0.25
+    with open(custom_yaml, "w") as fh:
+        yaml.dump(tracker_cfg, fh, default_flow_style=False, sort_keys=False)
+    return custom_yaml
 
 
 def prepare_pose_roi(
@@ -2398,72 +2454,6 @@ def select_pose_person(kps_list: np.ndarray, roi_wh: tuple[int, int]) -> int:
             best_dist = dist
             best_i = i
     return best_i
-
-
-class _GeometricTrackLinker:
-    """Frame-to-frame geometric ID stabilizer (SAM3-style, appearance-free)."""
-
-    def __init__(
-        self,
-        *,
-        enabled: bool = True,
-        max_gap: int = 12,
-        max_centroid_dist_px: float = 180.0,
-        min_iou: float = 0.05,
-    ) -> None:
-        self.enabled = enabled
-        self.max_gap = max_gap
-        self.max_centroid_dist_px = max_centroid_dist_px
-        self.min_iou = min_iou
-        self.active: dict[int, dict[str, Any]] = {}
-        self.next_stable_id = 1
-        self.reid_links: list[tuple[int, int, int]] = []
-
-    def assign_frame(self, frame_idx: int, detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Assign ``stable_id`` to each detection; log ``(frame, raw_id, stable_id)``."""
-        if not self.enabled:
-            for det in detections:
-                det["stable_id"] = int(det["tracker_id"])
-            return detections
-
-        assigned_tracks: set[int] = set()
-        out: list[dict[str, Any]] = []
-        for det in detections:
-            x_min, y_min, x_max, y_max = det["xyxy"]
-            bbox = (int(x_min), int(y_min), int(x_max), int(y_max))
-            cx, cy = _centroid_xyxy(bbox)
-            best_tid: int | None = None
-            best_cost = float("inf")
-            for tid, tr in self.active.items():
-                if tid in assigned_tracks:
-                    continue
-                gap = frame_idx - int(tr["frame"])
-                if gap < 0 or gap > self.max_gap:
-                    continue
-                prev_cx, prev_cy = tr["centroid"]
-                dist = float(np.hypot(cx - prev_cx, cy - prev_cy))
-                iou = _bbox_iou_xyxy(bbox, tr["bbox"])
-                if dist > self.max_centroid_dist_px and iou < self.min_iou:
-                    continue
-                cost = (dist / self.max_centroid_dist_px) + (1.0 - iou)
-                if cost < best_cost:
-                    best_cost = cost
-                    best_tid = tid
-            if best_tid is None:
-                best_tid = self.next_stable_id
-                self.next_stable_id += 1
-            assigned_tracks.add(best_tid)
-            self.active[best_tid] = {
-                "frame": frame_idx,
-                "bbox": bbox,
-                "centroid": (cx, cy),
-            }
-            raw_id = int(det["raw_id"])
-            self.reid_links.append((frame_idx, raw_id, best_tid))
-            det_out = dict(det)
-            det_out["stable_id"] = best_tid
-            out.append(det_out)
-        return out
 
 
 def _pose_csv_headers() -> list[str]:
@@ -2570,11 +2560,7 @@ def _write_yolo_reid_links_csv(output_dir: str, links: list[tuple[int, int, int]
     if not links:
         return None
     path = os.path.join(output_dir, "yolo_reid_links.csv")
-    with open(path, "w", encoding="utf-8", newline="") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["frame", "raw_id", "stable_id"])
-        for frame, raw_id, stable_id in links:
-            writer.writerow([frame, raw_id, stable_id])
+    write_reid_links_csv(path, links, ("frame", "raw_id", "stable_id"))
     return path
 
 
@@ -5227,7 +5213,10 @@ def run_yolov26track():
                     continue
                 print(f"Pose model loaded for inline inference: {config.get('pose_model_name')}")
 
-            geo_linker = _GeometricTrackLinker(enabled=bool(config.get("stabilize_ids", True)))
+            geo_linker = GeometricFrameLinker(
+                enabled=bool(config.get("stabilize_ids", True)),
+                config=_linker_config_from_dict(config),
+            )
             pose_buffers: dict[tuple[str, int], list[list[Any]]] = {}
             all_pose_rows: list[list[Any]] = []
             pose_pad_pct = float(config.get("pose_pad_pct", 0.15))
@@ -5817,10 +5806,24 @@ def run_yolov26track():
             if merged_csv:
                 print(f"Merged detection tracking file created: {merged_csv}")
 
-            if do_pose:
+            if config.get("stabilize_ids", True) and geo_linker.reid_links:
                 links_path = _write_yolo_reid_links_csv(output_dir, geo_linker.reid_links)
                 if links_path:
                     print(f"Geometric Re-ID links saved: {links_path}")
+
+            if config.get("appearance_reid"):
+                try:
+                    from .reid_yolotrack import run_appearance_reid_on_tracking_dir
+                except ImportError:
+                    from reid_yolotrack import run_appearance_reid_on_tracking_dir  # ty: ignore
+                print("[yolov26track] Running OSNet appearance ReID (post geometric stabilize)...")
+                run_appearance_reid_on_tracking_dir(
+                    output_dir,
+                    video_file,
+                    threshold=float(config.get("appearance_reid_threshold", 0.6)),
+                )
+
+            if do_pose:
                 all_pose_path = _write_all_id_pose_csv(output_dir, all_pose_rows)
                 if all_pose_path:
                     print(f"Combined pose CSV saved: {all_pose_path}")
@@ -6202,6 +6205,114 @@ def _export_overlay_video_from_buffer(
             os.rmdir(tmp_dir)
 
 
+def _flush_stable_bbox_csvs(
+    id_rows: dict[tuple[str, int], list[tuple[int, float, float, float, float, float]]],
+    output_dir: str,
+    total_frames: int,
+) -> list[str]:
+    written: list[str] = []
+    for (label, stable_id), rows in sorted(id_rows.items()):
+        color = get_color_for_id(stable_id)
+        color_r, color_g, color_b = color[2], color[1], color[0]
+        n = total_frames
+        x_min_a = np.full(n, np.nan)
+        y_min_a = np.full(n, np.nan)
+        x_max_a = np.full(n, np.nan)
+        y_max_a = np.full(n, np.nan)
+        conf_a = np.full(n, np.nan)
+        for f_idx, x1, y1, x2, y2, c in rows:
+            x_min_a[f_idx] = x1
+            y_min_a[f_idx] = y1
+            x_max_a[f_idx] = x2
+            y_max_a[f_idx] = y2
+            conf_a[f_idx] = c
+        df = pd.DataFrame(
+            {
+                "Frame": np.arange(n),
+                "Tracker ID": np.full(n, stable_id),
+                "Label": [label] * n,
+                "X_min": x_min_a,
+                "Y_min": y_min_a,
+                "X_max": x_max_a,
+                "Y_max": y_max_a,
+                "Confidence": conf_a,
+                "Color_R": np.full(n, color_r),
+                "Color_G": np.full(n, color_g),
+                "Color_B": np.full(n, color_b),
+            }
+        )
+        out_path = os.path.join(output_dir, f"{label}_id_{stable_id:02d}.csv")
+        df.to_csv(out_path, index=False)
+        written.append(out_path)
+    return written
+
+
+def _apply_geometric_stabilize_to_buffer(
+    buffer: list[_BufferedFrame],
+    output_dir: str,
+    class_name: str,
+    names_map: dict[int, str] | None,
+    *,
+    stabilize_ids: bool,
+    linker_config: GeometricLinkerConfig | None = None,
+) -> tuple[list[str], str | None]:
+    """Apply geometric linker to buffered tracks; write stable per-ID bbox CSVs."""
+    total_frames = len(buffer)
+    geo_linker = GeometricFrameLinker(
+        enabled=stabilize_ids,
+        config=linker_config or GeometricLinkerConfig(),
+    )
+    label_to_raw2seq: dict[str, dict[int, int]] = {}
+    label_to_next: dict[str, int] = {}
+    id_rows: dict[tuple[str, int], list[tuple[int, float, float, float, float, float]]] = {}
+
+    for bf in buffer:
+        frame_dets: list[dict[str, Any]] = []
+        for det in bf.detections:
+            raw_id = int(det["raw_id"])
+            x1, y1, x2, y2 = det["xyxy"]
+            cls = det.get("cls")
+            if names_map and cls is not None and int(cls) in names_map:
+                label = str(names_map[int(cls)])
+            else:
+                label = class_name
+            if label not in label_to_raw2seq:
+                label_to_raw2seq[label] = {}
+                label_to_next[label] = 1
+            if raw_id not in label_to_raw2seq[label]:
+                label_to_raw2seq[label][raw_id] = label_to_next[label]
+                label_to_next[label] += 1
+            tracker_id = label_to_raw2seq[label][raw_id]
+            frame_dets.append(
+                {
+                    "raw_id": raw_id,
+                    "tracker_id": tracker_id,
+                    "xyxy": (int(x1), int(y1), int(x2), int(y2)),
+                    "conf": float(det["conf"]),
+                    "label": label,
+                }
+            )
+
+        if geo_linker.enabled:
+            frame_dets = geo_linker.assign_frame(bf.frame_idx, frame_dets)
+        else:
+            for d in frame_dets:
+                d["stable_id"] = d["tracker_id"]
+
+        for det in frame_dets:
+            stable_id = int(det["stable_id"])
+            x_min, y_min, x_max, y_max = det["xyxy"]
+            label = str(det["label"])
+            key = (label, stable_id)
+            id_rows.setdefault(key, []).append(
+                (bf.frame_idx, float(x_min), float(y_min), float(x_max), float(y_max), float(det["conf"]))
+            )
+
+    written = _flush_stable_bbox_csvs(id_rows, output_dir, total_frames)
+    links_path = _write_yolo_reid_links_csv(output_dir, geo_linker.reid_links)
+    return written, links_path
+
+
 def _emit_track_pose_from_buffer(
     buffer: list[_BufferedFrame],
     video_path: str,
@@ -6217,6 +6328,7 @@ def _emit_track_pose_from_buffer(
     pose_pad_pct: float,
     pose_min_roi: int,
     stabilize_ids: bool,
+    linker_config: GeometricLinkerConfig | None = None,
     fps: float,
     save_overlay: bool = True,
 ) -> dict[str, Any]:
@@ -6227,7 +6339,10 @@ def _emit_track_pose_from_buffer(
         return {}
 
     total_frames = len(buffer)
-    geo_linker = _GeometricTrackLinker(enabled=stabilize_ids)
+    geo_linker = GeometricFrameLinker(
+        enabled=stabilize_ids,
+        config=linker_config or GeometricLinkerConfig(),
+    )
     label_to_raw2seq: dict[str, dict[int, int]] = {}
     label_to_next: dict[str, int] = {}
     pose_buffers: dict[tuple[str, int], list[list[Any]]] = {}
@@ -6347,40 +6462,7 @@ def _emit_track_pose_from_buffer(
         ):
             os.remove(temp_pose_avi)
 
-    written_bbox: list[str] = []
-    for (label, stable_id), rows in sorted(id_rows.items()):
-        color = get_color_for_id(stable_id)
-        color_r, color_g, color_b = color[2], color[1], color[0]
-        n = total_frames
-        x_min_a = np.full(n, np.nan)
-        y_min_a = np.full(n, np.nan)
-        x_max_a = np.full(n, np.nan)
-        y_max_a = np.full(n, np.nan)
-        conf_a = np.full(n, np.nan)
-        for f_idx, x1, y1, x2, y2, c in rows:
-            x_min_a[f_idx] = x1
-            y_min_a[f_idx] = y1
-            x_max_a[f_idx] = x2
-            y_max_a[f_idx] = y2
-            conf_a[f_idx] = c
-        df = pd.DataFrame(
-            {
-                "Frame": np.arange(n),
-                "Tracker ID": np.full(n, stable_id),
-                "Label": [label] * n,
-                "X_min": x_min_a,
-                "Y_min": y_min_a,
-                "X_max": x_max_a,
-                "Y_max": y_max_a,
-                "Confidence": conf_a,
-                "Color_R": np.full(n, color_r),
-                "Color_G": np.full(n, color_g),
-                "Color_B": np.full(n, color_b),
-            }
-        )
-        out_path = os.path.join(output_dir, f"{label}_id_{stable_id:02d}.csv")
-        df.to_csv(out_path, index=False)
-        written_bbox.append(out_path)
+    written_bbox = _flush_stable_bbox_csvs(id_rows, output_dir, total_frames)
 
     links_path = _write_yolo_reid_links_csv(output_dir, geo_linker.reid_links)
     all_pose_path = _write_all_id_pose_csv(output_dir, all_pose_rows)
@@ -6501,7 +6583,36 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         "--stabilize-ids",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Geometric ID linker after tracker (SAM3-style, default on).",
+        help="Geometric ID linker after tracker (Hungarian, default on).",
+    )
+    parser.add_argument("--reid-max-gap", type=int, default=12, help="Max frame gap for ReID.")
+    parser.add_argument(
+        "--reid-max-dist", type=float, default=180.0, help="Max centroid distance (px)."
+    )
+    parser.add_argument("--reid-min-iou", type=float, default=0.05, help="Min IoU gate.")
+    parser.add_argument(
+        "--reid-direction-weight",
+        type=float,
+        default=0.5,
+        help="Velocity-direction penalty weight (0=off).",
+    )
+    parser.add_argument(
+        "--appearance-reid",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Run OSNet appearance ReID after geometric stabilize (reid_yolotrack).",
+    )
+    parser.add_argument(
+        "--appearance-reid-threshold",
+        type=float,
+        default=0.6,
+        help="Cosine similarity threshold for appearance ReID merge.",
+    )
+    parser.add_argument(
+        "--reid-homography",
+        type=str,
+        default=None,
+        help="Optional 3x3 homography (.npy/.npz/.csv) for pitch-plane Re-ID distances.",
     )
     args = parser.parse_args(argv)
 
@@ -6546,6 +6657,23 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         task = _guess_task_for_cli(model_path)
     model = YOLO(model_path, task=task)
 
+    tracker_arg = args.tracker
+    tracker_stem = Path(tracker_arg).stem.lower().replace(".yaml", "").replace(".yml", "")
+    if tracker_stem == "botsort":
+        models_dir = str(VAILA_MODELS_DIR)
+        tracker_arg = _build_botsort_custom_yaml(models_dir, "botsort")
+        print(f"[yolov26track] BoT-SORT with ReID + GMC: {tracker_arg}")
+
+    linker_cfg_dict: dict[str, Any] = {
+        "reid_max_gap": int(args.reid_max_gap),
+        "reid_max_dist": float(args.reid_max_dist),
+        "reid_min_iou": float(args.reid_min_iou),
+        "reid_direction_weight": float(args.reid_direction_weight),
+    }
+    if args.reid_homography:
+        linker_cfg_dict["reid_homography_path"] = args.reid_homography
+    linker_config = _linker_config_from_dict(linker_cfg_dict)
+
     track_kwargs: dict[str, Any] = {
         "source": source,
         "conf": args.conf,
@@ -6555,7 +6683,7 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         "save": False,
         "stream": True,
         "persist": True,
-        "tracker": args.tracker,
+        "tracker": tracker_arg,
         "verbose": False,
     }
     if args.imgsz:
@@ -6588,6 +6716,7 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         names_map = None
 
     pose_outputs: dict[str, Any] = {}
+    links_path: str | None = None
     if args.pose:
         _track_banner(
             "Inline track+pose (upscaled ROI)",
@@ -6607,13 +6736,37 @@ def run_track_cli(argv: list[str] | None = None) -> int:
             pose_pad_pct=float(args.pose_pad_pct),
             pose_min_roi=int(args.pose_min_roi),
             stabilize_ids=bool(args.stabilize_ids),
+            linker_config=linker_config,
             fps=float(fps),
             save_overlay=bool(args.save_video),
         )
         written = pose_outputs.get("bbox_csvs") or []
+        links_path = pose_outputs.get("yolo_reid_links")
+    elif args.stabilize_ids:
+        _track_banner("Geometric Re-ID stabilize", f"frames buffered={len(buffer)}")
+        written, links_path = _apply_geometric_stabilize_to_buffer(
+            buffer,
+            output_dir,
+            args.class_name,
+            names_map,
+            stabilize_ids=True,
+            linker_config=linker_config,
+        )
     else:
         _track_banner("Writing per-ID CSVs", f"frames buffered={len(buffer)}")
         written = _write_per_id_csvs_from_buffer(buffer, output_dir, args.class_name, names_map)
+
+    if args.appearance_reid:
+        try:
+            from .reid_yolotrack import run_appearance_reid_on_tracking_dir
+        except ImportError:
+            from reid_yolotrack import run_appearance_reid_on_tracking_dir  # ty: ignore
+        _track_banner("OSNet appearance ReID", f"threshold={args.appearance_reid_threshold}")
+        run_appearance_reid_on_tracking_dir(
+            output_dir,
+            source,
+            threshold=float(args.appearance_reid_threshold),
+        )
 
     combined = create_combined_detection_csv(output_dir)
 
@@ -6639,8 +6792,11 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         print(f"[yolov26track] overlay video (.mp4): {overlay}")
     if pose_outputs.get("all_id_pose"):
         print(f"[yolov26track] combined pose CSV: {pose_outputs['all_id_pose']}")
-    if pose_outputs.get("yolo_reid_links"):
-        print(f"[yolov26track] geometric Re-ID links: {pose_outputs['yolo_reid_links']}")
+    if pose_outputs.get("yolo_reid_links") or links_path:
+        print(
+            f"[yolov26track] geometric Re-ID links: "
+            f"{pose_outputs.get('yolo_reid_links') or links_path}"
+        )
     if pose_outputs.get("track_pose_overlay"):
         print(f"[yolov26track] track+pose overlay: {pose_outputs['track_pose_overlay']}")
     for p in pose_outputs.get("per_id_pose") or []:
