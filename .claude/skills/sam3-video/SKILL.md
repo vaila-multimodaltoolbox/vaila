@@ -148,6 +148,9 @@ Text prompt is open-vocabulary (no fixed class list). `person` is only the defau
 | `--max-frames` | — | auto | VRAM frame cap; `0` = full clip |
 | `--no-overlay` | — | — | Skip overlay MP4 |
 | `--no-png` | — | — | Skip mask PNGs |
+| `--keep-mask-png` / `--keep-masks` | — | — | Keep masks/ and sam_masks_manifest.csv after exports finish (by default they are deleted to save disk space) |
+| `--delete-mask-png` | — | — | Delete masks/ and sam_masks_manifest.csv after exports finish (this is now the default behavior) |
+| `--keep-masks` | — | — | Alias for --keep-mask-png |
 | `--frame-by-frame` | — | — | Per-frame fallback (no temporal tracking) |
 | `--download-weights` | — | — | Download from HF |
 | `--open-help` | — | — | Open help in browser |
@@ -200,7 +203,7 @@ If you need to revisit this with full context, see the agent transcript: [SAM3 O
 When the coordinator falls back to `_process_video_chunked`, each chunk runs
 its **own** SAM3 session and therefore allocates **chunk-local object IDs**
 starting from 1. Without stitching, the merged output would assign random IDs
-to the same person across chunks. v0.3.54 fixes this with a 5-step pipeline
+to the same person across chunks. v0.3.54 fixes this with a 6-step pipeline
 implemented entirely in `vaila/vaila_sam.py`:
 
 1. **Sliding window overlap** — `_split_video_into_chunks(..., overlap_frames=2)`
@@ -209,14 +212,18 @@ implemented entirely in `vaila/vaila_sam.py`:
 2. **Feature caching** — for each chunk we read its `sam_tracks.csv` and
    collect, per local-id, a list of `(global_frame, bbox, centroid)` rows for
    the overlap frames.
-3. **Graph-based association** — at every boundary N → N+1, candidate
+3. **Temporary PNG preservation** — to render the overlay video in chunked mode,
+   the coordinator needs the PNG masks. If keeping masks is disabled, they are still
+   written temporarily (by invoking chunk subprocesses with `--keep-mask-png` to prevent
+   premature deletion), merged, and deleted by the coordinator at the end of the run.
+4. **Graph-based association** — at every boundary N → N+1, candidate
    chunk-N+1 *local* IDs (with detections in the overlap zone) form one side
    of a bipartite graph; previously-assigned chunk-N *global* IDs form the
    other.
-4. **Cost matrix** — per shared frame the score is
+5. **Cost matrix** — per shared frame the score is
    `(1 − IoU) + min(1, dist / max_centroid_dist_px)` averaged across overlap
    frames. Gates: `min_iou ≥ 0.05` **or** `mean_centroid_dist ≤ 180 px`.
-5. **Optimal matching** — solved by `_assignment_min_cost(cost_matrix)` which
+6. **Optimal matching** — solved by `_assignment_min_cost(cost_matrix)` which
    uses `scipy.optimize.linear_sum_assignment` (Hungarian) when SciPy is
    available, with a greedy minimum-cost fallback otherwise. Matched local IDs
    inherit the persistent global ID from chunk N; unmatched IDs get a fresh
@@ -292,7 +299,7 @@ If you need to revisit this with full context, see the agent transcripts: [SAM3 
 ```
 output/processed_sam_YYYYMMDD_HHMMSS/
   video_name/
-    masks/                          PNG per frame (unless --no-png)
+    masks/                          PNG per frame (only kept if --keep-mask-png or checked in GUI)
     <video_stem>_sam_overlay.mp4    coloured mask overlay (unless --no-overlay)
     sam_frames_meta.csv             per-frame metadata (normalised bbox)
     sam_tracks.csv                  long bbox+area+centroid per (frame, obj_id)

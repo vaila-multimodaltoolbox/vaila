@@ -458,3 +458,21 @@ def test_merge_chunk_outputs_links_ids_across_overlap(tmp_path: Path) -> None:
     assert len(mask_files) == 6
     assert all(path.name.endswith("_obj_0.png") for path in mask_files)
     assert (final_out / "test_sam_overlay.mp4").is_file()
+
+
+def test_delete_mask_artifacts(tmp_path):
+    from vaila.vaila_sam import _delete_mask_artifacts
+    masks_dir = tmp_path / "masks"
+    masks_dir.mkdir()
+    (masks_dir / "frame_000000_obj_1.png").touch()
+    manifest_csv = tmp_path / "sam_masks_manifest.csv"
+    manifest_csv.touch()
+
+    assert masks_dir.is_dir()
+    assert manifest_csv.is_file()
+
+    _delete_mask_artifacts(tmp_path)
+
+    assert not masks_dir.exists()
+    assert not manifest_csv.exists()
+

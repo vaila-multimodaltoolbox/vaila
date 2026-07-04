@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.55
-- **Updated:** 15 June 2026
+- **Version:** 0.3.68
+- **Updated:** 04 July 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -231,7 +231,8 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 | `--no-overlay` | — | flag | — | Skip overlay MP4 output |
 | `--no-png` | — | flag | — | Skip mask PNG output |
 | `--tracks-only` | — | flag | — | Fast profile: skip overlay, PNG masks and contours; write bbox/centroid CSV only |
-| `--delete-mask-png` | — | flag | — | Delete bulky `masks/` and `sam_masks_manifest.csv` after exports finish |
+| `--delete-mask-png` | — | flag | — | Delete bulky `masks/` and `sam_masks_manifest.csv` after exports finish (this is now the default behavior) |
+| `--keep-mask-png` / `--keep-masks` | — | flag | — | Keep `masks/` and `sam_masks_manifest.csv` after exports finish (by default they are deleted to save disk space) |
 | `--stabilize-ids` | GUI: `ReID/Stabilize SAM IDs + final CSVs` | flag | off in CLI; on by default in GUI | Rewrite SAM object IDs by short-term IoU/centroid continuity after export; enables `sam_tracks.csv` and, when no point mode is selected, automatically writes `sam_points.csv`/`sam_id_map.csv` plus `sam_points_georeid.csv`/`sam_id_map_georeid.csv` with mode `all` |
 | `--[no-]overlay-rich` | — | bool | `true` | Enrich overlay with bbox/ID/score/contours (on top of the colored masks) |
 | `--[no-]draw-contour` | — | bool | `true` | Draw mask contours on the overlay |
