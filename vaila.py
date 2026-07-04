@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 01 July 2026
-Version: 0.3.67
+Update Date: 04 July 2026
+Version: 0.3.68
 
 Example of usage:
 uv run vaila.py
