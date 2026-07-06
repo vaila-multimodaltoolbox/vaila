@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import cv2
@@ -109,6 +110,47 @@ class TestDiscoverAndRead:
         d.mkdir()
         with pytest.raises(FileNotFoundError):
             discover_sam_run(d)
+
+    def test_discover_finds_avi_overlay(self, tmp_path: Path) -> None:
+        sam_dir = _build_synthetic_run(tmp_path)
+        mp4 = sam_dir / "BRA_KOR_test_sam_overlay.mp4"
+        avi = sam_dir / "BRA_KOR_test_sam_overlay.avi"
+        avi.write_bytes(mp4.read_bytes())
+        mp4.unlink()
+        art = discover_sam_run(sam_dir)
+        assert art.overlay_mp4 == avi
+        assert frame_size(art) == (W, H)
+
+    def test_frame_size_from_contours_json(self, tmp_path: Path) -> None:
+        sam_dir = tmp_path / "chunked_merge"
+        sam_dir.mkdir()
+        header = "frame,box_x_0,box_y_0,box_w_0,box_h_0,prob_0"
+        (sam_dir / "sam_frames_meta.csv").write_text(
+            header + "\n0,0.100000,0.200000,0.300000,0.400000,0.900000\n",
+            encoding="utf-8",
+        )
+        (sam_dir / "sam_contours.json").write_text(
+            json.dumps({"width": W, "height": H, "frames": []}) + "\n",
+            encoding="utf-8",
+        )
+        art = discover_sam_run(sam_dir)
+        assert frame_size(art) == (W, H)
+
+    def test_frame_size_from_readme_source_key(self, tmp_path: Path) -> None:
+        src = tmp_path / "source.mp4"
+        _write_overlay_mp4(src, n_frames=2)
+        sam_dir = tmp_path / "chunked_readme"
+        sam_dir.mkdir()
+        (sam_dir / "README_sam.txt").write_text(f"source={src}\n", encoding="utf-8")
+        (sam_dir / "sam_frames_meta.csv").write_text(
+            "frame,box_x_3,box_y_3,box_w_3,box_h_3,prob_3\n"
+            "0,0.100000,0.200000,0.300000,0.400000,0.900000\n",
+            encoding="utf-8",
+        )
+        art = discover_sam_run(sam_dir)
+        assert frame_size(art) == (W, H)
+        out = extract_points_from_sam_run(sam_dir, mode="foot")
+        assert out.is_file()
 
 
 class TestMaskCentroid:
