@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.69
-- **Updated:** 04 July 2026
+- **Version:** 0.3.71
+- **Updated:** 05 July 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -145,58 +145,189 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run
 - If SAM3 exhausts its in-process OOM retry ladder (frame caps and long-edge caps), the per-video subprocess exits and the **coordinator process** automatically runs the **chunked divide-and-conquer** fallback from a clean GPU state.
 - Chunked fallback uses a conservative chunk size (≤48 frames), shares 2 overlap frames between adjacent chunks, links chunk-local IDs by same-frame IoU/centroid matching, drops duplicate overlap frames, and regenerates the final overlay from remapped masks so displayed IDs match the final CSVs.
 
+---
+
+## Re-ID and stable track IDs (CLI)
+
+SAM 3 assigns **fresh object IDs inside each temporal chunk**. For sports broadcasts and long clips you usually need **one consistent ID per player** across the full video. vailá applies Re-ID in **two layers** — use both for long chunked runs.
+
+### Layer 1 — Cross-chunk linking (automatic)
+
+When the coordinator falls back to **chunked divide-and-conquer** (OOM, low-FPS guard, or very long clips):
+
+| What | Detail |
+|------|--------|
+| When | Automatic during `_merge_chunk_outputs` — no extra flag |
+| Overlap | `--overlap-frames N` (default **2**) shared frames between adjacent chunks |
+| Algorithm | Hungarian assignment on IoU + centroid distance (+ mask IoU when PNGs exist) |
+| Output | Merged `sam_tracks.csv`, `sam_frames_meta.csv`, overlay with **global** IDs |
+
+Tune overlap for fast motion or camera cuts:
+
+```bash
+uv run vaila/vaila_sam.py -i long_match.mp4 -o out/ -t player \
+  --max-frames 128 --max-input-long-edge 1280 \
+  --overlap-frames 3
+```
+
+### Layer 2 — Geometric ID stabilization (`--stabilize-ids`)
+
+After SAM export (single-pass **or** merged chunk), optionally **rewrite IDs** for short-gap continuity (occlusions, SAM flicker, ID swaps within a chunk):
+
+| What | Detail |
+|------|--------|
+| Flag | `--stabilize-ids` (CLI: **off** by default; GUI: **on** by default — checkbox *ReID/Stabilize SAM IDs + final CSVs*) |
+| Engine | `GeometricFrameLinker` from `vaila/geometric_reid.py` (Hungarian + velocity-direction penalty) |
+| Requires | `sam_tracks.csv` (auto-enabled; forces `--save-tracks-csv` if missing) |
+| Rewrites | `sam_tracks.csv`, `sam_frames_meta.csv` |
+| Extra file | `sam_reid_links.csv` — columns `frame,old_obj_id,obj_id` (audit trail) |
+| Post-process | When `sam_reid_links.csv` exists, batch post-process also writes `sam_points_georeid.csv` and `sam_id_map_georeid.csv` (aliases for YOLOTrain / getpixelvideo) |
+
+**Recommended CLI for tracking workflows** (short clip, single athlete, or lab test):
+
+```bash
+uv run vaila/vaila_sam.py \
+  -i /path/to/clip.mp4 \
+  -o /path/to/output_parent/ \
+  -t person \
+  --stabilize-ids \
+  --postprocess-points all
+```
+
+**Long broadcast with chunking + Re-ID** (your ~6k-frame case):
+
+```bash
+uv run vaila/vaila_sam.py \
+  -i /path/to/long_match.mp4 \
+  -o /path/to/output_parent/ \
+  -t person \
+  --max-frames 128 \
+  --max-input-long-edge 1280 \
+  --stabilize-ids \
+  --overlap-frames 2 \
+  --postprocess-points all
+```
+
+Log lines to expect:
+
+```text
+[SAM3-CHUNK] Merging 147/147 chunk results...
+[SAM3-ReID] geometric ID stabilization: 42 track(s) -> sam_reid_links.csv
+[postprocess] wrote 1 sam_points.csv + 5 vailá anchor CSV(s).
+```
+
+### Re-ID output files (quick reference)
+
+| File | Role |
+|------|------|
+| `sam_tracks.csv` | Long format: bbox + centroids per frame/object (pixels) — **load in getpixelvideo** |
+| `sam_bbox_tracks.csv` | Hardlink/copy alias of `sam_tracks.csv` (easier to spot) |
+| `sam_reid_links.csv` | Frame-level ID remap log (only with `--stabilize-ids`) |
+| `sam_points.csv` | Wide marker CSV for getpixelvideo / rec2d (foot canonical by default) |
+| `sam_id_map.csv` | Maps `pN` columns → SAM `obj_id` |
+| `sam_points_georeid.csv` | Copy of `sam_points.csv` when Re-ID ran (YOLOTrain convention) |
+| `sam_vaila_bottom.csv` | Simple `frame,x1,y1,…` foot anchors — direct rec2d / field homography |
+
+### Downstream: load tracks in getpixelvideo
+
+1. Open the video in **getpixelvideo** (Frame C).
+2. **Load Tracking CSV** → pick `sam_tracks.csv` or `sam_bbox_tracks.csv`.
+3. When prompted for anchor: `2` = bottom (foot), `1` = center, etc.
+4. **Save** writes editable markers; or keep overlay-only with Enter.
+
+For stabilized IDs prefer `sam_points.csv` or `sam_vaila_bottom.csv` after `--postprocess-points all`.
+
+### Re-run post-process only (no GPU)
+
+If SAM finished but post-process failed (e.g. older build + `.avi` overlay):
+
+```bash
+uv run vaila/sam_postprocess.py \
+  /path/to/processed_sam_…/video_stem \
+  --mode all
+```
+
+Writes `sam_points.csv`, `sam_id_map.csv`, and five `sam_vaila_*.csv` files.
+
+---
+
 ### Common errors (CLI **and** GUI)
 
 | Symptom in the terminal / GUI log | Most likely cause | Fix |
 |-----------------------------------|-------------------|-----|
-| `Could not open VideoWriter for SAM3 subsample` in `FAILED_sam.txt` | OpenCV failed to create the **temporal subsample** clip (`_sam3_subsample_input.*`) before SAM3 inference — common on long clips (e.g. 30k+ frames) when `max_frames` auto-caps force subsampling. Older builds used only `mp4v` (no fallback). | Delete the failed per-video output folder and re-run. v0.3.69+ tries **MJPG → XVID → mp4v** automatically. For broadcast-length sources also lower `--max-frames` (256–512) to reduce subsample size and host-RAM risk. |
+| `Could not open VideoWriter for SAM3 subsample` in `FAILED_sam.txt` | OpenCV still could not create the temporal subsample clip (`_sam3_subsample_input.*`) after the mp4v → MJPG/XVID → ffmpeg libx264 pipe fallback. v0.3.71+ skips broken `h264_v4l2m2m`/`avc1` on ARM boards; v0.3.69+ routes extreme low-FPS subsamples to chunked fallback before opening the writer. | Delete the failed per-video output folder and re-run. Ensure `ffmpeg` is on `PATH` for the pipe fallback. For normal long broadcasts prefer auto `max_frames` or `--max-frames 128`/`256`; if the writer failure repeats, re-encode the source video. |
+| `[h264_v4l2m2m] Could not find a valid device` (stderr noise) | Harmless on many Linux SBCs when OpenCV probes the hardware encoder before falling back to `mp4v`. v0.3.71 tries software codecs first and uses ffmpeg libx264 when OpenCV fails entirely. CSV/JSON exports continue even if overlay MP4 stitching fails. | Ignore if the run completes. Install `ffmpeg` if overlay MP4 is missing. Chunked runs now auto-generate `sam_points.csv` + `sam_vaila_*.csv` after merge. |
 | `ERROR on <video>: subprocess killed by SIGKILL (exit=-9). Likely the Linux OOM killer (SYSTEM RAM, not VRAM)…` | **Host RAM** OOM killer — the temporal subsample plus SAM3's CPU-side video tensor demanded more system RAM than the OS could provide. Long broadcast clips (16 k+ frames @ 1080 p) easily peak >30 GiB on host RAM. | Lower `--max-frames` (try 256 → 128 → 64), add `--max-input-long-edge 1280`, close other heavy apps, and re-run. Confirm with `dmesg \| tail` / `journalctl -k -n 50`. |
 | `subprocess killed by SIGSEGV (exit=-11)` | Native segfault inside CUDA / Torch / OpenCV. | Check `nvidia-smi`, update GPU driver, rerun with `--dry-run` / `--preflight` to isolate. |
 | `subprocess killed by SIGABRT (exit=-6)` | C++ abort from Torch / Triton destructor running on the wrong thread. | Reproduce from the CLI (no Tk), attach `gdb` to the child if persistent. |
 | `subprocess killed by SIGBUS (exit=-7)` | Corrupted video file or broken mmap. | Re-encode the input with `ffmpeg -i in.mp4 -c:v libx264 -c:a copy out.mp4`. |
 | `CUDA out of memory` (Python exception, GPU side) | VRAM OOM during inference. | Lower `--max-input-long-edge` (1280/960), or add `--frame-by-frame` (loses temporal tracking). |
-| `subprocess exit=7 (EXIT_NEEDS_CHUNKING)` | Per-video child exhausted its OOM ladder. | The coordinator already retries with the **chunked divide-and-conquer** fallback automatically — wait for the next log line. |
+| `SAM3_NEEDS_CHUNKING` or `subprocess exit=7 (EXIT_NEEDS_CHUNKING)` | Per-video child exhausted its OOM ladder, or an extreme temporal subsample would require an impractically low temp-video FPS (for example `max_frames=1` on a long broadcast). | The coordinator already retries with the **chunked divide-and-conquer** fallback automatically. For normal long clips prefer auto `max_frames` or `--max-frames 128`/`256`; keep `1` for short diagnostics only. |
+| `[sam_postprocess] FAILED … Cannot determine frame size` after a **chunked** run that wrote `*_sam_overlay.avi` | Batch post-process only looked for `*_sam_overlay.mp4` and `source_original=` in `README_sam.txt`; chunked merges often emit MJPG `.avi` overlays and `source=` in the README. v0.3.69+ also reads AVI overlays, `sam_contours.json` width/height, and `source=` / `source_original=`. | Re-run post-process only (no SAM re-inference): `uv run vaila/sam_postprocess.py -i /path/to/processed_sam_…/video_stem --mode all`. Or upgrade and re-run the GUI — the fix applies on the next batch. |
 | GUI dialog opens but the SAM run fails immediately with `[GUI] subprocess exited with code 0` and `Failed (1/1)` | Worker subprocess died **after** SAM3 model load but before producing any output (frequently SIGKILL by the OOM killer). The GUI now also prints `[GUI] subprocess killed by SIGKILL …` and the path to the full log. | Same as `SIGKILL` row above — lower `--max-frames`. |
 
 > **Pro tip:** the CLI now prints a runtime banner with **GPU VRAM** and **Host RAM** numbers at startup; combine that with `--print-examples` to pick the right `--max-frames` for your machine.
 
-### CLI cheat sheet (copy/paste recipes)
+### CLI workflows by scenario
+
+Pick the recipe that matches your clip. All paths assume CUDA + `uv sync --extra sam`.
+
+| Scenario | Goal | Key flags |
+|----------|------|-----------|
+| **A — Lab / short clip** | Quick segmentation + markers | auto `max_frames`, `--postprocess-points all` |
+| **B — Single athlete** | Stable ID on a sprint/drill (~100 frames) | `--stabilize-ids` |
+| **C — Long broadcast** | Full match without host-RAM OOM | `--max-frames 128` + `--max-input-long-edge 1280` |
+| **D — Long + Re-ID** | Consistent player IDs after chunking | C + `--stabilize-ids` + `--overlap-frames 2` |
+| **E — Batch folder** | Many clips, isolated subprocess each | `-i clips_dir/` (isolation on by default) |
+| **F — Low VRAM (8 GiB)** | Never OOM; per-frame masks only | `--frame-by-frame --no-overlay` |
+| **G — Tracks-only / rec2d** | CSV bboxes, minimal disk | `--tracks-only --postprocess-points foot` |
+| **H — Post-process repair** | SAM done; CSVs missing | `uv run vaila/sam_postprocess.py …` |
 
 ```bash
-# Print this sheet again at any time (no GPU work):
+# Print all recipes again (no GPU):
 uv run vaila/vaila_sam.py --print-examples
 
-# Open this help page in the default browser:
+# Open this help page:
 uv run vaila/vaila_sam.py --open-help
 
-# Dry-run / smoke (effective settings, detected weights, OOM ladder):
-uv run vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person --dry-run
+# --- A: Short clip, 24 GiB GPU (auto caps) ---
+uv run vaila/vaila_sam.py -i clip.mp4 -o out_parent/ -t player \
+  --postprocess-points all
 
-# Short clip, 24 GiB GPU (auto everything):
-uv run vaila/vaila_sam.py -i path/to/video.mp4 -o out_parent/ -t player
+# --- B: Single athlete / drill (Re-ID on) ---
+uv run vaila/vaila_sam.py -i sprint.mp4 -o out_parent/ -t person \
+  --stabilize-ids --postprocess-points all
 
-# Long broadcast clip (~15 k+ frames) — avoid host-RAM OOM (exit=-9):
-uv run vaila/vaila_sam.py \
-  -i path/to/long_match.mp4 -o out_parent/ -t player \
+# --- C: Long broadcast (~15k+ frames) — avoid SIGKILL / host-RAM OOM ---
+uv run vaila/vaila_sam.py -i long_match.mp4 -o out_parent/ -t player \
   --max-frames 128 --max-input-long-edge 1280 --postprocess-points all
 
-# Batch over a directory of clips (subprocess-per-video isolation is ON by default):
-uv run vaila/vaila_sam.py \
-  -i path/to/clips_dir/ -o out_parent/ -t player \
-  --max-frames 256 --postprocess-points foot
+# --- D: Long broadcast + stable IDs (chunk merge + geometric Re-ID) ---
+uv run vaila/vaila_sam.py -i long_match.mp4 -o out_parent/ -t person \
+  --max-frames 128 --max-input-long-edge 1280 \
+  --stabilize-ids --overlap-frames 2 --postprocess-points all
 
-# Low-VRAM GPU (e.g. 8 GiB) — never OOM, no temporal tracking:
-uv run vaila/vaila_sam.py \
-  -i path/to/video.mp4 -o out_parent/ -t person \
+# --- E: Batch directory (one subprocess per video by default) ---
+uv run vaila/vaila_sam.py -i clips_dir/ -o out_parent/ -t player \
+  --max-frames 256 --stabilize-ids --postprocess-points foot
+
+# --- F: Low-VRAM GPU — no temporal tracking ---
+uv run vaila/vaila_sam.py -i video.mp4 -o out_parent/ -t person \
   --frame-by-frame --no-png --no-overlay
 
-# Use a specific checkpoint or the SAM 3.1 Multiplex weights:
-uv run vaila/vaila_sam.py \
-  -i video.mp4 -o out_parent/ -t player \
-  -w vaila/models/sam3/sam3.1_multiplex.pt
+# --- G: Fast bbox export for rec2d / homography (no overlay video) ---
+uv run vaila/vaila_sam.py -i match.mp4 -o out_parent/ -t player \
+  --tracks-only --stabilize-ids --postprocess-points foot
 
-# Preflight scan only (writes SAM3_PREFLIGHT.csv):
-uv run vaila/vaila_sam.py -i path/to/clips_dir/ --preflight -o out_parent/
+# --- H: Repair post-process on an existing SAM run (no re-inference) ---
+uv run vaila/sam_postprocess.py out_parent/processed_sam_…/video_stem --mode all
+
+# --- Utilities ---
+uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t person --dry-run   # smoke / caps
+uv run vaila/vaila_sam.py -i clips_dir/ --preflight -o out/          # SAM3_PREFLIGHT.csv
+uv run vaila/vaila_sam.py --download-weights                        # HF sam3.pt
+uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t player \
+  -w vaila/models/sam3/sam3.1_multiplex.pt                           # SAM 3.1 weights
 ```
 
 > Equivalent GUI: launch `vaila.py`, **Frame B → Video AI tools → SAM (Segment Anything)**, fill **Input**, **Output**, **Text prompt**, **Max frames** and click **Run**. The progress window now mirrors every CLI banner and prints the same exit-code diagnosis.
@@ -235,7 +366,9 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 | `--tracks-only` | — | flag | — | Fast profile: skip overlay, PNG masks and contours; write bbox/centroid CSV only |
 | `--delete-mask-png` | — | flag | — | Delete bulky `masks/` and `sam_masks_manifest.csv` after exports finish (this is now the default behavior) |
 | `--keep-mask-png` / `--keep-masks` | — | flag | — | Keep `masks/` and `sam_masks_manifest.csv` after exports finish (by default they are deleted to save disk space) |
-| `--stabilize-ids` | GUI: `ReID/Stabilize SAM IDs + final CSVs` | flag | off in CLI; on by default in GUI | Rewrite SAM object IDs by short-term IoU/centroid continuity after export; enables `sam_tracks.csv` and, when no point mode is selected, automatically writes `sam_points.csv`/`sam_id_map.csv` plus `sam_points_georeid.csv`/`sam_id_map_georeid.csv` with mode `all` |
+| `--stabilize-ids` | GUI: `ReID/Stabilize SAM IDs + final CSVs` | flag | off in CLI; **on** in GUI | After export, rewrite SAM IDs with geometric continuity (IoU/centroid/velocity). Writes `sam_reid_links.csv`, updates `sam_tracks.csv` + `sam_frames_meta.csv`. Post-process then emits `sam_points_georeid.csv` aliases. **Recommended for tracking / rec2d workflows.** |
+| `--overlap-frames` | — | int | `2` | Shared frames between adjacent chunks for cross-chunk ID linking (chunked fallback only). Increase to `3`–`4` for fast motion. |
+| `--chunk-size` | — | int | auto (≤48) | Chunk length for divide-and-conquer fallback. Larger = fewer model reloads but more VRAM per chunk. |
 | `--[no-]overlay-rich` | — | bool | `true` | Enrich overlay with bbox/ID/score/contours (on top of the colored masks) |
 | `--[no-]draw-contour` | — | bool | `true` | Draw mask contours on the overlay |
 | `--[no-]draw-box` | — | bool | `true` | Draw bounding boxes on the overlay |
@@ -395,8 +528,7 @@ Modes:
 Notes:
 
 - Missing detections are written as **empty cells** (CSV blanks).
-- The coordinates are computed in **original video pixels**, using the overlay MP4 (or masks) to
-  recover frame width/height.
+- The coordinates are computed in **original video pixels**, using the overlay video (MP4 or AVI), `sam_contours.json`, masks, or README `source`/`source_original` to recover frame width/height.
 
 #### `sam_id_map.csv` schema
 
@@ -505,7 +637,7 @@ In the main vailá window, open it via:
 1. **`SamVideoDialog`** — configuration modal:
     - `Input (dir or file)` + `Output folder` + `sam3.pt / weights (-w)` browsers.
     - **Text prompt combobox** with the presets listed above (editable).
-    - `Prompt frame index`, `Save overlay MP4`, `Save mask PNGs`, optional frame-by-frame CUDA fallback.
+    - `Prompt frame index`, `Save overlay MP4`, `Save mask PNGs`, **ReID/Stabilize SAM IDs** (on by default), optional frame-by-frame CUDA fallback.
     - Buttons: `Run`, `Cancel`, **`Help`** (opens this page in your default browser).
 
 2. **`SamBatchProgress`** — per-video status window (batch only):
@@ -527,6 +659,7 @@ In the main vailá window, open it via:
 ```
 
 - When **Post-process points** is `all` (default), `sam_points.csv`, `sam_id_map.csv`, and the five `sam_vaila_*.csv` anchor files are written automatically at the end of the batch — look for `[postprocess]` lines in the log.
+- **ReID/Stabilize SAM IDs** is checked by default in the GUI (equivalent to `--stabilize-ids` on the CLI). Uncheck only for quick mask previews.
 - **Calibrate field (DLT2D)** enables after the batch finishes (optional soccer-field homography).
 
 ---
@@ -878,7 +1011,8 @@ Place a short MP4 at `tests/SAM/test1000.mp4` for smoke tests (see `tests/SAM/RE
 
 ## Version History
 
-- **v0.3.69 (04 July 2026):** `--postprocess-points` default changed from `none` to `all` — `sam_points.csv` + `sam_id_map.csv` are now generated automatically after every batch/single-video run (CLI and GUI subprocess; no manual button). Five new **vailá-style anchor CSVs** (`sam_vaila_center.csv`, `sam_vaila_bottom.csv`, `sam_vaila_top.csv`, `sam_vaila_left.csv`, `sam_vaila_right.csv`) with simple `frame,x1,y1,...,xN,yN` format are written alongside `sam_points.csv`. GUI combobox default is `all`; progress log shows `[postprocess]` lines when the batch finishes.
+- **v0.3.70 (05 July 2026):** Set H.264/H.265 MP4 formats as the default output videos, keeping AVI only as a legacy fallback option to save disk space.
+- **v0.3.69 (05 July 2026):** Help expanded with **Re-ID CLI workflows** (`--stabilize-ids`, `--overlap-frames`, scenario recipes A–H), chunked post-process repair via `sam_postprocess.py`, and AVI overlay / `source=` README support in post-process frame-size detection.
 - **v0.3.47 (05 June 2026):** Subprocess-exit diagnostics (SIGKILL/SIGSEGV/SIGABRT/SIGBUS/EXIT_NEEDS_CHUNKING shown by name + actionable hint) in both CLI batch and GUI poller; runtime banner at startup (VRAM, host RAM, effective config, video queue); host-RAM heads-up for long broadcast clips; new `--print-examples` CLI flag + argparse epilog with copy/paste recipes; updated help with **Common errors** matrix.
 - **v0.3.43 (07 May 2026):** Fix GUI batch output directory — GUI now passes exact `processed_sam_...` folder to subprocess so no empty sibling folder is created.
 - **v0.0.4 (April 2026):** `fifa dlt-export` / `vaila.fifa_to_dlt` — FIFA `cameras/*.npz` → per-frame `.dlt2d` / `.dlt3d` for `rec2d.py` / `rec3d.py` (moving broadcast camera); help section **Full broadcast pipeline**; GUI button **FIFA cams→DLT**
@@ -905,7 +1039,7 @@ the script and will ship in a follow-up.
 
 ---
 
-Generated: July 04, 2026
+Generated: July 05, 2026
 Part of vailá - Multimodal Toolbox
 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
 Contact: paulosantiago@usp.br

@@ -5,7 +5,7 @@ Reads the artifacts written by :mod:`vaila.vaila_sam` for each video:
     {sam_dir}/sam_frames_meta.csv      # wide table with normalized bbox + prob per obj_id
     {sam_dir}/masks/frame_{f:06d}_obj_{oid}.png   # optional binary mask in original pixel space
     {sam_dir}/sam_tracks.csv           # optional bbox + mask centroid in pixels
-    {sam_dir}/{stem}_sam_overlay.mp4   # optional, used only to read frame width/height
+    {sam_dir}/{stem}_sam_overlay.mp4   # optional overlay (``.avi`` MJPG fallback too)
 
 and writes:
 
@@ -36,8 +36,8 @@ The bbox in ``sam_frames_meta.csv`` is normalized (fractions of W and H, see
 original video resolution. In fast SAM runs without mask PNGs, mask-centroid
 columns are read from ``sam_tracks.csv`` when available.
 
-Update Date: 04 July 2026
-Version: 0.3.69
+Update Date: 05 July 2026
+Version: 0.3.70
 
 Author: Paulo R. P. Santiago - vaila project
 Created: 19 April 2026
@@ -46,6 +46,7 @@ License: AGPL-3.0-or-later
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,6 +84,15 @@ class SamRunArtifacts:
     stem: str
 
 
+def _discover_sam_overlay(sam_dir: Path) -> Path | None:
+    """Return the first overlay video (``.mp4`` or MJPG ``.avi`` fallback)."""
+    for pattern in ("*_sam_overlay.mp4", "*_sam_overlay.avi"):
+        matches = sorted(sam_dir.glob(pattern))
+        if matches:
+            return matches[0]
+    return None
+
+
 def discover_sam_run(sam_dir: Path) -> SamRunArtifacts:
     """Locate canonical SAM3 artifacts inside a per-video output directory."""
     sam_dir = Path(sam_dir)
@@ -97,8 +107,7 @@ def discover_sam_run(sam_dir: Path) -> SamRunArtifacts:
     if not masks_dir.is_dir():
         masks_dir = sam_dir
 
-    overlays = sorted(sam_dir.glob("*_sam_overlay.mp4"))
-    overlay = overlays[0] if overlays else None
+    overlay = _discover_sam_overlay(sam_dir)
     tracks = sam_dir / "sam_tracks.csv"
     readme = sam_dir / "README_sam.txt"
     stem = overlay.stem.removesuffix("_sam_overlay") if overlay else sam_dir.name
@@ -146,6 +155,38 @@ def _frame_size_from_video(path_text: str | None) -> tuple[int, int] | None:
     return None
 
 
+def _frame_size_from_contours(sam_dir: Path) -> tuple[int, int] | None:
+    """Read width/height from ``sam_contours.json`` when present (chunked merge)."""
+    for name in ("sam_contours.json", "sam_contours.json.gz"):
+        path = sam_dir / name
+        if not path.is_file():
+            continue
+        try:
+            if path.suffix == ".gz":
+                import gzip
+
+                with gzip.open(path, "rt", encoding="utf-8") as fh:
+                    payload = json.load(fh)
+            else:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            w = int(payload.get("width") or 0)
+            h = int(payload.get("height") or 0)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if w > 0 and h > 0:
+            return w, h
+    return None
+
+
+def _frame_size_from_readme(art: SamRunArtifacts) -> tuple[int, int] | None:
+    """Chunked runs use ``source=``; single-pass runs use ``source_original=``."""
+    for key in ("source_original", "source"):
+        size = _frame_size_from_video(_read_readme_value(art.readme_txt, key))
+        if size is not None:
+            return size
+    return None
+
+
 def _read_track_centroids(art: SamRunArtifacts) -> dict[tuple[int, int], tuple[float, float]]:
     """Return {(frame, obj_id): (cx_px, cy_px)} from sam_tracks.csv when present."""
     if art.tracks_csv is None or not art.tracks_csv.is_file():
@@ -189,17 +230,12 @@ def read_sam_meta(sam_dir: Path) -> tuple[pd.DataFrame, list[int]]:
 def frame_size(art: SamRunArtifacts) -> tuple[int, int]:
     """Return (width, height) of the original video in pixels.
 
-    Tries the overlay MP4 first, then falls back to any mask PNG.
+    Tries overlay video (MP4 or AVI), mask PNG, ``sam_contours.json``, then README.
     """
     if art.overlay_mp4 is not None and art.overlay_mp4.is_file():
-        cap = cv2.VideoCapture(str(art.overlay_mp4))
-        try:
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        finally:
-            cap.release()
-        if w > 0 and h > 0:
-            return w, h
+        size = _frame_size_from_video(str(art.overlay_mp4))
+        if size is not None:
+            return size
 
     pngs = sorted(art.masks_dir.glob("frame_*_obj_*.png"))
     if pngs:
@@ -207,13 +243,18 @@ def frame_size(art: SamRunArtifacts) -> tuple[int, int]:
         if m is not None:
             return int(m.shape[1]), int(m.shape[0])
 
-    size = _frame_size_from_video(_read_readme_value(art.readme_txt, "source_original"))
+    size = _frame_size_from_contours(art.sam_dir)
+    if size is not None:
+        return size
+
+    size = _frame_size_from_readme(art)
     if size is not None:
         return size
 
     raise RuntimeError(
         f"Cannot determine frame size for SAM run at {art.sam_dir}: "
-        "no readable overlay MP4, mask PNG, nor source_original video in README_sam.txt."
+        "no readable overlay video (MP4/AVI), mask PNG, sam_contours.json, "
+        "nor source/source_original video in README_sam.txt."
     )
 
 
@@ -507,11 +548,15 @@ def main(argv: list[str] | None = None) -> int:
     target = Path(args.path).resolve()
     if (target / "sam_frames_meta.csv").is_file():
         extract_points_from_sam_run(target, mode=args.mode, canonical=args.canonical)
+        if args.mode == "all":
+            write_vaila_anchor_csvs(target)
     else:
         outs = extract_points_for_batch(target, mode=args.mode, canonical=args.canonical)
         if not outs:
             print(f"[sam_postprocess] No SAM runs found under {target}")
             return 1
+        if args.mode == "all":
+            write_vaila_anchor_csvs_for_batch(target)
     return 0
 
 

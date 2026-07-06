@@ -82,6 +82,130 @@ def test_sam3_build_oom_retry_attempts_extends_below_32() -> None:
     assert 32 in none_chain and 8 in none_chain
 
 
+def test_sam3_subsample_low_fps_signals_chunked_before_writer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Extreme temporal subsample should request chunking before VideoWriter."""
+    import cv2
+
+    import vaila.vaila_sam as sam
+
+    calls = {"captures": 0, "writers": 0}
+
+    class FakeCapture:
+        def __init__(self, _path: str) -> None:
+            calls["captures"] += 1
+
+        def isOpened(self) -> bool:  # noqa: N802
+            return True
+
+        def get(self, prop: int) -> float:
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return 30000.0
+            if prop == cv2.CAP_PROP_FPS:
+                return 30.0
+            if prop == cv2.CAP_PROP_FRAME_WIDTH:
+                return 1920.0
+            if prop == cv2.CAP_PROP_FRAME_HEIGHT:
+                return 1080.0
+            return 0.0
+
+        def release(self) -> None:
+            return None
+
+    def fail_writer(*_args: object, **_kwargs: object) -> object:
+        calls["writers"] += 1
+        pytest.fail("VideoWriter should not open after low-FPS chunking signal")
+
+    monkeypatch.setattr(sam.cv2, "VideoCapture", FakeCapture)
+    monkeypatch.setattr(sam, "_open_sam3_video_writer", fail_writer)
+
+    with pytest.raises(sam._Sam3NeedsChunkedFallback, match=sam._SAM3_NEEDS_CHUNKING_SENTINEL):
+        sam._maybe_subsample_video_for_vram(tmp_path / "long.mp4", tmp_path, 1)
+
+    assert calls == {"captures": 1, "writers": 0}
+
+
+def test_process_one_video_low_fps_signal_runs_chunked_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The retry wrapper routes the internal chunking signal to chunked fallback."""
+    import vaila.vaila_sam as sam
+
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"")
+    out_dir = tmp_path / "out"
+    chunked_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def fake_run(*_args: object, **_kwargs: object) -> None:
+        raise sam._Sam3NeedsChunkedFallback(sam._sam3_needs_chunking_message("low fps"))
+
+    def fake_chunked(*args: object, **kwargs: object) -> tuple[bool, str]:
+        chunked_calls.append((args, kwargs))
+        return True, "chunked ok"
+
+    monkeypatch.setattr(sam, "run_sam3_on_video", fake_run)
+    monkeypatch.setattr(sam, "_release_sam3_gpu_memory", lambda: None)
+    monkeypatch.setattr(sam, "_process_video_chunked", fake_chunked)
+
+    ok, msg = sam._process_one_video_with_oom_retry(
+        video,
+        out_dir,
+        text_prompt="person",
+        frame_index=0,
+        checkpoint=None,
+        max_input_frames=1,
+        save_overlay_mp4=False,
+        save_mask_png=False,
+        frame_by_frame_fallback=False,
+    )
+
+    assert ok is True
+    assert msg == "chunked ok"
+    assert len(chunked_calls) == 1
+    assert chunked_calls[0][0][0] == video
+
+
+def test_process_one_video_low_fps_signal_no_chunked_returns_sentinel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Chunk subprocesses return a sentinel when recursive chunking is disabled."""
+    import vaila.vaila_sam as sam
+
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"")
+    out_dir = tmp_path / "out"
+
+    def fake_run(*_args: object, **_kwargs: object) -> None:
+        raise sam._Sam3NeedsChunkedFallback(sam._sam3_needs_chunking_message("low fps"))
+
+    def fail_chunked(*_args: object, **_kwargs: object) -> tuple[bool, str]:
+        pytest.fail("recursive chunked fallback should be disabled")
+
+    monkeypatch.setattr(sam, "run_sam3_on_video", fake_run)
+    monkeypatch.setattr(sam, "_release_sam3_gpu_memory", lambda: None)
+    monkeypatch.setattr(sam, "_process_video_chunked", fail_chunked)
+
+    ok, err = sam._process_one_video_with_oom_retry(
+        video,
+        out_dir,
+        text_prompt="person",
+        frame_index=0,
+        checkpoint=None,
+        max_input_frames=1,
+        save_overlay_mp4=False,
+        save_mask_png=False,
+        frame_by_frame_fallback=False,
+        no_chunked_fallback=True,
+    )
+
+    assert ok is False
+    assert sam._SAM3_NEEDS_CHUNKING_SENTINEL in err
+    assert sam._SAM3_NEEDS_CHUNKING_SENTINEL in (out_dir / "FAILED_sam.txt").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_sam3_auto_max_frames_upper_bound_scales_with_gpu_class() -> None:
     """Workstation GPUs must not be stuck at 128-frame SAM subsample cap (overlay sync)."""
     from vaila.vaila_sam import _sam3_auto_max_frames_upper_bound
@@ -457,7 +581,9 @@ def test_merge_chunk_outputs_links_ids_across_overlap(tmp_path: Path) -> None:
     mask_files = sorted((final_out / "masks").glob("frame_*_obj_*.png"))
     assert len(mask_files) == 6
     assert all(path.name.endswith("_obj_0.png") for path in mask_files)
-    assert (final_out / "test_sam_overlay.mp4").is_file()
+    overlay_files = list(final_out.glob("test_sam_overlay.*"))
+    assert overlay_files, "expected merged overlay video (mp4 or avi)"
+    assert overlay_files[0].suffix.lower() in {".mp4", ".avi"}
 
 
 def test_delete_mask_artifacts(tmp_path):
@@ -476,6 +602,42 @@ def test_delete_mask_artifacts(tmp_path):
 
     assert not masks_dir.exists()
     assert not manifest_csv.exists()
+
+
+def test_sam3_writer_fallbacks_prefer_software_codecs() -> None:
+    from vaila.vaila_sam import _SAM3_WRITER_FALLBACKS
+
+    assert _SAM3_WRITER_FALLBACKS[0][0] == "mp4v"
+    assert not any(fourcc == "avc1" for fourcc, _ext in _SAM3_WRITER_FALLBACKS)
+
+
+def test_open_sam3_video_writer_ffmpeg_pipe_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When OpenCV codecs fail, fall back to ffmpeg libx264 pipe."""
+    import numpy as np
+
+    import vaila.vaila_sam as sam
+
+    class FakeCvWriter:
+        def isOpened(self) -> bool:  # noqa: N802
+            return False
+
+        def release(self) -> None:
+            return None
+
+    monkeypatch.setattr(sam.cv2, "VideoWriter", lambda *_a, **_k: FakeCvWriter())
+    monkeypatch.setattr(sam, "_sam3_ffmpeg_available", lambda: True)
+
+    target = tmp_path / "pipe_out.mp4"
+    writer, actual = sam._open_sam3_video_writer(target, 30.0, (64, 48), purpose="unit test")
+    try:
+        assert isinstance(writer, sam._FfmpegPipeVideoWriter)
+        writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
+    finally:
+        writer.release()
+    assert actual.suffix == ".mp4"
+    assert actual.stat().st_size > 0
 
 
 def test_open_sam3_video_writer_creates_file(tmp_path: Path) -> None:

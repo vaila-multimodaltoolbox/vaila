@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 04 July 2026
-Version: 0.3.69
+Update Date: 05 July 2026
+Version: 0.3.71
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -80,6 +80,7 @@ import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import time
 import tkinter as tk
@@ -266,8 +267,8 @@ def _print_sam3_install_instructions() -> None:
 
 
 SAM3_CLI_EXAMPLES = """\
-SAM 3 — copy/paste CLI recipes
-==============================
+SAM 3 — copy/paste CLI recipes (scenarios A–H)
+==============================================
 
 # 0. Open help / setup page in your default browser
 uv run vaila/vaila_sam.py --open-help
@@ -276,25 +277,24 @@ uv run vaila/vaila_sam.py --open-help
 uv run vaila/vaila_sam.py --print-examples
 
 # 2. Download gated facebook/sam3 weights into vaila/models/sam3/
-#    (needs 'uv run hf auth login' or HF_TOKEN with access to the model)
 uv run vaila/vaila_sam.py --download-weights
 
-# 3. Smoke / dry-run on a single video (prints effective settings, OOM ladder)
+# --- A: Short clip, 24 GiB GPU (auto caps) ---
 uv run vaila/vaila_sam.py \\
-  -i tests/SAM/test1000.mp4 \\
-  -o tests/SAM/ \\
-  -t person \\
-  --dry-run
-
-# 4. Single video — short clip on a 24 GiB GPU (auto everything)
-uv run vaila/vaila_sam.py \\
-  -i path/to/video.mp4 \\
+  -i path/to/clip.mp4 \\
   -o path/to/output_parent/ \\
-  -t player
+  -t player \\
+  --postprocess-points all
 
-# 5. LONG broadcast clip (~15k+ frames). The default auto cap can demand more
-#    HOST RAM than the OS has, which results in subprocess exit=-9 (SIGKILL by
-#    the Linux OOM killer). Force a conservative cap:
+# --- B: Single athlete / drill — geometric Re-ID ---
+uv run vaila/vaila_sam.py \\
+  -i path/to/sprint.mp4 \\
+  -o path/to/output_parent/ \\
+  -t person \\
+  --stabilize-ids \\
+  --postprocess-points all
+
+# --- C: LONG broadcast (~15k+ frames) — avoid host-RAM SIGKILL (exit=-9) ---
 uv run vaila/vaila_sam.py \\
   -i path/to/long_match.mp4 \\
   -o path/to/output_parent/ \\
@@ -303,44 +303,59 @@ uv run vaila/vaila_sam.py \\
   --max-input-long-edge 1280 \\
   --postprocess-points all
 
-# 6. Batch over a directory of clips (subprocess-per-video isolation is ON by
-#    default; each clip starts with a clean CUDA context).
+# --- D: Long broadcast + stable IDs (chunk merge + --stabilize-ids) ---
+uv run vaila/vaila_sam.py \\
+  -i path/to/long_match.mp4 \\
+  -o path/to/output_parent/ \\
+  -t person \\
+  --max-frames 128 \\
+  --max-input-long-edge 1280 \\
+  --stabilize-ids \\
+  --overlap-frames 2 \\
+  --postprocess-points all
+
+# --- E: Batch directory (subprocess-per-video isolation ON by default) ---
 uv run vaila/vaila_sam.py \\
   -i path/to/clips_dir/ \\
   -o path/to/output_parent/ \\
   -t player \\
   --max-frames 256 \\
+  --stabilize-ids \\
   --postprocess-points foot
 
-# 7. Low-VRAM GPU (e.g. RTX 5050 8 GiB) — disable temporal tracking but never OOM
+# --- F: Low-VRAM GPU (e.g. 8 GiB) — no temporal tracking ---
 uv run vaila/vaila_sam.py \\
   -i path/to/video.mp4 \\
   -o path/to/output_parent/ \\
   -t person \\
   --frame-by-frame --no-png --no-overlay
 
-# 8. Use a specific checkpoint or SAM 3.1 multiplex weights
+# --- G: Fast bbox export (tracks-only, rec2d / homography) ---
 uv run vaila/vaila_sam.py \\
-  -i path/to/video.mp4 \\
+  -i path/to/match.mp4 \\
   -o path/to/output_parent/ \\
   -t player \\
+  --tracks-only --stabilize-ids --postprocess-points foot
+
+# --- H: Repair post-process on existing SAM output (no GPU) ---
+uv run vaila/sam_postprocess.py path/to/processed_sam_…/video_stem --mode all
+
+# --- Utilities ---
+uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t person --dry-run
+uv run vaila/vaila_sam.py -i clips_dir/ --preflight -o out/
+uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t player \\
   -w vaila/models/sam3/sam3.1_multiplex.pt
 
-# 9. Preflight scan only — write SAM3_PREFLIGHT.csv (resolution/fps/duration)
-uv run vaila/vaila_sam.py --input path/to/clips_dir/ --preflight \\
-  --output path/to/output_parent/
-
-# 10. FIFA Skeletal Tracking Light subcommand (needs --extra fifa, CUDA, SAM 3D Body weights)
+# FIFA Skeletal Tracking Light (needs --extra fifa, CUDA, SAM 3D Body weights)
 uv run vaila/vaila_sam.py fifa --help
-uv run vaila/vaila_sam.py fifa bootstrap  --videos-dir DIR --data-root data/
-uv run vaila/vaila_sam.py fifa prepare    --video-source DIR --data-root data/
-uv run vaila/vaila_sam.py fifa boxes      --data-root data/ --sequences data/sequences_val.txt
-uv run vaila/vaila_sam.py fifa preprocess --data-root data/ --sequences data/sequences_val.txt
-uv run vaila/vaila_sam.py fifa baseline   --data-root data/ --sequences data/sequences_val.txt \\
-  --output outputs/submission_val.npz --export-camera
-uv run vaila/vaila_sam.py fifa dlt-export --cameras-dir data/cameras --output-dir outputs/dlt
-uv run vaila/vaila_sam.py fifa pack       --submission-full outputs/submission_val.npz \\
-  --data-root data/ --output-dir outputs/ --split val
+
+Re-ID notes
+-----------
+* Cross-chunk ID linking is AUTOMATIC when chunked fallback runs (--overlap-frames N, default 2).
+* --stabilize-ids adds geometric Re-ID after export -> sam_reid_links.csv + stable sam_tracks.csv.
+* GUI checkbox "ReID/Stabilize SAM IDs" is ON by default; CLI must pass --stabilize-ids explicitly.
+* Post-process (--postprocess-points all, default) writes sam_points.csv + sam_vaila_*.csv.
+  When sam_reid_links.csv exists, also writes sam_points_georeid.csv aliases.
 
 Tips
 ----
@@ -348,6 +363,8 @@ Tips
 * Common error 'subprocess exit=-9' = host-RAM OOM killer; lower --max-frames.
 * Common error 'CUDA out of memory' = drop --max-input-long-edge to 1280/960
   or add --frame-by-frame as a last resort.
+* Common exit=7 / SAM3_NEEDS_CHUNKING = coordinator will run chunked fallback;
+  for long clips prefer auto or --max-frames 128/256 over diagnostic max_frames=1.
 * Full reference            : vaila/help/vaila_sam.md  (or --open-help).
 """
 
@@ -358,13 +375,49 @@ def _print_sam3_cli_examples() -> None:
 
 
 # Exit codes for the per-video isolated subprocess (see batch CLI loop).
-# When the per-video subprocess exhausts its OOM retry ladder while running
+# When the per-video subprocess exhausts its OOM retry ladder, or detects that
+# an extreme temporal subsample needs chunked fallback, while running
 # under ``--no-chunked-fallback``, it exits with this code so the *coordinator*
 # (the outer CLI process, which never loaded SAM3 and therefore has a clean
 # CUDA context) can run the chunked fallback itself.  Keeping the chunked
 # coordinator separate from the OOM victim is the only way to free the ~13 GiB
 # of orphan SAM3 C++ workspace tensors that no in-process gc can reach.
 EXIT_NEEDS_CHUNKING = 7
+_SAM3_NEEDS_CHUNKING_SENTINEL = "SAM3_NEEDS_CHUNKING"
+_SAM3_MIN_TEMP_SUBSAMPLE_FPS = 0.01
+
+
+class _Sam3NeedsChunkedFallback(RuntimeError):  # noqa: N818
+    """Internal signal: skip retrying and run the chunked fallback."""
+
+
+def _sam3_needs_chunking_message(reason: str) -> str:
+    return f"{_SAM3_NEEDS_CHUNKING_SENTINEL}: {reason}"
+
+
+def _is_sam3_needs_chunking_error(message_or_exc: object) -> bool:
+    return _SAM3_NEEDS_CHUNKING_SENTINEL in str(message_or_exc)
+
+
+def _sam3_subsample_output_fps(source_fps: float, kept_frames: int, total_frames: int) -> float:
+    """FPS required to preserve duration after temporal subsampling."""
+    fps = float(source_fps) if float(source_fps) > 0.0 else 30.0
+    if total_frames <= 0:
+        return fps
+    return fps * (float(max(0, kept_frames)) / float(total_frames))
+
+
+def _sam3_temp_subsample_needs_chunked_fallback(
+    *,
+    total_frames: int,
+    kept_frames: int,
+    source_fps: float,
+    min_fps: float = _SAM3_MIN_TEMP_SUBSAMPLE_FPS,
+) -> bool:
+    """Return True when a temp subsample video would be too slow for OpenCV codecs."""
+    if total_frames <= 0 or kept_frames <= 0 or kept_frames >= total_frames:
+        return False
+    return _sam3_subsample_output_fps(source_fps, kept_frames, total_frames) < float(min_fps)
 
 
 # Common POSIX signals returned as negative exit codes by ``subprocess.call`` /
@@ -1155,6 +1208,11 @@ def _sam3_dry_run_report(
         for cap in attempts
     )
     lines.append(f"OOM retry ladder (raw->resolved): {attempts_display}")
+    lines.append(
+        "Low-FPS temp-video guard: retry caps that would preserve duration below "
+        f"{_SAM3_MIN_TEMP_SUBSAMPLE_FPS:g} fps are sent to chunked fallback instead "
+        "of opening VideoWriter."
+    )
 
     video_files = _find_videos(input_path) if input_path.is_dir() else [input_path]
     if not video_files:
@@ -1429,11 +1487,144 @@ def _nearest_sess_idx_for_orig_frame(frame_idx: int, sess_to_orig: np.ndarray) -
     return int(min(candidates, key=lambda j: (abs(int(a[j]) - frame_idx), -int(a[j]))))
 
 
+# OpenCV on some Linux boards tries ``h264_v4l2m2m`` for ``avc1``/``.mp4`` first
+# and logs scary errors even when ``mp4v`` would work. Prefer software codecs.
 _SAM3_WRITER_FALLBACKS: tuple[tuple[str, str], ...] = (
+    ("mp4v", ".mp4"),
     ("MJPG", ".avi"),
     ("XVID", ".avi"),
-    ("mp4v", ".mp4"),
+    ("hev1", ".mp4"),
 )
+
+
+class _FfmpegPipeVideoWriter:
+    """Write BGR frames to an ``ffmpeg`` stdin pipe (libx264 MP4)."""
+
+    def __init__(self, proc: subprocess.Popen[bytes], path: Path) -> None:
+        self._proc = proc
+        self._path = path.resolve()
+        self._open = proc.stdin is not None
+
+    def isOpened(self) -> bool:  # noqa: N802
+        return self._open and self._proc.poll() is None
+
+    def write(self, frame: np.ndarray) -> None:
+        if not self.isOpened() or self._proc.stdin is None:
+            return
+        try:
+            self._proc.stdin.write(np.ascontiguousarray(frame).tobytes())
+        except (BrokenPipeError, OSError):
+            self._open = False
+
+    def release(self) -> None:
+        if self._proc.stdin is not None:
+            with contextlib.suppress(Exception):
+                self._proc.stdin.close()
+        rc = self._proc.wait()
+        self._open = False
+        if rc != 0 or not self._path.is_file() or self._path.stat().st_size == 0:
+            with contextlib.suppress(OSError):
+                self._path.unlink(missing_ok=True)
+            raise OSError(f"ffmpeg pipe VideoWriter failed for {self._path.name} (exit={rc})")
+
+
+def _sam3_ffmpeg_available() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+
+def _sam3_ffmpeg_transcode_to_h264_mp4(src: Path, dst: Path) -> bool:
+    """Convert an OpenCV AVI/MJPG export to H.264 MP4. Returns True on success."""
+    if not _sam3_ffmpeg_available():
+        return False
+    with contextlib.suppress(OSError):
+        dst.unlink(missing_ok=True)
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(src),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-an",
+        str(dst),
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    except OSError:
+        return False
+    if proc.returncode != 0 or not dst.is_file() or dst.stat().st_size == 0:
+        if proc.stderr:
+            print(f"[SAM3] ffmpeg transcode: {proc.stderr[:400]}", flush=True)
+        with contextlib.suppress(OSError):
+            dst.unlink(missing_ok=True)
+        return False
+    return True
+
+
+def _open_sam3_ffmpeg_pipe_writer(
+    path: Path,
+    fps: float,
+    size: tuple[int, int],
+    *,
+    purpose: str = "SAM3 video",
+) -> tuple[_FfmpegPipeVideoWriter, Path]:
+    """Last-resort writer when OpenCV codecs fail (e.g. broken h264_v4l2m2m on ARM SBCs)."""
+    if not _sam3_ffmpeg_available():
+        raise OSError(f"{purpose}: ffmpeg not found on PATH")
+    w, h = size
+    out_path = path if path.suffix.lower() == ".mp4" else path.with_suffix(".mp4")
+    with contextlib.suppress(OSError):
+        out_path.unlink(missing_ok=True)
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "bgr24",
+        "-s",
+        f"{w}x{h}",
+        "-r",
+        str(float(fps)),
+        "-i",
+        "pipe:0",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(out_path),
+    ]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    if proc.stdin is None:
+        with contextlib.suppress(Exception):
+            proc.kill()
+        raise OSError(f"{purpose}: could not open ffmpeg stdin pipe")
+    print(
+        f"[SAM3] VideoWriter ({purpose}): ffmpeg libx264 pipe -> {out_path.name}",
+        flush=True,
+    )
+    return _FfmpegPipeVideoWriter(proc, out_path), out_path.resolve()
 
 
 def _open_sam3_video_writer(
@@ -1442,8 +1633,8 @@ def _open_sam3_video_writer(
     size: tuple[int, int],
     *,
     purpose: str = "SAM3 video",
-) -> tuple[cv2.VideoWriter, Path]:
-    """Open ``cv2.VideoWriter`` with MJPG → XVID → mp4v fallback.
+) -> tuple[Any, Path]:
+    """Open a video writer with mp4v → MJPG/XVID → ffmpeg pipe fallback.
 
     Removes any stale destination file first. Returns ``(writer, actual_path)``;
     ``actual_path`` may use ``.avi`` when ``mp4v`` fails (same pattern as
@@ -1470,10 +1661,59 @@ def _open_sam3_video_writer(
             return writer, candidate.resolve()
         writer.release()
         tried.append(f"{fourcc_name}({candidate.name})")
+    try:
+        return _open_sam3_ffmpeg_pipe_writer(path, fps, size, purpose=purpose)
+    except OSError as exc:
+        tried.append(f"ffmpeg-pipe({exc})")
     raise OSError(
         f"Could not open VideoWriter for {purpose} ({w}x{h} @ {fps:.3f} fps). "
         f"Tried: {', '.join(tried)}"
     )
+
+
+def _sam3_finalize_overlay_path(src: Path, desired_mp4: Path) -> Path:
+    """Return a playable overlay path, transcoding AVI→MP4 when ffmpeg is available."""
+    if not src.is_file() or src.stat().st_size == 0:
+        return src
+    if src.suffix.lower() == ".mp4":
+        if src.resolve() != desired_mp4.resolve():
+            with contextlib.suppress(OSError):
+                desired_mp4.unlink(missing_ok=True)
+            shutil.copy2(str(src), str(desired_mp4))
+        return desired_mp4.resolve()
+    if _sam3_ffmpeg_transcode_to_h264_mp4(src, desired_mp4):
+        return desired_mp4.resolve()
+    return src.resolve()
+
+
+def _run_sam3_postprocess_for_dir(
+    out_dir: Path,
+    *,
+    postprocess_points: str = "all",
+    log: Callable[[str], None] | None = None,
+) -> None:
+    """Build ``sam_points.csv`` + vailá anchor CSVs when a SAM run dir is ready."""
+    if not postprocess_points or postprocess_points == "none":
+        return
+    if not (out_dir / "sam_frames_meta.csv").is_file():
+        return
+
+    def _log(msg: str) -> None:
+        if log is not None:
+            log(msg)
+        else:
+            print(msg, flush=True)
+
+    try:
+        from vaila.sam_postprocess import extract_points_from_sam_run, write_vaila_anchor_csvs
+
+        _log(f"[postprocess] mode={postprocess_points}")
+        out_csv = extract_points_from_sam_run(out_dir, mode=postprocess_points)
+        _log(f"[postprocess] wrote {out_csv}")
+        vaila_outs = write_vaila_anchor_csvs(out_dir)
+        _log(f"[postprocess] wrote {len(vaila_outs)} vailá anchor CSV(s)")
+    except Exception as exc:
+        _log(f"[postprocess] FAILED: {exc}")
 
 
 def _maybe_subsample_video_for_vram(
@@ -1505,6 +1745,21 @@ def _maybe_subsample_video_for_vram(
         return video_path.resolve(), None, n, np.arange(max(0, n), dtype=np.int64)
 
     indices = np.unique(np.linspace(0, n - 1, num=max_frames, dtype=np.int64))
+    fps_out = _sam3_subsample_output_fps(fps, len(indices), n)
+    if _sam3_temp_subsample_needs_chunked_fallback(
+        total_frames=n,
+        kept_frames=len(indices),
+        source_fps=fps,
+    ):
+        reason = (
+            "Temporal subsample would require "
+            f"{fps_out:.6f} fps for _sam3_subsample_input "
+            f"({n} source frames -> {len(indices)} SAM frame(s), max_frames={max_frames}). "
+            f"That is below the {_SAM3_MIN_TEMP_SUBSAMPLE_FPS:g} fps temp-video guard; "
+            "using chunked fallback instead of opening VideoWriter."
+        )
+        print(f"[SAM3] {reason}", flush=True)
+        raise _Sam3NeedsChunkedFallback(_sam3_needs_chunking_message(reason))
     print(
         f"[SAM3] Temporal subsample: {n} → {len(indices)} frames (max_frames={max_frames}). "
         "Overlay uses nearest SAM keyframe on each original frame — wide spacing looks like lag. "
@@ -1519,8 +1774,7 @@ def _maybe_subsample_video_for_vram(
     # Preserve *duration* when subsampling: we keep fewer frames that represent the full clip,
     # so we must reduce the output FPS proportionally; otherwise the clip (and SAM overlay)
     # plays back faster than real time.
-    fps_out = float(fps) * (float(len(indices)) / float(n)) if n > 0 else float(fps)
-    fps_out = max(1e-3, fps_out)
+    fps_out = max(_SAM3_MIN_TEMP_SUBSAMPLE_FPS, fps_out)
     writer, out_path = _open_sam3_video_writer(
         out_path,
         fps_out,
@@ -1995,6 +2249,8 @@ def _render_overlay_from_merged_masks(
 
     cap.release()
     writer.release()
+    desired = final_output_dir / f"{video_path.stem}_sam_overlay.mp4"
+    _sam3_finalize_overlay_path(out_path, desired)
     return True
 
 
@@ -2250,11 +2506,20 @@ def _merge_chunk_outputs(
         if not rendered:
             overlay_parts = []
             for chunk_out in chunk_output_dirs:
-                overlays = list(chunk_out.glob("*_sam_overlay.mp4"))
+                overlays = sorted(chunk_out.glob("*_sam_overlay.mp4")) + sorted(
+                    chunk_out.glob("*_sam_overlay.avi")
+                )
                 if overlays:
                     overlay_parts.append(overlays[0])
             if overlay_parts:
-                _stitch_overlay_mp4s(overlay_parts, final_output_dir, video_path, chunks=chunks)
+                try:
+                    _stitch_overlay_mp4s(overlay_parts, final_output_dir, video_path, chunks=chunks)
+                except OSError as exc:
+                    print(
+                        f"[SAM3] WARNING: overlay stitch unavailable ({exc}); "
+                        "CSV/JSON/mask exports were still merged.",
+                        flush=True,
+                    )
 
 
 def _stitch_overlay_mp4s(
@@ -2267,14 +2532,12 @@ def _stitch_overlay_mp4s(
     """Concatenate overlay MP4 segments, skipping duplicated overlap frames."""
     out_path = final_output_dir / f"{video_path.stem}_sam_overlay.mp4"
     if len(parts) == 1:
-        import shutil
-
-        shutil.copy2(str(parts[0]), str(out_path))
+        _sam3_finalize_overlay_path(parts[0], out_path)
         return
     # Use OpenCV to stitch — read all parts and write sequentially
     first_cap = cv2.VideoCapture(str(parts[0]))
     if not first_cap.isOpened():
-        return
+        raise OSError(f"Could not open overlay segment: {parts[0]}")
     fps = first_cap.get(cv2.CAP_PROP_FPS) or 30.0
     w = int(first_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(first_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -2286,25 +2549,31 @@ def _stitch_overlay_mp4s(
         (w, h),
         purpose="SAM3 stitched overlay",
     )
-    for pi, part in enumerate(parts):
-        cap = cv2.VideoCapture(str(part))
-        local_idx = 0
-        start_frame = 0
-        write_start = 0
-        if chunks is not None and pi < len(chunks):
-            _chunk_path, start_frame, _end_frame = chunks[pi]
-            write_start = start_frame if pi == 0 else max(start_frame, chunks[pi - 1][2])
-        while True:
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                break
-            global_frame = start_frame + local_idx
-            local_idx += 1
-            if global_frame < write_start:
-                continue
-            writer.write(frame)
-        cap.release()
-    writer.release()
+    try:
+        for pi, part in enumerate(parts):
+            cap = cv2.VideoCapture(str(part))
+            local_idx = 0
+            start_frame = 0
+            write_start = 0
+            if chunks is not None and pi < len(chunks):
+                _chunk_path, start_frame, _end_frame = chunks[pi]
+                write_start = start_frame if pi == 0 else max(start_frame, chunks[pi - 1][2])
+            while True:
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    break
+                global_frame = start_frame + local_idx
+                local_idx += 1
+                if global_frame < write_start:
+                    continue
+                writer.write(frame)
+            cap.release()
+    finally:
+        writer.release()
+    if out_path.suffix.lower() != ".mp4":
+        _sam3_finalize_overlay_path(
+            out_path, final_output_dir / f"{video_path.stem}_sam_overlay.mp4"
+        )
 
 
 def _process_video_chunked(
@@ -2331,6 +2600,7 @@ def _process_video_chunked(
     contours_gzip: bool = False,
     chunk_size: int | None = None,
     overlap_frames: int = 2,
+    postprocess_points: str = "all",
     log: Callable[[str], None] | None = None,
 ) -> tuple[bool, str]:
     """Divide-and-conquer: split video into temporal chunks, process each in a
@@ -2547,6 +2817,7 @@ def _process_video_chunked(
         header=(
             "SAM 3 video export (chunked divide-and-conquer)\n"
             f"source={video_file.resolve()}\n"
+            f"source_original={video_file.resolve()}\n"
             f"total_frames={n_total}\n"
             f"chunk_size={chunk_size}\n"
             f"total_chunks={len(chunks)}\n"
@@ -2556,6 +2827,12 @@ def _process_video_chunked(
         ),
     )
     _make_sam_bbox_tracks_alias(output_dir)
+
+    _run_sam3_postprocess_for_dir(
+        output_dir,
+        postprocess_points=postprocess_points,
+        log=_log,
+    )
 
     # Clean up chunk work dir (keep outputs in final dir)
     import shutil
@@ -3666,6 +3943,8 @@ def run_sam3_on_video(
             cap.release()
         if writer is not None:
             writer.release()
+            desired_overlay = output_dir / f"{video_path.stem}_sam_overlay.mp4"
+            overlay_path = _sam3_finalize_overlay_path(overlay_path, desired_overlay)
 
         meta_path = output_dir / "sam_frames_meta.csv"
         meta_path.write_text(
@@ -3928,6 +4207,7 @@ def _process_one_video_with_oom_retry(
     # #endregion
 
     last_err: str = ""
+    needs_chunking_reason = ""
     mf_try: int | None = None
     for attempt_idx, mf_try in enumerate(attempts, start=1):
         _release_sam3_gpu_memory()
@@ -3957,6 +4237,11 @@ def _process_one_video_with_oom_retry(
                 contours_gzip=contours_gzip,
             )
             return True, ""
+        except _Sam3NeedsChunkedFallback as e:
+            last_err = str(e)
+            needs_chunking_reason = last_err
+            _log(f"  [SAM3] {last_err}")
+            break
         except Exception as e:
             last_err = str(e)
             if not _is_cuda_oom_error(e):
@@ -3992,7 +4277,7 @@ def _process_one_video_with_oom_retry(
     # Frame-cap ladder exhausted; 4K+ sources often OOM at session_frames=1 — lower long edge.
     smf = mf_try if mf_try is not None else (attempts[-1] if attempts else 1)
     user_le = _read_max_input_long_edge(max_input_long_edge)
-    for le in (1280, 960, 640, 512):
+    for le in () if needs_chunking_reason else (1280, 960, 640, 512):
         if user_le > 0 and le >= user_le:
             continue
         _release_sam3_gpu_memory()
@@ -4026,6 +4311,11 @@ def _process_one_video_with_oom_retry(
                 contours_gzip=contours_gzip,
             )
             return True, ""
+        except _Sam3NeedsChunkedFallback as e:
+            last_err = str(e)
+            needs_chunking_reason = last_err
+            _log(f"  [SAM3] {last_err}")
+            break
         except Exception as e:
             last_err = str(e)
             if not _is_cuda_oom_error(e):
@@ -4043,6 +4333,16 @@ def _process_one_video_with_oom_retry(
     # ``max(16, …)`` — chunking a 16-frame video yields exactly one chunk equal
     # to the input, OOMs, and recurses forever.
     if no_chunked_fallback:
+        if needs_chunking_reason:
+            disabled_reason = last_err or _sam3_needs_chunking_message(
+                "chunked fallback required but disabled"
+            )
+            _log(
+                f"  [SAM3] Chunked fallback required for {video_file.name} "
+                "(--no-chunked-fallback set; returning sentinel to coordinator)"
+            )
+            _write_failure_marker(output_dir, video_file, disabled_reason)
+            return False, disabled_reason
         _log(
             f"  [SAM3] All OOM retries exhausted for {video_file.name} "
             "(--no-chunked-fallback set; refusing to recurse into another chunked split)"
@@ -4053,10 +4353,16 @@ def _process_one_video_with_oom_retry(
             last_err or "All OOM retries exhausted (chunked fallback disabled)",
         )
         return False, last_err or "All OOM retries exhausted (chunked fallback disabled)"
-    _log(
-        f"  [SAM3] All OOM retry attempts exhausted for {video_file.name}; "
-        f"falling back to divide-and-conquer chunking..."
-    )
+    if needs_chunking_reason:
+        _log(
+            f"  [SAM3] Chunked fallback required for {video_file.name}; "
+            "falling back to divide-and-conquer chunking..."
+        )
+    else:
+        _log(
+            f"  [SAM3] All OOM retry attempts exhausted for {video_file.name}; "
+            "falling back to divide-and-conquer chunking..."
+        )
     _release_sam3_gpu_memory()
     ok, chunk_msg = _process_video_chunked(
         video_file,
@@ -5366,6 +5672,7 @@ def main() -> None:
                 text_prompt=args.text,
                 frame_index=args.frame,
                 max_input_frames=args.max_frames,
+                max_input_long_edge=args.max_input_long_edge,
                 save_overlay_mp4=not args.no_overlay,
                 save_mask_png=not args.no_png,
                 frame_by_frame_fallback=args.frame_by_frame,
@@ -5433,8 +5740,10 @@ def main() -> None:
         # fallback from a clean CUDA context.  The current process is poisoned:
         # SAM3 leaves ~13 GiB of orphan C++ workspace tensors after a failed
         # start_session that nothing short of process death can release.
-        if bool(args.no_chunked_fallback) and ("out of memory" in err.lower()):
-            print(f"  OOM EXHAUSTED on {single.name}; exiting with EXIT_NEEDS_CHUNKING")
+        if bool(args.no_chunked_fallback) and (
+            _is_sam3_needs_chunking_error(err) or "out of memory" in err.lower()
+        ):
+            print(f"  CHUNKED FALLBACK REQUIRED on {single.name}; exiting with EXIT_NEEDS_CHUNKING")
             raise SystemExit(EXIT_NEEDS_CHUNKING)
         print(f"  ERROR on {single.name}: {err}")
         raise SystemExit(3)
@@ -5483,6 +5792,7 @@ def main() -> None:
                 text_prompt=args.text,
                 frame_index=args.frame,
                 max_input_frames=args.max_frames,
+                max_input_long_edge=args.max_input_long_edge,
                 save_overlay_mp4=not args.no_overlay,
                 save_mask_png=not args.no_png,
                 frame_by_frame_fallback=args.frame_by_frame,
@@ -5543,7 +5853,7 @@ def main() -> None:
                     # Per-video subprocess MUST NOT chunk in-process: any chunk
                     # subprocesses it would spawn would inherit a poisoned GPU
                     # (the OOM victim still holds ~13 GiB of orphan C++ pools
-                    # until process exit).  When OOM-exhausted, this child
+                    # until process exit).  When needs chunked fallback, this child
                     # exits with EXIT_NEEDS_CHUNKING and the coordinator runs
                     # the chunked fallback from a clean state.
                     "--no-chunked-fallback",
@@ -5609,7 +5919,7 @@ def main() -> None:
                     continue
                 if rc == EXIT_NEEDS_CHUNKING:
                     print(
-                        f"  [coordinator] {video_file.name}: per-video subprocess OOM-exhausted; "
+                        f"  [coordinator] {video_file.name}: per-video subprocess requested chunked fallback; "
                         "running chunked divide-and-conquer from coordinator (clean GPU)..."
                     )
                     import shutil as _shutil_local
@@ -5646,6 +5956,7 @@ def main() -> None:
                         contours_gzip=bool(args.contours_gzip),
                         chunk_size=args.chunk_size,
                         overlap_frames=int(getattr(args, "overlap_frames", 2)),
+                        postprocess_points=args.postprocess_points,
                     )
                     if chunk_ok:
                         print(f"  Done (chunked): {out_dir} — {chunk_msg}")
