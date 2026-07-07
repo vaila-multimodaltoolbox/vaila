@@ -17,6 +17,7 @@ Companion files:
 - `docs/fifa_workflow.md` §4.5 — **external** merged `unified/` dataset, QA export, dedupe, `yolo pose train` (weights → `soccerfield_keypoints_ai`).
 - `.claude/skills/yolo-fb-gui-cli/SKILL.md` — YOLO + FB chooser + GUI→CLI mirror.
 - `docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md` — v0.3.72 session log.
+- `docs/sessions/2026-07-07-sapiens-output-dir-fix.md` — v0.3.76 Sapiens2 single output dir.
 
 Companion repo (the official starter kit):
 `~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`.

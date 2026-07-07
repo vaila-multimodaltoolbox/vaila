@@ -234,12 +234,13 @@ def _on_my_analysis(self) -> None:
 - Help: `vaila/help/vaila_sam.html` / `vaila/help/vaila_sam.md`
 - Skill: `.claude/skills/sam3-video/SKILL.md`
 
-### YOLO + FB chooser + Sapiens2 (`vaila.py` B4_r4_c1, v0.3.71–0.3.72)
+### YOLO + FB chooser + Sapiens2 (`vaila.py` B4_r4_c1, v0.3.71–0.3.76)
 - Button **YOLO + FB** opens chooser: Tracker, Pose, Seg, SAM 3, **Sapiens2 Pose**, Train YOLOv26
 - Chooser prints launcher CLI via `_print_yolo_fb_launch()`; each tool prints full Run CLI
 - Sapiens2: `uv sync --extra sapiens` + `bash bin/setup_sapiens2.sh`; `vaila/vaila_sapiens.py`; default model `1b`
 - Doc: `docs/vaila_buttons/yolo-fb.md`; skill: `.claude/skills/yolo-fb-gui-cli/SKILL.md`
 - Session: `docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md`
+- **Sapiens2 output dir (v0.3.76):** one `processed_sapiens_<timestamp>/` per run; isolated workers get `--output-base` — see `docs/sessions/2026-07-07-sapiens-output-dir-fix.md`
 
 ### FIFA Skeletal Tracking Light (`vaila_sam.py fifa`)
 - Extra: `uv sync --extra fifa` (combine with `--extra gpu` on CUDA template)
