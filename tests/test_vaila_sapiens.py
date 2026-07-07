@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import sys
 
 import numpy as np
 import pytest
@@ -111,6 +111,50 @@ def test_markerless_2d_analysis_videos_dry_run() -> None:
     assert any("videos=" in line for line in lines)
 
 
+def test_parse_gui_threshold_fields_defaults() -> None:
+    stride, kpt, bbox, nms, max_p = vs._parse_gui_threshold_fields(
+        stride_s="",
+        kpt_thr_s="",
+        bbox_thr_s="",
+        nms_thr_s="",
+        max_persons_s="",
+    )
+    assert stride == 1
+    assert kpt == vs.DEFAULT_KPT_THR
+    assert bbox == vs.DEFAULT_BBOX_THR
+    assert nms == vs.DEFAULT_NMS_THR
+    assert max_p == vs.DEFAULT_MAX_PERSONS
+
+
+def test_parse_gui_threshold_fields_rejects_out_of_range() -> None:
+    with pytest.raises(ValueError, match="kpt-thr"):
+        vs._parse_gui_threshold_fields(
+            stride_s="1",
+            kpt_thr_s="1.5",
+            bbox_thr_s="0.3",
+            nms_thr_s="0.3",
+            max_persons_s="8",
+        )
+
+
+def test_sapiens_cli_full_example_constant_lists_core_flags() -> None:
+    text = vs.SAPIENS_CLI_FULL_INFERENCE_EXAMPLE
+    for token in (
+        "--model",
+        "--stride",
+        "--device",
+        "--bbox-thr",
+        "--nms-thr",
+        "--max-persons",
+        "--kpt-thr",
+        "--pose-batch-size",
+        "--flip-test",
+        "--no-overlay",
+        "--quiet",
+    ):
+        assert token in text
+
+
 def test_format_sapiens_cli_command_quotes_paths() -> None:
     cmd = vs._format_sapiens_cli_command(
         "/path/with spaces/in.mp4",
@@ -124,7 +168,79 @@ def test_format_sapiens_cli_command_quotes_paths() -> None:
     assert "'/out folder'" in cmd
     assert "--model 1b" in cmd
     assert "--stride 2" in cmd
+    assert "--max-persons 8" in cmd
     assert "--no-overlay" in cmd
+
+
+def test_parse_gui_inference_fields_device_and_pose_batch() -> None:
+    stride, kpt, bbox, nms, max_p, device, pose_batch = vs._parse_gui_inference_fields(
+        stride_s="2",
+        kpt_thr_s="0.35",
+        bbox_thr_s="0.4",
+        nms_thr_s="0.25",
+        max_persons_s="4",
+        device_s="1",
+        pose_batch_s="3",
+    )
+    assert stride == 2
+    assert kpt == 0.35
+    assert device == 1
+    assert pose_batch == 3
+
+
+def test_build_sapiens_cli_argv_includes_all_inference_flags() -> None:
+    argv = vs._build_sapiens_cli_argv(
+        input_path=Path("/in/vid.mp4"),
+        out_parent=Path("/out"),
+        output_base=Path("/out/processed_sapiens_123"),
+        model="1b",
+        stride=2,
+        kpt_thr=0.35,
+        bbox_thr=0.4,
+        nms_thr=0.25,
+        max_persons=4,
+        device=1,
+        flip_test=True,
+        pose_batch_size=2,
+        quiet=True,
+        save_overlay=False,
+        for_subprocess=False,
+    )
+    for flag in (
+        "--output-base",
+        "--kpt-thr",
+        "--bbox-thr",
+        "--nms-thr",
+        "--max-persons",
+        "--device",
+        "--pose-batch-size",
+        "--flip-test",
+        "--no-overlay",
+        "--quiet",
+    ):
+        assert flag in argv
+
+
+def test_build_sapiens_cli_argv_includes_threshold_flags() -> None:
+    argv = vs._build_sapiens_cli_argv(
+        input_path=Path("/in/vid.mp4"),
+        out_parent=Path("/out"),
+        model="1b",
+        stride=2,
+        kpt_thr=0.35,
+        bbox_thr=0.4,
+        nms_thr=0.25,
+        max_persons=4,
+        for_subprocess=False,
+    )
+    assert "--kpt-thr" in argv
+    assert "0.35" in argv
+    assert "--bbox-thr" in argv
+    assert "0.4" in argv
+    assert "--nms-thr" in argv
+    assert "0.25" in argv
+    assert "--max-persons" in argv
+    assert "4" in argv
 
 
 def test_build_sapiens_cli_argv_output_base() -> None:

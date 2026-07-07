@@ -25,7 +25,7 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.3.47</p>
+        <p><strong>Version:</strong> 0.3.76</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -49,8 +49,9 @@
             <li><strong>Cut timeline feedback</strong>: clickable/draggable strip above the scrub slider, matching <code>getpixelvideo</code>. Blue = range, green = start, orange = end, yellow = pending start, white = playhead. Marker columns snap to cut points.</li>
             <li><strong>Responsive final render</strong>: ffmpeg/OpenCV export uses a cancellable Tk progress dialog that remains responsive while rendering.</li>
             <li><strong>Custom output base name</strong>: <code>B</code> or <strong>Base name</strong> button → <code>{prefix}_frame_{start}_to_{end}.mp4</code>; folder still <code>{video}_vailacut_{timestamp}</code>.</li>
-            <li><strong>Per-cut names from CSV (NEW)</strong>: <code>N</code> or <strong>Names CSV</strong> button loads a CSV/TXT list of base names (one per cut). Cut 1 → name 1, cut 2 → name 2, … each saved as <code>{name}.mp4</code> (clean). Accepts a comma-separated line or one name per line (<code>name,label</code> also works). Names are sanitized and de-duplicated; missing names fall back to the single base / video stem; per-cut names take priority over <code>B</code>.</li>
+            <li><strong>Per-cut output names (CSV/TXT)</strong>: <strong>V</strong> or <strong>N</strong> or <strong>Cut names</strong> button — one name per line → <code>name.mp4</code> per cut (example: <code>CarlosMiguel_cod_02</code>, …). Does not load cuts or replace TOML (<strong>F</strong>); only exported video filenames. <strong>C</strong> = labels in TOML only.</li>
             <li><strong>Subprocess launch</strong>: started from the main GUI as a separate process (like <code>getpixelvideo</code>), so closing the cut window returns control to vailá without freezing the main window.</li>
+            <li><strong>Playback speed (v0.3.76)</strong>: <code>[</code> / <code>]</code> step through discrete speeds (0.0625×–16×, always includes <strong>1×</strong>); HUD upper-right on the video (same style as <code>getpixelvideo</code>).</li>
             <li><strong>Player startup fix (v0.3.47)</strong>: <code>output_basename</code> initialized before pygame UI.</li>
         </ul>
     </div>
@@ -79,17 +80,17 @@
         <h3>Bottom control bar</h3>
         <ul>
             <li><strong>Left:</strong> clickable cut strip above slider, frame/time (.6f), hint <code>Out: {prefix}_frame_…</code> (or <code>Out: per-cut CSV names (n)</code>). Strip: blue range, green start, orange end, yellow pending, white playhead.</li>
-            <li><strong>Right:</strong> <strong>Loop</strong>, <strong>Help</strong>, then <strong>Names CSV</strong> (<strong>Names ✓n</strong> when a list is loaded) + <strong>Base name</strong> (<strong>Base ✓</strong> when custom prefix is set).</li>
+            <li><strong>Right:</strong> <strong>Loop</strong>, <strong>Help</strong>, then <strong>Cut names</strong> (<strong>Names ✓n</strong> when a list is loaded) + <strong>Base name</strong> (<strong>Base ✓</strong> when custom prefix is set).</li>
         </ul>
         <h3>Keyboard</h3>
         <ul>
-            <li><strong>Playback:</strong> Space, →/←, Shift+→/← (previous/next cut marker with wraparound), ↑/↓ (±60), slider click, cut-strip click/drag with marker snap.</li>
+            <li><strong>Playback:</strong> Space, <code>[</code> / <code>]</code> (slower/faster), →/←, Shift+→/← (previous/next cut marker with wraparound), ↑/↓ (±60), slider click, cut-strip click/drag with marker snap.</li>
             <li><strong>Audio:</strong> <code>A</code> panel, <code>M</code> mute.</li>
             <li><strong>Window:</strong> <code>0</code> auto-fit; +/- / wheel zoom; MMB pan.</li>
             <li><strong>Cuts:</strong> S, E, R, D/Delete, L, C (labels CSV).</li>
             <li><strong>Markers:</strong> Shift+Left/Right, PageUp/PageDown, Home/End.</li>
             <li><strong>Jump:</strong> G (frame), T (time), I/P (FPS).</li>
-            <li><strong>Files:</strong> F (load TOML/sync), <strong>B</strong> (single base name), <strong>N</strong> (per-cut base-name CSV/TXT), ESC (save + optional render).</li>
+            <li><strong>Files:</strong> F (load TOML/sync), <strong>V</strong> / <strong>N</strong> (per-cut names), <strong>B</strong> (single base), C (labels), ESC (save + optional render).</li>
             <li><strong>Help:</strong> H or Help button.</li>
         </ul>
     </div>

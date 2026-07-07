@@ -79,15 +79,19 @@ DETR detector is shared across all sizes.
 2. **Dir…** = batch all videos in a folder (recursive); **File…** = single video
 3. Choose output parent directory
 4. Model default `1b`; stride `1` = every frame
-5. Run
+5. **Detection & keypoint thresholds** — `--bbox-thr`, `--nms-thr`, `--kpt-thr`, `--max-persons`
+6. **GPU & advanced** — `--device`, `--pose-batch-size` (empty = auto), `--flip-test`, overlay on/off
+7. **Run** — terminal prints full `>> Equivalent CLI` including `--output-base`
 
 ## GUI → CLI mirror
 
-When you click **Run**, the terminal prints a copy-paste command:
+When you click **Run**, the terminal prints a copy-paste command with **every flag you chose**:
 
 ```text
 >> vaila/vaila_sapiens: Equivalent CLI (copy/paste):
->>   uv run vaila/vaila_sapiens.py -i ... -o ... --model 1b --stride 1 ...
+>>   uv run vaila/vaila_sapiens.py -i ... -o ... --output-base .../processed_sapiens_<ts>/ \
+>>     --model 1b --stride 1 --kpt-thr 0.3 --bbox-thr 0.3 --nms-thr 0.3 --max-persons 8 \
+>>     --device 0 --quiet ...
 ```
 
 The chooser also prints the launcher when you open **Sapiens2 Pose**:
@@ -97,6 +101,29 @@ uv run python -u vaila/vaila_sapiens.py
 ```
 
 ## CLI
+
+### Full inference — all flags
+
+```bash
+uv run vaila/vaila_sapiens.py \
+  -i /path/to/video.mp4 \
+  -o /path/to/output_parent/ \
+  --model 1b \
+  --stride 1 \
+  --device 0 \
+  --bbox-thr 0.3 \
+  --nms-thr 0.3 \
+  --max-persons 8 \
+  --kpt-thr 0.3 \
+  --pose-batch-size 2 \
+  --flip-test \
+  --no-overlay \
+  --quiet
+```
+
+Also: `uv run vaila/vaila_sapiens.py --print-examples` dumps recipes to the terminal.
+
+### Quick recipes
 
 ```bash
 # GUI (no args)
@@ -108,31 +135,87 @@ uv run vaila/vaila_sapiens.py \
   -o /tmp/sapiens_out \
   --model 1b --dry-run
 
-# Full run
-uv run vaila/vaila_sapiens.py \
-  -i tests/markerless_2d_analysis/camera_01_cube_test_png_196_190_446_dbox_h265.mp4 \
-  -o /tmp/sapiens_out \
-  --model 1b --stride 1
-
 # Long clips — lower compute
 uv run vaila/vaila_sapiens.py -i long.mp4 -o out/ --model 1b --stride 3
 ```
 
-### Flags
+### Flags — what each option does
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-i` / `--input` | — | Video file or directory |
-| `-o` / `--output` | — | Parent output directory |
-| `--model` | `1b` | `0.4b`, `0.8b`, `1b`, `5b` |
-| `--stride` | `1` | Infer every N frames; overlay reuses nearest pose |
-| `--kpt-thr` | `0.3` | Keypoint visibility threshold |
-| `--device` | `0` | CUDA device index |
-| `--no-overlay` | off | Skip overlay MP4 |
-| `--dry-run` | off | Plan only |
-| `--download-weights` | off | HF download for selected model + DETR |
-| `--quiet` | off | Minimal output (no tqdm / frame heartbeat) |
-| `--open-help` | off | Open this help in browser |
+#### Input / output
+
+| Flag | Default | What it is | What changes |
+|------|---------|------------|--------------|
+| `-i` / `--input` | — | One video file or a folder of videos | Folder = batch; skips `*_sapiens_overlay.*` and `processed_sapiens_*` |
+| `-o` / `--output` | — | Parent output directory | Creates `processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/` |
+
+#### Model and inference
+
+| Flag | Default | What it is | What changes |
+|------|---------|------------|--------------|
+| `--model` | `1b` | Checkpoint size: `0.4b`, `0.8b`, `1b`, `5b` | Larger = better quality, more VRAM. Use same flag for `--download-weights` and run |
+| `--stride` | `1` | Infer pose every **N** frames | `1` = every frame. `2+` = fewer GPU passes; skipped frames reuse nearest pose in overlay/CSVs |
+| `--device` | `0` | CUDA GPU index | `0` = first NVIDIA card |
+| `--flip-test` | off | Left–right flip ensemble in pose head | ~2× VRAM; slightly better accuracy |
+| `--pose-batch-size` | auto | Person crops processed per GPU pose pass (per frame) | Auto: 1 (`5b`), 2 (`1b`), 4 (`0.4b`/`0.8b`). See below |
+
+#### What is `--pose-batch-size`?
+
+Sapiens2 in vailá is **top-down** pose — it does not estimate all joints on the full frame at once. Per frame:
+
+1. **DETR detection** finds people and boxes them (`--bbox-thr`, `--nms-thr`, `--max-persons`).
+2. **Sapiens2 pose head** crops each person and predicts 308 keypoints on each crop.
+
+`--pose-batch-size` controls step 2: **how many person crops go through the pose network in one GPU forward pass** on the same frame.
+
+**Example:** 12 persons detected, `--pose-batch-size 4` → 3 pose passes (4+4+4). With `--pose-batch-size 1` → 12 passes (slower, less VRAM).
+
+**Auto (default):** omit the flag or leave the GUI field empty — vailá picks by model: `1` for `5b`, `2` for `1b`, `4` for `0.4b`/`0.8b`.
+
+**When to lower:** CUDA **OOM** on crowded frames → try `--pose-batch-size 1`. Also consider lowering `--max-persons` to cap detections.
+
+**Not `--stride`:** stride skips *frames*; pose-batch-size batches *persons within one frame*.
+
+#### Detection thresholds
+
+| Flag | Default | What it is | What changes |
+|------|---------|------------|--------------|
+| `--bbox-thr` | `0.3` | Min DETR person-detection score | Higher = fewer persons; lower = more false positives |
+| `--nms-thr` | `0.3` | Box overlap deduplication | Lower = stricter one-box-per-person |
+| `--max-persons` | `8` | Max persons per frame (top scores) | Lower to save VRAM in crowded scenes |
+
+#### `--kpt-thr` — keypoint confidence cutoff
+
+Each joint gets a **confidence score** (0–1) from the pose model. `--kpt-thr` is the minimum
+score for a joint to count as **visible** in post-processing. Default `0.3` (MMPose/Sapiens convention).
+
+| Flag | Default | What it is | What changes |
+|------|---------|------------|--------------|
+| `--kpt-thr` | `0.3` | Per-joint confidence cutoff | Effect depends on output file (see below) |
+
+**Where `--kpt-thr` applies:**
+
+- **Overlay MP4** — joints below threshold are not drawn
+- **`<stem>_id_NN_sapiens_pose.csv`** / **`<stem>_getpixelvideo_pose.csv`** — low-confidence joints → empty cells
+- **`sapiens_points.csv`** — mid-hip (`pN_hx`, `pN_hy`) averaged only from hip joints above threshold; foot/center use bbox, not this threshold
+
+**Where `--kpt-thr` does *not* filter:**
+
+- **`<stem>_sapiens_vaila.csv`** — long format keeps all joints + raw `score` column
+- **`<stem>_markers.csv`** — foot from bbox bottom anchor
+- **`sapiens_vaila_*.csv`** — bbox anchors only
+- **`<stem>_predictions.json`** — raw scores preserved
+
+**Practical tuning:** `0.1`–`0.2` = more joints (noisier); `0.3` = default; `0.4`–`0.6` = stricter (fewer gaps vs less jitter). Saved in JSON as `kpt_thr_used`.
+
+#### Run control
+
+| Flag | Default | What it is | What changes |
+|------|---------|------------|--------------|
+| `--no-overlay` | off | Skip skeleton preview MP4 | CSV/JSON still written |
+| `--dry-run` | off | Plan only | No GPU, no output files |
+| `--download-weights` | off | HF download for `--model` + DETR | Writes to `vaila/models/sapiens2/`, then exits |
+| `--quiet` | off | Minimal terminal output | No tqdm bar / heartbeat (GUI batch uses this) |
+| `--open-help` | off | Open help in browser | Exits after opening `vaila_sapiens.html` |
 
 ## Outputs
 

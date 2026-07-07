@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 02 June 2026
-Version: 0.3.47
+Update Date: 07 July 2026
+Version: 0.3.76
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -26,6 +26,7 @@ Features:
 - Added support for audio waveform visualization.
 - Added support for audio playback.
 - Added support for loop control.
+- Playback speed: `[` / `]` halve/double speed (0.0625×–16×), same as getpixelvideo.
 - Added support for auto-fit window.
 - Added support for marker navigation.
 - Added clickable timeline feedback for cut ranges, start/end markers, and pending start.
@@ -36,9 +37,8 @@ Features:
 - Added support for save and generate videos.
 - Added support for batch processing of videos.
 - Optional custom output base name for cut files (GUI button or B key).
-- Optional per-cut output names from a CSV/TXT list (GUI "Names CSV" button or N
-  key): cut 1 -> name 1, cut 2 -> name 2, ... saved as "<name>.mp4". Names are
-  sanitized and de-duplicated automatically.
+- Optional per-cut output names from a CSV/TXT list (GUI **Cut names** button or **N** / **V**):
+  one name per line → cut 1 → name1.mp4, cut 2 → name2.mp4, …
 
 Usage:
 - Run the script to open a graphical interface for selecting the input directory
@@ -116,6 +116,48 @@ CUT_PLAYHEAD_COLOR = (245, 245, 245)
 _CLOSE_EVENTS: tuple[int, ...] = (pygame.QUIT,)
 if hasattr(pygame, "WINDOWCLOSE"):
     _CLOSE_EVENTS = (pygame.QUIT, pygame.WINDOWCLOSE)
+
+# Discrete playback-speed ladder (always includes 1.0× so [ / ] never skip normal speed).
+PLAYBACK_SPEED_STEPS: tuple[float, ...] = (0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0)
+
+
+def _playback_speed_index(speed: float) -> int:
+    best_i = 0
+    best_d = float("inf")
+    for i, step in enumerate(PLAYBACK_SPEED_STEPS):
+        d = abs(step - speed)
+        if d < best_d:
+            best_d = d
+            best_i = i
+    return best_i
+
+
+def _step_playback_speed(speed: float, direction: int) -> float:
+    idx = _playback_speed_index(speed)
+    new_idx = max(0, min(len(PLAYBACK_SPEED_STEPS) - 1, idx + direction))
+    return PLAYBACK_SPEED_STEPS[new_idx]
+
+
+def _format_playback_speed_label(speed: float) -> str:
+    canonical = PLAYBACK_SPEED_STEPS[_playback_speed_index(speed)]
+    if canonical >= 1.0 and canonical == int(canonical):
+        return str(int(canonical))
+    return f"{canonical:g}"
+
+
+def _draw_playback_speed_hud(surface: pygame.Surface, speed: float, viewport_width: int) -> None:
+    """Upper-right overlay on the video area (same placement style as getpixelvideo HUD)."""
+    label = f"Speed: {_format_playback_speed_label(speed)}×"
+    font = pygame.font.SysFont("verdana", 11)
+    text = font.render(label, True, (238, 238, 245))
+    pad_x, pad_y = 8, 5
+    bg = pygame.Surface((text.get_width() + pad_x * 2, text.get_height() + pad_y + 3))
+    bg.set_alpha(200)
+    bg.fill((18, 18, 26))
+    x = viewport_width - bg.get_width() - 8
+    y = 8
+    surface.blit(bg, (x, y))
+    surface.blit(text, (x + pad_x, y + 3))
 
 
 def clamp_frame_index(frame_idx: int, total_frames: int) -> int:
@@ -1540,6 +1582,9 @@ def play_video_with_cuts(video_path):
     clock = pygame.time.Clock()
     frame_count = 0
     paused = True
+    playback_speed = 1.0
+    slow_mo_accumulator = 0.0
+    last_valid_frame = None
     cuts = []  # List to store (start, end) frame pairs
     cut_labels = []  # List to store labels for each cut
     current_start = None
@@ -1840,7 +1885,7 @@ def play_video_with_cuts(video_path):
         names_active = bool(output_basenames)
         names_color = (140, 110, 70) if names_active else (70, 70, 70)
         pygame.draw.rect(slider_surface, names_color, names_button_rect)
-        names_label = f"Names ✓{len(output_basenames)}" if names_active else "Names CSV"
+        names_label = f"Names ✓{len(output_basenames)}" if names_active else "Cut names"
         names_text = button_font.render(names_label, True, (255, 255, 255))
         slider_surface.blit(names_text, names_text.get_rect(center=names_button_rect.center))
 
@@ -1926,6 +1971,7 @@ def play_video_with_cuts(video_path):
             "",
             "Navigation:",
             "- Space: Play/Pause",
+            "- [ / ]: Decrease / Increase playback speed (halve / double; 0.0625×–16×)",
             "- Right Arrow: Next Frame (when paused)",
             "- Left Arrow: Previous Frame (when paused)",
             "- Shift+Right / Shift+Left: Jump to next/previous cut marker",
@@ -1957,12 +2003,13 @@ def play_video_with_cuts(video_path):
             "- Page Down: Jump to Next Marker",
             "",
             "File Operations:",
-            "- F: Load Sync File or Cuts TOML File",
-            "- C: Load Cut Labels from CSV (shown in cut list / TOML)",
+            "- F: Load Sync File or Cuts TOML File (cuts only; same as before)",
+            "- V or N: Load per-cut output .mp4 names from CSV/TXT (one name per line)",
+            "     Example (3 cuts): CarlosMiguel_cod_02 / Coutinho_cod_02 / Heittor_cod_02",
+            "     → CarlosMiguel_cod_02.mp4, Coutinho_cod_02.mp4, … (or 'Cut names' button)",
+            "     Does not change cuts or TOML load; only renames exported video files.",
+            "- C: Load cut labels only (metadata in TOML; does not rename output files)",
             "- B: Set a single output base name for all cuts (or 'Base name' button)",
-            "- N: Load a CSV/TXT list of base names, one per cut (or 'Names CSV' button)",
-            "     cut 1 -> name 1, cut 2 -> name 2 ... files saved as <name>.mp4",
-            "     (single comma-separated line OR one name per line; 'name,label' OK)",
             "- I or P: Input Manual FPS",
             "- ESC: Save cuts to TOML file and optionally generate videos",
             "",
@@ -1973,8 +2020,8 @@ def play_video_with_cuts(video_path):
             "- Click or drag cut strip: Jump to cut markers (green start / orange end)",
             "- Yellow strip marker: Pending start selected with S",
             "- Click on slider: Jump to frame",
-            "- Click 'Loop' / 'Help' / 'Names CSV' / 'Base name' (row below the timeline):",
-            "  Loop, Help, per-cut Names CSV, single Base name",
+            "- Click 'Loop' / 'Help' / 'Cut names' / 'Base name' (row below the timeline):",
+            "  Loop, Help, per-cut name list (CSV/TXT), single Base name",
             "- Mouse Wheel (video area): Zoom in/out",
             "- Middle mouse drag (video area): Pan when zoomed",
             "- Mouse Wheel in this help: Scroll help text",
@@ -2122,7 +2169,7 @@ def play_video_with_cuts(video_path):
         root_csv = Tk()
         root_csv.withdraw()
         csv_file = filedialog.askopenfilename(
-            title="Select base-name list (one per cut)",
+            title="Per-cut output names (one per line → name.mp4)",
             filetypes=[
                 ("CSV files", "*.csv"),
                 ("TXT files", "*.txt"),
@@ -2167,8 +2214,8 @@ def play_video_with_cuts(video_path):
                 extra = f"\n\nNote: {len(names)} name(s) for {n_cuts} cut(s); extras are ignored."
             preview = ", ".join(names[:10]) + (" …" if len(names) > 10 else "")
             messagebox.showinfo(
-                "Base-name list loaded",
-                f"Loaded {len(names)} base name(s):\n{preview}{extra}",
+                "Cut names loaded",
+                f"Loaded {len(names)} name(s) for output files:\n{preview}{extra}",
                 parent=msg_root,
             )
             print(f"Per-cut base names loaded ({len(names)}): {names}")
@@ -2477,11 +2524,30 @@ def play_video_with_cuts(video_path):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
             ret, frame = cap.read()
         else:
-            # Quando em reprodução, apenas leia o próximo frame sem reposicionar
-            ret, frame = cap.read()
-            if ret:
-                frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+            if playback_speed >= 1.0:
+                skip = int(playback_speed)
+                for _ in range(skip):
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                if ret:
+                    frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
             else:
+                slow_mo_accumulator += playback_speed
+                if slow_mo_accumulator >= 1.0:
+                    slow_mo_accumulator -= 1.0
+                    ret, frame = cap.read()
+                    if ret:
+                        frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+                elif last_valid_frame is not None:
+                    frame = last_valid_frame.copy()
+                    ret = True
+                else:
+                    ret, frame = cap.read()
+                    if ret:
+                        frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+
+            if not ret:
                 # Final do vídeo alcançado
                 if loop_enabled:
                     frame_count = 0
@@ -2506,6 +2572,7 @@ def play_video_with_cuts(video_path):
         if not ret:
             break
 
+        last_valid_frame = frame.copy()
         frame = check_and_rotate_frame(frame, metadata)
 
         # Base scale so that at zoom_level=1.0 the whole video fits in the window
@@ -2526,6 +2593,7 @@ def play_video_with_cuts(video_path):
 
         screen.fill((0, 0, 0))
         screen.blit(frame_surface, (0, 0))
+        _draw_playback_speed_hud(screen, playback_speed, window_width)
 
         # Draw audio waveform panel if enabled
         if show_audio:
@@ -2644,6 +2712,14 @@ def play_video_with_cuts(video_path):
                     zoom_level = max(0.1, zoom_level / 1.2)
                     clamp_zoom_level()
                     clamp_pan_offsets()
+                elif event.key == pygame.K_RIGHTBRACKET:  # ]
+                    playback_speed = _step_playback_speed(playback_speed, 1)
+                    slow_mo_accumulator = 0.0
+                    print(f"Playback speed: {_format_playback_speed_label(playback_speed)}×")
+                elif event.key == pygame.K_LEFTBRACKET:  # [
+                    playback_speed = _step_playback_speed(playback_speed, -1)
+                    slow_mo_accumulator = 0.0
+                    print(f"Playback speed: {_format_playback_speed_label(playback_speed)}×")
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                     if paused:
@@ -2710,11 +2786,16 @@ def play_video_with_cuts(video_path):
                         print("Last cut removed (D key)")
                 elif event.key == pygame.K_l:  # List all cuts
                     if cuts:
+                        planned = build_cut_output_filenames(
+                            video_path, cuts, output_basename, output_basenames
+                        )
                         cuts_list_strs = []
                         for i, (start, end) in enumerate(cuts):
                             label_str = f" [{cut_labels[i]}]" if i < len(cut_labels) else ""
+                            out_file = planned[i] if i < len(planned) else "?"
                             cuts_list_strs.append(
                                 f"Cut {i + 1}{label_str}: Frame {start + 1} to {end + 1}"
+                                f" → {out_file}"
                             )
                         messagebox.showinfo("Cuts List", "\n".join(cuts_list_strs))
                     else:
@@ -2881,7 +2962,7 @@ def play_video_with_cuts(video_path):
                     show_help_dialog()
                 elif event.key == pygame.K_b:  # Set output base name for cut files
                     screen = prompt_output_basename_dialog()
-                elif event.key == pygame.K_n:  # Load per-cut base names from CSV/TXT
+                elif event.key in (pygame.K_n, pygame.K_v):  # Per-cut output names (CSV/TXT)
                     screen = prompt_output_basenames_csv()
                 elif event.key == pygame.K_g and paused:  # Go to frame number
                     # Temporarily close pygame display to show tkinter dialog
