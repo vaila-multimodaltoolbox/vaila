@@ -44,6 +44,9 @@ vaila/models/sam3/*
 vaila/models/sam-3d-dinov3/*
 !vaila/models/sam-3d-dinov3/*.txt
 
+vaila/models/sapiens2/*
+!vaila/models/sapiens2/*.txt
+
 vaila/models/trackers/*
 !vaila/models/trackers/*.txt
 
@@ -241,3 +244,17 @@ tests/markerless_2d_analysis/temp/
 !tests/Deadlift/
 tests/Deadlift/**/*.mp4
 tests/Train_yolo/processed_sam_20260614_121915/
+
+# Local third-party clones and caches (bin/setup_*.sh; not committed)
+.local/
+
+# Legacy Sapiens2 path at repo root (pre-0.3.76; use .local/third_party/sapiens2/)
+sapiens2/
+
+# SAM 3D Body upstream clone (bin/setup_fifa_sam3d.sh; not committed)
+sam_3d_body/
+
+# Test output directories
+tests/**/processed_sapiens_*/
+tests/**/processed_sam_*/
+

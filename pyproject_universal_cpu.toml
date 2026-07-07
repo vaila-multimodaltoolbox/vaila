@@ -1,6 +1,6 @@
 [project]
 name = "vaila"
-version = "0.3.70"
+version = "0.3.72"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -146,6 +146,10 @@ fifa = [
     "braceexpand",
     "tqdm",
 ]
+sapiens = [
+    "transformers>=4.40",
+    "safetensors>=0.4",
+]
 
 [project.scripts]
 vaila = "vaila:main"
@@ -183,6 +187,8 @@ exclude = [
     ".uv",
     "uv.lock",
     "sam_3d_body",
+    ".local",
+    "sapiens2",
     "vaila/fifa_starter_lib",
 ]
 
@@ -241,6 +247,8 @@ exclude = [
     ".uv",
     "uv.lock",
     "sam_3d_body",
+    ".local",
+    "sapiens2",
     "vaila/fifa_starter_lib",
 ]
 

@@ -1,10 +1,12 @@
-# SAM (Segment Anything) Button
+# SAM 3 Video — via YOLO + FB Chooser
 
-The **SAM (Segment Anything)** button launches the `vaila_sam.py` module for advanced video segmentation using Meta's SAM 3 model.
+The **SAM 3 video** option in the **YOLO + FB** chooser launches `vaila_sam.py` for advanced video segmentation using Meta's SAM 3 model.
+
+See also: [YOLO + FB chooser](yolo-fb.md) for all launcher CLI mirrors.
 
 ## Overview
 
-SAM 3 allows for high-quality, zero-shot segmentation of objects in video based on text prompts or point clicks. In vailá, it is primarily used for segmenting players and referees in soccer footage to create binary masks and extract tracking points.
+SAM 3 allows for high-quality, zero-shot segmentation of objects in video based on text prompts. In vailá, it is primarily used for segmenting players and referees in soccer footage to create binary masks and extract tracking points.
 
 ## Key Features
 
@@ -16,16 +18,18 @@ SAM 3 allows for high-quality, zero-shot segmentation of objects in video based 
 
 ## Usage
 
-1. Click **Video AI tools** -> **SAM (Segment Anything)** in Frame B.
+1. Click **YOLO + FB** → **SAM 3 video** in Frame B.
 2. Select the input video or folder.
 3. Enter a **Text prompt** (e.g., `person`).
 4. (Optional) Select **Save overlay MP4** to visualize the segmentation.
-5. Click **Run**.
+5. Click **Run** — terminal prints `>> vaila/vaila_sam: Equivalent CLI` with full copy-paste command.
 
 ## Requirements
+
 - **NVIDIA GPU:** CUDA is strictly required for the SAM 3 video stack.
 - **Weights:** Must be downloaded from Hugging Face (`uv run vaila/vaila_sam.py --download-weights`).
 - **Dependencies:** `uv sync --extra sam`.
 
 ---
+
 See also: [FIFA Workflow](../../docs/fifa_workflow.md), [SAM 3 Help Index](../../vaila/help/vaila_sam.html)

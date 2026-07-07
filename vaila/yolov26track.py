@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 04 July 2026
-Version: 0.3.68
+Update Date: 06 July 2026
+Version: 0.3.72
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -96,6 +96,7 @@ import json
 import logging
 import os
 import platform
+import shlex
 import subprocess
 import sys
 import tkinter as tk
@@ -2505,9 +2506,7 @@ def _load_pose_model(pose_model_name: str, models_dir: str) -> Any | None:
             pose_model_path = str(pt_path)
         else:
             exported = hw.auto_export(pose_model_name, imgsz=640)
-            pose_model_path = (
-                str(pt_path) if str(exported).endswith(".engine") else str(exported)
-            )
+            pose_model_path = str(pt_path) if str(exported).endswith(".engine") else str(exported)
         return YOLO(pose_model_path, task="pose")
     except TypeError:
         return YOLO(pose_model_path)
@@ -2528,9 +2527,7 @@ def _infer_pose_in_bbox(
     min_side: int,
 ) -> list[tuple[float, float, float]] | None:
     """Run upscaled pose inside bbox; return global keypoints or None."""
-    roi, scale, off_x, off_y = prepare_pose_roi(
-        frame, xyxy, pad_pct=pad_pct, min_side=min_side
-    )
+    roi, scale, off_x, off_y = prepare_pose_roi(frame, xyxy, pad_pct=pad_pct, min_side=min_side)
     if roi.size == 0:
         return None
     results = pose_model.predict(
@@ -3300,6 +3297,15 @@ def run_yolov26pose_video(parent: tk.Misc | None = None) -> None:
             root.destroy()
         return
 
+    _print_pose_video_equivalent_cli(
+        video_path=video_path,
+        output_base_dir=output_base_dir,
+        pose_model=cast(str, result["pose_model_name"]),
+        pose_conf=float(result["pose_conf"]),
+        pose_iou=float(result["pose_iou"]),
+        device=cast(str, result["device"]),
+    )
+
     video_stem = Path(video_path).stem
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = Path(output_base_dir) / f"{video_stem}_pose_{timestamp}"
@@ -3731,6 +3737,8 @@ def select_id_and_run_pose():
             root.destroy()
         return
     tracking_dir = resolved
+
+    _print_pose_from_tracking_workflow_hint(tracking_dir)
 
     csv_files = glob.glob(os.path.join(tracking_dir, "*_id_*.csv"))
     csv_files = [f for f in csv_files if not os.path.basename(f).startswith("all_id_")]
@@ -5008,6 +5016,36 @@ def run_yolov26track():
 
     target_classes = class_dialog.result
 
+    # Collect videos and print GUI→CLI mirror before processing
+    pending_videos: list[tuple[str, str]] = []
+    for video_file in os.listdir(video_dir):
+        if video_file.endswith((".mp4", ".avi", ".mov", ".mkv", ".MP4", ".AVI", ".MOV", ".MKV")):
+            video_path = os.path.abspath(os.path.join(video_dir, video_file))
+            if not os.path.isfile(video_path):
+                continue
+            video_name = os.path.splitext(os.path.basename(video_path))[0]
+            output_dir = os.path.join(main_output_dir, video_name)
+            pending_videos.append((video_path, output_dir))
+
+    if pending_videos:
+        print("\n>> vaila/yolov26track: Equivalent CLI per video (copy/paste):", flush=True)
+        tracker_cli = tracker_name if tracker_name.endswith(".yaml") else f"{tracker_name}.yaml"
+        for video_path, output_dir in pending_videos:
+            cmd = _format_track_cli_command(
+                model_path=model_path,
+                source=video_path,
+                output_dir=output_dir,
+                tracker=tracker_cli,
+                config=config,
+                target_classes=target_classes,
+                do_pose=do_pose,
+            )
+            print(f">>   {cmd}", flush=True)
+        print(
+            ">> Note: GUI batch-processes a folder; CLI `track` runs one video per command.\n",
+            flush=True,
+        )
+
     # Count videos to process
     video_count = 0
     processed_count = 0
@@ -5054,7 +5092,9 @@ def run_yolov26track():
             all_video_path = os.path.join(output_dir, f"processed_{video_name}_all.mp4")
             temp_seg_avi_path = os.path.join(output_dir, f"processed_{video_name}_seg_temp.avi")
             temp_all_avi_path = os.path.join(output_dir, f"processed_{video_name}_all_temp.avi")
-            track_pose_overlay_path = os.path.join(output_dir, f"{video_name}_track_pose_overlay.mp4")
+            track_pose_overlay_path = os.path.join(
+                output_dir, f"{video_name}_track_pose_overlay.mp4"
+            )
             temp_pose_avi_path = os.path.join(output_dir, f"{video_name}_track_pose_temp.avi")
 
             # Use MJPG codec for AVI (highly compatible and reliable)
@@ -5592,7 +5632,9 @@ def run_yolov26track():
                         pose_buffers.setdefault(pose_key, []).append(pose_row)
                         all_pose_rows.append(pose_row)
                         if abs_kps:
-                            frame_all = _draw_keypoints_and_skeleton(frame_all, abs_kps, color=color)
+                            frame_all = _draw_keypoints_and_skeleton(
+                                frame_all, abs_kps, color=color
+                            )
 
                     if do_seg and masks_data is not None and det_i < len(masks_data):
                         mask_u8 = _to_mask_u8(masks_data[det_i])
@@ -5683,10 +5725,7 @@ def run_yolov26track():
                         print(f"Combined FFmpeg failed; keeping {temp_all_avi_path}")
             if pose_overlay_writer is not None:
                 pose_overlay_writer.release()
-                if (
-                    os.path.exists(temp_pose_avi_path)
-                    and os.path.getsize(temp_pose_avi_path) > 0
-                ):
+                if os.path.exists(temp_pose_avi_path) and os.path.getsize(temp_pose_avi_path) > 0:
                     print("Converting track+pose overlay to MP4...")
                     if _ffmpeg_temp_avi_to_h264_mp4(temp_pose_avi_path, track_pose_overlay_path):
                         os.remove(temp_pose_avi_path)
@@ -6305,7 +6344,14 @@ def _apply_geometric_stabilize_to_buffer(
             label = str(det["label"])
             key = (label, stable_id)
             id_rows.setdefault(key, []).append(
-                (bf.frame_idx, float(x_min), float(y_min), float(x_max), float(y_max), float(det["conf"]))
+                (
+                    bf.frame_idx,
+                    float(x_min),
+                    float(y_min),
+                    float(x_max),
+                    float(y_max),
+                    float(det["conf"]),
+                )
             )
 
     written = _flush_stable_bbox_csvs(id_rows, output_dir, total_frames)
@@ -6474,8 +6520,135 @@ def _emit_track_pose_from_buffer(
         "all_id_pose": all_pose_path,
         "yolo_reid_links": links_path,
         "per_id_pose": per_id_pose,
-        "track_pose_overlay": track_pose_overlay_path if os.path.isfile(track_pose_overlay_path) else None,
+        "track_pose_overlay": track_pose_overlay_path
+        if os.path.isfile(track_pose_overlay_path)
+        else None,
     }
+
+
+def _format_track_cli_command(
+    *,
+    model_path: str,
+    source: str,
+    output_dir: str,
+    tracker: str,
+    config: dict[str, Any],
+    target_classes: list[int] | None,
+    do_pose: bool,
+) -> str:
+    """Build copy-paste CLI equivalent to one GUI tracker run (``track`` subcommand)."""
+    parts: list[str] = [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "vaila.yolov26track",
+        "track",
+        "--model",
+        model_path,
+        "--source",
+        source,
+        "--output",
+        output_dir,
+        "--tracker",
+        tracker,
+        "--conf",
+        str(config.get("conf", 0.25)),
+        "--iou",
+        str(config.get("iou", 0.7)),
+        "--device",
+        str(config.get("device", "auto")),
+        "--vid-stride",
+        str(config.get("vid_stride", 1)),
+    ]
+    if target_classes:
+        parts.append("--classes")
+        parts.extend(str(c) for c in target_classes)
+    max_ids = int(config.get("max_tracked_ids", 0) or 0)
+    if max_ids > 0:
+        parts += ["--max-ids", str(max_ids)]
+    if not do_pose:
+        parts.append("--no-pose")
+    else:
+        parts += [
+            "--pose-model",
+            str(config.get("pose_model_name", "yolo26n-pose.pt")),
+            "--pose-conf",
+            str(config.get("pose_conf", 0.10)),
+            "--pose-iou",
+            str(config.get("pose_iou", 0.70)),
+            "--pose-min-roi",
+            str(config.get("pose_min_roi", 256)),
+            "--pose-pad-pct",
+            str(config.get("pose_pad_pct", 0.15)),
+        ]
+    if not config.get("stabilize_ids", True):
+        parts.append("--no-stabilize-ids")
+    else:
+        parts += [
+            "--reid-max-gap",
+            str(config.get("reid_max_gap", 12)),
+            "--reid-max-dist",
+            str(config.get("reid_max_dist", 180.0)),
+            "--reid-min-iou",
+            str(config.get("reid_min_iou", 0.05)),
+            "--reid-direction-weight",
+            str(config.get("reid_direction_weight", 0.5)),
+        ]
+    if config.get("appearance_reid"):
+        parts.append("--appearance-reid")
+        parts += [
+            "--appearance-reid-threshold",
+            str(config.get("appearance_reid_threshold", 0.6)),
+        ]
+    homography = config.get("reid_homography_path") or config.get("reid_homography_file")
+    if homography:
+        parts += ["--reid-homography", str(homography)]
+    return " ".join(shlex.quote(p) for p in parts)
+
+
+def _print_pose_video_equivalent_cli(
+    *,
+    video_path: str,
+    output_base_dir: str,
+    pose_model: str,
+    pose_conf: float,
+    pose_iou: float,
+    device: str,
+) -> None:
+    """Best-effort CLI hint for Pose (video) — no dedicated track subcommand."""
+    print(
+        "\n>> vaila/yolov26track: Pose (video) — GUI-only flow (no track subcommand).", flush=True
+    )
+    print(">> Launch from vailá: Frame B → YOLO + FB → Pose (video)", flush=True)
+    print(">> Or open the GUI module:", flush=True)
+    print(">>   uv run python -u -m vaila.yolov26track", flush=True)
+    print(">> Selected parameters:", flush=True)
+    print(f">>   video={shlex.quote(video_path)}", flush=True)
+    print(f">>   output_parent={shlex.quote(output_base_dir)}", flush=True)
+    print(
+        f">>   pose_model={pose_model} pose_conf={pose_conf} pose_iou={pose_iou} device={device}",
+        flush=True,
+    )
+    print("", flush=True)
+
+
+def _print_pose_from_tracking_workflow_hint(tracking_dir: str) -> None:
+    """CLI workflow hint for Pose (tracking) — step 1 is track; step 2 remains GUI."""
+    print("\n>> vaila/yolov26track: Pose (tracking) workflow:", flush=True)
+    print(">>   Step 1 — generate bbox CSVs with track CLI (one video example):", flush=True)
+    print(
+        ">>     uv run python -m vaila.yolov26track track "
+        "--model vaila/models/yolo26n.pt --source VIDEO.mp4 --output OUT/",
+        flush=True,
+    )
+    print(">>   Step 2 — select ID and run pose in GUI (no CLI subcommand yet):", flush=True)
+    print(
+        ">>     uv run python -u -m vaila.yolov26track  # then Pose (tracking) in chooser",
+        flush=True,
+    )
+    print(f">>   Tracking dir selected: {shlex.quote(tracking_dir)}", flush=True)
+    print("", flush=True)
 
 
 def run_track_cli(argv: list[str] | None = None) -> int:

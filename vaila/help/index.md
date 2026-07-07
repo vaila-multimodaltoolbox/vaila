@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 127 | **Categories:** 7 | **Generated on:** 05/07/2026 (v0.3.70)
+**Total documented modules:** 128 | **Categories:** 7 | **Generated on:** 07/07/2026 (v0.3.75)
 
 ---
 
@@ -294,6 +294,9 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **vaila_sam (SAM 3 Video Segmentation)**
   - [📄 HTML](vaila_sam.html)
   - [📝 Markdown](vaila_sam.md)
+- **vaila_sapiens (Sapiens2 Pose)**
+  - [📄 HTML](vaila_sapiens.html)
+  - [📝 Markdown](vaila_sapiens.md)
 - **vaila_stroboscopic (Stroboscopic Generator)**
   - [📄 HTML](vaila_stroboscopic.html)
   - [📝 Markdown](vaila_stroboscopic.md)

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 05 July 2026
-Version: 0.3.71
+Update Date: 06 July 2026
+Version: 0.3.72
 
 Example of usage:
 uv run vaila.py
@@ -110,6 +110,33 @@ def _print_sam3_install_instructions() -> None:
     print("=" * 72 + "\n", file=sys.stderr)
 
 
+def _sapiens_install_instructions() -> str:
+    """Sapiens2 setup text shared by terminal output and GUI error dialogs."""
+    return (
+        "Sapiens2 Pose is not installed.\n\n"
+        "Install the optional stack, then run the bootstrap:\n"
+        "  uv sync --extra sapiens\n"
+        "  bash bin/setup_sapiens2.sh\n\n"
+        "NVIDIA CUDA workstation (recommended):\n"
+        "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes\n"
+        "  bash bin/setup_sapiens2.sh\n\n"
+        "Weights download (inside bootstrap):\n"
+        "  pose: facebook/sapiens2-pose-1b\n"
+        "  detector: facebook/detr-resnet-101-dc5\n\n"
+        "CLI help / quick test:\n"
+        "  uv run vaila/vaila_sapiens.py --open-help\n"
+        "  uv run vaila/vaila_sapiens.py -i tests/markerless_2d_analysis/ -o /tmp/out --dry-run\n\n"
+        "Runtime note: Sapiens2 Pose requires NVIDIA CUDA. Default model is 1B (fits RTX 4090 24 GiB).\n"
+        "License: Sapiens2 uses Meta's Sapiens2 License (not AGPL). See vaila/help/vaila_sapiens.md."
+    )
+
+
+def _print_sapiens_install_instructions() -> None:
+    print("\n" + "=" * 72, file=sys.stderr)
+    print(_sapiens_install_instructions(), file=sys.stderr)
+    print("=" * 72 + "\n", file=sys.stderr)
+
+
 # Add the vaila directory to Python path to ensure modules can be found
 # This is especially important when vaila is installed and not run from the source directory
 vaila_dir = os.path.dirname(os.path.abspath(__file__))
@@ -194,6 +221,18 @@ def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
             messagebox.showerror("Error", f"Could not launch {module_name}: {e}")
 
 
+def _print_yolo_fb_launch(tool: str, launch_cli: str, *, note: str | None = None) -> None:
+    """Print launcher CLI mirror when a YOLO + FB chooser button is pressed."""
+    print("\n" + "=" * 60)
+    print(f"YOLO + FB → {tool}")
+    print(">> Equivalent launch CLI (copy/paste):")
+    print(f">>   {launch_cli}")
+    if note:
+        print(f">>   {note}")
+    print(">> Full run command prints in the tool terminal after you click Run.")
+    print("=" * 60 + "\n")
+
+
 # Conditionally import platform-specific functionality
 # Define a global variable to track if AppKit is available
 # This is used to set the application name in the dock for macOS
@@ -209,7 +248,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 05.Jul.2026 v0.3.70 (Python 3.12.13)
+    vailá - 06.Jul.2026 v0.3.72 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -246,7 +285,7 @@ B3_r3_c1 - HR/ECG         B3_r3_c2 - Yolo + Markerless_MP
 B3_r3_c3 - Vertical Jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - YOLO + SAM       B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c1 - YOLO + FB        B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
 B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
@@ -320,7 +359,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 05.Jul.2026 v0.3.70 (Python 3.12.13)")
+        self.title("vailá - 06.Jul.2026 v0.3.72 (Python 3.12.13)")
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -830,10 +869,10 @@ class Vaila(tk.Tk):
         row4_frame = tk.Frame(analysis_frame)
         row4_frame.pack(fill="x")
 
-        # B4_r4_c1 - YOLO + SAM
+        # B4_r4_c1 - YOLO + FB (YOLO + Meta/Facebook: SAM 3, Sapiens2)
         yolo_and_sam_btn = tk.Button(
             row4_frame,
-            text="YOLO + SAM",
+            text="YOLO + FB",
             width=button_width,
             command=self.yolo_and_sam,
         )
@@ -1625,12 +1664,18 @@ class Vaila(tk.Tk):
                 remote_lbl_var.set("Remote Directory (Source):")
 
         tk.Radiobutton(
-            mode_frame, text="Upload (Send to Remote)",
-            variable=mode_var, value="upload", command=_update_labels,
+            mode_frame,
+            text="Upload (Send to Remote)",
+            variable=mode_var,
+            value="upload",
+            command=_update_labels,
         ).pack(side=tk.LEFT, padx=10)
         tk.Radiobutton(
-            mode_frame, text="Download (Receive from Remote)",
-            variable=mode_var, value="download", command=_update_labels,
+            mode_frame,
+            text="Download (Receive from Remote)",
+            variable=mode_var,
+            value="download",
+            command=_update_labels,
         ).pack(side=tk.LEFT, padx=10)
 
         # -- helper to add labelled entry fields --
@@ -1640,14 +1685,10 @@ class Vaila(tk.Tk):
                     fill=tk.X, pady=(5, 2)
                 )
             else:
-                tk.Label(main_frame, text=label_var_or_str, anchor="w").pack(
-                    fill=tk.X, pady=(5, 2)
-                )
+                tk.Label(main_frame, text=label_var_or_str, anchor="w").pack(fill=tk.X, pady=(5, 2))
             row = tk.Frame(main_frame)
             row.pack(fill=tk.X, pady=(0, 5))
-            tk.Entry(row, textvariable=var).pack(
-                side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5)
-            )
+            tk.Entry(row, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
             if browse:
 
                 def _browse():
@@ -1731,7 +1772,7 @@ class Vaila(tk.Tk):
                 tmp.write("echo\n")
                 tmp.write(f"{cmd}\n")
                 tmp.write("echo\n")
-                tmp.write('if [ $? -eq 0 ]; then\n')
+                tmp.write("if [ $? -eq 0 ]; then\n")
                 tmp.write('    echo "✅ Transfer completed successfully!"\n')
                 tmp.write("else\n")
                 tmp.write('    echo "❌ Transfer failed!"\n')
@@ -1787,8 +1828,12 @@ class Vaila(tk.Tk):
         btn_frame = tk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
         tk.Button(
-            btn_frame, text="▶ Start Transfer", command=_start,
-            bg="#4CAF50", fg="white", font=("Arial", 10, "bold"),
+            btn_frame,
+            text="▶ Start Transfer",
+            command=_start,
+            bg="#4CAF50",
+            fg="white",
+            font=("Arial", 10, "bold"),
         ).pack(side=tk.LEFT, padx=(0, 5))
         tk.Button(btn_frame, text="Close", command=dialog.destroy).pack(side=tk.RIGHT)
 
@@ -2300,8 +2345,8 @@ class Vaila(tk.Tk):
 
         # Create a dialog window for tracking version selection
         dialog = tk.Toplevel(self)
-        dialog.title("Select YOLO Tool")
-        dialog.geometry("400x650")
+        dialog.title("Select YOLO / Meta (FB) Tool")
+        dialog.geometry("400x720")
         dialog.transient(self)  # Make dialog modal
 
         # Try to set grab, but don't fail if another grab is active
@@ -2315,7 +2360,7 @@ class Vaila(tk.Tk):
             with contextlib.suppress(Exception):
                 dialog.grab_set()
 
-        tk.Label(dialog, text="Select YOLO tool to use:", pady=15).pack()
+        tk.Label(dialog, text="Select tool:", pady=15).pack()
 
         # Ensure Ultralytics never downloads into repo root.
         try:
@@ -2327,6 +2372,7 @@ class Vaila(tk.Tk):
 
         def use_yolov26():
             dialog.destroy()
+            _print_yolo_fb_launch("Tracker (v26)", "uv run python -u -m vaila.yolov26track")
             try:
                 # Run in separate process. Reason: native TensorRT/torch failures can kill main GUI.
                 run_vaila_module(
@@ -2341,6 +2387,11 @@ class Vaila(tk.Tk):
 
         def use_yolov26_seg():
             dialog.destroy()
+            _print_yolo_fb_launch(
+                "Seg (v26)",
+                "uv run python -u -m vaila.yolov26track",
+                note="In the tracker GUI choose a -seg.pt model and track+seg run mode.",
+            )
             messagebox.showinfo(
                 "YOLO Segmentation",
                 "In the next window, please select a segmentation model (e.g., yolo26n-seg.pt)",
@@ -2359,6 +2410,7 @@ class Vaila(tk.Tk):
 
         def use_train_yolov26():
             dialog.destroy()
+            _print_yolo_fb_launch("Train YOLOv26", "uv run python -u -m vaila.yolotrain")
             try:
                 # Isolate Tk/Ultralytics training UI from the main vailá GUI process.
                 run_vaila_module(
@@ -2370,6 +2422,11 @@ class Vaila(tk.Tk):
 
         def use_yolo_pose_v26():
             dialog.destroy()
+            _print_yolo_fb_launch(
+                "Pose (video)",
+                "uv run python -u -m vaila.yolov26track",
+                note="Launched in-process from main vailá; pose params print after Run.",
+            )
             try:
                 from vaila import yolov26track
 
@@ -2382,6 +2439,11 @@ class Vaila(tk.Tk):
 
         def use_yolo_pose_v26_from_tracking():
             dialog.destroy()
+            _print_yolo_fb_launch(
+                "Pose (tracking)",
+                "uv run python -u -m vaila.yolov26track",
+                note="Step 1: track CLI; step 2: pose-from-tracking GUI (see terminal hints).",
+            )
             try:
                 from vaila import yolov26track
 
@@ -2394,7 +2456,13 @@ class Vaila(tk.Tk):
 
         def use_sam():
             dialog.destroy()
+            _print_yolo_fb_launch("SAM 3 video", "uv run python -u vaila/vaila_sam.py")
             self.sam_video()
+
+        def use_sapiens2():
+            dialog.destroy()
+            _print_yolo_fb_launch("Sapiens2 Pose", "uv run python -u vaila/vaila_sapiens.py")
+            self.sapiens_video()
 
         tk.Button(dialog, text="Tracker (v26)", command=use_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Pose (video)", command=use_yolo_pose_v26, width=16).pack(pady=6)
@@ -2406,6 +2474,7 @@ class Vaila(tk.Tk):
         ).pack(pady=6)
         tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
         tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
+        tk.Button(dialog, text="Sapiens2 Pose", command=use_sapiens2, width=16).pack(pady=6)
         tk.Button(dialog, text="Train YOLOv26", command=use_train_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
@@ -3321,12 +3390,54 @@ class Vaila(tk.Tk):
 
         print("\n" + "=" * 60)
         print("Launching: vaila.vaila_sam")
+        print(">> Equivalent launch CLI: uv run python -u vaila/vaila_sam.py")
         print("Features: SAM 3 video masks (CUDA + Hugging Face auth)")
         print(
             "A separate SAM window opens; if you do not see it, check the task bar / other workspace."
         )
         print("=" * 60 + "\n")
         run_vaila_module("vaila.vaila_sam", "vaila/vaila_sam.py", extra_py_flags=("-u",))
+
+    def sapiens_video(self):
+        """Runs Meta Sapiens2 308-keypoint pose estimation on video (optional extra: sapiens)."""
+        if importlib.util.find_spec("sapiens") is None:
+            _print_sapiens_install_instructions()
+            messagebox.showerror(
+                "Sapiens2 not installed",
+                _sapiens_install_instructions(),
+                parent=self,
+            )
+            return
+
+        pre = messagebox.askyesnocancel(
+            "Sapiens2 Pose — requirements",
+            "Sapiens2 Pose needs:\n"
+            "• NVIDIA GPU + CUDA on this machine\n"
+            "• Bootstrap: bash bin/setup_sapiens2.sh\n"
+            "  (clones .local/third_party/sapiens2/ + downloads pose + DETR weights)\n"
+            "• Optional: uv sync --extra sapiens\n\n"
+            "Quick test (terminal):\n"
+            "  uv run vaila/vaila_sapiens.py \\\n"
+            "    -i tests/markerless_2d_analysis/ -o /tmp/sapiens_out --model 1b\n\n"
+            "Yes = open the Hugging Face model collection in your browser\n"
+            "No = continue to the Sapiens2 window\n"
+            "Cancel = stop",
+            parent=self,
+        )
+        if pre is None:
+            return
+        if pre:
+            webbrowser.open("https://huggingface.co/facebook/sapiens2")
+
+        print("\n" + "=" * 60)
+        print("Launching: vaila.vaila_sapiens")
+        print(">> Equivalent launch CLI: uv run python -u vaila/vaila_sapiens.py")
+        print("Features: Sapiens2 308-keypoint pose (CUDA + HF weights)")
+        print(
+            "A separate Sapiens2 window opens; if you do not see it, check the task bar / other workspace."
+        )
+        print("=" * 60 + "\n")
+        run_vaila_module("vaila.vaila_sapiens", "vaila/vaila_sapiens.py", extra_py_flags=("-u",))
 
     def soccer_tools(self) -> None:
         """Open a small launcher for soccer-related tools (AI + calibration + FIFA utilities)."""

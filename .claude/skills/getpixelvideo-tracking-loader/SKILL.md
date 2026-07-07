@@ -39,6 +39,13 @@ vailá marker set.
 | `sam_frames_meta` | `sam_frames_meta.csv` | Per-frame meta with normalised bbox (`xc, yc, w, h ∈ [0,1]`) |
 | `yolo_multi` | `all_id_detection.csv` | One row per detection, multi-id |
 | `yolo_single` | `person_id_NN.csv` | Single-id YOLO export |
+| `sapiens_pose_long` | `*_sapiens_vaila.csv` | Sapiens2 long pose; prompt for `person_id` |
+| `sapiens_tracks` | `sapiens_tracks.csv` (legacy) | `stable_id` + `x1..y2` bbox rows |
+| `sam_tracks` | `sapiens_bbox_tracks.csv` | Same SAM schema as `sam_tracks.csv` |
+
+**Sapiens2 wide pose (308 kp):** use the regular **Load** button on
+``<stem>_id_NN_sapiens_pose.csv`` or ``<stem>_getpixelvideo_pose.csv`` from
+``vaila/vaila_sapiens.py`` — not the Load Tracking CSV button.
 
 Anything unrecognised falls back to the legacy YOLO parser, so old files
 still load.
@@ -111,7 +118,8 @@ marker set: editable, TAB-navigable, saveable.
 | `_BBOX_ANCHOR_ALIASES` | Maps friendly names + numeric shortcuts to canonical anchor keys |
 | `_anchor_xy_from_bbox(x1, y1, x2, y2, anchor)` | Returns `(x, y)` int pixel for the chosen anchor |
 | `_detect_frame_col(columns)` | Case-insensitive locator for the frame column |
-| `_detect_tracking_format(df)` | Returns one of `sam_tracks / sam_frames_meta / sam_points / yolo_multi / yolo_single / unknown` |
+| `_detect_tracking_format(df)` | Returns one of `sam_tracks / sam_frames_meta / sam_points / yolo_multi / yolo_single / sapiens_pose_long / sapiens_tracks / unknown` |
+| `_sapiens_long_to_marker_df(df, person_id, kpt_thr)` | Pivot Sapiens2 long CSV to wide marker layout |
 | `_iter_bboxes_from_df(df, fmt, video_width, video_height)` | Generator of uniform `{frame, obj_id, x1, y1, x2, y2, label, score}` dicts (normalised → pixel handled here) |
 | `bboxes_to_marker_coordinates(bboxes, total_frames, anchor)` | Build `(coordinates, labels)` from a list of bbox dicts |
 | `load_tracking_csv(...)` | Top-level loader; orchestrates detect → iterate → optional anchor prompt |

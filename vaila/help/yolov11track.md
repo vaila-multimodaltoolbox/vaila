@@ -87,7 +87,7 @@ Requirements:
 ## 🎮 Usage: Tracking Workflow
 
 1. **Start Tracking**:
-   - GUI: **Frame B → "Video AI tools" → "YOLOv11 Tracker"**
+   - GUI: **Frame B → "YOLO + FB"** (legacy YOLOv11 may be documented separately)
    - CLI (open GUI): `uv run python -m vaila.yolov11track`
 2. **Select Directories**: Choose input directory (containing videos) and output directory
 3. **Select Model**: Choose YOLO model (detection, pose, segmentation, OBB) - pre-trained or custom
@@ -102,7 +102,7 @@ Requirements:
 
 ## 🎯 Usage: Pose Estimation Workflow
 
-1. **Start Pose Estimation**: GUI: **Frame B → "Video AI tools" → "YOLOv11 Pose"**
+1. **Start Pose Estimation**: GUI: **Frame B → "YOLO + FB"** (legacy YOLOv11 Pose)
 2. **Select Tracking Directory**: Choose the directory containing tracking results (CSV files and video)
 3. **Select Video**: 
    - If multiple videos found, a dialog appears to select one

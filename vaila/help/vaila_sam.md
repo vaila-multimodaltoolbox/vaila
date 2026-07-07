@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.71
-- **Updated:** 05 July 2026
+- **Version:** 0.3.72
+- **Updated:** 06 July 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -330,7 +330,7 @@ uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t player \
   -w vaila/models/sam3/sam3.1_multiplex.pt                           # SAM 3.1 weights
 ```
 
-> Equivalent GUI: launch `vaila.py`, **Frame B → Video AI tools → SAM (Segment Anything)**, fill **Input**, **Output**, **Text prompt**, **Max frames** and click **Run**. The progress window now mirrors every CLI banner and prints the same exit-code diagnosis.
+> Equivalent GUI: launch `vaila.py`, **Frame B → YOLO + FB → SAM 3 video**, fill **Input**, **Output**, **Text prompt**, **Max frames** and click **Run**. The terminal prints `>> vaila/vaila_sam: Equivalent CLI` with the full copy-paste command; the progress window also logs the subprocess argv.
 
 ### Companion AI seed for the soccer field
 
@@ -632,7 +632,18 @@ When you launch `vaila_sam` without CLI args (or from the vailá main window), t
 
 In the main vailá window, open it via:
 
-- **Frame B → "Video AI tools" → "SAM (Segment Anything)"**
+- **Frame B → "YOLO + FB" → "SAM 3 video"**
+
+### GUI → CLI mirror
+
+On **Run**, stdout shows:
+
+```text
+>> vaila/vaila_sam: Equivalent CLI (copy/paste):
+>>   uv run vaila/vaila_sam.py -i ... -o ... -t person ...
+```
+
+The chooser prints `uv run python -u vaila/vaila_sam.py` when you open the tool.
 
 1. **`SamVideoDialog`** — configuration modal:
     - `Input (dir or file)` + `Output folder` + `sam3.pt / weights (-w)` browsers.

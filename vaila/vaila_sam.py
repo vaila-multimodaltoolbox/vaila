@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 05 July 2026
-Version: 0.3.71
+Update Date: 06 July 2026
+Version: 0.3.72
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -32,23 +32,37 @@ Host RAM (not VRAM) — **subprocess exit=-9 / SIGKILL**:
       e.g. ``256`` / ``128`` fixes it. See ``--print-examples`` and
       ``vaila/help/vaila_sam.md`` § *Common errors*.
 
-Usage (quick):
-    uv run vaila/vaila_sam.py                      # Tkinter: pick video, prompt, output folder
-    uv run vaila/vaila_sam.py --open-help          # SAM 3 setup in browser
-    uv run vaila/vaila_sam.py --download-weights   # fetch weights (needs HF auth)
+Usage (CLI — pass ``-i`` input and ``-o`` output; no GUI):
 
-**Full match / broadcast clip (CLI)** — segmentation + ``*_sam_overlay.mp4`` + CSV/JSON exports.
-Tweak ``--max-input-long-edge`` / ``--max-frames`` if CUDA OOMs:
+    # Single video → creates processed_sam_<timestamp>/ under -o
+    uv run vaila/vaila_sam.py \\
+        -i /path/to/video.mp4 \\
+        -o /path/to/output_parent \\
+        -t person
 
+    # Batch: directory of videos (every ``*.mp4`` under -i)
+    uv run vaila/vaila_sam.py \\
+        -i /path/to/videos_dir \\
+        -o /path/to/output_parent \\
+        -t player
+
+    # Long broadcast clip (same -i/-o; extra flags for RAM/VRAM)
     uv run vaila/vaila_sam.py \\
         -i /path/to/match.mp4 \\
-        -o /path/to/processed_sam_YYYYMMDD_HHMMSS \\
+        -o /path/to/output_parent \\
         -t player \\
-        --max-input-long-edge 1920
+        --max-frames 256 \\
+        --max-input-long-edge 1920 \\
+        --postprocess-points all \\
+        --stabilize-ids
 
-Shorter temporal SAM input (overlay still follows every frame of ``-i``):
+    # Bbox/CSV only (no overlay MP4)
+    uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t person --tracks-only
 
-    uv run vaila/vaila_sam.py -i /path/to/match.mp4 -o /path/to/out -t player --max-frames 400
+    uv run vaila/vaila_sam.py --download-weights   # weights only (HF auth)
+    uv run vaila/vaila_sam.py --print-examples     # more recipes
+
+    # GUI (optional): omit -i/-o → Tkinter dialog; or vaila.py → YOLO + FB → SAM 3 video
 
 More detail: ``vaila/help/vaila_sam.md`` / ``vaila/help/vaila_sam.html``.
 
@@ -79,6 +93,7 @@ import importlib.util
 import json
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -4965,12 +4980,11 @@ def _run_sam_batch_in_thread(
     on_done(succeeded, len(video_files), failed, output_base)
 
 
-def _start_sam_batch_subprocess(
+def _build_sam_cli_argv(
     *,
-    progress: SamBatchProgress,
     input_path: Path,
     out_parent: Path,
-    output_base: Path,
+    output_base: Path | None = None,
     prompt: str,
     frame_idx: int,
     ckpt_opt: Path | None,
@@ -4990,36 +5004,24 @@ def _start_sam_batch_subprocess(
     max_frames: int | None,
     max_input_long_edge: int | None,
     postprocess_points: str,
-    on_done: Callable[[int, int, list[str], Path], None],
-) -> None:
-    """Run SAM3 batch in an isolated child process; reader threads stream stdout.
-
-    Why a subprocess instead of ``threading.Thread``:
-        Running the SAM3 video predictor (CUDA + torch.compile + Triton + OpenCV)
-        in a worker thread of the same Python process as the Tk mainloop reliably
-        triggers ``terminate called without an active exception`` (SIGABRT) — the
-        Tcl event loop in MainThread interferes with the C++ destructors of CUDA /
-        torch / Triton background workers spawned by the worker thread. Verified
-        experimentally: same workload via the CLI (no Tk) completes cleanly, but
-        the moment a Tcl mainloop runs in MainThread, the worker process aborts
-        partway. Isolating the GPU work in a subprocess fully decouples it from
-        the Tk interpreter and resolves the abort.
-    """
-    import re
-    import shlex
-    import subprocess
-    import tempfile
+    for_subprocess: bool = False,
+) -> list[str]:
+    """Build SAM3 CLI argv (subprocess uses sys.executable; mirror uses uv run)."""
+    if for_subprocess:
+        runner: list[str] = [sys.executable, "-u", str(Path(__file__).resolve())]
+    else:
+        runner = ["uv", "run", "vaila/vaila_sam.py"]
 
     cmd: list[str] = [
-        sys.executable,
-        "-u",
-        str(Path(__file__).resolve()),
+        *runner,
         "-i",
         str(input_path.resolve()),
         "-o",
         str(out_parent.resolve()),
-        "--output-base",
-        str(output_base.resolve()),
+    ]
+    if output_base is not None:
+        cmd += ["--output-base", str(output_base.resolve())]
+    cmd += [
         "-t",
         prompt,
         "-f",
@@ -5061,8 +5063,113 @@ def _start_sam_batch_subprocess(
         cmd.append("--contours-gzip")
     if stabilize_ids:
         cmd.append("--stabilize-ids")
+    return cmd
+
+
+def _print_sam_equivalent_cli(cmd: list[str]) -> None:
+    """Print copy-paste CLI mirror to stdout (>> prefix)."""
+    print("\n>> vaila/vaila_sam: Equivalent CLI (copy/paste):", flush=True)
+    print(f">>   {shlex.join(cmd)}", flush=True)
+    print("", flush=True)
+
+
+def _start_sam_batch_subprocess(
+    *,
+    progress: SamBatchProgress,
+    input_path: Path,
+    out_parent: Path,
+    output_base: Path,
+    prompt: str,
+    frame_idx: int,
+    ckpt_opt: Path | None,
+    save_ov: bool,
+    save_png: bool,
+    overlay_rich: bool,
+    draw_contour: bool,
+    draw_box: bool,
+    draw_id: bool,
+    draw_centroid: bool,
+    save_contours: bool,
+    save_tracks_csv: bool,
+    contours_format: str,
+    contours_gzip: bool,
+    stabilize_ids: bool,
+    frame_fallback: bool,
+    max_frames: int | None,
+    max_input_long_edge: int | None,
+    postprocess_points: str,
+    on_done: Callable[[int, int, list[str], Path], None],
+) -> None:
+    """Run SAM3 batch in an isolated child process; reader threads stream stdout.
+
+    Why a subprocess instead of ``threading.Thread``:
+        Running the SAM3 video predictor (CUDA + torch.compile + Triton + OpenCV)
+        in a worker thread of the same Python process as the Tk mainloop reliably
+        triggers ``terminate called without an active exception`` (SIGABRT) — the
+        Tcl event loop in MainThread interferes with the C++ destructors of CUDA /
+        torch / Triton background workers spawned by the worker thread. Verified
+        experimentally: same workload via the CLI (no Tk) completes cleanly, but
+        the moment a Tcl mainloop runs in MainThread, the worker process aborts
+        partway. Isolating the GPU work in a subprocess fully decouples it from
+        the Tk interpreter and resolves the abort.
+    """
+    import re
+    import subprocess
+    import tempfile
+
+    cmd = _build_sam_cli_argv(
+        input_path=input_path,
+        out_parent=out_parent,
+        output_base=output_base,
+        prompt=prompt,
+        frame_idx=frame_idx,
+        ckpt_opt=ckpt_opt,
+        save_ov=save_ov,
+        save_png=save_png,
+        overlay_rich=overlay_rich,
+        draw_contour=draw_contour,
+        draw_box=draw_box,
+        draw_id=draw_id,
+        draw_centroid=draw_centroid,
+        save_contours=save_contours,
+        save_tracks_csv=save_tracks_csv,
+        contours_format=contours_format,
+        contours_gzip=contours_gzip,
+        stabilize_ids=stabilize_ids,
+        frame_fallback=frame_fallback,
+        max_frames=max_frames,
+        max_input_long_edge=max_input_long_edge,
+        postprocess_points=postprocess_points,
+        for_subprocess=True,
+    )
+    mirror_cmd = _build_sam_cli_argv(
+        input_path=input_path,
+        out_parent=out_parent,
+        output_base=output_base,
+        prompt=prompt,
+        frame_idx=frame_idx,
+        ckpt_opt=ckpt_opt,
+        save_ov=save_ov,
+        save_png=save_png,
+        overlay_rich=overlay_rich,
+        draw_contour=draw_contour,
+        draw_box=draw_box,
+        draw_id=draw_id,
+        draw_centroid=draw_centroid,
+        save_contours=save_contours,
+        save_tracks_csv=save_tracks_csv,
+        contours_format=contours_format,
+        contours_gzip=contours_gzip,
+        stabilize_ids=stabilize_ids,
+        frame_fallback=frame_fallback,
+        max_frames=max_frames,
+        max_input_long_edge=max_input_long_edge,
+        postprocess_points=postprocess_points,
+        for_subprocess=False,
+    )
 
     progress.schedule_log(f"[GUI] launching subprocess: {shlex.join(cmd)}")
+    _print_sam_equivalent_cli(mirror_cmd)
 
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
@@ -5298,6 +5405,38 @@ def run_sam_video(existing_root: tk.Tk | None = None) -> None:
         if owns_root:
             root.destroy()
         return
+
+    # Check if checkpoint exists locally or needs to download
+    resolved_ckpt = _resolve_sam3_checkpoint_file(ckpt_opt)
+    if resolved_ckpt is None:
+        msg = (
+            "SAM 3 video weights (sam3.pt) were not found in local directories.\n\n"
+            "By default, the Hugging Face Hub will attempt to download them at runtime, "
+            "but this requires gated access and authentication (hf auth login).\n\n"
+            "Would you like to download/validate the weights to vaila/models/sam3/ right now?\n"
+            "(Requires internet connection and Hugging Face auth)"
+        )
+        ans = messagebox.askyesno("SAM 3 — Weights Not Found", msg, parent=root)
+        if ans:
+            try:
+                print("[SAM3] Downloading weights automatically...")
+                download_sam3_weights_to_vaila_models()
+                resolved_ckpt = _resolve_sam3_checkpoint_file(ckpt_opt)
+            except Exception as e:
+                messagebox.showerror(
+                    "SAM 3 — Download Failed",
+                    f"Failed to download weights: {e}\n\n"
+                    "Please run in terminal:\n"
+                    "  uv run hf auth login\n"
+                    "  uv run vaila/vaila_sam.py --download-weights",
+                    parent=root,
+                )
+                if owns_root:
+                    root.destroy()
+                return
+        else:
+            # Let it proceed to try to download from hub
+            pass
 
     ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_base = out_parent / f"processed_sam_{ts}"

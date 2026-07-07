@@ -48,7 +48,7 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.3.71</p>
+            <p><strong>Version:</strong> 0.3.72</p>
             <p><strong>Updated:</strong> 05 July 2026</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
@@ -80,7 +80,8 @@
 
         <div class="info-box">
             <strong>GUI path:</strong> in the main vailá window, open
-            <code>Frame B → Video AI tools → SAM (Segment Anything)</code>.
+            <code>Frame B → YOLO + FB → SAM 3 video</code>.
+            <p>On <strong>Run</strong>, stdout shows <code>&gt;&gt; vaila/vaila_sam: Equivalent CLI</code> with the full copy-paste command.</p>
         </div>
 
         <!-- ============================================================ -->
@@ -311,7 +312,7 @@ uv run vaila/vaila_sam.py -i match.mp4 -o out_parent/ -t player \
 uv run vaila/sam_postprocess.py out_parent/processed_sam_…/video_stem --mode all</code></pre>
         <div class="info-box">
             <strong>Equivalent GUI:</strong> launch <code>vaila.py</code>, open
-            <em>Frame B → Video AI tools → SAM (Segment Anything)</em>, fill
+            <em>Frame B → YOLO + FB → SAM 3 video</em>, fill
             <strong>Input</strong>, <strong>Output</strong>,
             <strong>Text prompt</strong>, <strong>Max frames</strong> and
             click <strong>Run</strong>. The progress window mirrors every
