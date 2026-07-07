@@ -140,6 +140,30 @@ def test_build_sapiens_cli_argv_output_base() -> None:
     assert argv[0] == sys.executable
 
 
+def test_build_isolated_sapiens_cmd_passes_output_base() -> None:
+    argv = vs._build_isolated_sapiens_cmd(
+        video_file=Path("/in/vid.mp4"),
+        out_parent=Path("/out"),
+        output_base=Path("/out/processed_sapiens_123"),
+        out_dir=Path("/out/processed_sapiens_123/vid"),
+        model="1b",
+        stride=1,
+        kpt_thr=0.3,
+        bbox_thr=0.3,
+        nms_thr=0.3,
+        device=0,
+        save_overlay=True,
+        flip_test=False,
+        max_persons=8,
+        pose_batch_size=None,
+    )
+    assert "--output-base" in argv
+    assert "/out/processed_sapiens_123" in argv
+    assert "--video-output-dir" in argv
+    assert "/out/processed_sapiens_123/vid" in argv
+    assert "--no-isolate-batch" in argv
+
+
 def test_find_videos_skips_sapiens_outputs(tmp_path: Path) -> None:
     src = tmp_path / "clip.mp4"
     src.write_bytes(b"\x00")

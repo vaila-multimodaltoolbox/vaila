@@ -3,15 +3,16 @@ name: yolo-fb-gui-cli
 description: YOLO + FB chooser (Frame B), Sapiens2 Pose, and GUI→CLI terminal mirror for vailá video-AI tools. Use when reopening Cursor CLI, wiring GUI buttons, printing copy-paste CLI from Tkinter runs, or continuing work on vaila.py yolotrackerpose / vaila_sam / vaila_sapiens / yolov26track / yolotrain.
 ---
 
-# YOLO + FB Chooser & GUI→CLI Mirror (v0.3.72)
+# YOLO + FB Chooser & GUI→CLI Mirror (v0.3.76)
 
 Use when the user works on **Frame B → YOLO + FB**, wants **terminal commands** equivalent to GUI clicks, or resumes after closing the terminal in **Cursor CLI**.
 
 Companion docs:
 
 - `docs/vaila_buttons/yolo-fb.md` — chooser table + launcher CLI
-- `AGENTS.md` § Conventions (**GUI→CLI mirror**) + § History (v0.3.72)
+- `AGENTS.md` § Conventions (**GUI→CLI mirror**) + § History (v0.3.72, v0.3.76)
 - `docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md` — implementation log
+- `docs/sessions/2026-07-07-sapiens-output-dir-fix.md` — one `processed_sapiens_*` per run (v0.3.76)
 - `.claude/skills/sam3-video/SKILL.md` — SAM 3 specifics
 - `vaila/help/vaila_sapiens.md` — Sapiens2 Pose
 
@@ -82,6 +83,8 @@ uv run vaila/vaila_sapiens.py -i VIDEO_OR_DIR -o OUT_PARENT --model 1b
 
 - Default model **1b** (RTX 4090 24 GiB)
 - CUDA only; Meta Sapiens2 License
+- **One** `processed_sapiens_<timestamp>/` per run (v0.3.76); per-video subdirs `<timestamp>/<stem>/`
+- Isolated workers receive `--output-base` from parent — no empty duplicate folder
 - Tests: `uv run pytest tests/test_vaila_sapiens.py -v`
 
 ---
@@ -99,6 +102,6 @@ uv run pytest tests/test_vaila_sapiens.py tests/test_vaila_sam.py::test_build_sa
 ## Cursor CLI resume checklist
 
 1. `cd ~/data/vaila && uv sync` (add `--extra sam` / `--extra sapiens` / `--extra gpu` as needed)
-2. Read `AGENTS.md` History § v0.3.72 and this skill
-3. Global version: **0.3.72** (`vaila.py` header)
+2. Read `AGENTS.md` History § v0.3.76 (Sapiens2 output dir) and this skill
+3. Global version: **0.3.76** (`vaila.py` header)
 4. Never rename chooser back to “Video AI tools” in docs — use **YOLO + FB**

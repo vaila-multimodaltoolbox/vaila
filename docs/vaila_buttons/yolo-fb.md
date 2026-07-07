@@ -28,7 +28,7 @@ Each tool's **Run** button prints the **full** copy-paste command with your path
 
 - **Tracker:** `uv run python -m vaila.yolov26track track --model ... --source VIDEO.mp4 --output OUT/ ...`
 - **SAM 3:** `uv run vaila/vaila_sam.py -i ... -o ... -t person ...`
-- **Sapiens2:** `uv run vaila/vaila_sapiens.py -i ... -o ... --model 1b ...`
+- **Sapiens2:** `uv run vaila/vaila_sapiens.py -i ... -o ... --model 1b ...` → one `processed_sapiens_<timestamp>/` (v0.3.76)
 - **Train:** `uv run python -m vaila.yolotrain --data data.yaml --task detect ...`
 
 ## Related help
@@ -40,6 +40,6 @@ Each tool's **Run** button prints the **full** copy-paste command with your path
 
 ---
 
-**Last Updated:** July 2026 (v0.3.72)  
+**Last Updated:** 07 July 2026 (v0.3.76)  
 **Part of vailá - Multimodal Toolbox**  
 **License:** AGPLv3.0

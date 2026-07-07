@@ -1,11 +1,22 @@
 # Agent Continuation Log — vailá ↔ FIFA Skeletal Tracking Light 2026
 
-Last update: 2026-07-06 (v0.3.72 — YOLO + FB GUI→CLI mirror)
+Last update: 2026-07-07 (v0.3.76 — Sapiens2 single output directory)
 Working clone: `~/data/vaila`
 Companion repo: `~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`
 
-**Cursor CLI resume:** read `.claude/skills/yolo-fb-gui-cli/SKILL.md` and
-`docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md` for Frame B video-AI tools.
+**Cursor CLI resume:** read `.claude/skills/yolo-fb-gui-cli/SKILL.md`,
+`docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md`, and
+`docs/sessions/2026-07-07-sapiens-output-dir-fix.md` for Frame B video-AI tools.
+
+---
+
+## Update — 2026-07-07 (v0.3.76 — Sapiens2 output directory)
+
+- **Bug:** `vaila/vaila_sapiens.py` created two `processed_sapiens_<timestamp>/` folders (one empty).
+- **Cause:** isolated subprocess workers minted a new timestamp before `--video-output-dir` handling.
+- **Fix:** early return in `main()` for `--video-output-dir`; pass `--output-base` in `_build_isolated_sapiens_cmd()`.
+- **Global version:** `vaila.py` → v0.3.76, 07 July 2026.
+- **Tests:** `tests/test_vaila_sapiens.py::test_build_isolated_sapiens_cmd_passes_output_base`.
 
 ---
 

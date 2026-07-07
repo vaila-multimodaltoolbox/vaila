@@ -6,7 +6,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
 Update Date: 07 July 2026
-Version: 0.3.75
+Version: 0.3.76
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -1036,6 +1036,7 @@ def _build_isolated_sapiens_cmd(
     *,
     video_file: Path,
     out_parent: Path,
+    output_base: Path,
     out_dir: Path,
     model: str,
     stride: int,
@@ -1056,6 +1057,8 @@ def _build_isolated_sapiens_cmd(
         str(video_file.resolve()),
         "-o",
         str(out_parent.resolve()),
+        "--output-base",
+        str(output_base.resolve()),
         "--video-output-dir",
         str(out_dir.resolve()),
         "--model",
@@ -2043,6 +2046,48 @@ def main() -> None:
 
     inp = args.input.resolve()
     out_parent = args.output.resolve()
+
+    if args.video_output_dir is not None:
+        out_dir = args.video_output_dir.resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        videos = _find_videos(inp)
+        if not videos:
+            print(f"No videos under {inp}")
+            raise SystemExit(1)
+        video = videos[0]
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        os.environ["SAPIENS_DEVICE"] = str(args.device)
+        if args.quiet:
+            os.environ["TQDM_DISABLE"] = "1"
+        device = f"cuda:{args.device}"
+        flip_test = bool(args.flip_test)
+        save_overlay = not args.no_overlay
+        max_persons = max(1, int(args.max_persons))
+        pose_batch_size = (
+            max(1, int(args.pose_batch_size)) if args.pose_batch_size is not None else None
+        )
+        try:
+            run_sapiens_on_video(
+                video,
+                out_dir,
+                model=args.model,
+                stride=args.stride,
+                save_overlay=save_overlay,
+                bbox_thr=args.bbox_thr,
+                nms_thr=args.nms_thr,
+                kpt_thr=args.kpt_thr,
+                device=device,
+                flip_test=flip_test,
+                max_persons=max_persons,
+                pose_batch_size=pose_batch_size,
+            )
+            print(f"  Done: {out_dir}")
+        except Exception as e:
+            _write_failure_marker(out_dir, video, str(e))
+            print(f"  ERROR on {video.name}: {e}")
+            raise SystemExit(1) from e
+        return
+
     if args.output_base is not None:
         output_base = args.output_base.resolve()
         output_base.mkdir(parents=True, exist_ok=True)
@@ -2077,32 +2122,6 @@ def main() -> None:
         max(1, int(args.pose_batch_size)) if args.pose_batch_size is not None else None
     )
 
-    if args.video_output_dir is not None:
-        out_dir = args.video_output_dir.resolve()
-        out_dir.mkdir(parents=True, exist_ok=True)
-        video = videos[0]
-        try:
-            run_sapiens_on_video(
-                video,
-                out_dir,
-                model=args.model,
-                stride=args.stride,
-                save_overlay=save_overlay,
-                bbox_thr=args.bbox_thr,
-                nms_thr=args.nms_thr,
-                kpt_thr=args.kpt_thr,
-                device=device,
-                flip_test=flip_test,
-                max_persons=max_persons,
-                pose_batch_size=pose_batch_size,
-            )
-            print(f"  Done: {out_dir}")
-        except Exception as e:
-            _write_failure_marker(out_dir, video, str(e))
-            print(f"  ERROR on {video.name}: {e}")
-            raise SystemExit(1) from e
-        return
-
     use_isolation = not args.no_isolate_batch
     if use_isolation:
         scope = "single-video" if len(videos) == 1 else "each video"
@@ -2127,6 +2146,7 @@ def main() -> None:
             cmd = _build_isolated_sapiens_cmd(
                 video_file=vf,
                 out_parent=out_parent,
+                output_base=output_base,
                 out_dir=out_dir,
                 model=args.model,
                 stride=args.stride,

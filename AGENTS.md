@@ -525,6 +525,24 @@ Tests: `tests/test_vaila_sapiens.py`. Help: `vaila/help/vaila_sapiens.md`.
 
 Version sync: `0.3.72 / 06 July 2026`.
 
+### Sapiens2 duplicate output directory fix (July 2026, v0.3.76)
+
+**Module:** `vaila/vaila_sapiens.py`.
+
+**Symptom:** CLI and GUI runs left two `processed_sapiens_<timestamp>/` folders — one empty, one with CSVs/overlay.
+
+**Root cause:** Default subprocess-per-video isolation spawned workers that called `main()` without `--output-base`. Each child minted a **new** timestamp directory before handling `--video-output-dir`, while the parent batch already owned the real output tree.
+
+**Fix:**
+- `main()` returns early when `--video-output-dir` is set — no second timestamp folder.
+- `_build_isolated_sapiens_cmd()` passes `--output-base` from the parent batch to each isolated worker.
+
+**Tests:** `tests/test_vaila_sapiens.py::test_build_isolated_sapiens_cmd_passes_output_base`.
+
+**Docs:** `vaila/help/vaila_sapiens.{md,html}` § Output directory (v0.3.76); session `docs/sessions/2026-07-07-sapiens-output-dir-fix.md`.
+
+Version sync: `0.3.76 / 07 July 2026`.
+
 ## Caveman mode (optional)
 
 [Caveman](https://github.com/JuliusBrussee/caveman) is a skills/plugin pack for AI coding agents (Claude Code, Cursor, Gemini CLI, Windsurf, Copilot, and 30+ others). It steers the model toward terse replies: fewer filler words and articles, typically **~65–75% fewer output tokens** while keeping technical content intact.

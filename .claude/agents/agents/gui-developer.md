@@ -63,6 +63,12 @@ Use `>>` prefix — **not** `[bracketed]` (absl eats brackets). Reference:
 Existing examples: `yolotrain._format_training_cli_command`, `vaila_sam._build_sam_cli_argv`,
 `vaila_sapiens._format_sapiens_cli_command`, `yolov26track._format_track_cli_command`.
 
+## Sapiens2 output layout (v0.3.76)
+
+- GUI pre-creates `processed_sapiens_<timestamp>/` and passes `--output-base` to batch subprocess
+- Isolated per-video workers must receive the same `--output-base` (no second empty folder)
+- User-facing path: `<output_parent>/processed_sapiens_<ts>/<video_stem>/`
+
 ## Standard Dialog Pattern
 ```python
 import tkinter as tk

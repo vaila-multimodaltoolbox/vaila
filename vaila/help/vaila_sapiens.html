@@ -23,7 +23,7 @@
 <div class="container">
     <h1>vailá - Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
     <div class="module-info">
-        <p><strong>Version:</strong> 0.3.75 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-07</p>
+        <p><strong>Version:</strong> 0.3.76 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-07</p>
         <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
     </div>
     <p>Top-down <strong>308-keypoint</strong> human pose on video (Meta Sapiens2 + DETR detector).</p>
@@ -68,6 +68,10 @@ uv run vaila/vaila_sapiens.py \
         <li><strong>Load Tracking CSV</strong> bboxes: <code>sapiens_bbox_tracks.csv</code> (SAM-compatible)</li>
         <li><strong>REC2D/REC3D</strong>: <code>&lt;stem&gt;_markers.csv</code> (foot anchor, one point per person)</li>
     </ul>
+    <h2>Output directory (v0.3.76)</h2>
+    <p>Each run creates <strong>one</strong> <code>processed_sapiens_YYYYMMDD_HHMMSS/</code> under the
+       output parent. Per-video results live in <code>&lt;timestamp&gt;/&lt;video_stem&gt;/</code>.
+       Isolated subprocess workers reuse the parent <code>--output-base</code> (no second empty folder).</p>
     <h2>Outputs (biomechanics)</h2>
     <table>
         <tr><th>File</th><th>Role</th></tr>
