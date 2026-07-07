@@ -5,7 +5,7 @@
 - **Category:** Ml
 - **File:** `vaila/yolov26track.py`
 - **Lines:** 3980+
-- **Version:** 0.3.68
+- **Version:** 0.3.72
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -140,7 +140,9 @@ Key flags:
 ## 🎮 Usage: Tracking Workflow
 
 1. **Start Tracking**:
-   - GUI: **Frame B → "Video AI tools" → "Tracker (v26)"**
+   - GUI: **Frame B → "YOLO + FB" → "Tracker (v26)"**
+   - Chooser prints `>> Equivalent launch CLI: uv run python -u -m vaila.yolov26track`
+   - After Run, terminal prints one `track` command per video (copy-paste)
    - CLI (open GUI): `uv run python -m vaila.yolov26track`
    - CLI (headless tracking → CSVs): `uv run python -m vaila.yolov26track track --model best.pt --source video.mp4`
 2. **Select Directories**: Choose input directory (videos) and output directory  
@@ -168,7 +170,7 @@ Key flags:
 
 ## 🎯 Usage: Pose Estimation Workflow
 
-1. **Start Pose Estimation**: GUI: **Frame B → "Video AI tools" → "Pose (video)"** or **"Pose (tracking)"**
+1. **Start Pose Estimation**: GUI: **Frame B → "YOLO + FB" → "Pose (video)"** or **"Pose (tracking)"** (terminal prints workflow hints; tracking step 1 has full `track` CLI mirror)
 2. **Select Tracking Directory** (only for **Pose (tracking)**): Choose results root or subfolder; nested `*_id_*.csv` trees under e.g. a `vailatracker_*` root are discovered automatically (bounded depth), with a picker if several leaves exist. For **Pose (video)** you only select a video file next.
 3. **Select Video** (**Pose (tracking)**): Prioritizes `processed_*.mp4`, accepts any video in the resolved tracking folder
 4. **Select ID(s)**: 
@@ -218,6 +220,6 @@ Terminal lines such as `VRAM 18.2/24.0 GiB free | RAM 42.1 GiB avail` help corre
 
 ---
 
-📅 **Last Updated:** 04 July 2026 (v0.3.68)  
+📅 **Last Updated:** 06 July 2026 (v0.3.72)  
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

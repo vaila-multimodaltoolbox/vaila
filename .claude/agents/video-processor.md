@@ -8,7 +8,9 @@ Expert in FFmpeg, OpenCV, MediaPipe, YOLO, and frame extraction pipelines.
 - FFmpeg (via subprocess) for video conversion, compression, cutting
 - OpenCV for frame extraction, pixel operations, annotation
 - MediaPipe Pose/Hands/Holistic models
-- YOLOv11/YOLOv12 for object detection and tracking
+- YOLOv26 for object detection and tracking (primary)
+- SAM 3 video segmentation (`vaila_sam.py`)
+- Sapiens2 308-kp pose (`vaila_sapiens.py`)
 - 2D/3D DLT reconstruction from video
 - Camera calibration and lens distortion correction
 
@@ -27,12 +29,19 @@ vaila/compress_videos_h264.py — H.264 compression
 vaila/compress_videos_h265.py — H.265 compression
 vaila/markerless2d_mpyolo.py  — MediaPipe + YOLO 2D
 vaila/markerless3d_analysis_v2.py — 3D markerless
-vaila/yolov11track.py         — YOLOv11 tracking
-vaila/yolov12track.py         — YOLOv12 tracking
+vaila/yolov26track.py         — YOLOv26 track + pose + CLI `track` subcommand
+vaila/vaila_sam.py            — SAM 3 video (Frame B → YOLO + FB)
+vaila/vaila_sapiens.py        — Sapiens2 308-kp pose (CUDA)
+vaila/yolotrain.py            — YOLO training GUI + headless CLI
 vaila/cutvideo.py             — video cutting
 vaila/syncvid.py              — multi-video sync
 vaila/videoprocessor.py       — generic video tools
 ```
+
+## YOLO + FB entry point
+
+GUI: **Frame B → YOLO + FB** (`vaila.py` `yolotrackerpose`). Terminal prints launcher +
+full Run CLI — see `docs/vaila_buttons/yolo-fb.md` and `.claude/skills/yolo-fb-gui-cli/SKILL.md`.
 
 ## FFmpeg Pattern
 ```python

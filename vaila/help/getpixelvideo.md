@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.69  
+**Version:** 0.3.75  
 **Date:** 23 June 2026  
-**Updated:** 04 July 2026  
+**Updated:** 07 July 2026  
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** vailá - Multimodal Toolbox
 
@@ -134,7 +134,7 @@ Frame,Tracker ID,Label,X_min,Y_min,X_max,Y_max,Confidence,Color_R,Color_G,Color_
 **Save:** After loading bbox tracking CSVs such as SAM3 `sam_tracks.csv`, the **Save** button exports those bboxes as a YOLO detection dataset when Labeling mode is not active.
 
 **SAM3 boxes → player DETECTION dataset (recommended flow):**
-1. Open the video, then **Load Track CSV** and pick `sam_tracks.csv`.
+1. Open the video, then **Load Track CSV** and pick `sam_tracks.csv` or `sam_bbox_tracks.csv`.
 2. "BBox display" prompt: pick any (e.g. `3` = ID+confidence) — visual only.
 3. "Convert boxes to markers?" prompt: **press Enter to SKIP** — this KEEPS the
    boxes. This is the correct choice for per-player tracking. Choosing an anchor
@@ -142,6 +142,17 @@ Frame,Tracker ID,Label,X_min,Y_min,X_max,Y_max,Confidence,Color_R,Color_G,Color_
    cannot detect players individually, and `yolotrain` will block it).
 4. **Save** → writes a YOLO **detection** dataset (`data.yaml`, `classes.txt`,
    `train/val/test`, one box per player per frame).
+
+### Sapiens2 Pose (v0.3.75)
+
+From `vaila/vaila_sapiens.py` outputs under `processed_sapiens_*/<stem>/`:
+
+| Goal | getpixelvideo action | File |
+|------|---------------------|------|
+| Full 308-kp skeleton | **Load** (regular marker button) | `<stem>_id_NN_sapiens_pose.csv` or `<stem>_getpixelvideo_pose.csv` |
+| Full skeleton from long CSV | **Load Tracking CSV** → enter `person_id` | `<stem>_sapiens_vaila.csv` |
+| Multi-person bboxes | **Load Tracking CSV** → Enter at anchor (keep boxes) | `sapiens_bbox_tracks.csv` |
+| REC2D/REC3D foot point | **Load** | `<stem>_markers.csv` |
 
 **Temporal split (default since v0.3.65):** detection and pose exports now split
 frames into **chronological** train/val/test blocks (first frames → train,

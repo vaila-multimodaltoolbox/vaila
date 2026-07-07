@@ -5,8 +5,8 @@
 - **Category:** Analysis
 - **File:** `vaila/markerless_2d_analysis.py`
 - **Lines:** 4259
-- **Version:** 0.3.47
-- **Updated:** 03 June 2026
+- **Version:** 0.3.72
+- **Updated:** 06 July 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -658,3 +659,77 @@ def test_open_sam3_video_writer_creates_file(tmp_path: Path) -> None:
         writer.release()
     assert actual.is_file()
     assert actual.stat().st_size > 0
+
+
+def test_build_sam_cli_argv_includes_prompt(tmp_path: Path) -> None:
+    from vaila.vaila_sam import _build_sam_cli_argv
+
+    inp = tmp_path / "in.mp4"
+    out = tmp_path / "out"
+    base = tmp_path / "processed"
+    inp.write_bytes(b"x")
+    out.mkdir()
+    base.mkdir()
+
+    uv_cmd = _build_sam_cli_argv(
+        input_path=inp,
+        out_parent=out,
+        output_base=base,
+        prompt="person",
+        frame_idx=0,
+        ckpt_opt=None,
+        save_ov=True,
+        save_png=True,
+        overlay_rich=True,
+        draw_contour=True,
+        draw_box=True,
+        draw_id=True,
+        draw_centroid=False,
+        save_contours=True,
+        save_tracks_csv=True,
+        contours_format="json",
+        contours_gzip=False,
+        stabilize_ids=True,
+        frame_fallback=False,
+        max_frames=512,
+        max_input_long_edge=1920,
+        postprocess_points="all",
+        for_subprocess=False,
+    )
+    assert uv_cmd[:3] == ["uv", "run", "vaila/vaila_sam.py"]
+    assert "-i" in uv_cmd
+    assert "-t" in uv_cmd
+    assert uv_cmd[uv_cmd.index("-t") + 1] == "person"
+    assert "--max-frames" in uv_cmd
+    assert "--postprocess-points" in uv_cmd
+    assert "--stabilize-ids" in uv_cmd
+
+    sub_cmd = _build_sam_cli_argv(
+        input_path=inp,
+        out_parent=out,
+        output_base=base,
+        prompt="player",
+        frame_idx=1,
+        ckpt_opt=None,
+        save_ov=True,
+        save_png=False,
+        overlay_rich=True,
+        draw_contour=True,
+        draw_box=True,
+        draw_id=True,
+        draw_centroid=False,
+        save_contours=True,
+        save_tracks_csv=True,
+        contours_format="json",
+        contours_gzip=False,
+        stabilize_ids=False,
+        frame_fallback=True,
+        max_frames=None,
+        max_input_long_edge=None,
+        postprocess_points="none",
+        for_subprocess=True,
+    )
+    assert sub_cmd[0] == sys.executable
+    assert "--no-png" in sub_cmd
+    assert "--frame-by-frame" in sub_cmd
+    assert "--stabilize-ids" not in sub_cmd

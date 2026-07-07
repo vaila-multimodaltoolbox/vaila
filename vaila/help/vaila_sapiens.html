@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - vaila_sapiens</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f5f5f5; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .warning-box { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        pre { background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
+        th { background: #f8f9fa; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>vailá - Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
+    <div class="module-info">
+        <p><strong>Version:</strong> 0.3.75 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-07</p>
+        <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
+    </div>
+    <p>Top-down <strong>308-keypoint</strong> human pose on video (Meta Sapiens2 + DETR detector).</p>
+    <div class="warning-box">
+        <strong>License:</strong> Sapiens2 uses Meta's Sapiens2 License (not AGPL). Accept HF terms before download.
+    </div>
+    <h2>Setup</h2>
+    <pre><code>uv sync --extra sapiens
+bash bin/setup_sapiens2.sh</code></pre>
+    <h2>Models &amp; weight download</h2>
+    <table>
+        <tr><th>Model</th><th>Notes</th></tr>
+        <tr><td><code>1b</code></td><td><strong>Default</strong> — fits RTX 4090 24 GiB</td></tr>
+        <tr><td><code>0.4b</code> / <code>0.8b</code></td><td>Faster, less VRAM</td></tr>
+        <tr><td><code>5b</code></td><td>Max quality (~24 GiB checkpoint); heavy VRAM with many persons</td></tr>
+    </table>
+    <pre><code># Default 1B
+uv run vaila/vaila_sapiens.py --download-weights --model 1b
+
+# Largest 5B (accept Meta license on Hugging Face first)
+uv run vaila/vaila_sapiens.py --download-weights --model 5b
+
+uv run vaila/vaila_sapiens.py -i video.mp4 -o out/ --model 5b --stride 1</code></pre>
+    <h2>GUI → CLI mirror</h2>
+    <p>On <strong>Run</strong>, the terminal prints <code>&gt;&gt; vaila/vaila_sapiens: Equivalent CLI</code> with a copy-paste command.</p>
+    <h2>Terminal progress (v0.3.74)</h2>
+    <p>CLI runs print <code>&gt;&gt; vaila/vaila_sapiens:</code> status lines (model load, video geometry, CSV write)
+       plus a <strong>tqdm frame bar on stderr</strong>. The first 1–2 minutes are often model load before the bar moves.
+       Use <code>--quiet</code> to suppress the bar (GUI batch does this automatically and uses frame heartbeat lines instead).</p>
+    <h2>CLI examples</h2>
+    <pre><code>uv run vaila/vaila_sapiens.py \
+  -i tests/markerless_2d_analysis/ \
+  -o /tmp/sapiens_out --model 1b --dry-run
+
+uv run vaila/vaila_sapiens.py \
+  -i tests/markerless_2d_analysis/camera_01_cube_test_png_196_190_446_dbox_h265.mp4 \
+  -o /tmp/sapiens_out --model 1b</code></pre>
+    <h2>getpixelvideo (v0.3.75)</h2>
+    <ul>
+        <li><strong>Load</strong> wide pose: <code>&lt;stem&gt;_id_NN_sapiens_pose.csv</code> or <code>&lt;stem&gt;_getpixelvideo_pose.csv</code></li>
+        <li><strong>Load Tracking CSV</strong> long pose: <code>&lt;stem&gt;_sapiens_vaila.csv</code> (pick <code>person_id</code>)</li>
+        <li><strong>Load Tracking CSV</strong> bboxes: <code>sapiens_bbox_tracks.csv</code> (SAM-compatible)</li>
+        <li><strong>REC2D/REC3D</strong>: <code>&lt;stem&gt;_markers.csv</code> (foot anchor, one point per person)</li>
+    </ul>
+    <h2>Outputs (biomechanics)</h2>
+    <table>
+        <tr><th>File</th><th>Role</th></tr>
+        <tr><td><code>&lt;stem&gt;_markers.csv</code></td><td><strong>REC2D / REC3D</strong> — frame,p1_x,p1_y,… (foot anchor)</td></tr>
+        <tr><td><code>sapiens_vaila_*.csv</code></td><td>Five bbox anchors (same schema as SAM3 <code>sam_vaila_*</code>)</td></tr>
+        <tr><td><code>sapiens_points.csv</code></td><td>Foot + bbox center + mid-hip per stable pN</td></tr>
+        <tr><td><code>&lt;stem&gt;_sapiens_vaila.csv</code></td><td>Long format — all 308 keypoints</td></tr>
+        <tr><td><code>&lt;stem&gt;_sapiens_overlay.mp4</code></td><td>Visual QA</td></tr>
+    </table>
+    <p><a href="https://arxiv.org/pdf/2604.21681">Paper</a> ·
+       <a href="https://github.com/facebookresearch/sapiens2">GitHub</a> ·
+       <a href="https://huggingface.co/facebook/sapiens2">Hugging Face</a></p>
+</div>
+</body>
+</html>

@@ -28,7 +28,7 @@ Frame B layout (Multimodal Analysis):
 B1 row1: IMU | MoCapCluster | MoCapFullBody | Markerless2D | Markerless3D
 B2 row2: VectorCoding | EMG | ForcePlate | GNSS | MEG/EEG
 B3 row3: HR/ECG | MP_Yolo | Jump | Cube2D | OpenField
-B4 row4: Tracker | ML Walkway | Hands | MPAngles | MarkerlessLive
+B4 row4: YOLO + FB | ML Walkway | Hands | MPAngles | MarkerlessLive
 B5 row5: Ultrasound | Brainstorm | Scout | StartBlock | Pynalty
 B6 row6: Sprint | [free] | [free] | [free] | [free]
 ```
@@ -39,6 +39,29 @@ B6 row6: Sprint | [free] | [free] | [free] | [free]
 3. Create `ttk.Button` with `command=` pointing to the function
 4. Use `.grid(row=X, column=Y, padx=5, pady=5, sticky="ew")`
 5. Match the button text to the docs in `docs/vaila_buttons/README.md`
+
+## YOLO + FB chooser (B4_r4_c1, v0.3.71+)
+
+- Button text: **YOLO + FB** (not “Video AI tools” / “YOLO + SAM”)
+- Handler: `yolotrackerpose()` / alias `yolo_and_sam()`
+- Doc: `docs/vaila_buttons/yolo-fb.md`
+- Sub-tools: Tracker, Pose (video/tracking), Seg, SAM 3, Sapiens2, Train YOLOv26
+- Each sub-button calls `_print_yolo_fb_launch()` → terminal shows launcher CLI
+
+## GUI→CLI mirror (mandatory for CLI-capable modules, v0.3.72+)
+
+On GUI **Run**, print copy-paste CLI to stdout:
+
+```python
+print("\n>> vaila/my_module: Equivalent CLI (copy/paste):", flush=True)
+print(f">>   {shlex.join(cmd_parts)}", flush=True)
+```
+
+Use `>>` prefix — **not** `[bracketed]` (absl eats brackets). Reference:
+`AGENTS.md` Conventions, `.claude/skills/yolo-fb-gui-cli/SKILL.md`.
+
+Existing examples: `yolotrain._format_training_cli_command`, `vaila_sam._build_sam_cli_argv`,
+`vaila_sapiens._format_sapiens_cli_command`, `yolov26track._format_track_cli_command`.
 
 ## Standard Dialog Pattern
 ```python

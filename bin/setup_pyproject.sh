@@ -205,12 +205,12 @@ fi
 
 # ---------- extras selection ----------
 # Available extras per template (everything defined in [project.optional-dependencies]):
-#   cpu:        sam, fifa, upscaler, dev
-#   linux-cuda: gpu, sam, fifa, upscaler, dev
-#   win-cuda:   gpu, sam, fifa, upscaler, dev
-#   macos:      sam, fifa, upscaler, dev
-AVAILABLE_EXTRAS_CPU="sam fifa upscaler dev"
-AVAILABLE_EXTRAS_CUDA="gpu sam fifa upscaler dev"
+#   cpu:        sam, fifa, sapiens, upscaler, dev
+#   linux-cuda: gpu, sam, fifa, sapiens, upscaler, dev
+#   win-cuda:   gpu, sam, fifa, sapiens, upscaler, dev
+#   macos:      sam, fifa, sapiens, upscaler, dev
+AVAILABLE_EXTRAS_CPU="sam fifa sapiens upscaler dev"
+AVAILABLE_EXTRAS_CUDA="gpu sam fifa sapiens upscaler dev"
 case "$TARGET" in
     linux-cuda|win-cuda) AVAILABLE_EXTRAS="$AVAILABLE_EXTRAS_CUDA" ;;
     *)                   AVAILABLE_EXTRAS="$AVAILABLE_EXTRAS_CPU" ;;
@@ -226,6 +226,7 @@ else
     echo "  gpu      = tensorrt + nvidia-ml-py (CUDA only)"
     echo "  sam      = SAM 3 video segmentation (sam3==0.1.3; CUDA at runtime)"
     echo "  fifa     = FIFA Skeletal Tracking Light (pytorch-lightning, timm, ...)"
+    echo "  sapiens  = Sapiens2 Pose (transformers + safetensors; CUDA; then bash bin/setup_sapiens2.sh)"
     echo "  upscaler = diffusers (image upscaling)"
     echo "  dev      = ruff, ty, pytest (developer tooling)"
     read -r -p "Extras to install [default: '$SUGGESTED_EXTRAS']: " user_extras

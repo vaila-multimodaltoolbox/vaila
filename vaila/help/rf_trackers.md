@@ -29,7 +29,7 @@ That lists all flags (`-i` / `--input`, `-w` / `--weights`, `--tracker`, `--conf
 uv run python -m vaila.rf_trackers
 ```
 
-Or: **Frame B → Video AI tools → Roboflow trackers (v2.4)** in `vaila.py`.
+Or: **Frame B → YOLO + FB** (legacy Roboflow entry may still be documented separately).
 
 ## CLI (headless)
 

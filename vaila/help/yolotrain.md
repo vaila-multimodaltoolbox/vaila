@@ -31,7 +31,7 @@ The CLI rejects known model/task mismatches early. Example: a dataset with `kpt_
 
 ## GUI
 
-Open the main vailá window, choose **YOLO + SAM**, then **Train YOLOv26**. The trainer runs in a separate process from the main GUI.
+Open the main vailá window, choose **YOLO + FB**, then **Train YOLOv26**. The trainer runs in a separate process from the main GUI.
 
 Recommended flow:
 

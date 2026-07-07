@@ -19,8 +19,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 29 June 2026
-# Version: 0.3.67
+# Updated: 06 July 2026
+# Version: 0.3.71
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)               #
 #########################################################################################
 
@@ -411,6 +411,16 @@ if [[ "$sam_choice" == "y" || "$sam_choice" == "Y" ]]; then
     USE_SAM_EXTRA=true
 fi
 
+USE_SAPIENS_EXTRA=false
+if [[ "$USE_GPU" == true ]]; then
+    echo ""
+    echo "Install optional Sapiens2 Pose (Meta 308-keypoint pose, extra 'sapiens', CUDA)? [y/N]"
+    read -r sapiens_choice
+    if [[ "$sapiens_choice" == "y" || "$sapiens_choice" == "Y" ]]; then
+        USE_SAPIENS_EXTRA=true
+    fi
+fi
+
 # Choose template
 if [[ "$USE_GPU" == true ]]; then
     if [ -f "$VAILA_HOME/pyproject_linux_cuda12.toml" ]; then
@@ -468,6 +478,9 @@ fi
 if [[ "$USE_SAM_EXTRA" == true ]]; then
     UV_SYNC_CMD+=(--extra sam)
 fi
+if [[ "$USE_SAPIENS_EXTRA" == true ]]; then
+    UV_SYNC_CMD+=(--extra sapiens)
+fi
 if ! "${UV_SYNC_CMD[@]}"; then
     echo "Error: uv sync failed. Restoring universal CPU configuration..."
     cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
@@ -495,6 +508,29 @@ if [[ "$USE_SAM_EXTRA" == true ]]; then
         (cd "$VAILA_HOME" && uv run hf auth login) || {
             echo "Warning: hf auth login failed or was cancelled. You can run it later."
         }
+    fi
+fi
+
+if [[ "$USE_SAPIENS_EXTRA" == true ]]; then
+    echo ""
+    echo "------------------------------------------------------------"
+    echo "Sapiens2 Pose (optional): clone + weights via bin/setup_sapiens2.sh"
+    echo "  - Clones facebookresearch/sapiens2 into .local/third_party/sapiens2 (editable install)"
+    echo "  - Downloads pose (1B default) + DETR detector to vaila/models/sapiens2/"
+    echo "  - GUI: Frame B -> YOLO + FB -> Sapiens2 Pose"
+    echo "  - Test: uv run vaila/vaila_sapiens.py -i tests/markerless_2d_analysis/ -o /tmp/out --dry-run"
+    echo "  - License: Meta Sapiens2 License (not AGPL) — see vaila/help/vaila_sapiens.md"
+    echo "------------------------------------------------------------"
+    read -r -p "Run 'bash bin/setup_sapiens2.sh' now from $VAILA_HOME? [y/N] " sapiens_setup_now
+    if [[ "$sapiens_setup_now" == "y" || "$sapiens_setup_now" == "Y" ]]; then
+        if [[ -x "$VAILA_HOME/bin/setup_sapiens2.sh" ]]; then
+            (cd "$VAILA_HOME" && bash bin/setup_sapiens2.sh) || {
+                echo "Warning: setup_sapiens2.sh failed or was cancelled. You can run it later:"
+                echo "  cd \"$VAILA_HOME\" && bash bin/setup_sapiens2.sh"
+            }
+        else
+            echo "Warning: bin/setup_sapiens2.sh not found. Run manually after updating the repo."
+        fi
     fi
 fi
 

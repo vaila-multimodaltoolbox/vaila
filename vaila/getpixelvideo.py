@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 04 July 2026
-Version: 0.3.69
+Update: 07 July 2026
+Version: 0.3.75
 Python Version: 3.12.13
 
 Description:
@@ -44,9 +44,12 @@ How to use:
 3. Mark, TAB between slots, **Ctrl+G** to jump to a keypoint number, Save.
 
 Load Track CSV (smart loader, button next to the Load Track CSV button):
-  - Auto-detects: SAM3 ``sam_tracks.csv`` / ``sam_frames_meta.csv`` (normalised)
-    / ``sam_points.csv``, vailá YOLO ``all_id_detection.csv``, per-id YOLO
-    ``person_id_NN.csv``.
+  - Auto-detects: SAM3 ``sam_tracks.csv`` / ``sam_bbox_tracks.csv`` / ``sam_frames_meta.csv``
+    (normalised) / ``sam_points.csv``, Sapiens2 ``sapiens_bbox_tracks.csv`` /
+    ``*_sapiens_vaila.csv`` (long pose, pick ``person_id``), vailá YOLO
+    ``all_id_detection.csv``, per-id YOLO ``person_id_NN.csv``.
+  - Sapiens2 wide pose: use the regular **Load** button on
+    ``<stem>_id_NN_sapiens_pose.csv`` or ``<stem>_getpixelvideo_pose.csv``.
   - For bbox formats, a dialog first chooses overlay text:
     ``1=colored boxes only 2=ID 3=ID+confidence``. A second dialog asks the
     anchor for bbox -> marker conversion: ``1=center 2=bottom 3=top 4=left
@@ -2721,6 +2724,8 @@ def play_video_with_controls(
           * SAM3 ``sam_tracks.csv``       (frame, obj_id, x_px, y_px, w_px, h_px)
           * SAM3 ``sam_frames_meta.csv``  (normalised box_x_<oid> / box_y_<oid> / ...)
           * SAM3 ``sam_points.csv``       (frame, p1_x, p1_y, p2_x, p2_y, ...)
+          * Sapiens2 ``*_sapiens_vaila.csv`` (long pose: frame,person_id,kpt_idx,x,y,score)
+          * Sapiens2 ``sapiens_bbox_tracks.csv`` (SAM-compatible bbox tracks)
           * vailá YOLO ``all_id_detection.csv``  (Frame, X_min_<label>, ...)
           * Per-id YOLO ``person_id_NN.csv``     (Frame, X_min, Y_min, X_max, Y_max)
 
@@ -2826,6 +2831,59 @@ def play_video_with_controls(
             detected_fmt = _detect_tracking_format(df)
             print(f"[Load Track CSV] detected format: {detected_fmt or 'unknown (legacy parser)'}")
 
+            if detected_fmt == "sapiens_pose_long":
+                person_ids = sorted(
+                    {
+                        int(float(v))
+                        for v in pd.to_numeric(df.get("person_id"), errors="coerce").dropna()
+                    }
+                )
+                print(
+                    f">> vaila/getpixelvideo: Sapiens2 long pose — "
+                    f"person_ids in file: {person_ids or 'none'}"
+                )
+                raw_pid = show_input_dialog(
+                    "Sapiens2 person_id to load (e.g. 1):",
+                    str(person_ids[0]) if person_ids else "1",
+                )
+                try:
+                    person_id = int((raw_pid or "1").strip())
+                except ValueError:
+                    save_message_text = f"Invalid person_id: {raw_pid!r}"
+                    showing_save_message = True
+                    save_message_timer = 120
+                    return
+                try:
+                    wide_df = _sapiens_long_to_marker_df(df, person_id, kpt_thr=0.3)
+                    coords_new, labels_new, msg = load_marker_csv_df(
+                        wide_df,
+                        total_frames=total_frames,
+                        input_file=csv_path,
+                        video_width=original_width,
+                        video_height=original_height,
+                    )
+                except Exception as exc:
+                    save_message_text = f"Sapiens2 pose load failed: {exc}"
+                    showing_save_message = True
+                    save_message_timer = 120
+                    print(f"ERROR: {exc}")
+                    return
+                coordinates = coords_new
+                labels = labels_new
+                deleted_positions = {i: set() for i in range(total_frames)}
+                selected_marker_idx = 0
+                one_line_mode = False
+                bbox_converted_to_markers = True
+                save_message_text = f"Loaded Sapiens2 pose (person_id={person_id}): {msg}"
+                showing_save_message = True
+                save_message_timer = 120
+                csv_loaded = True
+                print(
+                    f"[OK] Loaded Sapiens2 long pose as markers "
+                    f"(person_id={person_id}, {len(labels_new)} keypoints)."
+                )
+                return
+
             if detected_fmt == "sam_points":
                 # Direct marker CSV - load as keypoints with no bbox / anchor step.
                 coords_new, labels_new, msg = load_marker_csv_df(
@@ -2850,7 +2908,13 @@ def play_video_with_controls(
                 print(f"[OK] Loaded sam_points.csv as markers ({len(labels_new)} obj IDs).")
                 return
 
-            if detected_fmt in {"sam_tracks", "sam_frames_meta", "yolo_single", "yolo_multi"}:
+            if detected_fmt in {
+                "sam_tracks",
+                "sam_frames_meta",
+                "yolo_single",
+                "yolo_multi",
+                "sapiens_tracks",
+            }:
                 bboxes = _iter_bboxes_from_df(
                     df,
                     detected_fmt,
@@ -2908,7 +2972,9 @@ def play_video_with_controls(
                 # markers turns each object into a keypoint, which F9 then
                 # exports as a single-object POSE set — useless for tracking N
                 # players. So default to skip and shout about it in the terminal.
-                if detected_fmt.startswith(("sam_", "yolo_")) and n_ids > 1:
+                if (
+                    detected_fmt.startswith(("sam_", "yolo_")) or detected_fmt == "sapiens_tracks"
+                ) and n_ids > 1:
                     print(
                         "\n>> vaila/getpixelvideo: STOP/READ — loaded "
                         f"{n_ids} tracked objects ({detected_fmt}).\n"
@@ -2958,7 +3024,10 @@ def play_video_with_controls(
                         f"anchor='{anchor_name}' across {n_ids} object IDs. "
                         f"Save will write *_markers.csv."
                     )
-                    if detected_fmt.startswith(("sam_", "yolo_")) and n_ids > 1:
+                    if (
+                        detected_fmt.startswith(("sam_", "yolo_"))
+                        or detected_fmt == "sapiens_tracks"
+                    ) and n_ids > 1:
                         print(
                             ">> vaila/getpixelvideo: STOP — you converted "
                             f"{n_ids} tracked objects into markers. F9 (pose) "
@@ -3318,12 +3387,10 @@ def play_video_with_controls(
 
     def load_bbox_and_export_coords():
         """Prompts user to select a bbox tracking CSV or contours JSON, and exports 5 coordinate files."""
-        nonlocal \
-            save_message_text, \
-            showing_save_message, \
-            save_message_timer
+        nonlocal save_message_text, showing_save_message, save_message_timer
 
         import platform
+
         initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
 
         if platform.system() == "Linux":
@@ -3359,7 +3426,7 @@ def play_video_with_controls(
                         ("Tracking/Contour Files", "*.csv;*.json;*.jsonl;*.gz"),
                         ("CSV Files", "*.csv"),
                         ("JSON Files", "*.json"),
-                        ("All Files", "*.*")
+                        ("All Files", "*.*"),
                     ],
                     initialdir=initial_dir,
                 )
@@ -3986,7 +4053,7 @@ def play_video_with_controls(
         )
         current_x += bbox_coords_button_width + button_gap
 
-        pygame.draw.rect(control_surface, (120, 80, 160), bbox_coords_button_rect) # Purple color
+        pygame.draw.rect(control_surface, (120, 80, 160), bbox_coords_button_rect)  # Purple color
         bbox_coords_text = font.render("BBox→Coords", True, (255, 255, 255))
         control_surface.blit(
             bbox_coords_text, bbox_coords_text.get_rect(center=bbox_coords_button_rect.center)
@@ -9607,6 +9674,10 @@ def load_marker_csv_df(
 #                         Frame, X_min_<label>, Y_min_<label>, X_max_<label>, Y_max_<label>, ...
 #   * "yolo_single"       per-id YOLO export (``person_id_01.csv``)
 #                         Frame, X_min, Y_min, X_max, Y_max, [Confidence, Label, ID]
+#   * "sapiens_pose_long" Sapiens2 ``*_sapiens_vaila.csv``
+#                         frame, person_id, kpt_idx, x, y, [score]
+#   * "sapiens_tracks"    legacy Sapiens2 ``sapiens_tracks.csv``
+#                         frame, stable_id, x1, y1, x2, y2, [mean_kpt_score]
 # ============================================================================
 
 _BBOX_ANCHOR_ALIASES: dict[str, str] = {
@@ -9684,6 +9755,57 @@ def _detect_frame_col(columns: list[str]) -> str | None:
     return None
 
 
+def _sapiens_long_to_marker_df(
+    df: Any,
+    person_id: int,
+    *,
+    kpt_thr: float = 0.0,
+) -> Any:
+    """Pivot Sapiens2 long pose CSV to wide marker layout for ``load_marker_csv_df``."""
+    cols_lower = {str(c).lower(): str(c) for c in df.columns}
+    frame_col = _detect_frame_col([str(c) for c in df.columns])
+    if frame_col is None:
+        raise ValueError("no frame column in Sapiens2 long pose CSV")
+    pid_col = cols_lower.get("person_id")
+    kidx_col = cols_lower.get("kpt_idx")
+    x_col = cols_lower.get("x")
+    y_col = cols_lower.get("y")
+    sc_col = cols_lower.get("score")
+    if not all([pid_col, kidx_col, x_col, y_col]):
+        raise ValueError("missing Sapiens2 long pose columns (person_id,kpt_idx,x,y)")
+
+    sub = df[pd.to_numeric(df[pid_col], errors="coerce") == person_id].copy()
+    if sub.empty:
+        raise ValueError(f"no rows for person_id={person_id}")
+
+    kpt_series = pd.to_numeric(sub[kidx_col], errors="coerce").dropna()
+    if kpt_series.empty:
+        raise ValueError(f"no keypoints for person_id={person_id}")
+    n_kp = int(kpt_series.max()) + 1
+
+    frame_vals = sorted(pd.to_numeric(sub[frame_col], errors="coerce").dropna().unique())
+    rows: list[dict[str, Any]] = []
+    for fr_raw in frame_vals:
+        fr = int(fr_raw)
+        row: dict[str, Any] = {"frame": fr}
+        for i in range(n_kp):
+            row[f"kp{i:03d}_x"] = ""
+            row[f"kp{i:03d}_y"] = ""
+        fr_mask = pd.to_numeric(sub[frame_col], errors="coerce") == fr
+        for _, r in sub.loc[fr_mask].iterrows():
+            try:
+                ki = int(float(r[kidx_col]))
+                sc = float(r[sc_col]) if sc_col and pd.notna(r.get(sc_col)) else 1.0
+                if sc < kpt_thr:
+                    continue
+                row[f"kp{ki:03d}_x"] = f"{float(r[x_col]):.4f}"
+                row[f"kp{ki:03d}_y"] = f"{float(r[y_col]):.4f}"
+            except (TypeError, ValueError):
+                continue
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def _detect_tracking_format(df: Any) -> str:
     """Classify a tracking CSV by its column names. Returns format key or ``""``.
 
@@ -9694,9 +9816,16 @@ def _detect_tracking_format(df: Any) -> str:
     has_frame = _detect_frame_col(cols) is not None
 
     if has_frame:
+        sapiens_long_required = {"person_id", "kpt_idx", "x", "y"}
+        if sapiens_long_required.issubset(cols_lower):
+            return "sapiens_pose_long"
+
         sam_tracks_required = {"obj_id", "x_px", "y_px", "w_px", "h_px"}
         if sam_tracks_required.issubset(cols_lower):
             return "sam_tracks"
+
+        if {"stable_id", "x1", "y1", "x2", "y2"}.issubset(cols_lower):
+            return "sapiens_tracks"
 
         meta_pat = re.compile(r"^box_x_\d+$", re.IGNORECASE)
         if any(meta_pat.match(c) for c in cols):
@@ -9828,6 +9957,43 @@ def _iter_bboxes_from_df(
                         "score": float(row[p_col]) if p_col and pd.notna(row.get(p_col)) else 1.0,
                     }
                 )
+        return out
+
+    if fmt == "sapiens_tracks":
+        sid_col = cols_lower.get("stable_id")
+        x1c = cols_lower.get("x1")
+        y1c = cols_lower.get("y1")
+        x2c = cols_lower.get("x2")
+        y2c = cols_lower.get("y2")
+        score_col = cols_lower.get("mean_kpt_score") or cols_lower.get("score")
+        if not all([sid_col, x1c, y1c, x2c, y2c]):
+            return out
+        for _, row in df.iterrows():
+            try:
+                fr = int(float(row[frame_col]))
+                oid = int(float(row[sid_col]))
+                x1 = float(row[x1c])
+                y1 = float(row[y1c])
+                x2 = float(row[x2c])
+                y2 = float(row[y2c])
+            except (TypeError, ValueError, KeyError):
+                continue
+            if not (np.isfinite([x1, y1, x2, y2]).all() and x2 > x1 and y2 > y1):
+                continue
+            out.append(
+                {
+                    "frame": fr,
+                    "obj_id": oid,
+                    "x1": x1,
+                    "y1": y1,
+                    "x2": x2,
+                    "y2": y2,
+                    "label": f"id{oid}",
+                    "score": float(row[score_col])
+                    if score_col and pd.notna(row.get(score_col))
+                    else 1.0,
+                }
+            )
         return out
 
     if fmt == "yolo_single":
@@ -9984,7 +10150,11 @@ def parse_contours_json(file_path):
     content_stripped = content.strip()
 
     # Check if JSONL (multiple lines of json records, or ends with jsonl)
-    if real_suffix == ".jsonl" or (content_stripped.startswith("{") and "\n" in content_stripped and not content_stripped.endswith("}")):
+    if real_suffix == ".jsonl" or (
+        content_stripped.startswith("{")
+        and "\n" in content_stripped
+        and not content_stripped.endswith("}")
+    ):
         lines = [ln.strip() for ln in content_stripped.split("\n") if ln.strip()]
         for line in lines:
             try:
@@ -10004,6 +10174,7 @@ def parse_contours_json(file_path):
                             if polys:
                                 xs = []
                                 ys = []
+
                                 def extract_pts(p, x_list, y_list):
                                     for item in p:
                                         if isinstance(item, (list, tuple)):
@@ -10012,6 +10183,7 @@ def parse_contours_json(file_path):
                                                 y_list.append(item[1])
                                             else:
                                                 extract_pts(item, x_list, y_list)
+
                                 extract_pts(polys, xs, ys)
                                 if xs and ys:
                                     x = min(xs)
@@ -10019,15 +10191,17 @@ def parse_contours_json(file_path):
                                     w = max(xs) - x
                                     h = max(ys) - y
                         if x is not None and y is not None and w is not None and h is not None:
-                            bboxes.append({
-                                "frame": fr,
-                                "obj_id": int(oid),
-                                "x1": float(x),
-                                "y1": float(y),
-                                "x2": float(x) + float(w),
-                                "y2": float(y) + float(h),
-                                "score": float(obj.get("score") or 1.0)
-                            })
+                            bboxes.append(
+                                {
+                                    "frame": fr,
+                                    "obj_id": int(oid),
+                                    "x1": float(x),
+                                    "y1": float(y),
+                                    "x2": float(x) + float(w),
+                                    "y2": float(y) + float(h),
+                                    "score": float(obj.get("score") or 1.0),
+                                }
+                            )
             except Exception:
                 continue
     else:
@@ -10051,6 +10225,7 @@ def parse_contours_json(file_path):
                             if polys:
                                 xs = []
                                 ys = []
+
                                 def extract_pts(p, x_list, y_list):
                                     for item in p:
                                         if isinstance(item, (list, tuple)):
@@ -10059,6 +10234,7 @@ def parse_contours_json(file_path):
                                                 y_list.append(item[1])
                                             else:
                                                 extract_pts(item, x_list, y_list)
+
                                 extract_pts(polys, xs, ys)
                                 if xs and ys:
                                     x = min(xs)
@@ -10066,15 +10242,17 @@ def parse_contours_json(file_path):
                                     w = max(xs) - x
                                     h = max(ys) - y
                         if x is not None and y is not None and w is not None and h is not None:
-                            bboxes.append({
-                                "frame": fr,
-                                "obj_id": int(oid),
-                                "x1": float(x),
-                                "y1": float(y),
-                                "x2": float(x) + float(w),
-                                "y2": float(y) + float(h),
-                                "score": float(obj.get("score") or 1.0)
-                            })
+                            bboxes.append(
+                                {
+                                    "frame": fr,
+                                    "obj_id": int(oid),
+                                    "x1": float(x),
+                                    "y1": float(y),
+                                    "x2": float(x) + float(w),
+                                    "y2": float(y) + float(h),
+                                    "score": float(obj.get("score") or 1.0),
+                                }
+                            )
         except Exception as e:
             print(f"Error parsing JSON contours file: {e}")
     return bboxes
@@ -10185,12 +10363,7 @@ def do_export_bbox_coords(input_file_path, video_file_path=None):
                 height = meta.get("height")
                 total_frames = meta.get("nb_frames")
 
-            bboxes = _iter_bboxes_from_df(
-                df,
-                detected_fmt,
-                video_width=width,
-                video_height=height
-            )
+            bboxes = _iter_bboxes_from_df(df, detected_fmt, video_width=width, video_height=height)
         except Exception as e:
             print(f"Error parsing tracking CSV file: {e}")
             return False
@@ -10219,9 +10392,7 @@ def do_export_bbox_coords(input_file_path, video_file_path=None):
         output_path = base_dir / output_file_name
 
         coords_dict, _ = bboxes_to_marker_coordinates(
-            bboxes,
-            total_frames=total_frames,
-            anchor=anchor
+            bboxes, total_frames=total_frames, anchor=anchor
         )
 
         columns = ["frame"]
