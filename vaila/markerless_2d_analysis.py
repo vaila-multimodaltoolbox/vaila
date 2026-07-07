@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 03 June 2026
-Version: 0.3.47
+Update Date: 06 July 2026
+Version: 0.3.72
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -4830,7 +4830,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             use_gpu = False
             gpu_backend = None
 
-    is_mps_gpu = (platform.system() == "Darwin" and use_gpu and gpu_backend == "mps")
+    is_mps_gpu = platform.system() == "Darwin" and use_gpu and gpu_backend == "mps"
 
     # Create landmarker options
     options = PoseLandmarkerOptions(
@@ -5737,6 +5737,22 @@ def process_videos_in_directory(existing_root=None):
             f"{pose_config.get('smooth_method', 'none')} smoothing"
         )
 
+    # Format and print equivalent CLI command (GUI->CLI mirror)
+    nvenc_flag = " --nvenc" if pose_config.get("use_nvenc_encoder", False) else " --libx264-encode"
+
+    import shlex
+
+    input_quoted = shlex.quote(str(input_dir))
+    output_quoted = shlex.quote(str(output_base.parent))
+
+    print("\n>> vaila/markerless_2d_analysis: Equivalent CLI (copy/paste):", flush=True)
+    print(
+        f">>   uv run python vaila/markerless_2d_analysis.py -i {input_quoted} "
+        f"-o {output_quoted} --device {selected_device}{nvenc_flag}",
+        flush=True,
+    )
+    print(f">> (GUI output saved under: {output_base})\n", flush=True)
+
     # Process each video
     for i, video_file in enumerate(video_files, 1):
         print(f"\nProcessing video {i}/{len(video_files)}: {video_file.name}")
@@ -5918,18 +5934,47 @@ def get_cpu_usage():
 
 @functools.lru_cache(maxsize=1)
 def _ffmpeg_lists_h264_nvenc() -> bool:
-    """True if FFmpeg build exposes NVIDIA H.264 encoder (offloads annotated MP4 from CPU)."""
+    """True if FFmpeg build exposes and can actually run NVIDIA H.264 encoder (at runtime)."""
     try:
         proc = subprocess.run(
             ["ffmpeg", "-hide_banner", "-encoders"],
             capture_output=True,
             text=True,
-            timeout=12,
+            timeout=5,
             check=False,
         )
         blob = (proc.stdout or "") + (proc.stderr or "")
-        return proc.returncode == 0 and "h264_nvenc" in blob
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        if proc.returncode != 0 or "h264_nvenc" not in blob:
+            return False
+
+        # Run a quick 1-second null test to verify NVENC driver compatibility at runtime
+        test_result = subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=1280x720:rate=30",
+                "-t",
+                "1",
+                "-c:v",
+                "h264_nvenc",
+                "-pix_fmt",
+                "yuv420p",
+                "-f",
+                "null",
+                "-",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return test_result.returncode == 0
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
         return False
 
 

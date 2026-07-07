@@ -15,7 +15,8 @@ Companion files:
 - `.claude/skills/sam3-video/SKILL.md` — SAM 3 video segmentation reference.
 - `.claude/skills/soccer-field-keypoints-yolo/SKILL.md` — pitch-keypoint training/inference.
 - `docs/fifa_workflow.md` §4.5 — **external** merged `unified/` dataset, QA export, dedupe, `yolo pose train` (weights → `soccerfield_keypoints_ai`).
-- `.claude/skills/sports-field-visualization/SKILL.md` — field rendering helpers.
+- `.claude/skills/yolo-fb-gui-cli/SKILL.md` — YOLO + FB chooser + GUI→CLI mirror.
+- `docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md` — v0.3.72 session log.
 
 Companion repo (the official starter kit):
 `~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`.

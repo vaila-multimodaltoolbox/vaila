@@ -164,6 +164,20 @@ Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script ch
 
 ---
 
+## Step 5 — GUI→CLI mirror (if module has CLI)
+
+When the module supports headless CLI, add `_format_*_cli_command()` using `shlex.quote`
+and print on GUI **Run**:
+
+```python
+print("\n>> vaila/<module>: Equivalent CLI (copy/paste):", flush=True)
+print(f">>   {cmd}", flush=True)
+```
+
+Use `>>` not `[bracketed]` (absl). See `.claude/skills/yolo-fb-gui-cli/SKILL.md`.
+
+---
+
 ## Checklist Before Committing
 
 - [ ] Module imports without errors: `uv run python -c "from vaila.<module_name> import run_<module_name>"`

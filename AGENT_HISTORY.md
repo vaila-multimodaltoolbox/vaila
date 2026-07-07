@@ -1,8 +1,11 @@
 # Agent Continuation Log — vailá ↔ FIFA Skeletal Tracking Light 2026
 
-Last update: 2026-06-01
+Last update: 2026-07-06 (v0.3.72 — YOLO + FB GUI→CLI mirror)
 Working clone: `~/data/vaila`
 Companion repo: `~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`
+
+**Cursor CLI resume:** read `.claude/skills/yolo-fb-gui-cli/SKILL.md` and
+`docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md` for Frame B video-AI tools.
 
 ---
 

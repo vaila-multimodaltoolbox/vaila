@@ -17,7 +17,7 @@ The repo ships **several `pyproject_*.toml` templates**. The checked-in **`pypro
 ```bash
 # Linux / macOS / WSL / Git Bash
 bash bin/setup_pyproject.sh                           # interactive, auto-detect
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes
 bash bin/setup_pyproject.sh --target=cpu --non-interactive
 
 # Windows PowerShell
@@ -40,6 +40,8 @@ Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--extras=a,b,c`, `--non-i
 Each switch runs `uv lock` and rewrites `uv.lock` for that hardware matrix. The default lock in git targets **CPU**; CUDA users regenerate locally after switching.
 
 SAM 3 video (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime (`torch.cuda.is_available()`), even if the `sam` extra is installed. There is **no** CPU-only or **macOS Metal/MPS** path in this integration; `--frame-by-frame` only lowers **VRAM on CUDA**, not a CPU fallback. Without CUDA, use other vailá modules (e.g. Markerless 2D / YOLO) or run on a CUDA workstation or cloud GPU. Checkpoint auto-detection supports both `vaila/models/sam3/` and repo-root `models/sam3/`.
+
+**Sapiens2 Pose (optional):** `uv sync --extra sapiens` plus `bash bin/setup_sapiens2.sh` (clones into `.local/third_party/sapiens2/`, editable install, downloads `facebook/sapiens2-pose-1b` + `facebook/detr-resnet-101-dc5` into `vaila/models/sapiens2/`). GUI: Frame B → **YOLO + FB** → **Sapiens2 Pose** (`vaila/vaila_sapiens.py`). Default model **1B** fits RTX 4090 24 GiB. Help: `vaila/help/vaila_sapiens.md`. License: Meta Sapiens2 License (not AGPL).
 
 **FIFA Skeletal Tracking Light (optional):** `uv sync --extra fifa` (workstation: combine with CUDA template + `--extra gpu`). `sam_3d_body/` is **not committed** — clone it with `bash bin/setup_fifa_sam3d.sh` (or `pwsh bin/setup_fifa_sam3d.ps1` on Windows), which also downloads the gated `facebook/sam-3d-body-dinov3` weights into `vaila/models/sam-3d-dinov3/`. Vendored MIT starter-kit utilities live in `vaila/fifa_starter_lib/` (`camera_tracker.py`, `postprocess.py`, `pitch_points.txt`; see `vaila/fifa_starter_lib/VENDOR.md`). CLI: `uv run vaila/vaila_sam.py fifa <subcommand> --help` with subcommands `bootstrap` (symlinks + sequences + pitch_points), `prepare`, `boxes`, `preprocess`, `baseline`, **`dlt-export`** (FIFA `cameras/*.npz` → per-frame `.dlt2d`/`.dlt3d` via `vaila/fifa_to_dlt.py` for **`rec2d.py` / `rec3d.py`** on moving broadcast cameras), `pack`. Use **`rec2d_one_dlt2d.py` / `rec3d_one_dlt3d.py` only for fixed cameras** (single DLT row). Companion tool `vaila/soccerfield_calib.py` (button **Soccer-Field Calib** in Frame C of `vaila.py`) fits a **single-frame** DLT2D homography from 29 FIFA keypoints; GUI **FIFA cams→DLT** exports per-frame DLT after `baseline --export-camera`. Tests: `uv run pytest tests/test_fifa_skeletal_pipeline.py tests/test_fifa_bootstrap.py tests/test_fifa_to_dlt.py tests/test_soccerfield_calib.py -v`. Full `data/` layout (`cameras/`, `boxes/`, …) still comes from the official starter kit / Hugging Face dataset when available.
 
@@ -127,6 +129,7 @@ vaila/                 ← root
 │   ├── fifa_bootstrap.py  ← `fifa bootstrap` helper (symlinks + sequences + pitch_points)
 │   └── soccerfield_calib.py  ← Companion DLT2D calibration (29 FIFA keypoints)
 ├── bin/setup_fifa_sam3d.sh/.ps1  ← Clones sam_3d_body + downloads gated weights
+├── bin/setup_sapiens2.sh/.ps1    ← Clones sapiens2 + downloads pose + DETR weights
 ├── sam_3d_body/       ← Cloned locally by the setup script (NOT committed)
 ├── tests/             ← pytest test suite
 ├── docs/              ← Documentation
@@ -208,6 +211,7 @@ Ruff is configured in `pyproject.toml` with:
 - **Naming:** Scientific code may use uppercase variable names (X, Y, Z, F, etc.) — this is acceptable and suppressed in linting
 - **Output pattern:** Analysis modules write results to timestamped subdirectories (e.g., `processed_linear_lowess_YYYYMMDD_HHMMSS/`)
 - **Build system:** `hatchling` backend, managed via `uv`
+- **GUI→CLI mirror:** any module with a CLI must print copy-paste equivalent commands on GUI **Run** using the `>>` prefix (absl logging eats `[bracketed]` stdout). Chooser **YOLO + FB** prints launcher CLI per button; full args in `vaila_sam`, `vaila_sapiens`, `yolov26track track`, `yolotrain`. Reference: `docs/vaila_buttons/yolo-fb.md`, `yolotrain._format_training_cli_command`, `getpixelvideo` `>> Equivalent CLI`.
 
 ## History (cross-IDE memory)
 
@@ -490,6 +494,36 @@ explicitly unless you want `none` to skip.
 Tests: `tests/test_sam_postprocess.py` — 26 passed (10 new anchor tests).
 
 Version sync: `0.3.69 / 04 July 2026`.
+
+### YOLO + FB chooser + Sapiens2 Pose (July 2026, v0.3.71)
+
+**GUI (`vaila.py`):**
+- Frame B button **YOLO + SAM** renamed to **YOLO + FB**
+- Chooser adds **Sapiens2 Pose** → `vaila/vaila_sapiens.py` (308 kp, CUDA)
+- Bootstrap: `bash bin/setup_sapiens2.sh`; extra `uv sync --extra sapiens`
+
+**New module:** `vaila/vaila_sapiens.py` — DETR + Sapiens2 ViT pose; default model `1b` for RTX 4090.
+
+Tests: `tests/test_vaila_sapiens.py`. Help: `vaila/help/vaila_sapiens.md`.
+
+### GUI→CLI mirror for YOLO + FB stack (July 2026, v0.3.72)
+
+**Convention:** modules with CLI print copy-paste commands on GUI **Run** using `>>` prefix
+(absl eats `[bracketed]` stdout). Chooser prints launcher CLI per button.
+
+**Code:**
+- `vaila.py` — `_print_yolo_fb_launch()` on all chooser buttons
+- `vaila_sapiens.py` — `_format_sapiens_cli_command` + print on Run
+- `vaila_sam.py` — `_build_sam_cli_argv` + `_print_sam_equivalent_cli`
+- `yolov26track.py` — `_format_track_cli_command` (one `track` per video); pose workflow hints
+- `yolotrain.py` — launch line + `_format_training_cli_command` in training thread
+
+**Docs:** `docs/vaila_buttons/yolo-fb.md`, helps rebranded to **YOLO + FB** path.
+
+**Skill:** `.claude/skills/yolo-fb-gui-cli/SKILL.md`
+**Session log:** `docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md`
+
+Version sync: `0.3.72 / 06 July 2026`.
 
 ## Caveman mode (optional)
 

@@ -125,3 +125,52 @@ def test_apply_geometric_stabilize_writes_links_csv(tmp_path) -> None:
     assert (out_path := out_dir / "yolo_reid_links.csv").is_file()
     text = out_path.read_text(encoding="utf-8")
     assert "frame" in text.lower()
+
+
+def test_format_track_cli_command_maps_config() -> None:
+    from vaila.yolov26track import _format_track_cli_command
+
+    config = {
+        "conf": 0.2,
+        "iou": 0.65,
+        "device": "cuda",
+        "vid_stride": 2,
+        "stabilize_ids": True,
+        "reid_max_gap": 10,
+        "reid_max_dist": 150.0,
+        "reid_min_iou": 0.1,
+        "reid_direction_weight": 0.3,
+        "pose_model_name": "yolo26n-pose.pt",
+        "pose_conf": 0.15,
+        "pose_iou": 0.75,
+        "pose_min_roi": 300,
+        "pose_pad_pct": 0.2,
+        "max_tracked_ids": 4,
+    }
+    cmd = _format_track_cli_command(
+        model_path="/models/best.pt",
+        source="/videos/clip.mp4",
+        output_dir="/out/clip",
+        tracker="botsort.yaml",
+        config=config,
+        target_classes=[0],
+        do_pose=True,
+    )
+    assert "track" in cmd
+    assert "--conf 0.2" in cmd
+    assert "--vid-stride 2" in cmd
+    assert "--max-ids 4" in cmd
+    assert "--classes 0" in cmd
+    assert "--pose-model yolo26n-pose.pt" in cmd
+    assert "--reid-max-gap 10" in cmd
+
+    cmd_no_pose = _format_track_cli_command(
+        model_path="/models/best.pt",
+        source="/videos/clip.mp4",
+        output_dir="/out/clip",
+        tracker="botsort.yaml",
+        config=config,
+        target_classes=None,
+        do_pose=False,
+    )
+    assert "--no-pose" in cmd_no_pose

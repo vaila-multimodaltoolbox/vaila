@@ -127,6 +127,9 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --frame-by-frame
 # GUI mode (no args)
 uv run vaila/vaila_sam.py
 
+# From main vailá GUI: Frame B → YOLO + FB → SAM 3 video
+# On Run, terminal prints: >> vaila/vaila_sam: Equivalent CLI (copy/paste): ...
+
 # Download weights only
 uv run vaila/vaila_sam.py --download-weights
 
@@ -135,6 +138,14 @@ uv run vaila/vaila_sam.py --open-help
 ```
 
 Text prompt is open-vocabulary (no fixed class list). `person` is only the default.
+
+### GUI path & CLI mirror (v0.3.72)
+
+- Main vailá: **Frame B → YOLO + FB → SAM 3 video** (not “Video AI tools”)
+- Launcher CLI (chooser): `uv run python -u vaila/vaila_sam.py`
+- On **Run**, stdout + progress log show full command via `_build_sam_cli_argv` /
+  `_print_sam_equivalent_cli` (`>>` prefix)
+- Skill for whole chooser: `.claude/skills/yolo-fb-gui-cli/SKILL.md`
 
 ### All CLI Flags
 

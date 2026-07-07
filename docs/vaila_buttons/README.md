@@ -37,7 +37,7 @@ Each button in the vailá GUI has its own documentation file:
 | B_r6_c5 | Deadlift | `deadlift_analysis` | [deadlift.md](deadlift.md) |
 | B_r3_c4 | Cube2D | `cube2d_kinematics` | [cube2d-kinematics.md](cube2d-kinematics.md) |
 | B_r3_c5 | Animal Open Field | `animal_open_field` | [animal-open-field.md](animal-open-field.md) |
-| B_r4_c1 | Video AI tools | `yolo_and_sam` | [vaila-sam.md](vaila-sam.md) |
+| B_r4_c1 | YOLO + FB | `yolo_and_sam` | [yolo-fb.md](yolo-fb.md) (YOLO, SAM 3, Sapiens2, Train) |
 | B_r4_c2 | ML Walkway | `ml_walkway` | [ml-walkway.md](ml-walkway.md) |
 | B_r4_c3 | Markerless Hands | `markerless_hands` | [markerless-hands.md](markerless-hands.md) |
 | B_r4_c4 | MP Angles | `mp_angles_calculation` | [mp-angles-calculation.md](mp-angles-calculation.md) |

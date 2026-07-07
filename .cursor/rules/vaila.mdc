@@ -229,11 +229,17 @@ def _on_my_analysis(self) -> None:
 - Extra: `uv sync --extra sam` (CUDA required at runtime; no CPU/MPS path; `--frame-by-frame` is VRAM-only on CUDA)
 - Weights: `vaila/models/sam3/sam3.pt` or `sam3.1_multiplex.pt` (gitignored; `--download-weights` or HF Hub)
 - CLI: `uv run vaila/vaila_sam.py -i VIDEO -o OUT -t person`
-- GUI: `uv run vaila/vaila_sam.py` (no args → Tkinter dialog); the dialog has a
-  **Help** button and an editable combobox of prompt presets (person, player,
-  goalkeeper, referee, football, ball, team in red, team in blue, …).
+- GUI: `uv run vaila/vaila_sam.py` (no args → Tkinter dialog); main vailá: **Frame B → YOLO + FB → SAM 3 video**
+- GUI→CLI: on **Run**, prints `>> vaila/vaila_sam: Equivalent CLI` (`_build_sam_cli_argv`)
 - Help: `vaila/help/vaila_sam.html` / `vaila/help/vaila_sam.md`
 - Skill: `.claude/skills/sam3-video/SKILL.md`
+
+### YOLO + FB chooser + Sapiens2 (`vaila.py` B4_r4_c1, v0.3.71–0.3.72)
+- Button **YOLO + FB** opens chooser: Tracker, Pose, Seg, SAM 3, **Sapiens2 Pose**, Train YOLOv26
+- Chooser prints launcher CLI via `_print_yolo_fb_launch()`; each tool prints full Run CLI
+- Sapiens2: `uv sync --extra sapiens` + `bash bin/setup_sapiens2.sh`; `vaila/vaila_sapiens.py`; default model `1b`
+- Doc: `docs/vaila_buttons/yolo-fb.md`; skill: `.claude/skills/yolo-fb-gui-cli/SKILL.md`
+- Session: `docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md`
 
 ### FIFA Skeletal Tracking Light (`vaila_sam.py fifa`)
 - Extra: `uv sync --extra fifa` (combine with `--extra gpu` on CUDA template)

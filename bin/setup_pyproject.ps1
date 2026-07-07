@@ -164,9 +164,9 @@ if (-not $NonInteractive -and -not $Yes) {
 
 # ---------- extras ----------
 $AvailableExtras = switch ($Target) {
-    'linux-cuda' { @('gpu','sam','fifa','upscaler','dev') }
-    'win-cuda'   { @('gpu','sam','fifa','upscaler','dev') }
-    default      { @('sam','fifa','upscaler','dev') }
+    'linux-cuda' { @('gpu','sam','fifa','sapiens','upscaler','dev') }
+    'win-cuda'   { @('gpu','sam','fifa','sapiens','upscaler','dev') }
+    default      { @('sam','fifa','sapiens','upscaler','dev') }
 }
 
 if ($Extras) {
@@ -179,6 +179,7 @@ if ($Extras) {
     Write-Host '  gpu      = tensorrt + nvidia-ml-py (CUDA only)'
     Write-Host '  sam      = SAM 3 video segmentation (sam3==0.1.3; CUDA at runtime)'
     Write-Host '  fifa     = FIFA Skeletal Tracking Light (pytorch-lightning, timm, ...)'
+    Write-Host '  sapiens  = Sapiens2 Pose (transformers + safetensors; CUDA; then bin/setup_sapiens2.ps1)'
     Write-Host '  upscaler = diffusers (image upscaling)'
     Write-Host '  dev      = ruff, ty, pytest (developer tooling)'
     $r = Read-Host "Extras to install [default: '$SuggestedExtras']"
