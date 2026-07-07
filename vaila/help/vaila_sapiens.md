@@ -4,7 +4,7 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.75
+- **Version:** 0.3.76
 - **Updated:** 2026-07-07
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
@@ -135,6 +135,18 @@ uv run vaila/vaila_sapiens.py -i long.mp4 -o out/ --model 1b --stride 3
 | `--open-help` | off | Open this help in browser |
 
 ## Outputs
+
+### Output directory (v0.3.76)
+
+Each CLI or GUI run creates **one** timestamped folder under the output parent:
+
+```text
+<output_parent>/processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/   ← CSVs, overlay, JSON
+```
+
+Subprocess-per-video isolation (default) reuses the parent `--output-base`; isolated
+workers write only to `<timestamp>/<stem>/` and no longer mint a second empty
+`processed_sapiens_*` directory.
 
 Under `processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/`:
 
