@@ -240,12 +240,12 @@
             <div class="searchbox">
                 <span class="pill">Search</span>
                 <input id="toolSearch" type="text"
-                    placeholder="Type a tool name (e.g., Soccer Tools, YOLO, SAM, Rec2D, tugturn)...">
+                    placeholder="Type a tool name (e.g., Sapiens, SAM, YOLO, Soccer Tools, Rec2D, tugturn)...">
             </div>
             <span class="pill">Layout: matches <code>vaila.py</code> CLI list</span>
         </div>
 
-        <pre class="banner">vailá - 04.Jul.2026 v0.3.68 (Python 3.12.13)</pre>
+        <pre class="banner">vailá - 07.Jul.2026 v0.3.76 (Python 3.12.13)</pre>
 
         <div>
             <h2>File Manager (Frame A)</h2>
@@ -380,7 +380,10 @@
 
                 <div class="tool-card">
                     <div class="tool-title">B4_r4_c1 - YOLO + FB</div>
-                    <div class="tool-links"><a href="#yolo-sam">Jump</a> <span class="text-sm">(chooser dialog)</span>
+                    <div class="tool-links"><a href="#yolo-fb">Chooser</a> ·
+                        <a href="vaila_sapiens.html">Sapiens2</a> ·
+                        <a href="vaila_sam.html">SAM 3</a> ·
+                        <a href="yolov26track.html">YOLOv26</a>
                     </div>
                 </div>
                 <div class="tool-card">
@@ -484,41 +487,66 @@
         </div>
 
 
-        <div id="yolo-sam">
-            <h2>YOLO &amp; Meta (FB)</h2>
+        <div id="yolo-fb">
+            <h2>YOLO + FB (chooser)</h2>
             <p class="mb-sm">
-                <strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> opens the chooser:
-                <code>YOLOv11/YOLOv26 Tracker</code>, <code>YOLOv11/YOLOv26 Pose</code>,
-                <code>YOLOv26 Segmentation</code>, <code>SAM 3 video</code>,
-                <code>Sapiens2 Pose</code>, <code>Train YOLOv26</code>.
+                <strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> opens the chooser with these buttons
+                (each prints a copy-paste launcher CLI to the terminal):
+                <code>Tracker (v26)</code>, <code>Pose (video)</code>, <code>Pose (tracking)</code>,
+                <code>Seg (v26)</code>, <code>SAM 3 video</code>, <code>Sapiens2 Pose</code>,
+                <code>Train YOLOv26</code>.
                 <br>
-                <strong>CLI:</strong> run headless with <code>uv run yolo ...</code> (train/val/test/predict) or open
-                module GUIs with
-                <code>uv run python -m vaila.&lt;module&gt;</code>.
+                <strong>Docs:</strong> <a href="../../docs/vaila_buttons/yolo-fb.md">docs/vaila_buttons/yolo-fb.md</a>
             </p>
             <div class="grid-container">
                 <div class="tool-card">
-                    <div class="tool-title">YOLO - Train</div>
-                    <div class="tool-links"><a href="yolotrain.html">HTML</a> | <a href="yolotrain.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">YOLO - Track (v11)</div>
-                    <div class="tool-links"><a href="yolov11track.html">HTML</a> | <a href="yolov11track.md">MD</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">YOLO - Track (v26)</div>
+                    <div class="tool-title">Tracker (v26)</div>
                     <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a>
                     </div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">YOLO - ReID</div>
+                    <div class="tool-title">Pose (video)</div>
+                    <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a>
+                        <span class="text-sm">(YOLOv26 pose on video)</span>
+                    </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">Pose (tracking)</div>
+                    <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a>
+                        <span class="text-sm">(track → pose per ID)</span>
+                    </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">Seg (v26)</div>
+                    <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a>
+                        <span class="text-sm">(segmentation model)</span>
+                    </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">SAM 3 video</div>
+                    <div class="tool-links"><a href="vaila_sam.html">HTML</a> | <a href="vaila_sam.md">MD</a>
+                        <span class="text-sm">(segmentation + FIFA pipeline)</span>
+                    </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">Sapiens2 Pose</div>
+                    <div class="tool-links"><a href="vaila_sapiens.html">HTML</a> | <a href="vaila_sapiens.md">MD</a>
+                        <span class="text-sm">(308 keypoints, CUDA)</span>
+                    </div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">Train YOLOv26</div>
+                    <div class="tool-links"><a href="yolotrain.html">HTML</a> | <a href="yolotrain.md">MD</a></div>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-title">YOLO - ReID (appearance)</div>
                     <div class="tool-links"><a href="reid_yolotrack.html">HTML</a> | <a href="reid_yolotrack.md">MD</a>
                     </div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">SAM 3 - Video segmentation + FIFA pipeline</div>
-                    <div class="tool-links"><a href="vaila_sam.html">HTML</a> | <a href="vaila_sam.md">MD</a></div>
+                    <div class="tool-title">YOLO - Track (v11, legacy)</div>
+                    <div class="tool-links"><a href="yolov11track.html">HTML</a> | <a href="yolov11track.md">MD</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -548,8 +576,8 @@
                 </div>
                 <div class="tool-card">
                     <div class="tool-title">C_A_r2_c2 - Rec2D 1DLT</div>
-                    <div class="tool-links"><a href="rec2d_one_dlt_2d.html">HTML</a> | <a
-                            href="rec2d_one_dlt_2d.md">MD</a></div>
+                    <div class="tool-links"><a href="rec2d_one_dlt2d.html">HTML</a> | <a
+                            href="rec2d_one_dlt2d.md">MD</a></div>
                 </div>
                 <div class="tool-card">
                     <div class="tool-title">C_A_r2_c3 - Rec2D MultiDLT</div>

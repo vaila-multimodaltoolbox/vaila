@@ -122,6 +122,38 @@ DETECTOR_DIRNAME = "detr-resnet-101-dc5"
 # COCO body indices inside the 308-keypoint Sociopticon topology (left/right hip).
 SAPIENS_MID_HIP_KPT_IDS = (11, 12)
 
+DEFAULT_BBOX_THR = 0.3
+DEFAULT_NMS_THR = 0.3
+DEFAULT_KPT_THR = 0.3
+DEFAULT_MAX_PERSONS = 8
+
+SAPIENS_CLI_FULL_INFERENCE_EXAMPLE = """\
+# Full inference example — all user-facing flags (copy/paste, adjust paths)
+uv run vaila/vaila_sapiens.py \\
+  -i /path/to/video.mp4 \\
+  -o /path/to/output_parent/ \\
+  --model 1b \\
+  --stride 1 \\
+  --device 0 \\
+  --bbox-thr 0.3 \\
+  --nms-thr 0.3 \\
+  --max-persons 8 \\
+  --kpt-thr 0.3 \\
+  --pose-batch-size 2 \\
+  --flip-test \\
+  --no-overlay \\
+  --quiet
+
+# GUI batch equivalent also passes --output-base processed_sapiens_<timestamp>/
+# (printed on Run — use that path to reproduce the exact GUI folder)
+
+# Dry-run (no GPU): add --dry-run and drop inference-only flags
+uv run vaila/vaila_sapiens.py -i /path/to/videos/ -o /tmp/out --model 1b --dry-run
+
+# Download weights only:
+uv run vaila/vaila_sapiens.py --download-weights --model 1b
+"""
+
 SAPIENS_OUTPUT_FILE_GLOSSARY = """\
 Biomechanics / vailá downstream CSVs (written after every run)
 --------------------------------------------------------------
@@ -156,7 +188,62 @@ def _sapiens_log(message: str) -> None:
     print(f">> vaila/vaila_sapiens: {message}", flush=True)
 
 
+def _parse_gui_inference_fields(
+    *,
+    stride_s: str,
+    kpt_thr_s: str,
+    bbox_thr_s: str,
+    nms_thr_s: str,
+    max_persons_s: str,
+    device_s: str,
+    pose_batch_s: str,
+) -> tuple[int, float, float, float, int, int, int | None]:
+    """Validate Tkinter inference fields; raises ValueError on bad input."""
+    stride = max(1, int(stride_s.strip() or "1"))
+    kpt_thr = float(kpt_thr_s.strip() or str(DEFAULT_KPT_THR))
+    bbox_thr = float(bbox_thr_s.strip() or str(DEFAULT_BBOX_THR))
+    nms_thr = float(nms_thr_s.strip() or str(DEFAULT_NMS_THR))
+    max_persons = max(1, int(max_persons_s.strip() or str(DEFAULT_MAX_PERSONS)))
+    device = max(0, int(device_s.strip() or "0"))
+    pose_batch_raw = pose_batch_s.strip()
+    pose_batch_size = None if not pose_batch_raw else max(1, int(pose_batch_raw))
+    for name, value in (
+        ("kpt-thr", kpt_thr),
+        ("bbox-thr", bbox_thr),
+        ("nms-thr", nms_thr),
+    ):
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"{name} must be between 0.0 and 1.0 (got {value})")
+    return stride, kpt_thr, bbox_thr, nms_thr, max_persons, device, pose_batch_size
+
+
+def _parse_gui_threshold_fields(
+    *,
+    stride_s: str,
+    kpt_thr_s: str,
+    bbox_thr_s: str,
+    nms_thr_s: str,
+    max_persons_s: str,
+) -> tuple[int, float, float, float, int]:
+    """Backward-compatible wrapper for threshold-only parsing."""
+    stride, kpt_thr, bbox_thr, nms_thr, max_persons, _device, _pose_batch = (
+        _parse_gui_inference_fields(
+            stride_s=stride_s,
+            kpt_thr_s=kpt_thr_s,
+            bbox_thr_s=bbox_thr_s,
+            nms_thr_s=nms_thr_s,
+            max_persons_s=max_persons_s,
+            device_s="0",
+            pose_batch_s="",
+        )
+    )
+    return stride, kpt_thr, bbox_thr, nms_thr, max_persons
+
+
 def _progress_quiet() -> bool:
+    flag = os.environ.get("TQDM_DISABLE", "").strip().lower()
+    return flag in {"1", "true", "yes", "on"}
+
     flag = os.environ.get("TQDM_DISABLE", "").strip().lower()
     return flag in {"1", "true", "yes", "on"}
 
@@ -950,19 +1037,38 @@ def _write_failure_marker(output_dir: Path, video_path: Path, reason: str) -> No
         pass
 
 
+@dataclass(frozen=True, slots=True)
+class SapiensGuiSettings:
+    input_path: Path
+    out_parent: Path
+    model: str
+    stride: int
+    kpt_thr: float
+    bbox_thr: float
+    nms_thr: float
+    max_persons: int
+    device: int
+    flip_test: bool
+    save_overlay: bool
+    pose_batch_size: int | None
+
+
 def _format_sapiens_cli_command(
     input_path: Path | str,
     output_parent: Path | str,
     *,
     model: str = DEFAULT_MODEL_KEY,
     stride: int = 1,
-    kpt_thr: float = 0.3,
-    bbox_thr: float = 0.3,
-    nms_thr: float = 0.3,
+    kpt_thr: float = DEFAULT_KPT_THR,
+    bbox_thr: float = DEFAULT_BBOX_THR,
+    nms_thr: float = DEFAULT_NMS_THR,
+    max_persons: int = DEFAULT_MAX_PERSONS,
     device: int = 0,
     save_overlay: bool = True,
     output_base: Path | str | None = None,
     flip_test: bool = False,
+    pose_batch_size: int | None = None,
+    quiet: bool = False,
 ) -> str:
     """Build copy-paste CLI equivalent to a GUI Sapiens2 run."""
     argv = _build_sapiens_cli_argv(
@@ -974,9 +1080,12 @@ def _format_sapiens_cli_command(
         kpt_thr=kpt_thr,
         bbox_thr=bbox_thr,
         nms_thr=nms_thr,
+        max_persons=max_persons,
         device=device,
         save_overlay=save_overlay,
         flip_test=flip_test,
+        pose_batch_size=pose_batch_size,
+        quiet=quiet,
         for_subprocess=False,
     )
     return shlex.join(argv)
@@ -989,12 +1098,15 @@ def _build_sapiens_cli_argv(
     output_base: Path | None = None,
     model: str = DEFAULT_MODEL_KEY,
     stride: int = 1,
-    kpt_thr: float = 0.3,
-    bbox_thr: float = 0.3,
-    nms_thr: float = 0.3,
+    kpt_thr: float = DEFAULT_KPT_THR,
+    bbox_thr: float = DEFAULT_BBOX_THR,
+    nms_thr: float = DEFAULT_NMS_THR,
+    max_persons: int = DEFAULT_MAX_PERSONS,
     device: int = 0,
     save_overlay: bool = True,
     flip_test: bool = False,
+    pose_batch_size: int | None = None,
+    quiet: bool = False,
     for_subprocess: bool = False,
 ) -> list[str]:
     """Build Sapiens2 CLI argv (subprocess uses sys.executable; mirror uses uv run)."""
@@ -1022,13 +1134,19 @@ def _build_sapiens_cli_argv(
         str(bbox_thr),
         "--nms-thr",
         str(nms_thr),
+        "--max-persons",
+        str(max(1, int(max_persons))),
         "--device",
         str(device),
     ]
+    if pose_batch_size is not None:
+        cmd += ["--pose-batch-size", str(max(1, int(pose_batch_size)))]
     if flip_test:
         cmd.append("--flip-test")
     if not save_overlay:
         cmd.append("--no-overlay")
+    if quiet:
+        cmd.append("--quiet")
     return cmd
 
 
@@ -1139,9 +1257,16 @@ def _print_sapiens_equivalent_cli(
     *,
     model: str = DEFAULT_MODEL_KEY,
     stride: int = 1,
-    kpt_thr: float = 0.3,
+    kpt_thr: float = DEFAULT_KPT_THR,
+    bbox_thr: float = DEFAULT_BBOX_THR,
+    nms_thr: float = DEFAULT_NMS_THR,
+    max_persons: int = DEFAULT_MAX_PERSONS,
+    device: int = 0,
     save_overlay: bool = True,
     output_base: Path | str | None = None,
+    flip_test: bool = False,
+    pose_batch_size: int | None = None,
+    quiet: bool = False,
 ) -> None:
     """Print GUI→CLI mirror to stdout (>> prefix avoids absl eating bracketed lines)."""
     cmd = _format_sapiens_cli_command(
@@ -1150,8 +1275,15 @@ def _print_sapiens_equivalent_cli(
         model=model,
         stride=stride,
         kpt_thr=kpt_thr,
+        bbox_thr=bbox_thr,
+        nms_thr=nms_thr,
+        max_persons=max_persons,
+        device=device,
         save_overlay=save_overlay,
         output_base=output_base,
+        flip_test=flip_test,
+        pose_batch_size=pose_batch_size,
+        quiet=quiet,
     )
     print("\n>> vaila/vaila_sapiens: Equivalent CLI (copy/paste):", flush=True)
     print(f">>   {cmd}", flush=True)
@@ -1510,8 +1642,12 @@ def _start_sapiens_batch_subprocess(
     kpt_thr: float,
     bbox_thr: float,
     nms_thr: float,
+    max_persons: int,
     device: int,
     save_overlay: bool,
+    flip_test: bool,
+    pose_batch_size: int | None,
+    quiet: bool,
     on_done: Callable[[int, int, list[str], Path], None],
 ) -> None:
     """Run Sapiens2 batch in an isolated child process (CUDA + Tk must not share a process)."""
@@ -1526,25 +1662,15 @@ def _start_sapiens_batch_subprocess(
         kpt_thr=kpt_thr,
         bbox_thr=bbox_thr,
         nms_thr=nms_thr,
+        max_persons=max_persons,
         device=device,
         save_overlay=save_overlay,
+        flip_test=flip_test,
+        pose_batch_size=pose_batch_size,
+        quiet=quiet,
         for_subprocess=True,
     )
-    mirror_cmd = _build_sapiens_cli_argv(
-        input_path=input_path,
-        out_parent=out_parent,
-        output_base=output_base,
-        model=model,
-        stride=stride,
-        kpt_thr=kpt_thr,
-        bbox_thr=bbox_thr,
-        nms_thr=nms_thr,
-        device=device,
-        save_overlay=save_overlay,
-        for_subprocess=False,
-    )
     progress.schedule_log(f"[GUI] launching subprocess: {shlex.join(cmd)}")
-    progress.schedule_log(f"[GUI] equivalent: {shlex.join(mirror_cmd)}")
 
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
@@ -1685,7 +1811,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
         def __init__(self, master: tk.Misc) -> None:
             super().__init__(master)
             self.title("Sapiens2 Pose — video")
-            self.result: tuple[Path, Path, str, int, float, bool] | None = None
+            self.result: SapiensGuiSettings | None = None
             frm = ttk.Frame(self, padding=12)
             frm.pack(fill="both", expand=True)
             ttk.Label(frm, text="Input (dir or file):").grid(row=0, column=0, sticky="w")
@@ -1714,22 +1840,75 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                 width=10,
                 state="readonly",
             ).grid(row=5, column=0, sticky="w")
-            ttk.Label(frm, text="Stride (1=every frame):").grid(
+            ttk.Label(frm, text="Stride (1 = every frame):").grid(
                 row=6, column=0, sticky="w", pady=(8, 0)
             )
             self.stride_var = tk.StringVar(value="1")
             ttk.Entry(frm, textvariable=self.stride_var, width=8).grid(row=7, column=0, sticky="w")
-            ttk.Label(frm, text="Keypoint threshold:").grid(
-                row=8, column=0, sticky="w", pady=(8, 0)
+
+            thr_frm = ttk.LabelFrame(frm, text="Detection & keypoint thresholds", padding=8)
+            thr_frm.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+            ttk.Label(thr_frm, text="BBox det. (--bbox-thr):").grid(row=0, column=0, sticky="w")
+            self.bbox_var = tk.StringVar(value=str(DEFAULT_BBOX_THR))
+            ttk.Entry(thr_frm, textvariable=self.bbox_var, width=8).grid(
+                row=0, column=1, sticky="w", padx=(4, 16)
             )
-            self.kpt_var = tk.StringVar(value="0.3")
-            ttk.Entry(frm, textvariable=self.kpt_var, width=8).grid(row=9, column=0, sticky="w")
+            ttk.Label(thr_frm, text="NMS (--nms-thr):").grid(row=0, column=2, sticky="w")
+            self.nms_var = tk.StringVar(value=str(DEFAULT_NMS_THR))
+            ttk.Entry(thr_frm, textvariable=self.nms_var, width=8).grid(
+                row=0, column=3, sticky="w", padx=(4, 0)
+            )
+            ttk.Label(thr_frm, text="Keypoint (--kpt-thr):").grid(
+                row=1, column=0, sticky="w", pady=(8, 0)
+            )
+            self.kpt_var = tk.StringVar(value=str(DEFAULT_KPT_THR))
+            ttk.Entry(thr_frm, textvariable=self.kpt_var, width=8).grid(
+                row=1, column=1, sticky="w", padx=(4, 16), pady=(8, 0)
+            )
+            ttk.Label(thr_frm, text="Max persons / frame:").grid(
+                row=1, column=2, sticky="w", pady=(8, 0)
+            )
+            self.max_persons_var = tk.StringVar(value=str(DEFAULT_MAX_PERSONS))
+            ttk.Entry(thr_frm, textvariable=self.max_persons_var, width=8).grid(
+                row=1, column=3, sticky="w", padx=(4, 0), pady=(8, 0)
+            )
+            ttk.Label(
+                thr_frm,
+                text="bbox/nms/kpt: 0.0–1.0 confidence · max persons caps crowded scenes",
+                font=("TkDefaultFont", 8),
+            ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
+
+            adv_frm = ttk.LabelFrame(frm, text="GPU & advanced (CLI flags)", padding=8)
+            adv_frm.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+            ttk.Label(adv_frm, text="CUDA device (--device):").grid(row=0, column=0, sticky="w")
+            self.device_var = tk.StringVar(value="0")
+            ttk.Entry(adv_frm, textvariable=self.device_var, width=8).grid(
+                row=0, column=1, sticky="w", padx=(4, 16)
+            )
+            ttk.Label(adv_frm, text="Pose batch (--pose-batch-size):").grid(
+                row=0, column=2, sticky="w"
+            )
+            self.pose_batch_var = tk.StringVar(value="")
+            ttk.Entry(adv_frm, textvariable=self.pose_batch_var, width=8).grid(
+                row=0, column=3, sticky="w", padx=(4, 0)
+            )
+            ttk.Label(
+                adv_frm,
+                text="empty = auto (1 for 5b, 2 for 1b, 4 for 0.4b/0.8b) · lower if OOM with many people",
+                font=("TkDefaultFont", 8),
+            ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(2, 0))
+
+            self.flip_test_var = tk.BooleanVar(value=False)
+            ttk.Checkbutton(adv_frm, text="Flip-test (--flip-test, 2× VRAM)", variable=self.flip_test_var).grid(
+                row=2, column=0, columnspan=2, sticky="w", pady=(8, 0)
+            )
             self.overlay_var = tk.BooleanVar(value=True)
-            ttk.Checkbutton(frm, text="Save overlay MP4", variable=self.overlay_var).grid(
-                row=10, column=0, sticky="w", pady=(8, 0)
+            ttk.Checkbutton(adv_frm, text="Save overlay MP4", variable=self.overlay_var).grid(
+                row=2, column=2, columnspan=2, sticky="w", pady=(8, 0)
             )
+
             btns = ttk.Frame(frm)
-            btns.grid(row=11, column=0, columnspan=3, pady=12)
+            btns.grid(row=10, column=0, columnspan=3, pady=12)
             ttk.Button(btns, text="Help", command=self._open_help).pack(side="left", padx=4)
             ttk.Button(btns, text="Run", command=self._on_run).pack(side="left", padx=4)
             ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="left", padx=4)
@@ -1769,20 +1948,33 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                 messagebox.showerror("Error", "Input and output are required.", parent=self)
                 return
             try:
-                stride = int(self.stride_var.get().strip() or "1")
-                kpt_thr = float(self.kpt_var.get().strip() or "0.3")
-            except ValueError:
-                messagebox.showerror(
-                    "Error", "Stride and kpt threshold must be numeric.", parent=self
+                stride, kpt_thr, bbox_thr, nms_thr, max_persons, device, pose_batch_size = (
+                    _parse_gui_inference_fields(
+                        stride_s=self.stride_var.get(),
+                        kpt_thr_s=self.kpt_var.get(),
+                        bbox_thr_s=self.bbox_var.get(),
+                        nms_thr_s=self.nms_var.get(),
+                        max_persons_s=self.max_persons_var.get(),
+                        device_s=self.device_var.get(),
+                        pose_batch_s=self.pose_batch_var.get(),
+                    )
                 )
+            except ValueError as exc:
+                messagebox.showerror("Error", str(exc), parent=self)
                 return
-            self.result = (
-                Path(inp),
-                Path(out),
-                self.model_var.get().strip() or "1b",
-                max(1, stride),
-                kpt_thr,
-                bool(self.overlay_var.get()),
+            self.result = SapiensGuiSettings(
+                input_path=Path(inp),
+                out_parent=Path(out),
+                model=self.model_var.get().strip() or "1b",
+                stride=stride,
+                kpt_thr=kpt_thr,
+                bbox_thr=bbox_thr,
+                nms_thr=nms_thr,
+                max_persons=max_persons,
+                device=device,
+                flip_test=bool(self.flip_test_var.get()),
+                save_overlay=bool(self.overlay_var.get()),
+                pose_batch_size=pose_batch_size,
             )
             self.destroy()
 
@@ -1793,7 +1985,19 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
             root.destroy()
         return
 
-    input_path, out_parent, model, stride, kpt_thr, save_overlay = dlg.result
+    settings = dlg.result
+    input_path = settings.input_path
+    out_parent = settings.out_parent
+    model = settings.model
+    stride = settings.stride
+    kpt_thr = settings.kpt_thr
+    bbox_thr = settings.bbox_thr
+    nms_thr = settings.nms_thr
+    max_persons = settings.max_persons
+    device = settings.device
+    flip_test = settings.flip_test
+    save_overlay = settings.save_overlay
+    pose_batch_size = settings.pose_batch_size
 
     # Validate model spec / weights existence before starting
     try:
@@ -1856,6 +2060,25 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
 
     progress = SapiensBatchProgress(root, total=len(videos), output_base=output_base)
 
+    _print_sapiens_equivalent_cli(
+        input_path,
+        out_parent,
+        model=model,
+        stride=stride,
+        kpt_thr=kpt_thr,
+        bbox_thr=bbox_thr,
+        nms_thr=nms_thr,
+        max_persons=max_persons,
+        device=device,
+        flip_test=flip_test,
+        save_overlay=save_overlay,
+        pose_batch_size=pose_batch_size,
+        quiet=True,
+        output_base=output_base,
+    )
+
+    os.environ["SAPIENS_DEVICE"] = str(device)
+
     def _on_done(succeeded: int, total: int, failed: list[str], out_base: Path) -> None:
         summary = f"Processed {succeeded}/{total} video(s).\nOutput: {out_base}"
         print("\n[Sapiens2] GUI batch finished")
@@ -1881,10 +2104,14 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
         model=model,
         stride=stride,
         kpt_thr=kpt_thr,
-        bbox_thr=0.3,
-        nms_thr=0.3,
-        device=int(os.environ.get("SAPIENS_DEVICE", "0")),
+        bbox_thr=bbox_thr,
+        nms_thr=nms_thr,
+        max_persons=max_persons,
+        device=device,
         save_overlay=save_overlay,
+        flip_test=flip_test,
+        pose_batch_size=pose_batch_size,
+        quiet=True,
         on_done=_on_done,
     )
 
@@ -1893,48 +2120,31 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
         root.destroy()
 
 
-SAPIENS_CLI_EXAMPLES = """\
+SAPIENS_CLI_EXAMPLES = (
+    """\
 Sapiens2 — copy/paste CLI recipes
 =================================
 
-# 0. Open help / setup page in your default browser
+"""
+    + SAPIENS_CLI_FULL_INFERENCE_EXAMPLE
+    + """
+# Open help / setup page in your default browser
 uv run vaila/vaila_sapiens.py --open-help
 
-# 1. Print these examples again (no GPU work)
+# Print these examples again (no GPU work)
 uv run vaila/vaila_sapiens.py --print-examples
-
-# 2. Download facebook/sapiens2 weights (default 1b; use 5b for max quality)
-uv run vaila/vaila_sapiens.py --download-weights --model 1b
-uv run vaila/vaila_sapiens.py --download-weights --model 5b
-
-# 3. Process video using default 1b model
-uv run vaila/vaila_sapiens.py \\
-  -i path/to/video.mp4 \\
-  -o path/to/output_parent/ \\
-  --model 1b \\
-  --stride 1
-
-# 4. Process video at a faster pace (every 2nd frame)
-uv run vaila/vaila_sapiens.py \\
-  -i path/to/video.mp4 \\
-  -o path/to/output_parent/ \\
-  --stride 2
-
-# 5. Process a directory of videos in batch
-uv run vaila/vaila_sapiens.py \\
-  -i path/to/videos_dir/ \\
-  -o path/to/output_parent/ \\
-  --model 0.4b
 
 Tips
 ----
 * GUI (no args)              : uv run vaila/vaila_sapiens.py
+* GUI Run prints >> Equivalent CLI with all flags you chose (copy/paste to reproduce)
 * Requires NVIDIA CUDA and sapiens2 cloned locally via bin/setup_sapiens2.sh
 * Model 5b                   : uv run vaila/vaila_sapiens.py --download-weights --model 5b
 * OOM on RTX 4090            : use --model 1b (default); avoid --flip-test; pass a single .mp4 not a folder with old overlays
 * REC2D/REC3D                : use <stem>_markers.csv (foot anchor, stable pN slots)
 * Full reference            : vaila/help/vaila_sapiens.md  (or --open-help).
 """
+)
 
 
 def _print_sapiens_cli_examples() -> None:
@@ -1966,11 +2176,24 @@ def main() -> None:
         help="Sapiens2 pose model size (1b recommended for RTX 4090)",
     )
     parser.add_argument("--stride", type=int, default=1, help="Run pose every N frames")
-    parser.add_argument("--kpt-thr", type=float, default=0.3, help="Keypoint threshold")
     parser.add_argument(
-        "--bbox-thr", type=float, default=0.3, help="Bounding box detection threshold"
+        "--kpt-thr",
+        type=float,
+        default=DEFAULT_KPT_THR,
+        help=("Min per-joint confidence (0.0–1.0) for overlay masking and getpixelvideo wide CSVs"),
     )
-    parser.add_argument("--nms-thr", type=float, default=0.3, help="NMS threshold")
+    parser.add_argument(
+        "--bbox-thr",
+        type=float,
+        default=DEFAULT_BBOX_THR,
+        help="Min DETR person-detection score (0.0–1.0) to keep a bounding box",
+    )
+    parser.add_argument(
+        "--nms-thr",
+        type=float,
+        default=DEFAULT_NMS_THR,
+        help="NMS IoU threshold (0.0–1.0) between overlapping person boxes",
+    )
     parser.add_argument("--device", type=int, default=0, help="CUDA device index")
     parser.add_argument("--no-overlay", action="store_true", help="Skip overlay MP4 generation")
     parser.add_argument(
@@ -1981,14 +2204,17 @@ def main() -> None:
     parser.add_argument(
         "--max-persons",
         type=int,
-        default=8,
+        default=DEFAULT_MAX_PERSONS,
         help="Max DETR persons per frame (top scores; default 8). Lower if VRAM is tight.",
     )
     parser.add_argument(
         "--pose-batch-size",
         type=int,
         default=None,
-        help="Pose micro-batch size (default: 1 for 5b, 2 for 1b, 4 for 0.4b/0.8b).",
+        help=(
+            "Person crops per GPU pose pass per frame (default: auto — 1 for 5b, 2 for 1b, 4 for 0.4b/0.8b). "
+            "Lower to 1 if CUDA OOM on crowded multi-person frames."
+        ),
     )
     parser.add_argument(
         "--no-isolate-batch",

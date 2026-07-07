@@ -6,6 +6,16 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 **Total documented modules:** 128 | **Categories:** 7 | **Generated on:** 07/07/2026 (v0.3.76)
 
+## YOLO + FB chooser (Frame B → B4_r4_c1)
+
+Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, Train YOLOv26.
+
+- [vaila_sapiens (Sapiens2 Pose)](vaila_sapiens.html) · [MD](vaila_sapiens.md)
+- [vaila_sam (SAM 3)](vaila_sam.html) · [MD](vaila_sam.md)
+- [yolov26track](yolov26track.html) · [MD](yolov26track.md)
+- [yolotrain](yolotrain.html) · [MD](yolotrain.md)
+- [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
+
 ---
 
 ## Analysis (15 modules)
@@ -385,10 +395,13 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 - **yolotrain**
   - [📄 HTML](yolotrain.html)
   - [📝 Markdown](yolotrain.md)
-- **yolov11track**
+- **yolov26track (YOLO + FB chooser)**
+  - [📄 HTML](yolov26track.html)
+  - [📝 Markdown](yolov26track.md)
+- **yolov11track (legacy)**
   - [📄 HTML](yolov11track.html)
   - [📝 Markdown](yolov11track.md)
-- **yolov12track**
+- **yolov12track (legacy)**
   - [📄 HTML](yolov12track.html)
   - [📝 Markdown](yolov12track.md)
 

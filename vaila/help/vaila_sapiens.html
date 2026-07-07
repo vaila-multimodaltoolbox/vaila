@@ -5,85 +5,351 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vailá - vaila_sapiens</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f5f5f5; }
-        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; color: #222; }
+        .container { max-width: 960px; margin: 0 auto; background: #fff; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .warning-box { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        th, td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
-        th { background: #f8f9fa; }
-        a { color: #2980b9; }
+        h2 { color: #34495e; margin-top: 28px; border-bottom: 2px solid #ecf0f1; padding-bottom: 6px; }
+        h3 { color: #2c3e50; margin-top: 16px; }
+        p, li { color: #222; }
+        ul, ol { padding-left: 22px; }
+        li { margin: 6px 0; }
+        .module-info { background: #f7f9fb; padding: 14px 16px; border-radius: 6px; border-left: 4px solid #3498db; margin: 14px 0; }
+        .note { background: #fff8e6; padding: 12px 14px; border-radius: 6px; border: 1px solid #f0d78c; margin: 14px 0; }
+        code { background: #eef2f5; padding: 2px 5px; border-radius: 4px; font-family: Consolas, 'Courier New', monospace; font-size: 0.95em; color: #1a1a1a; }
+        pre { background: #f4f6f8; color: #1a1a1a; padding: 14px 16px; border-radius: 6px; border: 1px solid #dde2e6; overflow-x: auto; font-size: 0.92em; line-height: 1.5; }
+        pre code { background: none; padding: 0; }
+        table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+        th, td { border: 1px solid #dee2e6; padding: 8px 10px; text-align: left; color: #222; }
+        th { background: #f7f9fb; }
+        a { color: #1a6fb5; }
+        .footer { margin-top: 34px; padding-top: 18px; border-top: 1px solid #dee2e6; color: #555; font-size: 0.95em; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>vailá - Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
+    <h1>Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
+
     <div class="module-info">
         <p><strong>Version:</strong> 0.3.76 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-07</p>
         <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
+        <p><strong>Category:</strong> Markerless 2D / Meta (Facebook)</p>
     </div>
-    <p>Top-down <strong>308-keypoint</strong> human pose on video (Meta Sapiens2 + DETR detector).</p>
-    <div class="warning-box">
-        <strong>License:</strong> Sapiens2 uses Meta's Sapiens2 License (not AGPL). Accept HF terms before download.
+
+    <p>Top-down <strong>308-keypoint</strong> human pose on video using Meta's DETR person detector + Sapiens2 ViT pose head.</p>
+
+    <div class="note">
+        <strong>License:</strong> Sapiens2 weights use Meta's Sapiens2 License (not AGPL). Accept the Hugging Face model terms before downloading.
     </div>
-    <h2>Setup</h2>
+
+    <h2>Requirements</h2>
+    <ul>
+        <li><strong>NVIDIA CUDA</strong> — no CPU or macOS path in this integration.</li>
+        <li>During <code>install_vaila_linux.sh</code> with GPU support, answer <strong>Y</strong> to install optional Sapiens2 Pose.</li>
+    </ul>
+
+    <h2>Setup (first time)</h2>
     <pre><code>uv sync --extra sapiens
 bash bin/setup_sapiens2.sh</code></pre>
-    <h2>Models &amp; weight download</h2>
+    <p>This clones <code>.local/third_party/sapiens2/</code> and downloads weights into <code>vaila/models/sapiens2/</code>.</p>
+
+    <h2>Download weights</h2>
     <table>
         <tr><th>Model</th><th>Notes</th></tr>
-        <tr><td><code>1b</code></td><td><strong>Default</strong> — fits RTX 4090 24 GiB</td></tr>
         <tr><td><code>0.4b</code> / <code>0.8b</code></td><td>Faster, less VRAM</td></tr>
-        <tr><td><code>5b</code></td><td>Max quality (~24 GiB checkpoint); heavy VRAM with many persons</td></tr>
+        <tr><td><code>1b</code></td><td><strong>Default</strong> — fits RTX 4090 24 GiB</td></tr>
+        <tr><td><code>5b</code></td><td>Max quality; heavy VRAM on multi-person 1080p</td></tr>
     </table>
     <pre><code># Default 1B
 uv run vaila/vaila_sapiens.py --download-weights --model 1b
 
 # Largest 5B (accept Meta license on Hugging Face first)
-uv run vaila/vaila_sapiens.py --download-weights --model 5b
+uv run vaila/vaila_sapiens.py --download-weights --model 5b</code></pre>
 
-uv run vaila/vaila_sapiens.py -i video.mp4 -o out/ --model 5b --stride 1</code></pre>
-    <h2>GUI → CLI mirror</h2>
-    <p>On <strong>Run</strong>, the terminal prints <code>&gt;&gt; vaila/vaila_sapiens: Equivalent CLI</code> with a copy-paste command.</p>
-    <h2>Terminal progress (v0.3.74)</h2>
-    <p>CLI runs print <code>&gt;&gt; vaila/vaila_sapiens:</code> status lines (model load, video geometry, CSV write)
-       plus a <strong>tqdm frame bar on stderr</strong>. The first 1–2 minutes are often model load before the bar moves.
-       Use <code>--quiet</code> to suppress the bar (GUI batch does this automatically and uses frame heartbeat lines instead).</p>
+    <h2>GUI — how to use</h2>
+    <ol>
+        <li>Open vailá → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></li>
+        <li><strong>Dir…</strong> = batch all videos in a folder; <strong>File…</strong> = single video</li>
+        <li>Choose the output parent directory</li>
+        <li>Model default <code>1b</code>; stride <code>1</code> = every frame</li>
+        <li><strong>Detection &amp; keypoint thresholds</strong> — <code>--bbox-thr</code>, <code>--nms-thr</code>, <code>--kpt-thr</code>, <code>--max-persons</code></li>
+        <li><strong>GPU &amp; advanced</strong> — <code>--device</code>, <code>--pose-batch-size</code> (empty = auto), <code>--flip-test</code>, overlay on/off</li>
+        <li>Click <strong>Run</strong> — terminal prints full <code>&gt;&gt; Equivalent CLI</code> with <code>--output-base</code></li>
+    </ol>
+    <p>On <strong>Run</strong>, the terminal prints <code>&gt;&gt; vaila/vaila_sapiens: Equivalent CLI</code> with every flag you chose (copy/paste to reproduce without the GUI).</p>
+
     <h2>CLI examples</h2>
+    <h3>Full inference — all flags</h3>
     <pre><code>uv run vaila/vaila_sapiens.py \
+  -i /path/to/video.mp4 \
+  -o /path/to/output_parent/ \
+  --model 1b \
+  --stride 1 \
+  --device 0 \
+  --bbox-thr 0.3 \
+  --nms-thr 0.3 \
+  --max-persons 8 \
+  --kpt-thr 0.3 \
+  --pose-batch-size 2 \
+  --flip-test \
+  --no-overlay \
+  --quiet</code></pre>
+    <p>GUI batch runs also print <code>--output-base processed_sapiens_&lt;timestamp&gt;/</code> in the mirrored command.</p>
+
+    <h3>Quick recipes</h3>
+    <pre><code># Open GUI (no args)
+uv run vaila/vaila_sapiens.py
+
+# Print all examples to terminal
+uv run vaila/vaila_sapiens.py --print-examples
+
+# Dry-run on test clips
+uv run vaila/vaila_sapiens.py \
   -i tests/markerless_2d_analysis/ \
   -o /tmp/sapiens_out --model 1b --dry-run
 
-uv run vaila/vaila_sapiens.py \
-  -i tests/markerless_2d_analysis/camera_01_cube_test_png_196_190_446_dbox_h265.mp4 \
-  -o /tmp/sapiens_out --model 1b</code></pre>
-    <h2>getpixelvideo (v0.3.75)</h2>
-    <ul>
-        <li><strong>Load</strong> wide pose: <code>&lt;stem&gt;_id_NN_sapiens_pose.csv</code> or <code>&lt;stem&gt;_getpixelvideo_pose.csv</code></li>
-        <li><strong>Load Tracking CSV</strong> long pose: <code>&lt;stem&gt;_sapiens_vaila.csv</code> (pick <code>person_id</code>)</li>
-        <li><strong>Load Tracking CSV</strong> bboxes: <code>sapiens_bbox_tracks.csv</code> (SAM-compatible)</li>
-        <li><strong>REC2D/REC3D</strong>: <code>&lt;stem&gt;_markers.csv</code> (foot anchor, one point per person)</li>
-    </ul>
-    <h2>Output directory (v0.3.76)</h2>
-    <p>Each run creates <strong>one</strong> <code>processed_sapiens_YYYYMMDD_HHMMSS/</code> under the
-       output parent. Per-video results live in <code>&lt;timestamp&gt;/&lt;video_stem&gt;/</code>.
-       Isolated subprocess workers reuse the parent <code>--output-base</code> (no second empty folder).</p>
-    <h2>Outputs (biomechanics)</h2>
+# Download weights
+uv run vaila/vaila_sapiens.py --download-weights --model 1b
+
+# Long clips — lower compute
+uv run vaila/vaila_sapiens.py -i long.mp4 -o out/ --model 1b --stride 3</code></pre>
+
+    <h2>CLI flags — what each option does</h2>
+
+    <h3>Input / output</h3>
     <table>
-        <tr><th>File</th><th>Role</th></tr>
-        <tr><td><code>&lt;stem&gt;_markers.csv</code></td><td><strong>REC2D / REC3D</strong> — frame,p1_x,p1_y,… (foot anchor)</td></tr>
-        <tr><td><code>sapiens_vaila_*.csv</code></td><td>Five bbox anchors (same schema as SAM3 <code>sam_vaila_*</code>)</td></tr>
-        <tr><td><code>sapiens_points.csv</code></td><td>Foot + bbox center + mid-hip per stable pN</td></tr>
-        <tr><td><code>&lt;stem&gt;_sapiens_vaila.csv</code></td><td>Long format — all 308 keypoints</td></tr>
-        <tr><td><code>&lt;stem&gt;_sapiens_overlay.mp4</code></td><td>Visual QA</td></tr>
+        <tr><th>Flag</th><th>Default</th><th>What it is</th><th>What changes when you use it</th></tr>
+        <tr>
+            <td><code>-i</code> / <code>--input</code></td>
+            <td>—</td>
+            <td>Path to one <code>.mp4</code> (or similar) <strong>or</strong> a folder of videos.</td>
+            <td>Single file = one run. Folder = batch (skips <code>*_sapiens_overlay.*</code> and <code>processed_sapiens_*</code> subfolders).</td>
+        </tr>
+        <tr>
+            <td><code>-o</code> / <code>--output</code></td>
+            <td>—</td>
+            <td>Parent directory where results are written.</td>
+            <td>Creates <code>processed_sapiens_YYYYMMDD_HHMMSS/&lt;video_stem&gt;/</code> with CSVs, JSON and overlay.</td>
+        </tr>
     </table>
-    <p><a href="https://arxiv.org/pdf/2604.21681">Paper</a> ·
-       <a href="https://github.com/facebookresearch/sapiens2">GitHub</a> ·
-       <a href="https://huggingface.co/facebook/sapiens2">Hugging Face</a></p>
+
+    <h3>Model and inference</h3>
+    <table>
+        <tr><th>Flag</th><th>Default</th><th>What it is</th><th>What changes when you use it</th></tr>
+        <tr>
+            <td><code>--model</code></td>
+            <td><code>1b</code></td>
+            <td>Sapiens2 pose checkpoint size: <code>0.4b</code>, <code>0.8b</code>, <code>1b</code>, <code>5b</code>.</td>
+            <td>Larger = better quality, more VRAM and slower. <code>1b</code> is the default for RTX 4090 24 GiB. Use the same <code>--model</code> for <code>--download-weights</code> and inference.</td>
+        </tr>
+        <tr>
+            <td><code>--stride</code></td>
+            <td><code>1</code></td>
+            <td>Run the pose network every <strong>N</strong> video frames.</td>
+            <td><code>1</code> = every frame (slowest, smoothest). <code>2</code> or <code>3</code> = fewer GPU passes; skipped frames reuse the <strong>nearest</strong> inferred pose in overlay and CSVs. Use the same stride on all cameras in a multi-view study.</td>
+        </tr>
+        <tr>
+            <td><code>--device</code></td>
+            <td><code>0</code></td>
+            <td>CUDA GPU index (<code>0</code> = first NVIDIA card).</td>
+            <td>Pick another index if you have multiple GPUs and want to leave GPU 0 free.</td>
+        </tr>
+        <tr>
+            <td><code>--flip-test</code></td>
+            <td>off</td>
+            <td>Optional left–right flip ensemble inside the pose head.</td>
+            <td>Slightly better accuracy, but about <strong>2× VRAM</strong>. Off by default on 24 GiB cards.</td>
+        </tr>
+        <tr>
+            <td><code>--pose-batch-size</code></td>
+            <td>auto</td>
+            <td>How many person crops the pose head runs <strong>at once</strong> per frame (see below).</td>
+            <td>Auto: <code>1</code> (<code>5b</code>), <code>2</code> (<code>1b</code>), <code>4</code> (<code>0.4b</code>/<code>0.8b</code>). Lower (e.g. <code>1</code>) if CUDA OOM on crowded frames.</td>
+        </tr>
+    </table>
+
+    <h3 id="pose-batch-size">What is <code>--pose-batch-size</code>?</h3>
+    <p>
+        Sapiens2 in vailá is <strong>top-down</strong> pose: it does <em>not</em> estimate all joints on the full
+        frame in one shot. Each video frame goes through two steps:
+    </p>
+    <ol>
+        <li><strong>Person detection (DETR)</strong> — finds people and draws a bounding box around each one
+            (controlled by <code>--bbox-thr</code>, <code>--nms-thr</code>, <code>--max-persons</code>).</li>
+        <li><strong>Pose estimation (Sapiens2 ViT)</strong> — for each box, crops that person from the frame and
+            predicts 308 keypoints on the crop.</li>
+    </ol>
+    <p>
+        <code>--pose-batch-size</code> controls step 2 only: <strong>how many person crops are sent through the
+        pose network in a single GPU forward pass</strong> on the same frame.
+    </p>
+    <p><strong>Example:</strong> a frame with 12 detected persons and <code>--pose-batch-size 4</code> means the
+        pose head runs <strong>3 passes</strong> on that frame (4 + 4 + 4 crops). With <code>--pose-batch-size 1</code>,
+        it runs <strong>12 passes</strong> — slower, but uses much less VRAM per frame.</p>
+    <p><strong>Auto (default):</strong> if you omit the flag (GUI field empty), vailá picks a safe default from the
+        model size:</p>
+    <ul>
+        <li><code>5b</code> → batch <code>1</code> (largest weights; least parallel crops)</li>
+        <li><code>1b</code> → batch <code>2</code></li>
+        <li><code>0.4b</code> / <code>0.8b</code> → batch <code>4</code></li>
+    </ul>
+    <p><strong>When to lower it:</strong> if the process crashes with <strong>CUDA out of memory (OOM)</strong> on
+        crowded scenes (many players, audience, beach, etc.), try <code>--pose-batch-size 1</code>. You can also reduce
+        <code>--max-persons</code> to cap how many boxes DETR keeps, but <code>--pose-batch-size</code> is the direct
+        knob for VRAM during pose inference.</p>
+    <p><strong>Not the same as <code>--stride</code>:</strong> stride skips <em>frames</em>; pose-batch-size batches
+        <em>persons within one frame</em>.</p>
+
+    <h3>Detection thresholds</h3>
+    <table>
+        <tr><th>Flag</th><th>Default</th><th>What it is</th><th>What changes when you use it</th></tr>
+        <tr>
+            <td><code>--bbox-thr</code></td>
+            <td><code>0.3</code></td>
+            <td>Minimum DETR person-detection score to keep a bounding box.</td>
+            <td><strong>Higher</strong> = fewer persons detected (misses faint/small people). <strong>Lower</strong> = more boxes, more false positives.</td>
+        </tr>
+        <tr>
+            <td><code>--nms-thr</code></td>
+            <td><code>0.3</code></td>
+            <td>Non-maximum suppression overlap between person boxes.</td>
+            <td><strong>Lower</strong> = stricter deduplication (one box per person). <strong>Higher</strong> = may keep overlapping duplicate boxes.</td>
+        </tr>
+        <tr>
+            <td><code>--max-persons</code></td>
+            <td><code>8</code></td>
+            <td>Max persons per frame (top scores kept).</td>
+            <td>Lower if VRAM is tight on crowded scenes; extra detections are dropped.</td>
+        </tr>
+    </table>
+
+    <h3 id="kpt-thr"><code>--kpt-thr</code> — keypoint confidence cutoff</h3>
+    <p>
+        Each of the 308 joints gets a <strong>confidence score</strong> from the pose model (0 = unreliable, 1 = very confident).
+        <code>--kpt-thr</code> is the minimum score for a joint to be treated as <strong>visible</strong> in post-processing.
+        Default <code>0.3</code> follows the usual MMPose / Sapiens convention.
+    </p>
+    <table>
+        <tr><th>Flag</th><th>Default</th><th>What it is</th><th>What changes when you use it</th></tr>
+        <tr>
+            <td><code>--kpt-thr</code></td>
+            <td><code>0.3</code></td>
+            <td>Per-joint confidence cutoff (0.0–1.0).</td>
+            <td>See table below — effect depends on which output file you use.</td>
+        </tr>
+    </table>
+
+    <p><strong>Where <code>--kpt-thr</code> applies:</strong></p>
+    <ul>
+        <li><strong>Overlay MP4</strong> — joints with score &lt; threshold are <em>not drawn</em> (skeleton looks cleaner).</li>
+        <li><strong><code>&lt;stem&gt;_id_NN_sapiens_pose.csv</code></strong> and <strong><code>&lt;stem&gt;_getpixelvideo_pose.csv</code></strong> — low-confidence joints are written as <em>empty cells</em> (getpixelvideo shows gaps instead of noisy points).</li>
+        <li><strong><code>sapiens_points.csv</code></strong> — mid-hip (<code>pN_hx</code>, <code>pN_hy</code>) is averaged only from hip keypoints above the threshold; if none pass, hip cells are empty. Foot and bbox-center columns use the detection box, not this threshold.</li>
+    </ul>
+    <p><strong>Where <code>--kpt-thr</code> does <em>not</em> filter:</strong></p>
+    <ul>
+        <li><strong><code>&lt;stem&gt;_sapiens_vaila.csv</code></strong> — long format keeps <em>all</em> joints with raw <code>score</code> column; you can filter later in pandas/Excel.</li>
+        <li><strong><code>&lt;stem&gt;_markers.csv</code></strong> — foot point comes from the <strong>bbox bottom</strong> anchor, not from joint confidence.</li>
+        <li><strong><code>sapiens_vaila_*.csv</code></strong> bbox anchors — derived from the person box, not per-joint scores.</li>
+        <li><strong><code>&lt;stem&gt;_predictions.json</code></strong> — raw model output with every score preserved.</li>
+    </ul>
+    <p><strong>Practical tuning:</strong></p>
+    <ul>
+        <li><code>0.1</code>–<code>0.2</code> — keep more joints; useful when limbs are often occluded but expect noisier points in overlay and getpixelvideo.</li>
+        <li><code>0.3</code> — balanced default for sports / broadcast video.</li>
+        <li><code>0.4</code>–<code>0.6</code> — stricter; skeleton and wide CSVs show only high-confidence joints (more gaps, less jitter).</li>
+    </ul>
+    <p>The value used is saved in <code>&lt;stem&gt;_predictions.json</code> as <code>kpt_thr_used</code>.</p>
+
+    <h3>Run control</h3>
+    <table>
+        <tr><th>Flag</th><th>Default</th><th>What it is</th><th>What changes when you use it</th></tr>
+        <tr>
+            <td><code>--no-overlay</code></td>
+            <td>off</td>
+            <td>Skip writing the skeleton preview video.</td>
+            <td>Faster run and less disk use; all CSV/JSON outputs are still written.</td>
+        </tr>
+        <tr>
+            <td><code>--dry-run</code></td>
+            <td>off</td>
+            <td>List videos and settings without loading the model.</td>
+            <td>Checks paths, model name and stride; no GPU inference, no output files.</td>
+        </tr>
+        <tr>
+            <td><code>--download-weights</code></td>
+            <td>off</td>
+            <td>Download pose checkpoint + shared DETR detector from Hugging Face.</td>
+            <td>Writes to <code>vaila/models/sapiens2/</code> for the <code>--model</code> you pass; exits without processing video.</td>
+        </tr>
+        <tr>
+            <td><code>--quiet</code></td>
+            <td>off</td>
+            <td>Minimal terminal output.</td>
+            <td>Hides the tqdm frame bar and periodic heartbeat lines. GUI batch enables this automatically.</td>
+        </tr>
+        <tr>
+            <td><code>--open-help</code></td>
+            <td>off</td>
+            <td>Open this help page in the browser.</td>
+            <td>Exits immediately after opening <code>vaila/help/vaila_sapiens.html</code>.</td>
+        </tr>
+    </table>
+
+    <h2>Terminal progress</h2>
+    <p>CLI runs print <code>&gt;&gt; vaila/vaila_sapiens:</code> status lines plus a <strong>tqdm frame bar on stderr</strong>. The first 1–2 minutes are often model load before the bar moves — that is normal. Use <code>--quiet</code> to suppress it (GUI batch does this automatically).</p>
+
+    <h2>Output directory</h2>
+    <p>Each run creates <strong>one</strong> folder under the output parent:</p>
+    <pre><code>&lt;output_parent&gt;/processed_sapiens_YYYYMMDD_HHMMSS/&lt;video_stem&gt;/</code></pre>
+    <p>Subprocess-per-video isolation reuses the parent <code>--output-base</code> (no second empty folder).</p>
+
+    <h2>Output files</h2>
+    <table>
+        <tr><th>File</th><th>Use</th></tr>
+        <tr><td><code>&lt;stem&gt;_sapiens_overlay.mp4</code></td><td>Visual QA — skeleton overlay</td></tr>
+        <tr><td><code>&lt;stem&gt;_markers.csv</code></td><td><strong>REC2D / REC3D</strong> — foot anchor, one point per person</td></tr>
+        <tr><td><code>&lt;stem&gt;_sapiens_vaila.csv</code></td><td>Long format — all 308 keypoints</td></tr>
+        <tr><td><code>&lt;stem&gt;_id_NN_sapiens_pose.csv</code></td><td><strong>getpixelvideo Load</strong> — wide 308-kp pose</td></tr>
+        <tr><td><code>&lt;stem&gt;_getpixelvideo_pose.csv</code></td><td>Same, when only one person is tracked</td></tr>
+        <tr><td><code>sapiens_bbox_tracks.csv</code></td><td><strong>getpixelvideo Load Tracking CSV</strong> — bbox overlay (SAM schema)</td></tr>
+        <tr><td><code>sapiens_vaila_*.csv</code></td><td>Five bbox anchors (same schema as SAM3)</td></tr>
+        <tr><td><code>README_sapiens.txt</code></td><td>Schema summary for the run</td></tr>
+    </table>
+
+    <h2>getpixelvideo workflow</h2>
+    <p><strong>Full skeleton (308 keypoints):</strong></p>
+    <ol>
+        <li><strong>Load</strong> → <code>&lt;stem&gt;_id_01_sapiens_pose.csv</code> (or <code>&lt;stem&gt;_getpixelvideo_pose.csv</code> for single person)</li>
+        <li>Or <strong>Load Tracking CSV</strong> → <code>&lt;stem&gt;_sapiens_vaila.csv</code> → enter <code>person_id</code> when prompted</li>
+    </ol>
+    <p><strong>Multi-person bboxes:</strong></p>
+    <ol>
+        <li><strong>Load Tracking CSV</strong> → <code>sapiens_bbox_tracks.csv</code> → press <strong>Enter</strong> at anchor prompt (keep boxes)</li>
+    </ol>
+    <p><strong>REC2D/REC3D</strong> uses <code>&lt;stem&gt;_markers.csv</code> (one foot point per person).</p>
+
+    <h2>Biomechanics workflow</h2>
+    <ol>
+        <li>Run Sapiens2 on each camera view (same <code>--stride</code> across views for multi-camera).</li>
+        <li>Feed <code>&lt;stem&gt;_markers.csv</code> into <strong>Rec2D</strong> / <strong>Rec3D</strong> with your DLT parameters.</li>
+        <li>Use <code>&lt;stem&gt;_sapiens_vaila.csv</code> for joint-level 2D kinematics (308 keypoints).</li>
+        <li>Optional: load wide pose CSVs or <code>sapiens_bbox_tracks.csv</code> in <strong>getpixelvideo</strong> for QA/editing.</li>
+    </ol>
+
+    <h2>VRAM tips (RTX 4090)</h2>
+    <ul>
+        <li>Flip-test is <strong>off by default</strong> (doubles VRAM). Use <code>--flip-test</code> only when you need max accuracy.</li>
+        <li>On 1080p multi-person with <code>5b</code>, try <code>--stride 2</code> or higher to avoid OOM.</li>
+        <li>Each video runs in an isolated subprocess — a failed run does not affect the next one.</li>
+    </ul>
+
+    <div class="footer">
+        <p><strong>References:</strong>
+            <a href="https://arxiv.org/pdf/2604.21681">Sapiens2 paper</a> ·
+            <a href="https://github.com/facebookresearch/sapiens2">GitHub</a> ·
+            <a href="https://huggingface.co/facebook/sapiens2">Hugging Face</a> ·
+            <a href="https://huggingface.co/spaces/facebook/sapiens2-pose">Demo Space</a>
+        </p>
+    </div>
 </div>
 </body>
 </html>

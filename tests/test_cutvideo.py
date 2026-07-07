@@ -42,6 +42,36 @@ def test_adjacent_cut_marker_frame_wraps_in_both_directions():
     assert cutvideo.adjacent_cut_marker_frame(5, [], 1) is None
 
 
+def test_parse_basename_list_one_name_per_line(tmp_path):
+    path = tmp_path / "cuts.txt"
+    path.write_text(
+        "CarlosMiguel_cod_02\nCoutinho_cod_02\nHeittor_cod_02\n",
+        encoding="utf-8",
+    )
+    names = cutvideo.parse_basename_list(path)
+    assert names == ["CarlosMiguel_cod_02", "Coutinho_cod_02", "Heittor_cod_02"]
+
+
+def test_build_cut_output_filenames_uses_per_cut_names(tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"\x00")
+    cuts = [(0, 10), (20, 30), (40, 50)]
+    per_cut = ["CarlosMiguel_cod_02", "Coutinho_cod_02", "Heittor_cod_02"]
+    out = cutvideo.build_cut_output_filenames(video, cuts, None, per_cut)
+    assert out == [
+        "CarlosMiguel_cod_02.mp4",
+        "Coutinho_cod_02.mp4",
+        "Heittor_cod_02.mp4",
+    ]
+
+
+def test_playback_speed_steps_include_normal_speed():
+    assert cutvideo._step_playback_speed(0.5, 1) == 1.0
+    assert cutvideo._step_playback_speed(2.0, -1) == 1.0
+    assert cutvideo._step_playback_speed(1.0, 1) == 2.0
+    assert cutvideo._step_playback_speed(1.0, -1) == 0.5
+
+
 def test_ffmpeg_render_can_be_cancelled(monkeypatch, tmp_path):
     class FakeProcess:
         returncode = None
