@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 07 July 2026
-Version: 0.3.76
+Update Date: 08 July 2026
+Version: 0.3.78
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -680,6 +680,58 @@ def cut_video_with_opencv(
         cap.release()
 
 
+def _gcd(a: int, b: int) -> int:
+    while b:
+        a, b = b, a % b
+    return abs(a)
+
+
+def _float_fps_to_rational(fps_val: float) -> tuple[int, int]:
+    """Map a user-entered float FPS to a reduced numerator/denominator pair."""
+    fps_num = int(round(fps_val * 1000))
+    fps_den = 1000
+    g = _gcd(fps_num, fps_den)
+    return fps_num // g, fps_den // g
+
+
+def _resolve_cuts_timing_fps(
+    fps_override: float | None, video_path: str | Path
+) -> tuple[float, int, int]:
+    """Return (fps, fps_num, fps_den) for TOML cut timing fields."""
+    try:
+        mm = get_precise_video_metadata(video_path)
+        meta_fps = float(mm["fps"])
+        if fps_override is None:
+            return (
+                meta_fps,
+                int(mm.get("fps_num", 30)),
+                int(mm.get("fps_den", 1)),
+            )
+        if abs(fps_override - meta_fps) < 0.001:
+            return (
+                meta_fps,
+                int(mm.get("fps_num", 30)),
+                int(mm.get("fps_den", 1)),
+            )
+    except Exception:
+        if fps_override is not None and fps_override > 0:
+            fps_num, fps_den = _float_fps_to_rational(fps_override)
+            return fps_override, fps_num, fps_den
+        return 30.0, 30, 1
+
+    fps_num, fps_den = _float_fps_to_rational(fps_override)
+    return fps_override, fps_num, fps_den
+
+
+def _cut_times_for_toml(
+    start_frame_1based: int, frame_count: int, fps_num: int, fps_den: int
+) -> tuple[float, float, float]:
+    """Compute start/end/duration seconds using the same convention as the cut UI."""
+    start_time = (start_frame_1based * fps_den) / fps_num
+    duration = (frame_count * fps_den) / fps_num
+    return start_time, start_time + duration, duration
+
+
 def save_cuts_to_toml(
     video_path, cuts, fps=None, output_dir=None, per_cut_outputs=None, labels=None
 ):
@@ -690,16 +742,9 @@ def save_cuts_to_toml(
     labels: optional list of string labels for each cut.
     """
 
-    fps_num, fps_den = 30, 1
-    original_fps = fps
-    try:
-        mm = get_precise_video_metadata(video_path)
-        if fps is None or abs(fps - mm["fps"]) < 0.001:
-            fps_num = mm.get("fps_num", 30)
-            fps_den = mm.get("fps_den", 1)
-            original_fps = mm["fps"]
-    except Exception:
-        pass
+    effective_fps, fps_num, fps_den = _resolve_cuts_timing_fps(fps, video_path)
+    if fps is None:
+        fps = effective_fps
     try:
         video_name = Path(video_path).stem
         # Convert path to POSIX format (forward slashes) for universal compatibility
@@ -731,15 +776,10 @@ def save_cuts_to_toml(
             end_frame_1based = end + 1
             # frame_count = end - start + 1 (inclusive count)
             frame_count = end - start + 1
-            if fps is not None and fps > 0:
-                # Use frame-count-based duration to avoid losing the last frame in timing
-                if abs(fps - original_fps) < 0.001 and fps_num and fps_den:
-                    start_time = (start_frame_1based * fps_den) / fps_num
-                    duration = (frame_count * fps_den) / fps_num
-                else:
-                    start_time = start_frame_1based / fps
-                    duration = frame_count / fps
-                end_time = start_time + duration
+            if fps is not None and fps > 0 and fps_num > 0:
+                start_time, end_time, duration = _cut_times_for_toml(
+                    start_frame_1based, frame_count, fps_num, fps_den
+                )
             else:
                 start_time = None
                 end_time = None
@@ -795,15 +835,10 @@ def save_cuts_to_toml(
                 end_frame_1based = end + 1
                 # frame_count = end - start + 1 (inclusive)
                 frame_count = end - start + 1
-                if fps is not None and fps > 0:
-                    # Use frame-count-based duration to avoid losing the last frame in timing
-                    if abs(fps - original_fps) < 0.001 and fps_num and fps_den:
-                        start_time = (start_frame_1based * fps_den) / fps_num
-                        duration = (frame_count * fps_den) / fps_num
-                    else:
-                        start_time = start_frame_1based / fps
-                        duration = frame_count / fps
-                    end_time = start_time + duration
+                if fps is not None and fps > 0 and fps_num > 0:
+                    start_time, end_time, duration = _cut_times_for_toml(
+                        start_frame_1based, frame_count, fps_num, fps_den
+                    )
                 else:
                     start_time = None
                     end_time = None
@@ -1515,7 +1550,7 @@ def play_video_with_cuts(video_path):
     audio_muted = False
     audio_ready = False
     audio_music_loaded = False
-    loop_enabled = True
+    loop_enabled = False
 
     # Get video filename for window title
     video_filename = Path(video_path).name
@@ -2374,15 +2409,8 @@ def play_video_with_cuts(video_path):
                 video_path = str(video_files[processed_count])
                 video_name = Path(video_path).stem
 
-                # Get metadata to get FPS for save_cuts_to_toml
-                try:
-                    metadata = get_precise_video_metadata(video_path)
-                    video_fps = metadata.get("fps", None)
-                except Exception:
-                    video_fps = None
-
-                # Salvar informações de corte para cada vídeo processado em TOML
-                save_cuts_to_toml(video_path, cuts, video_fps)
+                # Use the FPS chosen in the cut UI (may differ from container metadata).
+                save_cuts_to_toml(video_path, cuts, fps)
 
                 status_label.config(text=f"Processing: {video_name}")
                 print(f"\n--- Video {processed_count + 1}/{len(video_files)}: {video_name} ---")
