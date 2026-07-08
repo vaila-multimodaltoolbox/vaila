@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 07 July 2026
-Version: 0.3.79
+Update Date: 08 July 2026
+Version: 0.3.80
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -2610,13 +2610,15 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                 row=4, column=0, sticky="w", pady=(8, 0)
             )
             self.model_var = tk.StringVar(value="1b")
-            ttk.Combobox(
+            self.model_combo = ttk.Combobox(
                 frm,
                 textvariable=self.model_var,
                 values=["0.4b", "0.8b", "1b", "5b"],
                 width=10,
                 state="readonly",
-            ).grid(row=5, column=0, sticky="w")
+            )
+            self.model_combo.grid(row=5, column=0, sticky="w")
+            self.model_combo.bind("<<ComboboxSelected>>", self._on_model_change)
             ttk.Label(frm, text="Stride (1 = every frame):").grid(
                 row=6, column=0, sticky="w", pady=(8, 0)
             )
@@ -2665,13 +2667,15 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
             ttk.Label(adv_frm, text="Pose batch (--pose-batch-size):").grid(
                 row=0, column=2, sticky="w"
             )
-            self.pose_batch_var = tk.StringVar(value="")
+            self.pose_batch_var = tk.StringVar(
+                value=str(_default_pose_batch_size(self.model_var.get()))
+            )
             ttk.Entry(adv_frm, textvariable=self.pose_batch_var, width=8).grid(
                 row=0, column=3, sticky="w", padx=(4, 0)
             )
             ttk.Label(
                 adv_frm,
-                text="empty = auto (1 for 5b, 2 for 1b, 4 for 0.4b/0.8b) · lower if OOM with many people",
+                text="default per model (1 for 5b, 2 for 1b, 4 for 0.4b/0.8b) · lower if OOM with many people",
                 font=("TkDefaultFont", 8),
             ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(2, 0))
 
@@ -2739,6 +2743,10 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
             self.lift()
             self.focus_force()
 
+        def _on_model_change(self, _event: tk.Event | None = None) -> None:
+            model = self.model_var.get().strip() or "1b"
+            self.pose_batch_var.set(str(_default_pose_batch_size(model)))
+
         def _browse_dir(self) -> None:
             d = filedialog.askdirectory(parent=self, title="Select folder with videos")
             if d:
@@ -2794,8 +2802,6 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                     "Appearance threshold and static Re-ID fields must be numbers.",
                     parent=self,
                 )
-            except ValueError as exc:
-                messagebox.showerror("Error", str(exc), parent=self)
                 return
             self.result = SapiensGuiSettings(
                 input_path=Path(inp),
