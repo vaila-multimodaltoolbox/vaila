@@ -2794,6 +2794,8 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                     "Appearance threshold and static Re-ID fields must be numbers.",
                     parent=self,
                 )
+            except ValueError as exc:
+                messagebox.showerror("Error", str(exc), parent=self)
                 return
             self.result = SapiensGuiSettings(
                 input_path=Path(inp),
