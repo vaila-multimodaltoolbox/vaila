@@ -1,12 +1,19 @@
 # Agent Continuation Log — vailá ↔ FIFA Skeletal Tracking Light 2026
 
-Last update: 2026-07-07 (v0.3.76 — Sapiens2 single output directory)
+Last update: 2026-07-07 (v0.3.77 — Cut Video Loop Default Off)
 Working clone: `~/data/vaila`
 Companion repo: `~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026`
 
-**Cursor CLI resume:** read `.claude/skills/yolo-fb-gui-cli/SKILL.md`,
+Cursor CLI resume: read `.claude/skills/yolo-fb-gui-cli/SKILL.md`,
 `docs/sessions/2026-07-06-yolo-fb-gui-cli-mirror.md`, and
 `docs/sessions/2026-07-07-sapiens-output-dir-fix.md` for Frame B video-AI tools.
+
+---
+
+## Update — 2026-07-07 (v0.3.77 — Cut Video Loop Default Off)
+
+- **Feature:** Changed the loop mode in `vaila/cutvideo.py` to default to `off` (False) instead of `on` (True) when opened.
+- **Global version:** `vaila.py` → v0.3.77, 07 July 2026.
 
 ---
 

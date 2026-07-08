@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -137,6 +138,142 @@ def test_parse_gui_threshold_fields_rejects_out_of_range() -> None:
         )
 
 
+def test_format_instance_id_label() -> None:
+    assert vs._format_instance_id_label(3) == "#3"
+    assert vs._format_instance_id_label(0) == "#0"
+
+
+def test_draw_person_id_labels_writes_tag() -> None:
+    img = np.zeros((120, 160, 3), dtype=np.uint8)
+    instances = [{"stable_id": 2, "bbox": [10.0, 20.0, 80.0, 100.0]}]
+    out = vs._draw_person_id_labels(img, instances)
+    assert out.sum() > 0
+
+
+def test_load_predictions_timeline(tmp_path: Path) -> None:
+    json_path = tmp_path / "clip_predictions.json"
+    json_path.write_text(
+        json.dumps(
+            {
+                "video": "clip",
+                "frames": [
+                    {
+                        "frame_index": 0,
+                        "instances": [{"stable_id": 1, "bbox": [0, 0, 10, 10]}],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    stem, timeline = vs._load_predictions_timeline(json_path)
+    assert stem == "clip"
+    assert timeline[0][0]["stable_id"] == 1
+
+
+def test_stabilize_sapiens_pose_timeline_swaps_ids() -> None:
+    pose_by_frame = {
+        0: [
+            {
+                "raw_id": 1,
+                "bbox": [10.0, 10.0, 50.0, 90.0],
+                "keypoints": [[30.0, 50.0]],
+                "keypoint_scores": [0.9],
+            },
+            {
+                "raw_id": 2,
+                "bbox": [200.0, 10.0, 240.0, 90.0],
+                "keypoints": [[220.0, 50.0]],
+                "keypoint_scores": [0.9],
+            },
+        ],
+        1: [
+            {
+                "raw_id": 1,
+                "bbox": [205.0, 12.0, 245.0, 92.0],
+                "keypoints": [[225.0, 52.0]],
+                "keypoint_scores": [0.9],
+            },
+            {
+                "raw_id": 2,
+                "bbox": [12.0, 12.0, 52.0, 92.0],
+                "keypoints": [[32.0, 52.0]],
+                "keypoint_scores": [0.9],
+            },
+        ],
+    }
+    stabilized, links = vs._stabilize_sapiens_pose_timeline(pose_by_frame)
+    ids_f1 = sorted(int(i["stable_id"]) for i in stabilized[1])
+    assert ids_f1 == sorted(int(i["stable_id"]) for i in stabilized[0])
+    assert links
+
+
+def test_sapiens_temporal_linker_assigns_during_inference() -> None:
+    linker = vs.SapiensTemporalLinker()
+    inst0 = [
+        {
+            "raw_id": 1,
+            "bbox": [10.0, 10.0, 50.0, 90.0],
+            "keypoints": [[30.0, 50.0]],
+            "keypoint_scores": [0.9],
+        }
+    ]
+    out0 = linker.assign_instances(0, inst0)
+    assert out0[0]["temporal_id"] == 0
+    assert out0[0]["stable_id"] == 0
+
+
+def test_stabilize_sapiens_pose_timeline_bidirectional_merges() -> None:
+    pose_by_frame = {
+        0: [
+            {
+                "raw_id": 1,
+                "bbox": [10.0, 10.0, 50.0, 90.0],
+                "keypoints": [[30.0, 50.0]],
+                "keypoint_scores": [0.9],
+            }
+        ],
+        1: [
+            {
+                "raw_id": 1,
+                "bbox": [12.0, 12.0, 52.0, 92.0],
+                "keypoints": [[32.0, 52.0]],
+                "keypoint_scores": [0.9],
+            }
+        ],
+        2: [
+            {
+                "raw_id": 1,
+                "bbox": [14.0, 14.0, 54.0, 94.0],
+                "keypoints": [[34.0, 54.0]],
+                "keypoint_scores": [0.9],
+            }
+        ],
+    }
+    merged, audit = vs._stabilize_sapiens_pose_timeline_bidirectional(pose_by_frame)
+    assert len(merged) == 3
+    assert audit
+    assert all(len(row) == 4 for row in audit)
+
+
+def test_build_sapiens_cli_argv_appearance_and_bidirectional() -> None:
+    argv = vs._build_sapiens_cli_argv(
+        input_path=Path("/in/vid.mp4"),
+        out_parent=Path("/out"),
+        appearance_reid=True,
+        appearance_reid_threshold=0.55,
+        reid_bidirectional=False,
+        reid_static_speed=4.0,
+        reid_static_radius=70.0,
+    )
+    assert "--appearance-reid" in argv
+    assert "--appearance-reid-threshold" in argv
+    assert "0.55" in argv
+    assert "--no-reid-bidirectional" in argv
+    assert "--reid-static-speed" in argv
+    assert "--reid-static-radius" in argv
+
+
 def test_sapiens_cli_full_example_constant_lists_core_flags() -> None:
     text = vs.SAPIENS_CLI_FULL_INFERENCE_EXAMPLE
     for token in (
@@ -149,7 +286,12 @@ def test_sapiens_cli_full_example_constant_lists_core_flags() -> None:
         "--kpt-thr",
         "--pose-batch-size",
         "--flip-test",
+        "--stabilize-ids",
+        "--reid-max-gap",
+        "--reid-static-speed",
+        "--appearance-reid",
         "--no-overlay",
+        "--no-draw-id",
         "--quiet",
     ):
         assert token in text
@@ -269,6 +411,8 @@ def test_build_isolated_sapiens_cmd_passes_output_base() -> None:
         nms_thr=0.3,
         device=0,
         save_overlay=True,
+        draw_id=True,
+        stabilize_ids=True,
         flip_test=False,
         max_persons=8,
         pose_batch_size=None,

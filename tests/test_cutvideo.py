@@ -102,3 +102,30 @@ def test_ffmpeg_render_can_be_cancelled(monkeypatch, tmp_path):
 
     assert success is False
     assert process.terminated is True
+
+
+def test_save_cuts_to_toml_uses_manual_fps_for_times(tmp_path, monkeypatch):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"\x00")
+    cuts = [(0, 185)]  # frames 1-186 inclusive
+
+    monkeypatch.setattr(
+        cutvideo,
+        "get_precise_video_metadata",
+        lambda _path: {"fps": 30.0, "fps_num": 30, "fps_den": 1},
+    )
+
+    toml_path = cutvideo.save_cuts_to_toml(str(video), cuts, fps=120.0)
+    content = toml_path.read_text(encoding="utf-8")
+
+    assert "fps = 120.000000" in content
+    assert "start_time = 0.008333" in content
+    assert "duration = 1.550000" in content
+    assert "end_time = 1.558333" in content
+
+
+def test_cut_times_for_toml_matches_ui_convention():
+    start, end, duration = cutvideo._cut_times_for_toml(1, 186, 120, 1)
+    assert start == 1 / 120
+    assert duration == 186 / 120
+    assert end == start + duration

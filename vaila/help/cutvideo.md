@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.3.76
+- **Version:** 0.3.78
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -106,5 +106,5 @@ Heittor_cod_02
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 02 June 2026 (v0.3.47 - Shift+Left/Right cut-marker navigation; timeline feedback; responsive cancellable final render)
+📅 **Last Updated:** 08 July 2026 (v0.3.78 - Manual FPS TOML timing fix)
 🔗 **Part of vailá - Multimodal Toolbox**

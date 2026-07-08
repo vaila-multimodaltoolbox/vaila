@@ -7,8 +7,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 January 2026
-Update Date: 25 February 2026
-Version: 0.0.8
+Update Date: 08 July 2026
+Version: 0.3.78
 ================================================================================
 
 Description:
@@ -98,6 +98,9 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
+import matplotlib
+
+matplotlib.use("Agg")  # avoid Qt backend issues on Linux/headless environments
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -136,12 +139,176 @@ def _sanitize_filename_part(s):
     return re.sub(r"_+", "_", s).strip("_") or "segment"
 
 
-def create_dumbbell_chart(run_stats, output_dir):
+COD_LEFT_RUN_ID = 1  # cod_01 — athlete started COD toward the left
+COD_RIGHT_RUN_ID = 2  # cod_02 — athlete started COD toward the right
+
+
+def format_trial_label(mode: str, run_id, lang: str = "en") -> str:
+    """Human-readable trial label (Sprint run or COD side from filename suffix)."""
+    rid = int(run_id)
+    if mode == "cod":
+        if rid == COD_LEFT_RUN_ID:
+            return "COD Left (01)" if lang == "en" else "COD Esquerda (01)"
+        if rid == COD_RIGHT_RUN_ID:
+            return "COD Right (02)" if lang == "en" else "COD Direita (02)"
+        return f"COD {rid:02d}"
+    if lang == "pt":
+        return f"Sprint {rid}"
+    return f"Run {rid}"
+
+
+def trial_link_html(mode: str, run_id, report_path: str) -> str:
+    """HTML cell linking to an individual report with the correct trial label."""
+    label = format_trial_label(mode, run_id)
+    if report_path:
+        return f'<a href="{report_path}" target="_blank">{label}</a>'
+    return label
+
+
+def _metric_column_label(mode: str, run_id, metric: str, lang: str = "en") -> str:
+    trial = format_trial_label(mode, run_id, lang)
+    if metric == "speed":
+        return f"{trial}\nSpeed (km/h)" if lang == "en" else f"{trial}\nVelocidade (km/h)"
+    return f"{trial}\nTime (s)" if lang == "en" else f"{trial}\nTempo (s)"
+
+
+def generate_cod_left_right_comparison_html(run_stats, lang: str = "en") -> str:
+    """Side-by-side Left (01) vs Right (02) table for COD 180° team reports."""
+    pt = lang == "pt"
+    rows: list[dict] = []
+    for athlete in sorted(run_stats["athlete_name"].unique()):
+        ath = run_stats[run_stats["athlete_name"] == athlete]
+        left = ath[ath["run_id"] == COD_LEFT_RUN_ID]
+        right = ath[ath["run_id"] == COD_RIGHT_RUN_ID]
+
+        left_time = float(left["total_time_s"].iloc[0]) if not left.empty else np.nan
+        right_time = float(right["total_time_s"].iloc[0]) if not right.empty else np.nan
+        left_speed = float(left["max_speed_kmh"].iloc[0]) if not left.empty else np.nan
+        right_speed = float(right["max_speed_kmh"].iloc[0]) if not right.empty else np.nan
+        left_report = str(left["report_path"].iloc[0]) if not left.empty else ""
+        right_report = str(right["report_path"].iloc[0]) if not right.empty else ""
+
+        delta_time = (
+            right_time - left_time
+            if pd.notna(left_time) and pd.notna(right_time)
+            else np.nan
+        )
+        delta_speed = (
+            right_speed - left_speed
+            if pd.notna(left_speed) and pd.notna(right_speed)
+            else np.nan
+        )
+
+        if pd.notna(left_time) and pd.notna(right_time):
+            faster = (
+                format_trial_label("cod", COD_LEFT_RUN_ID, lang)
+                if left_time < right_time
+                else format_trial_label("cod", COD_RIGHT_RUN_ID, lang)
+                if right_time < left_time
+                else ("Tie" if not pt else "Empate")
+            )
+        else:
+            faster = "—"
+
+        rows.append(
+            {
+                "athlete_name": athlete,
+                "left_time": left_time,
+                "right_time": right_time,
+                "left_speed": left_speed,
+                "right_speed": right_speed,
+                "delta_time": delta_time,
+                "delta_speed": delta_speed,
+                "faster_side": faster,
+                "left_report": left_report,
+                "right_report": right_report,
+            }
+        )
+
+    if not rows:
+        return (
+            "<p class='section-intro'>No paired COD left/right data found.</p>"
+            if not pt
+            else "<p class='section-intro'>Nenhum par COD esquerda/direita encontrado.</p>"
+        )
+
+    df = pd.DataFrame(rows)
+    if "left_speed" in df.columns and "right_speed" in df.columns:
+        df["best_side_speed"] = df[["left_speed", "right_speed"]].max(axis=1)
+        df = df.sort_values("best_side_speed", ascending=False, na_position="last")
+    df = df.reset_index(drop=True)
+    df.index += 1
+
+    html = '<table class="data-table cod-side-table">\n<thead><tr>'
+    if pt:
+        html += (
+            "<th>Rank</th><th>Atleta</th>"
+            "<th>COD Esquerda (01)<br>Tempo (s)</th>"
+            "<th>COD Direita (02)<br>Tempo (s)</th>"
+            "<th>Δ Tempo<br>(Dir − Esq)</th>"
+            "<th>COD Esquerda (01)<br>Vel. máx. (km/h)</th>"
+            "<th>COD Direita (02)<br>Vel. máx. (km/h)</th>"
+            "<th>Δ Velocidade<br>(Dir − Esq)</th>"
+            "<th>Lado mais rápido<br>(20 m)</th>"
+        )
+    else:
+        html += (
+            "<th>Rank</th><th>Athlete</th>"
+            "<th>COD Left (01)<br>Time (s)</th>"
+            "<th>COD Right (02)<br>Time (s)</th>"
+            "<th>Δ Time<br>(Right − Left)</th>"
+            "<th>COD Left (01)<br>Max speed (km/h)</th>"
+            "<th>COD Right (02)<br>Max speed (km/h)</th>"
+            "<th>Δ Speed<br>(Right − Left)</th>"
+            "<th>Faster side<br>(20 m)</th>"
+        )
+    html += "</tr></thead>\n<tbody>\n"
+
+    for idx, row in df.iterrows():
+        left_time_cell = (
+            f'<a href="{row["left_report"]}" target="_blank">{row["left_time"]:.3f}</a>'
+            if row["left_report"] and pd.notna(row["left_time"])
+            else (f"{row['left_time']:.3f}" if pd.notna(row["left_time"]) else "—")
+        )
+        right_time_cell = (
+            f'<a href="{row["right_report"]}" target="_blank">{row["right_time"]:.3f}</a>'
+            if row["right_report"] and pd.notna(row["right_time"])
+            else (f"{row['right_time']:.3f}" if pd.notna(row["right_time"]) else "—")
+        )
+        left_speed_cell = (
+            f'<a href="{row["left_report"]}" target="_blank">{row["left_speed"]:.2f}</a>'
+            if row["left_report"] and pd.notna(row["left_speed"])
+            else (f"{row['left_speed']:.2f}" if pd.notna(row["left_speed"]) else "—")
+        )
+        right_speed_cell = (
+            f'<a href="{row["right_report"]}" target="_blank">{row["right_speed"]:.2f}</a>'
+            if row["right_report"] and pd.notna(row["right_speed"])
+            else (f"{row['right_speed']:.2f}" if pd.notna(row["right_speed"]) else "—")
+        )
+        delta_time_cell = f"{row['delta_time']:+.3f}" if pd.notna(row["delta_time"]) else "—"
+        delta_speed_cell = f"{row['delta_speed']:+.2f}" if pd.notna(row["delta_speed"]) else "—"
+
+        html += "<tr>"
+        html += f"<td><strong>#{idx}</strong></td>"
+        html += f"<td><strong>{row['athlete_name']}</strong></td>"
+        html += f"<td>{left_time_cell}</td><td>{right_time_cell}</td><td>{delta_time_cell}</td>"
+        html += f"<td>{left_speed_cell}</td><td>{right_speed_cell}</td><td>{delta_speed_cell}</td>"
+        html += f"<td>{row['faster_side']}</td>"
+        html += "</tr>\n"
+
+    html += "</tbody></table>"
+    return html
+
+
+def create_dumbbell_chart(run_stats, output_dir, mode="sprint"):
     """
     Create a multi-run speed evolution chart per athlete.
 
     Returns the path to the saved figure.
     """
+    def lbl(rid):
+        return format_trial_label(mode, rid)
+
     pivot_speed = run_stats.pivot_table(
         index="athlete_name", columns="run_id", values="max_speed_kmh", aggfunc="first"
     )
@@ -174,7 +341,7 @@ def create_dumbbell_chart(run_stats, output_dir):
         colors = sns.color_palette("husl", len(run_ids))
         y_pos = np.arange(len(pivot_speed))
 
-        for i, (athlete, row) in enumerate(pivot_speed.iterrows()):
+        for i, (_athlete, row) in enumerate(pivot_speed.iterrows()):
             valid_speeds = row.dropna().values
             if len(valid_speeds) == 0:
                 continue
@@ -207,7 +374,9 @@ def create_dumbbell_chart(run_stats, output_dir):
         ax.set_xlabel("Max Speed (km/h)", fontsize=12, fontweight="bold")
         ax.set_ylabel("Athlete", fontsize=12, fontweight="bold")
         ax.set_title(
-            "Multi-Run Performance Distribution\nAthletes sorted by best overall speed.",
+            "Multi-Run Performance Distribution\nAthletes sorted by best overall speed."
+            if mode != "cod"
+            else "COD Left (01) vs Right (02) — speed range per athlete.",
             fontsize=14,
             fontweight="bold",
             pad=18,
@@ -225,7 +394,7 @@ def create_dumbbell_chart(run_stats, output_dir):
                     color="w",
                     markerfacecolor=colors[color_idx],
                     markersize=10,
-                    label=f"Run {rid}",
+                    label=lbl(rid),
                 )
             )
         ax.legend(
@@ -298,7 +467,12 @@ def create_dumbbell_chart(run_stats, output_dir):
             ax.set_xlabel("Max Speed (km/h)", fontsize=12, fontweight="bold")
             ax.set_ylabel("Athlete", fontsize=12, fontweight="bold")
             ax.set_title(
-                f"Performance Ranking: Run {r1} vs Run {r2}\nAthletes sorted by best speed. Green = improved, Red = declined.",
+                f"Performance Ranking: {lbl(r1)} vs {lbl(r2)}\n"
+                + (
+                    "Athletes sorted by best speed. Green = faster on right side, Red = faster on left."
+                    if mode == "cod"
+                    else "Athletes sorted by best speed. Green = improved, Red = declined."
+                ),
                 fontsize=14,
                 fontweight="bold",
                 pad=18,
@@ -314,7 +488,7 @@ def create_dumbbell_chart(run_stats, output_dir):
                     color="w",
                     markerfacecolor="#3498db",
                     markersize=8,
-                    label=f"Run {r1}",
+                    label=lbl(r1),
                 ),
                 plt.Line2D(
                     [0],
@@ -323,7 +497,7 @@ def create_dumbbell_chart(run_stats, output_dir):
                     color="w",
                     markerfacecolor="#e67e22",
                     markersize=8,
-                    label=f"Run {r2}",
+                    label=lbl(r2),
                 ),
             ]
             ax.legend(
@@ -362,7 +536,7 @@ def create_dumbbell_chart(run_stats, output_dir):
                 alpha=0.85,
                 label=athlete,
             )
-        ax.set_xlabel("Run", fontsize=12, fontweight="bold")
+        ax.set_xlabel("COD side" if mode == "cod" else "Run", fontsize=12, fontweight="bold")
         ax.set_ylabel("Max Speed (km/h)", fontsize=12, fontweight="bold")
         ax.set_title(
             "Performance Evolution Across Runs\n(Max Speed per Athlete)",
@@ -507,12 +681,15 @@ def _create_sequential_scatter(pivot_speed, run_ids, output_dir):
     return out
 
 
-def create_improvement_scatter(run_stats, output_dir):
+def create_improvement_scatter(run_stats, output_dir, mode="sprint"):
     """
     Create a scatter plot of run-to-run comparison (2-run) and optionally sequential deltas (3+ runs).
 
     Returns (scatter_path, sequential_path_or_none).
     """
+    def lbl(rid):
+        return format_trial_label(mode, rid)
+
     pivot_speed = run_stats.pivot_table(
         index="athlete_name", columns="run_id", values="max_speed_kmh", aggfunc="first"
     )
@@ -562,10 +739,15 @@ def create_improvement_scatter(run_stats, output_dir):
             ax.set_xlim(x_lo, x_hi)
             ax.set_ylim(x_lo, x_hi)
             ax.set_aspect("equal", adjustable="box")
-            ax.set_xlabel(f"Run {r1} - Max Speed (km/h)", fontsize=12, fontweight="bold")
-            ax.set_ylabel(f"Run {r2} - Max Speed (km/h)", fontsize=12, fontweight="bold")
+            ax.set_xlabel(f"{lbl(r1)} - Max Speed (km/h)", fontsize=12, fontweight="bold")
+            ax.set_ylabel(f"{lbl(r2)} - Max Speed (km/h)", fontsize=12, fontweight="bold")
             ax.set_title(
-                f"Improvement Analysis: Run {r1} vs Run {r2}\nPoints above diagonal = improved from Run {r1} to Run {r2}.",
+                f"Improvement Analysis: {lbl(r1)} vs {lbl(r2)}\n"
+                + (
+                    "Points above diagonal = faster max speed on the right-side COD (02)."
+                    if mode == "cod"
+                    else f"Points above diagonal = improved from {lbl(r1)} to {lbl(r2)}."
+                ),
                 fontsize=14,
                 fontweight="bold",
                 pad=18,
@@ -634,7 +816,7 @@ def create_improvement_scatter(run_stats, output_dir):
     return (None, None)
 
 
-def create_performance_heatmap(run_stats, output_dir):
+def create_performance_heatmap(run_stats, output_dir, mode="sprint"):
     """
     Create a multi-run performance heatmap matrix.
 
@@ -662,8 +844,8 @@ def create_performance_heatmap(run_stats, output_dir):
     delta_cols = []
 
     for rid in run_ids:
-        speed_col = f"Run {rid}\nSpeed\n(km/h)"
-        time_col = f"Run {rid}\nTime\n(s)"
+        speed_col = _metric_column_label(mode, rid, "speed")
+        time_col = _metric_column_label(mode, rid, "time")
         heatmap_df[speed_col] = pivot_speed.get(rid, np.nan)
         heatmap_df[time_col] = pivot_time.get(rid, np.nan)
         speed_cols.append(speed_col)
@@ -672,9 +854,12 @@ def create_performance_heatmap(run_stats, output_dir):
     for idx in range(len(run_ids) - 1):
         prev_run = run_ids[idx]
         next_run = run_ids[idx + 1]
-        delta_col = f"Delta R{prev_run}->R{next_run}\n(km/h)"
-        prev_col = f"Run {prev_run}\nSpeed\n(km/h)"
-        next_col = f"Run {next_run}\nSpeed\n(km/h)"
+        if mode == "cod":
+            delta_col = f"Δ {format_trial_label(mode, next_run)} − {format_trial_label(mode, prev_run)}\n(km/h)"
+        else:
+            delta_col = f"Delta R{prev_run}->R{next_run}\n(km/h)"
+        prev_col = _metric_column_label(mode, prev_run, "speed")
+        next_col = _metric_column_label(mode, next_run, "speed")
         heatmap_df[delta_col] = heatmap_df[next_col] - heatmap_df[prev_col]
         delta_cols.append(delta_col)
 
@@ -895,7 +1080,7 @@ def create_beeswarm_plot(run_stats_clustered, output_dir):
         # Add athlete names
         for idx, row in data.iterrows():
             ax1.annotate(
-                row["athlete_name"],
+                f"{row['athlete_name']}_{int(row['run_id'])}",
                 xy=(row["max_speed_kmh"], cluster + y_jitter[list(data.index).index(idx)]),
                 fontsize=7,
                 alpha=0.7,
@@ -931,7 +1116,7 @@ def create_beeswarm_plot(run_stats_clustered, output_dir):
 
         for idx, row in data.iterrows():
             ax2.annotate(
-                row["athlete_name"],
+                f"{row['athlete_name']}_{int(row['run_id'])}",
                 xy=(row["total_time_s"], cluster + y_jitter[list(data.index).index(idx)]),
                 fontsize=7,
                 alpha=0.7,
@@ -980,7 +1165,9 @@ def calculate_zscore_table(run_stats):
 
     Returns: DataFrame with Z-scores and original values
     """
-    zscore_df = run_stats[["athlete_name", "run_id", "max_speed_kmh", "total_time_s"]].copy()
+    zscore_df = run_stats[
+        ["athlete_name", "run_id", "max_speed_kmh", "total_time_s", "report_path"]
+    ].copy()
 
     # Calculate Z-scores
     zscore_df["speed_zscore"] = stats.zscore(zscore_df["max_speed_kmh"])
@@ -997,11 +1184,12 @@ def calculate_zscore_table(run_stats):
     return zscore_df
 
 
-def generate_zscore_html_table(zscore_df):
+def generate_zscore_html_table(zscore_df, mode="sprint"):
     """
     Generate HTML table with color-coded Z-scores.
     Green = positive (above average), Red = negative (below average)
     """
+    trial_header = "COD" if mode == "cod" else "Run"
 
     def get_zscore_color(z):
         """Return color based on Z-score value."""
@@ -1028,17 +1216,25 @@ def generate_zscore_html_table(zscore_df):
 
     html = '<table class="zscore-table">\n'
     html += "<thead><tr>"
-    html += "<th>Rank</th><th>Athlete</th><th>Run</th>"
+    html += f"<th>Rank</th><th>Athlete</th><th>{trial_header}</th>"
     html += "<th>Speed (km/h)</th><th>Speed Z</th>"
     html += "<th>Time (s)</th><th>Time Z</th>"
     html += "<th>Composite Z</th>"
     html += "</tr></thead>\n<tbody>\n"
 
     for idx, row in zscore_df.iterrows():
+        report_path = row.get("report_path", "")
+        athlete_cell = (
+            f'<a href="{report_path}" target="_blank"><strong>{row["athlete_name"]}</strong></a>'
+            if report_path
+            else row["athlete_name"]
+        )
+        run_cell = trial_link_html(mode, row["run_id"], report_path)
+
         html += "<tr>"
         html += f"<td><strong>#{idx}</strong></td>"
-        html += f"<td>{row['athlete_name']}</td>"
-        html += f"<td>{int(row['run_id'])}</td>"
+        html += f"<td>{athlete_cell}</td>"
+        html += f"<td>{run_cell}</td>"
         html += f"<td>{row['max_speed_kmh']:.2f}</td>"
 
         # Speed Z-score cell
@@ -1067,7 +1263,7 @@ def generate_zscore_html_table(zscore_df):
     return html
 
 
-def generate_cluster_html_table(run_stats_clustered):
+def generate_cluster_html_table(run_stats_clustered, mode="sprint"):
     """
     Generate HTML table with cluster assignments and badges.
     """
@@ -1076,6 +1272,7 @@ def generate_cluster_html_table(run_stats_clustered):
 
     cluster_colors = {1: "#27ae60", 2: "#f39c12", 3: "#e74c3c"}
     cluster_labels = {1: "High", 2: "Medium", 3: "Low"}
+    trial_header = "COD" if mode == "cod" else "Run"
 
     # Sort by cluster then by speed
     df_sorted = run_stats_clustered.sort_values(
@@ -1084,7 +1281,7 @@ def generate_cluster_html_table(run_stats_clustered):
 
     html = '<table class="cluster-table">\n'
     html += "<thead><tr>"
-    html += "<th>Athlete</th><th>Run</th><th>Speed (km/h)</th><th>Time (s)</th><th>Level</th>"
+    html += f"<th>Athlete</th><th>{trial_header}</th><th>Speed (km/h)</th><th>Time (s)</th><th>Level</th>"
     html += "</tr></thead>\n<tbody>\n"
 
     for _, row in df_sorted.iterrows():
@@ -1092,9 +1289,246 @@ def generate_cluster_html_table(run_stats_clustered):
         color = cluster_colors.get(cluster, "#95a5a6")
         label = cluster_labels.get(cluster, "N/A")
 
+        report_path = row.get("report_path", "")
+        athlete_cell = (
+            f'<a href="{report_path}" target="_blank"><strong>{row["athlete_name"]}</strong></a>'
+            if report_path
+            else row["athlete_name"]
+        )
+        run_cell = trial_link_html(mode, row["run_id"], report_path)
+
         html += "<tr>"
-        html += f"<td><strong>{row['athlete_name']}</strong></td>"
-        html += f"<td>{int(row['run_id'])}</td>"
+        html += f"<td>{athlete_cell}</td>"
+        html += f"<td>{run_cell}</td>"
+        html += f"<td>{row['max_speed_kmh']:.2f}</td>"
+        html += f"<td>{row['total_time_s']:.2f}</td>"
+        html += f'<td><span class="cluster-badge" style="background-color: {color};">{label}</span></td>'
+        html += "</tr>\n"
+
+    html += "</tbody></table>"
+    return html
+
+
+def generate_best_performance_html_table(best_df, mode="sprint"):
+    """
+    Generate a highly visual best performance table for football coaches (English).
+    """
+    html = '<table class="data-table best-perf-table">\n'
+    html += "<thead><tr>"
+    html += "<th>Rank</th><th>Athlete</th><th>Best Max Speed</th><th>Best Total Time</th><th>Football Assessment</th>"
+    html += "</tr></thead>\n<tbody>\n"
+    for idx, row in best_df.iterrows():
+        speed = row["best_speed_kmh"]
+        if speed >= 36.0:
+            badge = '<span class="cluster-badge" style="background-color: #1e8449;">Elite (≥36 km/h)</span>'
+        elif speed >= 32.0:
+            badge = '<span class="cluster-badge" style="background-color: #27ae60;">Professional (32-36 km/h)</span>'
+        elif speed >= 28.0:
+            badge = '<span class="cluster-badge" style="background-color: #f39c12;">Average (28-32 km/h)</span>'
+        else:
+            badge = '<span class="cluster-badge" style="background-color: #e74c3c;">Needs Dev (<28 km/h)</span>'
+
+        athlete_link = (
+            f'<a href="{row["best_speed_report"]}" target="_blank"><strong>{row["athlete_name"]}</strong></a>'
+            if row["best_speed_report"]
+            else row["athlete_name"]
+        )
+        speed_link = (
+            f'<a href="{row["best_speed_report"]}" target="_blank">{speed:.2f} km/h ({format_trial_label(mode, row["best_speed_run"])})</a>'
+            if row["best_speed_report"]
+            else f"{speed:.2f} km/h ({format_trial_label(mode, row['best_speed_run'])})"
+        )
+        time_link = (
+            f'<a href="{row["best_time_report"]}" target="_blank">{row["best_time_s"]:.3f} s ({format_trial_label(mode, row["best_time_run"])})</a>'
+            if row["best_time_report"]
+            else f"{row['best_time_s']:.3f} s ({format_trial_label(mode, row['best_time_run'])})"
+        )
+
+        html += "<tr>"
+        html += f"<td><strong>#{idx}</strong></td>"
+        html += f"<td>{athlete_link}</td>"
+        html += f"<td>{speed_link}</td>"
+        html += f"<td>{time_link}</td>"
+        html += f"<td>{badge}</td>"
+        html += "</tr>\n"
+    html += "</tbody></table>"
+    return html
+
+
+def generate_best_performance_html_table_pt(best_df, mode="sprint"):
+    """
+    Generate a highly visual best performance table for football coaches (Portuguese).
+    """
+    html = '<table class="data-table best-perf-table">\n'
+    html += "<thead><tr>"
+    html += "<th>Rank</th><th>Atleta</th><th>Melhor Velocidade Máxima</th><th>Melhor Tempo Total</th><th>Avaliação de Futebol</th>"
+    html += "</tr></thead>\n<tbody>\n"
+    for idx, row in best_df.iterrows():
+        speed = row["best_speed_kmh"]
+        if speed >= 36.0:
+            badge = '<span class="cluster-badge" style="background-color: #1e8449;">Elite (≥36 km/h)</span>'
+        elif speed >= 32.0:
+            badge = '<span class="cluster-badge" style="background-color: #27ae60;">Profissional (32-36 km/h)</span>'
+        elif speed >= 28.0:
+            badge = '<span class="cluster-badge" style="background-color: #f39c12;">Médio (28-32 km/h)</span>'
+        else:
+            badge = '<span class="cluster-badge" style="background-color: #e74c3c;">Desenvolvimento (<28 km/h)</span>'
+
+        athlete_link = (
+            f'<a href="{row["best_speed_report"]}" target="_blank"><strong>{row["athlete_name"]}</strong></a>'
+            if row["best_speed_report"]
+            else row["athlete_name"]
+        )
+        speed_link = (
+            f'<a href="{row["best_speed_report"]}" target="_blank">{speed:.2f} km/h ({format_trial_label(mode, row["best_speed_run"], "pt")})</a>'
+            if row["best_speed_report"]
+            else f"{speed:.2f} km/h ({format_trial_label(mode, row['best_speed_run'], 'pt')})"
+        )
+        time_link = (
+            f'<a href="{row["best_time_report"]}" target="_blank">{row["best_time_s"]:.3f} s ({format_trial_label(mode, row["best_time_run"], "pt")})</a>'
+            if row["best_time_report"]
+            else f"{row['best_time_s']:.3f} s ({format_trial_label(mode, row['best_time_run'], 'pt')})"
+        )
+
+        html += "<tr>"
+        html += f"<td><strong>#{idx}</strong></td>"
+        html += f"<td>{athlete_link}</td>"
+        html += f"<td>{speed_link}</td>"
+        html += f"<td>{time_link}</td>"
+        html += f"<td>{badge}</td>"
+        html += "</tr>\n"
+    html += "</tbody></table>"
+    return html
+
+
+def generate_zscore_html_table_pt(zscore_df, mode="sprint"):
+    """
+    Gera tabela HTML com Z-scores coloridos em Português.
+    """
+
+    def get_zscore_color(z):
+        if pd.isna(z):
+            return "#ffffff"
+        if z > 1.5:
+            return "#1e8449"  # Verde escuro
+        elif z > 0.5:
+            return "#27ae60"  # Verde
+        elif z > -0.5:
+            return "#f9e79f"  # Amarelo
+        elif z > -1.5:
+            return "#e74c3c"  # Vermelho
+        else:
+            return "#922b21"  # Vermelho escuro
+
+    def get_text_color(z):
+        if pd.isna(z):
+            return "#000000"
+        if z > 1.5 or z < -1.5:
+            return "#ffffff"
+        return "#000000"
+
+    trial_header = "COD" if mode == "cod" else "Sprint"
+
+    html = '<table class="zscore-table">\n'
+    html += "<thead><tr>"
+    html += f"<th>Rank</th><th>Atleta</th><th>{trial_header}</th>"
+    html += "<th>Velocidade (km/h)</th><th>Z Velocidade</th>"
+    html += "<th>Tempo (s)</th><th>Z Tempo</th>"
+    html += "<th>Z Composto</th>"
+    html += "</tr></thead>\n<tbody>\n"
+
+    for idx, row in zscore_df.iterrows():
+        report_path = row.get("report_path", "")
+        athlete_cell = (
+            f'<a href="{report_path}" target="_blank"><strong>{row["athlete_name"]}</strong></a>'
+            if report_path
+            else row["athlete_name"]
+        )
+        run_cell = trial_link_html(mode, row["run_id"], report_path)
+        if mode != "cod" and not report_path:
+            run_cell = f"Sprint {int(row['run_id'])}"
+        elif mode == "cod":
+            run_cell = format_trial_label(mode, row["run_id"], "pt")
+            if report_path:
+                run_cell = f'<a href="{report_path}" target="_blank">{run_cell}</a>'
+
+        html += "<tr>"
+        html += f"<td><strong>#{idx}</strong></td>"
+        html += f"<td>{athlete_cell}</td>"
+        html += f"<td>{run_cell}</td>"
+        html += f"<td>{row['max_speed_kmh']:.2f}</td>"
+
+        # Speed Z-score
+        speed_z = row["speed_zscore"]
+        bg_color = get_zscore_color(speed_z)
+        txt_color = get_text_color(speed_z)
+        html += f'<td style="background-color: {bg_color}; color: {txt_color}; font-weight: bold;">{speed_z:+.2f}</td>'
+
+        html += f"<td>{row['total_time_s']:.2f}</td>"
+
+        # Time Z-score
+        time_z = row["time_zscore"]
+        bg_color = get_zscore_color(time_z)
+        txt_color = get_text_color(time_z)
+        html += f'<td style="background-color: {bg_color}; color: {txt_color}; font-weight: bold;">{time_z:+.2f}</td>'
+
+        # Composite Z-score
+        comp_z = row["composite_zscore"]
+        bg_color = get_zscore_color(comp_z)
+        txt_color = get_text_color(comp_z)
+        html += f'<td style="background-color: {bg_color}; color: {txt_color}; font-weight: bold;">{comp_z:+.2f}</td>'
+
+        html += "</tr>\n"
+
+    html += "</tbody></table>"
+    return html
+
+
+def generate_cluster_html_table_pt(run_stats_clustered, mode="sprint"):
+    """
+    Gera tabela HTML de clusters em Português.
+    """
+    if "cluster" not in run_stats_clustered.columns:
+        return ""
+
+    cluster_colors = {1: "#27ae60", 2: "#f39c12", 3: "#e74c3c"}
+    cluster_labels = {1: "Alto", 2: "Médio", 3: "Baixo"}
+    trial_header = "COD" if mode == "cod" else "Sprint"
+
+    # Sort by cluster then by speed
+    df_sorted = run_stats_clustered.sort_values(
+        ["cluster", "max_speed_kmh"], ascending=[True, False]
+    ).reset_index(drop=True)
+
+    html = '<table class="cluster-table">\n'
+    html += "<thead><tr>"
+    html += (
+        f"<th>Atleta</th><th>{trial_header}</th><th>Velocidade (km/h)</th><th>Tempo (s)</th><th>Nível</th>"
+    )
+    html += "</tr></thead>\n<tbody>\n"
+
+    for _, row in df_sorted.iterrows():
+        cluster = row["cluster"]
+        color = cluster_colors.get(cluster, "#95a5a6")
+        label = cluster_labels.get(cluster, "N/A")
+
+        report_path = row.get("report_path", "")
+        athlete_cell = (
+            f'<a href="{report_path}" target="_blank"><strong>{row["athlete_name"]}</strong></a>'
+            if report_path
+            else row["athlete_name"]
+        )
+        run_cell = trial_link_html(mode, row["run_id"], report_path)
+        if mode != "cod" and not report_path:
+            run_cell = f"Sprint {int(row['run_id'])}"
+        elif mode == "cod":
+            run_cell = format_trial_label(mode, row["run_id"], "pt")
+            if report_path:
+                run_cell = f'<a href="{report_path}" target="_blank">{run_cell}</a>'
+
+        html += "<tr>"
+        html += f"<td>{athlete_cell}</td>"
+        html += f"<td>{run_cell}</td>"
         html += f"<td>{row['max_speed_kmh']:.2f}</td>"
         html += f"<td>{row['total_time_s']:.2f}</td>"
         html += f'<td><span class="cluster-badge" style="background-color: {color};">{label}</span></td>'
@@ -1105,19 +1539,38 @@ def generate_cluster_html_table(run_stats_clustered):
 
 
 def get_reference_data():
-    """Returns the reference data for comparison."""
+    """Returns the reference data for comparison (English)."""
     data = {
-        "Atleta": [
+        "Athlete": [
             "Usain Bolt (WR 100m Avg)",
             "Usain Bolt (Max Speed)",
-            "Gabriel Silva (Recorde Futebol)",
+            "Gabriel Silva (Football Record)",
         ],
         "Speed (km/h)": [37.58, 44.72, 40.30],
         "Speed (m/s)": [10.44, 12.42, 11.19],
-        "Detalhes": [
+        "Details": [
             "Average speed during 9.58s WR",
             "Top momentary speed recorded",
             "Sta Clara vs Famalicão (GPS) - May 2025",
+        ],
+    }
+    return pd.DataFrame(data)
+
+
+def get_reference_data_pt():
+    """Returns the reference data for comparison (Portuguese)."""
+    data = {
+        "Atleta": [
+            "Usain Bolt (Média WR 100m)",
+            "Usain Bolt (Velocidade Máxima)",
+            "Gabriel Silva (Recorde do Futebol)",
+        ],
+        "Velocidade (km/h)": [37.58, 44.72, 40.30],
+        "Velocidade (m/s)": [10.44, 12.42, 11.19],
+        "Detalhes": [
+            "Velocidade média durante o Recorde Mundial de 9.58s",
+            "Velocidade máxima momentânea registrada",
+            "Santa Clara vs Famalicão (GPS) - Maio 2025",
         ],
     }
     return pd.DataFrame(data)
@@ -1257,6 +1710,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             return {
                 "title_suffix": "(COD 180°)",
                 "report_file_suffix": "_report_cod180.html",
+                "report_file_suffix_pt": "_report_cod180_pt.html",
                 "0m": "0m",
                 "5m": "5m",
                 "10m": "10m",
@@ -1267,6 +1721,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             return {
                 "title_suffix": "(20m Linear)",
                 "report_file_suffix": "_report_sprint20m.html",
+                "report_file_suffix_pt": "_report_sprint20m_pt.html",
                 "0m": "0m",
                 "5m": "5m",
                 "10m": "10m",
@@ -1275,7 +1730,6 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             }
 
     labels_map = get_labels(mode)
-    trial_label = "COD" if mode == "cod" else "Sprint"
 
     try:
         with open(filepath, encoding="utf-8") as f:
@@ -1296,6 +1750,14 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
         file_basename = os.path.splitext(os.path.basename(filepath))[0]
         # Extract Athlete Name: everything before the first underscore in basename
         athlete_name = file_basename.split("_")[0]
+
+        # Extract trial/side ID from filename (e.g. Allan_cod_01_cuts -> 1 = left, 2 = right)
+        trial_match = re.search(r"_(?:sprint|cod)_(\d+)", file_basename, re.IGNORECASE)
+        if trial_match:
+            file_run_id = int(trial_match.group(1))
+        else:
+            trial_match_fallback = re.search(r"_(\d+)(?:_|$)", file_basename)
+            file_run_id = int(trial_match_fallback.group(1)) if trial_match_fallback else 1
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_dir = os.path.join(output_base_dir, f"{file_basename}_analysis_{timestamp}")
@@ -1320,7 +1782,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 f"({remainder}/{cuts_per_run} cuts in last run). Processing anyway."
             )
 
-        df["run_id"] = (df.index // cuts_per_run) + 1
+        df["run_id"] = (df.index // cuts_per_run) + file_run_id
         df["section_in_run"] = df.groupby("run_id").cumcount() + 1
         df["distance_cumulative"] = df["section_in_run"] * section_distance
         df["speed_ms"] = section_distance / df["duration"]
@@ -1341,6 +1803,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             "",
         ]
         html_sections = []
+        html_sections_pt = []
         database_rows = []
 
         # Logo HTML
@@ -1350,7 +1813,13 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
 
         for rid in runs:
             df_run = df[df["run_id"] == rid].copy()
-            prefix = f"{athlete_name}_Run_{rid}"
+            trial_display = format_trial_label(mode, rid)
+            trial_display_pt = format_trial_label(mode, rid, "pt")
+            prefix = (
+                f"{athlete_name}_COD_{rid:02d}"
+                if mode == "cod"
+                else f"{athlete_name}_Run_{rid}"
+            )
 
             # Metrics
             total_time = df_run["duration"].sum()
@@ -1360,7 +1829,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
 
             summary_lines.extend(
                 [
-                    f"{trial_label} {rid}:",
+                    f"{trial_display}:",
                     f"  Total Time (20m): {total_time:.3f} s  [{labels_map['title_suffix']}]",
                     f"  Max Speed:        {max_spd_kmh:.3f} km/h ({max_spd_ms:.3f} m/s)",
                     f"  Peak Acceleration: {max_acc:.3f} m/s²",
@@ -1428,22 +1897,69 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             # --- Enhanced Plotting ---
             # Speed Plot
             fig, ax = plt.subplots(figsize=(10, 6))
-            sns.lineplot(
-                data=df_run,
-                x="distance_cumulative",
-                y="speed_kmh",
+            # Prepend (0, 0) to athlete's speed plot data so it starts at origin
+            ath_plot_x = [0.0] + list(df_run["distance_cumulative"].values)
+            ath_plot_y = [0.0] + list(df_run["speed_kmh"].values)
+
+            ax.plot(
+                ath_plot_x,
+                ath_plot_y,
                 marker="o",
                 linewidth=3,
                 label=athlete_name,
-                ax=ax,
+                zorder=3,
             )
 
-            # Updated Reference Line (Usain Bolt - Dual)
-            ax.axhline(
-                y=37.58, color="gold", linestyle="--", linewidth=2, label="Bolt Avg (37.58 km/h)"
-            )
-            ax.axhline(
-                y=44.72, color="red", linestyle=":", linewidth=2, label="Bolt Max (44.72 km/h)"
+            # Usain Bolt Reference Curve based on actual split times
+            bolt_x = [
+                0.0,
+                5.0,
+                10.0,
+                15.0,
+                20.0,
+                25.0,
+                30.0,
+                35.0,
+                40.0,
+                45.0,
+                50.0,
+                60.0,
+                70.0,
+                80.0,
+                90.0,
+                100.0,
+            ]
+            bolt_y = [
+                0.0,
+                19.05,
+                30.0,
+                36.36,
+                38.5,
+                40.00,
+                41.5,
+                42.0,
+                42.5,
+                43.0,
+                43.5,
+                44.0,
+                44.4,
+                44.0,
+                43.5,
+                43.5,
+            ]
+            max_dist = float(df_run["distance_cumulative"].max())
+            bolt_plot_x = [x for x in bolt_x if x < max_dist] + [max_dist]
+            bolt_plot_y = [float(np.interp(x, bolt_x, bolt_y)) for x in bolt_plot_x]
+
+            ax.plot(
+                bolt_plot_x,
+                bolt_plot_y,
+                color="#f1c40f",
+                linestyle="-.",
+                linewidth=2.5,
+                marker="^",
+                label="Usain Bolt Profile",
+                zorder=2,
             )
 
             max_v_idx = df_run["speed_kmh"].idxmax()
@@ -1457,7 +1973,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             )
 
             ax.set_title(
-                f"Speed Profile {labels_map['title_suffix']} - {trial_label} {rid} ({athlete_name})",
+                f"Speed Profile {labels_map['title_suffix']} - {trial_display} ({athlete_name})",
                 fontsize=16,
                 fontweight="bold",
             )
@@ -1486,7 +2002,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 )
 
             plt.title(
-                f"Acceleration per Section {labels_map['title_suffix']} - {trial_label} {rid} ({athlete_name})",
+                f"Acceleration per Section {labels_map['title_suffix']} - {trial_display} ({athlete_name})",
                 fontsize=16,
                 fontweight="bold",
             )
@@ -1523,7 +2039,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             # HTML Section
             html_sections.append(f"""
             <div class="run-section">
-                <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">{trial_label} {rid} Analysis</h2>
+                <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">{trial_display} Analysis</h2>
 
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; background: #ecf0f1; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
                     <div style="text-align: center;">
@@ -1546,8 +2062,8 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 </div>
 
                 <div class="plots" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px;">
-                    <img src="{os.path.basename(vel_plot_path)}" width="45%" style="box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px;">
-                    <img src="{os.path.basename(acc_plot_path)}" width="45%" style="box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px;">
+                    <img src="{os.path.basename(vel_plot_path)}" width="45%" onclick="openModal(this)" style="box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; cursor: pointer;">
+                    <img src="{os.path.basename(acc_plot_path)}" width="45%" onclick="openModal(this)" style="box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; cursor: pointer;">
                 </div>
 
                 <h3 style="margin-top: 30px; color: #34495e;">Interval Data</h3>
@@ -1556,6 +2072,58 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             </div>
             """)
 
+            # HTML Section (Portuguese)
+            cols_export_pt = {
+                "distance_cumulative": "Distância Acumulada (m)",
+                "duration": "Tempo do Intervalo (s)",
+                "speed_ms": "Velocidade (m/s)",
+                "speed_kmh": "Velocidade (km/h)",
+                "acceleration_ms2": "Aceleração (m/s²)",
+            }
+            df_run_pt = df_run[cols_export].rename(columns=cols_export_pt)
+
+            html_sections_pt.append(f"""
+            <div class="run-section">
+                <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">Análise — {trial_display_pt}</h2>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; background: #ecf0f1; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.9em; color: #7f8c8d;">Tempo Total</div>
+                        <div style="font-size: 1.5em; font-weight: bold; color: #2c3e50;">{total_time:.3f} s</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.9em; color: #7f8c8d;">Velocidade Máxima</div>
+                        <div style="font-size: 1.5em; font-weight: bold; color: #e74c3c;">{max_spd_kmh:.3f} km/h</div>
+                        <div style="font-size: 0.8em; color: #95a5a6;">{max_spd_ms:.3f} m/s</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.9em; color: #7f8c8d;">Aceleração Máxima</div>
+                        <div style="font-size: 1.5em; font-weight: bold; color: #f39c12;">{max_acc:.3f} m/s²</div>
+                    </div>
+                </div>
+
+                <div class="frames-container" style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; margin-bottom: 30px;">
+                    {frame_imgs_html}
+                </div>
+
+                <div class="plots" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px;">
+                    <img src="{os.path.basename(vel_plot_path)}" width="45%" onclick="openModal(this)" style="box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; cursor: pointer;">
+                    <img src="{os.path.basename(acc_plot_path)}" width="45%" onclick="openModal(this)" style="box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-radius: 8px; cursor: pointer;">
+                </div>
+
+                <h3 style="margin-top: 30px; color: #34495e;">Dados dos Intervalos</h3>
+                {df_run_pt.to_html(classes="data-table", float_format="%.3f", index=False)}
+                <br>
+            </div>
+            """)
+
+            # Relative path to this specific report
+            report_filename = f"{file_basename}{labels_map['report_file_suffix']}"
+            relative_report_path = f"{file_basename}_analysis_{timestamp}/{report_filename}"
+
+            report_filename_pt = f"{file_basename}{labels_map['report_file_suffix_pt']}"
+            relative_report_path_pt = f"{file_basename}_analysis_{timestamp}/{report_filename_pt}"
+
             # Database Record
             for _idx, row in df_run.iterrows():
                 cut_row = {
@@ -1563,23 +2131,37 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                     "athlete_name": athlete_name,
                     "patient_id": athlete_name,
                     "run_id": rid,
+                    "cod_side": ("left" if rid == COD_LEFT_RUN_ID else "right" if mode == "cod" else ""),
                     "distance_m": row["distance_cumulative"],
                     "duration_s": row["duration"],
                     "speed_ms": row["speed_ms"],
                     "speed_kmh": row["speed_kmh"],
                     "acceleration_ms2": row["acceleration_ms2"],
                     "date_processed": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "report_path": relative_report_path,
+                    "report_path_pt": relative_report_path_pt,
                 }
                 database_rows.append(cut_row)
 
         with open(os.path.join(output_dir, "summary.txt"), "w", encoding="utf-8") as f:
             f.write("\n".join(summary_lines))
 
+        page_title = (
+            f"COD 180° Analysis - {athlete_name}"
+            if mode == "cod"
+            else f"Sprint Analysis - {athlete_name}"
+        )
+        page_heading = (
+            f"<i>vailá</i> COD 180° Analysis {labels_map['title_suffix']} - {athlete_name}"
+            if mode == "cod"
+            else f"<i>vailá</i> Sprint Analysis {labels_map['title_suffix']} - {athlete_name}"
+        )
+
         html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Sprint Analysis - {athlete_name}</title>
+            <title>{page_title}</title>
             <meta charset="UTF-8">
             <style>
                 body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 40px; background-color: #f9f9f9; color: #333; }}
@@ -1594,27 +2176,113 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                 hr {{ border: 0; height: 1px; background: #e0e0e0; margin: 40px 0; }}
 
                 /* Lightbox Modal */
-                .modal {{ display: none; position: fixed; z-index: 1000; padding-top: 50px; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9); }}
-                .modal-content {{ margin: auto; display: block; max-width: 90%; max-height: 90%; animation-name: zoom; animation-duration: 0.6s; }}
-                @keyframes zoom {{ from {{transform:scale(0)}} to {{transform:scale(1)}} }}
-                .close {{ position: absolute; top: 15px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; transition: 0.3s; cursor: pointer; }}
-                .close:hover, .close:focus {{ color: #bbb; text-decoration: none; cursor: pointer; }}
+                .modal {{
+                    display: none;
+                    position: fixed;
+                    z-index: 1000;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: rgba(0,0,0,0.9);
+                    align-items: center;
+                    justify-content: center;
+                }}
+                .modal-content {{
+                    margin: auto;
+                    display: block;
+                    max-width: 85%;
+                    max-height: 85%;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                    border-radius: 8px;
+                    border: 2px solid rgba(255,255,255,0.2);
+                    animation-name: zoom;
+                    animation-duration: 0.3s;
+                }}
+                @keyframes zoom {{
+                    from {{transform:scale(0.9); opacity: 0;}}
+                    to {{transform:scale(1); opacity: 1;}}
+                }}
+                .close {{
+                    position: absolute;
+                    top: 15px;
+                    right: 35px;
+                    color: #f1f1f1;
+                    font-size: 40px;
+                    font-weight: bold;
+                    transition: 0.3s;
+                    cursor: pointer;
+                    user-select: none;
+                }}
+                .close:hover, .close:focus {{
+                    color: #bbb;
+                    text-decoration: none;
+                }}
+                .prev, .next {{
+                    cursor: pointer;
+                    position: absolute;
+                    top: 50%;
+                    width: auto;
+                    padding: 20px;
+                    margin-top: -30px;
+                    color: white;
+                    font-weight: bold;
+                    font-size: 40px;
+                    transition: 0.3s ease;
+                    border-radius: 5px;
+                    user-select: none;
+                    -webkit-user-select: none;
+                    background-color: rgba(0, 0, 0, 0.3);
+                }}
+                .next {{
+                    right: 30px;
+                }}
+                .prev {{
+                    left: 30px;
+                }}
+                .prev:hover, .next:hover {{
+                    background-color: rgba(0, 0, 0, 0.8);
+                }}
             </style>
             <script>
+                var currentImgIndex = -1;
+                var modalImages = [];
+
+                window.addEventListener('DOMContentLoaded', (event) => {{
+                    // Collect all zoomable images
+                    modalImages = Array.from(document.querySelectorAll('img[onclick^="openModal"]'));
+                }});
+
                 function openModal(img) {{
                     var modal = document.getElementById("myModal");
                     var modalImg = document.getElementById("img01");
-                    modal.style.display = "block";
+                    modal.style.display = "flex";
                     modalImg.src = img.src;
-                }}
-                function closeModal() {{
-                    document.getElementById("myModal").style.display = "none";
+                    currentImgIndex = modalImages.indexOf(img);
                 }}
 
-                // Close on Escape key
+                function closeModal() {{
+                    document.getElementById("myModal").style.display = "none";
+                    currentImgIndex = -1;
+                }}
+
+                function navigateModal(direction) {{
+                    if (currentImgIndex === -1 || modalImages.length === 0) return;
+                    currentImgIndex = (currentImgIndex + direction + modalImages.length) % modalImages.length;
+                    var modalImg = document.getElementById("img01");
+                    modalImg.src = modalImages[currentImgIndex].src;
+                }}
+
                 document.addEventListener('keydown', function(event) {{
-                    if (event.key === "Escape") {{
-                        closeModal();
+                    var modal = document.getElementById("myModal");
+                    if (modal && modal.style.display === "flex") {{
+                        if (event.key === "Escape") {{
+                            closeModal();
+                        }} else if (event.key === "ArrowRight") {{
+                            navigateModal(1);
+                        }} else if (event.key === "ArrowLeft") {{
+                            navigateModal(-1);
+                        }}
                     }}
                 }});
             </script>
@@ -1622,7 +2290,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
         <body>
             <div class="container">
                 {logo_html}
-                <h1><i>vailá</i> Sprint Analysis {labels_map["title_suffix"]} - {athlete_name}</h1>
+                <h1>{page_heading}</h1>
                 <div class="meta-info">
                     <p><strong>File:</strong> {file_basename} | <strong>Date:</strong> {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}</p>
                 </div>
@@ -1634,20 +2302,59 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             </div>
 
             <!-- Lightbox Modal -->
-            <div id="myModal" class="modal" onclick="closeModal()">
-              <span class="close">&times;</span>
-              <img class="modal-content" id="img01">
+            <div id="myModal" class="modal" onclick="event.target === this && closeModal()">
+              <span class="close" onclick="closeModal()">&times;</span>
+              <span class="prev" onclick="navigateModal(-1)">&#10094;</span>
+              <span class="next" onclick="navigateModal(1)">&#10095;</span>
+              <img class="modal-content" id="img01" onclick="navigateModal(1)">
             </div>
 
         </body>
         </html>
         """
+
         with open(
             os.path.join(output_dir, f"{file_basename}{labels_map['report_file_suffix']}"),
             "w",
             encoding="utf-8",
         ) as f:
             f.write(html_content)
+
+        # Generate Portuguese Individual Report by replacing English terms in the body
+        html_content_pt = html_content
+
+        html_content_pt = html_content_pt.replace(
+            f"<title>{page_title}</title>",
+            f"<title>Análise de {'COD 180°' if mode == 'cod' else 'Sprint'} - {athlete_name}</title>",
+        )
+        html_content_pt = html_content_pt.replace(
+            page_heading,
+            f"<i>vailá</i> {'Análise de COD 180°' if mode == 'cod' else 'Análise de Sprint'} {labels_map['title_suffix']} - {athlete_name}",
+        )
+        html_content_pt = html_content_pt.replace(
+            "<strong>File:</strong>", "<strong>Arquivo:</strong>"
+        )
+        html_content_pt = html_content_pt.replace(
+            "<strong>Date:</strong>", "<strong>Data:</strong>"
+        )
+
+        # Main sections body swap: We replace the entire compiled html_sections with html_sections_pt
+        html_content_pt = html_content_pt.replace("".join(html_sections), "".join(html_sections_pt))
+
+        # Reference Table swap
+        html_content_pt = html_content_pt.replace(
+            "<h2>Reference Values</h2>", "<h2>Valores de Referência</h2>"
+        )
+        ref_df_en_html = get_reference_data().to_html(classes="data-table", index=False)
+        ref_df_pt_html = get_reference_data_pt().to_html(classes="data-table", index=False)
+        html_content_pt = html_content_pt.replace(ref_df_en_html, ref_df_pt_html)
+
+        with open(
+            os.path.join(output_dir, f"{file_basename}{labels_map['report_file_suffix_pt']}"),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write(html_content_pt)
 
         print(f"Finished {file_basename} -> Output: {output_dir}")
         return database_rows
@@ -1701,12 +2408,10 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     if mode == "cod":
         report_title = "COD 180° Analysis"
         db_filename = "vaila_cod180_database.csv"
-        trial_label = "COD"
         trial_label_plural = "CODs"
     else:
         report_title = "Sprint Analysis"
         db_filename = "vaila_sprint_database.csv"
-        trial_label = "Sprint"
         trial_label_plural = "Sprints"
 
     df = pd.DataFrame(all_data)
@@ -1719,7 +2424,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     # 2. Ranking Summary
     run_stats = (
         df.groupby(["athlete_name", "file_name", "run_id"])
-        .agg({"speed_kmh": "max", "duration_s": "sum"})
+        .agg({"speed_kmh": "max", "duration_s": "sum", "report_path": "first"})
         .reset_index()
     )
     run_stats.rename(
@@ -1770,7 +2475,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     print("Generating enhanced visualizations...")
 
     # 8.1 Dumbbell Chart - Primary visualization (always Run 1 vs Run 2 when >=2 runs; + evolution if 3+)
-    dumbbell_result = create_dumbbell_chart(run_stats, output_dir)
+    dumbbell_result = create_dumbbell_chart(run_stats, output_dir, mode=mode)
     dumbbell_path = dumbbell_result[0] if isinstance(dumbbell_result, tuple) else dumbbell_result
     evolution_path = (
         dumbbell_result[1]
@@ -1779,14 +2484,14 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     )
 
     # 8.2 Improvement Scatter - Secondary (always Run 1 vs Run 2 when >=2 runs; + sequential if 3+)
-    scatter_result = create_improvement_scatter(run_stats, output_dir)
+    scatter_result = create_improvement_scatter(run_stats, output_dir, mode=mode)
     scatter_path = scatter_result[0] if isinstance(scatter_result, tuple) else scatter_result
     sequential_path = (
         scatter_result[1] if isinstance(scatter_result, tuple) and len(scatter_result) > 1 else None
     )
 
     # 8.3 Performance Heatmap - Overview visualization
-    heatmap_path = create_performance_heatmap(run_stats, output_dir)
+    heatmap_path = create_performance_heatmap(run_stats, output_dir, mode=mode)
 
     # 7.4 Beeswarm Plot - Cluster visualization
     beeswarm_path = (
@@ -1803,28 +2508,40 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
 
     if n_runs <= 2:
         if dumbbell_path:
-            dumbbell_title = f"Performance Ranking: Run {r1_report} vs Run {r2_report}"
-            dumbbell_desc = (
-                "Athletes sorted by best speed. Green lines = improved, Red lines = declined."
-            )
+            if mode == "cod":
+                dumbbell_title = (
+                    f"COD comparison: {format_trial_label(mode, r1_report)} vs "
+                    f"{format_trial_label(mode, r2_report)}"
+                )
+                dumbbell_desc = (
+                    "Each row is one athlete. Green = faster max speed on COD Right (02); "
+                    "red = faster on COD Left (01)."
+                )
+            else:
+                dumbbell_title = f"Performance Ranking: {format_trial_label(mode, r1_report)} vs {format_trial_label(mode, r2_report)}"
+                dumbbell_desc = (
+                    "Athletes sorted by best speed. Green lines = improved, Red lines = declined."
+                )
             charts_html += f'''
                 <div class="chart-card">
                     <h3>{dumbbell_title}</h3>
                     <p class="chart-description">{dumbbell_desc}</p>
-                    <img src="{os.path.basename(dumbbell_path)}" class="chart-img" alt="Dumbbell Chart">
+                    <img src="{os.path.basename(dumbbell_path)}" class="chart-img" onclick="openModal(this)" alt="Dumbbell Chart">
                 </div>
             '''
 
         if scatter_path:
-            scatter_title = "Improvement Analysis"
+            scatter_title = "COD Left vs Right Analysis" if mode == "cod" else "Improvement Analysis"
             scatter_desc = (
-                f"Points above diagonal = improved from Run {r1_report} to Run {r2_report}."
+                f"Points above diagonal = faster max speed on {format_trial_label(mode, r2_report)}."
+                if mode == "cod"
+                else f"Points above diagonal = improved from {format_trial_label(mode, r1_report)} to {format_trial_label(mode, r2_report)}."
             )
             charts_html += f'''
                 <div class="chart-card">
                     <h3>{scatter_title}</h3>
                     <p class="chart-description">{scatter_desc}</p>
-                    <img src="{os.path.basename(scatter_path)}" class="chart-img" alt="Scatter Plot">
+                    <img src="{os.path.basename(scatter_path)}" class="chart-img" onclick="openModal(this)" alt="Scatter Plot">
                 </div>
             '''
     else:
@@ -1835,7 +2552,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 <div class="chart-card">
                     <h3>{dumbbell_title}</h3>
                     <p class="chart-description">{dumbbell_desc}</p>
-                    <img src="{os.path.basename(dumbbell_path)}" class="chart-img" alt="Multi-Run Dot Plot">
+                    <img src="{os.path.basename(dumbbell_path)}" class="chart-img" onclick="openModal(this)" alt="Multi-Run Dot Plot">
                 </div>
             '''
 
@@ -1844,7 +2561,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 <div class="chart-card">
                     <h3>Performance Evolution Across Runs</h3>
                     <p class="chart-description">Max speed progression for each athlete across all detected runs.</p>
-                    <img src="{os.path.basename(evolution_path)}" class="chart-img" alt="Evolution Chart">
+                    <img src="{os.path.basename(evolution_path)}" class="chart-img" onclick="openModal(this)" alt="Evolution Chart">
                 </div>
             '''
 
@@ -1853,7 +2570,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 <div class="chart-card">
                     <h3>Sequential Improvement Analysis</h3>
                     <p class="chart-description">Each point is the speed delta between consecutive runs (R1->R2, R2->R3, ...).</p>
-                    <img src="{os.path.basename(sequential_path)}" class="chart-img" alt="Sequential Scatter">
+                    <img src="{os.path.basename(sequential_path)}" class="chart-img" onclick="openModal(this)" alt="Sequential Scatter">
                 </div>
             '''
 
@@ -1862,7 +2579,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             <div class="chart-card full-width">
                 <h3>Multi-Run Performance Matrix</h3>
                 <p class="chart-description">Complete overview across all runs. Delta columns highlight sequential improvements/declines.</p>
-                <img src="{os.path.basename(heatmap_path)}" class="chart-img" alt="Heatmap">
+                <img src="{os.path.basename(heatmap_path)}" class="chart-img" onclick="openModal(this)" alt="Heatmap">
             </div>
         '''
 
@@ -1872,7 +2589,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             <div class="chart-card full-width">
                 <h3>Cluster Distribution (Beeswarm Plot)</h3>
                 <p class="chart-description">Individual athlete performance colored by cluster level. Green = High, Orange = Medium, Red = Low.</p>
-                <img src="{os.path.basename(beeswarm_path)}" class="chart-img" alt="Beeswarm Plot">
+                <img src="{os.path.basename(beeswarm_path)}" class="chart-img" onclick="openModal(this)" alt="Beeswarm Plot">
             </div>
         '''
     elif not has_cluster_data:
@@ -1888,11 +2605,17 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
 
     # Generate cluster and Z-score HTML tables
     cluster_table_html = (
-        generate_cluster_html_table(run_stats_clustered)
+        generate_cluster_html_table(run_stats_clustered, mode=mode)
         if has_cluster_data
         else "<p class='section-intro'>Cluster assignments unavailable for this dataset size.</p>"
     )
-    zscore_table_html = generate_zscore_html_table(zscore_df)
+    cluster_table_html_pt = (
+        generate_cluster_html_table_pt(run_stats_clustered, mode=mode)
+        if has_cluster_data
+        else "<p class='section-intro'>Classificação dos clusters indisponível para este tamanho de base de dados.</p>"
+    )
+    zscore_table_html = generate_zscore_html_table(zscore_df, mode=mode)
+    zscore_table_html_pt = generate_zscore_html_table_pt(zscore_df, mode=mode)
 
     # Generate cluster summary HTML
     cluster_summary_html = ""
@@ -1930,6 +2653,128 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
         except Exception as e:
             print(f"Warning: Could not generate cluster summary HTML: {e}")
             cluster_summary_html = ""
+
+    # Calculate Best Performance Summary Table for Football Coaches
+    best_runs = []
+    for athlete in run_stats["athlete_name"].unique():
+        ath_data = run_stats[run_stats["athlete_name"] == athlete]
+
+        best_speed_row = ath_data.loc[ath_data["max_speed_kmh"].idxmax()]
+        best_time_row = ath_data.loc[ath_data["total_time_s"].idxmin()]
+
+        best_runs.append(
+            {
+                "athlete_name": athlete,
+                "best_speed_kmh": best_speed_row["max_speed_kmh"],
+                "best_speed_run": int(best_speed_row["run_id"]),
+                "best_speed_report": best_speed_row["report_path"],
+                "best_time_s": best_time_row["total_time_s"],
+                "best_time_run": int(best_time_row["run_id"]),
+                "best_time_report": best_time_row["report_path"],
+            }
+        )
+    best_df = pd.DataFrame(best_runs)
+    best_df = best_df.sort_values("best_speed_kmh", ascending=False).reset_index(drop=True)
+    best_df.index += 1
+
+    best_performance_html = generate_best_performance_html_table(best_df, mode=mode)
+    best_performance_html_pt = generate_best_performance_html_table_pt(best_df, mode=mode)
+
+    cod_comparison_html = (
+        generate_cod_left_right_comparison_html(run_stats, lang="en") if mode == "cod" else ""
+    )
+    cod_comparison_html_pt = (
+        generate_cod_left_right_comparison_html(run_stats, lang="pt") if mode == "cod" else ""
+    )
+    trial_col_en = "COD / Side" if mode == "cod" else "Run / Attempt"
+    trial_col_pt = "COD / Lado" if mode == "cod" else "Sprint / Tentativa"
+
+    # Prepare ranking dataframes with HTML links
+    ranking_speed_display = ranking_speed.copy()
+    if "report_path" in ranking_speed_display.columns:
+        ranking_speed_display["athlete_name"] = ranking_speed_display.apply(
+            lambda r: (
+                f'<a href="{r["report_path"]}" target="_blank"><strong>{r["athlete_name"]}</strong></a>'
+                if pd.notna(r["report_path"])
+                else r["athlete_name"]
+            ),
+            axis=1,
+        )
+        ranking_speed_display["run_id"] = ranking_speed_display.apply(
+            lambda r: trial_link_html(mode, r["run_id"], r["report_path"])
+            if pd.notna(r.get("report_path"))
+            else format_trial_label(mode, r["run_id"]),
+            axis=1,
+        )
+
+    ranking_time_display = ranking_time.copy()
+    if "report_path" in ranking_time_display.columns:
+        ranking_time_display["athlete_name"] = ranking_time_display.apply(
+            lambda r: (
+                f'<a href="{r["report_path"]}" target="_blank"><strong>{r["athlete_name"]}</strong></a>'
+                if pd.notna(r["report_path"])
+                else r["athlete_name"]
+            ),
+            axis=1,
+        )
+        ranking_time_display["run_id"] = ranking_time_display.apply(
+            lambda r: trial_link_html(mode, r["run_id"], r["report_path"])
+            if pd.notna(r.get("report_path"))
+            else format_trial_label(mode, r["run_id"]),
+            axis=1,
+        )
+
+    ranking_speed_html = (
+        ranking_speed_display[["athlete_name", "run_id", "max_speed_kmh", "total_time_s"]]
+        .rename(
+            columns={
+                "athlete_name": "Athlete",
+                "run_id": trial_col_en,
+                "max_speed_kmh": "Max Speed (km/h)",
+                "total_time_s": "Total Time (s)",
+            }
+        )
+        .to_html(classes="data-table", float_format="%.3f", escape=False)
+    )
+
+    ranking_speed_html_pt = (
+        ranking_speed_display[["athlete_name", "run_id", "max_speed_kmh", "total_time_s"]]
+        .rename(
+            columns={
+                "athlete_name": "Atleta",
+                "run_id": trial_col_pt,
+                "max_speed_kmh": "Velocidade Máxima (km/h)",
+                "total_time_s": "Tempo Total (s)",
+            }
+        )
+        .to_html(classes="data-table", float_format="%.3f", escape=False)
+    )
+
+    ranking_time_html = (
+        ranking_time_display[["athlete_name", "run_id", "total_time_s", "max_speed_kmh"]]
+        .rename(
+            columns={
+                "athlete_name": "Athlete",
+                "run_id": trial_col_en,
+                "total_time_s": "Total Time (s)",
+                "max_speed_kmh": "Max Speed (km/h)",
+            }
+        )
+        .to_html(classes="data-table", float_format="%.3f", escape=False)
+    )
+
+    ranking_time_html_pt = (
+        ranking_time_display[["athlete_name", "run_id", "total_time_s", "max_speed_kmh"]]
+        .rename(
+            columns={
+                "athlete_name": "Atleta",
+                "run_id": trial_col_pt,
+                "total_time_s": "Tempo Total (s)",
+                "max_speed_kmh": "Velocidade Máxima (km/h)",
+            }
+        )
+        .to_html(classes="data-table", float_format="%.3f", escape=False)
+    )
 
     html_content = f"""
     <!DOCTYPE html>
@@ -2090,6 +2935,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 width: 100%;
                 border-radius: 8px;
                 border: 1px solid #eee;
+                cursor: pointer;
             }}
 
             .data-table {{
@@ -2337,6 +3183,75 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                     grid-template-columns: 1fr;
                 }}
             }}
+
+            /* Lightbox Modal */
+            .modal {{
+                display: none;
+                position: fixed;
+                z-index: 1000;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.9);
+                align-items: center;
+                justify-content: center;
+            }}
+            .modal-content {{
+                margin: auto;
+                display: block;
+                max-width: 85%;
+                max-height: 85%;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                border-radius: 8px;
+                border: 2px solid rgba(255,255,255,0.2);
+                animation-name: zoom;
+                animation-duration: 0.3s;
+            }}
+            @keyframes zoom {{
+                from {{transform:scale(0.9); opacity: 0;}}
+                to {{transform:scale(1); opacity: 1;}}
+            }}
+            .close {{
+                position: absolute;
+                top: 15px;
+                right: 35px;
+                color: #f1f1f1;
+                font-size: 40px;
+                font-weight: bold;
+                transition: 0.3s;
+                cursor: pointer;
+                user-select: none;
+            }}
+            .close:hover, .close:focus {{
+                color: #bbb;
+                text-decoration: none;
+            }}
+            .prev, .next {{
+                cursor: pointer;
+                position: absolute;
+                top: 50%;
+                width: auto;
+                padding: 20px;
+                margin-top: -30px;
+                color: white;
+                font-weight: bold;
+                font-size: 40px;
+                transition: 0.3s ease;
+                border-radius: 5px;
+                user-select: none;
+                -webkit-user-select: none;
+                background-color: rgba(0, 0, 0, 0.3);
+            }}
+            .next {{
+                right: 30px;
+            }}
+            .prev {{
+                left: 30px;
+            }}
+            .prev:hover, .next:hover {{
+                background-color: rgba(0, 0, 0, 0.8);
+            }}
         </style>
     </head>
     <body>
@@ -2357,18 +3272,26 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 <div class="stat-item">
                     <span class="stat-value">{top_speed_value:.1f}</span>
                     <span class="stat-label">Top Speed (km/h)</span>
-                    <span class="stat-athlete">{top_speed_athlete} ({trial_label} {top_speed_run})</span>
+                    <span class="stat-athlete">{top_speed_athlete} ({format_trial_label(mode, top_speed_run)})</span>
                 </div>
                 <div class="stat-item">
                     <span class="stat-value">{best_time_value:.2f}</span>
                     <span class="stat-label">Best Time (s)</span>
-                    <span class="stat-athlete">{best_time_athlete} ({trial_label} {best_time_run})</span>
+                    <span class="stat-athlete">{best_time_athlete} ({format_trial_label(mode, best_time_run)})</span>
                 </div>
             </div>
 
             <div class="btn-group">
                 <a href="{db_filename}" class="btn">Download Database CSV</a>
             </div>
+
+            {"<h2>Left vs Right COD Comparison (180°)</h2>" + f'<p class="section-intro">Each athlete completed COD 20 m starting toward the left (<code>cod_01</code>) and toward the right (<code>cod_02</code>). Positive Δ columns mean better values on the right-side trial.</p>{cod_comparison_html}' if mode == "cod" else ""}
+
+            <h2>Best Performance Summary</h2>
+            <p class="section-intro">
+                Summary of the peak individual records (max speed and total time) for each athlete across all attempts, categorized by football speed levels.
+            </p>
+            {best_performance_html}
 
             <h2>Team Statistics</h2>
             <p class="section-intro">
@@ -2399,8 +3322,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
 
             <h2>Visual Performance Analysis</h2>
             <p class="section-intro">
-                Complementary visualizations to understand sprint performance:
-                ranking comparison, improvement patterns, and performance matrix.
+                {"Complementary visualizations to compare COD left vs right performance per athlete." if mode == "cod" else "Complementary visualizations to understand sprint performance: ranking comparison, improvement patterns, and performance matrix."}
             </p>
 
             <div class="charts-grid">
@@ -2456,14 +3378,64 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             <div class="rankings-grid">
                 <div>
                     <h3 style="color: var(--danger-color);">Ranking by Max Speed (Fastest First)</h3>
-                    {ranking_speed[["athlete_name", "run_id", "max_speed_kmh", "total_time_s"]].to_html(classes="data-table", float_format="%.3f")}
+                    {ranking_speed_html}
                 </div>
                 <div>
                     <h3 style="color: var(--success-color);">Ranking by Total Time (Fastest First)</h3>
-                    {ranking_time[["athlete_name", "run_id", "total_time_s", "max_speed_kmh"]].to_html(classes="data-table", float_format="%.3f")}
+                    {ranking_time_html}
                 </div>
             </div>
 
+            <!-- Lightbox Modal -->
+            <div id="myModal" class="modal" onclick="event.target === this && closeModal()">
+              <span class="close" onclick="closeModal()">&times;</span>
+              <span class="prev" onclick="navigateModal(-1)">&#10094;</span>
+              <span class="next" onclick="navigateModal(1)">&#10095;</span>
+              <img class="modal-content" id="img01" onclick="navigateModal(1)">
+            </div>
+
+            <script>
+                var currentImgIndex = -1;
+                var modalImages = [];
+
+                window.addEventListener('DOMContentLoaded', (event) => {{
+                    // Collect all zoomable images
+                    modalImages = Array.from(document.querySelectorAll('img[onclick^="openModal"]'));
+                }});
+
+                function openModal(img) {{
+                    var modal = document.getElementById("myModal");
+                    var modalImg = document.getElementById("img01");
+                    modal.style.display = "flex";
+                    modalImg.src = img.src;
+                    currentImgIndex = modalImages.indexOf(img);
+                }}
+
+                function closeModal() {{
+                    document.getElementById("myModal").style.display = "none";
+                    currentImgIndex = -1;
+                }}
+
+                function navigateModal(direction) {{
+                    if (currentImgIndex === -1 || modalImages.length === 0) return;
+                    currentImgIndex = (currentImgIndex + direction + modalImages.length) % modalImages.length;
+                    var modalImg = document.getElementById("img01");
+                    modalImg.src = modalImages[currentImgIndex].src;
+                }}
+
+                document.addEventListener('keydown', function(event) {{
+                    var modal = document.getElementById("myModal");
+                    if (modal && modal.style.display === "flex") {{
+                        if (event.key === "Escape") {{
+                            closeModal();
+                        }} else if (event.key === "ArrowRight") {{
+                            navigateModal(1);
+                        }} else if (event.key === "ArrowLeft") {{
+                            navigateModal(-1);
+                        }}
+                    }}
+                }});
+            </script>
         </div>
     </body>
     </html>
@@ -2472,6 +3444,311 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     with open(os.path.join(output_dir, "general_report.html"), "w", encoding="utf-8") as f:
         f.write(html_content)
     print(f"General Report generated: {os.path.join(output_dir, 'general_report.html')}")
+
+    # Generate Portuguese General Report by replacing English terms with Portuguese equivalents
+    html_content_pt = html_content
+
+    # 1. Page title & headers
+    html_content_pt = html_content_pt.replace(
+        "<title>vailá - General Analysis</title>", "<title>vailá - Análise Geral</title>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h1><i>vailá</i> Sprint Analysis</h1>", "<h1><i>vailá</i> Análise de Sprint</h1>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h1><i>vailá</i> COD 180° Analysis</h1>", "<h1><i>vailá</i> Análise de COD 180°</h1>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "General Report - Generated on", "Relatório Geral - Gerado em"
+    )
+    html_content_pt = html_content_pt.replace("at", "às")
+
+    if mode == "cod":
+        html_content_pt = html_content_pt.replace(
+            "<h2>Left vs Right COD Comparison (180°)</h2>",
+            "<h2>Comparativo COD Esquerda vs Direita (180°)</h2>",
+        )
+        html_content_pt = html_content_pt.replace(
+            "Each athlete completed COD 20 m starting toward the left (<code>cod_01</code>) and toward the right (<code>cod_02</code>). Positive Δ columns mean better values on the right-side trial.",
+            "Cada atleta realizou COD 20 m iniciando para a esquerda (<code>cod_01</code>) e para a direita (<code>cod_02</code>). Δ positivo indica melhor valor no trial da direita (02).",
+        )
+        html_content_pt = html_content_pt.replace(cod_comparison_html, cod_comparison_html_pt)
+        html_content_pt = html_content_pt.replace(
+            "Complementary visualizations to compare COD left vs right performance per athlete.",
+            "Visualizações complementares para comparar o desempenho COD esquerda vs direita por atleta.",
+        )
+        html_content_pt = html_content_pt.replace(
+            "<h3>COD Left vs Right Analysis</h3>", "<h3>Análise COD Esquerda vs Direita</h3>"
+        )
+        html_content_pt = html_content_pt.replace("COD comparison:", "Comparativo COD:")
+
+    # 2. Stats banner cards
+    html_content_pt = html_content_pt.replace(
+        '<span class="stat-label">Athletes</span>', '<span class="stat-label">Atletas</span>'
+    )
+    html_content_pt = html_content_pt.replace(
+        '<span class="stat-label">Total Sprints</span>',
+        '<span class="stat-label">Total de Sprints</span>',
+    )
+    html_content_pt = html_content_pt.replace(
+        '<span class="stat-label">Total CODs</span>',
+        '<span class="stat-label">Total de CODs</span>',
+    )
+    html_content_pt = html_content_pt.replace(
+        '<span class="stat-label">Top Speed (km/h)</span>',
+        '<span class="stat-label">Velocidade Máxima (km/h)</span>',
+    )
+    html_content_pt = html_content_pt.replace(
+        '<span class="stat-label">Best Time (s)</span>',
+        '<span class="stat-label">Melhor Tempo (s)</span>',
+    )
+
+    # 3. Main sections & Best performance table swap
+    html_content_pt = html_content_pt.replace(
+        "<h2>Best Performance Summary</h2>", "<h2>Melhor Desempenho por Atleta</h2>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "Summary of the peak individual records (max speed and total time) for each athlete across all attempts, categorized by football speed levels.",
+        "Resumo dos melhores registros individuais (velocidade máxima e tempo total) de cada atleta em todas as tentativas, com classificação de nível para o futebol.",
+    )
+    html_content_pt = html_content_pt.replace(best_performance_html, best_performance_html_pt)
+    html_content_pt = html_content_pt.replace(cluster_table_html, cluster_table_html_pt)
+    html_content_pt = html_content_pt.replace(zscore_table_html, zscore_table_html_pt)
+    html_content_pt = html_content_pt.replace(ranking_speed_html, ranking_speed_html_pt)
+    html_content_pt = html_content_pt.replace(ranking_time_html, ranking_time_html_pt)
+
+    html_content_pt = html_content_pt.replace(
+        "<h2>Team Statistics</h2>", "<h2>Estatísticas da Equipe</h2>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "Comprehensive team performance metrics including mean, standard deviation, minimum and maximum values.",
+        "Métricas de desempenho da equipe incluindo média, desvio padrão, valores mínimo e máximo.",
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h3>Team Statistics Summary</h3>", "<h3>Resumo Estatístico da Equipe</h3>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h3>Usain Bolt Reference</h3>", "<h3>Referência Usain Bolt</h3>"
+    )
+
+    # 4. Table headers
+    html_content_pt = html_content_pt.replace(
+        "<th>Metric</th><th>Mean</th><th>Standard Deviation</th><th>Minimum</th><th>Maximum</th>",
+        "<th>Métrica</th><th>Média</th><th>Desvio Padrão</th><th>Mínimo</th><th>Máximo</th>",
+    )
+    html_content_pt = html_content_pt.replace(
+        "<td>Max Speed (km/h)</td>", "<td>Velocidade Máxima (km/h)</td>"
+    )
+    html_content_pt = html_content_pt.replace("<td>Total Time (s)</td>", "<td>Tempo Total (s)</td>")
+    html_content_pt = html_content_pt.replace(
+        "Comparison against Usain Bolt's legendary values",
+        "Comparação com os valores lendários de Usain Bolt",
+    )
+
+    # 5. Visualizations section
+    html_content_pt = html_content_pt.replace(
+        "<h2>Performance Visualizations</h2>", "<h2>Visualizações de Desempenho</h2>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h3>Performance Ranking: Run", "<h3>Ranking de Desempenho: Sprint"
+    )
+    html_content_pt = html_content_pt.replace(
+        "Athletes sorted by best speed. Green lines = improved, Red lines = declined.",
+        "Atletas ordenados por melhor velocidade. Verde = melhorou, Vermelho = piorou.",
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h3>Improvement Analysis</h3>", "<h3>Análise de Evolução</h3>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "Points above diagonal = improved from Run",
+        "Pontos acima da diagonal = melhoraram do Sprint",
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h3>Multi-Run Performance Matrix</h3>", "<h3>Matriz de Desempenho Multi-Sprint</h3>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "Complete overview across all runs. Delta columns highlight sequential improvements/declines.",
+        "Visão geral completa de todos os sprints. Colunas Delta destacam melhorias/quedas sequenciais.",
+    )
+
+    # 6. Clustering section
+    html_content_pt = html_content_pt.replace(
+        "<h2>Performance Level Grouping (K-means)</h2>",
+        "<h2>Agrupamento por Nível de Desempenho (K-means)</h2>",
+    )
+    html_content_pt = html_content_pt.replace(
+        "K-means clustering split the team into 3 groups based on their best speed and time.",
+        "O agrupamento K-means dividiu a equipe em 3 grupos com base em sua melhor velocidade e tempo.",
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h3>Cluster Assignments</h3>", "<h3>Classificação dos Atletas</h3>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h3>Cluster Distribution</h3>", "<h3>Distribuição de Clusters</h3>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "Cluster assignments unavailable for this dataset size.",
+        "Classificação de clusters indisponível para este tamanho de conjunto de dados.",
+    )
+    html_content_pt = html_content_pt.replace(
+        "Clustering was skipped because there are not enough valid samples for reliable grouping.",
+        "O agrupamento foi ignorado porque não há amostras válidas suficientes para um agrupamento confiável.",
+    )
+    html_content_pt = html_content_pt.replace(
+        "<h4>Cluster Summary Statistics</h4>", "<h4>Estatísticas Resumidas dos Clusters</h4>"
+    )
+    html_content_pt = html_content_pt.replace("Avg Speed:", "Vel. Média:")
+    html_content_pt = html_content_pt.replace("Avg Time:", "Tempo Médio:")
+    html_content_pt = html_content_pt.replace("Count:", "Contagem:")
+    html_content_pt = html_content_pt.replace("High Performers", "Alto Desempenho")
+    html_content_pt = html_content_pt.replace("Medium Performers", "Médio Desempenho")
+    html_content_pt = html_content_pt.replace("Low Performers", "Baixo Desempenho")
+
+    # 7. Z-score section
+    html_content_pt = html_content_pt.replace(
+        "<h2>Z-score Analysis Table</h2>", "<h2>Tabela de Análise Z-score</h2>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "Standardized scores showing how each athlete compares to the group average.",
+        "Pontuações padronizadas mostrando como cada atleta se compara à média do grupo.",
+    )
+    html_content_pt = html_content_pt.replace(
+        "Positive values (green) = above average, Negative values (red) = below average.",
+        "Valores positivos (verde) = acima da média, Valores negativos (vermelho) = abaixo da média.",
+    )
+    html_content_pt = html_content_pt.replace(
+        "<th>Rank</th><th>Athlete</th><th>Run</th><th>Speed (km/h)</th><th>Speed Z</th><th>Time (s)</th><th>Time Z</th><th>Composite Z</th>",
+        "<th>Rank</th><th>Atleta</th><th>Sprint</th><th>Velocidade (km/h)</th><th>Z Velocidade</th><th>Tempo (s)</th><th>Z Tempo</th><th>Z Composto</th>",
+    )
+
+    # 8. Rankings section
+    html_content_pt = html_content_pt.replace(
+        "<h2>Performance Rankings</h2>", "<h2>Rankings de Desempenho</h2>"
+    )
+    html_content_pt = html_content_pt.replace(
+        "Ranking by Max Speed (Fastest First)",
+        "Ranking por Velocidade Máxima (Mais Rápido Primeiro)",
+    )
+    html_content_pt = html_content_pt.replace(
+        "Ranking by Total Time (Fastest First)", "Ranking por Tempo Total (Mais Rápido Primeiro)"
+    )
+
+    # 9. General UI elements
+    html_content_pt = html_content_pt.replace(
+        "Download Database CSV", "Baixar CSV da Base de Dados"
+    )
+    html_content_pt = html_content_pt.replace("Average Speed", "Velocidade Média")
+    html_content_pt = html_content_pt.replace("Speed Std Dev", "Desvio Padrão de Vel.")
+    html_content_pt = html_content_pt.replace("Min Speed", "Velocidade Mínima")
+    html_content_pt = html_content_pt.replace("Max Speed", "Velocidade Máxima")
+    html_content_pt = html_content_pt.replace("Average Time", "Tempo Médio")
+    html_content_pt = html_content_pt.replace("Time Std Dev", "Desvio Padrão do Tempo")
+    html_content_pt = html_content_pt.replace("Min Time", "Tempo Mínimo")
+    html_content_pt = html_content_pt.replace("Max Time", "Tempo Máximo")
+
+    # 10. Replace labels inside the generated tables: e.g. "Run 1" -> "Sprint 1"
+    if mode != "cod":
+        html_content_pt = html_content_pt.replace("Run ", "Sprint ")
+
+    with open(os.path.join(output_dir, "general_report_pt.html"), "w", encoding="utf-8") as f:
+        f.write(html_content_pt)
+    print(f"General Report PT-BR generated: {os.path.join(output_dir, 'general_report_pt.html')}")
+
+    # Generate multi-sheet Excel spreadsheet for Microsoft Excel users
+    xlsx_filename = db_filename.replace(".csv", ".xlsx")
+    xlsx_path = os.path.join(output_dir, xlsx_filename)
+    try:
+        with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
+            # Sheet 1: Best Performance Summary
+            excel_best_df = best_df.copy()
+            excel_best_df = excel_best_df.rename(
+                columns={
+                    "athlete_name": "Atleta / Athlete",
+                    "best_speed_kmh": "Melhor Vel. Máx. (km/h) / Best Max Speed (km/h)",
+                    "best_speed_run": "Sprint da Melhor Vel. / Best Speed Sprint",
+                    "best_time_s": "Melhor Tempo (s) / Best Total Time (s)",
+                    "best_time_run": "Sprint do Melhor Tempo / Best Time Sprint",
+                }
+            )
+            # Remove HTML report columns as Excel doesn't support them
+            drop_cols = [
+                c for c in ["best_speed_report", "best_time_report"] if c in excel_best_df.columns
+            ]
+            if drop_cols:
+                excel_best_df = excel_best_df.drop(columns=drop_cols)
+            excel_best_df.to_excel(
+                writer, sheet_name="Melhores Resultados (Summary)", index=True, index_label="Rank"
+            )
+
+            # Sheet 2: Análise Detalhada (Splits)
+            split_time_cols = sorted(
+                [c for c in df.columns if c.startswith("split_") and c.endswith("_time_s")]
+            )
+            split_speed_cols = sorted(
+                [c for c in df.columns if c.startswith("split_") and c.endswith("_speed_kmh")]
+            )
+            split_accel_cols = sorted(
+                [c for c in df.columns if c.startswith("split_") and c.endswith("_accel_mss")]
+            )
+
+            detail_cols = [
+                "athlete_name",
+                "run_id",
+                "total_time_s",
+                "average_speed_kmh",
+                "average_acceleration_mss",
+            ]
+            detail_cols += [c for c in split_time_cols if c in df.columns]
+            detail_cols += [c for c in split_speed_cols if c in df.columns]
+            detail_cols += [c for c in split_accel_cols if c in df.columns]
+
+            existing_cols = [c for c in detail_cols if c in df.columns]
+            detail_df = df[existing_cols].copy()
+
+            rename_dict = {
+                "athlete_name": "Atleta / Athlete",
+                "run_id": trial_col_pt,
+                "total_time_s": "Tempo Total (s) / Total Time",
+                "average_speed_kmh": "Velocidade Média (km/h) / Avg Speed",
+                "average_acceleration_mss": "Aceleração Média (m/s²) / Avg Accel",
+            }
+
+            for idx, col in enumerate(split_time_cols):
+                rename_dict[col] = f"Tempo Parcial {idx + 1} (s) / Split {idx + 1} Time"
+            for idx, col in enumerate(split_speed_cols):
+                rename_dict[col] = f"Velocidade Parcial {idx + 1} (km/h) / Split {idx + 1} Speed"
+            for idx, col in enumerate(split_accel_cols):
+                rename_dict[col] = f"Aceleração Parcial {idx + 1} (m/s²) / Split {idx + 1} Accel"
+
+            detail_df = detail_df.rename(columns=rename_dict)
+            detail_df = detail_df.sort_values(
+                ["Atleta / Athlete", trial_col_pt]
+            ).reset_index(drop=True)
+            detail_df.to_excel(writer, sheet_name="Análise Detalhada (Splits)", index=False)
+
+            # Sheet 3: Z-Scores (Standardized metrics)
+            excel_zscore_df = zscore_df.copy()
+            excel_zscore_df = excel_zscore_df.rename(
+                columns={
+                    "athlete_name": "Atleta / Athlete",
+                    "run_id": "COD / Lado" if mode == "cod" else "Sprint",
+                    "max_speed_kmh": "Vel. Máxima (km/h) / Max Speed",
+                    "speed_zscore": "Z Velocidade / Speed Z",
+                    "total_time_s": "Tempo Total (s) / Total Time",
+                    "time_zscore": "Z Tempo / Time Z",
+                    "composite_zscore": "Z Composto / Composite Z",
+                }
+            )
+            drop_cols_z = [c for c in ["report_path"] if c in excel_zscore_df.columns]
+            if drop_cols_z:
+                excel_zscore_df = excel_zscore_df.drop(columns=drop_cols_z)
+            excel_zscore_df.to_excel(writer, sheet_name="Z-Scores", index=False)
+
+            # Sheet 4: Dados Brutos / Raw Data
+            df.to_excel(writer, sheet_name="Dados Consolidados (Raw Data)", index=False)
+        print(f"Excel database generated: {xlsx_path}")
+    except Exception as e:
+        print(f"Warning: Could not generate Excel spreadsheet: {e}")
 
 
 def main():
