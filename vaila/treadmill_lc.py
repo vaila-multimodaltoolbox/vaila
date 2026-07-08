@@ -9,8 +9,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 02 July 2026
-Version: 0.3.68
+Update Date: 08 July 2026
+Version: 0.3.80
 
 Description:
 ------------
@@ -619,68 +619,46 @@ def clean_signal_with_clicks(file_path, parent=None):
         gc.collect()
 
 
+class YesNoDialog(simpledialog.Dialog):
+    """Custom Yes/No dialog window that inherits from simpledialog.Dialog to match project aesthetics."""
+    def __init__(self, parent, title, message):
+        self.message = message
+        self.result = False
+        super().__init__(parent, title=title)
+
+    def body(self, master):
+        lbl = ttk.Label(master, text=self.message, justify="left", wraplength=400)
+        lbl.pack(padx=20, pady=15, fill="both", expand=True)
+        return lbl
+
+    def buttonbox(self):
+        box = ttk.Frame(self)
+
+        btn_yes = ttk.Button(box, text="Yes", width=10, command=self.yes)
+        btn_yes.pack(side="left", padx=5, pady=5)
+
+        btn_no = ttk.Button(box, text="No", width=10, command=self.no)
+        btn_no.pack(side="left", padx=5, pady=5)
+
+        self.bind("<Return>", self.yes)
+        self.bind("<Escape>", self.no)
+
+        box.pack(anchor="e", padx=15, pady=(0, 10))
+
+    def yes(self, event=None):
+        self.result = True
+        self.ok()
+
+    def no(self, event=None):
+        self.result = False
+        self.cancel()
+
+
 def ask_yes_no_english(title, message, parent=None) -> bool:
-    """A custom Yes/No dialog window to force English 'Yes' and 'No' buttons."""
-    # Find active root/parent window
+    """A standard-themed Yes/No dialog window forcing English 'Yes' and 'No' buttons."""
     dialog_parent = parent or tk._default_root or tk.Tk()
-
-    result = [False]  # Store result
-
-    dialog = tk.Toplevel(dialog_parent)
-    dialog.title(title)
-    dialog.transient(dialog_parent)
-    dialog.grab_set()
-
-    # Configure spacing and padding
-    frame = ttk.Frame(dialog, padding=20)
-    frame.pack(fill=tk.BOTH, expand=True)
-
-    # Message
-    lbl_msg = ttk.Label(frame, text=message, justify=tk.LEFT, wraplength=450)
-    lbl_msg.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
-
-    # Button Frame
-    btn_frame = ttk.Frame(frame)
-    btn_frame.pack(anchor=tk.E)
-
-    def on_yes():
-        result[0] = True
-        dialog.destroy()
-
-    def on_no():
-        result[0] = False
-        dialog.destroy()
-
-    btn_yes = ttk.Button(btn_frame, text="Yes", command=on_yes, width=10)
-    btn_yes.pack(side=tk.LEFT, padx=5)
-
-    btn_no = ttk.Button(btn_frame, text="No", command=on_no, width=10)
-    btn_no.pack(side=tk.LEFT, padx=5)
-
-    # Center dialog on parent
-    dialog.update_idletasks()
-    dialog_width = dialog.winfo_width()
-    dialog_height = dialog.winfo_height()
-
-    parent_x = dialog_parent.winfo_rootx()
-    parent_y = dialog_parent.winfo_rooty()
-    parent_width = dialog_parent.winfo_width()
-    parent_height = dialog_parent.winfo_height()
-
-    try:
-        px = parent_x + (parent_width - dialog_width) // 2
-        py = parent_y + (parent_height - dialog_height) // 2
-        dialog.geometry(f"+{px}+{py}")
-    except Exception:
-        pass
-
-    # Set focus and key binds
-    btn_yes.focus_set()
-    dialog.bind("<Return>", lambda e: on_yes())
-    dialog.bind("<Escape>", lambda e: on_no())
-
-    dialog.wait_window()
-    return result[0]
+    dialog = YesNoDialog(dialog_parent, title, message)
+    return dialog.result
 
 
 def get_output_base_folder(folder):
@@ -3988,7 +3966,7 @@ class LoadCellTreadmillDialog(tk.Toplevel):
 
         ttk.Label(
             frame,
-            text="Run the full sequence or launch one pipeline step. Artifact adjustment and interpolation run before filtering.",
+            text="Run the full sequence or launch one pipeline step. Signal filtering runs before artifact adjustment and interpolation.",
             wraplength=540,
             justify="center",
             foreground="#64748b",
@@ -4011,16 +3989,16 @@ class LoadCellTreadmillDialog(tk.Toplevel):
 
         ttk.Button(
             stages_frame,
-            text="1. Adjust + Interpolate",
+            text="1. Filter Only (Zero-Phase + PSD)",
             style="Secondary.TButton",
-            command=lambda: self._execute_stage("adjust"),
+            command=lambda: self._execute_stage("filter"),
         ).pack(fill="x", pady=3)
 
         ttk.Button(
             stages_frame,
-            text="2. Filter Only (Zero-Phase + PSD)",
+            text="2. Adjust + Interpolate",
             style="Secondary.TButton",
-            command=lambda: self._execute_stage("filter"),
+            command=lambda: self._execute_stage("adjust"),
         ).pack(fill="x", pady=3)
 
         ttk.Button(
@@ -4065,7 +4043,7 @@ class LoadCellTreadmillDialog(tk.Toplevel):
 
     def _run_full_pipeline(self) -> None:
         self._write_log(
-            "Starting Full Sequential Pipeline (Ajuste+Interpolação -> Filtragem -> Processamento)"
+            "Starting Full Sequential Pipeline (Filtragem -> Ajuste+Interpolação -> Processamento)"
         )
 
         # 1. Ask for raw folder
@@ -4074,25 +4052,25 @@ class LoadCellTreadmillDialog(tk.Toplevel):
             self._write_log("Pipeline canceled by user.")
             return
 
-        # 2. Stage 1: Adjust + Interpolate raw trials before filtering
-        self._write_log("Executing Stage 1: Artifact Adjustment + Interpolation...")
-        limpos_folder = run_adjust_stage(parent=self, initial_dir=raw_folder)
-        if not limpos_folder:
-            self._write_log("Pipeline stopped after Stage 1 (Adjustment+Interpolation).")
+        # 2. Stage 1: Filter raw signals
+        self._write_log("Executing Stage 1: Signal Filtering...")
+        filtrado_folder = run_filter_stage(parent=self, initial_dir=raw_folder)
+        if not filtrado_folder:
+            self._write_log("Pipeline stopped after Stage 1 (Filtering).")
             return
 
-        # 3. Stage 2: Filter adjusted/interpolated signals
-        self._write_log(f"Executing Stage 2: Signal Filtering on folder '{limpos_folder}'...")
-        filtrado_folder = run_filter_stage(parent=self, initial_dir=limpos_folder)
-        if not filtrado_folder:
-            self._write_log("Pipeline stopped after Stage 2 (Filtering).")
+        # 3. Stage 2: Adjust + Interpolate filtered signals
+        self._write_log(f"Executing Stage 2: Artifact Adjustment + Interpolation on folder '{filtrado_folder}'...")
+        limpos_folder = run_adjust_stage(parent=self, initial_dir=filtrado_folder)
+        if not limpos_folder:
+            self._write_log("Pipeline stopped after Stage 2 (Adjustment+Interpolation).")
             return
 
         # 4. Stage 3: Process Metrics
         self._write_log(
-            f"Executing Stage 3: Biomechanical Metrics on folder '{filtrado_folder}'..."
+            f"Executing Stage 3: Biomechanical Metrics on folder '{limpos_folder}'..."
         )
-        results_folder = run_process_stage(parent=self, initial_dir=filtrado_folder)
+        results_folder = run_process_stage(parent=self, initial_dir=limpos_folder)
         if not results_folder:
             self._write_log("Pipeline stopped after Stage 3 (Processing).")
             return
@@ -4153,13 +4131,13 @@ def main(argv: list[str] | None = None) -> int:
         root.withdraw()
         if args.step == "all":
             # sequential pipeline on input_dir
-            limpos = run_adjust_stage(parent=root, initial_dir=args.input_dir)
-            if limpos:
-                ajustado = run_interpolate_stage(parent=root, initial_dir=limpos)
-                if ajustado:
-                    filtrado = run_filter_stage(parent=root, initial_dir=ajustado)
-                    if filtrado:
-                        run_process_stage(parent=root, initial_dir=filtrado)
+            filtrado = run_filter_stage(parent=root, initial_dir=args.input_dir)
+            if filtrado:
+                limpos = run_adjust_stage(parent=root, initial_dir=filtrado)
+                if limpos:
+                    ajustado = run_interpolate_stage(parent=root, initial_dir=limpos)
+                    if ajustado:
+                        run_process_stage(parent=root, initial_dir=ajustado)
         elif args.step == "adjust":
             run_adjust_stage(parent=root, initial_dir=args.input_dir)
         elif args.step == "interpolate":
