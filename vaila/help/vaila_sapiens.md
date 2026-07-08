@@ -4,8 +4,8 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.79
-- **Updated:** 2026-07-07
+- **Version:** 0.3.80
+- **Updated:** 2026-07-08
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -80,7 +80,7 @@ DETR detector is shared across all sizes.
 3. Choose output parent directory
 4. Model default `1b`; stride `1` = every frame
 5. **Detection & keypoint thresholds** — `--bbox-thr`, `--nms-thr`, `--kpt-thr`, `--max-persons`
-6. **GPU & advanced** — `--device`, `--pose-batch-size` (empty = auto), `--flip-test`, overlay on/off, **Draw person IDs**, **Temporal Re-ID** (online linker + OKS + bidirectional, default on)
+6. **GPU & advanced** — `--device`, `--pose-batch-size` (GUI pre-fills per-model default), `--flip-test`, overlay on/off, **Draw person IDs**, **Temporal Re-ID** (online linker + OKS + bidirectional, default on)
 7. **Run** — terminal prints full `>> Equivalent CLI` including `--output-base`
 
 ## GUI → CLI mirror

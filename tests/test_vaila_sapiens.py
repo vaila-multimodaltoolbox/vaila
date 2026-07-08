@@ -314,6 +314,13 @@ def test_format_sapiens_cli_command_quotes_paths() -> None:
     assert "--no-overlay" in cmd
 
 
+def test_default_pose_batch_size_per_model() -> None:
+    assert vs._default_pose_batch_size("5b") == 1
+    assert vs._default_pose_batch_size("1b") == 2
+    assert vs._default_pose_batch_size("0.4b") == 4
+    assert vs._default_pose_batch_size("0.8b") == 4
+
+
 def test_parse_gui_inference_fields_device_and_pose_batch() -> None:
     stride, kpt, bbox, nms, max_p, device, pose_batch = vs._parse_gui_inference_fields(
         stride_s="2",
