@@ -30,7 +30,7 @@
     <h1>Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
 
     <div class="module-info">
-        <p><strong>Version:</strong> 0.3.76 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-07</p>
+        <p><strong>Version:</strong> 0.3.79 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-07</p>
         <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
         <p><strong>Category:</strong> Markerless 2D / Meta (Facebook)</p>
     </div>
@@ -72,7 +72,7 @@ uv run vaila/vaila_sapiens.py --download-weights --model 5b</code></pre>
         <li>Choose the output parent directory</li>
         <li>Model default <code>1b</code>; stride <code>1</code> = every frame</li>
         <li><strong>Detection &amp; keypoint thresholds</strong> — <code>--bbox-thr</code>, <code>--nms-thr</code>, <code>--kpt-thr</code>, <code>--max-persons</code></li>
-        <li><strong>GPU &amp; advanced</strong> — <code>--device</code>, <code>--pose-batch-size</code> (empty = auto), <code>--flip-test</code>, overlay on/off</li>
+        <li><strong>GPU &amp; advanced</strong> — <code>--device</code>, <code>--pose-batch-size</code> (empty = auto), <code>--flip-test</code>, overlay on/off, <strong>Draw person IDs</strong>, <strong>Temporal Re-ID</strong> (online linker + OKS + bidirectional, default on)</li>
         <li>Click <strong>Run</strong> — terminal prints full <code>&gt;&gt; Equivalent CLI</code> with <code>--output-base</code></li>
     </ol>
     <p>On <strong>Run</strong>, the terminal prints <code>&gt;&gt; vaila/vaila_sapiens: Equivalent CLI</code> with every flag you chose (copy/paste to reproduce without the GUI).</p>
@@ -91,6 +91,11 @@ uv run vaila/vaila_sapiens.py --download-weights --model 5b</code></pre>
   --kpt-thr 0.3 \
   --pose-batch-size 2 \
   --flip-test \
+  --stabilize-ids \
+  --reid-max-gap 12 \
+  --reid-max-dist 180 \
+  --reid-min-iou 0.05 \
+  --reid-direction-weight 1.0 \
   --no-overlay \
   --quiet</code></pre>
     <p>GUI batch runs also print <code>--output-base processed_sapiens_&lt;timestamp&gt;/</code> in the mirrored command.</p>
@@ -111,7 +116,53 @@ uv run vaila/vaila_sapiens.py \
 uv run vaila/vaila_sapiens.py --download-weights --model 1b
 
 # Long clips — lower compute
-uv run vaila/vaila_sapiens.py -i long.mp4 -o out/ --model 1b --stride 3</code></pre>
+uv run vaila/vaila_sapiens.py -i long.mp4 -o out/ --model 1b --stride 3
+
+# Re-render overlay only (from existing predictions JSON)
+uv run vaila/vaila_sapiens.py \
+  --rerender-overlay \
+  -i /path/to/video.mp4 \
+  -o /path/to/processed_sapiens_&lt;ts&gt;/&lt;stem&gt;/</code></pre>
+
+    <h2>Person IDs — how to read them</h2>
+    <table>
+        <tr><th>ID</th><th>Where</th><th>Meaning</th></tr>
+        <tr>
+            <td><code>raw_id</code></td>
+            <td>Internal (inference pass)</td>
+            <td>Per-frame DETR order (1..N); resets every frame</td>
+        </tr>
+        <tr>
+            <td><strong><code>stable_id</code></strong></td>
+            <td><code>person_id</code> in CSVs, <code>obj_id</code> in bbox tracks, <code>#N</code> on overlay (same as SAM3)</td>
+            <td>Cross-frame track after <strong>geometric Re-ID</strong></td>
+        </tr>
+        <tr>
+            <td><strong><code>pN</code></strong></td>
+            <td><code>markers.csv</code> columns <code>p1</code>, <code>p2</code>, …; overlay tag <code>#N</code> (SAM3 style)</td>
+            <td>Stable slot (sorted <code>stable_id</code> → <code>p1</code>..<code>pN</code>)</td>
+        </tr>
+    </table>
+    <p><strong>Map:</strong> <code>sapiens_id_map.csv</code> — <code>pN, stable_id, n_frames, first_frame, last_frame</code>.</p>
+    <p><strong>Wide pose files:</strong> <code>&lt;stem&gt;_id_03_sapiens_pose.csv</code> uses <code>stable_id</code> (not <code>pN</code>) in the filename.</p>
+    <p><strong>Audit:</strong> <code>sapiens_reid_links.csv</code> — <code>frame,raw_id,temporal_id,stable_id</code> when bidirectional refine is on (default), or <code>frame,raw_id,stable_id</code> with <code>--no-reid-bidirectional</code>.</p>
+
+    <h2>Temporal identity (v0.3.79)</h2>
+    <p>Sapiens2 builds <strong>native temporal IDs</strong> during inference using <code>GeometricFrameLinker</code>
+        from <code>geometric_reid.py</code> (same family as SAM3 / yolov26track):</p>
+    <table>
+        <tr><th>Layer</th><th>When</th><th>What</th></tr>
+        <tr><td><strong>Online linker</strong></td><td>During inference</td><td><code>temporal_id</code> per frame — bbox + velocity + pose OKS + static anchoring</td></tr>
+        <tr><td><strong>Bidirectional refine</strong></td><td>After inference (default on)</td><td>Forward + backward passes; second half prefers backward IDs</td></tr>
+        <tr><td><strong>Appearance ReID</strong></td><td>Optional (<code>--appearance-reid</code>)</td><td>OSNet/boxmot merge for long occlusions</td></tr>
+    </table>
+    <ol>
+        <li><strong>Pass 1 — inference:</strong> DETR + Sapiens2; online linker assigns <code>temporal_id</code>.</li>
+        <li><strong>Pass 2 — refine:</strong> bidirectional geometric Re-ID (default <strong>on</strong>).</li>
+        <li><strong>Pass 3 — overlay:</strong> second video read; skeleton + <code>#N</code> tag.</li>
+    </ol>
+    <p>Disable with <code>--no-stabilize-ids</code>. Disable bidirectional merge with <code>--no-reid-bidirectional</code>.
+        Hide overlay tags with <code>--no-draw-id</code>. Rebuild overlay from JSON with <code>--rerender-overlay</code>.</p>
 
     <h2>CLI flags — what each option does</h2>
 
@@ -263,10 +314,88 @@ uv run vaila/vaila_sapiens.py -i long.mp4 -o out/ --model 1b --stride 3</code></
     <table>
         <tr><th>Flag</th><th>Default</th><th>What it is</th><th>What changes when you use it</th></tr>
         <tr>
+            <td><code>--stabilize-ids</code></td>
+            <td><strong>on</strong></td>
+            <td>Temporal Re-ID (online + OKS + bidirectional).</td>
+            <td>Writes <code>sapiens_reid_links.csv</code>; stable IDs in all CSVs and overlay.</td>
+        </tr>
+        <tr>
+            <td><code>--no-stabilize-ids</code></td>
+            <td>—</td>
+            <td>Disable temporal Re-ID.</td>
+            <td>Per-frame <code>raw_id</code> only; no <code>sapiens_reid_links.csv</code>.</td>
+        </tr>
+        <tr>
+            <td><code>--reid-bidirectional</code></td>
+            <td><strong>on</strong></td>
+            <td>Forward + backward refine merge.</td>
+            <td><code>--no-reid-bidirectional</code> = single forward pass.</td>
+        </tr>
+        <tr>
+            <td><code>--reid-max-gap</code></td>
+            <td><code>12</code></td>
+            <td>Max frames without detection before a track dies.</td>
+            <td>Same default as SAM3 / yolov26track.</td>
+        </tr>
+        <tr>
+            <td><code>--reid-max-dist</code></td>
+            <td><code>180</code></td>
+            <td>Max centroid distance (px) for linking.</td>
+            <td>Hungarian + velocity linker gate.</td>
+        </tr>
+        <tr>
+            <td><code>--reid-min-iou</code></td>
+            <td><code>0.05</code></td>
+            <td>Min bbox IoU for association.</td>
+            <td>Pairs below threshold need proximity match.</td>
+        </tr>
+        <tr>
+            <td><code>--reid-direction-weight</code></td>
+            <td><code>1.0</code></td>
+            <td>Velocity-direction penalty weight.</td>
+            <td>Default <code>1.0</code> (stronger than SAM3 <code>0.5</code>).</td>
+        </tr>
+        <tr>
+            <td><code>--reid-static-speed</code></td>
+            <td><code>5.0</code></td>
+            <td>Static-track speed threshold (px/frame).</td>
+            <td>Locks low-speed tracks to anchor.</td>
+        </tr>
+        <tr>
+            <td><code>--reid-static-radius</code></td>
+            <td><code>65</code></td>
+            <td>Static-track anchor radius (px).</td>
+            <td>Penalizes far jumps for static IDs.</td>
+        </tr>
+        <tr>
+            <td><code>--appearance-reid</code></td>
+            <td>off</td>
+            <td>OSNet appearance merge after geometric Re-ID.</td>
+            <td>Requires optional <code>boxmot</code>.</td>
+        </tr>
+        <tr>
+            <td><code>--appearance-reid-threshold</code></td>
+            <td><code>0.6</code></td>
+            <td>Cosine similarity for appearance merge.</td>
+            <td>Higher = stricter matching.</td>
+        </tr>
+        <tr>
             <td><code>--no-overlay</code></td>
             <td>off</td>
             <td>Skip writing the skeleton preview video.</td>
             <td>Faster run and less disk use; all CSV/JSON outputs are still written.</td>
+        </tr>
+        <tr>
+            <td><code>--no-draw-id</code></td>
+            <td>off</td>
+            <td>Hide per-person <code>#N</code> tags on the overlay.</td>
+            <td>Skeleton and bbox only; useful when IDs clutter the preview.</td>
+        </tr>
+        <tr>
+            <td><code>--rerender-overlay</code></td>
+            <td>off</td>
+            <td>Rebuild overlay MP4 from existing <code>*_predictions.json</code>.</td>
+            <td>Pass <code>-i</code> source video and <code>-o</code> run directory; loads model for skeleton viz only (~seconds, not full inference).</td>
         </tr>
         <tr>
             <td><code>--dry-run</code></td>
@@ -305,12 +434,15 @@ uv run vaila/vaila_sapiens.py -i long.mp4 -o out/ --model 1b --stride 3</code></
     <h2>Output files</h2>
     <table>
         <tr><th>File</th><th>Use</th></tr>
-        <tr><td><code>&lt;stem&gt;_sapiens_overlay.mp4</code></td><td>Visual QA — skeleton overlay</td></tr>
-        <tr><td><code>&lt;stem&gt;_markers.csv</code></td><td><strong>REC2D / REC3D</strong> — foot anchor, one point per person</td></tr>
-        <tr><td><code>&lt;stem&gt;_sapiens_vaila.csv</code></td><td>Long format — all 308 keypoints</td></tr>
-        <tr><td><code>&lt;stem&gt;_id_NN_sapiens_pose.csv</code></td><td><strong>getpixelvideo Load</strong> — wide 308-kp pose</td></tr>
+        <tr><td><code>&lt;stem&gt;_sapiens_overlay.mp4</code></td><td>Visual QA — skeleton + coloured bbox + <code>#N</code> tag per person</td></tr>
+        <tr><td><code>&lt;stem&gt;_predictions.json</code></td><td>Per-frame instances (bbox + 308 kp + <code>stable_id</code>)</td></tr>
+        <tr><td><code>&lt;stem&gt;_markers.csv</code></td><td><strong>REC2D / REC3D</strong> — foot anchor, one point per <code>pN</code></td></tr>
+        <tr><td><code>&lt;stem&gt;_sapiens_vaila.csv</code></td><td>Long format — all 308 keypoints (<code>person_id</code> = <code>stable_id</code>)</td></tr>
+        <tr><td><code>&lt;stem&gt;_id_NN_sapiens_pose.csv</code></td><td><strong>getpixelvideo Load</strong> — wide 308-kp pose (<code>NN</code> = <code>stable_id</code>)</td></tr>
         <tr><td><code>&lt;stem&gt;_getpixelvideo_pose.csv</code></td><td>Same, when only one person is tracked</td></tr>
         <tr><td><code>sapiens_bbox_tracks.csv</code></td><td><strong>getpixelvideo Load Tracking CSV</strong> — bbox overlay (SAM schema)</td></tr>
+        <tr><td><code>sapiens_id_map.csv</code></td><td>Map <code>pN</code> ↔ <code>stable_id</code> + frame span</td></tr>
+        <tr><td><code>sapiens_reid_links.csv</code></td><td>Re-ID audit — <code>frame,raw_id,stable_id</code> (like SAM3)</td></tr>
         <tr><td><code>sapiens_vaila_*.csv</code></td><td>Five bbox anchors (same schema as SAM3)</td></tr>
         <tr><td><code>README_sapiens.txt</code></td><td>Schema summary for the run</td></tr>
     </table>
@@ -334,6 +466,17 @@ uv run vaila/vaila_sapiens.py -i long.mp4 -o out/ --model 1b --stride 3</code></
         <li>Use <code>&lt;stem&gt;_sapiens_vaila.csv</code> for joint-level 2D kinematics (308 keypoints).</li>
         <li>Optional: load wide pose CSVs or <code>sapiens_bbox_tracks.csv</code> in <strong>getpixelvideo</strong> for QA/editing.</li>
     </ol>
+
+    <h2>vs SAM 3</h2>
+    <table>
+        <tr><th></th><th>SAM 3</th><th>Sapiens2 Pose</th></tr>
+        <tr><td>Task</td><td>Text-prompt segmentation</td><td>308-keypoint pose</td></tr>
+        <tr><td>Prompt</td><td>Required (<code>player</code>, etc.)</td><td>None (DETR finds persons)</td></tr>
+        <tr><td>Geometric Re-ID</td><td><code>--stabilize-ids</code> → <code>sam_reid_links.csv</code></td><td><code>--stabilize-ids</code> (default on) → <code>sapiens_reid_links.csv</code></td></tr>
+        <tr><td>ID on overlay</td><td><code>#N</code> on mask/bbox</td><td><code>#N</code> on bbox + skeleton</td></tr>
+        <tr><td>Long video</td><td><code>max_frames</code> VRAM cap</td><td><code>--stride</code> temporal skip</td></tr>
+        <tr><td>License</td><td>HF gated SAM3</td><td>Sapiens2 License</td></tr>
+    </table>
 
     <h2>VRAM tips (RTX 4090)</h2>
     <ul>
