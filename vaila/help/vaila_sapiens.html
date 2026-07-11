@@ -30,7 +30,7 @@
     <h1>Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
 
     <div class="module-info">
-        <p><strong>Version:</strong> 0.3.80 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-08</p>
+        <p><strong>Version:</strong> 0.3.82 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-10</p>
         <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
         <p><strong>Category:</strong> Markerless 2D / Meta (Facebook)</p>
     </div>
@@ -438,7 +438,7 @@ uv run vaila/vaila_sapiens.py \
         <tr><td><code>&lt;stem&gt;_predictions.json</code></td><td>Per-frame instances (bbox + 308 kp + <code>stable_id</code>)</td></tr>
         <tr><td><code>&lt;stem&gt;_markers.csv</code></td><td><strong>REC2D / REC3D</strong> — foot anchor, one point per <code>pN</code></td></tr>
         <tr><td><code>&lt;stem&gt;_sapiens_vaila.csv</code></td><td>Long format — all 308 keypoints (<code>person_id</code> = <code>stable_id</code>)</td></tr>
-        <tr><td><code>&lt;stem&gt;_id_NN_sapiens_pose.csv</code></td><td><strong>getpixelvideo Load</strong> — wide 308-kp pose (<code>NN</code> = <code>stable_id</code>)</td></tr>
+        <tr><td><code>&lt;stem&gt;_id_NN_sapiens_pose.csv</code></td><td><strong>getpixelvideo Load</strong> — wide 308-kp pose with Sociopticon column names (<code>nose_x</code>, <code>left_knee_y</code>, …)</td></tr>
         <tr><td><code>&lt;stem&gt;_getpixelvideo_pose.csv</code></td><td>Same, when only one person is tracked</td></tr>
         <tr><td><code>sapiens_bbox_tracks.csv</code></td><td><strong>getpixelvideo Load Tracking CSV</strong> — bbox overlay (SAM schema)</td></tr>
         <tr><td><code>sapiens_id_map.csv</code></td><td>Map <code>pN</code> ↔ <code>stable_id</code> + frame span</td></tr>
@@ -463,9 +463,25 @@ uv run vaila/vaila_sapiens.py \
     <ol>
         <li>Run Sapiens2 on each camera view (same <code>--stride</code> across views for multi-camera).</li>
         <li>Feed <code>&lt;stem&gt;_markers.csv</code> into <strong>Rec2D</strong> / <strong>Rec3D</strong> with your DLT parameters.</li>
-        <li>Use <code>&lt;stem&gt;_sapiens_vaila.csv</code> for joint-level 2D kinematics (308 keypoints).</li>
+        <li>Use <code>&lt;stem&gt;_sapiens_vaila.csv</code> for joint-level 2D kinematics (join <code>kpt_idx</code> to <code>keypoint_names</code> in <code>&lt;stem&gt;_predictions.json</code>).</li>
         <li>Optional: load wide pose CSVs or <code>sapiens_bbox_tracks.csv</code> in <strong>getpixelvideo</strong> for QA/editing.</li>
     </ol>
+
+    <h2>Sociopticon keypoint index (kinematics)</h2>
+    <p>Wide pose CSV columns use anatomical names from Meta's Sociopticon 308 topology (not <code>kp000_x</code>).</p>
+    <table>
+        <tr><th><code>kpt_idx</code></th><th>Names</th><th>Region</th></tr>
+        <tr><td>0–4</td><td><code>nose</code>, eyes, ears</td><td>Head</td></tr>
+        <tr><td>5–8</td><td>shoulders, elbows</td><td>Upper limb</td></tr>
+        <tr><td>9–14</td><td>hips, knees, ankles</td><td>Trunk / leg</td></tr>
+        <tr><td>15–20</td><td>toes, heels</td><td>Feet</td></tr>
+        <tr><td>21–41</td><td>right hand + <code>right_wrist</code></td><td>Right arm</td></tr>
+        <tr><td>42–62</td><td>left hand + <code>left_wrist</code></td><td>Left arm</td></tr>
+        <tr><td>63–69</td><td>olecranon, acromion, <code>neck</code></td><td>Extra body</td></tr>
+        <tr><td>70–305</td><td>face mesh</td><td>Face</td></tr>
+        <tr><td>306–307</td><td>ear landmarks</td><td>Ears</td></tr>
+    </table>
+    <p>Full list: <code>sapiens2/sapiens/pose/configs/_base_/keypoints308.py</code> or <code>keypoint_names</code> in <code>&lt;stem&gt;_predictions.json</code>.</p>
 
     <h2>vs SAM 3</h2>
     <table>

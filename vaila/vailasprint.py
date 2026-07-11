@@ -7,8 +7,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 January 2026
-Update Date: 08 July 2026
-Version: 0.3.78
+Update Date: 10 July 2026
+Version: 0.3.82
 ================================================================================
 
 Description:
@@ -189,14 +189,10 @@ def generate_cod_left_right_comparison_html(run_stats, lang: str = "en") -> str:
         right_report = str(right["report_path"].iloc[0]) if not right.empty else ""
 
         delta_time = (
-            right_time - left_time
-            if pd.notna(left_time) and pd.notna(right_time)
-            else np.nan
+            right_time - left_time if pd.notna(left_time) and pd.notna(right_time) else np.nan
         )
         delta_speed = (
-            right_speed - left_speed
-            if pd.notna(left_speed) and pd.notna(right_speed)
-            else np.nan
+            right_speed - left_speed if pd.notna(left_speed) and pd.notna(right_speed) else np.nan
         )
 
         if pd.notna(left_time) and pd.notna(right_time):
@@ -306,6 +302,7 @@ def create_dumbbell_chart(run_stats, output_dir, mode="sprint"):
 
     Returns the path to the saved figure.
     """
+
     def lbl(rid):
         return format_trial_label(mode, rid)
 
@@ -687,6 +684,7 @@ def create_improvement_scatter(run_stats, output_dir, mode="sprint"):
 
     Returns (scatter_path, sequential_path_or_none).
     """
+
     def lbl(rid):
         return format_trial_label(mode, rid)
 
@@ -1502,9 +1500,7 @@ def generate_cluster_html_table_pt(run_stats_clustered, mode="sprint"):
 
     html = '<table class="cluster-table">\n'
     html += "<thead><tr>"
-    html += (
-        f"<th>Atleta</th><th>{trial_header}</th><th>Velocidade (km/h)</th><th>Tempo (s)</th><th>Nível</th>"
-    )
+    html += f"<th>Atleta</th><th>{trial_header}</th><th>Velocidade (km/h)</th><th>Tempo (s)</th><th>Nível</th>"
     html += "</tr></thead>\n<tbody>\n"
 
     for _, row in df_sorted.iterrows():
@@ -1816,9 +1812,7 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
             trial_display = format_trial_label(mode, rid)
             trial_display_pt = format_trial_label(mode, rid, "pt")
             prefix = (
-                f"{athlete_name}_COD_{rid:02d}"
-                if mode == "cod"
-                else f"{athlete_name}_Run_{rid}"
+                f"{athlete_name}_COD_{rid:02d}" if mode == "cod" else f"{athlete_name}_Run_{rid}"
             )
 
             # Metrics
@@ -2131,7 +2125,9 @@ def process_sprint_file(filepath, output_base_dir, logo_b64, mode="sprint"):
                     "athlete_name": athlete_name,
                     "patient_id": athlete_name,
                     "run_id": rid,
-                    "cod_side": ("left" if rid == COD_LEFT_RUN_ID else "right" if mode == "cod" else ""),
+                    "cod_side": (
+                        "left" if rid == COD_LEFT_RUN_ID else "right" if mode == "cod" else ""
+                    ),
                     "distance_m": row["distance_cumulative"],
                     "duration_s": row["duration"],
                     "speed_ms": row["speed_ms"],
@@ -2531,7 +2527,9 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             '''
 
         if scatter_path:
-            scatter_title = "COD Left vs Right Analysis" if mode == "cod" else "Improvement Analysis"
+            scatter_title = (
+                "COD Left vs Right Analysis" if mode == "cod" else "Improvement Analysis"
+            )
             scatter_desc = (
                 f"Points above diagonal = faster max speed on {format_trial_label(mode, r2_report)}."
                 if mode == "cod"
@@ -2701,9 +2699,11 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             axis=1,
         )
         ranking_speed_display["run_id"] = ranking_speed_display.apply(
-            lambda r: trial_link_html(mode, r["run_id"], r["report_path"])
-            if pd.notna(r.get("report_path"))
-            else format_trial_label(mode, r["run_id"]),
+            lambda r: (
+                trial_link_html(mode, r["run_id"], r["report_path"])
+                if pd.notna(r.get("report_path"))
+                else format_trial_label(mode, r["run_id"])
+            ),
             axis=1,
         )
 
@@ -2718,9 +2718,11 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
             axis=1,
         )
         ranking_time_display["run_id"] = ranking_time_display.apply(
-            lambda r: trial_link_html(mode, r["run_id"], r["report_path"])
-            if pd.notna(r.get("report_path"))
-            else format_trial_label(mode, r["run_id"]),
+            lambda r: (
+                trial_link_html(mode, r["run_id"], r["report_path"])
+                if pd.notna(r.get("report_path"))
+                else format_trial_label(mode, r["run_id"])
+            ),
             axis=1,
         )
 
@@ -3461,7 +3463,7 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
     html_content_pt = html_content_pt.replace(
         "General Report - Generated on", "Relatório Geral - Gerado em"
     )
-    html_content_pt = html_content_pt.replace("at", "às")
+    html_content_pt = html_content_pt.replace(" at ", " às ")
 
     if mode == "cod":
         html_content_pt = html_content_pt.replace(
@@ -3721,9 +3723,9 @@ def generate_general_report(all_data, output_dir, logo_b64, mode="sprint"):
                 rename_dict[col] = f"Aceleração Parcial {idx + 1} (m/s²) / Split {idx + 1} Accel"
 
             detail_df = detail_df.rename(columns=rename_dict)
-            detail_df = detail_df.sort_values(
-                ["Atleta / Athlete", trial_col_pt]
-            ).reset_index(drop=True)
+            detail_df = detail_df.sort_values(["Atleta / Athlete", trial_col_pt]).reset_index(
+                drop=True
+            )
             detail_df.to_excel(writer, sheet_name="Análise Detalhada (Splits)", index=False)
 
             # Sheet 3: Z-Scores (Standardized metrics)

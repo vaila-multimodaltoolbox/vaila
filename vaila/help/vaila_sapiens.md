@@ -4,8 +4,8 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.80
-- **Updated:** 2026-07-08
+- **Version:** 0.3.82
+- **Updated:** 2026-07-10
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -312,7 +312,7 @@ Under `processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/`:
 | **`sapiens_reid_links.csv`** | **Re-ID audit** — `frame,raw_id,stable_id` (like `sam_reid_links.csv`) |
 | `sapiens_tracks.csv` | Bbox tracks (`stable_id`, `x1..y2`) |
 | **`sapiens_bbox_tracks.csv`** | **getpixelvideo Load Tracking** — SAM schema (`obj_id`, `x_px`, `w_px`, …) |
-| **`<stem>_id_NN_sapiens_pose.csv`** | **getpixelvideo Load** — wide 308-kp pose per person |
+| **`<stem>_id_NN_sapiens_pose.csv`** | **getpixelvideo Load** — wide 308-kp pose per person (`frame,nose_x,nose_y,left_eye_x,…` Sociopticon names, not `kp000`) |
 | `<stem>_getpixelvideo_pose.csv` | Alias when only one person is tracked |
 | `README_sapiens.txt` | Schema summary |
 | `FAILED_sapiens.txt` | Error marker on failure |
@@ -334,8 +334,29 @@ Under `processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/`:
 
 1. Run Sapiens2 on each camera view (same `--stride` across views for multi-camera).
 2. Feed `<stem>_markers.csv` into **Rec2D** / **Rec3D** with your DLT parameters.
-3. Use `<stem>_sapiens_vaila.csv` for joint-level 2D kinematics (308 keypoints).
+3. Use `<stem>_sapiens_vaila.csv` for joint-level 2D kinematics (308 keypoints; join `kpt_idx` to `keypoint_names` in `<stem>_predictions.json` or Sociopticon labels below).
 4. Optional: load wide pose CSVs or `sapiens_bbox_tracks.csv` in **getpixelvideo** for QA/editing.
+
+### Sociopticon keypoint index (kinematics)
+
+Wide pose CSV columns use **anatomical names** from Meta's Sociopticon 308 topology (not `kp000_x`).
+
+| `kpt_idx` | Name | Region |
+|-----------|------|--------|
+| 0–4 | `nose`, `left_eye`, `right_eye`, `left_ear`, `right_ear` | Head (COCO-like) |
+| 5–8 | `left_shoulder`, `right_shoulder`, `left_elbow`, `right_elbow` | Upper limb |
+| 9–14 | `left_hip`, `right_hip`, `left_knee`, `right_knee`, `left_ankle`, `right_ankle` | Trunk / leg |
+| 15–20 | `left_big_toe`, `left_small_toe`, `left_heel`, `right_big_toe`, `right_small_toe`, `right_heel` | Feet |
+| 21–40 | `right_thumb4` … `right_pinky_finger_third_joint` | Right hand (20 kp) |
+| 41 | `right_wrist` | Right wrist |
+| 42–61 | `left_thumb4` … `left_pinky_finger_third_joint` | Left hand (20 kp) |
+| 62 | `left_wrist` | Left wrist |
+| 63–68 | `left_olecranon`, `right_olecranon`, cubital fossa, acromion | Extra body |
+| 69 | `neck` | Neck |
+| 70–305 | Face mesh (`center_of_glabella`, `tip_of_nose`, …) | Face (236 kp) |
+| 306–307 | Ear landmarks | Ears |
+
+For full 308-name list, see `sapiens2/sapiens/pose/configs/_base_/keypoints308.py` (`keypoint_id2name` after teeth removal) or `keypoint_names` in `<stem>_predictions.json`.
 
 ## vs SAM 3
 
