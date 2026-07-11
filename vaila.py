@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 08 July 2026
-Version: 0.3.80
+Update Date: 10 July 2026
+Version: 0.3.82
 
 Example of usage:
 uv run vaila.py
@@ -53,6 +53,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 # Standard library imports
+import argparse
 import contextlib
 import importlib.util
 import os
@@ -248,7 +249,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 08.Jul.2026 v0.3.80 (Python 3.12.13)
+    vailá - 10.Jul.2026 v0.3.82 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -348,18 +349,21 @@ def open_folder_cross_platform(path):
 
 
 class Vaila(tk.Tk):
-    def __init__(self):
+    def __init__(self, *, gui: bool = True):
         """
         Initializes the Vaila application.
 
         - Sets the window title, geometry, button dimensions, and font size based on the operating system.
         - Configures the window icon based on the operating system.
         - For macOS, sets the application name in the dock if AppKit is available.
-        - Creates the widgets for the application.
+        - Creates the widgets for the application when ``gui`` is True.
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 08.Jul.2026 v0.3.80 (Python 3.12.13)")
+        self.title("vailá - 10.Jul.2026 v0.3.82 (Python 3.12.13)")
+        self._main_canvas: tk.Canvas | None = None
+        self._scrollable_frame: tk.Frame | None = None
+        self._canvas_window_id: int | None = None
 
         # wm class is set via className above, which results in class "Vaila"
         # This is needed for proper icon association in Linux docks/taskbars
@@ -392,8 +396,10 @@ class Vaila(tk.Tk):
             except Exception as e:
                 print(f"Could not set application name: {e}")
 
-        # Call method to create the widgets
-        self.create_widgets()
+        if gui:
+            self.create_widgets()
+        else:
+            self.withdraw()
 
     def set_dimensions_based_on_os(self):
         """
@@ -415,6 +421,102 @@ class Vaila(tk.Tk):
             self.geometry("1024x920")  # Default dimensions
             self.button_width = 15  # Default button width
             self.font_size = 11  # Default font size
+
+    def _setup_canvas_scrolling(self, canvas: tk.Canvas, scrollable_frame: tk.Frame) -> None:
+        """Mouse wheel, touchpad, and middle-button drag scrolling on the main canvas."""
+        self._main_canvas = canvas
+        self._scrollable_frame = scrollable_frame
+
+        def _canvas_pointer_xy(event: tk.Event) -> tuple[int, int]:
+            return (
+                int(event.x_root - canvas.winfo_rootx()),
+                int(event.y_root - canvas.winfo_rooty()),
+            )
+
+        def _scroll_units(direction: int) -> None:
+            canvas.yview_scroll(direction, "units")
+
+        def _on_mousewheel(event: tk.Event) -> str | None:
+            if platform.system() == "Darwin":
+                delta = -1 if event.delta > 0 else 1
+            else:
+                delta = int(-1 * (event.delta / 120)) if event.delta else 0
+                if delta == 0:
+                    delta = -1 if event.delta > 0 else 1
+            _scroll_units(delta)
+            return "break"
+
+        def _on_linux_wheel_up(_event: tk.Event) -> str | None:
+            _scroll_units(-1)
+            return "break"
+
+        def _on_linux_wheel_down(_event: tk.Event) -> str | None:
+            _scroll_units(1)
+            return "break"
+
+        def _on_middle_press(event: tk.Event) -> str | None:
+            cx, cy = _canvas_pointer_xy(event)
+            canvas.scan_mark(cx, cy)
+            return "break"
+
+        def _on_middle_drag(event: tk.Event) -> str | None:
+            cx, cy = _canvas_pointer_xy(event)
+            canvas.scan_dragto(cx, cy, gain=1)
+            return "break"
+
+        def _bind_scroll_recursive(widget: tk.Misc) -> None:
+            widget.bind("<MouseWheel>", _on_mousewheel, add="+")
+            widget.bind("<Button-4>", _on_linux_wheel_up, add="+")
+            widget.bind("<Button-5>", _on_linux_wheel_down, add="+")
+            widget.bind("<ButtonPress-2>", _on_middle_press, add="+")
+            widget.bind("<B2-Motion>", _on_middle_drag, add="+")
+            for child in widget.winfo_children():
+                _bind_scroll_recursive(child)
+
+        _bind_scroll_recursive(canvas)
+
+        def _sync_canvas_width(event: tk.Event) -> None:
+            if self._canvas_window_id is not None:
+                canvas.itemconfigure(self._canvas_window_id, width=event.width)
+
+        canvas.bind("<Configure>", _sync_canvas_width, add="+")
+
+    def _scroll_widget_into_view(self, widget: tk.Widget) -> None:
+        canvas = self._main_canvas
+        frame = self._scrollable_frame
+        if canvas is None or frame is None:
+            return
+        widget.update_idletasks()
+        widget_y = widget.winfo_rooty() - frame.winfo_rooty()
+        widget_h = widget.winfo_height()
+        total_h = max(frame.winfo_height(), 1)
+        top_frac = widget_y / total_h
+        bottom_frac = (widget_y + widget_h) / total_h
+        first, last = canvas.yview()
+        visible = last - first
+        if top_frac < first:
+            canvas.yview_moveto(max(0.0, top_frac))
+        elif bottom_frac > last:
+            canvas.yview_moveto(max(0.0, bottom_frac - visible))
+
+    def _setup_focusable_buttons(self, root_widget: tk.Misc) -> None:
+        """Tab order + auto-scroll when a button receives keyboard focus."""
+
+        def _walk(widget: tk.Misc) -> None:
+            for child in widget.winfo_children():
+                if isinstance(child, tk.Button):
+                    child.configure(takefocus=1)
+                    child.bind(
+                        "<FocusIn>",
+                        lambda e, w=child: self._on_action_button_focus(w),
+                        add="+",
+                    )
+                _walk(child)
+
+        _walk(root_widget)
+
+    def _on_action_button_focus(self, widget: tk.Widget) -> None:
+        self._scroll_widget_into_view(widget)
 
     def create_widgets(self):
         """
@@ -535,7 +637,7 @@ class Vaila(tk.Tk):
         )
 
         # Add the scrollable frame to the canvas
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        self._canvas_window_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
         """
             A - File Manager Avaliable:
@@ -1483,6 +1585,9 @@ class Vaila(tk.Tk):
             anchor="center",
         )
         license_static.pack(side="left")
+
+        self._setup_canvas_scrolling(canvas, scrollable_frame)
+        self._setup_focusable_buttons(scrollable_frame)
 
     # Class definition
     def show_vaila_message(self):
@@ -3628,5 +3733,29 @@ class Vaila(tk.Tk):
 
 
 if __name__ == "__main__":
-    app = Vaila()
-    app.mainloop()
+    parser = argparse.ArgumentParser(
+        description="vailá — multimodal biomechanical analysis toolbox",
+    )
+    parser.add_argument(
+        "--cli",
+        action="store_true",
+        help="Terminal menu (same buttons as the GUI)",
+    )
+    parser.add_argument(
+        "action",
+        nargs="?",
+        help="Optional action code for one-shot CLI launch (e.g. A_r1_c1, B4_r4_c1)",
+    )
+    cli_args = parser.parse_args()
+
+    if cli_args.cli or cli_args.action:
+        try:
+            from vaila.vaila_cli_menu import run_cli_menu
+        except ImportError:
+            from vaila_cli_menu import run_cli_menu  # type: ignore[no-redef]
+
+        cli_app = Vaila(gui=False)
+        run_cli_menu(cli_app, initial_code=cli_args.action)
+    else:
+        app = Vaila()
+        app.mainloop()

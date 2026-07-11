@@ -75,10 +75,12 @@ def test_sam3_build_oom_retry_attempts_extends_below_32() -> None:
     from vaila.vaila_sam import _sam3_build_oom_retry_attempts
 
     assert _sam3_build_oom_retry_attempts(32) == [32, 24, 16, 12, 8, 4, 2, 1]
-    chain0 = _sam3_build_oom_retry_attempts(0)
-    assert chain0[0] == 0
-    assert 16 in chain0
-    none_chain = _sam3_build_oom_retry_attempts(None)
+    chain0 = _sam3_build_oom_retry_attempts(0, total_frames=2117)
+    assert chain0 == [0]
+    assert _sam3_build_oom_retry_attempts(0, total_frames=0) == [0]
+    auto_full = _sam3_build_oom_retry_attempts(None, total_frames=2117)
+    assert auto_full == [None]
+    none_chain = _sam3_build_oom_retry_attempts(None, total_frames=5000)
     assert none_chain[0] is None
     assert 32 in none_chain and 8 in none_chain
 

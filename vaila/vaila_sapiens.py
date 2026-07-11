@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 08 July 2026
-Version: 0.3.80
+Update Date: 10 July 2026
+Version: 0.3.82
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -1397,6 +1397,78 @@ def write_sapiens_biomechanics_csvs(
     return written
 
 
+_SAPIENS308_KEYPOINT_NAMES_CACHE: list[str] | None = None
+
+
+def _keypoint_names_from_pose_metainfo(
+    meta: dict[str, Any] | None,
+    *,
+    n_kp: int | None = None,
+) -> list[str] | None:
+    """Ordered Sociopticon labels from Sapiens ``pose_metainfo`` (308 kp)."""
+    if not isinstance(meta, dict):
+        return None
+    raw_names = meta.get("keypoint_names")
+    if isinstance(raw_names, (list, tuple)) and raw_names:
+        names = [str(n) for n in raw_names]
+        if n_kp is not None:
+            names = names[:n_kp]
+        return names if names else None
+
+    id2name = meta.get("keypoint_id2name")
+    if not isinstance(id2name, dict) or not id2name:
+        return None
+
+    limit = n_kp if n_kp is not None else int(meta.get("num_keypoints") or len(id2name))
+    names: list[str] = []
+    for i in range(limit):
+        val = id2name.get(i)
+        if val is None:
+            val = id2name.get(str(i))
+        if val is None:
+            return None
+        names.append(str(val))
+    return names
+
+
+def _load_sapiens308_keypoint_names_cached() -> list[str] | None:
+    """Load Sociopticon 308 labels from upstream ``keypoints308.py`` (cached)."""
+    global _SAPIENS308_KEYPOINT_NAMES_CACHE
+    if _SAPIENS308_KEYPOINT_NAMES_CACHE is not None:
+        return list(_SAPIENS308_KEYPOINT_NAMES_CACHE)
+    try:
+        _require_sapiens_installed()
+        with _sapiens_pose_context():
+            from sapiens.pose.datasets import parse_pose_metainfo
+
+            meta = parse_pose_metainfo({"from_file": "configs/_base_/keypoints308.py"})
+        names = _keypoint_names_from_pose_metainfo(meta)
+        if names:
+            _SAPIENS308_KEYPOINT_NAMES_CACHE = list(names)
+        return names
+    except Exception:
+        return None
+
+
+def _resolve_sapiens_keypoint_names(
+    session: PoseInferenceSession | None,
+    *,
+    n_kp: int | None = None,
+) -> list[str] | None:
+    meta: dict[str, Any] | None = None
+    if session is not None and getattr(session, "model", None) is not None:
+        raw_meta = getattr(session.model, "pose_metainfo", None)
+        if isinstance(raw_meta, dict):
+            meta = raw_meta
+    names = _keypoint_names_from_pose_metainfo(meta, n_kp=n_kp)
+    if names and (n_kp is None or len(names) >= n_kp):
+        return names[:n_kp] if n_kp is not None else names
+    fallback = _load_sapiens308_keypoint_names_cached()
+    if fallback and (n_kp is None or len(fallback) >= n_kp):
+        return fallback[:n_kp] if n_kp is not None else fallback
+    return names
+
+
 def _sanitize_keypoint_label(name: str, idx: int) -> str:
     """Turn Sociopticon keypoint names into safe CSV column prefixes."""
     s = re.sub(r"[^a-zA-Z0-9_]+", "_", str(name).strip()).strip("_")
@@ -2130,11 +2202,7 @@ def run_sapiens_on_video(
 
     timeline = _expand_pose_timeline(pose_by_frame, fi)
 
-    kp_names: list[str] | None = None
-    if session.model is not None and getattr(session.model, "pose_metainfo", None):
-        meta = session.model.pose_metainfo
-        if isinstance(meta, dict) and meta.get("keypoint_names"):
-            kp_names = [str(n) for n in meta["keypoint_names"]]
+    kp_names = _resolve_sapiens_keypoint_names(session, n_kp=num_keypoints)
 
     if save_overlay:
         _sapiens_log(f"Writing overlay from stabilized IDs ({overlay_path.name}) …")
@@ -2153,6 +2221,7 @@ def run_sapiens_on_video(
         "video": stem,
         "image_size": image_size,
         "num_keypoints": num_keypoints,
+        "keypoint_names": kp_names or [],
         "model": spec.arch,
         "stride": stride,
         "kpt_thr_used": float(kpt_thr),
