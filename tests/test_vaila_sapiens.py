@@ -573,6 +573,31 @@ def test_write_sapiens_biomechanics_csvs(tmp_path: Path) -> None:
     assert "obj_id,x_px,y_px,w_px,h_px" in bbox_txt.replace(" ", "")
 
 
+def test_keypoint_names_from_pose_metainfo_id2name() -> None:
+    meta = {"keypoint_id2name": {0: "nose", 1: "left_eye", 2: "right_eye"}}
+    assert vs._keypoint_names_from_pose_metainfo(meta, n_kp=3) == [
+        "nose",
+        "left_eye",
+        "right_eye",
+    ]
+
+
+def test_keypoint_names_from_pose_metainfo_list() -> None:
+    meta = {"keypoint_names": ["nose", "left_hip"]}
+    assert vs._keypoint_names_from_pose_metainfo(meta) == ["nose", "left_hip"]
+
+
+def test_resolve_sapiens_keypoint_names_from_session() -> None:
+    model = MagicMock()
+    model.pose_metainfo = {
+        "keypoint_id2name": {0: "nose", 1: "left_eye"},
+        "num_keypoints": 2,
+    }
+    session = MagicMock()
+    session.model = model
+    assert vs._resolve_sapiens_keypoint_names(session, n_kp=2) == ["nose", "left_eye"]
+
+
 def test_write_getpixelvideo_pose_csv_wide(tmp_path: Path) -> None:
     n_kp = 4
     timeline = {

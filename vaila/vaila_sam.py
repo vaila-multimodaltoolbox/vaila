@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 06 July 2026
-Version: 0.3.72
+Update Date: 10 July 2026
+Version: 0.3.82
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -1757,9 +1757,31 @@ def _maybe_subsample_video_for_vram(
     if n <= 0:
         n = _video_frame_count(vp)
     if n <= max_frames:
+        # #region agent log
+        _agent_dbg_sam3(
+            hypothesis_id="H1",
+            location="vaila_sam.py:_maybe_subsample_video_for_vram",
+            message="no_subsample",
+            data={"total_frames": n, "max_frames": max_frames, "session_frames": n},
+        )
+        # #endregion
         return video_path.resolve(), None, n, np.arange(max(0, n), dtype=np.int64)
 
     indices = np.unique(np.linspace(0, n - 1, num=max_frames, dtype=np.int64))
+    # #region agent log
+    _agent_dbg_sam3(
+        hypothesis_id="H1",
+        location="vaila_sam.py:_maybe_subsample_video_for_vram",
+        message="temporal_subsample",
+        data={
+            "total_frames": n,
+            "max_frames": max_frames,
+            "session_frames": int(len(indices)),
+            "keyframe_spacing_mean": round(float(n) / max(1, len(indices)), 2),
+            "first_keyframes": [int(x) for x in indices[:8].tolist()],
+        },
+    )
+    # #endregion
     fps_out = _sam3_subsample_output_fps(fps, len(indices), n)
     if _sam3_temp_subsample_needs_chunked_fallback(
         total_frames=n,
@@ -3430,6 +3452,18 @@ def run_sam3_on_video(
         contours_format = "json"
     temp_spatial: Path | None = None
     mf = _read_max_input_frames(max_input_frames)
+    # #region agent log
+    _agent_dbg_sam3(
+        hypothesis_id="H1",
+        location="vaila_sam.py:run_sam3_on_video",
+        message="resolved_max_frames",
+        data={
+            "max_input_frames_cli": max_input_frames,
+            "resolved_max_frames": mf,
+            "video": str(video_path.name),
+        },
+    )
+    # #endregion
     session_path, temp_clip, n_sess, sess_to_orig = _maybe_subsample_video_for_vram(
         video_path, output_dir, mf
     )
@@ -4111,7 +4145,7 @@ def _agent_dbg_sam3(*, hypothesis_id: str, location: str, message: str, data: di
         line = (
             json.dumps(
                 {
-                    "sessionId": "42b4a5",
+                    "sessionId": "32a4da",
                     "hypothesisId": hypothesis_id,
                     "location": location,
                     "message": message,
@@ -4122,7 +4156,7 @@ def _agent_dbg_sam3(*, hypothesis_id: str, location: str, message: str, data: di
             )
             + "\n"
         )
-        with (Path(__file__).resolve().parents[1] / ".cursor" / "debug-42b4a5.log").open(
+        with (Path(__file__).resolve().parents[1] / ".cursor" / "debug-32a4da.log").open(
             "a", encoding="utf-8"
         ) as _lf:
             _lf.write(line)
@@ -4131,9 +4165,38 @@ def _agent_dbg_sam3(*, hypothesis_id: str, location: str, message: str, data: di
     # #endregion
 
 
-def _sam3_build_oom_retry_attempts(max_input_frames: int | None) -> list[int | None]:
-    """Caps to try on CUDA OOM (high → low). Includes low caps like 8→4→2→1."""
+def _sam3_build_oom_retry_attempts(
+    max_input_frames: int | None,
+    *,
+    total_frames: int = 0,
+) -> list[int | None]:
+    """Caps to try on CUDA OOM (high → low). Includes low caps like 8→4→2→1.
+
+    When the first attempt already loads **every source frame** (explicit
+    ``--max-frames 0`` or auto cap ≥ clip length), temporal subsampling on OOM
+    (64→32→…) destroys per-frame tracking — skip that ladder and let spatial
+    downscale / chunked fallback handle VRAM instead.
+    """
     attempts: list[int | None] = [max_input_frames]
+    resolved = _resolve_max_input_frames_value(max_input_frames)
+    n_src = max(0, int(total_frames))
+    full_clip_attempt = max_input_frames is not None and int(max_input_frames) <= 0
+    if not full_clip_attempt and n_src > 0 and resolved >= n_src:
+        full_clip_attempt = True
+    if full_clip_attempt:
+        # #region agent log
+        _agent_dbg_sam3(
+            hypothesis_id="H6",
+            location="vaila_sam.py:_sam3_build_oom_retry_attempts",
+            message="skip_subsample_ladder",
+            data={
+                "max_input_frames": max_input_frames,
+                "resolved": resolved,
+                "total_frames": n_src,
+            },
+        )
+        # #endregion
+        return attempts
     for step in _SAM3_OOM_FALLBACK_FRAMES:
         if max_input_frames is None or max_input_frames <= 0 or max_input_frames > step:
             attempts.append(step)
@@ -4211,13 +4274,22 @@ def _process_one_video_with_oom_retry(
         else:
             print(s)
 
-    attempts = _sam3_build_oom_retry_attempts(max_input_frames)
+    n_src_frames = _video_frame_count(str(video_file))
+    attempts = _sam3_build_oom_retry_attempts(
+        max_input_frames,
+        total_frames=n_src_frames,
+    )
     # #region agent log
     _agent_dbg_sam3(
         hypothesis_id="H1",
         location="vaila_sam.py:_process_one_video_with_oom_retry",
         message="oom_retry_attempts_built",
-        data={"max_input_frames": max_input_frames, "attempts": attempts, "n": len(attempts)},
+        data={
+            "max_input_frames": max_input_frames,
+            "attempts": attempts,
+            "n": len(attempts),
+            "total_frames": n_src_frames,
+        },
     )
     # #endregion
 
@@ -4378,6 +4450,19 @@ def _process_one_video_with_oom_retry(
             f"  [SAM3] All OOM retry attempts exhausted for {video_file.name}; "
             "falling back to divide-and-conquer chunking..."
         )
+    # #region agent log
+    _agent_dbg_sam3(
+        hypothesis_id="H6",
+        location="vaila_sam.py:_process_one_video_with_oom_retry",
+        message="chunked_fallback_start",
+        data={
+            "video": video_file.name,
+            "max_input_frames": max_input_frames,
+            "total_frames": n_src_frames,
+            "needs_chunking_reason": bool(needs_chunking_reason),
+        },
+    )
+    # #endregion
     _release_sam3_gpu_memory()
     ok, chunk_msg = _process_video_chunked(
         video_file,
@@ -5914,6 +5999,19 @@ def main() -> None:
         )
         if adjusted_max_frames is not None:
             args.max_frames = adjusted_max_frames
+        # #region agent log
+        _agent_dbg_sam3(
+            hypothesis_id="H3",
+            location="vaila_sam.py:main",
+            message="batch_max_frames_plan",
+            data={
+                "max_frames_cli": getattr(args, "max_frames", None),
+                "host_ram_adjusted": adjusted_max_frames,
+                "video_count": len(video_files),
+                "first_video": video_files[0].name if video_files else "",
+            },
+        )
+        # #endregion
 
         print(_format_runtime_banner(args, video_files), flush=True)
         print(f"\nSAM 3 batch — {len(video_files)} video(s) to process")
