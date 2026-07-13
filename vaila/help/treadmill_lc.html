@@ -21,7 +21,7 @@
 <main>
     <h1>Treadmill LC - Treadmill GRF</h1>
     <p>The <strong>Treadmill LC</strong> tool processes instrumented treadmill load-cell data in a guided workflow for running analysis. It supports artifact adjustment with interpolation review, signal filtering, calibration, body-weight normalization, center of pressure (COP), step detection, per-step metrics, and subject-day summaries.</p>
-    <p>Use it from <strong>Multimodal Analysis -&gt; Treadmill LC</strong>. The full workflow is <strong>Adjust + Interpolate -&gt; Filter -&gt; Process Metrics</strong>. The tool is TOML-configurable so the same settings can be reused for batch processing.</p>
+    <p>Use it from <strong>Multimodal Analysis -&gt; Treadmill LC</strong>. The full workflow is <strong>Filter -&gt; Adjust + Interpolate -&gt; Process Metrics</strong>. The tool is TOML-configurable so the same settings can be reused for batch processing.</p>
 
     <h2>Expected Files</h2>
     <p>The input folder can contain trial files, calibration files, and Borg metadata files. The tool separates these automatically by filename.</p>
@@ -36,7 +36,17 @@
 
     <h2>Processing Stages</h2>
 
-    <h3>1. Adjust + Interpolate</h3>
+    <h3>1. Filter</h3>
+    <ul>
+        <li>Default filter: low-pass Butterworth SOS at 40 Hz.</li>
+        <li>Median filtering uses <code>scipy.ndimage.median_filter</code> with configurable edge mode; default is <code>nearest</code>.</li>
+        <li>Zero-phase filtering uses <code>sosfiltfilt</code>.</li>
+        <li>Optional mains-noise notch filtering supports 50 Hz and 60 Hz power grids.</li>
+        <li>Available <code>filter_type</code> values: <code>lowpass</code>, <code>bandpass</code>, <code>highpass</code>, <code>median</code>, and <code>none</code>.</li>
+    </ul>
+    <p>During batch filtering, the GUI previews one calibration file and one running file. After approval, the same filter settings are applied to the remaining files without opening a plot for every file. Filtered running CSV files are saved inside <code>filtered_YYYYMMDD_HHMMSS</code> with the canonical <code>sXX_dYY_tZZ.csv</code> name, even if the input folder contains a legacy <code>*_LIMPO.csv</code> or <code>*_clean.csv</code> file. Calibration files keep their calibration names. Frequency diagnostics are saved to <code>filter_analysis_YYYYMMDD_HHMMSS</code> with explicit <code>filter_</code> names, such as <code>s01_d01_t01_filter_spectrum_metrics.csv</code> and <code>s01_d01_t01_filter_Cell_1_spectrum.png</code>.</p>
+
+    <h3>2. Adjust + Interpolate</h3>
     <ul>
         <li>Plot the four load cells and the summed signal.</li>
         <li>Select the affected load cell channels in a single multi-selection dialog, then mark intervals only on the selected cell plots.</li>
@@ -48,16 +58,6 @@
         <li>Approve the preview before saving. If rejected, the same file is reopened for correction.</li>
     </ul>
     <p>A timestamped <code>clean_YYYYMMDD_HHMMSS</code> folder is created for each adjustment run so previous runs are not overwritten. Every running trial is written there with its original name (<code>sXX_dYY_tZZ.csv</code>): adjusted/interpolated trials contain the corrected signal, and trials without marked intervals are copied unchanged. Adjustment and interpolation metadata are saved beside the CSV as <code>*_adjust_intervals.json</code>, <code>*_adjust_intervals.toml</code>, and <code>*_adjust_intervals.csv</code>.</p>
-
-    <h3>2. Filter</h3>
-    <ul>
-        <li>Default filter: low-pass Butterworth SOS at 40 Hz.</li>
-        <li>Median filtering uses <code>scipy.ndimage.median_filter</code> with configurable edge mode; default is <code>nearest</code>.</li>
-        <li>Zero-phase filtering uses <code>sosfiltfilt</code>.</li>
-        <li>Optional mains-noise notch filtering supports 50 Hz and 60 Hz power grids.</li>
-        <li>Available <code>filter_type</code> values: <code>lowpass</code>, <code>bandpass</code>, <code>highpass</code>, <code>median</code>, and <code>none</code>.</li>
-    </ul>
-    <p>During batch filtering, the GUI previews one calibration file and one running file. After approval, the same filter settings are applied to the remaining files without opening a plot for every file. Filtered running CSV files are saved inside <code>filtered_YYYYMMDD_HHMMSS</code> with the canonical <code>sXX_dYY_tZZ.csv</code> name, even if the input folder contains a legacy <code>*_LIMPO.csv</code> or <code>*_clean.csv</code> file. Calibration files keep their calibration names. Frequency diagnostics are saved to <code>filter_analysis_YYYYMMDD_HHMMSS</code> with explicit <code>filter_</code> names, such as <code>s01_d01_t01_filter_spectrum_metrics.csv</code> and <code>s01_d01_t01_filter_Cell_1_spectrum.png</code>.</p>
 
     <h3>3. Process Metrics</h3>
     <ul>
@@ -102,9 +102,9 @@
 
     <h2>GUI Usage</h2>
     <ul>
-        <li><strong>Run Full Pipeline</strong>: Adjust + Interpolate -&gt; Filter -&gt; Process Metrics.</li>
-        <li><strong>Adjust + Interpolate</strong>: Only artifact correction and interpolation review.</li>
+        <li><strong>Run Full Pipeline</strong>: Filter -&gt; Adjust + Interpolate -&gt; Process Metrics.</li>
         <li><strong>Filter Only</strong>: Only filtering and frequency diagnostics.</li>
+        <li><strong>Adjust + Interpolate</strong>: Only artifact correction and interpolation review.</li>
         <li><strong>Process Metrics Only</strong>: Only calibration and running metrics.</li>
         <li><strong>Create TOML Template</strong>: Save a reusable configuration file.</li>
         <li><strong>Help</strong>: Open this documentation.</li>
@@ -115,7 +115,7 @@
     <p>Common <code>--step</code> values are <code>all</code>, <code>adjust</code>, <code>filter</code>, and <code>process</code>.</p>
 
     <div class="footer">
-        <p>Version: 0.3.68 | Updated: 02 July 2026</p>
+        <p>Version: 0.3.85 | Updated: 13 July 2026</p>
     </div>
 </main>
 </body>

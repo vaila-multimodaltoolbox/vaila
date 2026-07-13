@@ -6,8 +6,8 @@ The **Treadmill LC** tool processes instrumented treadmill load-cell data in a g
 
 Use it from **Multimodal Analysis -> Treadmill LC**. The full workflow is:
 
-1. **Adjust + Interpolate**
-2. **Filter**
+1. **Filter**
+2. **Adjust + Interpolate**
 3. **Process Metrics**
 
 The tool is TOML-configurable so the same settings can be reused for batch processing.
@@ -26,9 +26,23 @@ Borg TXT files are not processed as trials. When a matching Borg file has a `Pes
 
 ## Processing Stages
 
-### 1. Adjust + Interpolate
+### 1. Filter
 
-This stage is used to correct artifacts before filtering and metric extraction.
+This stage smooths the signal while preserving treadmill force behavior.
+
+- Default filter: low-pass Butterworth SOS at 40 Hz.
+- Median filtering uses `scipy.ndimage.median_filter` with configurable edge mode; default is `nearest`.
+- Zero-phase filtering uses `sosfiltfilt`.
+- Optional mains-noise notch filtering supports 50 Hz and 60 Hz power grids.
+- Available `filter_type` values: `lowpass`, `bandpass`, `highpass`, `median`, and `none`.
+
+During batch filtering, the GUI previews one calibration file and one running file. After approval, the same filter settings are applied to the remaining files without opening a plot for every file.
+
+Filtered running CSV files are saved inside `filtered_YYYYMMDD_HHMMSS` with the canonical `sXX_dYY_tZZ.csv` name, even if the input folder contains a legacy `*_LIMPO.csv` or `*_clean.csv` file. Calibration files keep their calibration names. Frequency diagnostics are saved to `filter_analysis_YYYYMMDD_HHMMSS` with explicit `filter_` names, such as `s01_d01_t01_filter_spectrum_metrics.csv` and `s01_d01_t01_filter_Cell_1_spectrum.png`.
+
+### 2. Adjust + Interpolate
+
+This stage is used to correct artifacts after filtering and before metric extraction.
 
 - Plot the four load cells and the summed signal.
 - Select the affected load cell channels in a single multi-selection dialog, then mark intervals only on the selected cell plots.
@@ -46,20 +60,6 @@ A timestamped `clean_YYYYMMDD_HHMMSS` folder is created for each adjustment run 
 - `*_adjust_intervals.csv`
 
 The metadata records intervals, selected cells, interval treatment, selected interpolation methods, final method, and interpolation parameters.
-
-### 2. Filter
-
-This stage smooths the signal while preserving treadmill force behavior.
-
-- Default filter: low-pass Butterworth SOS at 40 Hz.
-- Median filtering uses `scipy.ndimage.median_filter` with configurable edge mode; default is `nearest`.
-- Zero-phase filtering uses `sosfiltfilt`.
-- Optional mains-noise notch filtering supports 50 Hz and 60 Hz power grids.
-- Available `filter_type` values: `lowpass`, `bandpass`, `highpass`, `median`, and `none`.
-
-During batch filtering, the GUI previews one calibration file and one running file. After approval, the same filter settings are applied to the remaining files without opening a plot for every file.
-
-Filtered running CSV files are saved inside `filtered_YYYYMMDD_HHMMSS` with the canonical `sXX_dYY_tZZ.csv` name, even if the input folder contains a legacy `*_LIMPO.csv` or `*_clean.csv` file. Calibration files keep their calibration names. Frequency diagnostics are saved to `filter_analysis_YYYYMMDD_HHMMSS` with explicit `filter_` names, such as `s01_d01_t01_filter_spectrum_metrics.csv` and `s01_d01_t01_filter_Cell_1_spectrum.png`.
 
 ### 3. Process Metrics
 
@@ -138,9 +138,9 @@ For batch processing, create a TOML once, review it in the GUI editor, then reus
 
 Open **Multimodal Analysis -> Treadmill LC** and choose:
 
-- **Run Full Pipeline**: Adjust + Interpolate -> Filter -> Process Metrics.
-- **Adjust + Interpolate**: Only artifact correction and interpolation review.
+- **Run Full Pipeline**: Filter -> Adjust + Interpolate -> Process Metrics.
 - **Filter Only**: Only filtering and frequency diagnostics.
+- **Adjust + Interpolate**: Only artifact correction and interpolation review.
 - **Process Metrics Only**: Only calibration and running metrics.
 - **Create TOML Template**: Save a reusable configuration file.
 - **Help**: Open this documentation.
@@ -156,5 +156,5 @@ uv run python -m vaila.treadmill_lc --input-dir /path/to/csv_folder --step all
 Common `--step` values are `all`, `adjust`, `filter`, and `process`.
 
 ---
-- **Version**: 0.3.68
-- **Updated**: 02 July 2026
+- **Version**: 0.3.85
+- **Updated**: 13 July 2026

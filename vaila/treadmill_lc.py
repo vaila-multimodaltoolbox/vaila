@@ -9,8 +9,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 02 July 2026
-Version: 0.3.68
+Update Date: 13 July 2026
+Version: 0.3.85
 
 Description:
 ------------
@@ -178,6 +178,7 @@ ADJUSTMENT_MODE_LABELS = {
     "zero": "Keep samples and set marked segment to zero",
     "neutral_mean": "Keep samples and fill with neutral mean from boundary line",
     "linear": "Keep samples and fill with linear bridge between boundaries",
+    "excluded": "Signal completely excluded from processing",
 }
 
 
@@ -355,11 +356,13 @@ def save_adjustment_metadata(file_path, interval_records, mode, interpolation_me
 
     source = Path(file_path)
     interpolation_metadata = interpolation_metadata or {}
+    processed = interpolation_metadata.get("processed", True)
     payload = {
         "source_file": source.name,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "adjustment_mode": mode,
         "mode_label": ADJUSTMENT_MODE_LABELS.get(mode, mode),
+        "processed": processed,
         "interpolation": interpolation_metadata,
         "intervals": interval_records,
     }
@@ -409,11 +412,17 @@ def clean_signal_with_clicks(file_path, parent=None):
 
             if not ask_yes_no_english(
                 "Artifact Adjustment + Interpolation",
-                "Do you want to mark bad segments and choose an interpolation method?",
+                "Do you want to adjust or exclude signal from any of the load cells in this file?",
                 parent=parent,
             ):
                 plt.close(fig_overview)
                 return None, dados, []
+
+            is_interpolation = ask_yes_no_english(
+                "Select Action Type",
+                "Do you want to interpolate bad segments? (Click 'Yes' to interpolate segments, or 'No' to exclude/discard the load-cell signal entirely)",
+                parent=parent,
+            )
 
             selection_parent = parent or tk._default_root or tk.Tk()
             if parent is None and selection_parent is not tk._default_root:
@@ -425,9 +434,29 @@ def clean_signal_with_clicks(file_path, parent=None):
 
             if not selected_cells:
                 messagebox.showinfo(
-                    "Info", "No load cells were selected for adjustment.", parent=parent
+                    "Info", "No load cells were selected. No adjustments applied.", parent=parent
                 )
                 return None, dados, []
+
+            if not is_interpolation:
+                messagebox.showwarning(
+                    "Trial Excluded",
+                    f"Trial {os.path.basename(file_path)} will not be processed because it needs more filtering adjustments.",
+                    parent=parent,
+                )
+                interval_records = [{
+                    "start_index": 0,
+                    "end_index_exclusive": len(t),
+                    "cells_0based": selected_cells,
+                    "mode": "excluded",
+                }]
+                metadata_paths = save_adjustment_metadata(
+                    file_path,
+                    interval_records,
+                    "excluded",
+                    interpolation_metadata={"status": "excluded", "processed": False},
+                )
+                return None, dados, metadata_paths
 
             intervalos_marcados = []
 
@@ -507,35 +536,79 @@ def clean_signal_with_clicks(file_path, parent=None):
                     interp_config["rbf_window_size"],
                 )
 
-                fig_comp, ax_comp = plt.subplots(figsize=(12, 8))
-                fig_comp.suptitle("Comparison of Summed Signals (Post-Interpolation)", fontsize=16)
-                ax_comp.plot(
-                    t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum"
+                # Part 1: Plotting individual selected cells before vs. after interpolation
+                fig_cells, axes = plt.subplots(
+                    len(selected_cells), 1, figsize=(12, 2.5 * len(selected_cells) + 2), sharex=True
                 )
-                ax_comp.plot(
-                    t,
-                    np.nansum(df_gaps.values, axis=1),
-                    color="black",
-                    alpha=0.45,
-                    label="Marked gap Sum",
-                )
+                if len(selected_cells) == 1:
+                    axes = [axes]
+
+                fig_cells.suptitle("Part 1: Selected Cells - Before vs. After Interpolation", fontsize=14)
                 colors = ["red", "blue", "green", "orange", "purple", "brown"]
+
+                for cell_idx, cell in enumerate(selected_cells):
+                    ax = axes[cell_idx]
+                    ax.plot(t, dados[:, cell], color="gray", alpha=0.3, label="Original")
+                    ax.plot(t, df_gaps.values[:, cell], color="black", alpha=0.5, label="Marked Gap")
+                    for idx, (method, res) in enumerate(results_comparison.items()):
+                        ax.plot(
+                            t,
+                            res[:, cell],
+                            color=colors[idx % len(colors)],
+                            label=f"Method: {interp_names.get(method, method)}",
+                            alpha=0.8,
+                            lw=1.5,
+                        )
+                    ax.set_ylabel(f"Cell {cell + 1} (V)")
+                    ax.legend(loc="upper right")
+                    ax.grid(True)
+
+                axes[-1].set_xlabel("Time (s)")
+                plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+                plt.show(block=True)
+                plt.close(fig_cells)
+
+                # Part 2: Plotting summed signals before vs. after interpolation
+                fig_sum, ax_sum = plt.subplots(figsize=(12, 8))
+                fig_sum.suptitle("Part 2: Summed Signals - Before vs. After Interpolation", fontsize=14)
+
+                ax_sum.plot(t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum")
+                ax_sum.plot(t, np.nansum(df_gaps.values, axis=1), color="black", alpha=0.45, label="Marked Gap Sum")
+
                 for idx, (method, res) in enumerate(results_comparison.items()):
-                    ax_comp.plot(
+                    ax_sum.plot(
                         t,
                         np.sum(res, axis=1),
                         color=colors[idx % len(colors)],
                         label=f"Method: {interp_names.get(method, method)}",
                         alpha=0.8,
+                        lw=1.5,
                     )
-                ax_comp.set_xlabel("Time (s)")
-                ax_comp.set_ylabel("Sum of Load Cells (V)")
-                ax_comp.legend()
-                ax_comp.grid(True)
-                plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+                ax_sum.set_xlabel("Time (s)")
+                ax_sum.set_ylabel("Sum of Load Cells (V)")
+                ax_sum.legend(loc="upper right")
+                ax_sum.grid(True)
+                plt.tight_layout()
                 plt.show(block=True)
-                plt.close(fig_comp)
+                plt.close(fig_sum)
 
+                # Part 3: Ask for approval
+                approved = ask_yes_no_english(
+                    "Approve Interpolation Changes",
+                    "Do you approve the interpolation changes shown in the graphs?\n\n"
+                    "Yes = choose a final method to save.\n"
+                    "No = retry selection and interval marking.",
+                    parent=parent,
+                )
+
+                if not approved:
+                    del results_comparison
+                    gc.collect()
+                    plt.close("all")
+                    # Break the inner loop to redo cell and interval selection
+                    break
+
+                # User approved, let them choose the final method to save
                 choice_parent = parent or tk._default_root or tk.Tk()
                 if parent is None and choice_parent is not tk._default_root:
                     choice_parent.withdraw()
@@ -560,127 +633,34 @@ def clean_signal_with_clicks(file_path, parent=None):
                 }
                 del results_comparison
                 gc.collect()
-                break
 
-            fig_final, ax = plt.subplots(5, 1, figsize=(14, 10), sharex=True)
-            for i in range(4):
-                ax[i].plot(t, dados[:, i], color="gray", alpha=0.45, label="Original")
-                ax[i].plot(
-                    t, dados_adjusted[:, i], color=cores[i], lw=1.5, label="Adjusted + Interpolated"
+                for record in interval_records:
+                    record["mode"] = "adjusted_and_interpolated"
+                metadata_paths = save_adjustment_metadata(
+                    file_path,
+                    interval_records,
+                    "nan",
+                    interpolation_metadata=interpolation_metadata,
                 )
-                ax[i].legend()
-                ax[i].grid(True)
-            ax[4].plot(t, np.sum(dados, axis=1), "gray", alpha=0.45, label="Original Sum")
-            ax[4].plot(
-                t,
-                np.sum(dados_adjusted, axis=1),
-                "black",
-                lw=2,
-                label="Adjusted + Interpolated Sum",
-            )
-            ax[4].legend()
-            ax[4].set_xlabel("Time (s)")
-            plt.suptitle("Preview - Adjusted and interpolated signal", fontsize=16)
-            plt.tight_layout()
-            plt.show()
 
-            approved = ask_yes_no_english(
-                "Approve Adjustment + Interpolation",
-                "Do you approve this adjusted and interpolated signal?\n\n"
-                "Yes = save this final signal and TOML/JSON/CSV metadata.\n"
-                "No = redo interval marking and interpolation method selection for this same file.",
-                parent=parent,
-            )
-            plt.close("all")
-            if not approved:
-                continue
-
-            for record in interval_records:
-                record["mode"] = "adjusted_and_interpolated"
-            metadata_paths = save_adjustment_metadata(
-                file_path,
-                interval_records,
-                "adjusted_and_interpolated",
-                interpolation_metadata=interpolation_metadata,
-            )
-
-            output_data = np.column_stack((t, dados_adjusted))
-            output_name = file_path.replace(".csv", "_clean.csv")
-            np.savetxt(output_name, output_data, delimiter=",", fmt="%.8f", header="", comments="")
-            messagebox.showinfo(
-                "Completed",
-                f"Adjusted + interpolated signal saved:\n{output_name}\n\n"
-                "Interval and interpolation metadata saved as TOML/JSON/CSV.",
-                parent=parent,
-            )
-            return output_name, dados_adjusted, metadata_paths
+                output_data = np.column_stack((t, dados_adjusted))
+                output_name = file_path.replace(".csv", "_clean.csv")
+                np.savetxt(output_name, output_data, delimiter=",", fmt="%.8f", header="", comments="")
+                messagebox.showinfo(
+                    "Completed",
+                    f"Adjusted + interpolated signal saved:\n{output_name}\n\n"
+                    "Interval and interpolation metadata saved as TOML/JSON/CSV.",
+                    parent=parent,
+                )
+                return output_name, dados_adjusted, metadata_paths
     finally:
         plt.close("all")
         gc.collect()
 
 
 def ask_yes_no_english(title, message, parent=None) -> bool:
-    """A custom Yes/No dialog window to force English 'Yes' and 'No' buttons."""
-    # Find active root/parent window
-    dialog_parent = parent or tk._default_root or tk.Tk()
-
-    result = [False]  # Store result
-
-    dialog = tk.Toplevel(dialog_parent)
-    dialog.title(title)
-    dialog.transient(dialog_parent)
-    dialog.grab_set()
-
-    # Configure spacing and padding
-    frame = ttk.Frame(dialog, padding=20)
-    frame.pack(fill=tk.BOTH, expand=True)
-
-    # Message
-    lbl_msg = ttk.Label(frame, text=message, justify=tk.LEFT, wraplength=450)
-    lbl_msg.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
-
-    # Button Frame
-    btn_frame = ttk.Frame(frame)
-    btn_frame.pack(anchor=tk.E)
-
-    def on_yes():
-        result[0] = True
-        dialog.destroy()
-
-    def on_no():
-        result[0] = False
-        dialog.destroy()
-
-    btn_yes = ttk.Button(btn_frame, text="Yes", command=on_yes, width=10)
-    btn_yes.pack(side=tk.LEFT, padx=5)
-
-    btn_no = ttk.Button(btn_frame, text="No", command=on_no, width=10)
-    btn_no.pack(side=tk.LEFT, padx=5)
-
-    # Center dialog on parent
-    dialog.update_idletasks()
-    dialog_width = dialog.winfo_width()
-    dialog_height = dialog.winfo_height()
-
-    parent_x = dialog_parent.winfo_rootx()
-    parent_y = dialog_parent.winfo_rooty()
-    parent_width = dialog_parent.winfo_width()
-    parent_height = dialog_parent.winfo_height()
-
-    try:
-        px = parent_x + (parent_width - dialog_width) // 2
-        py = parent_y + (parent_height - dialog_height) // 2
-        dialog.geometry(f"+{px}+{py}")
-    except Exception:
-        pass
-
-    # Set focus and key binds
-    btn_yes.focus_set()
-    dialog.bind("<Return>", lambda e: on_yes())
-    dialog.bind("<Escape>", lambda e: on_no())
-
-    dialog.wait_window()
-    return result[0]
+    """Standard messagebox Yes/No dialog to match the rest of the project (e.g. tugturn)."""
+    return bool(messagebox.askyesno(title, message, parent=parent))
 
 
 def get_output_base_folder(folder):
@@ -1431,6 +1411,8 @@ def load_adjustment_metadata(file_path):
         with open(sidecar, encoding="utf-8") as f:
             payload = json.load(f)
         payload["metadata_file"] = str(sidecar)
+        if "processed" not in payload:
+            payload["processed"] = True
         return payload
 
     if sidecar.suffix.lower() == ".toml":
@@ -1439,6 +1421,7 @@ def load_adjustment_metadata(file_path):
         return {
             "source_file": adjustment.get("source_file", ""),
             "adjustment_mode": adjustment.get("adjustment_mode", ""),
+            "processed": adjustment.get("processed", True),
             "interpolation": payload.get("interpolation", {}),
             "intervals": payload.get("intervals", []),
             "metadata_file": str(sidecar),
@@ -1565,6 +1548,11 @@ def preprocess_file_interp(file_path, config, fs=1000, root=None):
     metadata = load_adjustment_metadata(file_path)
     if metadata is None:
         print(f"No adjustment metadata for {os.path.basename(file_path)}. Copying unchanged.")
+        df = pd.read_csv(file_path, sep=",", header=None)
+        return df.values, df.iloc[:, 1:5].values, df[0].values, False
+
+    if metadata.get("processed") is False or metadata.get("adjustment_mode") == "excluded":
+        print(f"{os.path.basename(file_path)} marked as excluded/not processed. Copying unchanged.")
         df = pd.read_csv(file_path, sep=",", header=None)
         return df.values, df.iloc[:, 1:5].values, df[0].values, False
 
@@ -3767,6 +3755,14 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                 print(f"\n>>> Processing: {file}")
                 base_name = file[:-4]
 
+                metadata = load_adjustment_metadata(os.path.join(folder, file))
+                if metadata and metadata.get("processed") is False:
+                    msg = f"Trial {file} skipped from processing (marked as excluded/not processed because it needs more filtering adjustments)."
+                    print(msg)
+                    if parent and hasattr(parent, "_write_log"):
+                        parent._write_log(msg)
+                    continue
+
                 grf_bw, grf_total_raw, _, _ = load_data(
                     os.path.join(folder, file),
                     tara_file,
@@ -3988,7 +3984,7 @@ class LoadCellTreadmillDialog(tk.Toplevel):
 
         ttk.Label(
             frame,
-            text="Run the full sequence or launch one pipeline step. Artifact adjustment and interpolation run before filtering.",
+            text="Run the full sequence or launch one pipeline step. Signal filtering runs before artifact adjustment and interpolation.",
             wraplength=540,
             justify="center",
             foreground="#64748b",
@@ -4011,16 +4007,16 @@ class LoadCellTreadmillDialog(tk.Toplevel):
 
         ttk.Button(
             stages_frame,
-            text="1. Adjust + Interpolate",
+            text="1. Filter Only (Zero-Phase + PSD)",
             style="Secondary.TButton",
-            command=lambda: self._execute_stage("adjust"),
+            command=lambda: self._execute_stage("filter"),
         ).pack(fill="x", pady=3)
 
         ttk.Button(
             stages_frame,
-            text="2. Filter Only (Zero-Phase + PSD)",
+            text="2. Adjust + Interpolate",
             style="Secondary.TButton",
-            command=lambda: self._execute_stage("filter"),
+            command=lambda: self._execute_stage("adjust"),
         ).pack(fill="x", pady=3)
 
         ttk.Button(
@@ -4065,7 +4061,7 @@ class LoadCellTreadmillDialog(tk.Toplevel):
 
     def _run_full_pipeline(self) -> None:
         self._write_log(
-            "Starting Full Sequential Pipeline (Ajuste+Interpolação -> Filtragem -> Processamento)"
+            "Starting Full Sequential Pipeline (Filtragem -> Ajuste+Interpolação -> Processamento)"
         )
 
         # 1. Ask for raw folder
@@ -4074,25 +4070,25 @@ class LoadCellTreadmillDialog(tk.Toplevel):
             self._write_log("Pipeline canceled by user.")
             return
 
-        # 2. Stage 1: Adjust + Interpolate raw trials before filtering
-        self._write_log("Executing Stage 1: Artifact Adjustment + Interpolation...")
-        limpos_folder = run_adjust_stage(parent=self, initial_dir=raw_folder)
-        if not limpos_folder:
-            self._write_log("Pipeline stopped after Stage 1 (Adjustment+Interpolation).")
+        # 2. Stage 1: Filter raw signals
+        self._write_log("Executing Stage 1: Signal Filtering...")
+        filtrado_folder = run_filter_stage(parent=self, initial_dir=raw_folder)
+        if not filtrado_folder:
+            self._write_log("Pipeline stopped after Stage 1 (Filtering).")
             return
 
-        # 3. Stage 2: Filter adjusted/interpolated signals
-        self._write_log(f"Executing Stage 2: Signal Filtering on folder '{limpos_folder}'...")
-        filtrado_folder = run_filter_stage(parent=self, initial_dir=limpos_folder)
-        if not filtrado_folder:
-            self._write_log("Pipeline stopped after Stage 2 (Filtering).")
+        # 3. Stage 2: Adjust + Interpolate filtered signals
+        self._write_log(f"Executing Stage 2: Artifact Adjustment + Interpolation on folder '{filtrado_folder}'...")
+        limpos_folder = run_adjust_stage(parent=self, initial_dir=filtrado_folder)
+        if not limpos_folder:
+            self._write_log("Pipeline stopped after Stage 2 (Adjustment+Interpolation).")
             return
 
         # 4. Stage 3: Process Metrics
         self._write_log(
-            f"Executing Stage 3: Biomechanical Metrics on folder '{filtrado_folder}'..."
+            f"Executing Stage 3: Biomechanical Metrics on folder '{limpos_folder}'..."
         )
-        results_folder = run_process_stage(parent=self, initial_dir=filtrado_folder)
+        results_folder = run_process_stage(parent=self, initial_dir=limpos_folder)
         if not results_folder:
             self._write_log("Pipeline stopped after Stage 3 (Processing).")
             return
@@ -4153,13 +4149,13 @@ def main(argv: list[str] | None = None) -> int:
         root.withdraw()
         if args.step == "all":
             # sequential pipeline on input_dir
-            limpos = run_adjust_stage(parent=root, initial_dir=args.input_dir)
-            if limpos:
-                ajustado = run_interpolate_stage(parent=root, initial_dir=limpos)
-                if ajustado:
-                    filtrado = run_filter_stage(parent=root, initial_dir=ajustado)
-                    if filtrado:
-                        run_process_stage(parent=root, initial_dir=filtrado)
+            filtrado = run_filter_stage(parent=root, initial_dir=args.input_dir)
+            if filtrado:
+                limpos = run_adjust_stage(parent=root, initial_dir=filtrado)
+                if limpos:
+                    ajustado = run_interpolate_stage(parent=root, initial_dir=limpos)
+                    if ajustado:
+                        run_process_stage(parent=root, initial_dir=ajustado)
         elif args.step == "adjust":
             run_adjust_stage(parent=root, initial_dir=args.input_dir)
         elif args.step == "interpolate":
