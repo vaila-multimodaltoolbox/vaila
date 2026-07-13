@@ -661,7 +661,7 @@ def test_run_process_stage_skips_excluded_trials(tmp_path, monkeypatch):
     # Write dummy CSV data
     pd.DataFrame(np.zeros((10, 5))).to_csv(trial, header=False, index=False)
     pd.DataFrame(np.zeros((10, 5))).to_csv(tara, header=False, index=False)
-    pd.DataFrame(np.zeros((10, 5))).to_csv(peso, header=False, index=False)
+    pd.DataFrame(np.ones((10, 5))).to_csv(peso, header=False, index=False)
 
     # Save excluded metadata for this trial
     records = [{"start_index": 0, "end_index_exclusive": 10, "cells_0based": [0], "mode": "excluded"}]

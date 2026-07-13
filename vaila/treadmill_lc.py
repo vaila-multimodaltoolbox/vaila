@@ -356,11 +356,13 @@ def save_adjustment_metadata(file_path, interval_records, mode, interpolation_me
 
     source = Path(file_path)
     interpolation_metadata = interpolation_metadata or {}
+    processed = interpolation_metadata.get("processed", True)
     payload = {
         "source_file": source.name,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "adjustment_mode": mode,
         "mode_label": ADJUSTMENT_MODE_LABELS.get(mode, mode),
+        "processed": processed,
         "interpolation": interpolation_metadata,
         "intervals": interval_records,
     }
@@ -534,35 +536,79 @@ def clean_signal_with_clicks(file_path, parent=None):
                     interp_config["rbf_window_size"],
                 )
 
-                fig_comp, ax_comp = plt.subplots(figsize=(12, 8))
-                fig_comp.suptitle("Comparison of Summed Signals (Post-Interpolation)", fontsize=16)
-                ax_comp.plot(
-                    t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum"
+                # Part 1: Plotting individual selected cells before vs. after interpolation
+                fig_cells, axes = plt.subplots(
+                    len(selected_cells), 1, figsize=(12, 2.5 * len(selected_cells) + 2), sharex=True
                 )
-                ax_comp.plot(
-                    t,
-                    np.nansum(df_gaps.values, axis=1),
-                    color="black",
-                    alpha=0.45,
-                    label="Marked gap Sum",
-                )
+                if len(selected_cells) == 1:
+                    axes = [axes]
+
+                fig_cells.suptitle("Part 1: Selected Cells - Before vs. After Interpolation", fontsize=14)
                 colors = ["red", "blue", "green", "orange", "purple", "brown"]
+
+                for cell_idx, cell in enumerate(selected_cells):
+                    ax = axes[cell_idx]
+                    ax.plot(t, dados[:, cell], color="gray", alpha=0.3, label="Original")
+                    ax.plot(t, df_gaps.values[:, cell], color="black", alpha=0.5, label="Marked Gap")
+                    for idx, (method, res) in enumerate(results_comparison.items()):
+                        ax.plot(
+                            t,
+                            res[:, cell],
+                            color=colors[idx % len(colors)],
+                            label=f"Method: {interp_names.get(method, method)}",
+                            alpha=0.8,
+                            lw=1.5,
+                        )
+                    ax.set_ylabel(f"Cell {cell + 1} (V)")
+                    ax.legend(loc="upper right")
+                    ax.grid(True)
+
+                axes[-1].set_xlabel("Time (s)")
+                plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+                plt.show(block=True)
+                plt.close(fig_cells)
+
+                # Part 2: Plotting summed signals before vs. after interpolation
+                fig_sum, ax_sum = plt.subplots(figsize=(12, 8))
+                fig_sum.suptitle("Part 2: Summed Signals - Before vs. After Interpolation", fontsize=14)
+
+                ax_sum.plot(t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum")
+                ax_sum.plot(t, np.nansum(df_gaps.values, axis=1), color="black", alpha=0.45, label="Marked Gap Sum")
+
                 for idx, (method, res) in enumerate(results_comparison.items()):
-                    ax_comp.plot(
+                    ax_sum.plot(
                         t,
                         np.sum(res, axis=1),
                         color=colors[idx % len(colors)],
                         label=f"Method: {interp_names.get(method, method)}",
                         alpha=0.8,
+                        lw=1.5,
                     )
-                ax_comp.set_xlabel("Time (s)")
-                ax_comp.set_ylabel("Sum of Load Cells (V)")
-                ax_comp.legend()
-                ax_comp.grid(True)
-                plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+                ax_sum.set_xlabel("Time (s)")
+                ax_sum.set_ylabel("Sum of Load Cells (V)")
+                ax_sum.legend(loc="upper right")
+                ax_sum.grid(True)
+                plt.tight_layout()
                 plt.show(block=True)
-                plt.close(fig_comp)
+                plt.close(fig_sum)
 
+                # Part 3: Ask for approval
+                approved = ask_yes_no_english(
+                    "Approve Interpolation Changes",
+                    "Do you approve the interpolation changes shown in the graphs?\n\n"
+                    "Yes = choose a final method to save.\n"
+                    "No = retry selection and interval marking.",
+                    parent=parent,
+                )
+
+                if not approved:
+                    del results_comparison
+                    gc.collect()
+                    plt.close("all")
+                    # Break the inner loop to redo cell and interval selection
+                    break
+
+                # User approved, let them choose the final method to save
                 choice_parent = parent or tk._default_root or tk.Tk()
                 if parent is None and choice_parent is not tk._default_root:
                     choice_parent.withdraw()
@@ -587,60 +633,26 @@ def clean_signal_with_clicks(file_path, parent=None):
                 }
                 del results_comparison
                 gc.collect()
-                break
 
-            fig_final, ax = plt.subplots(5, 1, figsize=(14, 10), sharex=True)
-            for i in range(4):
-                ax[i].plot(t, dados[:, i], color="gray", alpha=0.45, label="Original")
-                ax[i].plot(
-                    t, dados_adjusted[:, i], color=cores[i], lw=1.5, label="Adjusted + Interpolated"
+                for record in interval_records:
+                    record["mode"] = "adjusted_and_interpolated"
+                metadata_paths = save_adjustment_metadata(
+                    file_path,
+                    interval_records,
+                    "nan",
+                    interpolation_metadata=interpolation_metadata,
                 )
-                ax[i].legend()
-                ax[i].grid(True)
-            ax[4].plot(t, np.sum(dados, axis=1), "gray", alpha=0.45, label="Original Sum")
-            ax[4].plot(
-                t,
-                np.sum(dados_adjusted, axis=1),
-                "black",
-                lw=2,
-                label="Adjusted + Interpolated Sum",
-            )
-            ax[4].legend()
-            ax[4].set_xlabel("Time (s)")
-            plt.suptitle("Preview - Adjusted and interpolated signal", fontsize=16)
-            plt.tight_layout()
-            plt.show()
 
-            approved = ask_yes_no_english(
-                "Approve Adjustment + Interpolation",
-                "Do you approve this adjusted and interpolated signal?\n\n"
-                "Yes = save this final signal and TOML/JSON/CSV metadata.\n"
-                "No = redo interval marking and interpolation method selection for this same file.",
-                parent=parent,
-            )
-            plt.close("all")
-            if not approved:
-                continue
-
-            for record in interval_records:
-                record["mode"] = "adjusted_and_interpolated"
-            metadata_paths = save_adjustment_metadata(
-                file_path,
-                interval_records,
-                "adjusted_and_interpolated",
-                interpolation_metadata=interpolation_metadata,
-            )
-
-            output_data = np.column_stack((t, dados_adjusted))
-            output_name = file_path.replace(".csv", "_clean.csv")
-            np.savetxt(output_name, output_data, delimiter=",", fmt="%.8f", header="", comments="")
-            messagebox.showinfo(
-                "Completed",
-                f"Adjusted + interpolated signal saved:\n{output_name}\n\n"
-                "Interval and interpolation metadata saved as TOML/JSON/CSV.",
-                parent=parent,
-            )
-            return output_name, dados_adjusted, metadata_paths
+                output_data = np.column_stack((t, dados_adjusted))
+                output_name = file_path.replace(".csv", "_clean.csv")
+                np.savetxt(output_name, output_data, delimiter=",", fmt="%.8f", header="", comments="")
+                messagebox.showinfo(
+                    "Completed",
+                    f"Adjusted + interpolated signal saved:\n{output_name}\n\n"
+                    "Interval and interpolation metadata saved as TOML/JSON/CSV.",
+                    parent=parent,
+                )
+                return output_name, dados_adjusted, metadata_paths
     finally:
         plt.close("all")
         gc.collect()
