@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 13 July 2026
-Version: 0.3.85
+Version: 0.3.83
 
 Example of usage:
 uv run vaila.py
@@ -249,7 +249,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 13.Jul.2026 v0.3.85 (Python 3.12.13)
+    vailá - 10.Jul.2026 v0.3.82 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -360,7 +360,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 13.Jul.2026 v0.3.85 (Python 3.12.13)")
+        self.title("vailá - 10.Jul.2026 v0.3.82 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -1860,15 +1860,19 @@ class Vaila(tk.Tk):
                 else:
                     cmd = f'scp -P {port} -r "{user}@{host}:{remote_n}/" "{local_n}"'
 
-            # write temp script
+            # write temp script (ASCII-only: Windows default encoding is cp1252)
             src_desc = local_n if mode == "upload" else f"{user}@{host}:{remote_n}"
             dst_desc = f"{user}@{host}:{remote_n}" if mode == "upload" else local_n
             with tempfile.NamedTemporaryFile(
-                mode="w", suffix="_vaila_transfer.sh", delete=False, prefix="vaila_"
+                mode="w",
+                suffix="_vaila_transfer.sh",
+                delete=False,
+                prefix="vaila_",
+                encoding="utf-8",
             ) as tmp:
                 tmp.write("#!/bin/bash\n")
                 tmp.write('echo "============================================"\n')
-                tmp.write(f'echo "vailá File Transfer — {mode.upper()}"\n')
+                tmp.write(f'echo "vaila File Transfer - {mode.upper()}"\n')
                 tmp.write('echo "============================================"\n')
                 tmp.write(f'echo "From: {src_desc}"\n')
                 tmp.write(f'echo "To:   {dst_desc}"\n')
@@ -1878,9 +1882,9 @@ class Vaila(tk.Tk):
                 tmp.write(f"{cmd}\n")
                 tmp.write("echo\n")
                 tmp.write("if [ $? -eq 0 ]; then\n")
-                tmp.write('    echo "✅ Transfer completed successfully!"\n')
+                tmp.write('    echo "[OK] Transfer completed successfully!"\n')
                 tmp.write("else\n")
-                tmp.write('    echo "❌ Transfer failed!"\n')
+                tmp.write('    echo "[FAIL] Transfer failed!"\n')
                 tmp.write("fi\n")
                 tmp.write("echo\n")
                 tmp.write('read -p "Press Enter to close..."\n')
