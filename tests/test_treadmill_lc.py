@@ -651,3 +651,48 @@ def test_analyze_spectrum_filt_uses_filter_specific_output_names(tmp_path):
     assert (tmp_path / "s01_d01_t01_filter_sum_spectrum.png").exists()
     assert (tmp_path / "s01_d01_t01_filter_spectrum_metrics.csv").exists()
     assert not (tmp_path / "s01_d01_t01_metrics.csv").exists()
+
+
+def test_run_process_stage_skips_excluded_trials(tmp_path, monkeypatch):
+    trial = tmp_path / "s01_d01_t01.csv"
+    tara = tmp_path / "s01_d01_tara.csv"
+    peso = tmp_path / "s01_d01_peso.csv"
+
+    # Write dummy CSV data
+    pd.DataFrame(np.zeros((10, 5))).to_csv(trial, header=False, index=False)
+    pd.DataFrame(np.zeros((10, 5))).to_csv(tara, header=False, index=False)
+    pd.DataFrame(np.zeros((10, 5))).to_csv(peso, header=False, index=False)
+
+    # Save excluded metadata for this trial
+    records = [{"start_index": 0, "end_index_exclusive": 10, "cells_0based": [0], "mode": "excluded"}]
+    save_adjustment_metadata(
+        str(trial),
+        records,
+        "excluded",
+        interpolation_metadata={"status": "excluded", "processed": False},
+    )
+
+    class DummyDialog:
+        def __init__(self, parent):
+            self.result = {
+                "processing": {
+                    "participant_weight_kg": 70.0,
+                    "use_advanced_calibration": False,
+                    "filter_cutoff_hz": 50,
+                    "apply_processing_filter": False,
+                    "detection_threshold_bw": 0.1,
+                    "generate_figures": False,
+                }
+            }
+
+    monkeypatch.setattr(lct, "ProcessConfigDialog", DummyDialog)
+
+    out_dir = lct.run_process_stage(parent=None, initial_dir=str(tmp_path))
+
+    assert out_dir is not None
+    steps_csv = Path(out_dir) / "s01_d01_t01_processing_steps.csv"
+    assert not steps_csv.exists()
+
+    metrics_csv = Path(out_dir) / "s01_d01_processing_metrics.csv"
+    assert not metrics_csv.exists()
+

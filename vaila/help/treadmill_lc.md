@@ -156,5 +156,5 @@ uv run python -m vaila.treadmill_lc --input-dir /path/to/csv_folder --step all
 Common `--step` values are `all`, `adjust`, `filter`, and `process`.
 
 ---
-- **Version**: 0.3.80
-- **Updated**: 08 July 2026
+- **Version**: 0.3.85
+- **Updated**: 13 July 2026

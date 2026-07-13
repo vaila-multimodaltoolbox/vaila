@@ -9,8 +9,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 08 July 2026
-Version: 0.3.80
+Update Date: 13 July 2026
+Version: 0.3.85
 
 Description:
 ------------
@@ -178,6 +178,7 @@ ADJUSTMENT_MODE_LABELS = {
     "zero": "Keep samples and set marked segment to zero",
     "neutral_mean": "Keep samples and fill with neutral mean from boundary line",
     "linear": "Keep samples and fill with linear bridge between boundaries",
+    "excluded": "Signal completely excluded from processing",
 }
 
 
@@ -409,11 +410,17 @@ def clean_signal_with_clicks(file_path, parent=None):
 
             if not ask_yes_no_english(
                 "Artifact Adjustment + Interpolation",
-                "Do you want to mark bad segments and choose an interpolation method?",
+                "Do you want to adjust or exclude signal from any of the load cells in this file?",
                 parent=parent,
             ):
                 plt.close(fig_overview)
                 return None, dados, []
+
+            is_interpolation = ask_yes_no_english(
+                "Select Action Type",
+                "Do you want to interpolate bad segments? (Click 'Yes' to interpolate segments, or 'No' to exclude/discard the load-cell signal entirely)",
+                parent=parent,
+            )
 
             selection_parent = parent or tk._default_root or tk.Tk()
             if parent is None and selection_parent is not tk._default_root:
@@ -425,9 +432,29 @@ def clean_signal_with_clicks(file_path, parent=None):
 
             if not selected_cells:
                 messagebox.showinfo(
-                    "Info", "No load cells were selected for adjustment.", parent=parent
+                    "Info", "No load cells were selected. No adjustments applied.", parent=parent
                 )
                 return None, dados, []
+
+            if not is_interpolation:
+                messagebox.showwarning(
+                    "Trial Excluded",
+                    f"Trial {os.path.basename(file_path)} will not be processed because it needs more filtering adjustments.",
+                    parent=parent,
+                )
+                interval_records = [{
+                    "start_index": 0,
+                    "end_index_exclusive": len(t),
+                    "cells_0based": selected_cells,
+                    "mode": "excluded",
+                }]
+                metadata_paths = save_adjustment_metadata(
+                    file_path,
+                    interval_records,
+                    "excluded",
+                    interpolation_metadata={"status": "excluded", "processed": False},
+                )
+                return None, dados, metadata_paths
 
             intervalos_marcados = []
 
@@ -619,46 +646,9 @@ def clean_signal_with_clicks(file_path, parent=None):
         gc.collect()
 
 
-class YesNoDialog(simpledialog.Dialog):
-    """Custom Yes/No dialog window that inherits from simpledialog.Dialog to match project aesthetics."""
-    def __init__(self, parent, title, message):
-        self.message = message
-        self.result = False
-        super().__init__(parent, title=title)
-
-    def body(self, master):
-        lbl = ttk.Label(master, text=self.message, justify="left", wraplength=400)
-        lbl.pack(padx=20, pady=15, fill="both", expand=True)
-        return lbl
-
-    def buttonbox(self):
-        box = ttk.Frame(self)
-
-        btn_yes = ttk.Button(box, text="Yes", width=10, command=self.yes)
-        btn_yes.pack(side="left", padx=5, pady=5)
-
-        btn_no = ttk.Button(box, text="No", width=10, command=self.no)
-        btn_no.pack(side="left", padx=5, pady=5)
-
-        self.bind("<Return>", self.yes)
-        self.bind("<Escape>", self.no)
-
-        box.pack(anchor="e", padx=15, pady=(0, 10))
-
-    def yes(self, event=None):
-        self.result = True
-        self.ok()
-
-    def no(self, event=None):
-        self.result = False
-        self.cancel()
-
-
 def ask_yes_no_english(title, message, parent=None) -> bool:
-    """A standard-themed Yes/No dialog window forcing English 'Yes' and 'No' buttons."""
-    dialog_parent = parent or tk._default_root or tk.Tk()
-    dialog = YesNoDialog(dialog_parent, title, message)
-    return dialog.result
+    """Standard messagebox Yes/No dialog to match the rest of the project (e.g. tugturn)."""
+    return bool(messagebox.askyesno(title, message, parent=parent))
 
 
 def get_output_base_folder(folder):
@@ -1409,6 +1399,8 @@ def load_adjustment_metadata(file_path):
         with open(sidecar, encoding="utf-8") as f:
             payload = json.load(f)
         payload["metadata_file"] = str(sidecar)
+        if "processed" not in payload:
+            payload["processed"] = True
         return payload
 
     if sidecar.suffix.lower() == ".toml":
@@ -1417,6 +1409,7 @@ def load_adjustment_metadata(file_path):
         return {
             "source_file": adjustment.get("source_file", ""),
             "adjustment_mode": adjustment.get("adjustment_mode", ""),
+            "processed": adjustment.get("processed", True),
             "interpolation": payload.get("interpolation", {}),
             "intervals": payload.get("intervals", []),
             "metadata_file": str(sidecar),
@@ -1543,6 +1536,11 @@ def preprocess_file_interp(file_path, config, fs=1000, root=None):
     metadata = load_adjustment_metadata(file_path)
     if metadata is None:
         print(f"No adjustment metadata for {os.path.basename(file_path)}. Copying unchanged.")
+        df = pd.read_csv(file_path, sep=",", header=None)
+        return df.values, df.iloc[:, 1:5].values, df[0].values, False
+
+    if metadata.get("processed") is False or metadata.get("adjustment_mode") == "excluded":
+        print(f"{os.path.basename(file_path)} marked as excluded/not processed. Copying unchanged.")
         df = pd.read_csv(file_path, sep=",", header=None)
         return df.values, df.iloc[:, 1:5].values, df[0].values, False
 
@@ -3744,6 +3742,14 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
             for file in group_files:
                 print(f"\n>>> Processing: {file}")
                 base_name = file[:-4]
+
+                metadata = load_adjustment_metadata(os.path.join(folder, file))
+                if metadata and metadata.get("processed") is False:
+                    msg = f"Trial {file} skipped from processing (marked as excluded/not processed because it needs more filtering adjustments)."
+                    print(msg)
+                    if parent and hasattr(parent, "_write_log"):
+                        parent._write_log(msg)
+                    continue
 
                 grf_bw, grf_total_raw, _, _ = load_data(
                     os.path.join(folder, file),
