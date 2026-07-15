@@ -25,7 +25,7 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.3.78</p>
+        <p><strong>Version:</strong> 0.3.83</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -47,7 +47,7 @@
             <li><strong>Auto-fit</strong>: Hotkey <code>0</code>; zoom/pan with +/-, wheel, middle-mouse drag.</li>
             <li><strong>Marker navigation</strong>: Shift+Left/Right cycles previous/next cut marker with wraparound, matching <code>getpixelvideo</code>; PageUp/PageDown and Home/End remain available.</li>
             <li><strong>Cut timeline feedback</strong>: clickable/draggable strip above the scrub slider, matching <code>getpixelvideo</code>. Blue = range, green = start, orange = end, yellow = pending start, white = playhead. Marker columns snap to cut points.</li>
-            <li><strong>Responsive final render</strong>: ffmpeg/OpenCV export uses a cancellable Tk progress dialog that remains responsive while rendering.</li>
+            <li><strong>Responsive final render</strong>: ffmpeg/OpenCV export uses a cancellable Tk progress dialog. Hardware H.264 (<code>h264_nvenc</code> on NVIDIA Linux/Windows, <code>h264_videotoolbox</code> on macOS) is used when available, with automatic CPU <code>libx264</code> fallback on every OS.</li>
             <li><strong>Custom output base name</strong>: <code>B</code> or <strong>Base name</strong> button → <code>{prefix}_frame_{start}_to_{end}.mp4</code>; folder still <code>{video}_vailacut_{timestamp}</code>.</li>
             <li><strong>Per-cut output names (CSV/TXT)</strong>: <strong>V</strong> or <strong>N</strong> or <strong>Cut names</strong> button — one name per line → <code>name.mp4</code> per cut (example: <code>CarlosMiguel_cod_02</code>, …). Does not load cuts or replace TOML (<strong>F</strong>); only exported video filenames. <strong>C</strong> = labels in TOML only.</li>
             <li><strong>Subprocess launch</strong>: started from the main GUI as a separate process (like <code>getpixelvideo</code>), so closing the cut window returns control to vailá without freezing the main window.</li>
@@ -68,7 +68,7 @@
             <li><code>prompt_output_basenames_csv()</code>, <code>parse_basename_list()</code>, <code>build_cut_output_filenames()</code> — per-cut name list (N / Names CSV) and collision-safe filename resolution.</li>
             <li><code>save_cuts_to_toml()</code> — writes TOML (1-based frames, .6f times).</li>
             <li><code>load_cuts_from_toml()</code> / <code>load_cuts_from_toml_file()</code> — reads TOML; legacy <code>.txt</code> fallback.</li>
-            <li><code>cut_video_with_ffmpeg()</code> / <code>cut_video_with_opencv()</code> — cutting backends.</li>
+            <li><code>cut_video_with_ffmpeg()</code> / <code>cut_video_with_opencv()</code> — cutting backends (NVENC when available).</li>
             <li><code>batch_process_videos()</code>, <code>batch_process_sync_videos()</code> — batch workflows.</li>
             <li><code>get_precise_video_metadata()</code> — ffprobe-first metadata.</li>
             <li><code>run_cutvideo()</code> — GUI entry point.</li>
@@ -125,13 +125,14 @@
             <li><strong>Main vailá window froze / needed <code>kill</code> after cutting:</strong> Fixed — separate process plus responsive cancellable progress dialog during final export.</li>
             <li><strong>Player does not open after metadata:</strong> Use v0.3.47+ (output_basename init fix).</li>
             <li><strong>No ffmpeg:</strong> OpenCV fallback; install ffmpeg for precise cuts and audio.</li>
+            <li><strong>Slow cuts / no GPU:</strong> NVIDIA: FFmpeg 8.x/7.x + <code>h264_nvenc</code>. macOS: <code>h264_videotoolbox</code> when available. CPU-only: <code>libx264</code>. Force CPU with <code>VAILA_FFMPEG_ENCODER=libx264</code>.</li>
             <li><strong>Cannot load cuts:</strong> Use <code>.toml</code> with <code>[[cuts]]</code>; legacy <code>.txt</code> deprecated.</li>
             <li><strong>No audio:</strong> Video may lack audio track; panel shows "No Audio Data".</li>
         </ul>
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 08 July 2026 (v0.3.78 - Manual FPS TOML timing fix)</p>
+        <p>📅 Last Updated: 15 July 2026 (v0.3.83 - NVIDIA NVENC for cut/convert encode)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>

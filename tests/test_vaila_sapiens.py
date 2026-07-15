@@ -23,6 +23,28 @@ def test_normalize_model_key_invalid() -> None:
         vs._normalize_model_key("99b")
 
 
+def test_load_visualize_keypoints_from_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """pose_render_utils is not a package; load via file path, not bare import."""
+    vis_dir = tmp_path / "sapiens" / "pose" / "tools" / "vis"
+    vis_dir.mkdir(parents=True)
+    (vis_dir / "pose_render_utils.py").write_text(
+        "def visualize_keypoints(**kwargs):\n    return kwargs.get('image')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(vs, "_sapiens2_root", lambda: tmp_path)
+    fn = vs._load_visualize_keypoints()
+    assert fn is not None
+    img = np.zeros((4, 4, 3), dtype=np.uint8)
+    assert fn(image=img) is img
+
+
+def test_load_visualize_keypoints_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(vs, "_sapiens2_root", lambda: tmp_path)
+    assert vs._load_visualize_keypoints() is None
+
+
 def test_resolve_model_spec_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = tmp_path / "repo"
     sapiens2 = repo / "sapiens2" / "sapiens" / "pose"
