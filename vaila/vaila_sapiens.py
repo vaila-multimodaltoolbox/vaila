@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 10 July 2026
-Version: 0.3.82
+Update Date: 15 July 2026
+Version: 0.3.83
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -392,6 +392,33 @@ def _find_videos(path: Path) -> list[Path]:
     return out
 
 
+def _pose_render_utils_path() -> Path:
+    """Absolute path to Sapiens2 ``pose_render_utils.py`` (not a Python package)."""
+    return (
+        _sapiens2_root() / "sapiens" / "pose" / "tools" / "vis" / "pose_render_utils.py"
+    ).resolve()
+
+
+def _load_visualize_keypoints() -> Callable[..., np.ndarray] | None:
+    """Load ``visualize_keypoints`` via file path (avoids bare sys.path imports)."""
+    vis_mod = _pose_render_utils_path()
+    if not vis_mod.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "vaila_sapiens_pose_render_utils",
+        vis_mod,
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        return None
+    fn = getattr(module, "visualize_keypoints", None)
+    return fn if callable(fn) else None
+
+
 @contextlib.contextmanager
 def _sapiens_pose_context() -> Iterator[Path]:
     """Temporarily use the upstream pose tree (configs + vis helpers)."""
@@ -490,8 +517,13 @@ class PoseInferenceSession:
             f"Loading Sapiens2 pose ({spec.arch}) from {spec.checkpoint_path.name} on {device} …"
         )
         with _sapiens_pose_context():
-            from sapiens.pose.datasets import UDPHeatmap, parse_pose_metainfo
-            from sapiens.pose.models import init_model
+            from sapiens.pose.datasets import (  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
+                UDPHeatmap,
+                parse_pose_metainfo,
+            )
+            from sapiens.pose.models import (  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
+                init_model,
+            )
 
             self.model = init_model(
                 str(spec.config_path),
@@ -507,12 +539,8 @@ class PoseInferenceSession:
                 raise RuntimeError(f"Unsupported codec type: {codec_type}")
             self.model.codec = UDPHeatmap(**self.model.cfg.codec)
 
-            try:
-                from pose_render_utils import visualize_keypoints
-
-                self._visualize_fn = visualize_keypoints
-            except ImportError:
-                self._visualize_fn = None
+            # File-path load: pose_render_utils lives outside the sapiens package.
+            self._visualize_fn = _load_visualize_keypoints()
 
         n_kp = int(getattr(self.model.cfg, "num_keypoints", 0) or 0)
         _sapiens_log(f"Pose model ready ({n_kp or '?'} keypoints, flip_test={self.flip_test})")
@@ -551,7 +579,9 @@ class PoseInferenceSession:
     def _detect_persons(self, image_bgr: np.ndarray) -> np.ndarray:
         import torch
         from PIL import Image
-        from sapiens.pose.evaluators import nms
+        from sapiens.pose.evaluators import (  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
+            nms,
+        )
 
         proc, model = self._get_detector()
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
@@ -1439,7 +1469,9 @@ def _load_sapiens308_keypoint_names_cached() -> list[str] | None:
     try:
         _require_sapiens_installed()
         with _sapiens_pose_context():
-            from sapiens.pose.datasets import parse_pose_metainfo
+            from sapiens.pose.datasets import (  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
+                parse_pose_metainfo,
+            )
 
             meta = parse_pose_metainfo({"from_file": "configs/_base_/keypoints308.py"})
         names = _keypoint_names_from_pose_metainfo(meta)

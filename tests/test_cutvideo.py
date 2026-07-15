@@ -90,6 +90,12 @@ def test_ffmpeg_render_can_be_cancelled(monkeypatch, tmp_path):
     process = FakeProcess()
     monkeypatch.setattr(cutvideo.subprocess, "run", lambda *args, **kwargs: None)
     monkeypatch.setattr(cutvideo.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(cutvideo, "encoders_with_cpu_fallback", lambda selected=None: ["libx264"])
+    monkeypatch.setattr(cutvideo, "get_ffmpeg_path", lambda: "ffmpeg")
+    monkeypatch.setattr(cutvideo, "get_video_encode_ffmpeg_path", lambda encoder=None: "ffmpeg")
+    monkeypatch.setattr(
+        cutvideo, "get_ffmpeg_video_encoding_args", lambda encoder=None: ["-c:v", "libx264"]
+    )
 
     success = cutvideo.cut_video_with_ffmpeg(
         tmp_path / "input.mp4",

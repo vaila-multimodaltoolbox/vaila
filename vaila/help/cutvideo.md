@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.3.78
+- **Version:** 0.3.83
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -22,7 +22,7 @@ Interactive video cutting with frame-accurate navigation, TOML-based cut storage
 - **Auto-fit window**: Hotkey `0` automatically adjusts window to maximize screen space usage while maintaining aspect ratio.
 - **Marker navigation**: Shift+Left/Right cycles through every start/end marker with wraparound, matching `getpixelvideo`; PageUp/PageDown and Home/End remain available.
 - **Cut timeline feedback**: Clickable/draggable strip above the scrub slider mirrors `getpixelvideo`: blue ranges, green starts, orange ends, yellow pending start, white playhead. Clicking a marker column snaps to that cut point.
-- **Responsive final render**: ffmpeg/OpenCV exports show a cancellable Tk progress dialog. The dialog stays responsive while ffmpeg runs and terminates the active subprocess when cancelled.
+- **Responsive final render**: ffmpeg/OpenCV exports show a cancellable Tk progress dialog. The dialog stays responsive while ffmpeg runs and terminates the active subprocess when cancelled. Hardware H.264 is used when available — NVIDIA `h264_nvenc` (Linux/Windows) or Apple `h264_videotoolbox` (macOS) — with automatic CPU `libx264` fallback on every OS.
 - **Manual FPS input**: Hotkey `I`/`P` lets you override FPS via Tk dialog; UI updates instantly.
 - **Scrollable help**: Help overlay scrolls via mouse wheel or arrow keys.
 - **Output naming**: Single video → `{video}_vailacut_{timestamp}`; batch → `vailacut_{prefix}{source}_batch_{timestamp}`; sync batch → `vailacut_sync_{video}_{timestamp}`; cut files use 1-based frame ranges.
@@ -54,7 +54,7 @@ Heittor_cod_02
 - `build_cut_output_filenames()` — resolve one collision-safe output filename per cut (per-cut CSV > single base > video stem).
 - `save_cuts_to_toml()` — writes TOML (1-based frames, .6f times, frame-count duration).
 - `load_cuts_from_toml()` / `load_cuts_from_toml_file()` — reads TOML; legacy `.txt` as fallback.
-- `cut_video_with_ffmpeg()` (precise) and `cut_video_with_opencv()` (fallback).
+- `cut_video_with_ffmpeg()` (precise; NVIDIA NVENC when available) and `cut_video_with_opencv()` (fallback).
 - `batch_process_videos()` and `batch_process_sync_videos()` — reuse marked cuts across files.
 - `get_precise_video_metadata()` — ffprobe-first, OpenCV fallback.
 - `run_cutvideo()` — entry point (uses Tk file dialog then launches pygame UI).
@@ -98,6 +98,7 @@ Heittor_cod_02
 ## 🐛 Troubleshooting Quick Hits
 - **Player does not open after metadata loads:** Update to v0.3.47+ (fixes `output_basename` initialization before the pygame UI).
 - **No ffmpeg:** Falls back to OpenCV; install ffmpeg for frame-accurate cuts and audio extraction.
+- **Slow cuts / no GPU:** On NVIDIA systems prefer FFmpeg 8.x/7.x with `h264_nvenc` (terminal shows `[FFmpeg][GPU]`). On macOS, Apple `h264_videotoolbox` is used when available. Laptops/CPU-only machines use `libx264` automatically. Optional: `VAILA_FFMPEG_ENCODER=libx264` to force CPU; `VAILA_NVENC_PRESET=p6` for NVENC quality.
 - **Windows paths in TOML:** Paths are stored with `/` to avoid escape issues.
 - **Cannot load cuts:** Ensure the file is `.toml` with `[[cuts]]` entries; legacy `.txt` still loads but is deprecated.
 - **No audio playback:** Check if video file contains audio track; audio panel (A key) shows "No Audio Data" if unavailable.
@@ -106,5 +107,5 @@ Heittor_cod_02
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 08 July 2026 (v0.3.78 - Manual FPS TOML timing fix)
+📅 **Last Updated:** 15 July 2026 (v0.3.83 - NVIDIA NVENC for cut/convert encode)
 🔗 **Part of vailá - Multimodal Toolbox**
