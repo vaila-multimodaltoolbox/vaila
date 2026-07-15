@@ -5,7 +5,7 @@
 - **Category:** Tools
 - **File:** `vaila/drawboxe.py`
 - **Lines:** 2051
-- **Version:** 0.3.47
+- **Version:** 0.3.83
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** ✅ Yes
 - **Email:** paulosantiago@usp.br
@@ -23,8 +23,8 @@
 - Batch processing support for multiple videos
 - Frame intervals (process only specific frames)
 - Save and load configurations in TOML files
-- Automatic NVIDIA NVENC H.264 encoding when supported, with CPU fallback
-- Continuous OpenCV-to-NVENC pipe and periodic NVIDIA utilization telemetry for videos without frame intervals
+- Automatic hardware H.264 encoding when supported (NVIDIA NVENC or Apple VideoToolbox), with CPU `libx264` fallback on all OS
+- Continuous OpenCV-to-hardware pipe and periodic NVIDIA utilization telemetry for NVENC exports without frame intervals
 
 ## 🎯 How to Use
 
@@ -210,8 +210,8 @@ After drawing shapes and pressing `Enter`:
 2. If you already have a TOML file with frame intervals, it will be automatically detected
 3. Videos will be processed and saved in a `video_2_drawbox_[timestamp]` directory
 4. Processed videos will have the suffix `_dbox.mp4`
-5. FFmpeg automatically uses verified NVIDIA `h264_nvenc` encoding when available; otherwise it uses CPU `libx264`
-6. If NVENC fails during a real export, that encode is retried automatically with CPU `libx264`
+5. FFmpeg uses verified hardware H.264 when available (`h264_nvenc` on Linux/Windows NVIDIA, `h264_videotoolbox` on macOS); otherwise CPU `libx264`
+6. If hardware encode fails during a real export, that encode is retried automatically with CPU `libx264`
 7. Terminal output reports batch backend and every encode start/finish with `[FFmpeg][GPU]` or `[FFmpeg][CPU]`
 8. NVENC exports explicitly use NVIDIA/NVENC GPU index `0` (`h264_nvenc -gpu 0`) and print NVIDIA model, PCI address, and UUID
 9. Without frame intervals, edited OpenCV frames are streamed continuously into NVENC; terminal telemetry reports GPU utilization, NVENC utilization, and VRAM about every 5 seconds
@@ -227,11 +227,11 @@ GPU acceleration applies to FFmpeg H.264 encoding. Polygon filling remains an Op
 - `has_audio_stream` - Detects original audio before FFmpeg pipe export
 - `apply_boxes_to_frame` - Applies configured boxes and polygons to one OpenCV frame
 - `stream_boxes_to_ffmpeg` - Streams edited frames continuously into NVENC or CPU FFmpeg encoding
-- `get_nvidia_gpu_info` - Reads selected NVIDIA GPU model, UUID, and PCI address from nvidia-smi
-- `describe_nvenc_gpu` - Formats selected NVENC device details for terminal feedback
-- `detect_ffmpeg_video_encoder` - Verifies NVIDIA NVENC with a short test encode
-- `get_ffmpeg_video_encoding_args` - Builds GPU or CPU H.264 encoding arguments
-- `run_ffmpeg_encode_with_fallback` - Retries a failed NVENC export with CPU libx264
+- `get_nvidia_gpu_info` - Reads selected NVIDIA GPU model, UUID, and PCI address from nvidia-smi (shared via `ffmpeg_utils`)
+- `describe_nvenc_gpu` - Formats selected NVENC device details for terminal feedback (shared via `ffmpeg_utils`)
+- `detect_ffmpeg_video_encoder` - Verifies NVIDIA NVENC with a short test encode (shared via `ffmpeg_utils`)
+- `get_ffmpeg_video_encoding_args` - Builds GPU or CPU H.264 encoding arguments (shared via `ffmpeg_utils`)
+- `run_ffmpeg_encode_with_fallback` - Retries a failed NVENC export with CPU libx264 (shared via `ffmpeg_utils`)
 - `save_first_frame` - Saves the first frame of the video
 - `extract_frames` - Extracts all frames from the video
 - `apply_boxes_directly_to_video` - Applies boxes directly to the video
@@ -251,7 +251,8 @@ GPU acceleration applies to FFmpeg H.264 encoding. Polygon filling remains an Op
 - Processing large videos may take time
 - Make sure you have enough disk space for processed videos
 - FFmpeg must be installed on the system for frame extraction
-- NVIDIA NVENC acceleration requires an NVIDIA GPU, driver, and FFmpeg build with `h264_nvenc`; CPU fallback is automatic
+- NVIDIA NVENC / Apple VideoToolbox acceleration is optional; CPU `libx264` works on Linux, macOS, and Windows without a discrete GPU
+- Stable NVIDIA recommendation (RTX 40xx): system **FFmpeg 8.x** (or 7.x) with NVENC; optional `VAILA_NVENC_PRESET=p6`. Force CPU anywhere with `VAILA_FFMPEG_ENCODER=libx264`
 
 ## 📚 Requirements
 
@@ -266,6 +267,7 @@ GPU acceleration applies to FFmpeg H.264 encoding. Polygon filling remains an Op
 
 ## 📝 Version History
 
+- **v0.3.83:** Shared cross-platform encode helpers (NVENC / VideoToolbox / libx264)
 - **v0.3.47:** Continuous OpenCV-to-NVENC pipe, explicit NVIDIA GPU 0 selection, periodic telemetry, and CPU fallback
 - **v0.0.7:** Added hatching to indicate "outside" mode
 - **v0.0.6:** Support for free polygons
@@ -277,7 +279,7 @@ GPU acceleration applies to FFmpeg H.264 encoding. Polygon filling remains an Op
 
 ---
 
-📅 **Generated automatically on:** 02 June 2026
+📅 **Generated automatically on:** 15 July 2026
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)  
 📧 **Contact:** paulosantiago@usp.br

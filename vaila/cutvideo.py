@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 08 July 2026
-Version: 0.3.78
+Update Date: 15 July 2026
+Version: 0.3.83
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -16,6 +16,8 @@ This script performs batch processing of videos for cutting videos.
 It allows users to visually mark cut points in videos, save cut information, and generate precisely cut video segments while preserving original metadata with high accuracy.
 It supports scientific precision for research applications.
 It uses ffmpeg to preserve exact frame rates (e.g., 59.94005994005994 fps) without rounding.
+It uses hardware H.264 when available (NVIDIA NVENC on Linux/Windows, Apple
+VideoToolbox on macOS) and falls back to CPU libx264 on all platforms.
 It uses OpenCV to fallback to less precise but always available.
 It uses pygame to create a graphical interface for selecting the input directory containing video files (.mp4, .avi, .mov), the output directory, and for specifying the cuts.
 It uses tomllib to load the cuts from a TOML file.
@@ -39,6 +41,7 @@ Features:
 - Optional custom output base name for cut files (GUI button or B key).
 - Optional per-cut output names from a CSV/TXT list (GUI **Cut names** button or **N** / **V**):
   one name per line → cut 1 → name1.mp4, cut 2 → name2.mp4, …
+- Hardware H.264 encode when available (NVENC / VideoToolbox; auto CPU libx264 fallback).
 
 Usage:
 - Run the script to open a graphical interface for selecting the input directory
@@ -104,6 +107,29 @@ import numpy as np
 import pygame
 from rich import print
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+try:
+    from .ffmpeg_utils import (
+        describe_video_encoder,
+        encoder_device_tag,
+        encoders_with_cpu_fallback,
+        get_ffmpeg_path,
+        get_ffmpeg_video_encoding_args,
+        get_ffprobe_path,
+        get_video_encode_ffmpeg_path,
+        is_hardware_video_encoder,
+    )
+except ImportError:
+    from ffmpeg_utils import (
+        describe_video_encoder,
+        encoder_device_tag,
+        encoders_with_cpu_fallback,
+        get_ffmpeg_path,
+        get_ffmpeg_video_encoding_args,
+        get_ffprobe_path,
+        get_video_encode_ffmpeg_path,
+        is_hardware_video_encoder,
+    )
 
 MAX_RENDER_PIXELS = 4_000_000
 CUT_RANGE_COLOR = (42, 86, 112)
@@ -386,7 +412,7 @@ def get_precise_video_metadata(video_path):
     """
     try:
         cmd = [
-            "ffprobe",
+            get_ffprobe_path(),
             "-v",
             "error",
             "-print_format",
@@ -565,10 +591,15 @@ def cut_video_with_ffmpeg(
     metadata,
     progress_callback: Callable[[], bool | None] | None = None,
 ):
-    """Cut video with ffmpeg while keeping an optional progress UI responsive."""
+    """Cut video with ffmpeg while keeping an optional progress UI responsive.
+
+    Prefers verified hardware H.264 (NVENC / VideoToolbox); falls back to CPU
+    ``libx264`` on all OS.
+    """
+    ffmpeg_check = get_ffmpeg_path()
     try:
         subprocess.run(
-            ["ffmpeg", "-version"],
+            [ffmpeg_check, "-version"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -588,57 +619,76 @@ def cut_video_with_ffmpeg(
     fps = metadata["fps"]
     frame_count = end_frame - start_frame + 1
     start_time = start_frame / fps if fps > 0 else 0.0
-    cmd_reencode = [
-        "ffmpeg",
-        "-y",
-        "-ss",
-        f"{start_time:.6f}",
-        "-i",
-        str(video_path),
-        "-frames:v",
-        str(frame_count),
-        "-c:v",
-        "libx264",
-        "-preset",
-        "medium",
-        "-crf",
-        "18",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
-        "-r",
-        f"{fps:.6f}",
-        "-avoid_negative_ts",
-        "make_zero",
-        str(output_path),
-    ]
-    try:
-        process = subprocess.Popen(cmd_reencode)
-        while process.poll() is None:
-            if not _continue_processing(progress_callback):
-                print("Video cut cancelled by user")
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
-                return False
-            time.sleep(0.05)
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, cmd_reencode)
-        return _continue_processing(progress_callback)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        print(f"Error with ffmpeg re-encoding: {exc}")
-        return cut_video_with_opencv(
-            video_path,
-            output_path,
-            start_frame,
-            end_frame,
-            metadata,
-            progress_callback=progress_callback,
+
+    for encoder in encoders_with_cpu_fallback():
+        device = encoder_device_tag(encoder)
+        ffmpeg = get_video_encode_ffmpeg_path(encoder)
+        print(
+            f"  [FFmpeg][{device}] Cutting with {encoder} "
+            f"({describe_video_encoder(encoder)}) via {ffmpeg}..."
         )
+        cmd_reencode = [
+            ffmpeg,
+            "-y",
+            "-ss",
+            f"{start_time:.6f}",
+            "-i",
+            str(video_path),
+            "-frames:v",
+            str(frame_count),
+            *get_ffmpeg_video_encoding_args(encoder),
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-r",
+            f"{fps:.6f}",
+            "-avoid_negative_ts",
+            "make_zero",
+            str(output_path),
+        ]
+        try:
+            process = subprocess.Popen(cmd_reencode)
+            while process.poll() is None:
+                if not _continue_processing(progress_callback):
+                    print("Video cut cancelled by user")
+                    process.terminate()
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    return False
+                time.sleep(0.05)
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, cmd_reencode)
+            print(f"  [FFmpeg][{device}] Finished cut encode with {encoder}")
+            return _continue_processing(progress_callback)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            if is_hardware_video_encoder(encoder):
+                print(
+                    f"  [FFmpeg][GPU] Warning: {encoder} cut failed ({exc}); "
+                    "retrying with CPU libx264"
+                )
+                continue
+            print(f"Error with ffmpeg re-encoding: {exc}")
+            return cut_video_with_opencv(
+                video_path,
+                output_path,
+                start_frame,
+                end_frame,
+                metadata,
+                progress_callback=progress_callback,
+            )
+
+    return cut_video_with_opencv(
+        video_path,
+        output_path,
+        start_frame,
+        end_frame,
+        metadata,
+        progress_callback=progress_callback,
+    )
 
 
 def cut_video_with_opencv(
@@ -1055,7 +1105,7 @@ def extract_audio_data(video_path, target_sr=44100):
     """
     try:
         probe_cmd = [
-            "ffprobe",
+            get_ffprobe_path(),
             "-v",
             "error",
             "-select_streams",
@@ -1073,7 +1123,7 @@ def extract_audio_data(video_path, target_sr=44100):
             return None, None
 
         cmd = [
-            "ffmpeg",
+            get_ffmpeg_path(),
             "-i",
             str(video_path),
             "-f",
@@ -1381,42 +1431,66 @@ def play_video_with_cuts(video_path):
                 def run_ffmpeg():
                     nonlocal conversion_success, conversion_error
                     try:
-                        cmd = [
-                            "ffmpeg",
-                            "-y",
-                            "-i",
-                            str(video_path),
-                            "-c:v",
-                            "libx264",
-                            "-c:a",
-                            "aac",
-                            "-b:a",
-                            "192k",
-                            "-pix_fmt",
-                            "yuv420p",
-                            str(converted_path),
-                        ]
-
-                        # Use rich progress in terminal
-                        with Progress(
-                            SpinnerColumn(),
-                            TextColumn("[bold blue]{task.description}"),
-                            TimeElapsedColumn(),
-                            transient=True,
-                        ) as progress:
-                            progress.add_task(f"Converting {Path(video_path).name}...", total=None)
-
-                            # Run subprocess (UTF-8 to avoid UnicodeDecodeError on Windows cp1252)
-                            subprocess.run(
-                                cmd,
-                                check=True,
-                                capture_output=True,
-                                text=True,
-                                encoding="utf-8",
-                                errors="replace",
+                        last_error = None
+                        for encoder in encoders_with_cpu_fallback():
+                            device = encoder_device_tag(encoder)
+                            ffmpeg = get_video_encode_ffmpeg_path(encoder)
+                            print(
+                                f"  [FFmpeg][{device}] Converting with {encoder} "
+                                f"({describe_video_encoder(encoder)}) via {ffmpeg}..."
                             )
+                            cmd = [
+                                ffmpeg,
+                                "-y",
+                                "-i",
+                                str(video_path),
+                                *get_ffmpeg_video_encoding_args(encoder),
+                                "-c:a",
+                                "aac",
+                                "-b:a",
+                                "192k",
+                                "-pix_fmt",
+                                "yuv420p",
+                                str(converted_path),
+                            ]
 
-                        conversion_success = True
+                            # Use rich progress in terminal
+                            with Progress(
+                                SpinnerColumn(),
+                                TextColumn("[bold blue]{task.description}"),
+                                TimeElapsedColumn(),
+                                transient=True,
+                            ) as progress:
+                                progress.add_task(
+                                    f"Converting {Path(video_path).name}...", total=None
+                                )
+
+                                # Run subprocess (UTF-8 to avoid UnicodeDecodeError on Windows cp1252)
+                                try:
+                                    subprocess.run(
+                                        cmd,
+                                        check=True,
+                                        capture_output=True,
+                                        text=True,
+                                        encoding="utf-8",
+                                        errors="replace",
+                                    )
+                                    print(f"  [FFmpeg][{device}] Finished convert with {encoder}")
+                                    conversion_success = True
+                                    last_error = None
+                                    break
+                                except subprocess.CalledProcessError as e:
+                                    last_error = e
+                                    if is_hardware_video_encoder(encoder):
+                                        print(
+                                            f"  [FFmpeg][GPU] Warning: {encoder} convert "
+                                            "failed; retrying with CPU libx264"
+                                        )
+                                        continue
+                                    raise
+
+                        if not conversion_success and last_error is not None:
+                            raise last_error
                     except subprocess.CalledProcessError as e:
                         err_text = (
                             e.stderr

@@ -46,7 +46,7 @@
             <p><strong>Category:</strong> Tools</p>
             <p><strong>File:</strong> vaila/drawboxe.py</p>
             <p><strong>Lines:</strong> 2051</p>
-            <p><strong>Version:</strong> 0.3.47</p>
+            <p><strong>Version:</strong> 0.3.83</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
             <p><strong>Email:</strong> paulosantiago@usp.br</p>
@@ -70,8 +70,8 @@
                 <li>Batch processing support for multiple videos</li>
                 <li>Frame intervals (process only specific frames)</li>
                 <li>Save and load configurations in TOML files</li>
-                <li>Automatic NVIDIA NVENC H.264 encoding when supported, with CPU fallback</li>
-                <li>Continuous OpenCV-to-NVENC pipe and periodic NVIDIA utilization telemetry for videos without frame intervals</li>
+                <li>Automatic hardware H.264 encoding when supported (NVIDIA NVENC or Apple VideoToolbox), with CPU <code>libx264</code> fallback on all OS</li>
+                <li>Continuous OpenCV-to-hardware pipe and periodic NVIDIA utilization telemetry for NVENC exports without frame intervals</li>
             </ul>
         </div>
 
@@ -348,6 +348,7 @@ end_frame = 600</code></pre>
                 <li>Make sure you have enough disk space for processed videos</li>
                 <li>FFmpeg must be installed on the system for frame extraction</li>
                 <li>NVIDIA NVENC acceleration requires an NVIDIA GPU, driver, and FFmpeg build with <code>h264_nvenc</code>; CPU fallback is automatic</li>
+                <li>Stable stack for RTX 40xx (Ada): system <strong>FFmpeg 8.x</strong> (or 7.x) with NVENC; default remains <code>h264_nvenc</code> (optional <code>VAILA_NVENC_PRESET=p6</code>)</li>
             </ul>
         </div>
 
@@ -365,6 +366,7 @@ end_frame = 600</code></pre>
 
         <h2>📝 Version History</h2>
         <ul>
+            <li><strong>v0.3.83:</strong> Shared cross-platform encode helpers (NVENC / VideoToolbox / libx264)</li>
             <li><strong>v0.3.47:</strong> Continuous OpenCV-to-NVENC pipe, explicit NVIDIA GPU 0 selection, periodic telemetry, and CPU fallback</li>
             <li><strong>v0.0.7:</strong> Added hatching to indicate "outside" mode</li>
             <li><strong>v0.0.6:</strong> Support for free polygons</li>
@@ -376,7 +378,7 @@ end_frame = 600</code></pre>
         </ul>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 02 June 2026</p>
+            <p>📅 Generated automatically on: 15 July 2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
             <p>📧 Contact: paulosantiago@usp.br</p>

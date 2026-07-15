@@ -6,14 +6,15 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 28 October 2024
-Update Date: 02 June 2026
-Version: 0.3.47
+Update Date: 15 July 2026
+Version: 0.3.83
 Description:
     Draw boxes on videos.
     This script is a modified version of the original drawboxe.py script.
     Draw trapezoid and free polygon boxes.
-    Uses NVIDIA NVENC automatically for FFmpeg H.264 encoding when available.
-    Streams edited OpenCV frames continuously into NVENC and reports NVIDIA telemetry.
+    Uses hardware H.264 when available (NVIDIA NVENC on Linux/Windows, Apple
+    VideoToolbox on macOS) via shared helpers in ffmpeg_utils; falls back to
+    CPU libx264 on all platforms.
 
 Usage:
     Run the script from the command line:
@@ -28,6 +29,7 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.3.83: Shared cross-platform encode helpers (NVENC / VideoToolbox / libx264)
     - v0.3.47: Added continuous OpenCV-to-NVENC pipe, explicit GPU 0 selection, telemetry, and CPU fallback
     - v0.0.9: Audio and metadata preservation - preserves original video audio and all metadata (compatible with numberframes.py and other metadata tools)
     - v0.0.8: Frame-accurate preservation - ensures exact frame count and precise FPS are maintained for biomechanical data synchronization (similar to cutvideo.py)
@@ -48,7 +50,6 @@ import shutil
 import subprocess
 import time
 import tkinter as tk
-from functools import lru_cache
 from tkinter import filedialog, messagebox
 
 import cv2
@@ -58,160 +59,38 @@ import numpy as np
 import toml  # type: ignore[import-untyped]
 
 try:
-    from .ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
+    from .ffmpeg_utils import (
+        NVENC_GPU_INDEX,
+        NVENC_VIDEO_ENCODER,
+        describe_video_encoder,
+        detect_ffmpeg_video_encoder,
+        encoder_device_tag,
+        encoders_with_cpu_fallback,
+        get_ffmpeg_path,
+        get_ffmpeg_video_encoding_args,
+        get_ffprobe_path,
+        get_video_encode_ffmpeg_path,
+        is_hardware_video_encoder,
+        run_ffmpeg_encode_with_fallback,
+    )
 except ImportError:
-    from ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
+    from ffmpeg_utils import (
+        NVENC_GPU_INDEX,
+        NVENC_VIDEO_ENCODER,
+        describe_video_encoder,
+        detect_ffmpeg_video_encoder,
+        encoder_device_tag,
+        encoders_with_cpu_fallback,
+        get_ffmpeg_path,
+        get_ffmpeg_video_encoding_args,
+        get_ffprobe_path,
+        get_video_encode_ffmpeg_path,
+        is_hardware_video_encoder,
+        run_ffmpeg_encode_with_fallback,
+    )
 
 FFMPEG = get_ffmpeg_path()
 FFPROBE = get_ffprobe_path()
-NVENC_GPU_INDEX = 0
-
-
-@lru_cache(maxsize=1)
-def get_nvidia_gpu_info():
-    """Return nvidia-smi details for the NVIDIA GPU selected for NVENC."""
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=index,name,uuid,pci.bus_id",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=5,
-        )
-        for line in result.stdout.splitlines():
-            index, name, uuid, pci_bus_id = (part.strip() for part in line.split(",", maxsplit=3))
-            if int(index) == NVENC_GPU_INDEX:
-                return {
-                    "index": index,
-                    "name": name,
-                    "uuid": uuid,
-                    "pci_bus_id": pci_bus_id,
-                }
-    except (FileNotFoundError, subprocess.SubprocessError, OSError, ValueError):
-        pass
-    return None
-
-
-def describe_nvenc_gpu():
-    """Return a CLI-friendly description of the NVIDIA NVENC device."""
-    gpu_info = get_nvidia_gpu_info()
-    if not gpu_info:
-        return f"NVIDIA NVENC GPU index {NVENC_GPU_INDEX}"
-    return (
-        f"NVIDIA NVENC GPU {gpu_info['index']}: {gpu_info['name']} "
-        f"(PCI {gpu_info['pci_bus_id']}, UUID {gpu_info['uuid']})"
-    )
-
-
-@lru_cache(maxsize=1)
-def detect_ffmpeg_video_encoder():
-    """Return the fastest verified FFmpeg H.264 encoder available."""
-    try:
-        encoders_result = subprocess.run(
-            [FFMPEG, "-hide_banner", "-encoders"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
-        if "h264_nvenc" in encoders_result.stdout:
-            test_result = subprocess.run(
-                [
-                    FFMPEG,
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "testsrc=size=1280x720:rate=30",
-                    "-t",
-                    "1",
-                    "-c:v",
-                    "h264_nvenc",
-                    "-gpu",
-                    str(NVENC_GPU_INDEX),
-                    "-preset",
-                    "p5",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-f",
-                    "null",
-                    "-",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if test_result.returncode == 0:
-                print(f"  [FFmpeg][GPU] h264_nvenc verified on {describe_nvenc_gpu()}")
-                return "h264_nvenc"
-            print("  [FFmpeg][CPU] h264_nvenc is listed but unavailable at runtime")
-    except (FileNotFoundError, subprocess.SubprocessError, OSError) as e:
-        print(f"  [FFmpeg][CPU] Could not verify NVIDIA NVENC support ({e})")
-
-    print("  [FFmpeg][CPU] Using libx264 software encoding")
-    return "libx264"
-
-
-def get_ffmpeg_video_encoding_args(encoder=None):
-    """Build quality-oriented FFmpeg H.264 arguments for GPU or CPU encoding."""
-    selected_encoder = encoder or detect_ffmpeg_video_encoder()
-    if selected_encoder == "h264_nvenc":
-        return [
-            "-c:v",
-            "h264_nvenc",
-            "-gpu",
-            str(NVENC_GPU_INDEX),
-            "-preset",
-            "p5",
-            "-tune",
-            "hq",
-            "-rc",
-            "vbr",
-            "-cq",
-            "18",
-            "-b:v",
-            "0",
-        ]
-    return ["-c:v", "libx264", "-preset", "medium", "-crf", "18"]
-
-
-def run_ffmpeg_encode_with_fallback(command_prefix, command_suffix):
-    """Run an FFmpeg encode, retrying with CPU if a verified NVENC encode fails."""
-    selected_encoder = detect_ffmpeg_video_encoder()
-    encoders = [selected_encoder]
-    if selected_encoder == "h264_nvenc":
-        encoders.append("libx264")
-
-    for encoder in encoders:
-        device = "GPU" if encoder == "h264_nvenc" else "CPU"
-        command = [
-            *command_prefix,
-            *get_ffmpeg_video_encoding_args(encoder),
-            *command_suffix,
-        ]
-        if encoder == "h264_nvenc":
-            print(
-                f"  [FFmpeg][GPU] Starting H.264 encode with h264_nvenc on "
-                f"{describe_nvenc_gpu()}..."
-            )
-        else:
-            print("  [FFmpeg][CPU] Starting H.264 encode with libx264...")
-        try:
-            subprocess.run(command, check=True, capture_output=False, text=True)
-            print(f"  [FFmpeg][{device}] Finished H.264 encode with {encoder}")
-            return encoder
-        except subprocess.CalledProcessError:
-            if encoder != "h264_nvenc":
-                raise
-            print("  [FFmpeg][GPU] Warning: h264_nvenc failed; retrying with CPU libx264")
-
-    raise RuntimeError("FFmpeg encoding failed without producing an output file")
 
 
 def get_precise_video_metadata(video_path):
@@ -533,7 +412,7 @@ def stream_boxes_to_ffmpeg(
         temp_video_path = temp_video.name
 
     command = [
-        FFMPEG,
+        get_video_encode_ffmpeg_path(encoder),
         "-y",
         "-f",
         "rawvideo",
@@ -563,11 +442,12 @@ def stream_boxes_to_ffmpeg(
         print("  [FFmpeg] Original video has no audio stream")
     command.extend(["-pix_fmt", "yuv420p", temp_video_path])
 
-    device = "GPU" if encoder == "h264_nvenc" else "CPU"
-    if encoder == "h264_nvenc":
-        print(f"  [FFmpeg][GPU] Continuous OpenCV -> NVENC pipe on {describe_nvenc_gpu()}")
-    else:
-        print("  [FFmpeg][CPU] Continuous OpenCV -> libx264 pipe")
+    device = encoder_device_tag(encoder)
+    encode_bin = command[0]
+    print(
+        f"  [FFmpeg][{device}] Continuous OpenCV -> {encoder} pipe "
+        f"({describe_video_encoder(encoder)}) via {encode_bin}"
+    )
     print(f"  [FFmpeg][{device}] Starting H.264 encode while frames are edited...")
 
     try:
@@ -590,7 +470,7 @@ def stream_boxes_to_ffmpeg(
             process.stdin.write(frame.tobytes())
             frame_count += 1
 
-            if frame_count % telemetry_step == 0 and encoder == "h264_nvenc":
+            if frame_count % telemetry_step == 0 and encoder == NVENC_VIDEO_ENCODER:
                 telemetry = get_nvidia_gpu_telemetry()
                 if telemetry:
                     print(f"\n  [FFmpeg][GPU] {telemetry}")
@@ -660,11 +540,7 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
         f"{os.path.basename(input_path)} -> {os.path.basename(output_path)}"
     )
     selected_encoder = detect_ffmpeg_video_encoder()
-    encoders = [selected_encoder]
-    if selected_encoder == "h264_nvenc":
-        encoders.append("libx264")
-
-    for encoder in encoders:
+    for encoder in encoders_with_cpu_fallback(selected_encoder):
         try:
             return stream_boxes_to_ffmpeg(
                 input_path,
@@ -676,10 +552,12 @@ def apply_boxes_directly_to_video(input_path, output_path, coordinates, selectio
                 encoder,
             )
         except (BrokenPipeError, FileNotFoundError, OSError, subprocess.CalledProcessError) as e:
-            if encoder != "h264_nvenc":
+            if not is_hardware_video_encoder(encoder):
                 print(f"Error: FFmpeg CPU encode failed: {e}")
                 return False
-            print(f"  [FFmpeg][GPU] Warning: NVENC pipe failed ({e}); retrying with CPU libx264")
+            print(
+                f"  [FFmpeg][GPU] Warning: {encoder} pipe failed ({e}); retrying with CPU libx264"
+            )
 
     return False
 
@@ -2007,10 +1885,10 @@ def run_drawboxe():
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
     encoder = detect_ffmpeg_video_encoder()
-    if encoder == "h264_nvenc":
-        print(f"\n[FFmpeg] Batch H.264 encoding backend: {describe_nvenc_gpu()} (h264_nvenc)")
-    else:
-        print("\n[FFmpeg] Batch H.264 encoding backend: CPU (libx264)")
+    print(
+        f"\n[FFmpeg] Batch H.264 encoding backend: {describe_video_encoder(encoder)} "
+        f"({encoder} via {get_video_encode_ffmpeg_path(encoder)})"
+    )
     n_videos = len(video_files)
     for idx, video_file in enumerate(video_files):
         input_path = os.path.join(video_directory, video_file)
