@@ -30,7 +30,7 @@
     <h1>Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
 
     <div class="module-info">
-        <p><strong>Version:</strong> 0.3.83 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-15</p>
+        <p><strong>Version:</strong> 0.3.85 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-16</p>
         <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
         <p><strong>Category:</strong> Markerless 2D / Meta (Facebook)</p>
     </div>
@@ -73,9 +73,9 @@ uv run vaila/vaila_sapiens.py --download-weights --model 5b</code></pre>
         <li>Model default <code>1b</code>; stride <code>1</code> = every frame</li>
         <li><strong>Detection &amp; keypoint thresholds</strong> — <code>--bbox-thr</code>, <code>--nms-thr</code>, <code>--kpt-thr</code>, <code>--max-persons</code></li>
         <li><strong>GPU &amp; advanced</strong> — <code>--device</code>, <code>--pose-batch-size</code> (GUI pre-fills per-model default), <code>--flip-test</code>, overlay on/off, <strong>Draw person IDs</strong>, <strong>Temporal Re-ID</strong> (online linker + OKS + bidirectional, default on)</li>
-        <li>Click <strong>Run</strong> — terminal prints full <code>&gt;&gt; Equivalent CLI</code> with <code>--output-base</code></li>
+        <li>Click <strong>Run</strong> — terminal prints <code>&gt;&gt; Equivalent CLI</code> with <code>-i</code> / <code>-o</code> and the flags you chose</li>
     </ol>
-    <p>On <strong>Run</strong>, the terminal prints <code>&gt;&gt; vaila/vaila_sapiens: Equivalent CLI</code> with every flag you chose (copy/paste to reproduce without the GUI).</p>
+    <p>On <strong>Run</strong>, the terminal prints <code>&gt;&gt; vaila/vaila_sapiens: Equivalent CLI</code> with every flag you chose (copy/paste to reproduce without the GUI). Output uses only <code>-o</code>; the CLI creates <code>processed_sapiens_&lt;timestamp&gt;/</code> under that parent.</p>
 
     <h2>CLI examples</h2>
     <h3>Full inference — all flags</h3>
@@ -98,8 +98,6 @@ uv run vaila/vaila_sapiens.py --download-weights --model 5b</code></pre>
   --reid-direction-weight 1.0 \
   --no-overlay \
   --quiet</code></pre>
-    <p>GUI batch runs also print <code>--output-base processed_sapiens_&lt;timestamp&gt;/</code> in the mirrored command.</p>
-
     <h3>Quick recipes</h3>
     <pre><code># Open GUI (no args)
 uv run vaila/vaila_sapiens.py

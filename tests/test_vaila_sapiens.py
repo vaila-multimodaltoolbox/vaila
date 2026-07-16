@@ -363,7 +363,6 @@ def test_build_sapiens_cli_argv_includes_all_inference_flags() -> None:
     argv = vs._build_sapiens_cli_argv(
         input_path=Path("/in/vid.mp4"),
         out_parent=Path("/out"),
-        output_base=Path("/out/processed_sapiens_123"),
         model="1b",
         stride=2,
         kpt_thr=0.35,
@@ -378,7 +377,6 @@ def test_build_sapiens_cli_argv_includes_all_inference_flags() -> None:
         for_subprocess=False,
     )
     for flag in (
-        "--output-base",
         "--kpt-thr",
         "--bbox-thr",
         "--nms-thr",
@@ -390,6 +388,22 @@ def test_build_sapiens_cli_argv_includes_all_inference_flags() -> None:
         "--quiet",
     ):
         assert flag in argv
+    assert "--output-base" not in argv
+
+
+def test_format_sapiens_cli_command_omits_output_base() -> None:
+    """User-facing GUI→CLI mirror must show only -o, not internal --output-base."""
+    cmd = vs._format_sapiens_cli_command(
+        "/in/vid.mp4",
+        "/out",
+        model="5b",
+        stride=1,
+        max_persons=1,
+        flip_test=True,
+    )
+    assert "-o" in cmd
+    assert "/out" in cmd
+    assert "--output-base" not in cmd
 
 
 def test_build_sapiens_cli_argv_includes_threshold_flags() -> None:

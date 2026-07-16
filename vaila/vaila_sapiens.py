@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 15 July 2026
-Version: 0.3.83
+Update Date: 16 July 2026
+Version: 0.3.85
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -179,9 +179,6 @@ uv run vaila/vaila_sapiens.py \\
   --rerender-overlay \\
   -i /path/to/video.mp4 \\
   -o /path/to/processed_sapiens_<ts>/<stem>/
-
-# GUI batch equivalent also passes --output-base processed_sapiens_<timestamp>/
-# (printed on Run — use that path to reproduce the exact GUI folder)
 
 # Dry-run (no GPU): add --dry-run and drop inference-only flags
 uv run vaila/vaila_sapiens.py -i /path/to/videos/ -o /tmp/out --model 1b --dry-run
@@ -1675,16 +1672,18 @@ def _format_sapiens_cli_command(
     reid_bidirectional: bool = True,
     appearance_reid: bool = False,
     appearance_reid_threshold: float = DEFAULT_APPEARANCE_REID_THRESHOLD,
-    output_base: Path | str | None = None,
     flip_test: bool = False,
     pose_batch_size: int | None = None,
     quiet: bool = False,
 ) -> str:
-    """Build copy-paste CLI equivalent to a GUI Sapiens2 run."""
+    """Build copy-paste CLI equivalent to a GUI Sapiens2 run.
+
+    User-facing mirror uses only ``-o`` (parent). Internal ``--output-base`` is
+    for GUI/worker subprocesses and is never printed here.
+    """
     argv = _build_sapiens_cli_argv(
         input_path=Path(input_path),
         out_parent=Path(output_parent),
-        output_base=Path(output_base) if output_base is not None else None,
         model=model,
         stride=stride,
         kpt_thr=kpt_thr,
@@ -1974,7 +1973,6 @@ def _print_sapiens_equivalent_cli(
     reid_bidirectional: bool = True,
     appearance_reid: bool = False,
     appearance_reid_threshold: float = DEFAULT_APPEARANCE_REID_THRESHOLD,
-    output_base: Path | str | None = None,
     flip_test: bool = False,
     pose_batch_size: int | None = None,
     quiet: bool = False,
@@ -2002,17 +2000,13 @@ def _print_sapiens_equivalent_cli(
         reid_bidirectional=reid_bidirectional,
         appearance_reid=appearance_reid,
         appearance_reid_threshold=appearance_reid_threshold,
-        output_base=output_base,
         flip_test=flip_test,
         pose_batch_size=pose_batch_size,
         quiet=quiet,
     )
     print("\n>> vaila/vaila_sapiens: Equivalent CLI (copy/paste):", flush=True)
     print(f">>   {cmd}", flush=True)
-    if output_base is None:
-        print(">> (CLI creates processed_sapiens_<timestamp>/ under -o)\n", flush=True)
-    else:
-        print(f">> (GUI batch output: {output_base})\n", flush=True)
+    print(">> (CLI creates processed_sapiens_<timestamp>/ under -o)\n", flush=True)
 
 
 def _write_readme_sapiens(output_dir: Path, *, model_key: str, stride: int) -> None:
@@ -3037,7 +3031,6 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
         reid_static_radius=reid_static_radius,
         pose_batch_size=pose_batch_size,
         quiet=True,
-        output_base=output_base,
     )
 
     os.environ["SAPIENS_DEVICE"] = str(device)
