@@ -4,8 +4,8 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.83
-- **Updated:** 2026-07-15
+- **Version:** 0.3.85
+- **Updated:** 2026-07-16
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -81,17 +81,19 @@ DETR detector is shared across all sizes.
 4. Model default `1b`; stride `1` = every frame
 5. **Detection & keypoint thresholds** — `--bbox-thr`, `--nms-thr`, `--kpt-thr`, `--max-persons`
 6. **GPU & advanced** — `--device`, `--pose-batch-size` (GUI pre-fills per-model default), `--flip-test`, overlay on/off, **Draw person IDs**, **Temporal Re-ID** (online linker + OKS + bidirectional, default on)
-7. **Run** — terminal prints full `>> Equivalent CLI` including `--output-base`
+7. **Run** — terminal prints `>> Equivalent CLI` with `-i` / `-o` and the flags you chose
 
 ## GUI → CLI mirror
 
-When you click **Run**, the terminal prints a copy-paste command with **every flag you chose**:
+When you click **Run**, the terminal prints a copy-paste command with **every flag you chose**
+(only `-o` for output — CLI creates `processed_sapiens_<timestamp>/` under that parent):
 
 ```text
 >> vaila/vaila_sapiens: Equivalent CLI (copy/paste):
->>   uv run vaila/vaila_sapiens.py -i ... -o ... --output-base .../processed_sapiens_<ts>/ \
+>>   uv run vaila/vaila_sapiens.py -i ... -o ... \
 >>     --model 1b --stride 1 --kpt-thr 0.3 --bbox-thr 0.3 --nms-thr 0.3 --max-persons 8 \
 >>     --device 0 --stabilize-ids --quiet ...
+>> (CLI creates processed_sapiens_<timestamp>/ under -o)
 ```
 
 The chooser also prints the launcher when you open **Sapiens2 Pose**:
