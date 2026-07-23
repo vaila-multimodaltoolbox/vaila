@@ -5,13 +5,14 @@
 - **Category:** Machine Learning / Computer Vision / Biomechanics Analysis
 - **File:** `vaila/markerless2d_analysis_v2.py`
 - **Lines of Code:** 2,442
-- **Version:** 0.3.16
+- **Version:** 0.3.85
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
 - **Creation Date:** 29 July 2024
-- **Last Updated:** 27 January 2026
+- **Last Updated:** 23 July 2026
 - **GUI Interface:** ✅ Yes (Tkinter-based)
+- **CLI:** ✅ Yes (`-i` / `-o` / optional `-c`)
 - **License:** AGPL-3.0-or-later
 
 ---
@@ -278,12 +279,26 @@ Five model sizes available, balancing speed and accuracy:
 
 #### Step 1: Launch the Application
 ```bash
-# Activate vaila environment
-conda activate vaila
+# From repo root (uv manages the venv)
+uv run python vaila/markerless2d_analysis_v2.py
 
-# Run the script
-python markerless2d_analysis_v2.py
+# Or from main vailá GUI:
+# Frame B → Markerless 2D → Advanced (YOLO + MediaPipe)
 ```
+
+### Headless CLI
+
+Reuse a `pose_config.toml` saved from a previous GUI run (or omit `-c` to use dialog defaults):
+
+```bash
+uv run python vaila/markerless2d_analysis_v2.py \
+  -i /path/to/videos \
+  -o /path/to/output \
+  -c /path/to/pose_config.toml
+```
+
+Both `-i` and `-o` are required for headless mode. Output lands under a timestamped
+`yolov_YYYYMMDD_HHMMSS/` or `mediapipe_YYYYMMDD_HHMMSS/` subdirectory.
 
 #### Step 2: Select Input Directory
 - Click "Select Input Directory"
@@ -743,6 +758,11 @@ conda activate vaila
 
 ## 📝 Version History
 
+### v0.3.85 (23 July 2026)
+- **Fix:** MediaPipe Tasks VIDEO mode timestamp collision when YOLO crop + full-frame fallback both call `detect_for_video` in the same frame (strictly increasing timestamps via per-call counter; `timestamp_ms = frame_count * 2`)
+- **New:** Headless CLI (`-i`/`-o`/`-c`) and `run_markerless2d_batch()` shared by GUI and CLI
+- **Cleanup:** Removed temporary agent debug logging
+
 ### v0.3.16 (January 2026)
 - **Major Update:** Migrated to MediaPipe Tasks API (0.10.32+)
 - **New Feature:** Manual OpenCV drawing (compatible with new MediaPipe)
@@ -787,7 +807,7 @@ If you use this module in your research, please cite:
   title = {vailá Markerless 2D Analysis v2},
   author = {Santiago, Paulo Roberto Pereira},
   year = {2026},
-  version = {0.3.16},
+  version = {0.3.85},
   url = {https://github.com/vaila-multimodaltoolbox/vaila}
 }
 ```
@@ -802,6 +822,6 @@ See the [LICENSE](https://github.com/vaila-multimodaltoolbox/vaila/blob/main/LIC
 
 ---
 
-**📅 Last Updated:** January 27, 2026  
+**📅 Last Updated:** 23 July 2026  
 **🔗 Part of vailá - Multimodal Toolbox for Biomechanics and Motion Analysis**  
 **🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)**

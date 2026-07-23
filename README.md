@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-07-16
+**Last updated:** 2026-07-23
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>

@@ -365,7 +365,7 @@
     <div class="container">
         <div class="header">
             <h1><i>vailá</i> - markerless2d_analysis_v2</h1>
-            <div class="subtitle">Professional Documentation <span class="version-tag">v0.3.16</span></div>
+            <div class="subtitle">Professional Documentation <span class="version-tag">v0.3.85</span></div>
         </div>
 
         <div class="content">
@@ -373,11 +373,12 @@
                 <h3>📋 Module Information</h3>
                 <p><strong>Category:</strong> Machine Learning / Computer Vision / Biomechanics Analysis</p>
                 <p><strong>File:</strong> <code>vaila/markerless2d_analysis_v2.py</code></p>
-                <p><strong>Lines of Code:</strong> 2,442</p>
-                <p><strong>Version:</strong> 0.3.16</p>
+                <p><strong>Version:</strong> 0.3.85</p>
                 <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
                 <p><strong>Email:</strong> paulosantiago@usp.br</p>
+                <p><strong>Last Updated:</strong> 23 July 2026</p>
                 <p><strong>GUI Interface:</strong> <span class="badge badge-success">Yes</span></p>
+                <p><strong>CLI:</strong> <span class="badge badge-success">Yes</span> (<code>-i</code> / <code>-o</code> / optional <code>-c</code>)</p>
                 <p><strong>License:</strong> AGPL-3.0-or-later</p>
             </div>
 
@@ -667,12 +668,21 @@
 
             <h3>Step 1: Launch the Application</h3>
             <div class="code-block">
-                <pre><code># Activate vaila environment
-conda activate vaila
+                <pre><code># From repo root (uv manages the venv)
+uv run python vaila/markerless2d_analysis_v2.py
 
-# Run the script
-python markerless2d_analysis_v2.py</code></pre>
+# Or from main vailá GUI:
+# Frame B → Markerless 2D → Advanced (YOLO + MediaPipe)</code></pre>
             </div>
+
+            <h3>Headless CLI</h3>
+            <div class="code-block">
+                <pre><code>uv run python vaila/markerless2d_analysis_v2.py \
+  -i /path/to/videos \
+  -o /path/to/output \
+  -c /path/to/pose_config.toml</code></pre>
+            </div>
+            <p>Both <code>-i</code> and <code>-o</code> are required for headless mode. Optional <code>-c</code> loads a TOML saved from a previous GUI run.</p>
 
             <h3>Step 2-5: Configuration</h3>
             <ol>
@@ -858,6 +868,13 @@ toml>=0.10.2</code></pre>
 
             <h1>📝 Version History</h1>
 
+            <h2>v0.3.85 (23 July 2026)</h2>
+            <ul>
+                <li><strong>Fix:</strong> MediaPipe Tasks VIDEO mode timestamp collision when YOLO crop + full-frame fallback both call <code>detect_for_video</code> in the same frame (strictly increasing timestamps; <code>timestamp_ms = frame_count * 2</code>)</li>
+                <li><strong>New:</strong> Headless CLI (<code>-i</code>/<code>-o</code>/<code>-c</code>) and <code>run_markerless2d_batch()</code> shared by GUI and CLI</li>
+                <li><strong>Cleanup:</strong> Removed temporary agent debug logging</li>
+            </ul>
+
             <h2>v0.3.17 (March 2026)</h2>
             <ul>
                 <li>Separate YOLO <strong>detection</strong> weights (e.g. <code>yolo26x.pt</code>) with <code>model.track(..., persist=True)</code> and BoT-SORT / ByteTrack</li>
@@ -875,7 +892,7 @@ toml>=0.10.2</code></pre>
             </ul>
 
             <div class="footer">
-                <p>📅 <strong>Last Updated:</strong> January 27, 2026</p>
+                <p>📅 <strong>Last Updated:</strong> 23 July 2026</p>
                 <p>🔗 <strong>Part of vailá - Multimodal Toolbox for Biomechanics and Motion Analysis</strong></p>
                 <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
                 <p>📧 <strong>Contact:</strong> paulosantiago@usp.br</p>

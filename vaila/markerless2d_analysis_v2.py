@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 01 June 2026
-Version: 0.3.45
+Update: 23 July 2026
+Version: 0.3.85
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -29,10 +29,14 @@ New Features (v0.3.16):
 - ROI polygon definition and bbox upscale factor for YOLO+MediaPipe mode
 
 Usage example:
-First activate the vaila environment:
-conda activate vaila
-Then run the markerless2d_analysis_v2.py script:
-python markerless2d_analysis_v2.py
+  # GUI (dialogs for dirs + pose config):
+  uv run python vaila/markerless2d_analysis_v2.py
+
+  # Headless CLI (reuse a saved config.toml from a previous run):
+  uv run python vaila/markerless2d_analysis_v2.py \
+    -i /path/to/videos -o /path/to/output -c /path/to/pose_config.toml
+
+  # From main vailá GUI: Frame B → Markerless 2D → Advanced (YOLO + MediaPipe)
 
 Requirements:
 - Python 3.12.13
@@ -61,10 +65,8 @@ License:
 
 import contextlib
 import datetime
-import json
 import math
 import os
-import tempfile
 import platform
 import shutil
 import time
@@ -108,7 +110,7 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-__version__ = "0.3.17"
+__version__ = "0.3.85"
 
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
 POSE_CONNECTIONS = frozenset(
@@ -150,49 +152,6 @@ POSE_CONNECTIONS = frozenset(
         (28, 32),
     ]
 )
-
-# #region agent log
-_DBG_PATH = os.path.join(tempfile.gettempdir(), "vaila_debug_2d1fa6.log")
-_DBG_SESSION = "2d1fa6"
-_DBG_FACE_DRAW_ONCE = False
-
-
-def _agent_debug_log(run_id, hypothesis_id, location, message, data=None):
-    payload = {
-        "sessionId": _DBG_SESSION,
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data or {},
-        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-    }
-    try:
-        with open(_DBG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
-    except Exception:
-        pass
-
-
-_face_expected = set(range(11))
-_face_present = set()
-for _a, _b in POSE_CONNECTIONS:
-    if _a in _face_expected:
-        _face_present.add(_a)
-    if _b in _face_expected:
-        _face_present.add(_b)
-_agent_debug_log(
-    "face-skeleton-investigation",
-    "H4",
-    "markerless2d_analysis_v2.py:POSE_CONNECTIONS",
-    "pose connection summary at import",
-    {
-        "total_connections": len(POSE_CONNECTIONS),
-        "face_indices_present": sorted(_face_present),
-        "missing_face_indices": sorted(_face_expected - _face_present),
-    },
-)
-# #endregion
 
 
 def get_hardware_info():
@@ -1607,6 +1566,16 @@ def process_frame_with_mediapipe_tasks(
             best_person_bbox = filtered_persons[0]["bbox"]
             best_person_keypoints = filtered_persons[0].get("keypoints")
 
+    # MediaPipe VIDEO mode requires strictly increasing timestamps across ALL
+    # detect_for_video calls (crop + optional full-frame fallback in same frame).
+    detect_ts_ms = int(timestamp_ms)
+
+    def _next_detect_ts() -> int:
+        nonlocal detect_ts_ms
+        ts = detect_ts_ms
+        detect_ts_ms += 1
+        return ts
+
     # --- Upscaled crop whenever YOLO supplied a bbox ---
     if best_person_bbox and use_yolo:
         crop_x1, crop_y1, crop_x2, crop_y2, crop_w, crop_h = _yolo_crop_from_bbox(
@@ -1623,7 +1592,8 @@ def process_frame_with_mediapipe_tasks(
                 upscaled_crop = cv2.resize(crop_img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
                 rgb_frame = cv2.cvtColor(upscaled_crop, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-                pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+                crop_ts = _next_detect_ts()
+                pose_landmarker_result = landmarker.detect_for_video(mp_image, crop_ts)
 
                 if (
                     pose_landmarker_result.pose_landmarks
@@ -1653,8 +1623,9 @@ def process_frame_with_mediapipe_tasks(
     # Fallback / Standard Inference (Full Frame)
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-    # Detect pose using Tasks API
-    pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+    # Detect pose using Tasks API (must use a NEW timestamp if crop already ran)
+    pose_landmarker_result = landmarker.detect_for_video(mp_image, _next_detect_ts())
+
 
     if not pose_landmarker_result.pose_landmarks or len(pose_landmarker_result.pose_landmarks) == 0:
         return None, None, best_person_bbox, best_person_keypoints
@@ -2135,8 +2106,10 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
         if not success:
             break
 
-        # Calculate timestamp for Tasks API (must be monotonically increasing)
-        timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
+        # Tasks API VIDEO mode: timestamps must be strictly increasing across ALL
+        # detect_for_video calls. Reserve +2 per frame (crop + optional fallback).
+        # Using frame index (not wall-clock ms) avoids collisions at high FPS.
+        timestamp_ms = frame_count * 2
 
         # Show progress every 10 frames with more detail
         if frame_count % 10 == 0:
@@ -2620,40 +2593,6 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
                     dline(pts.get("right_hip"), pts.get("left_hip"), C_CENTER, 2)
 
                     # 6. Draw Joints
-                    # #region agent log
-                    global _DBG_FACE_DRAW_ONCE
-                    if not _DBG_FACE_DRAW_ONCE:
-                        face_names = [
-                            "nose",
-                            "left_eye_inner",
-                            "left_eye",
-                            "left_eye_outer",
-                            "right_eye_inner",
-                            "right_eye",
-                            "right_eye_outer",
-                            "left_ear",
-                            "right_ear",
-                            "mouth_left",
-                            "mouth_right",
-                        ]
-                        face_valid_points = 0
-                        for _fname in face_names:
-                            _pt = pts.get(_fname, np.array([np.nan, np.nan]))
-                            if isinstance(_pt, np.ndarray) and not np.isnan(_pt).any():
-                                face_valid_points += 1
-                        _agent_debug_log(
-                            "face-skeleton-investigation",
-                            "H10",
-                            "markerless2d_analysis_v2.py:draw_joints",
-                            "face points before manual joint drawing",
-                            {
-                                "face_valid_points": face_valid_points,
-                                "face_total_points": len(face_names),
-                                "nose_and_eye_skipped_by_code": False,
-                            },
-                        )
-                        _DBG_FACE_DRAW_ONCE = True
-                    # #endregion
                     for name, pt in pts.items():
                         if "mid" in name:
                             continue
@@ -2758,6 +2697,90 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
     print(f"{'=' * 60}")
     print("PROCESSING COMPLETED SUCCESSFULLY!")
     print(f"{'=' * 60}\n")
+
+
+
+def _default_pose_config() -> dict:
+    """Defaults matching the pose configuration dialog."""
+    return {
+        "min_detection_confidence": 0.1,
+        "min_tracking_confidence": 0.1,
+        "model_complexity": 2,
+        "enable_segmentation": False,
+        "smooth_segmentation": False,
+        "static_image_mode": False,
+        "use_yolo": True,
+        "yolo_mode": "yolo_mediapipe",
+        "yolo_detector_model": "yolo26x.pt",
+        "yolo_model": "yolo11x-pose.pt",
+        "yolo_tracker": "botsort",
+        "min_pose_crop_short_side_px": 384,
+        "yolo_conf": 0.3,
+        "filter_type": "none",
+        "filter_param": "0.75",
+        "bbox_upscale_factor": 1,
+        "roi_polygon_points": None,
+    }
+
+
+def run_markerless2d_batch(input_dir, output_base, pose_config) -> None:
+    """Load YOLO (if configured) and process all videos in input_dir."""
+    yolo_detector = None
+    yolo_pose = None
+    use_yolo_successfully = False
+    if pose_config.get("use_yolo", False):
+        det_name = pose_config.get("yolo_detector_model", "yolo26x.pt")
+        print(f"Loading YOLO detector: {det_name}")
+        yolo_detector = load_yolo_detector(det_name)
+        yolo_mode_ld = pose_config.get("yolo_mode", "yolo_mediapipe")
+        if yolo_mode_ld == "yolo_only":
+            pose_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
+            print(f"Loading YOLO pose model: {pose_name}")
+            yolo_pose = load_yolo_pose_model(pose_name)
+        if yolo_detector is not None and (yolo_mode_ld != "yolo_only" or yolo_pose is not None):
+            use_yolo_successfully = True
+            print("YOLO weights loaded successfully.")
+        else:
+            print("Warning: Could not load required YOLO weights, proceeding without YOLO")
+            pose_config["use_yolo"] = False
+            yolo_detector = None
+            yolo_pose = None
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_base = Path(output_base)
+    if use_yolo_successfully and pose_config.get("use_yolo", False):
+        output_base = output_base / f"yolov_{timestamp}"
+        print(f"Output directory: yolov_{timestamp} (YOLO detector/track + pose pipeline)")
+    else:
+        output_base = output_base / f"mediapipe_{timestamp}"
+        print(f"Output directory: mediapipe_{timestamp} (MediaPipe only)")
+    output_base.mkdir(parents=True, exist_ok=True)
+
+    input_dir = Path(input_dir)
+    video_files = [
+        f for f in input_dir.glob("*.*") if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+    ]
+    video_files = sorted(video_files, key=lambda x: x.name.lower())
+
+    print(f"\nFound {len(video_files)} videos to process (sorted alphabetically)")
+    if len(video_files) > 0:
+        print("Processing order:")
+        for i, vf in enumerate(video_files, 1):
+            print(f"  {i}. {vf.name}")
+
+    for i, video_file in enumerate(video_files, 1):
+        print(f"\n\nProcessing video {i}/{len(video_files)}: {video_file.name}")
+        output_dir = output_base / video_file.stem
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            process_video(video_file, output_dir, pose_config, yolo_detector, yolo_pose)
+        except Exception as e:
+            print(f"\nError processing {video_file.name}: {e}")
+            continue
+
+    print("\n\nAll videos processed!")
+
 
 
 def process_videos_in_directory(existing_root=None):
@@ -2929,63 +2952,61 @@ def process_videos_in_directory(existing_root=None):
         return
 
     print("Pose configuration completed successfully.")
+    run_markerless2d_batch(input_dir, output_base, pose_config)
 
-    yolo_detector = None
-    yolo_pose = None
-    use_yolo_successfully = False
-    if pose_config["use_yolo"]:
-        det_name = pose_config.get("yolo_detector_model", "yolo26x.pt")
-        print(f"Loading YOLO detector: {det_name}")
-        yolo_detector = load_yolo_detector(det_name)
-        yolo_mode_ld = pose_config.get("yolo_mode", "yolo_mediapipe")
-        if yolo_mode_ld == "yolo_only":
-            pose_name = pose_config.get("yolo_model", "yolo11x-pose.pt")
-            print(f"Loading YOLO pose model: {pose_name}")
-            yolo_pose = load_yolo_pose_model(pose_name)
-        if yolo_detector is not None and (yolo_mode_ld != "yolo_only" or yolo_pose is not None):
-            use_yolo_successfully = True
-            print("YOLO weights loaded successfully.")
+
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entry: GUI dialogs when no paths; headless with -i/-o/[-c]."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Markerless 2D Analysis v2 (YOLO detector/track + MediaPipe pose)"
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        type=str,
+        help="Input directory with videos (.mp4/.avi/.mov)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        help="Base output directory (creates yolov_*/mediapipe_* subdir)",
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        help="Optional pose config TOML (from a previous GUI run)",
+    )
+    args = parser.parse_args(argv)
+
+    if args.input and args.output:
+        pose_config = _default_pose_config()
+        if args.config:
+            with open(args.config) as f:
+                loaded = toml.load(f)
+            pose_config.update(loaded)
+            print(f"Loaded config: {args.config}")
         else:
-            print("Warning: Could not load required YOLO weights, proceeding without YOLO")
-            pose_config["use_yolo"] = False
-            yolo_detector = None
-            yolo_pose = None
+            print("No --config given; using dialog defaults.")
+        print(">> vaila/markerless2d_analysis_v2: Equivalent CLI")
+        print(
+            f">> uv run python vaila/markerless2d_analysis_v2.py "
+            f"-i {args.input} -o {args.output}"
+            + (f" -c {args.config}" if args.config else "")
+        )
+        run_markerless2d_batch(args.input, args.output, pose_config)
+        return
 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Use different directory names based on whether YOLO is being used
-    if use_yolo_successfully and pose_config.get("use_yolo", False):
-        output_base = Path(output_base) / f"yolov_{timestamp}"
-        print(f"Output directory: yolov_{timestamp} (YOLO detector/track + pose pipeline)")
-    else:
-        output_base = Path(output_base) / f"mediapipe_{timestamp}"
-        print(f"Output directory: mediapipe_{timestamp} (MediaPipe only)")
-    output_base.mkdir(parents=True, exist_ok=True)
+    if args.input or args.output or args.config:
+        parser.error("Headless mode requires both -i/--input and -o/--output")
 
-    input_dir = Path(input_dir)
-    video_files = list(input_dir.glob("*.*"))
-    video_files = [f for f in video_files if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
-    # Sort videos alphabetically by filename (case-insensitive)
-    video_files = sorted(video_files, key=lambda x: x.name.lower())
-
-    print(f"\nFound {len(video_files)} videos to process (sorted alphabetically)")
-    if len(video_files) > 0:
-        print("Processing order:")
-        for i, vf in enumerate(video_files, 1):
-            print(f"  {i}. {vf.name}")
-
-    for i, video_file in enumerate(video_files, 1):
-        print(f"\n\nProcessing video {i}/{len(video_files)}: {video_file.name}")
-        output_dir = output_base / video_file.stem
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        try:
-            process_video(video_file, output_dir, pose_config, yolo_detector, yolo_pose)
-        except Exception as e:
-            print(f"\nError processing {video_file.name}: {e}")
-            continue
-
-    print("\n\nAll videos processed!")
+    process_videos_in_directory()
 
 
 if __name__ == "__main__":
-    process_videos_in_directory()
+    main()
