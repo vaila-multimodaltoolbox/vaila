@@ -30,7 +30,7 @@
     <h1>Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
 
     <div class="module-info">
-        <p><strong>Version:</strong> 0.3.85 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-16</p>
+        <p><strong>Version:</strong> 0.3.85 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-28</p>
         <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
         <p><strong>Category:</strong> Markerless 2D / Meta (Facebook)</p>
     </div>
@@ -71,10 +71,32 @@ uv run vaila/vaila_sapiens.py --download-weights --model 5b</code></pre>
         <li><strong>Dir…</strong> = batch all videos in a folder; <strong>File…</strong> = single video</li>
         <li>Choose the output parent directory</li>
         <li>Model default <code>1b</code>; stride <code>1</code> = every frame</li>
+        <li>Optional <strong>Detection ROI</strong> — draw a <strong>Rectangle…</strong> or <strong>Polygon…</strong>, load one shared <strong>TOML…</strong>, or choose a <strong>Folder…</strong> with per-video configs</li>
         <li><strong>Detection &amp; keypoint thresholds</strong> — <code>--bbox-thr</code>, <code>--nms-thr</code>, <code>--kpt-thr</code>, <code>--max-persons</code></li>
         <li><strong>GPU &amp; advanced</strong> — <code>--device</code>, <code>--pose-batch-size</code> (GUI pre-fills per-model default), <code>--flip-test</code>, overlay on/off, <strong>Draw person IDs</strong>, <strong>Temporal Re-ID</strong> (online linker + OKS + bidirectional, default on)</li>
         <li>Click <strong>Run</strong> — terminal prints <code>&gt;&gt; Equivalent CLI</code> with <code>-i</code> / <code>-o</code> and the flags you chose</li>
     </ol>
+
+    <h2>Detection ROI — faster local processing</h2>
+    <p>The optional ROI limits <strong>person detection</strong> to a selected rectangle or free polygon. vailá crops and masks the frame before DETR, keeps a 5% context ring for people touching the boundary, rejects boxes whose centre is outside the exact polygon, then restores accepted boxes to <strong>full-video pixel coordinates</strong>.</p>
+    <p>The Sapiens pose head still receives the <strong>original full-resolution frame plus the restored global box</strong>. ROI therefore does not downscale the person crop, and pose CSVs, overlay, geometric/appearance Re-ID, tracking, REC2D and REC3D stay in the original coordinate system. The active delimiter is yellow on the overlay.</p>
+    <ul>
+        <li><strong>Rectangle…</strong> — drag a box; Enter confirms, Esc cancels.</li>
+        <li><strong>Polygon…</strong> — left click adds, right click undoes, <code>R</code> resets, Enter confirms.</li>
+        <li><strong>TOML…</strong> — one shared config, automatically scaled for different video resolutions.</li>
+        <li><strong>Folder…</strong> — per-video batch configs named <code>&lt;stem&gt;_sapiens_roi.toml</code>, <code>&lt;stem&gt;_roi.toml</code>, timestamped <code>&lt;stem&gt;*roi*.toml</code>, or fallback <code>default.toml</code>.</li>
+        <li><strong>Full frame</strong> — disable ROI.</li>
+    </ul>
+    <p>The loader accepts native Sapiens TOML, YOLO <code>roi_polygon.points</code>, and markerless <code>roi_polygon_points</code>. Each ROI run writes <code>sapiens_roi_used.toml</code> and records scaled points/crop bounds under <code>roi</code> in <code>&lt;stem&gt;_predictions.json</code>.</p>
+    <pre><code># Draw, save and run
+uv run vaila/vaila_sapiens.py -i video.mp4 -o out/ --select-roi rectangle
+uv run vaila/vaila_sapiens.py -i video.mp4 -o out/ --select-roi polygon
+
+# Reuse one config or a per-video config folder
+uv run vaila/vaila_sapiens.py -i video.mp4 -o out/ --roi-config roi.toml
+uv run vaila/vaila_sapiens.py -i videos/ -o out/ --roi-config roi_configs/</code></pre>
+    <div class="note"><strong>Measured behavior:</strong> ROI removes DETR work outside the crop and prevents people outside it from entering the expensive pose head. The supplied clip has only one person in both modes, so a controlled 26-pass benchmark changed only from 29.44 s to 29.06 s (1.3%); mean keypoint confidence was effectively unchanged (0.73580 vs 0.73542). Crowded/wide views benefit more.</div>
+
     <p>On <strong>Run</strong>, the terminal prints <code>&gt;&gt; vaila/vaila_sapiens: Equivalent CLI</code> with every flag you chose (copy/paste to reproduce without the GUI). Output uses only <code>-o</code>; the CLI creates <code>processed_sapiens_&lt;timestamp&gt;/</code> under that parent.</p>
 
     <h2>CLI examples</h2>
@@ -90,6 +112,7 @@ uv run vaila/vaila_sapiens.py --download-weights --model 5b</code></pre>
   --max-persons 8 \
   --kpt-thr 0.3 \
   --pose-batch-size 2 \
+  --roi-config /path/to/video_sapiens_roi.toml \
   --flip-test \
   --stabilize-ids \
   --reid-max-gap 12 \
@@ -179,6 +202,8 @@ uv run vaila/vaila_sapiens.py \
             <td>Parent directory where results are written.</td>
             <td>Creates <code>processed_sapiens_YYYYMMDD_HHMMSS/&lt;video_stem&gt;/</code> with CSVs, JSON and overlay.</td>
         </tr>
+        <tr><td><code>--roi-config</code></td><td>none</td><td>Shared ROI TOML or directory of per-video TOMLs.</td><td>Crops/masks DETR only; pose and tracking coordinates stay global.</td></tr>
+        <tr><td><code>--select-roi</code></td><td>none</td><td>Interactive <code>rectangle</code> or <code>polygon</code>.</td><td>Saves a reusable TOML, then runs with it.</td></tr>
     </table>
 
     <h3>Model and inference</h3>
@@ -442,7 +467,8 @@ uv run vaila/vaila_sapiens.py \
         <tr><td><code>sapiens_id_map.csv</code></td><td>Map <code>pN</code> ↔ <code>stable_id</code> + frame span</td></tr>
         <tr><td><code>sapiens_reid_links.csv</code></td><td>Re-ID audit — <code>frame,raw_id,stable_id</code> (like SAM3)</td></tr>
         <tr><td><code>sapiens_vaila_*.csv</code></td><td>Five bbox anchors (same schema as SAM3)</td></tr>
-        <tr><td><code>README_sapiens.txt</code></td><td>Schema summary for the run</td></tr>
+        <tr><td><code>sapiens_roi_used.toml</code></td><td>Effective ROI copied into an ROI run for reproducibility</td></tr>
+        <tr><td><code>README_sapiens.txt</code></td><td>Schema summary + ROI provenance for the run</td></tr>
     </table>
 
     <h2>getpixelvideo workflow</h2>

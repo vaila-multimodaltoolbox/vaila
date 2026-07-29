@@ -1,6 +1,14 @@
-"""Focused tests for cutvideo timeline and cancellable render helpers."""
+"""Focused tests for cutvideo timeline, sync handoff, and render helpers.
 
-from vaila import cutvideo
+Update Date: 28 July 2026
+Version: 0.3.85
+"""
+
+from pathlib import Path
+
+import pytest
+
+from vaila import cutvideo, syncvid
 
 
 def test_timeline_x_for_frame_reaches_both_edges():
@@ -135,3 +143,174 @@ def test_cut_times_for_toml_matches_ui_convention():
     assert start == 1 / 120
     assert duration == 186 / 120
     assert end == start + duration
+
+
+def test_parse_sync_v2_uses_zero_based_internal_frames(tmp_path: Path):
+    video = tmp_path / "camera one.mp4"
+    video.write_bytes(b"x")
+    sync_file = syncvid.write_sync_file(
+        [syncvid.SyncPlanEntry(video.name, "camera one sync.mp4", 10, 20, 15)],
+        tmp_path / "sync.txt",
+    )
+    cuts, is_sync, data = cutvideo.parse_sync_file_content(sync_file, video, strict=True)
+    assert cuts == [(10, 20)]
+    assert is_sync is True
+    assert data[video.name]["initial_frame"] == 10
+    assert data[video.name]["final_frame"] == 20
+
+
+def test_load_cuts_or_sync_uses_explicit_file(tmp_path: Path):
+    video = tmp_path / "camera.mp4"
+    video.write_bytes(b"x")
+    selected = syncvid.write_sync_file(
+        [syncvid.SyncPlanEntry(video.name, "selected.mp4", 5, 15, 8)],
+        tmp_path / "selected.txt",
+    )
+    syncvid.write_sync_file(
+        [syncvid.SyncPlanEntry(video.name, "automatic.mp4", 100, 110, 105)],
+        tmp_path / "automatic_sync.txt",
+    )
+    cuts, is_sync, data = cutvideo.load_cuts_or_sync(video, sync_file=selected)
+    assert cuts == [(5, 15)]
+    assert is_sync is True
+    assert data[video.name]["new_name"] == "selected.mp4"
+
+
+def test_safe_sync_child_path_rejects_traversal_and_external_symlink(tmp_path: Path):
+    with pytest.raises(syncvid.SyncFileError):
+        cutvideo._safe_sync_child_path(tmp_path, "../camera.mp4", field="video_file")
+
+    outside = tmp_path.parent / f"{tmp_path.name}_outside.mp4"
+    outside.write_bytes(b"x")
+    link = tmp_path / "camera.mp4"
+    link.symlink_to(outside)
+    with pytest.raises(syncvid.SyncFileError, match="escapes"):
+        cutvideo._safe_sync_child_path(
+            tmp_path,
+            link.name,
+            field="video_file",
+            must_exist=True,
+        )
+
+
+def test_validate_sync_handoff_checks_all_source_videos(tmp_path: Path):
+    reference = tmp_path / "reference.mp4"
+    other = tmp_path / "other.mp4"
+    reference.write_bytes(b"x")
+    other.write_bytes(b"x")
+    sync_file = syncvid.write_sync_file(
+        [
+            syncvid.SyncPlanEntry(reference.name, "reference_sync.mp4", 0, 9, 4),
+            syncvid.SyncPlanEntry(other.name, "other_sync.mp4", 2, 11, 6),
+        ],
+        tmp_path / "sync.txt",
+    )
+    assert cutvideo.validate_sync_handoff(reference, sync_file) == (
+        reference.resolve(),
+        sync_file.resolve(),
+    )
+    other.unlink()
+    with pytest.raises(syncvid.SyncFileError):
+        cutvideo.validate_sync_handoff(reference, sync_file)
+
+
+def test_run_cutvideo_direct_handoff_skips_file_dialog(monkeypatch, tmp_path: Path):
+    video = tmp_path / "camera.mp4"
+    video.write_bytes(b"x")
+    sync_file = syncvid.write_sync_file(
+        [syncvid.SyncPlanEntry(video.name, "camera_sync.mp4", 0, 9, 4)],
+        tmp_path / "sync.txt",
+    )
+    calls = []
+    monkeypatch.setattr(
+        cutvideo,
+        "play_video_with_cuts",
+        lambda selected, *, sync_file=None: calls.append((selected, sync_file)),
+    )
+    monkeypatch.setattr(cutvideo, "cleanup_resources", lambda: None)
+    monkeypatch.setattr(
+        cutvideo,
+        "get_video_path",
+        lambda: pytest.fail("file dialog must not open during direct handoff"),
+    )
+    assert cutvideo.run_cutvideo(video, sync_file) is True
+    assert calls == [(str(video.resolve()), sync_file.resolve())]
+
+
+class _FakeProgressDialog:
+    def __init__(self, _title, _total_steps):
+        self.cancelled = False
+
+    def update(self, *_args, **_kwargs):
+        return True
+
+    def close(self):
+        return None
+
+
+def test_batch_sync_rejects_path_traversal_before_render(monkeypatch, tmp_path: Path):
+    reference = tmp_path / "reference.mp4"
+    reference.write_bytes(b"x")
+    monkeypatch.setattr(cutvideo, "RenderProgressDialog", _FakeProgressDialog)
+    monkeypatch.setattr(
+        cutvideo,
+        "cut_video_with_ffmpeg",
+        lambda *_args, **_kwargs: pytest.fail("unsafe entry must not render"),
+    )
+    data = {
+        "../outside.mp4": {
+            "new_name": "safe.mp4",
+            "initial_frame": 0,
+            "final_frame": 9,
+        }
+    }
+    assert cutvideo.batch_process_sync_videos(reference, data) is False
+
+
+def test_batch_sync_rejects_out_of_bounds_end_instead_of_truncating(monkeypatch, tmp_path: Path):
+    video = tmp_path / "camera.mp4"
+    video.write_bytes(b"x")
+    monkeypatch.setattr(cutvideo, "RenderProgressDialog", _FakeProgressDialog)
+    monkeypatch.setattr(
+        cutvideo,
+        "get_precise_video_metadata",
+        lambda _path: {"nb_frames": 10, "fps": 30.0},
+    )
+    monkeypatch.setattr(
+        cutvideo,
+        "cut_video_with_ffmpeg",
+        lambda *_args, **_kwargs: pytest.fail("out-of-bounds range must not render"),
+    )
+    data = {
+        video.name: {
+            "new_name": "camera_sync.mp4",
+            "initial_frame": 0,
+            "final_frame": 10,
+        }
+    }
+    assert cutvideo.batch_process_sync_videos(video, data) is False
+
+
+def test_batch_sync_reports_success_only_after_every_video(monkeypatch, tmp_path: Path):
+    first = tmp_path / "first.mp4"
+    second = tmp_path / "second.mp4"
+    first.write_bytes(b"x")
+    second.write_bytes(b"x")
+    rendered = []
+    monkeypatch.setattr(cutvideo, "RenderProgressDialog", _FakeProgressDialog)
+    monkeypatch.setattr(
+        cutvideo,
+        "get_precise_video_metadata",
+        lambda _path: {"nb_frames": 100, "fps": 30.0},
+    )
+    monkeypatch.setattr(
+        cutvideo,
+        "cut_video_with_ffmpeg",
+        lambda source, *_args, **_kwargs: rendered.append(Path(source).name) or True,
+    )
+    data = {
+        name: {"new_name": f"{Path(name).stem}_sync.mp4", "initial_frame": 0, "final_frame": 9}
+        for name in (first.name, second.name)
+    }
+    assert cutvideo.batch_process_sync_videos(first, data) is True
+    assert rendered == [first.name, second.name]

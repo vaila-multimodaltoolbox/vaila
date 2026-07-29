@@ -1,110 +1,79 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - syncvid</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vailá — Pygame Video Synchronization</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; }
+.container { max-width: 980px; margin: auto; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+h2 { color: #34495e; margin-top: 28px; }
+.card { background: #f7f9fb; padding: 14px 16px; border-left: 4px solid #3498db; border-radius: 6px; margin: 14px 0; }
+.warn { border-left-color: #e67e22; background: #fff7e8; }
+code { background: #eef2f5; padding: 2px 5px; border-radius: 4px; }
+pre { background: #eef2f5; padding: 14px; overflow-x: auto; border-radius: 5px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
+.footer { margin-top: 32px; color: #6c757d; border-top: 1px solid #ddd; padding-top: 14px; }
+</style>
 </head>
-<body>
-    <div class="container">
-        <h1>vailá - syncvid</h1>
+<body><div class="container">
+<h1>Pygame Multi-Video Synchronization</h1>
+<div class="card"><strong>File:</strong> <code>vaila/syncvid.py</code><br>
+<strong>Version:</strong> 0.3.85 · <strong>Updated:</strong> 2026-07-29<br>
+<strong>GUI:</strong> Frame C → Make Sync file</div>
 
-        <div class="module-info">
-            <h3>📋 Module Information</h3>
-            <p><strong>Category:</strong> Tools</p>
-            <p><strong>File:</strong> vaila\syncvid.py</p>
-            <p><strong>Lines:</strong> 314</p>
-            <p><strong>Size:</strong> 10276 characters</p>
-            <p><strong>Version:</strong> 0.0.2</p>
-            <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
-        </div>
+<h2>Purpose</h2>
+<p>Review every camera in a fast Pygame player, type each synchronization frame and the reference interval, then generate equal-duration ranges for Cut Video. <strong>Save + Cut Video</strong> opens Cut Video with the reference video and TXT already selected.</p>
 
-        
+<h2>Fast workflow</h2>
+<ol>
+<li>Open a target directory containing at least two videos.</li>
+<li>Click a camera name, or use Page Up/Page Down.</li>
+<li>Locate the common event with playback, the timeline or frame stepping.</li>
+<li>Type its displayed 1-based frame in that camera's <strong>Sync frame</strong> field.</li>
+<li>Repeat for every camera.</li>
+<li>Type the <strong>Reference video</strong> as a row number, filename, stem or unique fragment such as <code>frontal</code>.</li>
+<li>Type the inclusive <strong>Reference start</strong> and <strong>Reference end</strong>.</li>
+<li>Save the TXT, or save and open Cut Video directly.</li>
+</ol>
+<p>Clicking a field selects it for replacement. Tab/Shift+Tab navigates fields and Enter validates. Displayed and saved frames are 1-based and inclusive.</p>
 
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-Project: vailá Multimodal Toolbox
-Script: syncvid.py - Sync Video
+<h2>Pygame controls</h2>
+<table>
+<tr><th>Control</th><th>Action</th></tr>
+<tr><td>Space</td><td>Play/pause</td></tr>
+<tr><td>Left / Right</td><td>Previous/next frame while paused</td></tr>
+<tr><td>Down or <code>-</code></td><td>60 frames backward</td></tr>
+<tr><td>Up or <code>+</code></td><td>60 frames forward</td></tr>
+<tr><td><code>[</code> / <code>]</code></td><td>Playback speed from 0.0625× through 16×</td></tr>
+<tr><td>Home / End</td><td>First/last frame</td></tr>
+<tr><td>Page Up / Page Down</td><td>Previous/next camera</td></tr>
+<tr><td>Timeline click/drag</td><td>Seek directly</td></tr>
+<tr><td>Tab / Shift+Tab</td><td>Next/previous field</td></tr>
+<tr><td>Enter</td><td>Validate the active field and seek to a typed sync frame</td></tr>
+<tr><td>Ctrl+S</td><td>Save the synchronization file</td></tr>
+<tr><td>Escape</td><td>Leave a field, then cancel</td></tr>
+</table>
+<p>The player buttons use the traditional ASCII labels <strong>-60</strong>, <strong>-1</strong>, <strong>+1</strong> and <strong>+60</strong>. Consecutive frames are decoded sequentially and paused frames are cached for fluid 120-fps navigation.</p>
 
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 29 July 2024
-Update Date: 28 July 2025
-Version: 0.0.2
+<h2>Versioned sync format</h2>
+<pre># vaila sync file v2
+# frame_base=1; frame ranges are inclusive
+video_file    output_file    start_frame    end_frame    sync_frame
+camera 01.mp4 camera_01_sync.mp4 901 1101 1001</pre>
+<p>The actual separator is a tab; CSV-style quoting supports spaces. Legacy four-field whitespace files remain readable. Saving atomically replaces old content.</p>
 
-Description:
-This script performs batch processing of videos for sync videos.
+<h2>Direct Cut Video handoff</h2>
+<pre>uv run vaila/cutvideo.py --video /path/to/reference.mp4 --sync-file /path/to/session_sync.txt</pre>
+<p>Cut Video validates every source before Pygame opens. The synchronized interval is preloaded and batch rendering remains available.</p>
 
+<h2>CLI</h2>
+<pre>uv run vaila/syncvid.py -i /path/to/cameras
+uv run vaila/syncvid.py -i /path/to/cameras -o /path/to/session_sync.txt
+uv run vaila/syncvid.py -i /path/to/cameras --dry-run</pre>
 
-Features:
-- Added support for sync files.
-
-Usage:
-- Run the script to open a graphical interface for selecting the input directory
-  containing video files (.mp4, .avi, .mov), the output directory, and for
-  specifying the sync file.
-
-Requirements:
-- Python 3.12.11
-- Tkinter (usually included with Python installations)
-
-Output:
-The following files are generated for each processed video:
-1. Sync File (`*_sync.txt`):
-   The sync file with the sync data.
-
-Example:
-- Video: 1.mp4
-- Sync: 1_sync.txt
-- Output: 1_sync.mp4
-
-How to run:
-python syncvid.py
-
-License:
-    This project is licensed under the terms of GNU General Public License v3.0.
-</pre>
-        </div>
-
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 10</p>
-            <ul><li><code>get_video_files</code></li><li><code>write_sync_file</code></li><li><code>get_sync_info</code></li><li><code>sync_videos</code></li><li><code>create_widgets</code></li><li><code>on_next</code></li><li><code>select_main_camera</code></li><li><code>set_main_camera</code></li><li><code>get_sync_data</code></li><li><code>on_ok</code></li></ul>
-        </div>
-
-        <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
-        </div>
-    </div>
-</body>
-</html>
+<div class="card warn"><strong>Safety:</strong> every typed frame is range checked; ambiguous reference text, traversal, absolute paths, external symlinks, duplicates, oversized files and invalid ranges are rejected. Handoff uses <code>shell=False</code>.</div>
+<div class="footer">Part of vailá — Multimodal Toolbox · Updated 29 July 2026 (v0.3.85)</div>
+</div></body></html>
