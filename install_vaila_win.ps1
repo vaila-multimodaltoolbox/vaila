@@ -10,17 +10,33 @@
     Notes:
         - uv will be automatically installed if not present.
         - Python 3.12.13 will be installed via `uv python install`.
-        - Installation location:
-          * With admin: C:\Program Files\vaila (Windows standard location)
-          * Without admin: C:\Users\<user>\vaila (user directory)
+        - Installation location (prompt; Enter = portable default):
+          * [1] Current directory (Local/Portable) - default / recommended
+          * [2] User profile or Program Files:
+              - With admin: C:\Program Files\vaila
+              - Without admin: C:\Users\<user>\vaila
+        - Portable/git installs keep the committed uv.lock so `git pull` works.
+        - Profile / Program Files copies may regenerate uv.lock (no git tree).
+        - Safe with `irm ... | iex`: empty $PSScriptRoot falls back to the current
+          directory; if that folder is not a vaila clone, portable installs to .\vaila.
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 29 June 2026
-    Version: 0.3.67
+    Updated: 29 July 2026
+    Version: 0.3.85
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
+    Parameters:
+        -InstallLocation prompt|portable|profile
+          prompt   = ask interactively (default for manual runs)
+          portable = current script/cwd directory (Local/Portable; used by Inno Setup)
+          profile  = Program Files (admin) or %USERPROFILE%\vaila
 #>
+
+param(
+    [ValidateSet("prompt", "portable", "profile")]
+    [string]$InstallLocation = "prompt"
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -43,6 +59,15 @@ trap {
 # Check if running as administrator
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
+# irm|iex has empty $PSScriptRoot — fall back to the caller's working directory.
+$cwd = (Get-Location).Path
+$scriptRoot = $PSScriptRoot
+$runningViaIex = $false
+If ([string]::IsNullOrWhiteSpace($scriptRoot)) {
+    $scriptRoot = $cwd
+    $runningViaIex = $true
+}
+
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "vaila - Multimodal Toolbox Installation/Update (uv)" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -50,26 +75,45 @@ Write-Host ""
 Write-Host "This script will install or update vaila."
 Write-Host "If vaila is already installed, it will be updated with the latest code."
 Write-Host ""
+If ($runningViaIex) {
+    Write-Host "Detected irm|iex (no script path). Using working directory: $scriptRoot" -ForegroundColor Yellow
+    Write-Host ""
+}
 
 # ============================================================================
 # INSTALL LOCATION
 # ============================================================================
 
-Write-Host "---------------------------------------------" -ForegroundColor Cyan
-Write-Host "Install Location Selection" -ForegroundColor Cyan
-Write-Host "  [1] Default (User Profile or Program Files) - Recommended" -ForegroundColor Yellow
-Write-Host "  [2] Current Directory ($PSScriptRoot) - Local/Portable" -ForegroundColor Yellow
-Write-Host "---------------------------------------------" -ForegroundColor Cyan
-$installLocOption = Read-Host "Choose an option [1-2] (default: 1)"
-If ([string]::IsNullOrWhiteSpace($installLocOption)) {
+# Decide portable target early for the prompt label:
+# - Already inside a vaila clone → that folder
+# - Otherwise → .\vaila under the current directory
+$portableHint = $scriptRoot
+If (-Not (Test-Path (Join-Path $scriptRoot "pyproject.toml"))) {
+    $portableHint = Join-Path $cwd "vaila"
+}
+
+# Map CLI/Inno -InstallLocation to the interactive option codes:
+#   1 = portable (script/cwd dir), 2 = profile/Program Files
+$installLocOption = $null
+If ($InstallLocation -eq "portable") {
     $installLocOption = "1"
+    Write-Host "Install location preset: portable ($portableHint)" -ForegroundColor Green
+} ElseIf ($InstallLocation -eq "profile") {
+    $installLocOption = "2"
+    Write-Host "Install location preset: profile/Program Files" -ForegroundColor Green
+} Else {
+    Write-Host "---------------------------------------------" -ForegroundColor Cyan
+    Write-Host "Install Location Selection" -ForegroundColor Cyan
+    Write-Host "  [1] Current Directory ($portableHint) - Local/Portable - Recommended" -ForegroundColor Yellow
+    Write-Host "  [2] User Profile or Program Files" -ForegroundColor Yellow
+    Write-Host "---------------------------------------------" -ForegroundColor Cyan
+    $installLocOption = Read-Host "Choose an option [1-2] (default: 1)"
+    If ([string]::IsNullOrWhiteSpace($installLocOption)) {
+        $installLocOption = "1"
+    }
 }
 
 If ($installLocOption -eq "2") {
-    $vailaProgramPath = $PSScriptRoot
-    Write-Host "Installing in current directory: $vailaProgramPath" -ForegroundColor Green
-    Write-Host "(Local/Portable mode)" -ForegroundColor Green
-} Else {
     If ($isAdmin) {
         $vailaProgramPath = "${env:ProgramFiles}\vaila"
         Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Green
@@ -79,15 +123,34 @@ If ($installLocOption -eq "2") {
         Write-Host "Installation location: $vailaProgramPath" -ForegroundColor Yellow
         Write-Host "(No administrator privileges - using user directory)" -ForegroundColor Yellow
         Write-Host "Note: Some features (FFmpeg, Windows Terminal installation) may be skipped." -ForegroundColor Yellow
-        Write-Host "Run as administrator for installation to Program Files (recommended)." -ForegroundColor Yellow
+        Write-Host "Run as administrator for installation to Program Files." -ForegroundColor Yellow
     }
+} Else {
+    # Portable: use clone dir if present, else create/use .\vaila under cwd
+    If (Test-Path (Join-Path $scriptRoot "pyproject.toml")) {
+        $vailaProgramPath = $scriptRoot
+    } ElseIf (Test-Path (Join-Path $cwd "pyproject.toml")) {
+        $vailaProgramPath = $cwd
+    } Else {
+        $vailaProgramPath = Join-Path $cwd "vaila"
+    }
+    Write-Host "Installing in current directory: $vailaProgramPath" -ForegroundColor Green
+    Write-Host "(Local/Portable mode - default)" -ForegroundColor Green
 }
 Write-Host ""
 
-$sourcePath = (Get-Location).Path
-$projectDir = $sourcePath
+$sourcePath = $cwd
+$projectDir = $cwd
+# Prefer an existing clone as the source tree when present
+If (Test-Path (Join-Path $scriptRoot "pyproject.toml")) {
+    $projectDir = $scriptRoot
+} ElseIf (Test-Path (Join-Path $cwd "pyproject.toml")) {
+    $projectDir = $cwd
+} ElseIf (Test-Path (Join-Path $vailaProgramPath "pyproject.toml")) {
+    $projectDir = $vailaProgramPath
+}
 
-# Bootstrap: clone repo if pyproject.toml is missing locally
+# Bootstrap: clone repo if destination (or cwd) has no pyproject.toml
 If (-Not (Test-Path "$projectDir\pyproject.toml")) {
     Write-Host "Bootstrap Mode: vaila source not found locally." -ForegroundColor Cyan
     Write-Host "Cloning vaila repository from GitHub..." -ForegroundColor Cyan
@@ -97,16 +160,58 @@ If (-Not (Test-Path "$projectDir\pyproject.toml")) {
          Exit 1
     }
 
-    $tempDir = [System.IO.Path]::GetTempPath()
-    $tempVailaDir = Join-Path $tempDir "vaila_install_temp"
-    If (Test-Path $tempVailaDir) { Remove-Item -Path $tempVailaDir -Recurse -Force -ErrorAction SilentlyContinue }
+    $cloneTarget = $vailaProgramPath
+    # Profile/Program Files: clone to a temp dir, then the nested installer copies
+    If ($installLocOption -eq "2") {
+        $cloneTarget = Join-Path ([System.IO.Path]::GetTempPath()) "vaila_install_temp"
+        If (Test-Path $cloneTarget) {
+            Remove-Item -Path $cloneTarget -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } Else {
+        If (-Not (Test-Path $cloneTarget)) {
+            New-Item -ItemType Directory -Force -Path $cloneTarget | Out-Null
+        }
+        # If target exists but is empty-ish without pyproject, clone into it
+        If (Test-Path (Join-Path $cloneTarget "pyproject.toml")) {
+            Write-Host "Found existing clone at $cloneTarget" -ForegroundColor Green
+        } ElseIf ((Get-ChildItem -Force $cloneTarget -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0) {
+            # Non-empty without pyproject — use a subfolder only if this is not already named vaila
+            # Keep cloning into cloneTarget; git clone needs empty or new dir
+            $marker = Join-Path $cloneTarget ".git"
+            If (-Not (Test-Path $marker)) {
+                Write-Host "Target $cloneTarget is not empty and is not a git clone." -ForegroundColor Yellow
+                Write-Host "Cloning into a fresh temp dir, then installing to the chosen location..." -ForegroundColor Yellow
+                $cloneTarget = Join-Path ([System.IO.Path]::GetTempPath()) "vaila_install_temp"
+                If (Test-Path $cloneTarget) {
+                    Remove-Item -Path $cloneTarget -Recurse -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
 
-    Write-Host "Downloading to temporary directory: $tempVailaDir" -ForegroundColor Yellow
-    git clone --depth 1 https://github.com/vaila-multimodaltoolbox/vaila.git $tempVailaDir
+    Write-Host "Downloading to: $cloneTarget" -ForegroundColor Yellow
+    If (-Not (Test-Path (Join-Path $cloneTarget "pyproject.toml"))) {
+        # git clone requires the destination not to exist, or be empty
+        If ((Test-Path $cloneTarget) -and (Get-ChildItem -Force $cloneTarget -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0) {
+            Remove-Item -Path $cloneTarget -Force -ErrorAction SilentlyContinue
+        }
+        If (Test-Path $cloneTarget) {
+            git -C $cloneTarget pull --ff-only 2>$null
+            If (-Not (Test-Path (Join-Path $cloneTarget "pyproject.toml"))) {
+                Remove-Item -Path $cloneTarget -Recurse -Force -ErrorAction SilentlyContinue
+                git clone --depth 1 https://github.com/vaila-multimodaltoolbox/vaila.git $cloneTarget
+            }
+        } Else {
+            git clone --depth 1 https://github.com/vaila-multimodaltoolbox/vaila.git $cloneTarget
+        }
+    }
 
     Write-Host "Running installer from downloaded source..." -ForegroundColor Cyan
-    Set-Location $tempVailaDir
-    & ".\install_vaila_win.ps1"
+    Set-Location $cloneTarget
+    $nestedLocation = If ($installLocOption -eq "2") { "profile" } Else { "portable" }
+    # When portable and we cloned straight into the final dir, nested install stays there.
+    # When profile, nested install uses Program Files / user profile and copies from clone.
+    & ".\install_vaila_win.ps1" -InstallLocation $nestedLocation
     Exit $LASTEXITCODE
 }
 
@@ -376,7 +481,7 @@ If (-Not $normalizedProjectDir) { $normalizedProjectDir = $projectDir }
 If (-Not $normalizedVailaPath) { $normalizedVailaPath = $vailaProgramPath }
 $isAlreadyInstalled = ($normalizedProjectDir -eq $normalizedVailaPath)
 
-If ($isAlreadyInstalled -or ($installLocOption -eq "2")) {
+If ($isAlreadyInstalled -or ($installLocOption -ne "2")) {
     Write-Host "Script is running from installation directory (or local install selected). Files are already in place." -ForegroundColor Green
     Write-Host "Skipping file copy step." -ForegroundColor Green
 } Else {
@@ -412,8 +517,14 @@ If ($isAlreadyInstalled -or ($installLocOption -eq "2")) {
     }
 }
 
-If (Test-Path "$vailaProgramPath\uv.lock") {
-    Write-Host "Removing existing uv.lock to avoid stale dependency locks..." -ForegroundColor Yellow
+# Portable install into a git clone: keep committed uv.lock so `git pull` works.
+$isGitTree = Test-Path (Join-Path $vailaProgramPath ".git")
+$script:LockWasRegenerated = $false
+
+If ($isGitTree) {
+    Write-Host "Git working tree detected at $vailaProgramPath — keeping committed uv.lock." -ForegroundColor Green
+} ElseIf (Test-Path "$vailaProgramPath\uv.lock") {
+    Write-Host "Removing uv.lock in profile/Program Files install (no git tree)..." -ForegroundColor Yellow
     Remove-Item -Path "$vailaProgramPath\uv.lock" -Force -ErrorAction SilentlyContinue
 }
 
@@ -511,27 +622,53 @@ Try {
     Exit 1
 }
 
-# Generate lock file
+# Lock + sync (same policy as Linux/mac installers)
 Write-Host ""
-Write-Host "Generating lock file (uv.lock)..." -ForegroundColor Yellow
-& uv lock --upgrade
+If ($isGitTree) {
+    If ($useGPU) {
+        Write-Host "CUDA template selected in a git clone — regenerating uv.lock for this machine..." -ForegroundColor Yellow
+        & uv lock
+        $script:LockWasRegenerated = $true
+    } Else {
+        Write-Host "Using committed uv.lock (no uv lock --upgrade) so git pull is not blocked." -ForegroundColor Green
+    }
+} Else {
+    Write-Host "Generating lock file (uv.lock)..." -ForegroundColor Yellow
+    & uv lock --upgrade
+    $script:LockWasRegenerated = $true
+}
 
 # Sync dependencies
 Write-Host ""
 Write-Host "Installing vaila dependencies with uv..." -ForegroundColor Yellow
 Write-Host "This may take a few minutes on first run..." -ForegroundColor Yellow
 
-Try {
+function Invoke-VailaUvSync {
+    param([switch]$Frozen)
+    $syncArgs = @("sync")
+    If ($Frozen) { $syncArgs += "--frozen" }
     if ($useGPU -and $useSamExtra) {
-        & uv sync --extra gpu --extra sam
+        $syncArgs += @("--extra", "gpu", "--extra", "sam")
     } elseif ($useGPU) {
-        & uv sync --extra gpu
+        $syncArgs += @("--extra", "gpu")
     } elseif ($useSamExtra) {
-        & uv sync --extra sam
-    } else {
-        & uv sync
+        $syncArgs += @("--extra", "sam")
     }
-    $syncExitCode = $LASTEXITCODE
+    & uv @syncArgs
+    return $LASTEXITCODE
+}
+
+Try {
+    $wantFrozen = ($isGitTree -and -not $script:LockWasRegenerated)
+    $syncExitCode = Invoke-VailaUvSync -Frozen:$wantFrozen
+
+    If ($syncExitCode -ne 0 -and $wantFrozen) {
+        Write-Host "Frozen sync failed — retrying without --frozen (may update uv.lock)..." -ForegroundColor Yellow
+        $syncExitCode = Invoke-VailaUvSync
+        If ($syncExitCode -eq 0) {
+            $script:LockWasRegenerated = $true
+        }
+    }
 
     If ($syncExitCode -ne 0) {
         throw "uv sync failed with exit code $syncExitCode"
@@ -822,6 +959,31 @@ Write-Host "============================================================" -Foreg
 Write-Host "vaila installation completed successfully!" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
+If ($isGitTree) {
+    $lockDirty = $script:LockWasRegenerated
+    If (-not $lockDirty) {
+        Push-Location $vailaProgramPath
+        Try {
+            git diff --quiet -- uv.lock pyproject.toml 2>$null
+            If ($LASTEXITCODE -ne 0) { $lockDirty = $true }
+        } Catch {
+            # ignore git probe failures
+        }
+        Pop-Location
+    }
+    If ($lockDirty) {
+        Write-Host "NOTE (git pull): local pyproject.toml / uv.lock differ from the repo" -ForegroundColor Yellow
+        Write-Host "(common after a CUDA template switch). Before pulling:" -ForegroundColor Yellow
+        Write-Host "  git -C `"$vailaProgramPath`" restore uv.lock pyproject.toml" -ForegroundColor Cyan
+        Write-Host "  git -C `"$vailaProgramPath`" pull" -ForegroundColor Cyan
+        Write-Host "Then re-apply the platform template if needed:" -ForegroundColor Yellow
+        Write-Host "  pwsh bin/setup_pyproject.ps1 -Target win-cuda -Yes" -ForegroundColor Cyan
+        Write-Host ""
+    } Else {
+        Write-Host "Git tree kept clean for uv.lock — you can 'git pull' normally." -ForegroundColor Green
+        Write-Host ""
+    }
+}
 Write-Host "You can now launch vaila using:" -ForegroundColor Cyan
 Write-Host "  - Desktop shortcut" -ForegroundColor Yellow
 Write-Host "  - Start Menu shortcut" -ForegroundColor Yellow

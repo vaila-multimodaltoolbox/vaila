@@ -17,11 +17,13 @@
 #   - Requires Homebrew (https://brew.sh/) for system dependencies (auto-installed).    #
 #   - uv will be automatically installed if not present.                                #
 #   - Python 3.12.13 will be installed via `uv python install`.                         #
+#   - Portable/git installs keep the committed uv.lock (so git pull keeps working).     #
+#   - Profile copies (~/vaila) may regenerate uv.lock; no git tree there.               #
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                            #
-# Update: 29 June 2026
-# Version: 0.3.67
+# Update: 29 July 2026
+# Version: 0.3.85
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -31,7 +33,7 @@ echo "============================================================"
 echo "vaila - Multimodal Toolbox Installation/Update (uv)"
 echo "============================================================"
 echo ""
-echo "This script will install or update vaila in: ~/vaila"
+echo "This script will install or update vaila (default: current directory, portable)."
 echo "If vaila is already installed, it will be updated with the latest code."
 echo ""
 
@@ -44,19 +46,19 @@ USER_HOME="$HOME"
 
 echo "---------------------------------------------"
 echo "Install Location Selection"
-echo "  [1] Default (~/vaila) - Recommended"
-echo "  [2] Current Directory ($(pwd)) - Local/Portable"
+echo "  [1] Current Directory ($(pwd)) - Local/Portable - Recommended"
+echo "  [2] User Profile (~/vaila)"
 echo "---------------------------------------------"
 printf "Choose an option [1-2] (default: 1): "
 read INSTALL_LOC_OPTION
 INSTALL_LOC_OPTION=${INSTALL_LOC_OPTION:-1}
 
 if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
-    VAILA_HOME="$(pwd)"
-    echo "Installing in current directory: $VAILA_HOME"
-else
     VAILA_HOME="$USER_HOME/vaila"
-    echo "Installing in default location: $VAILA_HOME"
+    echo "Installing in user profile: $VAILA_HOME"
+else
+    VAILA_HOME="$(pwd)"
+    echo "Installing in current directory (portable): $VAILA_HOME"
 fi
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -213,8 +215,8 @@ fi
 
 echo "Preparing destination directory..."
 
-if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
-    echo "Local install selected. Skipping rsync file copy."
+if [[ "$INSTALL_LOC_OPTION" != "2" ]]; then
+    echo "Local/portable install selected. Skipping rsync file copy."
     echo "Using current directory as VAILA_HOME."
 else
     echo ""
@@ -231,8 +233,19 @@ else
     rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' --exclude='uv.lock' --exclude='.python-version' "$PROJECT_DIR/" "$VAILA_HOME/"
 fi
 
-if [ -f "$VAILA_HOME/uv.lock" ]; then
-    rm -f "$VAILA_HOME/uv.lock"
+# Portable install into a git clone: keep committed uv.lock so `git pull` works.
+IS_GIT_TREE=false
+if [ -d "$VAILA_HOME/.git" ]; then
+    IS_GIT_TREE=true
+fi
+
+if [[ "$IS_GIT_TREE" == true ]]; then
+    echo "Git working tree detected at $VAILA_HOME — keeping committed uv.lock."
+else
+    if [ -f "$VAILA_HOME/uv.lock" ]; then
+        echo "Removing uv.lock in profile install (no git tree)..."
+        rm -f "$VAILA_HOME/uv.lock"
+    fi
 fi
 
 cd "$VAILA_HOME"
@@ -294,33 +307,83 @@ else
     echo "Virtual environment already exists. uv sync will update it as needed."
 fi
 
+# Lock + sync (same policy as install_vaila_linux.sh)
+echo ""
+LOCK_WAS_REGENERATED=false
+if [[ "$IS_GIT_TREE" == true ]]; then
+    if [[ "$USE_METAL" == true ]]; then
+        echo "macOS Metal template selected in a git clone — regenerating uv.lock for this machine..."
+        uv lock
+        LOCK_WAS_REGENERATED=true
+    else
+        echo "Using committed uv.lock (no uv lock --upgrade) so git pull is not blocked."
+    fi
+else
+    echo "Generating lock file (uv.lock)..."
+    uv lock --upgrade
+    LOCK_WAS_REGENERATED=true
+fi
+
 # Sync dependencies
 echo ""
 echo "Installing vaila dependencies with uv..."
 echo "This may take a few minutes on first run..."
 
 UV_SYNC_CMD=(uv sync)
+if [[ "$IS_GIT_TREE" == true && "$LOCK_WAS_REGENERATED" != true ]]; then
+    UV_SYNC_CMD+=(--frozen)
+fi
 if [[ "$USE_SAM_EXTRA" == true ]]; then
     UV_SYNC_CMD+=(--extra sam)
 fi
 if ! "${UV_SYNC_CMD[@]}"; then
-    echo "Error: uv sync failed."
-    if [[ "$USE_SAM_EXTRA" == true ]]; then
-        echo "Retrying without SAM extra..."
-        if uv sync; then
-            echo "Base install succeeded (without --extra sam)."
-            echo "You can retry SAM later on a CUDA host with: uv sync --extra sam"
+    if [[ "$IS_GIT_TREE" == true && "$LOCK_WAS_REGENERATED" != true ]]; then
+        echo "Frozen sync failed — retrying without --frozen (may update uv.lock)..."
+        UV_SYNC_CMD=(uv sync)
+        if [[ "$USE_SAM_EXTRA" == true ]]; then
+            UV_SYNC_CMD+=(--extra sam)
+        fi
+        if "${UV_SYNC_CMD[@]}"; then
+            LOCK_WAS_REGENERATED=true
+        else
+            echo "Error: uv sync failed."
+            if [[ "$USE_SAM_EXTRA" == true ]]; then
+                echo "Retrying without SAM extra..."
+                if uv sync; then
+                    echo "Base install succeeded (without --extra sam)."
+                    echo "You can retry SAM later on a CUDA host with: uv sync --extra sam"
+                else
+                    echo "Restoring universal CPU configuration..."
+                    cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+                    echo "Installation failed. Please check the error messages above."
+                    exit 1
+                fi
+            else
+                echo "Restoring universal CPU configuration..."
+                cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+                echo "Installation failed. Please check the error messages above."
+                exit 1
+            fi
+        fi
+    else
+        echo "Error: uv sync failed."
+        if [[ "$USE_SAM_EXTRA" == true ]]; then
+            echo "Retrying without SAM extra..."
+            if uv sync; then
+                echo "Base install succeeded (without --extra sam)."
+                echo "You can retry SAM later on a CUDA host with: uv sync --extra sam"
+            else
+                echo "Restoring universal CPU configuration..."
+                cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+                echo "Installation failed. Please check the error messages above."
+                exit 1
+            fi
         else
             echo "Restoring universal CPU configuration..."
             cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
             echo "Installation failed. Please check the error messages above."
             exit 1
         fi
-    else
-        echo "Restoring universal CPU configuration..."
-        cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
-        echo "Installation failed. Please check the error messages above."
-        exit 1
     fi
 fi
 echo "Dependencies installed successfully."
@@ -674,6 +737,20 @@ echo "============================================================"
 echo "vaila installation completed successfully!"
 echo "============================================================"
 echo ""
+if [[ "$IS_GIT_TREE" == true ]]; then
+    if [[ "$LOCK_WAS_REGENERATED" == true ]] || ! git -C "$VAILA_HOME" diff --quiet -- uv.lock pyproject.toml 2>/dev/null; then
+        echo "NOTE (git pull): local pyproject.toml / uv.lock differ from the repo"
+        echo "(common after a Metal template switch). Before pulling:"
+        echo "  git -C \"$VAILA_HOME\" restore uv.lock pyproject.toml"
+        echo "  git -C \"$VAILA_HOME\" pull"
+        echo "Then re-apply the platform template if needed:"
+        echo "  bash bin/setup_pyproject.sh --target=macos --yes"
+        echo ""
+    else
+        echo "Git tree kept clean for uv.lock — you can 'git pull' normally."
+        echo ""
+    fi
+fi
 echo "Ways to run vaila:"
 echo "1. Recommended: $RUN_SCRIPT"
 echo "2. Or: cd \"$VAILA_HOME\" && .venv/bin/python vaila.py"

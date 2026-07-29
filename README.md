@@ -51,10 +51,26 @@ wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/i
 
 **🪟 Windows:**
 
-Run the following command in PowerShell to automatically configure TLS 1.2/1.3, download, and execute the Windows installer:
+Preferred (downloads to a temp file, then runs with `-File` so paths work):
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072
+$i = Join-Path $env:TEMP 'install_vaila_win.ps1'
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1' -OutFile $i -UseBasicParsing
+powershell -ExecutionPolicy Bypass -File $i
+```
+
+Or short form (`irm | iex` also works; portable installs to `.\vaila` under your current folder if you are not already inside a clone):
 
 ```powershell
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex
+```
+
+If you **already cloned** the repo, prefer running the local script (keeps `uv.lock` / `git pull` clean):
+
+```powershell
+cd path\to\vaila
+.\install_vaila_win.ps1
 ```
 
 ## Introduction
@@ -408,7 +424,15 @@ The script will:
     - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
 4.  Install **uv** and all dependencies with the selected configuration.
 
-**Note:** If you run as **Administrator**, _vailá_ installs to `C:\Program Files\vaila`. If you run as a **Standard User**, it installs to your user profile (`~\vaila`).
+**Note:** Default install location is **Local/Portable** (the current repo directory). Choose option **[2]** for a profile/system install: as **Administrator** → `C:\Program Files\vaila`; as a **Standard User** → `~\vaila`.
+
+**Git pull after install:** portable installs into a clone keep the committed `uv.lock` (CPU) so `git pull` works. If you chose CUDA/Metal, `pyproject.toml` / `uv.lock` become local overrides — restore before pulling:
+
+```bash
+git restore uv.lock pyproject.toml
+git pull
+# then re-apply: bash bin/setup_pyproject.sh   # or pwsh bin/setup_pyproject.ps1
+```
 
 ### 3. **What the Script Does**
 
@@ -632,12 +656,14 @@ If you prefer to run _vailá_ from the terminal or if you encounter issues with 
 
 ##### 🐧 Linux and 🍎 macOS
 
-The installation scripts automatically create a `run_vaila.sh` script in the installation directory (`~/vaila`).
+The installation scripts automatically create a `run_vaila.sh` script in the install directory (default: the repo you cloned; or `~/vaila` if you chose the user-profile option).
 
-- **Run the script**:
+- **Run the script** (portable default):
 
 ```bash
-~/vaila/run_vaila.sh
+./run_vaila.sh
+# or, if you installed to the user profile:
+# ~/vaila/run_vaila.sh
 ```
 
 The script uses the `uv` virtual environment created during installation.
@@ -662,7 +688,7 @@ run_vaila.bat
 
 - The launch scripts (`run_vaila.sh`, `run_vaila.ps1`, `run_vaila.bat`) are automatically created during installation.
 - These scripts run vaila through the `uv`-managed virtual environment.
-- The scripts are located in the installation directory (`~/vaila` on Linux/macOS, or the Program Files/user directory on Windows).
+- The scripts are located in the installation directory (default: the cloned repo / portable; optional: `~/vaila` or Program Files / user profile on Windows).
 
 ---
 
