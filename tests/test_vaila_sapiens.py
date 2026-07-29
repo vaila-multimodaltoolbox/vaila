@@ -1,4 +1,8 @@
-"""Unit tests for vaila.vaila_sapiens (Sapiens2 Pose video wrapper)."""
+"""Unit tests for vaila.vaila_sapiens (Sapiens2 Pose video wrapper).
+
+Update Date: 28 July 2026
+Version: 0.3.85
+"""
 
 from __future__ import annotations
 
@@ -567,8 +571,16 @@ def test_run_sapiens_on_video_writes_outputs(
     session.render_overlay.side_effect = lambda img, *_a, **_k: img
     mock_session_cls.return_value = session
 
+    roi = vs._make_sapiens_roi(
+        [[2, 2], [30, 2], [30, 22], [2, 22]],
+        source_width=32,
+        source_height=24,
+    )
+    roi_config = vs.save_sapiens_roi_config(video, roi, tmp_path / "sample_roi.toml")
     out_dir = tmp_path / "out"
-    vs.run_sapiens_on_video(video, out_dir, model="1b", stride=1, device="cpu")
+    vs.run_sapiens_on_video(
+        video, out_dir, model="1b", stride=1, device="cpu", roi_config=roi_config
+    )
 
     assert (out_dir / "sample_predictions.json").is_file()
     assert (out_dir / "sample_sapiens_vaila.csv").is_file()
@@ -577,6 +589,11 @@ def test_run_sapiens_on_video_writes_outputs(
     assert (out_dir / "sapiens_vaila_center.csv").is_file()
     assert (out_dir / "sapiens_points.csv").is_file()
     assert (out_dir / "README_sapiens.txt").is_file()
+    assert (out_dir / "sapiens_roi_used.toml").is_file()
+    payload = json.loads((out_dir / "sample_predictions.json").read_text(encoding="utf-8"))
+    assert payload["roi"]["points_full_frame"]
+    assert payload["roi"]["detector_crop_xyxy"]
+    assert all(call.kwargs.get("roi") is not None for call in session.process_frame.call_args_list)
 
 
 def test_write_sapiens_biomechanics_csvs(tmp_path: Path) -> None:
@@ -694,3 +711,130 @@ def test_progress_quiet_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert vs._progress_quiet()
     monkeypatch.setenv("TQDM_DISABLE", "true")
     assert vs._progress_quiet()
+
+
+def test_sapiens_roi_native_config_round_trip(tmp_path: Path) -> None:
+    video = tmp_path / "camera 01.mp4"
+    roi = vs._make_sapiens_roi(
+        [[10, 20], [90, 20], [90, 80], [10, 80]],
+        source_width=100,
+        source_height=100,
+        padding_fraction=0.1,
+    )
+    path = vs.save_sapiens_roi_config(video, roi, tmp_path / "roi.toml")
+    loaded = vs.load_sapiens_roi_config(path)
+    assert loaded.points == roi.points
+    assert loaded.source_width == 100
+    assert loaded.source_height == 100
+    assert loaded.padding_fraction == pytest.approx(0.1)
+    assert loaded.mask_outside
+
+
+def test_sapiens_roi_loads_markerless_pose_config(tmp_path: Path) -> None:
+    path = tmp_path / "pose_config.toml"
+    path.write_text(
+        "roi_polygon_points = [[10, 20], [90, 20], [90, 80], [10, 80]]\n",
+        encoding="utf-8",
+    )
+    roi = vs.load_sapiens_roi_config(path)
+    assert roi.points == ((10.0, 20.0), (90.0, 20.0), (90.0, 80.0), (10.0, 80.0))
+    assert roi.source_width == 0
+    assert roi.source_height == 0
+
+
+def test_scaled_sapiens_roi_polygon_tracks_video_resolution() -> None:
+    roi = vs._make_sapiens_roi(
+        [[10, 20], [90, 20], [90, 80], [10, 80]],
+        source_width=100,
+        source_height=100,
+    )
+    polygon = vs._scaled_sapiens_roi_polygon(roi, 200, 50)
+    np.testing.assert_allclose(
+        polygon,
+        np.array([[20, 10], [180, 10], [180, 40], [20, 40]], dtype=np.float32),
+    )
+
+
+def test_prepare_sapiens_roi_detector_input_crops_and_masks() -> None:
+    frame = np.full((100, 200, 3), 255, dtype=np.uint8)
+    roi = vs._make_sapiens_roi(
+        [[50, 20], [150, 20], [150, 80], [50, 80]],
+        source_width=200,
+        source_height=100,
+        padding_fraction=0.1,
+    )
+    crop, polygon, offset, rect = vs._prepare_sapiens_roi_detector_input(frame, roi)
+    assert crop.shape[0] < frame.shape[0]
+    assert crop.shape[1] < frame.shape[1]
+    assert offset == rect[:2]
+    assert polygon.shape == (4, 2)
+    assert crop[crop.shape[0] // 2, crop.shape[1] // 2].sum() > 0
+    assert crop[0, 0].sum() == 0
+
+
+def test_restore_sapiens_roi_bboxes_maps_global_and_filters_outside() -> None:
+    polygon = np.array([[20, 20], [80, 20], [80, 80], [20, 80]], dtype=np.float32)
+    local = np.array(
+        [
+            [10, 10, 30, 50],  # global center (30, 40): inside
+            [0, 0, 5, 5],  # global center (12.5, 12.5): outside
+        ],
+        dtype=np.float32,
+    )
+    boxes = vs._restore_sapiens_roi_bboxes(local, polygon, (10, 10))
+    np.testing.assert_allclose(boxes, np.array([[20, 20, 40, 60]], dtype=np.float32))
+
+
+def test_detect_persons_in_roi_receives_small_crop_and_returns_global_boxes() -> None:
+    session = object.__new__(vs.PoseInferenceSession)
+    session.max_persons = 8
+    session._detect_persons = MagicMock(  # type: ignore[method-assign]
+        return_value=np.array(
+            [
+                [12, 12, 32, 52],  # centre maps inside exact polygon
+                [0, 0, 5, 5],  # context ring only; exact-polygon filter removes it
+            ],
+            dtype=np.float32,
+        )
+    )
+    frame = np.full((100, 100, 3), 127, dtype=np.uint8)
+    roi = vs._make_sapiens_roi(
+        [[20, 20], [80, 20], [80, 80], [20, 80]],
+        source_width=100,
+        source_height=100,
+        padding_fraction=0.2,
+    )
+    boxes, polygon = session._detect_persons_in_roi(frame, roi)
+    detector_input = session._detect_persons.call_args.args[0]
+    assert detector_input.shape[0] < frame.shape[0]
+    assert detector_input.shape[1] < frame.shape[1]
+    assert session._detect_persons.call_args.kwargs["max_persons"] == 100
+    assert polygon is not None
+    assert boxes.shape == (1, 4)
+    # ROI crop offset is (8, 8), so local [12, 12, 32, 52] becomes global.
+    np.testing.assert_allclose(boxes[0], np.array([20, 20, 40, 60], dtype=np.float32))
+
+
+def test_resolve_sapiens_roi_directory_uses_per_video_config(tmp_path: Path) -> None:
+    roi_dir = tmp_path / "roi_configs"
+    roi_dir.mkdir()
+    video = tmp_path / "camera_01.mp4"
+    roi = vs._make_sapiens_roi([[1, 1], [9, 1], [9, 9], [1, 9]])
+    selected = vs.save_sapiens_roi_config(
+        video, roi, roi_dir / "camera_01_sapiens_roi_20260728_120000.toml"
+    )
+    vs.save_sapiens_roi_config(video, roi, roi_dir / "default.toml")
+    loaded, resolved = vs._resolve_roi_config_for_video(roi_dir, video)
+    assert loaded is not None
+    assert resolved == selected
+
+
+def test_build_sapiens_cli_argv_includes_roi_config(tmp_path: Path) -> None:
+    roi_path = tmp_path / "roi config.toml"
+    argv = vs._build_sapiens_cli_argv(
+        input_path=Path("/in/vid.mp4"),
+        out_parent=Path("/out"),
+        roi_config=roi_path,
+    )
+    assert "--roi-config" in argv
+    assert str(roi_path.resolve()) in argv

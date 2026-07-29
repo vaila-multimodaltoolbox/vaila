@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-07-23
+**Last updated:** 2026-07-29
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -151,6 +151,8 @@ B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
 B4_r4_c1 - YOLO + FB        B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
+  YOLO + FB includes Sapiens2 Pose with optional rectangle/polygon detection ROI;
+  DETR is cropped locally while pose, Re-ID, tracking and CSVs remain in full-frame coordinates.
 
 B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
@@ -176,6 +178,10 @@ C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Crop Face      C_B_r1_c3 - Draw Box
 C_B_r2_c1 - Compress Video C_B_r2_c2 - vailá         C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
+  Make Sync file uses a fast Pygame player with the same Space, arrow, -/+, and [/]
+  playback controls as Cut Video. Type each sync frame, reference video text, and inclusive
+  start/end frames directly in the side-panel fields; Save + Cut Video passes the reference
+  video and versioned sync TXT without reopening file choosers.
 C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 
 -> C_C: Visualization

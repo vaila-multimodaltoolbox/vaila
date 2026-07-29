@@ -5,7 +5,7 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 16 July 2026
+Update Date: 28 July 2026
 Version: 0.3.85
 
 Description:
@@ -69,6 +69,7 @@ import subprocess
 import sys
 import tempfile
 import tkinter as tk
+import tomllib
 import webbrowser
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -96,8 +97,12 @@ except ImportError:
         assignment_min_cost,
         write_reid_links_csv,
     )
-    from sam_postprocess import VAILA_ANCHORS, _anchor_xy, _format_cell
-    from vaila_sam import _open_sam3_video_writer
+    from sam_postprocess import (  # ty: ignore[unresolved-import]
+        VAILA_ANCHORS,
+        _anchor_xy,
+        _format_cell,
+    )
+    from vaila_sam import _open_sam3_video_writer  # ty: ignore[unresolved-import]
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 DATASET = "shutterstock_goliath_3po"
@@ -147,6 +152,7 @@ DEFAULT_REID_STATIC_SPEED = 5.0
 DEFAULT_REID_STATIC_RADIUS_PX = 65.0
 DEFAULT_REID_KPT_OKS_WEIGHT = 0.4
 DEFAULT_APPEARANCE_REID_THRESHOLD = 0.6
+DEFAULT_ROI_PADDING_FRACTION = 0.05
 
 SAPIENS_CLI_FULL_INFERENCE_EXAMPLE = """\
 # Full inference example — all user-facing flags (copy/paste, adjust paths)
@@ -161,6 +167,7 @@ uv run vaila/vaila_sapiens.py \\
   --max-persons 8 \\
   --kpt-thr 0.3 \\
   --pose-batch-size 2 \\
+  --roi-config /path/to/video_sapiens_roi.toml \\
   --flip-test \\
   --stabilize-ids \\
   --reid-max-gap 12 \\
@@ -213,7 +220,8 @@ Biomechanics / vailá downstream CSVs (written after every run)
   <stem>_getpixelvideo_pose.csv   alias when a single person is tracked (hardlink or copy)
 
   <stem>_sapiens_vaila.csv   long table: frame,person_id,kpt_idx,x,y,score (all 308 keypoints)
-  <stem>_predictions.json    full per-frame instances (bbox + keypoints)
+  <stem>_predictions.json    full per-frame instances (bbox + keypoints + ROI metadata)
+  sapiens_roi_used.toml        effective full-frame ROI for this video (ROI runs only)
 """
 
 
@@ -275,9 +283,6 @@ def _parse_gui_threshold_fields(
 
 
 def _progress_quiet() -> bool:
-    flag = os.environ.get("TQDM_DISABLE", "").strip().lower()
-    return flag in {"1", "true", "yes", "on"}
-
     flag = os.environ.get("TQDM_DISABLE", "").strip().lower()
     return flag in {"1", "true", "yes", "on"}
 
@@ -387,6 +392,355 @@ def _find_videos(path: Path) -> list[Path]:
             continue
         out.append(p.resolve())
     return out
+
+
+@dataclass(frozen=True)
+class SapiensRoi:
+    """Reusable polygon ROI stored in source-video pixel coordinates."""
+
+    points: tuple[tuple[float, float], ...]
+    source_width: int = 0
+    source_height: int = 0
+    padding_fraction: float = DEFAULT_ROI_PADDING_FRACTION
+    mask_outside: bool = True
+
+
+def _make_sapiens_roi(
+    points: Any,
+    *,
+    source_width: int = 0,
+    source_height: int = 0,
+    padding_fraction: float = DEFAULT_ROI_PADDING_FRACTION,
+    mask_outside: bool = True,
+) -> SapiensRoi:
+    """Validate user/config ROI data and return an immutable ROI."""
+    arr = np.asarray(points, dtype=np.float32)
+    if arr.ndim != 2 or arr.shape[1] != 2 or len(arr) < 3:
+        raise ValueError("Sapiens ROI must contain at least three [x, y] points")
+    if not np.isfinite(arr).all():
+        raise ValueError("Sapiens ROI points must be finite numbers")
+    if abs(float(cv2.contourArea(arr))) < 4.0:
+        raise ValueError("Sapiens ROI polygon area is too small")
+    padding = float(padding_fraction)
+    if not 0.0 <= padding <= 0.5:
+        raise ValueError("Sapiens ROI padding_fraction must be between 0.0 and 0.5")
+    return SapiensRoi(
+        points=tuple((float(x), float(y)) for x, y in arr),
+        source_width=max(0, int(source_width)),
+        source_height=max(0, int(source_height)),
+        padding_fraction=padding,
+        mask_outside=bool(mask_outside),
+    )
+
+
+def load_sapiens_roi_config(path: Path | str) -> SapiensRoi:
+    """Load native Sapiens, YOLO ROI, or markerless pose-config TOML."""
+    config_path = Path(path).expanduser().resolve()
+    if not config_path.is_file():
+        raise FileNotFoundError(f"ROI config not found: {config_path}")
+    with config_path.open("rb") as fh:
+        data = tomllib.load(fh)
+
+    section = data.get("sapiens_roi") or data.get("roi") or {}
+    points = section.get("points")
+    if points is None:
+        points = data.get("roi_polygon_points")
+    if points is None:
+        points = data.get("roi_polygon", {}).get("points")
+    if points is None:
+        raise ValueError(
+            f"ROI config has no sapiens_roi.points, roi.points, roi_polygon.points, "
+            f"or roi_polygon_points: {config_path}"
+        )
+
+    info = data.get("roi_info", {})
+    return _make_sapiens_roi(
+        points,
+        source_width=int(section.get("source_width", info.get("video_width", 0)) or 0),
+        source_height=int(section.get("source_height", info.get("video_height", 0)) or 0),
+        padding_fraction=float(section.get("padding_fraction", DEFAULT_ROI_PADDING_FRACTION)),
+        mask_outside=bool(section.get("mask_outside", True)),
+    )
+
+
+def save_sapiens_roi_config(
+    video_path: Path | str,
+    roi: SapiensRoi,
+    output_path: Path | str | None = None,
+) -> Path:
+    """Persist an ROI as a small TOML file reusable by GUI and CLI runs."""
+    video = Path(video_path).expanduser().resolve()
+    if output_path is None:
+        timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        roi_dir = video.parent / "roi_configs"
+        roi_dir.mkdir(parents=True, exist_ok=True)
+        path = roi_dir / f"{video.stem}_sapiens_roi_{timestamp}.toml"
+    else:
+        path = Path(output_path).expanduser().resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    points_text = ", ".join(f"[{x:.3f}, {y:.3f}]" for x, y in roi.points)
+    text = (
+        "# vailá Sapiens2 detection ROI\n"
+        "[sapiens_roi]\n"
+        "format_version = 1\n"
+        f"source_video = {json.dumps(video.name)}\n"
+        f"source_width = {roi.source_width}\n"
+        f"source_height = {roi.source_height}\n"
+        f"padding_fraction = {roi.padding_fraction:.6f}\n"
+        f"mask_outside = {'true' if roi.mask_outside else 'false'}\n"
+        f"points = [{points_text}]\n"
+    )
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _resolve_roi_config_for_video(
+    roi_config: Path | str | None, video_path: Path
+) -> tuple[SapiensRoi | None, Path | None]:
+    """Resolve one shared config file or a per-video config inside a directory."""
+    if roi_config is None:
+        return None, None
+    requested = Path(roi_config).expanduser().resolve()
+    if requested.is_file():
+        return load_sapiens_roi_config(requested), requested
+    if not requested.is_dir():
+        raise FileNotFoundError(f"ROI config path not found: {requested}")
+
+    stem = video_path.stem
+    exact_names = (
+        f"{stem}_sapiens_roi.toml",
+        f"{stem}_roi.toml",
+        f"{stem}.toml",
+    )
+    for name in exact_names:
+        candidate = requested / name
+        if candidate.is_file():
+            return load_sapiens_roi_config(candidate), candidate
+    matches = sorted(
+        {
+            *requested.glob(f"{stem}_sapiens_roi_*.toml"),
+            *requested.glob(f"{stem}_roi_*.toml"),
+            *requested.glob(f"{stem}*roi*.toml"),
+        }
+    )
+    if matches:
+        selected = matches[-1]
+        return load_sapiens_roi_config(selected), selected
+    default_config = requested / "default.toml"
+    if default_config.is_file():
+        return load_sapiens_roi_config(default_config), default_config
+    raise FileNotFoundError(
+        f"No ROI TOML for {video_path.name} in {requested}. Expected "
+        f"{stem}_sapiens_roi.toml, {stem}_roi.toml, or {stem}*roi*.toml"
+    )
+
+
+def _scaled_sapiens_roi_polygon(roi: SapiensRoi, frame_width: int, frame_height: int) -> np.ndarray:
+    """Scale and clip ROI points for the current video dimensions."""
+    if frame_width < 2 or frame_height < 2:
+        raise ValueError(f"Invalid frame dimensions for ROI: {frame_width}x{frame_height}")
+    points = np.asarray(roi.points, dtype=np.float32).copy()
+    if roi.source_width > 0 and roi.source_height > 0:
+        points[:, 0] *= frame_width / float(roi.source_width)
+        points[:, 1] *= frame_height / float(roi.source_height)
+    points[:, 0] = np.clip(points[:, 0], 0, frame_width - 1)
+    points[:, 1] = np.clip(points[:, 1], 0, frame_height - 1)
+    if abs(float(cv2.contourArea(points))) < 4.0:
+        raise ValueError("Scaled Sapiens ROI is empty or too small for this video")
+    return points
+
+
+def _prepare_sapiens_roi_detector_input(
+    image_bgr: np.ndarray, roi: SapiensRoi
+) -> tuple[np.ndarray, np.ndarray, tuple[int, int], tuple[int, int, int, int]]:
+    """Crop/mask detector input while retaining the exact full-frame polygon."""
+    height, width = image_bgr.shape[:2]
+    polygon = _scaled_sapiens_roi_polygon(roi, width, height)
+    x, y, rect_w, rect_h = cv2.boundingRect(np.rint(polygon).astype(np.int32))
+    pad_x = int(round(rect_w * roi.padding_fraction))
+    pad_y = int(round(rect_h * roi.padding_fraction))
+    x0 = max(0, x - pad_x)
+    y0 = max(0, y - pad_y)
+    x1 = min(width, x + rect_w + pad_x)
+    y1 = min(height, y + rect_h + pad_y)
+    if x1 <= x0 or y1 <= y0:
+        raise ValueError("Sapiens ROI produced an empty detector crop")
+    crop = image_bgr[y0:y1, x0:x1].copy()
+
+    if roi.mask_outside:
+        local_polygon = np.rint(polygon - np.array([x0, y0], dtype=np.float32)).astype(np.int32)
+        mask = np.zeros(crop.shape[:2], dtype=np.uint8)
+        cv2.fillPoly(mask, [local_polygon], 255)
+        # Keep a small context ring so people touching the delimiter are not truncated
+        # for DETR. Results are still accepted only when their centre is in the exact ROI.
+        context_px = max(pad_x, pad_y)
+        if context_px > 0:
+            cv2.polylines(
+                mask,
+                [local_polygon],
+                True,
+                255,
+                thickness=max(1, context_px * 2),
+                lineType=cv2.LINE_8,
+            )
+        crop = cv2.bitwise_and(crop, crop, mask=mask)
+    return crop, polygon, (x0, y0), (x0, y0, x1, y1)
+
+
+def _restore_sapiens_roi_bboxes(
+    local_bboxes: np.ndarray,
+    polygon: np.ndarray,
+    offset: tuple[int, int],
+) -> np.ndarray:
+    """Map detector boxes to full-frame pixels and enforce the exact ROI delimiter."""
+    boxes = np.asarray(local_bboxes, dtype=np.float32)
+    if boxes.size == 0:
+        return np.zeros((0, 4), dtype=np.float32)
+    boxes = boxes.reshape(-1, 4).copy()
+    x0, y0 = offset
+    boxes[:, (0, 2)] += float(x0)
+    boxes[:, (1, 3)] += float(y0)
+    keep: list[bool] = []
+    polygon_cv = np.asarray(polygon, dtype=np.float32)
+    for x1, y1, x2, y2 in boxes:
+        center = (float((x1 + x2) * 0.5), float((y1 + y2) * 0.5))
+        keep.append(cv2.pointPolygonTest(polygon_cv, center, False) >= 0)
+    return boxes[np.asarray(keep, dtype=bool)]
+
+
+def _draw_sapiens_roi_boundary(image_bgr: np.ndarray, polygon: np.ndarray) -> np.ndarray:
+    """Draw the active detection delimiter without changing inference coordinates."""
+    out = image_bgr.copy()
+    points = np.rint(polygon).astype(np.int32).reshape((-1, 1, 2))
+    cv2.polylines(out, [points], True, (0, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(
+        out,
+        "Sapiens ROI",
+        tuple(int(v) for v in points[:, 0, :].min(axis=0)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (0, 0, 0),
+        4,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        out,
+        "Sapiens ROI",
+        tuple(int(v) for v in points[:, 0, :].min(axis=0)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (0, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    return out
+
+
+def _read_first_video_frame(video_path: Path | str) -> np.ndarray:
+    cap = cv2.VideoCapture(str(video_path))
+    try:
+        if not cap.isOpened():
+            raise OSError(f"Could not open video for ROI selection: {video_path}")
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            raise OSError(f"Could not read first frame for ROI selection: {video_path}")
+        return frame
+    finally:
+        cap.release()
+
+
+def select_sapiens_roi(
+    video_path: Path | str,
+    *,
+    mode: str = "rectangle",
+    padding_fraction: float = DEFAULT_ROI_PADDING_FRACTION,
+) -> SapiensRoi | None:
+    """Interactively draw a rectangle or free polygon on the first video frame."""
+    video = Path(video_path).expanduser().resolve()
+    frame = _read_first_video_frame(video)
+    source_h, source_w = frame.shape[:2]
+    max_w, max_h = 1600, 900
+    scale = min(1.0, max_w / source_w, max_h / source_h)
+    display = (
+        cv2.resize(frame, (round(source_w * scale), round(source_h * scale)))
+        if scale < 1.0
+        else frame.copy()
+    )
+    window = "Sapiens ROI"
+    points: list[tuple[int, int]] = []
+    try:
+        if mode == "rectangle":
+            rect = cv2.selectROI(
+                f"{window} - drag; Enter confirms; Esc cancels",
+                display,
+                showCrosshair=True,
+                fromCenter=False,
+            )
+            x, y, width, height = (int(v) for v in rect)
+            if width <= 1 or height <= 1:
+                return None
+            points = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
+        elif mode == "polygon":
+            help_lines = (
+                "Left click: add point",
+                "Right click: undo",
+                "Enter: confirm (3+ points)",
+                "R: reset   Esc: cancel",
+            )
+
+            def _mouse(event: int, x: int, y: int, _flags: int, _param: Any) -> None:
+                if event == cv2.EVENT_LBUTTONDOWN:
+                    points.append((x, y))
+                elif event == cv2.EVENT_RBUTTONDOWN and points:
+                    points.pop()
+
+            cv2.namedWindow(window, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+            cv2.setMouseCallback(window, _mouse)
+            while True:
+                shown = display.copy()
+                for idx, text in enumerate(help_lines):
+                    y_text = 28 + idx * 24
+                    cv2.putText(
+                        shown, text, (12, y_text), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 4
+                    )
+                    cv2.putText(
+                        shown,
+                        text,
+                        (12, y_text),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 255, 255),
+                        2,
+                    )
+                if points:
+                    poly = np.asarray(points, dtype=np.int32).reshape((-1, 1, 2))
+                    cv2.polylines(shown, [poly], len(points) > 2, (0, 255, 255), 2)
+                    for point in points:
+                        cv2.circle(shown, point, 5, (255, 255, 0), -1)
+                cv2.imshow(window, shown)
+                key = cv2.waitKey(20) & 0xFF
+                if key in (10, 13) and len(points) >= 3:
+                    break
+                if key == 27:
+                    return None
+                if key in (ord("r"), ord("R")):
+                    points.clear()
+        else:
+            raise ValueError(f"Unknown ROI selection mode: {mode}")
+    finally:
+        cv2.destroyAllWindows()
+        with contextlib.suppress(Exception):
+            cv2.waitKey(1)
+
+    original_points = np.asarray(points, dtype=np.float32) / float(scale)
+    return _make_sapiens_roi(
+        original_points,
+        source_width=source_w,
+        source_height=source_h,
+        padding_fraction=padding_fraction,
+        mask_outside=True,
+    )
 
 
 def _pose_render_utils_path() -> Path:
@@ -554,7 +908,10 @@ class PoseInferenceSession:
             return self._detector_cache["proc"], self._detector_cache["model"]
         import logging
 
-        from transformers import DetrForObjectDetection, DetrImageProcessor
+        from transformers import (
+            DetrForObjectDetection,
+            DetrImageProcessor,
+        )
 
         _sapiens_log(f"Loading DETR person detector from {Path(self.args.det_checkpoint).name} …")
         tf_logger = logging.getLogger("transformers")
@@ -573,7 +930,9 @@ class PoseInferenceSession:
         self._detector_cache["model"] = model
         return proc, model
 
-    def _detect_persons(self, image_bgr: np.ndarray) -> np.ndarray:
+    def _detect_persons(
+        self, image_bgr: np.ndarray, *, max_persons: int | None = None
+    ) -> np.ndarray:
         import torch
         from PIL import Image
         from sapiens.pose.evaluators import (  # type: ignore[import-not-found]  # ty: ignore[unresolved-import]
@@ -584,7 +943,7 @@ class PoseInferenceSession:
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(image_rgb)
         inputs = proc(images=pil_img, return_tensors="pt").to(self.device)
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = model(**inputs)
         target_sizes = torch.tensor([image_rgb.shape[:2]], device=self.device)
         results = proc.post_process_object_detection(
@@ -598,16 +957,32 @@ class PoseInferenceSession:
         if len(bboxes) == 0:
             return np.zeros((0, 4), dtype=np.float32)
         order = np.argsort(-bboxes[:, 4])
-        bboxes = bboxes[order][: self.max_persons]
+        limit = self.max_persons if max_persons is None else max(1, int(max_persons))
+        bboxes = bboxes[order][:limit]
         return bboxes[:, :4]
 
+    def _detect_persons_in_roi(
+        self, image_bgr: np.ndarray, roi: SapiensRoi | None
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """Detect on an ROI crop, then restore full-frame boxes for pose/Re-ID."""
+        if roi is None:
+            return self._detect_persons(image_bgr), None
+        detector_input, polygon, offset, _crop_rect = _prepare_sapiens_roi_detector_input(
+            image_bgr, roi
+        )
+        # DETR's person limit is applied after exact-polygon filtering so a context-ring
+        # detection cannot displace a wanted person. Boxes remain score-sorted.
+        local_boxes = self._detect_persons(detector_input, max_persons=100)
+        global_boxes = _restore_sapiens_roi_bboxes(local_boxes, polygon, offset)
+        return global_boxes[: self.max_persons], polygon
+
     def process_frame(
-        self, image_bgr: np.ndarray
+        self, image_bgr: np.ndarray, *, roi: SapiensRoi | None = None
     ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
-        """Return keypoints, scores, bboxes for all detected persons."""
+        """Return global-coordinate keypoints, scores, and boxes for wanted persons."""
         import torch
 
-        bboxes = self._detect_persons(image_bgr)
+        bboxes, _polygon = self._detect_persons_in_roi(image_bgr, roi)
         keypoints: list[np.ndarray] = []
         keypoint_scores: list[np.ndarray] = []
         batch_size = self.pose_batch_size
@@ -747,7 +1122,11 @@ def flatten_instances_to_csv_rows(
 def _nearest_pose_frame(frame_idx: int, keys: list[int]) -> int:
     if not keys:
         return 0
-    return int(min(keys, key=lambda k: (abs(k - frame_idx), k)))
+    nearest = keys[0]
+    for candidate in keys[1:]:
+        if (abs(candidate - frame_idx), candidate) < (abs(nearest - frame_idx), nearest):
+            nearest = candidate
+    return nearest
 
 
 def _tag_raw_ids(instances: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1180,6 +1559,7 @@ def _write_sapiens_overlay_from_timeline(
     session: PoseInferenceSession,
     *,
     draw_id: bool = True,
+    roi_polygon: np.ndarray | None = None,
     desc: str = "overlay",
 ) -> Path:
     """Second video pass: skeleton + ID tags from a stabilized pose timeline."""
@@ -1224,6 +1604,8 @@ def _write_sapiens_overlay_from_timeline(
                 )
             else:
                 vis = frame
+            if roi_polygon is not None:
+                vis = _draw_sapiens_roi_boundary(vis, roi_polygon)
             writer.write(vis)
             fi += 1
             if pbar is not None:
@@ -1647,6 +2029,7 @@ class SapiensGuiSettings:
     reid_static_speed: float
     reid_static_radius: float
     pose_batch_size: int | None
+    roi_config: Path | None
 
 
 def _format_sapiens_cli_command(
@@ -1674,6 +2057,7 @@ def _format_sapiens_cli_command(
     appearance_reid_threshold: float = DEFAULT_APPEARANCE_REID_THRESHOLD,
     flip_test: bool = False,
     pose_batch_size: int | None = None,
+    roi_config: Path | str | None = None,
     quiet: bool = False,
 ) -> str:
     """Build copy-paste CLI equivalent to a GUI Sapiens2 run.
@@ -1705,6 +2089,7 @@ def _format_sapiens_cli_command(
         appearance_reid_threshold=appearance_reid_threshold,
         flip_test=flip_test,
         pose_batch_size=pose_batch_size,
+        roi_config=roi_config,
         quiet=quiet,
         for_subprocess=False,
     )
@@ -1737,6 +2122,7 @@ def _build_sapiens_cli_argv(
     appearance_reid_threshold: float = DEFAULT_APPEARANCE_REID_THRESHOLD,
     flip_test: bool = False,
     pose_batch_size: int | None = None,
+    roi_config: Path | str | None = None,
     quiet: bool = False,
     for_subprocess: bool = False,
 ) -> list[str]:
@@ -1772,6 +2158,8 @@ def _build_sapiens_cli_argv(
     ]
     if pose_batch_size is not None:
         cmd += ["--pose-batch-size", str(max(1, int(pose_batch_size)))]
+    if roi_config is not None:
+        cmd += ["--roi-config", str(Path(roi_config).expanduser().resolve())]
     if flip_test:
         cmd.append("--flip-test")
     if stabilize_ids:
@@ -1842,6 +2230,7 @@ def _build_isolated_sapiens_cmd(
     reid_bidirectional: bool = True,
     appearance_reid: bool = False,
     appearance_reid_threshold: float = DEFAULT_APPEARANCE_REID_THRESHOLD,
+    roi_config: Path | str | None = None,
 ) -> list[str]:
     cmd = _build_sapiens_cli_argv(
         input_path=video_file,
@@ -1868,6 +2257,7 @@ def _build_isolated_sapiens_cmd(
         appearance_reid_threshold=appearance_reid_threshold,
         flip_test=flip_test,
         pose_batch_size=pose_batch_size,
+        roi_config=roi_config,
         for_subprocess=True,
     )
     o_idx = cmd.index(str(out_parent.resolve()))
@@ -1905,6 +2295,7 @@ def _run_sapiens_batch(
     flip_test: bool = False,
     max_persons: int = 8,
     pose_batch_size: int | None = None,
+    roi_config: Path | str | None = None,
 ) -> tuple[int, list[str]]:
     """Process videos sequentially; emit log lines parsed by the GUI subprocess poller."""
     failed: list[str] = []
@@ -1937,6 +2328,7 @@ def _run_sapiens_batch(
                 flip_test=flip_test,
                 max_persons=max_persons,
                 pose_batch_size=pose_batch_size,
+                roi_config=roi_config,
             )
             succeeded += 1
             print(f"  Done: {out_dir}", flush=True)
@@ -1975,6 +2367,7 @@ def _print_sapiens_equivalent_cli(
     appearance_reid_threshold: float = DEFAULT_APPEARANCE_REID_THRESHOLD,
     flip_test: bool = False,
     pose_batch_size: int | None = None,
+    roi_config: Path | str | None = None,
     quiet: bool = False,
 ) -> None:
     """Print GUI→CLI mirror to stdout (>> prefix avoids absl eating bracketed lines)."""
@@ -2002,6 +2395,7 @@ def _print_sapiens_equivalent_cli(
         appearance_reid_threshold=appearance_reid_threshold,
         flip_test=flip_test,
         pose_batch_size=pose_batch_size,
+        roi_config=roi_config,
         quiet=quiet,
     )
     print("\n>> vaila/vaila_sapiens: Equivalent CLI (copy/paste):", flush=True)
@@ -2009,10 +2403,21 @@ def _print_sapiens_equivalent_cli(
     print(">> (CLI creates processed_sapiens_<timestamp>/ under -o)\n", flush=True)
 
 
-def _write_readme_sapiens(output_dir: Path, *, model_key: str, stride: int) -> None:
+def _write_readme_sapiens(
+    output_dir: Path,
+    *,
+    model_key: str,
+    stride: int,
+    roi_config: Path | None = None,
+) -> None:
+    roi_line = (
+        f"roi_config={roi_config} (DETR crop; pose/Re-ID coordinates remain global)\n"
+        if roi_config is not None
+        else "roi_config=none (full-frame DETR)\n"
+    )
     text = (
         "vailá Sapiens2 Pose run\n"
-        f"model={model_key} stride={stride}\n\n"
+        f"model={model_key} stride={stride}\n" + roi_line + "\n"
         "Outputs:\n"
         "  <video>_sapiens_overlay.mp4  — skeleton overlay + id NN tags (see sapiens_id_map.csv)\n"
         "  <video>_predictions.json     — per-frame instances (308 kp Sociopticon)\n"
@@ -2057,11 +2462,11 @@ def run_sapiens_on_video(
     reid_bidirectional: bool = True,
     appearance_reid: bool = False,
     appearance_reid_threshold: float = DEFAULT_APPEARANCE_REID_THRESHOLD,
+    roi_config: Path | str | None = None,
 ) -> None:
     """Run Sapiens2 pose on one video; writes overlay MP4 + JSON + CSV."""
     output_dir.mkdir(parents=True, exist_ok=True)
     model_key = _normalize_model_key(model)
-    _write_readme_sapiens(output_dir, model_key=model_key, stride=stride)
     micro_batch = (
         pose_batch_size if pose_batch_size is not None else _default_pose_batch_size(model_key)
     )
@@ -2077,6 +2482,36 @@ def run_sapiens_on_video(
     h_probe = int(cap_probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
     n_probe = int(cap_probe.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     cap_probe.release()
+    roi, resolved_roi_path = _resolve_roi_config_for_video(roi_config, video_path)
+    roi_polygon: np.ndarray | None = None
+    roi_crop_rect: tuple[int, int, int, int] | None = None
+    if roi is not None:
+        probe = np.zeros((h_probe, w_probe, 3), dtype=np.uint8)
+        _roi_probe, roi_polygon, _roi_offset, roi_crop_rect = _prepare_sapiens_roi_detector_input(
+            probe, roi
+        )
+        crop_pixels = (roi_crop_rect[2] - roi_crop_rect[0]) * (roi_crop_rect[3] - roi_crop_rect[1])
+        full_pixels = max(1, w_probe * h_probe)
+        _sapiens_log(
+            f"ROI active ({resolved_roi_path}): detector crop "
+            f"{roi_crop_rect[2] - roi_crop_rect[0]}x{roi_crop_rect[3] - roi_crop_rect[1]} "
+            f"({100.0 * crop_pixels / full_pixels:.1f}% of source pixels); "
+            "pose + Re-ID stay in full-frame coordinates"
+        )
+        effective_roi = _make_sapiens_roi(
+            roi_polygon,
+            source_width=w_probe,
+            source_height=h_probe,
+            padding_fraction=roi.padding_fraction,
+            mask_outside=roi.mask_outside,
+        )
+        save_sapiens_roi_config(video_path, effective_roi, output_dir / "sapiens_roi_used.toml")
+    _write_readme_sapiens(
+        output_dir,
+        model_key=model_key,
+        stride=stride,
+        roi_config=resolved_roi_path,
+    )
     stride_eff = max(1, int(stride))
     n_infer = (n_probe + stride_eff - 1) // stride_eff if n_probe > 0 else "?"
     _sapiens_log(
@@ -2150,7 +2585,7 @@ def run_sapiens_on_video(
             if not ok or frame is None:
                 break
             if fi % stride == 0:
-                keypoints, scores, bboxes = session.process_frame(frame)
+                keypoints, scores, bboxes = session.process_frame(frame, roi=roi)
                 instances = _tag_raw_ids(instances_from_frame(keypoints, scores, bboxes))
                 if temporal_linker is not None and instances:
                     instances = temporal_linker.assign_instances(
@@ -2238,6 +2673,7 @@ def run_sapiens_on_video(
             timeline,
             session,
             draw_id=draw_id,
+            roi_polygon=roi_polygon,
             desc=f"{stem} overlay",
         )
 
@@ -2254,6 +2690,17 @@ def run_sapiens_on_video(
         "stabilize_ids": bool(stabilize_ids),
         "reid_bidirectional": bool(reid_bidirectional),
         "appearance_reid": bool(appearance_reid),
+        "roi": (
+            {
+                "config": str(resolved_roi_path) if resolved_roi_path is not None else None,
+                "points_full_frame": roi_polygon.tolist() if roi_polygon is not None else [],
+                "detector_crop_xyxy": list(roi_crop_rect) if roi_crop_rect is not None else None,
+                "padding_fraction": float(roi.padding_fraction) if roi is not None else None,
+                "mask_outside": bool(roi.mask_outside) if roi is not None else None,
+            }
+            if roi is not None
+            else None
+        ),
         "reid_max_gap": int(reid_config.max_gap),
         "reid_max_dist_px": float(reid_config.max_centroid_dist_px),
         "reid_min_iou": float(reid_config.min_iou),
@@ -2266,7 +2713,6 @@ def run_sapiens_on_video(
     _sapiens_log(f"Writing JSON + biomechanics CSVs for {stem} …")
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     write_vaila_pose_csv(csv_path, csv_rows)
-    timeline = _expand_pose_timeline(pose_by_frame, fi)
     bio_paths = write_sapiens_biomechanics_csvs(output_dir, stem, timeline, kpt_thr=float(kpt_thr))
     gpv_paths = write_sapiens_getpixelvideo_pose_csvs(
         output_dir,
@@ -2320,7 +2766,14 @@ def rerender_sapiens_overlay(
     if not cap_probe.isOpened():
         raise OSError(f"Could not open video: {video_path}")
     n_frames = int(cap_probe.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    frame_width = int(cap_probe.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    frame_height = int(cap_probe.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     cap_probe.release()
+    roi_polygon: np.ndarray | None = None
+    roi_used_path = run_dir / "sapiens_roi_used.toml"
+    if roi_used_path.is_file():
+        roi_used = load_sapiens_roi_config(roi_used_path)
+        roi_polygon = _scaled_sapiens_roi_polygon(roi_used, frame_width, frame_height)
 
     timeline = _expand_pose_timeline(
         pose_by_frame, n_frames if n_frames > 0 else max(pose_by_frame) + 1
@@ -2342,6 +2795,7 @@ def rerender_sapiens_overlay(
             timeline,
             session,
             draw_id=draw_id,
+            roi_polygon=roi_polygon,
             desc=f"{stem[:40]} rerender",
         )
     finally:
@@ -2354,11 +2808,13 @@ def build_dry_run_report(
     *,
     model: str,
     stride: int,
+    roi_config: Path | str | None = None,
 ) -> list[str]:
     lines = ["[Sapiens2] Dry-run (no inference)"]
     lines.append(f"input={input_path}")
     lines.append(f"output_parent={output_parent}")
     lines.append(f"model={model} stride={stride}")
+    lines.append(f"roi_config={roi_config if roi_config is not None else 'none'}")
     try:
         spec = resolve_model_spec(model)
         lines.append(f"config={spec.config_path} exists={spec.config_path.is_file()}")
@@ -2369,7 +2825,28 @@ def build_dry_run_report(
     videos = _find_videos(input_path)
     lines.append(f"videos={len(videos)}")
     for vf in videos[:8]:
-        lines.append(f"  - {vf.name}")
+        video_line = f"  - {vf.name}"
+        if roi_config is not None:
+            try:
+                roi, selected = _resolve_roi_config_for_video(roi_config, vf)
+                cap = cv2.VideoCapture(str(vf))
+                try:
+                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+                finally:
+                    cap.release()
+                if roi is None:
+                    raise ValueError("ROI resolver returned no ROI")
+                probe = np.zeros((height, width, 3), dtype=np.uint8)
+                crop, _polygon, _offset, _rect = _prepare_sapiens_roi_detector_input(probe, roi)
+                ratio = 100.0 * crop.shape[0] * crop.shape[1] / max(1, width * height)
+                video_line += (
+                    f" ROI={selected.name if selected is not None else '?'} "
+                    f"crop={crop.shape[1]}x{crop.shape[0]} ({ratio:.1f}%)"
+                )
+            except Exception as exc:
+                video_line += f" ROI_ERROR={exc}"
+        lines.append(video_line)
     if len(videos) > 8:
         lines.append(f"  ... and {len(videos) - 8} more")
     return lines
@@ -2508,6 +2985,7 @@ def _start_sapiens_batch_subprocess(
     appearance_reid_threshold: float,
     flip_test: bool,
     pose_batch_size: int | None,
+    roi_config: Path | str | None,
     quiet: bool,
     on_done: Callable[[int, int, list[str], Path], None],
 ) -> None:
@@ -2539,6 +3017,7 @@ def _start_sapiens_batch_subprocess(
         appearance_reid_threshold=appearance_reid_threshold,
         flip_test=flip_test,
         pose_batch_size=pose_batch_size,
+        roi_config=roi_config,
         quiet=quiet,
         for_subprocess=True,
     )
@@ -2720,8 +3199,38 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
             self.stride_var = tk.StringVar(value="1")
             ttk.Entry(frm, textvariable=self.stride_var, width=8).grid(row=7, column=0, sticky="w")
 
+            roi_frm = ttk.LabelFrame(frm, text="Detection ROI (optional — faster)", padding=8)
+            roi_frm.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+            self.roi_var = tk.StringVar()
+            ttk.Entry(roi_frm, textvariable=self.roi_var, width=56).grid(
+                row=0, column=0, columnspan=5, sticky="ew"
+            )
+            ttk.Button(
+                roi_frm, text="Rectangle…", command=lambda: self._select_roi("rectangle")
+            ).grid(row=1, column=0, padx=(0, 3), pady=(6, 0))
+            ttk.Button(roi_frm, text="Polygon…", command=lambda: self._select_roi("polygon")).grid(
+                row=1, column=1, padx=3, pady=(6, 0)
+            )
+            ttk.Button(roi_frm, text="TOML…", command=self._browse_roi_file).grid(
+                row=1, column=2, padx=3, pady=(6, 0)
+            )
+            ttk.Button(roi_frm, text="Folder…", command=self._browse_roi_dir).grid(
+                row=1, column=3, padx=3, pady=(6, 0)
+            )
+            ttk.Button(roi_frm, text="Full frame", command=lambda: self.roi_var.set("")).grid(
+                row=1, column=4, padx=(3, 0), pady=(6, 0)
+            )
+            ttk.Label(
+                roi_frm,
+                text=(
+                    "Draw on the first input video, load one shared TOML, or choose a folder "
+                    "with per-video TOMLs"
+                ),
+                font=("TkDefaultFont", 8),
+            ).grid(row=2, column=0, columnspan=5, sticky="w", pady=(5, 0))
+
             thr_frm = ttk.LabelFrame(frm, text="Detection & keypoint thresholds", padding=8)
-            thr_frm.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+            thr_frm.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(10, 0))
             ttk.Label(thr_frm, text="BBox det. (--bbox-thr):").grid(row=0, column=0, sticky="w")
             self.bbox_var = tk.StringVar(value=str(DEFAULT_BBOX_THR))
             ttk.Entry(thr_frm, textvariable=self.bbox_var, width=8).grid(
@@ -2753,7 +3262,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
             ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
 
             adv_frm = ttk.LabelFrame(frm, text="GPU & advanced (CLI flags)", padding=8)
-            adv_frm.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+            adv_frm.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(10, 0))
             ttk.Label(adv_frm, text="CUDA device (--device):").grid(row=0, column=0, sticky="w")
             self.device_var = tk.StringVar(value="0")
             ttk.Entry(adv_frm, textvariable=self.device_var, width=8).grid(
@@ -2829,7 +3338,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
             )
 
             btns = ttk.Frame(frm)
-            btns.grid(row=10, column=0, columnspan=3, pady=12)
+            btns.grid(row=11, column=0, columnspan=3, pady=12)
             ttk.Button(btns, text="Help", command=self._open_help).pack(side="left", padx=4)
             ttk.Button(btns, text="Run", command=self._on_run).pack(side="left", padx=4)
             ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="left", padx=4)
@@ -2860,6 +3369,66 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
             d = filedialog.askdirectory(title="Output parent folder")
             if d:
                 self.out_var.set(d)
+
+        def _input_video_for_roi(self) -> Path | None:
+            raw = self.input_var.get().strip()
+            if not raw:
+                messagebox.showerror(
+                    "Sapiens ROI", "Select an input video or folder first.", parent=self
+                )
+                return None
+            path = Path(raw).expanduser()
+            videos = _find_videos(path)
+            if not videos:
+                messagebox.showerror("Sapiens ROI", f"No video found under: {path}", parent=self)
+                return None
+            return videos[0]
+
+        def _select_roi(self, mode: str) -> None:
+            video = self._input_video_for_roi()
+            if video is None:
+                return
+            with contextlib.suppress(tk.TclError):
+                self.grab_release()
+            self.withdraw()
+            try:
+                roi = select_sapiens_roi(video, mode=mode)
+                if roi is not None:
+                    config_path = save_sapiens_roi_config(video, roi)
+                    self.roi_var.set(str(config_path))
+                    messagebox.showinfo(
+                        "Sapiens ROI",
+                        f"ROI saved and selected:\n{config_path}",
+                        parent=self,
+                    )
+            except Exception as exc:
+                messagebox.showerror("Sapiens ROI", str(exc), parent=self)
+            finally:
+                self.deiconify()
+                self.lift()
+                with contextlib.suppress(tk.TclError):
+                    self.grab_set()
+
+        def _browse_roi_file(self) -> None:
+            selected = filedialog.askopenfilename(
+                parent=self,
+                title="Select Sapiens/YOLO/markerless ROI TOML",
+                filetypes=[("TOML", "*.toml"), ("All", "*.*")],
+            )
+            if selected:
+                try:
+                    load_sapiens_roi_config(selected)
+                except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+                    messagebox.showerror("Sapiens ROI", str(exc), parent=self)
+                    return
+                self.roi_var.set(selected)
+
+        def _browse_roi_dir(self) -> None:
+            selected = filedialog.askdirectory(
+                parent=self, title="Folder with one ROI TOML per video"
+            )
+            if selected:
+                self.roi_var.set(selected)
 
         def _open_help(self) -> None:
             help_path = _repo_root() / "vaila" / "help" / "vaila_sapiens.html"
@@ -2898,6 +3467,13 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                     parent=self,
                 )
                 return
+            roi_raw = self.roi_var.get().strip()
+            roi_path = Path(roi_raw).expanduser() if roi_raw else None
+            if roi_path is not None and not roi_path.exists():
+                messagebox.showerror(
+                    "Sapiens ROI", f"ROI config file/folder not found: {roi_path}", parent=self
+                )
+                return
             self.result = SapiensGuiSettings(
                 input_path=Path(inp),
                 out_parent=Path(out),
@@ -2918,6 +3494,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                 reid_static_speed=reid_static_speed,
                 reid_static_radius=reid_static_radius,
                 pose_batch_size=pose_batch_size,
+                roi_config=roi_path,
             )
             self.destroy()
 
@@ -2948,6 +3525,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
     reid_static_speed = settings.reid_static_speed
     reid_static_radius = settings.reid_static_radius
     pose_batch_size = settings.pose_batch_size
+    roi_config = settings.roi_config
 
     # Validate model spec / weights existence before starting
     try:
@@ -3030,6 +3608,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
         reid_static_speed=reid_static_speed,
         reid_static_radius=reid_static_radius,
         pose_batch_size=pose_batch_size,
+        roi_config=roi_config,
         quiet=True,
     )
 
@@ -3078,6 +3657,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
         appearance_reid_threshold=appearance_reid_threshold,
         flip_test=flip_test,
         pose_batch_size=pose_batch_size,
+        roi_config=roi_config,
         quiet=True,
         on_done=_on_done,
     )
@@ -3268,6 +3848,24 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--roi-config",
+        type=Path,
+        default=None,
+        help=(
+            "TOML ROI file shared by all videos, or directory with per-video TOMLs. "
+            "DETR runs only on the delimited crop; pose/Re-ID coordinates stay global."
+        ),
+    )
+    parser.add_argument(
+        "--select-roi",
+        choices=("rectangle", "polygon"),
+        default=None,
+        help=(
+            "Interactively draw an ROI on the first input video, save its TOML beside "
+            "the video, then use it for this run."
+        ),
+    )
+    parser.add_argument(
         "--no-isolate-batch",
         action="store_true",
         help="Disable subprocess-per-video isolation (debug only; OOM may cascade).",
@@ -3323,6 +3921,19 @@ def main() -> None:
 
     inp = args.input.resolve()
     out_parent = args.output.resolve()
+    roi_config = args.roi_config.expanduser().resolve() if args.roi_config is not None else None
+    if args.select_roi is not None:
+        if roi_config is not None:
+            parser.error("--select-roi and --roi-config are mutually exclusive")
+        roi_videos = _find_videos(inp)
+        if not roi_videos:
+            parser.error(f"no video found under {inp} for --select-roi")
+        selected_roi = select_sapiens_roi(roi_videos[0], mode=args.select_roi)
+        if selected_roi is None:
+            print("Sapiens ROI selection cancelled.")
+            return
+        roi_config = save_sapiens_roi_config(roi_videos[0], selected_roi)
+        _sapiens_log(f"ROI saved: {roi_config}")
 
     if args.rerender_overlay:
         videos = _find_videos(inp)
@@ -3397,6 +4008,7 @@ def main() -> None:
                 flip_test=flip_test,
                 max_persons=max_persons,
                 pose_batch_size=pose_batch_size,
+                roi_config=roi_config,
             )
             print(f"  Done: {out_dir}")
         except Exception as e:
@@ -3414,7 +4026,13 @@ def main() -> None:
         output_base.mkdir(parents=True, exist_ok=True)
 
     if args.dry_run:
-        lines = build_dry_run_report(inp, output_base, model=args.model, stride=args.stride)
+        lines = build_dry_run_report(
+            inp,
+            output_base,
+            model=args.model,
+            stride=args.stride,
+            roi_config=roi_config,
+        )
         report = output_base / "SAPIENS_DRY_RUN.txt"
         report.write_text("\n".join(lines) + "\n", encoding="utf-8")
         for line in lines:
@@ -3479,6 +4097,7 @@ def main() -> None:
                 flip_test=flip_test,
                 max_persons=max_persons,
                 pose_batch_size=pose_batch_size,
+                roi_config=roi_config,
                 reid_max_gap=args.reid_max_gap,
                 reid_max_dist=args.reid_max_dist,
                 reid_min_iou=args.reid_min_iou,
@@ -3531,6 +4150,7 @@ def main() -> None:
         flip_test=flip_test,
         max_persons=max_persons,
         pose_batch_size=pose_batch_size,
+        roi_config=roi_config,
     )
     if failed:
         raise SystemExit(1)
