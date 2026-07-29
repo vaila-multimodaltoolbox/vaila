@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 128 | **Categories:** 7 | **Generated on:** 23/07/2026 (v0.3.85)
+**Total documented modules:** 128 | **Categories:** 7 | **Generated on:** 29/07/2026 (v0.3.85)
 
 ## YOLO + FB chooser (Frame B → B4_r4_c1)
 
@@ -281,7 +281,7 @@ Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking)
 - **sync_flash**
   - [📄 HTML](sync_flash.html)
   - [📝 Markdown](sync_flash.md)
-- **syncvid**
+- **syncvid — fast Pygame synchronization with typed fields + direct Cut Video handoff**
   - [📄 HTML](syncvid.html)
   - [📝 Markdown](syncvid.md)
 - **usound_biomec1**
@@ -314,7 +314,7 @@ Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking)
 - **vaila_sam (SAM 3 Video Segmentation)**
   - [📄 HTML](vaila_sam.html)
   - [📝 Markdown](vaila_sam.md)
-- **vaila_sapiens (Sapiens2 Pose)**
+- **vaila_sapiens (Sapiens2 Pose — 308 keypoints + detection ROI)**
   - [📄 HTML](vaila_sapiens.html)
   - [📝 Markdown](vaila_sapiens.md)
 - **vaila_stroboscopic (Stroboscopic Generator)**

@@ -25,7 +25,7 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.3.83</p>
+        <p><strong>Version:</strong> 0.3.85</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -41,6 +41,8 @@
     <div class="card">
         <h2>Key Updates</h2>
         <ul>
+            <li><strong>Direct syncvid handoff (v0.3.85):</strong> accepts <code>--video</code> + <code>--sync-file</code>, validates every source, and opens with the synchronized interval preloaded.</li>
+            <li><strong>Safe sync v2:</strong> versioned TSV plus legacy TXT support; exact matching and traversal/symlink/range rejection.</li>
             <li><strong>TOML cuts</strong>: Saves/loads <code>{basename}_cuts.toml</code> with 1-based frames, .6f precision, <code>frame_count = end - start + 1</code>, plus <code>output_dir</code> and per-cut <code>output_file</code>. Paths stored as POSIX.</li>
             <li><strong>Audio waveform</strong>: Panel with orange waveform, sync playback; <code>A</code> toggle, <code>M</code> mute.</li>
             <li><strong>Loop control</strong>: Loop button stacked above Help / Base name (right side of control bar).</li>
@@ -76,6 +78,12 @@
     </div>
 
     <div class="card">
+        <h2>Direct synchronization CLI</h2>
+        <pre>uv run vaila/cutvideo.py --video /path/to/reference.mp4 --sync-file /path/to/session_sync.txt</pre>
+        <p>This is launched by <strong>syncvid → Save + Open Cut Video</strong>; it validates all files and bypasses both choosers.</p>
+    </div>
+
+    <div class="card">
         <h2>🎮 Controls (UI)</h2>
         <h3>Bottom control bar</h3>
         <ul>
@@ -100,7 +108,7 @@
         <ul>
             <li><strong>Input videos:</strong> .mp4, .avi, .mov, .mkv.</li>
             <li><strong>Cuts file:</strong> <code>{basename}_cuts.toml</code> (1-based frames, <code>output_file</code> per cut).</li>
-            <li><strong>Sync TXT:</strong> <code>video_file new_name initial_frame final_frame</code>.</li>
+            <li><strong>Sync v2 TXT/TSV:</strong> <code>video_file, output_file, start_frame, end_frame, sync_frame</code> with 1-based inclusive frames; legacy four-field rows remain readable.</li>
             <li><strong>Outputs:</strong>
                 <ul>
                     <li>Folder: <code>{video}_vailacut_{timestamp}</code> (or <code>_sync_vailacut_</code> in sync mode).</li>
@@ -132,7 +140,7 @@
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 15 July 2026 (v0.3.83 - NVIDIA NVENC for cut/convert encode)</p>
+        <p>📅 Last Updated: 28 July 2026 (v0.3.85 - direct validated syncvid handoff)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>

@@ -6,12 +6,12 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 15 July 2026
-Version: 0.3.83
+Update Date: 28 July 2026
+Version: 0.3.85
 
 Description:
 This script performs batch processing of videos for cutting videos.
-verview:
+Overview:
 This script performs batch processing of videos for cutting videos.
 It allows users to visually mark cut points in videos, save cut information, and generate precisely cut video segments while preserving original metadata with high accuracy.
 It supports scientific precision for research applications.
@@ -41,6 +41,8 @@ Features:
 - Optional custom output base name for cut files (GUI button or B key).
 - Optional per-cut output names from a CSV/TXT list (GUI **Cut names** button or **N** / **V**):
   one name per line → cut 1 → name1.mp4, cut 2 → name2.mp4, …
+- Direct syncvid handoff via `--video` + `--sync-file` (no repeated file choosers).
+- Safe v2 TSV sync parser with legacy TXT compatibility and path/range validation.
 - Hardware H.264 encode when available (NVENC / VideoToolbox; auto CPU libx264 fallback).
 
 Usage:
@@ -50,10 +52,12 @@ Usage:
 
 Requirements:
 - Python 3.12.13
+- Direct synchronization handoff:
+  `python cutvideo.py --video reference.mp4 --sync-file session_sync.txt`.
 - OpenCV (`pip install opencv-python`)
 - pygame (`pip install pygame`)
 - Tkinter (usually included with Python installations)
-- tomllib (`pip install tomllib`)
+- tomllib (Python 3.12 standard library)
 - rich (`pip install rich`)
 - numpy (`pip install numpy`)
 - scipy (`pip install scipy`)
@@ -77,6 +81,7 @@ License:
     This project is licensed under the terms of AGPLv3.
 """
 
+import argparse
 import bisect
 import contextlib
 import datetime
@@ -99,7 +104,7 @@ import threading
 import time
 import tomllib
 import wave
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import cv2
@@ -120,7 +125,7 @@ try:
         is_hardware_video_encoder,
     )
 except ImportError:
-    from ffmpeg_utils import (
+    from ffmpeg_utils import (  # ty: ignore[unresolved-import]
         describe_video_encoder,
         encoder_device_tag,
         encoders_with_cpu_fallback,
@@ -129,6 +134,23 @@ except ImportError:
         get_ffprobe_path,
         get_video_encode_ffmpeg_path,
         is_hardware_video_encoder,
+    )
+
+try:
+    from .syncvid import (
+        SyncFileError,
+        find_sync_entry,
+        read_sync_file,
+        sync_entries_to_cutvideo_data,
+        validate_sync_leaf_filename,
+    )
+except ImportError:
+    from syncvid import (  # ty: ignore[unresolved-import]
+        SyncFileError,
+        find_sync_entry,
+        read_sync_file,
+        sync_entries_to_cutvideo_data,
+        validate_sync_leaf_filename,
     )
 
 MAX_RENDER_PIXELS = 4_000_000
@@ -707,7 +729,7 @@ def cut_video_with_opencv(
     fps = metadata["fps"]
     width = metadata["width"]
     height = metadata["height"]
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # ty: ignore[unresolved-attribute]
     out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
     if not out.isOpened():
         cap.release()
@@ -917,75 +939,29 @@ def save_cuts_to_toml(
             return None
 
 
-def parse_sync_file_content(selected_file, video_path):
-    """Common logic for parsing sync file content (from dialog or auto-loading)."""
-    video_path_obj = Path(video_path).absolute()
-    video_name = video_path_obj.name
-    video_stem = video_path_obj.stem
+def parse_sync_file_content(selected_file, video_path, *, strict=False):
+    """Parse one validated v2/legacy sync file for the selected video.
 
-    cuts = []
-    sync_data = {}
-    is_sync_file = False
-
+    Matching is exact by filename (or uniquely by stem), never by substring.
+    Returned frame indices are zero-based and inclusive.
+    """
     try:
-        with open(selected_file, encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Parse sync file format: video_file new_name initial_frame final_frame
-            parts = line.split()
-            if len(parts) >= 4:
-                try:
-                    video_file = parts[0]
-                    new_name = parts[1]
-                    initial_frame_val = int(parts[2])
-                    final_frame_val = int(parts[3])
-
-                    # It's definitely a sync file format if it has 4+ parts and ints at the end
-                    is_sync_file = True
-
-                    # Store sync data for all videos in the file
-                    sync_data[video_file] = {
-                        "new_name": new_name,
-                        "initial_frame": initial_frame_val,
-                        "final_frame": final_frame_val,
-                    }
-
-                    # Matching logic:
-                    # 1. Exact match (case-insensitive)
-                    # 2. Stem match (case-insensitive)
-                    # 3. Substring match
-                    match_found = False
-                    if (
-                        video_name.lower() == video_file.lower()
-                        or video_stem.lower() == video_file.lower()
-                        or video_file.lower() == video_stem.lower()
-                        or video_name.lower() in video_file.lower()
-                        or video_file.lower() in video_name.lower()
-                    ):
-                        match_found = True
-
-                    if match_found:
-                        # Use 1-based to 0-based conversion
-                        # Safety clamp to 0
-                        start = max(0, initial_frame_val - 1)
-                        end = max(0, final_frame_val - 1)
-                        cuts.append((start, end))
-                        print(
-                            f"  [green]Match found in sync file:[/] {video_file} -> {start + 1} to {end + 1}"
-                        )
-
-                except (ValueError, IndexError):
-                    continue
-
-        return cuts, is_sync_file, sync_data
-    except Exception as e:
-        print(f"  [red]Error parsing sync file {selected_file}:[/] {e}")
+        entries = read_sync_file(selected_file)
+    except (OSError, SyncFileError) as exc:
+        if strict:
+            raise SyncFileError(f"Invalid sync file {selected_file}: {exc}") from exc
+        print(f"  [red]Error parsing sync file {selected_file}:[/] {exc}")
         return [], False, {}
+
+    sync_data = sync_entries_to_cutvideo_data(entries)
+    matched = find_sync_entry(entries, video_path)
+    cuts = [] if matched is None else [(matched.start_frame, matched.end_frame)]
+    if matched is not None:
+        print(
+            f"  [green]Match found in sync file:[/] {matched.video_file} -> "
+            f"{matched.start_frame + 1} to {matched.end_frame + 1}"
+        )
+    return cuts, True, sync_data
 
 
 def load_sync_file(video_path):
@@ -998,8 +974,10 @@ def load_sync_file(video_path):
         print(f"Searching for sync files for {video_name} in {video_dir}...")
 
         # Look for sync files in the directory (*.txt)
-        sync_files = list(video_dir.glob("*.txt")) + list(video_dir.glob("*.TXT"))
-        sync_files = list(set(sync_files))  # Deduplicate
+        sync_files = sorted(
+            set(video_dir.glob("*.txt")) | set(video_dir.glob("*.TXT")),
+            key=lambda path: (0 if "sync" in path.name.casefold() else 1, path.name.casefold()),
+        )
 
         for sync_file in sync_files:
             # Skip common non-sync files if they are huge or clearly irrelevant
@@ -1086,8 +1064,16 @@ def load_cuts_from_toml(video_path):
     return cuts
 
 
-def load_cuts_or_sync(video_path):
+def load_cuts_or_sync(video_path, sync_file=None):
     """Load cuts from either cut file or sync file. Returns (cuts, is_sync, sync_data)."""
+    if sync_file is not None:
+        cuts, is_sync, sync_data = parse_sync_file_content(sync_file, video_path, strict=True)
+        if not cuts:
+            raise SyncFileError(
+                f"Video {Path(video_path).name!r} is not present in sync file {sync_file}"
+            )
+        return cuts, is_sync, sync_data
+
     # First try to load from sync file
     sync_cuts, sync_data = load_sync_file(video_path)
     if sync_cuts:
@@ -1275,13 +1261,47 @@ def load_sync_file_from_dialog(video_path):
         return [], False, None
 
 
+def _safe_sync_child_path(base_directory, filename, *, field, must_exist=False):
+    """Resolve one validated sync source/output without allowing directory escape."""
+    base = Path(base_directory).expanduser().resolve()
+    leaf = validate_sync_leaf_filename(filename, field=field)
+    candidate = base / leaf
+    try:
+        resolved = candidate.resolve(strict=must_exist)
+    except OSError as exc:
+        raise SyncFileError(f"{field} cannot be resolved: {candidate}: {exc}") from exc
+    if resolved.parent != base:
+        raise SyncFileError(f"{field} escapes the expected directory: {filename!r}")
+    return resolved
+
+
+def _validated_sync_range(sync_info, video_file):
+    """Return a safe zero-based inclusive range and output filename."""
+    if not isinstance(sync_info, Mapping):
+        raise SyncFileError(f"Sync entry for {video_file} must be a mapping")
+    try:
+        start_frame = int(sync_info["initial_frame"])
+        end_frame = int(sync_info["final_frame"])
+        output_name = sync_info["new_name"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SyncFileError(f"Malformed sync entry for {video_file}") from exc
+    if isinstance(sync_info.get("initial_frame"), bool) or isinstance(
+        sync_info.get("final_frame"), bool
+    ):
+        raise SyncFileError(f"Boolean frame value rejected for {video_file}")
+    if start_frame < 0 or end_frame < start_frame:
+        raise SyncFileError(f"Invalid sync frame range for {video_file}: {start_frame}–{end_frame}")
+    output_name = validate_sync_leaf_filename(output_name, field="output_file")
+    return start_frame, end_frame, output_name
+
+
 def batch_process_sync_videos(video_path, sync_data):
     """Process all videos in a sync file with visible, cancellable progress."""
     if not sync_data:
         return False
 
     video_dir = Path(video_path).parent
-    video_name = Path(video_path).stem
+    video_name = sanitize_output_basename(Path(video_path).stem)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = video_dir / f"vailacut_sync_{video_name}_{timestamp}"
     output_dir.mkdir(exist_ok=True)
@@ -1292,28 +1312,33 @@ def batch_process_sync_videos(video_path, sync_data):
         for item_idx, (video_file, sync_info) in enumerate(sync_data.items()):
             if not progress_dialog.update(f"Preparing {video_file}", item_idx):
                 break
-            video_path_full = video_dir / video_file
-            if not video_path_full.exists():
-                print(f"Warning: Video file {video_file} not found")
-                continue
-
             try:
+                video_path_full = _safe_sync_child_path(
+                    video_dir, video_file, field="video_file", must_exist=True
+                )
+                start_frame, end_frame, output_name = _validated_sync_range(sync_info, video_file)
+                output_path = _safe_sync_child_path(
+                    output_dir, output_name, field="output_file", must_exist=False
+                )
                 metadata = get_precise_video_metadata(video_path_full)
                 total_frames = metadata.get("nb_frames") or (
                     int(metadata.get("duration", 0) * metadata["fps"])
                     if metadata.get("duration")
                     else int(cv2.VideoCapture(str(video_path_full)).get(cv2.CAP_PROP_FRAME_COUNT))
                 )
-                start_frame = sync_info["initial_frame"]
-                end_frame = sync_info["final_frame"]
                 if start_frame >= total_frames:
                     print(
                         f"Warning: Start frame {start_frame} beyond video length for {video_file}"
                     )
                     continue
 
-                actual_end_frame = min(end_frame, total_frames - 1)
-                output_path = output_dir / sync_info["new_name"]
+                if end_frame >= total_frames:
+                    print(
+                        f"Warning: End frame {end_frame} beyond video length for {video_file}; "
+                        "skipping instead of truncating synchronized duration"
+                    )
+                    continue
+                actual_end_frame = end_frame
                 progress_dialog.update(
                     f"Rendering {video_file} ({item_idx + 1}/{len(sync_data)})",
                     item_idx,
@@ -1330,10 +1355,7 @@ def batch_process_sync_videos(video_path, sync_data):
                     break
                 if success:
                     processed_count += 1
-                    print(
-                        f"Processed: {video_file} -> {sync_info['new_name']} "
-                        f"(FPS: {metadata['fps']:.6f})"
-                    )
+                    print(f"Processed: {video_file} -> {output_name} (FPS: {metadata['fps']:.6f})")
                 else:
                     print(f"Error processing: {video_file}")
             except Exception as exc:
@@ -1345,10 +1367,10 @@ def batch_process_sync_videos(video_path, sync_data):
 
     if progress_dialog.cancelled:
         print("Synchronized video processing cancelled by user")
-    return processed_count > 0
+    return not progress_dialog.cancelled and processed_count == len(sync_data)
 
 
-def play_video_with_cuts(video_path):
+def play_video_with_cuts(video_path, *, sync_file=None):
     from tkinter import Tk, filedialog, messagebox, simpledialog, ttk
 
     pygame.init()
@@ -1735,7 +1757,7 @@ def play_video_with_cuts(video_path):
             zoom_level = safe_zoom
 
     # Load existing cuts or sync file if available
-    cuts, using_sync_file, sync_data = load_cuts_or_sync(video_path)
+    cuts, using_sync_file, sync_data = load_cuts_or_sync(video_path, sync_file=sync_file)
     if len(cuts) > 0:
         if using_sync_file:
             print(f"Loaded {len(cuts)} sync points from sync file")
@@ -3247,40 +3269,77 @@ def cleanup_resources():
     # Let Python handle memory cleanup naturally
 
 
-def run_cutvideo():
-    # Print the directory and name of the script being executed
+def validate_sync_handoff(video_path, sync_file):
+    """Validate a direct syncvid → cutvideo handoff before opening pygame."""
+    video = Path(video_path).expanduser().resolve()
+    sync = Path(sync_file).expanduser().resolve()
+    if not video.is_file():
+        raise FileNotFoundError(f"Video not found: {video}")
+    validate_sync_leaf_filename(video.name, field="reference video")
+    entries = read_sync_file(sync)
+    if find_sync_entry(entries, video) is None:
+        raise SyncFileError(f"Reference video {video.name!r} is not present in {sync}")
+    for entry in entries:
+        _safe_sync_child_path(video.parent, entry.video_file, field="video_file", must_exist=True)
+    return video, sync
+
+
+def run_cutvideo(video_path=None, sync_file=None):
+    """Open Cut Video, optionally with a preselected video and synchronization file."""
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
     print("Starting cutvideo.py...")
-
-    import platform
 
     if platform.system() == "Linux":
         has_nvidia = os.path.exists("/proc/driver/nvidia")
         if has_nvidia:
             print("NVIDIA GPU detected, applying OpenGL compatibility settings")
 
-    video_path = get_video_path()
-    if not video_path:
-        print("No video selected. Exiting.")
-        return
+    if video_path is None:
+        video_path = get_video_path()
+        if not video_path:
+            print("No video selected. Exiting.")
+            return False
+    else:
+        video_path = Path(video_path).expanduser().resolve()
 
     try:
-        play_video_with_cuts(video_path)
+        if sync_file is not None:
+            video_path, sync_file = validate_sync_handoff(video_path, sync_file)
+            print(f"Direct sync handoff: {sync_file}")
+        elif not Path(video_path).is_file():
+            raise FileNotFoundError(f"Video not found: {video_path}")
+        play_video_with_cuts(str(video_path), sync_file=sync_file)
+        return True
     except Exception as e:
         print(f"Error in cutvideo: {e}")
 
-        # More helpful error message for Linux users
         if platform.system() == "Linux":
             print("\nPossible Linux graphics driver issue detected.")
             print("Try running these commands before starting the application:")
             print("export LIBGL_ALWAYS_SOFTWARE=1")
             print("export SDL_VIDEODRIVER=x11")
+        return False
     finally:
-        # Clean up resources more gently
         cleanup_resources()
         print("Video cutting process completed")
 
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Open vailá Cut Video, optionally from a syncvid handoff."
+    )
+    parser.add_argument("--video", type=Path, help="Video to open without a file dialog")
+    parser.add_argument(
+        "--sync-file",
+        type=Path,
+        help="Synchronization TXT to preload; requires --video",
+    )
+    args = parser.parse_args(argv)
+    if args.sync_file is not None and args.video is None:
+        parser.error("--sync-file requires --video")
+    return 0 if run_cutvideo(args.video, args.sync_file) else 1
+
+
 if __name__ == "__main__":
-    run_cutvideo()
+    raise SystemExit(main())

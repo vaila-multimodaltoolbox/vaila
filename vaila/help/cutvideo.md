@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.3.83
+- **Version:** 0.3.85
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -15,6 +15,8 @@
 Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with inclusive frame counts and high-resolution timestamps (.6f).
 
 ### Key Updates
+- **Direct Sync Video handoff (v0.3.85):** `syncvid` launches Cut Video with `--video` and `--sync-file`; the reference and exact sync interval are preloaded without reopening either chooser.
+- **Safe sync v2:** strict versioned TSV parser with legacy TXT compatibility, exact filename/unique-stem matching, 1-based file ↔ 0-based internal conversion, atomic writes, and traversal/symlink/range validation.
 - **TOML cuts**: Saves/loads `*_cuts.toml` with 1-based frames, `.6f` precision, `frame_count = end - start + 1` (duration = `frame_count / fps`), plus `output_dir` and per-cut `output_file` entries. Windows paths stored as POSIX to avoid escaping issues.
 - **Audio waveform visualization**: VirtualDub-style audio panel with orange waveform line, synchronized playback, and mute/unmute control (hotkey `A` for panel, `M` for mute).
 - **Audio playback**: Synchronized audio playback with video; automatically loops when loop mode is enabled.
@@ -55,9 +57,18 @@ Heittor_cod_02
 - `save_cuts_to_toml()` — writes TOML (1-based frames, .6f times, frame-count duration).
 - `load_cuts_from_toml()` / `load_cuts_from_toml_file()` — reads TOML; legacy `.txt` as fallback.
 - `cut_video_with_ffmpeg()` (precise; NVIDIA NVENC when available) and `cut_video_with_opencv()` (fallback).
-- `batch_process_videos()` and `batch_process_sync_videos()` — reuse marked cuts across files.
+- `parse_sync_file_content()` / `validate_sync_handoff()` — validate v2/legacy synchronization and the direct launch contract.
+- `batch_process_videos()` and `batch_process_sync_videos()` — reuse marked cuts across files; unsafe or out-of-range sync rows are skipped.
 - `get_precise_video_metadata()` — ffprobe-first, OpenCV fallback.
 - `run_cutvideo()` — entry point (uses Tk file dialog then launches pygame UI).
+
+## Direct synchronization CLI
+
+```bash
+uv run vaila/cutvideo.py --video /path/to/reference.mp4 --sync-file /path/to/session_sync.txt
+```
+
+This is launched by **syncvid → Save + Open Cut Video**. It validates all files before opening pygame and bypasses both file choosers.
 
 ## 🎮 Controls (UI)
 
@@ -80,7 +91,7 @@ Heittor_cod_02
 - **Cuts file:** `{basename}_cuts.toml`
   - Metadata: `video_name`, `fps` (.6f), `created`, `source_file` (POSIX), `output_dir` (POSIX).
   - Cuts (1-based): `index`, `start_frame`, `end_frame`, `frame_count`, `start_time`, `end_time`, `duration` (= `frame_count/fps`), `output_file`, `output_dir` (POSIX).
-- **Sync file (TXT):** `video_file new_name initial_frame final_frame` (integers).
+- **Sync file v2 (TXT/TSV):** header plus `video_file`, `output_file`, `start_frame`, `end_frame`, `sync_frame`; frames are 1-based and inclusive. Legacy four-field whitespace rows remain supported.
 - **Outputs:**
   - Folder (single): `{video}_vailacut_{timestamp}` (or `{video}_sync_vailacut_{timestamp}` when using sync).
   - Folder (batch): `vailacut_{prefix}{source}_batch_{timestamp}`.
@@ -107,5 +118,5 @@ Heittor_cod_02
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 15 July 2026 (v0.3.83 - NVIDIA NVENC for cut/convert encode)
+📅 **Last Updated:** 28 July 2026 (v0.3.85 - direct validated syncvid handoff)
 🔗 **Part of vailá - Multimodal Toolbox**

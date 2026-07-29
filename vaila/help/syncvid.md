@@ -1,81 +1,112 @@
-# syncvid
+# syncvid — Pygame Multi-Video Synchronization
 
-## 📋 Module Information
+## Module information
 
-- **Category:** Tools
-- **File:** `vaila\syncvid.py`
-- **Lines:** 314
-- **Size:** 10276 characters
-- **Version:** 0.0.2
-- **Author:** Paulo Roberto Pereira Santiago
-- **GUI Interface:** ✅ Yes
+- **Category:** Tools → Video and Image
+- **File:** `vaila/syncvid.py`
+- **Version:** 0.3.85
+- **Updated:** 2026-07-29
+- **GUI:** Frame C → **Make Sync file**
+- **CLI:** `uv run vaila/syncvid.py`
 
-## 📖 Description
+## Purpose
 
+`syncvid` opens every supported video from one target directory in a fast Pygame player. Playback and frame navigation follow the same conventions as `cutvideo.py`. The synchronization values are typed directly in the side panel, avoiding separate Mark, Reference, Start, and End buttons.
 
-Project: vailá Multimodal Toolbox
-Script: syncvid.py - Sync Video
+The generated versioned TXT maps one inclusive reference-camera interval into equal-duration ranges for every camera. **Save + Cut Video** launches Cut Video with both the reference video and TXT already selected.
 
-Author: Paulo Roberto Pereira Santiago
-Email: paulosantiago@usp.br
-GitHub: https://github.com/vaila-multimodaltoolbox/vaila
-Creation Date: 29 July 2024
-Update Date: 28 July 2025
-Version: 0.0.2
+## Fast workflow
 
-Description:
-This script performs batch processing of videos for sync videos.
+1. Select a directory containing at least two videos.
+2. Click a camera name in the right panel, or use **Page Up/Page Down**.
+3. Use playback, the timeline, or frame stepping to locate the common event.
+4. Type its displayed 1-based frame in that camera's **Sync frame** field.
+5. Repeat for every camera.
+6. In **Reference video**, type any one of:
+   - the 1-based row number;
+   - the exact filename;
+   - the filename without extension;
+   - a unique text fragment such as `frontal`.
+7. Type the inclusive **Reference start** and **Reference end** frame numbers.
+8. Choose:
+   - **Save sync** — save and return to vailá;
+   - **Save + Cut Video** — save and open Cut Video immediately without another file chooser.
 
+Clicking a field selects its current contents for quick replacement. **Tab/Shift+Tab** moves through all fields and **Enter** validates the active field. All displayed and saved frames are **1-based and inclusive**; internal Python calculations remain 0-based.
 
-Features:
-- Added support for sync files.
+## Pygame controls
 
-Usage:
-- Run the script to open a graphical interface for selecting the input directory
-  containing video files (.mp4, .avi, .mov), the output directory, and for
-  specifying the sync file.
+| Control | Action |
+|---|---|
+| Space | Play/pause |
+| Left / Right | Previous/next frame while paused |
+| Down or `-` | Move 60 frames backward |
+| Up or `+` | Move 60 frames forward |
+| `[` / `]` | Slower/faster playback: 0.0625× through 16× |
+| Home / End | First/last frame of the active video |
+| Page Up / Page Down | Previous/next camera |
+| Timeline click/drag | Seek directly |
+| Mouse click | Select camera, field, or action |
+| Tab / Shift+Tab | Next/previous input field |
+| Enter | Validate the active field and seek to a typed sync frame |
+| Ctrl+S | Save the synchronization TXT |
+| Escape | Leave a field; when no field is active, cancel |
 
-Requirements:
-- Python 3.12.11
-- Tkinter (usually included with Python installations)
+The visible step buttons use the traditional ASCII labels **-60**, **-1**, **+1**, and **+60**.
 
-Output:
-The following files are generated for each processed video:
-1. Sync File (`*_sync.txt`):
-   The sync file with the sync data.
+Playback reads consecutive frames sequentially and redraws cached paused frames, avoiding repeated random H.264 seeks. This is substantially smoother on long 120-fps recordings.
 
-Example:
-- Video: 1.mp4
-- Sync: 1_sync.txt
-- Output: 1_sync.mp4
+## Synchronization file v2
 
-How to run:
-python syncvid.py
+The output remains a UTF-8 tab-separated TXT:
 
-License:
-    This project is licensed under the terms of GNU General Public License v3.0.
+```text
+# vaila sync file v2
+# frame_base=1; frame ranges are inclusive
+video_file	output_file	start_frame	end_frame	sync_frame
+camera 01.mp4	camera_01_sync_1001_frames_901_to_1101.mp4	901	1101	1001
+```
 
+Tab-separated CSV quoting supports filenames containing spaces. Cut Video also reads legacy whitespace rows:
 
-## 🔧 Main Functions
+```text
+camera01.mp4 camera01_sync.mp4 901 1101
+```
 
-**Total functions found:** 10
+Saving atomically replaces an existing sync file instead of appending duplicate or stale rows.
 
-- `get_video_files`
-- `write_sync_file`
-- `get_sync_info`
-- `sync_videos`
-- `create_widgets`
-- `on_next`
-- `select_main_camera`
-- `set_main_camera`
-- `get_sync_data`
-- `on_ok`
+## Direct Cut Video handoff
 
+```bash
+uv run vaila/cutvideo.py \
+  --video /path/to/reference.mp4 \
+  --sync-file /path/to/vaila_sync_YYYYMMDD_HHMMSS.txt
+```
 
+Cut Video validates the TXT and every source video before its Pygame window opens. The interval is already loaded with `(SYNC)` status, and saving can render all synchronized cameras.
 
+## CLI and validation
+
+```bash
+# Pygame player with a preselected target directory
+uv run vaila/syncvid.py -i /path/to/camera_directory
+
+# Preselect the TXT destination
+uv run vaila/syncvid.py -i /path/to/camera_directory -o /path/to/session_sync.txt
+
+# Probe/decode all videos without opening Pygame
+uv run vaila/syncvid.py -i /path/to/camera_directory --dry-run
+```
+
+## Validation and security
+
+- Every typed frame must be an integer inside its video's timeline.
+- Reference text must resolve to exactly one camera; ambiguous fragments are rejected.
+- The common interval is checked before writing, so every output has equal duration.
+- Empty/broken videos, invalid FPS/frame counts, duplicate filenames, and fewer than two cameras are rejected.
+- Absolute paths, traversal, external symlinks, control characters, duplicate TXT entries, oversized files, and invalid ranges are rejected.
+- The writer is atomic and the Cut Video handoff uses an argument list with `shell=False`.
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
-🔗 **Part of vailá - Multimodal Toolbox**
-🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+Part of **vailá — Multimodal Toolbox**. Updated 29 July 2026.

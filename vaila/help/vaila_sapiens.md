@@ -5,7 +5,7 @@
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
 - **Version:** 0.3.85
-- **Updated:** 2026-07-16
+- **Updated:** 2026-07-28
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -79,9 +79,40 @@ DETR detector is shared across all sizes.
 2. **Dir…** = batch all videos in a folder (recursive); **File…** = single video
 3. Choose output parent directory
 4. Model default `1b`; stride `1` = every frame
-5. **Detection & keypoint thresholds** — `--bbox-thr`, `--nms-thr`, `--kpt-thr`, `--max-persons`
-6. **GPU & advanced** — `--device`, `--pose-batch-size` (GUI pre-fills per-model default), `--flip-test`, overlay on/off, **Draw person IDs**, **Temporal Re-ID** (online linker + OKS + bidirectional, default on)
-7. **Run** — terminal prints `>> Equivalent CLI` with `-i` / `-o` and the flags you chose
+5. Optional **Detection ROI** — click **Rectangle…** or **Polygon…** to draw on the first input video, choose **TOML…** for one shared config, or **Folder…** for per-video configs
+6. **Detection & keypoint thresholds** — `--bbox-thr`, `--nms-thr`, `--kpt-thr`, `--max-persons`
+7. **GPU & advanced** — `--device`, `--pose-batch-size` (GUI pre-fills per-model default), `--flip-test`, overlay on/off, **Draw person IDs**, **Temporal Re-ID** (online linker + OKS + bidirectional, default on)
+8. **Run** — terminal prints `>> Equivalent CLI` with `-i` / `-o` and the flags you chose
+
+## Detection ROI — faster local processing
+
+The optional ROI limits **person detection** to a selected rectangle or free polygon. vailá crops and masks the frame before DETR, keeps a 5% context ring for people touching the boundary, rejects boxes whose centre is outside the exact polygon, then restores every accepted box to **full-video pixel coordinates**.
+
+The Sapiens pose head still receives the **original full-resolution frame plus the restored global box**. Therefore ROI does not downscale the person crop, and the pose CSVs, overlay, geometric Re-ID, appearance Re-ID, tracking, REC2D and REC3D remain in the original coordinate system. The active delimiter is drawn in yellow on the overlay.
+
+### GUI choices
+
+- **Rectangle…** — drag a box; Enter confirms, Esc cancels.
+- **Polygon…** — left-click adds points, right-click undoes, `R` resets, Enter confirms.
+- **TOML…** — load one config and scale it automatically when the video resolution differs from the source dimensions.
+- **Folder…** — batch mode: resolve one config per video. Accepted names include `<stem>_sapiens_roi.toml`, `<stem>_roi.toml`, and timestamped `<stem>*roi*.toml`; `default.toml` is the fallback.
+- **Full frame** — disable ROI.
+
+The loader accepts native Sapiens ROI TOML, YOLO `roi_polygon.points` TOML, and markerless `roi_polygon_points` pose TOML. Every run copies the effective config to `sapiens_roi_used.toml` and records scaled points/crop bounds under `roi` in `<stem>_predictions.json`.
+
+```bash
+# Draw once from CLI, save beside the video, and run
+uv run vaila/vaila_sapiens.py -i video.mp4 -o out/ --select-roi rectangle
+uv run vaila/vaila_sapiens.py -i video.mp4 -o out/ --select-roi polygon
+
+# Reuse one config
+uv run vaila/vaila_sapiens.py -i video.mp4 -o out/ --roi-config roi.toml
+
+# Batch with one TOML per video
+uv run vaila/vaila_sapiens.py -i videos/ -o out/ --roi-config roi_configs/
+```
+
+**Performance expectation:** ROI removes DETR work outside the crop and, most importantly, prevents people outside it from entering the expensive Sapiens pose head. On the supplied single-person test clip, both full-frame and ROI runs still process one person, so the controlled 26-pass benchmark changed only from 29.44 s to 29.06 s (1.3%); mean keypoint confidence stayed effectively unchanged (0.73580 vs 0.73542). Gains are larger in crowded or wide views where the ROI excludes people.
 
 ## GUI → CLI mirror
 
@@ -118,6 +149,7 @@ uv run vaila/vaila_sapiens.py \
   --max-persons 8 \
   --kpt-thr 0.3 \
   --pose-batch-size 2 \
+  --roi-config /path/to/video_sapiens_roi.toml \
   --flip-test \
   --stabilize-ids \
   --reid-max-gap 12 \
@@ -201,6 +233,8 @@ Disable temporal linking with `--no-stabilize-ids`. Disable bidirectional merge 
 |------|---------|------------|--------------|
 | `-i` / `--input` | — | One video file or a folder of videos | Folder = batch; skips `*_sapiens_overlay.*` and `processed_sapiens_*` |
 | `-o` / `--output` | — | Parent output directory | Creates `processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/` |
+| `--roi-config` | none | Shared ROI TOML or directory of per-video TOMLs | Crops/masks DETR only; pose and tracking stay global |
+| `--select-roi` | none | `rectangle` or `polygon` interactive selector | Saves a reusable TOML, then runs with it |
 
 #### Model and inference
 
@@ -316,7 +350,8 @@ Under `processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/`:
 | **`sapiens_bbox_tracks.csv`** | **getpixelvideo Load Tracking** — SAM schema (`obj_id`, `x_px`, `w_px`, …) |
 | **`<stem>_id_NN_sapiens_pose.csv`** | **getpixelvideo Load** — wide 308-kp pose per person (`frame,nose_x,nose_y,left_eye_x,…` Sociopticon names, not `kp000`) |
 | `<stem>_getpixelvideo_pose.csv` | Alias when only one person is tracked |
-| `README_sapiens.txt` | Schema summary |
+| `sapiens_roi_used.toml` | Effective ROI copied into the run for reproducibility (ROI runs only) |
+| `README_sapiens.txt` | Schema summary + ROI provenance |
 | `FAILED_sapiens.txt` | Error marker on failure |
 
 ### getpixelvideo workflow (v0.3.75)
