@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.72
-- **Updated:** 06 July 2026
+- **Version:** 0.3.85
+- **Updated:** 30 July 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -255,6 +255,7 @@ Writes `sam_points.csv`, `sam_id_map.csv`, and five `sam_vaila_*.csv` files.
 
 | Symptom in the terminal / GUI log | Most likely cause | Fix |
 |-----------------------------------|-------------------|-----|
+| `Could not find bpe_simple_vocab_16e6.txt.gz` | The `sam3==0.1.3` wheel omitted the CLIP tokenizer vocabulary; recent BoxMOT wheels can omit the same fallback asset. | From the repository root run `bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes` (Linux CUDA) or `pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes` (Windows CUDA). If the CUDA template is already active, use `uv sync --extra gpu --extra sam`. For an older checkout, the temporary repair is `uv pip install openai-clip==1.0.1`. |
 | `Could not open VideoWriter for SAM3 subsample` in `FAILED_sam.txt` | OpenCV still could not create the temporal subsample clip (`_sam3_subsample_input.*`) after the mp4v → MJPG/XVID → ffmpeg libx264 pipe fallback. v0.3.71+ skips broken `h264_v4l2m2m`/`avc1` on ARM boards; v0.3.69+ routes extreme low-FPS subsamples to chunked fallback before opening the writer. | Delete the failed per-video output folder and re-run. Ensure `ffmpeg` is on `PATH` for the pipe fallback. For normal long broadcasts prefer auto `max_frames` or `--max-frames 128`/`256`; if the writer failure repeats, re-encode the source video. |
 | `[h264_v4l2m2m] Could not find a valid device` (stderr noise) | Harmless on many Linux SBCs when OpenCV probes the hardware encoder before falling back to `mp4v`. v0.3.71 tries software codecs first and uses ffmpeg libx264 when OpenCV fails entirely. CSV/JSON exports continue even if overlay MP4 stitching fails. | Ignore if the run completes. Install `ffmpeg` if overlay MP4 is missing. Chunked runs now auto-generate `sam_points.csv` + `sam_vaila_*.csv` after merge. |
 | `ERROR on <video>: subprocess killed by SIGKILL (exit=-9). Likely the Linux OOM killer (SYSTEM RAM, not VRAM)…` | **Host RAM** OOM killer — the temporal subsample plus SAM3's CPU-side video tensor demanded more system RAM than the OS could provide. Long broadcast clips (16 k+ frames @ 1080 p) easily peak >30 GiB on host RAM. | Lower `--max-frames` (try 256 → 128 → 64), add `--max-input-long-edge 1280`, close other heavy apps, and re-run. Confirm with `dmesg \| tail` / `journalctl -k -n 50`. |

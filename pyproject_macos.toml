@@ -141,6 +141,7 @@ sam = [
     # and weights for later use on a CUDA host. See AGENTS.md § *SAM 3 video* and
     # `.claude/skills/sam3-video/SKILL.md`.
     "sam3==0.1.3",
+    "openai-clip==1.0.1",
 ]
 fifa = [
     "pytorch-lightning>=2.4,<3",
