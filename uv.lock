@@ -2633,6 +2633,17 @@ wheels = [
 ]
 
 [[package]]
+name = "openai-clip"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ftfy" },
+    { name = "regex" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3f/81/26d701ef9fface424b4ca808a5c5674df645ac46447720a540143d11c41e/openai-clip-1.0.1.tar.gz", hash = "sha256:cd40bf2f205c096c49524fcbff484339f793b52afd6e7ffad80a2fe108151721", size = 1371625, upload-time = "2022-07-19T12:56:52.824Z" }
+
+[[package]]
 name = "opencv-contrib-python"
 version = "5.0.0.93"
 source = { registry = "https://pypi.org/simple" }
@@ -6984,6 +6995,7 @@ gpu = [
     { name = "tensorrt" },
 ]
 sam = [
+    { name = "openai-clip" },
     { name = "sam3" },
 ]
 sapiens = [
@@ -7048,6 +7060,7 @@ requires-dist = [
     { name = "omegaconf", marker = "extra == 'fifa'" },
     { name = "open3d" },
     { name = "openai" },
+    { name = "openai-clip", marker = "extra == 'sam'", specifier = "==1.0.1" },
     { name = "opencv-contrib-python" },
     { name = "openpyxl" },
     { name = "pandas" },

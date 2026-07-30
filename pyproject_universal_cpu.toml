@@ -136,6 +136,7 @@ upscaler = [
 ]
 sam = [
     "sam3==0.1.3",
+    "openai-clip==1.0.1",
 ]
 fifa = [
     "pytorch-lightning>=2.4,<3",

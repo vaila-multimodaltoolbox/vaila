@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 10 July 2026
-Version: 0.3.82
+Update Date: 30 July 2026
+Version: 0.3.85
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -689,7 +689,12 @@ def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
 
 
 def _resolve_bpe_path() -> Path:
-    """SAM3 PyPI wheel may omit site-packages/assets; fall back to boxmot's CLIP BPE."""
+    """Resolve the CLIP tokenizer vocabulary without importing heavyweight packages.
+
+    The ``sam3==0.1.3`` and recent BoxMOT wheels may omit this package data.
+    ``openai-clip`` is therefore part of the vailá ``sam`` extra and is the
+    stable fallback.
+    """
     try:
         import sam3  # type: ignore[reportMissingImports]
     except ModuleNotFoundError as e:
@@ -703,26 +708,38 @@ def _resolve_bpe_path() -> Path:
         Path(sam3.__file__).resolve().parent.parent / "assets" / "bpe_simple_vocab_16e6.txt.gz",
         Path(sam3.__file__).resolve().parent / "assets" / "bpe_simple_vocab_16e6.txt.gz",
     ]
-    for p in candidates:
-        if p.is_file():
-            return p
-    try:
-        import boxmot
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
 
-        fb = (
-            Path(boxmot.__file__).resolve().parent
-            / "reid"
-            / "backbones"
-            / "clip"
-            / "clip"
-            / "bpe_simple_vocab_16e6.txt.gz"
-        )
-        if fb.is_file():
-            return fb
-    except ImportError:
-        pass
+    package_candidates = (
+        ("clip", Path("bpe_simple_vocab_16e6.txt.gz")),
+        ("boxmot", Path("reid/backbones/clip/clip/bpe_simple_vocab_16e6.txt.gz")),
+    )
+    for package_name, relative_path in package_candidates:
+        spec = importlib.util.find_spec(package_name)
+        if spec is None or spec.origin is None:
+            continue
+        candidate = Path(spec.origin).resolve().parent / relative_path
+        if candidate.is_file():
+            return candidate
+
     raise FileNotFoundError(
-        "Could not find bpe_simple_vocab_16e6.txt.gz. Install sam3 extra: uv sync --extra sam"
+        "Could not find bpe_simple_vocab_16e6.txt.gz. The installed sam3/BoxMOT "
+        "wheel is missing required CLIP tokenizer data.\n\n"
+        "Repair from the vailá repository root:\n"
+        "  Linux NVIDIA CUDA:\n"
+        "    bash bin/setup_pyproject.sh --target=linux-cuda "
+        "--extras=gpu,sam --yes\n"
+        "  Windows NVIDIA CUDA (PowerShell):\n"
+        "    pwsh bin/setup_pyproject.ps1 -Target win-cuda "
+        "-Extras gpu,sam -Yes\n"
+        "  If the correct CUDA template is already active:\n"
+        "    uv sync --extra gpu --extra sam\n\n"
+        "Temporary repair for the current .venv (older vailá checkout):\n"
+        "    uv pip install openai-clip==1.0.1\n\n"
+        "Then run SAM 3 again. New vailá installations include openai-clip "
+        "automatically whenever the sam extra is selected."
     )
 
 
