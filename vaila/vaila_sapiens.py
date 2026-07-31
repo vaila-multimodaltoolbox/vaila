@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 28 July 2026
-Version: 0.3.85
+Update Date: 30 July 2026
+Version: 0.3.86
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -829,6 +829,7 @@ class PoseInferenceSession:
         flip_test: bool = False,
         max_persons: int = 8,
         pose_batch_size: int = 2,
+        use_detector: bool = True,
     ) -> None:
         _require_sapiens_installed()
         if not spec.config_path.is_file():
@@ -841,7 +842,7 @@ class PoseInferenceSession:
                 f"Sapiens2 pose checkpoint not found: {spec.checkpoint_path}\n"
                 "Run: bash bin/setup_sapiens2.sh or vaila/vaila_sapiens.py --download-weights"
             )
-        if not spec.detector_path.is_dir():
+        if use_detector and not spec.detector_path.is_dir():
             raise FileNotFoundError(
                 f"DETR detector not found: {spec.detector_path}\nRun: bash bin/setup_sapiens2.sh"
             )
@@ -863,6 +864,7 @@ class PoseInferenceSession:
         self.flip_test = bool(flip_test)
         self.max_persons = max(1, int(max_persons))
         self.pose_batch_size = max(1, int(pose_batch_size))
+        self.use_detector = bool(use_detector)
 
         _sapiens_log(
             f"Loading Sapiens2 pose ({spec.arch}) from {spec.checkpoint_path.name} on {device} …"
@@ -895,7 +897,12 @@ class PoseInferenceSession:
 
         n_kp = int(getattr(self.model.cfg, "num_keypoints", 0) or 0)
         _sapiens_log(f"Pose model ready ({n_kp or '?'} keypoints, flip_test={self.flip_test})")
-        self._warm_detector()
+        if self.use_detector:
+            self._warm_detector()
+        else:
+            _sapiens_log(
+                "External boxes enabled — DETR is not loaded; detection/identity come from SAM3"
+            )
 
     def _warm_detector(self) -> None:
         _sapiens_log("Warming DETR person detector (first inference) …")
@@ -904,11 +911,13 @@ class PoseInferenceSession:
         _sapiens_log("DETR detector ready — BatchNorm buffer warnings from Hugging Face are normal")
 
     def _get_detector(self) -> tuple[Any, Any]:
+        if not self.use_detector:
+            raise RuntimeError("DETR is disabled for this Sapiens2 pose session.")
         if "model" in self._detector_cache:
             return self._detector_cache["proc"], self._detector_cache["model"]
         import logging
 
-        from transformers import (
+        from transformers import (  # type: ignore[import-not-found]
             DetrForObjectDetection,
             DetrImageProcessor,
         )
@@ -980,9 +989,36 @@ class PoseInferenceSession:
         self, image_bgr: np.ndarray, *, roi: SapiensRoi | None = None
     ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
         """Return global-coordinate keypoints, scores, and boxes for wanted persons."""
+        if not self.use_detector:
+            raise RuntimeError(
+                "process_frame() needs DETR. Use process_frame_with_bboxes() "
+                "when external detections such as SAM3 guide the pose model."
+            )
+        bboxes, _polygon = self._detect_persons_in_roi(image_bgr, roi)
+        return self.process_frame_with_bboxes(image_bgr, bboxes)
+
+    def process_frame_with_bboxes(
+        self,
+        image_bgr: np.ndarray,
+        bboxes_xyxy: np.ndarray | list[np.ndarray] | list[list[float]],
+        *,
+        pose_images: list[np.ndarray] | None = None,
+    ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
+        """Run top-down Sapiens2 pose on externally supplied pixel-space boxes.
+
+        ``pose_images`` may provide one full-frame image per box. The caller
+        keeps global bbox coordinates while presenting a contour-focused image
+        for each SAM3 object. DETR is not needed when the session was created
+        with ``use_detector=False``.
+        """
         import torch
 
-        bboxes, _polygon = self._detect_persons_in_roi(image_bgr, roi)
+        bboxes = np.asarray(bboxes_xyxy, dtype=np.float32).reshape(-1, 4)
+        if pose_images is not None and len(pose_images) != len(bboxes):
+            raise ValueError(
+                "pose_images must contain exactly one image per external bbox "
+                f"({len(pose_images)} != {len(bboxes)})"
+            )
         keypoints: list[np.ndarray] = []
         keypoint_scores: list[np.ndarray] = []
         batch_size = self.pose_batch_size
@@ -990,8 +1026,11 @@ class PoseInferenceSession:
             chunk = bboxes[start : start + batch_size]
             inputs_list = []
             data_samples_list = []
-            for bbox in chunk:
-                data_info: dict[str, Any] = {"img": image_bgr}
+            for local_idx, bbox in enumerate(chunk):
+                source_image = (
+                    pose_images[start + local_idx] if pose_images is not None else image_bgr
+                )
+                data_info: dict[str, Any] = {"img": source_image}
                 data_info["bbox"] = bbox[None]
                 data_info["bbox_score"] = np.ones(1, dtype=np.float32)
                 data = self.model.pipeline(data_info)

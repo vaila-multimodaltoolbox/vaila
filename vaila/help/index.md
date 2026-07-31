@@ -4,13 +4,15 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 128 | **Categories:** 7 | **Generated on:** 30/07/2026 (v0.3.85)
+**Total documented modules:** 130 | **Categories:** 7 | **Generated on:** 31/07/2026 (v0.3.86)
 
 ## YOLO + FB chooser (Frame B → B4_r4_c1)
 
-Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, Train YOLOv26.
+Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, Train YOLOv26.
 
 - [vaila_sapiens (Sapiens2 Pose)](vaila_sapiens.html) · [MD](vaila_sapiens.md)
+- [sam3sapiens2 (SAM-guided Sapiens2)](sam3sapiens2.html) · [MD](sam3sapiens2.md)
+- [sam3sapiens2_visualize (selected-ID rerenderer)](sam3sapiens2_visualize.html) · [MD](sam3sapiens2_visualize.md)
 - [vaila_sam (SAM 3)](vaila_sam.html) · [MD](vaila_sam.md)
 - [yolov26track](yolov26track.html) · [MD](yolov26track.md)
 - [yolotrain](yolotrain.html) · [MD](yolotrain.md)
@@ -18,9 +20,11 @@ Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking)
 
 ## YOLO + FB chooser (Frame B → B4_r4_c1)
 
-Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, Train YOLOv26.
+Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, Train YOLOv26.
 
 - [vaila_sapiens (Sapiens2 Pose)](vaila_sapiens.html) · [MD](vaila_sapiens.md)
+- [sam3sapiens2 (SAM-guided Sapiens2)](sam3sapiens2.html) · [MD](sam3sapiens2.md)
+- [sam3sapiens2_visualize (selected-ID rerenderer)](sam3sapiens2_visualize.html) · [MD](sam3sapiens2_visualize.md)
 - [vaila_sam (SAM 3)](vaila_sam.html) · [MD](vaila_sam.md)
 - [yolov26track](yolov26track.html) · [MD](yolov26track.md)
 - [yolotrain](yolotrain.html) · [MD](yolotrain.md)
@@ -317,6 +321,12 @@ Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking)
 - **vaila_sapiens (Sapiens2 Pose — 308 keypoints + detection ROI)**
   - [📄 HTML](vaila_sapiens.html)
   - [📝 Markdown](vaila_sapiens.md)
+- **sam3sapiens2 (SAM3-guided Sapiens2 — DETR-free pose + inherited IDs)**
+  - [📄 HTML](sam3sapiens2.html)
+  - [📝 Markdown](sam3sapiens2.md)
+- **sam3sapiens2_visualize (selected-ID rerenderer)**
+  - [📄 HTML](sam3sapiens2_visualize.html)
+  - [📝 Markdown](sam3sapiens2_visualize.md)
 - **vaila_stroboscopic (Stroboscopic Generator)**
   - [📄 HTML](vaila_stroboscopic.html)
   - [📝 Markdown](vaila_stroboscopic.md)

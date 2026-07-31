@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-07-30
+**Last updated:** 2026-07-31
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -221,6 +221,8 @@ An overview of the project file structure:
 vaila
 ├── AGENTS.md                     # Hybrid CPU vs CUDA workstation, SAM/FIFA notes
 ├── CLAUDE.md                     # AI assistant tooling (Ruff, ty, uv)
+├── docs/ai-agents/preto-loop.md  # Preto Loop distribution for Codex/Cursor/Claude/Antigravity
+├── skills/preto-loop/             # Portable biomechanics/data-science loop skill
 ├── CONTRIBUTING.md               # PR workflow, versioning, models policy
 ├── vaila.py                      # Main Tkinter GUI entry point
 ├── pyproject.toml                # Active manifest (default: universal CPU; Hatchling + uv)
@@ -380,6 +382,19 @@ uv run vaila/vaila_sam.py --open-help
 ```
 
 That opens [vaila/help/vaila_sam.html](vaila/help/vaila_sam.html) in your default browser.
+
+### SAM3+Sapiens2 — combined detection, contour focus, and identity
+
+Frame B → **YOLO + FB → SAM3+Sapiens2** runs SAM3 first, then sends its per-frame bbox and silhouette directly to the Sapiens2 top-down pose model. DETR is not loaded, and the output invariant is `stable_id == person_id == sam_obj_id`. Existing `processed_sam_*` results can be reused:
+
+```bash
+uv run python -u vaila/sam3sapiens2.py \
+  -i /path/to/videos -o /path/to/output \
+  --sam-results /path/to/processed_sam_YYYYMMDD_HHMMSS \
+  --model 1b --stride 1
+```
+
+The combined overlay contains SAM contours/bboxes/IDs plus the Sapiens2 308-keypoint skeleton. REC2D/REC3D, getpixelvideo, per-ID pose CSVs, predictions JSON, and an explicit `sam3sapiens2_id_audit.csv` are written per video. See [SAM3+Sapiens2 help](vaila/help/sam3sapiens2.md).
 
 **FIFA Skeletal Tracking Light** (separate optional stack): `uv sync --extra fifa` (often together with `--extra gpu` on CUDA templates). See `AGENTS.md` and `vaila_sam.py fifa --help`.
 
