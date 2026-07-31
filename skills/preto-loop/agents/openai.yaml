@@ -1,0 +1,4 @@
+interface:
+  display_name: "Preto Loop"
+  short_description: "Design vailá biomechanics agent loops"
+  default_prompt: "Use $preto-loop to write a hardened, scientifically verifiable loop for a vailá biomechanics or data-science task."

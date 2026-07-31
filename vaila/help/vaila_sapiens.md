@@ -4,8 +4,8 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.85
-- **Updated:** 2026-07-28
+- **Version:** 0.3.86
+- **Updated:** 2026-07-30
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -17,6 +17,10 @@ vailá alongside SAM 3 under **Frame B → YOLO + FB → Sapiens2 Pose**.
 
 > **License:** Sapiens2 weights and code use Meta's **Sapiens2 License** (not
 > AGPL). Download only from Hugging Face after accepting the model terms.
+
+### External SAM3 guidance (v0.3.86)
+
+`PoseInferenceSession(..., use_detector=False)` now skips DETR validation, loading, and warm-up. Its `process_frame_with_bboxes()` entry point accepts external full-frame `xyxy` boxes and optional per-object contour-focused images. The new **YOLO + FB → SAM3+Sapiens2** tool uses this API so SAM3 supplies bbox, contour, confidence, and persistent IDs while Sapiens2 supplies only the 308-keypoint pose. See [sam3sapiens2.md](sam3sapiens2.md).
 
 ## Requirements
 

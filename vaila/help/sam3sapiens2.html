@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá - SAM3+Sapiens2</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; color: #222; }
+    .container { max-width: 980px; margin: auto; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
+    h1 { color: #24384d; border-bottom: 3px solid #7b4dc4; padding-bottom: 10px; }
+    h2 { color: #34495e; margin-top: 28px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+    code { background: #eef1f5; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f4f6f8; border: 1px solid #dce1e6; padding: 14px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f2eef9; }
+    .info { background: #f5f0ff; border-left: 4px solid #7b4dc4; padding: 12px 15px; }
+    .ok { background: #edf8f0; border: 1px solid #a9d7b2; padding: 12px 15px; }
+  </style>
+</head>
+<body><div class="container">
+  <h1>SAM3+Sapiens2 (<code>sam3sapiens2.py</code>)</h1>
+  <div class="info">
+    <strong>Version:</strong> 0.3.86 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-31<br>
+    <strong>GUI:</strong> Frame B → YOLO + FB → <strong>SAM3+Sapiens2</strong><br>
+    <strong>Runtime:</strong> NVIDIA CUDA; SAM3 and Sapiens2 optional stacks.
+  </div>
+
+  <h2>Purpose</h2>
+  <p>This pipeline makes SAM3 the authority for person detection, silhouettes, and persistent IDs. Sapiens2 runs top-down only on the supplied SAM boxes, with one contour-focused image per person. DETR is disabled and never loaded.</p>
+  <ol>
+    <li>SAM3 writes <code>sam_tracks.csv</code> and <code>sam_contours.json</code>.</li>
+    <li>The contour defines a tight padded pose box and isolates the person from competing crop background.</li>
+    <li>Sapiens2 estimates 308 keypoints only for those objects.</li>
+    <li>Outside-contour keypoints have confidence attenuated.</li>
+    <li><code>stable_id == person_id == sam_obj_id</code>; no Sapiens Re-ID can swap the IDs.</li>
+  </ol>
+  <div class="ok"><strong>Optimization:</strong> duplicate full-frame DETR inference is eliminated, and Sapiens2 receives only SAM-confirmed people.</div>
+
+  <h2>Run</h2>
+  <p>In the GUI, use <strong>Dir…</strong> to batch every video in a folder
+  (non-recursive) or <strong>File…</strong> for a single clip. Running the
+  script without <code>-i</code> and <code>-o</code> opens the same settings
+  GUI. The dialog is centered and raised above the terminal, and the terminal
+  confirms when it has been mapped. For a terminal-only run, supply both
+  arguments together (<code>-i</code> may be a folder).</p>
+  <pre><code>uv run python -u vaila/sam3sapiens2.py \
+  -i /path/to/videos -o /path/to/output \
+  -t person --model 1b --stride 1 \
+  --bbox-padding 0.12 --contour-margin 8</code></pre>
+  <p>Reuse an existing SAM batch without rerunning segmentation:</p>
+  <pre><code>uv run python -u vaila/sam3sapiens2.py \
+  -i /path/to/videos -o /path/to/output \
+  --sam-results /path/to/processed_sam_20260730_113024 \
+  --model 1b --stride 1</code></pre>
+  <p>Validate matching and metadata without inference:</p>
+  <pre><code>uv run python -u vaila/sam3sapiens2.py -i VIDEOS -o OUT \
+  --sam-results PROCESSED_SAM --dry-run</code></pre>
+
+  <h2>Main controls</h2>
+  <table>
+    <tr><th>Flag</th><th>Default</th><th>Effect</th></tr>
+    <tr><td><code>--bbox-padding</code></td><td>0.12</td><td>Context around the tight contour box.</td></tr>
+    <tr><td><code>--contour-margin</code></td><td>8 px</td><td>Dilates the silhouette for crop focus and keypoint validation.</td></tr>
+    <tr><td><code>--outside-contour-factor</code></td><td>0.25</td><td>Confidence multiplier outside the silhouette.</td></tr>
+    <tr><td><code>--max-persons</code></td><td>32</td><td>Safety cap; keeps strongest score×area objects.</td></tr>
+    <tr><td><code>--stride</code></td><td>1</td><td>Pose frequency; gaps follow the current SAM box and ID.</td></tr>
+    <tr><td><code>--no-contour-focus</code></td><td>off</td><td>Keep SAM boxes/IDs but use the original crop background.</td></tr>
+    <tr><td><code>--sam-results</code></td><td>none</td><td>Reuse an existing per-video or batch SAM run.</td></tr>
+  </table>
+
+  <h2>Outputs</h2>
+  <ul>
+    <li><code>&lt;video&gt;_sam3sapiens2_overlay.mp4</code>: contour, bbox, SAM ID, and Sapiens skeleton.</li>
+    <li><code>&lt;video&gt;_sam3sapiens2_predictions.json</code>: 308 keypoints and full provenance, including <code>detr_loaded: false</code>.</li>
+    <li><code>sam3sapiens2_id_audit.csv</code>: frame-by-frame proof of SAM ID inheritance.</li>
+    <li><code>&lt;video&gt;_markers.csv</code>, <code>sapiens_vaila_*.csv</code>, <code>sapiens_points.csv</code>: getpixelvideo / REC2D / REC3D.</li>
+    <li>Wide per-ID Sapiens pose CSVs, summary JSON, and <code>README_sam3sapiens2.txt</code>.</li>
+  </ul>
+  <p>When SAM is run automatically, raw SAM artifacts live in <code>&lt;video&gt;/sam3/</code>. Reused SAM results are referenced rather than copied.</p>
+
+  <h2>Setup</h2>
+  <pre><code>bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes
+bash bin/setup_sapiens2.sh
+uv run hf auth login
+uv run vaila/vaila_sam.py --download-weights</code></pre>
+  <p>See also <a href="vaila_sam.html">SAM3 help</a> and <a href="vaila_sapiens.html">Sapiens2 help</a>.</p>
+</div></body></html>

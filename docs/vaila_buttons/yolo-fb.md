@@ -7,7 +7,7 @@
 **Button Text:** YOLO + FB  
 **Dialog Title:** Select YOLO / Meta (FB) Tool
 
-Opens a chooser for Ultralytics YOLOv26 tools and Meta (Facebook) video AI: SAM 3, Sapiens2 Pose.
+Opens a chooser for Ultralytics YOLOv26 tools and Meta (Facebook) video AI: SAM 3, Sapiens2 Pose, and the combined SAM3-guided Sapiens2 pipeline.
 
 ## GUI → CLI mirror
 
@@ -23,6 +23,7 @@ Each tool's **Run** button prints the **full** copy-paste command with your path
 | SAM 3 video | `uv run python -u vaila/vaila_sam.py` |
 | Sapiens2 Pose | `uv run python -u vaila/vaila_sapiens.py` |
 | Train YOLOv26 | `uv run python -u -m vaila.yolotrain` |
+| SAM3+Sapiens2 | `uv run python -u vaila/sam3sapiens2.py` |
 
 ### Full Run examples (printed automatically)
 

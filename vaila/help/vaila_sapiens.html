@@ -30,12 +30,16 @@
     <h1>Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
 
     <div class="module-info">
-        <p><strong>Version:</strong> 0.3.85 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-28</p>
+        <p><strong>Version:</strong> 0.3.86 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-30</p>
         <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
         <p><strong>Category:</strong> Markerless 2D / Meta (Facebook)</p>
     </div>
 
     <p>Top-down <strong>308-keypoint</strong> human pose on video using Meta's DETR person detector + Sapiens2 ViT pose head.</p>
+
+
+    <h2>External SAM3 guidance (v0.3.86)</h2>
+    <p><code>PoseInferenceSession(..., use_detector=False)</code> now skips DETR completely, while <code>process_frame_with_bboxes()</code> accepts external boxes and contour-focused per-object images. The new <strong>YOLO + FB → SAM3+Sapiens2</strong> tool uses SAM3 bbox, silhouette, confidence, and persistent IDs as the authority, then runs only the Sapiens2 pose head. See <a href="sam3sapiens2.html">SAM3+Sapiens2 help</a>.</p>
 
     <div class="note">
         <strong>License:</strong> Sapiens2 weights use Meta's Sapiens2 License (not AGPL). Accept the Hugging Face model terms before downloading.
