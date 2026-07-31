@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 29 July 2026
-Version: 0.3.85
+Update Date: 31 July 2026
+Version: 0.3.86
 
 Example of usage:
 uv run vaila.py
@@ -249,7 +249,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 29.Jul.2026 v0.3.85 (Python 3.12.13)
+    vailá - 30.Jul.2026 v0.3.86 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -360,7 +360,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 29.Jul.2026 v0.3.85 (Python 3.12.13)")
+        self.title("vailá - 30.Jul.2026 v0.3.86 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -2573,6 +2573,19 @@ class Vaila(tk.Tk):
             _print_yolo_fb_launch("Sapiens2 Pose", "uv run python -u vaila/vaila_sapiens.py")
             self.sapiens_video()
 
+        def use_sam3sapiens2():
+            dialog.destroy()
+            _print_yolo_fb_launch("SAM3+Sapiens2", "uv run python -u vaila/sam3sapiens2.py")
+            self.sam3sapiens2_video()
+
+        def use_sam3sapiens2_visualize():
+            dialog.destroy()
+            _print_yolo_fb_launch(
+                "SAM3+Sapiens2 Visualize ID",
+                "uv run python -u vaila/sam3sapiens2_visualize.py",
+            )
+            self.sam3sapiens2_visualize_video()
+
         tk.Button(dialog, text="Tracker (v26)", command=use_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Pose (video)", command=use_yolo_pose_v26, width=16).pack(pady=6)
         tk.Button(
@@ -2584,6 +2597,13 @@ class Vaila(tk.Tk):
         tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
         tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
         tk.Button(dialog, text="Sapiens2 Pose", command=use_sapiens2, width=16).pack(pady=6)
+        tk.Button(dialog, text="SAM3+Sapiens2", command=use_sam3sapiens2, width=16).pack(pady=6)
+        tk.Button(
+            dialog,
+            text="SAM3+Sapiens2 Visualize ID",
+            command=use_sam3sapiens2_visualize,
+            width=24,
+        ).pack(pady=6)
         tk.Button(dialog, text="Train YOLOv26", command=use_train_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
 
@@ -3539,6 +3559,47 @@ class Vaila(tk.Tk):
         )
         print("=" * 60 + "\n")
         run_vaila_module("vaila.vaila_sapiens", "vaila/vaila_sapiens.py", extra_py_flags=("-u",))
+
+    def sam3sapiens2_video(self):
+        """Run Sapiens2 pose guided by SAM3 bbox, contours, and persistent IDs."""
+        missing: list[str] = []
+        if importlib.util.find_spec("sam3") is None:
+            missing.append("SAM3: uv sync --extra sam")
+        if importlib.util.find_spec("sapiens") is None:
+            missing.append("Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh")
+        if missing:
+            messagebox.showerror(
+                "SAM3+Sapiens2 — dependencies",
+                "Install both CUDA pipelines before running:\n\n" + "\n".join(missing),
+                parent=self,
+            )
+            return
+
+        print("\n" + "=" * 60)
+        print("Launching: vaila.sam3sapiens2")
+        print(">> Equivalent launch CLI: uv run python -u vaila/sam3sapiens2.py")
+        print("Features: SAM3 bbox/contour/ID -> DETR-free Sapiens2 308-keypoint pose")
+        print("SAM3 remains the identity authority; Sapiens2 does not reassign IDs.")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.sam3sapiens2",
+            "vaila/sam3sapiens2.py",
+            extra_py_flags=("-u",),
+        )
+
+    def sam3sapiens2_visualize_video(self):
+        """Rerender one existing SAM3+Sapiens2 identity without model inference."""
+        print("\n" + "=" * 60)
+        print("Launching: vaila.sam3sapiens2_visualize")
+        print(">> Equivalent launch CLI: uv run python -u vaila/sam3sapiens2_visualize.py")
+        print("Features: select one SAM ID; draw contour, bbox, ID, and Sapiens2 pose")
+        print("Runtime: CPU/OpenCV rerender; SAM3/Sapiens2 weights are not loaded.")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.sam3sapiens2_visualize",
+            "vaila/sam3sapiens2_visualize.py",
+            extra_py_flags=("-u",),
+        )
 
     def soccer_tools(self) -> None:
         """Open a small launcher for soccer-related tools (AI + calibration + FIFA utilities)."""

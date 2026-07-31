@@ -171,6 +171,7 @@ dmypy.json
 # IDEs and Editors
 # Cursor (ignore IDE config, but track rules)
 .cursor/
+!.cursor/
 !.cursor/rules/
 !.cursor/rules/*.mdc
 
@@ -204,6 +205,13 @@ out/
 # AI Agents (generic workflow/skill folders)
 .agents/
 .agent/
+!.agents/
+!.agents/skills/
+!.agents/skills/preto-loop/
+!.agents/skills/preto-loop/**
+!.agent/
+!.agent/rules/
+!.agent/rules/preto-loop.md
 _agents/
 _agent/
 
@@ -257,4 +265,3 @@ sam_3d_body/
 # Test output directories
 tests/**/processed_sapiens_*/
 tests/**/processed_sam_*/
-

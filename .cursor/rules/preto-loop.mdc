@@ -1,0 +1,13 @@
+---
+description: Use the repository's Preto Loop specification workflow for biomechanics, data science, and vailá coding tasks.
+globs: ["**/*.py", "**/*.csv", "**/*.toml", "**/*.md"]
+alwaysApply: false
+---
+
+# Preto Loop for Cursor
+
+When the user asks to create or design an agent loop, or asks for an iterative biomechanics, data-science, markerless-video, testing, or vailá coding workflow, read and follow `skills/preto-loop/SKILL.md`.
+
+Use the `$preto-loop` behavior even though Cursor rules do not expose Codex's `$skill` syntax. Write the resulting loop specification to the user-selected location; do not execute it automatically.
+
+Preserve the vailá gates: units and coordinate frames, sampling/frame rate, leakage controls, deterministic checks, GUI/CLI parity, Python metadata, pytest/Ruff/Ty validation, and explicit human approval for irreversible actions.

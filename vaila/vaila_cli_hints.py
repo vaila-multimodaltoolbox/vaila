@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.3.82"
-__updated__ = "10 July 2026"
+__version__ = "0.3.86"
+__updated__ = "30 July 2026"
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,9 +68,10 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
             "uv run python -u -m vaila.yolov26track",
             "uv run python -u vaila/vaila_sam.py",
             "uv run python -u vaila/vaila_sapiens.py",
+            "uv run python -u vaila/sam3sapiens2.py",
             "uv run python -u -m vaila.yolotrain",
         ),
-        "YOLO + FB chooser — Tracker / Pose / Seg / SAM 3 / Sapiens2 / Train. "
+        "YOLO + FB chooser — Tracker / Pose / Seg / SAM 3 / Sapiens2 / SAM3+Sapiens2 / Train. "
         "Each tool prints the full Run CLI after GUI dialogs.",
     ),
     "ml_walkway": CliRunHint(("uv run vaila/walkway_ml_prediction.py",), "ML walkway GUI."),
