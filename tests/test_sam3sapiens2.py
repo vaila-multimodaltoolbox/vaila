@@ -1,7 +1,7 @@
 """Tests for the SAM3-guided Sapiens2 pipeline.
 
 Update Date: 31 July 2026
-Version: 0.3.86
+Version: 0.3.88
 """
 
 from __future__ import annotations
@@ -216,12 +216,131 @@ def test_build_sam_command_exports_guidance_without_overlay(tmp_path: Path) -> N
         max_input_long_edge=1280,
         keep_masks=False,
     )
-    assert "--video-output-dir" in command
+    assert "--output-base" in command
+    assert "--video-output-dir" not in command
     assert "--save-contours" in command
     assert "--save-tracks-csv" in command
     assert "--no-overlay" in command
     assert "--no-png" in command
     assert command[command.index("--max-frames") + 1] == "256"
+
+
+def test_plan_video_processing_resume_skip_reuse_and_rerun(tmp_path: Path) -> None:
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"")
+    done = tmp_path / "done"
+    done.mkdir()
+    (done / "sam3sapiens2_summary.json").write_text(
+        json.dumps({"video": str(video), "ok": True}),
+        encoding="utf-8",
+    )
+    action, sam_dir, summary = combo.plan_video_processing(
+        video,
+        done,
+        resume=True,
+        sam_results=None,
+        single_video=True,
+    )
+    assert action == "skip"
+    assert sam_dir is None
+    assert summary is not None and summary["ok"] is True
+
+    partial = tmp_path / "partial"
+    local_sam = _write_sam_fixture(partial / "sam3")
+    action, sam_dir, summary = combo.plan_video_processing(
+        video,
+        partial,
+        resume=True,
+        sam_results=None,
+        single_video=True,
+    )
+    assert action == "reuse_sam"
+    assert sam_dir == local_sam.resolve()
+    assert summary is None
+
+    failed = tmp_path / "failed"
+    (failed / "sam3" / "_chunks").mkdir(parents=True)
+    (failed / "FAILED_sam3sapiens2.txt").write_text("boom", encoding="utf-8")
+    (failed / "sam3" / "FAILED_sam.txt").write_text("boom", encoding="utf-8")
+    action, sam_dir, summary = combo.plan_video_processing(
+        video,
+        failed,
+        resume=True,
+        sam_results=None,
+        single_video=True,
+    )
+    assert action == "run"
+    assert sam_dir is None
+    assert summary is None
+    combo.prepare_sam_rerun_dir(failed)
+    assert not (failed / "FAILED_sam3sapiens2.txt").exists()
+    assert not (failed / "sam3" / "FAILED_sam.txt").exists()
+    assert not (failed / "sam3" / "_chunks").exists()
+
+
+def test_plan_video_processing_honours_external_sam_results(tmp_path: Path) -> None:
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"")
+    batch = tmp_path / "processed_sam_123"
+    expected = _write_sam_fixture(batch / video.stem)
+    action, sam_dir, summary = combo.plan_video_processing(
+        video,
+        tmp_path / "fresh_out" / video.stem,
+        resume=False,
+        sam_results=batch,
+        single_video=False,
+    )
+    assert action == "reuse_sam"
+    assert sam_dir == expected.resolve()
+    assert summary is None
+
+
+def test_dry_run_resume_plan_reports_skip_and_rerun(tmp_path: Path) -> None:
+    videos_dir = tmp_path / "videos"
+    videos_dir.mkdir()
+    done_video = videos_dir / "done.mp4"
+    fail_video = videos_dir / "fail.mp4"
+    done_video.write_bytes(b"")
+    fail_video.write_bytes(b"")
+    run_dir = tmp_path / "processed_sam3sapiens2_20260731_000000"
+    done_out = run_dir / done_video.stem
+    fail_out = run_dir / fail_video.stem
+    done_out.mkdir(parents=True)
+    fail_out.mkdir(parents=True)
+    (done_out / "sam3sapiens2_summary.json").write_text(
+        json.dumps({"video": str(done_video)}),
+        encoding="utf-8",
+    )
+    (fail_out / "FAILED_sam3sapiens2.txt").write_text("failed", encoding="utf-8")
+    (fail_out / "sam3" / "_chunks").mkdir(parents=True)
+
+    args = SimpleNamespace(
+        input=videos_dir,
+        resume=run_dir,
+        sam_results=None,
+        model="1b",
+        stride=1,
+        device=0,
+        bbox_padding=0.12,
+        contour_margin=8,
+        no_contour_focus=False,
+        text="person",
+        sam_frame=0,
+        sam_checkpoint=None,
+        sam_max_frames=None,
+        sam_max_input_long_edge=None,
+        keep_sam_masks=False,
+    )
+    lines = combo._build_dry_run_report(
+        [done_video.resolve(), fail_video.resolve()],
+        run_dir,
+        args,
+    )
+    joined = "\n".join(lines)
+    assert "action=skip" in joined
+    assert "action=run" in joined
+    assert "--output-base" in joined
+    assert "--video-output-dir" not in joined
 
 
 def test_pose_session_without_detector_rejects_detector_entrypoint() -> None:

@@ -6,7 +6,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
 Update Date: 31 July 2026
-Version: 0.3.86
+Version: 0.3.88
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -23,6 +23,12 @@ Usage:
         -i /path/to/videos -o /path/to/output \
         --sam-results /path/to/processed_sam_YYYYMMDD_HHMMSS
 
+    # Resume a partial/failed processed_sam3sapiens2_* run:
+    uv run python -u vaila/sam3sapiens2.py \
+        -i /path/to/videos \
+        --resume /path/to/processed_sam3sapiens2_YYYYMMDD_HHMMSS \
+        --model 1b
+
     # GUI: omit arguments, or Frame B -> YOLO + FB -> SAM3+Sapiens2
 
 License:
@@ -33,12 +39,14 @@ License:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import datetime as dt
 import gzip
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tkinter as tk
@@ -110,7 +118,8 @@ class SamGuidance:
 @dataclass(frozen=True)
 class CombinedGuiSettings:
     input_path: Path
-    output_parent: Path
+    output_parent: Path | None
+    resume: Path | None
     sam_results: Path | None
     prompt: str
     model: str
@@ -372,6 +381,76 @@ def resolve_sam_results_dir(
         f"Could not match SAM3 outputs for {video.name} under {root}. "
         f"Expected {root / video.stem / 'sam_tracks.csv'}"
     )
+
+
+def _has_usable_sam_tracks(directory: Path) -> bool:
+    return (directory / "sam_tracks.csv").is_file() or (directory / "sam_bbox_tracks.csv").is_file()
+
+
+def find_local_sam_dir(output_dir: Path) -> Path | None:
+    """Return ``output_dir/sam3`` when it already has usable SAM tracks."""
+    candidate = output_dir / "sam3"
+    if _has_usable_sam_tracks(candidate):
+        return candidate.resolve()
+    return None
+
+
+def load_completed_summary(output_dir: Path) -> dict[str, Any] | None:
+    """Load a valid per-video summary, or None when missing/corrupt."""
+    path = output_dir / "sam3sapiens2_summary.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def plan_video_processing(
+    video: Path,
+    output_dir: Path,
+    *,
+    resume: bool,
+    sam_results: Path | None,
+    single_video: bool,
+) -> tuple[str, Path | None, dict[str, Any] | None]:
+    """Decide skip / reuse_sam / run for one video.
+
+    Returns ``(action, sam_dir, summary)`` where action is one of:
+    ``skip``, ``reuse_sam``, ``run``.
+    """
+    if resume:
+        summary = load_completed_summary(output_dir)
+        if summary is not None:
+            return "skip", None, summary
+
+    local = find_local_sam_dir(output_dir)
+    if local is not None:
+        return "reuse_sam", local, None
+
+    if sam_results is not None:
+        resolved = resolve_sam_results_dir(
+            sam_results,
+            video,
+            single_video=single_video,
+        )
+        return "reuse_sam", resolved, None
+
+    return "run", None, None
+
+
+def prepare_sam_rerun_dir(output_dir: Path) -> None:
+    """Clear stale failure markers / incomplete chunk trees before a SAM retry."""
+    for marker in (
+        output_dir / "FAILED_sam3sapiens2.txt",
+        output_dir / "sam3" / "FAILED_sam.txt",
+    ):
+        with contextlib.suppress(OSError):
+            marker.unlink(missing_ok=True)
+    chunks = output_dir / "sam3" / "_chunks"
+    if chunks.is_dir():
+        shutil.rmtree(chunks, ignore_errors=True)
 
 
 def _object_polygons(obj: dict[str, Any] | None) -> list[np.ndarray]:
@@ -1101,7 +1180,8 @@ def build_sam_command(
         str(video_path),
         "-o",
         str(sam_output_dir.parent),
-        "--video-output-dir",
+        # Keep vaila_sam coordinator CUDA-clean after an OOM.
+        "--output-base",
         str(sam_output_dir),
         "-t",
         prompt,
@@ -1151,6 +1231,7 @@ def run_sam_stage(
     _log("SAM3 stage CLI: " + shlex.join(cmd))
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
+    env["VAILA_SAM_COORDINATOR_OUTPUT_DIR"] = str(sam_output_dir)
     completed = subprocess.run(cmd, env=env, check=False)
     if completed.returncode != 0:
         raise RuntimeError(f"SAM3 stage failed with subprocess exit={completed.returncode}")
@@ -1291,45 +1372,54 @@ def _build_dry_run_report(
         "SAM3+Sapiens2 dry-run (no GPU/model inference)",
         f"input={args.input}",
         f"output_base={output_base}",
+        f"resume={args.resume or 'off'}",
         f"videos={len(videos)}",
-        f"sam_results={args.sam_results or 'run SAM3 first'}",
+        f"sam_results={args.sam_results or 'run SAM3 first / reuse local sam3/'}",
         f"model={args.model} stride={args.stride} device=cuda:{args.device}",
         f"DETR=disabled bbox_padding={args.bbox_padding} contour_margin={args.contour_margin}",
         f"identity_authority=SAM3 obj_id contour_focus={not args.no_contour_focus}",
     ]
     for video in videos:
+        output_dir = output_base / video.stem
+        action, sam_dir, _summary = plan_video_processing(
+            video,
+            output_dir,
+            resume=args.resume is not None,
+            sam_results=args.sam_results,
+            single_video=len(videos) == 1,
+        )
         lines.append(f"video={video}")
-        if args.sam_results is not None:
+        lines.append(f"  action={action}")
+        if action == "skip":
+            lines.append("  status=completed (sam3sapiens2_summary.json)")
+            continue
+        if action == "reuse_sam":
+            assert sam_dir is not None
             try:
-                resolved = resolve_sam_results_dir(
-                    args.sam_results,
-                    video,
-                    single_video=len(videos) == 1,
-                )
-                guidance = load_sam_guidance(resolved)
+                guidance = load_sam_guidance(sam_dir)
                 lines.append(
-                    f"  SAM OK: {resolved} frames={len(guidance.tracks_by_frame)} "
+                    f"  SAM reuse: {sam_dir} frames={len(guidance.tracks_by_frame)} "
                     f"contours={bool(guidance.contour_path)}"
                 )
             except Exception as exc:
                 lines.append(f"  SAM ERROR: {exc}")
-        else:
-            sam_dir = output_base / video.stem / "sam3"
-            lines.append(
-                "  SAM CLI: "
-                + shlex.join(
-                    build_sam_command(
-                        video,
-                        sam_dir,
-                        prompt=args.text,
-                        prompt_frame=args.sam_frame,
-                        checkpoint=args.sam_checkpoint,
-                        max_frames=args.sam_max_frames,
-                        max_input_long_edge=args.sam_max_input_long_edge,
-                        keep_masks=args.keep_sam_masks,
-                    )
+            continue
+        sam_cli_dir = output_dir / "sam3"
+        lines.append(
+            "  SAM CLI: "
+            + shlex.join(
+                build_sam_command(
+                    video,
+                    sam_cli_dir,
+                    prompt=args.text,
+                    prompt_frame=args.sam_frame,
+                    checkpoint=args.sam_checkpoint,
+                    max_frames=args.sam_max_frames,
+                    max_input_long_edge=args.sam_max_input_long_edge,
+                    keep_masks=args.keep_sam_masks,
                 )
             )
+        )
     return lines
 
 
@@ -1342,25 +1432,32 @@ def _format_gui_cli(settings: CombinedGuiSettings) -> list[str]:
         "vaila/sam3sapiens2.py",
         "-i",
         str(settings.input_path),
-        "-o",
-        str(settings.output_parent),
-        "-t",
-        settings.prompt,
-        "--model",
-        settings.model,
-        "--stride",
-        str(settings.stride),
-        "--device",
-        str(settings.device),
-        "--kpt-thr",
-        str(settings.kpt_thr),
-        "--bbox-padding",
-        str(settings.bbox_padding),
-        "--contour-margin",
-        str(settings.contour_margin),
-        "--max-persons",
-        str(settings.max_persons),
     ]
+    if settings.resume is not None:
+        cmd.extend(["--resume", str(settings.resume)])
+    else:
+        assert settings.output_parent is not None
+        cmd.extend(["-o", str(settings.output_parent)])
+    cmd.extend(
+        [
+            "-t",
+            settings.prompt,
+            "--model",
+            settings.model,
+            "--stride",
+            str(settings.stride),
+            "--device",
+            str(settings.device),
+            "--kpt-thr",
+            str(settings.kpt_thr),
+            "--bbox-padding",
+            str(settings.bbox_padding),
+            "--contour-margin",
+            str(settings.contour_margin),
+            "--max-persons",
+            str(settings.max_persons),
+        ]
+    )
     if settings.sam_results is not None:
         cmd.extend(["--sam-results", str(settings.sam_results)])
     if settings.pose_batch_size is not None:
@@ -1390,6 +1487,7 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
             frm.grid(sticky="nsew")
             self.input_var = tk.StringVar()
             self.output_var = tk.StringVar()
+            self.resume_var = tk.StringVar()
             self.sam_var = tk.StringVar()
             self.prompt_var = tk.StringVar(value="person")
             self.model_var = tk.StringVar(value="1b")
@@ -1412,7 +1510,8 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
                 frm,
                 text=(
                     "SAM3 defines bbox, contour and ID; Sapiens2 pose runs without DETR. "
-                    "Use Dir… for batch (all videos in a folder) or File… for one clip."
+                    "Use Dir… for batch (all videos in a folder) or File… for one clip. "
+                    "Resume… continues a previous processed_sam3sapiens2_* run."
                 ),
             ).grid(row=1, column=0, columnspan=5, sticky="w", pady=(0, 10))
             self._input_path_row(frm, 2)
@@ -1420,21 +1519,28 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
             self._path_row(
                 frm,
                 4,
+                "Resume run (optional)",
+                self.resume_var,
+                self._browse_resume,
+            )
+            self._path_row(
+                frm,
+                5,
                 "Existing SAM results (optional)",
                 self.sam_var,
                 self._browse_sam,
             )
 
-            ttk.Label(frm, text="SAM prompt").grid(row=5, column=0, sticky="w", pady=(8, 0))
-            ttk.Entry(frm, textvariable=self.prompt_var, width=18).grid(row=5, column=1, sticky="w")
-            ttk.Label(frm, text="Sapiens model").grid(row=5, column=2, sticky="e", padx=(12, 4))
+            ttk.Label(frm, text="SAM prompt").grid(row=6, column=0, sticky="w", pady=(8, 0))
+            ttk.Entry(frm, textvariable=self.prompt_var, width=18).grid(row=6, column=1, sticky="w")
+            ttk.Label(frm, text="Sapiens model").grid(row=6, column=2, sticky="e", padx=(12, 4))
             ttk.Combobox(
                 frm,
                 textvariable=self.model_var,
                 values=("0.4b", "0.8b", "1b", "5b"),
                 state="readonly",
                 width=8,
-            ).grid(row=5, column=3, sticky="w")
+            ).grid(row=6, column=3, sticky="w")
 
             options = (
                 ("Stride", self.stride_var),
@@ -1446,22 +1552,22 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
                 ("Max persons", self.max_persons_var),
             )
             for idx, (label, variable) in enumerate(options):
-                row = 6 + idx // 2
+                row = 7 + idx // 2
                 col = (idx % 2) * 2
                 ttk.Label(frm, text=label).grid(row=row, column=col, sticky="w", pady=(6, 0))
                 ttk.Entry(frm, textvariable=variable, width=10).grid(
                     row=row, column=col + 1, sticky="w", pady=(6, 0)
                 )
             ttk.Checkbutton(frm, text="Flip test", variable=self.flip_var).grid(
-                row=10, column=0, columnspan=2, sticky="w", pady=(8, 0)
+                row=11, column=0, columnspan=2, sticky="w", pady=(8, 0)
             )
             ttk.Checkbutton(
                 frm,
                 text="Save combined overlay",
                 variable=self.overlay_var,
-            ).grid(row=10, column=2, columnspan=2, sticky="w", pady=(8, 0))
+            ).grid(row=11, column=2, columnspan=2, sticky="w", pady=(8, 0))
             buttons = ttk.Frame(frm)
-            buttons.grid(row=11, column=0, columnspan=4, pady=(14, 0))
+            buttons.grid(row=12, column=0, columnspan=4, pady=(14, 0))
             ttk.Button(buttons, text="Help", command=self._open_help).pack(side="left", padx=4)
             ttk.Button(buttons, text="Run", command=self._on_run).pack(side="left", padx=4)
             ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="left", padx=4)
@@ -1518,6 +1624,14 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
             if path:
                 self.output_var.set(path)
 
+        def _browse_resume(self) -> None:
+            path = filedialog.askdirectory(
+                parent=self,
+                title="Select processed_sam3sapiens2_* run to resume",
+            )
+            if path:
+                self.resume_var.set(path)
+
         def _browse_sam(self) -> None:
             path = filedialog.askdirectory(
                 parent=self,
@@ -1533,7 +1647,6 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
         def _on_run(self) -> None:
             try:
                 input_path = Path(self.input_var.get().strip()).expanduser()
-                output_parent = Path(self.output_var.get().strip()).expanduser()
                 if not self.input_var.get().strip() or not input_path.exists():
                     raise ValueError("Select an existing input video or folder (Dir… / File…).")
                 videos = _find_videos(input_path)
@@ -1543,8 +1656,14 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
                         "Use Dir… for a folder of .mp4/.avi/.mov/.mkv/.webm files, "
                         "or File… for a single clip."
                     )
-                if not self.output_var.get().strip():
-                    raise ValueError("Select an output parent folder.")
+                resume_raw = self.resume_var.get().strip()
+                resume = Path(resume_raw).expanduser() if resume_raw else None
+                if resume is not None and not resume.is_dir():
+                    raise ValueError(f"Resume run directory not found: {resume}")
+                output_raw = self.output_var.get().strip()
+                output_parent = Path(output_raw).expanduser() if output_raw else None
+                if resume is None and output_parent is None:
+                    raise ValueError("Select an output parent folder, or a Resume run directory.")
                 sam_raw = self.sam_var.get().strip()
                 sam_results = Path(sam_raw).expanduser() if sam_raw else None
                 if sam_results is not None and not sam_results.exists():
@@ -1553,6 +1672,7 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
                 result = CombinedGuiSettings(
                     input_path=input_path,
                     output_parent=output_parent,
+                    resume=resume,
                     sam_results=sam_results,
                     prompt=self.prompt_var.get().strip() or "person",
                     model=self.model_var.get().strip() or "1b",
@@ -1604,6 +1724,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("-i", "--input", type=Path, help="Input video or non-recursive folder")
     parser.add_argument("-o", "--output", type=Path, help="Output parent directory")
+    parser.add_argument(
+        "--resume",
+        type=Path,
+        default=None,
+        metavar="RUN_DIR",
+        help="Resume an existing processed_sam3sapiens2_* directory: skip completed videos, retry failures, and reuse existing sam3/sam_tracks.csv.",
+    )
     parser.add_argument("-t", "--text", default="person", help="SAM3 text prompt")
     parser.add_argument(
         "--sam-results",
@@ -1667,11 +1794,11 @@ def main() -> None:
         if _help_path().is_file():
             webbrowser.open_new_tab(_help_path().as_uri())
         return
-    if args.input is None and args.output is None:
+    if args.input is None and args.output is None and args.resume is None:
         run_sam3sapiens2()
         return
-    if args.input is None or args.output is None:
-        parser.error("-i/--input and -o/--output must be supplied together")
+    if args.input is None or (args.output is None and args.resume is None):
+        parser.error("--input and either --output or --resume must be supplied")
     if not 0.0 <= args.kpt_thr <= 1.0:
         parser.error("--kpt-thr must be in [0,1]")
     if not 0.0 <= args.min_sam_score <= 1.0:
@@ -1682,7 +1809,11 @@ def main() -> None:
         parser.error("--bbox-padding must be >= 0")
 
     input_path = args.input.expanduser().resolve()
-    output_parent = args.output.expanduser().resolve()
+    output_parent = (
+        args.output.expanduser().resolve()
+        if args.output is not None
+        else args.resume.expanduser().resolve().parent
+    )
     videos = _find_videos(input_path)
     if not videos:
         parser.error(f"no supported video found under {input_path}")
@@ -1696,8 +1827,14 @@ def main() -> None:
         )
         return
 
-    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_base = output_parent / f"processed_sam3sapiens2_{timestamp}"
+    if args.resume is not None:
+        output_base = args.resume.expanduser().resolve()
+        if not output_base.is_dir():
+            parser.error(f"resume directory does not exist: {output_base}")
+        _log(f"Resume mode: reusing {output_base}")
+    else:
+        timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_base = output_parent / f"processed_sam3sapiens2_{timestamp}"
     output_base.mkdir(parents=True, exist_ok=True)
     if args.dry_run:
         lines = _build_dry_run_report(videos, output_base, args)
@@ -1713,14 +1850,26 @@ def main() -> None:
     use_isolation = not args.no_isolate_batch
     for index, video in enumerate(videos, start=1):
         output_dir = output_base / video.stem
-        sam_dir: Path | None = None
-        if args.sam_results is not None:
-            sam_dir = resolve_sam_results_dir(
-                args.sam_results,
-                video,
-                single_video=len(videos) == 1,
-            )
-        _log(f"Video {index}/{len(videos)}: {video.name}")
+        action, sam_dir, summary = plan_video_processing(
+            video,
+            output_dir,
+            resume=args.resume is not None,
+            sam_results=args.sam_results,
+            single_video=len(videos) == 1,
+        )
+        if action == "skip":
+            assert summary is not None
+            summaries.append(summary)
+            _log(f"Resume: skipping completed video {video.name}")
+            continue
+        if action == "reuse_sam":
+            assert sam_dir is not None
+            with contextlib.suppress(OSError):
+                (output_dir / "FAILED_sam3sapiens2.txt").unlink(missing_ok=True)
+            _log(f"Resume: reusing SAM3 results for {video.name} -> {sam_dir}")
+        else:
+            prepare_sam_rerun_dir(output_dir)
+        _log(f"Video {index}/{len(videos)}: {video.name} ({action})")
         try:
             if use_isolation:
                 cmd = build_worker_command(

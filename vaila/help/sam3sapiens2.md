@@ -3,10 +3,11 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.3.86
+- **Version:** 0.3.88
 - **Updated:** 2026-07-31
 - **GUI:** Frame B → **YOLO + FB** → **SAM3+Sapiens2**
 - **CLI:** Yes
+- **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita vídeos concluídos e `sam3/sam_tracks.csv`; informe também `-i` com a pasta original.
 
 ## What this pipeline changes
 
@@ -81,6 +82,23 @@ uv run python -u vaila/sam3sapiens2.py \
   --bbox-padding 0.12 \
   --contour-margin 8
 ```
+
+### Resume a partial / failed SAM3+Sapiens2 run
+
+```bash
+uv run python -u vaila/sam3sapiens2.py \
+  -i /path/to/videos \
+  --resume /path/to/processed_sam3sapiens2_YYYYMMDD_HHMMSS \
+  --model 1b
+```
+
+`--resume` keeps the same timestamped folder:
+
+- videos with a valid `sam3sapiens2_summary.json` are skipped;
+- videos with usable `sam3/sam_tracks.csv` skip SAM3 and run only Sapiens2;
+- failed videos clear stale `_chunks` / `FAILED_*.txt` and re-run SAM3 via the CUDA-clean coordinator, then Sapiens2.
+
+GUI: **Resume run (optional)** in the SAM3+Sapiens2 dialog.
 
 ### Reuse a completed SAM3 batch
 
