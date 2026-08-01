@@ -48,8 +48,8 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.3.88</p>
-            <p><strong>Updated:</strong> 31 July 2026</p>
+            <p><strong>Version:</strong> 0.3.89</p>
+            <p><strong>Updated:</strong> 01 August 2026</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
             <p><strong>CLI Interface:</strong> Yes (<code>-i</code>, <code>-o</code>, <code>-t</code>, ...)</p>
@@ -174,8 +174,10 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run</code></pr
             <strong>What happens on CUDA OOM (important for big videos)</strong>
             <ul>
                 <li>The script runs each video in an <strong>isolated subprocess</strong> by default (even for a single video).</li>
+                <li>Each CUDA worker owns a process group. Descendants are terminated after exit, and the coordinator waits for free VRAM to return within 512 MiB of its baseline. A 45-second timeout stops the batch before an OOM cascade.</li>
                 <li>If SAM3 exhausts its OOM retry ladder, the per-video subprocess exits and the <strong>coordinator</strong> automatically runs the <strong>chunked divide-and-conquer</strong> fallback from a clean GPU state.</li>
-                <li>Chunked fallback uses a conservative chunk size (≤48 frames) and clamps chunk subprocesses to <code>--max-frames=&lt;chunk_size&gt;</code> and <code>--max-input-long-edge 1280</code>.</li>
+                <li>Chunked fallback retries the complete video at 48 → 24 → 16 frames when needed. Partial chunk sets are never merged or reported as success.</li>
+                <li><code>sam_frames_meta.csv</code> must prove coverage of every source frame before the run is accepted.</li>
             </ul>
         </div>
 

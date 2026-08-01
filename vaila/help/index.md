@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 130 | **Categories:** 7 | **Generated on:** 31/07/2026 (v0.3.88)
+**Total documented modules:** 130 | **Categories:** 7 | **Generated on:** 01/08/2026 (v0.3.89)
 
 ## YOLO + FB chooser (Frame B → B4_r4_c1)
 

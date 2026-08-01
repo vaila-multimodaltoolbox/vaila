@@ -1,7 +1,7 @@
 # SAM3+Sapiens2 — Visualize selected ID
 
-**Version:** 0.3.89  
-**Updated:** 2026-08-01
+**Version:** 0.3.86  
+**Updated:** 2026-07-31
 
 This CPU-only tool rerenders an existing `processed_sam3sapiens2_*` result. It does not load SAM3 or Sapiens2 weights, so it is safe for visualization after an inference run and does not repeat GPU allocation.
 
@@ -19,8 +19,6 @@ Use `--list-ids` to discover IDs and `--dry-run` to validate paths. `--kpt-thr` 
 
 ## GUI
 
-Frame B → **YOLO + FB** → **SAM3+Sapiens2 Visualize ID**. Select the processed run directory first. The matching source video is filled automatically from `sam3sapiens2_summary.json`; if the run was moved, choose the synchronized/cropped source video manually. Select an **output parent** and an ID. The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.
-
-Before rendering, the tool verifies the source frame count and image dimensions against the predictions. This prevents accidentally applying a 631-frame synchronized result to its 2,809-frame original video.
+Frame B → **YOLO + FB** → **SAM3+Sapiens2 Visualize ID**. Select the processed run directory, source video, output directory, and then choose an ID from the populated selection box.
 
 Frames are zero-based and coordinates are full-frame pixels. SAM3 remains the identity authority; Sapiens2 never reassigns IDs.

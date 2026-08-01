@@ -1,7 +1,7 @@
 """Tests for the SAM3-guided Sapiens2 pipeline.
 
-Update Date: 31 July 2026
-Version: 0.3.88
+Update Date: 01 August 2026
+Version: 0.3.89
 """
 
 from __future__ import annotations
@@ -56,6 +56,20 @@ def _write_sam_fixture(root: Path, *, frames: int = 2, obj_id: int = 7) -> Path:
         )
         for frame in range(frames):
             writer.writerow([frame, obj_id, 10 + frame * 10, 20, 20, 40, 0.9, 600, 20, 40])
+    with (root / "sam_frames_meta.csv").open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(
+            [
+                "frame",
+                f"box_x_{obj_id}",
+                f"box_y_{obj_id}",
+                f"box_w_{obj_id}",
+                f"box_h_{obj_id}",
+                f"prob_{obj_id}",
+            ]
+        )
+        for frame in range(frames):
+            writer.writerow([frame, 0.1, 0.2, 0.2, 0.5, 0.9])
     payload = {
         "schema": "vaila_sam_contours_v1",
         "video": "clip.mp4",
@@ -225,13 +239,24 @@ def test_build_sam_command_exports_guidance_without_overlay(tmp_path: Path) -> N
     assert command[command.index("--max-frames") + 1] == "256"
 
 
-def test_plan_video_processing_resume_skip_reuse_and_rerun(tmp_path: Path) -> None:
+def test_plan_video_processing_resume_skip_reuse_and_rerun(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(combo, "_video_frame_count", lambda _path: 2)
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"")
     done = tmp_path / "done"
     done.mkdir()
     (done / "sam3sapiens2_summary.json").write_text(
-        json.dumps({"video": str(video), "ok": True}),
+        json.dumps(
+            {
+                "video": str(video),
+                "ok": True,
+                "completed": True,
+                "expected_frames": 2,
+                "n_frames": 2,
+            }
+        ),
         encoding="utf-8",
     )
     action, sam_dir, summary = combo.plan_video_processing(
@@ -278,7 +303,10 @@ def test_plan_video_processing_resume_skip_reuse_and_rerun(tmp_path: Path) -> No
     assert not (failed / "sam3" / "_chunks").exists()
 
 
-def test_plan_video_processing_honours_external_sam_results(tmp_path: Path) -> None:
+def test_plan_video_processing_honours_external_sam_results(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(combo, "_video_frame_count", lambda _path: 2)
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"")
     batch = tmp_path / "processed_sam_123"
@@ -295,7 +323,61 @@ def test_plan_video_processing_honours_external_sam_results(tmp_path: Path) -> N
     assert summary is None
 
 
-def test_dry_run_resume_plan_reports_skip_and_rerun(tmp_path: Path) -> None:
+def test_resume_rejects_local_partial_sam(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(combo, "_video_frame_count", lambda _path: 2)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"")
+    out = tmp_path / "out"
+    sam_dir = _write_sam_fixture(out / "sam3", frames=1)
+    action, reused, summary = combo.plan_video_processing(
+        video,
+        out,
+        resume=True,
+        sam_results=None,
+        single_video=True,
+    )
+    assert sam_dir.is_dir()
+    assert action == "run"
+    assert reused is None
+    assert summary is None
+
+
+def test_resume_accepts_verified_legacy_complete_summary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(combo, "_video_frame_count", lambda _path: 2)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"")
+    out = tmp_path / "out"
+    out.mkdir()
+    artifacts: dict[str, str] = {}
+    for key, name in (
+        ("predictions", "predictions.json"),
+        ("long_csv", "poses.csv"),
+        ("identity_audit", "audit.csv"),
+    ):
+        path = out / name
+        path.write_text("ok", encoding="utf-8")
+        artifacts[key] = str(path)
+    (out / "sam3sapiens2_summary.json").write_text(
+        json.dumps({"video": str(video), "n_frames": 2, **artifacts}),
+        encoding="utf-8",
+    )
+    action, _sam, summary = combo.plan_video_processing(
+        video,
+        out,
+        resume=True,
+        sam_results=None,
+        single_video=True,
+    )
+    assert action == "skip"
+    assert summary is not None
+
+
+def test_dry_run_resume_plan_reports_skip_and_rerun(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(combo, "_video_frame_count", lambda _path: 2)
     videos_dir = tmp_path / "videos"
     videos_dir.mkdir()
     done_video = videos_dir / "done.mp4"
@@ -308,7 +390,14 @@ def test_dry_run_resume_plan_reports_skip_and_rerun(tmp_path: Path) -> None:
     done_out.mkdir(parents=True)
     fail_out.mkdir(parents=True)
     (done_out / "sam3sapiens2_summary.json").write_text(
-        json.dumps({"video": str(done_video)}),
+        json.dumps(
+            {
+                "video": str(done_video),
+                "completed": True,
+                "expected_frames": 2,
+                "n_frames": 2,
+            }
+        ),
         encoding="utf-8",
     )
     (fail_out / "FAILED_sam3sapiens2.txt").write_text("failed", encoding="utf-8")

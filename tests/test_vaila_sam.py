@@ -1,4 +1,8 @@
-"""Light tests for vaila_sam helpers (no GPU / no HF download)."""
+"""Light tests for vaila_sam helpers (no GPU / no HF download).
+
+Update Date: 01 August 2026
+Version: 0.3.89
+"""
 
 from __future__ import annotations
 
@@ -83,6 +87,26 @@ def test_sam3_build_oom_retry_attempts_extends_below_32() -> None:
     none_chain = _sam3_build_oom_retry_attempts(None, total_frames=5000)
     assert none_chain[0] is None
     assert 32 in none_chain and 8 in none_chain
+
+
+def test_validate_sam_run_complete_rejects_missing_frame(tmp_path: Path) -> None:
+    from vaila.vaila_sam import validate_sam_run_complete
+
+    out = tmp_path / "sam"
+    out.mkdir()
+    (out / "sam_frames_meta.csv").write_text("frame\n0\n1\n3\n", encoding="utf-8")
+    complete, reason = validate_sam_run_complete(out, expected_frames=4)
+    assert complete is False
+    assert "missing=1 [2]" in reason
+
+
+def test_validate_sam_run_complete_accepts_empty_detection_rows(tmp_path: Path) -> None:
+    from vaila.vaila_sam import validate_sam_run_complete
+
+    out = tmp_path / "sam"
+    out.mkdir()
+    (out / "sam_frames_meta.csv").write_text("frame\n0\n1\n2\n", encoding="utf-8")
+    assert validate_sam_run_complete(out, expected_frames=3)[0] is True
 
 
 def test_sam3_subsample_low_fps_signals_chunked_before_writer(
@@ -207,6 +231,47 @@ def test_process_one_video_low_fps_signal_no_chunked_returns_sentinel(
     assert sam._SAM3_NEEDS_CHUNKING_SENTINEL in (out_dir / "FAILED_sam.txt").read_text(
         encoding="utf-8"
     )
+
+
+def test_chunked_minimum_size_never_merges_partial_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import vaila.vaila_sam as sam
+
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"")
+    chunk = tmp_path / "chunk.mp4"
+    chunk.write_bytes(b"")
+    monkeypatch.setattr(sam, "_video_frame_count", lambda _path: 16)
+    monkeypatch.setattr(
+        sam,
+        "_split_video_into_chunks",
+        lambda *_a, **_k: [(chunk, 0, 16)],
+    )
+    monkeypatch.setattr(
+        sam,
+        "run_isolated_gpu_subprocess",
+        lambda *_a, **_k: type("Result", (), {"returncode": sam.EXIT_NEEDS_CHUNKING})(),
+    )
+    monkeypatch.setattr(
+        sam,
+        "_merge_chunk_outputs",
+        lambda *_a, **_k: pytest.fail("partial chunks must never be merged"),
+    )
+    ok, reason = sam._process_video_chunked(
+        video,
+        tmp_path / "out",
+        text_prompt="person",
+        frame_index=0,
+        checkpoint=None,
+        max_input_frames=None,
+        save_overlay_mp4=False,
+        save_mask_png=False,
+        chunk_size=16,
+    )
+    assert ok is False
+    assert "minimum chunk_size=16" in reason
+    assert (tmp_path / "out" / "FAILED_sam.txt").is_file()
 
 
 def test_sam3_auto_max_frames_upper_bound_scales_with_gpu_class() -> None:
