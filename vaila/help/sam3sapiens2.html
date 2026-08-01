@@ -21,9 +21,10 @@
 <body><div class="container">
   <h1>SAM3+Sapiens2 (<code>sam3sapiens2.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.3.86 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-31<br>
+    <strong>Version:</strong> 0.3.88 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-31<br>
     <strong>GUI:</strong> Frame B → YOLO + FB → <strong>SAM3+Sapiens2</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA; SAM3 and Sapiens2 optional stacks.
+    <p><strong>Retomada:</strong> use <code>--resume RUN_DIR -i INPUT_DIR</code> para pular vídeos concluídos e reutilizar resultados SAM3 existentes.</p>
   </div>
 
   <h2>Purpose</h2>
@@ -85,4 +86,12 @@ bash bin/setup_sapiens2.sh
 uv run hf auth login
 uv run vaila/vaila_sam.py --download-weights</code></pre>
   <p>See also <a href="vaila_sam.html">SAM3 help</a> and <a href="vaila_sapiens.html">Sapiens2 help</a>.</p>
-</div></body></html>
+</div><h3>Resume a partial / failed run</h3>
+<pre><code>uv run python -u vaila/sam3sapiens2.py \
+  -i /path/to/videos \
+  --resume /path/to/processed_sam3sapiens2_YYYYMMDD_HHMMSS \
+  --model 1b
+</code></pre>
+<p>Skips completed videos, reuses local <code>sam3/sam_tracks.csv</code>, and retries failed clips with a CUDA-clean SAM3 coordinator.</p>
+
+</body></html>
