@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 30 July 2026
-Version: 0.3.86
+Update Date: 01 August 2026
+Version: 0.3.89
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -88,6 +88,12 @@ try:
         assignment_min_cost,
         write_reid_links_csv,
     )
+    from .gpu_subprocess import (
+        GpuMemoryRecoveryError,
+        popen_process_group_kwargs,
+        run_isolated_gpu_subprocess,
+        terminate_process_tree,
+    )
     from .sam_postprocess import VAILA_ANCHORS, _anchor_xy, _format_cell
     from .vaila_sam import _open_sam3_video_writer
 except ImportError:
@@ -96,6 +102,12 @@ except ImportError:
         GeometricLinkerConfig,
         assignment_min_cost,
         write_reid_links_csv,
+    )
+    from gpu_subprocess import (  # ty: ignore[unresolved-import]
+        GpuMemoryRecoveryError,
+        popen_process_group_kwargs,
+        run_isolated_gpu_subprocess,
+        terminate_process_tree,
     )
     from sam_postprocess import (  # ty: ignore[unresolved-import]
         VAILA_ANCHORS,
@@ -197,6 +209,11 @@ uv run vaila/vaila_sapiens.py --download-weights --model 1b
 SAPIENS_OUTPUT_FILE_GLOSSARY = """\
 Biomechanics / vailá downstream CSVs (written after every run)
 --------------------------------------------------------------
+  sapiens_summary.json
+      Transactional completion proof: expected_frames, processed_frames,
+      inferred_frames, stride, completed. The coordinator accepts success only
+      when expected_frames == processed_frames and completed is true.
+
   <stem>_markers.csv
       getpixelvideo + REC2D/REC3D point format:
       frame,p1_x,p1_y,...,pN_x,pN_y  (bbox bottom-center anchor, stable pN slots)
@@ -392,6 +409,15 @@ def _find_videos(path: Path) -> list[Path]:
             continue
         out.append(p.resolve())
     return out
+
+
+def _video_frame_count(path: Path) -> int:
+    cap = cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        return 0
+    count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    cap.release()
+    return max(0, count)
 
 
 @dataclass(frozen=True)
@@ -2047,6 +2073,35 @@ def _write_failure_marker(output_dir: Path, video_path: Path, reason: str) -> No
         pass
 
 
+def validate_sapiens_run_complete(
+    output_dir: Path,
+    *,
+    expected_frames: int,
+) -> tuple[bool, str]:
+    """Validate the transactional completion summary of one Sapiens2 video."""
+    failure = output_dir / "FAILED_sapiens.txt"
+    if failure.is_file():
+        return False, f"failure marker exists: {failure}"
+    summary_path = output_dir / "sapiens_summary.json"
+    if not summary_path.is_file():
+        return False, f"missing completion summary: {summary_path}"
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"invalid completion summary {summary_path}: {exc}"
+    expected = int(summary.get("expected_frames", -1))
+    processed = int(summary.get("processed_frames", -1))
+    completed = summary.get("completed") is True
+    if not completed or expected != int(expected_frames) or processed != int(expected_frames):
+        return (
+            False,
+            "incomplete Sapiens2 frame coverage: "
+            f"source={expected_frames}, summary_expected={expected}, processed={processed}, "
+            f"completed={completed}",
+        )
+    return True, f"complete frame coverage: {processed}/{expected_frames}"
+
+
 @dataclass(frozen=True, slots=True)
 class SapiensGuiSettings:
     input_path: Path
@@ -2468,6 +2523,7 @@ def _write_readme_sapiens(
         "  sapiens_reid_links.csv       — geometric Re-ID audit (frame,raw_id,stable_id)\n"
         "  sapiens_tracks.csv           — bbox tracks with stable_id\n"
         "  sapiens_bbox_tracks.csv      — SAM-compatible bbox tracks for getpixelvideo\n"
+        "  sapiens_summary.json          — complete frame-count transaction record\n"
         "  <stem>_id_NN_sapiens_pose.csv — wide pose for getpixelvideo Load\n"
         "  FAILED_sapiens.txt           — present only on failure\n\n"
         + SAPIENS_OUTPUT_FILE_GLOSSARY
@@ -2505,6 +2561,9 @@ def run_sapiens_on_video(
 ) -> None:
     """Run Sapiens2 pose on one video; writes overlay MP4 + JSON + CSV."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    for stale in (output_dir / "sapiens_summary.json", output_dir / "FAILED_sapiens.txt"):
+        with contextlib.suppress(OSError):
+            stale.unlink(missing_ok=True)
     model_key = _normalize_model_key(model)
     micro_batch = (
         pose_batch_size if pose_batch_size is not None else _default_pose_batch_size(model_key)
@@ -2652,6 +2711,12 @@ def run_sapiens_on_video(
         if pbar is not None:
             pbar.close()
 
+    if n_frames > 0 and fi != n_frames:
+        raise RuntimeError(
+            f"Video decode ended early: expected {n_frames} frames but read {fi}; "
+            "refusing to publish a partial Sapiens2 result."
+        )
+
     if stabilize_ids:
         if reid_bidirectional:
             pose_by_frame, reid_audit = _stabilize_sapiens_pose_timeline_bidirectional(
@@ -2761,11 +2826,32 @@ def run_sapiens_on_video(
         keypoint_names=kp_names,
     )
     markers_name = f"{stem}_markers.csv"
+    summary = {
+        "schema": "vaila_sapiens_completion_v1",
+        "video": str(video_path.resolve()),
+        "output_dir": str(output_dir.resolve()),
+        "expected_frames": int(n_frames),
+        "processed_frames": int(fi),
+        "inferred_frames": int(len(frames_records)),
+        "stride": int(stride),
+        "completed": True,
+    }
+    (output_dir / "sapiens_summary.json").write_text(
+        json.dumps(summary, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    complete, coverage_reason = validate_sapiens_run_complete(
+        output_dir,
+        expected_frames=n_frames,
+    )
+    if not complete:
+        raise RuntimeError(coverage_reason)
     _sapiens_log(
         f"Done {video_path.name}: overlay={overlay_path.name if save_overlay else 'skipped'}, "
         f"json={json_path.name}, csv={csv_path.name}, markers={markers_name} "
         f"({fi} frames, {len(frames_records)} inferred, "
-        f"{len(bio_paths)} biomech + {len(gpv_paths)} getpixelvideo CSVs)"
+        f"{len(bio_paths)} biomech + {len(gpv_paths)} getpixelvideo CSVs); "
+        f"{coverage_reason}"
     )
 
 
@@ -3076,6 +3162,7 @@ def _start_sapiens_batch_subprocess(
             stderr=subprocess.STDOUT,
             text=True,
             env=env,
+            **popen_process_group_kwargs(),
         )
     except Exception as e:
         log_handle.close()
@@ -3140,7 +3227,7 @@ def _start_sapiens_batch_subprocess(
     def _poll() -> None:
         if progress.cancelled and proc.poll() is None:
             with contextlib.suppress(Exception):
-                proc.terminate()
+                terminate_process_tree(proc)
         _drain_log_file()
         rc = proc.poll()
         if rc is None:
@@ -4148,13 +4235,34 @@ def main() -> None:
                 appearance_reid_threshold=float(args.appearance_reid_threshold),
             )
             try:
-                rc = subprocess.call(cmd, env=env)
+                gpu_result = run_isolated_gpu_subprocess(
+                    cmd,
+                    env=env,
+                    device=int(args.device),
+                    log=lambda message: print(f"  [Sapiens2] {message}", flush=True),
+                )
+                rc = gpu_result.returncode
             except KeyboardInterrupt:
                 print(f"  INTERRUPTED on {vf.name}")
                 raise
+            except GpuMemoryRecoveryError as exc:
+                reason = f"GPU cleanup barrier failed: {exc}"
+                failed.append(f"{vf.name}: {reason}")
+                _write_failure_marker(out_dir, vf, reason)
+                print(f"  ERROR on {vf.name}: {reason}", flush=True)
+                raise SystemExit(1) from exc
             if rc == 0:
-                succeeded += 1
-                print(f"  Done: {out_dir}", flush=True)
+                complete, reason = validate_sapiens_run_complete(
+                    out_dir,
+                    expected_frames=_video_frame_count(vf),
+                )
+                if complete:
+                    succeeded += 1
+                    print(f"  Done: {out_dir} — {reason}", flush=True)
+                else:
+                    failed.append(f"{vf.name}: {reason}")
+                    _write_failure_marker(out_dir, vf, reason)
+                    print(f"  ERROR on {vf.name}: {reason}", flush=True)
             else:
                 failed.append(f"{vf.name}: subprocess exit={rc}")
                 print(f"  ERROR on {vf.name}: subprocess exit={rc}", flush=True)

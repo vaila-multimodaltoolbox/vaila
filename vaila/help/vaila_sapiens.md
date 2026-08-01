@@ -4,8 +4,8 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.86
-- **Updated:** 2026-07-30
+- **Version:** 0.3.89
+- **Updated:** 2026-08-01
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -52,7 +52,7 @@ This clones `.local/third_party/sapiens2/` (gitignored) and downloads:
 **VRAM tips (RTX 4090):** flip-test is **off by default** (upstream config enables it but doubles VRAM).
 Use `--flip-test` only when you need max accuracy and have headroom. Pass a **single `.mp4`**
 or a clean folder — batch scan skips `*_sapiens_overlay.*` and `processed_sapiens_*` subdirs.
-Each video runs in an isolated subprocess so a failed run does not poison the next one.
+Each video runs in an isolated process group. After every worker, vailá terminates surviving descendants and waits for VRAM to return to its pre-worker baseline before starting the next video. If the barrier times out, the batch stops instead of cascading into OOM. A run is successful only after all source frames were decoded and `sapiens_summary.json` records matching `expected_frames` and `processed_frames`.
 
 ### Terminal progress (v0.3.74)
 
@@ -356,6 +356,7 @@ Under `processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/`:
 | `<stem>_getpixelvideo_pose.csv` | Alias when only one person is tracked |
 | `sapiens_roi_used.toml` | Effective ROI copied into the run for reproducibility (ROI runs only) |
 | `README_sapiens.txt` | Schema summary + ROI provenance |
+| `sapiens_summary.json` | Transactional completion proof: expected/processed/inferred frame counts and `completed=true` |
 | `FAILED_sapiens.txt` | Error marker on failure |
 
 ### getpixelvideo workflow (v0.3.75)

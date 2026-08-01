@@ -833,7 +833,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.selected_id not in ids:
         parser.error(f"ID {args.selected_id} is unavailable; choose one of {ids}")
     if args.dry_run:
-        validate_source_video(args.video.expanduser().resolve(), payload)
         print(
             f">> Dry-run OK: video={args.video} run_dir={run_dir} id={args.selected_id} output={args.output}"
         )

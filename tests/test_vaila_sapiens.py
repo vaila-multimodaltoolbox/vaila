@@ -1,5 +1,8 @@
 """Unit tests for vaila.vaila_sapiens (Sapiens2 Pose video wrapper).
 
+Update Date: 01 August 2026
+Version: 0.3.89
+
 Update Date: 28 July 2026
 Version: 0.3.85
 """
@@ -15,6 +18,18 @@ import numpy as np
 import pytest
 
 from vaila import vaila_sapiens as vs
+
+
+def test_validate_sapiens_run_complete_rejects_partial_summary(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "sapiens_summary.json").write_text(
+        '{"completed": true, "expected_frames": 10, "processed_frames": 8}',
+        encoding="utf-8",
+    )
+    complete, reason = vs.validate_sapiens_run_complete(out, expected_frames=10)
+    assert complete is False
+    assert "processed=8" in reason
 
 
 def test_normalize_model_key_default() -> None:

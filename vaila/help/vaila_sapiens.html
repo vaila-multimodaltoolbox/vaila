@@ -30,7 +30,7 @@
     <h1>Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
 
     <div class="module-info">
-        <p><strong>Version:</strong> 0.3.86 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-07-30</p>
+        <p><strong>Version:</strong> 0.3.89 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-01</p>
         <p><strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> → <strong>Sapiens2 Pose</strong></p>
         <p><strong>Category:</strong> Markerless 2D / Meta (Facebook)</p>
     </div>
@@ -473,6 +473,7 @@ uv run vaila/vaila_sapiens.py \
         <tr><td><code>sapiens_vaila_*.csv</code></td><td>Five bbox anchors (same schema as SAM3)</td></tr>
         <tr><td><code>sapiens_roi_used.toml</code></td><td>Effective ROI copied into an ROI run for reproducibility</td></tr>
         <tr><td><code>README_sapiens.txt</code></td><td>Schema summary + ROI provenance for the run</td></tr>
+        <tr><td><code>sapiens_summary.json</code></td><td>Transactional completion proof with expected, processed and inferred frame counts</td></tr>
     </table>
 
     <h2>getpixelvideo workflow</h2>
@@ -526,7 +527,8 @@ uv run vaila/vaila_sapiens.py \
     <ul>
         <li>Flip-test is <strong>off by default</strong> (doubles VRAM). Use <code>--flip-test</code> only when you need max accuracy.</li>
         <li>On 1080p multi-person with <code>5b</code>, try <code>--stride 2</code> or higher to avoid OOM.</li>
-        <li>Each video runs in an isolated subprocess — a failed run does not affect the next one.</li>
+        <li>Each video runs in an isolated process group; descendants are terminated and free VRAM must return to its pre-worker baseline before the next video starts.</li>
+        <li>Success requires every source frame and a valid <code>sapiens_summary.json</code> with matching expected/processed counts.</li>
     </ul>
 
     <div class="footer">

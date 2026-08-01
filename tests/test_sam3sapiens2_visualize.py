@@ -1,7 +1,7 @@
 """Tests for the selected-ID SAM3+Sapiens2 rerenderer.
 
-Update Date: 31 July 2026
-Version: 0.3.86
+Update Date: 01 August 2026
+Version: 0.3.89
 """
 
 from __future__ import annotations
@@ -90,6 +90,37 @@ def test_discover_and_resolve_selected_id(tmp_path: Path) -> None:
     run, video = _fixture_run(tmp_path)
     assert viz.resolve_run_dir(run.parent, video) == run.resolve()
     assert viz.discover_ids(run) == [2, 9]
+
+
+def test_discovers_recorded_source_video_and_validates_alignment(tmp_path: Path) -> None:
+    run, video = _fixture_run(tmp_path)
+    (run / "sam3sapiens2_summary.json").write_text(
+        json.dumps({"video": str(video)}), encoding="utf-8"
+    )
+    payload = viz.load_predictions(run)
+    assert viz.discover_source_video(run, payload) == video.resolve()
+    assert viz.validate_source_video(video, payload)["frames"] == 2
+
+    wrong = tmp_path / "wrong.mp4"
+    writer = cv2.VideoWriter(str(wrong), cv2.VideoWriter_fourcc(*"mp4v"), 10.0, (80, 60))
+    for _ in range(3):
+        writer.write(np.zeros((60, 80, 3), dtype=np.uint8))
+    writer.release()
+    try:
+        viz.validate_source_video(wrong, payload)
+    except ValueError as exc:
+        assert "frames=3, expected 2" in str(exc)
+    else:
+        raise AssertionError("A frame-count mismatch must be rejected")
+
+
+def test_gui_output_is_new_child_of_selected_parent(tmp_path: Path) -> None:
+    video = tmp_path / "clip.mp4"
+    first = viz._unique_gui_output_dir(tmp_path, video, 4)
+    assert first.parent == tmp_path.resolve()
+    assert first.name == "clip_sam3sapiens2_visualized_id_04"
+    first.mkdir()
+    assert viz._unique_gui_output_dir(tmp_path, video, 4).name.endswith("_2")
 
 
 def test_selected_artifacts_filter_json_and_csv(tmp_path: Path) -> None:

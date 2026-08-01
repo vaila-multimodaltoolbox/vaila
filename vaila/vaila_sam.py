@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 31 July 2026
-Version: 0.3.88
+Update Date: 01 August 2026
+Version: 0.3.89
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -103,7 +103,7 @@ import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Any
+from typing import Any, Literal, cast
 
 import cv2
 import numpy as np
@@ -125,6 +125,21 @@ except ImportError:
         bbox_iou_xywh,
         mask_iou_u8,
         write_reid_links_csv,
+    )
+
+try:
+    from .gpu_subprocess import (
+        GpuMemoryRecoveryError,
+        popen_process_group_kwargs,
+        run_isolated_gpu_subprocess,
+        terminate_process_tree,
+    )
+except ImportError:
+    from gpu_subprocess import (  # ty: ignore[unresolved-import]
+        GpuMemoryRecoveryError,
+        popen_process_group_kwargs,
+        run_isolated_gpu_subprocess,
+        terminate_process_tree,
     )
 
 SAM3_DEFAULT_CKPT_NAME = "sam3.pt"
@@ -174,7 +189,7 @@ def _patch_sam3_disable_perpetual_tracker_autocast() -> None:
             ctx.__exit__(None, None, None)
             self.bf16_context = contextlib.nullcontext()
 
-    _stp.Sam3TrackerPredictor.__init__ = _init_no_perpetual_autocast  # ty: ignore[invalid-assignment]
+    _stp.Sam3TrackerPredictor.__init__ = _init_no_perpetual_autocast
     _SAM3_PERPETUAL_TRACKER_AUTOCAST_PATCHED = True
 
 
@@ -1320,6 +1335,57 @@ def _video_frame_count(video_path: str) -> int:
     return max(0, n)
 
 
+def validate_sam_run_complete(
+    output_dir: Path,
+    *,
+    expected_frames: int,
+) -> tuple[bool, str]:
+    """Prove that a SAM run covers every source frame exactly once or more.
+
+    ``sam_frames_meta.csv`` always has one row per exported frame, including
+    frames with no detections, so it is the authoritative coverage artifact.
+    Merely finding ``sam_tracks.csv`` is insufficient: a partial chunk merge
+    can contain valid tracks while omitting a large suffix of the video.
+    """
+    failure = output_dir / "FAILED_sam.txt"
+    if failure.is_file():
+        return False, f"failure marker exists: {failure}"
+    if expected_frames <= 0:
+        return False, f"invalid expected frame count: {expected_frames}"
+    meta_path = output_dir / "sam_frames_meta.csv"
+    if not meta_path.is_file():
+        return False, f"missing frame coverage file: {meta_path}"
+    frames: set[int] = set()
+    try:
+        with meta_path.open(encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                raw = row.get("frame")
+                if raw is not None and raw.strip():
+                    frames.add(int(float(raw)))
+    except (OSError, ValueError, csv.Error) as exc:
+        return False, f"could not read frame coverage from {meta_path}: {exc}"
+    expected = set(range(int(expected_frames)))
+    missing = sorted(expected - frames)
+    extra = sorted(frames - expected)
+    if missing or extra:
+        missing_preview = missing[:8]
+        extra_preview = extra[:8]
+        return (
+            False,
+            f"incomplete SAM frame coverage: expected={expected_frames}, "
+            f"present={len(frames)}, missing={len(missing)} {missing_preview}, "
+            f"extra={len(extra)} {extra_preview}",
+        )
+    readme = output_dir / "README_sam.txt"
+    if readme.is_file():
+        with contextlib.suppress(OSError):
+            text = readme.read_text(encoding="utf-8")
+            for line in text.splitlines():
+                if line.startswith("failed_chunks=") and line.split("=", 1)[1].strip() != "0":
+                    return False, f"SAM chunk manifest reports {line}"
+    return True, f"complete frame coverage: {len(frames)}/{expected_frames}"
+
+
 def _video_basic_meta(video_path: Path) -> dict[str, float | int | str]:
     """Best-effort metadata probe via OpenCV (no decode pass)."""
     vp = str(video_path.resolve())
@@ -1515,8 +1581,14 @@ def _nearest_sess_idx_for_orig_frame(frame_idx: int, sess_to_orig: np.ndarray) -
         candidates.append(ins)
     if not candidates:
         return 0
+
     # Prefer smaller temporal error; on ties, prefer the larger original index (newer keyframe).
-    return int(min(candidates, key=lambda j: (abs(int(a[j]) - frame_idx), -int(a[j]))))
+    def _distance_key(candidate: int) -> tuple[int, int]:
+        index = int(candidate)
+        original_frame = int(a[index])
+        return abs(original_frame - frame_idx), -original_frame
+
+    return int(min(candidates, key=_distance_key))
 
 
 # OpenCV on some Linux boards tries ``h264_v4l2m2m`` for ``avc1``/``.mp4`` first
@@ -1740,7 +1812,8 @@ def _run_sam3_postprocess_for_dir(
         from vaila.sam_postprocess import extract_points_from_sam_run, write_vaila_anchor_csvs
 
         _log(f"[postprocess] mode={postprocess_points}")
-        out_csv = extract_points_from_sam_run(out_dir, mode=postprocess_points)
+        mode = cast(Literal["foot", "center", "mask", "all"], postprocess_points)
+        out_csv = extract_points_from_sam_run(out_dir, mode=mode)
         _log(f"[postprocess] wrote {out_csv}")
         vaila_outs = write_vaila_anchor_csvs(out_dir)
         _log(f"[postprocess] wrote {len(vaila_outs)} vailá anchor CSV(s)")
@@ -2334,14 +2407,12 @@ def _merge_chunk_outputs(
         all_unique_oids.update(m.values())
     sorted_oids = sorted(all_unique_oids)
 
-    header_line = ""
-    if sorted_oids:
-        header_cols = ["frame"]
-        for oid in sorted_oids:
-            header_cols.extend(
-                [f"box_x_{oid}", f"box_y_{oid}", f"box_w_{oid}", f"box_h_{oid}", f"prob_{oid}"]
-            )
-        header_line = ",".join(header_cols)
+    header_cols = ["frame"]
+    for oid in sorted_oids:
+        header_cols.extend(
+            [f"box_x_{oid}", f"box_y_{oid}", f"box_w_{oid}", f"box_h_{oid}", f"prob_{oid}"]
+        )
+    header_line = ",".join(header_cols)
 
     all_meta_rows: list[str] = []
     merged_tracks_rows: list[str] = []
@@ -2668,8 +2739,6 @@ def _process_video_chunked(
 
     Returns ``(success, message)``.
     """
-    import subprocess as _sp
-
     chunk_save_png = save_mask_png or save_overlay_mp4
 
     def _log(s: str) -> None:
@@ -2819,18 +2888,40 @@ def _process_video_chunked(
         env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
         try:
-            rc = _sp.call(cmd, env=env)
+            gpu_result = run_isolated_gpu_subprocess(
+                cmd,
+                env=env,
+                device=0,
+                log=lambda message: _log(f"  [SAM3-CHUNK] {message}"),
+            )
+            rc = gpu_result.returncode
         except KeyboardInterrupt:
             _log(f"  [SAM3-CHUNK] Interrupted at chunk {ci + 1}")
             failed_chunks.append(ci)
             break
+        except GpuMemoryRecoveryError as e:
+            reason = f"GPU cleanup barrier failed after chunk {ci + 1}: {e}"
+            _log(f"  [SAM3-CHUNK] {reason}")
+            _write_failure_marker(output_dir, video_file, reason)
+            return False, reason
         except Exception as e:
             _log(f"  [SAM3-CHUNK] Exception on chunk {ci + 1}: {e}")
             failed_chunks.append(ci)
             continue
 
         if rc == 0:
-            _log(f"  [SAM3-CHUNK] Chunk {ci + 1}/{len(chunks)} done")
+            chunk_complete, chunk_reason = validate_sam_run_complete(
+                chunk_out,
+                expected_frames=end_frame - start_frame,
+            )
+            if chunk_complete:
+                _log(f"  [SAM3-CHUNK] Chunk {ci + 1}/{len(chunks)} done — {chunk_reason}")
+            else:
+                _log(
+                    f"  [SAM3-CHUNK] Chunk {ci + 1}/{len(chunks)} returned "
+                    f"incomplete output: {chunk_reason}"
+                )
+                failed_chunks.append(ci)
         else:
             _log(f"  [SAM3-CHUNK] Chunk {ci + 1}/{len(chunks)} FAILED (exit={rc})")
             failed_chunks.append(ci)
@@ -2839,7 +2930,47 @@ def _process_video_chunked(
         with contextlib.suppress(OSError):
             chunk_path.unlink(missing_ok=True)
 
-    # Merge results
+    # Never merge a partial result. Retry the complete video with smaller
+    # temporal chunks so dense scenes can still finish with full coverage.
+    if failed_chunks:
+        if int(chunk_size) > 16:
+            next_chunk_size = max(16, int(chunk_size) // 2)
+            _log(
+                f"  [SAM3-CHUNK] {len(failed_chunks)}/{len(chunks)} chunk(s) failed; "
+                f"retrying the complete video with chunk_size={next_chunk_size}"
+            )
+            shutil.rmtree(str(chunk_work_dir), ignore_errors=True)
+            return _process_video_chunked(
+                video_file,
+                output_dir,
+                text_prompt=text_prompt,
+                frame_index=frame_index,
+                checkpoint=checkpoint,
+                max_input_frames=max_input_frames,
+                max_input_long_edge=max_input_long_edge,
+                save_overlay_mp4=save_overlay_mp4,
+                save_mask_png=save_mask_png,
+                overlay_rich=overlay_rich,
+                draw_contour=draw_contour,
+                draw_box=draw_box,
+                draw_id=draw_id,
+                draw_centroid=draw_centroid,
+                save_contours=save_contours,
+                save_tracks_csv=save_tracks_csv,
+                delete_mask_png=delete_mask_png,
+                stabilize_ids=stabilize_ids,
+                contours_format=contours_format,
+                contours_gzip=contours_gzip,
+                chunk_size=next_chunk_size,
+                overlap_frames=overlap_frames,
+                postprocess_points=postprocess_points,
+                log=log,
+            )
+        reason = f"{len(failed_chunks)}/{len(chunks)} chunks failed at minimum chunk_size=16"
+        _write_failure_marker(output_dir, video_file, reason)
+        return False, reason
+
+    # Merge results only after every chunk succeeded.
     successful_chunks = len(chunks) - len(failed_chunks)
     if successful_chunks == 0:
         _write_failure_marker(output_dir, video_file, "All chunks failed (CUDA OOM)")
@@ -2889,17 +3020,13 @@ def _process_video_chunked(
     )
 
     # Clean up chunk work dir (keep outputs in final dir)
-    import shutil
-
     with contextlib.suppress(OSError):
         shutil.rmtree(str(chunk_work_dir), ignore_errors=True)
 
-    if failed_chunks:
-        _log(
-            f"  [SAM3-CHUNK] Warning: {len(failed_chunks)} chunk(s) failed, "
-            f"but {successful_chunks} succeeded → partial result available"
-        )
-        return True, f"Partial: {successful_chunks}/{len(chunks)} chunks OK"
+    complete, reason = validate_sam_run_complete(output_dir, expected_frames=n_total)
+    if not complete:
+        _write_failure_marker(output_dir, video_file, reason)
+        return False, reason
     _log(f"  [SAM3-CHUNK] All {len(chunks)} chunks merged successfully")
     return True, ""
 
@@ -3542,8 +3669,6 @@ def run_sam3_on_video(
             print(
                 "[SAM3] Frame-by-frame fallback activated: processing each frame via isolated subprocesses."
             )
-            import subprocess
-
             cap = cv2.VideoCapture(vp)
             if not cap.isOpened():
                 raise OSError(f"Could not open video: {vp}")
@@ -3600,9 +3725,16 @@ def run_sam3_on_video(
                     cmd.extend(["-w", str(checkpoint)])
 
                 try:
-                    subprocess.run(cmd, check=True, capture_output=True, text=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"  [SAM3] Process failed for frame {fi_eval}:\n{e.stderr}")
+                    frame_result = run_isolated_gpu_subprocess(cmd, device=0)
+                except GpuMemoryRecoveryError as e:
+                    raise RuntimeError(
+                        f"GPU cleanup failed after isolated frame {fi_eval}: {e}"
+                    ) from e
+                if frame_result.returncode != 0:
+                    print(
+                        f"  [SAM3] Process failed for frame {fi_eval}: "
+                        f"exit={frame_result.returncode}"
+                    )
                     continue
 
                 # Parse output to rebuild the tracker dictionary
@@ -4102,6 +4234,13 @@ def run_sam3_on_video(
         )
         _make_sam_bbox_tracks_alias(output_dir)
 
+        complete, coverage_reason = validate_sam_run_complete(
+            output_dir,
+            expected_frames=_video_frame_count(str(video_path)),
+        )
+        if not complete:
+            raise RuntimeError(coverage_reason)
+
         # Summary for the user.
         _written_files = [
             f
@@ -4113,7 +4252,9 @@ def run_sam3_on_video(
             )
             if f is not None and Path(f).is_file()
         ]
-        print(f"[SAM3] ✓ Done — {len(_written_files)} output files in {output_dir}")
+        print(
+            f"[SAM3] ✓ Done — {len(_written_files)} output files in {output_dir}; {coverage_reason}"
+        )
         for f in _written_files:
             print(f"  • {Path(f).name} ({Path(f).stat().st_size / 1024:.0f} KB)")
         sys.stdout.flush()
@@ -5288,6 +5429,7 @@ def _start_sam_batch_subprocess(
             stderr=subprocess.STDOUT,
             text=True,
             env=env,
+            **popen_process_group_kwargs(),
         )
     except Exception as e:
         log_handle.close()
@@ -5354,7 +5496,7 @@ def _start_sam_batch_subprocess(
     def _poll() -> None:
         if progress.cancelled and proc.poll() is None:
             with contextlib.suppress(Exception):
-                proc.terminate()
+                terminate_process_tree(proc)
         _drain_log_file()
         rc = proc.poll()
         if rc is None:
@@ -6087,8 +6229,6 @@ def main() -> None:
         failed_cli: list[str] = []
 
         if use_isolation:
-            import subprocess as _sp
-
             scope = "single-video" if len(video_files) == 1 else "each video"
             print(f"[batch] subprocess-per-video isolation: ENABLED ({scope} in a fresh process)")
 
@@ -6157,21 +6297,37 @@ def main() -> None:
                 print(f"Processing video {idx}/{len(video_files)}: {video_file.name} (isolated)")
                 print(f"{'=' * 60}")
                 exact_output = os.environ.get("VAILA_SAM_COORDINATOR_OUTPUT_DIR")
-                out_dir = Path(exact_output).resolve() if exact_output else output_base / video_file.stem
+                out_dir = (
+                    Path(exact_output).resolve() if exact_output else output_base / video_file.stem
+                )
                 out_dir.mkdir(parents=True, exist_ok=True)
                 cmd = _build_isolated_cmd(video_file, out_dir)
                 env = os.environ.copy()
                 env.setdefault("TQDM_DISABLE", "1")
                 env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
                 try:
-                    rc = _sp.call(cmd, env=env)
+                    gpu_result = run_isolated_gpu_subprocess(
+                        cmd,
+                        env=env,
+                        device=0,
+                        log=lambda message: print(f"  [SAM3] {message}", flush=True),
+                    )
+                    rc = gpu_result.returncode
                 except KeyboardInterrupt:
                     print(f"  INTERRUPTED on {video_file.name}")
                     failed_cli.append(f"{video_file.name}: interrupted")
                     raise
                 if rc == 0:
-                    print(f"  Done: {out_dir}")
-                    continue
+                    complete, reason = validate_sam_run_complete(
+                        out_dir,
+                        expected_frames=_video_frame_count(str(video_file)),
+                    )
+                    if complete:
+                        print(f"  Done: {out_dir} — {reason}")
+                        continue
+                    rc = 1
+                    _write_failure_marker(out_dir, video_file, reason)
+                    print(f"  ERROR on {video_file.name}: {reason}")
                 if rc == EXIT_NEEDS_CHUNKING:
                     print(
                         f"  [coordinator] {video_file.name}: per-video subprocess requested chunked fallback; "
@@ -6229,7 +6385,9 @@ def main() -> None:
                 print(f"Processing video {idx}/{len(video_files)}: {video_file.name}")
                 print(f"{'=' * 60}")
                 exact_output = os.environ.get("VAILA_SAM_COORDINATOR_OUTPUT_DIR")
-                out_dir = Path(exact_output).resolve() if exact_output else output_base / video_file.stem
+                out_dir = (
+                    Path(exact_output).resolve() if exact_output else output_base / video_file.stem
+                )
                 out_dir.mkdir(parents=True, exist_ok=True)
                 ok, err = _process_one_video_with_oom_retry(
                     video_file,
