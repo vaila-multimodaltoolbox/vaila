@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 30 July 2026
-Version: 0.3.85
+Update Date: 31 July 2026
+Version: 0.3.88
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -6156,7 +6156,8 @@ def main() -> None:
                 print(f"\n{'=' * 60}")
                 print(f"Processing video {idx}/{len(video_files)}: {video_file.name} (isolated)")
                 print(f"{'=' * 60}")
-                out_dir = output_base / video_file.stem
+                exact_output = os.environ.get("VAILA_SAM_COORDINATOR_OUTPUT_DIR")
+                out_dir = Path(exact_output).resolve() if exact_output else output_base / video_file.stem
                 out_dir.mkdir(parents=True, exist_ok=True)
                 cmd = _build_isolated_cmd(video_file, out_dir)
                 env = os.environ.copy()
@@ -6227,7 +6228,8 @@ def main() -> None:
                 print(f"\n{'=' * 60}")
                 print(f"Processing video {idx}/{len(video_files)}: {video_file.name}")
                 print(f"{'=' * 60}")
-                out_dir = output_base / video_file.stem
+                exact_output = os.environ.get("VAILA_SAM_COORDINATOR_OUTPUT_DIR")
+                out_dir = Path(exact_output).resolve() if exact_output else output_base / video_file.stem
                 out_dir.mkdir(parents=True, exist_ok=True)
                 ok, err = _process_one_video_with_oom_retry(
                     video_file,
