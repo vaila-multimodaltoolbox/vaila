@@ -3,11 +3,11 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.3.88
-- **Updated:** 2026-07-31
+- **Version:** 0.3.89
+- **Updated:** 2026-08-01
 - **GUI:** Frame B → **YOLO + FB** → **SAM3+Sapiens2**
 - **CLI:** Yes
-- **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita vídeos concluídos e `sam3/sam_tracks.csv`; informe também `-i` com a pasta original.
+- **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original.
 
 ## What this pipeline changes
 
@@ -63,6 +63,8 @@ If **Existing SAM results** is empty, every video is processed as:
 SAM3 child process → child exits/VRAM is clean → Sapiens2-from-SAM worker
 ```
 
+The transition is guarded by a GPU recovery barrier: descendants are terminated and free VRAM must return to the pre-SAM baseline before Sapiens2 can load. `sam_frames_meta.csv` must contain every source frame; otherwise Sapiens2 is not loaded.
+
 If it points to an existing batch, SAM3 is skipped and its per-video subdirectory is matched by video stem.
 
 ## CLI
@@ -94,8 +96,9 @@ uv run python -u vaila/sam3sapiens2.py \
 
 `--resume` keeps the same timestamped folder:
 
-- videos with a valid `sam3sapiens2_summary.json` are skipped;
-- videos with usable `sam3/sam_tracks.csv` skip SAM3 and run only Sapiens2;
+- videos with a valid, `completed=true` `sam3sapiens2_summary.json` whose frame count matches the source are skipped;
+- videos whose `sam3/sam_frames_meta.csv` proves complete frame coverage skip SAM3 and run only Sapiens2;
+- a mere `sam_tracks.csv` is not enough: partial SAM runs are rejected and rerun;
 - failed videos clear stale `_chunks` / `FAILED_*.txt` and re-run SAM3 via the CUDA-clean coordinator, then Sapiens2.
 
 GUI: **Resume run (optional)** in the SAM3+Sapiens2 dialog.

@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.3.88
-- **Updated:** 31 July 2026
+- **Version:** 0.3.89
+- **Updated:** 01 August 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -142,8 +142,10 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run
 ### What happens on CUDA OOM (important for big videos)
 
 - The script runs each video in an **isolated subprocess** by default (even for a single video). This prevents SAM3's CUDA state from leaking into subsequent runs.
+- Every CUDA child now owns a process group. After it exits, vailá terminates surviving descendants and waits until free VRAM returns to within 512 MiB of the pre-worker baseline. If recovery does not occur within 45 seconds, the batch stops before launching another model and records a cleanup failure instead of cascading into OOM.
 - If SAM3 exhausts its in-process OOM retry ladder (frame caps and long-edge caps), the per-video subprocess exits and the **coordinator process** automatically runs the **chunked divide-and-conquer** fallback from a clean GPU state.
-- Chunked fallback uses a conservative chunk size (≤48 frames), shares 2 overlap frames between adjacent chunks, links chunk-local IDs by same-frame IoU/centroid matching, drops duplicate overlap frames, and regenerates the final overlay from remapped masks so displayed IDs match the final CSVs.
+- Chunked fallback starts at a conservative size (≤48 frames). If any chunk fails, the complete video is retried at `24`, then `16` frames. A partial set is never merged or reported as success.
+- Successful output is accepted only when `sam_frames_meta.csv` proves coverage of every source frame. Chunked runs share 2 overlap frames, link chunk-local IDs by same-frame IoU/centroid matching, drop duplicate overlap frames, and regenerate the final overlay from remapped masks so displayed IDs match the final CSVs.
 
 ---
 

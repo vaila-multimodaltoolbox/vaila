@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 31 July 2026
-Version: 0.3.88
+Update Date: 01 August 2026
+Version: 0.3.89
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -47,7 +47,6 @@ import json
 import os
 import shlex
 import shutil
-import subprocess
 import sys
 import tkinter as tk
 import webbrowser
@@ -60,6 +59,8 @@ import cv2
 import numpy as np
 
 try:
+    from .gpu_subprocess import run_isolated_gpu_subprocess
+    from .vaila_sam import validate_sam_run_complete
     from .vaila_sapiens import (
         DEFAULT_KPT_THR,
         DEFAULT_MODEL_KEY,
@@ -76,6 +77,8 @@ try:
         write_vaila_pose_csv,
     )
 except ImportError:
+    from gpu_subprocess import run_isolated_gpu_subprocess  # ty: ignore[unresolved-import]
+    from vaila_sam import validate_sam_run_complete  # ty: ignore[unresolved-import]
     from vaila_sapiens import (  # ty: ignore[unresolved-import]
         DEFAULT_KPT_THR,
         DEFAULT_MODEL_KEY,
@@ -204,6 +207,15 @@ def _find_videos(path: Path) -> list[Path]:
         ),
         key=lambda p: p.name.lower(),
     )
+
+
+def _video_frame_count(path: Path) -> int:
+    cap = cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        return 0
+    count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    cap.release()
+    return max(0, count)
 
 
 def _safe_float(value: Any, default: float) -> float:
@@ -387,16 +399,26 @@ def _has_usable_sam_tracks(directory: Path) -> bool:
     return (directory / "sam_tracks.csv").is_file() or (directory / "sam_bbox_tracks.csv").is_file()
 
 
-def find_local_sam_dir(output_dir: Path) -> Path | None:
-    """Return ``output_dir/sam3`` when it already has usable SAM tracks."""
+def find_local_sam_dir(output_dir: Path, *, expected_frames: int) -> Path | None:
+    """Return local SAM output only when it proves complete frame coverage."""
     candidate = output_dir / "sam3"
-    if _has_usable_sam_tracks(candidate):
+    complete, _reason = validate_sam_run_complete(
+        candidate,
+        expected_frames=expected_frames,
+    )
+    if _has_usable_sam_tracks(candidate) and complete:
         return candidate.resolve()
     return None
 
 
-def load_completed_summary(output_dir: Path) -> dict[str, Any] | None:
+def load_completed_summary(
+    output_dir: Path,
+    *,
+    expected_frames: int,
+) -> dict[str, Any] | None:
     """Load a valid per-video summary, or None when missing/corrupt."""
+    if (output_dir / "FAILED_sam3sapiens2.txt").is_file():
+        return None
     path = output_dir / "sam3sapiens2_summary.json"
     if not path.is_file():
         return None
@@ -404,7 +426,24 @@ def load_completed_summary(output_dir: Path) -> dict[str, Any] | None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    return data if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    if data.get("completed") is False:
+        return None
+    recorded_expected = data.get("expected_frames")
+    if recorded_expected is not None and int(recorded_expected) != int(expected_frames):
+        return None
+    if int(data.get("n_frames", -1)) != int(expected_frames):
+        return None
+    if data.get("completed") is not True:
+        # Backward-compatible proof for v0.3.88 and older summaries. Those did
+        # not have a transactional flag, so require every named final artifact
+        # to still exist before treating the video as complete.
+        for key in ("predictions", "long_csv", "identity_audit"):
+            raw = data.get(key)
+            if not isinstance(raw, str) or not Path(raw).is_file():
+                return None
+    return data
 
 
 def plan_video_processing(
@@ -420,12 +459,13 @@ def plan_video_processing(
     Returns ``(action, sam_dir, summary)`` where action is one of:
     ``skip``, ``reuse_sam``, ``run``.
     """
+    expected_frames = _video_frame_count(video)
     if resume:
-        summary = load_completed_summary(output_dir)
+        summary = load_completed_summary(output_dir, expected_frames=expected_frames)
         if summary is not None:
             return "skip", None, summary
 
-    local = find_local_sam_dir(output_dir)
+    local = find_local_sam_dir(output_dir, expected_frames=expected_frames)
     if local is not None:
         return "reuse_sam", local, None
 
@@ -435,6 +475,12 @@ def plan_video_processing(
             video,
             single_video=single_video,
         )
+        complete, reason = validate_sam_run_complete(
+            resolved,
+            expected_frames=expected_frames,
+        )
+        if not complete:
+            raise ValueError(f"Refusing incomplete external SAM results at {resolved}: {reason}")
         return "reuse_sam", resolved, None
 
     return "run", None, None
@@ -928,6 +974,18 @@ def run_sapiens_from_sam(
             f"SAM contour size {guidance.width}x{guidance.height} does not match "
             f"video {width}x{height}; select the matching SAM run."
         )
+    complete_sam, sam_reason = validate_sam_run_complete(
+        guidance.sam_dir,
+        expected_frames=n_frames,
+    )
+    if not complete_sam:
+        raise RuntimeError(f"SAM3 guidance is incomplete; Sapiens2 was not loaded: {sam_reason}")
+    for stale in (
+        output_dir / "sam3sapiens2_summary.json",
+        output_dir / "FAILED_sam3sapiens2.txt",
+    ):
+        with contextlib.suppress(OSError):
+            stale.unlink(missing_ok=True)
 
     model_key = model.strip().lower()
     micro_batch = pose_batch_size or _default_pose_batch_size(model_key)
@@ -1053,6 +1111,11 @@ def run_sapiens_from_sam(
             cap.release()
 
         actual_frames = frame_idx
+        if n_frames > 0 and actual_frames != n_frames:
+            raise RuntimeError(
+                f"Video decode ended early: expected {n_frames} frames but read "
+                f"{actual_frames}; refusing to publish a partial combined result."
+            )
         timeline = _expand_pose_with_sam_guidance(
             inferred,
             guidance,
@@ -1137,6 +1200,8 @@ def run_sapiens_from_sam(
             "long_csv": str(long_csv),
             "identity_audit": str(audit_path),
             "n_frames": actual_frames,
+            "expected_frames": n_frames,
+            "completed": True,
             "n_inferred_frames": len(inferred),
             "n_stable_ids": len(
                 {int(inst["stable_id"]) for instances in timeline.values() for inst in instances}
@@ -1148,6 +1213,8 @@ def run_sapiens_from_sam(
             json.dumps(result, indent=2) + "\n",
             encoding="utf-8",
         )
+        if load_completed_summary(output_dir, expected_frames=n_frames) is None:
+            raise RuntimeError("combined completion summary failed validation")
         _log(
             f"Done {video_path.name}: {result['n_stable_ids']} SAM IDs, "
             f"{len(inferred)} inferred frames -> {output_dir}"
@@ -1232,11 +1299,22 @@ def run_sam_stage(
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
     env["VAILA_SAM_COORDINATOR_OUTPUT_DIR"] = str(sam_output_dir)
-    completed = subprocess.run(cmd, env=env, check=False)
-    if completed.returncode != 0:
-        raise RuntimeError(f"SAM3 stage failed with subprocess exit={completed.returncode}")
+    gpu_result = run_isolated_gpu_subprocess(
+        cmd,
+        env=env,
+        device=0,
+        log=lambda message: _log(f"SAM3 stage {message}"),
+    )
+    if gpu_result.returncode != 0:
+        raise RuntimeError(f"SAM3 stage failed with subprocess exit={gpu_result.returncode}")
     if not (sam_output_dir / "sam_tracks.csv").is_file():
         raise RuntimeError(f"SAM3 finished but sam_tracks.csv is missing: {sam_output_dir}")
+    complete, reason = validate_sam_run_complete(
+        sam_output_dir,
+        expected_frames=_video_frame_count(video_path),
+    )
+    if not complete:
+        raise RuntimeError(f"SAM3 stage returned incomplete output: {reason}")
 
 
 def _write_failure(output_dir: Path, video_path: Path, reason: str) -> None:
@@ -1712,7 +1790,8 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
     print("\n>> vaila/sam3sapiens2: Equivalent CLI (copy/paste):", flush=True)
     print(">>   " + shlex.join(cli), flush=True)
     launch = [sys.executable, "-u", str(Path(__file__).resolve())] + cli[5:]
-    raise SystemExit(subprocess.call(launch))
+    gui_result = run_isolated_gpu_subprocess(launch, device=int(settings.device))
+    raise SystemExit(gui_result.returncode)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1880,12 +1959,25 @@ def main() -> None:
                     sam_dir=sam_dir,
                 )
                 _log("Isolated worker CLI: " + shlex.join(cmd))
-                rc = subprocess.call(cmd, env=os.environ.copy())
+                gpu_result = run_isolated_gpu_subprocess(
+                    cmd,
+                    env=os.environ.copy(),
+                    device=int(args.device),
+                    log=lambda message: _log(f"Worker {message}"),
+                )
+                rc = gpu_result.returncode
                 if rc != 0:
                     raise RuntimeError(f"combined worker subprocess exit={rc}")
                 summary_path = output_dir / "sam3sapiens2_summary.json"
-                if summary_path.is_file():
-                    summaries.append(json.loads(summary_path.read_text(encoding="utf-8")))
+                completed_summary = load_completed_summary(
+                    output_dir,
+                    expected_frames=_video_frame_count(video),
+                )
+                if completed_summary is None:
+                    raise RuntimeError(
+                        f"combined worker exited 0 without a valid complete summary: {summary_path}"
+                    )
+                summaries.append(completed_summary)
             else:
                 worker_args = argparse.Namespace(**vars(args))
                 worker_args.worker_sam_dir = sam_dir
