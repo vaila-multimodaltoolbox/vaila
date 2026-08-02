@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 01 August 2026
-Version: 0.3.89
+Version: 0.3.92
 
 Example of usage:
 uv run vaila.py
@@ -249,7 +249,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 01.Aug.2026 v0.3.89 (Python 3.12.13)
+    vailá - 01.Aug.2026 v0.3.92 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -360,7 +360,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 01.Aug.2026 v0.3.89 (Python 3.12.13)")
+        self.title("vailá - 01.Aug.2026 v0.3.92 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -2586,6 +2586,15 @@ class Vaila(tk.Tk):
             )
             self.sam3sapiens2_visualize_video()
 
+        def use_sam3dinov3():
+            dialog.destroy()
+            _print_yolo_fb_launch(
+                "SAM3+DINOv3 3D",
+                "uv run python -u vaila/sam3dinov3.py",
+                note="Markerless 3D: SAM 3 boxes/masks -> SAM 3D Body (DINOv3) MHR mesh",
+            )
+            self.sam3dinov3_video()
+
         tk.Button(dialog, text="Tracker (v26)", command=use_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Pose (video)", command=use_yolo_pose_v26, width=16).pack(pady=6)
         tk.Button(
@@ -2602,6 +2611,12 @@ class Vaila(tk.Tk):
             dialog,
             text="SAM3+Sapiens2 Visualize ID",
             command=use_sam3sapiens2_visualize,
+            width=24,
+        ).pack(pady=6)
+        tk.Button(
+            dialog,
+            text="SAM3+DINOv3 3D",
+            command=use_sam3dinov3,
             width=24,
         ).pack(pady=6)
         tk.Button(dialog, text="Train YOLOv26", command=use_train_yolov26, width=16).pack(pady=6)
@@ -3584,6 +3599,42 @@ class Vaila(tk.Tk):
         run_vaila_module(
             "vaila.sam3sapiens2",
             "vaila/sam3sapiens2.py",
+            extra_py_flags=("-u",),
+        )
+
+    def sam3dinov3_video(self):
+        """Markerless 3D: SAM3 boxes/masks drive SAM 3D Body (DINOv3) mesh recovery."""
+        missing: list[str] = []
+        if importlib.util.find_spec("sam3") is None:
+            missing.append("SAM3: uv sync --extra sam")
+        if importlib.util.find_spec("sam_3d_body") is None:
+            missing.append("SAM 3D Body: bash bin/setup_fifa_sam3d.sh")
+
+        weights_dir = Path(__file__).parent / "vaila" / "models" / "sam-3d-dinov3"
+        if not (weights_dir / "model.ckpt").is_file():
+            missing.append(
+                "Weights: accept https://huggingface.co/facebook/sam-3d-body-dinov3, "
+                "then uv run hf download facebook/sam-3d-body-dinov3 "
+                f"--local-dir {weights_dir}"
+            )
+        if missing:
+            messagebox.showerror(
+                "SAM3+DINOv3 3D — dependencies",
+                "Install the CUDA pipeline before running:\n\n" + "\n\n".join(missing),
+                parent=self,
+            )
+            return
+
+        print("\n" + "=" * 60)
+        print("Launching: vaila.sam3dinov3")
+        print(">> Equivalent launch CLI: uv run python -u vaila/sam3dinov3.py")
+        print("Features: SAM3 bbox/contour/ID -> SAM 3D Body (DINOv3) markerless 3D")
+        print("Outputs: MHR70 3D keypoints (m), 2D reprojection (px), camera, optional mesh")
+        print("SAM3 remains the identity authority; SAM 3D Body does not reassign IDs.")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.sam3dinov3",
+            "vaila/sam3dinov3.py",
             extra_py_flags=("-u",),
         )
 

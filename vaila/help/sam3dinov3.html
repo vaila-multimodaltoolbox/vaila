@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá - SAM3+DINOv3 3D</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; color: #222; }
+    .container { max-width: 980px; margin: auto; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
+    h1 { color: #24384d; border-bottom: 3px solid #7b4dc4; padding-bottom: 10px; }
+    h2 { color: #34495e; margin-top: 28px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+    h3 { color: #44566b; margin-top: 20px; }
+    code { background: #eef1f5; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f4f6f8; border: 1px solid #dce1e6; padding: 14px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f2eef9; }
+    .info { background: #f5f0ff; border-left: 4px solid #7b4dc4; padding: 12px 15px; }
+    .ok { background: #edf8f0; border: 1px solid #a9d7b2; padding: 12px 15px; }
+    .warn { background: #fff8e6; border-left: 4px solid #e0a800; padding: 12px 15px; margin: 14px 0; }
+  </style>
+</head>
+<body><div class="container">
+  <h1>SAM3+DINOv3 3D (<code>sam3dinov3.py</code>)</h1>
+  <div class="info">
+    <strong>Version:</strong> 0.3.92 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-01<br>
+    <strong>Category:</strong> Markerless 3D / Meta (Facebook)<br>
+    <strong>GUI:</strong> Frame B → YOLO + FB → <strong>SAM3+DINOv3 3D</strong><br>
+    <strong>Runtime:</strong> NVIDIA CUDA required; SAM 3 and SAM 3D Body optional stacks.
+    <p><strong>Retomada:</strong> use <code>--resume RUN_DIR -i INPUT_DIR</code>; vídeos já concluídos são pulados.</p>
+  </div>
+
+  <h2>What this pipeline does</h2>
+  <p>Monocular <strong>markerless 3D</strong>: a single video in, a per-person 3D skeleton
+  and body mesh out. It is the 3D counterpart of
+  <a href="sam3sapiens2.html">sam3sapiens2</a> — same SAM3 front-end, different second stage.</p>
+  <ol>
+    <li><strong>SAM 3 runs first</strong> and defines each person's bounding box, silhouette,
+      score and persistent <code>obj_id</code>.</li>
+    <li><strong>SAM 3D Body (DINOv3 ViT-H/16+ backbone)</strong> receives only those SAM boxes
+      and silhouettes, via
+      <code>SAM3DBodyEstimator.process_one_image(bboxes=..., masks=...)</code>.
+      The upstream <strong>ViTDet detector and SAM2 segmentor are never loaded</strong> — that
+      saves VRAM and keeps SAM 3 as the single source of identity.</li>
+    <li>For each person the model regresses an <strong>MHR (Momentum Human Rig)</strong> mesh,
+      3D joints in metres, their 2D reprojection in pixels, the camera translation
+      <code>cam_t</code> and the focal length.</li>
+    <li><code>person_id == sam_obj_id</code>, so no second Re-ID stage can swap identities.</li>
+  </ol>
+  <p>Because the boxes and masks come from a <em>video</em> tracker rather than per-frame
+  detection, identities stay stable across the whole clip — which is what makes the
+  per-joint 3D trajectories usable for biomechanics.</p>
+
+  <h2>Requirements</h2>
+<pre># SAM 3 (CUDA) stack
+bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+uv run hf auth login
+uv run vaila/vaila_sam.py --download-weights
+
+# SAM 3D Body: clones facebookresearch/sam-3d-body and downloads gated weights
+# (accept the license on the model card first)
+bash bin/setup_fifa_sam3d.sh</pre>
+  <div class="warn">
+    <strong>Why there is no <code>pip install -e</code>.</strong> Upstream
+    <code>sam-3d-body</code> ships no <code>pyproject.toml</code>/<code>setup.py</code>, so it
+    cannot be installed as a package. The setup script clones it to
+    <code>sam_3d_body/</code> and installs only its runtime dependencies with
+    <code>--no-deps</code> (protecting your CUDA torch build); this module then puts the
+    <strong>checkout root</strong> on <code>sys.path</code> automatically. Set
+    <code>VAILA_SAM3D_BODY_DIR</code> to use a checkout kept somewhere else.
+    <p>Two dependency traps worth knowing: <code>omegaconf</code> requires
+    <code>antlr4-python3-runtime==4.9.3</code> (4.13 raises <em>"Could not deserialize ATN
+    with version 3"</em>), and the MHR body model is the PyPI package <code>mhr</code>.</p>
+  </div>
+  <p>The weights land in <code>vaila/models/sam-3d-dinov3/</code>:</p>
+  <table>
+    <tr><th>File</th><th>Role</th></tr>
+    <tr><td><code>model.ckpt</code></td><td>SAM 3D Body checkpoint (DINOv3 backbone)</td></tr>
+    <tr><td><code>model_config.yaml</code></td><td>Backbone/decoder configuration</td></tr>
+    <tr><td><code>assets/mhr_model.pt</code></td><td>Momentum Human Rig body model</td></tr>
+  </table>
+  <p>Both <code>facebook/sam3</code> and <code>facebook/sam-3d-body-dinov3</code> are
+  <strong>gated</strong> — a 403 means the Hugging Face account has not been granted
+  access yet. Model weights keep their respective <strong>Meta licenses</strong>,
+  separate from vailá's AGPL source license.</p>
+
+  <h2>GUI</h2>
+  <p>Open <strong>YOLO + FB → SAM3+DINOv3 3D</strong>. The dialog collects the input
+  video/folder, the output parent, the SAM 3 text prompt, and the 3D options.
+  Pressing <strong>Run</strong> prints the equivalent CLI to the terminal (prefix
+  <code>&gt;&gt;</code>) and then launches exactly that command in an isolated GPU
+  subprocess — so any GUI run is reproducible from the shell.</p>
+
+  <h2>CLI</h2>
+<pre># Simplest run: SAM 3 + SAM 3D Body on one clip or a folder
+uv run python -u vaila/sam3dinov3.py -i /path/to/video_or_folder -o /path/to/output -t person
+
+# Reuse an existing SAM run instead of re-segmenting
+uv run python -u vaila/sam3dinov3.py -i /path/to/videos -o /path/to/output \
+    --sam-results /path/to/processed_sam_YYYYMMDD_HHMMSS
+
+# Metric-accurate run with a known focal length, plus mesh export
+uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /path/to/output \
+    --focal-px 1400 --save-mesh
+
+# Validate paths, weights and the plan without touching the GPU
+uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
+
+  <h3>Main options</h3>
+  <table>
+    <tr><th>Flag</th><th>Default</th><th>Meaning</th></tr>
+    <tr><td><code>-t, --text</code></td><td><code>person</code></td><td>SAM 3 text prompt</td></tr>
+    <tr><td><code>--sam-results</code></td><td>–</td><td>Reuse <code>processed_sam_*</code> (batch parent or per-video dir)</td></tr>
+    <tr><td><code>--weights-dir</code></td><td>auto</td><td>SAM 3D Body weights dir</td></tr>
+    <tr><td><code>--inference-type</code></td><td><code>full</code></td><td><code>full</code> (body+hand), <code>body</code>, or <code>hand</code></td></tr>
+    <tr><td><code>--focal-px</code></td><td>auto</td><td>Known focal length in px — see <em>Scale caveat</em></td></tr>
+    <tr><td><code>--fov-estimator</code></td><td>–</td><td>Optional upstream FOV estimator (e.g. <code>moge2</code>); extra weights</td></tr>
+    <tr><td><code>--no-mask</code></td><td>off</td><td>Use SAM boxes/IDs but skip mask-conditioned inference</td></tr>
+    <tr><td><code>--stride</code></td><td><code>1</code></td><td>Run inference every Nth frame</td></tr>
+    <tr><td><code>--bbox-padding</code></td><td><code>0.12</code></td><td>Context padding around the SAM contour box</td></tr>
+    <tr><td><code>--contour-margin</code></td><td><code>8</code></td><td>Dilation (px) applied to the SAM silhouette</td></tr>
+    <tr><td><code>--max-persons</code></td><td><code>32</code></td><td>Cap on people per frame</td></tr>
+    <tr><td><code>--save-mesh</code></td><td>off</td><td>Write per-frame MHR vertices to <code>meshes/*.npz</code> (large)</td></tr>
+    <tr><td><code>--no-overlay</code></td><td>off</td><td>Skip the overlay video</td></tr>
+    <tr><td><code>--dry-run</code></td><td>off</td><td>Validate and print the plan, no GPU inference</td></tr>
+    <tr><td><code>--resume RUN_DIR</code></td><td>–</td><td>Continue an interrupted batch</td></tr>
+  </table>
+
+  <h2>Outputs</h2>
+  <p>Each video gets its own subdirectory inside
+  <code>processed_sam3dinov3_&lt;timestamp&gt;/</code>.</p>
+  <table>
+    <tr><th>File</th><th>Content</th></tr>
+    <tr><td><code>&lt;video&gt;_sam3dinov3_overlay.mp4</code></td><td>SAM contour/bbox/ID + reprojected 3D skeleton</td></tr>
+    <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints3d.csv</code></td><td>Long table: root-relative <strong>and</strong> camera-frame metres</td></tr>
+    <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints2d.csv</code></td><td>Long table: reprojected pixels</td></tr>
+    <tr><td><code>&lt;video&gt;_sam3dinov3_camera.csv</code></td><td>Per-frame focal length, <code>cam_t</code>, bbox</td></tr>
+    <tr><td><code>&lt;video&gt;_id_NN_mhr70_3d.csv</code></td><td>Wide, named columns (<code>nose_x,nose_y,nose_z,…</code>)</td></tr>
+    <tr><td><code>&lt;video&gt;_id_NN_mhr70_rec3d.csv</code></td><td>Wide, vailá <code>rec3d</code> convention (<code>p1_x,p1_y,p1_z,…</code>)</td></tr>
+    <tr><td><code>&lt;video&gt;_id_NN_markers.csv</code></td><td>Wide 2D for REC2D / <code>getpixelvideo.py</code></td></tr>
+    <tr><td><code>&lt;video&gt;_sam3dinov3_predictions.json.gz</code></td><td>Full provenance + per-instance predictions</td></tr>
+    <tr><td><code>meshes/frame_NNNNNN.npz</code></td><td>Only with <code>--save-mesh</code>: vertices, <code>obj_ids</code>, <code>cam_t</code></td></tr>
+    <tr><td><code>mesh_faces.npy</code></td><td>Only with <code>--save-mesh</code>: shared MHR topology</td></tr>
+    <tr><td><code>sam3dinov3_summary.json</code></td><td>Machine-readable run summary</td></tr>
+    <tr><td><code>README_sam3dinov3.txt</code></td><td>Verbose per-run schema/units description</td></tr>
+    <tr><td><code>FAILED_sam3dinov3.txt</code></td><td>Present only when the stage fails</td></tr>
+  </table>
+  <p><code>NN</code> is the SAM <code>obj_id</code>, zero-padded — the same identity you see
+  in the overlay and in the SAM outputs.</p>
+
+  <h2>Keypoints</h2>
+  <p>The analysis columns use the <strong>first 70 of the 308 MHR keypoints</strong>
+  (<code>mhr70</code>): body, feet, full hands, plus anatomical extras
+  (<code>left-olecranon</code>, <code>right-cubital-fossa</code>,
+  <code>left-acromion</code>, <code>neck</code>, …). Hyphens become underscores in CSV
+  headers (<code>left-shoulder</code> → <code>left_shoulder_x</code>).</p>
+
+  <h2>Coordinate systems and units</h2>
+  <table>
+    <tr><th>Columns</th><th>Meaning</th></tr>
+    <tr><td><code>x_m, y_m, z_m</code></td><td>Root-relative 3D joints, metres, camera axes (OpenCV: +x right, +y down, +z forward)</td></tr>
+    <tr><td><code>xcam_m, ycam_m, zcam_m</code></td><td>Camera-frame absolute joints = root-relative + <code>cam_t</code></td></tr>
+    <tr><td><code>x_px, y_px</code></td><td>Perspective reprojection into the original full frame</td></tr>
+    <tr><td><code>frame</code></td><td>Zero-based, matching the source video and the SAM outputs</td></tr>
+  </table>
+  <p>Use the <strong><code>xcam_*</code> columns</strong> for inter-person distances and
+  depth; the wide <code>*_mhr70_3d.csv</code> / <code>*_mhr70_rec3d.csv</code> files already
+  contain those.</p>
+
+  <div class="warn">
+    <strong>Scale caveat.</strong> Monocular depth is metric only up to the assumed
+    camera intrinsics. Without <code>--focal-px</code> the model falls back to a default
+    FOV (<code>f = sqrt(W² + H²)</code>), so absolute depth inherits that assumption.
+    Supply the true focal length in pixels (or a FOV estimator) whenever absolute
+    distances matter. Relative joint geometry within one person is far less sensitive
+    to this than absolute depth.
+  </div>
+
+  <h2>Performance notes</h2>
+  <ul>
+    <li>One <strong>isolated GPU subprocess per video</strong>, so a CUDA OOM on one clip
+      cannot poison the rest of the batch (<code>--no-isolate-batch</code> disables this
+      for debugging).</li>
+    <li><code>--save-mesh</code> writes roughly <strong>220 KB per person per frame</strong> —
+      enable it only when you actually need the surface, not just joints.</li>
+    <li><code>--stride N</code> trades temporal resolution for speed; frames between
+      inference steps carry no instances.</li>
+    <li>The upstream model prints a banner per person per frame; that chatter is
+      silenced by default (<code>--verbose-model</code> restores it).</li>
+  </ul>
+
+  <h2>Related modules</h2>
+  <ul>
+    <li><a href="sam3sapiens2.html">sam3sapiens2</a> — same SAM3 front-end, 2D 308-keypoint pose</li>
+    <li><a href="vaila_sam.html">vaila_sam</a> — SAM 3 video segmentation on its own</li>
+    <li><a href="vaila_sapiens.html">vaila_sapiens</a> — Sapiens2 pose</li>
+  </ul>
+
+  <h2>References</h2>
+  <ul>
+    <li>SAM 3 — <a href="https://ai.meta.com/research/sam3/">ai.meta.com/research/sam3</a></li>
+    <li>DINOv3 — <a href="https://ai.meta.com/research/dinov3/">ai.meta.com/research/dinov3</a></li>
+    <li>SAM 3D Body — <a href="https://github.com/facebookresearch/sam-3d-body">github.com/facebookresearch/sam-3d-body</a></li>
+    <li>Weights — <a href="https://huggingface.co/facebook/sam-3d-body-dinov3">huggingface.co/facebook/sam-3d-body-dinov3</a></li>
+    <li>Rerun viewer — <a href="https://github.com/rerun-io/sam3d-body-rerun">github.com/rerun-io/sam3d-body-rerun</a></li>
+  </ul>
+
+  <div class="ok"><strong>vailá</strong> — Versatile Anarcho Integrated Liberation Ánalysis.
+  Source under AGPLv3; SAM 3 and SAM 3D Body weights under their Meta licenses.</div>
+</div></body>
+</html>

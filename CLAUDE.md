@@ -38,9 +38,11 @@ The project uses the full [Astral](https://astral.sh) Rust-based toolchain:
 uv run vaila.py
 
 # Sync dependencies (reads uv.lock + pyproject.toml)
-uv sync                        # default: universal CPU pyproject
-uv sync --extra gpu            # only after CUDA template is active (see AGENTS.md Hybrid)
-uv sync --extra sam            # SAM 3 optional stack; video still needs NVIDIA CUDA
+uv sync                        # default template's dependencies (see note below)
+uv sync --extra gpu            # only defined on CUDA templates (tensorrt + nvidia-ml-py)
+uv sync --extra sam            # SAM 3 optional stack; video still needs NVIDIA CUDA at runtime
+uv sync --extra sapiens        # Sapiens2 Pose (308 kp); bash bin/setup_sapiens2.sh after
+uv sync --extra fifa           # FIFA Skeletal Tracking Light (SAM 3D Body + PyTorch Lightning)
 uv sync --frozen               # CI mode: fail if lock is outdated
 
 # RECOMMENDED: unified interactive bootstrap (auto-detects OS + NVIDIA + extras)
@@ -203,6 +205,23 @@ Two dispatch patterns:
 1. **Direct import + call** — runs in the same process
 2. **Subprocess via `run_vaila_module()`** — separate process (avoids Tkinter conflicts)
 
+**Button grid** (row/col ids match the code, e.g. `B4_r4_c1`; run `uv run vaila.py` to see it live):
+
+| Area | Buttons |
+| --- | --- |
+| Frame A (r1) | Rename · Import · Export · Copy · Move · Remove · Tree · Find · Transfer |
+| Frame B (r1–r2) | IMU · MoCap Cluster · MoCap Full Body · Markerless 2D · Markerless 3D · Vector Coding · EMG · Force Plate · GNSS/GPS · MEG/EEG |
+| Frame B (r3) | HR/ECG · Yolo + Markerless_MP · Vertical Jump · Cube2D · Animal Open Field |
+| Frame B (r4) | **YOLO + FB** (chooser: Tracker/Pose/Seg v26, SAM 3 video, Sapiens2 Pose, SAM3+Sapiens2, SAM3+DINOv3 3D, Train YOLOv26) · ML Walkway · Markerless Hands · MP Angles · Markerless Live |
+| Frame B (r5) | Ultrasound · Brainstorm · Scout · StartBlock · Pynalty |
+| Frame B (r6) | Sprint · Face Mesh · tugturn · Soccer Tools (Field KPs AI, Soccer-Field Calib, VEK ElasticKick, FIFA cams→DLT) · Deadlift |
+| Frame B (r7) | Treadmill LC (step-based ground-reaction-force workflow, TOML config) |
+| Frame C-A (Data Files) | Edit CSV · C3D↔CSV · Smooth & Filter · Make/Rec DLT2D/DLT3D (1DLT + MultiDLT) · ReID Marker |
+| Frame C-B (Video/Image) | Video↔PNG · Crop Face · Draw Box · Compress Video · Make Sync file · GetPixelCoord · Metadata info · Merge/Split · Distort · Cut · Resize · YT Downloader · Insert Audio · rm Dup PNG |
+| Frame C-C (Visualization) | Show C3D/CSV 3D · Plot 2D/3D · Draw Sports · Stroboscopic |
+
+Full ASCII map with descriptions: `README.md` § *vailá Structure and Interface*; per-button docs: `docs/vaila_buttons/`.
+
 ### Package Structure (`vaila/`)
 
 ~100 self-contained analysis modules. Each module:
@@ -221,7 +240,7 @@ Two dispatch patterns:
 | `common_utils.py`                           | Header detection and data reshaping                       |
 | `dialogsuser.py` / `dialogsuser_cluster.py` | Reusable Tkinter input dialogs                            |
 | `filemanager.py`                            | File management (rename, copy, move, SSH transfer)        |
-| `hardware_manager.py`                       | GPU/CPU detection, TensorRT export — **do not duplicate** |
+| `hardware_manager.py`                       | GPU/CPU detection, TensorRT export — **do not duplicate**. First run per model builds a VRAM-sized `.engine` (2–5 min, cached); Windows/Linux engines coexist in the same folder on dual-boot. |
 | `interp_smooth_split.py`                    | Interpolation, smoothing, splitting (GUI + CLI)           |
 
 ---
@@ -238,6 +257,8 @@ Copy the correct template to `pyproject.toml` **before** running `uv python pin`
 | `pyproject_universal_cpu.toml` | CPU-only fallback               |
 
 Install scripts handle this automatically: `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`.
+
+> The currently-active template can drift from what other docs claim (it's a plain file copy, not a symlink). Before assuming CPU-vs-CUDA, check directly: `diff pyproject.toml pyproject_universal_cpu.toml` (empty output = CPU is active; otherwise diff against the CUDA/macOS templates to identify which one matches).
 
 ---
 
@@ -330,6 +351,11 @@ Step-by-step workflows and specialized agent roles are stored in the `.claude/` 
 - **GUI→CLI mirror (v0.3.72)**: modules with a CLI path must print copy-paste commands to the terminal on GUI **Run** (prefix `>>`, not `[bracketed]` — absl eats brackets). Chooser **YOLO + FB** prints launcher CLI on each button; full args print in `vaila_sam`, `vaila_sapiens`, `yolov26track track`, `yolotrain`. See `docs/vaila_buttons/yolo-fb.md`.
 - **Sapiens2 output directory fix (v0.3.76)**: `vaila/vaila_sapiens.py` no longer creates an empty second `processed_sapiens_*` folder during subprocess-per-video isolation; isolated workers inherit `--output-base` from the parent batch. See `docs/sessions/2026-07-07-sapiens-output-dir-fix.md`.
 - **Default post-processing + VAILA anchor CSVs (`vaila/sam_postprocess.py`, v0.3.69)**: `--postprocess-points` default changed from `none` to `all`; GUI default also `all`. `sam_points.csv` + `sam_id_map.csv` now auto-generated after every SAM run. Five new simple VAILA-style CSVs (`sam_vaila_center.csv`, `sam_vaila_bottom.csv`, `sam_vaila_top.csv`, `sam_vaila_left.csv`, `sam_vaila_right.csv`) with `frame,x1,y1,...,xN,yN` format written alongside. New functions: `write_vaila_anchor_csvs()`, `write_vaila_anchor_csvs_for_batch()`, `VAILA_ANCHORS`. Tests: `tests/test_sam_postprocess.py` (10 new anchor tests).
+
+- **SAM3+DINOv3 3D (`vaila/sam3dinov3.py`, v0.3.92)**: new **markerless 3D** module — Frame B → **YOLO + FB → SAM3+DINOv3 3D**. Reuses the `sam3sapiens2` SAM front-end (imports `load_sam_guidance`, `_guidance_for_frame`, `_contour_mask`, `_pose_bbox_from_sam`, `run_sam_stage`) and swaps the second stage for **SAM 3D Body** (`facebook/sam-3d-body-dinov3`, DINOv3 ViT-H/16+ backbone) via `SAM3DBodyEstimator.process_one_image(bboxes=..., masks=...)` — upstream ViTDet/SAM2 never load, so `person_id == sam_obj_id`. **Gotchas:** (1) SAM 3D Body expects **0/1** masks, but `_contour_mask` returns 0/255 — normalise with `(mask > 0).astype(np.uint8)`; (2) the upstream estimator hardcodes `recursive_to(batch, "cuda")`, so **CPU/MPS cannot work**; (3) `pred_keypoints_3d` is **root-relative** — camera-frame is `+ pred_cam_t` (same as `pred_vertices + pred_cam_t`); (4) without `--focal-px` depth inherits the default FOV `f=sqrt(W²+H²)`. Outputs: MHR70 long/wide CSVs (incl. vailá `p1_x,p1_y,p1_z` rec3d convention), camera CSV, optional `meshes/*.npz`. Help: `vaila/help/sam3dinov3.md`. Tests: `tests/test_sam3dinov3.py`.
+- **`bin/setup_fifa_sam3d.sh` / `.ps1` — two real bugs fixed (v0.3.92)**: (1) **clone URL** — the Meta repo is **`facebookresearch/sam-3d-body`** (hyphens); the scripts cloned `sam_3d_body` (underscores), which 404s and makes git prompt for credentials. The **local dir and Python package stay `sam_3d_body`**. (2) **`uv pip install -e sam_3d_body/` cannot work** — upstream ships **no `pyproject.toml`/`setup.py`** (it uses `pyrootutils`). The scripts now install only the runtime deps with `--no-deps` (`mhr yacs omegaconf antlr4-python3-runtime==4.9.3 roma trimesh braceexpand pytorch-lightning torchmetrics lightning-utilities`) so the CUDA torch build is never resolved away; `sam3dinov3.ensure_sam3d_importable()` puts the **checkout root** on `sys.path` at runtime (override with `VAILA_SAM3D_BODY_DIR`). **Gotchas:** `omegaconf` needs `antlr4-python3-runtime==4.9.3` (4.13 raises "Could not deserialize ATN with version 3"); the MHR body model is the PyPI package **`mhr`**; and a bare `sam_3d_body/` clone dir also resolves as an *empty namespace package*, so import it via `importlib` + `getattr`, never `from sam_3d_body import X`.
+- **Validated on real data (2026-08-01)**: `sam3dinov3` on `~/data/sep_runcod_01072026/REC3D_COD` (1920x1080, 120 fps COD drills) reusing existing SAM3 runs. Segment lengths thigh 0.387±0.017 m / shank 0.371±0.012 m / shoulder width 0.360 m; **100 %** of core joints reproject inside their own SAM bbox vs **0 %** under a shuffled-ID control. Default FOV gives `focal = sqrt(W²+H²) = 2202.9 px` — pass `--focal-px` for true metric depth.
+- **Installers offer the `fifa` extra (v0.3.92)**: `install_vaila_linux.sh`/`_mac.sh`/`_win.ps1` now prompt (GPU-gated on Linux/Windows, install-only disclaimer on macOS) to `uv sync --extra fifa` and optionally run `bin/setup_fifa_sam3d.sh`/`.ps1` right after sync — mirrors the existing Sapiens2 prompt pattern. Windows' `Invoke-VailaUvSync` was refactored to accumulate extras generically (`if ($useX) { $syncArgs += ... }`) instead of an if/elseif combinatorial chain, so adding a 4th extra later is a one-liner.
 
 ### Specialized Agents (`.claude/agents/`)
 

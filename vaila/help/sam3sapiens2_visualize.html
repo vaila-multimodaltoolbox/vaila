@@ -3,15 +3,26 @@
 <head><meta charset="utf-8"><title>SAM3+Sapiens2 — Visualize selected ID</title></head>
 <body>
 <h1>SAM3+Sapiens2 — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.3.89 &nbsp; <strong>Updated:</strong> 2026-08-01</p>
+<p><strong>Version:</strong> 0.3.91 &nbsp; <strong>Updated:</strong> 2026-08-01</p>
 <p>This CPU-only tool rerenders an existing <code>processed_sam3sapiens2_*</code> result. It does not load SAM3 or Sapiens2 weights. Select one SAM identity, draw its contour, bounding box and Sapiens2 keypoints, and write filtered tracking/pose/contour artifacts plus an overlay video.</p>
+<h2>Overlay style (v0.3.91)</h2>
+<ol>
+  <li><strong>SAM3 contour</strong> — semi-transparent silhouette fill + outline, bbox, and <code>SAM #id</code> label</li>
+  <li><strong>Sapiens2 skeleton</strong> — official <code>keypoints308</code> palette with <strong>left = green</strong> and <strong>right = orange</strong> limb colors (full 308 links when the <code>sapiens</code> extra is installed; COCO-21 left/right fallback otherwise)</li>
+</ol>
 <h2>CLI</h2>
 <pre>uv run python -u vaila/sam3sapiens2_visualize.py \
   --sam-results /path/to/processed_sam3sapiens2_.../video_stem \
   --video /path/to/video.mp4 --id 2 --output /path/to/selected_id_02</pre>
-<p>Use <code>--list-ids</code> to discover IDs and <code>--dry-run</code> to validate paths. <code>--kpt-thr</code> changes confidence filtering; <code>--no-all-keypoints</code> limits drawing to the 21 principal body points.</p>
+<p><code>--id</code> selects the SAM/stable identity. If you omit <code>--id</code> while supplying <code>--sam-results</code>, <code>--video</code>, and <code>--output</code>, the CLI prints the available IDs and <strong>prompts interactively</strong> until a valid ID is entered.</p>
+<pre>uv run python -u vaila/sam3sapiens2_visualize.py \
+  --sam-results /path/to/processed_sam3sapiens2_.../video_stem \
+  --video /path/to/video.mp4 --output /path/to/selected_id_out
+# &gt;&gt; Available SAM IDs: [0, 1, 2, 4]
+# &gt;&gt; Enter SAM/stable ID to visualize: 4</pre>
+<p>Use <code>--list-ids</code> to discover IDs and exit without rendering. <code>--dry-run</code> validates paths. <code>--overwrite</code> allows a non-empty output directory. <code>--kpt-thr</code> changes confidence filtering; <code>--no-all-keypoints</code> limits drawing to the 21 principal body points.</p>
 <h2>GUI</h2>
-<p>Frame B → <strong>YOLO + FB</strong> → <strong>SAM3+Sapiens2 Visualize ID</strong>. Choose the processed run first. The matching source video is filled automatically from <code>sam3sapiens2_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. Choose an <strong>output parent</strong> and an ID. The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
+<p>Frame B → <strong>YOLO + FB</strong> → <strong>SAM3+Sapiens2 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3sapiens2_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. Choose an <strong>output parent</strong> and an ID from the combobox. The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
 <p>Before rendering, the tool verifies the source frame count and image dimensions against the predictions. This prevents applying a synchronized result to the wrong original video.</p>
 <p>Frames are zero-based and coordinates are full-frame pixels. SAM3 remains the identity authority.</p>
 </body>

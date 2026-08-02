@@ -576,6 +576,16 @@ if ($samChoice -eq "y" -or $samChoice -eq "Y") {
     $useSamExtra = $true
 }
 
+$useFifaExtra = $false
+If ($useGPU) {
+    Write-Host ""
+    Write-Host "Install optional FIFA Skeletal Tracking Light / SAM 3D Body stack (markerless 3D mesh, extra 'fifa', CUDA)? [y/N]" -ForegroundColor Cyan
+    $fifaChoice = Read-Host
+    if ($fifaChoice -eq "y" -or $fifaChoice -eq "Y") {
+        $useFifaExtra = $true
+    }
+}
+
 # Choose template
 If ($useGPU) {
     If (Test-Path "$vailaProgramPath\pyproject_win_cuda12.toml") {
@@ -647,13 +657,9 @@ function Invoke-VailaUvSync {
     param([switch]$Frozen)
     $syncArgs = @("sync")
     If ($Frozen) { $syncArgs += "--frozen" }
-    if ($useGPU -and $useSamExtra) {
-        $syncArgs += @("--extra", "gpu", "--extra", "sam")
-    } elseif ($useGPU) {
-        $syncArgs += @("--extra", "gpu")
-    } elseif ($useSamExtra) {
-        $syncArgs += @("--extra", "sam")
-    }
+    if ($useGPU) { $syncArgs += @("--extra", "gpu") }
+    if ($useSamExtra) { $syncArgs += @("--extra", "sam") }
+    if ($useFifaExtra) { $syncArgs += @("--extra", "fifa") }
     & uv @syncArgs
     return $LASTEXITCODE
 }
@@ -688,6 +694,32 @@ Try {
                 & uv run hf auth login
             } catch {
                 Write-Warning "hf auth login failed or was cancelled."
+            }
+        }
+    }
+
+    if ($useFifaExtra) {
+        Write-Host ""
+        Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+        Write-Host "FIFA Skeletal Tracking Light / SAM 3D Body (optional): clone + weights via bin/setup_fifa_sam3d.ps1" -ForegroundColor Cyan
+        Write-Host "  - Clones facebookresearch/sam-3d-body into sam_3d_body/ (NOT pip-installable; runtime deps only)" -ForegroundColor Cyan
+        Write-Host "  - Downloads gated facebook/sam-3d-body-dinov3 weights into vaila\models\sam-3d-dinov3\" -ForegroundColor Cyan
+        Write-Host "  - GUI: Frame B -> YOLO + FB -> SAM3+DINOv3 3D (markerless 3D mesh + metric joints)" -ForegroundColor Cyan
+        Write-Host "  - License: SAM 3D Body keeps its Meta license (not AGPL) — see vaila\help\sam3dinov3.md" -ForegroundColor Cyan
+        Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+        $fifaSetupNow = Read-Host "Run 'bin/setup_fifa_sam3d.ps1' now from $vailaProgramPath? [y/N]"
+        if ($fifaSetupNow -eq "y" -or $fifaSetupNow -eq "Y") {
+            $fifaScript = Join-Path $vailaProgramPath "bin\setup_fifa_sam3d.ps1"
+            If (Test-Path $fifaScript) {
+                Try {
+                    Set-Location $vailaProgramPath
+                    & $fifaScript
+                } Catch {
+                    Write-Warning "setup_fifa_sam3d.ps1 failed or was cancelled. You can run it later:"
+                    Write-Warning "  cd `"$vailaProgramPath`" ; pwsh bin\setup_fifa_sam3d.ps1"
+                }
+            } Else {
+                Write-Warning "bin\setup_fifa_sam3d.ps1 not found. Run manually after updating the repo."
             }
         }
     }
@@ -726,16 +758,8 @@ Try {
         Write-Host "Environment verification successful." -ForegroundColor Green
     } Else {
         Write-Warning "Environment verification failed. PIL module not found. Running uv sync again..."
-        If ($useGPU -and $useSamExtra) {
-            & uv sync --extra gpu --extra sam
-        } ElseIf ($useGPU) {
-            & uv sync --extra gpu
-        } ElseIf ($useSamExtra) {
-            & uv sync --extra sam
-        } Else {
-            & uv sync
-        }
-        If ($LASTEXITCODE -ne 0) {
+        $retrySyncCode = Invoke-VailaUvSync
+        If ($retrySyncCode -ne 0) {
             Write-Error "Failed to sync dependencies during verification."
             Exit 1
         }
