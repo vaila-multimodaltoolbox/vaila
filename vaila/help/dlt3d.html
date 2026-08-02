@@ -1,33 +1,26 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vailá - dlt3d</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #333; margin-top: 20px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; color: #212529; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        pre { background: #e9ecef; padding: 14px; border-radius: 6px; overflow-x: auto; color: #212529; border: 1px solid #dee2e6; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        .warn { background: #fff8e6; border-left: 4px solid #e0a800; padding: 10px 15px; margin: 14px 0; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
     </style>
 </head>
 <body>
@@ -35,55 +28,84 @@
         <h1>vailá - dlt3d</h1>
 
         <div class="module-info">
-            <h3>📋 Module Information</h3>
+            <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
-            <p><strong>File:</strong> vaila\dlt3d.py</p>
-            <p><strong>Lines:</strong> 271</p>
-            <p><strong>Size:</strong> 10271 characters</p>
-            <p><strong>Version:</strong> 0.0.3</p>
+            <p><strong>File:</strong> vaila/dlt3d.py</p>
+            <p><strong>Version:</strong> 0.3.93</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
 
-        
+        <h2>Description</h2>
+        <p>Calculates <strong>Direct Linear Transformation (DLT3D)</strong> parameters (11 coefficients) from a pixel-coordinate calibration file and a corresponding real-world 3D reference (REF3D) file, one set of parameters per frame.</p>
+        <p>The script can also generate a <strong>REF3D template</strong> (<code>_x</code>, <code>_y</code>, <code>_z</code> columns) from a pixel file for you to fill in with real-world 3D coordinates.</p>
 
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-================================================================================
-Script: dlt3d.py
-================================================================================
-vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/vaila-multimodaltoolbox/vaila
-Please see AUTHORS for contributors.
-
-================================================================================
-Author: Paulo Roberto Pereira Santiago
-Version: 0.0.3
-Create: 24 February, 2025
-Last Updated: 02 August, 2025
-
-Description:
-    This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
-    It uses pixel coordinates from video calibration data and corresponding real-world 3D coordinates to compute the 11
-    DLT parameters for each frame (or uses a single row of real-world coordinates for all frames).
-
-    New Features:
-      - Generates a REF3D template (with _x, _y, _z columns) from the pixel file.
-      - ...</pre>
+        <h3>Point matching (pixel ↔ REF3D)</h3>
+        <p>Points are correlated by <strong>label</strong> — the point prefix before the underscore (e.g. <code>p3</code> in <code>p3_x</code>/<code>p3_y</code>/<code>p3_z</code>), not by column order. This lets the REF3D file define <strong>more</strong> calibration points than a given pixel/video file actually tracks; only the points common to both files are used.</p>
+        <div class="warn">
+            <strong>v0.3.93 fix:</strong> earlier versions derived the point range from the pixel
+            file only and assumed the REF3D file had the same range, raising a raw
+            <code>KeyError</code> as soon as they diverged. Point matching is now based on the
+            actual intersection of point labels in both files, and DLT3D requires <strong>at
+            least 6 common points</strong> (11 unknowns, 2 equations per point) — with fewer, a
+            clear message is printed and no .dlt3d file is written instead of crashing.
         </div>
 
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 6</p>
-            <ul><li><code>read_pixel_file</code></li><li><code>read_ref3d_file</code></li><li><code>calculate_dlt3d_params</code></li><li><code>process_files</code></li><li><code>save_dlt_parameters</code></li><li><code>main</code></li></ul>
-        </div>
+        <h3>Frame matching (pixel ↔ REF3D)</h3>
+        <ul>
+            <li><strong>Single reference mode</strong>: the REF3D file has exactly 1 row — those 3D coordinates are used for every frame in the pixel file.</li>
+            <li><strong>Per-frame mode</strong>: the REF3D file has multiple rows — matched by the frame column.</li>
+        </ul>
+
+        <h2>Output files</h2>
+        <table>
+            <tr><th>File</th><th>Description</th></tr>
+            <tr><td><code>&lt;pixel_basename&gt;.ref3d</code></td><td>REF3D template (only with --create-ref); p{i}_x, p{i}_y, p{i}_z columns, values cleared.</td></tr>
+            <tr><td><code>&lt;pixel_basename&gt;.dlt3d</code></td><td>CSV: frame, then 11 DLT3D coefficients, one row per frame.</td></tr>
+        </table>
+
+        <h2>GUI mode</h2>
+        <ol>
+            <li>Select the <strong>pixel coordinate CSV</strong> file.</li>
+            <li>Choose whether to <strong>create a REF3D template</strong>, or select an <strong>existing REF3D</strong> file with real-world 3D coordinates.</li>
+            <li>If a template was created, edit it with real 3D coordinates and re-run to compute the .dlt3d file.</li>
+        </ol>
+
+        <h2>CLI mode</h2>
+        <table>
+            <tr><th>Argument</th><th>Description</th></tr>
+            <tr><td><code>--pixel</code> <em>FILE</em></td><td>Pixel coordinate CSV file.</td></tr>
+            <tr><td><code>--real</code> <em>FILE</em></td><td>Real-world coordinate REF3D file (required unless --create-ref).</td></tr>
+            <tr><td><code>--create-ref</code></td><td>Create a REF3D template from --pixel instead of computing DLT3D parameters.</td></tr>
+        </table>
+        <h3>Examples</h3>
+        <pre># Create a REF3D template from a pixel file
+python vaila/dlt3d.py --pixel calib.csv --create-ref
+
+# Compute DLT3D parameters (one row per frame)
+python vaila/dlt3d.py --pixel calib.csv --real calib.ref3d</pre>
+
+        <h2>Main functions</h2>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>calculate_dlt3d_params</code></td><td>Compute 11 DLT3D parameters from real-world 3D and pixel coordinate pairs (least squares).</td></tr>
+            <tr><td><code>read_ref3d_file</code></td><td>Read and validate a REF3D file (checks _x/_y/_z columns are present for its own point range).</td></tr>
+            <tr><td><code>process_files</code></td><td>Core logic: match points by label (≥6 common points required), match frames, compute DLT3D per frame.</td></tr>
+            <tr><td><code>save_dlt_parameters</code></td><td>Write the .dlt3d CSV.</td></tr>
+            <tr><td><code>main</code></td><td>GUI/CLI entry point.</td></tr>
+        </table>
+
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><strong>rec3d</strong></td><td>Reconstruct 3D coordinates using per-frame DLT3D parameters (this module's output) across multiple cameras.</td></tr>
+            <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Reconstruct 3D coordinates using one fixed DLT3D row per camera.</td></tr>
+            <tr><td><strong>dlt2d</strong></td><td>Same idea for 2D (8 parameters, REF2D file).</td></tr>
+        </table>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+            <p>Part of <strong>vailá</strong> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
 </body>

@@ -3,13 +3,14 @@
 <head><meta charset="utf-8"><title>SAM3+Sapiens2 — Visualize selected ID</title></head>
 <body>
 <h1>SAM3+Sapiens2 — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.3.91 &nbsp; <strong>Updated:</strong> 2026-08-01</p>
+<p><strong>Version:</strong> 0.3.96 &nbsp; <strong>Updated:</strong> 2026-08-02</p>
 <p>This CPU-only tool rerenders an existing <code>processed_sam3sapiens2_*</code> result. It does not load SAM3 or Sapiens2 weights. Select one SAM identity, draw its contour, bounding box and Sapiens2 keypoints, and write filtered tracking/pose/contour artifacts plus an overlay video.</p>
-<h2>Overlay style (v0.3.91)</h2>
+<h2>Overlay style (v0.3.96)</h2>
 <ol>
-  <li><strong>SAM3 contour</strong> — semi-transparent silhouette fill + outline, bbox, and <code>SAM #id</code> label</li>
+  <li><strong>SAM3 contour</strong> — semi-transparent silhouette fill (anti-aliased edge, alpha 0.45) + outline, bbox, and <code>SAM #id</code> label</li>
   <li><strong>Sapiens2 skeleton</strong> — official <code>keypoints308</code> palette with <strong>left = green</strong> and <strong>right = orange</strong> limb colors (full 308 links when the <code>sapiens</code> extra is installed; COCO-21 left/right fallback otherwise)</li>
 </ol>
+<p><strong>Note:</strong> this pipeline has no body mesh — Sapiens2 regresses joints only, not a surface. For a Blender-importable <strong>3D body mesh</strong>, use <a href="sam3dinov3_visualize.html">sam3dinov3_visualize</a> <code>--export-mesh obj</code> on a SAM3+DINOv3 run made with <code>--save-mesh</code>.</p>
 <h2>CLI</h2>
 <pre>uv run python -u vaila/sam3sapiens2_visualize.py \
   --sam-results /path/to/processed_sam3sapiens2_.../video_stem \

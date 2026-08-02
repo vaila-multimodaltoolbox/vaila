@@ -1,33 +1,26 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vailá - rec3d</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #333; margin-top: 20px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; color: #212529; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        pre { background: #e9ecef; padding: 14px; border-radius: 6px; overflow-x: auto; color: #212529; border: 1px solid #dee2e6; }
+        ul { margin: 10px 0; padding-left: 24px; }
+        .warn { background: #fff8e6; border-left: 4px solid #e0a800; padding: 10px 15px; margin: 14px 0; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
     </style>
 </head>
 <body>
@@ -35,57 +28,95 @@
         <h1>vailá - rec3d</h1>
 
         <div class="module-info">
-            <h3>📋 Module Information</h3>
+            <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
-            <p><strong>File:</strong> vaila\rec3d.py</p>
-            <p><strong>Lines:</strong> 296</p>
-            <p><strong>Size:</strong> 11090 characters</p>
-            <p><strong>Version:</strong> 0.0.2</p>
+            <p><strong>File:</strong> vaila/rec3d.py</p>
+            <p><strong>Version:</strong> 0.3.94</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
 
-        
+        <h2>Description</h2>
+        <p>Batch 3D reconstruction using the <strong>Direct Linear Transformation (DLT)</strong> method with multiple cameras and DLT3D parameters that <strong>vary per frame</strong> — a DLT "matrix" (one row per frame, per camera), as opposed to <strong>rec3d_one_dlt3d</strong>, which uses one fixed set of DLT3D parameters per camera for the whole clip. Use <code>rec3d</code> when your cameras move or get re-calibrated during the recording (e.g. broadcast/pan-tilt-zoom cameras).</p>
+        <p>For each camera you provide:</p>
+        <ul>
+            <li>One <strong>DLT3D parameter file</strong> with <strong>one row per frame</strong> (frame, then 11 coefficients).</li>
+            <li>One <strong>pixel-coordinate CSV</strong>, placed together with the other cameras' pixel files in a single input directory.</li>
+        </ul>
+        <p>All camera pixel files must live in the <strong>same input directory</strong> (one CSV per camera) so they can be correlated frame by frame; they are paired with <code>--dlt-files</code> by <strong>sorted filename order</strong>.</p>
 
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-================================================================================
-Script: rec3d.py
-================================================================================
-
-vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/vaila-multimodaltoolbox/vaila
-Please see AUTHORS for contributors.
-
-================================================================================
-Author: Paulo Santiago
-Version: 0.0.2
-Created: August 03, 2025
-Last Updated: August 03, 2025
-
-Description:
-    Optimized batch processing of 3D coordinates reconstruction using corresponding DLT3D parameters for each frame.
-    Processes multiple CSV files containing pixel coordinates and reconstructs them to 3D real-world coordinates.
-    The pixel files are expected to use vailá's standard header:
-      frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
-    Uses DLT3D parameters that can vary per frame (11 parameters per frame).
-
-    Optimizations:
-    - Pre-allocat...</pre>
+        <div class="warn">
+            <strong>v0.3.93 fix:</strong> earlier versions read each camera's pixel file completely
+            independently and treated the <code>input_directory</code>'s CSVs as unrelated batch
+            trials, silently reusing a single file's row as if it were every camera's observation.
+            It has been rewritten to correlate all camera pixel files by frame and reconstruct one
+            3D result — the CSV file count in <code>input_directory</code> must now match
+            <code>--dlt-files</code> exactly, or the run stops with a clear error.
         </div>
 
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 3</p>
-            <ul><li><code>rec3d_multicam</code></li><li><code>process_files_in_directory</code></li><li><code>run_rec3d</code></li></ul>
-        </div>
+        <h2>Input file formats</h2>
+        <h3>DLT3D file (per camera)</h3>
+        <p>CSV with <strong>one row per frame</strong>: <code>frame</code>, then 11 DLT coefficients. <strong>One file per camera</strong>, passed to <code>--dlt-files</code> in the same order the pixel CSVs will sort alphabetically. If a frame is missing from a camera's DLT3D file (or its coefficients contain NaN), that frame is skipped.</p>
+        <h3>Pixel CSV (per camera)</h3>
+        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of header text (vailá <code>p1_x</code>/<code>p1_y</code>, SAM3, YOLO, MediaPipe named joints, etc.). Exactly <strong>one CSV per camera</strong> must be placed in <code>--input-dir</code>, matching <code>--dlt-files</code> in count, paired by <strong>sorted filename</strong> (e.g. <code>cam1_pixels.csv</code>, <code>cam2_pixels.csv</code>, ...).</p>
+        <p>Only frames present in <strong>every</strong> camera's pixel file, with valid DLT parameters for that frame in every camera, are reconstructed.</p>
+
+        <h2>Output files</h2>
+        <p>A single reconstruction result is written inside a new subfolder: <code>vaila_rec3d_YYYYMMDD_HHMMSS/</code>.</p>
+        <table>
+            <tr><th>File</th><th>Description</th></tr>
+            <tr><td><code>rec3d_*.csv</code></td><td>3D points: frame, p1_x, p1_y, p1_z, p2_x, ...</td></tr>
+            <tr><td><code>rec3d_*.3d</code></td><td>Same data as CSV (duplicate format).</td></tr>
+        </table>
+        <p>Unlike <code>rec3d_one_dlt3d</code>, this module does not export C3D/BVH; use <code>rec3d_one_dlt3d</code> or <code>readcsv_export</code> if you need those formats from the resulting CSV.</p>
+
+        <h2>GUI mode</h2>
+        <p>Run with no arguments:</p>
+        <ol>
+            <li><strong>DLT3D files</strong> — select one file per camera (each with one row per frame).</li>
+            <li><strong>Input directory</strong> — a single folder containing exactly one pixel CSV per camera.</li>
+            <li><strong>Output directory</strong> — where to create the timestamped result folder.</li>
+            <li><strong>Data rate (Hz)</strong> — recorded in the console/summary.</li>
+        </ol>
+
+        <h2>CLI mode</h2>
+        <p><strong>Required (headless):</strong> <code>--dlt-files</code>, <code>--input-dir</code>, <code>--output-dir</code>, <code>--rate</code>.</p>
+        <table>
+            <tr><th>Argument</th><th>Description</th></tr>
+            <tr><td><code>--dlt-files</code> <em>FILE</em> [<em>FILE</em> ...]</td><td>DLT3D parameter files, one per camera (each with one row per frame).</td></tr>
+            <tr><td><code>--input-dir</code> <em>DIR</em></td><td>Directory containing exactly one pixel CSV per camera, matching <code>--dlt-files</code> in count.</td></tr>
+            <tr><td><code>--output-dir</code> <em>DIR</em></td><td>Output directory; a timestamped <code>vaila_rec3d_*</code> subfolder is created here.</td></tr>
+            <tr><td><code>--rate</code> <em>HZ</em></td><td>Data frequency in Hz (recorded in the console summary). Accepts fractional rates, e.g. <code>119.88012001</code>.</td></tr>
+        </table>
+        <h3>Example</h3>
+        <pre># Two moving/re-calibrated cameras, one pixel CSV each in ./cams
+python vaila/rec3d.py \
+  --dlt-files cam1_matrix.dlt3d cam2_matrix.dlt3d \
+  --input-dir ./cams \
+  --output-dir ./out \
+  --rate 100</pre>
+
+        <h2>Main functions</h2>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>rec3d_multicam</code></td><td>Reconstruct one 3D point from multiple camera observations (DLT least squares). Shared with <code>rec3d_one_dlt3d</code>.</td></tr>
+            <tr><td><code>load_pixel_csv_positional</code></td><td>Column-order-based pixel CSV reader, ignoring header labels. Shared with <code>rec3d_one_dlt3d</code>.</td></tr>
+            <tr><td><code>find_common_frames</code></td><td>Sorted intersection of frame numbers across camera pixel files. Shared with <code>rec3d_one_dlt3d</code>.</td></tr>
+            <tr><td><code>process_files_in_directory</code></td><td>Core logic: correlate N camera pixel files by frame, look up per-frame DLT3D parameters, reconstruct, save CSV/.3d.</td></tr>
+            <tr><td><code>run_rec3d</code></td><td>GUI/CLI entry point.</td></tr>
+        </table>
+
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><strong>dlt3d</strong></td><td>Compute DLT3D coefficients from calibration, one row per frame when the camera moves.</td></tr>
+            <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Same DLT3D method with one fixed set of parameters per camera; also exports C3D/BVH.</td></tr>
+            <tr><td><strong>readcsv_export</strong></td><td>CSV → C3D (used internally by rec3d_one_dlt3d); batch convert.</td></tr>
+        </table>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+            <p>Part of <strong>vailá</strong> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
 </body>

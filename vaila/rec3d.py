@@ -10,24 +10,36 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.2
+Version: 0.3.94
 Created: August 03, 2025
-Last Updated: August 03, 2025
+Last Updated: 01 August 2026
 
 Description:
-    Optimized batch processing of 3D coordinates reconstruction using corresponding DLT3D parameters for each frame.
-    Processes multiple CSV files containing pixel coordinates and reconstructs them to 3D real-world coordinates.
-    The pixel files are expected to use vailá's standard header:
-      frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
-    Uses DLT3D parameters that can vary per frame (11 parameters per frame).
+    Batch 3D reconstruction using per-frame Direct Linear Transformation (DLT3D)
+    parameters — i.e. a DLT "matrix" that can change frame by frame (moving or
+    re-calibrated cameras), as opposed to rec3d_one_dlt3d.py which uses one
+    fixed set of DLT3D parameters per camera for the whole clip.
 
-    Optimizations:
-    - Pre-allocated NumPy arrays to eliminate dynamic memory allocation
-    - Progress tracking for large datasets
-    - Reduced debug output for cleaner processing feedback
-    - User-defined output directory and data frequency upfront
-    - Vectorized operations for better performance
-    - Support for multiple cameras with different DLT3D parameters per frame
+    For each camera you provide:
+      - One DLT3D parameter file with ONE ROW PER FRAME (frame, 11 coefficients).
+      - One pixel-coordinate CSV, in the same directory as the other cameras'
+        pixel files, with the same number of rows as the other cameras.
+
+    All camera pixel files must be placed together in a single input directory
+    (one CSV per camera) so they can be correlated frame-by-frame; the files are
+    paired with --dlt-files by sorted filename order — same convention used to
+    pair --dlt3d/--pixels in rec3d_one_dlt3d.py, just via a directory instead of
+    an explicit file list.
+
+    Column headers are NOT required to follow any particular naming: only the
+    COLUMN ORDER matters — column 0 is the frame identifier and every pair of
+    columns after that is one marker's (x, y). This makes the pixel files
+    compatible with trackers that use different label conventions (vailá
+    p1_x/p1_y, SAM3, YOLO, MediaPipe named joints, etc.) as long as the same
+    markers appear in the same order in every camera's file.
+
+    Output: one reconstructed 3D result (CSV + .3d) in a timestamped
+    vaila_rec3d_<timestamp>/ subfolder — not one output per input file.
 """
 
 import argparse
@@ -73,148 +85,222 @@ def rec3d_multicam(dlt_list, pixel_list):
     return solution  # [X, Y, Z]
 
 
-def process_files_in_directory(dlt_params_dfs, input_directory, output_directory, data_rate):
+def load_pixel_csv_positional(file_path):
     """
-    Process multiple CSV files in a directory using multiple DLT3D parameter sets.
+    Load a pixel-coordinate CSV using COLUMN ORDER instead of column names.
+
+    Column 0 (whatever it is named) is treated as the frame identifier; every
+    pair of columns after that is one marker's (x, y) pixel position. A single
+    header row is still expected (and discarded) so the file remains a normal
+    CSV, but its label text is never inspected.
 
     Args:
-        dlt_params_dfs (list): List of DataFrames containing DLT3D parameters for each camera
-        input_directory (str): Directory containing CSV files to process
-        output_directory (str): Directory to save output files
-        data_rate (int): Data frequency in Hz
+        file_path (str): Path to the pixel CSV file.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: (frame_values shape (n_rows,),
+        xy shape (n_rows, num_markers, 2)).
+
+    Raises:
+        ValueError: if the file has fewer than 3 columns, or the number of
+        coordinate columns (all columns after the first) is not even.
+    """
+    df = pd.read_csv(file_path)
+    n_cols = df.shape[1]
+    if n_cols < 3:
+        raise ValueError(f"expected at least 3 columns (frame + one marker x,y), found {n_cols}")
+    n_coord_cols = n_cols - 1
+    if n_coord_cols % 2 != 0:
+        raise ValueError(
+            f"expected an even number of coordinate columns after the frame column, "
+            f"found {n_coord_cols} (columns must be frame, x1, y1, x2, y2, ...)"
+        )
+
+    values = df.to_numpy(dtype=np.float64)
+    frame_values = values[:, 0]
+    if len(frame_values) == 1:
+        # Single-row files (e.g. a single calibration/reference frame) are
+        # conventionally treated as frame 0.
+        frame_values = np.array([0.0])
+
+    num_markers = n_coord_cols // 2
+    xy = values[:, 1:].reshape(-1, num_markers, 2)
+    return frame_values, xy
+
+
+def find_common_frames(frame_arrays):
+    """Sorted intersection of frame numbers present in every array (as ints)."""
+    frame_sets = [{int(f) for f in arr} for arr in frame_arrays]
+    common = set.intersection(*frame_sets) if frame_sets else set()
+    return np.array(sorted(common), dtype=np.int64)
+
+
+def _write_rec3d_output(rec_coords_df, out_path):
+    """Write frame as integer, coordinates as float with 6-decimal precision."""
+    with open(out_path, "w") as fh:
+        fh.write(",".join(rec_coords_df.columns) + "\n")
+        for _, row in rec_coords_df.iterrows():
+            vals = []
+            for col in rec_coords_df.columns:
+                v = row[col]
+                if col == "frame":
+                    vals.append(str(int(v)))
+                elif pd.isna(v):
+                    vals.append("")
+                else:
+                    vals.append(f"{v:.6f}")
+            fh.write(",".join(vals) + "\n")
+
+
+def process_files_in_directory(dlt_params_dfs, input_directory, output_directory, data_rate):
+    """
+    Reconstruct 3D coordinates from N camera pixel CSV files (one per camera,
+    matching the order of dlt_params_dfs) using per-frame-varying DLT3D
+    parameters for each camera.
+
+    Args:
+        dlt_params_dfs (list of pd.DataFrame): Per-camera DLT3D parameter
+            tables (frame + 11 coefficients per row), same order as the pixel
+            CSV files once sorted by filename.
+        input_directory (str): Directory containing exactly len(dlt_params_dfs)
+            pixel CSV files, one per camera.
+        output_directory (str): Directory to save the reconstructed output.
+        data_rate (float): Data frequency in Hz (recorded in the console summary).
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(output_directory, f"vaila_rec3d_{timestamp}")
-    os.makedirs(output_dir, exist_ok=True)
+    num_cameras = len(dlt_params_dfs)
 
-    # Extract DLT parameters for each camera
-    dlt_params_list = []
-    frames_list = []
+    # Per-camera DLT3D frames + parameters (positional: col 0 = frame, rest = 11 coeffs)
+    dlt_frames_list = []
+    dlt_values_list = []
     for df in dlt_params_dfs:
-        dlt_params = df.to_numpy()
-        frames = dlt_params[:, 0]
-        dlt_params = dlt_params[:, 1:]  # Remove frame column, keep 11 DLT parameters
-        dlt_params_list.append(dlt_params)
-        frames_list.append(frames)
+        arr = df.to_numpy(dtype=np.float64)
+        dlt_frames_list.append(arr[:, 0])
+        dlt_values_list.append(arr[:, 1:])
 
     csv_files = sorted([f for f in os.listdir(input_directory) if f.endswith(".csv")])
 
     if not csv_files:
         messagebox.showerror("Error", "No CSV files found in the selected directory!")
         return
+    if len(csv_files) != num_cameras:
+        messagebox.showerror(
+            "Error",
+            f"Expected {num_cameras} pixel CSV file(s) in the input directory "
+            f"(one per camera, matching --dlt-files), found {len(csv_files)}.",
+        )
+        return
 
-    print(f"Found {len(csv_files)} CSV files to process")
-    print(f"Using {len(dlt_params_list)} camera DLT parameter sets")
+    print(
+        f"Found {len(csv_files)} camera pixel file(s), matching {num_cameras} DLT3D camera set(s)"
+    )
 
-    total_files = len(csv_files)
-    files_processed = 0
-
-    for i_file, csv_file in enumerate(csv_files):
-        files_processed = i_file + 1
-        progress = (files_processed / total_files) * 100
-        print(f"Processing file {files_processed}/{total_files} ({progress:.1f}%): {csv_file}")
-
+    # Load every camera's pixel file (column-order based; labels are ignored)
+    pixel_frames_list = []
+    pixel_xy_list = []
+    for csv_file in csv_files:
+        path = os.path.join(input_directory, csv_file)
         try:
-            pixel_file = os.path.join(input_directory, csv_file)
-            pixel_coords_df = pd.read_csv(pixel_file)
+            frames_arr, xy_arr = load_pixel_csv_positional(path)
         except Exception as e:
-            print(f"[red]Error reading {csv_file}: {e}. Skipping file.[/red]")
+            print(f"[red]Error reading {csv_file}: {e}. Aborting.[/red]")
+            messagebox.showerror("Error", f"Error reading {csv_file}: {e}")
+            return
+        pixel_frames_list.append(frames_arr)
+        pixel_xy_list.append(xy_arr)
+
+    num_markers = min(xy.shape[1] for xy in pixel_xy_list)
+    if any(xy.shape[1] != num_markers for xy in pixel_xy_list):
+        print(
+            f"[yellow]Warning: camera pixel files have different marker counts; "
+            f"using the smallest common count: {num_markers}[/yellow]"
+        )
+
+    common_frames = find_common_frames(pixel_frames_list)
+    if common_frames.size == 0:
+        messagebox.showerror("Error", "No common frames found among the camera pixel files!")
+        return
+    print(f"Processing {len(common_frames)} common frame(s) across {num_cameras} camera(s)...")
+
+    # Only create the output folder once every validation above has passed.
+    output_dir = os.path.join(output_directory, f"vaila_rec3d_{timestamp}")
+    os.makedirs(output_dir, exist_ok=True)
+
+    total_frames = len(common_frames)
+    total_cols = 1 + (num_markers * 3)
+    reconstruction_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
+    reconstruction_array[:, 0] = common_frames
+
+    pixel_frame_to_row = [{int(f): i for i, f in enumerate(frames)} for frames in pixel_frames_list]
+    dlt_frame_to_row = [{int(f): i for i, f in enumerate(frames)} for frames in dlt_frames_list]
+
+    progress_step = max(1, total_frames // 20)
+    for frame_idx, frame in enumerate(common_frames):
+        if frame_idx % progress_step == 0:
+            progress = (frame_idx / total_frames) * 100
+            print(f"Progress: {progress:.1f}% ({frame_idx}/{total_frames} frames)")
+
+        frame_int = int(frame)
+
+        # Per-camera DLT3D parameters for THIS frame (the "DLT matrix" lookup)
+        dlt_params_for_frame = []
+        frame_ok = True
+        for cam_idx in range(num_cameras):
+            dlt_row = dlt_frame_to_row[cam_idx].get(frame_int)
+            if dlt_row is None:
+                frame_ok = False
+                break
+            A = dlt_values_list[cam_idx][dlt_row]
+            if np.isnan(A).any():
+                frame_ok = False
+                break
+            dlt_params_for_frame.append(A)
+        if not frame_ok:
             continue
 
-        # Calculate number of coordinate pairs (excluding frame column)
-        num_coords = (pixel_coords_df.shape[1] - 1) // 2
-        total_frames = len(pixel_coords_df)
+        pixel_row_for_cam = [pixel_frame_to_row[c][frame_int] for c in range(num_cameras)]
 
-        # Pre-allocate array: frame + (x,y,z) for each coordinate pair
-        total_cols = 1 + (num_coords * 3)  # frame + x,y,z for each point
-        rec_coords_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
-
-        # Set frame numbers in first column
-        rec_coords_array[:, 0] = pixel_coords_df["frame"].values
-
-        # Process each frame with pre-allocated array
-        for i, row in pixel_coords_df.iterrows():
-            frame_num = int(row["frame"])
-
-            # Check if frame exists in all DLT parameter sets
-            frame_exists_in_all = True
-            dlt_params_for_frame = []
-
-            for _camera_idx, (dlt_params, frames) in enumerate(
-                zip(dlt_params_list, frames_list, strict=False)
-            ):
-                if frame_num in frames:
-                    A_index = np.where(frames == frame_num)[0][0]
-                    A = dlt_params[A_index]
-                    if not np.isnan(A).any():
-                        dlt_params_for_frame.append(A)
-                    else:
-                        frame_exists_in_all = False
-                        break
-                else:
-                    frame_exists_in_all = False
+        for marker in range(num_markers):
+            pixel_obs_list = []
+            valid_marker = True
+            for cam_idx in range(num_cameras):
+                x_obs, y_obs = pixel_xy_list[cam_idx][pixel_row_for_cam[cam_idx], marker]
+                if np.isnan(x_obs) or np.isnan(y_obs):
+                    valid_marker = False
                     break
+                pixel_obs_list.append((float(x_obs), float(y_obs)))
+            if not valid_marker:
+                continue
 
-            if frame_exists_in_all and len(dlt_params_for_frame) == len(dlt_params_list):
-                # Process each marker for this frame
-                for marker in range(1, num_coords + 1):
-                    pixel_obs_list = []
-                    valid_marker = True
+            point3d = rec3d_multicam(dlt_params_for_frame, pixel_obs_list)
+            col_start = 1 + marker * 3
+            reconstruction_array[frame_idx, col_start : col_start + 3] = point3d
 
-                    for _camera_idx in range(len(dlt_params_list)):
-                        try:
-                            x_obs = float(row[f"p{marker}_x"])
-                            y_obs = float(row[f"p{marker}_y"])
-                            if np.isnan(x_obs) or np.isnan(y_obs):
-                                valid_marker = False
-                                break
-                            pixel_obs_list.append((x_obs, y_obs))
-                        except Exception:
-                            valid_marker = False
-                            break
+    header = ["frame"]
+    for marker in range(1, num_markers + 1):
+        header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
 
-                    if valid_marker and len(pixel_obs_list) == len(dlt_params_for_frame):
-                        # Calculate 3D reconstruction
-                        point3d = rec3d_multicam(dlt_params_for_frame, pixel_obs_list)
+    rec_coords_df = pd.DataFrame(reconstruction_array, columns=header)  # type: ignore
+    rec_coords_df["frame"] = rec_coords_df["frame"].astype(int)
 
-                        # Fill the pre-allocated array directly
-                        col_start = 1 + (marker - 1) * 3  # x, y, z columns for this marker
-                        rec_coords_array[i, col_start : col_start + 3] = np.array(point3d).flatten()  # type: ignore
-                # NaN values already pre-allocated for invalid frames/markers
-
-        # Convert to DataFrame with original column names but with _z added
-        header = ["frame"]
-        for marker in range(1, num_coords + 1):
-            header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
-
-        rec_coords_df = pd.DataFrame(rec_coords_array, columns=header)  # type: ignore
-        rec_coords_df["frame"] = rec_coords_df["frame"].astype(int)
-
-        output_file = os.path.join(output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.3d")
-
-        with open(output_file, "w") as fh:
-            fh.write(",".join(rec_coords_df.columns) + "\n")
-            for _, row in rec_coords_df.iterrows():
-                vals = []
-                for col in rec_coords_df.columns:
-                    v = row[col]
-                    if col == "frame":
-                        vals.append(str(int(v)))
-                    elif pd.isna(v):
-                        vals.append("")
-                    else:
-                        vals.append(f"{v:.6f}")
-                fh.write(",".join(vals) + "\n")
+    output_file_3d = os.path.join(output_dir, f"rec3d_{timestamp}.3d")
+    output_file_csv = os.path.join(output_dir, f"rec3d_{timestamp}.csv")
+    _write_rec3d_output(rec_coords_df, output_file_3d)
+    _write_rec3d_output(rec_coords_df, output_file_csv)
 
     print("\n=== Processing Complete ===")
-    print(f"Processed {total_files} files")
+    print(f"Cameras: {num_cameras}")
+    print(f"Frames reconstructed: {total_frames}")
+    print(f"Markers: {num_markers}")
     print(f"Data rate used: {data_rate} Hz")
     print(f"Output directory: {output_dir}")
 
     messagebox.showinfo(
         "Processing Complete",
         f"3D reconstruction completed successfully!\n\n"
-        f"Processed: {total_files} files\n"
+        f"Cameras: {num_cameras}\n"
+        f"Frames: {total_frames}\n"
+        f"Markers: {num_markers}\n"
         f"Data rate: {data_rate} Hz\n"
         f"Output directory: {os.path.basename(output_dir)}",
     )
@@ -235,7 +321,7 @@ def run_rec3d(dlt_files=None, input_directory=None, output_directory=None, data_
         # Step 1: Select DLT3D parameters files (multiple cameras)
         print("Step 1: Selecting DLT3D parameters files...")
         dlt_files = filedialog.askopenfilenames(
-            title="Select DLT3D Parameters Files (one per camera)",
+            title="Select DLT3D Parameters Files (one per camera, matching pixel file order)",
             filetypes=[("DLT3D files", "*.dlt3d"), ("CSV files", "*.csv")],
         )
         if not dlt_files:
@@ -244,7 +330,9 @@ def run_rec3d(dlt_files=None, input_directory=None, output_directory=None, data_
 
         # Step 2: Select input directory with CSV files
         print("Step 2: Selecting input directory...")
-        input_directory = filedialog.askdirectory(title="Select Directory Containing CSV Files")
+        input_directory = filedialog.askdirectory(
+            title="Select Directory Containing Pixel CSV Files (one per camera)"
+        )
         if not input_directory:
             print("Input directory selection cancelled.")
             return
@@ -258,8 +346,11 @@ def run_rec3d(dlt_files=None, input_directory=None, output_directory=None, data_
 
         # Step 4: Ask for data frequency
         print("Step 4: Setting data frequency...")
-        data_rate = simpledialog.askinteger(
-            "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
+        data_rate = simpledialog.askfloat(
+            "Data Frequency",
+            "Enter the data frequency (Hz), e.g. 119.88012001 for a real NTSC-derived rate:",
+            minvalue=0.0001,
+            initialvalue=100.0,
         )
         if data_rate is None:
             messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
@@ -298,14 +389,26 @@ def run_rec3d(dlt_files=None, input_directory=None, output_directory=None, data_
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Reconstruct 3D Coordinates using multiple DLT3D cameras"
+        description=(
+            "Reconstruct 3D coordinates from N camera pixel CSV files using "
+            "per-frame-varying DLT3D parameters (a DLT matrix, one row per frame, "
+            "per camera). --input-dir must contain exactly one pixel CSV per "
+            "camera, matching --dlt-files in count (paired by sorted filename)."
+        )
     )
     parser.add_argument(
         "--dlt-files", nargs="+", help="Path to DLT3D parameter files (one per camera)"
     )
-    parser.add_argument("--input-dir", help="Directory containing CSV files to process")
+    parser.add_argument(
+        "--input-dir",
+        help="Directory containing exactly one pixel CSV per camera (matching --dlt-files)",
+    )
     parser.add_argument("--output-dir", help="Output directory for results")
-    parser.add_argument("--rate", type=int, help="Data frequency in Hz")
+    parser.add_argument(
+        "--rate",
+        type=float,
+        help="Data frequency in Hz (accepts fractional rates, e.g. 119.88012001)",
+    )
     args = parser.parse_args()
 
     run_rec3d(

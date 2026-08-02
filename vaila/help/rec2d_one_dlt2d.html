@@ -1,33 +1,25 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vailá - rec2d_one_dlt2d</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #333; margin-top: 20px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; color: #212529; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        pre { background: #e9ecef; padding: 14px; border-radius: 6px; overflow-x: auto; color: #212529; border: 1px solid #dee2e6; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
     </style>
 </head>
 <body>
@@ -35,57 +27,71 @@
         <h1>vailá - rec2d_one_dlt2d</h1>
 
         <div class="module-info">
-            <h3>📋 Module Information</h3>
+            <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
-            <p><strong>File:</strong> vaila\rec2d_one_dlt2d.py</p>
-            <p><strong>Lines:</strong> 211</p>
-            <p><strong>Size:</strong> 7327 characters</p>
-            <p><strong>Version:</strong> 0.0.3</p>
+            <p><strong>File:</strong> vaila/rec2d_one_dlt2d.py</p>
+            <p><strong>Version:</strong> 0.3.93</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
 
-        
+        <h2>Description</h2>
+        <p>Batch 2D reconstruction using the <strong>Direct Linear Transformation (DLT2D)</strong> method with <strong>one fixed set of DLT2D parameters</strong> (the file's first row) applied to every frame of every pixel CSV in the input directory. For DLT2D parameters that vary per frame (a DLT "matrix"), use <strong>rec2d</strong> instead.</p>
+        <p>Every CSV file in the input directory is processed independently (each is a separate trial/subject reconstructed with the same fixed DLT2D parameters).</p>
 
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-================================================================================
-Script: rec2d_one_dlt2d.py
-================================================================================
+        <h2>Input file formats</h2>
+        <h3>DLT2D file</h3>
+        <p>CSV with at least one row of 8 DLT2D coefficients. Only the <strong>first row</strong> is used, regardless of how many rows the file has.</p>
+        <h3>Pixel CSV (per file in the input directory)</h3>
+        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of header text (vailá <code>p1_x</code>/<code>p1_y</code>, SAM3, YOLO, MediaPipe named joints, etc.). Output always uses vailá's standard <code>Frame</code> label for column 0; coordinate column labels are preserved as-is from the input file.</p>
 
-vailá - Multimodal Toolbox
-© Paulo Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
-https://github.com/paulopreto/vaila-multimodaltoolbox
-Please see AUTHORS for contributors.
+        <h2>Output files</h2>
+        <p>One reconstructed result <strong>per input CSV</strong>, all inside a shared timestamped subfolder: <code>vaila_rec2d_YYYYMMDD_HHMMSS/</code>.</p>
+        <table>
+            <tr><th>File</th><th>Description</th></tr>
+            <tr><td><code>&lt;name&gt;_&lt;timestamp&gt;.2d</code></td><td>2D points: Frame, then the original coordinate column labels.</td></tr>
+            <tr><td><code>&lt;name&gt;_&lt;timestamp&gt;.csv</code></td><td>Same data as the .2d file.</td></tr>
+        </table>
 
-================================================================================
-Author: Paulo Santiago
-Version: 0.0.3
-Created: August 9, 2024
-Last Updated: August 02, 2025
+        <h2>GUI mode</h2>
+        <ol>
+            <li><strong>DLT2D file</strong> — a single file; only its first row is used.</li>
+            <li><strong>Input directory</strong> — folder with one or more pixel CSVs to reconstruct.</li>
+            <li><strong>Output directory</strong> — where to create the timestamped result folder.</li>
+        </ol>
 
-Description:
-    Optimized batch processing of 2D coordinates reconstruction using corresponding DLT parameters for each frame.
-    Processes multiple CSV files containing pixel coordinates and reconstructs them to 2D real-world coordinates.
-    The pixel files are expected to use vailá's standard header:
-      frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
-    Uses DLT2D parameters that can vary per frame.
+        <h2>CLI mode</h2>
+        <p><strong>Required (headless):</strong> <code>--dlt-file</code>, <code>--input-dir</code>, <code>--output-dir</code>.</p>
+        <table>
+            <tr><th>Argument</th><th>Description</th></tr>
+            <tr><td><code>--dlt-file</code> <em>FILE</em></td><td>DLT2D parameter file (*.dlt2d); only the first row is used.</td></tr>
+            <tr><td><code>--input-dir</code> <em>DIR</em></td><td>Directory containing one or more pixel CSVs to reconstruct.</td></tr>
+            <tr><td><code>--output-dir</code> <em>DIR</em></td><td>Output directory; a timestamped <code>vaila_rec2d_*</code> subfolder is created here.</td></tr>
+        </table>
+        <h3>Example</h3>
+        <pre>python vaila/rec2d_one_dlt2d.py \
+  --dlt-file calib.dlt2d \
+  --input-dir ./trials \
+  --output-dir ./out</pre>
 
-    Optimizations:
-    - Pre-allocated NumPy array...</pre>
-        </div>
+        <h2>Main functions</h2>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>rec2d</code></td><td>Reconstruct 2D real-world coordinates from pixel coordinates using DLT2D parameters.</td></tr>
+            <tr><td><code>process_files_in_directory</code></td><td>Core logic: fixed DLT2D lookup, column-order-based pixel reading, save .2d/.csv.</td></tr>
+            <tr><td><code>run_rec2d_one_dlt2d</code></td><td>GUI/CLI entry point.</td></tr>
+        </table>
 
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 4</p>
-            <ul><li><code>read_coordinates</code></li><li><code>rec2d</code></li><li><code>process_files_in_directory</code></li><li><code>run_rec2d_one_dlt2d</code></li></ul>
-        </div>
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><strong>dlt2d</strong></td><td>Compute DLT2D coefficients from calibration (pixel + 2D reference).</td></tr>
+            <tr><td><strong>rec2d</strong></td><td>Same DLT2D method with parameters that vary per frame.</td></tr>
+        </table>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+            <p>Part of <strong>vailá</strong> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
 </body>

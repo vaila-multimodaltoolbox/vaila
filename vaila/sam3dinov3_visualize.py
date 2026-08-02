@@ -1,30 +1,47 @@
 """
 Project: vailá
-Script: sam3sapiens2_visualize.py
+Script: sam3dinov3_visualize.py
 Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
-Creation Date: 31 July 2026
+Email: paulosantiago@usp.br
+GitHub: https://github.com/vaila-multimodaltoolbox/vaila
+Creation Date: 01 August 2026
 Update Date: 02 August 2026
 Version: 0.3.96
 
 Description:
-    CPU-only rerenderer for an existing SAM3+Sapiens2 run. It selects one
-    SAM object ID, draws its contour, bbox, ID, and Sapiens2 keypoints on the
-    original video, and writes ID-specific tracking/pose/contour artifacts.
+    CPU-only rerenderer for an existing SAM3+DINOv3 3D (SAM 3D Body) run. It
+    selects one person (SAM `obj_id`), draws its contour, bbox, ID, and the
+    reprojected MHR skeleton on the original video, and writes ID-specific
+    tracking/keypoint/mesh artifacts. SAM3/SAM 3D Body weights are never
+    loaded, so this is safe to run on a CPU-only machine right after a GPU
+    inference run.
+
+    The MHR70 skeleton is colored by joint side (left=green, right=orange,
+    center=blue) using the "left-"/"right-" name prefixes, and the SAM
+    contour fill is anti-aliased for a cleaner silhouette edge.
+
+    When the source run used --save-mesh, --export-mesh {obj,ply} writes the
+    selected person's per-frame body mesh (vertices + shared MHR faces, with
+    cam_t translation applied) as a Blender-importable sequence (built-in
+    "Stop Motion OBJ" add-on: Import > Mesh Sequence).
 
 Usage:
-    uv run python -u vaila/sam3sapiens2_visualize.py \
-        --sam-results /path/to/processed_sam3sapiens2_.../video_stem \
-        --video /path/to/video.mp4 --id 2 --output /path/to/output
+    uv run python -u vaila/sam3dinov3_visualize.py \
+        --sam3d-results /path/to/processed_sam3dinov3_.../video_stem \
+        --video /path/to/video.mp4 --id 2 --output /path/to/output \
+        --export-mesh obj
 
-    # Omit --id to be prompted interactively with the available SAM IDs.
-    # GUI: omit all arguments, or use Frame B -> YOLO + FB -> SAM3+Sapiens2 Visualize ID
+    # Omit --id to be prompted interactively with the available person IDs.
+    # GUI: omit all arguments, or use Frame B -> YOLO + FB -> SAM3+DINOv3 Visualize ID
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import datetime as dt
+import gzip
 import json
 import shutil
 import threading
@@ -36,49 +53,34 @@ from typing import Any
 import cv2
 import numpy as np
 
+try:
+    from .sam3dinov3 import (
+        MHR70_NAMES,
+        keypoint_names,
+        skeleton_edges,
+    )
+except ImportError:  # standalone execution
+    from sam3dinov3 import (  # ty: ignore[unresolved-import]
+        MHR70_NAMES,
+        keypoint_names,
+        skeleton_edges,
+    )
+
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
-DEFAULT_KPT_THR = 0.30
-DEFAULT_SKELETON_RADIUS = 4
-DEFAULT_SKELETON_THICKNESS = 2
 # Match SAM3 composite alpha (~0.45) for selected-ID contour fills.
 SAM_CONTOUR_FILL_ALPHA = 0.45
 
-# Sapiens2's first 21 points are the COCO-style body/foot topology.
-# Fallback left/right colors match keypoints308.py (RGB; converted to BGR in OpenCV).
+# MHR70 joint names carry an explicit "left-"/"right-" prefix, so the skeleton
+# can be colored by side directly from the name instead of a hardcoded index
+# set (same left=green/right=orange/center=blue palette as keypoints308).
 COLOR_LEFT_RGB = (0, 255, 0)
 COLOR_RIGHT_RGB = (255, 128, 0)
 COLOR_CENTER_RGB = (51, 153, 255)
-LEFT_BODY_INDICES = frozenset({1, 3, 5, 7, 9, 11, 13, 15, 17, 18, 19})
-RIGHT_BODY_INDICES = frozenset({2, 4, 6, 8, 10, 12, 14, 16, 20})
-BODY_EDGES = (
-    (0, 1),
-    (0, 2),
-    (1, 3),
-    (2, 4),
-    (5, 6),
-    (5, 7),
-    (7, 9),
-    (6, 8),
-    (8, 10),
-    (5, 11),
-    (6, 12),
-    (11, 12),
-    (11, 13),
-    (13, 15),
-    (13, 17),
-    (12, 14),
-    (14, 18),
-    (14, 20),
-    (15, 16),
-    (18, 19),
-)
-
-_STYLE_UNSET = object()
-_SAPIENS_STYLE_CACHE: Any = _STYLE_UNSET
+MESH_EXPORT_FORMATS = ("none", "obj", "ply")
 
 
 def _log(message: str) -> None:
-    print(f">> vaila/sam3sapiens2_visualize: {message}", flush=True)
+    print(f">> vaila/sam3dinov3_visualize: {message}", flush=True)
 
 
 def _safe_int(value: Any) -> int | None:
@@ -96,32 +98,27 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     return result if np.isfinite(result) else default
 
 
-def _prediction_path(run_dir: Path) -> Path:
-    candidates = sorted(run_dir.glob("*_sam3sapiens2_predictions.json"))
+def _predictions_path(run_dir: Path) -> Path:
+    candidates = sorted(run_dir.glob("*_sam3dinov3_predictions.json.gz"))
     if not candidates:
-        raise FileNotFoundError(f"No *_sam3sapiens2_predictions.json in {run_dir}")
+        raise FileNotFoundError(f"No *_sam3dinov3_predictions.json.gz in {run_dir}")
     return candidates[0]
 
 
 def resolve_run_dir(path: Path, video_path: Path | None = None) -> Path:
     """Resolve a direct per-video output or a processed batch parent."""
     path = path.expanduser().resolve()
-    if path.is_dir() and (path / "sam3").is_dir():
+    if path.is_dir() and list(path.glob("*_sam3dinov3_predictions.json.gz")):
         return path
     if video_path is not None:
         stem_dir = path / video_path.stem
-        if (stem_dir / "sam3").is_dir() or list(stem_dir.glob("*_sam3sapiens2_predictions.json")):
+        if list(stem_dir.glob("*_sam3dinov3_predictions.json.gz")):
             return stem_dir
-    direct = list(path.glob("*_sam3sapiens2_predictions.json")) if path.is_dir() else []
-    if direct:
-        return path
     candidates = (
         sorted(
             p
             for p in path.iterdir()
-            if p.is_dir()
-            and (p / "sam3").is_dir()
-            and list(p.glob("*_sam3sapiens2_predictions.json"))
+            if p.is_dir() and list(p.glob("*_sam3dinov3_predictions.json.gz"))
         )
         if path.is_dir()
         else []
@@ -130,27 +127,28 @@ def resolve_run_dir(path: Path, video_path: Path | None = None) -> Path:
         return candidates[0]
     names = ", ".join(p.name for p in candidates[:8])
     raise FileNotFoundError(
-        f"Could not resolve a per-video SAM3+Sapiens2 directory from {path}. "
+        f"Could not resolve a per-video SAM3+DINOv3 directory from {path}. "
         f"Candidates: {names or 'none'}"
     )
 
 
 def load_predictions(run_dir: Path) -> dict[str, Any]:
-    path = _prediction_path(run_dir)
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("schema") != "vaila_sam3sapiens2_v1":
+    path = _predictions_path(run_dir)
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    if payload.get("schema") != "vaila_sam3dinov3_v1":
         raise ValueError(f"Unsupported predictions schema in {path}: {payload.get('schema')!r}")
     return payload
 
 
 def discover_source_video(run_dir: Path, payload: dict[str, Any] | None = None) -> Path | None:
-    """Find the exact source video recorded by a SAM3+Sapiens2 run.
+    """Find the exact source video recorded by a SAM3+DINOv3 run.
 
     The summary's absolute path is authoritative. Relative fallbacks keep runs
     usable after the whole input/results tree has been moved to another disk.
     """
     run_dir = run_dir.expanduser().resolve()
-    summary = run_dir / "sam3sapiens2_summary.json"
+    summary = run_dir / "sam3dinov3_summary.json"
     recorded: Path | None = None
     if summary.is_file():
         try:
@@ -186,10 +184,9 @@ def validate_source_video(video_path: Path, payload: dict[str, Any]) -> dict[str
     finally:
         cap.release()
 
-    expected_frames = len(payload.get("frames", []))
-    expected_size = payload.get("image_size") or []
-    expected_height = _safe_int(expected_size[0]) if len(expected_size) >= 2 else None
-    expected_width = _safe_int(expected_size[1]) if len(expected_size) >= 2 else None
+    expected_frames = _safe_int(payload.get("n_frames"))
+    expected_width = _safe_int(payload.get("width"))
+    expected_height = _safe_int(payload.get("height"))
     mismatches: list[str] = []
     if expected_frames and frames != expected_frames:
         mismatches.append(f"frames={frames}, expected {expected_frames}")
@@ -197,8 +194,8 @@ def validate_source_video(video_path: Path, payload: dict[str, Any]) -> dict[str
         mismatches.append(f"size={width}x{height}, expected {expected_width}x{expected_height}")
     if mismatches:
         raise ValueError(
-            f"The selected video does not match this SAM3+Sapiens2 run ({'; '.join(mismatches)}). "
-            "Choose the synchronized/cropped source video recorded in sam3sapiens2_summary.json."
+            f"The selected video does not match this SAM3+DINOv3 run ({'; '.join(mismatches)}). "
+            "Choose the synchronized/cropped source video recorded in sam3dinov3_summary.json."
         )
     return {"frames": frames, "width": width, "height": height, "fps": fps}
 
@@ -206,7 +203,7 @@ def validate_source_video(video_path: Path, payload: dict[str, Any]) -> dict[str
 def _unique_gui_output_dir(output_parent: Path, video_path: Path, selected_id: int) -> Path:
     """Return a new ID-specific child directory below a GUI-selected parent."""
     output_parent = output_parent.expanduser().resolve()
-    base = output_parent / f"{video_path.stem}_sam3sapiens2_visualized_id_{selected_id:02d}"
+    base = output_parent / f"{video_path.stem}_sam3dinov3_visualized_id_{selected_id:02d}"
     candidate = base
     suffix = 2
     while candidate.exists():
@@ -220,9 +217,15 @@ def discover_ids(run_dir: Path, payload: dict[str, Any] | None = None) -> list[i
     ids: set[int] = set()
     for frame in payload.get("frames", []):
         for instance in frame.get("instances", []):
-            value = _safe_int(instance.get("stable_id", instance.get("sam_obj_id")))
+            value = _safe_int(instance.get("person_id", instance.get("sam_obj_id")))
             if value is not None:
                 ids.add(value)
+    if not ids:
+        summary = run_dir / "sam3dinov3_summary.json"
+        if summary.is_file():
+            with contextlib.suppress(OSError, ValueError, TypeError, json.JSONDecodeError):
+                data = json.loads(summary.read_text(encoding="utf-8"))
+                ids.update(int(v) for v in data.get("person_ids", []))
     if not ids:
         tracks = run_dir / "sam3" / "sam_tracks.csv"
         if tracks.exists():
@@ -232,17 +235,17 @@ def discover_ids(run_dir: Path, payload: dict[str, Any] | None = None) -> list[i
                     if value is not None:
                         ids.add(value)
     if not ids:
-        raise ValueError(f"No SAM IDs found in {run_dir}")
+        raise ValueError(f"No person IDs found in {run_dir}")
     return sorted(ids)
 
 
 def prompt_selected_id(available: list[int]) -> int:
-    """Ask for a SAM/stable ID on stdin until a valid choice is entered."""
+    """Ask for a person ID on stdin until a valid choice is entered."""
     if not available:
-        raise ValueError("No SAM IDs available to prompt")
+        raise ValueError("No person IDs available to prompt")
     while True:
         try:
-            raw = input(">> Enter SAM/stable ID to visualize: ").strip()
+            raw = input(">> Enter SAM/person ID to visualize: ").strip()
         except EOFError as exc:
             raise SystemExit("No ID provided (EOF while prompting for --id)") from exc
         if not raw:
@@ -262,11 +265,11 @@ def prompt_selected_id(available: list[int]) -> int:
 def _records_by_frame(payload: dict[str, Any], selected_id: int) -> dict[int, dict[str, Any]]:
     records: dict[int, dict[str, Any]] = {}
     for frame in payload.get("frames", []):
-        frame_idx = _safe_int(frame.get("frame_index", frame.get("frame")))
+        frame_idx = _safe_int(frame.get("frame"))
         if frame_idx is None:
             continue
         for instance in frame.get("instances", []):
-            value = _safe_int(instance.get("stable_id", instance.get("sam_obj_id")))
+            value = _safe_int(instance.get("person_id", instance.get("sam_obj_id")))
             if value == selected_id:
                 records[frame_idx] = instance
                 break
@@ -276,7 +279,7 @@ def _records_by_frame(payload: dict[str, Any], selected_id: int) -> dict[int, di
 def _contours_by_frame(run_dir: Path, selected_id: int) -> dict[int, dict[str, Any]]:
     path = run_dir / "sam3" / "sam_contours.json"
     if not path.exists():
-        raise FileNotFoundError(f"Missing contour artifact: {path}")
+        return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
     result: dict[int, dict[str, Any]] = {}
     for frame in payload.get("frames", []):
@@ -300,66 +303,13 @@ def _rgb_to_bgr(color: tuple[int, int, int]) -> tuple[int, int, int]:
     return int(color[2]), int(color[1]), int(color[0])
 
 
-def _side_color_rgb(index: int, names: list[str] | None = None) -> tuple[int, int, int]:
-    if names is not None and 0 <= index < len(names):
-        label = names[index].lower()
-        if "left" in label:
-            return COLOR_LEFT_RGB
-        if "right" in label:
-            return COLOR_RIGHT_RGB
-        return COLOR_CENTER_RGB
-    if index in LEFT_BODY_INDICES:
-        return COLOR_LEFT_RGB
-    if index in RIGHT_BODY_INDICES:
-        return COLOR_RIGHT_RGB
-    return COLOR_CENTER_RGB
-
-
-def _load_sapiens_overlay_style() -> dict[str, Any] | None:
-    """Load Sapiens2 visualize_keypoints + 308 metainfo without pose weights."""
-    global _SAPIENS_STYLE_CACHE
-    if _SAPIENS_STYLE_CACHE is not _STYLE_UNSET:
-        return None if _SAPIENS_STYLE_CACHE is None else dict(_SAPIENS_STYLE_CACHE)
-    try:
-        try:
-            from .vaila_sapiens import (  # type: ignore[attr-defined]
-                _load_visualize_keypoints,
-                _require_sapiens_installed,
-                _sapiens_pose_context,
-            )
-        except ImportError:
-            from vaila_sapiens import (  # type: ignore[no-redef]
-                _load_visualize_keypoints,
-                _require_sapiens_installed,
-                _sapiens_pose_context,
-            )
-
-        _require_sapiens_installed()
-        visualize_fn = _load_visualize_keypoints()
-        if visualize_fn is None:
-            raise RuntimeError("pose_render_utils.visualize_keypoints unavailable")
-        with _sapiens_pose_context():
-            from sapiens.pose.datasets import (  # type: ignore[import-not-found]
-                parse_pose_metainfo,
-            )
-
-            meta = parse_pose_metainfo({"from_file": "configs/_base_/keypoints308.py"})
-        style = {
-            "visualize": visualize_fn,
-            "skeleton": list(meta["skeleton_links"]),
-            "kpt_color": np.asarray(meta["keypoint_colors"]),
-            "link_color": np.asarray(meta["skeleton_link_colors"]),
-            "keypoint_names": [
-                str(meta["keypoint_id2name"][i]) for i in range(int(meta["num_keypoints"]))
-            ],
-        }
-        _SAPIENS_STYLE_CACHE = style
-        _log("Using Sapiens2 pose style (left/right skeleton colors from keypoints308)")
-        return dict(style)
-    except Exception as exc:
-        _SAPIENS_STYLE_CACHE = None
-        _log(f"Sapiens2 pose style unavailable ({exc}); using left/right OpenCV fallback")
-        return None
+def _side_color_bgr(name: str) -> tuple[int, int, int]:
+    label = name.lower()
+    if label.startswith("left-") or label.startswith("left_"):
+        return _rgb_to_bgr(COLOR_LEFT_RGB)
+    if label.startswith("right-") or label.startswith("right_"):
+        return _rgb_to_bgr(COLOR_RIGHT_RGB)
+    return _rgb_to_bgr(COLOR_CENTER_RGB)
 
 
 def _object_polygons(contour: dict[str, Any] | None) -> list[np.ndarray]:
@@ -397,22 +347,19 @@ def _draw_sam_contour_outline_and_id(
     *,
     selected_id: int,
 ) -> np.ndarray:
-    """SAM contour outline + bbox + ID label (matches sam3sapiens2 guidance layer)."""
+    """SAM contour outline + bbox + ID/depth label (matches sam3dinov3 guidance layer)."""
     out = image
     color = _color_for_id(selected_id)
     polygons = _object_polygons(contour)
     if polygons:
         cv2.polylines(out, polygons, True, color, 2, cv2.LINE_AA)
-    bbox = instance.get("sam_bbox_xyxy") or instance.get("bbox")
+    bbox = instance.get("bbox_xyxy")
     if bbox and len(bbox) >= 4:
         x1, y1, x2, y2 = [int(round(_safe_float(v))) for v in bbox[:4]]
         cv2.rectangle(out, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
-        score = instance.get("sam_score")
-        label = f"SAM #{selected_id}"
-        if score is not None:
-            label = f"{label} {_safe_float(score):.2f}"
-        else:
-            label = f"SAM/Sapiens2 ID {selected_id}"
+        cam_t = instance.get("cam_t_m") or [0.0, 0.0, 0.0]
+        depth = _safe_float(cam_t[2] if len(cam_t) > 2 else None)
+        label = f"ID {selected_id}  z={depth:.2f} m"
         cv2.putText(
             out,
             label,
@@ -426,90 +373,47 @@ def _draw_sam_contour_outline_and_id(
     return out
 
 
-def _draw_sapiens_skeleton(
+def _draw_mhr_skeleton(
     image: np.ndarray,
     instance: dict[str, Any],
-    *,
-    kpt_thr: float,
-    draw_all_keypoints: bool,
-    style: dict[str, Any] | None,
-    keypoint_names: list[str] | None = None,
+    edges: list[tuple[int, int]],
+    names: list[str],
 ) -> np.ndarray:
-    """Draw Sapiens2 skeleton with left/right colors (official style when available)."""
-    points = np.asarray(instance.get("keypoints") or [], dtype=np.float32).reshape(-1, 2)
-    scores = np.asarray(instance.get("keypoint_scores") or [], dtype=np.float32).reshape(-1)
-    if len(points) == 0:
+    """Draw the reprojected MHR70 skeleton (2D pixels), colored left/right/center."""
+    kp2d = np.asarray(instance.get("keypoints_2d_px") or [], dtype=np.float32).reshape(-1, 2)
+    if len(kp2d) == 0:
         return image
-    if len(scores) < len(points):
-        padded = np.ones(len(points), dtype=np.float32)
-        padded[: len(scores)] = scores
-        scores = padded
-
-    if style is not None:
-        skeleton = list(style["skeleton"])
-        kpt_color = style["kpt_color"]
-        link_color = style["link_color"]
-        if not draw_all_keypoints:
-            skeleton = [(a, b) for a, b in skeleton if a < 21 and b < 21]
-            n = min(21, len(points))
-            points = points[:n]
-            scores = scores[:n]
-            if hasattr(kpt_color, "__len__") and len(kpt_color) > n:
-                kpt_color = np.asarray(kpt_color)[:n]
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        vis_rgb = style["visualize"](
-            image=image_rgb,
-            keypoints=[points],
-            keypoints_visible=[np.ones(len(points), dtype=bool)],
-            keypoint_scores=[scores],
-            radius=DEFAULT_SKELETON_RADIUS,
-            thickness=DEFAULT_SKELETON_THICKNESS,
-            kpt_thr=kpt_thr,
-            skeleton=skeleton,
-            kpt_color=kpt_color,
-            link_color=link_color,
-        )
-        return cv2.cvtColor(vis_rgb, cv2.COLOR_RGB2BGR)
-
-    # OpenCV fallback: COCO-21 edges + left/right colors matching keypoints308.
-    out = image.copy()
-    names = keypoint_names
-    n_draw = len(points) if draw_all_keypoints else min(21, len(points))
-    valid = np.zeros(len(points), dtype=bool)
-    for idx in range(len(points)):
-        x, y = points[idx]
-        score = float(scores[idx]) if idx < len(scores) else 1.0
-        valid[idx] = score >= kpt_thr and np.isfinite(x) and np.isfinite(y)
-    for left, right in BODY_EDGES:
-        if left >= n_draw or right >= n_draw:
+    out = image
+    height, width = out.shape[:2]
+    side_colors = [_side_color_bgr(name) for name in names]
+    center = _rgb_to_bgr(COLOR_CENTER_RGB)
+    for a, b in edges:
+        if a >= len(kp2d) or b >= len(kp2d):
             continue
-        if not (valid[left] and valid[right]):
+        pa, pb = kp2d[a], kp2d[b]
+        if not (np.isfinite(pa).all() and np.isfinite(pb).all()):
             continue
-        color_rgb = COLOR_CENTER_RGB
-        if left in LEFT_BODY_INDICES and right in LEFT_BODY_INDICES:
-            color_rgb = COLOR_LEFT_RGB
-        elif left in RIGHT_BODY_INDICES and right in RIGHT_BODY_INDICES:
-            color_rgb = COLOR_RIGHT_RGB
-        elif names is not None:
-            left_c = _side_color_rgb(left, names)
-            right_c = _side_color_rgb(right, names)
-            if left_c == right_c:
-                color_rgb = left_c
+        color_a = side_colors[a] if a < len(side_colors) else center
+        color_b = side_colors[b] if b < len(side_colors) else center
+        color = color_a if color_a == color_b else center
         cv2.line(
             out,
-            tuple(np.round(points[left]).astype(int)),
-            tuple(np.round(points[right]).astype(int)),
-            _rgb_to_bgr(color_rgb),
-            DEFAULT_SKELETON_THICKNESS,
+            (int(round(float(pa[0]))), int(round(float(pa[1])))),
+            (int(round(float(pb[0]))), int(round(float(pb[1])))),
+            color,
+            2,
             cv2.LINE_AA,
         )
+    n_draw = min(len(kp2d), len(MHR70_NAMES))
     for idx in range(n_draw):
-        if not valid[idx]:
+        point = kp2d[idx]
+        if not np.isfinite(point).all():
             continue
-        radius = DEFAULT_SKELETON_RADIUS if idx < 21 else 2
-        color = _rgb_to_bgr(_side_color_rgb(idx, names))
-        pt = tuple(np.round(points[idx]).astype(int))
-        cv2.circle(out, pt, radius, color, -1, cv2.LINE_AA)
+        x = int(round(float(point[0])))
+        y = int(round(float(point[1])))
+        if 0 <= x < width and 0 <= y < height:
+            color = side_colors[idx] if idx < len(side_colors) else center
+            cv2.circle(out, (x, y), 3, color, -1, cv2.LINE_AA)
     return out
 
 
@@ -517,26 +421,14 @@ def _draw_instance(
     image: np.ndarray,
     instance: dict[str, Any],
     contour: dict[str, Any] | None,
+    edges: list[tuple[int, int]],
+    names: list[str],
     *,
     selected_id: int,
-    kpt_thr: float,
-    draw_all_keypoints: bool,
-    keypoint_names: list[str] | None = None,
 ) -> np.ndarray:
-    """Match SAM3+Sapiens2 look: contour fill, left/right skeleton, then outline/ID."""
-    style = _load_sapiens_overlay_style()
-    names = keypoint_names
-    if names is None and style is not None:
-        names = style.get("keypoint_names")
+    """Match SAM3+DINOv3 overlay look: contour fill, left/right MHR skeleton, then outline/ID."""
     out = _draw_sam_contour_fill(image, contour, selected_id=selected_id)
-    out = _draw_sapiens_skeleton(
-        out,
-        instance,
-        kpt_thr=kpt_thr,
-        draw_all_keypoints=draw_all_keypoints,
-        style=style,
-        keypoint_names=names,
-    )
+    out = _draw_mhr_skeleton(out, instance, edges, names)
     return _draw_sam_contour_outline_and_id(out, instance, contour, selected_id=selected_id)
 
 
@@ -556,11 +448,10 @@ def render_selected_video(
     output_path: Path,
     records: dict[int, dict[str, Any]],
     contours: dict[int, dict[str, Any]],
+    edges: list[tuple[int, int]],
+    names: list[str],
     *,
     selected_id: int,
-    kpt_thr: float = DEFAULT_KPT_THR,
-    draw_all_keypoints: bool = True,
-    keypoint_names: list[str] | None = None,
 ) -> tuple[Path, int, int]:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -568,8 +459,6 @@ def render_selected_video(
     fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # Warm the style cache once before the frame loop (logs once).
-    _load_sapiens_overlay_style()
     writer, actual_path = _open_writer(output_path, fps, (width, height))
     frame_count = 0
     drawn_count = 0
@@ -584,10 +473,9 @@ def render_selected_video(
                     frame,
                     instance,
                     contours.get(frame_count),
+                    edges,
+                    names,
                     selected_id=selected_id,
-                    kpt_thr=kpt_thr,
-                    draw_all_keypoints=draw_all_keypoints,
-                    keypoint_names=keypoint_names,
                 )
                 drawn_count += 1
             writer.write(frame)
@@ -618,56 +506,136 @@ def _filter_rows(path: Path, output: Path, id_columns: tuple[str, ...], selected
     return True
 
 
-def _write_filtered_json(
-    path: Path, output: Path, selected_id: int, *, contours: bool = False
-) -> bool:
+def _write_filtered_predictions(path: Path, output: Path, selected_id: int) -> bool:
+    if not path.exists():
+        return False
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    for frame in payload.get("frames", []):
+        frame["instances"] = [
+            inst
+            for inst in frame.get("instances", [])
+            if _safe_int(inst.get("person_id", inst.get("sam_obj_id"))) == selected_id
+        ]
+    with gzip.open(output, "wt", encoding="utf-8") as fh:
+        json.dump(payload, fh)
+    return True
+
+
+def _write_filtered_contours(path: Path, output: Path, selected_id: int) -> bool:
     if not path.exists():
         return False
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if contours:
-        payload["object_ids"] = [selected_id]
-        for frame in payload.get("frames", []):
-            frame["objects"] = [
-                o for o in frame.get("objects", []) if _safe_int(o.get("obj_id")) == selected_id
-            ]
-    else:
-        for frame in payload.get("frames", []):
-            frame["instances"] = [
-                i
-                for i in frame.get("instances", [])
-                if _safe_int(i.get("stable_id", i.get("sam_obj_id"))) == selected_id
-            ]
+    payload["object_ids"] = [selected_id]
+    for frame in payload.get("frames", []):
+        frame["objects"] = [
+            o for o in frame.get("objects", []) if _safe_int(o.get("obj_id")) == selected_id
+        ]
     output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return True
 
 
-def _id_slot(run_dir: Path, selected_id: int) -> int | None:
-    path = run_dir / "sapiens_id_map.csv"
-    if not path.exists():
-        return None
-    with path.open(newline="", encoding="utf-8") as fh:
-        for row in csv.DictReader(fh):
-            if _safe_int(row.get("stable_id")) == selected_id:
-                return _safe_int(row.get("pN"))
-    return None
+def _write_filtered_meshes(run_dir: Path, output_dir: Path, selected_id: int) -> int:
+    """Extract the selected person's vertices/cam_t from each per-frame mesh npz."""
+    mesh_dir = run_dir / "meshes"
+    if not mesh_dir.is_dir():
+        return 0
+    out_mesh_dir = output_dir / "meshes"
+    written = 0
+    for source in sorted(mesh_dir.glob("frame_*.npz")):
+        with np.load(source) as data:
+            obj_ids = np.asarray(data["obj_ids"])
+            matches = np.nonzero(obj_ids == selected_id)[0]
+            if matches.size == 0:
+                continue
+            idx = int(matches[0])
+            out_mesh_dir.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(
+                out_mesh_dir / source.name,
+                obj_ids=np.asarray([selected_id], dtype=np.int32),
+                vertices=data["vertices"][idx : idx + 1],
+                cam_t=data["cam_t"][idx : idx + 1],
+            )
+            written += 1
+    faces_path = run_dir / "mesh_faces.npy"
+    if written and faces_path.is_file():
+        shutil.copy2(faces_path, output_dir / "mesh_faces.npy")
+    return written
 
 
-def _write_wide_selected(path: Path, output: Path, slot: int | None) -> bool:
-    if not path.exists() or slot is None:
-        return False
-    with path.open(newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh)
-        fields = reader.fieldnames or []
-        keep = [field for field in fields if field == "frame" or field.startswith(f"p{slot}_")]
-        if not keep:
-            return False
-        rows = [{field: row.get(field, "") for field in keep} for row in reader]
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=keep)
-        writer.writeheader()
-        writer.writerows(rows)
-    return True
+def _write_obj(path: Path, vertices: np.ndarray, faces: np.ndarray) -> None:
+    """Write an ASCII Wavefront OBJ (universally readable by Blender)."""
+    with path.open("w", encoding="utf-8") as fh:
+        fh.write("# vailá SAM3+DINOv3 mesh frame\n")
+        np.savetxt(fh, vertices, fmt="v %.6f %.6f %.6f")
+        np.savetxt(fh, faces + 1, fmt="f %d %d %d")
+
+
+def _write_ply(path: Path, vertices: np.ndarray, faces: np.ndarray) -> None:
+    """Write a compact binary-little-endian PLY (smaller than OBJ for dense meshes)."""
+    n_v, n_f = len(vertices), len(faces)
+    header = (
+        "ply\nformat binary_little_endian 1.0\n"
+        f"element vertex {n_v}\nproperty float x\nproperty float y\nproperty float z\n"
+        f"element face {n_f}\nproperty list uchar int vertex_indices\nend_header\n"
+    ).encode("ascii")
+    face_records = np.zeros(n_f, dtype=[("count", "u1"), ("idx", "<i4", (3,))])
+    face_records["count"] = 3
+    face_records["idx"] = faces.astype(np.int32)
+    with path.open("wb") as fh:
+        fh.write(header)
+        fh.write(vertices.astype("<f4").tobytes())
+        fh.write(face_records.tobytes())
+
+
+def export_mesh_sequence(
+    mesh_dir: Path,
+    faces_path: Path,
+    output_dir: Path,
+    *,
+    person_id: int | None = None,
+    fmt: str = "obj",
+    include_translation: bool = True,
+) -> list[Path]:
+    """Export a per-frame MHR mesh (``meshes/frame_NNNNNN.npz``) as an OBJ/PLY
+
+    sequence Blender can import as a mesh-cache animation (built-in "Stop
+    Motion OBJ" add-on: Edit > Preferences > Add-ons > enable "Mesh: Stop
+    Motion OBJ", then Import > Mesh Sequence and point it at ``output_dir``).
+    ``include_translation`` adds each frame's ``cam_t`` so the body keeps its
+    camera-frame position instead of resetting to the origin every frame.
+    """
+    if fmt not in ("obj", "ply"):
+        raise ValueError(f"Unsupported mesh export format: {fmt!r}")
+    faces = np.asarray(np.load(faces_path))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    writer = _write_obj if fmt == "obj" else _write_ply
+    for source in sorted(mesh_dir.glob("frame_*.npz")):
+        with np.load(source) as data:
+            obj_ids = np.asarray(data["obj_ids"])
+            if obj_ids.size == 0:
+                continue
+            if person_id is None:
+                idx = 0
+                if obj_ids.size > 1:
+                    _log(
+                        f"WARNING {source.name}: {obj_ids.size} people present; "
+                        f"exporting obj_ids[0]={int(obj_ids[0])}. Pass person_id to choose."
+                    )
+            else:
+                matches = np.nonzero(obj_ids == person_id)[0]
+                if matches.size == 0:
+                    continue
+                idx = int(matches[0])
+            vertices = np.asarray(data["vertices"][idx], dtype=np.float64)
+            if include_translation:
+                vertices = vertices + np.asarray(data["cam_t"][idx], dtype=np.float64)
+        frame_idx = _safe_int(source.stem.rsplit("_", 1)[-1]) or 0
+        target = output_dir / f"frame_{frame_idx:06d}.{fmt}"
+        writer(target, vertices, faces)
+        written.append(target)
+    return written
 
 
 def write_selected_artifacts(
@@ -679,68 +647,64 @@ def write_selected_artifacts(
     source_dir.mkdir(exist_ok=True)
     written: list[str] = []
     stem = Path(str(payload.get("video", "video.mp4"))).stem
+    id_tag = f"{selected_id:02d}"
+
     mapping = (
         (run_dir / "sam3" / "sam_tracks.csv", output_dir / "sam_tracks.csv", ("obj_id",)),
         (run_dir / "sam3" / "sam_bbox_tracks.csv", output_dir / "sam_bbox_tracks.csv", ("obj_id",)),
         (
-            run_dir / "sapiens_tracks.csv",
-            output_dir / "sapiens_tracks.csv",
-            ("stable_id", "person_id"),
+            run_dir / f"{stem}_sam3dinov3_keypoints3d.csv",
+            output_dir / f"{stem}_sam3dinov3_keypoints3d.csv",
+            ("person_id",),
         ),
         (
-            run_dir / "sam3sapiens2_id_audit.csv",
-            output_dir / "sam3sapiens2_id_audit.csv",
-            ("stable_id", "sam_obj_id"),
+            run_dir / f"{stem}_sam3dinov3_keypoints2d.csv",
+            output_dir / f"{stem}_sam3dinov3_keypoints2d.csv",
+            ("person_id",),
         ),
         (
-            run_dir / f"{stem}_sam3sapiens2_vaila.csv",
-            output_dir / f"{stem}_sam3sapiens2_vaila.csv",
-            ("stable_id", "person_id", "sam_obj_id"),
+            run_dir / f"{stem}_sam3dinov3_camera.csv",
+            output_dir / f"{stem}_sam3dinov3_camera.csv",
+            ("person_id",),
         ),
     )
     for source, target, columns in mapping:
         if _filter_rows(source, target, columns, selected_id):
             written.append(str(target.name))
-    if _write_filtered_json(
-        _prediction_path(run_dir),
-        output_dir / f"{stem}_sam3sapiens2_predictions.json",
+
+    # Per-ID wide CSVs already exist in the source run (person_id == sam_obj_id).
+    for suffix in ("mhr70_3d", "mhr70_rec3d", "markers"):
+        source = run_dir / f"{stem}_id_{id_tag}_{suffix}.csv"
+        if source.is_file():
+            target = output_dir / source.name
+            shutil.copy2(source, target)
+            written.append(target.name)
+
+    if _write_filtered_predictions(
+        _predictions_path(run_dir),
+        output_dir / f"{stem}_sam3dinov3_predictions.json.gz",
         selected_id,
     ):
-        written.append(f"{stem}_sam3sapiens2_predictions.json")
-    if _write_filtered_json(
+        written.append(f"{stem}_sam3dinov3_predictions.json.gz")
+    if _write_filtered_contours(
         run_dir / "sam3" / "sam_contours.json",
         output_dir / "sam_contours.json",
         selected_id,
-        contours=True,
     ):
         written.append("sam_contours.json")
-    slot = _id_slot(run_dir, selected_id)
-    if slot is not None:
-        with (output_dir / "sapiens_id_map.csv").open("w", newline="", encoding="utf-8") as fh:
-            writer = csv.writer(fh)
-            writer.writerow(["pN", "stable_id", "selected"])
-            writer.writerow([slot, selected_id, True])
-        written.append("sapiens_id_map.csv")
-        for source_name in (
-            "sapiens_points.csv",
-            "sapiens_vaila_center.csv",
-            "sapiens_vaila_bottom.csv",
-            "sapiens_vaila_top.csv",
-            "sapiens_vaila_left.csv",
-            "sapiens_vaila_right.csv",
-        ):
-            if _write_wide_selected(run_dir / source_name, output_dir / source_name, slot):
-                written.append(source_name)
-    for source in run_dir.glob(f"*id_{selected_id:02d}*sapiens_pose.csv"):
-        shutil.copy2(source, output_dir / source.name)
-        written.append(source.name)
+    n_meshes = _write_filtered_meshes(run_dir, output_dir, selected_id)
+    if n_meshes:
+        written.append(f"meshes/ ({n_meshes} frames)")
+        written.append("mesh_faces.npy")
 
     # Keep every original non-video artifact in a namespaced folder. The root
     # remains ID-specific, while provenance is never silently discarded.
     for source in run_dir.rglob("*"):
         if not source.is_file() or source == output_dir or output_dir in source.parents:
             continue
-        if source.name.endswith("_sam3sapiens2_overlay.mp4"):
+        if source.name.endswith("_sam3dinov3_overlay.mp4") or source.name.endswith(
+            "_sam3dinov3_overlay.avi"
+        ):
             continue
         relative = source.relative_to(run_dir)
         target = source_dir / relative
@@ -756,9 +720,8 @@ def visualize_selected_id(
     selected_id: int,
     output_dir: Path,
     *,
-    kpt_thr: float = DEFAULT_KPT_THR,
-    draw_all_keypoints: bool = True,
     overwrite: bool = False,
+    export_mesh: str = "none",
 ) -> dict[str, Any]:
     run_dir = resolve_run_dir(run_dir, video_path)
     video_path = video_path.expanduser().resolve()
@@ -772,49 +735,84 @@ def visualize_selected_id(
     if output_dir.exists() and any(output_dir.iterdir()) and not overwrite:
         raise FileExistsError(f"Output directory is not empty: {output_dir} (use --overwrite)")
     output_dir.mkdir(parents=True, exist_ok=True)
+
     records = _records_by_frame(payload, selected_id)
     contours = _contours_by_frame(run_dir, selected_id)
-    keypoint_names = payload.get("keypoint_names")
-    if isinstance(keypoint_names, list):
-        keypoint_names = [str(name) for name in keypoint_names]
-    else:
-        keypoint_names = None
+    names = payload.get("keypoint_names")
+    if not isinstance(names, list) or not names:
+        n_kpts = len(next(iter(records.values()), {}).get("keypoints_3d_m", MHR70_NAMES))
+        names = keypoint_names(n_kpts)
+    names = [str(n) for n in names]
+    edges = skeleton_edges(names)
+
     overlay, frames, drawn = render_selected_video(
         video_path,
-        output_dir / f"{video_path.stem}_sam3sapiens2_id_{selected_id:02d}_overlay.mp4",
+        output_dir / f"{video_path.stem}_sam3dinov3_id_{selected_id:02d}_overlay.mp4",
         records,
         contours,
+        edges,
+        names,
         selected_id=selected_id,
-        kpt_thr=kpt_thr,
-        draw_all_keypoints=draw_all_keypoints,
-        keypoint_names=keypoint_names,
     )
     written = write_selected_artifacts(run_dir, output_dir, selected_id, payload)
+
+    mesh_export_dir: Path | None = None
+    n_mesh_exported = 0
+    if export_mesh != "none":
+        mesh_dir = output_dir / "meshes"
+        faces_path = output_dir / "mesh_faces.npy"
+        if mesh_dir.is_dir() and faces_path.is_file():
+            mesh_export_dir = output_dir / f"meshes_{export_mesh}"
+            exported = export_mesh_sequence(
+                mesh_dir, faces_path, mesh_export_dir, person_id=selected_id, fmt=export_mesh
+            )
+            n_mesh_exported = len(exported)
+            _log(
+                f"Exported {n_mesh_exported} {export_mesh.upper()} mesh frames -> {mesh_export_dir}"
+            )
+        else:
+            _log(
+                "No meshes/ found for this ID; rerun sam3dinov3.py with --save-mesh "
+                "to get body-mesh vertices for Blender export."
+            )
+
     manifest = {
-        "schema": "vaila_sam3sapiens2_selected_id_v1",
+        "schema": "vaila_sam3dinov3_selected_id_v1",
         "source_run": str(run_dir),
         "source_video": str(video_path),
         "selected_id": selected_id,
         "available_ids": available,
         "fps": payload.get("fps"),
-        "image_size": payload.get("image_size"),
+        "width": payload.get("width"),
+        "height": payload.get("height"),
         "n_video_frames": frames,
-        "n_frames_with_selected_pose": drawn,
-        "kpt_threshold": kpt_thr,
+        "n_frames_with_selected_person": drawn,
         "overlay": str(overlay),
         "artifacts": written,
+        "mesh_export_format": export_mesh,
+        "mesh_export_dir": str(mesh_export_dir) if mesh_export_dir is not None else None,
+        "n_mesh_frames_exported": n_mesh_exported,
         "created_at": dt.datetime.now().astimezone().isoformat(),
     }
-    (output_dir / "sam3sapiens2_selected_id_manifest.json").write_text(
+    (output_dir / "sam3dinov3_selected_id_manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
-    (output_dir / "README_sam3sapiens2_selected_id.txt").write_text(
-        "vailá SAM3+Sapiens2 selected-ID visualization\n"
+    blender_note = (
+        f"mesh_export={export_mesh} -> {mesh_export_dir} ({n_mesh_exported} frames)\n"
+        "Blender: Edit > Preferences > Add-ons > enable 'Mesh: Stop Motion OBJ', then\n"
+        "File > Import > Mesh Sequence, and point it at the meshes_obj/ (or meshes_ply/) folder.\n"
+        if mesh_export_dir is not None
+        else "mesh_export=none (no meshes/ in the source run; rerun sam3dinov3.py with "
+        "--save-mesh, then re-visualize with --export-mesh obj|ply for a Blender-ready sequence)\n"
+    )
+    (output_dir / "README_sam3dinov3_selected_id.txt").write_text(
+        "vailá SAM3+DINOv3 3D selected-ID visualization\n"
         f"selected_id={selected_id}\nsource_run={run_dir}\nsource_video={video_path}\n"
-        "identity_authority=SAM3 obj_id / stable_id\n"
-        "coordinate_units=full-frame pixels; frame_index=zero-based\n"
+        "identity_authority=SAM3 obj_id (person_id == sam_obj_id)\n"
+        "coordinate_units=full-frame pixels for 2D; metres for 3D; frame_index=zero-based\n"
         "The root contains filtered artifacts. source_artifacts/ preserves the original run.\n"
-        "Overlay style: Sapiens2 left/right skeleton colors + SAM3 contour fill/outline.\n",
+        "Overlay style: SAM3 contour fill/outline + left/right/center MHR70 skeleton + depth label.\n"
+        f"{blender_note}",
         encoding="utf-8",
     )
     _log(f"ID {selected_id}: rendered {drawn}/{frames} frames -> {output_dir}")
@@ -841,24 +839,24 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
     if owns_root:
         root.withdraw()
     dialog = tk.Toplevel(root)
-    dialog.title("SAM3+Sapiens2 — Visualize one ID")
+    dialog.title("SAM3+DINOv3 3D — Visualize one person")
     dialog.resizable(False, False)
     vars_: dict[str, tk.StringVar] = {
         "run": tk.StringVar(),
         "video": tk.StringVar(),
         "output": tk.StringVar(),
         "id": tk.StringVar(),
-        "thr": tk.StringVar(value=str(DEFAULT_KPT_THR)),
-        "status": tk.StringVar(value="Choose a processed_sam3sapiens2_* directory first."),
+        "status": tk.StringVar(value="Choose a processed_sam3dinov3_* directory first."),
     }
+    export_mesh_var = tk.BooleanVar(value=False)
     frame = ttk.Frame(dialog, padding=14)
     frame.grid(sticky="nsew")
     ttk.Label(
-        frame, text="SAM3+Sapiens2 — selected-ID visualization", font=("TkDefaultFont", 11, "bold")
+        frame, text="SAM3+DINOv3 3D — selected-ID visualization", font=("TkDefaultFont", 11, "bold")
     ).grid(column=0, row=0, columnspan=3, sticky="w", pady=(0, 10))
 
     def browse_run() -> None:
-        chosen = filedialog.askdirectory(parent=dialog, title="Processed SAM3+Sapiens2 directory")
+        chosen = filedialog.askdirectory(parent=dialog, title="Processed SAM3+DINOv3 directory")
         if not chosen:
             return
         vars_["run"].set(chosen)
@@ -912,8 +910,11 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
     ttk.Label(frame, text="Selected ID").grid(column=0, row=4, sticky="w", pady=3)
     combo = ttk.Combobox(frame, textvariable=vars_["id"], state="readonly", width=14)
     combo.grid(column=1, row=4, sticky="w", padx=6)
-    ttk.Label(frame, text="Keypoint threshold").grid(column=0, row=5, sticky="w", pady=3)
-    ttk.Entry(frame, textvariable=vars_["thr"], width=14).grid(column=1, row=5, sticky="w", padx=6)
+    ttk.Checkbutton(
+        frame,
+        text="Export mesh sequence (.obj, for Blender — needs --save-mesh in the source run)",
+        variable=export_mesh_var,
+    ).grid(column=0, row=5, columnspan=3, sticky="w", pady=2)
     ttk.Label(frame, textvariable=vars_["status"], foreground="#7a4f00", wraplength=560).grid(
         column=0, row=6, columnspan=3, sticky="w", pady=(8, 4)
     )
@@ -926,39 +927,39 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
             output_text = vars_["output"].get().strip()
             output_parent = Path(output_text).expanduser() if output_text else run_dir
             output = _unique_gui_output_dir(output_parent, video, selected)
-            threshold = float(vars_["thr"].get())
         except Exception as exc:
             messagebox.showerror(
-                "SAM3+Sapiens2 visualization", f"Invalid settings: {exc}", parent=dialog
+                "SAM3+DINOv3 3D visualization", f"Invalid settings: {exc}", parent=dialog
             )
             return
-        _log(
-            "GUI equivalent CLI: "
-            + " ".join(
-                [
-                    "uv run python -u vaila/sam3sapiens2_visualize.py",
-                    "--sam-results",
-                    str(run_dir),
-                    "--video",
-                    str(video),
-                    "--id",
-                    str(selected),
-                    "--output",
-                    str(output),
-                ]
-            )
-        )
+        export_mesh = "obj" if export_mesh_var.get() else "none"
+        cli = [
+            "uv run python -u vaila/sam3dinov3_visualize.py",
+            "--sam3d-results",
+            str(run_dir),
+            "--video",
+            str(video),
+            "--id",
+            str(selected),
+            "--output",
+            str(output),
+        ]
+        if export_mesh != "none":
+            cli.extend(["--export-mesh", export_mesh])
+        _log("GUI equivalent CLI: " + " ".join(cli))
         vars_["status"].set("Rendering selected ID; the window remains responsive…")
 
         def worker() -> None:
             try:
-                result = visualize_selected_id(run_dir, video, selected, output, kpt_thr=threshold)
+                result = visualize_selected_id(
+                    run_dir, video, selected, output, export_mesh=export_mesh
+                )
                 dialog.after(
                     0,
                     lambda: (
                         vars_["status"].set(f"Done: {result['overlay']}"),
                         messagebox.showinfo(
-                            "SAM3+Sapiens2 visualization",
+                            "SAM3+DINOv3 3D visualization",
                             f"Finished ID {selected}.\n\n{output}",
                             parent=dialog,
                         ),
@@ -971,7 +972,7 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
                     lambda: (
                         vars_["status"].set(error_text),
                         messagebox.showerror(
-                            "SAM3+Sapiens2 visualization", error_text, parent=dialog
+                            "SAM3+DINOv3 3D visualization", error_text, parent=dialog
                         ),
                     ),
                 )
@@ -990,36 +991,35 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Render one SAM3+Sapiens2 ID from an existing run."
+        description="Render one SAM3+DINOv3 3D person ID from an existing run."
     )
     parser.add_argument(
-        "--sam-results",
+        "--sam3d-results",
         "--input-dir",
+        dest="sam3d_results",
         required=False,
         type=Path,
-        help="Per-video or processed_sam3sapiens2_* directory.",
+        help="Per-video or processed_sam3dinov3_* directory.",
     )
     parser.add_argument("--video", "-i", type=Path, help="Original source video.")
     parser.add_argument(
         "--id",
         dest="selected_id",
         type=int,
-        help="SAM/stable ID to visualize. If omitted in CLI mode, prompt interactively.",
+        help="SAM/person ID to visualize. If omitted in CLI mode, prompt interactively.",
     )
     parser.add_argument("--output", "-o", type=Path, help="New output directory for this ID.")
     parser.add_argument(
-        "--kpt-thr",
-        type=float,
-        default=DEFAULT_KPT_THR,
-        help="Keypoint confidence threshold (default: 0.30).",
-    )
-    parser.add_argument(
-        "--no-all-keypoints",
-        action="store_true",
-        help="Draw only the 21 main body points instead of all visible Sapiens2 points.",
-    )
-    parser.add_argument(
         "--overwrite", action="store_true", help="Allow a non-empty output directory."
+    )
+    parser.add_argument(
+        "--export-mesh",
+        choices=MESH_EXPORT_FORMATS,
+        default="none",
+        help=(
+            "Export the filtered per-frame body mesh as an OBJ/PLY sequence for "
+            "Blender (needs --save-mesh in the source sam3dinov3.py run)."
+        ),
     )
     parser.add_argument(
         "--list-ids", action="store_true", help="Print available IDs and exit without rendering."
@@ -1035,15 +1035,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if not any((args.sam_results, args.video, args.selected_id is not None, args.output)):
+    if not any((args.sam3d_results, args.video, args.selected_id is not None, args.output)):
         run_visualizer_gui()
         return 0
-    if args.sam_results is None or args.video is None:
-        parser.error("--sam-results/--input-dir and --video/-i must be supplied together")
-    run_dir = resolve_run_dir(args.sam_results, args.video)
+    if args.sam3d_results is None or args.video is None:
+        parser.error("--sam3d-results/--input-dir and --video/-i must be supplied together")
+    run_dir = resolve_run_dir(args.sam3d_results, args.video)
     payload = load_predictions(run_dir)
     ids = discover_ids(run_dir, payload)
-    print(f">> Available SAM IDs: {ids}")
+    print(f">> Available person IDs: {ids}")
     if args.list_ids:
         return 0
     selected_id = args.selected_id
@@ -1064,9 +1064,8 @@ def main(argv: list[str] | None = None) -> int:
         args.video,
         selected_id,
         args.output,
-        kpt_thr=args.kpt_thr,
-        draw_all_keypoints=not args.no_all_keypoints,
         overwrite=args.overwrite,
+        export_mesh=args.export_mesh,
     )
     return 0
 

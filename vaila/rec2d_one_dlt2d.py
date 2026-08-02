@@ -10,16 +10,22 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.45
+Version: 0.3.93
 Created: August 9, 2024
-Last Updated: 23 May 2026
+Last Updated: 01 August 2026
 
 Description:
-    Optimized batch processing of 2D coordinates reconstruction using corresponding DLT parameters for each frame.
+    Optimized batch processing of 2D coordinates reconstruction using ONE FIXED
+    set of DLT2D parameters (the file's first row) applied to every frame of
+    every pixel CSV in the input directory. For DLT2D parameters that vary per
+    frame (a DLT "matrix"), use rec2d.py instead.
     Processes multiple CSV files containing pixel coordinates and reconstructs them to 2D real-world coordinates.
-    The pixel files are expected to use vailá's standard header:
-      frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
-    Uses DLT2D parameters that can vary per frame.
+    Pixel CSV column LABELS are not inspected — only column ORDER matters:
+    column 0 is the frame identifier and every pair of columns after that is
+    one marker's (x, y), regardless of header text (vailá p1_x/p1_y, SAM3,
+    YOLO, MediaPipe named joints, etc.). Output always uses vailá's standard
+    "Frame" label for column 0; coordinate column labels are preserved as-is
+    from the input file.
 
     Optimizations:
     - Pre-allocated NumPy arrays to eliminate dynamic memory allocation
@@ -76,6 +82,7 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, sh
         if show_gui:
             try:
                 import tkinter as tk
+
                 if tk._default_root is not None:
                     messagebox.showerror("Error", "No CSV files found in the selected directory!")
             except Exception:
@@ -95,7 +102,10 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, sh
         pixel_file = os.path.join(input_directory, csv_file)
         pixel_coords_df = pd.read_csv(pixel_file)
 
-        # Calculate number of coordinate pairs (excluding frame column)
+        # Calculate number of coordinate pairs (excluding frame column).
+        # Column labels are not inspected: column 0 is the frame identifier and
+        # every pair of columns after that is one marker's (x, y), regardless
+        # of the header text (vailá p1_x/p1_y, SAM3, YOLO, MediaPipe, ...).
         num_coords = (pixel_coords_df.shape[1] - 1) // 2
         total_frames = len(pixel_coords_df)
 
@@ -104,11 +114,11 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, sh
         rec_coords_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
 
         # Set frame numbers in first column
-        rec_coords_array[:, 0] = pixel_coords_df["frame"].values
+        rec_coords_array[:, 0] = pixel_coords_df.iloc[:, 0].to_numpy()
 
         # Process each frame with pre-allocated array
         for i, row in pixel_coords_df.iterrows():
-            pixel_coords = row[1:].to_numpy().reshape(-1, 2)
+            pixel_coords = row.iloc[1:].to_numpy().reshape(-1, 2)
             if not np.isnan(pixel_coords).all():
                 rec2d_coords = rec2d(dlt_params, pixel_coords)
                 # Fill the pre-allocated array directly
@@ -116,13 +126,15 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, sh
             # NaN values already pre-allocated, so skip invalid data
 
         # Convert to DataFrame with original column names
-        rec_coords_df = pd.DataFrame(rec_coords_array, columns=pixel_coords_df.columns)
+        original_columns = list(pixel_coords_df.columns)
+        rec_coords_df = pd.DataFrame(rec_coords_array, columns=original_columns)  # ty: ignore[invalid-argument-type]
 
         # Save with timestamp
         output_file = os.path.join(output_dir, f"{os.path.splitext(csv_file)[0]}_{timestamp}.2d")
-        # Normalize output to vaila's convention: `Frame` integer + float coords with %.6f.
-        rec_coords_df["frame"] = rec_coords_df["frame"].astype(int)
-        rec_coords_df = rec_coords_df.rename(columns={"frame": "Frame"})
+        # Normalize output to vaila's convention: `Frame` integer + float coords
+        # with %.6f, regardless of what the input's first column was named.
+        rec_coords_df.iloc[:, 0] = rec_coords_df.iloc[:, 0].astype(int)
+        rec_coords_df = rec_coords_df.rename(columns={original_columns[0]: "Frame"})
 
         def _write_output(df: pd.DataFrame, out_path: str) -> None:
             coord_cols_local = [c for c in df.columns if c != "Frame"]
@@ -152,6 +164,7 @@ def process_files_in_directory(dlt_params, input_directory, output_directory, sh
     if show_gui:
         try:
             import tkinter as tk
+
             if tk._default_root is not None:
                 messagebox.showinfo(
                     "Processing Complete",
@@ -223,7 +236,7 @@ def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=No
     print("-" * 80)
 
     # Process files
-    show_gui = (dlt_file is None)
+    show_gui = dlt_file is None
     process_files_in_directory(dlt_params, input_directory, output_directory, show_gui=show_gui)
 
 
