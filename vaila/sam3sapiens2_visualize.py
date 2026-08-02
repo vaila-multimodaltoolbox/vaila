@@ -4,7 +4,7 @@ Script: sam3sapiens2_visualize.py
 Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Creation Date: 31 July 2026
 Update Date: 01 August 2026
-Version: 0.3.89
+Version: 0.3.91
 
 Description:
     CPU-only rerenderer for an existing SAM3+Sapiens2 run. It selects one
@@ -16,6 +16,7 @@ Usage:
         --sam-results /path/to/processed_sam3sapiens2_.../video_stem \
         --video /path/to/video.mp4 --id 2 --output /path/to/output
 
+    # Omit --id to be prompted interactively with the available SAM IDs.
     # GUI: omit all arguments, or use Frame B -> YOLO + FB -> SAM3+Sapiens2 Visualize ID
 """
 
@@ -37,9 +38,18 @@ import numpy as np
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 DEFAULT_KPT_THR = 0.30
+DEFAULT_SKELETON_RADIUS = 4
+DEFAULT_SKELETON_THICKNESS = 2
+# Match SAM3 composite alpha (~0.45) for selected-ID contour fills.
+SAM_CONTOUR_FILL_ALPHA = 0.35
 
-# Sapiens2's first 21 points are the COCO-style body/foot topology. The
-# remaining 287 face/hand/ear points are rendered as dots when visible.
+# Sapiens2's first 21 points are the COCO-style body/foot topology.
+# Fallback left/right colors match keypoints308.py (RGB; converted to BGR in OpenCV).
+COLOR_LEFT_RGB = (0, 255, 0)
+COLOR_RIGHT_RGB = (255, 128, 0)
+COLOR_CENTER_RGB = (51, 153, 255)
+LEFT_BODY_INDICES = frozenset({1, 3, 5, 7, 9, 11, 13, 15, 17, 18, 19})
+RIGHT_BODY_INDICES = frozenset({2, 4, 6, 8, 10, 12, 14, 16, 20})
 BODY_EDGES = (
     (0, 1),
     (0, 2),
@@ -62,6 +72,9 @@ BODY_EDGES = (
     (15, 16),
     (18, 19),
 )
+
+_STYLE_UNSET = object()
+_SAPIENS_STYLE_CACHE: Any = _STYLE_UNSET
 
 
 def _log(message: str) -> None:
@@ -181,9 +194,7 @@ def validate_source_video(video_path: Path, payload: dict[str, Any]) -> dict[str
     if expected_frames and frames != expected_frames:
         mismatches.append(f"frames={frames}, expected {expected_frames}")
     if expected_width and expected_height and (width, height) != (expected_width, expected_height):
-        mismatches.append(
-            f"size={width}x{height}, expected {expected_width}x{expected_height}"
-        )
+        mismatches.append(f"size={width}x{height}, expected {expected_width}x{expected_height}")
     if mismatches:
         raise ValueError(
             f"The selected video does not match this SAM3+Sapiens2 run ({'; '.join(mismatches)}). "
@@ -225,6 +236,29 @@ def discover_ids(run_dir: Path, payload: dict[str, Any] | None = None) -> list[i
     return sorted(ids)
 
 
+def prompt_selected_id(available: list[int]) -> int:
+    """Ask for a SAM/stable ID on stdin until a valid choice is entered."""
+    if not available:
+        raise ValueError("No SAM IDs available to prompt")
+    while True:
+        try:
+            raw = input(">> Enter SAM/stable ID to visualize: ").strip()
+        except EOFError as exc:
+            raise SystemExit("No ID provided (EOF while prompting for --id)") from exc
+        if not raw:
+            _log(f"ID is required; choose one of {available}")
+            continue
+        try:
+            value = int(raw)
+        except ValueError:
+            _log(f"Invalid integer '{raw}'; choose one of {available}")
+            continue
+        if value not in available:
+            _log(f"ID {value} is unavailable; choose one of {available}")
+            continue
+        return value
+
+
 def _records_by_frame(payload: dict[str, Any], selected_id: int) -> dict[int, dict[str, Any]]:
     records: dict[int, dict[str, Any]] = {}
     for frame in payload.get("frames", []):
@@ -262,6 +296,223 @@ def _color_for_id(selected_id: int) -> tuple[int, int, int]:
     return int(bgr[0]), int(bgr[1]), int(bgr[2])
 
 
+def _rgb_to_bgr(color: tuple[int, int, int]) -> tuple[int, int, int]:
+    return int(color[2]), int(color[1]), int(color[0])
+
+
+def _side_color_rgb(index: int, names: list[str] | None = None) -> tuple[int, int, int]:
+    if names is not None and 0 <= index < len(names):
+        label = names[index].lower()
+        if "left" in label:
+            return COLOR_LEFT_RGB
+        if "right" in label:
+            return COLOR_RIGHT_RGB
+        return COLOR_CENTER_RGB
+    if index in LEFT_BODY_INDICES:
+        return COLOR_LEFT_RGB
+    if index in RIGHT_BODY_INDICES:
+        return COLOR_RIGHT_RGB
+    return COLOR_CENTER_RGB
+
+
+def _load_sapiens_overlay_style() -> dict[str, Any] | None:
+    """Load Sapiens2 visualize_keypoints + 308 metainfo without pose weights."""
+    global _SAPIENS_STYLE_CACHE
+    if _SAPIENS_STYLE_CACHE is not _STYLE_UNSET:
+        return None if _SAPIENS_STYLE_CACHE is None else dict(_SAPIENS_STYLE_CACHE)
+    try:
+        try:
+            from .vaila_sapiens import (  # type: ignore[attr-defined]
+                _load_visualize_keypoints,
+                _require_sapiens_installed,
+                _sapiens_pose_context,
+            )
+        except ImportError:
+            from vaila_sapiens import (  # type: ignore[no-redef]
+                _load_visualize_keypoints,
+                _require_sapiens_installed,
+                _sapiens_pose_context,
+            )
+
+        _require_sapiens_installed()
+        visualize_fn = _load_visualize_keypoints()
+        if visualize_fn is None:
+            raise RuntimeError("pose_render_utils.visualize_keypoints unavailable")
+        with _sapiens_pose_context():
+            from sapiens.pose.datasets import (  # type: ignore[import-not-found]
+                parse_pose_metainfo,
+            )
+
+            meta = parse_pose_metainfo({"from_file": "configs/_base_/keypoints308.py"})
+        style = {
+            "visualize": visualize_fn,
+            "skeleton": list(meta["skeleton_links"]),
+            "kpt_color": np.asarray(meta["keypoint_colors"]),
+            "link_color": np.asarray(meta["skeleton_link_colors"]),
+            "keypoint_names": [
+                str(meta["keypoint_id2name"][i]) for i in range(int(meta["num_keypoints"]))
+            ],
+        }
+        _SAPIENS_STYLE_CACHE = style
+        _log("Using Sapiens2 pose style (left/right skeleton colors from keypoints308)")
+        return dict(style)
+    except Exception as exc:
+        _SAPIENS_STYLE_CACHE = None
+        _log(f"Sapiens2 pose style unavailable ({exc}); using left/right OpenCV fallback")
+        return None
+
+
+def _object_polygons(contour: dict[str, Any] | None) -> list[np.ndarray]:
+    polygons: list[np.ndarray] = []
+    if not contour:
+        return polygons
+    for raw in contour.get("polygons") or []:
+        arr = np.asarray(raw, dtype=np.int32).reshape(-1, 2)
+        if len(arr) >= 3 and abs(float(cv2.contourArea(arr))) >= 2.0:
+            polygons.append(arr.reshape(-1, 1, 2))
+    return polygons
+
+
+def _draw_sam_contour_fill(
+    image: np.ndarray,
+    contour: dict[str, Any] | None,
+    *,
+    selected_id: int,
+) -> np.ndarray:
+    """Semi-transparent SAM silhouette fill (SAM3-like alpha blend)."""
+    polygons = _object_polygons(contour)
+    out = image.copy()
+    if not polygons:
+        return out
+    color = _color_for_id(selected_id)
+    overlay = out.copy()
+    cv2.fillPoly(overlay, polygons, color)
+    return cv2.addWeighted(overlay, SAM_CONTOUR_FILL_ALPHA, out, 1.0 - SAM_CONTOUR_FILL_ALPHA, 0.0)
+
+
+def _draw_sam_contour_outline_and_id(
+    image: np.ndarray,
+    instance: dict[str, Any],
+    contour: dict[str, Any] | None,
+    *,
+    selected_id: int,
+) -> np.ndarray:
+    """SAM contour outline + bbox + ID label (matches sam3sapiens2 guidance layer)."""
+    out = image
+    color = _color_for_id(selected_id)
+    polygons = _object_polygons(contour)
+    if polygons:
+        cv2.polylines(out, polygons, True, color, 2, cv2.LINE_AA)
+    bbox = instance.get("sam_bbox_xyxy") or instance.get("bbox")
+    if bbox and len(bbox) >= 4:
+        x1, y1, x2, y2 = [int(round(_safe_float(v))) for v in bbox[:4]]
+        cv2.rectangle(out, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+        score = instance.get("sam_score")
+        label = f"SAM #{selected_id}"
+        if score is not None:
+            label = f"{label} {_safe_float(score):.2f}"
+        else:
+            label = f"SAM/Sapiens2 ID {selected_id}"
+        cv2.putText(
+            out,
+            label,
+            (max(0, x1), max(18, y1 - 5)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            color,
+            2,
+            cv2.LINE_AA,
+        )
+    return out
+
+
+def _draw_sapiens_skeleton(
+    image: np.ndarray,
+    instance: dict[str, Any],
+    *,
+    kpt_thr: float,
+    draw_all_keypoints: bool,
+    style: dict[str, Any] | None,
+    keypoint_names: list[str] | None = None,
+) -> np.ndarray:
+    """Draw Sapiens2 skeleton with left/right colors (official style when available)."""
+    points = np.asarray(instance.get("keypoints") or [], dtype=np.float32).reshape(-1, 2)
+    scores = np.asarray(instance.get("keypoint_scores") or [], dtype=np.float32).reshape(-1)
+    if len(points) == 0:
+        return image
+    if len(scores) < len(points):
+        padded = np.ones(len(points), dtype=np.float32)
+        padded[: len(scores)] = scores
+        scores = padded
+
+    if style is not None:
+        skeleton = list(style["skeleton"])
+        kpt_color = style["kpt_color"]
+        link_color = style["link_color"]
+        if not draw_all_keypoints:
+            skeleton = [(a, b) for a, b in skeleton if a < 21 and b < 21]
+            n = min(21, len(points))
+            points = points[:n]
+            scores = scores[:n]
+            if hasattr(kpt_color, "__len__") and len(kpt_color) > n:
+                kpt_color = np.asarray(kpt_color)[:n]
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        vis_rgb = style["visualize"](
+            image=image_rgb,
+            keypoints=[points],
+            keypoints_visible=[np.ones(len(points), dtype=bool)],
+            keypoint_scores=[scores],
+            radius=DEFAULT_SKELETON_RADIUS,
+            thickness=DEFAULT_SKELETON_THICKNESS,
+            kpt_thr=kpt_thr,
+            skeleton=skeleton,
+            kpt_color=kpt_color,
+            link_color=link_color,
+        )
+        return cv2.cvtColor(vis_rgb, cv2.COLOR_RGB2BGR)
+
+    # OpenCV fallback: COCO-21 edges + left/right colors matching keypoints308.
+    out = image.copy()
+    names = keypoint_names
+    n_draw = len(points) if draw_all_keypoints else min(21, len(points))
+    valid = np.zeros(len(points), dtype=bool)
+    for idx in range(len(points)):
+        x, y = points[idx]
+        score = float(scores[idx]) if idx < len(scores) else 1.0
+        valid[idx] = score >= kpt_thr and np.isfinite(x) and np.isfinite(y)
+    for left, right in BODY_EDGES:
+        if left >= n_draw or right >= n_draw:
+            continue
+        if not (valid[left] and valid[right]):
+            continue
+        color_rgb = COLOR_CENTER_RGB
+        if left in LEFT_BODY_INDICES and right in LEFT_BODY_INDICES:
+            color_rgb = COLOR_LEFT_RGB
+        elif left in RIGHT_BODY_INDICES and right in RIGHT_BODY_INDICES:
+            color_rgb = COLOR_RIGHT_RGB
+        elif names is not None:
+            left_c = _side_color_rgb(left, names)
+            right_c = _side_color_rgb(right, names)
+            if left_c == right_c:
+                color_rgb = left_c
+        cv2.line(
+            out,
+            tuple(np.round(points[left]).astype(int)),
+            tuple(np.round(points[right]).astype(int)),
+            _rgb_to_bgr(color_rgb),
+            DEFAULT_SKELETON_THICKNESS,
+            cv2.LINE_AA,
+        )
+    for idx in range(n_draw):
+        if not valid[idx]:
+            continue
+        radius = DEFAULT_SKELETON_RADIUS if idx < 21 else 2
+        color = _rgb_to_bgr(_side_color_rgb(idx, names))
+        pt = tuple(np.round(points[idx]).astype(int))
+        cv2.circle(out, pt, radius, color, -1, cv2.LINE_AA)
+    return out
+
+
 def _draw_instance(
     image: np.ndarray,
     instance: dict[str, Any],
@@ -270,66 +521,23 @@ def _draw_instance(
     selected_id: int,
     kpt_thr: float,
     draw_all_keypoints: bool,
+    keypoint_names: list[str] | None = None,
 ) -> np.ndarray:
-    out = image.copy()
-    color = _color_for_id(selected_id)
-    if contour:
-        polygons = []
-        for raw in contour.get("polygons", []):
-            poly = np.asarray(raw, dtype=np.int32).reshape(-1, 1, 2)
-            if len(poly) >= 3:
-                polygons.append(poly)
-        if polygons:
-            cv2.polylines(out, polygons, True, color, 3, cv2.LINE_AA)
-            overlay = out.copy()
-            cv2.fillPoly(overlay, polygons, color)
-            out = cv2.addWeighted(overlay, 0.10, out, 0.90, 0.0)
-    bbox = instance.get("sam_bbox_xyxy") or instance.get("bbox")
-    if bbox and len(bbox) >= 4:
-        x1, y1, x2, y2 = [int(round(_safe_float(v))) for v in bbox[:4]]
-        cv2.rectangle(out, (x1, y1), (x2, y2), color, 3, cv2.LINE_AA)
-        label = f"SAM/Sapiens2 ID {selected_id}"
-        cv2.putText(
-            out,
-            label,
-            (max(0, x1), max(26, y1 - 8)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            color,
-            2,
-            cv2.LINE_AA,
-        )
-
-    points = np.asarray(instance.get("keypoints") or [], dtype=np.float32).reshape(-1, 2)
-    scores = np.asarray(instance.get("keypoint_scores") or [], dtype=np.float32).reshape(-1)
-    valid = np.zeros(len(points), dtype=bool)
-    for idx, (x, y) in enumerate(points):
-        score = float(scores[idx]) if idx < len(scores) else 1.0
-        valid[idx] = score >= kpt_thr and np.isfinite(x) and np.isfinite(y)
-    for left, right in BODY_EDGES:
-        if left < len(points) and right < len(points) and valid[left] and valid[right]:
-            cv2.line(
-                out,
-                tuple(np.round(points[left]).astype(int)),
-                tuple(np.round(points[right]).astype(int)),
-                color,
-                2,
-                cv2.LINE_AA,
-            )
-    draw_indices = range(len(points)) if draw_all_keypoints else range(min(21, len(points)))
-    for idx in draw_indices:
-        if valid[idx]:
-            radius = 3 if idx < 21 else 2
-            cv2.circle(
-                out,
-                tuple(np.round(points[idx]).astype(int)),
-                radius,
-                (255, 255, 255),
-                -1,
-                cv2.LINE_AA,
-            )
-            cv2.circle(out, tuple(np.round(points[idx]).astype(int)), radius, color, 1, cv2.LINE_AA)
-    return out
+    """Match SAM3+Sapiens2 look: contour fill, left/right skeleton, then outline/ID."""
+    style = _load_sapiens_overlay_style()
+    names = keypoint_names
+    if names is None and style is not None:
+        names = style.get("keypoint_names")
+    out = _draw_sam_contour_fill(image, contour, selected_id=selected_id)
+    out = _draw_sapiens_skeleton(
+        out,
+        instance,
+        kpt_thr=kpt_thr,
+        draw_all_keypoints=draw_all_keypoints,
+        style=style,
+        keypoint_names=names,
+    )
+    return _draw_sam_contour_outline_and_id(out, instance, contour, selected_id=selected_id)
 
 
 def _open_writer(path: Path, fps: float, size: tuple[int, int]) -> tuple[cv2.VideoWriter, Path]:
@@ -352,6 +560,7 @@ def render_selected_video(
     selected_id: int,
     kpt_thr: float = DEFAULT_KPT_THR,
     draw_all_keypoints: bool = True,
+    keypoint_names: list[str] | None = None,
 ) -> tuple[Path, int, int]:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -359,6 +568,8 @@ def render_selected_video(
     fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # Warm the style cache once before the frame loop (logs once).
+    _load_sapiens_overlay_style()
     writer, actual_path = _open_writer(output_path, fps, (width, height))
     frame_count = 0
     drawn_count = 0
@@ -376,6 +587,7 @@ def render_selected_video(
                     selected_id=selected_id,
                     kpt_thr=kpt_thr,
                     draw_all_keypoints=draw_all_keypoints,
+                    keypoint_names=keypoint_names,
                 )
                 drawn_count += 1
             writer.write(frame)
@@ -562,6 +774,11 @@ def visualize_selected_id(
     output_dir.mkdir(parents=True, exist_ok=True)
     records = _records_by_frame(payload, selected_id)
     contours = _contours_by_frame(run_dir, selected_id)
+    keypoint_names = payload.get("keypoint_names")
+    if isinstance(keypoint_names, list):
+        keypoint_names = [str(name) for name in keypoint_names]
+    else:
+        keypoint_names = None
     overlay, frames, drawn = render_selected_video(
         video_path,
         output_dir / f"{video_path.stem}_sam3sapiens2_id_{selected_id:02d}_overlay.mp4",
@@ -570,6 +787,7 @@ def visualize_selected_id(
         selected_id=selected_id,
         kpt_thr=kpt_thr,
         draw_all_keypoints=draw_all_keypoints,
+        keypoint_names=keypoint_names,
     )
     written = write_selected_artifacts(run_dir, output_dir, selected_id, payload)
     manifest = {
@@ -595,7 +813,8 @@ def visualize_selected_id(
         f"selected_id={selected_id}\nsource_run={run_dir}\nsource_video={video_path}\n"
         "identity_authority=SAM3 obj_id / stable_id\n"
         "coordinate_units=full-frame pixels; frame_index=zero-based\n"
-        "The root contains filtered artifacts. source_artifacts/ preserves the original run.\n",
+        "The root contains filtered artifacts. source_artifacts/ preserves the original run.\n"
+        "Overlay style: Sapiens2 left/right skeleton colors + SAM3 contour fill/outline.\n",
         encoding="utf-8",
     )
     _log(f"ID {selected_id}: rendered {drawn}/{frames} frames -> {output_dir}")
@@ -705,11 +924,7 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
             video = Path(vars_["video"].get()).expanduser()
             selected = int(vars_["id"].get())
             output_text = vars_["output"].get().strip()
-            output_parent = (
-                Path(output_text).expanduser()
-                if output_text
-                else run_dir
-            )
+            output_parent = Path(output_text).expanduser() if output_text else run_dir
             output = _unique_gui_output_dir(output_parent, video, selected)
             threshold = float(vars_["thr"].get())
         except Exception as exc:
@@ -785,7 +1000,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Per-video or processed_sam3sapiens2_* directory.",
     )
     parser.add_argument("--video", "-i", type=Path, help="Original source video.")
-    parser.add_argument("--id", dest="selected_id", type=int, help="SAM/stable ID to visualize.")
+    parser.add_argument(
+        "--id",
+        dest="selected_id",
+        type=int,
+        help="SAM/stable ID to visualize. If omitted in CLI mode, prompt interactively.",
+    )
     parser.add_argument("--output", "-o", type=Path, help="New output directory for this ID.")
     parser.add_argument(
         "--kpt-thr",
@@ -826,22 +1046,23 @@ def main(argv: list[str] | None = None) -> int:
     print(f">> Available SAM IDs: {ids}")
     if args.list_ids:
         return 0
-    if args.selected_id is None:
-        parser.error("--id is required unless --list-ids is used")
+    selected_id = args.selected_id
+    if selected_id is None:
+        selected_id = prompt_selected_id(ids)
+    elif selected_id not in ids:
+        parser.error(f"ID {selected_id} is unavailable; choose one of {ids}")
     if args.output is None:
         parser.error("--output/-o is required for rendering")
-    if args.selected_id not in ids:
-        parser.error(f"ID {args.selected_id} is unavailable; choose one of {ids}")
     if args.dry_run:
         validate_source_video(args.video.expanduser().resolve(), payload)
         print(
-            f">> Dry-run OK: video={args.video} run_dir={run_dir} id={args.selected_id} output={args.output}"
+            f">> Dry-run OK: video={args.video} run_dir={run_dir} id={selected_id} output={args.output}"
         )
         return 0
     visualize_selected_id(
         run_dir,
         args.video,
-        args.selected_id,
+        selected_id,
         args.output,
         kpt_thr=args.kpt_thr,
         draw_all_keypoints=not args.no_all_keypoints,

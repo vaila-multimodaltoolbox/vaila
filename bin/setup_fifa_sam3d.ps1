@@ -27,14 +27,22 @@ if (Test-Path (Join-Path $Sam3dDir ".git")) {
     Write-Warning "git pull failed; continuing with existing checkout"
   }
 } else {
-  Write-Host ">> [1/3] Cloning facebookresearch/sam_3d_body into $Sam3dDir..."
-  git clone --depth 1 https://github.com/facebookresearch/sam_3d_body.git $Sam3dDir
+  Write-Host ">> [1/3] Cloning facebookresearch/sam-3d-body into $Sam3dDir..."
+  git clone --depth 1 https://github.com/facebookresearch/sam-3d-body.git $Sam3dDir
 }
 
-Write-Host ">> [1/3] Installing sam_3d_body (editable) into the uv environment..."
+# Upstream `sam-3d-body` ships NO pyproject.toml / setup.py, so `uv pip install -e`
+# cannot work. The package is imported by putting the checkout root on sys.path;
+# `vaila/sam3dinov3.py` does that automatically (see `ensure_sam3d_importable`),
+# and VAILA_SAM3D_BODY_DIR overrides the location. Here we only install the
+# runtime dependencies it needs, with --no-deps so the CUDA torch build is
+# never resolved away.
+Write-Host ">> [1/3] Installing sam_3d_body runtime dependencies (--no-deps)..."
 Push-Location $RepoRoot
 try {
-  uv pip install -e $Sam3dDir
+  uv pip install --no-deps `
+    mhr yacs omegaconf "antlr4-python3-runtime==4.9.3" roma trimesh braceexpand `
+    pytorch-lightning torchmetrics lightning-utilities
 } finally {
   Pop-Location
 }

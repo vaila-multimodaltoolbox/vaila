@@ -275,6 +275,16 @@ if [[ "$sam_choice" == "y" || "$sam_choice" == "Y" ]]; then
     USE_SAM_EXTRA=true
 fi
 
+USE_FIFA_EXTRA=false
+echo ""
+echo "Install optional FIFA Skeletal Tracking Light / SAM 3D Body stack (extra 'fifa')?"
+echo "Note: on macOS this is install-only. SAM 3D Body inference requires NVIDIA CUDA at runtime."
+echo "[y/N]"
+read -r fifa_choice
+if [[ "$fifa_choice" == "y" || "$fifa_choice" == "Y" ]]; then
+    USE_FIFA_EXTRA=true
+fi
+
 # Choose template
 if [[ "$USE_METAL" == true ]]; then
     if [ -f "$VAILA_HOME/pyproject_macos.toml" ]; then
@@ -336,6 +346,9 @@ fi
 if [[ "$USE_SAM_EXTRA" == true ]]; then
     UV_SYNC_CMD+=(--extra sam)
 fi
+if [[ "$USE_FIFA_EXTRA" == true ]]; then
+    UV_SYNC_CMD+=(--extra fifa)
+fi
 if ! "${UV_SYNC_CMD[@]}"; then
     if [[ "$IS_GIT_TREE" == true && "$LOCK_WAS_REGENERATED" != true ]]; then
         echo "Frozen sync failed — retrying without --frozen (may update uv.lock)..."
@@ -343,15 +356,18 @@ if ! "${UV_SYNC_CMD[@]}"; then
         if [[ "$USE_SAM_EXTRA" == true ]]; then
             UV_SYNC_CMD+=(--extra sam)
         fi
+        if [[ "$USE_FIFA_EXTRA" == true ]]; then
+            UV_SYNC_CMD+=(--extra fifa)
+        fi
         if "${UV_SYNC_CMD[@]}"; then
             LOCK_WAS_REGENERATED=true
         else
             echo "Error: uv sync failed."
-            if [[ "$USE_SAM_EXTRA" == true ]]; then
-                echo "Retrying without SAM extra..."
+            if [[ "$USE_SAM_EXTRA" == true || "$USE_FIFA_EXTRA" == true ]]; then
+                echo "Retrying without optional extras (sam/fifa)..."
                 if uv sync; then
-                    echo "Base install succeeded (without --extra sam)."
-                    echo "You can retry SAM later on a CUDA host with: uv sync --extra sam"
+                    echo "Base install succeeded (without --extra sam/fifa)."
+                    echo "You can retry later on a CUDA host with: uv sync --extra sam --extra fifa"
                 else
                     echo "Restoring universal CPU configuration..."
                     cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
@@ -367,11 +383,11 @@ if ! "${UV_SYNC_CMD[@]}"; then
         fi
     else
         echo "Error: uv sync failed."
-        if [[ "$USE_SAM_EXTRA" == true ]]; then
-            echo "Retrying without SAM extra..."
+        if [[ "$USE_SAM_EXTRA" == true || "$USE_FIFA_EXTRA" == true ]]; then
+            echo "Retrying without optional extras (sam/fifa)..."
             if uv sync; then
-                echo "Base install succeeded (without --extra sam)."
-                echo "You can retry SAM later on a CUDA host with: uv sync --extra sam"
+                echo "Base install succeeded (without --extra sam/fifa)."
+                echo "You can retry later on a CUDA host with: uv sync --extra sam --extra fifa"
             else
                 echo "Restoring universal CPU configuration..."
                 cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
@@ -401,6 +417,29 @@ if [[ "$USE_SAM_EXTRA" == true ]]; then
         (cd "$VAILA_HOME" && uv run hf auth login) || {
             echo "Warning: hf auth login failed or was cancelled."
         }
+    fi
+fi
+
+if [[ "$USE_FIFA_EXTRA" == true ]]; then
+    echo ""
+    echo "------------------------------------------------------------"
+    echo "FIFA Skeletal Tracking Light / SAM 3D Body (optional): clone + weights via bin/setup_fifa_sam3d.sh"
+    echo "  - Clones facebookresearch/sam-3d-body into sam_3d_body/ (NOT pip-installable; runtime deps only)"
+    echo "  - Downloads gated facebook/sam-3d-body-dinov3 weights into vaila/models/sam-3d-dinov3/"
+    echo "  - GUI: Frame B -> YOLO + FB -> SAM3+DINOv3 3D (markerless 3D mesh + metric joints)"
+    echo "  - Note: cloning/weights work here; actual inference needs a CUDA host (see above)"
+    echo "  - License: SAM 3D Body keeps its Meta license (not AGPL) — see vaila/help/sam3dinov3.md"
+    echo "------------------------------------------------------------"
+    read -r -p "Run 'bash bin/setup_fifa_sam3d.sh' now from $VAILA_HOME? [y/N] " fifa_setup_now
+    if [[ "$fifa_setup_now" == "y" || "$fifa_setup_now" == "Y" ]]; then
+        if [[ -x "$VAILA_HOME/bin/setup_fifa_sam3d.sh" ]]; then
+            (cd "$VAILA_HOME" && bash bin/setup_fifa_sam3d.sh) || {
+                echo "Warning: setup_fifa_sam3d.sh failed or was cancelled. You can run it later:"
+                echo "  cd \"$VAILA_HOME\" && bash bin/setup_fifa_sam3d.sh"
+            }
+        else
+            echo "Warning: bin/setup_fifa_sam3d.sh not found. Run manually after updating the repo."
+        fi
     fi
 fi
 

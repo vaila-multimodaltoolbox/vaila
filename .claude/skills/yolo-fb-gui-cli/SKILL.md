@@ -3,7 +3,7 @@ name: yolo-fb-gui-cli
 description: YOLO + FB chooser (Frame B), Sapiens2 Pose, and GUI→CLI terminal mirror for vailá video-AI tools. Use when reopening Cursor CLI, wiring GUI buttons, printing copy-paste CLI from Tkinter runs, or continuing work on vaila.py yolotrackerpose / vaila_sam / vaila_sapiens / yolov26track / yolotrain.
 ---
 
-# YOLO + FB Chooser & GUI→CLI Mirror (v0.3.85)
+# YOLO + FB Chooser & GUI→CLI Mirror (v0.3.91)
 
 Use when the user works on **Frame B → YOLO + FB**, wants **terminal commands** equivalent to GUI clicks, or resumes after closing the terminal in **Cursor CLI**.
 
@@ -32,6 +32,8 @@ Each chooser button calls `_print_yolo_fb_launch()` before launching the tool:
 | Seg (v26) | same as Tracker; pick `-seg.pt` + seg run mode |
 | SAM 3 video | `uv run python -u vaila/vaila_sam.py` |
 | Sapiens2 Pose | `uv run python -u vaila/vaila_sapiens.py` |
+| SAM3+Sapiens2 | `uv run python -u vaila/sam3sapiens2.py` |
+| SAM3+Sapiens2 Visualize ID | `uv run python -u vaila/sam3sapiens2_visualize.py` |
 | Train YOLOv26 | `uv run python -u -m vaila.yolotrain` |
 
 ---
@@ -104,5 +106,6 @@ uv run pytest tests/test_vaila_sapiens.py tests/test_vaila_sam.py::test_build_sa
 
 1. `cd ~/data/vaila && uv sync` (add `--extra sam` / `--extra sapiens` / `--extra gpu` as needed)
 2. Read `AGENTS.md` History § v0.3.76 (Sapiens2 output dir) and this skill
-3. Global version: **0.3.85** (`vaila.py` header)
+3. Global version: **0.3.91** (`vaila.py` header)
 4. Never rename chooser back to “Video AI tools” in docs — use **YOLO + FB**
+5. Visualize ID: CLI `--id N` or omit `--id` for interactive prompt; GUI uses combobox after browsing the run dir. Overlay = SAM3 contour fill + Sapiens2 left/right skeleton colors.

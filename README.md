@@ -83,9 +83,7 @@ The analysis of human movement is fundamental in both health and sports biomecha
 - [Description](#description)
 - [_vailá_ Structure and Interface](#vailá-structure-and-interface)
 - [Installation and Setup](#installation-and-setup)
-  - [Optional: Crop Face model](#optional-crop-face-model)
-  - [Optional: SAM 3 (video segmentation)](#optional-sam-3-video-segmentation)
-- [Running the Application](#running-the-application)
+- [Running _vailá_ — GUI and CLI](#running-vailá--gui-and-cli)
 - [Uninstallation Instructions](#uninstallation-instructions)
 - [Documentation](#documentation)
 - [Citing _vailá_](#citing-vailá)
@@ -167,20 +165,15 @@ B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
 B4_r4_c1 - YOLO + FB        B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
-  YOLO + FB includes Sapiens2 Pose with optional rectangle/polygon detection ROI;
-  DETR is cropped locally while pose, Re-ID, tracking and CSVs remain in full-frame coordinates.
 
 B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
 B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
 
 B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
 B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
-  Soccer Tools includes Field KPs (AI), Soccer-Field Calib, VEK ElasticKick, FIFA cams->DLT and dataset utilities.
 
 B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - Treadmill LC
 B6_r7_c4 - vailá          B6_r7_c5 - vailá
-
-Treadmill LC opens a step-based treadmill ground-reaction-force workflow for instrumented treadmill data. It uses reusable TOML configurations for edge-safe low-pass filtering, optional 50/60 Hz mains-noise removal, cell-specific artifact marking/removal, interpolation, calibration, body-weight normalization, COP, step metrics, and asymmetry summaries. The GUI can read participant weight from Borg TXT metadata, flag trials marked with `Tent` values such as `T02*` for manual review, use same-day `tara`, `peso`, and optional plate-weight calibration files as complementary calibration points anchored by the participant weight, average calibration files over their central 5 seconds to avoid edge transients, and save calibration audit reports for each trial. The full pipeline runs in the practical order adjust+interpolate -> filter -> process metrics; filtering previews one calibration file and one running file before applying the same settings in batch, and processing writes timestamped output folders for every stage, with stage-explicit names (`*_processing_steps.csv`, `*_processing_metrics.csv`, `processing_overview.png`, `processing_cop_trajectory.png`) while filtering diagnostics use `filter_*` names, preventing spectrum metrics from being confused with biomechanical metrics. COP uses the fixed 58 x 113 cm treadmill geometry with COP X medio-lateral on the horizontal axis and COP Y anterior-posterior on the vertical axis; COP figures and optional interactive reports show the contact-load center over the instrumented deck, not belt displacement or stride length.
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
@@ -194,10 +187,6 @@ C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Crop Face      C_B_r1_c3 - Draw Box
 C_B_r2_c1 - Compress Video C_B_r2_c2 - vailá         C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
-  Make Sync file uses a fast Pygame player with the same Space, arrow, -/+, and [/]
-  playback controls as Cut Video. Type each sync frame, reference video text, and inclusive
-  start/end frames directly in the side-panel fields; Save + Cut Video passes the reference
-  video and versioned sync TXT without reopening file choosers.
 C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 
 -> C_C: Visualization
@@ -265,7 +254,7 @@ _vailá_ uses **[uv](https://github.com/astral-sh/uv)**, an extremely fast Pytho
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
 - **Dynamic Hardware Optimization:** Automatically detects hardware (NVIDIA GPU, Apple Silicon) and selects the optimized configuration template for your system.
-- **Cross-Platform:** **Windows** (CUDA 12.1 + TensorRT where applicable), **Linux** (CUDA 12.8 + TensorRT), and **macOS** (Metal/MPS for the general PyTorch stack). **Exception:** [SAM 3 video](#optional-sam-3-video-segmentation) (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime — it does not use MPS and has no CPU-only path.
+- **Cross-Platform:** **Windows** (CUDA 12.1 + TensorRT where applicable), **Linux** (CUDA 12.8 + TensorRT), and **macOS** (Metal/MPS for the general PyTorch stack). **Exception:** [SAM 3 video](vaila/help/vaila_sam.md) (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime — it does not use MPS and has no CPU-only path.
 
 #### 🎯 Smart Configuration System
 
@@ -322,81 +311,13 @@ This ensures that:
 
 For more information about uv, visit: [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
 
-### Optional: Crop Face model
+### Optional AI modules (SAM 3, Sapiens2, SAM3+Sapiens2, SAM3+DINOv3 3D, Crop Face, FIFA…)
 
-The **Crop Face** button uses dependencies already included in the standard vailá install. On first use, it downloads the official MediaPipe BlazeFace short-range detector into the local Git-ignored model cache:
+Several GUI tools (Frame B → **YOLO + FB**, Frame C → **Crop Face**, and the FIFA Skeletal Tracking Light stack) need an extra `uv sync --extra <name>` and, for some, a one-time gated-weights download or vendored-repo clone. Each one has its **own help page** with the exact extra name, install/setup commands, CUDA requirements, CLI usage, and outputs — start from the **Script Help Index**:
 
-```text
-vaila/models/crop_face/face_detector.task
-```
+- **[Script Help Index (HTML)](vaila/help/index.html)** · **[Script Help Index (Markdown)](vaila/help/index.md)**
 
-To provision the model before opening the GUI, run:
-
-```bash
-uv run python vaila/crop_faces_atletas.py --download-model
-```
-
-The downloaded bytes come from Google's versioned [MediaPipe BlazeFace short-range model](https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite). If automatic download fails, the GUI still allows manual selection of a compatible `.task` or `.tflite` file.
-
-### Optional: SAM 3 (video segmentation)
-
-The **Segment Anything Model 3** stack is not installed by default. If the GUI shows **“SAM 3 not installed”** (or the CLI exits when you run batch mode without the package), install the optional dependencies and restart _vailá_.
-
-**Standard installation** (universal CPU `pyproject` template):
-
-```bash
-uv sync --extra sam
-```
-
-**Workstation with NVIDIA CUDA** — recommended one-liner (auto-detects + switches template + syncs):
-
-```bash
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes   # Linux
-pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes        # Windows
-```
-
-Or do it manually after switching the `pyproject` template (legacy `bin/use_pyproject_*.sh / .ps1` shims):
-
-```bash
-uv sync --extra gpu --extra sam
-```
-
-**Runtime (important):** SAM 3 **video** uses `torch.cuda` in this integration. It requires an **NVIDIA GPU with CUDA** (`torch.cuda.is_available()`), even when the `sam` extra is installed on a CPU-only or macOS machine.
-
-| Situation | SAM 3 *video* |
-|-----------|----------------|
-| Linux / Windows + NVIDIA + CUDA PyTorch | Supported |
-| Windows **without** NVIDIA CUDA | **Not supported** — CLI/GUI stop with a clear message; use Markerless 2D / YOLO or a CUDA host |
-| macOS (Metal / Apple Silicon) | **Not supported** for SAM 3 *video* (not an MPS code path); use other vailá modules or run SAM 3 on a CUDA workstation / cloud GPU |
-
-`--frame-by-frame` only reduces **VRAM on CUDA**; it is **not** CPU inference.
-
-For laptop vs workstation installs, see **[AGENTS.md](AGENTS.md)** (“Hybrid CPU vs NVIDIA workstation”).
-
-**Weights** (Hugging Face, gated): accept the model on Hugging Face, then e.g. `uv run hf auth login` and `uv run vaila/vaila_sam.py --download-weights`, or `hf download` into `vaila/models/sam3/` **or** repo-root `models/sam3/` (both are auto-detected).
-
-**In-browser setup page** (same instructions): open the local help file after install, or run:
-
-```bash
-uv run vaila/vaila_sam.py --open-help
-```
-
-That opens [vaila/help/vaila_sam.html](vaila/help/vaila_sam.html) in your default browser.
-
-### SAM3+Sapiens2 — combined detection, contour focus, and identity
-
-Frame B → **YOLO + FB → SAM3+Sapiens2** runs SAM3 first, then sends its per-frame bbox and silhouette directly to the Sapiens2 top-down pose model. DETR is not loaded, and the output invariant is `stable_id == person_id == sam_obj_id`. Existing `processed_sam_*` results can be reused:
-
-```bash
-uv run python -u vaila/sam3sapiens2.py \
-  -i /path/to/videos -o /path/to/output \
-  --sam-results /path/to/processed_sam_YYYYMMDD_HHMMSS \
-  --model 1b --stride 1
-```
-
-The combined overlay contains SAM contours/bboxes/IDs plus the Sapiens2 308-keypoint skeleton. REC2D/REC3D, getpixelvideo, per-ID pose CSVs, predictions JSON, and an explicit `sam3sapiens2_id_audit.csv` are written per video. See [SAM3+Sapiens2 help](vaila/help/sam3sapiens2.md).
-
-**FIFA Skeletal Tracking Light** (separate optional stack): `uv sync --extra fifa` (often together with `--extra gpu` on CUDA templates). See `AGENTS.md` and `vaila_sam.py fifa --help`.
+For the hybrid CPU-laptop vs. NVIDIA-workstation workflow (which `pyproject_*.toml` template, which extras, `bin/setup_pyproject.sh`), see **[AGENTS.md](AGENTS.md)**.
 
 ---
 
@@ -479,17 +400,7 @@ The installation script automatically:
 
 ### 4. **Launching _vailá_**
 
-After installation, you can launch _vailá_:
-
-- Using the **Desktop shortcut** (with proper icon)
-- From the **Windows Start Menu** under _vailá_
-- From **Windows Terminal** via the pre-configured _vailá_ profile
-- Manually, by running:
-
-  ```powershell
-  cd path\to\vaila
-  uv run vaila.py
-  ```
+See [Running _vailá_ — GUI and CLI](#running-vailá--gui-and-cli) below (Desktop/Start Menu shortcut, Windows Terminal profile, or `uv run vaila.py`).
 
 ---
 
@@ -605,23 +516,42 @@ The uv installer will automatically:
 
 ---
 
-## Running the Application
+## Running _vailá_ — GUI and CLI
 
-After installation, you can launch _vailá_ from your applications menu or directly from the terminal, depending on your operating system.
+### GUI (recommended)
 
-### 🚀 Using uv (Recommended)
+```bash
+cd path/to/vaila
+uv run vaila.py
+```
 
-**uv** provides faster execution times and is the recommended method for all platforms.
+Or, without typing that:
 
-- Using the **Desktop shortcut** (with proper icon)
-- From the **Windows Start Menu** under _vailá_
-- From **Windows Terminal** via the pre-configured _vailá_ profile
-- Manually, by running:
+- **Desktop / Start Menu / Applications** shortcut created by the installer (with icon)
+- **Windows Terminal** profile pre-configured by the installer (Windows)
+- Portable launch scripts created by the installer:
+  - 🐧 🍎 `./run_vaila.sh` (default install dir, or `~/vaila` if you chose the user-profile option)
+  - 🪟 `.\run_vaila.ps1`, or double-click `run_vaila.bat`
 
-  ```powershell
-  cd path\to\vaila
-  uv run vaila.py
-  ```
+All of these run _vailá_ through the same `uv`-managed virtual environment created at install time.
+
+### CLI
+
+Most `vaila/*.py` modules also run standalone from the command line, e.g.:
+
+```bash
+uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t person
+uv run vaila/sam3dinov3.py -i video.mp4 -o out/ --focal-px 1400
+uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
+```
+
+Every GUI **Run** button also prints its equivalent copy-paste CLI command to the terminal, so you can recover the exact flags used from a GUI session.
+
+### Full script reference
+
+For the CLI flags, GUI button location, required extras, and outputs of **every** script — see the Script Help Index:
+
+- **[Script Help Index (HTML)](vaila/help/index.html)** · **[Script Help Index (Markdown)](vaila/help/index.md)**
 
 ---
 
@@ -651,59 +581,6 @@ The test suite covers:
 
 - **Unit Tests:** Physics formulas (Force, Power, Energy), TOML configuration loading, and baseline calculations.
 - **Integration Tests:** End-to-end processing of Time-of-flight, Jump-height, and MediaPipe data using real sample files.
-
----
-
----
-
-## If preferred, you can also run _vailá_ from the launch scripts
-
-### For 🐧 Linux and 🍎 macOS
-
-- From the Applications Menu:
-  - Look for `vailá` in your applications menu and launch it by clicking on the icon.
-
----
-
-#### From the Terminal
-
-If you prefer to run _vailá_ from the terminal or if you encounter issues with the applications menu, you can use the launch script created during installation.
-
-##### 🐧 Linux and 🍎 macOS
-
-The installation scripts automatically create a `run_vaila.sh` script in the install directory (default: the repo you cloned; or `~/vaila` if you chose the user-profile option).
-
-- **Run the script** (portable default):
-
-```bash
-./run_vaila.sh
-# or, if you installed to the user profile:
-# ~/vaila/run_vaila.sh
-```
-
-The script uses the `uv` virtual environment created during installation.
-
-##### 🪟 Windows
-
-The installation script automatically creates `run_vaila.ps1` and `run_vaila.bat` scripts in the installation directory.
-
-- **Run using PowerShell**:
-
-```powershell
-.\run_vaila.ps1
-```
-
-- **Or double-click**:
-
-```batch
-run_vaila.bat
-```
-
-#### Notes
-
-- The launch scripts (`run_vaila.sh`, `run_vaila.ps1`, `run_vaila.bat`) are automatically created during installation.
-- These scripts run vaila through the `uv`-managed virtual environment.
-- The scripts are located in the installation directory (default: the cloned repo / portable; optional: `~/vaila` or Program Files / user profile on Windows).
 
 ---
 
@@ -808,26 +685,15 @@ The script will:
 
 ### 📚 Script Help Documentation
 
-Comprehensive documentation for all Python scripts and modules in vailá:
+Every module and script in vailá — description, GUI button location, required extras, CLI usage, configuration parameters, and input/output formats — is documented in the **Script Help Index**:
 
 - **[Script Help Index (HTML)](vaila/help/index.html)** - Complete documentation for all Python modules and scripts (HTML version)
 - **[Script Help Index (Markdown)](vaila/help/index.md)** - Complete documentation for all Python modules and scripts (Markdown version)
-- **[Treadmill LC Help (HTML)](vaila/help/treadmill_lc.html)** - Guided treadmill load-cell workflow, TOML parameters, calibration, filtering, adjustment/interpolation, and processing outputs
-- **[Treadmill LC Help (Markdown)](vaila/help/treadmill_lc.md)** - Same Treadmill LC documentation in Markdown form
-
-The help documentation includes detailed information about:
-
-- Module descriptions and functionality
-- Configuration parameters
-- Usage instructions
-- Input/output formats
-- Requirements and dependencies
 
 ### 📖 Additional Documentation
 
 - **[AGENTS.md](AGENTS.md)** - `uv run` recipes, hybrid CPU vs CUDA `pyproject` templates, SAM 3 / FIFA pointers
 - **[Project Documentation](docs/index.md)** - Overview and module documentation
-- **[PDF Transcription](vaila/help/transcribe_pdfs.md)** - Brainstorm PDF exam transcription workflow
 - **[Help Guide](docs/help.md)** - User guide and installation instructions
 - **[GUI Button Documentation](docs/vaila_buttons/README.md)** - Complete documentation for all GUI buttons
 

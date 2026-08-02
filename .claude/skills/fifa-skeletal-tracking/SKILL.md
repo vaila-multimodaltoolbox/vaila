@@ -106,8 +106,17 @@ uv run vaila/vaila_sam.py fifa bootstrap \
 - `vaila/fifa_starter_lib/` — **vendored MIT** `camera_tracker.py`, `postprocess.py`,
   and `pitch_points.txt` from the official starter kit. Updated via the steps in
   `vaila/fifa_starter_lib/VENDOR.md`.
-- `sam_3d_body/` at repo root — cloned by `bin/setup_fifa_sam3d.sh` (NOT committed);
-  installed into the uv environment with `uv pip install -e sam_3d_body/`.
+- `sam_3d_body/` at repo root — cloned by `bin/setup_fifa_sam3d.sh` (NOT committed).
+  Upstream ships **no `pyproject.toml`/`setup.py`**, so it cannot be `pip install -e`'d;
+  the setup script installs only its runtime deps (`--no-deps`, so the CUDA torch
+  build is never touched), and `vaila/sam3dinov3.py::ensure_sam3d_importable()`
+  puts the checkout root on `sys.path` at runtime (override with
+  `VAILA_SAM3D_BODY_DIR`). Dependency traps: `omegaconf` needs
+  `antlr4-python3-runtime==4.9.3` (4.13 raises *"Could not deserialize ATN with
+  version 3"*); the MHR body model is the PyPI package `mhr`; a bare clone dir
+  also resolves as an empty namespace package to static analysers, so it's
+  imported via `importlib` + `getattr`, never `from sam_3d_body import X`. See
+  `CLAUDE.md` § *Recent GUI Notes* for the full writeup.
 
 ---
 
@@ -335,8 +344,8 @@ Same process with `--split test` and the [Test Portal](https://www.codabench.org
 | `vaila/fifa_starter_lib/postprocess.py` | Vendored MIT smoothing (`smoothen`) |
 | `vaila/fifa_starter_lib/pitch_points.txt` | Vendored MIT FIFA pitch reference |
 | `vaila/soccerfield_calib.py` | Companion DLT2D homography from 29 FIFA keypoints |
-| `bin/setup_fifa_sam3d.sh` / `.ps1` | Clones sam_3d_body + downloads gated weights |
-| `sam_3d_body/` | Cloned by the setup script (NOT committed) |
+| `bin/setup_fifa_sam3d.sh` / `.ps1` | Clones sam_3d_body + installs its runtime deps (`--no-deps`) + downloads gated weights |
+| `sam_3d_body/` | Cloned by the setup script (NOT committed); no packaging metadata, so it is never `pip install`'d — see `ensure_sam3d_importable()` in `vaila/sam3dinov3.py` |
 | `vaila/models/sam-3d-dinov3/` | SAM 3D Body weights (model.ckpt, mhr_model.pt) |
 | `vaila/models/sam3/` | SAM 3 video weights (sam3.pt, sam3.1_multiplex.pt) |
 | `tests/test_vaila_sam.py` | SAM helpers + GUI Help smoke test |
@@ -356,7 +365,8 @@ Same process with `--split test` and the [Test Portal](https://www.codabench.org
   `vaila/fifa_starter_lib/`; update it with the steps in
   `vaila/fifa_starter_lib/VENDOR.md` if upstream changes.
 - **Missing `sam_3d_body/`:** Run `bash bin/setup_fifa_sam3d.sh` (or the `.ps1`)
-  to clone the Meta repo and `uv pip install -e` it.
+  to clone the Meta repo (`facebookresearch/sam-3d-body`, hyphenated — the
+  underscore spelling 404s) and install its runtime dependencies.
 - **No `cameras/` or `pitch_points.txt`:** `fifa bootstrap` seeds
   `pitch_points.txt` from the vendored copy; `cameras/*.npz` must come from the
   HF dataset or from `vaila/soccerfield_calib.py` (companion tool — drops

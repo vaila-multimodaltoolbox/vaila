@@ -1,7 +1,7 @@
 """Tests for the selected-ID SAM3+Sapiens2 rerenderer.
 
 Update Date: 01 August 2026
-Version: 0.3.89
+Version: 0.3.91
 """
 
 from __future__ import annotations
@@ -12,8 +12,16 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 from vaila import sam3sapiens2_visualize as viz
+
+
+@pytest.fixture(autouse=True)
+def _reset_style_cache() -> None:
+    viz._SAPIENS_STYLE_CACHE = viz._STYLE_UNSET
+    yield
+    viz._SAPIENS_STYLE_CACHE = viz._STYLE_UNSET
 
 
 def _fixture_run(tmp_path: Path) -> tuple[Path, Path]:
@@ -92,6 +100,33 @@ def test_discover_and_resolve_selected_id(tmp_path: Path) -> None:
     assert viz.discover_ids(run) == [2, 9]
 
 
+def test_prompt_selected_id_reprompts_until_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers = iter(["", "abc", "99", "2"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+    assert viz.prompt_selected_id([2, 9]) == 2
+
+
+def test_cli_prompts_for_id_when_flag_omitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run, video = _fixture_run(tmp_path)
+    output = tmp_path / "out_id_prompt"
+    monkeypatch.setattr(viz, "prompt_selected_id", lambda _ids: 2)
+    code = viz.main(
+        [
+            "--sam-results",
+            str(run),
+            "--video",
+            str(video),
+            "--output",
+            str(output),
+            "--dry-run",
+        ]
+    )
+    assert code == 0
+    assert output.exists() is False
+
+
 def test_discovers_recorded_source_video_and_validates_alignment(tmp_path: Path) -> None:
     run, video = _fixture_run(tmp_path)
     (run / "sam3sapiens2_summary.json").write_text(
@@ -150,3 +185,45 @@ def test_render_selected_video_draws_only_selected_instance(tmp_path: Path) -> N
     )
     assert rendered.exists()
     assert frames == drawn == 2
+
+
+def test_draw_instance_uses_left_right_limb_colors() -> None:
+    """Fallback OpenCV path must colour left green and right orange (BGR)."""
+    viz._SAPIENS_STYLE_CACHE = None  # force left/right fallback
+    image = np.zeros((120, 160, 3), dtype=np.uint8)
+    instance = {
+        "sam_bbox_xyxy": [10, 10, 150, 110],
+        "keypoints": [[0.0, 0.0]] * 21,
+        "keypoint_scores": [1.0] * 21,
+    }
+    # left wrist (9) vs right wrist (10)
+    instance["keypoints"][9] = [40.0, 60.0]
+    instance["keypoints"][10] = [120.0, 60.0]
+    contour = {
+        "polygons": [[[20, 20], [140, 20], [140, 100], [20, 100]]],
+    }
+    out = viz._draw_instance(
+        image,
+        instance,
+        contour,
+        selected_id=2,
+        kpt_thr=0.3,
+        draw_all_keypoints=False,
+    )
+    left_bgr = out[60, 40]
+    right_bgr = out[60, 120]
+    assert tuple(int(v) for v in left_bgr) == viz._rgb_to_bgr(viz.COLOR_LEFT_RGB)
+    assert tuple(int(v) for v in right_bgr) == viz._rgb_to_bgr(viz.COLOR_RIGHT_RGB)
+    # Contour fill should tint interior pixels away from pure black.
+    assert int(out[50, 80].sum()) > 0
+
+
+def test_sapiens_overlay_style_loads_left_right_palette_when_available() -> None:
+    style = viz._load_sapiens_overlay_style()
+    if style is None:
+        pytest.skip("sapiens2 pose style not installed")
+    assert callable(style["visualize"])
+    assert len(style["skeleton"]) >= 20
+    link_colors = np.asarray(style["link_color"])
+    assert any(np.array_equal(row, viz.COLOR_LEFT_RGB) for row in link_colors)
+    assert any(np.array_equal(row, viz.COLOR_RIGHT_RGB) for row in link_colors)

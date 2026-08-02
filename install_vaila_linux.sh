@@ -435,6 +435,16 @@ if [[ "$USE_GPU" == true ]]; then
     fi
 fi
 
+USE_FIFA_EXTRA=false
+if [[ "$USE_GPU" == true ]]; then
+    echo ""
+    echo "Install optional FIFA Skeletal Tracking Light / SAM 3D Body stack (markerless 3D mesh, extra 'fifa', CUDA)? [y/N]"
+    read -r fifa_choice
+    if [[ "$fifa_choice" == "y" || "$fifa_choice" == "Y" ]]; then
+        USE_FIFA_EXTRA=true
+    fi
+fi
+
 # Choose template
 if [[ "$USE_GPU" == true ]]; then
     if [ -f "$VAILA_HOME/pyproject_linux_cuda12.toml" ]; then
@@ -513,6 +523,9 @@ fi
 if [[ "$USE_SAPIENS_EXTRA" == true ]]; then
     UV_SYNC_CMD+=(--extra sapiens)
 fi
+if [[ "$USE_FIFA_EXTRA" == true ]]; then
+    UV_SYNC_CMD+=(--extra fifa)
+fi
 if ! "${UV_SYNC_CMD[@]}"; then
     if [[ "$IS_GIT_TREE" == true && "$LOCK_WAS_REGENERATED" != true ]]; then
         echo "Frozen sync failed — retrying without --frozen (may update uv.lock)..."
@@ -525,6 +538,9 @@ if ! "${UV_SYNC_CMD[@]}"; then
         fi
         if [[ "$USE_SAPIENS_EXTRA" == true ]]; then
             UV_SYNC_CMD+=(--extra sapiens)
+        fi
+        if [[ "$USE_FIFA_EXTRA" == true ]]; then
+            UV_SYNC_CMD+=(--extra fifa)
         fi
         if "${UV_SYNC_CMD[@]}"; then
             LOCK_WAS_REGENERATED=true
@@ -584,6 +600,29 @@ if [[ "$USE_SAPIENS_EXTRA" == true ]]; then
             }
         else
             echo "Warning: bin/setup_sapiens2.sh not found. Run manually after updating the repo."
+        fi
+    fi
+fi
+
+if [[ "$USE_FIFA_EXTRA" == true ]]; then
+    echo ""
+    echo "------------------------------------------------------------"
+    echo "FIFA Skeletal Tracking Light / SAM 3D Body (optional): clone + weights via bin/setup_fifa_sam3d.sh"
+    echo "  - Clones facebookresearch/sam-3d-body into sam_3d_body/ (NOT pip-installable; runtime deps only)"
+    echo "  - Downloads gated facebook/sam-3d-body-dinov3 weights into vaila/models/sam-3d-dinov3/"
+    echo "  - GUI: Frame B -> YOLO + FB -> SAM3+DINOv3 3D (markerless 3D mesh + metric joints)"
+    echo "  - Test: uv run python -u vaila/sam3dinov3.py -i tests/markerless_2d_analysis/ -o /tmp/out --dry-run"
+    echo "  - License: SAM 3D Body keeps its Meta license (not AGPL) — see vaila/help/sam3dinov3.md"
+    echo "------------------------------------------------------------"
+    read -r -p "Run 'bash bin/setup_fifa_sam3d.sh' now from $VAILA_HOME? [y/N] " fifa_setup_now
+    if [[ "$fifa_setup_now" == "y" || "$fifa_setup_now" == "Y" ]]; then
+        if [[ -x "$VAILA_HOME/bin/setup_fifa_sam3d.sh" ]]; then
+            (cd "$VAILA_HOME" && bash bin/setup_fifa_sam3d.sh) || {
+                echo "Warning: setup_fifa_sam3d.sh failed or was cancelled. You can run it later:"
+                echo "  cd \"$VAILA_HOME\" && bash bin/setup_fifa_sam3d.sh"
+            }
+        else
+            echo "Warning: bin/setup_fifa_sam3d.sh not found. Run manually after updating the repo."
         fi
     fi
 fi
