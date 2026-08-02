@@ -121,7 +121,7 @@ dependencies = [
     "ruff",
     "vpython",
     "pyvista",
-    "setuptools<82",
+    "setuptools>=83",
 ]
 
 [project.optional-dependencies]
@@ -173,6 +173,7 @@ packages = ["vaila"]
 [tool.uv]
 override-dependencies = [
     "regex>=2025.11.3",
+    "setuptools>=83",
 ]
 
 [tool.uv.workspace]
