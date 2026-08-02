@@ -4,16 +4,17 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 131 | **Categories:** 7 | **Generated on:** 01/08/2026 (v0.3.92)
+**Total documented modules:** 132 | **Categories:** 7 | **Generated on:** 02/08/2026 (v0.3.96)
 
 ## YOLO + FB chooser (Frame B → B4_r4_c1)
 
-Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, **SAM3+DINOv3 3D**, Train YOLOv26.
+Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, Train YOLOv26.
 
 - [vaila_sapiens (Sapiens2 Pose)](vaila_sapiens.html) · [MD](vaila_sapiens.md)
 - [sam3sapiens2 (SAM-guided Sapiens2)](sam3sapiens2.html) · [MD](sam3sapiens2.md)
 - [sam3sapiens2_visualize (selected-ID rerenderer)](sam3sapiens2_visualize.html) · [MD](sam3sapiens2_visualize.md)
 - [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
+- [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
 - [vaila_sam (SAM 3)](vaila_sam.html) · [MD](vaila_sam.md)
 - [yolov26track](yolov26track.html) · [MD](yolov26track.md)
 - [yolotrain](yolotrain.html) · [MD](yolotrain.md)
@@ -21,12 +22,13 @@ Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking)
 
 ## YOLO + FB chooser (Frame B → B4_r4_c1)
 
-Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, **SAM3+DINOv3 3D**, Train YOLOv26.
+Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, Train YOLOv26.
 
 - [vaila_sapiens (Sapiens2 Pose)](vaila_sapiens.html) · [MD](vaila_sapiens.md)
 - [sam3sapiens2 (SAM-guided Sapiens2)](sam3sapiens2.html) · [MD](sam3sapiens2.md)
 - [sam3sapiens2_visualize (selected-ID rerenderer)](sam3sapiens2_visualize.html) · [MD](sam3sapiens2_visualize.md)
 - [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
+- [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
 - [vaila_sam (SAM 3)](vaila_sam.html) · [MD](vaila_sam.md)
 - [yolov26track](yolov26track.html) · [MD](yolov26track.md)
 - [yolotrain](yolotrain.html) · [MD](yolotrain.md)
@@ -332,6 +334,9 @@ Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking)
 - **sam3dinov3 (SAM3 + DINOv3 / SAM 3D Body — markerless 3D MHR mesh)**
   - [📄 HTML](sam3dinov3.html)
   - [📝 Markdown](sam3dinov3.md)
+- **sam3dinov3_visualize (selected-ID rerenderer)**
+  - [📄 HTML](sam3dinov3_visualize.html)
+  - [📝 Markdown](sam3dinov3_visualize.md)
 - **vaila_stroboscopic (Stroboscopic Generator)**
   - [📄 HTML](vaila_stroboscopic.html)
   - [📝 Markdown](vaila_stroboscopic.md)

@@ -1,18 +1,20 @@
 # SAM3+Sapiens2 — Visualize selected ID
 
-**Version:** 0.3.91  
-**Updated:** 2026-08-01
+**Version:** 0.3.96  
+**Updated:** 2026-08-02
 
 This CPU-only tool rerenders an existing `processed_sam3sapiens2_*` result. It does not load SAM3 or Sapiens2 weights, so it is safe for visualization after an inference run and does not repeat GPU allocation.
 
 It draws the selected SAM identity, contour, bounding box, and Sapiens2 keypoints on the original video, then writes a new ID-specific directory. The root includes filtered tracking, pose, contour, audit, and overlay-video outputs; `source_artifacts/` preserves the original run for provenance.
 
-## Overlay style (v0.3.91)
+## Overlay style (v0.3.96)
 
 The selected-ID overlay matches the combined SAM3+Sapiens2 look:
 
-1. **SAM3 contour** — semi-transparent silhouette fill + outline, bbox, and `SAM #id` label
+1. **SAM3 contour** — semi-transparent silhouette fill (anti-aliased edge, alpha 0.45) + outline, bbox, and `SAM #id` label
 2. **Sapiens2 skeleton** — official `keypoints308` palette with **left = green** and **right = orange** limb colors (full 308 links when the `sapiens` extra is installed; COCO-21 left/right fallback otherwise)
+
+> Note: this pipeline has no body mesh — Sapiens2 regresses joints only, not a surface. For a Blender-importable **3D body mesh**, use [sam3dinov3_visualize](sam3dinov3_visualize.md) `--export-mesh obj` on a SAM3+DINOv3 run made with `--save-mesh`.
 
 ## CLI
 

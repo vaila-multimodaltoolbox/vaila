@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 01 August 2026
-Version: 0.3.92
+Update Date: 02 August 2026
+Version: 0.3.96
 
 Example of usage:
 uv run vaila.py
@@ -249,7 +249,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 01.Aug.2026 v0.3.92 (Python 3.12.13)
+    vailá - 02.Aug.2026 v0.3.96 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -360,7 +360,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 01.Aug.2026 v0.3.92 (Python 3.12.13)")
+        self.title("vailá - 02.Aug.2026 v0.3.96 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -2595,6 +2595,14 @@ class Vaila(tk.Tk):
             )
             self.sam3dinov3_video()
 
+        def use_sam3dinov3_visualize():
+            dialog.destroy()
+            _print_yolo_fb_launch(
+                "SAM3+DINOv3 Visualize ID",
+                "uv run python -u vaila/sam3dinov3_visualize.py",
+            )
+            self.sam3dinov3_visualize_video()
+
         tk.Button(dialog, text="Tracker (v26)", command=use_yolov26, width=16).pack(pady=6)
         tk.Button(dialog, text="Pose (video)", command=use_yolo_pose_v26, width=16).pack(pady=6)
         tk.Button(
@@ -2617,6 +2625,12 @@ class Vaila(tk.Tk):
             dialog,
             text="SAM3+DINOv3 3D",
             command=use_sam3dinov3,
+            width=24,
+        ).pack(pady=6)
+        tk.Button(
+            dialog,
+            text="SAM3+DINOv3 Visualize ID",
+            command=use_sam3dinov3_visualize,
             width=24,
         ).pack(pady=6)
         tk.Button(dialog, text="Train YOLOv26", command=use_train_yolov26, width=16).pack(pady=6)
@@ -3649,6 +3663,20 @@ class Vaila(tk.Tk):
         run_vaila_module(
             "vaila.sam3sapiens2_visualize",
             "vaila/sam3sapiens2_visualize.py",
+            extra_py_flags=("-u",),
+        )
+
+    def sam3dinov3_visualize_video(self):
+        """Rerender one existing SAM3+DINOv3 3D identity without model inference."""
+        print("\n" + "=" * 60)
+        print("Launching: vaila.sam3dinov3_visualize")
+        print(">> Equivalent launch CLI: uv run python -u vaila/sam3dinov3_visualize.py")
+        print("Features: select one person ID; draw SAM contour, bbox, ID, and MHR skeleton")
+        print("Runtime: CPU/OpenCV rerender; SAM3/SAM 3D Body weights are not loaded.")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.sam3dinov3_visualize",
+            "vaila/sam3dinov3_visualize.py",
             extra_py_flags=("-u",),
         )
 

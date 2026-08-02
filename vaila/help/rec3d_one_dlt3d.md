@@ -6,7 +6,7 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/rec3d_one_dlt3d.py` |
-| **Version** | 0.0.5 |
+| **Version** | 0.3.94 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -15,10 +15,10 @@
 
 ## Description
 
-Batch 3D reconstruction using the **Direct Linear Transformation (DLT)** method with multiple cameras. For each camera you provide:
+Batch 3D reconstruction using the **Direct Linear Transformation (DLT)** method with multiple cameras and **one fixed set of DLT3D parameters per camera** (the whole clip uses the same 11 coefficients). For DLT3D parameters that vary frame by frame (a DLT "matrix"), use **rec3d** instead. For each camera you provide:
 
 - One **DLT3D parameter file** (11 coefficients per camera, e.g. from the `dlt3d` module).
-- One **pixel-coordinate CSV** with columns: `frame`, `p1_x`, `p1_y`, `p2_x`, `p2_y`, ..., `pN_x`, `pN_y` (vailá standard).
+- One **pixel-coordinate CSV**: column 0 is the frame identifier and every pair of columns after that is one marker's (x, y).
 
 Frames common to all pixel files are reconstructed; results are written to a **timestamped subfolder** in the chosen output directory.
 
@@ -33,7 +33,7 @@ Frames common to all pixel files are reconstructed; results are written to a **t
 
 ### Pixel CSV
 
-- Header: `frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y`.
+- **Column labels are not inspected — only column order matters.** Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of what the header text says. This makes the file compatible with vailá's own `frame,p1_x,p1_y,...` convention as well as CSVs coming from SAM3, YOLO, MediaPipe (named joints), or any other tracker — as long as the same markers appear in the same order in every camera's file.
 - **One file per camera**; same number of markers and overlapping frame sets recommended.
 - In GUI mode, each file can be chosen from a **different directory** (one dialog per camera).
 
@@ -75,7 +75,7 @@ Run with **no arguments** or with `--gui`:
 |----------|-------------|
 | `--dlt3d` *FILE* [*FILE* ...] | DLT3D parameter files (one per camera); order must match `--pixels`. |
 | `--pixels` *FILE* [*FILE* ...] | Pixel coordinate CSV files (one per camera); order must match `--dlt3d`. |
-| `--fps` *HZ* | Point data rate in Hz (default: 100). |
+| `--fps` *HZ* | Point data rate in Hz (default: 100). Accepts fractional rates, e.g. `119.88012001` for NTSC-derived 120000/1001 capture. |
 | `-o`, `--output` *DIR* | Output directory; a timestamped subfolder will be created here. |
 | `--gui` | Launch GUI instead of CLI. |
 

@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.45
+Version: 0.3.93
 Created: November 26, 2024
-Last Updated: 23 May 2026
+Last Updated: 01 August 2026
 ================================================================================
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 2D coordinate transformations.
@@ -27,6 +27,16 @@ New Features:
     - Detailed logging of DLT parameter calculation for each frame.
     - User-friendly graphical interface for file selection using Tkinter.
     - Integration with the Rich library for enhanced console output.
+
+Note on point matching:
+    Unlike rec2d.py/rec3d.py (where a single pixel file's marker columns are
+    read purely by ORDER), dlt2d.py correlates two DIFFERENT files — the pixel
+    calibration file and the REF2D reference file — by matching the point
+    LABEL prefix before the underscore (e.g. "p3" in "p3_x"/"p3_y"). This lets
+    a REF2D file define more calibration points than a given pixel file
+    actually tracks; only the common points are used. If the pixel and REF2D
+    frame counts differ (and REF2D has more than 1 row), no DLT parameters are
+    computed and a clear message is printed instead of raising an exception.
 
 Usage:
     1. Run the script to start the Direct Linear Transformation (DLT) process.
@@ -229,7 +239,7 @@ def process_files(pixel_file, real_file):
         print(
             "Files should have either the same number of frames or reference file should have exactly 1 frame."
         )
-        return
+        return []
 
     dlt_params = []
 
@@ -313,6 +323,7 @@ def save_dlt_parameters(output_file, dlt_params, show_gui=True):
     if show_gui:
         try:
             import tkinter as tk
+
             if tk._default_root is not None:
                 messagebox.showinfo("Success", f"DLT parameters saved to {output_file}")
         except Exception:
@@ -366,8 +377,14 @@ def run_dlt2d(pixel_file=None, real_file=None, create_ref=False):
             return
 
     dlt_params = process_files(pixel_file, real_file)
+    show_gui = pixel_file is None
+    if not dlt_params:
+        msg = "No DLT2D parameters could be computed; check the messages above."
+        print(f"Error: {msg}")
+        if show_gui:
+            messagebox.showerror("Error", msg)
+        return
     output_file = os.path.splitext(pixel_file)[0] + ".dlt2d"
-    show_gui = (pixel_file is None)
     save_dlt_parameters(output_file, dlt_params, show_gui=show_gui)
 
 

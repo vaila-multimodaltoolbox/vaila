@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.6
+Version: 0.3.94
 Created: 02 August 2025
-Last Updated: 15 February 2026
+Last Updated: 01 August 2026
 
 ================================================================================
 Description
@@ -44,7 +44,10 @@ DLT3D file:
   - One file per camera; order must match the pixel file order.
 
 Pixel CSV:
-  - Header: frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y (vailá standard).
+  - Column LABELS are not inspected — only column ORDER matters: column 0 is
+    the frame identifier and every pair of columns after that is one marker's
+    (x, y), regardless of header text (vailá p1_x/p1_y, SAM3, YOLO, MediaPipe
+    named joints, etc.).
   - One file per camera; same number of markers and matching frame sets recommended.
   - Files may be in different directories (GUI: one dialog per camera).
 
@@ -86,39 +89,16 @@ from tkinter import Tk, filedialog, messagebox, simpledialog
 import ezc3d
 import numpy as np
 import pandas as pd
-from numpy.linalg import lstsq
 from rich import print
 
-
-def rec3d_multicam(dlt_list, pixel_list):
-    """
-    Reconstructs a 3D point using multiple camera observations and their corresponding DLT3D parameters.
-
-    Args:
-        dlt_list (list of np.array): List of DLT3D parameter arrays (each of 11 elements) for each camera.
-        pixel_list (list of tuple): List of observed pixel coordinates (x, y) for each camera.
-
-    Returns:
-        np.array: Reconstructed 3D point [X, Y, Z] using a least squares solution.
-    """
-    num_cameras = len(dlt_list)
-    A_matrix = np.zeros((num_cameras * 2, 3))
-    b_vector = np.zeros(num_cameras * 2)
-
-    for i, (A_params, (x, y)) in enumerate(zip(dlt_list, pixel_list, strict=False)):
-        a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11 = A_params
-
-        # Equations for camera i:
-        # (a1 - x*a9)*X + (a2 - x*a10)*Y + (a3 - x*a11)*Z = x - a4
-        # (a5 - y*a9)*X + (a6 - y*a10)*Y + (a7 - y*a11)*Z = y - a8
-        row_idx = i * 2
-        A_matrix[row_idx] = [a1 - x * a9, a2 - x * a10, a3 - x * a11]
-        A_matrix[row_idx + 1] = [a5 - y * a9, a6 - y * a10, a7 - y * a11]
-        b_vector[row_idx] = x - a4
-        b_vector[row_idx + 1] = y - a8
-
-    solution, residuals, rank, s = lstsq(A_matrix, b_vector, rcond=None)
-    return solution  # [X, Y, Z]
+try:
+    from .rec3d import find_common_frames, load_pixel_csv_positional, rec3d_multicam
+except ImportError:
+    from rec3d import (  # ty: ignore[unresolved-import]
+        find_common_frames,
+        load_pixel_csv_positional,
+        rec3d_multicam,
+    )
 
 
 def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, conversion_factor=1):
@@ -506,30 +486,32 @@ def run_reconstruction(
         params = df.iloc[0, 1:].to_numpy().astype(float)
         dlt_params_list.append(params)
 
-    # Load pixel coordinate data for each camera
+    # Load pixel coordinate data for each camera.
+    # Column labels are NOT inspected here: column 0 is the frame identifier
+    # and every pair of columns after that is one marker's (x, y), regardless
+    # of what the header text says (vailá p1_x/p1_y, SAM3, YOLO, MediaPipe...).
     print("Loading pixel coordinate data...")
-    pixel_dfs = []
+    pixel_frames_list = []
+    pixel_xy_list = []
     for file in pixel_files:
-        df = pd.read_csv(file)
-        required_cols = {"frame", "p1_x", "p1_y"}
-        if not required_cols.issubset(df.columns):
-            return _err(
-                f"Pixel coordinate file {os.path.basename(file)} does not contain required columns 'frame', 'p1_x', and 'p1_y'."
-            )
-        if df.shape[0] == 1:
-            df["frame"] = 0
-        pixel_dfs.append(df)
+        try:
+            frames_arr, xy_arr = load_pixel_csv_positional(file)
+        except Exception as e:
+            return _err(f"Pixel coordinate file {os.path.basename(file)}: {e}")
+        pixel_frames_list.append(frames_arr)
+        pixel_xy_list.append(xy_arr)
 
-    first_df = pixel_dfs[0]
-    x_columns = [col for col in first_df.columns if col.endswith("_x") and col.startswith("p")]
-    num_markers = len(x_columns)
+    num_markers = min(xy.shape[1] for xy in pixel_xy_list)
+    if any(xy.shape[1] != num_markers for xy in pixel_xy_list):
+        print(
+            f"Warning: pixel files have different marker counts; "
+            f"using the smallest common count: {num_markers}"
+        )
     print(f"Detected {num_markers} markers for 3D reconstruction")
 
-    frame_sets = [set(df["frame"]) for df in pixel_dfs]
-    common_frames = set.intersection(*frame_sets)
-    if not common_frames:
+    common_frames = find_common_frames(pixel_frames_list)
+    if common_frames.size == 0:
         return _err("No common frames found among pixel files!")
-    common_frames = sorted(common_frames)
     print(f"Processing {len(common_frames)} common frames...")
 
     total_frames = len(common_frames)
@@ -538,40 +520,32 @@ def run_reconstruction(
     reconstruction_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
     reconstruction_array[:, 0] = common_frames
 
+    pixel_frame_to_row = [{int(f): i for i, f in enumerate(frames)} for frames in pixel_frames_list]
+
     progress_step = max(1, total_frames // 20)
     for frame_idx, frame in enumerate(common_frames):
         if frame_idx % progress_step == 0:
             progress = (frame_idx / total_frames) * 100
             print(f"Progress: {progress:.1f}% ({frame_idx}/{total_frames} frames)")
 
-        frame_data = []
-        valid_frame = True
-        for df in pixel_dfs:
-            frame_row = df[df["frame"] == frame]
-            if frame_row.empty:
-                valid_frame = False
-                break
-            frame_data.append(frame_row.iloc[0])
-
-        if not valid_frame:
+        frame_int = int(frame)
+        pixel_row_for_cam = [
+            pixel_frame_to_row[c].get(frame_int) for c in range(len(pixel_xy_list))
+        ]
+        if any(r is None for r in pixel_row_for_cam):
             continue
 
-        for marker in range(1, num_markers + 1):
+        for marker in range(num_markers):
             pixel_obs_list = []
             valid_marker = True
-            for frame_row in frame_data:
-                try:
-                    x_obs = float(frame_row[f"p{marker}_x"])
-                    y_obs = float(frame_row[f"p{marker}_y"])
-                    if np.isnan(x_obs) or np.isnan(y_obs):
-                        valid_marker = False
-                        break
-                    pixel_obs_list.append((x_obs, y_obs))
-                except Exception:
+            for cam_idx, row_idx in enumerate(pixel_row_for_cam):
+                x_obs, y_obs = pixel_xy_list[cam_idx][row_idx, marker]
+                if np.isnan(x_obs) or np.isnan(y_obs):
                     valid_marker = False
                     break
+                pixel_obs_list.append((float(x_obs), float(y_obs)))
 
-            col_start = 1 + (marker - 1) * 3
+            col_start = 1 + marker * 3
             if not valid_marker or len(pixel_obs_list) != len(dlt_params_list):
                 pass
             else:
@@ -776,11 +750,11 @@ def run_rec3d_one_dlt3d():
 
     # Step 4: Ask for data frequency
     print("Step 4: Setting data frequency...")
-    point_rate = simpledialog.askinteger(
+    point_rate = simpledialog.askfloat(
         "Data Frequency",
-        "Enter the point data rate (Hz):",
-        minvalue=1,
-        initialvalue=100,
+        "Enter the point data rate (Hz), e.g. 119.88012001 for a real NTSC-derived rate:",
+        minvalue=0.0001,
+        initialvalue=100.0,
     )
     if point_rate is None:
         messagebox.showerror("Error", "Point data rate is required. Operation cancelled.")
@@ -874,10 +848,13 @@ See also: vaila/help/rec3d_one_dlt3d.md
     )
     parser.add_argument(
         "--fps",
-        type=int,
-        default=100,
+        type=float,
+        default=100.0,
         metavar="HZ",
-        help="Point data rate in Hz for C3D/CSV (default: 100)",
+        help=(
+            "Point data rate in Hz for C3D/CSV (default: 100). Accepts fractional "
+            "rates, e.g. 119.88012001 for NTSC-derived 120000/1001 capture."
+        ),
     )
     parser.add_argument(
         "-o",

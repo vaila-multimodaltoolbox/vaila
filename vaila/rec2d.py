@@ -10,17 +10,21 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.0.3
+Version: 0.3.94
 Created: August 9, 2024
-Last Updated: March 19, 2026
+Last Updated: 01 August 2026
 
 Description:
     Optimized batch processing of 2D coordinates reconstruction using corresponding
     DLT2D parameters for each frame.
     Processes multiple CSV files containing pixel coordinates and reconstructs them
     to 2D real-world coordinates.
-    The pixel files are expected to use vailá's standard header:
-      frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y
+    Pixel CSV column LABELS are not inspected — only column ORDER matters:
+    column 0 is the frame identifier and every pair of columns after that is
+    one marker's (x, y), regardless of header text (vailá p1_x/p1_y, SAM3,
+    YOLO, MediaPipe named joints, etc.). Output always uses vailá's standard
+    "Frame" label for column 0; coordinate column labels are preserved as-is
+    from the input file.
     Uses DLT2D parameters that can vary per frame (8 parameters per frame).
 
     Optimizations:
@@ -108,16 +112,19 @@ def process_files_in_directory(dlt_params_df, input_directory, output_directory,
             print(f"[red]Error reading {csv_file}: {e}. Skipping file.[/red]")
             continue
 
+        # Column labels are not inspected: column 0 is the frame identifier and
+        # every pair of columns after that is one marker's (x, y), regardless
+        # of the header text (vailá p1_x/p1_y, SAM3, YOLO, MediaPipe, ...).
         num_coords = (pixel_coords_df.shape[1] - 1) // 2
         total_frames = len(pixel_coords_df)
 
         total_cols = 1 + (num_coords * 2)
         rec_coords_array = np.full((total_frames, total_cols), np.nan, dtype=np.float64)
 
-        rec_coords_array[:, 0] = pixel_coords_df["frame"].values
+        rec_coords_array[:, 0] = pixel_coords_df.iloc[:, 0].to_numpy()
 
         for i, row in pixel_coords_df.iterrows():
-            frame_num = int(row["frame"])
+            frame_num = int(row.iloc[0])
             if frame_num in frames:
                 A_index = np.where(frames == frame_num)[0][0]
                 A = dlt_params[A_index]
@@ -128,12 +135,13 @@ def process_files_in_directory(dlt_params_df, input_directory, output_directory,
                     rec2d_coords = rec2d(A, pixel_coords)
                     rec_coords_array[i, 1:] = rec2d_coords.flatten()
 
-        rec_coords_df = pd.DataFrame(rec_coords_array, columns=pixel_coords_df.columns)
+        original_columns = list(pixel_coords_df.columns)
+        rec_coords_df = pd.DataFrame(rec_coords_array, columns=original_columns)  # ty: ignore[invalid-argument-type]
 
-        # Normalize output to vaila's expected convention: `Frame` as integer.
-        if "frame" in rec_coords_df.columns:
-            rec_coords_df["frame"] = rec_coords_df["frame"].astype(int)
-            rec_coords_df = rec_coords_df.rename(columns={"frame": "Frame"})
+        # Normalize output to vaila's expected convention: `Frame` as integer,
+        # regardless of what the input's first column was actually named.
+        rec_coords_df.iloc[:, 0] = rec_coords_df.iloc[:, 0].astype(int)
+        rec_coords_df = rec_coords_df.rename(columns={original_columns[0]: "Frame"})
 
         def _write_output(df: pd.DataFrame, out_path: str) -> None:
             coord_cols_local = [c for c in df.columns if c != "Frame"]
@@ -210,8 +218,11 @@ def run_rec2d(dlt_file=None, input_directory=None, output_directory=None, data_r
             return
 
         print("Step 4: Setting data frequency...")
-        data_rate = simpledialog.askinteger(
-            "Data Frequency", "Enter the data frequency (Hz):", minvalue=1, initialvalue=100
+        data_rate = simpledialog.askfloat(
+            "Data Frequency",
+            "Enter the data frequency (Hz), e.g. 119.88012001 for a real NTSC-derived rate:",
+            minvalue=0.0001,
+            initialvalue=100.0,
         )
         if data_rate is None:
             messagebox.showerror("Error", "Data frequency is required. Operation cancelled.")
@@ -249,7 +260,11 @@ if __name__ == "__main__":
     parser.add_argument("--dlt-file", help="Path to DLT2D parameter file")
     parser.add_argument("--input-dir", help="Directory containing CSV files to process")
     parser.add_argument("--output-dir", help="Output directory for results")
-    parser.add_argument("--rate", type=int, help="Data frequency in Hz")
+    parser.add_argument(
+        "--rate",
+        type=float,
+        help="Data frequency in Hz (accepts fractional rates, e.g. 119.88012001)",
+    )
     args = parser.parse_args()
 
     run_rec2d(

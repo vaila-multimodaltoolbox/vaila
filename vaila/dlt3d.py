@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Roberto Pereira Santiago
-Version: 0.3.45
+Version: 0.3.93
 Create: 24 February, 2025
-Last Updated: 23 May 2026
+Last Updated: 01 August 2026
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -24,6 +24,13 @@ Description:
       - Updated calculation of DLT parameters (11 parameters) using least squares.
       - Graphical file selection using Tkinter.
       - Improved console output.
+
+    Point matching (pixel <-> REF3D): points are correlated by LABEL (the "p3"
+    in "p3_x"/"p3_y"/"p3_z"), not by column order, since a REF3D file may
+    calibrate more points than a given pixel file tracks. Only the common
+    points are used; if fewer than 6 common points are found (the minimum for
+    an 11-parameter DLT3D solve), no parameters are computed and a clear
+    message is printed instead of a raw KeyError.
 
 Usage:
     Run the script and select a pixel coordinate CSV file. Then, choose whether to create a REF3D template.
@@ -122,33 +129,50 @@ def process_files(pixel_file, ref3d_file):
     if ref_df is None:
         return None
 
-    # Determine the number of points from the pixel file columns
-    pixel_columns = list(pixel_df.columns)
-    point_columns = [
-        col for col in pixel_columns if col.startswith("p") and ("_x" in col or "_y" in col)
-    ]
-    point_numbers = set()
-    for col in point_columns:
-        if "_" in col:
-            parts = col.split("_")
-            if len(parts) >= 2:
-                point_num = parts[0][1:]  # Remove 'p' from 'p1', 'p20', etc.
-                if point_num.isdigit():
-                    point_numbers.add(int(point_num))
+    def _point_numbers(columns):
+        """Point indices (the N in pN_x/pN_y/pN_z) present in a column list."""
+        numbers = set()
+        for col in columns:
+            if col.startswith("p") and "_" in col:
+                parts = col.split("_")
+                if len(parts) >= 2 and parts[0][1:].isdigit():
+                    numbers.add(int(parts[0][1:]))
+        return numbers
 
-    num_points = max(point_numbers) if point_numbers else 0
+    # Only use points present in BOTH files: the REF3D file may calibrate a
+    # different (often larger) set of points than what a given pixel/video
+    # file actually tracks. Assuming the pixel file's point range also exists
+    # in the REF3D file crashes with a raw KeyError as soon as they diverge.
+    pixel_points = _point_numbers(pixel_df.columns)
+    ref_points = _point_numbers(ref_df.columns)
+    common_points = sorted(pixel_points & ref_points)
+
+    if len(common_points) < 6:
+        print(
+            f"Error: only {len(common_points)} common point(s) found between the pixel and "
+            "REF3D files; DLT3D needs at least 6 non-coplanar points to be well-determined "
+            "(11 unknowns, 2 equations per point)."
+        )
+        return None
+
+    missing_in_ref = sorted(pixel_points - ref_points)
+    if missing_in_ref:
+        print(
+            f"Warning: pixel file has point(s) {missing_in_ref} not present in the REF3D "
+            f"file; using only the {len(common_points)} common point(s): {common_points}"
+        )
 
     dlt_params_all = {}
     # If the REF3D file consists of only one row, use it for all frames:
     if len(ref_df) == 1:
         ref_coords_arr = []
         ref_line = ref_df.iloc[0]
-        for i in range(1, num_points + 1):
+        for i in common_points:
             ref_coords_arr.append([ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]])
         ref_coords_arr = np.array(ref_coords_arr)
         for _, row in pixel_df.iterrows():
             pixel_coords_arr = []
-            for i in range(1, num_points + 1):
+            for i in common_points:
                 pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
             pixel_coords_arr = np.array(pixel_coords_arr)
             L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
@@ -165,7 +189,7 @@ def process_files(pixel_file, ref3d_file):
             ref_line = ref_line.iloc[0]
             pixel_coords_arr = []
             ref_coords_arr = []
-            for i in range(1, num_points + 1):
+            for i in common_points:
                 pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
                 ref_coords_arr.append(
                     [ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]]
@@ -190,6 +214,7 @@ def save_dlt_parameters(output_file, dlt_params, show_gui=True):
     if show_gui:
         try:
             import tkinter as tk
+
             if tk._default_root is not None:
                 messagebox.showinfo("Success", f"DLT3d file saved successfully: {output_file}")
         except Exception:
@@ -265,7 +290,7 @@ def main(pixel_file=None, real_file=None, create_ref=False):
         print("Error processing the files.")
         return
     output_file = os.path.splitext(pixel_file)[0] + ".dlt3d"
-    show_gui = (pixel_file is None)
+    show_gui = pixel_file is None
     save_dlt_parameters(output_file, dlt_params, show_gui=show_gui)
 
 

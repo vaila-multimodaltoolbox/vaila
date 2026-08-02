@@ -30,16 +30,16 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/rec3d_one_dlt3d.py</p>
-            <p><strong>Version:</strong> 0.0.5</p>
+            <p><strong>Version:</strong> 0.3.94</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
 
         <h2>Description</h2>
-        <p>Batch 3D reconstruction using the <strong>Direct Linear Transformation (DLT)</strong> method with multiple cameras. For each camera you provide:</p>
+        <p>Batch 3D reconstruction using the <strong>Direct Linear Transformation (DLT)</strong> method with multiple cameras and <strong>one fixed set of DLT3D parameters per camera</strong> (the whole clip uses the same 11 coefficients). For DLT3D parameters that vary frame by frame (a DLT "matrix"), use <strong>rec3d</strong> instead. For each camera you provide:</p>
         <ul>
             <li>One <strong>DLT3D parameter file</strong> (11 coefficients per camera, e.g. from the <code>dlt3d</code> module).</li>
-            <li>One <strong>pixel-coordinate CSV</strong> with columns: <code>frame</code>, <code>p1_x</code>, <code>p1_y</code>, <code>p2_x</code>, <code>p2_y</code>, ..., <code>pN_x</code>, <code>pN_y</code> (vailá standard).</li>
+            <li>One <strong>pixel-coordinate CSV</strong>: column 0 is the frame identifier and every pair of columns after that is one marker's (x, y).</li>
         </ul>
         <p>Frames common to all pixel files are reconstructed; results are written to a <strong>timestamped subfolder</strong> in the chosen output directory.</p>
 
@@ -47,7 +47,7 @@
         <h3>DLT3D file</h3>
         <p>CSV with one row of 11 DLT coefficients (e.g. from the vailá <strong>dlt3d</strong> module). <strong>One file per camera</strong>; order must match the pixel file order.</p>
         <h3>Pixel CSV</h3>
-        <p>Header: <code>frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y</code>. <strong>One file per camera</strong>; same number of markers and overlapping frame sets recommended. In GUI mode, each file can be chosen from a <strong>different directory</strong> (one dialog per camera).</p>
+        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of the header text. This makes the file compatible with vailá's own <code>frame,p1_x,p1_y,...</code> convention as well as CSVs coming from SAM3, YOLO, MediaPipe (named joints), or any other tracker — as long as the same markers appear in the same order in every camera's file. <strong>One file per camera</strong>; same number of markers and overlapping frame sets recommended. In GUI mode, each file can be chosen from a <strong>different directory</strong> (one dialog per camera).</p>
 
         <h2>Output files</h2>
         <p>All outputs share the same base name and are written inside a new subfolder: <code>rec3d_YYYYMMDD_HHMMSS/</code>.</p>
@@ -76,7 +76,7 @@
             <tr><th>Argument</th><th>Description</th></tr>
             <tr><td><code>--dlt3d</code> <em>FILE</em> [<em>FILE</em> ...]</td><td>DLT3D parameter files (one per camera); order must match <code>--pixels</code>.</td></tr>
             <tr><td><code>--pixels</code> <em>FILE</em> [<em>FILE</em> ...]</td><td>Pixel coordinate CSV files (one per camera); order must match <code>--dlt3d</code>.</td></tr>
-            <tr><td><code>--fps</code> <em>HZ</em></td><td>Point data rate in Hz (default: 100).</td></tr>
+            <tr><td><code>--fps</code> <em>HZ</em></td><td>Point data rate in Hz (default: 100). Accepts fractional rates, e.g. <code>119.88012001</code> for NTSC-derived 120000/1001 capture.</td></tr>
             <tr><td><code>-o</code>, <code>--output</code> <em>DIR</em></td><td>Output directory; a timestamped subfolder will be created here.</td></tr>
             <tr><td><code>--gui</code></td><td>Launch GUI instead of CLI.</td></tr>
         </table>
