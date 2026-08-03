@@ -5,7 +5,7 @@
 - **Category:** Markerless 3D / Meta (Facebook)
 - **Version:** 0.3.92
 - **Updated:** 2026-08-01
-- **GUI:** Frame B → **YOLO + FB** → **SAM3+DINOv3 3D**
+- **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
 - **Retomada:** `--resume /caminho/processed_sam3dinov3_...` pula vídeos já concluídos e reaproveita `sam3/sam_tracks.csv`; informe também `-i` com a pasta original.
@@ -72,7 +72,7 @@ source license.
 
 ## GUI
 
-Open **YOLO + FB → SAM3+DINOv3 3D**. The dialog collects the input video/folder,
+Open **Markerless 3D → SAM3+DINOv3 3D**. The dialog collects the input video/folder,
 the output parent, the SAM 3 text prompt, and the 3D options. Pressing **Run**
 prints the equivalent CLI to the terminal (prefix `>>`) and then launches exactly
 that command in an isolated GPU subprocess — so any GUI run is reproducible from

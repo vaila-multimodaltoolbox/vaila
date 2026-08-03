@@ -1,9 +1,9 @@
 """
 Script: markerless_live.py
 Author: Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
-Version: 0.0.2
+Version: 0.3.98
 Created: April 9, 2025
-Last Updated: April 11, 2025
+Last Updated: 02 August 2026
 
 Description:
 This script performs real-time pose estimation and angle calculation using either YOLO or
@@ -155,6 +155,11 @@ BUFFER_SIZE = 100  # Number of frames to keep in the angle buffer
 # Output settings
 SAVE_DATA = True
 
+# Verbose per-frame introspection (keypoint dumps, `dir()` attribute lists).
+# Keep False for real-time use: printing on every frame is slow enough on its
+# own to visibly lag/drop frames at typical webcam rates.
+DEBUG = False
+
 
 # ===== CODE FROM ANGLE_CALCULATOR.PY =====
 class AngleCalculator:
@@ -203,9 +208,9 @@ class YOLOAngleCalculator(AngleCalculator):
         """Process the YOLO keypoints and calculate the angles."""
         angles = {}
 
-        # Debug: Print keypoints shape and content
-        print(f"Keypoints shape: {keypoints.shape}")
-        print("Processing keypoints...")
+        if DEBUG:
+            print(f"Keypoints shape: {keypoints.shape}")
+            print("Processing keypoints...")
 
         # Check if the keypoints have enough confidence (third column)
         confidence_threshold = 0.3  # Reduced to 0.3 to capture more points
@@ -220,13 +225,14 @@ class YOLOAngleCalculator(AngleCalculator):
             ),
         )
 
-        print(f"Valid keypoints mask: {valid_mask}")
-        print("Valid keypoints coordinates:")
-        for i, valid in enumerate(valid_mask):
-            if valid:
-                print(
-                    f"Point {i}: ({keypoints[i][0]:.1f}, {keypoints[i][1]:.1f}), conf: {keypoints[i][2]:.3f}"
-                )
+        if DEBUG:
+            print(f"Valid keypoints mask: {valid_mask}")
+            print("Valid keypoints coordinates:")
+            for i, valid in enumerate(valid_mask):
+                if valid:
+                    print(
+                        f"Point {i}: ({keypoints[i][0]:.1f}, {keypoints[i][1]:.1f}), conf: {keypoints[i][2]:.3f}"
+                    )
 
         for joint_name, indices in self.joint_map.items():
             p1_idx, p2_idx, p3_idx = indices
@@ -239,10 +245,12 @@ class YOLOAngleCalculator(AngleCalculator):
 
                 angle = self.calculate_angle(p1, p2, p3)
                 angles[joint_name] = angle
-                print(f"Calculated {joint_name}: {angle:.4f}°")
-                print(f"  Points used: {p1_idx}({p1}), {p2_idx}({p2}), {p3_idx}({p3})")
+                if DEBUG:
+                    print(f"Calculated {joint_name}: {angle:.4f}°")
+                    print(f"  Points used: {p1_idx}({p1}), {p2_idx}({p2}), {p3_idx}({p3})")
 
-        print(f"Final angles: {angles}")
+        if DEBUG:
+            print(f"Final angles: {angles}")
         return angles
 
 
@@ -672,6 +680,11 @@ class MovementAnalyzer:
 
         # Initialize camera
         self.cap = cv2.VideoCapture(self.camera_device)
+        if not self.cap.isOpened():
+            raise RuntimeError(
+                f"Could not open camera device {self.camera_device}. "
+                "It may be in use by another application or disconnected."
+            )
 
         # Configure camera settings
         if self.camera_fps is not None:
@@ -784,65 +797,70 @@ class MovementAnalyzer:
             # Use a lower confidence threshold for better detection
             results = self.model(frame, conf=self.conf_threshold, verbose=False)
 
-            # Debug: Print the structure of results to understand what's available
             if len(results) > 0:
-                print(f"YOLO results type: {type(results)}")
-                print(f"First result attributes: {dir(results[0])}")
-
-                # Check for pose-related attributes
-                pose_attrs = [
-                    attr
-                    for attr in dir(results[0])
-                    if "pose" in attr.lower()
-                    or "keypoint" in attr.lower()
-                    or "landmark" in attr.lower()
-                ]
-                if pose_attrs:
-                    print(f"Found pose-related attributes: {pose_attrs}")
+                if DEBUG:
+                    print(f"YOLO results type: {type(results)}")
+                    print(f"First result attributes: {dir(results[0])}")
+                    pose_attrs = [
+                        attr
+                        for attr in dir(results[0])
+                        if "pose" in attr.lower()
+                        or "keypoint" in attr.lower()
+                        or "landmark" in attr.lower()
+                    ]
+                    if pose_attrs:
+                        print(f"Found pose-related attributes: {pose_attrs}")
 
                 # Try to find keypoints in different possible locations
                 keypoints = None
-                if hasattr(results[0], "keypoints") and results[0].keypoints is not None:
-                    print("Found keypoints in results[0].keypoints")
-                    if len(results[0].keypoints.data) > 0:
-                        keypoints = results[0].keypoints.data[0].cpu().numpy()
-                        print(f"Keypoints from results[0].keypoints: {keypoints.shape}")
-                elif hasattr(results[0], "poses") and results[0].poses is not None:
-                    print("Found poses in results[0].poses")
-                    if len(results[0].poses) > 0:
-                        keypoints = results[0].poses[0].cpu().numpy()
-                        print(f"Keypoints from results[0].poses: {keypoints.shape}")
-                elif hasattr(results[0], "landmarks") and results[0].landmarks is not None:
-                    print("Found landmarks in results[0].landmarks")
-                    if len(results[0].landmarks) > 0:
-                        keypoints = results[0].landmarks[0].cpu().numpy()
-                        print(f"Keypoints from results[0].landmarks: {keypoints.shape}")
+                if (
+                    hasattr(results[0], "keypoints")
+                    and results[0].keypoints is not None
+                    and len(results[0].keypoints.data) > 0
+                ):
+                    keypoints = results[0].keypoints.data[0].cpu().numpy()
+                elif (
+                    hasattr(results[0], "poses")
+                    and results[0].poses is not None
+                    and len(results[0].poses) > 0
+                ):
+                    keypoints = results[0].poses[0].cpu().numpy()
+                elif (
+                    hasattr(results[0], "landmarks")
+                    and results[0].landmarks is not None
+                    and len(results[0].landmarks) > 0
+                ):
+                    keypoints = results[0].landmarks[0].cpu().numpy()
 
                 if keypoints is not None:
-                    print(f"Keypoints shape: {keypoints.shape}")
-                    print(f"Keypoints content: {keypoints}")
+                    if DEBUG:
+                        print(f"Keypoints shape: {keypoints.shape}")
+                        print(f"Keypoints content: {keypoints}")
 
                     # Draw bounding box (bounding box) around the person
+                    # (was previously unindented: `boxes` could be referenced
+                    # before assignment and crash the live loop when the model
+                    # result has no `.boxes`, e.g. a keypoints-only result)
                     if hasattr(results[0], "boxes") and results[0].boxes is not None:
                         boxes = results[0].boxes.cpu().numpy()
-                    for box in boxes:
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        conf = float(box.conf[0])
+                        for box in boxes:
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            conf = float(box.conf[0])
 
-                        # Draw rectangle around the person
-                        cv2.rectangle(processed_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                            # Draw rectangle around the person
+                            cv2.rectangle(processed_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
-                        # Add label "Person" with confidence
-                        label = f"Person {conf:.2f}"
-                        cv2.putText(
-                            processed_frame,
-                            label,
-                            (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.5,
-                            (0, 0, 255),
-                            2,
-                        )
+                            # Add label "Person" with confidence
+                            label = f"Person {conf:.2f}"
+                            cv2.putText(
+                                processed_frame,
+                                label,
+                                (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5,
+                                (0, 0, 255),
+                                2,
+                            )
 
                     # Define skeleton connections (pairs of keypoint indices)
                     # Adapt to YOLO11n keypoint format
@@ -887,7 +905,8 @@ class MovementAnalyzer:
                     angles = {}
                     if isinstance(self.angle_calculator, YOLOAngleCalculator):
                         angles = self.angle_calculator.process_keypoints(keypoints)
-                    print(f"Calculated angles: {angles}")
+                    if DEBUG:
+                        print(f"Calculated angles: {angles}")
 
                     # Draw keypoints (excluding face keypoints)
                     for i, kp in enumerate(keypoints):
@@ -914,7 +933,7 @@ class MovementAnalyzer:
                         # Keep only the last measurements (BUFFER_SIZE)
                         if len(self.angle_buffer) > BUFFER_SIZE:
                             self.angle_buffer.pop(0)
-                else:
+                elif DEBUG:
                     print("No keypoints detected in this frame")
                     # Try to find any pose-related data
                     for attr in dir(results[0]):
@@ -1429,18 +1448,26 @@ def run_markerless_live():
     root.destroy()
 
     # Initialize and run the analyzer with the selected parameters
-    analyzer = MovementAnalyzer(
-        engine=selected_engine,
-        model_name=model_name,
-        conf_threshold=conf_threshold,
-        model_complexity=model_complexity,
-        min_detection_confidence=min_detection_confidence,
-        camera_device=selected_camera["index"],
-        camera_fps=camera_fps,
-        camera_width=camera_width,
-        camera_height=camera_height,
-        output_dir=output_dir,
-    )
+    try:
+        analyzer = MovementAnalyzer(
+            engine=selected_engine,
+            model_name=model_name,
+            conf_threshold=conf_threshold,
+            model_complexity=model_complexity,
+            min_detection_confidence=min_detection_confidence,
+            camera_device=selected_camera["index"],
+            camera_fps=camera_fps,
+            camera_width=camera_width,
+            camera_height=camera_height,
+            output_dir=output_dir,
+        )
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        error_root = tk.Tk()
+        error_root.withdraw()
+        messagebox.showerror("Camera Error", str(e), parent=error_root)
+        error_root.destroy()
+        return
 
     # Run the analyzer
     analyzer.run()

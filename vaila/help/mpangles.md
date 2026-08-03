@@ -4,11 +4,11 @@
 
 - **Category:** Utils
 - **File:** `vaila/mpangles.py`
-- **Version:** 0.0.3
+- **Version:** 0.3.98
 - **Author:** Paulo R. P. Santiago
 - **Email:** paulosantiago@usp.br
 - **Creation Date:** 31 March 2025
-- **Update Date:** 5 February 2026
+- **Update Date:** 02 August 2026
 - **Python Version:** 3.12.13
 - **GUI Interface:** ✅ Yes
 - **License:** AGPL v3.0
@@ -177,4 +177,4 @@ AGPL v3.0.
 
 ---
 
-**Last Updated:** February 2026 · Part of vailá - Multimodal Toolbox
+**Last Updated:** 02 August 2026 · Part of vailá - Multimodal Toolbox

@@ -1,18 +1,23 @@
-# Which conversion would you like to perform? - Button B_r4_c3
+# Markerless Hands — via Markerless 2D Chooser
 
 ## Overview
 
-**Button Position:** B_r4_c3  
+> **v0.3.98:** this used to be its own button (`B4_r4_c3`, text
+> "Markerless Hands"). It is now under the **"Other 2D tools"** section of
+> the **Markerless 2D** coringa chooser (`B1_r1_c4`, method
+> `markerless_2d_analysis`) — the underlying handler and script
+> (`vaila/mphands.py`) are unchanged.
+
 **Method Name:** `markerless_hands`  
-**Button Text:** Which conversion would you like to perform?
+**Button Text (in chooser):** Markerless Hands
 
 ## Description
 
-Invokes the vaila_mphands module.
+Invokes the `vaila/mphands.py` module — MediaPipe hand-landmark tracking.
 
 ## Usage
 
-1. Click the **Which conversion would you like to perform?** button in the vailá GUI
+1. Click **Markerless 2D** in the vailá GUI, then **Markerless Hands** in the "Other 2D tools" section of the chooser
 2. Follow the prompts in the dialog windows
 3. Select input files/directories as requested
 4. Configure parameters if needed
@@ -45,6 +50,6 @@ This button integrates with other vailá modules:
 
 ---
 
-**Last Updated:** November 2025  
+**Last Updated:** 02 August 2026  
 **Part of vailá - Multimodal Toolbox**  
 **License:** AGPLv3.0

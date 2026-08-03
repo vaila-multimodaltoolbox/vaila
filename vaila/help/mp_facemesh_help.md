@@ -8,7 +8,7 @@ This module collects **478 face landmarks** including **10 iris landmarks (468-4
 
 ## 🚀 Workflow
 
-1. **Launch**: Open `vaila.py`, verify your settings, and click the **Face Mesh** button (B5_r6_c2, next to Sprint).
+1. **Launch**: Open `vaila.py`, click **Markerless 2D** (Frame B, `B1_r1_c4`), then **Face Mesh** in the "Other 2D tools" section of the chooser.
 2. **Select Device**: Choose between CPU or NVIDIA GPU processing
    - **CPU**: Standard MediaPipe FaceMesh processing (Recommended - GPU support is limited)
    - **NVIDIA GPU**: GPU-accelerated processing (Note: FaceMesh currently uses CPU, GPU support may be available in future versions)

@@ -2,7 +2,8 @@
 mphands.py
 Created by: Flávia Pessoni Faleiros Macêdo & Paulo Roberto Pereira Santiago
 date: 01/01/2025
-updated: 11/02/2025
+updated: 02/08/2026
+Version: 0.3.98
 
 Description:
 This script uses the MediaPipe Hand Landmarker in video mode to detect hand landmarks
@@ -30,7 +31,6 @@ following the standard used in other files.
 import colorsys  # Added for color conversion
 import csv
 import os
-import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -79,7 +79,7 @@ def download_model_if_needed():
         os.makedirs(MODELS_DIR, exist_ok=True)
         print("hand_landmarker.task model not found at:", MODEL_PATH)
         print("Downloading model...")
-        response = requests.get(MODEL_URL)
+        response = requests.get(MODEL_URL, timeout=60)
         if response.status_code != 200:
             raise RuntimeError(f"Failed to download the model: status code {response.status_code}")
         with open(MODEL_PATH, "wb") as model_file:
@@ -161,9 +161,12 @@ def draw_hand_landmarks(image, landmarks, hand_index=0):
 def select_video_file():
     """
     Opens a dialog so that the user can select the video file for analysis.
+
+    Does not create its own ``tk.Tk()`` root: when called from within the
+    main vailá app (already a live Tk root), a second explicit root would be
+    an unsupported multi-root Tkinter setup. ``filedialog`` lazily creates a
+    hidden default root itself when none exists (e.g. standalone execution).
     """
-    root = tk.Tk()
-    root.withdraw()
     file_path = filedialog.askopenfilename(
         title="Select the video for analysis",
         filetypes=[("Video Files", "*.mp4;*.avi;*.mov"), ("All Files", "*.*")],
@@ -204,6 +207,9 @@ def run_mphands():
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0:
+        print("Warning: video reports 0 FPS; falling back to 30.0 for timestamp computation.")
+        fps = 30.0
 
     # Define output file paths based on the input video's name
     video_path = Path(video_file)
@@ -214,8 +220,9 @@ def run_mphands():
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out_video = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
 
-    # Open CSV file for saving landmark data
-    csv_file = open(data_file_path, mode="w", newline="")
+    # Open CSV file for saving landmark data (closed in the try/finally below,
+    # which also covers the per-frame loop, so a plain open() is fine here)
+    csv_file = open(data_file_path, mode="w", newline="")  # noqa: SIM115
     csv_writer = csv.writer(csv_file)
 
     max_hands = 2
@@ -245,53 +252,56 @@ def run_mphands():
         running_mode=VisionRunningMode.VIDEO,
     )
 
-    with HandLandmarker.create_from_options(options) as landmarker:
-        frame_idx = 0
-        while True:
-            success, frame = cap.read()
-            if not success:
-                break
+    try:
+        with HandLandmarker.create_from_options(options) as landmarker:
+            frame_idx = 0
+            while True:
+                success, frame = cap.read()
+                if not success:
+                    break
 
-            frame_idx += 1
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-            # Compute a timestamp (in ms)
-            timestamp = int(frame_idx * 1000 / fps)
-            result = landmarker.detect_for_video(mp_image, timestamp)
+                frame_idx += 1
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+                # Compute a timestamp (in ms)
+                timestamp = int(frame_idx * 1000 / fps)
+                result = landmarker.detect_for_video(mp_image, timestamp)
 
-            # Build one CSV row per frame, consolidating data for up to max_hands hands.
-            row = [frame_idx]
-            if result.hand_landmarks:
-                # For each hand slot (up to max_hands)
-                for hand_slot in range(max_hands):
-                    if hand_slot < len(result.hand_landmarks):
-                        hand_landmarks = result.hand_landmarks[hand_slot]
-                        # Draw landmarks on the frame (for display) with enhanced visualization
-                        draw_hand_landmarks(frame, hand_landmarks, hand_index=hand_slot)
-                        for lm_index in range(len(LANDMARK_NAMES)):
-                            if lm_index < len(hand_landmarks):
-                                lm = hand_landmarks[lm_index]
-                                norm_x = lm.x
-                                norm_y = lm.y
-                                norm_z = lm.z if hasattr(lm, "z") else 0.0
-                                pixel_x = int(norm_x * frame_width)
-                                pixel_y = int(norm_y * frame_height)
-                                row.extend([norm_x, norm_y, norm_z, pixel_x, pixel_y])
-                            else:
-                                row.extend(["", "", "", "", ""])
-                    else:
+                # Build one CSV row per frame, consolidating data for up to max_hands hands.
+                row = [frame_idx]
+                if result.hand_landmarks:
+                    # For each hand slot (up to max_hands)
+                    for hand_slot in range(max_hands):
+                        if hand_slot < len(result.hand_landmarks):
+                            hand_landmarks = result.hand_landmarks[hand_slot]
+                            # Draw landmarks on the frame (for display) with enhanced visualization
+                            draw_hand_landmarks(frame, hand_landmarks, hand_index=hand_slot)
+                            for lm_index in range(len(LANDMARK_NAMES)):
+                                if lm_index < len(hand_landmarks):
+                                    lm = hand_landmarks[lm_index]
+                                    norm_x = lm.x
+                                    norm_y = lm.y
+                                    norm_z = lm.z if hasattr(lm, "z") else 0.0
+                                    pixel_x = int(norm_x * frame_width)
+                                    pixel_y = int(norm_y * frame_height)
+                                    row.extend([norm_x, norm_y, norm_z, pixel_x, pixel_y])
+                                else:
+                                    row.extend(["", "", "", "", ""])
+                        else:
+                            row.extend([""] * (len(LANDMARK_NAMES) * 5))
+                else:
+                    # If no hand is detected, fill with empty fields for all hand slots.
+                    for _ in range(max_hands):
                         row.extend([""] * (len(LANDMARK_NAMES) * 5))
-            else:
-                # If no hand is detected, fill with empty fields for all hand slots.
-                for _ in range(max_hands):
-                    row.extend([""] * (len(LANDMARK_NAMES) * 5))
-            csv_writer.writerow(row)
-            # Write the processed frame to the output video file
-            out_video.write(frame)
-
-    cap.release()
-    out_video.release()
-    csv_file.close()
+                csv_writer.writerow(row)
+                # Write the processed frame to the output video file
+                out_video.write(frame)
+    finally:
+        # Guarantee release/close even if MediaPipe or OpenCV raises mid-stream,
+        # so the capture/writer/file are never left open on an error path.
+        cap.release()
+        out_video.release()
+        csv_file.close()
 
     print("Processing completed.")
     print("Output video saved at:", output_video_path)

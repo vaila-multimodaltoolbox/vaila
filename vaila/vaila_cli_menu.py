@@ -17,8 +17,8 @@ from vaila.vaila_cli_hints import CliRunHint, get_cli_hint
 if TYPE_CHECKING:
     from vaila import Vaila
 
-__version__ = "0.3.82"
-__updated__ = "10 July 2026"
+__version__ = "0.3.98"
+__updated__ = "02 August 2026"
 
 _ROW_RE = re.compile(r"_r(\d+)_")
 _COL_RE = re.compile(r"_c(\d+)$")
@@ -73,26 +73,24 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     VailaMenuEntry("B2_r2_c4", "B", "Multimodal Analysis", "GNSS/GPS", "gnss_analysis"),
     VailaMenuEntry("B2_r2_c5", "B", "Multimodal Analysis", "MEG/EEG", "external:mne_overview"),
     VailaMenuEntry("B3_r3_c1", "B", "Multimodal Analysis", "HR/ECG", "external:heartrate_py"),
-    VailaMenuEntry(
-        "B3_r3_c2", "B", "Multimodal Analysis", "Yolo + Markerless_MP", "markerless2d_mpyolo"
-    ),
+    VailaMenuEntry("B3_r3_c2", "B", "Multimodal Analysis", "vailá", "show_vaila_message"),
     VailaMenuEntry("B3_r3_c3", "B", "Multimodal Analysis", "Vertical Jump", "vailajump"),
     VailaMenuEntry("B3_r3_c4", "B", "Multimodal Analysis", "Cube2D", "cube2d_kinematics"),
     VailaMenuEntry(
         "B3_r3_c5", "B", "Multimodal Analysis", "Animal Open Field", "animal_open_field"
     ),
-    VailaMenuEntry("B4_r4_c1", "B", "Multimodal Analysis", "YOLO + FB", "yolo_and_sam"),
+    VailaMenuEntry("B4_r4_c1", "B", "Multimodal Analysis", "vailá", "show_vaila_message"),
     VailaMenuEntry("B4_r4_c2", "B", "Multimodal Analysis", "ML Walkway", "ml_walkway"),
-    VailaMenuEntry("B4_r4_c3", "B", "Multimodal Analysis", "Markerless Hands", "markerless_hands"),
-    VailaMenuEntry("B4_r4_c4", "B", "Multimodal Analysis", "MP Angles", "mp_angles_calculation"),
-    VailaMenuEntry("B4_r4_c5", "B", "Multimodal Analysis", "Markerless Live", "markerless_live"),
+    VailaMenuEntry("B4_r4_c3", "B", "Multimodal Analysis", "vailá", "show_vaila_message"),
+    VailaMenuEntry("B4_r4_c4", "B", "Multimodal Analysis", "vailá", "show_vaila_message"),
+    VailaMenuEntry("B4_r4_c5", "B", "Multimodal Analysis", "vailá", "show_vaila_message"),
     VailaMenuEntry("B5_r5_c1", "B", "Multimodal Analysis", "Ultrasound", "ultrasound"),
     VailaMenuEntry("B5_r5_c2", "B", "Multimodal Analysis", "Brainstorm", "brainstorm"),
     VailaMenuEntry("B5_r5_c3", "B", "Multimodal Analysis", "Scout", "scout"),
     VailaMenuEntry("B5_r5_c4", "B", "Multimodal Analysis", "Start Block", "startblock"),
     VailaMenuEntry("B5_r5_c5", "B", "Multimodal Analysis", "Pynalty", "pynalty"),
     VailaMenuEntry("B5_r6_c1", "B", "Multimodal Analysis", "Sprint", "sprint"),
-    VailaMenuEntry("B5_r6_c2", "B", "Multimodal Analysis", "Face Mesh", "face_mesh_analysis"),
+    VailaMenuEntry("B5_r6_c2", "B", "Multimodal Analysis", "vailá", "show_vaila_message"),
     VailaMenuEntry("B5_r6_c3", "B", "Multimodal Analysis", "tugturn", "tugturn"),
     VailaMenuEntry("B5_r6_c4", "B", "Multimodal Analysis", "Soccer Tools", "soccer_tools"),
     VailaMenuEntry("B5_r6_c5", "B", "Multimodal Analysis", "Deadlift", "deadlift_analysis"),
@@ -105,12 +103,12 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     VailaMenuEntry("C_A_r1_c1", "C_A", "Data Files", "Edit CSV", "reorder_csv_data"),
     VailaMenuEntry("C_A_r1_c2", "C_A", "Data Files", "C3D <--> CSV", "convert_c3d_csv"),
     VailaMenuEntry("C_A_r1_c3", "C_A", "Data Files", "Smooth & Filter", "gapfill_split"),
-    VailaMenuEntry("C_A_r2_c1", "C_A", "Data Files", "Make DLT2D", "dlt2d"),
-    VailaMenuEntry("C_A_r2_c2", "C_A", "Data Files", "Rec2D 1DLT", "rec2d_one_dlt2d"),
-    VailaMenuEntry("C_A_r2_c3", "C_A", "Data Files", "Rec2D MultiDLT", "rec2d"),
-    VailaMenuEntry("C_A_r3_c1", "C_A", "Data Files", "Make DLT3D", "run_dlt3d"),
-    VailaMenuEntry("C_A_r3_c2", "C_A", "Data Files", "Rec3D 1DLT", "rec3d_one_dlt3d"),
-    VailaMenuEntry("C_A_r3_c3", "C_A", "Data Files", "Rec3D MultiDLT", "rec3d"),
+    VailaMenuEntry("C_A_r2_c1", "C_A", "Data Files", "DLT/REC 2D-3D", "dlt_rec_toolkit"),
+    VailaMenuEntry("C_A_r2_c2", "C_A", "Data Files", "vailá", "show_vaila_message"),
+    VailaMenuEntry("C_A_r2_c3", "C_A", "Data Files", "vailá", "show_vaila_message"),
+    VailaMenuEntry("C_A_r3_c1", "C_A", "Data Files", "vailá", "show_vaila_message"),
+    VailaMenuEntry("C_A_r3_c2", "C_A", "Data Files", "vailá", "show_vaila_message"),
+    VailaMenuEntry("C_A_r3_c3", "C_A", "Data Files", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_A_r4_c1", "C_A", "Data Files", "ReID Marker", "reid_marker"),
     VailaMenuEntry("C_A_r4_c2", "C_A", "Data Files", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_A_r4_c3", "C_A", "Data Files", "vailá", "show_vaila_message"),
@@ -516,7 +514,7 @@ def run_cli_menu(app: Vaila, *, initial_code: str | None = None, headless: bool 
                 _print_search_results(console, matches, query[1:])
                 console.print(
                     "[dim]Multiple matches — run one explicitly, e.g. "
-                    "[bold]uv run vaila.py --cli B4_r4_c1[/][/]"
+                    "[bold]uv run vaila.py --cli B1_r1_c4[/][/]"
                 )
             return
 

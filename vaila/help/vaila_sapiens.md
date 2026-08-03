@@ -13,14 +13,14 @@
 
 Top-down **Sapiens2 Pose** (308 keypoints, Sociopticon topology) on video.
 Uses Meta's DETR person detector + Sapiens2 ViT pose head. Integrated into
-vailá alongside SAM 3 under **Frame B → YOLO + FB → Sapiens2 Pose**.
+vailá alongside SAM 3 under **Frame B → Markerless 2D → Sapiens2 Pose**.
 
 > **License:** Sapiens2 weights and code use Meta's **Sapiens2 License** (not
 > AGPL). Download only from Hugging Face after accepting the model terms.
 
 ### External SAM3 guidance (v0.3.86)
 
-`PoseInferenceSession(..., use_detector=False)` now skips DETR validation, loading, and warm-up. Its `process_frame_with_bboxes()` entry point accepts external full-frame `xyxy` boxes and optional per-object contour-focused images. The new **YOLO + FB → SAM3+Sapiens2** tool uses this API so SAM3 supplies bbox, contour, confidence, and persistent IDs while Sapiens2 supplies only the 308-keypoint pose. See [sam3sapiens2.md](sam3sapiens2.md).
+`PoseInferenceSession(..., use_detector=False)` now skips DETR validation, loading, and warm-up. Its `process_frame_with_bboxes()` entry point accepts external full-frame `xyxy` boxes and optional per-object contour-focused images. The new **Markerless 2D → SAM3+Sapiens2** tool uses this API so SAM3 supplies bbox, contour, confidence, and persistent IDs while Sapiens2 supplies only the 308-keypoint pose. See [sam3sapiens2.md](sam3sapiens2.md).
 
 ## Requirements
 
@@ -79,7 +79,7 @@ DETR detector is shared across all sizes.
 
 ## GUI
 
-1. Open vailá → **YOLO + FB** → **Sapiens2 Pose**
+1. Open vailá → **Markerless 2D** → **Sapiens2 Pose**
 2. **Dir…** = batch all videos in a folder (recursive); **File…** = single video
 3. Choose output parent directory
 4. Model default `1b`; stride `1` = every frame

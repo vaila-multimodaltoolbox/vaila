@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.3.86"
-__updated__ = "30 July 2026"
+__version__ = "0.3.98"
+__updated__ = "02 August 2026"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,21 +40,41 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
     "cluster_analysis": CliRunHint(("uv run vaila/cluster_analysis.py",), "MoCap cluster GUI."),
     "mocap_analysis": CliRunHint(("uv run vaila/mocap_analysis.py",), "Full-body MoCap GUI."),
     "markerless_2d_analysis": CliRunHint(
-        ("uv run vaila/markerless_2d_analysis.py",),
-        "Markerless 2D batch GUI.",
+        (
+            "uv run vaila/markerless_2d_analysis.py",
+            "uv run vaila/markerless2d_analysis_v2.py",
+            "uv run vaila/markerless2d_yolo26.py",
+            "uv run vaila/markerless2d_mpyolo.py",
+            "uv run python -u -m vaila.yolov26track",
+            "uv run python -u -m vaila.yolotrain",
+            "uv run python -u vaila/vaila_sam.py",
+            "uv run python -u vaila/vaila_sapiens.py",
+            "uv run python -u vaila/sam3sapiens2.py",
+            "uv run python -u vaila/sam3sapiens2_visualize.py",
+            "uv run vaila/mphands.py",
+            "uv run vaila/mpangles.py",
+            "uv run vaila/mp_facemesh.py",
+            "uv run vaila/markerless_live.py",
+        ),
+        "Markerless 2D chooser (coringa) — Standard/Advanced/YOLOv26 MediaPipe, "
+        "Yolo + Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, "
+        "SAM3+Sapiens2 and its Visualize ID, Markerless Hands, MP Angles, Face Mesh, "
+        "Markerless Live. Each tool prints its own Run CLI after dialogs.",
     ),
     "markerless_3d_analysis": CliRunHint(
-        ("uv run vaila/markerless_3d_analysis.py",),
-        "Markerless 3D GUI.",
+        (
+            "uv run vaila/markerless_3d_analysis.py",
+            "uv run vaila/markerless3d_analysis_v2.py",
+            "uv run python -u vaila/sam3dinov3.py",
+            "uv run python -u vaila/sam3dinov3_visualize.py",
+        ),
+        "Markerless 3D chooser (coringa) — Standard/Advanced MediaPipe+YOLO lift, "
+        "SAM3+DINOv3 3D and its Visualize ID. Each tool prints its own Run CLI after dialogs.",
     ),
     "vector_coding": CliRunHint(("uv run vaila/vector_coding.py",), "Vector coding GUI."),
     "emg_analysis": CliRunHint(("uv run vaila/emg_analysis.py",), "EMG analysis GUI."),
     "force_analysis": CliRunHint(("uv run vaila/force_analysis.py",), "Force plate GUI."),
     "gnss_analysis": CliRunHint(("uv run vaila/gnss_analysis.py",), "GNSS/GPS GUI."),
-    "markerless2d_mpyolo": CliRunHint(
-        ("uv run vaila/markerless2d_mpyolo.py",),
-        "MediaPipe + YOLO combined workflow GUI.",
-    ),
     "vailajump": CliRunHint(
         ("uv run vaila/vaila_and_jump.py --help",),
         "Vertical jump — CLI flags or GUI from main app.",
@@ -63,31 +83,13 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
     "animal_open_field": CliRunHint(
         ("uv run vaila/animal_open_field.py",), "Animal open field GUI."
     ),
-    "yolo_and_sam": CliRunHint(
-        (
-            "uv run python -u -m vaila.yolov26track",
-            "uv run python -u vaila/vaila_sam.py",
-            "uv run python -u vaila/vaila_sapiens.py",
-            "uv run python -u vaila/sam3sapiens2.py",
-            "uv run python -u -m vaila.yolotrain",
-        ),
-        "YOLO + FB chooser — Tracker / Pose / Seg / SAM 3 / Sapiens2 / SAM3+Sapiens2 / Train. "
-        "Each tool prints the full Run CLI after GUI dialogs.",
-    ),
     "ml_walkway": CliRunHint(("uv run vaila/walkway_ml_prediction.py",), "ML walkway GUI."),
-    "markerless_hands": CliRunHint(("uv run vaila/markerless_hands.py",), "Hands tracking GUI."),
-    "mp_angles_calculation": CliRunHint(
-        ("uv run vaila/mp_angles_calculation.py",),
-        "MediaPipe angles GUI.",
-    ),
-    "markerless_live": CliRunHint(("uv run vaila/markerless_live.py",), "Live markerless GUI."),
     "ultrasound": CliRunHint(("uv run vaila/ultrasound.py",), "Ultrasound GUI."),
     "brainstorm": CliRunHint(("uv run vaila/brainstorm.py",), "Brainstorm integration GUI."),
     "scout": CliRunHint(("uv run vaila/scout.py",), "Scout GUI."),
     "startblock": CliRunHint(("uv run vaila/startblock.py",), "Start block GUI."),
     "pynalty": CliRunHint(("uv run vaila/pynalty.py",), "Pynalty GUI."),
     "sprint": CliRunHint(("uv run vaila/vailasprint.py",), "Sprint analysis GUI."),
-    "face_mesh_analysis": CliRunHint(("uv run vaila/face_mesh_analysis.py",), "Face mesh GUI."),
     "tugturn": CliRunHint(
         ("uv run vaila/tugturn.py --help",),
         "TUG/Turn clinical analysis — CSV + TOML via CLI or GUI.",
@@ -119,12 +121,18 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
         ("uv run vaila/interp_smooth_split.py --help",),
         "Smooth, filter, gap-fill — TOML config + directory batch CLI.",
     ),
-    "dlt2d": CliRunHint(("uv run vaila/dlt2d.py",), "Make DLT2D GUI."),
-    "rec2d_one_dlt2d": CliRunHint(("uv run vaila/rec2d_one_dlt2d.py",), "Rec2D single DLT GUI."),
-    "rec2d": CliRunHint(("uv run vaila/rec2d.py",), "Rec2D multi-DLT GUI."),
-    "run_dlt3d": CliRunHint(("uv run vaila/dlt3d.py",), "Make DLT3D GUI."),
-    "rec3d_one_dlt3d": CliRunHint(("uv run vaila/rec3d_one_dlt3d.py",), "Rec3D single DLT GUI."),
-    "rec3d": CliRunHint(("uv run vaila/rec3d.py",), "Rec3D multi-DLT GUI."),
+    "dlt_rec_toolkit": CliRunHint(
+        (
+            "uv run vaila/dlt2d.py",
+            "uv run vaila/rec2d_one_dlt2d.py",
+            "uv run vaila/rec2d.py",
+            "uv run vaila/dlt3d.py",
+            "uv run vaila/rec3d_one_dlt3d.py",
+            "uv run vaila/rec3d.py",
+        ),
+        "DLT/REC chooser (coringa) — Make DLT2D, Rec2D 1DLT/MultiDLT, "
+        "Make DLT3D, Rec3D 1DLT/MultiDLT. Each keeps its own GUI/CLI unchanged.",
+    ),
     "reid_marker": CliRunHint(("uv run vaila/reid_markers.py",), "Marker Re-ID GUI."),
     # Frame C_B
     "extract_png_from_videos": CliRunHint(("uv run vaila/videoprocessor.py",), "Video ↔ PNG GUI."),

@@ -62,7 +62,7 @@ Use `--list-ids` to discover IDs and exit without rendering. `--dry-run` validat
 
 ## GUI
 
-Frame B → **YOLO + FB** → **SAM3+DINOv3 Visualize ID** (or run with no arguments). Select the processed run directory first. The matching source video is filled automatically from `sam3dinov3_summary.json`; if the run was moved, choose the synchronized/cropped source video manually. Select an **output parent** and an ID from the combobox. Check **"Export mesh sequence (.obj, for Blender)"** to also write the OBJ sequence described above (needs `--save-mesh` in the source run). The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.
+Frame B → **Markerless 3D** → **SAM3+DINOv3 Visualize ID** (or run with no arguments). Select the processed run directory first. The matching source video is filled automatically from `sam3dinov3_summary.json`; if the run was moved, choose the synchronized/cropped source video manually. Select an **output parent** and an ID from the combobox. Check **"Export mesh sequence (.obj, for Blender)"** to also write the OBJ sequence described above (needs `--save-mesh` in the source run). The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.
 
 Before rendering, the CLI `--dry-run` path verifies the source frame count and image dimensions against `width`/`height`/`n_frames` recorded in the gzipped predictions — this prevents accidentally applying a synchronized/cropped result to the wrong source video.
 

@@ -333,7 +333,7 @@ uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t player \
   -w vaila/models/sam3/sam3.1_multiplex.pt                           # SAM 3.1 weights
 ```
 
-> Equivalent GUI: launch `vaila.py`, **Frame B → YOLO + FB → SAM 3 video**, fill **Input**, **Output**, **Text prompt**, **Max frames** and click **Run**. The terminal prints `>> vaila/vaila_sam: Equivalent CLI` with the full copy-paste command; the progress window also logs the subprocess argv.
+> Equivalent GUI: launch `vaila.py`, **Frame B → Markerless 2D → SAM 3 video**, fill **Input**, **Output**, **Text prompt**, **Max frames** and click **Run**. The terminal prints `>> vaila/vaila_sam: Equivalent CLI` with the full copy-paste command; the progress window also logs the subprocess argv.
 
 ### Companion AI seed for the soccer field
 
@@ -635,7 +635,7 @@ When you launch `vaila_sam` without CLI args (or from the vailá main window), t
 
 In the main vailá window, open it via:
 
-- **Frame B → "YOLO + FB" → "SAM 3 video"**
+- **Frame B → "Markerless 2D" → "SAM 3 video"**
 
 ### GUI → CLI mirror
 

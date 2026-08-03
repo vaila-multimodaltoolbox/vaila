@@ -6,7 +6,7 @@
 - **File:** `vaila\markerless_live.py`
 - **Lines:** 1486
 - **Size:** 56506 characters
-- **Version:** 0.0.2
+- **Version:** 0.3.98
 - **Author:** Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
 - **GUI Interface:** ✅ Yes
 

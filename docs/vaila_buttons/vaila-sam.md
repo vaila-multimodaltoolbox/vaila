@@ -1,8 +1,8 @@
-# SAM 3 Video — via YOLO + FB Chooser
+# SAM 3 Video — via Markerless 2D Chooser
 
-The **SAM 3 video** option in the **YOLO + FB** chooser launches `vaila_sam.py` for advanced video segmentation using Meta's SAM 3 model.
+The **SAM 3 video** option in the **Markerless 2D** chooser (`B1_r1_c4`, formerly under **YOLO + FB**) launches `vaila_sam.py` for advanced video segmentation using Meta's SAM 3 model.
 
-See also: [YOLO + FB chooser](yolo-fb.md) for all launcher CLI mirrors.
+See also: [YOLO + FB tools](yolo-fb.md) for all launcher CLI mirrors.
 
 ## Overview
 
@@ -18,7 +18,7 @@ SAM 3 allows for high-quality, zero-shot segmentation of objects in video based 
 
 ## Usage
 
-1. Click **YOLO + FB** → **SAM 3 video** in Frame B.
+1. Click **Markerless 2D** → **SAM 3 video** in Frame B.
 2. Select the input video or folder.
 3. Enter a **Text prompt** (e.g., `person`).
 4. (Optional) Select **Save overlay MP4** to visualize the segmentation.

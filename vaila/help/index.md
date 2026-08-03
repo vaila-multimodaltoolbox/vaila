@@ -4,34 +4,54 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 132 | **Categories:** 7 | **Generated on:** 02/08/2026 (v0.3.96)
+**Total documented modules:** 132 | **Categories:** 7 | **Generated on:** 02/08/2026 (v0.3.98)
 
-## YOLO + FB chooser (Frame B → B4_r4_c1)
+## Markerless 2D chooser (Frame B → B1_r1_c4)
 
-Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, Train YOLOv26.
+Frame B button **Markerless 2D** opens (v0.3.98 — absorbed the former Yolo + Markerless_MP and the 2D-only half of YOLO + FB, plus 4 more standalone 2D buttons): Standard, Advanced (YOLO + MediaPipe), YOLOv26 Pose Only, Yolo + Markerless_MP, Tracker (v26), Pose (video), Pose (tracking), Seg (v26), Train YOLOv26, SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, **Markerless Hands**, **MP Angles**, **Face Mesh**, **Markerless Live**.
 
 - [vaila_sapiens (Sapiens2 Pose)](vaila_sapiens.html) · [MD](vaila_sapiens.md)
 - [sam3sapiens2 (SAM-guided Sapiens2)](sam3sapiens2.html) · [MD](sam3sapiens2.md)
 - [sam3sapiens2_visualize (selected-ID rerenderer)](sam3sapiens2_visualize.html) · [MD](sam3sapiens2_visualize.md)
-- [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
-- [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
 - [vaila_sam (SAM 3)](vaila_sam.html) · [MD](vaila_sam.md)
 - [yolov26track](yolov26track.html) · [MD](yolov26track.md)
 - [yolotrain](yolotrain.html) · [MD](yolotrain.md)
+- [mphands (Markerless Hands)](mphands.html) · [MD](mphands.md)
+- [mpangles (MP Angles)](mpangles.html) · [MD](mpangles.md)
+- [mp_facemesh (Face Mesh)](mp_facemesh_help.html) · [MD](mp_facemesh_help.md)
+- [markerless_live (Markerless Live)](markerless_live.html) · [MD](markerless_live.md)
 - [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
 
-## YOLO + FB chooser (Frame B → B4_r4_c1)
+## Markerless 3D chooser (Frame B → B1_r1_c5)
 
-Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking), Seg (v26), SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, Train YOLOv26.
+Frame B button **Markerless 3D** opens (v0.3.97 — absorbed the 3D-native half of YOLO + FB): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**.
+
+- [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
+- [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
+- [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
+
+## Markerless 2D chooser (Frame B → B1_r1_c4)
+
+Frame B button **Markerless 2D** opens (v0.3.98 — absorbed the former Yolo + Markerless_MP and the 2D-only half of YOLO + FB, plus 4 more standalone 2D buttons): Standard, Advanced (YOLO + MediaPipe), YOLOv26 Pose Only, Yolo + Markerless_MP, Tracker (v26), Pose (video), Pose (tracking), Seg (v26), Train YOLOv26, SAM 3 video, **Sapiens2 Pose**, **SAM3+Sapiens2**, **SAM3+Sapiens2 Visualize ID**, **Markerless Hands**, **MP Angles**, **Face Mesh**, **Markerless Live**.
 
 - [vaila_sapiens (Sapiens2 Pose)](vaila_sapiens.html) · [MD](vaila_sapiens.md)
 - [sam3sapiens2 (SAM-guided Sapiens2)](sam3sapiens2.html) · [MD](sam3sapiens2.md)
 - [sam3sapiens2_visualize (selected-ID rerenderer)](sam3sapiens2_visualize.html) · [MD](sam3sapiens2_visualize.md)
-- [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
-- [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
 - [vaila_sam (SAM 3)](vaila_sam.html) · [MD](vaila_sam.md)
 - [yolov26track](yolov26track.html) · [MD](yolov26track.md)
 - [yolotrain](yolotrain.html) · [MD](yolotrain.md)
+- [mphands (Markerless Hands)](mphands.html) · [MD](mphands.md)
+- [mpangles (MP Angles)](mpangles.html) · [MD](mpangles.md)
+- [mp_facemesh (Face Mesh)](mp_facemesh_help.html) · [MD](mp_facemesh_help.md)
+- [markerless_live (Markerless Live)](markerless_live.html) · [MD](markerless_live.md)
+- [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
+
+## Markerless 3D chooser (Frame B → B1_r1_c5)
+
+Frame B button **Markerless 3D** opens (v0.3.97 — absorbed the 3D-native half of YOLO + FB): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**.
+
+- [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
+- [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
 - [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
 
 ---
@@ -425,7 +445,7 @@ Frame B button **YOLO + FB** opens: Tracker (v26), Pose (video), Pose (tracking)
 - **yolotrain**
   - [📄 HTML](yolotrain.html)
   - [📝 Markdown](yolotrain.md)
-- **yolov26track (YOLO + FB chooser)**
+- **yolov26track (Markerless 2D chooser)**
   - [📄 HTML](yolov26track.html)
   - [📝 Markdown](yolov26track.md)
 - **yolov11track (legacy)**

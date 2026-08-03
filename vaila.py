@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 02 August 2026
-Version: 0.3.96
+Version: 0.3.98
 
 Example of usage:
 uv run vaila.py
@@ -73,7 +73,6 @@ from tkinter import (
     Toplevel,
     filedialog,
     messagebox,
-    simpledialog,
     ttk,
 )
 
@@ -222,10 +221,16 @@ def run_vaila_module(module_name, script_path=None, *, extra_py_flags=()):
             messagebox.showerror("Error", f"Could not launch {module_name}: {e}")
 
 
-def _print_yolo_fb_launch(tool: str, launch_cli: str, *, note: str | None = None) -> None:
-    """Print launcher CLI mirror when a YOLO + FB chooser button is pressed."""
+def _print_chooser_launch(
+    chooser: str, tool: str, launch_cli: str, *, note: str | None = None
+) -> None:
+    """Print launcher CLI mirror when a chooser-dialog button is pressed.
+
+    Shared by the Markerless 2D and Markerless 3D choosers (each a "coringa"
+    that absorbs several sub-tools), so ``chooser`` names the parent button.
+    """
     print("\n" + "=" * 60)
-    print(f"YOLO + FB → {tool}")
+    print(f"{chooser} → {tool}")
     print(">> Equivalent launch CLI (copy/paste):")
     print(f">>   {launch_cli}")
     if note:
@@ -249,7 +254,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 02.Aug.2026 v0.3.96 (Python 3.12.13)
+    vailá - 02.Aug.2026 v0.3.98 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -276,23 +281,26 @@ A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
 
 ========================== Multimodal Analysis (Frame B) ===================
 B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
-B1_r1_c3 - Motion Capture Full Body B1_r1_c4 - Markerless 2D
-B1_r1_c5 - Markerless 3D
+B1_r1_c3 - Motion Capture Full Body
+B1_r1_c4 - Markerless 2D (coringa: Standard/Advanced/YOLOv26, Yolo+Markerless_MP,
+            YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID],
+            Markerless Hands, MP Angles, Face Mesh, Markerless Live)
+B1_r1_c5 - Markerless 3D (coringa: Standard/Advanced YOLO lift, SAM3+DINOv3 3D [+Visualize ID])
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
-B3_r3_c1 - HR/ECG         B3_r3_c2 - Yolo + Markerless_MP
+B3_r3_c1 - HR/ECG         B3_r3_c2 - vailá
 B3_r3_c3 - Vertical Jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - YOLO + FB        B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
-B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
+B4_r4_c1 - vailá          B4_r4_c2 - ML Walkway      B4_r4_c3 - vailá
+B4_r4_c4 - vailá          B4_r4_c5 - vailá
 
 B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
 B5_r5_c4 - Start Block    B5_r5_c5 - Pynalty
 
-B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
+B5_r6_c1 - Sprint         B5_r6_c2 - vailá           B5_r6_c3 - tugturn
 B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
 
 B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - Treadmill LC
@@ -301,8 +309,9 @@ B6_r7_c4 - vailá          B6_r7_c5 - vailá
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
 C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
-C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
-C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
+C_A_r2_c1 - DLT/REC 2D-3D (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
+C_A_r2_c2 - vailá         C_A_r2_c3 - vailá
+C_A_r3_c1 - vailá         C_A_r3_c2 - vailá          C_A_r3_c3 - vailá
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
@@ -360,7 +369,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 02.Aug.2026 v0.3.96 (Python 3.12.13)")
+        self.title("vailá - 02.Aug.2026 v0.3.98 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -928,12 +937,12 @@ class Vaila(tk.Tk):
             # command=self.heart_rate_analysis,
         )
 
-        # B3_r3_c2 - markerless2d_mpyolo
-        markerless2d_mpyolo_btn = tk.Button(
+        # B3_r3_c2 - vailá (placeholder; Yolo + Markerless_MP moved into Markerless 2D)
+        vaila_b3_r3_c2 = tk.Button(
             row3_frame,
-            text="Yolo + Markerless_MP",
+            text="vailá",
             width=button_width,
-            command=self.markerless2d_mpyolo,
+            command=self.show_vaila_message,
         )
 
         # B3_r3_c3 - vaila_and_jump
@@ -962,7 +971,7 @@ class Vaila(tk.Tk):
 
         # Pack row3 buttons
         ecg_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        markerless2d_mpyolo_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b3_r3_c2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vailajump_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         cube2d_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         vaila_animalof.pack(side="left", expand=True, fill="x", padx=2, pady=2)
@@ -971,12 +980,12 @@ class Vaila(tk.Tk):
         row4_frame = tk.Frame(analysis_frame)
         row4_frame.pack(fill="x")
 
-        # B4_r4_c1 - YOLO + FB (YOLO + Meta/Facebook: SAM 3, Sapiens2)
-        yolo_and_sam_btn = tk.Button(
+        # B4_r4_c1 - vailá (placeholder; YOLO + FB moved into Markerless 2D / Markerless 3D)
+        vaila_b4_r4_c1 = tk.Button(
             row4_frame,
-            text="YOLO + FB",
+            text="vailá",
             width=button_width,
-            command=self.yolo_and_sam,
+            command=self.show_vaila_message,
         )
 
         # B4_r4_c2 - ML Walkway
@@ -987,36 +996,36 @@ class Vaila(tk.Tk):
             command=self.ml_walkway,
         )
 
-        # B4_r4_c3 - Markerless Hands
-        mphands_btn = tk.Button(
+        # B4_r4_c3 - vailá (placeholder; Markerless Hands moved into Markerless 2D)
+        vaila_b4_r4_c3 = tk.Button(
             row4_frame,
-            text="Markerless Hands",
+            text="vailá",
             width=button_width,
-            command=self.markerless_hands,
+            command=self.show_vaila_message,
         )
 
-        # B4_r4_c4 - MP Angles
-        mpangles_btn = tk.Button(
+        # B4_r4_c4 - vailá (placeholder; MP Angles moved into Markerless 2D)
+        vaila_b4_r4_c4 = tk.Button(
             row4_frame,
-            text="MP Angles",
+            text="vailá",
             width=button_width,
-            command=self.mp_angles_calculation,
+            command=self.show_vaila_message,
         )
 
-        # B4_r4_c5 - Markerless Live
-        markerlesslive_btn = tk.Button(
+        # B4_r4_c5 - vailá (placeholder; Markerless Live moved into Markerless 2D)
+        vaila_b4_r4_c5 = tk.Button(
             row4_frame,
-            text="Markerless Live",
+            text="vailá",
             width=button_width,
-            command=self.markerless_live,
+            command=self.show_vaila_message,
         )
 
         # Pack row4 buttons
-        yolo_and_sam_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b4_r4_c1.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         mlwalkway_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        mphands_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        mpangles_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        markerlesslive_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b4_r4_c3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b4_r4_c4.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b4_r4_c5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         # B5 - Fifth row of buttons (Ultrasound, vailá, vailá, vailá, vailá)
         row5_frame = tk.Frame(analysis_frame)
@@ -1081,12 +1090,12 @@ class Vaila(tk.Tk):
             command=self.sprint,
         )
 
-        # B5_r6_c2 - Face Mesh
-        face_mesh_btn = tk.Button(
+        # B5_r6_c2 - vailá (placeholder; Face Mesh moved into Markerless 2D)
+        vaila_b5_r6_c2 = tk.Button(
             row6_frame,
-            text="Face Mesh",
+            text="vailá",
             width=button_width,
-            command=self.face_mesh_analysis,
+            command=self.show_vaila_message,
         )
 
         # B5_r6_c3 - tugturn
@@ -1115,7 +1124,7 @@ class Vaila(tk.Tk):
 
         # Pack row6 buttons
         sprint_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        face_mesh_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b5_r6_c2.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         tugturn_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         soccer_tools_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         deadlift_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
@@ -1215,36 +1224,53 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_A_r2_c1 - Data Files: Make DLT2D
-        dlt2d_btn = tk.Button(tools_col1, text="Make DLT2D", command=self.dlt2d, width=button_width)
-
-        # C_A_r2_c2 - Data Files: Rec2D 1DLT
-        rec2d_one_btn = tk.Button(
+        # C_A_r2_c1 - Data Files: DLT/REC toolkit (coringa for the former 6
+        # Make/Rec DLT2D/DLT3D + 1DLT/MultiDLT buttons; saves grid space)
+        dlt_rec_toolkit_btn = tk.Button(
             tools_col1,
-            text="Rec2D 1DLT",
-            command=self.rec2d_one_dlt2d,
+            text="DLT/REC 2D-3D",
+            command=self.dlt_rec_toolkit,
             width=button_width,
         )
 
-        # C_A_r2_c3 - Data Files: Rec2D MultiDLT
-        rec2d_multiple_btn = tk.Button(
-            tools_col1, text="Rec2D MultiDLT", command=self.rec2d, width=button_width
-        )
-        # C_A_r3_c1 - Data Files: Make DLT3D
-        dlt3d_btn = tk.Button(
-            tools_col1, text="Make DLT3D", command=self.run_dlt3d, width=button_width
-        )
-
-        # C_A_r3_c2 - Data Files: Rec3D 1DLT
-        rec3d_one_btn = tk.Button(
+        # C_A_r2_c2 - Data Files: vailá (placeholder; Rec2D 1DLT moved into DLT/REC 2D-3D)
+        vaila_c_a_r2_c2 = tk.Button(
             tools_col1,
-            text="Rec3D 1DLT",
-            command=self.rec3d_one_dlt3d,
+            text="vailá",
+            command=self.show_vaila_message,
             width=button_width,
         )
-        # C_A_r3_c3 - Data Files: Rec3D MultiDLT
-        rec3d_multiple_btn = tk.Button(
-            tools_col1, text="Rec3D MultiDLT", command=self.rec3d, width=button_width
+
+        # C_A_r2_c3 - Data Files: vailá (placeholder; Rec2D MultiDLT moved into DLT/REC 2D-3D)
+        vaila_c_a_r2_c3 = tk.Button(
+            tools_col1,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # C_A_r3_c1 - Data Files: vailá (placeholder; Make DLT3D moved into DLT/REC 2D-3D)
+        vaila_c_a_r3_c1 = tk.Button(
+            tools_col1,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # C_A_r3_c2 - Data Files: vailá (placeholder; Rec3D 1DLT moved into DLT/REC 2D-3D)
+        vaila_c_a_r3_c2 = tk.Button(
+            tools_col1,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
+        )
+
+        # C_A_r3_c3 - Data Files: vailá (placeholder; Rec3D MultiDLT moved into DLT/REC 2D-3D)
+        vaila_c_a_r3_c3 = tk.Button(
+            tools_col1,
+            text="vailá",
+            command=self.show_vaila_message,
+            width=button_width,
         )
 
         # Available blank (vailá) buttons for future tools
@@ -1300,12 +1326,12 @@ class Vaila(tk.Tk):
         reorder_csv_btn.grid(row=0, column=0, padx=2, pady=2)
         convert_btn.grid(row=0, column=1, padx=2, pady=2)
         gapfill_btn.grid(row=0, column=2, padx=2, pady=2)
-        dlt2d_btn.grid(row=1, column=0, padx=2, pady=2)
-        rec2d_one_btn.grid(row=1, column=1, padx=2, pady=2)
-        rec2d_multiple_btn.grid(row=1, column=2, padx=2, pady=2)
-        dlt3d_btn.grid(row=2, column=0, padx=2, pady=2)
-        rec3d_one_btn.grid(row=2, column=1, padx=2, pady=2)
-        rec3d_multiple_btn.grid(row=2, column=2, padx=2, pady=2)
+        dlt_rec_toolkit_btn.grid(row=1, column=0, padx=2, pady=2)
+        vaila_c_a_r2_c2.grid(row=1, column=1, padx=2, pady=2)
+        vaila_c_a_r2_c3.grid(row=1, column=2, padx=2, pady=2)
+        vaila_c_a_r3_c1.grid(row=2, column=0, padx=2, pady=2)
+        vaila_c_a_r3_c2.grid(row=2, column=1, padx=2, pady=2)
+        vaila_c_a_r3_c3.grid(row=2, column=2, padx=2, pady=2)
         reid_marker_btn.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn10.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn11.grid(row=3, column=2, padx=2, pady=2)
@@ -1989,227 +2015,396 @@ class Vaila(tk.Tk):
 
         mocap_analysis.analyze_mocap_fullbody_data()
 
+    def _build_grid_chooser_dialog(
+        self, title: str, *, width: int = 640, height: int = 560, columns: int = 3
+    ):
+        """Build a Toplevel with a scrollable N-column button grid.
+
+        Used by the Markerless 2D / Markerless 3D "coringa" choosers so a long
+        list of sub-tools stays usable on small-resolution monitors: buttons
+        wrap into `columns` columns instead of one long vertical list, and
+        both a vertical and a horizontal scrollbar (plus mouse-wheel support)
+        are always available regardless of window size.
+
+        Returns ``(dialog, place_button, place_section)``:
+        - ``place_button(text, command, width=24)`` adds a button, auto-
+          advancing across the grid (fills row 0 left-to-right, then row 1, ...).
+        - ``place_section(text)`` adds a full-width section header and starts
+          a new row for the buttons that follow.
+        The dialog already has a Cancel button and Escape binding.
+        """
+        dialog = Toplevel(self)
+        dialog.title(title)
+        dialog.geometry(f"{width}x{height}")
+        dialog.transient(self)
+        try:
+            dialog.grab_set()
+        except tk.TclError:
+            with contextlib.suppress(Exception):
+                self.grab_release()
+            with contextlib.suppress(Exception):
+                dialog.grab_set()
+
+        footer = tk.Frame(dialog)
+        footer.pack(side="bottom", fill="x")
+        Button(footer, text="Cancel", command=dialog.destroy, width=12).pack(pady=8)
+
+        body = tk.Frame(dialog)
+        canvas = tk.Canvas(body, highlightthickness=0)
+        vbar = ttk.Scrollbar(body, orient="vertical", command=canvas.yview)
+        hbar = ttk.Scrollbar(dialog, orient="horizontal", command=canvas.xview)
+        canvas.configure(yscrollcommand=vbar.set, xscrollcommand=hbar.set)
+
+        hbar.pack(side="bottom", fill="x")
+        body.pack(side="top", fill="both", expand=True)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        vbar.grid(row=0, column=1, sticky="ns")
+        body.grid_rowconfigure(0, weight=1)
+        body.grid_columnconfigure(0, weight=1)
+
+        grid = tk.Frame(canvas)
+        canvas.create_window((0, 0), window=grid, anchor="nw")
+        for col in range(columns):
+            grid.grid_columnconfigure(col, weight=1, uniform="chooser")
+
+        def _sync_scrollregion(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        grid.bind("<Configure>", _sync_scrollregion)
+
+        def _wheel_y(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def _wheel_y_up(_event):
+            canvas.yview_scroll(-3, "units")
+
+        def _wheel_y_down(_event):
+            canvas.yview_scroll(3, "units")
+
+        def _wheel_x(event):
+            canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", _wheel_y)
+        canvas.bind_all("<Shift-MouseWheel>", _wheel_x)
+        canvas.bind_all("<Button-4>", _wheel_y_up)
+        canvas.bind_all("<Button-5>", _wheel_y_down)
+
+        def _unbind_wheel(_event=None):
+            with contextlib.suppress(Exception):
+                canvas.unbind_all("<MouseWheel>")
+                canvas.unbind_all("<Shift-MouseWheel>")
+                canvas.unbind_all("<Button-4>")
+                canvas.unbind_all("<Button-5>")
+
+        dialog.bind("<Destroy>", _unbind_wheel)
+
+        state = {"row": 0, "col": 0}
+
+        def place_section(text: str) -> None:
+            if state["col"] != 0:
+                state["col"] = 0
+                state["row"] += 1
+            Label(grid, text=text, font=("Arial", 9, "bold"), fg="gray20").grid(
+                row=state["row"], column=0, columnspan=columns, sticky="w", padx=6, pady=(12, 2)
+            )
+            state["row"] += 1
+
+        def place_button(text: str, command, *, width: int = 24) -> None:
+            Button(grid, text=text, command=command, width=width).grid(
+                row=state["row"], column=state["col"], padx=4, pady=4, sticky="ew"
+            )
+            state["col"] += 1
+            if state["col"] >= columns:
+                state["col"] = 0
+                state["row"] += 1
+
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+        dialog.focus_set()
+        return dialog, place_button, place_section
+
     # B_r1_c4
     def markerless_2d_analysis(self):
-        """Runs the Markerless 2D Analysis module."""
+        """Chooser for every 2D markerless pipeline.
 
-        # Create a dialog window for version selection
-        dialog = Toplevel(self)
-        dialog.title("Markerless 2D Analysis - Select Version")
-        dialog.geometry("600x400")
-        dialog.transient(self)
-        dialog.grab_set()
-        # Center the dialog
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
-
-        # Create main frame
-        main_frame = tk.Frame(dialog, padx=20, pady=20)
-        main_frame.pack(fill="both", expand=True)
-
-        # Title
-        title_label = Label(
-            main_frame,
-            text="Select Markerless 2D Analysis Version",
-            font=("Arial", 12, "bold"),
+        A "coringa" (wildcard) button: absorbs the former Yolo + Markerless_MP
+        button and the 2D-only tools from the former YOLO + FB chooser
+        (YOLOv26 track/pose/seg/train, SAM 3 video, Sapiens2 Pose,
+        SAM3+Sapiens2, SAM3+Sapiens2 Visualize ID). 3D-native tools
+        (SAM3+DINOv3) live under Markerless 3D instead.
+        """
+        dialog, place_button, place_section = self._build_grid_chooser_dialog(
+            "Markerless 2D — Select Tool", width=680, height=560
         )
-        title_label.pack(pady=(0, 20))
 
-        # Version selection variable
-        version_var = tk.StringVar(value="1")
+        # Ensure Ultralytics never downloads into repo root.
+        try:
+            from vaila.yolov26track import VAILA_MODELS_DIR, _configure_ultralytics_dirs
 
-        # Version 1: Standard (CPU/GPU unified)
-        standard_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
-        standard_frame.pack(fill="x", pady=5)
-        standard_radio = tk.Radiobutton(
-            standard_frame,
-            text="Standard (CPU/GPU)",
-            variable=version_var,
-            value="1",
-            font=("Arial", 10),
-        )
-        standard_radio.pack(anchor="w")
-        standard_desc = Label(
-            standard_frame,
-            text="MediaPipe only, single-person, automatic CPU/GPU detection",
-            font=("Arial", 9),
-            fg="gray",
-        )
-        standard_desc.pack(anchor="w", padx=(25, 0))
-        standard_gpu_desc = Label(
-            standard_frame,
-            text="GPU backends: NVIDIA/CUDA, ROCm/AMD, MPS/Apple Silicon",
-            font=("Arial", 8),
-            fg="gray",
-        )
-        standard_gpu_desc.pack(anchor="w", padx=(25, 0))
+            _configure_ultralytics_dirs(VAILA_MODELS_DIR)
+        except Exception:
+            pass
 
-        # Version 2: Advanced
-        advanced_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
-        advanced_frame.pack(fill="x", pady=5)
-        advanced_radio = tk.Radiobutton(
-            advanced_frame,
-            text="Advanced (YOLO + MediaPipe)",
-            variable=version_var,
-            value="2",
-            font=("Arial", 10),
-        )
-        advanced_radio.pack(anchor="w")
-        advanced_desc = Label(
-            advanced_frame,
-            text="Multi-person detection with YOLO and MediaPipe (Ultralytics stack)",
-            font=("Arial", 9),
-            fg="gray",
-        )
-        advanced_desc.pack(anchor="w", padx=(25, 0))
-
-        # Version 3: YOLO-Only
-        yolo_frame = tk.Frame(main_frame, relief="raised", borderwidth=2, padx=10, pady=10)
-        yolo_frame.pack(fill="x", pady=5)
-        yolo_radio = tk.Radiobutton(
-            yolo_frame,
-            text="YOLOv26 Pose Only (17 keypoints)",
-            variable=version_var,
-            value="3",
-            font=("Arial", 10),
-        )
-        yolo_radio.pack(anchor="w")
-        yolo_desc = Label(
-            yolo_frame,
-            text="Uses purely YOLO pose models for 17-keypoint detection",
-            font=("Arial", 9),
-            fg="gray",
-        )
-        yolo_desc.pack(anchor="w", padx=(25, 0))
-
-        # Buttons frame
-        buttons_frame = tk.Frame(main_frame)
-        buttons_frame.pack(pady=(20, 0))
-
-        def launch_version():
-            version_choice = version_var.get()
+        def use_standard():
             dialog.destroy()
-
+            _print_chooser_launch(
+                "Markerless 2D", "Standard (CPU/GPU)", "uv run vaila/markerless_2d_analysis.py"
+            )
             try:
-                # Launch in separate process (recommended - no Tkinter conflicts)
-                if version_choice == "1" or version_choice == "1gpu":
-                    print("\n" + "=" * 60)
-                    print("Markerless 2D Analysis - Version Selected: Standard (CPU/GPU)")
-                    print("=" * 60)
-                    print("Launching: vaila.markerless_2d_analysis")
-                    print("Features: MediaPipe only, single-person, automatic CPU/GPU detection")
-                    print("GPU backends: NVIDIA/CUDA, ROCm/AMD, MPS/Apple Silicon")
-                    print("=" * 60 + "\n")
-                    run_vaila_module("vaila.markerless_2d_analysis")
-                elif version_choice == "2":
-                    print("\n" + "=" * 60)
-                    print("Markerless 2D Analysis - Version Selected: Advanced (YOLO + MediaPipe)")
-                    print("=" * 60)
-                    print("Launching: vaila.markerless2d_analysis_v2")
-                    print("Features: Multi-person detection with YOLO and MediaPipe")
-                    print("=" * 60 + "\n")
-                    run_vaila_module(
-                        "vaila.markerless2d_analysis_v2", script_path="markerless2d_analysis_v2.py"
-                    )
-                elif version_choice == "3":
-                    print("\n" + "=" * 60)
-                    print("Markerless 2D Analysis - Version Selected: YOLOv26 Pose Only")
-                    print("=" * 60)
-                    print("Launching: vaila.markerless2d_yolo26")
-                    print("Features: Pure YOLO pose extraction (17 keypoints)")
-                    print("=" * 60 + "\n")
-                    run_vaila_module(
-                        "vaila.markerless2d_yolo26", script_path="markerless2d_yolo26.py"
-                    )
+                run_vaila_module("vaila.markerless_2d_analysis")
             except Exception as e:
-                print(f"\nERROR: Failed to launch markerless analysis: {e}\n")
                 messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
 
-        def cancel():
+        def use_advanced():
             dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D",
+                "Advanced (YOLO + MediaPipe)",
+                "uv run vaila/markerless2d_analysis_v2.py",
+            )
+            try:
+                run_vaila_module(
+                    "vaila.markerless2d_analysis_v2", script_path="markerless2d_analysis_v2.py"
+                )
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
 
-        # OK and Cancel buttons
-        ok_button = Button(buttons_frame, text="OK", command=launch_version, width=10)
-        ok_button.pack(side="left", padx=5)
-        cancel_button = Button(buttons_frame, text="Cancel", command=cancel, width=10)
-        cancel_button.pack(side="left", padx=5)
+        def use_yolo_pose_only():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "YOLOv26 Pose Only", "uv run vaila/markerless2d_yolo26.py"
+            )
+            try:
+                run_vaila_module("vaila.markerless2d_yolo26", script_path="markerless2d_yolo26.py")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch markerless analysis: {e}")
 
-        # Make Enter key trigger OK
-        dialog.bind("<Return>", lambda e: launch_version())
-        dialog.bind("<Escape>", lambda e: cancel())
+        def use_mpyolo():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "Yolo + Markerless_MP", "uv run vaila/markerless2d_mpyolo.py"
+            )
+            self.markerless2d_mpyolo()
 
-        # Focus on dialog
-        dialog.focus_set()
+        def use_yolov26_tracker():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "Tracker (v26)", "uv run python -u -m vaila.yolov26track"
+            )
+            try:
+                run_vaila_module("vaila.yolov26track", extra_py_flags=("-u",))
+            except Exception as e:
+                messagebox.showerror("Error Running YOLOv26", f"Error: {str(e)}")
+
+        def use_yolov26_pose_video():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D",
+                "Pose (video)",
+                "uv run python -u -m vaila.yolov26track",
+                note="Launched in-process from main vailá; pose params print after Run.",
+            )
+            try:
+                from vaila import yolov26track
+
+                yolov26track.run_yolov26pose_video(parent=self)
+            except Exception as e:
+                messagebox.showerror("Error Running YOLOv26 Pose", f"Error: {str(e)}")
+
+        def use_yolov26_pose_tracking():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D",
+                "Pose (tracking)",
+                "uv run python -u -m vaila.yolov26track",
+                note="Step 1: track CLI; step 2: pose-from-tracking GUI (see terminal hints).",
+            )
+            try:
+                from vaila import yolov26track
+
+                yolov26track.select_id_and_run_pose()
+            except Exception as e:
+                messagebox.showerror(
+                    "Error Running YOLOv26 Pose (from tracking)", f"Error: {str(e)}"
+                )
+
+        def use_yolov26_seg():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D",
+                "Seg (v26)",
+                "uv run python -u -m vaila.yolov26track",
+                note="In the tracker GUI choose a -seg.pt model and track+seg run mode.",
+            )
+            messagebox.showinfo(
+                "YOLO Segmentation",
+                "In the next window, please select a segmentation model (e.g., yolo26n-seg.pt)",
+            )
+            try:
+                run_vaila_module("vaila.yolov26track", extra_py_flags=("-u",))
+            except Exception as e:
+                messagebox.showerror("Error Running YOLOv26 Segmentation", f"Error: {str(e)}")
+
+        def use_train_yolov26():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "Train YOLOv26", "uv run python -u -m vaila.yolotrain"
+            )
+            try:
+                run_vaila_module("vaila.yolotrain", extra_py_flags=("-u",))
+            except Exception as e:
+                messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
+
+        def use_sam():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "SAM 3 video", "uv run python -u vaila/vaila_sam.py"
+            )
+            self.sam_video()
+
+        def use_sapiens2():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "Sapiens2 Pose", "uv run python -u vaila/vaila_sapiens.py"
+            )
+            self.sapiens_video()
+
+        def use_sam3sapiens2():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "SAM3+Sapiens2", "uv run python -u vaila/sam3sapiens2.py"
+            )
+            self.sam3sapiens2_video()
+
+        def use_sam3sapiens2_visualize():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D",
+                "SAM3+Sapiens2 Visualize ID",
+                "uv run python -u vaila/sam3sapiens2_visualize.py",
+            )
+            self.sam3sapiens2_visualize_video()
+
+        def use_markerless_hands():
+            dialog.destroy()
+            _print_chooser_launch("Markerless 2D", "Markerless Hands", "uv run vaila/mphands.py")
+            self.markerless_hands()
+
+        def use_mp_angles():
+            dialog.destroy()
+            _print_chooser_launch("Markerless 2D", "MP Angles", "uv run vaila/mpangles.py")
+            self.mp_angles_calculation()
+
+        def use_face_mesh():
+            dialog.destroy()
+            _print_chooser_launch("Markerless 2D", "Face Mesh", "uv run vaila/mp_facemesh.py")
+            self.face_mesh_analysis()
+
+        def use_markerless_live():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "Markerless Live", "uv run vaila/markerless_live.py"
+            )
+            self.markerless_live()
+
+        place_section("Native pipelines")
+        place_button("Standard (CPU/GPU)", use_standard)
+        place_button("Advanced (YOLO + MediaPipe)", use_advanced)
+        place_button("YOLOv26 Pose Only", use_yolo_pose_only)
+        place_button("Yolo + Markerless_MP", use_mpyolo)
+
+        place_section("YOLOv26 tools")
+        place_button("Tracker (v26)", use_yolov26_tracker)
+        place_button("Pose (video)", use_yolov26_pose_video)
+        place_button("Pose (tracking)", use_yolov26_pose_tracking)
+        place_button("Seg (v26)", use_yolov26_seg)
+        place_button("Train YOLOv26", use_train_yolov26)
+
+        place_section("SAM3 / Sapiens2 (2D)")
+        place_button("SAM 3 video", use_sam)
+        place_button("Sapiens2 Pose", use_sapiens2)
+        place_button("SAM3+Sapiens2", use_sam3sapiens2)
+        place_button("SAM3+Sapiens2 Visualize ID", use_sam3sapiens2_visualize)
+
+        place_section("Other 2D tools")
+        place_button("Markerless Hands", use_markerless_hands)
+        place_button("MP Angles", use_mp_angles)
+        place_button("Face Mesh", use_face_mesh)
+        place_button("Markerless Live", use_markerless_live)
 
     # B_r1_c5
     def markerless_3d_analysis(self):
-        """Runs the Markerless 3D Analysis module."""
+        """Chooser for every 3D markerless pipeline.
 
-        # Option dialog using existing root
-        choice = simpledialog.askstring(
-            "Markerless 3D Analysis Options",
-            "Select launch method:\n\n1: Separate Process (Recommended - No Tkinter conflicts)\n2: Same Process (Uses existing window)\n\nEnter 1 or 2:",
-            initialvalue="1",
+        A "coringa" (wildcard) button: absorbs the only two 3D-native tools
+        formerly under the YOLO + FB chooser (SAM3+DINOv3 3D and its
+        Visualize ID rerenderer). Everything 2D-only from that same chooser
+        lives under Markerless 2D instead.
+        """
+        dialog, place_button, place_section = self._build_grid_chooser_dialog(
+            "Markerless 3D — Select Tool", width=640, height=360
         )
 
-        if not choice or choice not in ["1", "2"]:
-            return
-
-        if choice == "1":
-            # Option 1: Launch in separate process (recommended)
+        def use_standard_separate():
+            dialog.destroy()
             try:
-                # First ask for version choice
-                version_choice = simpledialog.askstring(
-                    "Markerless 3D Analysis Version",
-                    "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
-                    initialvalue="1",
-                )
-
-                if not version_choice or version_choice not in ["1", "2"]:
-                    return
-
-                # Launch in separate process
-                if version_choice == "1":
-                    run_vaila_module("vaila.markerless_3d_analysis")
-                else:
-                    run_vaila_module("vaila.markerless3d_analysis_v2")
-
+                run_vaila_module("vaila.markerless_3d_analysis")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to launch markerless 3D analysis: {e}")
 
-        else:
-            # Option 2: Use existing root window (may have conflicts)
+        def use_standard_same():
+            dialog.destroy()
             try:
-                # Version choice
-                version_choice = simpledialog.askstring(
-                    "Markerless 3D Analysis Version",
-                    "Select version:\n\n1: Standard (Faster, single-person)\n2: Advanced (Slower, multi-person with YOLO)\n\nEnter 1 or 2:",
-                    initialvalue="1",
-                )
+                from vaila.markerless_3d_analysis import App
 
-                if not version_choice or version_choice not in ["1", "2"]:
-                    return
-
-                # Import and run in same process
-                if version_choice == "1":
-                    import tkinter as tk
-
-                    from vaila.markerless_3d_analysis import App
-
-                    dialog = tk.Toplevel(self)
-                    _app = App(dialog)
-                else:
-                    from vaila.markerless3d_analysis_v2 import (
-                        process_videos_in_directory,
-                    )
-
-                    # Pass the existing root window to avoid creating new Tk
-                    process_videos_in_directory(existing_root=self)
-
+                sub_dialog = tk.Toplevel(self)
+                App(sub_dialog)
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to run markerless 3D analysis: {e}")
+
+        def use_advanced_separate():
+            dialog.destroy()
+            try:
+                run_vaila_module("vaila.markerless3d_analysis_v2")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to launch markerless 3D analysis: {e}")
+
+        def use_advanced_same():
+            dialog.destroy()
+            try:
+                from vaila.markerless3d_analysis_v2 import process_videos_in_directory
+
+                process_videos_in_directory(existing_root=self)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to run markerless 3D analysis: {e}")
+
+        def use_sam3dinov3():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 3D",
+                "SAM3+DINOv3 3D",
+                "uv run python -u vaila/sam3dinov3.py",
+                note="SAM 3 boxes/masks -> SAM 3D Body (DINOv3) MHR mesh",
+            )
+            self.sam3dinov3_video()
+
+        def use_sam3dinov3_visualize():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 3D",
+                "SAM3+DINOv3 Visualize ID",
+                "uv run python -u vaila/sam3dinov3_visualize.py",
+            )
+            self.sam3dinov3_visualize_video()
+
+        place_section("Native pipelines")
+        place_button("Standard (separate process)", use_standard_separate, width=26)
+        place_button("Advanced YOLO (separate process)", use_advanced_separate, width=26)
+        place_button("Standard (same process)", use_standard_same, width=26)
+        place_button("Advanced YOLO (same process)", use_advanced_same, width=26)
+
+        place_section("SAM3+DINOv3 (3D)")
+        place_button("SAM3+DINOv3 3D", use_sam3dinov3, width=26)
+        place_button("SAM3+DINOv3 Visualize ID", use_sam3dinov3_visualize, width=26)
 
     # B_r2_c1
     def vector_coding(self):
@@ -2439,211 +2634,6 @@ class Vaila(tk.Tk):
 
         animal_open_field.run_animal_open_field()
 
-    # B_r4_c1
-    def yolotrackerpose(self):
-        """Runs the specified YOLO tracking analysis."""
-        print(f"Running tracker analysis {os.path.dirname(os.path.abspath(__file__))}")
-        print(f"Running tracker analysis {os.path.basename(__file__)}")
-        # Show approximate source line for debugging.
-        with contextlib.suppress(Exception):
-            import inspect
-
-            frame = inspect.currentframe()
-            if frame is not None:
-                print(f"Line number: {frame.f_lineno}")
-
-        # Create a dialog window for tracking version selection
-        dialog = tk.Toplevel(self)
-        dialog.title("Select YOLO / Meta (FB) Tool")
-        dialog.geometry("400x720")
-        dialog.transient(self)  # Make dialog modal
-
-        # Try to set grab, but don't fail if another grab is active
-        try:
-            dialog.grab_set()
-        except tk.TclError:
-            # Another grab is active, try to release it first
-            with contextlib.suppress(Exception):
-                self.grab_release()
-            # Continue without grab if it still fails
-            with contextlib.suppress(Exception):
-                dialog.grab_set()
-
-        tk.Label(dialog, text="Select tool:", pady=15).pack()
-
-        # Ensure Ultralytics never downloads into repo root.
-        try:
-            from vaila.yolov26track import VAILA_MODELS_DIR, _configure_ultralytics_dirs
-
-            _configure_ultralytics_dirs(VAILA_MODELS_DIR)
-        except Exception:
-            pass
-
-        def use_yolov26():
-            dialog.destroy()
-            _print_yolo_fb_launch("Tracker (v26)", "uv run python -u -m vaila.yolov26track")
-            try:
-                # Run in separate process. Reason: native TensorRT/torch failures can kill main GUI.
-                run_vaila_module(
-                    "vaila.yolov26track",
-                    extra_py_flags=("-u",),
-                )
-            except Exception as e:
-                messagebox.showerror(
-                    "Error Running YOLOv26",
-                    f"Error: {str(e)}",
-                )
-
-        def use_yolov26_seg():
-            dialog.destroy()
-            _print_yolo_fb_launch(
-                "Seg (v26)",
-                "uv run python -u -m vaila.yolov26track",
-                note="In the tracker GUI choose a -seg.pt model and track+seg run mode.",
-            )
-            messagebox.showinfo(
-                "YOLO Segmentation",
-                "In the next window, please select a segmentation model (e.g., yolo26n-seg.pt)",
-            )
-            try:
-                # Same tracker GUI (has seg run mode in config dialog).
-                run_vaila_module(
-                    "vaila.yolov26track",
-                    extra_py_flags=("-u",),
-                )
-            except Exception as e:
-                messagebox.showerror(
-                    "Error Running YOLOv26 Segmentation",
-                    f"Error: {str(e)}",
-                )
-
-        def use_train_yolov26():
-            dialog.destroy()
-            _print_yolo_fb_launch("Train YOLOv26", "uv run python -u -m vaila.yolotrain")
-            try:
-                # Isolate Tk/Ultralytics training UI from the main vailá GUI process.
-                run_vaila_module(
-                    "vaila.yolotrain",
-                    extra_py_flags=("-u",),
-                )
-            except Exception as e:
-                messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
-
-        def use_yolo_pose_v26():
-            dialog.destroy()
-            _print_yolo_fb_launch(
-                "Pose (video)",
-                "uv run python -u -m vaila.yolov26track",
-                note="Launched in-process from main vailá; pose params print after Run.",
-            )
-            try:
-                from vaila import yolov26track
-
-                yolov26track.run_yolov26pose_video(parent=self)
-            except Exception as e:
-                messagebox.showerror(
-                    "Error Running YOLOv26 Pose",
-                    f"Error: {str(e)}",
-                )
-
-        def use_yolo_pose_v26_from_tracking():
-            dialog.destroy()
-            _print_yolo_fb_launch(
-                "Pose (tracking)",
-                "uv run python -u -m vaila.yolov26track",
-                note="Step 1: track CLI; step 2: pose-from-tracking GUI (see terminal hints).",
-            )
-            try:
-                from vaila import yolov26track
-
-                yolov26track.select_id_and_run_pose()
-            except Exception as e:
-                messagebox.showerror(
-                    "Error Running YOLOv26 Pose (from tracking)",
-                    f"Error: {str(e)}",
-                )
-
-        def use_sam():
-            dialog.destroy()
-            _print_yolo_fb_launch("SAM 3 video", "uv run python -u vaila/vaila_sam.py")
-            self.sam_video()
-
-        def use_sapiens2():
-            dialog.destroy()
-            _print_yolo_fb_launch("Sapiens2 Pose", "uv run python -u vaila/vaila_sapiens.py")
-            self.sapiens_video()
-
-        def use_sam3sapiens2():
-            dialog.destroy()
-            _print_yolo_fb_launch("SAM3+Sapiens2", "uv run python -u vaila/sam3sapiens2.py")
-            self.sam3sapiens2_video()
-
-        def use_sam3sapiens2_visualize():
-            dialog.destroy()
-            _print_yolo_fb_launch(
-                "SAM3+Sapiens2 Visualize ID",
-                "uv run python -u vaila/sam3sapiens2_visualize.py",
-            )
-            self.sam3sapiens2_visualize_video()
-
-        def use_sam3dinov3():
-            dialog.destroy()
-            _print_yolo_fb_launch(
-                "SAM3+DINOv3 3D",
-                "uv run python -u vaila/sam3dinov3.py",
-                note="Markerless 3D: SAM 3 boxes/masks -> SAM 3D Body (DINOv3) MHR mesh",
-            )
-            self.sam3dinov3_video()
-
-        def use_sam3dinov3_visualize():
-            dialog.destroy()
-            _print_yolo_fb_launch(
-                "SAM3+DINOv3 Visualize ID",
-                "uv run python -u vaila/sam3dinov3_visualize.py",
-            )
-            self.sam3dinov3_visualize_video()
-
-        tk.Button(dialog, text="Tracker (v26)", command=use_yolov26, width=16).pack(pady=6)
-        tk.Button(dialog, text="Pose (video)", command=use_yolo_pose_v26, width=16).pack(pady=6)
-        tk.Button(
-            dialog,
-            text="Pose (tracking)",
-            command=use_yolo_pose_v26_from_tracking,
-            width=16,
-        ).pack(pady=6)
-        tk.Button(dialog, text="Seg (v26)", command=use_yolov26_seg, width=16).pack(pady=6)
-        tk.Button(dialog, text="SAM 3 video", command=use_sam, width=16).pack(pady=6)
-        tk.Button(dialog, text="Sapiens2 Pose", command=use_sapiens2, width=16).pack(pady=6)
-        tk.Button(dialog, text="SAM3+Sapiens2", command=use_sam3sapiens2, width=16).pack(pady=6)
-        tk.Button(
-            dialog,
-            text="SAM3+Sapiens2 Visualize ID",
-            command=use_sam3sapiens2_visualize,
-            width=24,
-        ).pack(pady=6)
-        tk.Button(
-            dialog,
-            text="SAM3+DINOv3 3D",
-            command=use_sam3dinov3,
-            width=24,
-        ).pack(pady=6)
-        tk.Button(
-            dialog,
-            text="SAM3+DINOv3 Visualize ID",
-            command=use_sam3dinov3_visualize,
-            width=24,
-        ).pack(pady=6)
-        tk.Button(dialog, text="Train YOLOv26", command=use_train_yolov26, width=16).pack(pady=6)
-        tk.Button(dialog, text="Cancel", command=dialog.destroy, width=10).pack(pady=8)
-
-        # Wait for the dialog to be closed
-        self.wait_window(dialog)
-
-    # Backwards-compat alias (older button handler name)
-    def yolo_and_sam(self):
-        """Alias to open the YOLO/SAM selection dialog."""
-        return self.yolotrackerpose()
-
     # B_r4_c2 - ML Walkway
     def ml_walkway(self):
         """Invokes the vaila_mlwalkway module."""
@@ -2795,7 +2785,70 @@ class Vaila(tk.Tk):
             except Exception as e2:
                 messagebox.showerror("Error", f"Failed to launch interpolation module: {e2}")
 
-    # C_A_r2_c1
+    # C_A_r2_c1 - DLT/REC toolkit (coringa: Make/Rec DLT2D + DLT3D, 1DLT and MultiDLT)
+    def dlt_rec_toolkit(self):
+        """Chooser merging the six DLT calibration / REC reconstruction buttons.
+
+        Make DLT2D, Rec2D 1DLT, Rec2D MultiDLT, Make DLT3D, Rec3D 1DLT, and
+        Rec3D MultiDLT each keep their own unchanged handler and CLI script;
+        this dialog only saves grid space in the main GUI.
+        """
+        dialog = Toplevel(self)
+        dialog.title("DLT / REC Toolkit — 2D and 3D")
+        dialog.geometry("340x480")
+        dialog.transient(self)
+        try:
+            dialog.grab_set()
+        except tk.TclError:
+            with contextlib.suppress(Exception):
+                self.grab_release()
+            with contextlib.suppress(Exception):
+                dialog.grab_set()
+
+        Label(dialog, text="Select DLT / REC Tool", font=("Arial", 12, "bold")).pack(pady=10)
+
+        def section(text: str) -> None:
+            Label(dialog, text=text, font=("Arial", 9, "bold"), fg="gray20").pack(pady=(12, 2))
+
+        def use_dlt2d():
+            dialog.destroy()
+            self.dlt2d()
+
+        def use_rec2d_one():
+            dialog.destroy()
+            self.rec2d_one_dlt2d()
+
+        def use_rec2d_multi():
+            dialog.destroy()
+            self.rec2d()
+
+        def use_dlt3d():
+            dialog.destroy()
+            self.run_dlt3d()
+
+        def use_rec3d_one():
+            dialog.destroy()
+            self.rec3d_one_dlt3d()
+
+        def use_rec3d_multi():
+            dialog.destroy()
+            self.rec3d()
+
+        section("2D calibration / reconstruction")
+        Button(dialog, text="Make DLT2D", command=use_dlt2d, width=22).pack(pady=3)
+        Button(dialog, text="Rec2D 1DLT", command=use_rec2d_one, width=22).pack(pady=3)
+        Button(dialog, text="Rec2D MultiDLT", command=use_rec2d_multi, width=22).pack(pady=3)
+
+        section("3D calibration / reconstruction")
+        Button(dialog, text="Make DLT3D", command=use_dlt3d, width=22).pack(pady=3)
+        Button(dialog, text="Rec3D 1DLT", command=use_rec3d_one, width=22).pack(pady=3)
+        Button(dialog, text="Rec3D MultiDLT", command=use_rec3d_multi, width=22).pack(pady=3)
+
+        Button(dialog, text="Cancel", command=dialog.destroy, width=12).pack(pady=10)
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+        dialog.focus_set()
+
+    # (kept for the DLT/REC toolkit chooser and headless CLI addressing)
     def dlt2d(self):
         """Runs the DLT2D module.
 
@@ -2811,7 +2864,7 @@ class Vaila(tk.Tk):
 
         dlt2d.run_dlt2d()
 
-    # C_A_r2_c2
+    # (sub-tool of dlt_rec_toolkit)
     def rec2d_one_dlt2d(self):
         """Runs the Reconstruction 2D module with one DLT2D.
 
@@ -2826,7 +2879,7 @@ class Vaila(tk.Tk):
 
         rec2d_one_dlt2d.run_rec2d_one_dlt2d()
 
-    # C_A_r2_c3 - for multi dlts in rows
+    # (sub-tool of dlt_rec_toolkit)
     def rec2d(self):
         """Runs the Reconstruction 2D module.
 
@@ -2841,7 +2894,7 @@ class Vaila(tk.Tk):
 
         rec2d.run_rec2d()
 
-    # C_A_r3_c1
+    # (sub-tool of dlt_rec_toolkit)
     def run_dlt3d(self):
         """Run DLT module in multiplatform."""
         try:
@@ -2851,7 +2904,7 @@ class Vaila(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"Error running dlt3d.py: {e}")
 
-    # C_A_r3_c2 - for multi dlts in rows
+    # (sub-tool of dlt_rec_toolkit)
     def rec3d_one_dlt3d(self):
         """Runs the Reconstruction 3D module with one DLT3D.
 
@@ -2866,7 +2919,7 @@ class Vaila(tk.Tk):
 
         rec3d_one_dlt3d.run_rec3d_one_dlt3d()
 
-    # C_A_r3_c3 - for multi dlts in rows
+    # (sub-tool of dlt_rec_toolkit)
     def rec3d(self):
         """Runs the Reconstruction 3D module.
 
@@ -2877,7 +2930,9 @@ class Vaila(tk.Tk):
         input the sample rate and start and end indices for analysis.
 
         """
-        pass  # Here you should add the logic for 3D reconstruction with multiple DLTs
+        from vaila import rec3d
+
+        rec3d.run_rec3d()
 
     # C_A_r4_c1 - ReID Marker
     def reid_marker(self):
@@ -3880,7 +3935,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "action",
         nargs="?",
-        help="Optional action code for one-shot CLI launch (e.g. A_r1_c1, B4_r4_c1)",
+        help="Optional action code for one-shot CLI launch (e.g. A_r1_c1, B1_r1_c4)",
     )
     cli_args = parser.parse_args()
 

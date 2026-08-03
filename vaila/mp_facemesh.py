@@ -6,8 +6,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 January 2026
-Update Date: 12 January 2026
-Version: 0.1.0
+Update Date: 02 August 2026
+Version: 0.3.98
 
 Description:
 This script performs batch processing of videos for 2D face mesh detection using
@@ -844,7 +844,7 @@ def detect_amd_gpu():
                 gpu_info = {
                     "name": "AMD GPU (ROCm)",
                     "driver_version": "ROCm",
-                    "count": len([l for l in lines if "card" in l.lower()]),
+                    "count": len([line for line in lines if "card" in line.lower()]),
                 }
                 return True, gpu_info, None
     except FileNotFoundError:
@@ -860,14 +860,15 @@ def detect_amd_gpu():
             timeout=5,
             text=True,
         )
-        if result.returncode == 0:
-            if "amd" in result.stdout.lower() or "radeon" in result.stdout.lower():
-                gpu_info = {
-                    "name": "AMD GPU (detected via lspci)",
-                    "driver_version": "Unknown",
-                    "count": 1,
-                }
-                return True, gpu_info, None
+        if result.returncode == 0 and (
+            "amd" in result.stdout.lower() or "radeon" in result.stdout.lower()
+        ):
+            gpu_info = {
+                "name": "AMD GPU (detected via lspci)",
+                "driver_version": "Unknown",
+                "count": 1,
+            }
+            return True, gpu_info, None
     except Exception:
         pass
 
@@ -2565,17 +2566,52 @@ def process_video(video_path, output_dir, face_config):
     frame_count = 0
 
     # Process with Tasks API (single context manager for all frames)
-    with FaceLandmarker.create_from_options(options) as landmarker:
-        # Process padding frames first if enabled
-        if enable_padding and pad_start_frames > 0 and padding_frame is not None:
-            print(f"Processing {pad_start_frames} padding frames...")
-            for _pad_idx in range(pad_start_frames):
+    try:
+        with FaceLandmarker.create_from_options(options) as landmarker:
+            # Process padding frames first if enabled
+            if enable_padding and pad_start_frames > 0 and padding_frame is not None:
+                print(f"Processing {pad_start_frames} padding frames...")
+                for _pad_idx in range(pad_start_frames):
+                    if should_throttle_cpu(frame_count):
+                        apply_cpu_throttling()
+
+                    timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
+                    faces_result = process_frame_with_facemesh(
+                        padding_frame,
+                        landmarker,
+                        timestamp_ms,
+                        enable_crop,
+                        bbox_config,
+                        width,
+                        height,
+                        original_width,
+                        original_height,
+                        face_config,
+                    )
+
+                    if faces_result:
+                        all_frames_data.append({"frame_idx": frame_count, "faces": faces_result})
+                    else:
+                        all_frames_data.append({"frame_idx": frame_count, "faces": []})
+                        frames_with_missing_data.append(frame_count)
+
+                    frame_count += 1
+                    time.sleep(FRAME_SLEEP_TIME)
+
+            # Reset and process real frames
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
                 if should_throttle_cpu(frame_count):
                     apply_cpu_throttling()
 
                 timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
                 faces_result = process_frame_with_facemesh(
-                    padding_frame,
+                    frame,
                     landmarker,
                     timestamp_ms,
                     enable_crop,
@@ -2596,46 +2632,12 @@ def process_video(video_path, output_dir, face_config):
                 frame_count += 1
                 time.sleep(FRAME_SLEEP_TIME)
 
-        # Reset and process real frames
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            if should_throttle_cpu(frame_count):
-                apply_cpu_throttling()
-
-            timestamp_ms = int((frame_count * 1000) / fps) if fps > 0 else frame_count * 33
-            faces_result = process_frame_with_facemesh(
-                frame,
-                landmarker,
-                timestamp_ms,
-                enable_crop,
-                bbox_config,
-                width,
-                height,
-                original_width,
-                original_height,
-                face_config,
-            )
-
-            if faces_result:
-                all_frames_data.append({"frame_idx": frame_count, "faces": faces_result})
-            else:
-                all_frames_data.append({"frame_idx": frame_count, "faces": []})
-                frames_with_missing_data.append(frame_count)
-
-            frame_count += 1
-            time.sleep(FRAME_SLEEP_TIME)
-
-            if frame_count % 100 == 0:
-                print(
-                    f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames"
-                )
-
-    cap.release()
+                if frame_count % 100 == 0:
+                    print(
+                        f"  Processed {frame_count}/{total_frames + (pad_start_frames if enable_padding else 0)} frames"
+                    )
+    finally:
+        cap.release()
     cv2.destroyAllWindows()
 
     # Remove padding frames from results
@@ -2832,100 +2834,101 @@ def process_video(video_path, output_dir, face_config):
         )
 
     frame_idx = 0
-    while cap.isOpened():
-        success, frame = cap.read()
-        if not success:
-            break
-
-        if frame_idx % 30 == 0:
-            progress = (frame_idx / total_frames) * 100
-            print(f"\r Generating video {frame_idx}/{total_frames} ({progress:.1f}%)", end="")
-
-        # Get processed landmarks for this frame
-        frame_faces = None
-        for frame_data in all_frames_data:
-            if frame_data["frame_idx"] == frame_idx:
-                frame_faces = frame_data["faces"]
+    try:
+        while cap.isOpened():
+            success, frame = cap.read()
+            if not success:
                 break
 
-        if frame_faces:
-            for _face_idx, landmarks in frame_faces:
-                # Draw landmarks
-                points = {}
-                for i, lm in enumerate(landmarks):
-                    if not np.isnan(lm[0]) and not np.isnan(lm[1]):
-                        x = int(lm[0] * original_width)
-                        y = int(lm[1] * original_height)
-                        points[i] = (x, y)
-                        # cv2.circle(frame, (x, y), 2, (0, 255, 0), -1) # Moved to end with custom size/color
+            if frame_idx % 30 == 0:
+                progress = (frame_idx / total_frames) * 100
+                print(f"\r Generating video {frame_idx}/{total_frames} ({progress:.1f}%)", end="")
 
-                # Define colors (BGR) for Left (Blue) and Right (Red)
-                # Note: OpenCV uses BGR
-                color_right = (0, 0, 255)  # Red (Subject's Right)
-                color_left = (255, 0, 0)  # Blue (Subject's Left)
-                color_other = (0, 255, 0)  # Green (Other points)
-                color_neutral_conn = (200, 200, 200)  # Grey/White for neutral connections
+            # Get processed landmarks for this frame
+            frame_faces = None
+            for frame_data in all_frames_data:
+                if frame_data["frame_idx"] == frame_idx:
+                    frame_faces = frame_data["faces"]
+                    break
 
-                # Draw connections with specific colors
-                for connection in DRAW_CONNECTIONS:
-                    if connection[0] in points and connection[1] in points:
-                        start_pt = points[connection[0]]
-                        end_pt = points[connection[1]]
+            if frame_faces:
+                for _face_idx, landmarks in frame_faces:
+                    # Draw landmarks
+                    points = {}
+                    for i, lm in enumerate(landmarks):
+                        if not np.isnan(lm[0]) and not np.isnan(lm[1]):
+                            x = int(lm[0] * original_width)
+                            y = int(lm[1] * original_height)
+                            points[i] = (x, y)
+                            # cv2.circle(frame, (x, y), 2, (0, 255, 0), -1) # Moved to end with custom size/color
 
-                        # Determine color based on connection
-                        is_right_eye = any(
-                            (connection == c or connection == c[::-1])
-                            for c in MEDIAPIPE_REGIONS["right_eye"]
-                        )
-                        is_right_brow = any(
-                            (connection == c or connection == c[::-1])
-                            for c in MEDIAPIPE_REGIONS["right_eyebrow"]
-                        )
-                        is_left_eye = any(
-                            (connection == c or connection == c[::-1])
-                            for c in MEDIAPIPE_REGIONS["left_eye"]
-                        )
-                        is_left_brow = any(
-                            (connection == c or connection == c[::-1])
-                            for c in MEDIAPIPE_REGIONS["left_eyebrow"]
-                        )
+                    # Define colors (BGR) for Left (Blue) and Right (Red)
+                    # Note: OpenCV uses BGR
+                    color_right = (0, 0, 255)  # Red (Subject's Right)
+                    color_left = (255, 0, 0)  # Blue (Subject's Left)
+                    color_other = (0, 255, 0)  # Green (Other points)
+                    color_neutral_conn = (200, 200, 200)  # Grey/White for neutral connections
 
-                        if is_right_eye or is_right_brow:
-                            color = color_right
-                        elif is_left_eye or is_left_brow:
-                            color = color_left
-                        else:
-                            color = color_neutral_conn
+                    # Draw connections with specific colors
+                    for connection in DRAW_CONNECTIONS:
+                        if connection[0] in points and connection[1] in points:
+                            start_pt = points[connection[0]]
+                            end_pt = points[connection[1]]
 
-                        cv2.line(frame, start_pt, end_pt, color, 1)
+                            # Determine color based on connection
+                            is_right_eye = any(
+                                (connection == c or connection == c[::-1])
+                                for c in MEDIAPIPE_REGIONS["right_eye"]
+                            )
+                            is_right_brow = any(
+                                (connection == c or connection == c[::-1])
+                                for c in MEDIAPIPE_REGIONS["right_eyebrow"]
+                            )
+                            is_left_eye = any(
+                                (connection == c or connection == c[::-1])
+                                for c in MEDIAPIPE_REGIONS["left_eye"]
+                            )
+                            is_left_brow = any(
+                                (connection == c or connection == c[::-1])
+                                for c in MEDIAPIPE_REGIONS["left_eyebrow"]
+                            )
 
-                # Draw iris landmarks individually
-                # Right Iris (468-472) -> Red
-                for i in range(468, 473):
-                    if i in points:
-                        cv2.circle(frame, points[i], 2, color_right, -1)
+                            if is_right_eye or is_right_brow:
+                                color = color_right
+                            elif is_left_eye or is_left_brow:
+                                color = color_left
+                            else:
+                                color = color_neutral_conn
 
-                # Left Iris (473-477) -> Blue
-                for i in range(473, 478):
-                    if i in points:
-                        cv2.circle(frame, points[i], 2, color_left, -1)
+                            cv2.line(frame, start_pt, end_pt, color, 1)
 
-                # Draw other points (Green, smaller size)
-                for i, pt in points.items():
-                    if i < 468:  # Non-iris landmarks
-                        # Check if it's already part of the colored features to avoid overwriting or leave it?
-                        # User said "demais points em green", implies all others.
-                        # Logic: Draw all small green, then overwrite eyes? Or just draw points not in eyes?
-                        # Simplest: Draw ALL face mesh points as small green dots first, then maybe eyes on top?
-                        # But loop order here is after connectivity.
-                        # Let's draw them all as small green dots for the "diminuir size" request.
-                        cv2.circle(frame, pt, 1, color_other, -1)
+                    # Draw iris landmarks individually
+                    # Right Iris (468-472) -> Red
+                    for i in range(468, 473):
+                        if i in points:
+                            cv2.circle(frame, points[i], 2, color_right, -1)
 
-        out.write(frame)
-        frame_idx += 1
+                    # Left Iris (473-477) -> Blue
+                    for i in range(473, 478):
+                        if i in points:
+                            cv2.circle(frame, points[i], 2, color_left, -1)
 
-    cap.release()
-    out.release()
+                    # Draw other points (Green, smaller size)
+                    for i, pt in points.items():
+                        if i < 468:  # Non-iris landmarks
+                            # Check if it's already part of the colored features to avoid overwriting or leave it?
+                            # User said "demais points em green", implies all others.
+                            # Logic: Draw all small green, then overwrite eyes? Or just draw points not in eyes?
+                            # Simplest: Draw ALL face mesh points as small green dots first, then maybe eyes on top?
+                            # But loop order here is after connectivity.
+                            # Let's draw them all as small green dots for the "diminuir size" request.
+                            cv2.circle(frame, pt, 1, color_other, -1)
+
+            out.write(frame)
+            frame_idx += 1
+    finally:
+        cap.release()
+        out.release()
 
     # Finalize video with ffmpeg if available
     try:
