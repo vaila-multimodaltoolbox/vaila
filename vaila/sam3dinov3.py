@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 01 August 2026
-Version: 0.3.92
+Update Date: 03 August 2026
+Version: 0.3.98
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -248,6 +248,27 @@ SKELETON_EDGE_NAMES: tuple[tuple[str, str], ...] = (
     ("right-ankle", "right-big-toe-tip"),
     ("right-heel", "right-big-toe-tip"),
 )
+
+# MHR70 joint names carry an explicit "left-"/"right-" prefix, so the skeleton
+# overlay can be colored by body side directly from the name — same palette
+# used by sam3sapiens2_visualize / sam3dinov3_visualize for a consistent look
+# across the whole SAM3 family: left=green, right=orange, center/spine=blue.
+COLOR_LEFT_RGB = (0, 255, 0)
+COLOR_RIGHT_RGB = (255, 128, 0)
+COLOR_CENTER_RGB = (51, 153, 255)
+
+
+def _rgb_to_bgr(color: tuple[int, int, int]) -> tuple[int, int, int]:
+    return int(color[2]), int(color[1]), int(color[0])
+
+
+def _side_color_bgr(name: str) -> tuple[int, int, int]:
+    label = name.lower()
+    if label.startswith("left-") or label.startswith("left_"):
+        return _rgb_to_bgr(COLOR_LEFT_RGB)
+    if label.startswith("right-") or label.startswith("right_"):
+        return _rgb_to_bgr(COLOR_RIGHT_RGB)
+    return _rgb_to_bgr(COLOR_CENTER_RGB)
 
 
 @dataclass
@@ -553,12 +574,22 @@ def _draw_pose_overlay(
     image: np.ndarray,
     instances: list[dict[str, Any]],
     edges: list[tuple[int, int]],
+    names: list[str],
     *,
     draw_ids: bool,
 ) -> np.ndarray:
+    """Draw the reprojected MHR skeleton, colored by joint side.
+
+    Left/right/center coloring (rather than one solid color per person) makes
+    the live overlay video readable the same way sam3sapiens2_visualize and
+    sam3dinov3_visualize already are. ``_color_for_id`` is kept only for the
+    ``ID nn`` text label, so multiple people stay distinguishable by that tag.
+    """
     out = image
+    side_colors = [_side_color_bgr(name) for name in names]
+    center = _rgb_to_bgr(COLOR_CENTER_RGB)
     for inst in instances:
-        color = _color_for_id(int(inst["person_id"]))
+        id_color = _color_for_id(int(inst["person_id"]))
         kp2d = inst["keypoints_2d"]
         height, width = out.shape[:2]
         for a, b in edges:
@@ -568,6 +599,11 @@ def _draw_pose_overlay(
             pb = kp2d[b]
             if not (np.isfinite(pa).all() and np.isfinite(pb).all()):
                 continue
+            color_a = side_colors[a] if a < len(side_colors) else center
+            color_b = side_colors[b] if b < len(side_colors) else center
+            # Only take a side color when both endpoints agree; mixed edges
+            # (e.g. neck -> shoulder) fall back to the center color.
+            color = color_a if color_a == color_b else center
             cv2.line(
                 out,
                 (int(round(float(pa[0]))), int(round(float(pa[1])))),
@@ -576,13 +612,16 @@ def _draw_pose_overlay(
                 2,
                 cv2.LINE_AA,
             )
-        for point in kp2d[: len(MHR70_NAMES)]:
+        n_draw = min(len(kp2d), len(names))
+        for idx in range(n_draw):
+            point = kp2d[idx]
             if not np.isfinite(point).all():
                 continue
             x = int(round(float(point[0])))
             y = int(round(float(point[1])))
             if 0 <= x < width and 0 <= y < height:
-                cv2.circle(out, (x, y), 3, color, -1, cv2.LINE_AA)
+                joint_color = side_colors[idx] if idx < len(side_colors) else center
+                cv2.circle(out, (x, y), 3, joint_color, -1, cv2.LINE_AA)
         if draw_ids:
             depth = float(inst["cam_t"][2])
             label = f"ID {int(inst['person_id'])}  z={depth:.2f} m"
@@ -593,7 +632,7 @@ def _draw_pose_overlay(
                 (max(0, int(x1)), max(34, int(y1) - 22)),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
-                color,
+                id_color,
                 2,
                 cv2.LINE_AA,
             )
@@ -894,7 +933,10 @@ pixels (or a FOV estimator) whenever absolute distances matter.
 
 Main outputs
 ------------
-<video>_sam3dinov3_overlay.mp4          SAM contour/bbox/ID + reprojected 3D skeleton.
+<video>_sam3dinov3_overlay.mp4          SAM contour/bbox/ID + reprojected 3D skeleton,
+                                         colored by joint side (left=green, right=orange,
+                                         center/spine=blue) — same palette as
+                                         sam3sapiens2_visualize / sam3dinov3_visualize.
 <video>_sam3dinov3_keypoints3d.csv      Long table, root-relative and camera-frame metres.
 <video>_sam3dinov3_keypoints2d.csv      Long table, reprojected pixels.
 <video>_sam3dinov3_camera.csv           Per-frame focal length, cam_t and bbox.
@@ -1073,6 +1115,7 @@ def run_sam3d_from_sam(
                     overlay,
                     instances,
                     edges,
+                    names,
                     draw_ids=not args.no_draw_id,
                 )
                 writer.write(overlay)

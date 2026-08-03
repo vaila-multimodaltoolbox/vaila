@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.3.92
-- **Updated:** 2026-08-01
+- **Version:** 0.3.98
+- **Updated:** 2026-08-03
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
@@ -122,7 +122,7 @@ Each video gets its own subdirectory inside `processed_sam3dinov3_<timestamp>/`.
 
 | File                                    | Content                                                      |
 | --------------------------------------- | ------------------------------------------------------------ |
-| `<video>_sam3dinov3_overlay.mp4`        | SAM contour/bbox/ID + reprojected 3D skeleton                 |
+| `<video>_sam3dinov3_overlay.mp4`        | SAM contour/bbox/ID + reprojected 3D skeleton, colored by joint side (left=green, right=orange, center/spine=blue) — v0.3.98, same palette as [sam3dinov3_visualize](sam3dinov3_visualize.md) |
 | `<video>_sam3dinov3_keypoints3d.csv`    | Long table: root-relative **and** camera-frame metres         |
 | `<video>_sam3dinov3_keypoints2d.csv`    | Long table: reprojected pixels                                |
 | `<video>_sam3dinov3_camera.csv`         | Per-frame focal length, `cam_t`, bbox                         |

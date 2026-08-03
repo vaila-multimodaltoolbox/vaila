@@ -1,7 +1,7 @@
 """Tests for the selected-ID SAM3+DINOv3 3D rerenderer.
 
-Update Date: 02 August 2026
-Version: 0.3.96
+Update Date: 03 August 2026
+Version: 0.3.98
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 import pytest
 
+from vaila import sam3dinov3
 from vaila import sam3dinov3_visualize as viz
 
 NAMES = ["nose", "left-eye", "right-eye", "neck", "left-shoulder", "right-shoulder"]
@@ -254,8 +255,8 @@ def test_render_selected_video_draws_only_selected_instance(tmp_path: Path) -> N
 
 
 def test_side_color_helper_maps_prefixes_to_palette() -> None:
-    assert viz._side_color_bgr("left-shoulder") == viz._rgb_to_bgr(viz.COLOR_LEFT_RGB)
-    assert viz._side_color_bgr("right-elbow") == viz._rgb_to_bgr(viz.COLOR_RIGHT_RGB)
+    assert viz._side_color_bgr("left-shoulder") == viz._rgb_to_bgr(sam3dinov3.COLOR_LEFT_RGB)
+    assert viz._side_color_bgr("right-elbow") == viz._rgb_to_bgr(sam3dinov3.COLOR_RIGHT_RGB)
     assert viz._side_color_bgr("nose") == viz._rgb_to_bgr(viz.COLOR_CENTER_RGB)
 
 
@@ -268,8 +269,8 @@ def test_draw_mhr_skeleton_colors_left_and_right_differently() -> None:
     out = viz._draw_mhr_skeleton(image, instance, [(0, 1), (0, 2)], names)
     left_point = out[30, 20]
     right_point = out[30, 60]
-    assert tuple(int(v) for v in left_point) == viz._rgb_to_bgr(viz.COLOR_LEFT_RGB)
-    assert tuple(int(v) for v in right_point) == viz._rgb_to_bgr(viz.COLOR_RIGHT_RGB)
+    assert tuple(int(v) for v in left_point) == viz._rgb_to_bgr(sam3dinov3.COLOR_LEFT_RGB)
+    assert tuple(int(v) for v in right_point) == viz._rgb_to_bgr(sam3dinov3.COLOR_RIGHT_RGB)
 
 
 def test_export_mesh_sequence_writes_obj_and_ply_with_translation(tmp_path: Path) -> None:
