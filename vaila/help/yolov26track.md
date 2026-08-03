@@ -140,7 +140,7 @@ Key flags:
 ## 🎮 Usage: Tracking Workflow
 
 1. **Start Tracking**:
-   - GUI: **Frame B → "YOLO + FB" → "Tracker (v26)"**
+   - GUI: **Frame B → "Markerless 2D" → "Tracker (v26)"**
    - Chooser prints `>> Equivalent launch CLI: uv run python -u -m vaila.yolov26track`
    - After Run, terminal prints one `track` command per video (copy-paste)
    - CLI (open GUI): `uv run python -m vaila.yolov26track`
@@ -170,7 +170,7 @@ Key flags:
 
 ## 🎯 Usage: Pose Estimation Workflow
 
-1. **Start Pose Estimation**: GUI: **Frame B → "YOLO + FB" → "Pose (video)"** or **"Pose (tracking)"** (terminal prints workflow hints; tracking step 1 has full `track` CLI mirror)
+1. **Start Pose Estimation**: GUI: **Frame B → "Markerless 2D" → "Pose (video)"** or **"Pose (tracking)"** (terminal prints workflow hints; tracking step 1 has full `track` CLI mirror)
 2. **Select Tracking Directory** (only for **Pose (tracking)**): Choose results root or subfolder; nested `*_id_*.csv` trees under e.g. a `vailatracker_*` root are discovered automatically (bounded depth), with a picker if several leaves exist. For **Pose (video)** you only select a video file next.
 3. **Select Video** (**Pose (tracking)**): Prioritizes `processed_*.mp4`, accepts any video in the resolved tracking folder
 4. **Select ID(s)**: 

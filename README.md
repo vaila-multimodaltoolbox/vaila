@@ -126,7 +126,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 04.Jul.2026 v0.3.69 (Python 3.12.13)
+vailá - 02.Aug.2026 v0.3.97 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -153,21 +153,23 @@ A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
 
 ========================== Multimodal Analysis (Frame B) ===================
 B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
-B1_r1_c3 - Motion Capture Full Body B1_r1_c4 - Markerless 2D
-B1_r1_c5 - Markerless 3D
+B1_r1_c3 - Motion Capture Full Body
+B1_r1_c4 - Markerless 2D (coringa: Standard/Advanced/YOLOv26, Yolo+Markerless_MP,
+            YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID])
+B1_r1_c5 - Markerless 3D (coringa: Standard/Advanced YOLO lift, SAM3+DINOv3 3D [+Visualize ID])
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
 
-B3_r3_c1 - HR/ECG         B3_r3_c2 - Yolo + Markerless_MP
+B3_r3_c1 - HR/ECG         B3_r3_c2 - vailá
 B3_r3_c3 - Vertical Jump
 B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 
-B4_r4_c1 - YOLO + FB        B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
+B4_r4_c1 - vailá          B4_r4_c2 - ML Walkway      B4_r4_c3 - Markerless Hands
 B4_r4_c4 - MP Angles      B4_r4_c5 - Markerless Live
 
-B4_r5_c1 - Ultrasound     B4_r5_c2 - Brainstorm      B4_r5_c3 - Scout
-B4_r5_c4 - StartBlock     B4_r5_c5 - Pynalty
+B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
+B5_r5_c4 - Start Block    B5_r5_c5 - Pynalty
 
 B5_r6_c1 - Sprint         B5_r6_c2 - Face Mesh       B5_r6_c3 - tugturn
 B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
@@ -178,8 +180,9 @@ B6_r7_c4 - vailá          B6_r7_c5 - vailá
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
 C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
-C_A_r2_c1 - Make DLT2D    C_A_r2_c2 - Rec2D 1DLT     C_A_r2_c3 - Rec2D MultiDLT
-C_A_r3_c1 - Make DLT3D    C_A_r3_c2 - Rec3D 1DLT     C_A_r3_c3 - Rec3D MultiDLT
+C_A_r2_c1 - DLT/REC 2D-3D (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
+C_A_r2_c2 - vailá         C_A_r2_c3 - vailá
+C_A_r3_c1 - vailá         C_A_r3_c2 - vailá          C_A_r3_c3 - vailá
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - vailá          C_A_r4_c3 - vailá
 
 -> C_B: Video and Image
@@ -313,7 +316,7 @@ For more information about uv, visit: [https://github.com/astral-sh/uv](https://
 
 ### Optional AI modules (SAM 3, Sapiens2, SAM3+Sapiens2, SAM3+DINOv3 3D, Crop Face, FIFA…)
 
-Several GUI tools (Frame B → **YOLO + FB**, Frame C → **Crop Face**, and the FIFA Skeletal Tracking Light stack) need an extra `uv sync --extra <name>` and, for some, a one-time gated-weights download or vendored-repo clone. Each one has its **own help page** with the exact extra name, install/setup commands, CUDA requirements, CLI usage, and outputs — start from the **Script Help Index**:
+Several GUI tools (Frame B → **Markerless 2D** / **Markerless 3D**, Frame C → **Crop Face**, and the FIFA Skeletal Tracking Light stack) need an extra `uv sync --extra <name>` and, for some, a one-time gated-weights download or vendored-repo clone. Each one has its **own help page** with the exact extra name, install/setup commands, CUDA requirements, CLI usage, and outputs — start from the **Script Help Index**:
 
 - **[Script Help Index (HTML)](vaila/help/index.html)** · **[Script Help Index (Markdown)](vaila/help/index.md)**
 

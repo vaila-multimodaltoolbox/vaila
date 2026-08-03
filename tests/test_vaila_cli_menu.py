@@ -40,24 +40,70 @@ def test_menu_registry_has_unique_codes() -> None:
 
 
 def test_entry_by_code_case_insensitive() -> None:
-    entry = _entry_by_code("b4_r4_c1")
+    entry = _entry_by_code("b1_r1_c4")
     assert entry is not None
-    assert entry.label == "YOLO + FB"
+    assert entry.label == "Markerless 2D"
 
 
-def test_search_yolo_finds_yolo_fb() -> None:
-    matches = _search_entries("yolo")
+def test_search_markerless_finds_2d_and_3d_choosers() -> None:
+    matches = _search_entries("markerless")
     codes = {m.code for m in matches}
-    assert "B4_r4_c1" in codes
+    assert "B1_r1_c4" in codes
+    assert "B1_r1_c5" in codes
 
 
-def test_yolo_fb_hint_lists_launchers() -> None:
-    entry = _entry_by_code("B4_r4_c1")
+def test_search_dlt_finds_toolkit_chooser() -> None:
+    matches = _search_entries("dlt")
+    codes = {m.code for m in matches}
+    assert "C_A_r2_c1" in codes
+
+
+def test_markerless_2d_hint_lists_absorbed_launchers() -> None:
+    entry = _entry_by_code("B1_r1_c4")
     assert entry is not None
     hint = get_cli_hint(handler=entry.handler, code=entry.code, label=entry.label)
     assert not hint.invoke_handler
     assert any("yolov26track" in cmd for cmd in hint.commands)
     assert any("vaila_sam.py" in cmd for cmd in hint.commands)
+    assert any("markerless2d_mpyolo.py" in cmd for cmd in hint.commands)
+    assert any("mphands.py" in cmd for cmd in hint.commands)
+    assert any("mpangles.py" in cmd for cmd in hint.commands)
+    assert any("mp_facemesh.py" in cmd for cmd in hint.commands)
+    assert any("markerless_live.py" in cmd for cmd in hint.commands)
+
+
+def test_retired_standalone_codes_are_vaila_placeholders() -> None:
+    for code in ("B4_r4_c3", "B4_r4_c4", "B4_r4_c5", "B5_r6_c2"):
+        entry = _entry_by_code(code)
+        assert entry is not None
+        assert entry.label == "vailá"
+        assert entry.handler == "show_vaila_message"
+
+
+def test_markerless_3d_hint_lists_sam3dinov3_launchers() -> None:
+    entry = _entry_by_code("B1_r1_c5")
+    assert entry is not None
+    hint = get_cli_hint(handler=entry.handler, code=entry.code, label=entry.label)
+    assert not hint.invoke_handler
+    assert any("sam3dinov3.py" in cmd for cmd in hint.commands)
+    assert any("sam3dinov3_visualize.py" in cmd for cmd in hint.commands)
+
+
+def test_dlt_rec_toolkit_hint_lists_all_six_scripts() -> None:
+    entry = _entry_by_code("C_A_r2_c1")
+    assert entry is not None
+    assert entry.label == "DLT/REC 2D-3D"
+    hint = get_cli_hint(handler=entry.handler, code=entry.code, label=entry.label)
+    assert not hint.invoke_handler
+    for script in (
+        "dlt2d.py",
+        "rec2d_one_dlt2d.py",
+        "rec2d.py",
+        "dlt3d.py",
+        "rec3d_one_dlt3d.py",
+        "rec3d.py",
+    ):
+        assert any(script in cmd for cmd in hint.commands), script
 
 
 def test_resolve_handler_method() -> None:
@@ -68,6 +114,17 @@ def test_resolve_handler_method() -> None:
     handler = resolve_handler(app, entry)
     assert callable(handler)
     assert handler.__name__ == "rename_files"
+    app.destroy()
+
+
+def test_resolve_handler_dlt_rec_toolkit() -> None:
+    Vaila = _load_vaila_app_class()
+    app = Vaila(gui=False)
+    entry = _entry_by_code("C_A_r2_c1")
+    assert entry is not None
+    handler = resolve_handler(app, entry)
+    assert callable(handler)
+    assert handler.__name__ == "dlt_rec_toolkit"
     app.destroy()
 
 
@@ -86,7 +143,7 @@ def test_headless_direct_code_prints_cli_not_gui() -> None:
     buffer = StringIO()
     console = Console(file=buffer, force_terminal=True, width=120, highlight=False)
     try:
-        entry = _entry_by_code("B4_r4_c1")
+        entry = _entry_by_code("B1_r1_c4")
         assert entry is not None
         from vaila.vaila_cli_menu import _run_entry
 
@@ -99,11 +156,11 @@ def test_headless_direct_code_prints_cli_not_gui() -> None:
         app.destroy()
 
 
-def test_run_cli_menu_one_shot_yolo_fb(capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_cli_menu_one_shot_markerless_2d(capsys: pytest.CaptureFixture[str]) -> None:
     Vaila = _load_vaila_app_class()
     app = Vaila(gui=False)
     try:
-        run_cli_menu(app, initial_code="B4_r4_c1", headless=True)
+        run_cli_menu(app, initial_code="B1_r1_c4", headless=True)
     finally:
         app.destroy()
     captured = capsys.readouterr().out
@@ -134,8 +191,8 @@ def test_tools_grid_aligns_three_columns() -> None:
     assert "Fi…60" not in out
 
 
-def test_entry_by_number_resolves_yolo_fb() -> None:
-    entry = _entry_by_code("B4_r4_c1")
+def test_entry_by_number_resolves_markerless_2d() -> None:
+    entry = _entry_by_code("B1_r1_c4")
     assert entry is not None
     num = _NUMBER_BY_CODE[entry.code.upper()]
     assert _entry_by_number(num) == entry
@@ -144,7 +201,7 @@ def test_entry_by_number_resolves_yolo_fb() -> None:
 def test_run_cli_menu_one_shot_by_number(capsys: pytest.CaptureFixture[str]) -> None:
     Vaila = _load_vaila_app_class()
     app = Vaila(gui=False)
-    entry = _entry_by_code("B4_r4_c1")
+    entry = _entry_by_code("B1_r1_c4")
     assert entry is not None
     num = _NUMBER_BY_CODE[entry.code.upper()]
     try:
@@ -159,11 +216,11 @@ def test_run_cli_menu_slash_search_lists_matches(capsys: pytest.CaptureFixture[s
     Vaila = _load_vaila_app_class()
     app = Vaila(gui=False)
     try:
-        run_cli_menu(app, initial_code="/yolo", headless=True)
+        run_cli_menu(app, initial_code="/markerless", headless=True)
     finally:
         app.destroy()
     captured = capsys.readouterr().out
-    assert "B4_r4_c1" in captured
+    assert "B1_r1_c4" in captured
     assert "Multiple matches" in captured
 
 

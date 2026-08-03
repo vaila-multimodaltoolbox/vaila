@@ -24,31 +24,29 @@ Each button in the vailá GUI has its own documentation file:
 | B_r1_c1 | IMU | `imu_analysis` | [imu-analysis.md](imu-analysis.md) |
 | B_r1_c2 | Motion Capture Cluster | `cluster_analysis` | [cluster-analysis.md](cluster-analysis.md) |
 | B_r1_c3 | Motion Capture Full Body | `mocap_analysis` | [mocap-analysis.md](mocap-analysis.md) |
-| B_r1_c4 | Markerless 2D | `markerless_2d_analysis` | [markerless-2d-analysis.md](markerless-2d-analysis.md) |
-| B_r1_c5 | Markerless 3D | `markerless_3d_analysis` | [markerless-3d-analysis.md](markerless-3d-analysis.md) |
+| B_r1_c4 | Markerless 2D | `markerless_2d_analysis` | [markerless-2d-analysis.md](markerless-2d-analysis.md) (coringa: Standard/Advanced/YOLOv26 MediaPipe, Yolo+Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID], Markerless Hands, MP Angles, Face Mesh, Markerless Live) |
+| B_r1_c5 | Markerless 3D | `markerless_3d_analysis` | [markerless-3d-analysis.md](markerless-3d-analysis.md) (coringa: Standard/Advanced YOLO lift, SAM3+DINOv3 3D [+Visualize ID]) |
 | B_r2_c1 | Vector Coding | `vector_coding` | [vector-coding.md](vector-coding.md) |
 | B_r2_c2 | EMG | `emg_analysis` | [emg-analysis.md](emg-analysis.md) |
 | B_r2_c3 | Force Plate | `force_analysis` | [force-analysis.md](force-analysis.md) |
 | B_r2_c4 | GNSS/GPS | `gnss_analysis` | [gnss-analysis.md](gnss-analysis.md) |
 | B_r2_c5 | MEG/EEG | `vaila_btn3` | [meg-eeg-analysis.md](meg-eeg-analysis.md) |
 | B_r3_c1 | HR/ECG | `ecg_btn` | [hr-analysis.md](hr-analysis.md) |
-| B_r3_c2 | Yolo + Markerless_MP | `markerless2d_mpyolo` | [markerless2d-mpyolo.md](markerless2d-mpyolo.md) |
 | B_r3_c3 | Vertical Jump | `vailajump` | [vailajump.md](vailajump.md) |
 | B_r6_c5 | Deadlift | `deadlift_analysis` | [deadlift.md](deadlift.md) |
 | B_r3_c4 | Cube2D | `cube2d_kinematics` | [cube2d-kinematics.md](cube2d-kinematics.md) |
 | B_r3_c5 | Animal Open Field | `animal_open_field` | [animal-open-field.md](animal-open-field.md) |
-| B_r4_c1 | YOLO + FB | `yolo_and_sam` | [yolo-fb.md](yolo-fb.md) (YOLO, SAM 3, Sapiens2, SAM3+Sapiens2, SAM3+DINOv3 3D, Train) |
 | B_r4_c2 | ML Walkway | `ml_walkway` | [ml-walkway.md](ml-walkway.md) |
-| B_r4_c3 | Markerless Hands | `markerless_hands` | [markerless-hands.md](markerless-hands.md) |
-| B_r4_c4 | MP Angles | `mp_angles_calculation` | [mp-angles-calculation.md](mp-angles-calculation.md) |
-| B_r4_c5 | Markerless Live | `markerless_live` | [markerless-live.md](markerless-live.md) |
+| (in Markerless 2D chooser) | Markerless Hands | `markerless_hands` | [markerless-hands.md](markerless-hands.md) |
+| (in Markerless 2D chooser) | MP Angles | `mp_angles_calculation` | [mp-angles-calculation.md](mp-angles-calculation.md) |
+| (in Markerless 2D chooser) | Markerless Live | `markerless_live` | [markerless-live.md](markerless-live.md) |
 | B_r5_c1 | Ultrasound | `ultrasound` | [ultrasound.md](ultrasound.md) |
 | B_r5_c2 | Brainstorm | `brainstorm` | [brainstorm.md](brainstorm.md) |
 | B_r5_c3 | Scout | `scout` | [scout.md](scout.md) |
 | B_r5_c4 | Start Block | `startblock` | [startblock.md](startblock.md) |
 | B_r5_c5 | Pynalty | `pynalty` | [pynalty.md](pynalty.md) |
 | B_r6_c1 | Sprint | `sprint` | [sprint.md](sprint.md) |
-| B_r6_c2 | Face Mesh | `face_mesh_analysis` | [face-mesh.md](face-mesh.md) |
+| (in Markerless 2D chooser) | Face Mesh | `face_mesh_analysis` | [face-mesh.md](face-mesh.md) |
 | B_r6_c3 | tugturn | `tugturn` | [tugturn.md](tugturn.md) |
 | B_r6_c4 | Field KPs (AI) | `soccerfield_keypoints_ai` | [soccerfield-keypoints-ai.md](soccerfield-keypoints-ai.md) |
 | B_r6_c5 | Soccer-Field Calib | `soccerfield_calib` | [soccerfield-calib.md](soccerfield-calib.md) |
@@ -58,12 +56,7 @@ Each button in the vailá GUI has its own documentation file:
 | C_A_r1_c1 | Edit CSV | `reorder_csv_data` | [reorder-csv-data.md](reorder-csv-data.md) |
 | C_A_r1_c2 | C3D <--> CSV | `convert_c3d_csv` | [convert-c3d-csv.md](convert-c3d-csv.md) |
 | C_A_r1_c3 | Smooth & Filter | `gapfill_split` | [smooth-filter.md](smooth-filter.md) |
-| C_A_r2_c1 | Make DLT2D | `dlt2d` | [dlt2d.md](dlt2d.md) |
-| C_A_r2_c2 | Rec2D 1DLT | `rec2d_one_dlt2d` | [rec2d-one-dlt2d.md](rec2d-one-dlt2d.md) |
-| C_A_r2_c3 | Rec2D MultiDLT | `rec2d` | [rec2d.md](rec2d.md) |
-| C_A_r3_c1 | Make DLT3D | `run_dlt3d` | [dlt3d.md](dlt3d.md) |
-| C_A_r3_c2 | Rec3D 1DLT | `rec3d_one_dlt3d` | [rec3d-one-dlt3d.md](rec3d-one-dlt3d.md) |
-| C_A_r3_c3 | Rec3D MultiDLT | `rec3d` | [rec3d.md](rec3d.md) |
+| C_A_r2_c1 | DLT/REC 2D-3D | `dlt_rec_toolkit` | coringa: Make DLT2D ([dlt2d.md](dlt2d.md)), Rec2D 1DLT ([rec2d-one-dlt2d.md](rec2d-one-dlt2d.md)), Rec2D MultiDLT ([rec2d.md](rec2d.md)), Make DLT3D ([dlt3d.md](dlt3d.md)), Rec3D 1DLT ([rec3d-one-dlt3d.md](rec3d-one-dlt3d.md)), Rec3D MultiDLT ([rec3d.md](rec3d.md)) |
 | C_A_r4_c1 | ReID Marker | `reid_marker` | [reid-marker.md](reid-marker.md) |
 | C_B_r1_c1 | Video <--> PNG | `extract_png_from_videos` | [extract-png.md](extract-png.md) |
 | C_B_r1_c3 | Draw Box | `draw_box` | [draw-box.md](draw-box.md) |
@@ -104,4 +97,4 @@ Each button in the vailá GUI has its own documentation file:
 
 ---
 
-**Last Updated:** November 2025
+**Last Updated:** 02 August 2026

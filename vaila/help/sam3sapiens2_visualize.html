@@ -23,7 +23,7 @@
 # &gt;&gt; Enter SAM/stable ID to visualize: 4</pre>
 <p>Use <code>--list-ids</code> to discover IDs and exit without rendering. <code>--dry-run</code> validates paths. <code>--overwrite</code> allows a non-empty output directory. <code>--kpt-thr</code> changes confidence filtering; <code>--no-all-keypoints</code> limits drawing to the 21 principal body points.</p>
 <h2>GUI</h2>
-<p>Frame B → <strong>YOLO + FB</strong> → <strong>SAM3+Sapiens2 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3sapiens2_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. Choose an <strong>output parent</strong> and an ID from the combobox. The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
+<p>Frame B → <strong>Markerless 2D</strong> → <strong>SAM3+Sapiens2 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3sapiens2_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. Choose an <strong>output parent</strong> and an ID from the combobox. The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
 <p>Before rendering, the tool verifies the source frame count and image dimensions against the predictions. This prevents applying a synchronized result to the wrong original video.</p>
 <p>Frames are zero-based and coordinates are full-frame pixels. SAM3 remains the identity authority.</p>
 </body>

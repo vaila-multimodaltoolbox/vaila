@@ -38,7 +38,7 @@ Use `--list-ids` to discover IDs and exit without rendering. `--dry-run` validat
 
 ## GUI
 
-Frame B → **YOLO + FB** → **SAM3+Sapiens2 Visualize ID** (or run with no arguments). Select the processed run directory first. The matching source video is filled automatically from `sam3sapiens2_summary.json`; if the run was moved, choose the synchronized/cropped source video manually. Select an **output parent** and an ID from the combobox. The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.
+Frame B → **Markerless 2D** → **SAM3+Sapiens2 Visualize ID** (or run with no arguments). Select the processed run directory first. The matching source video is filled automatically from `sam3sapiens2_summary.json`; if the run was moved, choose the synchronized/cropped source video manually. Select an **output parent** and an ID from the combobox. The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.
 
 Before rendering, the tool verifies the source frame count and image dimensions against the predictions. This prevents accidentally applying a 631-frame synchronized result to its 2,809-frame original video.
 

@@ -1,13 +1,16 @@
-# YOLO + FB Chooser — Button B_r4_c1
+# YOLO + FB tools (merged into Markerless 2D / Markerless 3D, v0.3.97)
 
 ## Overview
 
-**Button Position:** B_r4_c1  
-**Method Name:** `yolotrackerpose` (alias `yolo_and_sam`)  
-**Button Text:** YOLO + FB  
-**Dialog Title:** Select YOLO / Meta (FB) Tool
+> **v0.3.97:** the standalone **YOLO + FB** button (and **Yolo + Markerless_MP**)
+> no longer exist. Every tool below is now reachable from the **Markerless 2D**
+> (`B1_r1_c4`, method `markerless_2d_analysis`) or **Markerless 3D**
+> (`B1_r1_c5`, method `markerless_3d_analysis`) coringa chooser — 2D-only
+> tools (YOLOv26, SAM 3, Sapiens2, SAM3+Sapiens2) moved to Markerless 2D;
+> the 3D-native SAM3+DINOv3 pair moved to Markerless 3D. The launcher CLI
+> commands below are unchanged — only the GUI path to reach them moved.
 
-Opens a chooser for Ultralytics YOLOv26 tools and Meta (Facebook) video AI: SAM 3, Sapiens2 Pose, the combined SAM3-guided Sapiens2 2D pose pipeline, and its SAM 3D Body (DINOv3) markerless 3D counterpart.
+Ultralytics YOLOv26 tools and Meta (Facebook) video AI: SAM 3, Sapiens2 Pose, the combined SAM3-guided Sapiens2 2D pose pipeline, and its SAM 3D Body (DINOv3) markerless 3D counterpart.
 
 ## GUI → CLI mirror
 
@@ -25,7 +28,8 @@ Each tool's **Run** button prints the **full** copy-paste command with your path
 | Train YOLOv26 | `uv run python -u -m vaila.yolotrain` |
 | SAM3+Sapiens2 | `uv run python -u vaila/sam3sapiens2.py` |
 | SAM3+Sapiens2 Visualize ID | `uv run python -u vaila/sam3sapiens2_visualize.py` |
-| SAM3+DINOv3 3D | `uv run python -u vaila/sam3dinov3.py` |
+| SAM3+DINOv3 3D | `uv run python -u vaila/sam3dinov3.py` (now under Markerless 3D) |
+| SAM3+DINOv3 Visualize ID | `uv run python -u vaila/sam3dinov3_visualize.py` (now under Markerless 3D) |
 
 ### Full Run examples (printed automatically)
 
@@ -48,6 +52,6 @@ Each tool's **Run** button prints the **full** copy-paste command with your path
 
 ---
 
-**Last Updated:** 01 August 2026 (v0.3.92)  
+**Last Updated:** 02 August 2026 (v0.3.97)  
 **Part of vailá - Multimodal Toolbox**  
 **License:** AGPLv3.0

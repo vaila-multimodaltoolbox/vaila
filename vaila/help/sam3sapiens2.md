@@ -5,7 +5,7 @@
 - **Category:** Markerless 2D / Meta (Facebook)
 - **Version:** 0.3.91
 - **Updated:** 2026-08-01
-- **GUI:** Frame B → **YOLO + FB** → **SAM3+Sapiens2**
+- **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes
 - **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original.
 - **Selected-ID rerender:** after a run, use [sam3sapiens2_visualize](sam3sapiens2_visualize.md) (GUI **SAM3+Sapiens2 Visualize ID**, or CLI `--id` / interactive prompt). Overlay matches SAM3 contour + Sapiens2 left/right skeleton colors.
@@ -37,7 +37,7 @@ Inference requires an NVIDIA CUDA GPU. SAM3/Sapiens2 model licenses remain Meta 
 
 ## GUI
 
-Open **YOLO + FB → SAM3+Sapiens2**. On the input row:
+Open **Markerless 2D → SAM3+Sapiens2**. On the input row:
 
 - **Dir…** — pick a folder; every video in that folder is processed in batch
   (non-recursive; `.mp4` / `.avi` / `.mov` / `.mkv` / `.webm`);

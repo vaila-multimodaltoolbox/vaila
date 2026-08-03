@@ -317,14 +317,17 @@
                     </div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">B1_r1_c4 - Markerless 2D</div>
+                    <div class="tool-title">B1_r1_c4 - Markerless 2D (chooser)</div>
                     <div class="tool-links"><a href="markerless2d_analysis_v2.html">HTML</a> | <a
-                            href="markerless2d_analysis_v2.md">MD</a></div>
+                            href="markerless2d_analysis_v2.md">MD</a> ·
+                        <a href="#yolo-fb">absorbed tools ↓</a></div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">B1_r1_c5 - Markerless 3D</div>
+                    <div class="tool-title">B1_r1_c5 - Markerless 3D (chooser)</div>
                     <div class="tool-links"><a href="markerless_3d_analysis.html">HTML</a> | <a
-                            href="markerless_3d_analysis.md">MD</a></div>
+                            href="markerless_3d_analysis.md">MD</a> ·
+                        <a href="sam3dinov3.html">SAM3+DINOv3 3D</a> ·
+                        <a href="sam3dinov3_visualize.html">Visualize ID</a></div>
                 </div>
 
                 <div class="tool-card">
@@ -357,7 +360,7 @@
                     <div class="tool-links"><span>(Coming Soon)</span></div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">B3_r3_c2 - Yolo + Markerless_MP</div>
+                    <div class="tool-title">Yolo + Markerless_MP (in Markerless 2D chooser)</div>
                     <div class="tool-links"><a href="markerless2d_mpyolo.html">HTML</a> |
                         <a href="markerless2d_mpyolo.md">MD</a>
                     </div>
@@ -379,32 +382,20 @@
                 </div>
 
                 <div class="tool-card">
-                    <div class="tool-title">B4_r4_c1 - YOLO + FB</div>
-                    <div class="tool-links"><a href="#yolo-fb">Chooser</a> ·
-                        <a href="vaila_sapiens.html">Sapiens2</a> ·
-                        <a href="sam3sapiens2.html">SAM3+Sapiens2</a> ·
-                        <a href="sam3sapiens2_visualize.html">Visualize ID</a> ·
-                        <a href="sam3dinov3.html">SAM3+DINOv3 3D</a> ·
-                        <a href="sam3dinov3_visualize.html">Visualize ID (3D)</a> ·
-                        <a href="vaila_sam.html">SAM 3</a> ·
-                        <a href="yolov26track.html">YOLOv26</a>
-                    </div>
-                </div>
-                <div class="tool-card">
                     <div class="tool-title">B4_r4_c2 - ML Walkway</div>
                     <div class="tool-links"><a href="ml_models_training.html">HTML</a> | <a
                             href="ml_models_training.md">MD</a></div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">B4_r4_c3 - Markerless Hands</div>
+                    <div class="tool-title">Markerless Hands (in Markerless 2D chooser)</div>
                     <div class="tool-links"><a href="mphands.html">HTML</a> | <a href="mphands.md">MD</a></div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">B4_r4_c4 - MP Angles</div>
+                    <div class="tool-title">MP Angles (in Markerless 2D chooser)</div>
                     <div class="tool-links"><a href="mpangles.html">HTML</a> | <a href="mpangles.md">MD</a></div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">B4_r4_c5 - Markerless Live</div>
+                    <div class="tool-title">Markerless Live (in Markerless 2D chooser)</div>
                     <div class="tool-links"><a href="markerless_live.html">HTML</a> | <a
                             href="markerless_live.md">MD</a></div>
                 </div>
@@ -441,7 +432,7 @@
                             href="vailasprint_help.md">MD</a></div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">B5_r6_c2 - Face Mesh</div>
+                    <div class="tool-title">Face Mesh (in Markerless 2D chooser)</div>
                     <div class="tool-links"><a href="mp_facemesh_help.html">HTML</a> | <a
                             href="mp_facemesh_help.md">MD</a></div>
                 </div>
@@ -492,13 +483,24 @@
 
 
         <div id="yolo-fb">
-            <h2>YOLO + FB (chooser)</h2>
+            <h2>Markerless 2D / 3D — absorbed tools (formerly "YOLO + FB")</h2>
             <p class="mb-sm">
-                <strong>GUI:</strong> Frame B → <strong>YOLO + FB</strong> opens the chooser with these buttons
-                (each prints a copy-paste launcher CLI to the terminal):
+                <strong>v0.3.97:</strong> the standalone <strong>YOLO + FB</strong> and
+                <strong>Yolo + Markerless_MP</strong> buttons were merged into the
+                <strong>Markerless 2D</strong> (<code>B1_r1_c4</code>) and
+                <strong>Markerless 3D</strong> (<code>B1_r1_c5</code>) choosers — 2D-only
+                tools moved to Markerless 2D, the 3D-native SAM3+DINOv3 pair moved to
+                Markerless 3D. Each button below still prints a copy-paste launcher CLI
+                to the terminal, unchanged:
                 <code>Tracker (v26)</code>, <code>Pose (video)</code>, <code>Pose (tracking)</code>,
                 <code>Seg (v26)</code>, <code>SAM 3 video</code>, <code>Sapiens2 Pose</code>,
-                <code>SAM3+Sapiens2</code>, <code>Train YOLOv26</code>.
+                <code>SAM3+Sapiens2</code>, <code>SAM3+Sapiens2 Visualize ID</code>,
+                <code>SAM3+DINOv3 3D</code>, <code>SAM3+DINOv3 Visualize ID</code>,
+                <code>Train YOLOv26</code>.
+                <strong>v0.3.98</strong> additionally folded four more standalone
+                2D buttons into Markerless 2D's new "Other 2D tools" section:
+                <code>Markerless Hands</code>, <code>MP Angles</code>, <code>Face Mesh</code>,
+                <code>Markerless Live</code>.
                 <br>
                 <strong>Docs:</strong> <a href="../../docs/vaila_buttons/yolo-fb.md">docs/vaila_buttons/yolo-fb.md</a>
             </p>
@@ -587,30 +589,15 @@
                             href="interp_smooth_split.md">MD</a></div>
                 </div>
                 <div class="tool-card">
-                    <div class="tool-title">C_A_r2_c1 - Make DLT2D</div>
-                    <div class="tool-links"><a href="dlt2d.html">HTML</a> | <a href="dlt2d.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r2_c2 - Rec2D 1DLT</div>
-                    <div class="tool-links"><a href="rec2d_one_dlt2d.html">HTML</a> | <a
-                            href="rec2d_one_dlt2d.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r2_c3 - Rec2D MultiDLT</div>
-                    <div class="tool-links"><a href="rec2d.html">HTML</a> | <a href="rec2d.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r3_c1 - Make DLT3D</div>
-                    <div class="tool-links"><a href="dlt3d.html">HTML</a> | <a href="dlt3d.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r3_c2 - Rec3D 1DLT</div>
-                    <div class="tool-links"><a href="rec3d_one_dlt3d.html">HTML</a> | <a
-                            href="rec3d_one_dlt3d.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r3_c3 - Rec3D MultiDLT</div>
-                    <div class="tool-links"><a href="rec3d.html">HTML</a> | <a href="rec3d.md">MD</a></div>
+                    <div class="tool-title">C_A_r2_c1 - DLT/REC 2D-3D (chooser)</div>
+                    <div class="tool-links">
+                        <a href="dlt2d.html">DLT2D</a> ·
+                        <a href="rec2d_one_dlt2d.html">Rec2D 1DLT</a> ·
+                        <a href="rec2d.html">Rec2D MultiDLT</a> ·
+                        <a href="dlt3d.html">DLT3D</a> ·
+                        <a href="rec3d_one_dlt3d.html">Rec3D 1DLT</a> ·
+                        <a href="rec3d.html">Rec3D MultiDLT</a>
+                    </div>
                 </div>
                 <div class="tool-card">
                     <div class="tool-title">C_A_r4_c1 - ReID Marker</div>
@@ -763,7 +750,7 @@
         </div>
 
         <div class="footer">
-            <p class="muted">Generated based on <i>vailá</i> v0.3.96 layout. Generated on 02/08/2026.</p>
+            <p class="muted">Generated based on <i>vailá</i> v0.3.98 layout. Generated on 02/08/2026.</p>
         </div>
 
         <script>

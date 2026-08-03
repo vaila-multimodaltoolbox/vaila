@@ -1,10 +1,15 @@
-# Select YOLO tracker version to use: - Button B_r3_c4
+# Yolo + Markerless_MP — via Markerless 2D Chooser
 
 ## Overview
 
-**Button Position:** B_r3_c4  
+> **v0.3.97:** this used to be its own button (`B3_r3_c2`, text
+> "Yolo + Markerless_MP"). It is now the first option under the
+> **Markerless 2D** coringa chooser (`B1_r1_c4`, method
+> `markerless_2d_analysis`) — the underlying handler and script are
+> unchanged.
+
 **Method Name:** `markerless2d_mpyolo`  
-**Button Text:** Select YOLO tracker version to use:
+**Button Text (in chooser):** Yolo + Markerless_MP
 
 ## Description
 
@@ -12,7 +17,7 @@ Runs the markerless2d_mpyolo analysis.
 
 ## Usage
 
-1. Click the **Select YOLO tracker version to use:** button in the vailá GUI
+1. Click **Markerless 2D** in the vailá GUI, then **Yolo + Markerless_MP** in the chooser
 2. Follow the prompts in the dialog windows
 3. Select input files/directories as requested
 4. Configure parameters if needed
@@ -45,6 +50,6 @@ This button integrates with other vailá modules:
 
 ---
 
-**Last Updated:** November 2025  
+**Last Updated:** 02 August 2026  
 **Part of vailá - Multimodal Toolbox**  
 **License:** AGPLv3.0

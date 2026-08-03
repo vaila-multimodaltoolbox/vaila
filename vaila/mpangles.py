@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 31 March 2025
-Update Date: 5 February 2026
-Version: 0.0.3
+Update Date: 02 August 2026
+Version: 0.3.98
 Python Version: 3.12.13
 
 Description:
@@ -361,7 +361,9 @@ def get_vector_landmark(data, landmark):
     try:
         landmark_idx = landmark_names.index(landmark)
     except ValueError:
-        raise ValueError(f"Landmark '{landmark}' not found in the list of valid landmarks")
+        raise ValueError(
+            f"Landmark '{landmark}' not found in the list of valid landmarks"
+        ) from None
 
     # Calculate the column indices for x and y
     # Add 1 to skip the frame column, and multiply by 2 because each landmark has 2 columns
@@ -488,10 +490,7 @@ def compute_absolute_angle(p_proximal, p_distal, format_360=False):
     angle = np.degrees(np.arctan2(dy, -dx))
 
     # Format angle based on user preference
-    if format_360:
-        absolute_angle = angle % 360  # [0, 360) format
-    else:
-        absolute_angle = (angle + 180) % 360 - 180  # [-180, 180) format
+    absolute_angle = angle % 360 if format_360 else (angle + 180) % 360 - 180
 
     return absolute_angle
 
@@ -1230,7 +1229,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
                             right_elbow[i], right_wrist[i], right_pinky[i], right_index[i]
                         )
                     )
-                except:
+                except Exception:
                     right_wrist_angles.append(np.nan)
 
                 # Left side
@@ -1257,7 +1256,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
                             left_elbow[i], left_wrist[i], left_pinky[i], left_index[i]
                         )
                     )
-                except:
+                except Exception:
                     left_wrist_angles.append(np.nan)
 
                 # Central segments relative angles
@@ -1288,13 +1287,13 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
                 try:
                     rh_mid = compute_midpoint(right_pinky[i], right_index[i])
                     pairs["right_hand"] = (right_wrist[i], rh_mid)
-                except:
+                except Exception:
                     pairs["right_hand"] = None
 
                 try:
                     lh_mid = compute_midpoint(left_pinky[i], left_index[i])
                     pairs["left_hand"] = (left_wrist[i], lh_mid)
-                except:
+                except Exception:
                     pairs["left_hand"] = None
 
                 for name, pts in pairs.items():
@@ -1502,7 +1501,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
                             right_index[i],
                         )
                     )
-                except:
+                except Exception:
                     right_wrist_angles.append(np.nan)
 
                 # Left side
@@ -1529,7 +1528,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
                             left_elbow[i], left_wrist[i], left_pinky[i], left_index[i]
                         )
                     )
-                except:
+                except Exception:
                     left_wrist_angles.append(np.nan)
 
                 # Central segments relative angles
@@ -1562,7 +1561,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
                     right_hand_abs_angles.append(
                         compute_absolute_angle(right_wrist[i], right_hand_mid, format_360)
                     )
-                except:
+                except Exception:
                     right_hand_abs_angles.append(np.nan)
 
                 left_thigh_abs_angles.append(
@@ -1586,7 +1585,7 @@ def process_angles(input_csv, output_csv, filter_config=None, video_dims=None):
                     left_hand_abs_angles.append(
                         compute_absolute_angle(left_wrist[i], left_hand_mid, format_360)
                     )
-                except:
+                except Exception:
                     left_hand_abs_angles.append(np.nan)
 
                 trunk_abs_angles.append(
@@ -2051,123 +2050,130 @@ def process_video_with_visualization(
     print(f"Generating visualization video: {output_video_path}")
 
     frame_idx = 0
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
+    try:
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        if frame_idx >= len(df):
-            break  # Stop if no more data
+            if frame_idx >= len(df):
+                break  # Stop if no more data
 
-        # Extract landmarks for this frame (filtered) directly from df
-        # Landmarks in df are p0_x, p0_y...
-        # We need to construct a dict for draw function
+            # Extract landmarks for this frame (filtered) directly from df
+            # Landmarks in df are p0_x, p0_y...
+            # We need to construct a dict for draw function
 
-        # Find which column index starts the filtered data
-        # process_angles returns filtered 'df'.
-        # We need to parse it back to dict landmarks
+            # Find which column index starts the filtered data
+            # process_angles returns filtered 'df'.
+            # We need to parse it back to dict landmarks
 
-        row = df.iloc[frame_idx]
+            row = df.iloc[frame_idx]
 
-        # Construct landmarks dict
-        # We rely on get_vector_landmark helper or just manual extraction
-        # But get_vector_landmark takes the WHOLE df or array.
-        # We can implement a fast extractor
+            # Construct landmarks dict
+            # We rely on get_vector_landmark helper or just manual extraction
+            # But get_vector_landmark takes the WHOLE df or array.
+            # We can implement a fast extractor
 
-        landmarks = {}
-        # Reuse mapping logic (but fast)
-        # names defined in global 'landmark_names' in markerless_2d... but here we have local list
-        # mpangles.py has `get_vector_landmark` which uses names.
+            landmarks = {}
+            # Reuse mapping logic (but fast)
+            # names defined in global 'landmark_names' in markerless_2d... but here we have local list
+            # mpangles.py has `get_vector_landmark` which uses names.
 
-        # We need a list of names.
-        l_names = [
-            "nose",
-            "left_eye_inner",
-            "left_eye",
-            "left_eye_outer",
-            "right_eye_inner",
-            "right_eye",
-            "right_eye_outer",
-            "left_ear",
-            "right_ear",
-            "mouth_left",
-            "mouth_right",
-            "left_shoulder",
-            "right_shoulder",
-            "left_elbow",
-            "right_elbow",
-            "left_wrist",
-            "right_wrist",
-            "left_pinky",
-            "right_pinky",
-            "left_index",
-            "right_index",
-            "left_thumb",
-            "right_thumb",
-            "left_hip",
-            "right_hip",
-            "left_knee",
-            "right_knee",
-            "left_ankle",
-            "right_ankle",
-            "left_heel",
-            "right_heel",
-            "left_foot_index",
-            "right_foot_index",
-        ]
+            # We need a list of names.
+            l_names = [
+                "nose",
+                "left_eye_inner",
+                "left_eye",
+                "left_eye_outer",
+                "right_eye_inner",
+                "right_eye",
+                "right_eye_outer",
+                "left_ear",
+                "right_ear",
+                "mouth_left",
+                "mouth_right",
+                "left_shoulder",
+                "right_shoulder",
+                "left_elbow",
+                "right_elbow",
+                "left_wrist",
+                "right_wrist",
+                "left_pinky",
+                "right_pinky",
+                "left_index",
+                "right_index",
+                "left_thumb",
+                "right_thumb",
+                "left_hip",
+                "right_hip",
+                "left_knee",
+                "right_knee",
+                "left_ankle",
+                "right_ankle",
+                "left_heel",
+                "right_heel",
+                "left_foot_index",
+                "right_foot_index",
+            ]
 
-        # Offset: 1 if frame col exists
-        start_col = 0
-        if "frame" in df.columns[0].lower() or "index" in df.columns[0].lower():
-            start_col = 1
+            # Offset: 1 if frame col exists
+            start_col = 0
+            if "frame" in df.columns[0].lower() or "index" in df.columns[0].lower():
+                start_col = 1
 
-        for i, name in enumerate(l_names):
-            idx = start_col + (i * 2)
-            if idx + 1 < len(df.columns):
-                x = row.iloc[idx]
-                y = row.iloc[idx + 1]
-                landmarks[name] = np.array([x, y])
+            for i, name in enumerate(l_names):
+                idx = start_col + (i * 2)
+                if idx + 1 < len(df.columns):
+                    x = row.iloc[idx]
+                    y = row.iloc[idx + 1]
+                    landmarks[name] = np.array([x, y])
+                else:
+                    landmarks[name] = np.array([np.nan, np.nan])
+
+            # Compute midpoints locally for drawing
+            if (
+                not np.isnan(landmarks["left_shoulder"]).any()
+                and not np.isnan(landmarks["right_shoulder"]).any()
+            ):
+                landmarks["mid_shoulder"] = (
+                    landmarks["left_shoulder"] + landmarks["right_shoulder"]
+                ) / 2
             else:
-                landmarks[name] = np.array([np.nan, np.nan])
+                landmarks["mid_shoulder"] = np.array([np.nan, np.nan])
 
-        # Compute midpoints locally for drawing
-        if (
-            not np.isnan(landmarks["left_shoulder"]).any()
-            and not np.isnan(landmarks["right_shoulder"]).any()
-        ):
-            landmarks["mid_shoulder"] = (
-                landmarks["left_shoulder"] + landmarks["right_shoulder"]
-            ) / 2
-        else:
-            landmarks["mid_shoulder"] = np.array([np.nan, np.nan])
+            if (
+                not np.isnan(landmarks["left_hip"]).any()
+                and not np.isnan(landmarks["right_hip"]).any()
+            ):
+                landmarks["mid_hip"] = (landmarks["left_hip"] + landmarks["right_hip"]) / 2
+            else:
+                landmarks["mid_hip"] = np.array([np.nan, np.nan])
 
-        if not np.isnan(landmarks["left_hip"]).any() and not np.isnan(landmarks["right_hip"]).any():
-            landmarks["mid_hip"] = (landmarks["left_hip"] + landmarks["right_hip"]) / 2
-        else:
-            landmarks["mid_hip"] = np.array([np.nan, np.nan])
+            if (
+                not np.isnan(landmarks["left_ear"]).any()
+                and not np.isnan(landmarks["right_ear"]).any()
+            ):
+                landmarks["mid_ear"] = (landmarks["left_ear"] + landmarks["right_ear"]) / 2
+            else:
+                landmarks["mid_ear"] = np.array([np.nan, np.nan])
 
-        if not np.isnan(landmarks["left_ear"]).any() and not np.isnan(landmarks["right_ear"]).any():
-            landmarks["mid_ear"] = (landmarks["left_ear"] + landmarks["right_ear"]) / 2
-        else:
-            landmarks["mid_ear"] = np.array([np.nan, np.nan])
+            # Angles dict: rel, abs180 (left panel), abs360 (right panel)
+            rel = rel_df.iloc[frame_idx].to_dict()
+            abs180 = abs180_df.iloc[frame_idx].to_dict()
+            abs360 = abs360_df.iloc[frame_idx].to_dict()
 
-        # Angles dict: rel, abs180 (left panel), abs360 (right panel)
-        rel = rel_df.iloc[frame_idx].to_dict()
-        abs180 = abs180_df.iloc[frame_idx].to_dict()
-        abs360 = abs360_df.iloc[frame_idx].to_dict()
+            # Draw: left absolute -180..180, right absolute 0..360
+            frame = draw_skeleton_enhanced(frame, landmarks, rel, abs180, abs_angles_360=abs360)
 
-        # Draw: left absolute -180..180, right absolute 0..360
-        frame = draw_skeleton_enhanced(frame, landmarks, rel, abs180, abs_angles_360=abs360)
+            out.write(frame)
 
-        out.write(frame)
+            if frame_idx % 30 == 0:
+                print(f"Rendering frame {frame_idx}/{total_frames}")
 
-        if frame_idx % 30 == 0:
-            print(f"Rendering frame {frame_idx}/{total_frames}")
-
-        frame_idx += 1
-
-    cap.release()
-    out.release()
+            frame_idx += 1
+    finally:
+        cap.release()
+        out.release()
     print("Video generation complete.")
 
     # Stick figure sequence for report
@@ -2739,11 +2745,11 @@ class MPAnglesApp:
                 # Directory mode: batch by video (match CSV by similar name), then skeleton+angles
                 results = process_directory_videos(input_path, filter_config)
                 if results:
-                    [r[0] for r in results]
                     generate_batch_html_report(input_path, results)
+                    n_ok = sum(1 for _video, out_dir in results if out_dir)
                     messagebox.showinfo(
                         "Success",
-                        f"Processed {len(results)} video(s). Open batch_analysis_report.html in the directory for links.",
+                        f"Processed {n_ok}/{len(results)} video(s). Open batch_analysis_report.html in the directory for links.",
                     )
                 else:
                     # No videos in dir: fall back to CSV-only batch (angles only, no video overlay)

@@ -1,13 +1,17 @@
-# MP Angles - Button B4_r4_c4
+# MP Angles — via Markerless 2D Chooser
 
 ## Overview
 
-The **MP Angles** button (B4_r4_c4) in the vailá GUI provides access to the MediaPipe Angle Calculation module. This tool calculates absolute and relative joint angles from MediaPipe pose estimation landmark coordinates, enabling comprehensive biomechanical analysis of human movement.
+> **v0.3.98:** this used to be its own button (`B4_r4_c4`). It is now under
+> the **"Other 2D tools"** section of the **Markerless 2D** coringa chooser
+> (`B1_r1_c4`, method `markerless_2d_analysis`) — the underlying handler and
+> script are unchanged.
 
-**Button Position:** B4_r4_c4 (Button 4, Row 4, Column 4)  
+The **MP Angles** option provides access to the MediaPipe Angle Calculation module. This tool calculates absolute and relative joint angles from MediaPipe pose estimation landmark coordinates, enabling comprehensive biomechanical analysis of human movement.
+
 **Method Name:** `mp_angles_calculation`  
-**Button Text:** MP Angles  
-**GUI Category:** Multimodal Analysis → Row 4
+**Button Text (in chooser):** MP Angles  
+**GUI Category:** Multimodal Analysis → Markerless 2D → Other 2D tools
 
 ## Description
 
@@ -26,7 +30,7 @@ The MP Angles module processes CSV files containing MediaPipe landmark coordinat
 
 ### Step 1: Launch the Module
 
-1. Click the **"MP Angles"** button in the vailá GUI
+1. Click **Markerless 2D** in the vailá GUI, then **MP Angles** in the "Other 2D tools" section of the chooser
 2. The module will start and display dialogs
 
 ### Step 2: Select Angle Format
@@ -325,6 +329,6 @@ Contains segment angles in degrees (format depends on user selection):
 
 ---
 
-**Last Updated:** November 2025  
+**Last Updated:** 02 August 2026  
 **Part of vailá - Multimodal Toolbox**  
 **License:** AGPLv3.0
