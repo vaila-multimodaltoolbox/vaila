@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 02 August 2026
-Version: 0.3.96
+Update Date: 03 August 2026
+Version: 0.3.98
 
 Description:
     CPU-only rerenderer for an existing SAM3+DINOv3 3D (SAM 3D Body) run. It
@@ -55,13 +55,19 @@ import numpy as np
 
 try:
     from .sam3dinov3 import (
+        COLOR_CENTER_RGB,
         MHR70_NAMES,
+        _rgb_to_bgr,
+        _side_color_bgr,
         keypoint_names,
         skeleton_edges,
     )
 except ImportError:  # standalone execution
     from sam3dinov3 import (  # ty: ignore[unresolved-import]
+        COLOR_CENTER_RGB,
         MHR70_NAMES,
+        _rgb_to_bgr,
+        _side_color_bgr,
         keypoint_names,
         skeleton_edges,
     )
@@ -69,13 +75,6 @@ except ImportError:  # standalone execution
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 # Match SAM3 composite alpha (~0.45) for selected-ID contour fills.
 SAM_CONTOUR_FILL_ALPHA = 0.45
-
-# MHR70 joint names carry an explicit "left-"/"right-" prefix, so the skeleton
-# can be colored by side directly from the name instead of a hardcoded index
-# set (same left=green/right=orange/center=blue palette as keypoints308).
-COLOR_LEFT_RGB = (0, 255, 0)
-COLOR_RIGHT_RGB = (255, 128, 0)
-COLOR_CENTER_RGB = (51, 153, 255)
 MESH_EXPORT_FORMATS = ("none", "obj", "ply")
 
 
@@ -297,19 +296,6 @@ def _color_for_id(selected_id: int) -> tuple[int, int, int]:
     hsv = np.asarray([[[int(selected_id * 47) % 180, 220, 255]]], dtype=np.uint8)
     bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)[0, 0]
     return int(bgr[0]), int(bgr[1]), int(bgr[2])
-
-
-def _rgb_to_bgr(color: tuple[int, int, int]) -> tuple[int, int, int]:
-    return int(color[2]), int(color[1]), int(color[0])
-
-
-def _side_color_bgr(name: str) -> tuple[int, int, int]:
-    label = name.lower()
-    if label.startswith("left-") or label.startswith("left_"):
-        return _rgb_to_bgr(COLOR_LEFT_RGB)
-    if label.startswith("right-") or label.startswith("right_"):
-        return _rgb_to_bgr(COLOR_RIGHT_RGB)
-    return _rgb_to_bgr(COLOR_CENTER_RGB)
 
 
 def _object_polygons(contour: dict[str, Any] | None) -> list[np.ndarray]:

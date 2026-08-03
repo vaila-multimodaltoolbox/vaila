@@ -23,7 +23,7 @@
 <body><div class="container">
   <h1>SAM3+DINOv3 3D (<code>sam3dinov3.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.3.92 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-01<br>
+    <strong>Version:</strong> 0.3.98 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-03<br>
     <strong>Category:</strong> Markerless 3D / Meta (Facebook)<br>
     <strong>GUI:</strong> Frame B → Markerless 3D → <strong>SAM3+DINOv3 3D</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA required; SAM 3 and SAM 3D Body optional stacks.
@@ -131,7 +131,7 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
   <code>processed_sam3dinov3_&lt;timestamp&gt;/</code>.</p>
   <table>
     <tr><th>File</th><th>Content</th></tr>
-    <tr><td><code>&lt;video&gt;_sam3dinov3_overlay.mp4</code></td><td>SAM contour/bbox/ID + reprojected 3D skeleton</td></tr>
+    <tr><td><code>&lt;video&gt;_sam3dinov3_overlay.mp4</code></td><td>SAM contour/bbox/ID + reprojected 3D skeleton, colored by joint side (left=green, right=orange, center/spine=blue) — v0.3.98, same palette as <a href="sam3dinov3_visualize.html">sam3dinov3_visualize</a></td></tr>
     <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints3d.csv</code></td><td>Long table: root-relative <strong>and</strong> camera-frame metres</td></tr>
     <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints2d.csv</code></td><td>Long table: reprojected pixels</td></tr>
     <tr><td><code>&lt;video&gt;_sam3dinov3_camera.csv</code></td><td>Per-frame focal length, <code>cam_t</code>, bbox</td></tr>

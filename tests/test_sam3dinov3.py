@@ -17,10 +17,16 @@ import numpy as np
 import pytest
 
 from vaila.sam3dinov3 import (
+    COLOR_CENTER_RGB,
+    COLOR_LEFT_RGB,
+    COLOR_RIGHT_RGB,
     MHR70_NAMES,
     _collect_person_ids,
+    _draw_pose_overlay,
     _frame_batch_from_guidance,
     _instances_from_outputs,
+    _rgb_to_bgr,
+    _side_color_bgr,
     _write_readme,
     build_worker_command,
     keypoint_names,
@@ -115,6 +121,38 @@ def test_skeleton_edges_resolve_to_valid_indices():
         assert a != b
     # A truncated name list must silently drop the unresolvable edges.
     assert skeleton_edges(["nose", "neck"]) == [(1, 0)]
+
+
+def test_side_color_helper_maps_prefixes_to_palette():
+    assert _side_color_bgr("left-knee") == _rgb_to_bgr(COLOR_LEFT_RGB)
+    assert _side_color_bgr("right-knee") == _rgb_to_bgr(COLOR_RIGHT_RGB)
+    assert _side_color_bgr("neck") == _rgb_to_bgr(COLOR_CENTER_RGB)
+    # Case- and separator-insensitive (defensive against upstream renames).
+    assert _side_color_bgr("LEFT-elbow") == _rgb_to_bgr(COLOR_LEFT_RGB)
+    assert _side_color_bgr("right_elbow") == _rgb_to_bgr(COLOR_RIGHT_RGB)
+
+
+def test_draw_pose_overlay_colors_left_and_right_differently():
+    """Regression test: the live overlay video used one solid color per
+    person for the whole skeleton (monochromatic, no left/right cue). It
+    must now match the left=green/right=orange/center=blue palette shared
+    with sam3dinov3_visualize.
+    """
+    image = np.zeros((60, 80, 3), dtype=np.uint8)
+    names = ["nose", "left-shoulder", "right-shoulder"]
+    edges = [(0, 1), (0, 2)]
+    instance = {
+        "person_id": 0,
+        "keypoints_2d": np.array([[40.0, 5.0], [20.0, 30.0], [60.0, 30.0]], dtype=np.float32),
+        "cam_t": np.array([0.0, 0.0, 1.0], dtype=np.float32),
+        "bbox": np.array([0.0, 0.0, 80.0, 60.0], dtype=np.float32),
+    }
+    out = _draw_pose_overlay(image, [instance], edges, names, draw_ids=False)
+    left_point = tuple(int(v) for v in out[30, 20])
+    right_point = tuple(int(v) for v in out[30, 60])
+    assert left_point == _rgb_to_bgr(COLOR_LEFT_RGB)
+    assert right_point == _rgb_to_bgr(COLOR_RIGHT_RGB)
+    assert left_point != right_point
 
 
 # --------------------------------------------------------------------------- #
