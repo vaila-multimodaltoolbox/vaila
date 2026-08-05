@@ -109,6 +109,14 @@ inherited entirely from the monocular estimate. Output goes to
 manifest (frame, chosen camera index, fit residual in meters) in the same
 timestamped output subfolder as the other results.
 
+If a mesh-source directory also has a `*_sam3dinov3_joint_angles.csv` (a
+sam3dinov3.py run made after joint_kinematics.py was added — see that
+module), the same per-frame camera selection above re-exports that camera's
+local (parent-relative) joint-angle rows unchanged into a companion
+`<file_base>_joint_angles.csv` — no rotation math needed here, since a local
+joint angle is intrinsic to the body's own articulation and does not depend
+on the camera or the DLT world alignment.
+
 ================================================================================
 Blender alignment (v0.3.99, mesh axis convention corrected 2026-08-05)
 ================================================================================
@@ -315,6 +323,21 @@ def _find_mesh_source_bundle(mesh_source_dir, export_fmt):
     return mhr70_rec3d_csv, mesh_frames_dir, mesh_faces_path
 
 
+def _find_joint_angles_csv(mesh_source_dir):
+    """Locate an optional per-camera `*_sam3dinov3_joint_angles.csv`.
+
+    Present only for sam3dinov3.py runs made after joint_kinematics.py was
+    added; absent for older runs. Unlike `_find_mesh_source_bundle`'s three
+    files, this is never required -- mesh export must keep working for a
+    mesh-source directory that predates this feature.
+
+    Returns:
+        Path | None
+    """
+    matches = sorted(Path(mesh_source_dir).glob("*_sam3dinov3_joint_angles.csv"))
+    return matches[0] if matches else None
+
+
 def find_markers_csv_in_dir(mesh_source_dir):
     """
     Locate the 2D pixel markers CSV (`*_markers.csv`) inside a
@@ -451,6 +474,28 @@ def reconstruct_mesh_sequence(
         )
         return None
 
+    # Per-camera local (parent-relative) joint angles, if that camera's
+    # sam3dinov3_visualize.py run has one. Local angles are camera-invariant
+    # (an elbow bent 90 degrees is 90 degrees regardless of viewing angle or
+    # DLT world alignment -- see joint_kinematics.py), so no rotation
+    # composition is needed here: for each frame this function already picks
+    # one camera's mesh via the Umeyama fit residual below, and the SAME
+    # camera's angle rows are re-exported unchanged for that frame. Optional
+    # per camera -- older mesh-source runs simply contribute no angle rows.
+    joint_angles_by_camera: list[pd.DataFrame | None] = []
+    for mesh_source_dir, bundle in zip(mesh_source_dirs, bundles, strict=False):
+        if bundle is None:
+            joint_angles_by_camera.append(None)
+            continue
+        angles_path = _find_joint_angles_csv(mesh_source_dir)
+        if angles_path is None:
+            joint_angles_by_camera.append(None)
+            continue
+        joint_angles_by_camera.append(pd.read_csv(angles_path))
+    angle_header = next(
+        (df.columns.tolist() for df in joint_angles_by_camera if df is not None), None
+    )
+
     marker_cols_x = [f"p{i}_x" for i in marker_indices]
     marker_cols_y = [f"p{i}_y" for i in marker_indices]
     marker_cols_z = [f"p{i}_z" for i in marker_indices]
@@ -504,6 +549,7 @@ def reconstruct_mesh_sequence(
     output_mesh_dir.mkdir(parents=True, exist_ok=True)
 
     manifest_rows = []
+    angle_rows = []
     skip_reasons = {}
     previous_camera = None
     camera_switches = 0
@@ -635,6 +681,15 @@ def reconstruct_mesh_sequence(
         out_path = output_mesh_dir / f"frame_{frame:06d}.{export_fmt}"
         writer(out_path, transformed, out_faces)
 
+        # Local joint angles are camera-invariant (see the module docstring
+        # for why), so the winning camera's own angle rows for this frame are
+        # re-exported unchanged -- no rotation composition needed.
+        cam_angles = joint_angles_by_camera[cam_idx]
+        if cam_angles is not None:
+            frame_rows = cam_angles[cam_angles["frame"] == frame]
+            if not frame_rows.empty:
+                angle_rows.append(frame_rows)
+
         if previous_camera is not None and previous_camera != cam_idx:
             camera_switches += 1
         previous_camera = cam_idx
@@ -656,6 +711,19 @@ def reconstruct_mesh_sequence(
     manifest_df.to_csv(manifest_path, index=False, float_format="%.6f")
     _write_mesh_import_readme(output_mesh_dir, export_fmt, swap_yz, frames_written)
 
+    joint_angles_path = None
+    if angle_rows:
+        joint_angles_path = Path(output_dir) / f"{file_base}_joint_angles.csv"
+        pd.concat(angle_rows, ignore_index=True).to_csv(
+            joint_angles_path, index=False, float_format="%.6f"
+        )
+    elif angle_header is not None:
+        # At least one camera had angle data, but no solved frame happened to
+        # use that camera (unusual, but not an error): write an empty file
+        # with the right header rather than silently producing nothing.
+        joint_angles_path = Path(output_dir) / f"{file_base}_joint_angles.csv"
+        pd.DataFrame(columns=angle_header).to_csv(joint_angles_path, index=False)
+
     # Interpolated frames carry no residual of their own (NaN in the manifest);
     # the statistics below describe the directly solved frames only.
     residuals = manifest_df["mean_residual_m"].to_numpy() if frames_written else np.array([])
@@ -670,6 +738,7 @@ def reconstruct_mesh_sequence(
         "skip_reasons": skip_reasons,
         "camera_switches": camera_switches,
         "manifest_path": str(manifest_path),
+        "joint_angles_path": str(joint_angles_path) if joint_angles_path is not None else None,
         "output_mesh_dir": str(output_mesh_dir),
         "sequence_contiguous": not gap_frames,
         "missing_frames": gap_frames,
@@ -696,6 +765,13 @@ def reconstruct_mesh_sequence(
         )
     print(f"Mesh sequence: {output_mesh_dir}")
     print(f"Alignment manifest: {manifest_path}")
+    if joint_angles_path is not None:
+        print(f"Joint angles: {joint_angles_path}")
+    else:
+        print(
+            "[yellow]No joint-angle data in any mesh-source camera (older "
+            "sam3dinov3.py run); no *_joint_angles.csv written.[/yellow]"
+        )
     return summary
 
 
@@ -893,10 +969,11 @@ def run_reconstruction(
     save_rec3d_as_bvh(rec3d_df, new_dir, file_base, point_rate, gui=gui, swap_yz=swap_yz)
 
     # ---> NEW: Optional aligned mesh-for-Blender export <---
+    mesh_result = None
     if mesh_source_dirs and export_mesh != "none":
         print("\nAligning and exporting mesh sequence...")
         try:
-            reconstruct_mesh_sequence(
+            mesh_result = reconstruct_mesh_sequence(
                 rec3d_df,
                 mesh_source_dirs,
                 new_dir,
@@ -937,6 +1014,11 @@ def run_reconstruction(
     )
     if blender_script:
         print(f"  - {os.path.basename(blender_script)} (Run this in Blender to visualize skeleton)")
+    if mesh_result and mesh_result.get("joint_angles_path"):
+        print(
+            f"  - {os.path.basename(mesh_result['joint_angles_path'])} "
+            f"(local joint angles: Euler XYZ deg + quaternion wxyz)"
+        )
 
     if gui:
         msg_bvh_gui = "• BVH file (natively opens in Blender"
@@ -948,6 +1030,8 @@ def run_reconstruction(
         extra_msg = ""
         if blender_script:
             extra_msg = "\n• Blender visualization script generated!"
+        if mesh_result and mesh_result.get("joint_angles_path"):
+            extra_msg += "\n• Joint-angle CSV generated (Euler + quaternion)!"
 
         messagebox.showinfo(
             "Processing Complete",

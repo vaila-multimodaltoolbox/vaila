@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 134 | **Categories:** 7 | **Generated on:** 05/08/2026 (v0.3.99)
+**Total documented modules:** 136 | **Categories:** 7 | **Generated on:** 05/08/2026 (v0.3.99)
 
 ## Markerless 2D chooser (Frame B → B1_r1_c4)
 
@@ -24,10 +24,11 @@ Frame B button **Markerless 2D** opens (v0.3.98 — absorbed the former Yolo + M
 
 ## Markerless 3D chooser (Frame B → B1_r1_c5)
 
-Frame B button **Markerless 3D** opens (v0.3.97 — absorbed the 3D-native half of YOLO + FB): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**.
+Frame B button **Markerless 3D** opens (v0.3.99 — absorbed the 3D-native half of YOLO + FB): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, **Monocular → DLT world**.
 
 - [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
 - [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
+- [monocular_dlt_align (1-camera run → calibrated lab frame)](monocular_dlt_align.html) · [MD](monocular_dlt_align.md)
 - [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
 
 ## Markerless 2D chooser (Frame B → B1_r1_c4)
@@ -48,10 +49,11 @@ Frame B button **Markerless 2D** opens (v0.3.98 — absorbed the former Yolo + M
 
 ## Markerless 3D chooser (Frame B → B1_r1_c5)
 
-Frame B button **Markerless 3D** opens (v0.3.97 — absorbed the 3D-native half of YOLO + FB): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**.
+Frame B button **Markerless 3D** opens (v0.3.99 — absorbed the 3D-native half of YOLO + FB): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, **Monocular → DLT world**.
 
 - [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
 - [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
+- [monocular_dlt_align (1-camera run → calibrated lab frame)](monocular_dlt_align.html) · [MD](monocular_dlt_align.md)
 - [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
 
 ---
@@ -385,6 +387,12 @@ Frame B button **Markerless 3D** opens (v0.3.97 — absorbed the 3D-native half 
 - **interp_smooth_split**
   - [📄 HTML](interp_smooth_split.html)
   - [📝 Markdown](interp_smooth_split.md)
+- **joint_kinematics (Euler/quaternion joint angles for sam3dinov3 + rec3d_one_dlt3d)**
+  - [📄 HTML](joint_kinematics.html)
+  - [📝 Markdown](joint_kinematics.md)
+- **monocular_dlt_align (place a 1-camera monocular 3D run in the DLT lab frame)**
+  - [📄 HTML](monocular_dlt_align.html)
+  - [📝 Markdown](monocular_dlt_align.md)
 - **mesh_alignment (Umeyama fit for rec3d_one_dlt3d mesh export)**
   - [📄 HTML](mesh_alignment.html)
   - [📝 Markdown](mesh_alignment.md)

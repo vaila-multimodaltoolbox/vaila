@@ -82,6 +82,7 @@ Output (in the same timestamped subfolder):
 |------|-------------|
 | `meshes_<fmt>/frame_NNNNNN.<fmt>` | Aligned per-frame mesh, Blender-importable as a mesh-cache sequence ("Stop Motion OBJ" / OBJSequence add-on). |
 | `rec3d_*_mesh_alignment.csv` | Manifest: `frame`, `camera_index` (which camera's mesh was used), `mean_residual_m`/`rms_residual_m`/`max_residual_m` (Umeyama fit residual), `n_fit_points`. |
+| `rec3d_*_joint_angles.csv` | **v0.3.99.** Only when a mesh-source camera has one: the winning camera's local (parent-relative) joint-angle rows, re-exported unchanged (no rotation math needed — see [joint_kinematics](joint_kinematics.md)). |
 
 ```bash
 # Simplified: one path per camera (the Visualize-ID run directory) is enough
@@ -141,8 +142,8 @@ Run with **no arguments** or with `--gui`:
 | `--fps` *HZ* | Point data rate in Hz (default: 100). Accepts fractional rates, e.g. `119.88012001` for NTSC-derived 120000/1001 capture. |
 | `-o`, `--output` *DIR* | Output directory; a timestamped subfolder will be created here. |
 | `--gui` | Launch GUI instead of CLI. |
-| `--swap-yz` | Swap Y/Z in BVH **and** mesh so height is vertical (Z-up) in Blender. **Default since v0.3.99**; kept as an explicit opt-in. |
-| `--no-swap-yz` | Keep the raw DLT axes (no Y/Z swap). |
+| `--swap-yz` | Swap Y/Z in the **BVH only** so height is vertical (Z-up) in Blender. **Default since v0.3.99**; kept as an explicit opt-in. The mesh is always raw regardless — see "Blender alignment" above. |
+| `--no-swap-yz` | Keep the raw DLT axes for the BVH (no Y/Z swap). |
 
 ### Examples — every supported run type
 
@@ -210,6 +211,7 @@ python -m vaila.rec3d_one_dlt3d --gui
 |--------|------|
 | **dlt3d** | Compute DLT3D coefficients from calibration (pixel + 3D reference). |
 | **mesh_alignment** | Umeyama similarity fit + OBJ/PLY I/O used by the mesh-export feature. |
+| **joint_kinematics** | Shared math for `rec3d_*_joint_angles.csv` — local joint angles re-exported from whichever camera's mesh-source directory has one. |
 | **sam3dinov3_visualize** | Produces the per-camera "Visualize ID" mesh-source directories consumed by `--mesh-source-dir`. |
 | **vaila/skeletons/** | Ready-made `--skeleton` presets (MediaPipe, YOLO/COCO-17, SAM3+DINOv3 MHR70, Sapiens2 Goliath-308). |
 | **readcsv_export** | CSV → C3D (used internally); batch convert. |

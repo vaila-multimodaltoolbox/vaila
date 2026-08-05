@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - monocular_dlt_align</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 860px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #212529; margin-top: 18px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; }
+        pre { background: #f1f3f5; padding: 14px; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        ul { margin: 10px 0; padding-left: 24px; }
+        .note { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i>vailá</i> - monocular_dlt_align</h1>
+
+        <div class="module-info">
+            <h3>Module information</h3>
+            <p><strong>Category:</strong> Processing / Markerless 3D</p>
+            <p><strong>File:</strong> vaila/monocular_dlt_align.py</p>
+            <p><strong>Version:</strong> 0.3.99</p>
+            <p><strong>Author:</strong> Paulo Santiago</p>
+            <p><strong>GUI:</strong> Yes — Frame B → Markerless 3D → Monocular → DLT world &nbsp; <strong>CLI:</strong> Yes</p>
+            <p><strong>Runtime:</strong> CPU only; no model weights are loaded</p>
+        </div>
+
+        <h2>What problem this solves</h2>
+        <p><code>sam3dinov3.py</code> writes its 3D output in the <strong>camera frame</strong> (OpenCV convention: +X right, +Y <strong>down</strong>, +Z forward, origin at the lens). Opened directly in <code>readcsv.py</code> / Open3D / PyVista / Blender the subject is upside-down and floating somewhere arbitrary — there is no floor, no lab axes, and no true metric scale.</p>
+        <p>This module applies the <strong>change of basis</strong> (rotation + translation) into the lab frame defined by your <code>.ref3d</code> control points, using that camera's <code>.dlt3d</code>, so the result drops straight into vailá's normal rec3d workflow.</p>
+
+        <h2>Why a rigid transform alone is not enough</h2>
+        <p>Measured on the real 3-camera COD fixture (camera c1, 2026-08-05):</p>
+        <table>
+            <tr><th>step</th><th>result</th></tr>
+            <tr><td>true focal from the <code>.dlt3d</code> decomposition</td><td><strong>851.7 px</strong></td></tr>
+            <tr><td>focal <code>sam3dinov3.py</code> actually assumed (no <code>--focal-px</code>, default FOV √(W²+H²))</td><td><strong>2202.9 px</strong> — a factor of <strong>2.56</strong></td></tr>
+            <tr><td>monocular depth</td><td>~15.9 m, where the calibrated volume is at <strong>3.9–11.7 m</strong></td></tr>
+            <tr><td>plain rotate+translate into the lab</td><td>58.8 px reprojection, <strong>0 of 70</strong> markers inside the volume</td></tr>
+            <tr><td>rescaling the translation by the focal ratio</td><td><strong>worse</strong> (130.4 px) — the true camera also has a different principal point</td></tr>
+        </table>
+
+        <h2>What actually works</h2>
+        <p>Keep the monocular body's metric <strong>shape</strong> (focal-independent, and the thing the network genuinely estimates), and solve only <strong>where that body sits</strong> by minimising the reprojection of its own 2D keypoints through the <strong>real DLT camera</strong>:</p>
+        <ul>
+            <li><code>solve_placement_translation</code> — closed form. The DLT projection equations are linear in the world point, so each keypoint gives two linear equations; all are solved together by least squares.</li>
+            <li><code>refine_placement</code> — refines rotation <strong>and</strong> translation (6 DOF) against the same residual.</li>
+        </ul>
+        <p>Result on that fixture, 631 frames: <strong>1.18 px</strong> mean reprojection — better than the DLT calibration's own <strong>2.35 px</strong> residual on its 12 control points. The 6-DOF refinement rotates the body a median of only <strong>9.5°</strong> from the network's own orientation, the systematic correction expected from a 2.56× focal error rather than noise fitting.</p>
+        <div class="note"><strong>Scale is deliberately not a free parameter.</strong> From one camera, a bigger body further away reprojects identically, so a free scale is unidentifiable and would quietly absorb real depth. The body's metric size comes from the network and is left alone.</div>
+
+        <h2>Independent validation (constraints the fit never uses)</h2>
+        <table>
+            <tr><th>check</th><th>result</th></tr>
+            <tr><td>lowest foot above the floor plane Z=0</td><td><strong>+0.050 m</strong> mean (p5 −0.038, p95 +0.123)</td></tr>
+            <tr><td>markers inside the calibrated volume</td><td><strong>100 %</strong></td></tr>
+            <tr><td>horizontal speed</td><td>median 3.4, p95 5.6, max 7.8 m/s</td></tr>
+        </table>
+        <p>The fit is driven purely by 2D reprojection and never sees the floor, so the foot contact is genuine evidence that absolute depth <strong>and</strong> body size are jointly right to a few percent.</p>
+
+        <h2>Temporal smoothing (<code>--smooth-hz</code>, default 6 Hz)</h2>
+        <p>Monocular depth flickers. Raw, the fixture produced pelvis speeds peaking at <strong>27.5 m/s</strong> — physically impossible. The jitter is in the camera's depth direction (translation std 31/45 mm per frame horizontally vs only 6 mm vertically), i.e. a <em>placement</em> artifact, not articulation.</p>
+        <p>The zero-lag Butterworth is therefore applied to the <strong>6-DOF placement</strong>, never to the 70 marker trajectories: the body stays exactly rigid within each frame, so no filter can distort a limb length, and articulated motion is untouched. Measured: peak speed 27.5 → <strong>7.8 m/s</strong>, p95 12.6 → 5.6 m/s, at a cost of only 1.01 → 1.18 px (still well under the calibration's own 2.35 px), floor contact unchanged. Use <code>--no-smooth</code> for the raw placement.</p>
+        <div class="note">
+            <h3>Gotcha — the rotation origin decides whether smoothing works at all</h3>
+            <p>Smoothing <code>(R, T)</code> is <strong>not</strong> invariant to where the body shape is centred, because <code>T</code> is the world position of the shape's origin, so the filter must track that point. The raw fit <em>is</em> invariant (identical 1.01 px either way), which makes this easy to get wrong silently.</p>
+            <p>Measured: centring on the plain marker centroid — which for MHR70 sits near the <strong>hands</strong>, since 42 of its 70 markers are finger joints, moving at p95 13.6 m/s — left 6 Hz smoothing nearly useless (1.88 px mean / 24.06 px max, still a 26.3 m/s spike). Centring on the hip midpoint (origin at p95 5.6 m/s) gave 1.18 px / 3.45 px and 7.75 m/s.</p>
+            <p>Hence the default <code>--origin-markers 10 11</code> (MHR70 hips); override for a different marker layout.</p>
+        </div>
+
+        <h2>Inputs</h2>
+        <table>
+            <tr><th>Argument</th><th>Meaning</th></tr>
+            <tr><td><code>--mono3d</code></td><td>Monocular 3D CSV in the <strong>camera frame</strong>, wide, read by column <strong>order</strong> only (col 0 = frame, then x,y,z per marker): <code>*_mhr70_rec3d.csv</code> or <code>*_mhr70_3d.csv</code>.</td></tr>
+            <tr><td><code>--pixels</code></td><td>The <strong>same person's</strong> 2D keypoints in pixels, wide (col 0 = frame, then x,y): <code>*_id_NN_markers.csv</code>. Optional — falls back to the sibling <code>*_sam3dinov3_keypoints2d.csv</code>.</td></tr>
+            <tr><td><code>--dlt3d</code></td><td>That camera's DLT3D coefficients (1 row = fixed camera, or one row per frame).</td></tr>
+            <tr><td><code>--ref3d</code></td><td>Optional control points — used only to <strong>validate</strong> the calibration and report the working volume, never to fit anything.</td></tr>
+            <tr><td><code>--fps</code></td><td>Point rate in Hz; fractional rates accepted (e.g. <code>119.88012001</code>).</td></tr>
+            <tr><td><code>--smooth-hz</code> / <code>--no-smooth</code></td><td>Placement smoothing cutoff (default 6 Hz) / disable it.</td></tr>
+            <tr><td><code>--origin-markers</code></td><td>1-based markers whose midpoint the placement rotates about (default <code>10 11</code>).</td></tr>
+            <tr><td><code>--skeleton</code></td><td>Skeleton JSON for the generated Blender script.</td></tr>
+        </table>
+
+        <h2>Outputs</h2>
+        <table>
+            <tr><th>File</th><th>Content</th></tr>
+            <tr><td><code>&lt;base&gt;.csv</code> / <code>.3d</code></td><td>World-frame 3D, vailá rec3d convention (<code>p1_x,p1_y,p1_z,…</code>)</td></tr>
+            <tr><td><code>&lt;base&gt;_m.c3d</code> / <code>&lt;base&gt;_mm.c3d</code></td><td>C3D in metres / millimetres</td></tr>
+            <tr><td><code>&lt;base&gt;.bvh</code></td><td>Mocap for Blender (Y/Z swapped)</td></tr>
+            <tr><td><code>&lt;base&gt;_blender_skeleton_viz.py</code></td><td>Blender companion script</td></tr>
+            <tr><td><code>&lt;base&gt;_alignment.csv</code></td><td>Per-frame reprojection, rotation vector, translation, points used</td></tr>
+            <tr><td><code>README_monocular_dlt_align.txt</code></td><td>What was done, the quality numbers, and the caveats</td></tr>
+        </table>
+
+        <h2>Example</h2>
+        <pre><code>python -m vaila.monocular_dlt_align \
+  --mono3d c1_cod_sam3dinov3_visualized_id_04/c1_cod_id_04_mhr70_rec3d.csv \
+  --pixels c1_cod_sam3dinov3_visualized_id_04/c1_cod_id_04_markers.csv \
+  --dlt3d  c1_cod_markers_1_line.dlt3d \
+  --ref3d  c1c2c3_cod.ref3d \
+  --skeleton vaila/skeletons/sam3dinov3_mhr70.json \
+  --fps 119.88012001 -o ./out</code></pre>
+
+        <h2>Caveats</h2>
+        <ul>
+            <li>This is still a <strong>monocular</strong> estimate placed in a calibrated frame — <strong>not a triangulation</strong>. Body proportions come entirely from the network; if it estimates the wrong stature, depth absorbs that error.</li>
+            <li><strong>With 2+ synchronised calibrated cameras, prefer <a href="rec3d_one_dlt3d.html">rec3d_one_dlt3d</a></strong> — real triangulation.</li>
+            <li>Depth is the least certain axis: the reprojection residual constrains the viewing rays far better than the distance along them.</li>
+        </ul>
+
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><a href="sam3dinov3.html">sam3dinov3</a> / <a href="sam3dinov3_visualize.html">sam3dinov3_visualize</a></td><td>Produce the monocular camera-frame input</td></tr>
+            <tr><td><a href="rec3d_one_dlt3d.html">rec3d_one_dlt3d</a></td><td>True multi-camera DLT triangulation — prefer it when available</td></tr>
+            <tr><td><a href="dlt3d.html">dlt3d</a></td><td>Computes the <code>.dlt3d</code> coefficients from calibration</td></tr>
+        </table>
+
+        <h2>Testing</h2>
+        <ul>
+            <li><code>tests/test_monocular_dlt_align.py</code> — synthetic, CPU-only: recovers a known camera from its own DLT, the OpenCV +Y down convention on real coefficients, known placements (translation and 6-DOF), missing-pixel handling, smoothing behaviour including quaternion hemisphere continuity, and that the rotation origin does <strong>not</strong> change the raw fit.</li>
+        </ul>
+
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

@@ -152,6 +152,7 @@ fifa = [
     "roma",
     "braceexpand",
     "tqdm",
+    "termcolor",
 ]
 sapiens = [
     "transformers>=4.40",

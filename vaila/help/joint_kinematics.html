@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - joint_kinematics</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; color: #212529; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        ul { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i>vailá</i> - joint_kinematics</h1>
+
+        <div class="module-info">
+            <h3>Module information</h3>
+            <p><strong>Category:</strong> Processing</p>
+            <p><strong>File:</strong> vaila/joint_kinematics.py</p>
+            <p><strong>Version:</strong> 0.3.99</p>
+            <p><strong>Author:</strong> Paulo Santiago</p>
+            <p><strong>GUI:</strong> No &nbsp; <strong>CLI:</strong> No (library module)</p>
+        </div>
+
+        <h2>Description</h2>
+        <p>Shared math turning SAM 3D Body's per-joint rotation output into biomechanically usable joint angles (Euler/Cardan degrees + quaternion), consumed by <strong>sam3dinov3</strong> (writes <code>*_sam3dinov3_joint_angles.csv</code>), <strong>sam3dinov3_visualize</strong> (filters it by selected ID), and <strong>rec3d_one_dlt3d</strong> (re-exports the winning camera's rows unchanged into the DLT-triangulated output).</p>
+        <p><i>vailá</i> had no single existing 3D joint-angle convention to copy — three partial, mutually inconsistent ones already existed:</p>
+        <ul>
+            <li><strong>rotation.py</strong>: <code>scipy</code> <code>Rotation.from_matrix(...).as_euler("xyz")</code>, but only SEGMENT-vs-LAB-FRAME angles (never one segment relative to its parent), used by <code>cluster_analysis.py</code>/<code>mocap_analysis.py</code>.</li>
+            <li><strong>mpangles.py</strong>: pure 2D vector angles, no rotation matrices at all.</li>
+            <li>IMU modules (<code>imu_analysis.py</code>, <code>vaila_deadlift_imu.py</code>): explicit scalar-first <code>[w, x, y, z]</code> quaternions. <code>rotation.py.rotmat2quat</code> also <em>claims</em> scalar-first in its docstring but actually returns scipy's scalar-last <code>[x, y, z, w]</code> — a real inconsistency this module deliberately does not repeat.</li>
+        </ul>
+        <p>This module keeps <code>rotation.py</code>'s established Euler sequence (<code>"xyz"</code>, the repo-wide default outside the IMU modules' own aerospace ZYX convention) and the IMU modules' scalar-first quaternion convention.</p>
+        <p><strong>Source of the rotations:</strong> SAM 3D Body's MHR (Momentum Human Rig) model regresses a full per-joint GLOBAL rotation for its own <strong>127-joint rig</strong> (<code>out["pred_global_rots"]</code>, not the 70-keypoint <code>MHR70_NAMES</code> list — that is a position-only subset for 2D/3D keypoint output). This is the model's own regressed body pose, not a 3-point plane heuristic reconstructed from joint positions — the latter cannot resolve rotation about a segment's own long axis (e.g. femur internal/external rotation), which a plain hip-knee-ankle plane leaves undetermined.</p>
+        <p><strong>Kinematic tree:</strong> <code>MHR127_PARENTS</code> (127 parent indices, root=0/parent=-1) was extracted directly from the shipped <code>assets/mhr_model.pt</code> TorchScript checkpoint's <code>character_torch.skeleton.joint_parents</code> buffer — Meta's "Momentum" rig, loaded upstream from an FBX file via <code>pymomentum</code> (a native dependency not part of <i>vailá</i>'s own dependency tree). The FBX's per-joint <strong>names</strong> are therefore not available in the shipped checkpoint or in the <code>sam_3d_body</code>/<code>mhr</code> Python packages (neither ships a joint-name list; TorchScript buffers cannot hold strings). Names for the joints that matter for gait/posture analysis are instead recovered empirically by matching each rig joint's 3D position against the already-named <code>MHR70_NAMES</code> keypoint set for the same frame (<code>infer_joint_names_from_positions</code>) — validated on real GPU output (2026-08-05): 55/70 MHR70 names matched within 3 cm (everything but face/eye/ear landmarks, which have no rig ROTATION joint of their own). The remaining rig joints keep a generic <code>joint_NNN</code> label.</p>
+        <p><strong>Local vs. global:</strong> biomechanical "joint angle" means the CHILD segment's rotation relative to its PARENT segment, not relative to the camera or lab frame — <code>local_rotations_from_global</code> computes exactly that from the model's global rotations and the kinematic tree above.</p>
+        <p><strong>Why the DLT/world pipeline needs no realignment:</strong> a local joint rotation is intrinsic to the body's own articulation (an elbow bent 90&deg; is 90&deg; no matter which way the camera or world frame is oriented), so it is invariant under the Umeyama transform <code>rec3d_one_dlt3d.py</code> applies to place a monocular mesh into DLT-triangulated world space. <code>rec3d_one_dlt3d.py</code> therefore simply re-exports, per solved frame, the winning camera's own local joint-angle row — the same per-frame camera selection its mesh alignment already makes — with no rotation composition of its own.</p>
+        <p><strong>Gimbal lock:</strong> any 3-parameter Euler representation has a mathematical singularity at &plusmn;90&deg; on the middle axis; <code>scipy</code> warns ("Gimbal lock detected... third angle set to zero") and pins the ambiguous angle rather than guessing — observed on real data. The quaternion columns have no such singularity and should be treated as the lossless representation; the Euler columns are for human readability.</p>
+        <p>This module never loads SAM3/SAM 3D Body weights and has no CUDA/GPU dependency — pure NumPy/scipy, so it runs anywhere.</p>
+
+        <h2>Main functions</h2>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>local_rotations_from_global(global_rots, parents)</code></td><td>Child-relative-to-parent rotations from the model's own global ones.</td></tr>
+            <tr><td><code>rotmat_to_euler_xyz_deg(rotmats)</code></td><td>Cardan/Tait-Bryan XYZ Euler angles in degrees, matching rotation.py's sequence.</td></tr>
+            <tr><td><code>rotmat_to_quat_wxyz(rotmats)</code></td><td>Scalar-first (w, x, y, z) quaternions, matching the IMU modules (scipy itself is scalar-last).</td></tr>
+            <tr><td><code>infer_joint_names_from_positions(...)</code></td><td>Recover joint names for the 127-joint rig from a 70-name keypoint set by nearest-position matching.</td></tr>
+            <tr><td><code>MHR127_PARENTS</code></td><td>127-entry parent-index tuple, the MHR rig's kinematic tree (constant, extracted from the checkpoint).</td></tr>
+        </table>
+
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><strong>sam3dinov3</strong></td><td>Captures pred_global_rots/pred_joint_coords from SAM 3D Body and writes *_sam3dinov3_joint_angles.csv using this module.</td></tr>
+            <tr><td><strong>sam3dinov3_visualize</strong></td><td>Filters the joint-angle CSV to the selected person ID, like its other per-person CSVs.</td></tr>
+            <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Re-exports the winning camera's local joint-angle rows into &lt;file_base&gt;_joint_angles.csv alongside the DLT-triangulated mesh/BVH.</td></tr>
+            <tr><td><strong>rotation.py</strong></td><td>The pre-existing (segment-vs-lab-frame) 3D angle convention this module deliberately stays consistent with (Euler sequence) and deliberately corrects (quaternion scalar order).</td></tr>
+        </table>
+
+        <h2>Testing</h2>
+        <ul>
+            <li><code>tests/test_joint_kinematics.py</code> — synthetic, CPU-only: kinematic-tree topology, local-rotation recovery against a known ground-truth delta, Euler/quaternion round-trips, name-inference matching/tie-breaking/NaN-handling.</li>
+            <li><code>tests/test_sam3dinov3.py</code> — <code>_instances_from_outputs</code>/<code>write_long_joint_angles_csv</code>/<code>_joint_rig_names</code> with synthetic (but shape/orthonormality-correct) rotation data.</li>
+            <li>Smoke-tested manually against a real forward pass on an RTX 4090 (2026-08-05): pred_global_rots shape (127, 3, 3), every sampled rotation orthonormal (det &asymp; 1.0000), 55/70 names matched, decoded angles biomechanically plausible (knee ~44&deg; flexion, hip ~64&deg;, ankle ~13&deg; for a mid-stride frame). Not repeatable in CI (needs gated CUDA weights).</li>
+        </ul>
+
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

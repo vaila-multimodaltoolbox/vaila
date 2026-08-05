@@ -2361,9 +2361,21 @@ class Vaila(tk.Tk):
             )
             self.sam3dinov3_visualize_video()
 
+        def use_monocular_dlt_align():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 3D",
+                "Monocular -> DLT world",
+                "uv run python -m vaila.monocular_dlt_align",
+                note="place a 1-camera monocular reconstruction in the calibrated lab frame",
+            )
+            self.monocular_dlt_align()
+
         place_section("SAM3+DINOv3 (3D)")
         place_button("SAM3+DINOv3 3D", use_sam3dinov3, width=26)
         place_button("SAM3+DINOv3 Visualize ID", use_sam3dinov3_visualize, width=26)
+        place_section("Calibrated world frame (needs .dlt3d)")
+        place_button("Monocular -> DLT world", use_monocular_dlt_align, width=26)
 
     # B_r2_c1
     def vector_coding(self):
@@ -3704,6 +3716,22 @@ class Vaila(tk.Tk):
         run_vaila_module(
             "vaila.sam3dinov3_visualize",
             "vaila/sam3dinov3_visualize.py",
+            extra_py_flags=("-u",),
+        )
+
+    def monocular_dlt_align(self):
+        """Place a single-camera monocular 3D run into the DLT-calibrated lab frame."""
+        print("\n" + "=" * 60)
+        print("Launching: vaila.monocular_dlt_align")
+        print(">> Equivalent launch CLI: uv run python -m vaila.monocular_dlt_align")
+        print("Features: camera-frame -> lab-frame change of basis from a .dlt3d,")
+        print("          placement solved by reprojection through the real camera,")
+        print("          writes CSV/.3d/C3D/BVH + a Blender companion script.")
+        print("Runtime: CPU only; no model weights are loaded.")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.monocular_dlt_align",
+            "vaila/monocular_dlt_align.py",
             extra_py_flags=("-u",),
         )
 

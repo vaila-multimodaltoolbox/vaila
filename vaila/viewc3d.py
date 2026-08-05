@@ -1971,13 +1971,27 @@ def run_viewc3d(c3d_path=None):
             margin=1.3,
         ):
             params = view_ctl.convert_to_pinhole_camera_parameters()
-            # Intrinsics like Blender 16:9 with ~40° horizontal FOV
+            # Open3D REJECTS convert_from_pinhole_camera_parameters() when the
+            # intrinsic size differs from the live window ("failed because
+            # window height and width do not match"), and it only warns -- the
+            # camera is then silently left untouched while the code below still
+            # reports success. So take the real window size from the current
+            # parameters instead of hardcoding one, and keep the passed-in
+            # width/height only as a fallback if Open3D reports nothing usable.
+            win_w = int(getattr(params.intrinsic, "width", 0) or 0)
+            win_h = int(getattr(params.intrinsic, "height", 0) or 0)
+            if win_w <= 0 or win_h <= 0:
+                win_w, win_h = int(width), int(height)
+
             fov_x = np.deg2rad(fov_x_deg)
-            fx = width / (2.0 * np.tan(fov_x / 2.0))
+            fx = win_w / (2.0 * np.tan(fov_x / 2.0))
             fy = fx  # square pixels
-            params.intrinsic.width = width
-            params.intrinsic.height = height
-            params.intrinsic.set_intrinsics(width, height, fx, fy, width / 2.0, height / 2.0)
+            # Open3D expects the principal point at (w/2 - 0.5, h/2 - 0.5) for a
+            # window camera; an exactly-centred one is also rejected.
+            params.intrinsic.set_intrinsics(
+                win_w, win_h, fx, fy, win_w / 2.0 - 0.5, win_h / 2.0 - 0.5
+            )
+            width, height = win_w, win_h
 
             # Vertical FOV implied
             fov_y = 2.0 * np.arctan((height / 2.0) / fy)
@@ -1998,7 +2012,14 @@ def run_viewc3d(c3d_path=None):
             up = np.array([0.0, 0.0, 1.0])
             params.extrinsic = compute_lookat_extrinsic(eye, center, up)
 
-            view_ctl.convert_from_pinhole_camera_parameters(params)
+            # Returns False (plus an Open3D warning) when it refuses; report
+            # that honestly instead of claiming the camera was configured.
+            applied = view_ctl.convert_from_pinhole_camera_parameters(params)
+            if applied is False:
+                print(
+                    "[yellow]Open3D refused the camera intrinsics "
+                    f"({width}x{height}); keeping its default view.[/yellow]"
+                )
             try:
                 # Generous near/far planes based on scale
                 max_dimension = max(x_range, y_range, z_range, 1.0)
@@ -2033,7 +2054,7 @@ def run_viewc3d(c3d_path=None):
         if model.is_z_up():
             ctr.set_up((0.0, 0.0, 1.0))
             print("[green]Camera: Z-up orientation applied (biomechanics convention)[/green]")
-        print("[green]Camera configured with Blender-like FOV (~40° horiz) and 16:9 aspect[/green]")
+        print("[green]Camera configured (50° horizontal FOV, fitted to the data)[/green]")
 
     except Exception as e:
         print(f"[red] Camera setup failed: {str(e)}[/red]")
