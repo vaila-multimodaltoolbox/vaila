@@ -26,6 +26,15 @@ tracking and band calibration:
 
 → [docs/vek.md](vek.md)
 
+### 📐 DLT 3D Reconstruction and Mesh Alignment — Theory and Validation
+
+Didactic derivation of the DLT method (calibration + multi-camera
+triangulation) and the Umeyama similarity-transform mesh alignment that
+fuses SAM3+DINOv3's monocular body mesh into the DLT world frame, with real
+validation numbers and honestly-stated open items:
+
+→ [docs/dlt_reconstruction_and_mesh_alignment.md](dlt_reconstruction_and_mesh_alignment.md)
+
 ---
 
 ## 🇬🇧 English — Project Overview

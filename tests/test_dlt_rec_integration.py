@@ -142,7 +142,9 @@ def test_rec3d_integration(test_data):
     # Check if a reconstructed folder was created
     subfolders = [f for f in output_dir.iterdir() if f.is_dir() and "vaila_rec" in f.name]
     assert len(subfolders) >= 1
-    assert any(f.suffix == ".3d" for f in subfolders[0].iterdir())
+    csv_file = next(f for f in subfolders[0].iterdir() if f.suffix == ".csv")
+    first_row = csv_file.read_text(encoding="utf-8").splitlines()[1]
+    assert first_row.startswith("0,") or first_row.startswith("1,")
 
 
 def test_rec3d_one_dlt3d_integration(test_data):
@@ -182,3 +184,6 @@ def test_rec3d_one_dlt3d_integration(test_data):
     files = list(subfolders[0].iterdir())
     assert any(f.suffix == ".csv" for f in files)
     assert any(f.suffix == ".3d" for f in files)
+    csv_file = next(f for f in files if f.suffix == ".csv")
+    first_row = csv_file.read_text(encoding="utf-8").splitlines()[1]
+    assert first_row.startswith("0,") or first_row.startswith("1,")

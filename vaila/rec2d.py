@@ -72,7 +72,9 @@ def rec2d(A, cc2d):
     return H
 
 
-def process_files_in_directory(dlt_params_df, input_directory, output_directory, data_rate):
+def process_files_in_directory(
+    dlt_params_df, input_directory, output_directory, data_rate, gui=True
+):
     """Process multiple CSV files in a directory using DLT2D parameters.
 
     Args:
@@ -92,7 +94,10 @@ def process_files_in_directory(dlt_params_df, input_directory, output_directory,
     csv_files = sorted([f for f in os.listdir(input_directory) if f.endswith(".csv")])
 
     if not csv_files:
-        messagebox.showerror("Error", "No CSV files found in the selected directory!")
+        # Guarded: an unguarded messagebox blocks a headless/CLI run forever.
+        print("[red]Error: No CSV files found in the selected directory![/red]")
+        if gui:
+            messagebox.showerror("Error", "No CSV files found in the selected directory!")
         return
 
     print(f"Found {len(csv_files)} CSV files to process")
@@ -171,17 +176,21 @@ def process_files_in_directory(dlt_params_df, input_directory, output_directory,
     print(f"Data rate used: {data_rate} Hz")
     print(f"Output directory: {output_dir}")
 
-    messagebox.showinfo(
-        "Processing Complete",
-        f"2D reconstruction completed successfully!\n\n"
-        f"Processed: {total_files} files\n"
-        f"Data rate: {data_rate} Hz\n"
-        f"Output directory: {os.path.basename(output_dir)}",
-    )
+    # Must stay behind `if gui:` — on the CLI path there is no Tk root and
+    # nobody to click the dialog, so an unguarded showinfo() blocks forever
+    # on a machine with a real DISPLAY (and raises TclError without one).
+    if gui:
+        messagebox.showinfo(
+            "Processing Complete",
+            f"2D reconstruction completed successfully!\n\n"
+            f"Processed: {total_files} files\n"
+            f"Data rate: {data_rate} Hz\n"
+            f"Output directory: {os.path.basename(output_dir)}",
+        )
     print(f"Reconstructed 2D coordinates saved to {output_dir}")
 
 
-def run_rec2d(dlt_file=None, input_directory=None, output_directory=None, data_rate=None):
+def run_rec2d(dlt_file=None, input_directory=None, output_directory=None, data_rate=None, gui=True):
     """Main entry point for 2D reconstruction.
 
     When called without arguments, opens GUI dialogs. When all arguments are
@@ -250,7 +259,7 @@ def run_rec2d(dlt_file=None, input_directory=None, output_directory=None, data_r
     print(f"  - DLT parameters for {len(dlt_params_df)} frames")
     print("-" * 80)
 
-    process_files_in_directory(dlt_params_df, input_directory, output_directory, data_rate)
+    process_files_in_directory(dlt_params_df, input_directory, output_directory, data_rate, gui=gui)
 
 
 if __name__ == "__main__":
@@ -267,9 +276,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    # Headless: every argument came from the command line, so no Tk dialog
+    # should ever open (an unguarded one would hang the process).
+    cli_mode = bool(args.dlt_file and args.input_dir and args.output_dir)
     run_rec2d(
         dlt_file=args.dlt_file,
         input_directory=args.input_dir,
         output_directory=args.output_dir,
         data_rate=args.rate,
+        gui=not cli_mode,
     )
