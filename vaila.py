@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 02 August 2026
-Version: 0.3.98
+Update Date: 05 August 2026
+Version: 0.3.99
 
 Example of usage:
 uv run vaila.py
@@ -254,7 +254,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 02.Aug.2026 v0.3.98 (Python 3.12.13)
+    vailá - 04.Aug.2026 v0.3.99 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -285,7 +285,7 @@ B1_r1_c3 - Motion Capture Full Body
 B1_r1_c4 - Markerless 2D (coringa: Standard/Advanced/YOLOv26, Yolo+Markerless_MP,
             YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID],
             Markerless Hands, MP Angles, Face Mesh, Markerless Live)
-B1_r1_c5 - Markerless 3D (coringa: Standard/Advanced YOLO lift, SAM3+DINOv3 3D [+Visualize ID])
+B1_r1_c5 - Markerless 3D (coringa: SAM3+DINOv3 3D [+Visualize ID])
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
@@ -324,7 +324,7 @@ C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 -> C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV 3D    C_C_r2_c1 - Plot 2D
 C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Draw Sports    C_C_r3_c2 - Stroboscopic
-C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
+C_C_r4_c1 - Animation Blender                        C_C_r4_c2 - vailá
 C_C_r5_c1 - vailá         C_C_r5_c2 - vailá          C_C_r5_c3 - vailá
 
 Type 'h' for help or 'exit' to quit.
@@ -369,7 +369,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 02.Aug.2026 v0.3.98 (Python 3.12.13)")
+        self.title("vailá - 04.Aug.2026 v0.3.99 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -1520,11 +1520,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_C_r4_c1 - Visualization: vailá
-        vaila_btn19 = tk.Button(
+        # C_C_r4_c1 - Visualization: Animation Blender
+        animation_blender_btn = tk.Button(
             tools_col3,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Animation Blender",
+            command=self.animation_blender,
             width=button_width,
         )
 
@@ -1559,7 +1559,7 @@ class Vaila(tk.Tk):
         plot_3d_btn.grid(row=1, column=1, padx=2, pady=2)
         draw_sports_fields_btn.grid(row=2, column=0, padx=2, pady=2)
         stroboscopic_btn.grid(row=2, column=1, padx=2, pady=2)
-        vaila_btn19.grid(row=3, column=0, padx=2, pady=2)
+        animation_blender_btn.grid(row=3, column=0, padx=2, pady=2)
         vaila_btn20.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn21.grid(row=4, column=0, padx=2, pady=2)
         vaila_btn22.grid(row=4, column=1, padx=2, pady=2)
@@ -2333,49 +2333,14 @@ class Vaila(tk.Tk):
 
     # B_r1_c5
     def markerless_3d_analysis(self):
-        """Chooser for every 3D markerless pipeline.
+        """Chooser for 3D markerless pipeline.
 
-        A "coringa" (wildcard) button: absorbs the only two 3D-native tools
-        formerly under the YOLO + FB chooser (SAM3+DINOv3 3D and its
-        Visualize ID rerenderer). Everything 2D-only from that same chooser
-        lives under Markerless 2D instead.
+        Presents the modern 3D-native tools: SAM3+DINOv3 3D and its
+        Visualize ID rerenderer.
         """
         dialog, place_button, place_section = self._build_grid_chooser_dialog(
-            "Markerless 3D — Select Tool", width=640, height=360
+            "Markerless 3D — Select Tool", width=640, height=220
         )
-
-        def use_standard_separate():
-            dialog.destroy()
-            try:
-                run_vaila_module("vaila.markerless_3d_analysis")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to launch markerless 3D analysis: {e}")
-
-        def use_standard_same():
-            dialog.destroy()
-            try:
-                from vaila.markerless_3d_analysis import App
-
-                sub_dialog = tk.Toplevel(self)
-                App(sub_dialog)
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to run markerless 3D analysis: {e}")
-
-        def use_advanced_separate():
-            dialog.destroy()
-            try:
-                run_vaila_module("vaila.markerless3d_analysis_v2")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to launch markerless 3D analysis: {e}")
-
-        def use_advanced_same():
-            dialog.destroy()
-            try:
-                from vaila.markerless3d_analysis_v2 import process_videos_in_directory
-
-                process_videos_in_directory(existing_root=self)
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to run markerless 3D analysis: {e}")
 
         def use_sam3dinov3():
             dialog.destroy()
@@ -2395,12 +2360,6 @@ class Vaila(tk.Tk):
                 "uv run python -u vaila/sam3dinov3_visualize.py",
             )
             self.sam3dinov3_visualize_video()
-
-        place_section("Native pipelines")
-        place_button("Standard (separate process)", use_standard_separate, width=26)
-        place_button("Advanced YOLO (separate process)", use_advanced_separate, width=26)
-        place_button("Standard (same process)", use_standard_same, width=26)
-        place_button("Advanced YOLO (same process)", use_advanced_same, width=26)
 
         place_section("SAM3+DINOv3 (3D)")
         place_button("SAM3+DINOv3 3D", use_sam3dinov3, width=26)
@@ -3315,6 +3274,19 @@ class Vaila(tk.Tk):
         from vaila.readcsv import show_csv
 
         show_csv()
+
+    # C_C_r4_c1
+    def animation_blender(self):
+        """Opens a rec3d reconstruction in Blender, fully set up.
+
+        Launches Blender on the run's ``*_blender_skeleton_viz.py`` companion
+        script (regenerating it when missing), so the BVH, mesh sequence,
+        skeleton bones, scene rate and frame range are all in place on
+        startup — the steps Blender's own importers skip.
+        """
+        from vaila import blender_viz
+
+        blender_viz.run_blender_viz()
 
     # C_C_r1_c3
     def plot_2d_data(self):

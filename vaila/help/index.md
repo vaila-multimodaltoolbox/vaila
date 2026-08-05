@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 132 | **Categories:** 7 | **Generated on:** 02/08/2026 (v0.3.98)
+**Total documented modules:** 134 | **Categories:** 7 | **Generated on:** 05/08/2026 (v0.3.99)
 
 ## Markerless 2D chooser (Frame B → B1_r1_c4)
 
@@ -365,7 +365,7 @@ Frame B button **Markerless 3D** opens (v0.3.97 — absorbed the 3D-native half 
 - **fifa_dataset_builder (FIFA Dataset Builder)**
   - [📄 HTML](fifa_dataset_builder.html)
 
-## Processing (16 modules)
+## Processing (17 modules)
 
 - **data_processing**
   - [📄 HTML](data_processing.html)
@@ -385,6 +385,9 @@ Frame B button **Markerless 3D** opens (v0.3.97 — absorbed the 3D-native half 
 - **interp_smooth_split**
   - [📄 HTML](interp_smooth_split.html)
   - [📝 Markdown](interp_smooth_split.md)
+- **mesh_alignment (Umeyama fit for rec3d_one_dlt3d mesh export)**
+  - [📄 HTML](mesh_alignment.html)
+  - [📝 Markdown](mesh_alignment.md)
 - **modifylabref**
   - [📄 HTML](modifylabref.html)
   - [📝 Markdown](modifylabref.md)
@@ -455,8 +458,11 @@ Frame B button **Markerless 3D** opens (v0.3.97 — absorbed the 3D-native half 
   - [📄 HTML](yolov12track.html)
   - [📝 Markdown](yolov12track.md)
 
-## Visualization (6 modules)
+## Visualization (7 modules)
 
+- **blender_viz (Animation Blender — launch Blender on a rec3d run)**
+  - [📄 HTML](blender_viz.html)
+  - [📝 Markdown](blender_viz.md)
 - **plotting**
   - [📄 HTML](plotting.html)
   - [📝 Markdown](plotting.md)

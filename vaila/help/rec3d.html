@@ -25,13 +25,13 @@
 </head>
 <body>
     <div class="container">
-        <h1>vailá - rec3d</h1>
+        <h1><i>vailá</i> - rec3d</h1>
 
         <div class="module-info">
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/rec3d.py</p>
-            <p><strong>Version:</strong> 0.3.94</p>
+            <p><strong>Version:</strong> 0.3.99</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
@@ -67,8 +67,26 @@
             <tr><th>File</th><th>Description</th></tr>
             <tr><td><code>rec3d_*.csv</code></td><td>3D points: frame, p1_x, p1_y, p1_z, p2_x, ...</td></tr>
             <tr><td><code>rec3d_*.3d</code></td><td>Same data as CSV (duplicate format).</td></tr>
+            <tr><td><code>rec3d_*.bvh</code></td><td>Mocap format for Blender (each marker as an independent ROOT node).</td></tr>
+            <tr><td><code>rec3d_*_blender_skeleton_viz.py</code></td><td>Companion script (see "Skeleton visualization" below).</td></tr>
         </table>
-        <p>Unlike <code>rec3d_one_dlt3d</code>, this module does not export C3D/BVH; use <code>rec3d_one_dlt3d</code> or <code>readcsv_export</code> if you need those formats from the resulting CSV.</p>
+        <p>Unlike <code>rec3d_one_dlt3d</code>, this module does not export C3D; use <code>rec3d_one_dlt3d</code> or <code>readcsv_export</code> if you need C3D from the resulting CSV. <strong>v0.3.99</strong> added the same BVH + skeleton-visualization export <code>rec3d_one_dlt3d</code> already had.</p>
+
+        <h2>Skeleton visualization (--swap-yz / --skeleton)</h2>
+        <p>Every run also writes a <code>.bvh</code> file (each marker as an independent ROOT node) and a <code>_blender_skeleton_viz.py</code> companion script. The BVH imports natively into Blender; running the companion script inside Blender's Text Editor afterward draws bone connections between the markers using the <code>--skeleton</code> JSON's <code>"connections"</code> list (<code>[["pA","pB"], ...]</code>, referencing the <strong>1-based</strong> <code>pN</code> column index — always renumbered positionally, regardless of the original tracker's own column labels).</p>
+        <p>Ready-made presets for every tracker vailá supports ship in <code>vaila/skeletons/</code>:</p>
+        <table>
+            <tr><th>File</th><th>Keypoint set</th></tr>
+            <tr><td><code>mediapipe_pose33.json</code></td><td>MediaPipe BlazePose (33 kp)</td></tr>
+            <tr><td><code>yolo_coco17.json</code></td><td>YOLO / COCO-17</td></tr>
+            <tr><td><code>sam3dinov3_mhr70.json</code></td><td>SAM3+DINOv3 (SAM 3D Body) MHR70</td></tr>
+            <tr><td><code>sapiens2_goliath308.json</code></td><td>Sapiens2 Sociopticon/Goliath (308 kp)</td></tr>
+        </table>
+        <p>Pick the preset matching the tracker that produced your pixel CSVs (without <code>--skeleton</code>, a hardcoded MediaPipe-33 default is used). <code>--swap-yz</code> swaps Y/Z axes so height ends up vertical (Z-up) in Blender — <strong>this is the default since v0.3.99</strong>; pass <code>--no-swap-yz</code> to keep the raw DLT axes.</p>
+
+        <h3>The companion script imports everything already aligned (v0.3.99)</h3>
+        <p>Run <code>rec3d_*_blender_skeleton_viz.py</code> inside Blender (Text Editor &gt; Run Script) on an empty scene and it will, in order: set the scene rate and frame range, import the BVH, and draw the skeleton bones. It is also safe to run <em>after</em> importing the BVH/C3D by hand — it will not duplicate an existing armature and still fixes the scene settings.</p>
+        <p><strong>Why the script sets the scene rate itself:</strong> Blender's BVH importer defaults to <code>update_scene_fps=False</code> and <code>update_scene_duration=False</code>. Importing a 631-frame / 120 Hz capture with File &gt; Import &gt; BVH therefore leaves the scene at <strong>24 fps with frame_end=250</strong> — the animation plays in slow motion (26 s instead of 5.3 s) and stops a third of the way through, while an imported C3D (whose importer <em>does</em> read POINT:RATE) plays correctly. The exported data was never wrong; only the scene settings were. Fractional rates are preserved exactly via Blender's <code>fps</code>/<code>fps_base</code> pair (119.88012001 Hz → fps=120, fps_base=1.001).</p>
 
         <h2>GUI mode</h2>
         <p>Run with no arguments:</p>
@@ -77,24 +95,35 @@
             <li><strong>Input directory</strong> — a single folder containing exactly one pixel CSV per camera.</li>
             <li><strong>Output directory</strong> — where to create the timestamped result folder.</li>
             <li><strong>Data rate (Hz)</strong> — recorded in the console/summary.</li>
+            <li><strong>Swap Y/Z for BVH</strong> — defaults to Yes (height vertical in Blender); answer No only to keep raw DLT axes.</li>
+            <li><strong>(Optional) Skeleton Pose JSON</strong> — pick one of the <code>vaila/skeletons/</code> presets, or your own.</li>
         </ol>
 
         <h2>CLI mode</h2>
-        <p><strong>Required (headless):</strong> <code>--dlt-files</code>, <code>--input-dir</code>, <code>--output-dir</code>, <code>--rate</code>.</p>
+        <p><strong>Required (headless):</strong> <code>--dlt-files</code>, <code>--input-dir</code>, <code>--output-dir</code>, <code>--rate</code>. <strong>Optional:</strong> <code>--no-swap-yz</code>, <code>--skeleton</code>.</p>
         <table>
             <tr><th>Argument</th><th>Description</th></tr>
             <tr><td><code>--dlt-files</code> <em>FILE</em> [<em>FILE</em> ...]</td><td>DLT3D parameter files, one per camera (each with one row per frame).</td></tr>
             <tr><td><code>--input-dir</code> <em>DIR</em></td><td>Directory containing exactly one pixel CSV per camera, matching <code>--dlt-files</code> in count.</td></tr>
             <tr><td><code>--output-dir</code> <em>DIR</em></td><td>Output directory; a timestamped <code>vaila_rec3d_*</code> subfolder is created here.</td></tr>
             <tr><td><code>--rate</code> <em>HZ</em></td><td>Data frequency in Hz (recorded in the console summary). Accepts fractional rates, e.g. <code>119.88012001</code>.</td></tr>
+            <tr><td><code>--swap-yz</code></td><td>Swap Y and Z axes in BVH output so height is vertical (Z-up) in Blender. <strong>Default since v0.3.99</strong>; kept as an explicit opt-in.</td></tr>
+            <tr><td><code>--no-swap-yz</code></td><td>Keep the raw DLT axes in the BVH output (no Y/Z swap).</td></tr>
+            <tr><td><code>--skeleton</code> <em>FILE</em></td><td>Path to a skeleton connections JSON; see <code>vaila/skeletons/</code> for presets.</td></tr>
         </table>
-        <h3>Example</h3>
+        <h3>Examples</h3>
         <pre># Two moving/re-calibrated cameras, one pixel CSV each in ./cams
 python vaila/rec3d.py \
   --dlt-files cam1_matrix.dlt3d cam2_matrix.dlt3d \
   --input-dir ./cams \
   --output-dir ./out \
-  --rate 100</pre>
+  --rate 100
+
+# Same, with BVH Y/Z swap and a SAM3+DINOv3 skeleton for Blender
+python vaila/rec3d.py \
+  --dlt-files cam1_matrix.dlt3d cam2_matrix.dlt3d \
+  --input-dir ./cams --output-dir ./out --rate 119.88012001 \
+  --skeleton vaila/skeletons/sam3dinov3_mhr70.json   # --swap-yz is the default</pre>
 
         <h2>Main functions</h2>
         <table>
@@ -102,7 +131,9 @@ python vaila/rec3d.py \
             <tr><td><code>rec3d_multicam</code></td><td>Reconstruct one 3D point from multiple camera observations (DLT least squares). Shared with <code>rec3d_one_dlt3d</code>.</td></tr>
             <tr><td><code>load_pixel_csv_positional</code></td><td>Column-order-based pixel CSV reader, ignoring header labels. Shared with <code>rec3d_one_dlt3d</code>.</td></tr>
             <tr><td><code>find_common_frames</code></td><td>Sorted intersection of frame numbers across camera pixel files. Shared with <code>rec3d_one_dlt3d</code>.</td></tr>
-            <tr><td><code>process_files_in_directory</code></td><td>Core logic: correlate N camera pixel files by frame, look up per-frame DLT3D parameters, reconstruct, save CSV/.3d.</td></tr>
+            <tr><td><code>process_files_in_directory</code></td><td>Core logic: correlate N camera pixel files by frame, look up per-frame DLT3D parameters, reconstruct, save CSV/.3d/BVH + skeleton script.</td></tr>
+            <tr><td><code>save_rec3d_as_bvh</code></td><td>BVH export (owns this function; <code>rec3d_one_dlt3d</code> imports it).</td></tr>
+            <tr><td><code>generate_blender_companion_script</code></td><td>Skeleton-visualization companion script (owns this function; <code>rec3d_one_dlt3d</code> imports it).</td></tr>
             <tr><td><code>run_rec3d</code></td><td>GUI/CLI entry point.</td></tr>
         </table>
 
@@ -110,12 +141,12 @@ python vaila/rec3d.py \
         <table>
             <tr><th>Module</th><th>Role</th></tr>
             <tr><td><strong>dlt3d</strong></td><td>Compute DLT3D coefficients from calibration, one row per frame when the camera moves.</td></tr>
-            <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Same DLT3D method with one fixed set of parameters per camera; also exports C3D/BVH.</td></tr>
+            <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Same DLT3D method with one fixed set of parameters per camera; also imports <code>save_rec3d_as_bvh</code>/<code>generate_blender_companion_script</code> from this module.</td></tr>
             <tr><td><strong>readcsv_export</strong></td><td>CSV → C3D (used internally by rec3d_one_dlt3d); batch convert.</td></tr>
         </table>
 
         <div class="footer">
-            <p>Part of <strong>vailá</strong> - Multimodal Toolbox</p>
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
             <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>

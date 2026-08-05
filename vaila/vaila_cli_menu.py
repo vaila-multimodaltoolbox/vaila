@@ -17,8 +17,8 @@ from vaila.vaila_cli_hints import CliRunHint, get_cli_hint
 if TYPE_CHECKING:
     from vaila import Vaila
 
-__version__ = "0.3.98"
-__updated__ = "02 August 2026"
+__version__ = "0.3.99"
+__updated__ = "05 August 2026"
 
 _ROW_RE = re.compile(r"_r(\d+)_")
 _COL_RE = re.compile(r"_c(\d+)$")
@@ -144,7 +144,7 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     VailaMenuEntry("C_C_r2_c2", "C_C", "Visualization", "Plot 3D", "plot_3d_data"),
     VailaMenuEntry("C_C_r3_c1", "C_C", "Visualization", "Draw Sports", "draw_sports_fields_courts"),
     VailaMenuEntry("C_C_r3_c2", "C_C", "Visualization", "Stroboscopic", "run_stroboscopic"),
-    VailaMenuEntry("C_C_r4_c1", "C_C", "Visualization", "vailá", "show_vaila_message"),
+    VailaMenuEntry("C_C_r4_c1", "C_C", "Visualization", "Animation Blender", "animation_blender"),
     VailaMenuEntry("C_C_r4_c2", "C_C", "Visualization", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_C_r5_c1", "C_C", "Visualization", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_C_r5_c2", "C_C", "Visualization", "vailá", "show_vaila_message"),

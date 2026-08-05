@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - mesh_alignment</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; color: #212529; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        ul { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i>vailá</i> - mesh_alignment</h1>
+
+        <div class="module-info">
+            <h3>Module information</h3>
+            <p><strong>Category:</strong> Processing</p>
+            <p><strong>File:</strong> vaila/mesh_alignment.py</p>
+            <p><strong>Version:</strong> 0.3.99</p>
+            <p><strong>Author:</strong> Paulo Santiago</p>
+            <p><strong>GUI:</strong> No &nbsp; <strong>CLI:</strong> No (library module)</p>
+        </div>
+
+        <h2>Description</h2>
+        <p>Shared support module for <strong>rec3d_one_dlt3d</strong>'s mesh-for-Blender export feature. Provides:</p>
+        <ul>
+            <li><code>umeyama_alignment(source, target)</code> — closed-form similarity-transform fit (rotation + uniform scale + translation, Umeyama 1991) between two corresponding 3D point sets, with a degenerate/near-planar-input guard.</li>
+            <li><code>apply_similarity_transform(points, R, s, t)</code> — apply a fitted transform to any point set (markers or mesh vertices).</li>
+            <li><code>best_camera_alignment(source_points_per_camera, target_points)</code> — fit per camera, return the lowest-residual non-degenerate result.</li>
+            <li><code>read_obj_vertices</code> / <code>write_obj_mesh</code> / <code>write_ply_mesh</code> — minimal ASCII OBJ/PLY vertex I/O (faces loaded once from a shared <code>mesh_faces.npy</code>).</li>
+            <li><code>apply_blender_yz_swap(vertices, faces)</code> — rotate vertices <code>(x, y, z) &rarr; (x, z, -y)</code> into the Y-up file frame Blender's own importers expect (the convention <code>rec3d.save_rec3d_as_bvh</code> writes under <code>--swap-yz</code>). <strong>Not applied to the mesh export:</strong> mesh vertices are written in the raw <code>(x, y, z)</code> DLT frame, because mesh-<em>sequence</em> add-ons (Stop Motion OBJ / OBJSequence) assign <code>v x y z</code> straight to the mesh with no axis conversion and no forward/up setting to override. This helper is kept to document and test the BVH-side convention. The negation makes it a <strong>rotation</strong> (determinant +1) rather than a mirror: a bare column swap to <code>(x, z, y)</code> combined with Blender's own Y-up&rarr;Z-up rotation leaves the subject <strong>reflected</strong>, swapping anatomical left and right. Face winding is preserved, since a proper rotation keeps outward normals outward.</li>
+            <li><code>ALIGNMENT_MARKER_SPEC</code> / <code>ALIGNMENT_MARKER_INDICES</code> — the fixed torso/hip/knee MHR70 marker subset used for the fit (shoulders, hips, knees, acromion, neck) — hand/foot/finger tips and facial points are deliberately excluded as the noisiest MHR70 keypoints.</li>
+        </ul>
+        <p>This module never loads SAM3/SAM 3D Body weights and has no CUDA/GPU dependency — pure NumPy linear algebra plus file I/O.</p>
+
+        <h2>Reference</h2>
+        <p>S. Umeyama, "Least-squares estimation of transformation parameters between two point patterns," <em>IEEE Transactions on Pattern Analysis and Machine Intelligence</em>, 13(4), 1991.</p>
+
+        <h2>Main functions</h2>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>umeyama_alignment</code></td><td>Fit (R, s, t) mapping source points onto target points; returns an AlignmentResult with <code>.degenerate</code> set when unreliable.</td></tr>
+            <tr><td><code>apply_similarity_transform</code></td><td>Apply a fitted (R, s, t) to any (N, 3) point array.</td></tr>
+            <tr><td><code>best_camera_alignment</code></td><td>Fit per camera, return the (index, result) of the lowest-residual non-degenerate camera.</td></tr>
+            <tr><td><code>read_obj_vertices</code></td><td>Read only the <code>v x y z</code> lines of an ASCII OBJ, in file order.</td></tr>
+            <tr><td><code>write_obj_mesh</code> / <code>write_ply_mesh</code></td><td>Write an ASCII OBJ/PLY mesh from vertices + a shared 0-indexed faces array.</td></tr>
+            <tr><td><code>apply_blender_yz_swap</code></td><td>Rotate vertices to <code>(x, z, -y)</code> for Blender (winding preserved), matching <code>--swap-yz</code>'s BVH convention.</td></tr>
+        </table>
+
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Consumes this module for its <code>--mesh-source-dir</code>/<code>--export-mesh</code> feature.</td></tr>
+            <tr><td><strong>sam3dinov3_visualize</strong></td><td>Produces the per-camera monocular MHR70 3D CSV + mesh sequence this module aligns.</td></tr>
+            <tr><td><strong>sam3dinov3</strong></td><td>Defines MHR70_NAMES, the fixed keypoint order ALIGNMENT_MARKER_SPEC indexes into.</td></tr>
+        </table>
+
+        <h2>Testing</h2>
+        <ul>
+            <li><code>tests/test_rec3d_mesh_alignment.py</code> — synthetic, CPU-only: recovers a known transform to float tolerance, flags planar/collinear input as degenerate, OBJ/PLY round-trip.</li>
+            <li><code>tests/test_rec3d_mesh_export.py</code> — real-data regression against a 3-camera fixture (skipped if unavailable).</li>
+        </ul>
+
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

@@ -3,8 +3,8 @@ Project: vailá
 Script: sam3sapiens2_visualize.py
 Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Creation Date: 31 July 2026
-Update Date: 02 August 2026
-Version: 0.3.96
+Update Date: 05 August 2026
+Version: 0.3.99
 
 Description:
     CPU-only rerenderer for an existing SAM3+Sapiens2 run. It selects one
@@ -43,13 +43,13 @@ DEFAULT_SKELETON_THICKNESS = 2
 # Match SAM3 composite alpha (~0.45) for selected-ID contour fills.
 SAM_CONTOUR_FILL_ALPHA = 0.45
 
-# Sapiens2's first 21 points are the COCO-style body/foot topology.
+# Sapiens2's first 23 points are the COCO-style body/foot topology (0..22).
 # Fallback left/right colors match keypoints308.py (RGB; converted to BGR in OpenCV).
 COLOR_LEFT_RGB = (0, 255, 0)
 COLOR_RIGHT_RGB = (255, 128, 0)
 COLOR_CENTER_RGB = (51, 153, 255)
 LEFT_BODY_INDICES = frozenset({1, 3, 5, 7, 9, 11, 13, 15, 17, 18, 19})
-RIGHT_BODY_INDICES = frozenset({2, 4, 6, 8, 10, 12, 14, 16, 20})
+RIGHT_BODY_INDICES = frozenset({2, 4, 6, 8, 10, 12, 14, 16, 20, 21, 22})
 BODY_EDGES = (
     (0, 1),
     (0, 2),
@@ -65,12 +65,20 @@ BODY_EDGES = (
     (11, 12),
     (11, 13),
     (13, 15),
-    (13, 17),
+    (15, 19),  # left_ankle - left_heel
+    (15, 17),  # left_ankle - left_big_toe
+    (15, 18),  # left_ankle - left_small_toe
+    (19, 17),  # left_heel - left_big_toe
+    (19, 18),  # left_heel - left_small_toe
+    (17, 18),  # left_big_toe - left_small_toe
     (12, 14),
-    (14, 18),
-    (14, 20),
-    (15, 16),
-    (18, 19),
+    (14, 16),
+    (16, 22),  # right_ankle - right_heel
+    (16, 20),  # right_ankle - right_big_toe
+    (16, 21),  # right_ankle - right_small_toe
+    (22, 20),  # right_heel - right_big_toe
+    (22, 21),  # right_heel - right_small_toe
+    (20, 21),  # right_big_toe - right_small_toe
 )
 
 _STYLE_UNSET = object()
