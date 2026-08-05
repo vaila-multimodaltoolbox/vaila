@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-05
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -195,7 +195,7 @@ C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
 -> C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV 3D    C_C_r2_c1 - Plot 2D
 C_C_r2_c2 - Plot 3D       C_C_r3_c1 - Draw Sports    C_C_r3_c2 - Stroboscopic
-C_C_r4_c1 - vailá         C_C_r4_c2 - vailá          C_C_r4_c3 - vailá
+C_C_r4_c1 - Animation Blender                        C_C_r4_c2 - vailá
 C_C_r5_c1 - vailá         C_C_r5_c2 - vailá          C_C_r5_c3 - vailá
 
 Type 'h' for help or 'exit' to quit.

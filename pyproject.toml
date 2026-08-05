@@ -71,6 +71,7 @@ dependencies = [
     # 3D processing
     "open3d",
     "glfw",
+    "fake-bpy-module-latest",
     # Signal processing and biomechanics
     "imufusion",
     "neurokit2",
@@ -153,6 +154,12 @@ fifa = [
 sapiens = [
     "transformers>=4.40",
     "safetensors>=0.4",
+]
+blender = [
+    "fake-bpy-module-latest",
+]
+bpy = [
+    "fake-bpy-module-latest",
 ]
 
 [project.scripts]

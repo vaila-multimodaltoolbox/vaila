@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - blender_viz</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; color: #212529; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        pre { background: #e9ecef; padding: 14px 18px; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        ul { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i>vailá</i> - blender_viz</h1>
+
+        <div class="module-info">
+            <h3>Module information</h3>
+            <p><strong>Category:</strong> Visualization</p>
+            <p><strong>File:</strong> vaila/blender_viz.py</p>
+            <p><strong>Version:</strong> 0.3.99</p>
+            <p><strong>Updated:</strong> 05 August 2026</p>
+            <p><strong>Author:</strong> Paulo Santiago</p>
+            <p><strong>GUI:</strong> Yes — Frame C &rarr; Visualization &rarr; <strong>Animation Blender</strong> (<code>C_C_r4_c1</code>)
+               &nbsp; <strong>CLI:</strong> Yes — <code>uv run python -m vaila.blender_viz -i RUN_DIR</code></p>
+        </div>
+
+        <h2>Description</h2>
+        <p>Opens a <em>rec3d</em> reconstruction in Blender with the animation already imported and the scene already configured. It replaces the manual routine of launching Blender, loading <code>&lt;base&gt;_blender_skeleton_viz.py</code> in the Text Editor and pressing <strong>Run Script</strong>.</p>
+        <p>Every <em>rec3d</em> run — from both <code>rec3d.py</code> (per-frame DLT) and <code>rec3d_one_dlt3d.py</code> (one fixed DLT per camera) — writes that companion script next to its outputs. The script imports the BVH, builds the OBJ/PLY mesh sequence without needing any add-on, draws the skeleton bones, and sets the scene rate and frame range <strong>last</strong>. That last step is the one Blender's own importers skip: <code>File &gt; Import &gt; BVH</code> leaves <code>update_scene_fps</code> and <code>update_scene_duration</code> off, so a 631-frame 120 Hz capture lands in a scene still at 24 fps with <code>frame_end</code> 250 — it plays in slow motion and stops a third of the way through.</p>
+        <p><code>blender_viz</code> finds Blender, resolves the script, and runs <code>blender --python &lt;script&gt;</code>. The script calls <code>main()</code> at module bottom, so it executes on startup.</p>
+
+        <h2>What it accepts</h2>
+        <table>
+            <tr><th>Selection</th><th>Behaviour</th></tr>
+            <tr><td>A <em>rec3d</em> run directory</td><td>Uses the newest <code>*_blender_skeleton_viz.py</code> inside it.</td></tr>
+            <tr><td>A run directory with <strong>no</strong> script</td><td>Rebuilds one from the run's own files (see below).</td></tr>
+            <tr><td>The <code>*_blender_skeleton_viz.py</code> file itself</td><td>Uses it directly.</td></tr>
+        </table>
+
+        <h3>Rebuilding a missing script</h3>
+        <p>Everything the generator needs is recoverable from the folder, so runs produced before the companion script existed still work:</p>
+        <table>
+            <tr><th>Input</th><th>Source</th></tr>
+            <tr><td>Frame count and capture rate</td><td>The BVH <code>MOTION</code> header (<code>Frames:</code>, <code>Frame Time:</code>), refined by <code>POINT:RATE</code> in <code>&lt;base&gt;_m.c3d</code> when the two agree.</td></tr>
+            <tr><td>Marker layout, never-reconstructed markers</td><td>The reconstruction CSV.</td></tr>
+            <tr><td>Mesh sequence</td><td>A <code>meshes_obj/</code> or <code>meshes_ply/</code> subfolder.</td></tr>
+            <tr><td>Skeleton connections</td><td>Inferred from the marker <strong>count</strong>: 17 &rarr; <code>yolo_coco17</code>, 33 &rarr; <code>mediapipe_pose33</code>, 70 &rarr; <code>sam3dinov3_mhr70</code>, 308 &rarr; <code>sapiens2_goliath308</code>.</td></tr>
+        </table>
+        <p>The count, not the highest marker index, is what identifies the layout — <code>sapiens2_goliath308</code>'s connection list tops out at <code>p63</code> despite the layout having 308 markers.</p>
+
+        <h2>Finding Blender</h2>
+        <p>Resolution order, first working hit wins. Each candidate is validated by running <code>--version</code>, so a wrong pick fails immediately with an explanation instead of opening nothing.</p>
+        <ul>
+            <li><code>--blender</code> command-line argument</li>
+            <li><code>VAILA_BLENDER</code> environment variable</li>
+            <li>The path saved in <code>~/.vaila/vaila_config.toml</code></li>
+            <li><code>blender</code> on <code>PATH</code></li>
+            <li>Usual install locations for the platform — <strong>Linux:</strong> <code>/snap/bin/blender</code>, <code>/usr/bin/blender</code>, <code>/usr/local/bin/blender</code>, Flatpak exports; <strong>macOS:</strong> <code>/Applications/Blender.app/Contents/MacOS/Blender</code>; <strong>Windows:</strong> <code>C:\Program Files\Blender Foundation\Blender *\blender.exe</code> (newest first)</li>
+            <li><strong>GUI only:</strong> a file dialog — and the choice is saved, so the question is asked once</li>
+        </ul>
+<pre><code># ~/.vaila/vaila_config.toml
+[blender]
+executable = "/snap/bin/blender"</code></pre>
+        <p>A saved path that stops working (Blender uninstalled or moved) is skipped and auto-detection continues.</p>
+
+        <h2>CLI</h2>
+<pre><code># Open a run directory
+uv run python -m vaila.blender_viz -i /path/to/vaila_rec3d_20260805_093649
+
+# Point straight at the script
+uv run python -m vaila.blender_viz -i /path/to/rec3d_..._blender_skeleton_viz.py
+
+# Force a rebuild — the fix for a script whose recorded paths went stale
+uv run python -m vaila.blender_viz -i RUN_DIR --regenerate
+
+# Use a specific Blender
+uv run python -m vaila.blender_viz -i RUN_DIR --blender /snap/bin/blender
+
+# Headless: verify the scene without opening a window (exits when done)
+uv run python -m vaila.blender_viz -i RUN_DIR --background</code></pre>
+        <p>Running with no <code>-i</code> opens the GUI dialogs. The GUI prints the equivalent CLI on launch with the <code>&gt;&gt;</code> prefix, so any run can be repeated headlessly.</p>
+
+        <h2>Notes</h2>
+        <ul>
+            <li>The launch is <strong>non-blocking</strong>: the <i>vailá</i> window stays usable while Blender is open.</li>
+            <li>Re-running is safe. The companion script does not duplicate the armature or the mesh, and re-running it is the documented fix for a scene whose rate or frame range was already broken by a manual import.</li>
+            <li><code>--background</code> runs Blender with <code>-b</code> and waits for it, which is what makes it usable as a check in scripts.</li>
+        </ul>
+
+        <h2>Main functions</h2>
+        <table>
+            <tr><th>Function</th><th>Description</th></tr>
+            <tr><td><code>find_blender_executable</code></td><td>Locate a working Blender by the order above, validating each candidate with <code>--version</code>.</td></tr>
+            <tr><td><code>resolve_companion_script</code></td><td>Turn a run directory or a <code>.py</code> selection into a runnable companion script.</td></tr>
+            <tr><td><code>regenerate_companion_script</code></td><td>Rebuild the script from a run's own BVH, CSV, C3D and mesh folder.</td></tr>
+            <tr><td><code>parse_bvh_header</code></td><td>Recover <code>(n_frames, rate)</code> from the BVH <code>MOTION</code> header.</td></tr>
+            <tr><td><code>infer_skeleton_preset</code></td><td>Map a marker count to a preset in <code>vaila/skeletons/</code>.</td></tr>
+            <tr><td><code>launch_blender</code></td><td>Start Blender on the script without blocking the caller.</td></tr>
+            <tr><td><code>load_vaila_config</code> / <code>save_vaila_config</code></td><td>Read/write <code>~/.vaila/vaila_config.toml</code>.</td></tr>
+        </table>
+
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><strong>rec3d</strong></td><td>Multi-camera reconstruction (per-frame DLT); generates the companion script.</td></tr>
+            <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Reconstruction with one fixed DLT per camera, plus the mesh sequence export.</td></tr>
+            <tr><td><strong>mesh_alignment</strong></td><td>The alignment behind the exported mesh sequence.</td></tr>
+        </table>
+
+        <h2>Testing</h2>
+        <ul>
+            <li><code>tests/test_blender_viz.py</code> — pure Python, no <code>bpy</code> and no Blender: BVH header round-trip at fractional rates, skeleton inference, script resolution and regeneration, executable-discovery precedence, config round-trip, argv construction.</li>
+        </ul>
+
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

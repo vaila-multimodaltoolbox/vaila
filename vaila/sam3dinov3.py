@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 03 August 2026
-Version: 0.3.98
+Update Date: 05 August 2026
+Version: 0.3.99
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -241,12 +241,18 @@ SKELETON_EDGE_NAMES: tuple[tuple[str, str], ...] = (
     ("left-knee", "left-ankle"),
     ("left-ankle", "left-heel"),
     ("left-ankle", "left-big-toe-tip"),
+    ("left-ankle", "left-small-toe-tip"),
     ("left-heel", "left-big-toe-tip"),
+    ("left-heel", "left-small-toe-tip"),
+    ("left-big-toe-tip", "left-small-toe-tip"),
     ("right-hip", "right-knee"),
     ("right-knee", "right-ankle"),
     ("right-ankle", "right-heel"),
     ("right-ankle", "right-big-toe-tip"),
+    ("right-ankle", "right-small-toe-tip"),
     ("right-heel", "right-big-toe-tip"),
+    ("right-heel", "right-small-toe-tip"),
+    ("right-big-toe-tip", "right-small-toe-tip"),
 )
 
 # MHR70 joint names carry an explicit "left-"/"right-" prefix, so the skeleton

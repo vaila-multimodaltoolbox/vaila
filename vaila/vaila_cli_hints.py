@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.3.98"
-__updated__ = "02 August 2026"
+__version__ = "0.3.99"
+__updated__ = "05 August 2026"
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +180,10 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
         "C3D viewer — Open3D or PyVista.",
     ),
     "show_csv_file": CliRunHint(("uv run vaila/vpython_c3d.py",), "CSV 3D viewer GUI."),
+    "animation_blender": CliRunHint(
+        ("uv run python -m vaila.blender_viz -i RUN_DIR",),
+        "Open a rec3d run in Blender (BVH + mesh + bones + scene rate, all set up).",
+    ),
     "plot_2d_data": CliRunHint(("uv run vaila/vailaplot2d.py",), "2D plot GUI."),
     "plot_3d_data": CliRunHint(("uv run vaila/vailaplot3d.py",), "3D plot GUI."),
     "draw_sports_fields_courts": CliRunHint(

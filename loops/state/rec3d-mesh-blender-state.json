@@ -1,0 +1,122 @@
+{
+  "loop": "rec3d-mesh-blender-loop",
+  "status": "level4_complete_awaiting_human_checkpoint",
+  "updated_at": "2026-08-04",
+  "fixture_dir": "/home/preto/data/sep_runcod_01072026/REC3D_COD/rec3d_todo/",
+  "implementation": {
+    "modules_added": ["vaila/mesh_alignment.py"],
+    "modules_changed": [
+      "vaila/rec3d_one_dlt3d.py",
+      "vaila/rec3d.py",
+      "vaila/readcsv_export.py"
+    ],
+    "cli_flags_added": ["--mesh-source-dir", "--export-mesh"],
+    "version": "0.3.99"
+  },
+  "session_2026_08_04_validation_run": {
+    "goal": "run + test perfect 3D reconstruction and .c3d/.bvh/.obj Blender visualization",
+    "input_path": "rec3d_todo/sam3sapiens2_one_person_visualized (3 cameras, SAM3+Sapiens2 Goliath-308 pose CSVs)",
+    "mesh_source": "rec3d_todo/sam3dinov3_one_person_visualized (SAM3+DINOv3, MHR70 + meshes_obj)",
+    "fps": 119.88012001,
+    "output": "sam3sapiens2_one_person_visualized/vaila_rec3d_20260804_205908",
+    "result": {
+      "frames": 631,
+      "markers": 308,
+      "mesh_frames_written": 631,
+      "mesh_frames_interpolated": 0,
+      "mesh_frames_skipped": 0,
+      "sequence_contiguous": true,
+      "camera_switches": 96,
+      "residual_m": {"mean": 0.0265, "median": 0.0261, "max": 0.0437},
+      "frozen_thresholds_m": {"median_lt": 0.03, "p95_lt": 0.05, "max_lt": 0.08}
+    },
+    "key_finding_marker_layouts": "Sapiens2 Goliath-308's first 70 markers ARE MHR70, verified name-by-name; all 9 ALIGNMENT_MARKER_SPEC entries (incl. p68/p69 acromions, p70 neck) match exactly. So a Sapiens-308 DLT reconstruction can drive DINOv3 mesh alignment with the default indices."
+  },
+  "bugs_found_and_fixed_this_session": [
+    {
+      "id": "mirrored-blender-export",
+      "severity": "high (biomechanical correctness)",
+      "files": ["vaila/rec3d.py", "vaila/mesh_alignment.py"],
+      "symptom": "Subject appeared MIRRORED in Blender: anatomical left/right swapped in both the BVH skeleton and the OBJ mesh.",
+      "cause": "swap_yz wrote (x, z, y), a REFLECTION (det -1). Blender's BVH and OBJ importers then apply their own Y-up->Z-up ROTATION (det +1); net det -1.",
+      "fix": "Write (x, z, -y) instead -- a proper rotation (-90 deg about X, det +1). Face winding reversal in apply_blender_yz_swap removed, since a rotation already preserves outward normals.",
+      "evidence": "Marker labelled left_shoulder is anatomically left in 100% of 379 fast frames in the CSV, but was 0% after export; now 95.1% measured inside the Blender scene (misses are low-speed change-of-direction frames where velocity is a poor proxy for facing). BVH joints now reproduce the CSV in Blender world space to 0.00 mm (was 9005.67 mm)."
+    },
+    {
+      "id": "mesh-sequence-gaps",
+      "severity": "high (silent desync)",
+      "file": "vaila/rec3d_one_dlt3d.py",
+      "symptom": "36 of 631 OBJ frames missing, so a Blender OBJ-sequence import drifted progressively out of sync with the C3D/BVH.",
+      "cause": "reconstruct_mesh_sequence() dropped any frame where ANY of the 9 alignment markers was NaN -- but best_camera_alignment() already excludes non-finite rows per camera. On this fixture only the two acromions ever go missing, leaving 7 good correspondences.",
+      "fix": "Removed the all-or-nothing guard; added an interpolate_similarity_transform()/slerp_rotation() fallback (per camera only, since transforms are not interchangeable) for frames that are genuinely unsolvable, plus a sequence_contiguous report.",
+      "evidence": "631/631 frames written, 0 interpolated, 0 skipped. Largest mesh-centroid step fell from 0.695 m (83 m/s) to 0.103 m (12.3 m/s); frames stepping >0.15 m went from 11 to 0. n_fit_points: 595 frames used 9 markers, 35 used 8, 1 used 7."
+    },
+    {
+      "id": "c3d-occluded-points-at-origin",
+      "severity": "high (visualization corruption)",
+      "file": "vaila/readcsv_export.py",
+      "symptom": "30588 occluded marker-samples (15.7%) written as 0.0 with a VALID residual, so C3D viewers drew them as real markers piled on the world origin.",
+      "cause": "np.nan_to_num(nan=0.0) with no residual flag.",
+      "fix": "Track the NaN mask and set meta_points.residuals = -1 for those samples (the C3D invalid-sample convention). Verified ezc3d round-trips -1 and returns NaN coordinates on read.",
+      "evidence": "0 valid samples at the origin after the fix; mm/m magnitude ratio still exactly 1000."
+    },
+    {
+      "id": "bvh-occlusion-origin-spikes",
+      "severity": "medium",
+      "file": "vaila/rec3d.py",
+      "symptom": "BVH wrote 0.0 for occluded samples, teleporting joints to the world origin mid-motion.",
+      "cause": "BVH has no invalid-sample convention, and the code substituted 0.0.",
+      "fix": "Linearly interpolate interior gaps and hold the nearest valid sample at head/tail before writing (48225 samples filled on this fixture).",
+      "note": "43539 samples belong to 23 markers never reconstructed at all (finger keypoints) -- nothing to fill from, so they remain at the origin."
+    },
+    {
+      "id": "blender-bones-to-origin",
+      "severity": "medium",
+      "file": "vaila/rec3d.py",
+      "symptom": "15 of the 63 Goliath-308 skeleton connections referenced never-reconstructed finger markers, drawing bones from the hands to (0,0,0).",
+      "fix": "New find_unreconstructed_markers(); generate_blender_companion_script() now drops connections touching them."
+    }
+  ],
+  "level4_evidence": {
+    "method": "headless Blender 5.2 (blender --background) numeric verification + workbench renders read back by the model",
+    "checks": [
+      "BVH armature imports with 308 bones",
+      "scene rate 119.880114 fps (fractional NTSC preserved) and frame range covers 631 frames",
+      "631 contiguous OBJ frames",
+      "BVH joints reproduce the reconstruction CSV in Blender world space to 0.00 mm across 105 joint-frames",
+      "mesh-to-skeleton distance bounded 0.106-0.251 m (mean 0.146) at 15 sampled frames incl. camera switches and the former gap region",
+      "trunk inside mesh bbox at every sampled frame",
+      "handedness measured in-scene: 95.1% (was 0%)"
+    ],
+    "obj_import_axes": "Blender's DEFAULT (forward=-Z, up=Y) is REQUIRED. Probed all 30 axis combinations: default gives 0.15 m mean mesh-to-skeleton distance, every alternative 2.1-4.6 m. Do NOT set up=Z.",
+    "biomechanical_plausibility": "thigh 0.42+/-0.02 m, shank 0.41+/-0.02 m, shoulder width 0.35 m (low SD => stable triangulation); hip speed median 3.5 max 6.9 m/s; trunk inclination median 28 deg, 53.6 deg at frame 300 during a 4.5 m/s change of direction",
+    "caveat": "15 of 631 frames sampled in Blender; model judgment (level 4), not a substitute for the user's own review (level 5)"
+  },
+  "level5_checkpoint": {
+    "status": "not_yet_performed_by_user",
+    "instructions": "Open vaila_rec3d_20260804_205908/rec3d_20260804_205908_blender_skeleton_viz.py in Blender and Run Script. If importing the OBJ sequence by hand, keep the DEFAULT axis settings (forward -Z, up Y) -- overriding to up=Z reintroduces a multi-metre offset. Confirm left/right are correct against the source videos."
+  },
+  "tests": {
+    "added": [
+      "tests/test_rec3d_occlusion_handling.py (17 tests: BVH gap-filling, partial-occlusion alignment, SLERP/transform interpolation, BVH round-trip + handedness)",
+      "tests/test_c3d_invalid_points.py (6 tests: invalid-residual flagging, no origin markers, unit conversion)"
+    ],
+    "updated": [
+      "tests/test_rec3d_mesh_alignment.py (yz-swap tests rewritten for the rotation convention: determinant +1, Blender-import round-trip, winding preserved)"
+    ],
+    "suite_result": "76 passed (rec3d/DLT/mesh/blender/occlusion/c3d), ruff clean, ty clean"
+  },
+  "documentation": [
+    "docs/dlt_reconstruction_and_mesh_alignment.md",
+    "vaila/help/mesh_alignment.md",
+    "vaila/help/mesh_alignment.html"
+  ],
+  "sibling_loop_status": {
+    "dlt-distortion-loop": "not started (no distortion modeling implemented yet)"
+  },
+  "pre_existing_bug_annotated": {
+    "files": ["vaila/rec3d.py", "vaila/rec2d.py"],
+    "issue": "messagebox.showinfo() called unconditionally on the CLI success path, no gui= guard -> hangs or TclError headlessly",
+    "action_taken": "TODO(headless-cli) comments added at both call sites, 2026-08-04; not fixed (out of scope, pre-existing, unrelated file)"
+  }
+}

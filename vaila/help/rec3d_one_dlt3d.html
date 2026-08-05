@@ -24,13 +24,13 @@
 </head>
 <body>
     <div class="container">
-        <h1>vailá - rec3d_one_dlt3d</h1>
+        <h1><i>vailá</i> - rec3d_one_dlt3d</h1>
 
         <div class="module-info">
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/rec3d_one_dlt3d.py</p>
-            <p><strong>Version:</strong> 0.3.94</p>
+            <p><strong>Version:</strong> 0.3.99</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
@@ -45,9 +45,9 @@
 
         <h2>Input file formats</h2>
         <h3>DLT3D file</h3>
-        <p>CSV with one row of 11 DLT coefficients (e.g. from the vailá <strong>dlt3d</strong> module). <strong>One file per camera</strong>; order must match the pixel file order.</p>
+        <p>CSV with one row of 11 DLT coefficients (e.g. from the <i>vailá</i> <strong>dlt3d</strong> module). <strong>One file per camera</strong>; order must match the pixel file order.</p>
         <h3>Pixel CSV</h3>
-        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of the header text. This makes the file compatible with vailá's own <code>frame,p1_x,p1_y,...</code> convention as well as CSVs coming from SAM3, YOLO, MediaPipe (named joints), or any other tracker — as long as the same markers appear in the same order in every camera's file. <strong>One file per camera</strong>; same number of markers and overlapping frame sets recommended. In GUI mode, each file can be chosen from a <strong>different directory</strong> (one dialog per camera).</p>
+        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of the header text. This makes the file compatible with <i>vailá</i>'s own <code>frame,p1_x,p1_y,...</code> convention as well as CSVs coming from SAM3, YOLO, MediaPipe (named joints), or any other tracker — as long as the same markers appear in the same order in every camera's file. <strong>One file per camera</strong>; same number of markers and overlapping frame sets recommended. In GUI mode, each file can be chosen from a <strong>different directory</strong> (one dialog per camera).</p>
 
         <h2>Output files</h2>
         <p>All outputs share the same base name and are written inside a new subfolder: <code>rec3d_YYYYMMDD_HHMMSS/</code>.</p>
@@ -60,44 +60,106 @@
         </table>
         <p>C3D files are compatible with <strong>viewc3d</strong>, <strong>viewc3d_pyvista</strong>, <strong>readc3d_export</strong> (inspect/convert), and standard C3D tools.</p>
 
+        <h2>Optional: mesh-for-Blender export</h2>
+        <p>If your pixel files are the MHR70-ordered <code>p1_x,p1_y,...,p70_x,p70_y</code> markers CSVs written by <strong>sam3dinov3_visualize.py</strong>'s "Visualize ID" output, you can also export a per-frame <strong>body mesh</strong> aligned into this same DLT world space.</p>
+        <p>For each camera, pass a <code>--mesh-source-dir</code> (same order as <code>--dlt3d</code>) pointing at that camera's Visualize-ID output directory. Each must contain <code>&lt;stem&gt;_markers.csv</code> (2D pixel markers), <code>&lt;stem&gt;_mhr70_rec3d.csv</code> (that camera's own monocular 3D MHR70 estimate), a <code>meshes_obj/</code> or <code>meshes_ply/</code> folder of per-frame meshes, and <code>mesh_faces.npy</code> (shared face topology).</p>
+        <p><code>--pixels</code> <strong>can be omitted</strong> when <code>--mesh-source-dir</code> is given: each run directory already contains its own <code>*_markers.csv</code>, so one path per camera (the run directory itself) drives both triangulation and mesh alignment. Explicit <code>--pixels</code> is still supported (required if not using mesh export, or if pixel CSVs live elsewhere).</p>
+        <p>At each frame, a <strong>similarity transform</strong> (rotation + uniform scale + translation, Umeyama 1991) is fit per camera from its monocular MHR70 estimate (torso/hip/knee subset) onto the DLT-triangulated skeleton; the camera with the lowest fit residual is used as that frame's mesh source, and the same transform is applied to its mesh vertices. This is a <strong>coordinate-frame reconciliation, not a re-triangulation</strong> — mesh shape/proportion accuracy is inherited entirely from the monocular estimate.</p>
+        <p>The mesh is always exported in the <strong>raw</strong> (x, y, z) DLT/world frame, the same convention as the reconstruction CSV, <strong>regardless of <code>--swap-yz</code></strong> (which only affects the BVH). <strong>Corrected 2026-08-05</strong> — a same-convention swap was tried first, on the assumption that any OBJ consumer applies the same axis conversion Blender's BVH importer applies by default; that holds for Blender's own File &gt; Import &gt; Wavefront (.obj) dialog but not for the "Stop Motion OBJ"/OBJSequence family of mesh-<em>sequence</em> add-ons most people actually use to play this back, which applies no axis conversion at all (confirmed from its source) — so a swapped mesh showed height on the wrong axis relative to the BVH once played as a sequence. See <code>README_mesh_import.txt</code> (written next to every <code>meshes_&lt;fmt&gt;/</code>) for the manual-import axis override this implies.</p>
+        <table>
+            <tr><th>Argument</th><th>Description</th></tr>
+            <tr><td><code>--mesh-source-dir</code> <em>DIR</em> [<em>DIR</em> ...]</td><td>Per-camera Visualize-ID output directory (order must match <code>--dlt3d</code>). Also supplies <code>--pixels</code> automatically when omitted.</td></tr>
+            <tr><td><code>--export-mesh</code> <code>{none,obj,ply}</code></td><td>Export format (default: none). Requires <code>--mesh-source-dir</code>.</td></tr>
+        </table>
+        <table>
+            <tr><th>File</th><th>Description</th></tr>
+            <tr><td><code>meshes_&lt;fmt&gt;/frame_NNNNNN.&lt;fmt&gt;</code></td><td>Aligned per-frame mesh, Blender-importable as a mesh-cache sequence.</td></tr>
+            <tr><td><code>rec3d_*_mesh_alignment.csv</code></td><td>Manifest: frame, camera_index, mean/rms/max residual (m), n_fit_points.</td></tr>
+        </table>
+
+
+        <h2>Blender alignment (v0.3.99, mesh axis convention corrected 2026-08-05)</h2>
+        <p><code>--swap-yz</code> is the <strong>default</strong> (pass <code>--no-swap-yz</code> for raw DLT axes) and applies to the <strong>BVH only</strong>. The mesh is always raw, unconditionally — see above.</p>
+        <p>The generated <code>rec3d_*_blender_skeleton_viz.py</code> imports everything <strong>already aligned</strong>: it sets the scene rate and frame range, imports the BVH with <code>update_scene_fps</code>/<code>update_scene_duration</code> enabled, imports the OBJ mesh sequence starting on the same frame (reading the raw floats itself, no axis conversion needed), then builds the skeleton bones. Run it on an empty scene (it imports everything itself) or after importing the BVH/C3D by hand (it will not duplicate an existing armature and still fixes the scene settings, since <code>setup_scene()</code> always runs last).</p>
+        <p><strong>Why the scene setup was needed:</strong> Blender's BVH importer defaults to <code>update_scene_fps=False</code> and <code>update_scene_duration=False</code>. A File &gt; Import &gt; BVH of a 631-frame / 120 Hz capture therefore leaves the scene at <strong>24 fps with frame_end=250</strong> — the BVH and OBJ mesh sequence play in slow motion (26 s instead of 5.3 s) and stop a third of the way through. Fractional rates survive exactly via Blender's <code>fps</code>/<code>fps_base</code> pair (119.88012001 Hz → fps=120, fps_base=1.001), and the BVH <code>Frame Time</code> is written with 9 decimals so the file alone also reads back at the right rate. Blender's bundled C3D importer is not exempt either: even though this exporter's C3D correctly states <code>POINT:RATE</code> (verified: both <code>POINT:RATE</code> and the file header's <code>frame_rate</code> read back as 120.0 for a 120 Hz run), <code>bpy.ops.import_anim.c3d</code>'s own <code>adapt_frame_rate=True</code> default does not reliably apply it to the scene — re-running this companion script after a manual C3D import fixes that too, since it sets the scene rate last regardless of import order.</p>
+        <p>A <strong>GUI run prints the equivalent CLI command both before and after processing</strong>, so the last thing on screen is a copy-pasteable headless re-run.</p>
+
         <h2>GUI mode</h2>
         <p>Run with <strong>no arguments</strong> or with <code>--gui</code>:</p>
         <ol>
             <li><strong>Number of cameras</strong> — e.g. 2.</li>
             <li><strong>DLT3D files</strong> — One file dialog per camera; each file can be in a different directory.</li>
-            <li><strong>Pixel CSV files</strong> — One file dialog per camera; each can be from a different directory.</li>
+            <li><strong>Pixel source</strong> — Yes/No: use per-camera <strong>SAM3+DINOv3 "Visualize ID" run directories</strong> (one dialog per camera; each run's own <code>*_markers.csv</code> is used automatically, and you can optionally also export the aligned mesh from the same directories) — or No for a plain pixel-coordinate CSV per camera (original flow, no mesh export).</li>
             <li><strong>Output directory</strong> — Where to create the timestamped result folder.</li>
             <li><strong>Data rate (Hz)</strong> — Point data rate for C3D/CSV (e.g. 60, 100).</li>
+            <li><strong>Swap Y/Z for BVH</strong> — defaults to Yes (height vertical in Blender, BVH and mesh in the same convention); answer No only to keep raw DLT axes.</li>
+            <li><strong>(Optional) Skeleton Pose JSON</strong> — Pick one of the <code>vaila/skeletons/</code> presets, or your own.</li>
+            <li><strong>(Optional) Mesh export</strong> — If plain pixel CSVs were chosen above, one directory dialog per camera plus OBJ/PLY format choice; if run directories were already picked, just the format choice. The equivalent CLI command is printed (<code>&gt;&gt;</code> prefix) before running.</li>
         </ol>
 
         <h2>CLI mode</h2>
-        <p><strong>Required:</strong> <code>--dlt3d</code>, <code>--pixels</code>, <code>--output</code>. <strong>Optional:</strong> <code>--fps</code>, <code>--gui</code>.</p>
+        <p><strong>Required:</strong> <code>--dlt3d</code>, <code>--output</code>, and either <code>--pixels</code> or <code>--mesh-source-dir</code>. <strong>Optional:</strong> <code>--fps</code>, <code>--gui</code>, <code>--export-mesh</code>.</p>
         <table>
             <tr><th>Argument</th><th>Description</th></tr>
-            <tr><td><code>--dlt3d</code> <em>FILE</em> [<em>FILE</em> ...]</td><td>DLT3D parameter files (one per camera); order must match <code>--pixels</code>.</td></tr>
-            <tr><td><code>--pixels</code> <em>FILE</em> [<em>FILE</em> ...]</td><td>Pixel coordinate CSV files (one per camera); order must match <code>--dlt3d</code>.</td></tr>
+            <tr><td><code>--dlt3d</code> <em>FILE</em> [<em>FILE</em> ...]</td><td>DLT3D parameter files (one per camera); order must match <code>--pixels</code>/<code>--mesh-source-dir</code>.</td></tr>
+            <tr><td><code>--pixels</code> <em>FILE</em> [<em>FILE</em> ...]</td><td>Pixel coordinate CSV files (one per camera). Optional if <code>--mesh-source-dir</code> is given.</td></tr>
             <tr><td><code>--fps</code> <em>HZ</em></td><td>Point data rate in Hz (default: 100). Accepts fractional rates, e.g. <code>119.88012001</code> for NTSC-derived 120000/1001 capture.</td></tr>
             <tr><td><code>-o</code>, <code>--output</code> <em>DIR</em></td><td>Output directory; a timestamped subfolder will be created here.</td></tr>
             <tr><td><code>--gui</code></td><td>Launch GUI instead of CLI.</td></tr>
+            <tr><td><code>--swap-yz</code></td><td>Swap Y/Z in BVH <strong>and</strong> mesh so height is vertical (Z-up) in Blender. <strong>Default since v0.3.99</strong>; kept as an explicit opt-in.</td></tr>
+            <tr><td><code>--no-swap-yz</code></td><td>Keep the raw DLT axes (no Y/Z swap).</td></tr>
+            <tr><td><code>--mesh-source-dir</code> <em>DIR</em> [<em>DIR</em> ...]</td><td>Per-camera Visualize-ID directory. Supplies <code>--pixels</code> automatically when omitted; required for mesh export.</td></tr>
+            <tr><td><code>--export-mesh</code> <code>{none,obj,ply}</code></td><td>Export an aligned mesh sequence (default: none).</td></tr>
         </table>
-        <h3>Examples</h3>
-        <pre># Two cameras, 60 Hz, output under ./out
+        <h3>Examples — every supported run type</h3>
+        <pre># 1) Minimal: two cameras, 60 Hz, output under ./out
 python -m vaila.rec3d_one_dlt3d --dlt3d cam1.dlt3d cam2.dlt3d --pixels cam1.csv cam2.csv --fps 60 --output ./out
 
-# Short form for output
+# 2) Short form for output (-o instead of --output)
 python -m vaila.rec3d_one_dlt3d -o ./results --dlt3d a.dlt3d b.dlt3d --pixels a.csv b.csv
 
-# Show full CLI help
+# 3) Three cameras, real NTSC-derived fractional rate (120000/1001 Hz)
+python -m vaila.rec3d_one_dlt3d \
+  --dlt3d cam1.dlt3d cam2.dlt3d cam3.dlt3d \
+  --pixels cam1.csv cam2.csv cam3.csv \
+  --fps 119.88012001 -o ./out
+
+# 4) BVH for Blender (Y/Z swapped) + a skeleton JSON for the companion
+#    visualization script (presets in vaila/skeletons/)
+python -m vaila.rec3d_one_dlt3d \
+  --dlt3d cam1.dlt3d cam2.dlt3d \
+  --pixels cam1.csv cam2.csv \
+  --fps 100 -o ./out \
+  --skeleton vaila/skeletons/mediapipe_pose33.json   # --swap-yz is the default
+
+# 5) Simplified mesh-for-Blender export: one path per camera (the
+#    Visualize-ID run dir) is enough, --pixels is derived automatically
+python -m vaila.rec3d_one_dlt3d \
+  --dlt3d c1.dlt3d c2.dlt3d c3.dlt3d \
+  --mesh-source-dir c1_id/ c2_id/ c3_id/ \
+  --export-mesh obj \
+  --fps 119.88012001 -o ./out
+
+# 6) Everything combined: 3 cameras, fractional fps, BVH swap, a
+#    SAM3+DINOv3 skeleton, and mesh export in one run
+python -m vaila.rec3d_one_dlt3d \
+  --dlt3d c1.dlt3d c2.dlt3d c3.dlt3d \
+  --mesh-source-dir c1_id/ c2_id/ c3_id/ --export-mesh ply \
+  --fps 119.88012001 -o ./out \
+  --skeleton vaila/skeletons/sam3dinov3_mhr70.json   # --swap-yz is the default
+
+# 7) Show full CLI help (lists every flag with its default)
 python -m vaila.rec3d_one_dlt3d --help
 
-# Launch GUI
+# 8) Launch the GUI instead (same 8 steps as "GUI mode" above)
 python -m vaila.rec3d_one_dlt3d --gui</pre>
 
         <h2>Main functions</h2>
         <table>
             <tr><th>Function</th><th>Description</th></tr>
             <tr><td><code>rec3d_multicam</code></td><td>Reconstruct one 3D point from multiple camera observations (DLT least squares).</td></tr>
-            <tr><td><code>run_reconstruction</code></td><td>Core logic: load DLT3D and pixel data, reconstruct, save CSV/.3d/C3D (used by GUI and CLI).</td></tr>
+            <tr><td><code>run_reconstruction</code></td><td>Core logic: load DLT3D and pixel data, reconstruct, save CSV/.3d/C3D/BVH, optionally align+export mesh (used by GUI and CLI).</td></tr>
+            <tr><td><code>reconstruct_mesh_sequence</code></td><td>Per-frame Umeyama camera selection + mesh alignment + OBJ/PLY export + manifest.</td></tr>
             <tr><td><code>save_rec3d_as_c3d</code></td><td>Save current reconstruction as C3D via file dialog.</td></tr>
             <tr><td><code>run_rec3d_one_dlt3d</code></td><td>GUI entry: dialogs then run_reconstruction.</td></tr>
         </table>
@@ -106,13 +168,16 @@ python -m vaila.rec3d_one_dlt3d --gui</pre>
         <table>
             <tr><th>Module</th><th>Role</th></tr>
             <tr><td><strong>dlt3d</strong></td><td>Compute DLT3D coefficients from calibration (pixel + 3D reference).</td></tr>
+            <tr><td><strong>mesh_alignment</strong></td><td>Umeyama similarity fit + OBJ/PLY I/O used by the mesh-export feature.</td></tr>
+            <tr><td><strong>sam3dinov3_visualize</strong></td><td>Produces the per-camera "Visualize ID" mesh-source directories consumed by <code>--mesh-source-dir</code>.</td></tr>
+            <tr><td><strong>vaila/skeletons/</strong></td><td>Ready-made <code>--skeleton</code> presets (MediaPipe, YOLO/COCO-17, SAM3+DINOv3 MHR70, Sapiens2 Goliath-308).</td></tr>
             <tr><td><strong>readcsv_export</strong></td><td>CSV → C3D (used internally); batch convert.</td></tr>
             <tr><td><strong>readc3d_export</strong></td><td>C3D → CSV; inspect C3D.</td></tr>
             <tr><td><strong>viewc3d</strong> / <strong>viewc3d_pyvista</strong></td><td>Visualize C3D files.</td></tr>
         </table>
 
         <div class="footer">
-            <p>Part of <strong>vailá</strong> - Multimodal Toolbox</p>
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
             <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>

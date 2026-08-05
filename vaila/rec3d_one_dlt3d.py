@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.94
+Version: 0.3.99
 Created: 02 August 2025
-Last Updated: 01 August 2026
+Last Updated: 05 August 2026
 
 ================================================================================
 Description
@@ -77,9 +77,78 @@ Related modules:
   - readcsv_export.py — CSV to C3D (used internally); batch convert
   - readc3d_export.py — C3D to CSV; inspect C3D
   - viewc3d / viewc3d_pyvista — visualize C3D files
+  - mesh_alignment.py — Umeyama fit used by the optional mesh-export feature
+
+================================================================================
+Optional: mesh-for-Blender export (--mesh-source-dir / --export-mesh)
+================================================================================
+
+If your pixel files are the MHR70-ordered (p1_x,p1_y,...,p70_x,p70_y) markers
+CSVs written by sam3dinov3_visualize.py's "Visualize ID" output, you can also
+export a per-frame body MESH aligned into this same DLT world space, for
+Blender. For each camera pass a `--mesh-source-dir` (one per camera, same
+order as --dlt3d) pointing at that visualize-ID output directory — it must
+contain `<stem>_mhr70_rec3d.csv` (that camera's own monocular 3D MHR70
+estimate), a `meshes_obj/` or `meshes_ply/` folder of per-frame meshes (from
+sam3dinov3_visualize.py --export-mesh obj|ply), and `mesh_faces.npy`.
+
+Simplified path: `--pixels` can be OMITTED when `--mesh-source-dir` is given
+— each run directory already contains its own `*_markers.csv`, so one path
+per camera (the run directory) is enough to drive both triangulation and
+mesh alignment. Explicit `--pixels` is still supported (and required if you
+are not using mesh export at all, or your pixel CSVs live somewhere else).
+
+At each frame, a similarity transform (rotation + uniform scale +
+translation) is fit per camera from its monocular MHR70 estimate onto the
+DLT-triangulated skeleton (see mesh_alignment.umeyama_alignment); the camera
+with the lowest fit residual is used as that frame's mesh source, and the
+same transform is applied to its mesh vertices. This is a coordinate-frame
+reconciliation, not a re-triangulation — mesh shape/proportion accuracy is
+inherited entirely from the monocular estimate. Output goes to
+`meshes_<fmt>/frame_NNNNNN.<fmt>` plus a `<file_base>_mesh_alignment.csv`
+manifest (frame, chosen camera index, fit residual in meters) in the same
+timestamped output subfolder as the other results.
+
+================================================================================
+Blender alignment (v0.3.99, mesh axis convention corrected 2026-08-05)
+================================================================================
+
+--swap-yz is the DEFAULT (use --no-swap-yz to keep raw DLT axes) and applies
+to the BVH file. The exported MESH is always written in the RAW (x, y, z)
+DLT/world frame — the same convention as the triangulated skeleton CSV —
+REGARDLESS of --swap-yz. This is deliberate, not an oversight: Blender's
+bundled BVH importer applies its own axis conversion by default, so a
+swapped BVH file still lands correctly, but the "Stop Motion OBJ"/OBJSequence
+family of mesh-sequence add-ons applies none at all (confirmed from its
+source), so the mesh must already be in Blender's final world convention on
+disk. A swapped mesh file looked right through Blender's own native OBJ
+import dialog (which does convert) but wrong — "Z where Y should be" — through
+that add-on, which is what most people actually use to play a mesh sequence.
+See README_mesh_import.txt (written next to every meshes_<fmt>/ folder) for
+the exact manual-import axis settings this implies.
+
+The generated `<file_base>_blender_skeleton_viz.py` now imports everything
+already aligned: it sets the scene rate (exactly, including fractional NTSC
+rates via Blender's fps/fps_base pair) and the frame range, imports the BVH
+with update_scene_fps/update_scene_duration enabled, imports the OBJ mesh
+sequence starting on the same frame (reading the raw floats itself, no axis
+conversion needed), then builds the skeleton bones. Without that scene setup,
+Blender's BVH importer leaves a 631-frame 120 Hz capture in a 24 fps scene
+ending at frame 250 — the BVH and mesh play in slow motion and stop a third
+of the way through. A C3D importer is not exempt either: Blender's bundled
+one (io_anim_c3d) does not reliably update the scene rate from the file even
+though this exporter's C3D correctly states it (verified: POINT:RATE and the
+header's frame_rate both read back as 120.0 for a 120 Hz run) — so a C3D
+imported into the same scene can still look desynced from the BVH/mesh unless
+this companion script is (re-)run afterward, which always sets the scene rate
+last regardless of import order.
+
+A GUI run prints the equivalent CLI command both before and after processing,
+so the last thing on screen is a copy-pasteable headless re-run.
 """
 
 import argparse
+import bisect
 import os
 import sys
 from datetime import datetime
@@ -92,12 +161,40 @@ import pandas as pd
 from rich import print
 
 try:
-    from .rec3d import find_common_frames, load_pixel_csv_positional, rec3d_multicam
-except ImportError:
-    from rec3d import (  # ty: ignore[unresolved-import]
+    from .mesh_alignment import (
+        ALIGNMENT_MARKER_INDICES,
+        apply_similarity_transform,
+        best_camera_alignment,
+        interpolate_similarity_transform,
+        read_obj_vertices,
+        write_obj_mesh,
+        write_ply_mesh,
+    )
+    from .rec3d import (
         find_common_frames,
+        find_unreconstructed_markers,
+        generate_blender_companion_script,
         load_pixel_csv_positional,
         rec3d_multicam,
+        save_rec3d_as_bvh,
+    )
+except ImportError:
+    from mesh_alignment import (  # ty: ignore[unresolved-import]
+        ALIGNMENT_MARKER_INDICES,
+        apply_similarity_transform,
+        best_camera_alignment,
+        interpolate_similarity_transform,
+        read_obj_vertices,
+        write_obj_mesh,
+        write_ply_mesh,
+    )
+    from rec3d import (  # ty: ignore[unresolved-import]
+        find_common_frames,
+        find_unreconstructed_markers,
+        generate_blender_companion_script,
+        load_pixel_csv_positional,
+        rec3d_multicam,
+        save_rec3d_as_bvh,
     )
 
 
@@ -158,290 +255,448 @@ def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, co
         messagebox.showwarning("Warning", "C3D save operation cancelled.")
 
 
-def save_rec3d_as_bvh(rec3d_df, output_dir, file_base, point_rate, gui=True, swap_yz=True):
+def _load_wide_xyz_csv(file_path):
     """
-    Exports reconstructed 3D data to BVH format (Biovision Hierarchy).
-    Since there is no pre-defined rigid skeleton model, each marker is
-    exported as an independent ROOT node in 3D space.
+    Load a wide 3D CSV (frame, p1_x, p1_y, p1_z, p2_x, p2_y, p2_z, ...) using
+    COLUMN ORDER, not labels — mirrors rec3d.load_pixel_csv_positional but for
+    triples instead of pairs (used for a camera's own monocular MHR70 3D
+    estimate, e.g. `<stem>_mhr70_rec3d.csv`).
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: (frame_values shape (n_rows,),
+        xyz shape (n_rows, num_markers, 3)).
+    """
+    df = pd.read_csv(file_path)
+    n_cols = df.shape[1]
+    n_coord_cols = n_cols - 1
+    if n_coord_cols < 3 or n_coord_cols % 3 != 0:
+        raise ValueError(
+            f"expected frame + a multiple-of-3 coordinate columns, found {n_coord_cols} "
+            f"coordinate column(s) in {file_path}"
+        )
+    values = df.to_numpy(dtype=np.float64)
+    frame_values = values[:, 0]
+    num_markers = n_coord_cols // 3
+    xyz = values[:, 1:].reshape(-1, num_markers, 3)
+    return frame_values, xyz
+
+
+def _find_mesh_source_bundle(mesh_source_dir, export_fmt):
+    """
+    Locate the files a mesh-source directory (a sam3dinov3_visualize.py
+    "Visualize ID" output) must contain: the camera's own monocular MHR70 3D
+    CSV, the per-frame mesh directory for `export_fmt`, and the shared face
+    topology.
+
+    Returns:
+        tuple[Path, Path, Path] | None: (mhr70_rec3d_csv, mesh_frames_dir,
+        mesh_faces_path), or None with a printed reason if anything is missing.
+    """
+    mesh_source_dir = Path(mesh_source_dir)
+    matches = sorted(mesh_source_dir.glob("*_mhr70_rec3d.csv"))
+    if not matches:
+        print(f"[yellow]No *_mhr70_rec3d.csv found in {mesh_source_dir}[/yellow]")
+        return None
+    mhr70_rec3d_csv = matches[0]
+
+    mesh_frames_dir = mesh_source_dir / f"meshes_{export_fmt}"
+    if not mesh_frames_dir.is_dir():
+        print(
+            f"[yellow]No meshes_{export_fmt}/ folder in {mesh_source_dir} — run "
+            f"sam3dinov3_visualize.py with --export-mesh {export_fmt} first.[/yellow]"
+        )
+        return None
+
+    mesh_faces_path = mesh_source_dir / "mesh_faces.npy"
+    if not mesh_faces_path.is_file():
+        print(f"[yellow]No mesh_faces.npy found in {mesh_source_dir}[/yellow]")
+        return None
+
+    return mhr70_rec3d_csv, mesh_frames_dir, mesh_faces_path
+
+
+def find_markers_csv_in_dir(mesh_source_dir):
+    """
+    Locate the 2D pixel markers CSV (`*_markers.csv`) inside a
+    sam3dinov3_visualize.py "Visualize ID" output directory — the same
+    directory already required by --mesh-source-dir. Lets --pixels be
+    omitted when running with --mesh-source-dir: one directory per camera is
+    then enough to drive both triangulation (this file) and mesh alignment
+    (the directory's *_mhr70_rec3d.csv + meshes_<fmt>/ + mesh_faces.npy).
+
+    Returns:
+        Path | None: the markers CSV path, or None with a printed reason if
+        not found (or ambiguous).
+    """
+    mesh_source_dir = Path(mesh_source_dir)
+    matches = sorted(mesh_source_dir.glob("*_markers.csv"))
+    if not matches:
+        print(f"[yellow]No *_markers.csv found in {mesh_source_dir}[/yellow]")
+        return None
+    if len(matches) > 1:
+        print(
+            f"[yellow]Multiple *_markers.csv found in {mesh_source_dir}, "
+            f"using {matches[0].name}[/yellow]"
+        )
+    return matches[0]
+
+
+def _write_mesh_import_readme(mesh_dir, export_fmt, swap_yz, n_frames):
+    """State the axis settings a manual Blender import needs, next to the files.
+
+    Mesh vertices are always written RAW (x, y, z) -- the same convention as
+    the reconstruction CSV and, once the BVH importer applies its own default
+    axis conversion, the same convention the skeleton ends up in too. This is
+    what a mesh-sequence add-on with no axis controls at all (Stop Motion OBJ
+    -- confirmed by reading its source: it assigns "v x y z" straight to
+    Blender's mesh, no conversion) needs to line up with the BVH out of the
+    box. Blender's OWN native File > Import > Wavefront (.obj) dialog DOES
+    apply a conversion by default, so it needs an override to cancel it out.
+    """
+    axes = "Forward Y, Up Z  (override the dialog's defaults -- see below)"
+    Path(mesh_dir).joinpath("README_mesh_import.txt").write_text(
+        "vaila rec3d_one_dlt3d -- aligned mesh sequence\n"
+        "=============================================\n\n"
+        f"{n_frames} frame(s), format .{export_fmt}, written in the RAW (x, y, z)\n"
+        f"DLT/world frame -- the same convention as the reconstruction CSV.\n"
+        f"Frame N of this sequence is frame N of the .c3d / .bvh in the parent folder.\n\n"
+        "PREFERRED: run the *_blender_skeleton_viz.py script in the parent folder.\n"
+        "It imports the BVH and this sequence and sets the scene rate and frame\n"
+        "range -- none of which a manual import does.\n\n"
+        "A mesh-sequence add-on with no axis settings (e.g. Stop Motion OBJ /\n"
+        "OBJSequence) works with these files out of the box -- no configuration\n"
+        "needed, because they never apply any axis conversion of their own.\n\n"
+        "If you import these files with Blender's OWN File > Import > Wavefront\n"
+        "(.obj) dialog instead, its defaults DO apply a conversion and will move\n"
+        f"the mesh away from the skeleton -- override the axis settings to:\n"
+        f"    {axes}\n\n"
+        "A manual File > Import > BVH also leaves the scene at 24 fps with\n"
+        "frame_end 250, so a long capture plays slowly and stops early.\n"
+        + (
+            ""
+            if swap_yz
+            else "\nThis run was exported WITHOUT --swap-yz: the BVH is ALSO raw (x, y, z),\n"
+            "so it needs the same Forward Y, Up Z override if imported by hand.\n"
+        ),
+        encoding="utf-8",
+    )
+
+
+def reconstruct_mesh_sequence(
+    rec3d_df,
+    mesh_source_dirs,
+    output_dir,
+    file_base,
+    export_fmt="obj",
+    marker_indices=ALIGNMENT_MARKER_INDICES,
+    swap_yz=False,
+):
+    """
+    Align and export a per-frame body mesh from N cameras' monocular
+    SAM3+DINOv3 output into this run's DLT-triangulated world space (see
+    module docstring "Optional: mesh-for-Blender export").
 
     Args:
-        swap_yz (bool): If True, swaps Y and Z (Y_out = Z_in, Z_out = Y_in) for Z-up systems (Blender).
+        rec3d_df: the already-triangulated skeleton DataFrame (frame,
+            p1_x, p1_y, p1_z, ..., MHR70-ordered columns) produced earlier in
+            this same run_reconstruction() call.
+        mesh_source_dirs: list of per-camera sam3dinov3_visualize.py
+            "Visualize ID" output directories, same order as --dlt3d/--pixels.
+        output_dir: this run's timestamped output directory.
+        file_base: this run's file base name (for the manifest filename).
+        export_fmt: "obj" or "ply".
+        marker_indices: 1-based marker indices used for the Umeyama fit
+            (default: torso/hip/knee subset, see mesh_alignment.py).
+        swap_yz: kept for signature symmetry with save_rec3d_as_bvh() and
+            recorded in the written README, but no longer changes what gets
+            written to the mesh files (see below).
+
+    Mesh files are always written in the RAW (unswapped) DLT/world frame —
+    the same (x, y, z) convention as the triangulated skeleton CSV — REGARDLESS
+    of swap_yz. This looked wrong at first (the BVH is Y/Z-swapped by default
+    for Blender's Z-up convention, so shouldn't the mesh match it byte for
+    byte?) until measuring what actually happens with a real Blender mesh-
+    sequence viewer: the bundled "Stop Motion OBJ" family of add-ons parses
+    "v x y z" lines and assigns them straight to `mesh.vertices` with NO axis
+    conversion at all (confirmed by reading stop_motion_obj2/core.py's
+    parse_obj()/apply_to_mesh() — there is no forward/up parameter on its
+    operator to override this). Blender's own BVH importer, by contrast,
+    DOES apply an axis conversion by default. So a mesh file written in the
+    swapped convention displayed correctly only through Blender's native
+    `wm.obj_import` (which also converts) — but through the add-on most
+    people actually use for a mesh sequence, its height ended up along the
+    wrong Blender axis relative to the (correctly displayed) BVH skeleton:
+    exactly "the mesh has Z where Y should be" reported on a real run
+    (2026-08-05). Writing the mesh raw fixes the add-on path unconditionally
+    and only costs one extra step for `wm.obj_import`: override Forward=Y,
+    Up=Z (an identity/no-op conversion) instead of leaving its defaults —
+    see the companion script and README_mesh_import.txt, both updated to
+    match.
+
+    Returns:
+        dict summary (frames_written, frames_skipped, skip_reasons,
+        residuals, camera_switches, manifest_path) or None if no camera's
+        mesh-source bundle could be found.
     """
-    import os
+    if export_fmt not in ("obj", "ply"):
+        raise ValueError(f"export_fmt must be 'obj' or 'ply', got {export_fmt!r}")
+    writer = write_obj_mesh if export_fmt == "obj" else write_ply_mesh
 
-    import numpy as np
-
-    bvh_filepath = os.path.join(output_dir, f"{file_base}.bvh")
-
-    # Identifies markers from DataFrame columns
-    markers = []
-    for col in rec3d_df.columns:
-        if col.endswith("_x") and col.startswith("p"):
-            markers.append(col.replace("_x", ""))
-
-    num_frames = len(rec3d_df)
-    # Protection against division by zero, if point_rate is invalid
-    frame_time = 1.0 / point_rate if point_rate > 0 else 0.01
-
-    try:
-        with open(bvh_filepath, "w", encoding="utf-8") as f:
-            # ==========================================
-            # SEÇÃO 1: HIERARCHY
-            # ==========================================
-            f.write("HIERARCHY\n")
-            for marker in markers:
-                f.write(f"ROOT {marker}\n")
-                f.write("{\n")
-                f.write("\tOFFSET 0.000000 0.000000 0.000000\n")
-                f.write("\tCHANNELS 3 Xposition Yposition Zposition\n")
-                f.write("\tEnd Site\n")
-                f.write("\t{\n")
-                f.write("\t\tOFFSET 0.000000 0.000000 0.000000\n")
-                f.write("\t}\n")
-                f.write("}\n")
-
-            # ==========================================
-            # SECTION 2: MOTION
-            # ==========================================
-            f.write("MOTION\n")
-            f.write(f"Frames: {num_frames}\n")
-            f.write(f"Frame Time: {frame_time:.6f}\n")
-
-            # Format coordinates frame by frame
-            for _index, row in rec3d_df.iterrows():
-                frame_data = []
-                for marker in markers:
-                    x = row.get(f"{marker}_x", 0.0)
-                    y = row.get(f"{marker}_y", 0.0)
-                    z = row.get(f"{marker}_z", 0.0)
-
-                    # BVH format does not accept "NaN". Replace with 0.0
-                    x = 0.0 if np.isnan(x) else x
-                    y = 0.0 if np.isnan(y) else y
-                    z = 0.0 if np.isnan(z) else z
-
-                    if swap_yz:
-                        # AXIS SWAP FOR BLENDER (Z-up vs Y-up)
-                        # DLT Z axis goes to BVH Y column, and Y axis goes to Z.
-                        # Reference: X=X, Y=Z, Z=Y (or -Y if needed, but default is Y)
-                        frame_data.extend([f"{x:.6f}", f"{z:.6f}", f"{y:.6f}"])
-                    else:
-                        frame_data.extend([f"{x:.6f}", f"{y:.6f}", f"{z:.6f}"])
-
-                f.write(" ".join(frame_data) + "\n")
-
-        print(f"BVH file (mocap/Blender) created successfully (Swap Y/Z: {swap_yz})")
-        return bvh_filepath
-
-    except Exception as e:
-        msg = f"Failed to save BVH file: {e}"
-        print(f"Error: {msg}")
-        if gui:
-            from tkinter import messagebox
-
-            messagebox.showerror("Error", msg)
-
+    bundles = []
+    for mesh_source_dir in mesh_source_dirs:
+        bundles.append(_find_mesh_source_bundle(mesh_source_dir, export_fmt))
+    if all(b is None for b in bundles):
+        print(
+            "[red]No usable mesh-source directory found for any camera; skipping mesh export.[/red]"
+        )
         return None
 
-
-def generate_blender_companion_script(output_dir, file_base, skeleton_json_path=None):
-    """
-    Generates a Python script to be run inside Blender.
-    Creates a second Armature with STICK display whose bones connect
-    the imported BVH markers via constraints (Copy Location + Stretch To).
-    Native Blender approach — "bones" are visible lines that follow
-    the animation automatically.
-    """
-    import json
-    import os
-
-    # Default connections (MediaPipe 33 keypoints) used if no JSON is provided
-    default_connections = [
-        ["p12", "p13"],
-        ["p24", "p25"],
-        ["p12", "p24"],
-        ["p13", "p25"],
-        ["p12", "p25"],
-        ["p13", "p24"],
-        ["p1", "p3"],
-        ["p1", "p6"],
-        ["p3", "p6"],
-        ["p3", "p8"],
-        ["p6", "p9"],
-        ["p10", "p11"],
-        ["p12", "p14"],
-        ["p14", "p16"],
-        ["p16", "p18"],
-        ["p16", "p20"],
-        ["p16", "p22"],
-        ["p13", "p15"],
-        ["p15", "p17"],
-        ["p17", "p19"],
-        ["p17", "p21"],
-        ["p17", "p23"],
-        ["p24", "p26"],
-        ["p26", "p28"],
-        ["p28", "p30"],
-        ["p30", "p32"],
-        ["p25", "p27"],
-        ["p27", "p29"],
-        ["p29", "p31"],
-        ["p31", "p33"],
+    marker_cols_x = [f"p{i}_x" for i in marker_indices]
+    marker_cols_y = [f"p{i}_y" for i in marker_indices]
+    marker_cols_z = [f"p{i}_z" for i in marker_indices]
+    missing_cols = [
+        c for c in marker_cols_x + marker_cols_y + marker_cols_z if c not in rec3d_df.columns
     ]
-
-    connections = default_connections
-
-    if skeleton_json_path and os.path.exists(skeleton_json_path):
-        try:
-            with open(skeleton_json_path, encoding="utf-8") as f:
-                skeleton_data = json.load(f)
-                connections = skeleton_data.get("connections", default_connections)
-        except Exception as e:
-            print(f"Error reading skeleton JSON: {e}. Using default connections.")
-
-    # Don't generate if no connections (shouldn't happen with default, but good check)
-    if not connections:
+    if missing_cols:
+        print(
+            f"[red]rec3d output is missing alignment marker columns {missing_cols[:3]}... "
+            f"(need {len(marker_indices)} MHR70 markers); skipping mesh export.[/red]"
+        )
         return None
 
-    script_content = f"""import bpy
+    target_by_frame = {}
+    for _idx, row in rec3d_df.iterrows():
+        pts = np.stack(
+            [
+                row[marker_cols_x].to_numpy(),
+                row[marker_cols_y].to_numpy(),
+                row[marker_cols_z].to_numpy(),
+            ],
+            axis=1,
+        ).astype(np.float64)
+        target_by_frame[int(row["frame"])] = pts
 
-# =========================================================
-# Script automatically generated by vaila Toolbox
-# Skeleton Visualization — Armature STICK bones
-# =========================================================
-# How to use:
-#   1. Import the .bvh file into Blender (File > Import > BVH)
-#   2. Open this script in Blender's Text Editor
-#   3. Click "Run Script" (Play button)
-#   4. Press Space to play the animation and see the skeleton
-# =========================================================
-
-def create_skeleton_visualization():
-    print("=" * 60)
-    print("vaila — Skeleton Visualization (Armature STICK)")
-    print("=" * 60)
-
-    connections = {connections}
-
-    # ----------------------------------------------------------
-    # 1. Finds the imported BVH Armature
-    # ----------------------------------------------------------
-    bvh_armature = None
-    for obj in bpy.context.scene.objects:
-        if obj.type == 'ARMATURE':
-            bvh_armature = obj
-            break
-
-    if not bvh_armature:
-        print("ERROR: No Armature found in scene!")
-        print("Import the .bvh file first (File > Import > BVH).")
-        return
-
-    available_bones = [b.name for b in bvh_armature.data.bones]
-    print(f"Armature found: '{{bvh_armature.name}}' with {{len(available_bones)}} bones")
-
-    # ----------------------------------------------------------
-    # 2. Removes previous Vaila_Skeleton (safe re-run)
-    # ----------------------------------------------------------
-    old_obj = bpy.data.objects.get("Vaila_Skeleton")
-    if old_obj:
-        bpy.data.objects.remove(old_obj, do_unlink=True)
-    old_arm = bpy.data.armatures.get("Vaila_Skeleton_Data")
-    if old_arm:
-        bpy.data.armatures.remove(old_arm)
-
-    # ----------------------------------------------------------
-    # 3. Creates new Armature with STICK display
-    # ----------------------------------------------------------
-    arm_data = bpy.data.armatures.new("Vaila_Skeleton_Data")
-    arm_obj = bpy.data.objects.new("Vaila_Skeleton", arm_data)
-    bpy.context.scene.collection.objects.link(arm_obj)
-
-    # Display as thin lines (STICK) and always visible in front
-    arm_data.display_type = 'STICK'
-    arm_obj.show_in_front = True
-
-    # ----------------------------------------------------------
-    # 4. Enters Edit mode and creates connection bones
-    # ----------------------------------------------------------
-    bpy.ops.object.select_all(action='DESELECT')
-    bpy.context.view_layer.objects.active = arm_obj
-    arm_obj.select_set(True)
-    bpy.ops.object.mode_set(mode='EDIT')
-
-    valid_connections = []
-    for idx, (start_name, end_name) in enumerate(connections):
-        if start_name not in available_bones or end_name not in available_bones:
-            print(f"  Skipping: {{start_name}} -> {{end_name}} (not found in Armature)")
+    monocular_by_camera = []
+    faces_by_camera = []
+    for bundle in bundles:
+        if bundle is None:
+            monocular_by_camera.append(None)
+            faces_by_camera.append(None)
             continue
+        mhr70_rec3d_csv, _mesh_dir, mesh_faces_path = bundle
+        frames_arr, xyz_arr = _load_wide_xyz_csv(mhr70_rec3d_csv)
+        max_needed = max(marker_indices)
+        if xyz_arr.shape[1] < max_needed:
+            print(
+                f"[yellow]{mhr70_rec3d_csv} has only {xyz_arr.shape[1]} markers, "
+                f"need marker index {max_needed}; skipping this camera.[/yellow]"
+            )
+            monocular_by_camera.append(None)
+            faces_by_camera.append(None)
+            continue
+        frame_to_row = {int(f): i for i, f in enumerate(frames_arr)}
+        monocular_by_camera.append((frame_to_row, xyz_arr))
+        faces_by_camera.append(np.load(mesh_faces_path))
 
-        bone_name = f"link_{{start_name}}_{{end_name}}"
-        bone = arm_data.edit_bones.new(bone_name)
-        # Temporary position — will be overwritten by constraints
-        bone.head = (0.0, 0.0, idx * 0.001)
-        bone.tail = (0.0, 0.1, idx * 0.001)
-        bone.use_connect = False
-        valid_connections.append((start_name, end_name, bone_name))
+    mesh_dirs_by_camera = [b[1] if b is not None else None for b in bundles]
 
-    print(f"Bones created: {{len(valid_connections)}} connections")
+    output_mesh_dir = Path(output_dir) / f"meshes_{export_fmt}"
+    output_mesh_dir.mkdir(parents=True, exist_ok=True)
 
-    # ----------------------------------------------------------
-    # 5. Enters Pose mode and adds constraints
-    # ----------------------------------------------------------
-    bpy.ops.object.mode_set(mode='POSE')
+    manifest_rows = []
+    skip_reasons = {}
+    previous_camera = None
+    camera_switches = 0
+    frames_written = 0
 
-    for start_name, end_name, bone_name in valid_connections:
-        pbone = arm_obj.pose.bones[bone_name]
+    common_frames = sorted(target_by_frame.keys())
 
-        # Constraint 1: copy location of start marker
-        cloc = pbone.constraints.new('COPY_LOCATION')
-        cloc.target = bvh_armature
-        cloc.subtarget = start_name
+    def _mesh_frame_path(cam_idx, frame):
+        """Path to camera `cam_idx`'s monocular mesh for `frame`, or None."""
+        mesh_frames_dir = mesh_dirs_by_camera[cam_idx]
+        if mesh_frames_dir is None or faces_by_camera[cam_idx] is None:
+            return None
+        # meshes_obj/meshes_ply are always named frame_NNNNNN.<fmt>
+        candidate = mesh_frames_dir / f"frame_{frame:06d}.{export_fmt}"
+        if candidate.is_file():
+            return candidate
+        candidate = mesh_frames_dir / f"frame_{frame:06d}.obj"
+        return candidate if candidate.is_file() else None
 
-        # Constraint 2: stretch to end marker
-        stretch = pbone.constraints.new('STRETCH_TO')
-        stretch.target = bvh_armature
-        stretch.subtarget = end_name
-        try:
-            stretch.volume = 'NONE'
-        except TypeError:
-            stretch.volume = 'NO_VOLUME'
+    # --- Pass 1: solve the alignment on every frame where the target allows it.
+    # Transforms are kept per camera because each one maps that camera's own
+    # monocular space into world space; they are not interchangeable, so a gap
+    # may only ever be interpolated between solved frames of the SAME camera.
+    solved = {}
+    solved_by_camera = {cam_idx: [] for cam_idx in range(len(bundles))}
+    for frame in common_frames:
+        target_pts = target_by_frame[frame]
+        # No all-or-nothing NaN guard here on purpose: best_camera_alignment()
+        # already drops the individual rows that are non-finite in either the
+        # source or the target, per camera, before checking min_points. A
+        # frame where a single alignment marker is occluded (e.g. one acromion)
+        # is still perfectly solvable from the remaining ones, and rejecting it
+        # outright would push it into the interpolation fallback below —
+        # trading a real fit for a guessed one.
+        source_points_per_camera = []
+        for cam_idx in range(len(bundles)):
+            entry = monocular_by_camera[cam_idx]
+            if entry is None:
+                source_points_per_camera.append(None)
+                continue
+            frame_to_row, xyz_arr = entry
+            row_idx = frame_to_row.get(frame)
+            if row_idx is None:
+                source_points_per_camera.append(None)
+                continue
+            source_points_per_camera.append(xyz_arr[row_idx, [i - 1 for i in marker_indices], :])
 
-        # Green color (neon) for the bone — Blender 4.0+
-        try:
-            pbone.color.palette = 'CUSTOM'
-            pbone.color.custom.normal = (0.0, 1.0, 0.3)
-            pbone.color.custom.select = (1.0, 1.0, 0.0)
-            pbone.color.custom.active = (1.0, 0.5, 0.0)
-        except Exception:
-            pass
+        best_idx, best_result = best_camera_alignment(source_points_per_camera, target_pts)
+        if best_idx is None or best_result is None:
+            continue
+        # best_camera_alignment() only returns a non-degenerate AlignmentResult here,
+        # which always has R/s/t populated together (see mesh_alignment.py).
+        assert best_result.R is not None and best_result.s is not None and best_result.t is not None
+        solved[frame] = (best_idx, best_result)
+        solved_by_camera[best_idx].append((frame, best_result.R, best_result.s, best_result.t))
 
-    bpy.ops.object.mode_set(mode='OBJECT')
+    solved_frames_by_camera = {
+        cam_idx: [entry[0] for entry in entries] for cam_idx, entries in solved_by_camera.items()
+    }
 
-    # ----------------------------------------------------------
-    # 6. Forces scene update
-    # ----------------------------------------------------------
-    bpy.context.view_layer.update()
+    def _neighbours(cam_idx, frame):
+        """Nearest solved (frame, R, s, t) of `cam_idx` before/after `frame`."""
+        frames = solved_frames_by_camera[cam_idx]
+        pos = bisect.bisect_left(frames, frame)
+        before = solved_by_camera[cam_idx][pos - 1] if pos > 0 else None
+        after = solved_by_camera[cam_idx][pos] if pos < len(frames) else None
+        return before, after
 
-    print("=" * 60)
-    print(f"Done! {{len(valid_connections)}} skeleton connections created.")
-    print("Press SPACE to play animation and see the skeleton.")
-    print("=" * 60)
+    # --- Pass 2: write one mesh per frame, interpolating the placement of any
+    # frame Pass 1 could not solve, so the exported sequence has no gaps.
+    interpolated_frames = 0
+    for frame in common_frames:
+        interpolated = False
+        if frame in solved:
+            cam_idx, result = solved[frame]
+            # Pass 1 only stores non-degenerate results, which always carry
+            # R/s/t together (see mesh_alignment.AlignmentResult).
+            assert result.R is not None and result.s is not None and result.t is not None
+            R, s, t = result.R, result.s, result.t
+            mesh_path = _mesh_frame_path(cam_idx, frame)
+            if mesh_path is None:
+                skip_reasons["missing_mesh_frame"] = skip_reasons.get("missing_mesh_frame", 0) + 1
+                continue
+        else:
+            # Choose the camera with the closest solved frame that also has a
+            # mesh for THIS frame, then interpolate within that camera alone.
+            best_cam, best_gap, best_path = None, None, None
+            for cam_idx in range(len(bundles)):
+                if not solved_frames_by_camera[cam_idx]:
+                    continue
+                mesh_path = _mesh_frame_path(cam_idx, frame)
+                if mesh_path is None:
+                    continue
+                before, after = _neighbours(cam_idx, frame)
+                gaps = [abs(frame - n[0]) for n in (before, after) if n is not None]
+                if not gaps:
+                    continue
+                gap = min(gaps)
+                if best_gap is None or gap < best_gap:
+                    best_cam, best_gap, best_path = cam_idx, gap, mesh_path
+            if best_cam is None:
+                reason = (
+                    "missing_target"
+                    if np.isnan(target_by_frame[frame]).any()
+                    else "no_valid_camera"
+                )
+                skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
+                continue
+            before, after = _neighbours(best_cam, frame)
+            transform = interpolate_similarity_transform(before, after, frame)
+            if transform is None:
+                skip_reasons["no_valid_camera"] = skip_reasons.get("no_valid_camera", 0) + 1
+                continue
+            R, s, t = transform
+            cam_idx, result, mesh_path = best_cam, None, best_path
+            interpolated = True
+            interpolated_frames += 1
 
-create_skeleton_visualization()
-"""
+        # _mesh_frame_path() only returns a path for a camera whose faces are
+        # loaded, so this is never None on either branch above.
+        faces = faces_by_camera[cam_idx]
+        assert faces is not None and mesh_path is not None
+        vertices = read_obj_vertices(mesh_path)
+        transformed = apply_similarity_transform(vertices, R, s, t)
+        # Always the raw (x, y, z) DLT/world frame, independent of swap_yz --
+        # see the docstring above for why: the mesh-sequence add-on most
+        # people actually view this with does no axis conversion of its own.
+        out_faces = faces
+        out_path = output_mesh_dir / f"frame_{frame:06d}.{export_fmt}"
+        writer(out_path, transformed, out_faces)
 
-    script_filename = f"{file_base}_blender_skeleton_viz.py"
-    script_path = os.path.join(output_dir, script_filename)
+        if previous_camera is not None and previous_camera != cam_idx:
+            camera_switches += 1
+        previous_camera = cam_idx
+        frames_written += 1
+        manifest_rows.append(
+            {
+                "frame": frame,
+                "camera_index": cam_idx,
+                "mean_residual_m": result.mean_residual if result is not None else np.nan,
+                "rms_residual_m": result.rms_residual if result is not None else np.nan,
+                "max_residual_m": result.max_residual if result is not None else np.nan,
+                "n_fit_points": result.n_points if result is not None else 0,
+                "interpolated": int(interpolated),
+            }
+        )
 
-    try:
-        with open(script_path, "w", encoding="utf-8") as f:
-            f.write(script_content)
-        print(f"Blender companion script created: {script_filename}")
-        return script_path
-    except Exception as e:
-        print(f"Failed to create Blender script: {e}")
-        return None
+    manifest_path = Path(output_dir) / f"{file_base}_mesh_alignment.csv"
+    manifest_df = pd.DataFrame(manifest_rows)
+    manifest_df.to_csv(manifest_path, index=False, float_format="%.6f")
+    _write_mesh_import_readme(output_mesh_dir, export_fmt, swap_yz, frames_written)
+
+    # Interpolated frames carry no residual of their own (NaN in the manifest);
+    # the statistics below describe the directly solved frames only.
+    residuals = manifest_df["mean_residual_m"].to_numpy() if frames_written else np.array([])
+    residuals = residuals[np.isfinite(residuals)]
+    gap_frames = [
+        int(f) for f in sorted(set(common_frames) - {int(row["frame"]) for row in manifest_rows})
+    ]
+    summary = {
+        "frames_written": frames_written,
+        "frames_interpolated": interpolated_frames,
+        "frames_skipped": sum(skip_reasons.values()),
+        "skip_reasons": skip_reasons,
+        "camera_switches": camera_switches,
+        "manifest_path": str(manifest_path),
+        "output_mesh_dir": str(output_mesh_dir),
+        "sequence_contiguous": not gap_frames,
+        "missing_frames": gap_frames,
+        "mean_residual_m": float(residuals.mean()) if residuals.size else None,
+        "median_residual_m": float(np.median(residuals)) if residuals.size else None,
+        "max_residual_m": float(residuals.max()) if residuals.size else None,
+    }
+    print("\n=== Mesh Alignment Complete ===")
+    print(f"Frames written: {frames_written}")
+    print(f"Frames with interpolated placement: {interpolated_frames}")
+    print(f"Frames skipped: {summary['frames_skipped']} ({skip_reasons})")
+    print(f"Camera switches: {camera_switches}")
+    if gap_frames:
+        print(
+            f"[yellow]Sequence has {len(gap_frames)} gap(s) — a Blender OBJ-sequence "
+            f"import will drift out of sync with the C3D/BVH.[/yellow]"
+        )
+    else:
+        print("Sequence is gap-free (frame N of the mesh == frame N of the C3D/BVH)")
+    if residuals.size:
+        print(
+            f"Residual (m): mean={summary['mean_residual_m']:.4f} "
+            f"median={summary['median_residual_m']:.4f} max={summary['max_residual_m']:.4f}"
+        )
+    print(f"Mesh sequence: {output_mesh_dir}")
+    print(f"Alignment manifest: {manifest_path}")
+    return summary
 
 
 def run_reconstruction(
@@ -452,6 +707,8 @@ def run_reconstruction(
     gui=True,
     swap_yz=True,
     skeleton_json_path=None,
+    mesh_source_dirs=None,
+    export_mesh="none",
 ):
     """
     Run 3D reconstruction from DLT3D and pixel CSV paths. Used by both GUI and CLI.
@@ -561,6 +818,7 @@ def run_reconstruction(
     rec3d_df = pd.DataFrame(reconstruction_array, columns=header)  # type: ignore
     valid_frames_mask = ~rec3d_df.iloc[:, 1:].isna().all(axis=1)
     rec3d_df = rec3d_df[valid_frames_mask].reset_index(drop=True)
+    rec3d_df["frame"] = rec3d_df["frame"].astype(int)
 
     if rec3d_df.empty:
         return _err("No valid 3D reconstruction could be performed!")
@@ -634,6 +892,23 @@ def run_reconstruction(
     # ---> NEW: Call to save BVH file <---
     save_rec3d_as_bvh(rec3d_df, new_dir, file_base, point_rate, gui=gui, swap_yz=swap_yz)
 
+    # ---> NEW: Optional aligned mesh-for-Blender export <---
+    if mesh_source_dirs and export_mesh != "none":
+        print("\nAligning and exporting mesh sequence...")
+        try:
+            reconstruct_mesh_sequence(
+                rec3d_df,
+                mesh_source_dirs,
+                new_dir,
+                file_base,
+                export_fmt=export_mesh,
+                swap_yz=swap_yz,
+            )
+        except Exception as e:
+            print(f"[red]Mesh export failed: {e}[/red]")
+            if gui:
+                messagebox.showerror("Mesh Export Error", f"Mesh export failed: {e}")
+
     print("\n=== Processing Complete ===")
     print(f"Processed {len(common_frames)} frames with {num_markers} markers")
     print(f"Output directory: {new_dir}")
@@ -651,7 +926,15 @@ def run_reconstruction(
 
     # ---> NEW: Companion Script for Blender <---
     # Always attempt to generate (will use default Body-33 connections if path is None)
-    blender_script = generate_blender_companion_script(new_dir, file_base, skeleton_json_path)
+    blender_script = generate_blender_companion_script(
+        new_dir,
+        file_base,
+        skeleton_json_path,
+        point_rate=point_rate,
+        n_frames=len(rec3d_df),
+        mesh_dir=(f"meshes_{export_mesh}" if mesh_source_dirs and export_mesh != "none" else None),
+        unreconstructed_markers=find_unreconstructed_markers(rec3d_df),
+    )
     if blender_script:
         print(f"  - {os.path.basename(blender_script)} (Run this in Blender to visualize skeleton)")
 
@@ -678,6 +961,40 @@ def run_reconstruction(
         )
 
     return (new_dir, file_base)
+
+
+def _build_cli_command(
+    dlt_files,
+    pixel_files,
+    output_directory,
+    point_rate,
+    swap_yz,
+    skeleton_json_path,
+    mesh_source_dirs,
+    export_mesh,
+):
+    """
+    Build the CLI command equivalent to a GUI run, so the terminal always
+    shows a copy-pasteable way to repeat the same reconstruction headlessly.
+
+    `pixel_files` may be None when --mesh-source-dir already supplies them
+    (each Visualize-ID run directory contains its own *_markers.csv), keeping
+    the printed command as short as the simplified CLI path allows.
+    """
+    parts = ["uv run python -m vaila.rec3d_one_dlt3d", f"--dlt3d {' '.join(dlt_files)}"]
+    if pixel_files:
+        parts.append(f"--pixels {' '.join(pixel_files)}")
+    parts.append(f"--fps {point_rate}")
+    parts.append(f"-o {output_directory}")
+    # --swap-yz is the default; only the opt-out needs to appear explicitly.
+    if not swap_yz:
+        parts.append("--no-swap-yz")
+    if skeleton_json_path:
+        parts.append(f"--skeleton {skeleton_json_path}")
+    if mesh_source_dirs:
+        parts.append(f"--mesh-source-dir {' '.join(mesh_source_dirs)}")
+        parts.append(f"--export-mesh {export_mesh}")
+    return " ".join(parts)
 
 
 def run_rec3d_one_dlt3d():
@@ -719,19 +1036,57 @@ def run_rec3d_one_dlt3d():
             return
         dlt_files.append(path)
 
-    # Step 2: Select pixel coordinate CSV files (one dialog per camera)
-    print("Step 2: Selecting pixel coordinate CSV files...")
-    pixel_files = []
-    for i in range(1, n_cameras + 1):
-        path = filedialog.askopenfilename(
-            title=f"Select pixel coordinate CSV for camera {i}",
-            filetypes=[("CSV files", "*.csv")],
-        )
-        if not path:
-            messagebox.showerror("Error", f"No pixel coordinate file selected for camera {i}!")
-            root.destroy()
-            return
-        pixel_files.append(path)
+    # Step 2: Select pixel coordinate CSV files, one per camera -- OR, if a
+    # SAM3+DINOv3 run is being used, derive them from --mesh-source-dir below
+    # instead (each Visualize-ID directory already contains its own
+    # *_markers.csv, so there is no need to pick the same directory twice).
+    print("Step 2: Pixel source...")
+    mesh_source_dirs = None
+    use_mesh_run_dirs = messagebox.askyesno(
+        "Pixel Source",
+        "Use per-camera SAM3+DINOv3 'Visualize ID' run directories as the "
+        "pixel source?\n\n"
+        "YES: pick one run directory per camera (from "
+        "sam3dinov3_visualize.py) -- its own markers.csv is used "
+        "automatically, and you can optionally also export the aligned "
+        "mesh from the same directories.\n\n"
+        "NO: pick a plain pixel-coordinate CSV per camera instead (the "
+        "original flow; no mesh export available this way).",
+    )
+    if use_mesh_run_dirs:
+        mesh_source_dirs = []
+        for i in range(1, n_cameras + 1):
+            path = filedialog.askdirectory(
+                title=f"Select SAM3+DINOv3 'Visualize ID' run directory for camera {i}"
+            )
+            if not path:
+                messagebox.showerror("Error", f"No run directory selected for camera {i}!")
+                root.destroy()
+                return
+            mesh_source_dirs.append(path)
+
+        pixel_files = []
+        for mesh_dir in mesh_source_dirs:
+            markers_csv = find_markers_csv_in_dir(mesh_dir)
+            if markers_csv is None:
+                messagebox.showerror(
+                    "Error", f"No *_markers.csv found in {mesh_dir} -- cannot continue."
+                )
+                root.destroy()
+                return
+            pixel_files.append(str(markers_csv))
+    else:
+        pixel_files = []
+        for i in range(1, n_cameras + 1):
+            path = filedialog.askopenfilename(
+                title=f"Select pixel coordinate CSV for camera {i}",
+                filetypes=[("CSV files", "*.csv")],
+            )
+            if not path:
+                messagebox.showerror("Error", f"No pixel coordinate file selected for camera {i}!")
+                root.destroy()
+                return
+            pixel_files.append(path)
 
     if len(dlt_files) != len(pixel_files):
         messagebox.showerror(
@@ -760,12 +1115,14 @@ def run_rec3d_one_dlt3d():
         messagebox.showerror("Error", "Point data rate is required. Operation cancelled.")
         return
 
-    # Step 5: Ask if user wants to swap Y and Z axes for Blender
+    # Step 5: Ask if user wants to swap Y and Z axes for Blender (default YES)
     swap_yz = messagebox.askyesno(
-        "BVH Axis Export",
-        "Do you want to swap Y and Z axes for the BVH file?\n\n"
-        "Select YES if you plan to open this in Blender (Z-up).\n"
-        "Select NO to keep original DLT coordinates.",
+        "Blender Axis Export",
+        "Swap Y and Z axes for the BVH and mesh output?\n\n"
+        "YES (recommended, default): height becomes vertical (Z-up) in "
+        "Blender, and the BVH and mesh stay in the same axis convention.\n"
+        "NO: keep the original DLT coordinates.",
+        default=messagebox.YES,
     )
 
     # Step 6: (Optional) Select Skeleton Pose JSON
@@ -782,6 +1139,50 @@ def run_rec3d_one_dlt3d():
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
         )
 
+    # Step 7: (Optional) Aligned mesh-for-Blender export
+    print("Step 7: (Optional) Aligned mesh-for-Blender export...")
+    export_mesh = "none"
+    if mesh_source_dirs:
+        # Step 2 already selected the run directories (simplified path) --
+        # just ask whether to also export the aligned mesh from them.
+        use_mesh = messagebox.askyesno(
+            "Mesh Export",
+            "Also export an aligned 3D body mesh sequence for Blender from "
+            "the same SAM3+DINOv3 run directories?",
+        )
+        if use_mesh:
+            export_mesh = (
+                "obj" if messagebox.askyesno("Mesh Format", "Export as OBJ? (No = PLY)") else "ply"
+            )
+    else:
+        use_mesh = messagebox.askyesno(
+            "Mesh Export",
+            "Export an aligned 3D body mesh sequence for Blender?\n\n"
+            "Requires one sam3dinov3_visualize.py 'Visualize ID' output directory "
+            "per camera (containing *_mhr70_rec3d.csv, meshes_obj/ or meshes_ply/, "
+            "and mesh_faces.npy).",
+        )
+        if use_mesh:
+            mesh_source_dirs = []
+            for i in range(1, n_cameras + 1):
+                path = filedialog.askdirectory(
+                    title=f"Select mesh-source directory for camera {i} (Visualize ID output)"
+                )
+                if not path:
+                    messagebox.showwarning(
+                        "Mesh Export Cancelled",
+                        "Mesh-source directory missing; skipping mesh export.",
+                    )
+                    mesh_source_dirs = None
+                    break
+                mesh_source_dirs.append(path)
+            if mesh_source_dirs:
+                export_mesh = (
+                    "obj"
+                    if messagebox.askyesno("Mesh Format", "Export as OBJ? (No = PLY)")
+                    else "ply"
+                )
+
     # Configuration summary
     print("Configuration complete:")
     print(f"  - DLT3D files: {len(dlt_files)} cameras")
@@ -792,7 +1193,22 @@ def run_rec3d_one_dlt3d():
     print(
         f"  - Skeleton JSON: {os.path.basename(skeleton_json_path) if skeleton_json_path else 'None'}"
     )
+    print(
+        f"  - Mesh export: {export_mesh} ({len(mesh_source_dirs) if mesh_source_dirs else 0} camera(s))"
+    )
     print("-" * 80)
+
+    cli_cmd = _build_cli_command(
+        dlt_files,
+        pixel_files if not use_mesh_run_dirs else None,
+        output_directory,
+        point_rate,
+        swap_yz,
+        skeleton_json_path,
+        mesh_source_dirs,
+        export_mesh,
+    )
+    print(f">> {cli_cmd}")
 
     run_reconstruction(
         dlt_files,
@@ -802,7 +1218,18 @@ def run_rec3d_one_dlt3d():
         gui=True,
         swap_yz=swap_yz,
         skeleton_json_path=skeleton_json_path,
+        mesh_source_dirs=mesh_source_dirs,
+        export_mesh=export_mesh,
     )
+
+    # Repeat the equivalent CLI command LAST, after all the processing output,
+    # so it is the final thing on screen and easy to copy for a headless re-run.
+    print("\n" + "=" * 80)
+    print("Equivalent CLI command for this run (copy/paste to repeat headlessly):")
+    print("=" * 80)
+    print(f">> {cli_cmd}")
+    print("=" * 80)
+
     root.destroy()
 
 
@@ -844,7 +1271,11 @@ See also: vaila/help/rec3d_one_dlt3d.md
         "--pixels",
         nargs="+",
         metavar="FILE",
-        help="Pixel coordinate CSV files, one per camera (order must match --dlt3d)",
+        help=(
+            "Pixel coordinate CSV files, one per camera (order must match --dlt3d). "
+            "Optional if --mesh-source-dir is given: each mesh-source directory's own "
+            "*_markers.csv is used automatically."
+        ),
     )
     parser.add_argument(
         "--fps",
@@ -870,45 +1301,106 @@ See also: vaila/help/rec3d_one_dlt3d.md
     )
     parser.add_argument(
         "--swap-yz",
+        dest="swap_yz",
         action="store_true",
-        help="Swap Y and Z axes in BVH output (optimized for Blender Z-up)",
+        default=True,
+        help=(
+            "Swap Y and Z axes in the BVH and mesh output so height ends up "
+            "vertical (Z-up) in Blender. This is the DEFAULT; the flag is kept "
+            "for backward compatibility and as an explicit opt-in."
+        ),
+    )
+    parser.add_argument(
+        "--no-swap-yz",
+        dest="swap_yz",
+        action="store_false",
+        help="Keep the raw DLT axes in the BVH and mesh output (no Y/Z swap)",
     )
     parser.add_argument(
         "--skeleton",
         metavar="FILE",
         help="Path to Skeleton Pose JSON file (defines connections for Blender visualization)",
     )
+    parser.add_argument(
+        "--mesh-source-dir",
+        nargs="+",
+        metavar="DIR",
+        dest="mesh_source_dir",
+        help=(
+            "Per-camera sam3dinov3_visualize.py 'Visualize ID' output directory "
+            "(order must match --dlt3d/--pixels); each must contain "
+            "*_mhr70_rec3d.csv, meshes_obj/ or meshes_ply/, and mesh_faces.npy"
+        ),
+    )
+    parser.add_argument(
+        "--export-mesh",
+        choices=["none", "obj", "ply"],
+        default="none",
+        help="Export an aligned per-frame mesh sequence for Blender (requires --mesh-source-dir)",
+    )
     args = parser.parse_args()
 
-    if args.gui or (not args.dlt3d and not args.pixels and not args.output):
+    have_pixel_source = args.pixels or args.mesh_source_dir
+    if args.gui or (not args.dlt3d and not have_pixel_source and not args.output):
         run_rec3d_one_dlt3d()
         return
 
-    if not args.dlt3d or not args.pixels:
+    if not args.dlt3d or not have_pixel_source:
         # Check if user only provided --gui (already handled) but maybe they provided partial args
         if args.gui:
             run_rec3d_one_dlt3d()
             return
-        print("Error: CLI mode requires --dlt3d and --pixels.", file=sys.stderr)
+        print(
+            "Error: CLI mode requires --dlt3d and (--pixels or --mesh-source-dir).", file=sys.stderr
+        )
         sys.exit(1)
     if not args.output:
         print("Error: CLI mode requires --output.", file=sys.stderr)
         sys.exit(1)
-    if len(args.dlt3d) != len(args.pixels):
+    if args.mesh_source_dir and len(args.mesh_source_dir) != len(args.dlt3d):
         print(
-            "Error: Number of --dlt3d files must match number of --pixels files.",
+            "Error: Number of --mesh-source-dir entries must match number of --dlt3d files.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if args.export_mesh != "none" and not args.mesh_source_dir:
+        print("Error: --export-mesh requires --mesh-source-dir.", file=sys.stderr)
+        sys.exit(1)
+
+    pixel_files = args.pixels
+    if not pixel_files:
+        # Simplified single-argument-per-camera path: each --mesh-source-dir
+        # is a sam3dinov3_visualize.py "Visualize ID" output directory, which
+        # already contains its own *_markers.csv alongside the mesh data —
+        # no need to also pass --pixels pointing at the same directory.
+        print("No --pixels given; deriving pixel files from --mesh-source-dir...")
+        pixel_files = []
+        for mesh_dir in args.mesh_source_dir:
+            markers_csv = find_markers_csv_in_dir(mesh_dir)
+            if markers_csv is None:
+                print(f"Error: could not find *_markers.csv in {mesh_dir}", file=sys.stderr)
+                sys.exit(1)
+            pixel_files.append(str(markers_csv))
+            print(f"  {mesh_dir} -> {markers_csv.name}")
+
+    if len(args.dlt3d) != len(pixel_files):
+        print(
+            "Error: Number of --dlt3d files must match number of pixel files "
+            "(from --pixels, or derived from --mesh-source-dir).",
             file=sys.stderr,
         )
         sys.exit(1)
 
     result = run_reconstruction(
         args.dlt3d,
-        args.pixels,
+        pixel_files,
         os.path.abspath(args.output),
         args.fps,
         gui=False,
         swap_yz=args.swap_yz,
         skeleton_json_path=args.skeleton,
+        mesh_source_dirs=args.mesh_source_dir,
+        export_mesh=args.export_mesh,
     )
     if result is None:
         sys.exit(1)

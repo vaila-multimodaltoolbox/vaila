@@ -3,10 +3,10 @@
 readcsv_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Version: 25 September 2024
-Update: 04 September 2025
-Version updated: 0.1.1
-Python Version: 3.12.11
+Version: 0.3.99
+Created: 25 September 2024
+Last Updated: 04 August 2026
+Python Version: 3.12.13
 
 Description:
 This script provides functionality to convert CSV files containing point and analog data
@@ -789,6 +789,11 @@ def auto_create_c3d_from_csv(
 
     try:
         points_data = np.zeros((4, num_markers, num_frames))
+        # C3D marks an occluded/untracked sample with a NEGATIVE residual (-1).
+        # Start every sample valid (0.0) and flag NaN samples below; writing 0.0
+        # coordinates with a valid residual instead would park every occluded
+        # marker on the world origin, which viewers draw as a real marker.
+        residuals_data = np.zeros((1, num_markers, num_frames))
         print("Initialized points data array with shape:", points_data.shape)
     except Exception as e:
         raise Exception(f"Failed to initialize points data array: {e}")
@@ -813,11 +818,16 @@ def auto_create_c3d_from_csv(
             y_data = points_df[y_col].values
             z_data = points_df[z_col].values
 
-            if np.any(np.isnan(x_data)) or np.any(np.isnan(y_data)) or np.any(np.isnan(z_data)):
-                print(f"Warning: NaN values found in marker {label}, replacing with 0")
+            invalid = np.isnan(x_data) | np.isnan(y_data) | np.isnan(z_data)
+            if np.any(invalid):
+                print(
+                    f"Info: {int(invalid.sum())} occluded sample(s) in marker {label}, "
+                    "flagged invalid in C3D (residual = -1)"
+                )
                 x_data = np.nan_to_num(x_data, nan=0.0)
                 y_data = np.nan_to_num(y_data, nan=0.0)
                 z_data = np.nan_to_num(z_data, nan=0.0)
+                residuals_data[0, i, invalid] = -1.0
 
             points_data[0, i, :] = x_data * conversion_factor
             points_data[1, i, :] = y_data * conversion_factor
@@ -834,6 +844,17 @@ def auto_create_c3d_from_csv(
         print("Points data assigned to C3D successfully.")
     except Exception as e:
         raise Exception(f"Failed to assign points data to C3D: {e}")
+
+    # Must be assigned AFTER points: ezc3d sizes meta_points from the points array.
+    if np.any(residuals_data < 0):
+        try:
+            c3d["data"]["meta_points"]["residuals"] = residuals_data
+            print(
+                f"Flagged {int((residuals_data < 0).sum())} occluded marker-samples "
+                "as invalid (residual = -1)."
+            )
+        except Exception as e:
+            print(f"Warning: Could not set invalid-point residuals: {e}")
 
     # POINT:FRAMES (total frame count) for reader/tool compatibility
     try:
