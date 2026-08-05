@@ -23,7 +23,7 @@
 <body><div class="container">
   <h1>SAM3+DINOv3 3D (<code>sam3dinov3.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.3.98 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-03<br>
+    <strong>Version:</strong> 0.3.99 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-05<br>
     <strong>Category:</strong> Markerless 3D / Meta (Facebook)<br>
     <strong>GUI:</strong> Frame B → Markerless 3D → <strong>SAM3+DINOv3 3D</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA required; SAM 3 and SAM 3D Body optional stacks.
@@ -135,6 +135,7 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
     <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints3d.csv</code></td><td>Long table: root-relative <strong>and</strong> camera-frame metres</td></tr>
     <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints2d.csv</code></td><td>Long table: reprojected pixels</td></tr>
     <tr><td><code>&lt;video&gt;_sam3dinov3_camera.csv</code></td><td>Per-frame focal length, <code>cam_t</code>, bbox</td></tr>
+    <tr><td><code>&lt;video&gt;_sam3dinov3_joint_angles.csv</code></td><td>Long table: local (parent-relative) joint angles for the model's own 127-joint MHR rig — Euler XYZ degrees + scalar-first quaternion, from the model's own regressed rotations — v0.3.99, see <a href="joint_kinematics.html">joint_kinematics</a></td></tr>
     <tr><td><code>&lt;video&gt;_id_NN_mhr70_3d.csv</code></td><td>Wide, named columns (<code>nose_x,nose_y,nose_z,…</code>)</td></tr>
     <tr><td><code>&lt;video&gt;_id_NN_mhr70_rec3d.csv</code></td><td>Wide, vailá <code>rec3d</code> convention (<code>p1_x,p1_y,p1_z,…</code>)</td></tr>
     <tr><td><code>&lt;video&gt;_id_NN_markers.csv</code></td><td>Wide 2D for REC2D / <code>getpixelvideo.py</code></td></tr>
@@ -193,6 +194,7 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
   <ul>
     <li><a href="sam3sapiens2.html">sam3sapiens2</a> — same SAM3 front-end, 2D 308-keypoint pose</li>
     <li><a href="vaila_sam.html">vaila_sam</a> — SAM 3 video segmentation on its own</li>
+    <li><a href="joint_kinematics.html">joint_kinematics</a> — shared math for <code>*_sam3dinov3_joint_angles.csv</code></li>
     <li><a href="vaila_sapiens.html">vaila_sapiens</a> — Sapiens2 pose</li>
   </ul>
 

@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 03 August 2026
-Version: 0.3.98
+Update Date: 05 August 2026
+Version: 0.3.99
 
 Description:
     CPU-only rerenderer for an existing SAM3+DINOv3 3D (SAM 3D Body) run. It
@@ -15,6 +15,12 @@ Description:
     tracking/keypoint/mesh artifacts. SAM3/SAM 3D Body weights are never
     loaded, so this is safe to run on a CPU-only machine right after a GPU
     inference run.
+
+    If the source run's *_sam3dinov3_joint_angles.csv exists (runs made after
+    this feature was added -- see joint_kinematics.py), it is filtered to the
+    selected ID like the other per-person CSVs: local (parent-relative) Euler
+    XYZ degrees + scalar-first quaternion per joint of the model's own
+    127-joint MHR rig.
 
     The MHR70 skeleton is colored by joint side (left=green, right=orange,
     center=blue) using the "left-"/"right-" name prefixes, and the SAM
@@ -653,6 +659,11 @@ def write_selected_artifacts(
             output_dir / f"{stem}_sam3dinov3_camera.csv",
             ("person_id",),
         ),
+        (
+            run_dir / f"{stem}_sam3dinov3_joint_angles.csv",
+            output_dir / f"{stem}_sam3dinov3_joint_angles.csv",
+            ("person_id",),
+        ),
     )
     for source, target, columns in mapping:
         if _filter_rows(source, target, columns, selected_id):
@@ -798,6 +809,10 @@ def visualize_selected_id(
         "coordinate_units=full-frame pixels for 2D; metres for 3D; frame_index=zero-based\n"
         "The root contains filtered artifacts. source_artifacts/ preserves the original run.\n"
         "Overlay style: SAM3 contour fill/outline + left/right/center MHR70 skeleton + depth label.\n"
+        f"{video_path.stem}_sam3dinov3_joint_angles.csv: local (parent-relative) joint angles for the\n"
+        "127-joint MHR rig -- Euler XYZ degrees + scalar-first (w,x,y,z) quaternion, from the\n"
+        "model's own regressed rotations (present only for runs made after this feature was\n"
+        "added; older runs have no *_joint_angles.csv to filter).\n"
         f"{blender_note}",
         encoding="utf-8",
     )

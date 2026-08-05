@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.3.98
-- **Updated:** 2026-08-03
+- **Version:** 0.3.99
+- **Updated:** 2026-08-05
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
@@ -126,6 +126,7 @@ Each video gets its own subdirectory inside `processed_sam3dinov3_<timestamp>/`.
 | `<video>_sam3dinov3_keypoints3d.csv`    | Long table: root-relative **and** camera-frame metres         |
 | `<video>_sam3dinov3_keypoints2d.csv`    | Long table: reprojected pixels                                |
 | `<video>_sam3dinov3_camera.csv`         | Per-frame focal length, `cam_t`, bbox                         |
+| `<video>_sam3dinov3_joint_angles.csv`   | Long table: local (parent-relative) joint angles for the model's own 127-joint MHR rig — Euler XYZ degrees + scalar-first quaternion, from the model's own regressed rotations — v0.3.99, see [joint_kinematics](joint_kinematics.md) |
 | `<video>_id_NN_mhr70_3d.csv`            | Wide, named columns (`nose_x,nose_y,nose_z,…`)                |
 | `<video>_id_NN_mhr70_rec3d.csv`         | Wide, vailá `rec3d` convention (`p1_x,p1_y,p1_z,…`)           |
 | `<video>_id_NN_markers.csv`             | Wide 2D for REC2D / `getpixelvideo.py`                        |
@@ -181,6 +182,7 @@ Use the **`xcam_*` columns** for inter-person distances and depth; the wide
 
 - [sam3sapiens2](sam3sapiens2.md) — same SAM3 front-end, 2D 308-keypoint pose
 - [vaila_sam](vaila_sam.md) — SAM 3 video segmentation on its own
+- [joint_kinematics](joint_kinematics.md) — shared math for `*_sam3dinov3_joint_angles.csv`
 - [vaila_sapiens](vaila_sapiens.md) — Sapiens2 pose
 
 ## References
