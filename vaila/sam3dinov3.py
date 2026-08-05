@@ -88,6 +88,14 @@ import numpy as np
 
 try:
     from .gpu_subprocess import run_isolated_gpu_subprocess
+    from .joint_kinematics import (
+        MHR127_NUM_JOINTS,
+        MHR127_PARENTS,
+        infer_joint_names_from_positions,
+        local_rotations_from_global,
+        rotmat_to_euler_xyz_deg,
+        rotmat_to_quat_wxyz,
+    )
     from .sam3sapiens2 import (
         DEFAULT_BBOX_PADDING,
         DEFAULT_CONTOUR_MARGIN_PX,
@@ -112,6 +120,14 @@ try:
     from .vaila_sam import _open_sam3_video_writer
 except ImportError:  # standalone execution
     from gpu_subprocess import run_isolated_gpu_subprocess  # ty: ignore[unresolved-import]
+    from joint_kinematics import (  # ty: ignore[unresolved-import]
+        MHR127_NUM_JOINTS,
+        MHR127_PARENTS,
+        infer_joint_names_from_positions,
+        local_rotations_from_global,
+        rotmat_to_euler_xyz_deg,
+        rotmat_to_quat_wxyz,
+    )
     from sam3sapiens2 import (  # ty: ignore[unresolved-import]
         DEFAULT_BBOX_PADDING,
         DEFAULT_CONTOUR_MARGIN_PX,
@@ -557,6 +573,14 @@ def _instances_from_outputs(
         kp3d = np.asarray(out["pred_keypoints_3d"], dtype=np.float32).reshape(-1, 3)
         kp2d = np.asarray(out["pred_keypoints_2d"], dtype=np.float32).reshape(-1, 2)
         cam_t = np.asarray(out["pred_cam_t"], dtype=np.float32).reshape(3)
+        # Per-joint GLOBAL rotation matrices for the model's own 127-joint MHR
+        # rig (Meta's Momentum Human Rig) -- NOT the same indexing as the
+        # 70-name MHR70_NAMES keypoint list above, which is position-only.
+        # Small (127x3x3 floats), unlike vertices, so kept for the whole run
+        # rather than dropped after the overlay is drawn. See
+        # joint_kinematics.py for the joint-angle math built on this.
+        global_rots = out.get("pred_global_rots")
+        joint_coords = out.get("pred_joint_coords")
         instances.append(
             {
                 "person_id": int(obj_id),
@@ -571,6 +595,16 @@ def _instances_from_outputs(
                 "keypoints_3d_cam": kp3d + cam_t[None, :],
                 "focal_length": float(np.asarray(out["focal_length"]).reshape(-1)[0]),
                 "vertices": out.get("pred_vertices"),
+                "global_rots": (
+                    np.asarray(global_rots, dtype=np.float64).reshape(-1, 3, 3)
+                    if global_rots is not None
+                    else None
+                ),
+                "joint_coords_3d": (
+                    np.asarray(joint_coords, dtype=np.float64).reshape(-1, 3)
+                    if joint_coords is not None
+                    else None
+                ),
             }
         )
     return instances
@@ -767,6 +801,97 @@ def write_camera_csv(
     return path
 
 
+def _joint_rig_names(
+    timeline: dict[int, list[dict[str, Any]]], names: list[str]
+) -> list[str] | None:
+    """Infer names for the 127-joint MHR rig, once, from the first usable frame.
+
+    The rig-joint <-> keypoint-name correspondence is a fixed model property
+    (not something that changes frame to frame), so this only needs to run
+    once per run, against whichever frame/person has both fields populated.
+    Returns None if no instance in the whole timeline carries rig data (e.g.
+    an older run, or if the upstream ``process_one_image`` output ever
+    drops these fields).
+    """
+    for frame_idx in sorted(timeline):
+        for inst in timeline[frame_idx]:
+            rig = inst.get("joint_coords_3d")
+            if rig is not None and inst.get("global_rots") is not None:
+                return infer_joint_names_from_positions(rig, inst["keypoints_3d"], names)
+    return None
+
+
+def write_long_joint_angles_csv(
+    output_dir: Path,
+    stem: str,
+    timeline: dict[int, list[dict[str, Any]]],
+    names: list[str],
+) -> Path | None:
+    """Long-format joint-angle table: local (parent-relative) Euler + quaternion.
+
+    One row per frame/person/joint of the model's own 127-joint MHR rig (see
+    ``joint_kinematics.py`` for why this is preferred over reconstructing
+    angles from keypoint positions, and for the Euler/quaternion
+    conventions used). Returns None (writes nothing) if no instance in this
+    run carries the rotation fields -- e.g. a run predating this feature.
+    """
+    rig_names = _joint_rig_names(timeline, names)
+    if rig_names is None:
+        _log(
+            "No per-joint rotation data in this run's predictions "
+            "(pred_global_rots); skipping joint-angle CSV."
+        )
+        return None
+
+    path = output_dir / f"{stem}_sam3dinov3_joint_angles.csv"
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(
+            [
+                "frame",
+                "person_id",
+                "joint_idx",
+                "joint_name",
+                "parent_idx",
+                "euler_x_deg",
+                "euler_y_deg",
+                "euler_z_deg",
+                "quat_w",
+                "quat_x",
+                "quat_y",
+                "quat_z",
+            ]
+        )
+        for frame_idx in sorted(timeline):
+            for inst in timeline[frame_idx]:
+                global_rots = inst.get("global_rots")
+                if global_rots is None:
+                    continue
+                pid = int(inst["person_id"])
+                n = min(len(global_rots), MHR127_NUM_JOINTS)
+                local_rots = local_rotations_from_global(global_rots[:n], MHR127_PARENTS[:n])
+                euler = rotmat_to_euler_xyz_deg(local_rots)
+                quat = rotmat_to_quat_wxyz(local_rots)
+                for j in range(n):
+                    writer.writerow(
+                        [
+                            frame_idx,
+                            pid,
+                            j,
+                            rig_names[j] if j < len(rig_names) else f"joint_{j:03d}",
+                            MHR127_PARENTS[j],
+                            _format_cell(euler[j, 0]),
+                            _format_cell(euler[j, 1]),
+                            _format_cell(euler[j, 2]),
+                            _format_cell(quat[j, 0]),
+                            _format_cell(quat[j, 1]),
+                            _format_cell(quat[j, 2]),
+                            _format_cell(quat[j, 3]),
+                        ]
+                    )
+    return path
+
+
 def _instance_for_person(instances: list[dict[str, Any]], person_id: int) -> dict[str, Any] | None:
     for inst in instances:
         if int(inst["person_id"]) == person_id:
@@ -946,6 +1071,11 @@ Main outputs
 <video>_sam3dinov3_keypoints3d.csv      Long table, root-relative and camera-frame metres.
 <video>_sam3dinov3_keypoints2d.csv      Long table, reprojected pixels.
 <video>_sam3dinov3_camera.csv           Per-frame focal length, cam_t and bbox.
+<video>_sam3dinov3_joint_angles.csv     Long table, local (parent-relative) joint angles
+                                         for the model's own 127-joint MHR rig: Euler XYZ
+                                         degrees + scalar-first (w,x,y,z) quaternion, from
+                                         the model's own regressed rotations (not a
+                                         position-only heuristic) -- see joint_kinematics.py.
 <video>_id_NN_mhr70_3d.csv              Wide, named columns (nose_x, nose_y, nose_z, ...).
 <video>_id_NN_mhr70_rec3d.csv           Wide, vailá rec3d convention (p1_x,p1_y,p1_z, ...).
 <video>_id_NN_markers.csv               Wide 2D for REC2D / getpixelvideo.
@@ -1147,6 +1277,9 @@ def run_sam3d_from_sam(
     names = keypoint_names(n_keypoints)
     written = write_long_keypoints_csvs(output_dir, stem, timeline, names)
     written.append(write_camera_csv(output_dir, stem, timeline))
+    joint_angles_path = write_long_joint_angles_csv(output_dir, stem, timeline, names)
+    if joint_angles_path is not None:
+        written.append(joint_angles_path)
     written.extend(
         write_wide_person_csvs(
             output_dir,

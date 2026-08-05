@@ -46,7 +46,12 @@ fi
 echo ">> [1/3] Installing sam_3d_body runtime dependencies (--no-deps)..."
 (cd "${REPO_ROOT}" && uv pip install --no-deps \
   mhr yacs omegaconf "antlr4-python3-runtime==4.9.3" roma trimesh braceexpand \
-  pytorch-lightning torchmetrics lightning-utilities)
+  pytorch-lightning torchmetrics lightning-utilities termcolor)
+# termcolor: not pulled in transitively by anything else in a typical vailá
+# venv (unlike timm/tqdm, which usually are) -- without it, torch.hub loading
+# the DINOv3 backbone (dinov3/logging/__init__.py) fails with
+# ModuleNotFoundError: No module named 'termcolor' on the very first GPU run
+# (found running vaila/sam3dinov3.py end to end, 2026-08-05).
 
 # ----------------------------------------------------------------- weights DL
 echo ">> [2/3] Downloading facebook/sam-3d-body-dinov3 weights to ${WEIGHTS_DIR}..."

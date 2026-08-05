@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from vaila.joint_kinematics import MHR127_NUM_JOINTS
 from vaila.sam3dinov3 import (
     COLOR_CENTER_RGB,
     COLOR_LEFT_RGB,
@@ -25,6 +26,7 @@ from vaila.sam3dinov3 import (
     _draw_pose_overlay,
     _frame_batch_from_guidance,
     _instances_from_outputs,
+    _joint_rig_names,
     _rgb_to_bgr,
     _side_color_bgr,
     _write_readme,
@@ -33,6 +35,7 @@ from vaila.sam3dinov3 import (
     resolve_sam3d_assets,
     skeleton_edges,
     write_camera_csv,
+    write_long_joint_angles_csv,
     write_long_keypoints_csvs,
     write_predictions_json,
     write_wide_person_csvs,
@@ -84,6 +87,20 @@ def _fake_output(seed: int) -> dict[str, object]:
         "pred_cam_t": np.array([0.1, -0.2, 4.5], dtype=np.float32),
         "pred_vertices": rng.normal(size=(16, 3)).astype(np.float32),
     }
+
+
+def _fake_output_with_rotations(seed: int) -> dict[str, object]:
+    """Like _fake_output, but also carries pred_global_rots/pred_joint_coords
+    (real SAM 3D Body output includes these; older fixtures/runs may not)."""
+    from scipy.spatial.transform import Rotation
+
+    out = _fake_output(seed)
+    rng = np.random.default_rng(seed)
+    out["pred_global_rots"] = (
+        Rotation.random(MHR127_NUM_JOINTS, random_state=rng).as_matrix().astype(np.float32)
+    )
+    out["pred_joint_coords"] = rng.normal(size=(MHR127_NUM_JOINTS, 3)).astype(np.float32)
+    return out
 
 
 def _timeline(n_frames: int = 3, person_ids: tuple[int, ...] = (1, 2)) -> dict:
@@ -232,6 +249,27 @@ def test_instances_pair_common_prefix_when_counts_mismatch(capsys):
     assert "WARNING" in capsys.readouterr().out
 
 
+def test_instances_have_no_rotation_data_when_absent_from_output():
+    """Backward compatibility: an older/plain output dict without
+    pred_global_rots/pred_joint_coords must not raise -- both fields simply
+    stay None (see write_long_joint_angles_csv, which then writes nothing)."""
+    instances = _instances_from_outputs([1], [_fake_output(1)], frame_idx=0)
+    assert instances[0]["global_rots"] is None
+    assert instances[0]["joint_coords_3d"] is None
+
+
+def test_instances_capture_rotation_data_when_present():
+    instances = _instances_from_outputs([7], [_fake_output_with_rotations(1)], frame_idx=0)
+    inst = instances[0]
+    assert inst["global_rots"].shape == (MHR127_NUM_JOINTS, 3, 3)
+    assert inst["joint_coords_3d"].shape == (MHR127_NUM_JOINTS, 3)
+    # Every captured rotation must be a real (orthonormal, det +1) rotation
+    # matrix, not just whatever shape happened to fit.
+    for R in inst["global_rots"][:5]:
+        assert np.allclose(R @ R.T, np.eye(3), atol=1e-5)
+        assert np.linalg.det(R) == pytest.approx(1.0, abs=1e-5)
+
+
 # --------------------------------------------------------------------------- #
 # writers
 # --------------------------------------------------------------------------- #
@@ -266,6 +304,82 @@ def test_long_keypoint_csvs_shape_and_units(tmp_path: Path):
         rows2d = list(csv.DictReader(fh))
     assert len(rows2d) == 2 * 2 * N_KPTS
     assert set(rows2d[0]) == {"frame", "person_id", "kpt_idx", "kpt_name", "x_px", "y_px"}
+
+
+def test_joint_angles_csv_skipped_when_no_rotation_data(tmp_path: Path, capsys):
+    """A run predating pred_global_rots capture must not error -- just skip."""
+    timeline = _timeline(n_frames=2, person_ids=(1, 2))  # plain _fake_output, no rotations
+    names = keypoint_names(N_KPTS)
+    path = write_long_joint_angles_csv(tmp_path, "clip", timeline, names)
+    assert path is None
+    assert "skipping joint-angle CSV" in capsys.readouterr().out
+
+
+def test_joint_angles_csv_shape_and_columns(tmp_path: Path):
+    person_ids = (1, 4)
+    timeline: dict[int, list[dict]] = {}
+    for frame_idx in range(2):
+        outputs = [_fake_output_with_rotations(frame_idx * 10 + pid) for pid in person_ids]
+        timeline[frame_idx] = _instances_from_outputs(
+            list(person_ids), outputs, frame_idx=frame_idx
+        )
+
+    names = keypoint_names(N_KPTS)
+    path = write_long_joint_angles_csv(tmp_path, "clip", timeline, names)
+    assert path is not None
+
+    with path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 2 * len(person_ids) * MHR127_NUM_JOINTS
+    assert set(rows[0]) == {
+        "frame",
+        "person_id",
+        "joint_idx",
+        "joint_name",
+        "parent_idx",
+        "euler_x_deg",
+        "euler_y_deg",
+        "euler_z_deg",
+        "quat_w",
+        "quat_x",
+        "quat_y",
+        "quat_z",
+    }
+    # Root joint (idx 0) always has parent -1, regardless of person/frame.
+    root_rows = [r for r in rows if r["joint_idx"] == "0"]
+    assert root_rows and all(r["parent_idx"] == "-1" for r in root_rows)
+    # Quaternion columns must always be unit-norm (a valid rotation, not junk).
+    for row in rows[:20]:
+        q = np.array(
+            [float(row["quat_w"]), float(row["quat_x"]), float(row["quat_y"]), float(row["quat_z"])]
+        )
+        assert np.linalg.norm(q) == pytest.approx(1.0, abs=1e-4)
+
+
+def test_joint_rig_names_recovers_mhr70_names_via_position_match():
+    """When a rig joint's position coincides with a named MHR70 keypoint's
+    position (as it does for the real model, since both describe the same
+    physical joint), _joint_rig_names must recover that name."""
+    out = _fake_output_with_rotations(0)
+    # Force two rig-joint positions to exactly match two MHR70 keypoints so
+    # the match is unambiguous, rather than relying on random coincidence.
+    kp3d = np.asarray(out["pred_keypoints_3d"])
+    joint_coords = np.asarray(out["pred_joint_coords"])
+    joint_coords[10] = kp3d[MHR70_NAMES.index("left-knee")]
+    joint_coords[20] = kp3d[MHR70_NAMES.index("right-elbow")]
+    out["pred_joint_coords"] = joint_coords
+    instances = _instances_from_outputs([1], [out], frame_idx=0)
+    timeline = {0: instances}
+
+    names = _joint_rig_names(timeline, list(MHR70_NAMES))
+    assert names is not None
+    assert names[10] == "left-knee"
+    assert names[20] == "right-elbow"
+
+
+def test_joint_rig_names_returns_none_without_rotation_data():
+    timeline = _timeline(n_frames=1, person_ids=(1,))
+    assert _joint_rig_names(timeline, list(MHR70_NAMES)) is None
 
 
 def test_camera_csv_one_row_per_person_frame(tmp_path: Path):

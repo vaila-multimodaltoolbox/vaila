@@ -1,7 +1,7 @@
 # SAM3+DINOv3 3D — Visualize selected ID
 
-**Version:** 0.3.98
-**Updated:** 2026-08-03
+**Version:** 0.3.99
+**Updated:** 2026-08-05
 
 This CPU-only tool rerenders an existing `processed_sam3dinov3_*` (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights, so it is safe to run right after a GPU inference run to isolate one person, and does not repeat GPU allocation.
 
@@ -74,6 +74,7 @@ Before rendering, the CLI `--dry-run` path verifies the source frame count and i
 | `<video>_sam3dinov3_keypoints3d.csv` | Long table filtered to `person_id == NN` |
 | `<video>_sam3dinov3_keypoints2d.csv` | Long table filtered to `person_id == NN` |
 | `<video>_sam3dinov3_camera.csv` | Per-frame focal/`cam_t`/bbox filtered to `person_id == NN` |
+| `<video>_sam3dinov3_joint_angles.csv` | Local joint-angle table filtered to `person_id == NN` — v0.3.99, only when the source run has one (see [joint_kinematics](joint_kinematics.md)) |
 | `<video>_id_NN_mhr70_3d.csv` | Copied as-is (already per-ID in the source run) |
 | `<video>_id_NN_mhr70_rec3d.csv` | Copied as-is (vailá `rec3d` convention) |
 | `<video>_id_NN_markers.csv` | Copied as-is (wide 2D for REC2D / `getpixelvideo.py`) |
@@ -94,3 +95,4 @@ Frames are zero-based; 2D coordinates are full-frame pixels; 3D coordinates are 
 
 - [sam3dinov3](sam3dinov3.md) — the GPU inference run this tool rerenders
 - [sam3sapiens2_visualize](sam3sapiens2_visualize.md) — the 2D-pose counterpart this tool mirrors
+- [joint_kinematics](joint_kinematics.md) — shared math for the filtered joint-angle CSV

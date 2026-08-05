@@ -75,6 +75,7 @@
             <tr><th>File</th><th>Description</th></tr>
             <tr><td><code>meshes_&lt;fmt&gt;/frame_NNNNNN.&lt;fmt&gt;</code></td><td>Aligned per-frame mesh, Blender-importable as a mesh-cache sequence.</td></tr>
             <tr><td><code>rec3d_*_mesh_alignment.csv</code></td><td>Manifest: frame, camera_index, mean/rms/max residual (m), n_fit_points.</td></tr>
+            <tr><td><code>rec3d_*_joint_angles.csv</code></td><td><strong>v0.3.99.</strong> Only when a mesh-source camera has one: the winning camera's local (parent-relative) joint-angle rows, re-exported unchanged — see <a href="joint_kinematics.html">joint_kinematics</a>.</td></tr>
         </table>
 
 
@@ -106,8 +107,8 @@
             <tr><td><code>--fps</code> <em>HZ</em></td><td>Point data rate in Hz (default: 100). Accepts fractional rates, e.g. <code>119.88012001</code> for NTSC-derived 120000/1001 capture.</td></tr>
             <tr><td><code>-o</code>, <code>--output</code> <em>DIR</em></td><td>Output directory; a timestamped subfolder will be created here.</td></tr>
             <tr><td><code>--gui</code></td><td>Launch GUI instead of CLI.</td></tr>
-            <tr><td><code>--swap-yz</code></td><td>Swap Y/Z in BVH <strong>and</strong> mesh so height is vertical (Z-up) in Blender. <strong>Default since v0.3.99</strong>; kept as an explicit opt-in.</td></tr>
-            <tr><td><code>--no-swap-yz</code></td><td>Keep the raw DLT axes (no Y/Z swap).</td></tr>
+            <tr><td><code>--swap-yz</code></td><td>Swap Y/Z in the <strong>BVH only</strong> so height is vertical (Z-up) in Blender. <strong>Default since v0.3.99</strong>; kept as an explicit opt-in. The mesh is always raw regardless — see "Blender alignment" above.</td></tr>
+            <tr><td><code>--no-swap-yz</code></td><td>Keep the raw DLT axes for the BVH (no Y/Z swap).</td></tr>
             <tr><td><code>--mesh-source-dir</code> <em>DIR</em> [<em>DIR</em> ...]</td><td>Per-camera Visualize-ID directory. Supplies <code>--pixels</code> automatically when omitted; required for mesh export.</td></tr>
             <tr><td><code>--export-mesh</code> <code>{none,obj,ply}</code></td><td>Export an aligned mesh sequence (default: none).</td></tr>
         </table>
@@ -169,6 +170,7 @@ python -m vaila.rec3d_one_dlt3d --gui</pre>
             <tr><th>Module</th><th>Role</th></tr>
             <tr><td><strong>dlt3d</strong></td><td>Compute DLT3D coefficients from calibration (pixel + 3D reference).</td></tr>
             <tr><td><strong>mesh_alignment</strong></td><td>Umeyama similarity fit + OBJ/PLY I/O used by the mesh-export feature.</td></tr>
+            <tr><td><strong>joint_kinematics</strong></td><td>Shared math for <code>rec3d_*_joint_angles.csv</code> — local joint angles re-exported from whichever camera's mesh-source directory has one.</td></tr>
             <tr><td><strong>sam3dinov3_visualize</strong></td><td>Produces the per-camera "Visualize ID" mesh-source directories consumed by <code>--mesh-source-dir</code>.</td></tr>
             <tr><td><strong>vaila/skeletons/</strong></td><td>Ready-made <code>--skeleton</code> presets (MediaPipe, YOLO/COCO-17, SAM3+DINOv3 MHR70, Sapiens2 Goliath-308).</td></tr>
             <tr><td><strong>readcsv_export</strong></td><td>CSV → C3D (used internally); batch convert.</td></tr>

@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>SAM3+DINOv3 3D — Visualize selected ID</title></head>
 <body>
 <h1>SAM3+DINOv3 3D — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.3.98 &nbsp; <strong>Updated:</strong> 2026-08-03</p>
+<p><strong>Version:</strong> 0.3.99 &nbsp; <strong>Updated:</strong> 2026-08-05</p>
 <p>This CPU-only tool rerenders an existing <code>processed_sam3dinov3_*</code> (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights. Select one person, draw its SAM contour, bounding box, ID and reprojected MHR70 skeleton, and write filtered keypoint/camera/contour/predictions artifacts plus an overlay video (and a filtered per-frame mesh, when the source run has <code>meshes/</code>).</p>
 <h2>Overlay style (v0.3.96)</h2>
 <ol>
@@ -47,6 +47,7 @@
 <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints3d.csv</code></td><td>Long table filtered to <code>person_id == NN</code></td></tr>
 <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints2d.csv</code></td><td>Long table filtered to <code>person_id == NN</code></td></tr>
 <tr><td><code>&lt;video&gt;_sam3dinov3_camera.csv</code></td><td>Per-frame focal/<code>cam_t</code>/bbox filtered to <code>person_id == NN</code></td></tr>
+<tr><td><code>&lt;video&gt;_sam3dinov3_joint_angles.csv</code></td><td>Local joint-angle table filtered to <code>person_id == NN</code> — v0.3.99, only when the source run has one (see <a href="joint_kinematics.html">joint_kinematics</a>)</td></tr>
 <tr><td><code>&lt;video&gt;_id_NN_mhr70_3d.csv</code></td><td>Copied as-is (already per-ID in the source run)</td></tr>
 <tr><td><code>&lt;video&gt;_id_NN_mhr70_rec3d.csv</code></td><td>Copied as-is (vailá <code>rec3d</code> convention)</td></tr>
 <tr><td><code>&lt;video&gt;_id_NN_markers.csv</code></td><td>Copied as-is (wide 2D for REC2D / <code>getpixelvideo.py</code>)</td></tr>
@@ -65,6 +66,7 @@
 <ul>
   <li><a href="sam3dinov3.html">sam3dinov3</a> — the GPU inference run this tool rerenders</li>
   <li><a href="sam3sapiens2_visualize.html">sam3sapiens2_visualize</a> — the 2D-pose counterpart this tool mirrors</li>
+  <li><a href="joint_kinematics.html">joint_kinematics</a> — shared math for the filtered joint-angle CSV</li>
 </ul>
 </body>
 </html>
