@@ -3,6 +3,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import matplotlib
+
+# Lock Agg before importing treadmill_lc so pyplot never binds QtAgg/PySide6.
+matplotlib.use("Agg")
+
 import numpy as np
 import pandas as pd
 
@@ -664,7 +669,9 @@ def test_run_process_stage_skips_excluded_trials(tmp_path, monkeypatch):
     pd.DataFrame(np.ones((10, 5))).to_csv(peso, header=False, index=False)
 
     # Save excluded metadata for this trial
-    records = [{"start_index": 0, "end_index_exclusive": 10, "cells_0based": [0], "mode": "excluded"}]
+    records = [
+        {"start_index": 0, "end_index_exclusive": 10, "cells_0based": [0], "mode": "excluded"}
+    ]
     save_adjustment_metadata(
         str(trial),
         records,
@@ -686,6 +693,8 @@ def test_run_process_stage_skips_excluded_trials(tmp_path, monkeypatch):
             }
 
     monkeypatch.setattr(lct, "ProcessConfigDialog", DummyDialog)
+    monkeypatch.setattr(lct.messagebox, "showinfo", lambda *args, **kwargs: None)
+    monkeypatch.setattr(lct.messagebox, "showerror", lambda *args, **kwargs: None)
 
     out_dir = lct.run_process_stage(parent=None, initial_dir=str(tmp_path))
 
@@ -696,3 +705,19 @@ def test_run_process_stage_skips_excluded_trials(tmp_path, monkeypatch):
     metrics_csv = Path(out_dir) / "s01_d01_processing_metrics.csv"
     assert not metrics_csv.exists()
 
+
+def test_plot_trial_figures_uses_agg_backend_not_qt(tmp_path):
+    """Regression: savefig paths must not load QtAgg/PySide6 (hangs/aborts in pytest)."""
+    assert matplotlib.get_backend().lower() == "agg"
+    plot_trial_figures(
+        np.linspace(0.0, 1.0, 20),
+        np.linspace(-0.2, 0.2, 20),
+        np.sin(np.linspace(0.0, np.pi, 20)) * 0.1,
+        [{"idx_start": 2, "idx_end": 8, "foot": "D"}],
+        np.array([5]),
+        "s01_d01_t01.csv",
+        tmp_path,
+        generate_interactive_report=False,
+    )
+    assert matplotlib.get_backend().lower() == "agg"
+    assert (tmp_path / "s01_d01_t01_processing_overview.png").exists()
