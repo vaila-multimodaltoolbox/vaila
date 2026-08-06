@@ -9,8 +9,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 13 July 2026
-Version: 0.3.85
+Update Date: 05 August 2026
+Version: 0.3.99
 
 Description:
 ------------
@@ -44,6 +44,11 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+import matplotlib
+
+# Default Agg: savefig/tests/CLI must never auto-pick QtAgg (PySide6).
+# Interactive GUI paths switch to TkAgg via _ensure_interactive_backend().
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -55,7 +60,27 @@ from scipy.ndimage import median_filter
 from scipy.signal import butter, find_peaks, sosfiltfilt, welch
 
 FS = 1000
-VERSION = "0.3.68"
+VERSION = "0.3.99"
+
+
+def _matplotlib_backend_name() -> str:
+    return str(matplotlib.get_backend()).lower()
+
+
+def _ensure_noninteractive_backend() -> None:
+    """Force Agg for headless figure writes (tests, CLI, batch savefig)."""
+    if _matplotlib_backend_name() == "agg":
+        return
+    plt.close("all")
+    plt.switch_backend("Agg")
+
+
+def _ensure_interactive_backend() -> None:
+    """Force TkAgg for interactive windows — never Qt (PySide6/PyQt)."""
+    if _matplotlib_backend_name() == "tkagg":
+        return
+    plt.close("all")
+    plt.switch_backend("TkAgg")
 
 
 # =============================================================================
@@ -80,6 +105,7 @@ def merge_intervals(intervalos):
 
 def capture_clicks_with_undo(fig, ax, t, sinal, color, parent=None):
     """Captures mouse clicks on a matplotlib figure for marking intervals."""
+    # Caller must already be on TkAgg (_ensure_interactive_backend) before creating fig.
     pontos = []
 
     def redraw_markers():
@@ -390,6 +416,7 @@ def save_adjustment_metadata(file_path, interval_records, mode, interpolation_me
 
 def clean_signal_with_clicks(file_path, parent=None):
     """Mark artifacts and immediately choose the best interpolation method."""
+    _ensure_interactive_backend()
     df = pd.read_csv(file_path, header=None)
     t = df[0].values
     dados = df.iloc[:, 1:5].values.astype(float)
@@ -444,12 +471,14 @@ def clean_signal_with_clicks(file_path, parent=None):
                     f"Trial {os.path.basename(file_path)} will not be processed because it needs more filtering adjustments.",
                     parent=parent,
                 )
-                interval_records = [{
-                    "start_index": 0,
-                    "end_index_exclusive": len(t),
-                    "cells_0based": selected_cells,
-                    "mode": "excluded",
-                }]
+                interval_records = [
+                    {
+                        "start_index": 0,
+                        "end_index_exclusive": len(t),
+                        "cells_0based": selected_cells,
+                        "mode": "excluded",
+                    }
+                ]
                 metadata_paths = save_adjustment_metadata(
                     file_path,
                     interval_records,
@@ -543,13 +572,17 @@ def clean_signal_with_clicks(file_path, parent=None):
                 if len(selected_cells) == 1:
                     axes = [axes]
 
-                fig_cells.suptitle("Part 1: Selected Cells - Before vs. After Interpolation", fontsize=14)
+                fig_cells.suptitle(
+                    "Part 1: Selected Cells - Before vs. After Interpolation", fontsize=14
+                )
                 colors = ["red", "blue", "green", "orange", "purple", "brown"]
 
                 for cell_idx, cell in enumerate(selected_cells):
                     ax = axes[cell_idx]
                     ax.plot(t, dados[:, cell], color="gray", alpha=0.3, label="Original")
-                    ax.plot(t, df_gaps.values[:, cell], color="black", alpha=0.5, label="Marked Gap")
+                    ax.plot(
+                        t, df_gaps.values[:, cell], color="black", alpha=0.5, label="Marked Gap"
+                    )
                     for idx, (method, res) in enumerate(results_comparison.items()):
                         ax.plot(
                             t,
@@ -570,10 +603,20 @@ def clean_signal_with_clicks(file_path, parent=None):
 
                 # Part 2: Plotting summed signals before vs. after interpolation
                 fig_sum, ax_sum = plt.subplots(figsize=(12, 8))
-                fig_sum.suptitle("Part 2: Summed Signals - Before vs. After Interpolation", fontsize=14)
+                fig_sum.suptitle(
+                    "Part 2: Summed Signals - Before vs. After Interpolation", fontsize=14
+                )
 
-                ax_sum.plot(t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum")
-                ax_sum.plot(t, np.nansum(df_gaps.values, axis=1), color="black", alpha=0.45, label="Marked Gap Sum")
+                ax_sum.plot(
+                    t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum"
+                )
+                ax_sum.plot(
+                    t,
+                    np.nansum(df_gaps.values, axis=1),
+                    color="black",
+                    alpha=0.45,
+                    label="Marked Gap Sum",
+                )
 
                 for idx, (method, res) in enumerate(results_comparison.items()):
                     ax_sum.plot(
@@ -645,7 +688,9 @@ def clean_signal_with_clicks(file_path, parent=None):
 
                 output_data = np.column_stack((t, dados_adjusted))
                 output_name = file_path.replace(".csv", "_clean.csv")
-                np.savetxt(output_name, output_data, delimiter=",", fmt="%.8f", header="", comments="")
+                np.savetxt(
+                    output_name, output_data, delimiter=",", fmt="%.8f", header="", comments=""
+                )
                 messagebox.showinfo(
                     "Completed",
                     f"Adjusted + interpolated signal saved:\n{output_name}\n\n"
@@ -674,10 +719,16 @@ def get_output_base_folder(folder):
     name = os.path.basename(folder_abs).lower()
     # Support both English and Portuguese prefixes to handle legacy and new folders
     prefixes = [
-        "limpos", "clean", "cleaned",
-        "ajustado", "adjusted",
-        "filtrado", "filtered", "filter_analysis",
-        "results", "figures"
+        "limpos",
+        "clean",
+        "cleaned",
+        "ajustado",
+        "adjusted",
+        "filtrado",
+        "filtered",
+        "filter_analysis",
+        "results",
+        "figures",
     ]
     # Check if the folder name starts with one of the prefixes, possibly followed by a timestamp
     pattern = r"^(" + "|".join(prefixes) + r")(?:_\d{8}_\d{6})?(?:_\d+)?$"
@@ -717,7 +768,9 @@ def deduplicate_trial_files(files: list[str]) -> list[str]:
         if current is None:
             selected[canonical] = file_name
             continue
-        if (current.lower().endswith("_limpo.csv") or current.lower().endswith("_clean.csv")) and file_name.lower() == canonical:
+        if (
+            current.lower().endswith("_limpo.csv") or current.lower().endswith("_clean.csv")
+        ) and file_name.lower() == canonical:
             print(f"Skipping duplicate legacy adjusted trial during filtering: {current}")
             selected[canonical] = file_name
         else:
@@ -1590,6 +1643,7 @@ def preprocess_file_interp(file_path, config, fs=1000, root=None):
         return df.values, raw, t, False
 
     try:
+        _ensure_interactive_backend()
         fig_raw, ax_raw = plt.subplots(5, 1, figsize=(12, 10), sharex=True)
         for i, ch in enumerate(["Cell 1", "Cell 2", "Cell 3", "Cell 4"]):
             ax_raw[i].plot(t, raw[:, i], label="Input")
@@ -2109,6 +2163,7 @@ def apply_filter(signal, filter_type="lowpass", fs=1000, **kwargs):
 
 def analyze_spectrum_filt(cells, timestamps, file_name, path_analise, fs=1000):
     """Performs frequency domain analysis on load cell signals."""
+    _ensure_noninteractive_backend()
     try:
         channels = ["Cell 1", "Cell 2", "Cell 3", "Cell 4"]
         metrics = {}
@@ -2246,6 +2301,7 @@ def preprocess_file_filt(file_path, config, fs=1000, root=None, preview=True, co
 
     try:
         if preview:
+            _ensure_interactive_backend()
             fig, ax = plt.subplots(5, 1, figsize=(12, 10), sharex=True)
             fig.suptitle("Final Result: Raw (gray) vs. Processed (blue)", fontsize=16)
             for i in range(4):
@@ -2801,6 +2857,7 @@ def normalize_analysis_window_points(points, n_samples):
 
 def select_analysis_window(grf_total_raw, file_name, parent=None):
     """Select analysis window; right click clears points and Enter finalizes."""
+    _ensure_interactive_backend()
     while True:
         clicked_points = []
         marker_artists = []
@@ -3236,7 +3293,9 @@ def _plot_strike_diagnostics(grf_total, steps, file_name, output_dir, fs=FS):
             base_name = _base_trial_stem_from_adjusted(file_name)
             fig.suptitle(f"Original-style Strike Attributes: {file_name}", fontsize=14)
             plt.tight_layout(rect=[0, 0, 1, 0.94])
-            fig.savefig(os.path.join(output_dir, f"{base_name}_processing_strike_attributes.png"), dpi=150)
+            fig.savefig(
+                os.path.join(output_dir, f"{base_name}_processing_strike_attributes.png"), dpi=150
+            )
         finally:
             plt.close(fig)
 
@@ -3282,7 +3341,9 @@ def _plot_strike_diagnostics(grf_total, steps, file_name, output_dir, fs=FS):
             ax_norm.grid(True, alpha=0.25)
             base_name = _base_trial_stem_from_adjusted(file_name)
             plt.tight_layout()
-            fig_map.savefig(os.path.join(output_dir, f"{base_name}_processing_stride_map.png"), dpi=150)
+            fig_map.savefig(
+                os.path.join(output_dir, f"{base_name}_processing_stride_map.png"), dpi=150
+            )
         finally:
             plt.close(fig_map)
 
@@ -3465,6 +3526,7 @@ def plot_trial_figures(
     generate_interactive_report=True,
 ):
     """Save lightweight per-trial overview, full COP trajectory, and optional HTML report."""
+    _ensure_noninteractive_backend()
     os.makedirs(output_dir, exist_ok=True)
     derivative = np.gradient(grf_total) * FS if len(grf_total) > 1 else np.zeros_like(grf_total)
     time_s = np.arange(len(grf_total)) / FS
@@ -4078,16 +4140,16 @@ class LoadCellTreadmillDialog(tk.Toplevel):
             return
 
         # 3. Stage 2: Adjust + Interpolate filtered signals
-        self._write_log(f"Executing Stage 2: Artifact Adjustment + Interpolation on folder '{filtrado_folder}'...")
+        self._write_log(
+            f"Executing Stage 2: Artifact Adjustment + Interpolation on folder '{filtrado_folder}'..."
+        )
         limpos_folder = run_adjust_stage(parent=self, initial_dir=filtrado_folder)
         if not limpos_folder:
             self._write_log("Pipeline stopped after Stage 2 (Adjustment+Interpolation).")
             return
 
         # 4. Stage 3: Process Metrics
-        self._write_log(
-            f"Executing Stage 3: Biomechanical Metrics on folder '{limpos_folder}'..."
-        )
+        self._write_log(f"Executing Stage 3: Biomechanical Metrics on folder '{limpos_folder}'...")
         results_folder = run_process_stage(parent=self, initial_dir=limpos_folder)
         if not results_folder:
             self._write_log("Pipeline stopped after Stage 3 (Processing).")
