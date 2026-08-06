@@ -18,23 +18,29 @@ import pytest
 from scipy.spatial.transform import Rotation
 
 try:
+    from vaila.mesh_alignment import read_obj_vertices
     from vaila.monocular_dlt_align import (
         DEFAULT_PLACEMENT_ORIGIN_MARKERS,
         _placement_origin,
         decompose_dlt3d,
         dlt_project,
         dlt_projection_matrix,
+        export_aligned_mesh_sequence,
+        load_mesh_frame_camera,
         refine_placement,
         smooth_placement,
         solve_placement_translation,
     )
 except ImportError:
+    from mesh_alignment import read_obj_vertices  # ty: ignore[unresolved-import]
     from monocular_dlt_align import (  # ty: ignore[unresolved-import]
         DEFAULT_PLACEMENT_ORIGIN_MARKERS,
         _placement_origin,
         decompose_dlt3d,
         dlt_project,
         dlt_projection_matrix,
+        export_aligned_mesh_sequence,
+        load_mesh_frame_camera,
         refine_placement,
         smooth_placement,
         solve_placement_translation,
@@ -268,3 +274,182 @@ def test_placement_origin_does_not_change_the_raw_fit():
         results.append(centred + T)
     np.testing.assert_allclose(results[0], results[1], atol=1e-6)
     np.testing.assert_allclose(results[0], world_true, atol=1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# mesh export
+# --------------------------------------------------------------------------- #
+def _tetrahedron():
+    """A minimal (4 vertex, 4 face) mesh -- enough to exercise the pipeline
+    without the cost of a real ~18k-vertex MHR mesh."""
+    vertices = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+    faces = np.array([[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]])
+    return vertices, faces
+
+
+def _write_mesh_frame_npz(path, vertices_root_relative, cam_t, obj_id=0):
+    np.savez(
+        path,
+        vertices=vertices_root_relative[np.newaxis, ...],
+        cam_t=np.asarray(cam_t, dtype=np.float64)[np.newaxis, :],
+        obj_ids=np.array([obj_id], dtype=np.int32),
+    )
+
+
+def test_load_mesh_frame_camera_adds_cam_t(tmp_path):
+    vertices, _ = _tetrahedron()
+    cam_t = np.array([1.0, -2.0, 5.0])
+    npz_path = tmp_path / "frame_000000.npz"
+    _write_mesh_frame_npz(npz_path, vertices, cam_t)
+
+    loaded = load_mesh_frame_camera(npz_path)
+    assert loaded is not None
+    np.testing.assert_allclose(loaded, vertices + cam_t)
+
+
+def test_load_mesh_frame_camera_returns_none_for_empty_frame(tmp_path):
+    npz_path = tmp_path / "frame_000000.npz"
+    np.savez(
+        npz_path,
+        vertices=np.zeros((0, 4, 3)),
+        cam_t=np.zeros((0, 3)),
+        obj_ids=np.zeros((0,), dtype=np.int32),
+    )
+    assert load_mesh_frame_camera(npz_path) is None
+
+
+def test_export_aligned_mesh_sequence_disabled_by_none(tmp_path):
+    assert (
+        export_aligned_mesh_sequence(
+            tmp_path,
+            "none",
+            np.zeros((1, 3)),
+            np.eye(3)[np.newaxis],
+            np.zeros((1, 3)),
+            np.eye(3),
+            [0],
+            tmp_path / "out",
+        )
+        is None
+    )
+    assert not (tmp_path / "out").exists()
+
+
+def test_export_aligned_mesh_sequence_none_when_no_source_meshes_dir(tmp_path):
+    # No meshes/ subdirectory anywhere under tmp_path.
+    result = export_aligned_mesh_sequence(
+        tmp_path,
+        "obj",
+        np.zeros((1, 3)),
+        np.eye(3)[np.newaxis],
+        np.zeros((1, 3)),
+        np.eye(3),
+        [0],
+        tmp_path / "out",
+    )
+    assert result is None
+
+
+def test_export_aligned_mesh_sequence_applies_the_exact_skeleton_transform(tmp_path):
+    """The mesh must land in the SAME world frame as the skeleton: applying
+    (origin, camera_R, rotmat, translation) to a mesh vertex must give the
+    identical result as the module's own _build_world does for a keypoint at
+    the same position -- (v - origin) @ camera_R @ rotmat.T + translation."""
+    vertices, faces = _tetrahedron()
+    cam_t = np.array([0.2, -0.1, 3.0])
+
+    source_dir = tmp_path / "source"
+    meshes_dir = source_dir / "meshes"
+    meshes_dir.mkdir(parents=True)
+    np.save(source_dir / "mesh_faces.npy", faces)
+    _write_mesh_frame_npz(meshes_dir / "frame_000042.npz", vertices, cam_t)
+
+    origin = np.array([0.05, 0.0, 0.1])
+    camera_R = Rotation.from_euler("xyz", [10.0, -5.0, 30.0], degrees=True).as_matrix()
+    rotmat = Rotation.from_euler("xyz", [0.0, 0.0, 90.0], degrees=True).as_matrix()
+    translation = np.array([2.0, -1.0, 0.5])
+
+    out_dir = tmp_path / "out"
+    result = export_aligned_mesh_sequence(
+        source_dir,
+        "obj",
+        origin[np.newaxis, :],
+        rotmat[np.newaxis, ...],
+        translation[np.newaxis, :],
+        camera_R,
+        [42],
+        out_dir,
+    )
+    assert result is not None
+    assert result["written"] == 1
+    assert result["missing"] == 0
+
+    written_path = out_dir / "meshes_obj" / "frame_000042.obj"
+    assert written_path.is_file()
+    got = read_obj_vertices(written_path)
+
+    mesh_cam = vertices + cam_t
+    expected = (mesh_cam - origin) @ camera_R @ rotmat.T + translation
+    np.testing.assert_allclose(got, expected, atol=1e-6)
+    assert (out_dir / "meshes_obj" / "README_mesh_import.txt").is_file()
+
+
+def test_export_aligned_mesh_sequence_counts_missing_frames_without_crashing(tmp_path):
+    vertices, faces = _tetrahedron()
+    source_dir = tmp_path / "source"
+    meshes_dir = source_dir / "meshes"
+    meshes_dir.mkdir(parents=True)
+    np.save(source_dir / "mesh_faces.npy", faces)
+    _write_mesh_frame_npz(meshes_dir / "frame_000000.npz", vertices, np.zeros(3))
+    # frame 1 has no mesh file at all -- must be skipped, not raise.
+
+    result = export_aligned_mesh_sequence(
+        source_dir,
+        "obj",
+        np.zeros((2, 3)),
+        np.stack([np.eye(3), np.eye(3)]),
+        np.zeros((2, 3)),
+        np.eye(3),
+        [0, 1],
+        tmp_path / "out",
+    )
+    assert result is not None
+    assert result["written"] == 1
+    assert result["missing"] == 1
+
+
+def test_export_aligned_mesh_sequence_ply_format(tmp_path):
+    """The .ply writer path (mesh_alignment.write_ply_mesh) must also work."""
+    vertices, faces = _tetrahedron()
+    source_dir = tmp_path / "source"
+    meshes_dir = source_dir / "meshes"
+    meshes_dir.mkdir(parents=True)
+    np.save(source_dir / "mesh_faces.npy", faces)
+    _write_mesh_frame_npz(meshes_dir / "frame_000000.npz", vertices, np.zeros(3))
+
+    result = export_aligned_mesh_sequence(
+        source_dir,
+        "ply",
+        np.zeros((1, 3)),
+        np.eye(3)[np.newaxis],
+        np.zeros((1, 3)),
+        np.eye(3),
+        [0],
+        tmp_path / "out",
+    )
+    assert result is not None
+    assert (tmp_path / "out" / "meshes_ply" / "frame_000000.ply").is_file()
+
+
+def test_export_aligned_mesh_sequence_rejects_bad_format(tmp_path):
+    with pytest.raises(ValueError):
+        export_aligned_mesh_sequence(
+            tmp_path,
+            "stl",
+            np.zeros((1, 3)),
+            np.eye(3)[np.newaxis],
+            np.zeros((1, 3)),
+            np.eye(3),
+            [0],
+            tmp_path / "out",
+        )
