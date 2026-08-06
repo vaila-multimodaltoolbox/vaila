@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 05 August 2026
+Update Date: 06 August 2026
 Version: 0.3.99
 
 Example of usage:
@@ -254,7 +254,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 04.Aug.2026 v0.3.99 (Python 3.12.13)
+    vailá - 06.Aug.2026 v0.3.99 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -369,7 +369,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 04.Aug.2026 v0.3.99 (Python 3.12.13)")
+        self.title("vailá - 06.Aug.2026 v0.3.99 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None

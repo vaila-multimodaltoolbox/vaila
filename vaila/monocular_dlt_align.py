@@ -12,7 +12,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.3.99
 Created: 05 August 2026
-Last Updated: 05 August 2026
+Last Updated: 06 August 2026
 
 ================================================================================
 Description
@@ -145,12 +145,35 @@ CLI:
       --ref3d   c1c2c3_cod.ref3d \\
       --fps 119.88012001 -o ./out
 
+Optional: mesh export (--mesh-source-dir / --export-mesh)
+----------------------------------------------------------
+When the ``sam3dinov3.py`` run that produced ``--mono3d`` was made with
+``--save-mesh``, its ``meshes/frame_NNNNNN.npz`` (root-relative vertices +
+``cam_t``, filtered to this person by ``sam3dinov3_visualize.py``) and
+``mesh_faces.npy`` sit right next to it. This module can then place a full
+per-frame body MESH in the same lab frame, not just the 70 MHR70 keypoints --
+by applying the EXACT SAME per-frame rigid placement ((origin, R, T), already
+solved above from the 2D reprojection) to every mesh vertex instead of just
+the keypoints. No extra alignment fit is needed here (unlike
+``rec3d_one_dlt3d.py``'s multi-camera Umeyama mesh fit): the mesh lives in
+the identical monocular camera space as the keypoints that placed it, so the
+same transform applies directly. ``--mesh-source-dir`` defaults to the
+``--mono3d`` file's own directory; ``--export-mesh {none,obj,ply}`` defaults
+to ``obj`` and silently no-ops (prints a note) when no ``meshes/`` is found.
+Mesh files are written in the RAW (x, y, z) world frame -- same convention as
+the reconstruction CSV, and the one the skeleton ends up in once Blender's
+BVH importer applies its own default axis conversion -- matching
+``rec3d_one_dlt3d.py``'s mesh convention regardless of the BVH's own
+``swap_yz``.
+
 Outputs (timestamped subfolder, same conventions as rec3d_one_dlt3d.py):
   <base>.csv / .3d               world-frame 3D, vailá rec3d convention
   <base>_m.c3d / <base>_mm.c3d   C3D in metres / millimetres
   <base>.bvh                     mocap for Blender (Y/Z swapped)
   <base>_blender_skeleton_viz.py Blender companion script
   <base>_alignment.csv           per-frame report (reprojection, R, T, n pts)
+  meshes_obj/ (or meshes_ply/)   aligned per-frame mesh, one file per frame
+                                  (needs --save-mesh in the source run)
   README_monocular_dlt_align.txt what was done, and the caveats
 
 Related modules:
@@ -178,12 +201,14 @@ from scipy.signal import butter, filtfilt
 from scipy.spatial.transform import Rotation
 
 try:
+    from .mesh_alignment import write_obj_mesh, write_ply_mesh
     from .rec3d import (
         find_unreconstructed_markers,
         generate_blender_companion_script,
         save_rec3d_as_bvh,
     )
 except ImportError:  # standalone execution
+    from mesh_alignment import write_obj_mesh, write_ply_mesh  # ty: ignore[unresolved-import]
     from rec3d import (  # ty: ignore[unresolved-import]
         find_unreconstructed_markers,
         generate_blender_companion_script,
@@ -192,6 +217,9 @@ except ImportError:  # standalone execution
 
 DEFAULT_SMOOTH_HZ = 6.0
 DEFAULT_FPS = 100.0
+#: Output mesh format written by --export-mesh; "none" disables mesh export
+#: even when a meshes/ source directory is found.
+DEFAULT_EXPORT_MESH = "obj"
 #: Minimum keypoints with finite 2D+3D needed before a frame can be placed
 #: (3 unknowns for the linear translation solve; 6 keeps it well conditioned).
 MIN_POINTS_FOR_PLACEMENT = 6
@@ -500,6 +528,141 @@ def _find_sibling(directory: Path, pattern: str) -> Path | None:
 
 
 # --------------------------------------------------------------------------- #
+# mesh export
+# --------------------------------------------------------------------------- #
+def load_mesh_frame_camera(npz_path: str | Path) -> np.ndarray | None:
+    """One frame's mesh vertices in the CAMERA frame (root-relative + cam_t).
+
+    Same convention ``--mono3d`` already uses for the 70 keypoints (see the
+    module docstring: "camera-frame is + pred_cam_t"), so the identical
+    placement transform solved for the keypoints applies to these vertices
+    unchanged. Written by ``sam3dinov3.py --save-mesh`` and filtered to one
+    person by ``sam3dinov3_visualize.py`` into ``meshes/frame_NNNNNN.npz``
+    (keys: ``vertices`` (1, V, 3), ``cam_t`` (1, 3), ``obj_ids`` (1,)).
+
+    Returns:
+        (V, 3) vertices, or None when the frame has no person recorded.
+    """
+    with np.load(npz_path) as data:
+        obj_ids = np.asarray(data["obj_ids"])
+        if obj_ids.size == 0:
+            return None
+        vertices = np.asarray(data["vertices"][0], dtype=np.float64)
+        cam_t = np.asarray(data["cam_t"][0], dtype=np.float64)
+    return vertices + cam_t
+
+
+def export_aligned_mesh_sequence(
+    mesh_source_dir: str | Path,
+    export_fmt: str,
+    origins: np.ndarray,
+    rotmats: np.ndarray,
+    translations: np.ndarray,
+    camera_R: np.ndarray,
+    frames: list[int],
+    output_dir: str | Path,
+) -> dict | None:
+    """Place this run's per-frame mesh in the same world frame as the skeleton.
+
+    Reuses, per frame, the exact ``(origin, R, T)`` already solved by
+    ``align_monocular_to_world`` from the 2D reprojection -- the mesh lives
+    in the identical monocular camera space as the keypoints that placed it,
+    so no separate alignment fit is needed (contrast with
+    ``rec3d_one_dlt3d.py``'s multi-camera Umeyama mesh fit, which reconciles
+    independently-estimated monocular spaces from different cameras).
+
+    Args:
+        origins: (n_frames, 3) camera-frame placement-rotation origin, one
+            per entry of ``frames`` (see ``_placement_origin``).
+        rotmats: (n_frames, 3, 3) final (post-smoothing, if any) world
+            rotation matrices, one per entry of ``frames``.
+        translations: (n_frames, 3) final world translations.
+        camera_R: (3, 3) the DLT camera's world -> camera rotation (so
+            ``camera_R`` maps camera-frame vectors to world axes, matching
+            ``shape_world = (points_cam - origin) @ camera_R`` above).
+        frames: frame numbers, same order as origins/rotmats/translations.
+
+    Returns:
+        Summary dict (written, missing, output_mesh_dir), or None when no
+        usable ``meshes/`` + ``mesh_faces.npy`` source could be found, or
+        ``export_fmt == "none"``.
+    """
+    if export_fmt == "none":
+        return None
+    if export_fmt not in ("obj", "ply"):
+        raise ValueError(f"export_fmt must be 'none', 'obj' or 'ply', got {export_fmt!r}")
+
+    mesh_source_dir = Path(mesh_source_dir)
+    mesh_frames_dir = mesh_source_dir / "meshes"
+    mesh_faces_path = mesh_source_dir / "mesh_faces.npy"
+    if not mesh_frames_dir.is_dir() or not mesh_faces_path.is_file():
+        print(
+            f"[yellow]No meshes/ + mesh_faces.npy in {mesh_source_dir}; skipping mesh export "
+            f"(needs --save-mesh in the sam3dinov3.py run that produced this ID).[/yellow]"
+        )
+        return None
+
+    faces = np.load(mesh_faces_path)
+    out_dir = Path(output_dir) / f"meshes_{export_fmt}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    writer = write_obj_mesh if export_fmt == "obj" else write_ply_mesh
+
+    written = 0
+    missing = 0
+    for i, frame in enumerate(frames):
+        src = mesh_frames_dir / f"frame_{int(frame):06d}.npz"
+        mesh_cam = load_mesh_frame_camera(src) if src.is_file() else None
+        if mesh_cam is None:
+            missing += 1
+            continue
+        shape_world = (mesh_cam - origins[i]) @ camera_R
+        mesh_world = shape_world @ rotmats[i].T + translations[i]
+        writer(out_dir / f"frame_{int(frame):06d}.{export_fmt}", mesh_world, faces)
+        written += 1
+
+    _write_mesh_import_readme(out_dir, export_fmt, written)
+    print(
+        f"Mesh sequence written: {out_dir} ({written} frame(s)"
+        + (f", {missing} missing)" if missing else ")")
+    )
+    return {"written": written, "missing": missing, "output_mesh_dir": str(out_dir)}
+
+
+def _write_mesh_import_readme(mesh_dir: Path, export_fmt: str, n_frames: int) -> None:
+    """State the axis settings a manual Blender import needs, next to the files.
+
+    Mesh vertices are written RAW (x, y, z) -- the same convention as the
+    reconstruction CSV, and (once Blender's BVH importer applies its own
+    default axis conversion) the same one the skeleton ends up in too. This
+    is what a mesh-sequence add-on with no axis controls at all (Stop Motion
+    OBJ / OBJSequence -- confirmed by reading its source: it assigns
+    "v x y z" straight to Blender's mesh, no conversion) needs to line up
+    with the BVH out of the box. Blender's own native File > Import >
+    Wavefront (.obj) dialog DOES apply a conversion by default, so it needs
+    an override to cancel it out. Matches rec3d_one_dlt3d.py's mesh
+    convention (see that module for the measurements behind this choice).
+    """
+    mesh_dir.joinpath("README_mesh_import.txt").write_text(
+        "vaila monocular_dlt_align -- aligned mesh sequence\n"
+        "===================================================\n\n"
+        f"{n_frames} frame(s), format .{export_fmt}, written in the RAW (x, y, z)\n"
+        "DLT/world frame -- the same convention as the reconstruction CSV.\n"
+        "Frame N of this sequence is frame N of the .c3d / .bvh in the parent folder.\n\n"
+        "PREFERRED: run the *_blender_skeleton_viz.py script in the parent folder.\n"
+        "It imports the BVH and this sequence and sets the scene rate and frame\n"
+        "range -- none of which a manual import does.\n\n"
+        "A mesh-sequence add-on with no axis settings (e.g. Stop Motion OBJ /\n"
+        "OBJSequence) works with these files out of the box -- no configuration\n"
+        "needed, because they never apply any axis conversion of their own.\n\n"
+        "If you import these files with Blender's OWN File > Import > Wavefront\n"
+        "(.obj) dialog instead, its defaults DO apply a conversion and will move\n"
+        "the mesh away from the skeleton -- override the axis settings to:\n"
+        "    Forward Y, Up Z  (override the dialog's defaults)\n",
+        encoding="utf-8",
+    )
+
+
+# --------------------------------------------------------------------------- #
 # main pipeline
 # --------------------------------------------------------------------------- #
 def align_monocular_to_world(
@@ -513,6 +676,8 @@ def align_monocular_to_world(
     refine=True,
     origin_markers=DEFAULT_PLACEMENT_ORIGIN_MARKERS,
     skeleton_json_path=None,
+    mesh_source_dir=None,
+    export_mesh=DEFAULT_EXPORT_MESH,
     gui=False,
 ):
     """Align a monocular camera-frame reconstruction into the DLT lab frame.
@@ -595,6 +760,7 @@ def align_monocular_to_world(
     rotvecs: list[np.ndarray] = []
     translations: list[np.ndarray] = []
     per_frame_L: list[np.ndarray] = []
+    origins: list[np.ndarray] = []
     skipped: dict[str, int] = {}
     rotvec_prev: np.ndarray | None = None
 
@@ -635,6 +801,7 @@ def align_monocular_to_world(
         rotvecs.append(rotvec)
         translations.append(translation)
         per_frame_L.append(L)
+        origins.append(origin)
 
     if not solved_frames:
         return _fail(f"No frame could be placed (reasons: {skipped})", gui)
@@ -705,6 +872,11 @@ def align_monocular_to_world(
         mono3d_path=mono3d_path,
         dlt3d_path=dlt3d_path,
         skeleton_json_path=skeleton_json_path,
+        origins=np.stack(origins),
+        mesh_source_dir=Path(mesh_source_dir).expanduser().resolve()
+        if mesh_source_dir
+        else run_dir,
+        export_mesh=export_mesh,
         gui=gui,
     )
 
@@ -804,6 +976,9 @@ def _write_outputs(
     mono3d_path,
     dlt3d_path,
     skeleton_json_path,
+    origins,
+    mesh_source_dir,
+    export_mesh,
     gui,
 ):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -849,6 +1024,19 @@ def _write_outputs(
             print(f"[yellow]C3D ({suffix}) export failed: {exc}[/yellow]")
 
     save_rec3d_as_bvh(rec3d_df, str(new_dir), file_base, point_rate, gui=gui, swap_yz=True)
+
+    # Optional per-frame mesh, placed with the exact same transform as the
+    # skeleton above (see export_aligned_mesh_sequence).
+    mesh_summary = export_aligned_mesh_sequence(
+        mesh_source_dir,
+        export_mesh,
+        origins,
+        Rotation.from_rotvec(rotvecs).as_matrix(),
+        translations,
+        camera.R,
+        frames,
+        new_dir,
+    )
 
     # Per-frame alignment report.
     report_df = pd.DataFrame(
@@ -935,7 +1123,18 @@ def _write_outputs(
         f"{file_base}_m.c3d / _mm.c3d        C3D in metres / millimetres\n"
         f"{file_base}.bvh                    mocap for Blender (Y/Z swapped)\n"
         f"{file_base}_alignment.csv          per-frame reprojection and placement\n"
-        + (f"{Path(blender_script).name}   run this in Blender\n" if blender_script else ""),
+        + (f"{Path(blender_script).name}   run this in Blender\n" if blender_script else "")
+        + (
+            f"meshes_{export_mesh}/                  aligned per-frame mesh "
+            f"({mesh_summary['written']} frame(s); RAW x,y,z, see its own README_mesh_import.txt)\n"
+            if mesh_summary
+            else (
+                f"(no mesh exported: no meshes/ found in {mesh_source_dir} -- rerun "
+                "sam3dinov3.py with --save-mesh for that ID if a mesh is needed)\n"
+                if export_mesh != "none"
+                else ""
+            )
+        ),
         encoding="utf-8",
     )
 
@@ -947,17 +1146,25 @@ def _write_outputs(
     print(f"  - {report_path.name} (per-frame alignment report)")
     if blender_script:
         print(f"  - {os.path.basename(blender_script)} (run this in Blender)")
+    if mesh_summary:
+        print(f"  - meshes_{export_mesh}/ ({mesh_summary['written']} frame(s), aligned mesh)")
 
     if gui:
         try:
             from tkinter import messagebox
 
+            mesh_line = (
+                f"Mesh: {mesh_summary['written']} frame(s) -> meshes_{export_mesh}/\n\n"
+                if mesh_summary
+                else ""
+            )
             messagebox.showinfo(
                 "Monocular DLT alignment",
                 f"Alignment complete.\n\n"
                 f"Frames: {stats['frames_placed']}\n"
                 f"Reprojection: {stats['reprojection_px_mean']:.2f} px mean\n"
                 f"Foot above floor: {stats['floor_contact_m_mean']:+.3f} m\n\n"
+                f"{mesh_line}"
                 f"{new_dir}",
             )
         except Exception:  # noqa: BLE001
@@ -1020,6 +1227,13 @@ def run_monocular_dlt_align_gui():
             title="Skeleton JSON for the Blender script — optional, Cancel to skip",
             filetypes=[("JSON", "*.json"), ("All files", "*")],
         )
+        export_mesh = DEFAULT_EXPORT_MESH
+        if not (Path(mono3d).parent / "meshes").is_dir() or not messagebox.askyesno(
+            "Mesh export",
+            "meshes/ found next to the monocular 3D CSV.\n\n"
+            "Also export an aligned per-frame mesh sequence (.obj, for Blender)?",
+        ):
+            export_mesh = "none"
     finally:
         root.destroy()
 
@@ -1035,6 +1249,8 @@ def run_monocular_dlt_align_gui():
         str(fps),
         "--smooth-hz",
         str(smooth),
+        "--export-mesh",
+        export_mesh,
     ]
     if pixels:
         cli.extend(["--pixels", pixels])
@@ -1054,6 +1270,7 @@ def run_monocular_dlt_align_gui():
             point_rate=fps,
             smooth_hz=smooth,
             skeleton_json_path=skeleton or None,
+            export_mesh=export_mesh,
             gui=True,
         )
     except Exception as exc:  # noqa: BLE001 - surface any failure in the GUI
@@ -1111,6 +1328,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skeleton", type=Path, default=None, help="Skeleton JSON for the Blender script"
     )
+    parser.add_argument(
+        "--mesh-source-dir",
+        type=Path,
+        default=None,
+        dest="mesh_source_dir",
+        help=(
+            "Directory with meshes/frame_NNNNNN.npz + mesh_faces.npy (needs --save-mesh in "
+            "the source sam3dinov3.py run). Defaults to --mono3d's own directory."
+        ),
+    )
+    parser.add_argument(
+        "--export-mesh",
+        choices=("none", "obj", "ply"),
+        default=DEFAULT_EXPORT_MESH,
+        dest="export_mesh",
+        help=(
+            f"Aligned per-frame mesh format for Blender (default {DEFAULT_EXPORT_MESH}); "
+            "silently skipped when no meshes/ source is found. 'none' disables."
+        ),
+    )
     parser.add_argument("--gui", action="store_true", help="Force the GUI")
     return parser
 
@@ -1139,6 +1376,8 @@ def main(argv: list[str] | None = None) -> int:
         refine=not args.no_refine,
         origin_markers=tuple(args.origin_markers),
         skeleton_json_path=args.skeleton,
+        mesh_source_dir=args.mesh_source_dir,
+        export_mesh=args.export_mesh,
         gui=False,
     )
     return 0 if result else 1

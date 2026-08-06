@@ -81,6 +81,15 @@
             <p>Hence the default <code>--origin-markers 10 11</code> (MHR70 hips); override for a different marker layout.</p>
         </div>
 
+        <h2>Optional mesh export (<code>--mesh-source-dir</code> / <code>--export-mesh</code>)</h2>
+        <p>When the <code>sam3dinov3.py</code> run that produced <code>--mono3d</code> was made with <code>--save-mesh</code>, its <code>meshes/frame_NNNNNN.npz</code> (root-relative vertices + <code>cam_t</code>, already filtered to this person by <code>sam3dinov3_visualize.py</code>) and <code>mesh_faces.npy</code> sit right next to it. This module can then place a full per-frame body <strong>mesh</strong> in the same lab frame, not just the 70 MHR70 keypoints — by applying the exact same per-frame rigid placement <code>(origin, R, T)</code> already solved above from the 2D reprojection to every mesh vertex. No extra alignment fit is needed here (unlike <code>rec3d_one_dlt3d.py</code>'s multi-camera Umeyama mesh fit): the mesh lives in the identical monocular camera space as the keypoints that placed it, so the same transform applies directly.</p>
+        <ul>
+            <li><code>--mesh-source-dir</code> defaults to <code>--mono3d</code>'s own directory.</li>
+            <li><code>--export-mesh {none,obj,ply}</code> defaults to <code>obj</code>, and silently no-ops (prints a note) when no <code>meshes/</code> is found.</li>
+            <li>Mesh files are written in the <strong>raw</strong> <code>(x, y, z)</code> world frame — same convention as the reconstruction CSV, and the one the skeleton ends up in once Blender's BVH importer applies its own default axis conversion — matching <code>rec3d_one_dlt3d.py</code>'s mesh convention. A <code>README_mesh_import.txt</code> is written next to the sequence with the manual-import axis override.</li>
+            <li>GUI: after picking the skeleton JSON, you are asked whether to also export the mesh (only if a <code>meshes/</code> folder was found next to the CSV).</li>
+        </ul>
+
         <h2>Inputs</h2>
         <table>
             <tr><th>Argument</th><th>Meaning</th></tr>
@@ -92,6 +101,8 @@
             <tr><td><code>--smooth-hz</code> / <code>--no-smooth</code></td><td>Placement smoothing cutoff (default 6 Hz) / disable it.</td></tr>
             <tr><td><code>--origin-markers</code></td><td>1-based markers whose midpoint the placement rotates about (default <code>10 11</code>).</td></tr>
             <tr><td><code>--skeleton</code></td><td>Skeleton JSON for the generated Blender script.</td></tr>
+            <tr><td><code>--mesh-source-dir</code></td><td>Directory with <code>meshes/frame_NNNNNN.npz</code> + <code>mesh_faces.npy</code> (needs <code>--save-mesh</code> in the source <code>sam3dinov3.py</code> run). Defaults to <code>--mono3d</code>'s own directory.</td></tr>
+            <tr><td><code>--export-mesh {none,obj,ply}</code></td><td>Aligned per-frame mesh format for Blender (default <code>obj</code>); silently skipped when no <code>meshes/</code> source is found.</td></tr>
         </table>
 
         <h2>Outputs</h2>
@@ -102,6 +113,7 @@
             <tr><td><code>&lt;base&gt;.bvh</code></td><td>Mocap for Blender (Y/Z swapped)</td></tr>
             <tr><td><code>&lt;base&gt;_blender_skeleton_viz.py</code></td><td>Blender companion script</td></tr>
             <tr><td><code>&lt;base&gt;_alignment.csv</code></td><td>Per-frame reprojection, rotation vector, translation, points used</td></tr>
+            <tr><td><code>meshes_obj/</code> (or <code>meshes_ply/</code>)</td><td>Aligned per-frame mesh, one file per frame — needs <code>--save-mesh</code> in the source run; includes its own <code>README_mesh_import.txt</code></td></tr>
             <tr><td><code>README_monocular_dlt_align.txt</code></td><td>What was done, the quality numbers, and the caveats</td></tr>
         </table>
 
@@ -131,7 +143,7 @@
 
         <h2>Testing</h2>
         <ul>
-            <li><code>tests/test_monocular_dlt_align.py</code> — synthetic, CPU-only: recovers a known camera from its own DLT, the OpenCV +Y down convention on real coefficients, known placements (translation and 6-DOF), missing-pixel handling, smoothing behaviour including quaternion hemisphere continuity, and that the rotation origin does <strong>not</strong> change the raw fit.</li>
+            <li><code>tests/test_monocular_dlt_align.py</code> — synthetic, CPU-only: recovers a known camera from its own DLT, the OpenCV +Y down convention on real coefficients, known placements (translation and 6-DOF), missing-pixel handling, smoothing behaviour including quaternion hemisphere continuity, that the rotation origin does <strong>not</strong> change the raw fit, and the mesh export (vertex transform matches the skeleton's own placement exactly, OBJ/PLY writers, missing-frame handling, <code>--export-mesh none</code>/no-source no-ops).</li>
         </ul>
 
         <div class="footer">

@@ -5,7 +5,7 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 05 August 2026
+Update Date: 06 August 2026
 Version: 0.3.99
 
 Description:
@@ -86,6 +86,16 @@ MESH_EXPORT_FORMATS = ("none", "obj", "ply")
 
 def _log(message: str) -> None:
     print(f">> vaila/sam3dinov3_visualize: {message}", flush=True)
+
+
+def _try_import_tqdm() -> Any:
+    """Return tqdm class or None."""
+    try:
+        from tqdm import tqdm
+
+        return tqdm
+    except ImportError:
+        return None
 
 
 def _safe_int(value: Any) -> int | None:
@@ -428,7 +438,9 @@ def _open_writer(path: Path, fps: float, size: tuple[int, int]) -> tuple[cv2.Vid
     path.parent.mkdir(parents=True, exist_ok=True)
     for suffix, codec in ((".mp4", "mp4v"), (".avi", "XVID")):
         candidate = path.with_suffix(suffix)
-        writer = cv2.VideoWriter(str(candidate), cv2.VideoWriter_fourcc(*codec), fps, size)
+        writer = cv2.VideoWriter(
+            str(candidate), cv2.VideoWriter_fourcc(*codec), fps, size  # ty: ignore[unresolved-attribute]
+        )
         if writer.isOpened():
             return writer, candidate
         writer.release()
@@ -451,9 +463,23 @@ def render_selected_video(
     fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     writer, actual_path = _open_writer(output_path, fps, (width, height))
     frame_count = 0
     drawn_count = 0
+
+    tqdm_cls = _try_import_tqdm()
+    pbar = None
+    if tqdm_cls is not None:
+        pbar = tqdm_cls(
+            total=total_frames if total_frames > 0 else None,
+            desc=f">> sam3dinov3_visualize render ID {selected_id}",
+            unit="frame",
+            leave=True,
+        )
+    else:
+        _log(f"Rendering video overlay for ID {selected_id} ({total_frames} frames)...")
+
     try:
         while True:
             ok, frame = cap.read()
@@ -472,7 +498,19 @@ def render_selected_video(
                 drawn_count += 1
             writer.write(frame)
             frame_count += 1
+
+            if pbar is not None:
+                pbar.update(1)
+            elif total_frames > 0:
+                step = max(1, total_frames // 10)
+                if frame_count % step == 0 or frame_count == total_frames:
+                    pct = (frame_count / total_frames) * 100.0
+                    _log(f"Rendering ID {selected_id}: frame {frame_count}/{total_frames} ({pct:.1f}%)")
+            elif frame_count % 100 == 0:
+                _log(f"Rendering ID {selected_id}: frame {frame_count}...")
     finally:
+        if pbar is not None:
+            pbar.close()
         cap.release()
         writer.release()
     return actual_path, frame_count, drawn_count
@@ -603,7 +641,25 @@ def export_mesh_sequence(
     output_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     writer = _write_obj if fmt == "obj" else _write_ply
-    for source in sorted(mesh_dir.glob("frame_*.npz")):
+    sources = sorted(mesh_dir.glob("frame_*.npz"))
+    total_files = len(sources)
+
+    tqdm_cls = _try_import_tqdm()
+    pbar = None
+    if tqdm_cls is not None and total_files > 0:
+        pbar = tqdm_cls(
+            sources,
+            desc=f">> sam3dinov3_visualize mesh export ({fmt.upper()})",
+            unit="frame",
+            leave=True,
+        )
+        iterable = pbar
+    else:
+        if total_files > 0:
+            _log(f"Exporting {total_files} mesh frames ({fmt.upper()})...")
+        iterable = sources
+
+    for idx_file, source in enumerate(iterable, start=1):
         with np.load(source) as data:
             obj_ids = np.asarray(data["obj_ids"])
             if obj_ids.size == 0:
@@ -627,6 +683,13 @@ def export_mesh_sequence(
         target = output_dir / f"frame_{frame_idx:06d}.{fmt}"
         writer(target, vertices, faces)
         written.append(target)
+
+        if pbar is None and total_files > 0:
+            step = max(1, total_files // 10)
+            if idx_file % step == 0 or idx_file == total_files:
+                pct = (idx_file / total_files) * 100.0
+                _log(f"Exporting mesh sequence: {idx_file}/{total_files} ({pct:.1f}%)")
+
     return written
 
 
@@ -742,6 +805,8 @@ def visualize_selected_id(
     names = [str(n) for n in names]
     edges = skeleton_edges(names)
 
+    _log(f"Starting visualization for ID {selected_id} on video: {video_path.name}")
+    _log(f"Rendering overlay video for ID {selected_id}...")
     overlay, frames, drawn = render_selected_video(
         video_path,
         output_dir / f"{video_path.stem}_sam3dinov3_id_{selected_id:02d}_overlay.mp4",
@@ -751,6 +816,7 @@ def visualize_selected_id(
         names,
         selected_id=selected_id,
     )
+    _log(f"Filtering and writing artifacts for ID {selected_id}...")
     written = write_selected_artifacts(run_dir, output_dir, selected_id, payload)
 
     mesh_export_dir: Path | None = None
