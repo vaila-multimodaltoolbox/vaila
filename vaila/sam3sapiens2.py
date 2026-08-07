@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 01 August 2026
-Version: 0.3.89
+Update Date: 07 August 2026
+Version: 0.3.101
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -45,6 +45,7 @@ import datetime as dt
 import gzip
 import json
 import os
+import re
 import shlex
 import shutil
 import sys
@@ -188,9 +189,47 @@ def _show_dialog_in_front(dialog: tk.Toplevel) -> None:
         pass
 
 
+# Every overlay-video suffix any SAM3/Sapiens2/SAM3D-family writer produces,
+# as a regex rather than a growing substring tuple. The tuple this replaces
+# matched "_sam3sapiens2_overlay" but NOT "_sam3sapiens2_id_04_overlay" --
+# the actual pattern sam3sapiens2_visualize.py writes -- which is exactly how
+# a rendered overlay got queued as raw input (real bug, 2026-08-07). Keep
+# this list in sync whenever a new overlay-writing module is added; the
+# parent-directory check in _is_derived_video() below is the safety net for
+# whatever this list still misses.
+_DERIVED_VIDEO_SUFFIX_RE = re.compile(
+    r"(_sam_overlay"
+    r"|_sapiens_overlay"
+    r"|_sam3sapiens2_overlay"
+    r"|_sam3sapiens2_id_\d+_overlay"
+    r"|_sam3dinov3_overlay"
+    r"|_sam3dinov3_id_\d+_overlay"
+    r"|_sapiens2_3d_overlay"
+    r")$",
+    re.IGNORECASE,
+)
+# A file living inside one of these directory shapes is a derived/processed
+# output almost by construction (no vailá pipeline ever writes fresh raw
+# input into a processed_* batch dir or a *_visualized_id_NN single-ID
+# rerender dir) -- this catches a *future* overlay-writing tool the suffix
+# list above hasn't been updated for yet, which is the exact bug class fixed
+# here, not just the one reported instance.
+_DERIVED_VIDEO_PARENT_RE = re.compile(
+    r"^processed_(sam|sam3sapiens2|sam3dinov3|sapiens2_3d)_"
+    r"|_sam3sapiens2_visualized_id_\d+$"
+    r"|_sam3dinov3_visualized_id_\d+$",
+    re.IGNORECASE,
+)
+
+
 def _is_derived_video(path: Path) -> bool:
-    name = path.name.lower()
-    return any(tag in name for tag in ("_sam_overlay", "_sapiens_overlay", "_sam3sapiens2_overlay"))
+    """True for a rendered overlay/derived video that must never be treated
+    as raw input, via two independent signals (either is sufficient):
+    the file's own name matches a known overlay suffix, or the file lives
+    inside a directory whose name marks it as a processed/derived output."""
+    if _DERIVED_VIDEO_SUFFIX_RE.search(path.stem.lower()):
+        return True
+    return any(_DERIVED_VIDEO_PARENT_RE.search(parent.name.lower()) for parent in path.parents)
 
 
 def _find_videos(path: Path) -> list[Path]:

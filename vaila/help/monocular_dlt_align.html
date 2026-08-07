@@ -137,6 +137,7 @@
         <table>
             <tr><th>Module</th><th>Role</th></tr>
             <tr><td><a href="sam3dinov3.html">sam3dinov3</a> / <a href="sam3dinov3_visualize.html">sam3dinov3_visualize</a></td><td>Produce the monocular camera-frame input</td></tr>
+            <tr><td><a href="sapiens2_3d.html">sapiens2_3d</a></td><td>Auto-chains into <code>align_monocular_to_world()</code> (this module, unmodified) via its own <code>--dlt3d</code>/<code>--ref3d</code> flags — no manual second step</td></tr>
             <tr><td><a href="rec3d_one_dlt3d.html">rec3d_one_dlt3d</a></td><td>True multi-camera DLT triangulation — prefer it when available</td></tr>
             <tr><td><a href="dlt3d.html">dlt3d</a></td><td>Computes the <code>.dlt3d</code> coefficients from calibration</td></tr>
         </table>

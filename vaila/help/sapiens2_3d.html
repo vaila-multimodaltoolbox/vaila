@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá - Sapiens2 3D Pose</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; color: #222; }
+    .container { max-width: 980px; margin: auto; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
+    h1 { color: #24384d; border-bottom: 3px solid #7b4dc4; padding-bottom: 10px; }
+    h2 { color: #34495e; margin-top: 28px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+    h3 { color: #44566b; margin-top: 20px; }
+    code { background: #eef1f5; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f4f6f8; border: 1px solid #dce1e6; padding: 14px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f2eef9; }
+    .info { background: #f5f0ff; border-left: 4px solid #7b4dc4; padding: 12px 15px; }
+    .ok { background: #edf8f0; border: 1px solid #a9d7b2; padding: 12px 15px; }
+    .warn { background: #fff8e6; border-left: 4px solid #e0a800; padding: 12px 15px; margin: 14px 0; }
+  </style>
+</head>
+<body><div class="container">
+  <h1>Sapiens2 3D Pose (<code>sapiens2_3d.py</code>)</h1>
+  <div class="info">
+    <strong>Version:</strong> 0.3.101 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-07<br>
+    <strong>Category:</strong> Markerless 3D / Meta (Facebook)<br>
+    <strong>GUI:</strong> Frame B → Markerless 3D → <strong>Sapiens2 3D Pose</strong><br>
+    <strong>Runtime:</strong> NVIDIA CUDA required; same SAM 3D Body estimator as sam3dinov3.py. The optional DLT3D auto-chain step itself is CPU-only.
+  </div>
+
+  <h2>Scope, read this first</h2>
+  <p>Sapiens2 as vendored in this repo (<code>vaila_sapiens.py</code>) is a <strong>2D-only</strong>
+  top-down pose model — x, y, score, no depth/normal/mesh head. It cannot produce 3D on its own.
+  The vendored SAM 3D Body estimator (<code>sam_3d_body_estimator.py</code>'s
+  <code>process_one_image()</code>) also accepts <strong>no external keypoint/pose-hint parameter
+  at inference time</strong> — only <code>bboxes</code>/<code>masks</code>/<code>cam_int</code>.
+  Its internal <code>keypoint_prompt_sampler</code> machinery is a <em>training</em>-time
+  self-refinement loop that reads ground-truth <code>batch["keypoints_2d"]</code>, a field the
+  inference-time batch builder never populates; reusing it would mean patching unsupported
+  internal state in vendored upstream code.</p>
+  <p>So this module's guidance is <strong>bbox tightening only</strong>: Sapiens2's 308 keypoints
+  (already computed by <a href="sam3sapiens2.html">sam3sapiens2</a>) replace SAM3's mask-derived
+  bbox with a tighter, keypoint-derived one whenever enough confident keypoints are available
+  <em>and</em> they geometrically agree with the SAM3 bbox (an IoU sanity check — see below). The
+  3D lifter itself — SAM 3D Body (DINOv3 backbone), the MHR mesh, all downstream outputs — is
+  byte-identical to <a href="sam3dinov3.html">sam3dinov3</a>. This module never modifies
+  <code>sam3dinov3.py</code> or <code>sam3sapiens2.py</code>; it only imports and calls their
+  functions.</p>
+
+  <h2>What this pipeline does</h2>
+  <ol>
+    <li>Reuses an existing <a href="sam3sapiens2.html">sam3sapiens2</a> combined run (SAM3
+      bbox/contour/ID authority + Sapiens2 308-keypoint 2D pose), or runs that stage itself from
+      a raw SAM3 result if only <code>--sam-results</code> is given.</li>
+    <li>Per frame/person, tightens the SAM3 bbox using Sapiens2 keypoints:
+      <ul>
+        <li>Needs at least <code>--min-guidance-keypoints</code> (default 4) keypoints scoring
+          ≥ <code>--kpt-score-thresh</code> (default 0.3).</li>
+        <li>The resulting keypoint bbox must overlap the SAM3 bbox by at least
+          <code>--min-sanity-iou</code> (default 0.05) — guards against a misassigned or drifted
+          Sapiens2 detection silently sending the 3D lifter's crop somewhere unrelated to the
+          tracked person.</li>
+        <li>Otherwise falls back to the unmodified SAM3 bbox.</li>
+      </ul>
+    </li>
+    <li>Feeds the resulting bbox + the SAM3 contour mask into
+      <code>SAM3DBodyEstimator.process_one_image(bboxes=..., masks=...)</code> — the exact call
+      <code>sam3dinov3.py</code> already makes.</li>
+    <li>Writes the same MHR70 long/wide CSV + camera CSV + optional mesh family
+      <code>sam3dinov3.py</code> writes (by calling its writer functions directly), plus one
+      extra CSV recording, per frame/person, whether Sapiens2 guidance was used.</li>
+    <li><strong>Optional:</strong> when <code>--dlt3d</code> is given, each person is automatically
+      placed into the DLT-calibrated lab frame — see <em>Calibrated lab frame</em> below.</li>
+  </ol>
+
+  <h2>Smart input resolution (v0.3.101)</h2>
+  <p>Pointing <code>--sapiens2-results</code>/<code>-i</code> at a plausible-but-wrong directory
+  (e.g. a <a href="sam3sapiens2_visualize.html">sam3sapiens2_visualize</a> single-ID rerender output
+  instead of the combined run it came from) now resolves automatically instead of failing with a
+  bare "not found":</p>
+  <ul>
+    <li>A directory holding <strong>exactly one</strong> <code>*_sam3sapiens2_predictions.json</code>
+      is used even if its name doesn't match the video you're processing.</li>
+    <li>A <code>&lt;base&gt;_sam3sapiens2_visualized_id_NN</code> (or
+      <code>..._sam3dinov3_visualized_id_NN</code>) directory resolves to its sibling combined-run
+      directory <code>&lt;base&gt;/</code>.</li>
+    <li>If <code>-i</code> doesn't resolve to a usable video but <code>--sapiens2-results</code>
+      does, the raw video is auto-located by walking upward from the results directory looking for
+      the exact filename the predictions JSON itself remembers (<code>payload["video"]</code>).</li>
+  </ul>
+  <p>A genuine mismatch — the resolved predictions JSON was built from a <em>different</em> video
+  than the one about to be processed — still raises an error rather than silently proceeding:
+  mismatched guidance would misalign every frame with no visible symptom.</p>
+
+  <h2>Requirements</h2>
+  <p>Same as <a href="sam3dinov3.html">sam3dinov3</a> <strong>plus</strong> the Sapiens2 stack:</p>
+<pre># SAM 3 (CUDA) stack
+bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+uv run hf auth login
+uv run vaila/vaila_sam.py --download-weights
+
+# SAM 3D Body: clones facebookresearch/sam-3d-body and downloads gated weights
+bash bin/setup_fifa_sam3d.sh
+
+# Sapiens2 (CUDA) stack
+uv sync --extra sapiens
+bash bin/setup_sapiens2.sh</pre>
+  <p>You also need an existing <strong>SAM3+Sapiens2</strong> run for the video (see
+  <a href="sam3sapiens2.html">sam3sapiens2</a>) — or point <code>--sam-results</code> at a raw
+  SAM3 run and this module will run that stage for you.</p>
+
+  <h2>GUI</h2>
+  <p>Open <strong>Markerless 3D → Sapiens2 3D Pose</strong>. The dialog collects the input
+  video/folder, the output parent, either an existing <code>processed_sam3sapiens2_*</code>
+  directory (preferred) or a raw SAM3 results directory, and the bbox-tightening options. An
+  optional <strong>Calibrated lab frame</strong> section takes a <code>.dlt3d</code> (and optional
+  <code>.ref3d</code>) to auto-chain into <code>monocular_dlt_align.py</code> after the run — see
+  below. Pressing <strong>Run</strong> prints the equivalent CLI to the terminal (prefix
+  <code>&gt;&gt;</code>) and launches exactly that command in an isolated GPU subprocess. Only
+  <code>--dlt3d</code>/<code>--ref3d</code>/<code>--export-mesh</code> are exposed in the dialog;
+  the DLT-chain's other knobs keep their defaults unless set from the CLI.</p>
+
+  <h2>CLI</h2>
+<pre># Reuse an existing SAM3+Sapiens2 combined run:
+uv run python -u vaila/sapiens2_3d.py \
+    -i /path/to/video.mp4 -o /path/to/output \
+    --sapiens2-results /path/to/processed_sam3sapiens2_YYYYMMDD_HHMMSS
+
+# Only a raw SAM3 run exists -- the Sapiens2 stage runs first automatically:
+uv run python -u vaila/sapiens2_3d.py \
+    -i /path/to/video.mp4 -o /path/to/output \
+    --sam-results /path/to/processed_sam_YYYYMMDD_HHMMSS
+
+# Auto-chain into the DLT3D-calibrated lab frame (per person):
+uv run python -u vaila/sapiens2_3d.py \
+    -i /path/to/video.mp4 -o /path/to/output \
+    --sapiens2-results /path/to/processed_sam3sapiens2_YYYYMMDD_HHMMSS \
+    --dlt3d /path/to/camera.dlt3d --ref3d /path/to/control_points.ref3d \
+    --save-mesh --export-mesh obj</pre>
+
+  <h3>Main options</h3>
+  <table>
+    <tr><th>Flag</th><th>Default</th><th>Meaning</th></tr>
+    <tr><td><code>--sapiens2-results</code></td><td>–</td><td>Existing <code>sam3sapiens2.py</code> output dir (preferred front end)</td></tr>
+    <tr><td><code>--sam-results</code></td><td>–</td><td>Raw SAM3 output; the Sapiens2 stage runs first if given instead</td></tr>
+    <tr><td><code>--min-guidance-keypoints</code></td><td><code>4</code></td><td>Min. confident Sapiens2 keypoints required to trust its bbox</td></tr>
+    <tr><td><code>--kpt-score-thresh</code></td><td><code>0.3</code></td><td>Sapiens2 keypoint confidence threshold</td></tr>
+    <tr><td><code>--kpt-bbox-padding-frac</code></td><td><code>0.08</code></td><td>Padding around the tight keypoint bounding box</td></tr>
+    <tr><td><code>--min-sanity-iou</code></td><td><code>0.05</code></td><td>Min. IoU vs the SAM3 bbox for guidance to be trusted</td></tr>
+    <tr><td><code>--weights-dir</code></td><td>auto</td><td>SAM 3D Body weights dir</td></tr>
+    <tr><td><code>--inference-type</code></td><td><code>full</code></td><td><code>full</code> (body+hand), <code>body</code>, or <code>hand</code></td></tr>
+    <tr><td><code>--focal-px</code></td><td>auto</td><td>Known focal length in px — see <em>Scale caveat</em> in sam3dinov3</td></tr>
+    <tr><td><code>--no-mask</code></td><td>off</td><td>Use SAM boxes/IDs but skip mask-conditioned inference</td></tr>
+    <tr><td><code>--stride</code></td><td><code>1</code></td><td>Run inference every Nth frame</td></tr>
+    <tr><td><code>--save-mesh</code></td><td>off</td><td>Write per-frame MHR vertices to <code>meshes/*.npz</code> (large)</td></tr>
+    <tr><td><code>--no-overlay</code></td><td>off</td><td>Skip the overlay video</td></tr>
+  </table>
+
+  <h3>Calibrated lab frame (DLT3D auto-chain) options</h3>
+  <table>
+    <tr><th>Flag</th><th>Default</th><th>Meaning</th></tr>
+    <tr><td><code>--dlt3d</code></td><td>–</td><td>This camera's DLT3D calibration. Given, triggers the auto-chain per person</td></tr>
+    <tr><td><code>--ref3d</code></td><td>–</td><td>Control points, for validation only (same convention as <code>monocular_dlt_align.py</code>)</td></tr>
+    <tr><td><code>--smooth-hz</code></td><td><code>6.0</code></td><td>Butterworth cutoff on the 6-DOF placement (0 disables via <code>--no-smooth</code>)</td></tr>
+    <tr><td><code>--no-smooth</code></td><td>off</td><td>Disable placement smoothing (raw)</td></tr>
+    <tr><td><code>--no-refine</code></td><td>off</td><td>Translation only (skip the 6-DOF refinement); usually worse</td></tr>
+    <tr><td><code>--origin-markers</code></td><td><code>10 11</code></td><td>1-based MHR70 markers whose midpoint the placement rotates about (hips)</td></tr>
+    <tr><td><code>--skeleton</code></td><td>–</td><td>Skeleton JSON for the Blender companion script</td></tr>
+    <tr><td><code>--export-mesh</code></td><td><code>obj</code></td><td><code>none</code>/<code>obj</code>/<code>ply</code> — needs <code>--save-mesh</code> in this same run</td></tr>
+  </table>
+  <p>The chain calls <code>monocular_dlt_align.align_monocular_to_world()</code>
+  <strong>unmodified</strong> once per detected person, using that person's own
+  <code>*_id_NN_mhr70_rec3d.csv</code>/<code>*_id_NN_markers.csv</code> this run just wrote (the
+  point rate passed is the video's own real fps, not a guess). One person's placement failure is
+  logged and skipped — never fatal for the rest of the run, since the underlying SAM3D outputs are
+  already safely on disk regardless. See <a href="monocular_dlt_align.html">monocular_dlt_align</a>
+  for the placement math, the scale-is-not-free caveat, and how to import the result in Blender.</p>
+
+  <h2>Outputs</h2>
+  <p>Each video gets its own subdirectory inside
+  <code>processed_sapiens2_3d_&lt;timestamp&gt;/</code>. Identical to
+  <a href="sam3dinov3.html#outputs">sam3dinov3</a>'s (<code>*_sam3dinov3_keypoints3d.csv</code>,
+  <code>*_sam3dinov3_camera.csv</code>, <code>*_id_NN_mhr70_*.csv</code>,
+  <code>*_sam3dinov3_predictions.json.gz</code>, optional <code>meshes/*.npz</code>), plus:</p>
+  <table>
+    <tr><th>File</th><th>Content</th></tr>
+    <tr><td><code>&lt;video&gt;_sapiens2_3d_overlay.mp4</code></td><td>Same overlay as sam3dinov3's, from the tightened bboxes</td></tr>
+    <tr><td><code>&lt;video&gt;_sapiens2_3d_guidance.csv</code></td><td><strong>New.</strong> <code>frame,person_id,guided,num_keypoints_used</code> — whether Sapiens2 guidance was actually used for that frame/person, and how many keypoints cleared the score threshold</td></tr>
+    <tr><td><code>dlt_world/id_NN/</code></td><td><strong>Only with <code>--dlt3d</code>.</strong> That person's calibrated-lab-frame CSV/.3d/C3D/BVH (+ mesh if <code>--save-mesh --export-mesh</code> was set) — same output family <code>monocular_dlt_align.py</code> writes standalone</td></tr>
+    <tr><td><code>sapiens2_3d_summary.json</code></td><td>Machine-readable run summary, incl. guided-frame counts and <code>dlt_world_outputs</code> (per person_id, when <code>--dlt3d</code> was used)</td></tr>
+    <tr><td><code>README_sapiens2_3d.txt</code></td><td>Verbose per-run schema/units description</td></tr>
+    <tr><td><code>FAILED_sapiens2_3d.txt</code></td><td>Present only when the stage fails</td></tr>
+  </table>
+  <p><code>sam3dinov3.py</code>'s own shared writers/schema are reused <strong>unmodified</strong> —
+  this module never changes a CSV column another pipeline depends on; the guidance flag lives only
+  in its own companion CSV.</p>
+
+  <h2>Coordinate systems and units</h2>
+  <p>Identical to <a href="sam3dinov3.html#coordinate-systems-and-units">sam3dinov3</a> — the 3D
+  lifter is unchanged. Same scale caveat: monocular depth is metric only up to the assumed camera
+  intrinsics.</p>
+
+  <div class="warn">
+    <strong>Known limitation (MVP scope).</strong> Processes videos sequentially in one process —
+    no per-video subprocess isolation like <code>sam3dinov3.py</code>'s batch coordinator
+    (<code>_release_gpu_memory()</code> runs between videos). Cannot start from a completely raw
+    video with no existing SAM3 or SAM3+Sapiens2 run — see Requirements.
+  </div>
+
+  <h2>Related modules</h2>
+  <ul>
+    <li><a href="sam3dinov3.html">sam3dinov3</a> — the 3D lifter this module reuses unmodified</li>
+    <li><a href="sam3sapiens2.html">sam3sapiens2</a> — the front end this module consumes</li>
+    <li><a href="monocular_dlt_align.html">monocular_dlt_align</a> — the DLT-chain placement math this module calls unmodified</li>
+    <li><a href="vaila_sapiens.html">vaila_sapiens</a> — Sapiens2 2D pose on its own</li>
+  </ul>
+
+  <h2>References</h2>
+  <ul>
+    <li>SAM 3 — <a href="https://ai.meta.com/research/sam3/">ai.meta.com/research/sam3</a></li>
+    <li>Sapiens2 — <a href="https://about.meta.com/realitylabs/codecavatars/sapiens/">about.meta.com/realitylabs/codecavatars/sapiens</a></li>
+    <li>SAM 3D Body — <a href="https://github.com/facebookresearch/sam-3d-body">github.com/facebookresearch/sam-3d-body</a></li>
+    <li>Weights — <a href="https://huggingface.co/facebook/sam-3d-body-dinov3">huggingface.co/facebook/sam-3d-body-dinov3</a></li>
+  </ul>
+
+  <div class="ok"><strong>vailá</strong> — Versatile Anarcho Integrated Liberation Ánalysis.
+  Source under AGPLv3; SAM 3, SAM 3D Body, and Sapiens2 weights under their Meta licenses.</div>
+</div></body>
+</html>
