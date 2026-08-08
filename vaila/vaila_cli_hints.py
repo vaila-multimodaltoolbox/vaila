@@ -67,12 +67,14 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
             "uv run vaila/markerless3d_analysis_v2.py",
             "uv run python -u vaila/sam3dinov3.py",
             "uv run python -u vaila/sam3dinov3_visualize.py",
+            "uv run python -u vaila/sapiens2_3d.py",
             "uv run python -m vaila.monocular_dlt_align",
         ),
         "Markerless 3D chooser (coringa) — Standard/Advanced MediaPipe+YOLO lift, "
-        "SAM3+DINOv3 3D and its Visualize ID, plus Monocular -> DLT world (places a "
-        "1-camera reconstruction in the calibrated lab frame). Each tool prints its "
-        "own Run CLI after dialogs.",
+        "SAM3+DINOv3 3D and its Visualize ID, Sapiens2 3D Pose (Sapiens2-keypoint-guided "
+        "bbox tightening feeding the same SAM 3D Body mesh), plus Monocular -> DLT world "
+        "(places a 1-camera reconstruction in the calibrated lab frame). Each tool prints "
+        "its own Run CLI after dialogs.",
     ),
     "vector_coding": CliRunHint(("uv run vaila/vector_coding.py",), "Vector coding GUI."),
     "emg_analysis": CliRunHint(("uv run vaila/emg_analysis.py",), "EMG analysis GUI."),

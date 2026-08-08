@@ -1,0 +1,132 @@
+{
+  "loop": "sapiens2-3d-pipeline-loop",
+  "status": "success",
+  "iteration_count": 4,
+  "cost": {
+    "note": "not metered by this harness; track qualitatively via iteration_count"
+  },
+  "step0_checks": {
+    "cuda": {
+      "result": "ok",
+      "evidence": "nvidia-smi: NVIDIA GeForce RTX 4090, 24564 MiB total, 74 MiB used, driver 595.84",
+      "checked_at": "2026-08-06"
+    },
+    "fixture_dir": {
+      "path": "/home/preto/data/sep_runcod_01072026/REC3D_COD/rec3d_todo/",
+      "result": "ok",
+      "evidence": "c1_cod.mp4, c2_cod.mp4, c3_cod.mp4 all present; no processed_sam3sapiens2_*/processed_sam3dinov3_* subdirs exist yet (confirmed at authoring time) so tier-3 GPU stage must run the SAM3+Sapiens2 front end fresh, not reuse an existing run."
+    },
+    "dependencies_importable": {
+      "result": "ok",
+      "evidence": "uv run python -c 'import vaila.sam3dinov3, vaila.sam3sapiens2, vaila.vaila_sapiens' -> all import OK"
+    }
+  },
+  "ranked_targets": [
+    {
+      "id": "a_api_surface_investigation",
+      "description": "Confirm whether SAM3DBodyEstimator.process_one_image accepts any keypoint/pose hint beyond bboxes/masks.",
+      "status": "resolved",
+      "finding": "NO. Read the vendored source directly: /home/preto/data/vaila/sam_3d_body/sam_3d_body/sam_3d_body_estimator.py's process_one_image(img, bboxes=None, masks=None, cam_int=None, det_cat_id=0, bbox_thr=0.5, nms_thr=0.3, use_mask=False, inference_type='full') exposes exactly bboxes/masks/cam_int as external guidance -- no keypoint or pose-hint parameter. There IS an internal keypoint-prompt refinement mechanism (models/decoders/keypoint_prompt_sampler.py, meta_arch/sam3d_body.py's _get_keypoint_prompt/_one_prompt_iter/run_keypoint_prompt), but it is a TRAINING-time iterative self-refinement loop: _get_keypoint_prompt reads batch['keypoints_2d'], which is ground-truth annotation data set only by the training dataset loader. The inference-time batch builder prepare_batch() (data/utils/prepare_batch.py) never sets batch['keypoints_2d'] at all. Repurposing this path at inference would mean reconstructing an unsupported internal batch field and bypassing self.training gating -- an unsupported, fragile modification to vendored upstream code, not a stable API.",
+      "decision": "Guidance mechanism is scoped down to BBOX TIGHTENING ONLY, computed client-side in vaila/sapiens2_3d.py from Sapiens2's 308 keypoints, before calling process_one_image(bboxes=..., masks=...) exactly as sam3dinov3.py already does. This must be documented explicitly in the new module's docstring so the feature is never oversold as 'keypoint-guided mesh regression' -- it is 'keypoint-tightened bbox + existing mask-conditioned mesh regression'.",
+      "evidence_files": [
+        "sam_3d_body/sam_3d_body/sam_3d_body_estimator.py (process_one_image signature, lines ~63-79)",
+        "sam_3d_body/sam_3d_body/data/utils/prepare_batch.py (batch fields built for inference; no keypoints_2d)",
+        "sam_3d_body/sam_3d_body/models/meta_arch/sam3d_body.py (_get_keypoint_prompt at ~L752, requires batch['keypoints_2d']; _one_prompt_iter at ~L788; run_keypoint_prompt at ~L1649)"
+      ]
+    },
+    {
+      "id": "b_bbox_tightening_fn",
+      "description": "Keypoint-to-bbox tightening function + fallback when Sapiens2 keypoints are missing/low-confidence for a person/frame.",
+      "status": "resolved",
+      "evidence": "vaila/sapiens2_3d.py: sapiens2_keypoint_bbox() + tighten_bbox_with_sapiens2(). Falls back to the SAM3 bbox when keypoints are None, below DEFAULT_MIN_GUIDANCE_KEYPOINTS=4, or the keypoint-derived bbox has IoU < DEFAULT_MIN_SANITY_IOU=0.05 against the SAM3 bbox (guards a misassigned/drifted Sapiens2 detection). Covered by 10 unit tests in tests/test_sapiens2_3d.py."
+    },
+    {
+      "id": "c_module_skeleton",
+      "description": "vaila/sapiens2_3d.py skeleton reusing sam3sapiens2.py's front end (dual-import pattern, lazy imports, no duplication).",
+      "status": "resolved",
+      "evidence": "vaila/sapiens2_3d.py created (dual try/except import pattern, mirrors sam3dinov3.py's own reuse of sam3sapiens2.py). Imports SamGuidance/load_sam_guidance/_guidance_for_frame/_contour_mask/_pose_bbox_from_sam/_draw_sam_guidance/_prepare_gui_root/_find_videos/_video_frame_count/resolve_sam_results_dir/run_sapiens_from_sam from sam3sapiens2.py, and load_sam3d_estimator/build_cam_int/_instances_from_outputs/_draw_pose_overlay/keypoint_names/skeleton_edges/MHR70_NAMES/default_weights_dir/_release_gpu_memory/_muted_stdout/_open_sam3_video_writer/_collect_person_ids from sam3dinov3.py, plus bbox_iou_xyxy from geometric_reid.py. Neither sam3dinov3.py nor sam3sapiens2.py was modified. New front-end resolver _resolve_sapiens2_front_end() supports --sapiens2-results (preferred) or --sam-results (auto-runs run_sapiens_from_sam first)."
+    },
+    {
+      "id": "d_writers",
+      "description": "MHR70 CSV/camera/mesh writers reusing sam3dinov3.py's existing writer functions, plus new guidance-flag column.",
+      "status": "resolved",
+      "evidence": "run_sapiens2_guided_sam3d() calls sam3dinov3.py's write_long_keypoints_csvs/write_camera_csv/write_long_joint_angles_csv/write_wide_person_csvs/write_predictions_json unmodified (same schema, no shared-writer changes). Guidance flag recorded separately via new write_guidance_csv() -> <video>_sapiens2_3d_guidance.csv (frame,person_id,guided,num_keypoints_used), never merged into the shared schema. Round-trip tested."
+    },
+    {
+      "id": "e_gui_wiring",
+      "description": "GUI entry inside markerless_3d_analysis() chooser + _print_chooser_launch CLI mirror.",
+      "status": "resolved",
+      "evidence": "vaila.py: new sapiens2_3d_video() handler (dependency checks for sam3/sapiens/sam_3d_body + weights, _print CLI mirror, run_vaila_module dispatch) placed after sam3dinov3_video(); new 'Sapiens2 3D Pose' button wired into markerless_3d_analysis() chooser under a new 'Sapiens2-guided (3D)' section, alongside SAM3+DINOv3 3D. vaila.py header bumped to Version 0.3.100 / Update Date 06 August 2026. vaila_cli_hints.py's markerless_3d_analysis hint updated to include the new CLI. vaila_cli_menu.py unaffected (no top-level code added/removed) -- confirmed via tests/test_vaila_cli_menu.py (20 passed)."
+    },
+    {
+      "id": "f_unit_tests",
+      "description": "tests/test_sapiens2_3d.py: synthetic bbox-tightening math, CSV guidance-flag round-trip, missing-keypoint fallback -- CPU-only, mocked estimator.",
+      "status": "resolved",
+      "evidence": "tests/test_sapiens2_3d.py created: 22 tests, all CPU-only (no CUDA/estimator import), covering sapiens2_keypoint_bbox, tighten_bbox_with_sapiens2 (guided/fallback/sanity-IoU/threshold-boundary cases), _frame_batch_from_guidance_sapiens2 (mixed guided/fallback in one frame, degenerate-bbox skip, mask 0/1 convention, no-mask mode), write_guidance_csv round-trip, find/load/index sapiens2 predictions JSON (direct file, missing, ambiguous, schema-mismatch warning), and _resolve_sapiens2_front_end branching (prefers existing results, auto-runs Sapiens2 stage from raw SAM3, requires one source) via monkeypatching -- no real files/GPU touched. 22/22 passed."
+    },
+    {
+      "id": "g_tier3_smoke_clip",
+      "description": "Real GPU run on a short trimmed window of c1_cod.mp4 (~150-300 frames). Requires human approval per Guardrails before running.",
+      "status": "resolved",
+      "human_approval": "Granted explicitly by user 2026-08-06: 'Yes, proceed with the Tier-3 GPU smoke test on a short trimmed clip of c1_cod.mp4.'",
+      "environment_fix_applied": "sapiens package was not importable in the active venv despite the .local/third_party/sapiens2 checkout and vaila/models/sapiens2/{pose,detector} weights already existing on disk (stale editable-install registration, likely purged by a prior uv sync). Fixed with 'uv pip install -e .local/third_party/sapiens2' -- purely local, no network/weight download (all weights already present); verified via find_spec. This is a real, narrow environment-restoration action, not a new install.",
+      "clip": "First 200 frames (of 631) of rec3d_todo/c1_cod.mp4, re-encoded via ffmpeg (-frames:v 200 -c:v libx264 -crf 18) to a scratch dir OUTSIDE the fixture directory (never wrote into rec3d_todo, per Guardrails). Verified 200 frames / 119.88012001 fps / 1920x1080 after cut.",
+      "pipeline_run": "1) run_sam_stage() (sam3sapiens2.py) on the clip -> 5 SAM3 tracked IDs, 200/200 frames. 2) Baseline: uv run python -u vaila/sam3dinov3.py -i clip -o out --sam-results sam3_raw --no-overlay -> succeeded, 200 inference frames, ids=[0,1,2,3,4]. 3) Guided: uv run python -u vaila/sapiens2_3d.py -i clip -o out --sam-results sam3_raw --no-overlay (auto-ran the Sapiens2 stage via run_sapiens_from_sam, then the tightened SAM3D stage) -> succeeded, 200 inference frames, 1000/1000 person-frames Sapiens2-guided.",
+      "evidence_segment_lengths": "Both runs anatomically plausible and consistent with the frozen reference (thigh 0.387+/-0.017 m, shank 0.371+/-0.012 m, shoulder 0.360 m) across all 5 ids: thigh range 0.372-0.413 m, shank 0.363-0.379 m, shoulder 0.334-0.375 m. Guided vs baseline nearly identical per id (delta <=0.002 m); id 2 shows guided std tightening (thigh std 0.002->0.001).",
+      "evidence_bbox_tightening": "Guided bbox area vs baseline SAM3-only bbox area, mean over 200 frames, all 5 ids: id0 -29.93%, id1 -44.35%, id2 -23.58%, id3 -50.50%, id4 -26.96%. Guidance CSV: 1000/1000 (100%) person-frames guided; num_keypoints_used per id averaged 258-271 out of 308 (far above the min_guidance_keypoints=4 threshold) -- the mechanism engages substantially and passes its own IoU sanity check on essentially every frame of this clip.",
+      "evidence_reprojection_vs_independent_detector": "Novel cross-check devised for this run (not pre-specified in the loop doc, added because no ground-truth 2D exists for this clip): compared each run's reprojected MHR70 2D keypoints (shoulders/hips/knees/ankles) against Sapiens2's OWN independently-computed COCO17-indexed 2D keypoints (Sociopticon-308's first 17 follow COCO ordering per vaila_sapiens.py's SAPIENS_MID_HIP_KPT_IDS comment) for the same anatomical joints, per frame/person. Mean pixel distance: baseline=15.931 px, guided=15.936 px, delta=+0.005 px (n=1000 frame-person comparisons each) -- statistically negligible; per-id deltas all within +/-0.04 px. Interpretation: on this clip, bbox tightening does NOT change SAM 3D Body's 2D localization accuracy relative to an independent 2D detector, even though the box itself is 24-50% smaller in area.",
+      "caveat": "This clip is a clean, well-tracked, unoccluded scene -- exactly the case where SAM3's own bbox is already good, so it is the weakest possible test of whether tightening ever *matters*. It does NOT exercise the motion-blur/partial-occlusion cases the guidance mechanism is meant to help with (per the module docstring's own reasoning for why Sapiens2 keypoints could correct a loose SAM3 box). ids 0/1/3 have implausibly small bbox areas (~1100-2500 px^2, i.e. ~35-50 px per side in a 1920x1080 frame) despite passing the segment-length plausibility check -- a reminder that plausible segment lengths are necessary but not sufficient evidence of a genuinely-tracked person; the monocular mesh regressor's body-shape prior can produce an anatomically 'plausible' body from a near-noise crop. id 2 (bbox ~19-14k px^2, most stable segment lengths, std <=0.002 m) is the most likely candidate for the actual tracked athlete; id 4 is the next most likely (largest box, more motion)."
+    },
+    {
+      "id": "h_tier3_full_video",
+      "description": "Full c1_cod.mp4 run + guided-vs-baseline reprojection error comparison. Requires human approval per Guardrails.",
+      "status": "waived",
+      "note": "The loop doc's literal completion criterion called for this before 'success'. The human, at the level-5 checkpoint, explicitly chose to accept success on the 200-frame smoke-clip evidence alone rather than spend further GPU time on the full 631-frame video -- see level5_checkpoint below. Recorded as 'waived', not 'resolved', so this deviation from the originally-written criterion stays traceable rather than silently satisfied."
+    },
+    {
+      "id": "i_docs_metadata",
+      "description": "vaila/help/sapiens2_3d.md+.html, vaila/help/index.md+.html, version/date headers.",
+      "status": "resolved",
+      "evidence": "vaila/help/sapiens2_3d.md + .html created (mirrors sam3dinov3.md/.html structure). vaila/help/index.md + .html updated: Markerless 3D chooser sections (both duplicated blocks in index.md), tool-card entries in index.html, total module count 136->137, generated-version stamps bumped to v0.3.100. sam3dinov3.md/.html 'Related modules' cross-linked to sapiens2_3d. README.md 'Last updated' already stamped today, no change needed. HTML validated with html.parser (no parse errors)."
+    }
+  ],
+  "tier1_2_evidence": [
+    {
+      "iteration": 2,
+      "checks": [
+        "uv run ruff check vaila/sapiens2_3d.py vaila.py vaila/vaila_cli_hints.py tests/test_sapiens2_3d.py -> All checks passed!",
+        "uv run ruff format (all 4 files) -> reformatted cleanly",
+        "uv run ty check vaila/sapiens2_3d.py tests/test_sapiens2_3d.py -> All checks passed except one pre-existing list-invariance diagnostic already present in tests/test_sam3dinov3.py against the same-shaped upstream signature (not a regression)",
+        "uv run pytest tests/test_sapiens2_3d.py -v -> 22 passed",
+        "uv run pytest tests/test_sam3dinov3.py tests/test_sam3sapiens2.py tests/test_vaila_sapiens.py tests/test_vaila_cli_menu.py -q -> 117 passed (regression floor green)"
+      ]
+    }
+  ],
+  "tier3_evidence": [
+    {
+      "iteration": 3,
+      "scope": "200-frame smoke clip (c1_cod.mp4 frames 0-199), see g_tier3_smoke_clip for full detail",
+      "headline": "Guidance engages on 100% of person-frames with 24-50% smaller bbox area, while segment-length plausibility is preserved and reprojection agreement against an independent Sapiens2 2D detector is unchanged (delta +0.005 px, negligible).",
+      "outputs_location": "/tmp scratchpad (session-local, not under fixture_dir): sapiens2_3d_tier3_smoke/{sam3_raw, baseline_sam3dinov3, guided_sapiens2_3d}. Not preserved beyond this session -- rerunning the three commands in g_tier3_smoke_clip.pipeline_run reproduces them exactly."
+    }
+  ],
+  "level5_checkpoint": {
+    "date": "2026-08-06",
+    "decision": "success",
+    "decided_by": "user (human, not the loop's own maker)",
+    "quote": "Accept as success (b). The BBox tightening mechanism works safely and as intended (24-51% tighter crops without geometric regressions). Proceed with finalizing and concluding the loop.",
+    "basis": "200-frame smoke-clip tier-3 evidence only (see tier3_evidence + g_tier3_smoke_clip) -- full 631-frame video run was explicitly waived, not run. Criterion actually satisfied: bbox tightening engages correctly and safely (no segment-length or reprojection-accuracy regression vs an independent 2D detector). Criterion NOT strictly satisfied as originally worded: 'better on a measurable subset of frames' -- the smoke-clip evidence showed unchanged accuracy (delta +0.005 px), not improved accuracy; the human accepted 'no regression, tighter crop as designed' as sufficient grounds for success rather than requiring a demonstrated accuracy win.",
+    "post_conditions_verified_at_closure": [
+      "uv run ruff check vaila/sapiens2_3d.py vaila.py vaila/vaila_cli_hints.py tests/test_sapiens2_3d.py -> All checks passed!",
+      "uv run pytest tests/test_sapiens2_3d.py tests/test_sam3dinov3.py tests/test_sam3sapiens2.py tests/test_vaila_sapiens.py tests/test_vaila_cli_menu.py -q -> 139 passed",
+      "GUI wiring, docs, and version metadata already resolved at iteration 2 (items e, i)"
+    ]
+  },
+  "lessons": [
+    "sam_3d_body's process_one_image has no external keypoint-prompt hook at inference time; only bboxes/masks/cam_int. Do not attempt to wire Sapiens2 keypoints into the model's internal keypoint_prompt_sampler machinery -- it depends on ground-truth batch fields the inference path never populates.",
+    "rec3d_todo fixture currently has no pre-generated processed_sam3sapiens2_*/processed_sam3dinov3_* directories -- tier-3 evidence requires a fresh GPU run of the front end, unlike the sibling rec3d-mesh-blender-loop's fixture state.",
+    "Randomly-sampled synthetic keypoints in a unit test can make a deterministic-looking assertion flaky when the IoU sanity check is in the loop -- with only 4 random points the derived bbox can shrink enough that IoU vs a much larger SAM box dips under threshold. Fixed by using explicit deterministic corner keypoints sized comparably to the SAM box in the one test targeting the score-threshold boundary specifically (not the IoU check, which has its own dedicated tests).",
+    "Companion CSVs (not modifying a shared writer's schema) are a good, low-risk pattern any time new information needs recording without touching a schema another pipeline already depends on.",
+    "On a clean, well-tracked, unoccluded clip, SAM3's own mask-derived bbox is already good enough that a 24-50% tighter Sapiens2-guided crop makes no measurable difference to SAM 3D Body's 2D accuracy -- the real differentiator for this feature would be motion-blur/partial-occlusion frames, not clean ones. Future validation on a harder clip would be the natural next data point, not required for this loop's own closure."
+  ]
+}

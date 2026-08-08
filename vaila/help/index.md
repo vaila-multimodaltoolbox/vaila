@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 136 | **Categories:** 7 | **Generated on:** 06/08/2026 (v0.3.99)
+**Total documented modules:** 137 | **Categories:** 7 | **Generated on:** 07/08/2026 (v0.3.101)
 
 ## Markerless 2D chooser (Frame B → B1_r1_c4)
 
@@ -24,10 +24,11 @@ Frame B button **Markerless 2D** opens (v0.3.98 — absorbed the former Yolo + M
 
 ## Markerless 3D chooser (Frame B → B1_r1_c5)
 
-Frame B button **Markerless 3D** opens (v0.3.99 — absorbed the 3D-native half of YOLO + FB): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, **Monocular → DLT world**.
+Frame B button **Markerless 3D** opens (v0.3.101 — Sapiens2 3D Pose gained an optional DLT3D/ref3d auto-chain into the calibrated lab frame, plus smarter input-directory resolution): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, **Sapiens2 3D Pose**, **Monocular → DLT world**.
 
 - [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
 - [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
+- [sapiens2_3d (Sapiens2-keypoint-guided bbox → SAM 3D Body)](sapiens2_3d.html) · [MD](sapiens2_3d.md)
 - [monocular_dlt_align (1-camera run → calibrated lab frame)](monocular_dlt_align.html) · [MD](monocular_dlt_align.md)
 - [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
 
@@ -49,10 +50,11 @@ Frame B button **Markerless 2D** opens (v0.3.98 — absorbed the former Yolo + M
 
 ## Markerless 3D chooser (Frame B → B1_r1_c5)
 
-Frame B button **Markerless 3D** opens (v0.3.99 — absorbed the 3D-native half of YOLO + FB): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, **Monocular → DLT world**.
+Frame B button **Markerless 3D** opens (v0.3.101 — Sapiens2 3D Pose gained an optional DLT3D/ref3d auto-chain into the calibrated lab frame, plus smarter input-directory resolution): Standard, Advanced YOLO (each separate/same process), **SAM3+DINOv3 3D**, **SAM3+DINOv3 Visualize ID**, **Sapiens2 3D Pose**, **Monocular → DLT world**.
 
 - [sam3dinov3 (SAM3 + DINOv3 markerless 3D)](sam3dinov3.html) · [MD](sam3dinov3.md)
 - [sam3dinov3_visualize (selected-ID rerenderer)](sam3dinov3_visualize.html) · [MD](sam3dinov3_visualize.md)
+- [sapiens2_3d (Sapiens2-keypoint-guided bbox → SAM 3D Body)](sapiens2_3d.html) · [MD](sapiens2_3d.md)
 - [monocular_dlt_align (1-camera run → calibrated lab frame)](monocular_dlt_align.html) · [MD](monocular_dlt_align.md)
 - [Chooser reference](../../docs/vaila_buttons/yolo-fb.md)
 
@@ -359,6 +361,9 @@ Frame B button **Markerless 3D** opens (v0.3.99 — absorbed the 3D-native half 
 - **sam3dinov3_visualize (selected-ID rerenderer)**
   - [📄 HTML](sam3dinov3_visualize.html)
   - [📝 Markdown](sam3dinov3_visualize.md)
+- **sapiens2_3d (Sapiens2-keypoint-guided bbox tightening → SAM 3D Body mesh)**
+  - [📄 HTML](sapiens2_3d.html)
+  - [📝 Markdown](sapiens2_3d.md)
 - **vaila_stroboscopic (Stroboscopic Generator)**
   - [📄 HTML](vaila_stroboscopic.html)
   - [📝 Markdown](vaila_stroboscopic.md)
