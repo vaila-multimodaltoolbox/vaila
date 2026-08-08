@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 06 August 2026
-Version: 0.3.99
+Update Date: 07 August 2026
+Version: 0.3.101
 
 Example of usage:
 uv run vaila.py
@@ -2336,10 +2336,10 @@ class Vaila(tk.Tk):
         """Chooser for 3D markerless pipeline.
 
         Presents the modern 3D-native tools: SAM3+DINOv3 3D and its
-        Visualize ID rerenderer.
+        Visualize ID rerenderer, plus the Sapiens2-guided variant.
         """
         dialog, place_button, place_section = self._build_grid_chooser_dialog(
-            "Markerless 3D — Select Tool", width=640, height=220
+            "Markerless 3D — Select Tool", width=640, height=260
         )
 
         def use_sam3dinov3():
@@ -2361,6 +2361,16 @@ class Vaila(tk.Tk):
             )
             self.sam3dinov3_visualize_video()
 
+        def use_sapiens2_3d():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 3D",
+                "Sapiens2 3D Pose",
+                "uv run python -u vaila/sapiens2_3d.py",
+                note="Sapiens2 308-kp guided bbox tightening -> SAM 3D Body (DINOv3) mesh",
+            )
+            self.sapiens2_3d_video()
+
         def use_monocular_dlt_align():
             dialog.destroy()
             _print_chooser_launch(
@@ -2374,6 +2384,8 @@ class Vaila(tk.Tk):
         place_section("SAM3+DINOv3 (3D)")
         place_button("SAM3+DINOv3 3D", use_sam3dinov3, width=26)
         place_button("SAM3+DINOv3 Visualize ID", use_sam3dinov3_visualize, width=26)
+        place_section("Sapiens2-guided (3D)")
+        place_button("Sapiens2 3D Pose", use_sapiens2_3d, width=26)
         place_section("Calibrated world frame (needs .dlt3d)")
         place_button("Monocular -> DLT world", use_monocular_dlt_align, width=26)
 
@@ -3688,6 +3700,52 @@ class Vaila(tk.Tk):
         run_vaila_module(
             "vaila.sam3dinov3",
             "vaila/sam3dinov3.py",
+            extra_py_flags=("-u",),
+        )
+
+    def sapiens2_3d_video(self):
+        """Markerless 3D: Sapiens2 308-kp guided bbox tightening -> SAM 3D Body (DINOv3) mesh.
+
+        Complements sam3dinov3_video(): same 3D lifter (SAM 3D Body), same
+        SAM3 identity authority, but the person bbox fed to it is tightened
+        using Sapiens2 keypoints (from an existing sam3sapiens2.py run) when
+        enough of them are confident and agree with the SAM3 bbox. See
+        vaila/sapiens2_3d.py's module docstring for why this is scoped to
+        bbox tightening rather than a second, independent 3D lifter.
+        """
+        missing: list[str] = []
+        if importlib.util.find_spec("sam3") is None:
+            missing.append("SAM3: uv sync --extra sam")
+        if importlib.util.find_spec("sapiens") is None:
+            missing.append("Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh")
+        if importlib.util.find_spec("sam_3d_body") is None:
+            missing.append("SAM 3D Body: bash bin/setup_fifa_sam3d.sh")
+
+        weights_dir = Path(__file__).parent / "vaila" / "models" / "sam-3d-dinov3"
+        if not (weights_dir / "model.ckpt").is_file():
+            missing.append(
+                "Weights: accept https://huggingface.co/facebook/sam-3d-body-dinov3, "
+                "then uv run hf download facebook/sam-3d-body-dinov3 "
+                f"--local-dir {weights_dir}"
+            )
+        if missing:
+            messagebox.showerror(
+                "Sapiens2 3D Pose — dependencies",
+                "Install both CUDA pipelines before running:\n\n" + "\n\n".join(missing),
+                parent=self,
+            )
+            return
+
+        print("\n" + "=" * 60)
+        print("Launching: vaila.sapiens2_3d")
+        print(">> Equivalent launch CLI: uv run python -u vaila/sapiens2_3d.py")
+        print("Features: Sapiens2 308-kp guided bbox tightening -> SAM 3D Body (DINOv3) mesh")
+        print("Needs an existing sam3sapiens2.py run (or a raw SAM3 run to build one from).")
+        print("SAM3 remains the identity authority; Sapiens2 only tightens the person bbox.")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.sapiens2_3d",
+            "vaila/sapiens2_3d.py",
             extra_py_flags=("-u",),
         )
 

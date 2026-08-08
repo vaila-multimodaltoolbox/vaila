@@ -127,6 +127,7 @@ python -m vaila.monocular_dlt_align \
 | Module | Role |
 |---|---|
 | [sam3dinov3](sam3dinov3.md) / [sam3dinov3_visualize](sam3dinov3_visualize.md) | Produce the monocular camera-frame input |
+| [sapiens2_3d](sapiens2_3d.md) | Auto-chains into `align_monocular_to_world()` (this module, unmodified) via its own `--dlt3d`/`--ref3d` flags — no manual second step |
 | [rec3d_one_dlt3d](rec3d_one_dlt3d.md) | True multi-camera DLT triangulation — prefer it when available |
 | [dlt3d](dlt3d.md) | Computes the `.dlt3d` coefficients from calibration |
 

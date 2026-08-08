@@ -36,6 +36,71 @@ def test_find_videos_accepts_single_file(tmp_path: Path) -> None:
     assert combo._find_videos(clip) == [clip.resolve()]
 
 
+@pytest.mark.parametrize(
+    "overlay_name",
+    [
+        "a_sam_overlay.mp4",
+        "a_sapiens_overlay.mp4",
+        "a_sam3sapiens2_overlay.mp4",
+        "c1_cod_sam3sapiens2_id_04_overlay.mp4",  # sam3sapiens2_visualize.py's real output
+        "a_sam3dinov3_overlay.mp4",
+        "c1_cod_sam3dinov3_id_07_overlay.mp4",  # sam3dinov3_visualize.py's real output
+        "a_sapiens2_3d_overlay.mp4",  # sapiens2_3d.py's own overlay
+    ],
+)
+def test_is_derived_video_matches_every_known_overlay_suffix(
+    tmp_path: Path, overlay_name: str
+) -> None:
+    """Regression for the 2026-08-07 bug: the old substring-only check matched
+    '_sam3sapiens2_overlay' but not '_sam3sapiens2_id_04_overlay' -- the
+    actual filename sam3sapiens2_visualize.py writes -- so a rendered
+    overlay got queued by _find_videos() as if it were raw input."""
+    path = tmp_path / overlay_name
+    path.write_bytes(b"")
+    assert combo._is_derived_video(path) is True
+    assert combo._find_videos(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "raw_name",
+    ["c1_cod.mp4", "clip.mp4", "athlete_sam3sapiens2_run.mp4", "sapiens2_intro.mov"],
+)
+def test_is_derived_video_does_not_exclude_real_raw_video_names(
+    tmp_path: Path, raw_name: str
+) -> None:
+    """Regression guard the other direction: the broadened filter must not
+    start excluding legitimate raw video names that merely mention a
+    pipeline name without ending in one of the known overlay suffixes."""
+    path = tmp_path / raw_name
+    path.write_bytes(b"")
+    assert combo._is_derived_video(path) is False
+    assert combo._find_videos(tmp_path) == [path.resolve()]
+
+
+def test_is_derived_video_excludes_files_inside_a_processed_batch_dir(tmp_path: Path) -> None:
+    batch_dir = tmp_path / "processed_sam3sapiens2_20260806_233956"
+    batch_dir.mkdir()
+    # A file that doesn't even match the suffix regex is still caught by the
+    # parent-directory signal -- the safety net for a future overlay-writing
+    # tool this suffix list hasn't been updated for yet.
+    stray = batch_dir / "some_future_writer_output.mp4"
+    stray.write_bytes(b"")
+    assert combo._is_derived_video(stray) is True
+
+
+def test_is_derived_video_excludes_files_inside_a_visualized_id_dir(tmp_path: Path) -> None:
+    visualize_dir = tmp_path / "c1_cod_sam3sapiens2_visualized_id_04"
+    visualize_dir.mkdir()
+    stray = visualize_dir / "markers.mp4"
+    stray.write_bytes(b"")
+    assert combo._is_derived_video(stray) is True
+    other_dir = tmp_path / "c2_cod_sam3dinov3_visualized_id_08"
+    other_dir.mkdir()
+    stray2 = other_dir / "whatever.mp4"
+    stray2.write_bytes(b"")
+    assert combo._is_derived_video(stray2) is True
+
+
 def _write_sam_fixture(root: Path, *, frames: int = 2, obj_id: int = 7) -> Path:
     root.mkdir(parents=True)
     with (root / "sam_tracks.csv").open("w", newline="", encoding="utf-8") as fh:

@@ -181,6 +181,7 @@ Use the **`xcam_*` columns** for inter-person distances and depth; the wide
 ## Related modules
 
 - [sam3sapiens2](sam3sapiens2.md) — same SAM3 front-end, 2D 308-keypoint pose
+- [sapiens2_3d](sapiens2_3d.md) — this pipeline's bbox tightened by Sapiens2 keypoints before the same SAM 3D Body call
 - [vaila_sam](vaila_sam.md) — SAM 3 video segmentation on its own
 - [joint_kinematics](joint_kinematics.md) — shared math for `*_sam3dinov3_joint_angles.csv`
 - [vaila_sapiens](vaila_sapiens.md) — Sapiens2 pose
