@@ -3646,11 +3646,23 @@ class Vaila(tk.Tk):
         if importlib.util.find_spec("sam3") is None:
             missing.append("SAM3: uv sync --extra sam")
         if importlib.util.find_spec("sapiens") is None:
-            missing.append("Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh")
+            missing.append("Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh (or uv pip install -e .local/third_party/sapiens2)")
         if missing:
+            cli_hint = (
+                ">> Required CLI install commands:\n"
+                "   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes\n"
+                "   bash bin/setup_sapiens2.sh\n"
+                "   uv pip install -e .local/third_party/sapiens2\n"
+            )
+            print("\n" + "=" * 72, file=sys.stderr)
+            print("[ERROR] SAM3+Sapiens2 — Missing dependencies:", file=sys.stderr)
+            for m in missing:
+                print(f"  • {m}", file=sys.stderr)
+            print("\n" + cli_hint, file=sys.stderr)
+            print("=" * 72 + "\n", file=sys.stderr)
             messagebox.showerror(
                 "SAM3+Sapiens2 — dependencies",
-                "Install both CUDA pipelines before running:\n\n" + "\n".join(missing),
+                "Install CUDA pipelines before running:\n\n" + "\n".join(missing) + "\n\n" + cli_hint,
                 parent=self,
             )
             return
@@ -3683,9 +3695,19 @@ class Vaila(tk.Tk):
                 f"--local-dir {weights_dir}"
             )
         if missing:
+            cli_hint = (
+                ">> Required CLI install commands:\n"
+                "   bash bin/setup_fifa_sam3d.sh\n"
+            )
+            print("\n" + "=" * 72, file=sys.stderr)
+            print("[ERROR] SAM3+DINOv3 3D — Missing dependencies:", file=sys.stderr)
+            for m in missing:
+                print(f"  • {m}", file=sys.stderr)
+            print("\n" + cli_hint, file=sys.stderr)
+            print("=" * 72 + "\n", file=sys.stderr)
             messagebox.showerror(
                 "SAM3+DINOv3 3D — dependencies",
-                "Install the CUDA pipeline before running:\n\n" + "\n\n".join(missing),
+                "Install the CUDA pipeline before running:\n\n" + "\n\n".join(missing) + "\n\n" + cli_hint,
                 parent=self,
             )
             return
@@ -3717,7 +3739,7 @@ class Vaila(tk.Tk):
         if importlib.util.find_spec("sam3") is None:
             missing.append("SAM3: uv sync --extra sam")
         if importlib.util.find_spec("sapiens") is None:
-            missing.append("Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh")
+            missing.append("Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh (or uv pip install -e .local/third_party/sapiens2)")
         if importlib.util.find_spec("sam_3d_body") is None:
             missing.append("SAM 3D Body: bash bin/setup_fifa_sam3d.sh")
 
@@ -3729,9 +3751,22 @@ class Vaila(tk.Tk):
                 f"--local-dir {weights_dir}"
             )
         if missing:
+            cli_hint = (
+                ">> Required CLI install commands:\n"
+                "   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes\n"
+                "   bash bin/setup_sapiens2.sh\n"
+                "   bash bin/setup_fifa_sam3d.sh\n"
+                "   uv pip install -e .local/third_party/sapiens2\n"
+            )
+            print("\n" + "=" * 72, file=sys.stderr)
+            print("[ERROR] Sapiens2 3D Pose — Missing dependencies:", file=sys.stderr)
+            for m in missing:
+                print(f"  • {m}", file=sys.stderr)
+            print("\n" + cli_hint, file=sys.stderr)
+            print("=" * 72 + "\n", file=sys.stderr)
             messagebox.showerror(
                 "Sapiens2 3D Pose — dependencies",
-                "Install both CUDA pipelines before running:\n\n" + "\n\n".join(missing),
+                "Install both CUDA pipelines before running:\n\n" + "\n\n".join(missing) + "\n\n" + cli_hint,
                 parent=self,
             )
             return
