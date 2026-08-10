@@ -4,8 +4,8 @@
 
 - **Category:** Ml
 - **File:** `vaila/yolov26track.py`
-- **Lines:** 3980+
-- **Version:** 0.3.72
+- **Version:** 0.3.102
+- **Updated:** 10 August 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -127,8 +127,32 @@ Key flags:
 - `--appearance-reid-threshold F` — cosine similarity threshold (default 0.6)
 
 - `--anchor center|bottom|top|left|right|corners` — which point of the bbox becomes the marker for REC2D/REC3D. Default `bottom` (foot/ground contact), best for planar gait/field kinematics; use `center` for centroid trajectories.
-- `--max-ids N` — keep only the N most persistent IDs, re-ranked 1..N (recommended to clean up fragmented tracklets; also gives stable `p1..pN` columns).
+- `--max-ids N` — keep only the N most persistent IDs, re-ranked 1..N (recommended to clean up fragmented tracklets; also gives stable `p1..pN` columns). **Drop-based**: ids outside the top-N are discarded, not merged — see `--reid-postprocess` below for a merge-based alternative.
 - `--classes 0 32` — restrict class indices; `--vid-stride N` — process every Nth frame; `--device auto|cuda|cpu`; `--conf/--iou/--imgsz`.
+
+### Optional post-process: reid_markers geometric merge (v0.3.102)
+
+`--reid-postprocess` (default off) runs `reid_markers`' offline **Geometric
+ReID (2D + velocity, `max_ids`-bounded slot pool)** on `all_id_detection.csv`
+right after it's written — **additive only**: `--max-ids` (drop-based,
+above) and `--stabilize-ids` (the Hungarian linker during tracking) run
+exactly as they always have, unmodified, regardless of this flag. Unlike
+`--max-ids`, the post-process merge never drops a detection row (only a
+raw tracker id label changes), and correctly recovers from
+`--stabilize-ids` occasionally producing more stable ids than the live
+`--max-ids` cap (an unbounded-slot artifact in the live linker; fixed at
+the source too via `geometric_reid.py`'s new `max_tracks`, see
+`geometric_reid.md`).
+
+```bash
+uv run python -m vaila.yolov26track track \
+  --model yolo26n.pt --source video.mp4 --output out/ \
+  --max-ids 16 --reid-postprocess --reid-postprocess-max-ids 16
+```
+
+`--reid-postprocess-max-ids` defaults to the same value as `--max-ids`
+when set, else auto-estimates from peak concurrent detections. See
+`reid_markers.md` for the merge engine itself.
 
 ### Biomechanics / kinematics flow (REC2D / REC3D)
 

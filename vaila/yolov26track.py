@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 06 July 2026
-Version: 0.3.72
+Update Date: 10 August 2026
+Version: 0.3.102
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -2360,24 +2360,53 @@ def _linker_config_from_dict(config: dict[str, Any]) -> GeometricLinkerConfig:
 
 
 def _build_botsort_custom_yaml(models_dir: str, tracker_name: str) -> str:
-    """Write BoT-SORT YAML with GMC + appearance ReID (mirrors GUI path)."""
+    """Write BoT-SORT YAML with GMC + appearance ReID (mirrors GUI path).
+
+    Loads the *currently installed* Ultralytics default tracker YAML first and
+    only overrides a handful of fields on top of it, so the result always
+    carries whatever fields that Ultralytics version's own tracker callbacks
+    expect (e.g. ``model`` for ``with_reid``, added upstream after this file
+    was first written — see ``ultralytics/trackers/track.py``'s
+    ``on_predict_start``, which does ``cfg.model == "auto"`` unconditionally
+    once ``with_reid`` is set). Falls back to a from-scratch config (with
+    ``model: "auto"`` added defensively) only if the installed package's
+    default YAML cannot be found/read — mirrors the GUI's Option 1/Option 2
+    fallback in ``track_objects_and_export_bbox``.
+    """
     trackers_dir = os.path.join(models_dir, "trackers")
     os.makedirs(trackers_dir, exist_ok=True)
     custom_yaml = os.path.join(trackers_dir, f"{tracker_name}_custom.yaml")
-    tracker_cfg: dict[str, Any] = {
-        "tracker_type": tracker_name,
-        "track_high_thresh": 0.5,
-        "track_low_thresh": 0.1,
-        "new_track_thresh": 0.6,
-        "track_buffer": 60,
-        "match_thresh": 0.8,
-        "fuse_score": True,
-    }
+
+    tracker_cfg: dict[str, Any] | None = None
+    with contextlib.suppress(Exception):
+        from importlib.resources import files
+
+        default_yaml = Path(str(files("ultralytics") / "cfg" / "trackers")) / f"{tracker_name}.yaml"
+        if default_yaml.exists():
+            with open(default_yaml) as fh:
+                tracker_cfg = yaml.safe_load(fh)
+
+    if tracker_cfg is None:
+        tracker_cfg = {
+            "tracker_type": tracker_name,
+            "track_high_thresh": 0.5,
+            "track_low_thresh": 0.1,
+            "new_track_thresh": 0.6,
+            "track_buffer": 60,
+            "match_thresh": 0.8,
+            "fuse_score": True,
+        }
+        if tracker_name == "botsort":
+            tracker_cfg["model"] = "auto"
+
+    tracker_cfg["track_buffer"] = 60
     if tracker_name == "botsort":
         tracker_cfg["gmc_method"] = "sparseOptFlow"
         tracker_cfg["with_reid"] = True
         tracker_cfg["proximity_thresh"] = 0.5
         tracker_cfg["appearance_thresh"] = 0.25
+        tracker_cfg.setdefault("model", "auto")
+
     with open(custom_yaml, "w") as fh:
         yaml.dump(tracker_cfg, fh, default_flow_style=False, sort_keys=False)
     return custom_yaml
@@ -2732,6 +2761,23 @@ def build_id_rerank_map(id_counts: dict[int, int], max_ids: int) -> dict[int, in
     sorted_ids = sorted(id_counts.items(), key=lambda kv: (-kv[1], kv[0]))
     kept = sorted_ids[:max_ids]
     return {raw_id: new_id for new_id, (raw_id, _cnt) in enumerate(kept, start=1)}
+
+
+def resolve_reid_postprocess_max_ids(
+    reid_postprocess_max_ids: int | None, max_ids: int | None
+) -> int | None:
+    """Resolve the max_ids value for --reid-postprocess.
+
+    Precedence: an explicit ``--reid-postprocess-max-ids`` wins; otherwise
+    fall back to ``--max-ids`` (the live drop-based cap) when it was
+    actually set (``> 0``); otherwise ``None``, letting reid_markers
+    auto-estimate from peak concurrent detections itself.
+    """
+    if reid_postprocess_max_ids:
+        return int(reid_postprocess_max_ids)
+    if max_ids and max_ids > 0:
+        return int(max_ids)
+    return None
 
 
 def rerank_buffered_stream(
@@ -6787,6 +6833,27 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional 3x3 homography (.npy/.npz/.csv) for pitch-plane Re-ID distances.",
     )
+    parser.add_argument(
+        "--reid-postprocess",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "After writing all_id_detection.csv, run reid_markers' offline geometric "
+            "merge (2D + velocity, max_ids-bounded slot pool) on it as an additional "
+            "post-process step. Additive only -- does not change --max-ids (drop-based, "
+            "still applied during tracking above) or --stabilize-ids in any way; both "
+            "run exactly as before regardless of this flag."
+        ),
+    )
+    parser.add_argument(
+        "--reid-postprocess-max-ids",
+        type=int,
+        default=None,
+        help=(
+            "max_ids for --reid-postprocess (default: same value as --max-ids when set, "
+            "else auto-estimated from peak concurrent detections by reid_markers itself)."
+        ),
+    )
     args = parser.parse_args(argv)
 
     source = os.path.abspath(args.source)
@@ -6943,6 +7010,42 @@ def run_track_cli(argv: list[str] | None = None) -> int:
 
     combined = create_combined_detection_csv(output_dir)
 
+    reid_postprocess_output: str | None = None
+    if args.reid_postprocess and combined:
+        # Additive-only: reid_markers.run_geometric_merge() is called on the
+        # all_id_detection.csv file already written above -- --max-ids
+        # (drop-based, applied inside the tracking loop) and --stabilize-ids
+        # (GeometricFrameLinker, applied inside _apply_geometric_stabilize_to_buffer
+        # above) already ran, unmodified, exactly as they always have.
+        try:
+            from .reid_markers import run_geometric_merge
+        except ImportError:
+            from reid_markers import run_geometric_merge  # ty: ignore[unresolved-import]
+        postprocess_max_ids = resolve_reid_postprocess_max_ids(
+            args.reid_postprocess_max_ids, args.max_ids
+        )
+        _track_banner(
+            "reid_markers geometric merge (post-process)",
+            f"input={combined} | max_ids={postprocess_max_ids or 'auto'}",
+        )
+        try:
+            out_path, reid_stats = run_geometric_merge(combined, max_ids=postprocess_max_ids)
+            reid_postprocess_output = str(out_path)
+            print(
+                ">> yolov26track: reid_markers merge: "
+                f"raw_ids={reid_stats['raw_ids']} -> stable_ids={reid_stats['stable_ids']} "
+                f"(max_ids={reid_stats['max_ids']}) | "
+                f"forced_reassignments={reid_stats['forced_reassignments']} | "
+                f"dropped_rows={reid_stats['dropped_rows']}"
+            )
+            print(
+                ">> Equivalent standalone CLI (copy/paste):\n"
+                f'>>   uv run python -u -m vaila.reid_markers --input "{combined}" '
+                f'--max-ids {reid_stats["max_ids"]} --output "{out_path}"'
+            )
+        except Exception as exc:  # noqa: BLE001 - post-process is best-effort, never fatal
+            print(f">> yolov26track: reid_markers merge failed (non-fatal): {exc}")
+
     _track_banner("Writing REC2D/REC3D markers CSV", f"anchor={args.anchor}")
     markers_csv, n_markers = _write_markers_csv_from_buffer(
         buffer, output_dir, video_stem, args.anchor
@@ -6960,6 +7063,8 @@ def run_track_cli(argv: list[str] | None = None) -> int:
     print(f"[yolov26track] per-ID bbox CSVs: {len(written)} files")
     if combined:
         print(f"[yolov26track] combined bbox CSV (getpixelvideo): {combined}")
+    if reid_postprocess_output:
+        print(f"[yolov26track] reid_markers geometric merge output: {reid_postprocess_output}")
     print(f"[yolov26track] REC2D/REC3D markers CSV (frame,p1_x,p1_y,...): {markers_csv}")
     if overlay:
         print(f"[yolov26track] overlay video (.mp4): {overlay}")
