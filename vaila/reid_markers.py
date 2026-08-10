@@ -3,8 +3,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 04 July 2026
-Version: 0.3.68
+Update Date: 10 August 2026
+Version: 0.3.102
 Python Version: 3.12.9
 
 Description:
@@ -19,10 +19,14 @@ by getpixelvideo.py. It offers the following functionalities:
 ================================================================================
 """
 
+import argparse
 import contextlib
 import json
 import os
+import re
 import shutil  # Para operações de diretório
+import sys
+import time
 import tkinter as tk
 import warnings
 from tkinter import Button as TkButton
@@ -46,9 +50,17 @@ matplotlib.use("TkAgg")  # Força backend interativo
 from pathlib import Path
 
 try:
-    from .geometric_reid import assignment_min_cost
+    from .geometric_reid import (
+        GeometricFrameLinker,
+        GeometricLinkerConfig,
+        assignment_min_cost,
+    )
 except ImportError:
-    from geometric_reid import assignment_min_cost  # ty: ignore[unresolved-import]
+    from geometric_reid import (  # ty: ignore[unresolved-import]
+        GeometricFrameLinker,
+        GeometricLinkerConfig,
+        assignment_min_cost,
+    )
 
 
 def load_markers_file():
@@ -668,6 +680,597 @@ def load_homography_matrix(path: str | Path) -> np.ndarray:
     if H.shape != (3, 3):
         raise ValueError(f"Expected 3x3 homography, got shape {H.shape} from {hp}")
     return H
+
+
+# =============================================================================
+# Geometric ReID (2D + Velocity) v2: schema auto-detection + max_ids merging
+# =============================================================================
+#
+# The functions above/below this block (geometric_reid_align_markers and
+# friends) are a SWAP-FIXER: they operate on a fixed set of pre-existing
+# ``pN_x/pN_y`` marker slots and only reassign which source's data lands in
+# which slot per frame -- they never change how many slots exist. They stay
+# untouched and are still used as the GUI's fallback path (see
+# ``run_geometric_reid_with_data`` / the "Geometric ReID (2D + velocity)"
+# button dispatch in ``create_gui_menu``) for files that don't match a
+# recognized schema.
+#
+# What follows is a different, additive capability: MERGING an arbitrary
+# number of fragmented raw tracker ids (bbox or point, wide-per-slot or
+# row-per-detection) down into <= max_ids persistent stable ids, reusing the
+# shared ``GeometricFrameLinker`` (Hungarian + IoU + velocity-direction,
+# geometric_reid.py) rather than a second bespoke implementation. It backs
+# both a new headless CLI (``python -m vaila.reid_markers --input ...``) and
+# an upgraded GUI flow.
+
+INPUT_SCHEMA_BBOX_WIDE_SLOT = "bbox_wide_slot"
+INPUT_SCHEMA_BBOX_ROW_XYXY = "bbox_row_xyxy"
+INPUT_SCHEMA_BBOX_ROW_XYWH = "bbox_row_xywh"
+INPUT_SCHEMA_POINT_ROW = "point_row"
+INPUT_SCHEMA_SAM_TRACKS = "sam_tracks"
+
+_BBOX_WIDE_SLOT_FIELD_RE = re.compile(r"^(?P<field>X_min|Y_min|X_max|Y_max)_(?P<slot>.+)$")
+_LONG_DETECTION_COLUMNS = ("frame", "raw_slot", "cx", "cy", "x1", "y1", "x2", "y2", "orig_index")
+
+
+def _find_frame_column(columns) -> str:
+    """Return the frame/index column name, tried case-insensitively."""
+    lower = {str(c).strip().lower(): c for c in columns}
+    for candidate in ("frame", "frame_idx", "frameindex", "frame number", "frame_number"):
+        if candidate in lower:
+            return lower[candidate]
+    raise ValueError("No frame column found (expected one of: Frame, frame, frame_idx, ...).")
+
+
+def _find_id_column(columns) -> str | None:
+    """Return a detection-id column name for row-per-detection schemas, if any."""
+    lower = {str(c).strip().lower(): c for c in columns}
+    for candidate in ("tracker id", "tracker_id", "id", "obj_id", "track_id", "person_id"):
+        if candidate in lower:
+            return lower[candidate]
+    return None
+
+
+def _find_bbox_wide_slots(columns) -> dict[str, dict[str, str]]:
+    """Map ``slot label -> {"X_min": colname, ...}`` for slots with all 4 bbox fields."""
+    per_slot: dict[str, dict[str, str]] = {}
+    for col in columns:
+        m = _BBOX_WIDE_SLOT_FIELD_RE.match(str(col))
+        if m:
+            per_slot.setdefault(m.group("slot"), {})[m.group("field")] = col
+    required = {"X_min", "Y_min", "X_max", "Y_max"}
+    return {slot: fields for slot, fields in per_slot.items() if required <= fields.keys()}
+
+
+def detect_input_schema(df: pd.DataFrame) -> str:
+    """Classify a tracking CSV from its column headers alone -- no manual flag.
+
+    Priority order: SAM long tracks, bbox wide-per-slot (e.g. vailá's
+    ``all_id_detection.csv``: ``X_min_person_id_01`` etc.), vailá's own
+    ``pN_x/pN_y`` wide point convention, then row-per-detection bbox tables
+    (``x1,y1,x2,y2`` or ``x,y,w,h`` + a frame/id column).
+    """
+    if is_sam_tracks_file(df):
+        return INPUT_SCHEMA_SAM_TRACKS
+    if _find_bbox_wide_slots(df.columns):
+        return INPUT_SCHEMA_BBOX_WIDE_SLOT
+    if detect_markers(df):
+        return INPUT_SCHEMA_POINT_ROW
+    lower = {str(c).strip().lower(): c for c in df.columns}
+    has_frame = any(cand in lower for cand in ("frame", "frame_idx", "frameindex", "frame number"))
+    if has_frame and {"x1", "y1", "x2", "y2"} <= lower.keys():
+        return INPUT_SCHEMA_BBOX_ROW_XYXY
+    if has_frame and {"x_min", "y_min", "x_max", "y_max"} <= lower.keys():
+        return INPUT_SCHEMA_BBOX_ROW_XYXY
+    if has_frame and {"x", "y", "w", "h"} <= lower.keys():
+        return INPUT_SCHEMA_BBOX_ROW_XYWH
+    raise ValueError(
+        "Could not auto-detect a supported ReID input schema. Expected one of: "
+        f"{INPUT_SCHEMA_BBOX_WIDE_SLOT}, {INPUT_SCHEMA_BBOX_ROW_XYXY}, "
+        f"{INPUT_SCHEMA_BBOX_ROW_XYWH}, {INPUT_SCHEMA_POINT_ROW}, {INPUT_SCHEMA_SAM_TRACKS}. "
+        f"Columns seen (first 25): {list(df.columns)[:25]}"
+    )
+
+
+def _extract_bbox_wide_slot(df: pd.DataFrame) -> pd.DataFrame:
+    slots = _find_bbox_wide_slots(df.columns)
+    frame_col = _find_frame_column(df.columns)
+    frame_all = pd.to_numeric(df[frame_col], errors="coerce")
+    rows: list[pd.DataFrame] = []
+    for slot, fields in slots.items():
+        x1 = pd.to_numeric(df[fields["X_min"]], errors="coerce")
+        y1 = pd.to_numeric(df[fields["Y_min"]], errors="coerce")
+        x2 = pd.to_numeric(df[fields["X_max"]], errors="coerce")
+        y2 = pd.to_numeric(df[fields["Y_max"]], errors="coerce")
+        valid = x1.notna() & y1.notna() & x2.notna() & y2.notna() & frame_all.notna()
+        if not valid.any():
+            continue
+        sub = pd.DataFrame(
+            {
+                "frame": frame_all,
+                "raw_slot": slot,
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "orig_index": df.index.to_numpy(),
+            }
+        )
+        sub["cx"] = (sub["x1"] + sub["x2"]) / 2.0
+        sub["cy"] = (sub["y1"] + sub["y2"]) / 2.0
+        # Carry through any other per-slot column (Tracker ID, Label,
+        # Confidence, Color_R/G/B, ...) unprefixed, so the writer can
+        # reproduce them for the winning stable_id.
+        used = set(fields.values())
+        for col in df.columns:
+            col_s = str(col)
+            if col_s.endswith(f"_{slot}") and col not in used:
+                base = col_s[: -(len(slot) + 1)]
+                sub[base] = df[col]
+        rows.append(sub.loc[valid].copy())
+    if not rows:
+        return pd.DataFrame(columns=_LONG_DETECTION_COLUMNS)  # ty: ignore[invalid-argument-type]
+    out = pd.concat(rows, ignore_index=True)
+    out["frame"] = out["frame"].astype(int)
+    return out.sort_values(["frame", "raw_slot"]).reset_index(drop=True)
+
+
+def _extract_point_row(df: pd.DataFrame) -> pd.DataFrame:
+    marker_ids = detect_markers(df)
+    frame_col = _find_frame_column(df.columns)
+    frame_all = pd.to_numeric(df[frame_col], errors="coerce")
+    rows: list[pd.DataFrame] = []
+    for mid in marker_ids:
+        x_col, y_col = f"p{mid}_x", f"p{mid}_y"
+        x = pd.to_numeric(df[x_col], errors="coerce")
+        y = pd.to_numeric(df[y_col], errors="coerce")
+        valid = x.notna() & y.notna() & frame_all.notna()
+        if not valid.any():
+            continue
+        sub = pd.DataFrame(
+            {
+                "frame": frame_all,
+                "raw_slot": f"p{mid}",
+                "cx": x,
+                "cy": y,
+                "x1": np.nan,
+                "y1": np.nan,
+                "x2": np.nan,
+                "y2": np.nan,
+                "orig_index": df.index.to_numpy(),
+            }
+        )
+        rows.append(sub.loc[valid].copy())
+    if not rows:
+        return pd.DataFrame(columns=_LONG_DETECTION_COLUMNS)  # ty: ignore[invalid-argument-type]
+    out = pd.concat(rows, ignore_index=True)
+    out["frame"] = out["frame"].astype(int)
+    return out.sort_values(["frame", "raw_slot"]).reset_index(drop=True)
+
+
+def _extract_bbox_row(df: pd.DataFrame, schema: str) -> pd.DataFrame:
+    frame_col = _find_frame_column(df.columns)
+    id_col = _find_id_column(df.columns)
+    lower = {str(c).strip().lower(): c for c in df.columns}
+    if schema == INPUT_SCHEMA_BBOX_ROW_XYXY:
+        if {"x1", "y1", "x2", "y2"} <= lower.keys():
+            x1c, y1c, x2c, y2c = lower["x1"], lower["y1"], lower["x2"], lower["y2"]
+        else:
+            x1c, y1c, x2c, y2c = (
+                lower["x_min"],
+                lower["y_min"],
+                lower["x_max"],
+                lower["y_max"],
+            )
+        x1 = pd.to_numeric(df[x1c], errors="coerce")
+        y1 = pd.to_numeric(df[y1c], errors="coerce")
+        x2 = pd.to_numeric(df[x2c], errors="coerce")
+        y2 = pd.to_numeric(df[y2c], errors="coerce")
+    elif schema == INPUT_SCHEMA_BBOX_ROW_XYWH:
+        xc, yc, wc, hc = lower["x"], lower["y"], lower["w"], lower["h"]
+        x = pd.to_numeric(df[xc], errors="coerce")
+        y = pd.to_numeric(df[yc], errors="coerce")
+        w = pd.to_numeric(df[wc], errors="coerce")
+        h = pd.to_numeric(df[hc], errors="coerce")
+        x1, y1, x2, y2 = x, y, x + w, y + h
+    else:
+        raise ValueError(f"_extract_bbox_row does not handle schema {schema!r}")
+
+    frame = pd.to_numeric(df[frame_col], errors="coerce")
+    raw_slot = (
+        df[id_col].astype(str)
+        if id_col is not None
+        else pd.Series([f"row{i}" for i in range(len(df))], index=df.index)
+    )
+    out = pd.DataFrame(
+        {
+            "frame": frame,
+            "raw_slot": raw_slot,
+            "x1": x1,
+            "y1": y1,
+            "x2": x2,
+            "y2": y2,
+            "orig_index": df.index.to_numpy(),
+        }
+    )
+    out["cx"] = (out["x1"] + out["x2"]) / 2.0
+    out["cy"] = (out["y1"] + out["y2"]) / 2.0
+    valid = out[["frame", "x1", "y1", "x2", "y2"]].notna().all(axis=1)
+    out = out.loc[valid].copy()
+    out["frame"] = out["frame"].astype(int)
+    return out.sort_values(["frame", "raw_slot"]).reset_index(drop=True)
+
+
+def _extract_sam_tracks(df: pd.DataFrame) -> pd.DataFrame:
+    t = df.copy()
+    t["frame"] = pd.to_numeric(t["frame"], errors="coerce")
+    t["obj_id"] = pd.to_numeric(t["obj_id"], errors="coerce")
+    for c in ("x_px", "y_px", "w_px", "h_px"):
+        t[c] = pd.to_numeric(t[c], errors="coerce")
+    valid = t[["frame", "obj_id", "x_px", "y_px", "w_px", "h_px"]].notna().all(axis=1)
+    t = t.loc[valid]
+    out = pd.DataFrame(
+        {
+            "frame": t["frame"].astype(int),
+            "raw_slot": t["obj_id"].astype(int).astype(str),
+            "x1": t["x_px"],
+            "y1": t["y_px"],
+            "x2": t["x_px"] + t["w_px"],
+            "y2": t["y_px"] + t["h_px"],
+            "orig_index": t.index.to_numpy(),
+        }
+    )
+    out["cx"] = (out["x1"] + out["x2"]) / 2.0
+    out["cy"] = (out["y1"] + out["y2"]) / 2.0
+    return out.sort_values(["frame", "raw_slot"]).reset_index(drop=True)
+
+
+def extract_long_detections(df: pd.DataFrame, schema: str) -> pd.DataFrame:
+    """Uniform long-format view: one row per (frame, raw_slot) detection.
+
+    Columns: ``frame``(int), ``raw_slot``(str, original id/marker/slot label),
+    ``cx``/``cy``(float, centroid), ``x1``/``y1``/``x2``/``y2``(float, NaN for
+    point-only input), ``orig_index`` (row position in the original ``df``,
+    used by row-per-detection writers), plus any schema-specific extra
+    metadata columns (``bbox_wide_slot`` carries through Tracker ID/Label/
+    Confidence/Color_* unprefixed).
+    """
+    if schema == INPUT_SCHEMA_BBOX_WIDE_SLOT:
+        return _extract_bbox_wide_slot(df)
+    if schema == INPUT_SCHEMA_POINT_ROW:
+        return _extract_point_row(df)
+    if schema in (INPUT_SCHEMA_BBOX_ROW_XYXY, INPUT_SCHEMA_BBOX_ROW_XYWH):
+        return _extract_bbox_row(df, schema)
+    if schema == INPUT_SCHEMA_SAM_TRACKS:
+        return _extract_sam_tracks(df)
+    raise ValueError(f"Unsupported schema for extraction: {schema!r}")
+
+
+def estimate_max_ids(long_df: pd.DataFrame) -> int:
+    """Auto-estimate max_ids as the peak count of simultaneous detections."""
+    if long_df.empty:
+        return 1
+    return int(long_df.groupby("frame").size().max())
+
+
+def merge_fragmented_ids_geometric(
+    long_df: pd.DataFrame,
+    *,
+    max_ids: int | None = None,
+    max_gap: int = 12,
+    max_dist: float = 180.0,
+    min_iou: float = 0.05,
+    direction_weight: float = 0.5,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Merge fragmented ``raw_slot`` ids into <= ``max_ids`` persistent ids.
+
+    Reuses the shared ``GeometricFrameLinker`` (Hungarian assignment + IoU +
+    velocity-direction, ``geometric_reid.py`` -- the same engine yolov26track
+    and SAM use for ``--stabilize-ids``) instead of a second bespoke
+    implementation. When bbox columns are present, IoU is a real geometric
+    signal; for point-only input (``point_row``), a small synthetic 2px bbox
+    is centered on ``cx/cy`` so the same cost function applies uniformly.
+
+    ``max_ids`` bounds the number of *concurrently active* identity slots
+    (see ``GeometricLinkerConfig.max_tracks``): a slot idle longer than
+    ``max_gap`` frees for reuse by a different physical subject later. Every
+    input row keeps a ``stable_id`` -- no detections are dropped, except the
+    one unavoidable edge case where more simultaneous detections exist in a
+    single frame than ``max_ids`` allows (reported via ``dropped_rows`` in
+    the returned stats; zero in normal operation where ``max_ids`` is at or
+    above the true peak concurrency).
+    """
+    if long_df.empty:
+        empty = long_df.copy()
+        empty["stable_id"] = pd.Series(dtype="Int64")
+        return empty, {
+            "frames": 0,
+            "raw_ids": 0,
+            "stable_ids": 0,
+            "forced_reassignments": 0,
+            "max_ids": max_ids,
+            "dropped_rows": 0,
+        }
+
+    config = GeometricLinkerConfig(
+        max_gap=int(max_gap),
+        max_centroid_dist_px=float(max_dist),
+        min_iou=float(min_iou),
+        direction_weight=float(direction_weight),
+        max_tracks=int(max_ids) if max_ids else None,
+    )
+    linker = GeometricFrameLinker(enabled=True, config=config, start_stable_id=1)
+
+    # Keyed on long_df's OWN unique row index -- NOT orig_index, which is the
+    # *source wide dataframe's* row/frame position and is deliberately
+    # shared by every slot detected at the same frame (bbox_wide_slot,
+    # point_row): using it here would silently collapse simultaneous
+    # detections from different slots onto a single stable_id.
+    stable_by_long_index: dict[int, int] = {}
+    for frame_idx, frame_df in long_df.groupby("frame", sort=True):
+        dets = []
+        for long_idx, row in frame_df.iterrows():
+            has_bbox = pd.notna(row.get("x1")) and pd.notna(row.get("x2"))
+            if has_bbox:
+                xyxy = (float(row["x1"]), float(row["y1"]), float(row["x2"]), float(row["y2"]))
+            else:
+                cx, cy = float(row["cx"]), float(row["cy"])
+                xyxy = (cx - 1.0, cy - 1.0, cx + 1.0, cy + 1.0)
+            dets.append(
+                {
+                    "raw_id": row["orig_index"],
+                    "tracker_id": row["raw_slot"],
+                    "xyxy": xyxy,
+                    "link_xy": (float(row["cx"]), float(row["cy"])),
+                    "_long_index": int(long_idx),  # ty: ignore[invalid-argument-type]
+                }
+            )
+        assigned = linker.assign_frame(int(frame_idx), dets)  # ty: ignore[invalid-argument-type]
+        for det in assigned:
+            stable_by_long_index[det["_long_index"]] = int(det["stable_id"])
+
+    merged = long_df.copy()
+    merged["stable_id"] = merged.index.to_series().map(stable_by_long_index).astype("Int64")
+
+    dup_mask = merged.duplicated(subset=["frame", "stable_id"], keep="first")
+    stats = {
+        "frames": int(long_df["frame"].nunique()),
+        "raw_ids": int(long_df["raw_slot"].nunique()),
+        "stable_ids": int(merged["stable_id"].nunique(dropna=True)),
+        "forced_reassignments": len(linker.forced_reassignments),
+        "max_ids": int(max_ids) if max_ids else None,
+        "dropped_rows": int(dup_mask.sum()),
+    }
+    return merged, stats
+
+
+def write_bbox_wide_slot_output(
+    original_df: pd.DataFrame,
+    merged_long: pd.DataFrame,
+    out_path: str | Path,
+    *,
+    slot_prefix: str = "person_id",
+) -> pd.DataFrame:
+    """Write merged detections back in the ``all_id_detection.csv`` convention."""
+    frame_col = _find_frame_column(original_df.columns)
+    frame_all = pd.to_numeric(original_df[frame_col], errors="coerce").dropna().astype(int)
+    full_frames = np.arange(int(frame_all.min()), int(frame_all.max()) + 1)
+
+    extra_field_names = [
+        c for c in merged_long.columns if c not in _LONG_DETECTION_COLUMNS and c != "stable_id"
+    ]
+    stable_ids = sorted(int(s) for s in merged_long["stable_id"].dropna().unique())
+
+    merged_dedup = merged_long.drop_duplicates(subset=["frame", "stable_id"], keep="first")
+
+    # Build every column as a plain dict first and concat once -- assigning
+    # columns one at a time into a growing DataFrame (the previous approach)
+    # triggers pandas' "highly fragmented DataFrame" PerformanceWarning at
+    # this width (4 + len(extra_field_names) columns x len(stable_ids) slots)
+    # and is measurably slower on a 16k-frame, 16-slot real file.
+    columns: dict[str, np.ndarray] = {"Frame": full_frames}
+    for sid in stable_ids:
+        slot_label = f"{slot_prefix}_{sid:02d}"
+        sub = merged_dedup.loc[merged_dedup["stable_id"] == sid].set_index("frame")
+        sub = sub.reindex(full_frames)
+        columns[f"X_min_{slot_label}"] = sub["x1"].to_numpy()
+        columns[f"Y_min_{slot_label}"] = sub["y1"].to_numpy()
+        columns[f"X_max_{slot_label}"] = sub["x2"].to_numpy()
+        columns[f"Y_max_{slot_label}"] = sub["y2"].to_numpy()
+        for field in extra_field_names:
+            columns[f"{field}_{slot_label}"] = sub[field].to_numpy()
+    out = pd.DataFrame(columns)
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_csv(out_path, index=False)
+    return out
+
+
+def write_point_row_output(
+    original_df: pd.DataFrame,
+    merged_long: pd.DataFrame,
+    out_path: str | Path,
+) -> pd.DataFrame:
+    """Write merged point detections back in vailá's ``pN_x/pN_y`` convention."""
+    frame_col = _find_frame_column(original_df.columns)
+    frame_all = pd.to_numeric(original_df[frame_col], errors="coerce").dropna().astype(int)
+    full_frames = np.arange(int(frame_all.min()), int(frame_all.max()) + 1)
+
+    stable_ids = sorted(int(s) for s in merged_long["stable_id"].dropna().unique())
+    merged_dedup = merged_long.drop_duplicates(subset=["frame", "stable_id"], keep="first")
+
+    columns: dict[str, np.ndarray] = {"frame": full_frames}
+    for sid in stable_ids:
+        sub = merged_dedup.loc[merged_dedup["stable_id"] == sid].set_index("frame")
+        sub = sub.reindex(full_frames)
+        columns[f"p{sid}_x"] = sub["cx"].to_numpy()
+        columns[f"p{sid}_y"] = sub["cy"].to_numpy()
+    out = pd.DataFrame(columns)
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_csv(out_path, index=False)
+    return out
+
+
+def write_row_per_detection_output(
+    original_df: pd.DataFrame,
+    merged_long: pd.DataFrame,
+    out_path: str | Path,
+) -> pd.DataFrame:
+    """Write merged row-per-detection input (bbox rows / SAM tracks) back with
+
+    every original row preserved unchanged plus a new ``stable_id`` column —
+    used for ``bbox_row_xyxy``, ``bbox_row_xywh``, and ``sam_tracks`` input.
+    """
+    stable_by_orig_index = dict(
+        zip(merged_long["orig_index"].astype(int), merged_long["stable_id"], strict=False)
+    )
+    out = original_df.copy()
+    out["stable_id"] = out.index.to_series().map(stable_by_orig_index)
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_csv(out_path, index=False)
+    return out
+
+
+def run_geometric_merge(
+    input_path: str | Path,
+    *,
+    max_ids: int | None = None,
+    output_path: str | Path | None = None,
+    max_gap: int = 12,
+    max_dist: float = 180.0,
+    min_iou: float = 0.05,
+    direction_weight: float = 0.5,
+) -> tuple[Path, dict[str, object]]:
+    """Single entry point shared by the CLI and the GUI -- load, detect
+    schema, merge, write. No Tkinter import/usage anywhere in this path.
+    """
+    input_path = Path(input_path)
+    df = pd.read_csv(input_path)
+    schema = detect_input_schema(df)
+    long_df = extract_long_detections(df, schema)
+
+    effective_max_ids = int(max_ids) if max_ids else estimate_max_ids(long_df)
+    merged, stats = merge_fragmented_ids_geometric(
+        long_df,
+        max_ids=effective_max_ids,
+        max_gap=max_gap,
+        max_dist=max_dist,
+        min_iou=min_iou,
+        direction_weight=direction_weight,
+    )
+    stats["schema"] = schema
+    stats["input"] = str(input_path)
+
+    if output_path is None:
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        output_path = input_path.with_name(
+            f"{input_path.stem}_reid_maxids{effective_max_ids}_{ts}.csv"
+        )
+    output_path = Path(output_path)
+
+    if schema == INPUT_SCHEMA_BBOX_WIDE_SLOT:
+        write_bbox_wide_slot_output(df, merged, output_path)
+    elif schema == INPUT_SCHEMA_POINT_ROW:
+        write_point_row_output(df, merged, output_path)
+    else:
+        write_row_per_detection_output(df, merged, output_path)
+
+    stats["output"] = str(output_path)
+    return output_path, stats
+
+
+def build_reid_merge_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="python -m vaila.reid_markers",
+        description=(
+            "Geometric ReID (2D + velocity): merge fragmented tracker ids into "
+            "<= max_ids persistent trajectories. Auto-detects bbox-wide-slot, "
+            "point pN_x/pN_y, bbox-row (xyxy/xywh), and SAM-tracks schemas."
+        ),
+    )
+    parser.add_argument("--input", required=True, help="Path to the tracking CSV.")
+    parser.add_argument(
+        "--max-ids",
+        type=int,
+        default=None,
+        help="Max concurrently-active identity slots (default: auto-estimate from peak "
+        "simultaneous detections).",
+    )
+    parser.add_argument(
+        "--output-dir", default=None, help="Output directory (default: alongside input)."
+    )
+    parser.add_argument(
+        "--output", default=None, help="Exact output CSV path (overrides --output-dir)."
+    )
+    parser.add_argument(
+        "--reid-max-gap", type=int, default=12, help="Max frame gap for reconnection."
+    )
+    parser.add_argument(
+        "--reid-max-dist", type=float, default=180.0, help="Max centroid distance (px)."
+    )
+    parser.add_argument("--reid-min-iou", type=float, default=0.05, help="Min IoU gate.")
+    parser.add_argument(
+        "--reid-direction-weight",
+        type=float,
+        default=0.5,
+        help="Velocity-direction penalty weight.",
+    )
+    return parser
+
+
+def main_cli(argv: list[str] | None = None) -> int:
+    """Headless entry point: no Tk root, no dialogs -- safe for CI/subprocess."""
+    parser = build_reid_merge_arg_parser()
+    args = parser.parse_args(argv)
+
+    input_path = Path(args.input)
+    if not input_path.is_file():
+        print(f">> vaila/reid_markers: ERROR - input file not found: {input_path}")
+        return 2
+
+    output_path = None
+    if args.output:
+        output_path = Path(args.output)
+    elif args.output_dir:
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        output_path = (
+            Path(args.output_dir)
+            / f"{input_path.stem}_reid_maxids{args.max_ids or 'auto'}_{ts}.csv"
+        )
+
+    print(f">> vaila/reid_markers: loading {input_path}")
+    try:
+        out_path, stats = run_geometric_merge(
+            input_path,
+            max_ids=args.max_ids,
+            output_path=output_path,
+            max_gap=args.reid_max_gap,
+            max_dist=args.reid_max_dist,
+            min_iou=args.reid_min_iou,
+            direction_weight=args.reid_direction_weight,
+        )
+    except ValueError as exc:
+        print(f">> vaila/reid_markers: ERROR - {exc}")
+        return 1
+
+    print(
+        ">> vaila/reid_markers: Equivalent CLI (copy/paste):\n"
+        f'>>   uv run python -u -m vaila.reid_markers --input "{input_path}" '
+        f'--max-ids {stats["max_ids"]} --output "{out_path}"'
+    )
+    print(
+        f">> vaila/reid_markers: schema={stats['schema']} | frames={stats['frames']} | "
+        f"raw_ids={stats['raw_ids']} -> stable_ids={stats['stable_ids']} "
+        f"(max_ids={stats['max_ids']}) | forced_reassignments={stats['forced_reassignments']} | "
+        f"dropped_rows={stats['dropped_rows']}"
+    )
+    print(f">> vaila/reid_markers: DONE - output: {out_path}")
+    return 0
 
 
 def geometric_reid_align_markers(
@@ -1320,6 +1923,54 @@ def run_geometric_reid_with_data(df, file_path, frame_col, coord_cols):
         messagebox.showerror("Geometric ReID", f"Failed: {exc}")
 
 
+def run_geometric_merge_with_dialog(df: pd.DataFrame, file_path: str, schema: str) -> None:
+    """GUI entry point for the schema-auto-detected, max_ids-bounded merge.
+
+    Counterpart to ``run_geometric_reid_with_data`` (the legacy swap-fixer):
+    this is the path taken by the "Geometric ReID (2D + velocity)" button
+    when ``detect_input_schema`` recognizes the loaded file. Prints the
+    equivalent ``>>`` CLI command so the same run can be reproduced headless.
+    """
+    long_df = extract_long_detections(df, schema)
+    auto_estimate = estimate_max_ids(long_df)
+    max_ids = simpledialog.askinteger(
+        "Max IDs",
+        f"Detected schema: {schema}\n"
+        f"Peak simultaneous detections observed: {auto_estimate}\n\n"
+        "Maximum number of persistent IDs (concurrently active slots).\n"
+        "Leave blank to auto-estimate from peak simultaneous detections:",
+        minvalue=1,
+    )
+    try:
+        out_path, stats = run_geometric_merge(file_path, max_ids=max_ids)
+    except Exception as exc:
+        messagebox.showerror("Geometric ReID", f"Failed: {exc}")
+        return
+
+    print(
+        ">> vaila/reid_markers: Equivalent CLI (copy/paste):\n"
+        f'>>   uv run python -u -m vaila.reid_markers --input "{file_path}" '
+        f'--max-ids {stats["max_ids"]} --output "{out_path}"'
+    )
+    print(
+        f">> vaila/reid_markers: schema={stats['schema']} | frames={stats['frames']} | "
+        f"raw_ids={stats['raw_ids']} -> stable_ids={stats['stable_ids']} "
+        f"(max_ids={stats['max_ids']}) | forced_reassignments={stats['forced_reassignments']} | "
+        f"dropped_rows={stats['dropped_rows']}"
+    )
+    messagebox.showinfo(
+        "Geometric ReID",
+        "Geometric ReID (2D + velocity) merge complete.\n\n"
+        f"Schema detected: {stats['schema']}\n"
+        f"Saved: {out_path}\n"
+        f"Frames: {stats['frames']}\n"
+        f"Raw ids: {stats['raw_ids']} -> Stable ids: {stats['stable_ids']} "
+        f"(max_ids={stats['max_ids']})\n"
+        f"Forced reassignments: {stats['forced_reassignments']}\n"
+        f"Dropped rows: {stats['dropped_rows']}",
+    )
+
+
 def create_gui_menu():
     """Create main GUI menu for the application."""
 
@@ -1359,6 +2010,20 @@ def create_gui_menu():
         if df is None:
             return
 
+        # "Geometric ReID (2D + velocity)" upgrade path: try schema
+        # auto-detection + max_ids merge FIRST (no manual column picking
+        # needed). Falls back to the legacy manual-column-selection
+        # swap-fixer below for any file that doesn't match a recognized
+        # schema, so existing workflows keep working unchanged.
+        if action_type == "geometric_reid":
+            try:
+                schema = detect_input_schema(df)
+            except ValueError:
+                schema = None
+            if schema is not None:
+                run_geometric_merge_with_dialog(df, file_path, schema)
+                return
+
         # Select columns dialog
         column_config = select_columns_dialog(df)
         if column_config.get("cancelled", False):
@@ -1379,6 +2044,7 @@ def create_gui_menu():
         elif action_type == "reidswap_manual":
             run_reid_swap_manual_with_data(df, file_path)
         elif action_type == "geometric_reid":
+            # Unrecognized schema: legacy swap-only flow on manually chosen columns.
             run_geometric_reid_with_data(df, file_path, frame_col, coord_cols)
 
     # Row 1 - Main functions
@@ -2617,4 +3283,10 @@ def auto_fill_gaps_arima():
 
 
 if __name__ == "__main__":
-    create_gui_menu()
+    # Headless CLI path (e.g. `uv run python -u -m vaila.reid_markers --input
+    # ...`) never imports/calls anything Tkinter; GUI stays the zero-arg
+    # default so double-clicking / the vailá button launcher is unchanged.
+    if len(sys.argv) > 1:
+        sys.exit(main_cli())
+    else:
+        create_gui_menu()

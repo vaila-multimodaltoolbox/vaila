@@ -3,12 +3,13 @@
 Used by yolov26track, vaila_sam, and reid_markers to keep ID-stabilization logic
 consistent across bbox tracking, SAM exports, and marker CSV workflows.
 
-Update Date: 07 July 2026
-Version: 0.3.79
+Update Date: 10 August 2026
+Version: 0.3.102
 """
 
 from __future__ import annotations
 
+import heapq
 from dataclasses import dataclass
 from typing import Any
 
@@ -211,6 +212,14 @@ class GeometricLinkerConfig:
     # Sapiens2 pose: OKS on COCO-17 subset inside 308-kp topology.
     kpt_oks_weight: float = 0.0
     kpt_thr: float = 0.3
+    # Bounded identity-slot pool (opt-in; None = unlimited, existing behavior).
+    # Caps the number of *concurrently* live ``stable_id`` values at
+    # ``max_tracks`` — a track idle longer than ``max_gap`` frees its slot for
+    # reuse by a later, different physical subject (see reid_markers.py's
+    # geometric merge engine, the first caller). Unset by every existing
+    # call site (yolov26track, vaila_sam, vaila_sapiens), so default behavior
+    # is byte-for-byte unchanged.
+    max_tracks: int | None = None
 
 
 def detection_link_xy(det: dict[str, Any]) -> tuple[float, float]:
@@ -288,6 +297,20 @@ class GeometricFrameLinker:
         self.active: dict[int, dict[str, Any]] = {}
         self.next_stable_id = start_stable_id
         self.reid_links: list[tuple[int, int, int]] = []
+        # Bounded slot pool (opt-in via config.max_tracks): a min-heap of
+        # currently-unused slot ids in [start_stable_id, start_stable_id +
+        # max_tracks - 1]. None when max_tracks is unset -> unlimited IDs,
+        # identical to pre-existing behavior.
+        self._free_slots: list[int] | None = None
+        if self.config.max_tracks is not None and self.config.max_tracks > 0:
+            self._free_slots = list(
+                range(start_stable_id, start_stable_id + int(self.config.max_tracks))
+            )
+            heapq.heapify(self._free_slots)
+        # (frame, raw_id, stolen_stable_id) audit trail: only populated when
+        # the slot pool is exhausted and a still-active track's slot had to be
+        # reassigned to a different detection rather than dropping it.
+        self.forced_reassignments: list[tuple[int, int, int]] = []
 
     def assign_frame(
         self, frame_idx: int, detections: list[dict[str, Any]]
@@ -306,6 +329,18 @@ class GeometricFrameLinker:
             for tid, tr in self.active.items()
             if 0 <= frame_idx - int(tr["frame"]) <= self.config.max_gap
         ]
+
+        # Purge anything that fell outside max_gap right away (previously
+        # this only happened in a trailing loop below whose condition could
+        # never actually be true -- see git history / test coverage -- so
+        # expired entries were silently kept in self.active forever, just
+        # excluded from matching by the active_ids filter each frame; that
+        # was harmless for the unbounded-id case but breaks max_tracks slot
+        # recycling, since a slot must genuinely free up here to be reused).
+        for stale_tid in [tid for tid in self.active if tid not in active_ids]:
+            del self.active[stale_tid]
+            if self._free_slots is not None:
+                heapq.heappush(self._free_slots, stale_tid)
 
         if not active_ids:
             out: list[dict[str, Any]] = []
@@ -372,12 +407,11 @@ class GeometricFrameLinker:
             if i not in assigned_det:
                 out[i] = self._spawn_track(frame_idx, det)
 
-        for tid in active_ids:
-            if (
-                tid not in assigned_trk
-                and frame_idx - int(self.active[tid]["frame"]) > self.config.max_gap
-            ):
-                del self.active[tid]
+        # Unmatched-but-still-within-max_gap tracks (tid in active_ids minus
+        # assigned_trk) are deliberately left alone here: their "frame" is
+        # untouched, so they naturally fall out of active_ids (and get
+        # purged, freeing their slot) on whichever later frame first exceeds
+        # max_gap -- handled by the purge step at the top of this method.
 
         return out
 
@@ -418,8 +452,22 @@ class GeometricFrameLinker:
         return base_cost
 
     def _spawn_track(self, frame_idx: int, det: dict[str, Any]) -> dict[str, Any]:
-        tid = self.next_stable_id
-        self.next_stable_id += 1
+        if self._free_slots is not None:
+            if self._free_slots:
+                tid = heapq.heappop(self._free_slots)
+            else:
+                # Pool exhausted: every slot is claimed by a still-active
+                # track. Steal the least-recently-updated one rather than
+                # dropping this detection (a hard max_tracks bound with no
+                # data loss beats an unbounded id count or a silently
+                # discarded row). Logged so callers can audit/report it.
+                tid = min(self.active, key=lambda t: int(self.active[t]["frame"]))
+                self.forced_reassignments.append(
+                    (frame_idx, int(det.get("raw_id", det.get("tracker_id", 0))), tid)
+                )
+        else:
+            tid = self.next_stable_id
+            self.next_stable_id += 1
         return self._attach_track(frame_idx, tid, det)
 
     def _attach_track(self, frame_idx: int, tid: int, det: dict[str, Any]) -> dict[str, Any]:

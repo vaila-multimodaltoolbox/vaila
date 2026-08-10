@@ -1,0 +1,57 @@
+{
+  "loop": "reid-markers-geometric-max-ids",
+  "status": "success",
+  "iteration_count": 10,
+  "budget": {
+    "max_iterations": 30
+  },
+  "cost": {
+    "note": "not metered by this harness; track qualitatively via iteration_count and cost_per_accepted_change"
+  },
+  "frozen_inputs": {
+    "input_csv": "/home/preto/data/ComercialFC/vailatracker_20260807_162350/yoyo_comercial_01052026_dbox/all_id_detection.csv",
+    "max_ids": 18,
+    "output_dir": null
+  },
+  "frozen_design_decisions": {
+    "yolov26track_integration_scope": "offline-only, honored: yolov26track.py's live --max-ids (drop-based, build_id_rerank_map) and --stabilize-ids (GeometricFrameLinker) are byte-for-byte unchanged. New work is an additive --reid-postprocess flag that calls the new reid_markers.run_geometric_merge() on all_id_detection.csv after it is written.",
+    "max_ids_semantics": "implemented as a single slot-pool mechanism in geometric_reid.GeometricLinkerConfig.max_tracks: bounds concurrently-active identity slots per frame; a slot idle past max_gap frees for reuse by a different physical subject. Validated on real data to serve both the 'few known subjects' and 'peak concurrency, subjects enter/exit' interpretations without a mode flag.",
+    "no_dropped_detections": "implemented: merge_fragmented_ids_geometric() keeps every input row's stable_id except the one honestly-audited edge case (more simultaneous detections in one frame than max_ids allows) -- reported via forced_reassignments/dropped_rows, never silent."
+  },
+  "step0_checks": {
+    "repo_clean_on_main": "clean at loop start (per gitStatus)",
+    "feature_branch_created": "NOT created -- worked directly (interactive session continuation, not an unattended run); flagged here as a deviation from the spec's Iteration step 0 for the human to note before merging/committing",
+    "input_csv_readable": true
+  },
+  "ranked_targets": [
+    {"id": "1_headless_cli", "status": "resolved", "evidence": "argparse CLI (main_cli/build_reid_merge_arg_parser) added to reid_markers.py; __main__ dispatches to CLI when sys.argv has args, GUI otherwise. tests/test_reid_markers_cli.py (4 tests, real subprocess) confirm no TclError, no hang, exit 0/1/2 as appropriate."},
+    {"id": "2_schema_autodetect", "status": "resolved", "evidence": "detect_input_schema() + extract_long_detections() cover bbox_wide_slot, point_row, bbox_row_xyxy, bbox_row_xywh, sam_tracks. tests/test_reid_markers_schema.py (11 tests) all pass, including against the real all_id_detection.csv wide-slot convention."},
+    {"id": "3_bbox_velocity_engine", "status": "resolved", "evidence": "merge_fragmented_ids_geometric() reuses geometric_reid.GeometricFrameLinker/GeometricLinkerConfig directly -- no duplicate Hungarian/IoU implementation. Real bug found and fixed in the SHARED linker itself during this work: dead expired-track cleanup loop (condition could never be true) prevented slot recycling; fixed by purging expired entries eagerly at top of assign_frame."},
+    {"id": "4_max_ids_slot_pool", "status": "resolved", "evidence": "GeometricLinkerConfig.max_tracks + GeometricFrameLinker's heapq-based free-slot pool with steal-oldest fallback (forced_reassignments audit trail). tests/test_geometric_reid.py +3 (none-is-unchanged, caps-and-logs-forced-reassignment, frees-slot-after-gap-timeout). Validated on real data: exact reproduction of the 16-cap-grows-to-17 bug the user hit interactively, and the fix (reid_markers merge) re-consolidating it back to 16 with 0 dropped rows."},
+    {"id": "5_no_drop_output_schema", "status": "resolved", "evidence": "write_bbox_wide_slot_output/write_point_row_output/write_row_per_detection_output preserve every detection; dropped_rows stat computed and reported honestly. Real-file evidence: 388->18 max_ids gave dropped_rows=475 (true peak 21, correctly NOT hidden); 388->21 gave dropped_rows=0."},
+    {"id": "6_gui_parity", "status": "resolved", "evidence": "run_geometric_merge_with_dialog() wired into the existing 'Geometric ReID (2D + velocity)' button; tries schema auto-detect first, falls back to legacy swap-fixer flow unchanged for unrecognized files. Prints >> CLI mirror on every run."},
+    {"id": "7_yolov26track_hook", "status": "resolved", "evidence": "--reid-postprocess/--reid-postprocess-max-ids added to the track CLI subcommand; calls run_geometric_merge() on the just-written all_id_detection.csv. resolve_reid_postprocess_max_ids() extracted as a standalone, unit-tested function. Existing --max-ids/--stabilize-ids code paths untouched (verified by diff -- no lines in build_id_rerank_map/rerank_buffered_stream/_apply_geometric_stabilize_to_buffer changed)."},
+    {"id": "8_tests", "status": "resolved", "evidence": "39 new/changed tests across tests/test_geometric_reid.py (+3), tests/test_reid_markers_schema.py (11, new file), tests/test_reid_markers_geometric.py (+8), tests/test_reid_markers_cli.py (4, new file), tests/test_yolov26track_reid_postprocess.py (6, new file). All pass. Full repo suite: 870 passed, 13 skipped (pre-existing/unrelated), 0 failed, 0 regressions."},
+    {"id": "9_metadata_docs", "status": "resolved", "evidence": "Headers bumped to v0.3.102 / 10 August 2026 in vaila.py, reid_markers.py, yolov26track.py, geometric_reid.py. README.md Last updated -> 2026-08-10. vaila/help/index.md + index.html Generated-on bumped. vaila/help/{reid_markers,yolov26track,geometric_reid}.md and reid_markers.html/yolov26track.html updated with Version/Updated fields + new-capability sections. CLAUDE.md 'Recent GUI Notes' bullet added documenting the full change including the shared-linker bug fix."},
+    {"id": "10_real_file_evidence", "status": "resolved (evidence, not a pass/fail gate per spec)", "evidence": "Real 660-raw-id/17-stable-id file (post yolov26track --max-ids 16 --stabilize-ids run): reid_markers merge --max-ids 16 -> raw_ids=17 stable_ids=16 forced_reassignments=0 dropped_rows=0, ~22s runtime. Real 388-raw-id/16693-frame uncapped fixture: --max-ids 18 -> stable_ids=18 forced_reassignments=521 dropped_rows=475 (true peak concurrency independently confirmed at 21 via estimate_max_ids + per-frame concurrency histogram); --max-ids 21 -> stable_ids=21 forced_reassignments=3 dropped_rows=0, ~28s runtime. Schema detected correctly as bbox_wide_slot in all runs."}
+  ],
+  "attempts_summary": "Single continuous session, ~10 logical iterations (one per ranked target, in the specified blocking order). One real bug found and fixed mid-implementation via the loop's own smoke-testing discipline: orig_index (source wide-dataframe row) was not a unique key per detection across slots sharing a frame, silently collapsing 2 well-separated simultaneous ids into 1 -- caught by an interactive smoke test before it reached the formal pytest suite, fixed by keying on the long-format dataframe's own unique row index instead.",
+  "evidence": {
+    "ruff": "All checks passed (vaila/reid_markers.py, vaila/yolov26track.py, vaila/geometric_reid.py, all new/changed test files)",
+    "ty": "No new diagnostics introduced by this change; 2 pandas-stub false positives in new code suppressed with # ty: ignore[invalid-argument-type] (columns= accepting a tuple/list of str, and int() of a groupby/index label -- both valid at runtime); all other flagged lines confirmed pre-existing/unrelated by line-number cross-check",
+    "pytest": "870 passed, 13 skipped, 0 failed, 127.15s (full tests/ suite)",
+    "real_file_smoke_run": "see ranked_targets[9].evidence above"
+  },
+  "curated_lessons": [
+    "orig_index (source-row position) is NOT a safe unique key across multiple detections sharing one frame in wide-per-slot/wide-per-marker schemas -- always key merge-tracking dicts on the long-format dataframe's own row index instead.",
+    "GeometricFrameLinker's pairwise gate 'dist > max_dist AND iou < min_iou' means min_iou=0.0 disables the distance veto entirely (iou < 0.0 is never true) -- any test/config relying on distance-based rejection needs a small positive min_iou.",
+    "Column-by-column assignment into a growing pandas DataFrame inside a loop triggers real PerformanceWarning fragmentation at real-file scale (16 slots x 16k frames) -- build a dict and construct the DataFrame once.",
+    "A cleanup-loop condition that references an already-filtered set against the same filter threshold it was filtered by can never fire -- this exact pattern was a real, silent, previously-undetected bug in the shared GeometricFrameLinker."
+  ],
+  "human_approvals": [],
+  "terminal_state": "success",
+  "unresolved_deviations_from_spec": [
+    "No dedicated feature branch was created (spec Iteration step 0) -- work happened directly in the interactive session continuation of an already-open task. Repo is NOT yet committed; flagged for human review/branch-and-commit before merging.",
+    "$code-review (final correctness pass, spec's success-criterion clause) was not run as a separate step in this session -- recommended as the next action before declaring the branch mergeable."
+  ]
+}

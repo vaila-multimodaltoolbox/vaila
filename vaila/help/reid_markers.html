@@ -37,12 +37,12 @@
         <div class="module-info">
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Processing</p>
-            <p><strong>File:</strong> vaila\reid_markers.py</p>
-            <p><strong>Lines:</strong> 2585</p>
-            <p><strong>Size:</strong> 94499 characters</p>
-            <p><strong>Version:</strong> 0.3.47</p>
+            <p><strong>File:</strong> vaila/reid_markers.py</p>
+            <p><strong>Version:</strong> 0.3.102</p>
+            <p><strong>Updated:</strong> 10 August 2026</p>
             <p><strong>Author:</strong> Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>CLI Interface:</strong> ✅ Yes (new, v0.3.102) — <code>uv run python -u -m vaila.reid_markers --input ...</code></p>
         </div>
 
         
@@ -75,6 +75,17 @@ by getpixelvideo.py. It offers the following functionalities:
         <h3>SAM tracking CSV support</h3>
         <p>If <code>sam_tracks.csv</code> is selected, the loader now normalizes SAM long-format tracks to vailá wide marker columns. When a sibling <code>sam_points.csv</code> exists, it is used directly; otherwise the loader writes <code>sam_tracks_reid_points.csv</code> and <code>sam_tracks_reid_id_map.csv</code>.</p>
 
+        <h3>Geometric ReID v2: schema auto-detection + max_ids merge (v0.3.102)</h3>
+        <p>Upgrades "Geometric ReID (2D + velocity)" to merge an arbitrary number of fragmented raw tracker ids down into <code>&lt;= max_ids</code> persistent trajectories, and to run <strong>headless</strong> via a new CLI.</p>
+        <ul>
+            <li><strong>Schema auto-detection</strong> (<code>detect_input_schema</code>): bbox wide-per-slot (<code>X_min_person_id_01</code> etc., the <code>all_id_detection.csv</code> convention), vailá's <code>pN_x/pN_y</code> point convention, row-per-detection bbox (<code>x1,y1,x2,y2</code> or <code>x,y,w,h</code>), and SAM long tracks — no manual column picking.</li>
+            <li><strong>max_ids</strong>: bounds the number of concurrently active identity slots (a slot idle past <code>--reid-max-gap</code> frees for reuse by a different subject later); omit to auto-estimate from peak simultaneous detections. Reuses the shared <code>GeometricFrameLinker</code> (<code>geometric_reid.py</code>) via its new <code>max_tracks</code> slot pool — no second Hungarian/IoU implementation.</li>
+            <li><strong>No detections dropped</strong>, except the one honestly-reported edge case where a single frame has more simultaneous detections than <code>max_ids</code> allows (<code>forced_reassignments</code>/<code>dropped_rows</code> in the printed stats).</li>
+            <li><strong>CLI:</strong> <code>uv run python -u -m vaila.reid_markers --input all_id_detection.csv --max-ids 16 --output-dir processed_reid_maxids/</code></li>
+            <li><strong>GUI:</strong> the existing button now tries schema auto-detection first, falling back to the legacy swap-fixer for unrecognized files.</li>
+        </ul>
+        <p>Validated on a real 16,693-frame file: 388 raw fragmented ids merged to exactly <code>max_ids=18</code> (true peak was 21, so <code>dropped_rows=475</code> honestly reported the shortfall; <code>max_ids=21</code> gave <code>dropped_rows=0</code>).</p>
+
         <div class="functions">
             <h3>🔧 Main Functions</h3>
             <p><strong>Total functions found:</strong> 34</p>
@@ -82,7 +93,7 @@ by getpixelvideo.py. It offers the following functionalities:
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 09/06/2026</p>
+            <p>📅 Generated automatically on: 10/08/2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

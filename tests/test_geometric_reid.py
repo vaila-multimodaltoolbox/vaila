@@ -111,7 +111,14 @@ def test_static_mobility_penalty_reduces_far_jump() -> None:
     for fi, xy in enumerate([(500.0, 400.0), (501.0, 400.0), (499.0, 400.0), (500.0, 400.0)]):
         linker.assign_frame(
             fi,
-            [{"raw_id": 1, "tracker_id": 1, "xyxy": (xy[0] - 20, 300, xy[0] + 20, 420), "link_xy": xy}],
+            [
+                {
+                    "raw_id": 1,
+                    "tracker_id": 1,
+                    "xyxy": (xy[0] - 20, 300, xy[0] + 20, 420),
+                    "link_xy": xy,
+                }
+            ],
         )
     out = linker.assign_frame(
         4,
@@ -205,3 +212,72 @@ def test_oks_cost_prefers_same_pose_over_crossing_bbox() -> None:
     by_kpt_x = {int(np.mean(d["keypoints"][:, 0])): d["stable_id"] for d in out1}
     assert by_kpt_x[min(by_kpt_x)] == id_left
     assert by_kpt_x[max(by_kpt_x)] == id_right
+
+
+def test_max_tracks_none_is_unchanged_unbounded_behavior() -> None:
+    """Default (max_tracks unset) keeps the pre-existing unbounded id counter."""
+    config = GeometricLinkerConfig(max_gap=1, max_centroid_dist_px=50.0, min_iou=0.0)
+    linker = GeometricFrameLinker(enabled=True, config=config, start_stable_id=1)
+    out = linker.assign_frame(
+        0,
+        [
+            {"raw_id": 1, "tracker_id": 1, "xyxy": (0, 0, 10, 10)},
+            {"raw_id": 2, "tracker_id": 2, "xyxy": (1000, 1000, 1010, 1010)},
+            {"raw_id": 3, "tracker_id": 3, "xyxy": (2000, 2000, 2010, 2010)},
+        ],
+    )
+    assert sorted(d["stable_id"] for d in out) == [1, 2, 3]
+    assert linker.forced_reassignments == []
+
+
+def test_max_tracks_caps_concurrent_ids_and_logs_forced_reassignment() -> None:
+    """max_tracks=2: a 3rd simultaneous, unmatchable detection steals a slot
+    instead of spawning id 3 -- the exact failure mode observed on the real
+    yolov26track run (16-cap -> 17 stable ids after the unbounded linker)."""
+    # min_iou > 0 matters here: the gate is "dist > max_dist AND iou < min_iou"
+    # -- with min_iou == 0.0 that second clause (iou < 0.0) can never be true,
+    # so nothing is ever actually rejected by distance alone. A small
+    # positive min_iou is required to genuinely gate out a far detection.
+    config = GeometricLinkerConfig(
+        max_gap=10, max_centroid_dist_px=50.0, min_iou=0.05, max_tracks=2
+    )
+    linker = GeometricFrameLinker(enabled=True, config=config, start_stable_id=1)
+
+    out0 = linker.assign_frame(
+        0,
+        [
+            {"raw_id": 10, "tracker_id": 10, "xyxy": (0, 0, 10, 10)},
+            {"raw_id": 20, "tracker_id": 20, "xyxy": (1000, 1000, 1010, 1010)},
+        ],
+    )
+    assert sorted(d["stable_id"] for d in out0) == [1, 2]
+
+    # Frame 1: both prior tracks still "active" (within max_gap), but a 3rd
+    # detection appears far from both -- gated out of matching either one.
+    out1 = linker.assign_frame(
+        1,
+        [{"raw_id": 30, "tracker_id": 30, "xyxy": (5000, 5000, 5010, 5010)}],
+    )
+    assert len(out1) == 1
+    assert out1[0]["stable_id"] in (1, 2)  # never a fresh id 3 -- pool stays <= 2
+    assert len(linker.active) <= 2
+    assert linker.forced_reassignments == [(1, 30, out1[0]["stable_id"])]
+
+
+def test_max_tracks_frees_slot_after_gap_timeout_for_reuse() -> None:
+    """A track's numeric slot returns to the pool once it exceeds max_gap and
+    is genuinely reused later by a different physical subject entering the
+    scene -- the frozen 'peak concurrency, slot reuse over time' design."""
+    config = GeometricLinkerConfig(max_gap=2, max_centroid_dist_px=50.0, min_iou=0.0, max_tracks=1)
+    linker = GeometricFrameLinker(enabled=True, config=config, start_stable_id=1)
+
+    out0 = linker.assign_frame(0, [{"raw_id": 1, "tracker_id": 1, "xyxy": (0, 0, 10, 10)}])
+    first_id = out0[0]["stable_id"]
+    assert first_id == 1
+
+    # Frame far enough past max_gap that the first track has expired.
+    out_later = linker.assign_frame(
+        10, [{"raw_id": 99, "tracker_id": 99, "xyxy": (9000, 9000, 9010, 9010)}]
+    )
+    assert out_later[0]["stable_id"] == 1  # same slot label, cleanly reused
+    assert linker.forced_reassignments == []  # a free slot was available -- no stealing needed

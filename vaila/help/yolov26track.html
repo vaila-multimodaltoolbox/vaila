@@ -104,8 +104,8 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Ml</p>
             <p><strong>File:</strong> vaila/yolov26track.py</p>
-            <p><strong>Lines:</strong> 3980+</p>
-            <p><strong>Version:</strong> 0.3.72</p>
+            <p><strong>Version:</strong> 0.3.102</p>
+            <p><strong>Updated:</strong> 10 August 2026</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -175,12 +175,13 @@
                 <li><code>{label}_id_NN.csv</code> + <code>all_id_detection.csv</code> — per-ID bbox tracks; load <code>all_id_detection.csv</code> in getpixelvideo to edit/inspect.</li>
                 <li><code>&lt;stem&gt;_track_overlay.mp4</code> — annotated <strong>H.264 MP4</strong> (never a bulky <code>.avi</code>; <code>--no-save-video</code> to skip).</li>
             </ul>
-            <p>Flags: <code>--anchor center|bottom|top|left|right|corners</code> (marker point of bbox; default <code>bottom</code> = foot), <code>--max-ids N</code> (keep N most persistent IDs, re-rank 1..N → stable <code>p1..pN</code>), <code>--classes 0 32</code>, <code>--vid-stride N</code>, <code>--device auto|cuda|cpu</code>, <code>--conf/--iou/--imgsz</code>.</p>
+            <p>Flags: <code>--anchor center|bottom|top|left|right|corners</code> (marker point of bbox; default <code>bottom</code> = foot), <code>--max-ids N</code> (keep N most persistent IDs, re-rank 1..N → stable <code>p1..pN</code>; <strong>drop-based</strong>), <code>--classes 0 32</code>, <code>--vid-stride N</code>, <code>--device auto|cuda|cpu</code>, <code>--conf/--iou/--imgsz</code>.</p>
+            <p><strong>Optional post-process (v0.3.102):</strong> <code>--reid-postprocess</code> runs <code>reid_markers</code>' offline Geometric ReID (2D + velocity, <code>max_ids</code>-bounded slot pool, merge-based not drop-based) on <code>all_id_detection.csv</code> after it's written — additive only, does not change <code>--max-ids</code>/<code>--stabilize-ids</code>. Optional <code>--reid-postprocess-max-ids</code> overrides the default (same value as <code>--max-ids</code>). See <a href="reid_markers.html">reid_markers</a>.</p>
             <p><strong>Kinematics flow:</strong> use the <em>same</em> <code>--anchor</code> and <code>--max-ids</code> for every camera so <code>p1..pN</code> columns line up across views for REC3D.</p>
         </div>
 
         <div class="footer">
-            <p>📅 Last Updated: July 06, 2026 (v0.3.72)</p>
+            <p>📅 Last Updated: August 10, 2026 (v0.3.102)</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
