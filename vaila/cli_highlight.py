@@ -6,7 +6,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 11 August 2026
 Update Date: 11 August 2026
-Version: 0.3.103
+Version: 0.3.104
 
 Description:
     Shared terminal-highlight helper for the "GUI->CLI mirror" convention

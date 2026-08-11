@@ -7,7 +7,7 @@ GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
 Update Date: 11 August 2026
-Version: 0.3.103
+Version: 0.3.104
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using

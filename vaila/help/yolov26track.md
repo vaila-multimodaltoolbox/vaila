@@ -4,8 +4,8 @@
 
 - **Category:** Ml
 - **File:** `vaila/yolov26track.py`
-- **Version:** 0.3.102
-- **Updated:** 10 August 2026
+- **Version:** 0.3.104
+- **Updated:** 11 August 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila

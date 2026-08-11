@@ -2,8 +2,8 @@
 
 - **Category:** Analysis
 - **File:** `vaila/vaila_deadlift_imu.py`
-- **Version:** 0.3.50
-- **Updated:** 2026-06-09
+- **Version:** 0.3.104
+- **Updated:** 2026-08-11
 - **GUI Interface:** Yes — Frame B → **Deadlift IMU** (B6_r7_c1), or **Deadlift** (B5_r6_c5) → choose *IMU (AHRS)* in the data-source dialog
 
 ## Description

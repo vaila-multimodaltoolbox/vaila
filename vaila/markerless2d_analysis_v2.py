@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
 Update: 11 August 2026
-Version: 0.3.103
+Version: 0.3.104
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -112,7 +112,7 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-__version__ = "0.3.103"
+__version__ = "0.3.104"
 
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
 POSE_CONNECTIONS = frozenset(

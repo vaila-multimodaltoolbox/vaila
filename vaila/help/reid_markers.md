@@ -4,8 +4,8 @@
 
 - **Category:** Processing
 - **File:** `vaila/reid_markers.py`
-- **Version:** 0.3.102
-- **Updated:** 10 August 2026
+- **Version:** 0.3.104
+- **Updated:** 11 August 2026
 - **Author:** Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **CLI Interface:** ✅ Yes (new, v0.3.102) — `uv run python -u -m vaila.reid_markers --input ...`

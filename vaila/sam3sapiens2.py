@@ -6,7 +6,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
 Update Date: 11 August 2026
-Version: 0.3.103
+Version: 0.3.104
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the

@@ -9,7 +9,7 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.103
+Version: 0.3.104
 Created: 05 August 2026
 Last Updated: 11 August 2026
 
