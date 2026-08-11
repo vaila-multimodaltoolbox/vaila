@@ -21,7 +21,7 @@
 <body><div class="container">
   <h1>SAM3+Sapiens2 (<code>sam3sapiens2.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.3.91 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-01<br>
+    <strong>Version:</strong> 0.3.103 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-11<br>
     <strong>GUI:</strong> Frame B → Markerless 2D → <strong>SAM3+Sapiens2</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA; SAM3 and Sapiens2 optional stacks.
     <p><strong>Retomada:</strong> use <code>--resume RUN_DIR -i INPUT_DIR</code>; somente resultados com cobertura completa comprovada são reutilizados.</p>
@@ -48,6 +48,10 @@
   GUI. The dialog is centered and raised above the terminal, and the terminal
   confirms when it has been mapped. For a terminal-only run, supply both
   arguments together (<code>-i</code> may be a folder).</p>
+  <p>Clicking <strong>Run</strong> prints the equivalent CLI command inside a
+  highlighted bold-yellow banner in the terminal (plain text when output is
+  redirected to a file or <code>NO_COLOR</code> is set) — copy/paste it to
+  repeat this exact run headlessly later without reopening the GUI.</p>
   <pre><code>uv run python -u vaila/sam3sapiens2.py \
   -i /path/to/videos -o /path/to/output \
   -t person --model 1b --stride 1 \

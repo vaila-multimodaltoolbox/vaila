@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 23 July 2026
-Version: 0.3.85
+Update: 11 August 2026
+Version: 0.3.103
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -86,6 +86,7 @@ from ultralytics import YOLO
 
 # Handle imports for both package and script execution
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .hardware_manager import HardwareManager
 except ImportError:
     # Fallback or debug print
@@ -97,6 +98,7 @@ except ImportError:
     current_dir = str(Path(__file__).parent.resolve())
     if current_dir not in sys.path:
         sys.path.append(current_dir)
+    from vaila.cli_highlight import print_gui_cli_mirror
     from vaila.hardware_manager import HardwareManager
 
 import warnings
@@ -110,7 +112,7 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-__version__ = "0.3.85"
+__version__ = "0.3.103"
 
 # MANUAL DEFINITION OF THE BODY CONNECTIONS (since mp.solutions was removed)
 POSE_CONNECTIONS = frozenset(
@@ -2993,11 +2995,10 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Loaded config: {args.config}")
         else:
             print("No --config given; using dialog defaults.")
-        print(">> vaila/markerless2d_analysis_v2: Equivalent CLI")
-        print(
-            f">> uv run python vaila/markerless2d_analysis_v2.py "
-            f"-i {args.input} -o {args.output}"
-            + (f" -c {args.config}" if args.config else "")
+        print_gui_cli_mirror(
+            "vaila/markerless2d_analysis_v2",
+            f"uv run python vaila/markerless2d_analysis_v2.py "
+            f"-i {args.input} -o {args.output}" + (f" -c {args.config}" if args.config else ""),
         )
         run_markerless2d_batch(args.input, args.output, pose_config)
         return

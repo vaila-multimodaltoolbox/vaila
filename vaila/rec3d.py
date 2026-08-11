@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.99
+Version: 0.3.103
 Created: August 03, 2025
-Last Updated: 05 August 2026
+Last Updated: 11 August 2026
 
 Description:
     Batch 3D reconstruction using per-frame Direct Linear Transformation (DLT3D)
@@ -61,6 +61,11 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import lstsq
 from rich import print
+
+try:
+    from .cli_highlight import print_gui_cli_mirror
+except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
 
 
 def rec3d_multicam(dlt_list, pixel_list):
@@ -1210,7 +1215,7 @@ def run_rec3d(
     if skeleton_json_path:
         cli_parts.append(f"--skeleton {skeleton_json_path}")
     cli_cmd = " ".join(cli_parts)
-    print(f">> {cli_cmd}")
+    print_gui_cli_mirror("vaila/rec3d", cli_cmd)
 
     # Process files
     process_files_in_directory(
@@ -1224,12 +1229,10 @@ def run_rec3d(
     )
 
     # Repeat the equivalent CLI command LAST, after all the processing output,
-    # so it is the final thing on screen and easy to copy.
-    print("\n" + "=" * 80)
-    print("Equivalent CLI command for this run (copy/paste to repeat headlessly):")
-    print("=" * 80)
-    print(f">> {cli_cmd}")
-    print("=" * 80)
+    # so it is the final thing on screen, highlighted, and easy to copy.
+    print_gui_cli_mirror(
+        "vaila/rec3d", cli_cmd, note="Equivalent CLI command for this run (copy/paste):"
+    )
 
 
 if __name__ == "__main__":

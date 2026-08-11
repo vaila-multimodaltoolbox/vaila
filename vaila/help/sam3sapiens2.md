@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.3.91
-- **Updated:** 2026-08-01
+- **Version:** 0.3.103
+- **Updated:** 2026-08-11
 - **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes
 - **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original.
@@ -50,8 +50,11 @@ Also select:
 - SAM text prompt, Sapiens2 model, stride, CUDA device, keypoint threshold, pose batch size;
 - bbox padding and contour margin.
 
-Click **Run**. The terminal prints how many videos were queued and the complete
-`>> Equivalent CLI` command before execution.
+Click **Run**. The terminal prints how many videos were queued, then the
+complete `>> Equivalent CLI` command inside a highlighted bold-yellow banner
+(plain text when the terminal isn't interactive, e.g. redirected to a log
+file, or `NO_COLOR` is set) — copy/paste it to repeat this exact run headlessly
+later without reopening the GUI.
 Running `uv run python -u vaila/sam3sapiens2.py` without `-i` and `-o` also
 opens this settings window. The window is centered and raised above the
 terminal; the terminal prints confirmation as soon as the dialog is mapped.

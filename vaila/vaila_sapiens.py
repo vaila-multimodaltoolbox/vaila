@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 10 August 2026
-Version: 0.3.102
+Update Date: 11 August 2026
+Version: 0.3.103
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -82,6 +82,7 @@ import cv2
 import numpy as np
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .geometric_reid import (
         GeometricFrameLinker,
         GeometricLinkerConfig,
@@ -97,6 +98,7 @@ try:
     from .sam_postprocess import VAILA_ANCHORS, _anchor_xy, _format_cell
     from .vaila_sam import _open_sam3_video_writer
 except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from geometric_reid import (  # ty: ignore[unresolved-import]
         GeometricFrameLinker,
         GeometricLinkerConfig,
@@ -2502,8 +2504,7 @@ def _print_sapiens_equivalent_cli(
         roi_config=roi_config,
         quiet=quiet,
     )
-    print("\n>> vaila/vaila_sapiens: Equivalent CLI (copy/paste):", flush=True)
-    print(f">>   {cmd}", flush=True)
+    print_gui_cli_mirror("vaila/vaila_sapiens", cmd)
     print(">> (CLI creates processed_sapiens_<timestamp>/ under -o)\n", flush=True)
 
 

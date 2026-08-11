@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 10 August 2026
-Version: 0.3.102
+Update Date: 11 August 2026
+Version: 0.3.103
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -241,6 +241,7 @@ from ultralytics import YOLO  # noqa: E402
 
 # Mandatory dual-import pattern (package + standalone execution).
 try:
+    from .cli_highlight import highlight
     from .geometric_reid import (
         GeometricFrameLinker,
         GeometricLinkerConfig,
@@ -248,6 +249,7 @@ try:
     )
     from .hardware_manager import HardwareManager
 except ImportError:  # pragma: no cover
+    from cli_highlight import highlight  # ty: ignore[unresolved-import]
     from geometric_reid import (  # ty: ignore[unresolved-import]
         GeometricFrameLinker,
         GeometricLinkerConfig,
@@ -5074,7 +5076,10 @@ def run_yolov26track():
             pending_videos.append((video_path, output_dir))
 
     if pending_videos:
-        print("\n>> vaila/yolov26track: Equivalent CLI per video (copy/paste):", flush=True)
+        print(
+            highlight("\n>> vaila/yolov26track: Equivalent CLI per video (copy/paste):"),
+            flush=True,
+        )
         tracker_cli = tracker_name if tracker_name.endswith(".yaml") else f"{tracker_name}.yaml"
         for video_path, output_dir in pending_videos:
             cmd = _format_track_cli_command(
@@ -5086,7 +5091,7 @@ def run_yolov26track():
                 target_classes=target_classes,
                 do_pose=do_pose,
             )
-            print(f">>   {cmd}", flush=True)
+            print(highlight(f">>   {cmd}"), flush=True)
         print(
             ">> Note: GUI batch-processes a folder; CLI `track` runs one video per command.\n",
             flush=True,
@@ -6664,16 +6669,19 @@ def _print_pose_video_equivalent_cli(
 ) -> None:
     """Best-effort CLI hint for Pose (video) — no dedicated track subcommand."""
     print(
-        "\n>> vaila/yolov26track: Pose (video) — GUI-only flow (no track subcommand).", flush=True
+        highlight("\n>> vaila/yolov26track: Pose (video) — GUI-only flow (no track subcommand)."),
+        flush=True,
     )
-    print(">> Launch from vailá: Frame B → YOLO + FB → Pose (video)", flush=True)
-    print(">> Or open the GUI module:", flush=True)
-    print(">>   uv run python -u -m vaila.yolov26track", flush=True)
-    print(">> Selected parameters:", flush=True)
-    print(f">>   video={shlex.quote(video_path)}", flush=True)
-    print(f">>   output_parent={shlex.quote(output_base_dir)}", flush=True)
+    print(highlight(">> Launch from vailá: Frame B → YOLO + FB → Pose (video)"), flush=True)
+    print(highlight(">> Or open the GUI module:"), flush=True)
+    print(highlight(">>   uv run python -u -m vaila.yolov26track"), flush=True)
+    print(highlight(">> Selected parameters:"), flush=True)
+    print(highlight(f">>   video={shlex.quote(video_path)}"), flush=True)
+    print(highlight(f">>   output_parent={shlex.quote(output_base_dir)}"), flush=True)
     print(
-        f">>   pose_model={pose_model} pose_conf={pose_conf} pose_iou={pose_iou} device={device}",
+        highlight(
+            f">>   pose_model={pose_model} pose_conf={pose_conf} pose_iou={pose_iou} device={device}"
+        ),
         flush=True,
     )
     print("", flush=True)
@@ -6681,19 +6689,29 @@ def _print_pose_video_equivalent_cli(
 
 def _print_pose_from_tracking_workflow_hint(tracking_dir: str) -> None:
     """CLI workflow hint for Pose (tracking) — step 1 is track; step 2 remains GUI."""
-    print("\n>> vaila/yolov26track: Pose (tracking) workflow:", flush=True)
-    print(">>   Step 1 — generate bbox CSVs with track CLI (one video example):", flush=True)
+    print(highlight("\n>> vaila/yolov26track: Pose (tracking) workflow:"), flush=True)
     print(
-        ">>     uv run python -m vaila.yolov26track track "
-        "--model vaila/models/yolo26n.pt --source VIDEO.mp4 --output OUT/",
+        highlight(">>   Step 1 — generate bbox CSVs with track CLI (one video example):"),
         flush=True,
     )
-    print(">>   Step 2 — select ID and run pose in GUI (no CLI subcommand yet):", flush=True)
     print(
-        ">>     uv run python -u -m vaila.yolov26track  # then Pose (tracking) in chooser",
+        highlight(
+            ">>     uv run python -m vaila.yolov26track track "
+            "--model vaila/models/yolo26n.pt --source VIDEO.mp4 --output OUT/"
+        ),
         flush=True,
     )
-    print(f">>   Tracking dir selected: {shlex.quote(tracking_dir)}", flush=True)
+    print(
+        highlight(">>   Step 2 — select ID and run pose in GUI (no CLI subcommand yet):"),
+        flush=True,
+    )
+    print(
+        highlight(
+            ">>     uv run python -u -m vaila.yolov26track  # then Pose (tracking) in chooser"
+        ),
+        flush=True,
+    )
+    print(highlight(f">>   Tracking dir selected: {shlex.quote(tracking_dir)}"), flush=True)
     print("", flush=True)
 
 

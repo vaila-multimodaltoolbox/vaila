@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 01 August 2026
-Version: 0.3.89
+Update Date: 11 August 2026
+Version: 0.3.103
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -109,6 +109,7 @@ import cv2
 import numpy as np
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .geometric_reid import (
         GeometricFrameLinker,
         GeometricLinkerConfig,
@@ -118,6 +119,7 @@ try:
         write_reid_links_csv,
     )
 except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from geometric_reid import (  # ty: ignore[unresolved-import]
         GeometricFrameLinker,
         GeometricLinkerConfig,
@@ -5310,10 +5312,8 @@ def _build_sam_cli_argv(
 
 
 def _print_sam_equivalent_cli(cmd: list[str]) -> None:
-    """Print copy-paste CLI mirror to stdout (>> prefix)."""
-    print("\n>> vaila/vaila_sam: Equivalent CLI (copy/paste):", flush=True)
-    print(f">>   {shlex.join(cmd)}", flush=True)
-    print("", flush=True)
+    """Print copy-paste CLI mirror to stdout, highlighted for easy reuse."""
+    print_gui_cli_mirror("vaila/vaila_sam", cmd)
 
 
 def _start_sam_batch_subprocess(
