@@ -3,8 +3,8 @@
 ===============================================================================
 bin/verify_cuda_libs.py
 ===============================================================================
-Update Date: 10 August 2026
-Version: 0.3.103
+Update Date: 11 August 2026
+Version: 0.3.104
 
 Verifies that installed NVIDIA CUDA wheels (``nvidia-*-cu12``) and the
 PyTorch stack (``torch``, ``torchvision``, ``torchaudio``, ``triton``) have

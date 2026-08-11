@@ -4,8 +4,8 @@
 
 - **Category:** Processing / Re-ID
 - **File:** `vaila/geometric_reid.py`
-- **Version:** 0.3.102
-- **Updated:** 10 August 2026
+- **Version:** 0.3.104
+- **Updated:** 11 August 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** No (library module)
 - **CLI Interface:** No (consumed by yolov26track, vaila_sam, reid_markers)
@@ -70,6 +70,6 @@ this same `max_tracks` field) correctly re-consolidated that exact
 
 ---
 
-📅 **Last Updated:** 10 August 2026 (v0.3.102)
+📅 **Last Updated:** 11 August 2026 (v0.3.104)
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

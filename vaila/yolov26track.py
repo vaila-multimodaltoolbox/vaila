@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
 Update Date: 11 August 2026
-Version: 0.3.103
+Version: 0.3.104
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.

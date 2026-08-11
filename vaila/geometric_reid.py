@@ -3,8 +3,8 @@
 Used by yolov26track, vaila_sam, and reid_markers to keep ID-stabilization logic
 consistent across bbox tracking, SAM exports, and marker CSV workflows.
 
-Update Date: 10 August 2026
-Version: 0.3.102
+Update Date: 11 August 2026
+Version: 0.3.104
 """
 
 from __future__ import annotations

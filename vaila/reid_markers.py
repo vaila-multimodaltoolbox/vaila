@@ -4,7 +4,7 @@ Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
 Update Date: 11 August 2026
-Version: 0.3.103
+Version: 0.3.104
 Python Version: 3.12.9
 
 Description:

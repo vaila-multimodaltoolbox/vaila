@@ -3,7 +3,7 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.3.103
+- **Version:** 0.3.104
 - **Updated:** 2026-08-11
 - **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes

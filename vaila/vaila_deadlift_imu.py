@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
 Update Date: 11 August 2026
-Version: 0.3.103
+Version: 0.3.104
 Python Version: 3.12.x
 
 Description:
@@ -181,7 +181,7 @@ except ImportError:
     from cli_highlight import highlight  # ty: ignore[unresolved-import]
 
 # Global vailá version (keep in sync with vaila.py banner / module header).
-VAILA_VERSION = "0.3.103"
+VAILA_VERSION = "0.3.104"
 DEFAULT_IMU_CUTOFF_HZ = 4.0
 
 

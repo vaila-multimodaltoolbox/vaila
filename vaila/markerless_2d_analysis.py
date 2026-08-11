@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
 Update Date: 11 August 2026
-Version: 0.3.103
+Version: 0.3.104
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
