@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 29 July 2026
-# Version: 0.3.85
+# Updated: 10 August 2026
+# Version: 0.3.103
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)               #
 #########################################################################################
 
@@ -560,6 +560,58 @@ fi
 echo "Dependencies installed successfully."
 echo ""
 echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are installed via uv sync from pyproject.toml."
+
+# Verify + repair CUDA wheel integrity (GPU template only).
+# Real bug hit in production: uv sync can report "nothing to do" for an
+# nvidia-*-cu12 package whose dist-info is present but whose actual .so
+# payload is missing on disk (broken hardlink / interrupted extraction /
+# disk full) -- `import torch` then fails with e.g.
+# "ImportError: libcusparseLt.so.0: cannot open shared object file",
+# invisible to uv's own "already satisfied" bookkeeping.
+if [[ "$USE_GPU" == true ]]; then
+    echo ""
+    echo "Verifying NVIDIA/PyTorch CUDA wheel integrity..."
+    BROKEN="$(uv run python bin/verify_cuda_libs.py --quiet 2>/dev/null || true)"
+    if [[ -n "$BROKEN" ]]; then
+        echo "Warning: corrupted CUDA wheels detected (metadata present, files missing): $(echo "$BROKEN" | tr '\n' ' ')"
+        echo "Reinstalling only the broken packages..."
+        REPAIR_CMD=(uv sync)
+        for pkg in $BROKEN; do REPAIR_CMD+=(--reinstall-package "$pkg"); done
+        if [[ "$USE_GPU" == true ]]; then REPAIR_CMD+=(--extra gpu); fi
+        if [[ "$USE_SAM_EXTRA" == true ]]; then REPAIR_CMD+=(--extra sam); fi
+        if [[ "$USE_SAPIENS_EXTRA" == true ]]; then REPAIR_CMD+=(--extra sapiens); fi
+        if [[ "$USE_FIFA_EXTRA" == true ]]; then REPAIR_CMD+=(--extra fifa); fi
+        "${REPAIR_CMD[@]}"
+        STILL_BROKEN="$(uv run python bin/verify_cuda_libs.py --quiet 2>/dev/null || true)"
+        if [[ -n "$STILL_BROKEN" ]]; then
+            echo "Warning: still broken after reinstall: $(echo "$STILL_BROKEN" | tr '\n' ' ')"
+            echo "Check disk space (df -h) and, if the uv cache and .venv are on different"
+            echo "filesystems, try: export UV_LINK_MODE=copy   then re-run this installer."
+        else
+            echo "CUDA wheel integrity repaired."
+        fi
+    else
+        echo "CUDA wheel integrity verified."
+    fi
+    uv run python -c "import torch; print('torch', torch.__version__, '- CUDA available:', torch.cuda.is_available())" \
+        || echo "Warning: torch import still failing after CUDA wheel repair -- see errors above."
+fi
+
+# Verify + repair the Sapiens2 editable install.
+# Real bug hit in production: `uv sync` (even with --extra sapiens) does not
+# know about the local editable checkout at .local/third_party/sapiens2 --
+# a plain sync can silently drop it. Re-register it if the checkout exists
+# on disk but the package no longer imports (cheap, no network).
+if [[ "$USE_SAPIENS_EXTRA" == true ]]; then
+    if ! uv run python -c "import sapiens" >/dev/null 2>&1; then
+        if [[ -d "$VAILA_HOME/.local/third_party/sapiens2" ]]; then
+            echo "Warning: sapiens checkout exists but is not importable -- re-registering editable install..."
+            uv pip install -e "$VAILA_HOME/.local/third_party/sapiens2" \
+                && echo "sapiens editable install repaired." \
+                || echo "Warning: failed to repair sapiens editable install; run: bash bin/setup_sapiens2.sh"
+        fi
+    fi
+fi
 
 if [[ "$USE_SAM_EXTRA" == true ]]; then
     echo ""
