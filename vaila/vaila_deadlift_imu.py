@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 09 June 2026
-Version: 0.3.50
+Update Date: 11 August 2026
+Version: 0.3.103
 Python Version: 3.12.x
 
 Description:
@@ -175,8 +175,13 @@ try:
 except Exception:  # pragma: no cover - Python <3.11 fallback
     _toml_reader = None
 
+try:
+    from .cli_highlight import highlight
+except ImportError:
+    from cli_highlight import highlight  # ty: ignore[unresolved-import]
+
 # Global vailá version (keep in sync with vaila.py banner / module header).
-VAILA_VERSION = "0.3.50"
+VAILA_VERSION = "0.3.103"
 DEFAULT_IMU_CUTOFF_HZ = 4.0
 
 
@@ -3503,7 +3508,7 @@ def _print_run_settings(
     print(f"Gyro units:   {gyro_units}")
     print(f"Expected reps: {reps if reps is not None else 'auto-detect'}")
     print()
-    print("Equivalent CLI command:")
+    print(highlight("Equivalent CLI command (copy/paste to repeat this run):"))
     cmd = _format_cli_command(
         input_dir=input_dir,
         output_dir=output_dir,
@@ -3520,7 +3525,7 @@ def _print_run_settings(
         batch=True,
     )
     for line in cmd.splitlines():
-        print(f"  {line}")
+        print(highlight(f"  {line}"))
     print(bar, flush=True)
 
 

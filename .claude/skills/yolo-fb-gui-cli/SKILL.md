@@ -45,33 +45,54 @@ Each chooser button calls `_print_yolo_fb_launch()` before launching the tool:
 - **Prefix:** `>>` (not `[bracketed]` — absl from mediapipe/opencv eats bracketed stdout)
 - **Chooser:** launcher only (`_print_yolo_fb_launch` in `vaila.py`)
 - **Run:** full args after user confirms dialogs
+- **Highlight (v0.3.103+):** the printed banner is bold-yellow ANSI on an interactive
+  TTY (plain text when redirected/piped or `NO_COLOR` is set), via the shared
+  `vaila/cli_highlight.py` module — `print_gui_cli_mirror(module_label, cli)` for a
+  single reproducible command (banner + `>>` header + command line), or `highlight(text)`
+  to wrap an individual line when a module prints a multi-line hint block instead of
+  one clean command (e.g. `yolov26track.py`'s Pose workflow hints, `getpixelvideo.py`'s
+  STOP/READ warnings). Every module below imports one or both of these instead of
+  hand-rolling its own ANSI/print formatting — don't reintroduce a local duplicate.
 
 | Module | Helper | When printed |
 |--------|--------|--------------|
-| `vaila_sam.py` | `_build_sam_cli_argv`, `_print_sam_equivalent_cli` | SAM GUI **Run** |
-| `vaila_sapiens.py` | `_format_sapiens_cli_command`, `_print_sapiens_equivalent_cli` | Sapiens2 GUI **Run** |
-| `yolov26track.py` | `_format_track_cli_command` | Tracker GUI before video loop (one `track` per file) |
-| `yolov26track.py` | `_print_pose_video_equivalent_cli` | Pose (video) after config dialog |
-| `yolov26track.py` | `_print_pose_from_tracking_workflow_hint` | Pose (tracking) after dir pick |
+| `vaila_sam.py` | `_build_sam_cli_argv`, `_print_sam_equivalent_cli` (→ `print_gui_cli_mirror`) | SAM GUI **Run** |
+| `vaila_sapiens.py` | `_format_sapiens_cli_command`, `_print_sapiens_equivalent_cli` (→ `print_gui_cli_mirror`) | Sapiens2 GUI **Run** |
+| `sam3sapiens2.py` | `_format_gui_cli` → `print_gui_cli_mirror` | SAM3+Sapiens2 GUI **Run** |
+| `sam3dinov3.py` | `_format_gui_cli` → `print_gui_cli_mirror` | SAM3+DINOv3 3D GUI **Run** |
+| `sapiens2_3d.py` | `_format_gui_cli` → `print_gui_cli_mirror` | Sapiens2 3D Pose GUI **Run** |
+| `reid_markers.py` | `run_geometric_merge` callers → `print_gui_cli_mirror` | CLI `main()` and GUI merge dialog |
+| `markerless_2d_analysis.py` | inline → `print_gui_cli_mirror` | Batch GUI **Run** |
+| `markerless2d_analysis_v2.py` | inline → `print_gui_cli_mirror` | `main()` when `-i`/`-o` given |
+| `rec3d.py` | inline → `print_gui_cli_mirror` | Preview + repeated after processing |
+| `rec3d_one_dlt3d.py` | inline → `print_gui_cli_mirror` | Preview + repeated after processing |
+| `blender_viz.py` | `format_blender_viz_cli` → `print_gui_cli_mirror` | Animation Blender button |
+| `vaila_deadlift_imu.py` | `_format_cli_command` → `highlight()` per line | Run-configuration summary |
+| `yolov26track.py` | `_format_track_cli_command` → `highlight()` per line | Tracker GUI before video loop (one `track` per file) |
+| `yolov26track.py` | `_print_pose_video_equivalent_cli` → `highlight()` per line | Pose (video) after config dialog |
+| `yolov26track.py` | `_print_pose_from_tracking_workflow_hint` → `highlight()` per line | Pose (tracking) after dir pick |
 | `yolotrain.py` | `_format_training_cli_command`, `_print_gui_state` | Start Training + GUI open |
-| `getpixelvideo.py` | `>> Equivalent CLI` blocks | Load Tracking CSV / save hints |
+| `getpixelvideo.py` | `>> Equivalent CLI` blocks → `highlight()` per block | Load Tracking CSV / save hints |
 
 ### Adding mirror to a new GUI module
 
 ```python
+try:
+    from .cli_highlight import print_gui_cli_mirror
+except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+
 import shlex
 
-def _format_my_cli_command(input_path: str, output: str, *, flag: int) -> str:
-    parts = ["uv", "run", "vaila/my_module.py", "-i", input_path, "-o", output, "--flag", str(flag)]
-    return " ".join(shlex.quote(p) for p in parts)
+def _format_my_cli_command(input_path: str, output: str, *, flag: int) -> list[str]:
+    return ["uv", "run", "vaila/my_module.py", "-i", input_path, "-o", output, "--flag", str(flag)]
 
 def _print_equivalent_cli(...) -> None:
-    print("\n>> vaila/my_module: Equivalent CLI (copy/paste):", flush=True)
-    print(f">>   {_format_my_cli_command(...)}", flush=True)
-    print("", flush=True)
+    print_gui_cli_mirror("vaila/my_module", _format_my_cli_command(...))
 ```
 
-Call `_print_equivalent_cli` **after** dialogs OK, **before** long work.
+`print_gui_cli_mirror` accepts either an argv `list[str]` (joined via `shlex.join`) or an
+already-formatted command string. Call it **after** dialogs OK, **before** long work.
 
 ---
 

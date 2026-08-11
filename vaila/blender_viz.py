@@ -9,9 +9,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.99
+Version: 0.3.103
 Created: 05 August 2026
-Last Updated: 05 August 2026
+Last Updated: 11 August 2026
 
 Description:
     Launches Blender directly from vailá with a rec3d reconstruction already
@@ -62,8 +62,10 @@ import sys
 from pathlib import Path
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .rec3d import find_unreconstructed_markers, generate_blender_companion_script
 except ImportError:  # standalone execution
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from rec3d import (  # ty: ignore[unresolved-import]
         find_unreconstructed_markers,
         generate_blender_companion_script,
@@ -502,8 +504,7 @@ def run_blender_viz() -> None:
         )
         return
 
-    print(">> vaila/blender_viz: Equivalent CLI")
-    print(f">> {format_blender_viz_cli(target, blender_executable)}")
+    print_gui_cli_mirror("vaila/blender_viz", format_blender_viz_cli(target, blender_executable))
 
     try:
         launch_blender(script_path, blender_executable)

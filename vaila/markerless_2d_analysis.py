@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 06 July 2026
-Version: 0.3.72
+Update Date: 11 August 2026
+Version: 0.3.103
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -95,14 +95,12 @@ import contextlib
 import datetime
 import functools
 import gc
-import json
 import os
 import platform
 import shutil
 import subprocess
 import tempfile
 import time
-import time as _time_module
 import tkinter as tk
 import urllib.request
 import webbrowser
@@ -116,40 +114,10 @@ import numpy as np
 import pandas as pd
 import psutil
 
-# #region agent log
-# Debug logging - uses script directory for portability across OS (Linux, macOS, Windows)
-# Creates .cursor directory in project root if it doesn't exist
-_debug_log_dir = Path(__file__).parent.parent / ".cursor"
 try:
-    _debug_log_dir.mkdir(exist_ok=True)
-except (OSError, PermissionError):
-    # If can't create .cursor, use script directory instead
-    _debug_log_dir = Path(__file__).parent
-_debug_log_path = _debug_log_dir / "debug.log"
-
-
-def _debug_log(hypothesis_id, location, message, data=None):
-    try:
-        with open(_debug_log_path, "a", encoding="utf-8") as f:
-            f.write(
-                json.dumps(
-                    {
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": hypothesis_id,
-                        "location": location,
-                        "message": message,
-                        "data": data or {},
-                        "timestamp": int(_time_module.time() * 1000),
-                    }
-                )
-                + "\n"
-            )
-    except Exception:
-        pass
-
-
-# #endregion
+    from .cli_highlight import print_gui_cli_mirror
+except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
 
 # --- NEW IMPORTS FOR THE TASKS API (MediaPipe 0.10.31+) ---
 
@@ -193,50 +161,6 @@ POSE_CONNECTIONS = frozenset(
         (28, 32),
     ]
 )
-
-# #region agent log
-_AGENT_DBG_PATH = os.path.join(tempfile.gettempdir(), "vaila_debug_2d1fa6.log")
-_AGENT_DBG_SESSION = "2d1fa6"
-_AGENT_FACE_DRAW_LOGGED = False
-try:
-    _face_expected = set(range(11))
-    _face_present = set()
-    for _a, _b in POSE_CONNECTIONS:
-        if _a in _face_expected:
-            _face_present.add(_a)
-        if _b in _face_expected:
-            _face_present.add(_b)
-    _payload = {
-        "sessionId": _AGENT_DBG_SESSION,
-        "runId": "face-skeleton-investigation",
-        "hypothesisId": "H5",
-        "location": "markerless_2d_analysis.py:POSE_CONNECTIONS",
-        "message": "pose connection summary at import",
-        "data": {
-            "total_connections": len(POSE_CONNECTIONS),
-            "face_indices_present": sorted(_face_present),
-            "missing_face_indices": sorted(_face_expected - _face_present),
-        },
-        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-    }
-    with open(_AGENT_DBG_PATH, "a", encoding="utf-8") as _f:
-        _f.write(json.dumps(_payload, ensure_ascii=True) + "\n")
-except Exception:
-    pass
-# #endregion
-
-# #region agent log
-_debug_log(
-    "A",
-    "import:100",
-    "After importing mediapipe Tasks API",
-    {
-        "mp_type": str(type(mp)),
-        "has_tasks": hasattr(mp, "tasks"),
-        "mp_attrs": str([x for x in dir(mp) if not x.startswith("_")])[:500],
-    },
-)
-# #endregion
 
 # Additional imports for filtering and interpolation
 from pykalman import KalmanFilter  # noqa: E402
@@ -4655,25 +4579,6 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         use_gpu: Whether to use GPU acceleration (default: False)
         gpu_backend: GPU backend to use ("nvidia", "rocm", "mps") if use_gpu is True
     """
-    # #region agent log
-    try:
-        import mediapipe as mp_test
-
-        _debug_log(
-            "E",
-            "process_video:2475",
-            "Function entry",
-            {
-                "video_path": str(video_path),
-                "output_dir": str(output_dir),
-                "has_mp_solutions": hasattr(mp_test, "solutions"),
-                "mp_test_type": str(type(mp_test)),
-            },
-        )
-    except Exception:
-        # Log function itself may fail, but continue
-        pass
-    # #endregion
     print("\n=== Parameters being used for this video ===")
     for k, v in pose_config.items():
         print(f"{k}: {v}")
@@ -4801,13 +4706,6 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     output_pixel_file_path = output_dir / f"{video_path.stem}_mp_pixel.csv"
 
     # Initialize MediaPipe Tasks API
-    # #region agent log
-    from contextlib import suppress
-
-    with suppress(Exception):
-        _debug_log("A", "process_video:2610", "Initializing MediaPipe Tasks API", {})
-    # #endregion
-
     model_path = get_model_path(pose_config["model_complexity"])
 
     BaseOptions = mp.tasks.BaseOptions  # noqa: N806 - MediaPipe class name
@@ -5360,47 +5258,6 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                 dline(annotated_frame, pts["right_hip"], pts["left_hip"], C_CENTER, 2)
 
                 # 6. Draw Joints
-                # region agent log H6
-                global _AGENT_FACE_DRAW_LOGGED
-                if not _AGENT_FACE_DRAW_LOGGED:
-                    face_names = [
-                        "nose",
-                        "left_eye_inner",
-                        "left_eye",
-                        "left_eye_outer",
-                        "right_eye_inner",
-                        "right_eye",
-                        "right_eye_outer",
-                        "left_ear",
-                        "right_ear",
-                        "mouth_left",
-                        "mouth_right",
-                    ]
-                    face_valid = 0
-                    for _fname in face_names:
-                        _pt = pts.get(_fname, np.array([np.nan, np.nan]))
-                        if not np.isnan(_pt).any():
-                            face_valid += 1
-                    try:
-                        _payload = {
-                            "sessionId": _AGENT_DBG_SESSION,
-                            "runId": "face-skeleton-investigation",
-                            "hypothesisId": "H6",
-                            "location": "markerless_2d_analysis.py:draw_loop",
-                            "message": "face points available before joint drawing",
-                            "data": {
-                                "face_valid_points": face_valid,
-                                "face_total_points": len(face_names),
-                                "nose_and_eye_skipped_by_code": False,
-                            },
-                            "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                        }
-                        with open(_AGENT_DBG_PATH, "a", encoding="utf-8") as _f:
-                            _f.write(json.dumps(_payload, ensure_ascii=True) + "\n")
-                    except Exception:
-                        pass
-                    _AGENT_FACE_DRAW_LOGGED = True
-                # endregion
                 for name, pt in pts.items():
                     if "mid" in name:
                         continue
@@ -5745,11 +5602,10 @@ def process_videos_in_directory(existing_root=None):
     input_quoted = shlex.quote(str(input_dir))
     output_quoted = shlex.quote(str(output_base.parent))
 
-    print("\n>> vaila/markerless_2d_analysis: Equivalent CLI (copy/paste):", flush=True)
-    print(
-        f">>   uv run python vaila/markerless_2d_analysis.py -i {input_quoted} "
+    print_gui_cli_mirror(
+        "vaila/markerless_2d_analysis",
+        f"uv run python vaila/markerless_2d_analysis.py -i {input_quoted} "
         f"-o {output_quoted} --device {selected_device}{nvenc_flag}",
-        flush=True,
     )
     print(f">> (GUI output saved under: {output_base})\n", flush=True)
 

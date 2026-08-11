@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 10 August 2026
-Version: 0.3.102
+Update Date: 11 August 2026
+Version: 0.3.103
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -60,6 +60,7 @@ import cv2
 import numpy as np
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .gpu_subprocess import run_isolated_gpu_subprocess
     from .vaila_sam import validate_sam_run_complete
     from .vaila_sapiens import (
@@ -78,6 +79,7 @@ try:
         write_vaila_pose_csv,
     )
 except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from gpu_subprocess import run_isolated_gpu_subprocess  # ty: ignore[unresolved-import]
     from vaila_sam import validate_sam_run_complete  # ty: ignore[unresolved-import]
     from vaila_sapiens import (  # ty: ignore[unresolved-import]
@@ -1826,8 +1828,7 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
     if settings is None:
         return
     cli = _format_gui_cli(settings)
-    print("\n>> vaila/sam3sapiens2: Equivalent CLI (copy/paste):", flush=True)
-    print(">>   " + shlex.join(cli), flush=True)
+    print_gui_cli_mirror("vaila/sam3sapiens2", cli)
     launch = [sys.executable, "-u", str(Path(__file__).resolve())] + cli[5:]
     gui_result = run_isolated_gpu_subprocess(launch, device=int(settings.device))
     raise SystemExit(gui_result.returncode)

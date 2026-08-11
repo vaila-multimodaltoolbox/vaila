@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 06 August 2026
-Update Date: 07 August 2026
-Version: 0.3.101
+Update Date: 11 August 2026
+Version: 0.3.103
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery, complementing
@@ -123,7 +123,6 @@ import datetime as dt
 import json
 import os
 import re
-import shlex
 import sys
 import tkinter as tk
 import webbrowser
@@ -136,6 +135,7 @@ import cv2
 import numpy as np
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .geometric_reid import bbox_iou_xyxy
     from .gpu_subprocess import run_isolated_gpu_subprocess
     from .monocular_dlt_align import (
@@ -189,6 +189,7 @@ try:
         run_sapiens_from_sam,
     )
 except ImportError:  # standalone execution
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from geometric_reid import bbox_iou_xyxy  # ty: ignore[unresolved-import]
     from gpu_subprocess import run_isolated_gpu_subprocess  # ty: ignore[unresolved-import]
     from monocular_dlt_align import (  # ty: ignore[unresolved-import]
@@ -1614,8 +1615,7 @@ def run_sapiens2_3d(existing_root: Any | None = None) -> None:
     if settings is None:
         return
     cli = _format_gui_cli(settings)
-    print("\n>> vaila/sapiens2_3d: Equivalent CLI (copy/paste):", flush=True)
-    print(">>   " + shlex.join(cli), flush=True)
+    print_gui_cli_mirror("vaila/sapiens2_3d", cli)
     launch = [sys.executable, "-u", str(Path(__file__).resolve())] + cli[5:]
     gui_result = run_isolated_gpu_subprocess(launch, device=int(settings.device))
     raise SystemExit(gui_result.returncode)

@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 05 August 2026
-Version: 0.3.99
+Update Date: 11 August 2026
+Version: 0.3.103
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -87,6 +87,7 @@ import cv2
 import numpy as np
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .gpu_subprocess import run_isolated_gpu_subprocess
     from .joint_kinematics import (
         MHR127_NUM_JOINTS,
@@ -119,6 +120,7 @@ try:
     )
     from .vaila_sam import _open_sam3_video_writer
 except ImportError:  # standalone execution
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from gpu_subprocess import run_isolated_gpu_subprocess  # ty: ignore[unresolved-import]
     from joint_kinematics import (  # ty: ignore[unresolved-import]
         MHR127_NUM_JOINTS,
@@ -1833,8 +1835,7 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
     if settings is None:
         return
     cli = _format_gui_cli(settings)
-    print("\n>> vaila/sam3dinov3: Equivalent CLI (copy/paste):", flush=True)
-    print(">>   " + shlex.join(cli), flush=True)
+    print_gui_cli_mirror("vaila/sam3dinov3", cli)
     launch = [sys.executable, "-u", str(Path(__file__).resolve())] + cli[5:]
     gui_result = run_isolated_gpu_subprocess(launch, device=int(settings.device))
     raise SystemExit(gui_result.returncode)

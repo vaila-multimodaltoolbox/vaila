@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.99
+Version: 0.3.103
 Created: 02 August 2025
-Last Updated: 05 August 2026
+Last Updated: 11 August 2026
 
 ================================================================================
 Description
@@ -169,6 +169,7 @@ import pandas as pd
 from rich import print
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .mesh_alignment import (
         ALIGNMENT_MARKER_INDICES,
         apply_similarity_transform,
@@ -187,6 +188,7 @@ try:
         save_rec3d_as_bvh,
     )
 except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from mesh_alignment import (  # ty: ignore[unresolved-import]
         ALIGNMENT_MARKER_INDICES,
         apply_similarity_transform,
@@ -1292,7 +1294,7 @@ def run_rec3d_one_dlt3d():
         mesh_source_dirs,
         export_mesh,
     )
-    print(f">> {cli_cmd}")
+    print_gui_cli_mirror("vaila/rec3d_one_dlt3d", cli_cmd)
 
     run_reconstruction(
         dlt_files,
@@ -1307,12 +1309,10 @@ def run_rec3d_one_dlt3d():
     )
 
     # Repeat the equivalent CLI command LAST, after all the processing output,
-    # so it is the final thing on screen and easy to copy for a headless re-run.
-    print("\n" + "=" * 80)
-    print("Equivalent CLI command for this run (copy/paste to repeat headlessly):")
-    print("=" * 80)
-    print(f">> {cli_cmd}")
-    print("=" * 80)
+    # so it is the final thing on screen, highlighted, and easy to copy.
+    print_gui_cli_mirror(
+        "vaila/rec3d_one_dlt3d", cli_cmd, note="Equivalent CLI command for this run (copy/paste):"
+    )
 
     root.destroy()
 

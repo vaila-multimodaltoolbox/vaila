@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 07 July 2026
-Version: 0.3.75
+Update: 11 August 2026
+Version: 0.3.103
 Python Version: 3.12.13
 
 Description:
@@ -117,6 +117,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from rich import print
+
+try:
+    from .cli_highlight import highlight
+except ImportError:
+    from cli_highlight import highlight  # ty: ignore[unresolved-import]
 
 if platform.system() == "Linux":
     os.environ["SDL_VIDEODRIVER"] = "x11"
@@ -2976,18 +2981,20 @@ def play_video_with_controls(
                     detected_fmt.startswith(("sam_", "yolo_")) or detected_fmt == "sapiens_tracks"
                 ) and n_ids > 1:
                     print(
-                        "\n>> vaila/getpixelvideo: STOP/READ — loaded "
-                        f"{n_ids} tracked objects ({detected_fmt}).\n"
-                        ">> For DETECTION/tracking of N players: press Enter "
-                        "(skip anchor) to KEEP the boxes, then Save to export a "
-                        "one-box-per-player YOLO DETECT dataset.\n"
-                        ">> Converting boxes to markers makes a POSE dataset "
-                        "(one object whose keypoints are the players) that "
-                        "cannot detect players individually.\n"
-                        ">> Equivalent CLI (does not need the GUI):\n"
-                        ">>   uv run python -m vaila.sam_to_yolo build "
-                        "--sam-tracks sam_tracks.csv --video VIDEO.mp4 "
-                        "--class-name person\n"
+                        highlight(
+                            "\n>> vaila/getpixelvideo: STOP/READ — loaded "
+                            f"{n_ids} tracked objects ({detected_fmt}).\n"
+                            ">> For DETECTION/tracking of N players: press Enter "
+                            "(skip anchor) to KEEP the boxes, then Save to export a "
+                            "one-box-per-player YOLO DETECT dataset.\n"
+                            ">> Converting boxes to markers makes a POSE dataset "
+                            "(one object whose keypoints are the players) that "
+                            "cannot detect players individually.\n"
+                            ">> Equivalent CLI (does not need the GUI):\n"
+                            ">>   uv run python -m vaila.sam_to_yolo build "
+                            "--sam-tracks sam_tracks.csv --video VIDEO.mp4 "
+                            "--class-name person\n"
+                        )
                     )
                 anchor_prompt = (
                     "Convert boxes to markers (POSE keypoints)? "
@@ -3029,16 +3036,18 @@ def play_video_with_controls(
                         or detected_fmt == "sapiens_tracks"
                     ) and n_ids > 1:
                         print(
-                            ">> vaila/getpixelvideo: STOP — you converted "
-                            f"{n_ids} tracked objects into markers. F9 (pose) "
-                            "will collapse them into the keypoints of ONE "
-                            "object; the resulting dataset CANNOT detect "
-                            "players individually.\n"
-                            ">> For per-player tracking rebuild a DETECT "
-                            "dataset instead:\n"
-                            ">>   uv run python -m vaila.sam_to_yolo build "
-                            "--sam-tracks sam_tracks.csv --video VIDEO.mp4 "
-                            "--class-name person\n"
+                            highlight(
+                                ">> vaila/getpixelvideo: STOP — you converted "
+                                f"{n_ids} tracked objects into markers. F9 (pose) "
+                                "will collapse them into the keypoints of ONE "
+                                "object; the resulting dataset CANNOT detect "
+                                "players individually.\n"
+                                ">> For per-player tracking rebuild a DETECT "
+                                "dataset instead:\n"
+                                ">>   uv run python -m vaila.sam_to_yolo build "
+                                "--sam-tracks sam_tracks.csv --video VIDEO.mp4 "
+                                "--class-name person\n"
+                            )
                         )
                 else:
                     save_message_text = (
@@ -5999,16 +6008,18 @@ def play_video_with_controls(
         # people use a DETECTION dataset (vaila.sam_to_yolo) instead.
         if bbox_converted_to_markers:
             print(
-                ">> vaila/getpixelvideo: STOP — F9 exports a POSE dataset "
-                "(ONE object/frame; your markers become its keypoints).\n"
-                ">> vaila/getpixelvideo: If these markers came from SAM/YOLO "
-                "per-player boxes, this dataset CANNOT detect players "
-                "individually (yolotrain will block it as a mis-export).\n"
-                ">> vaila/getpixelvideo: For DETECTION/tracking of N people use "
-                "the boxes instead:\n"
-                ">> vaila/getpixelvideo:   uv run python -m vaila.sam_to_yolo "
-                "build --sam-tracks sam_tracks.csv --video VIDEO.mp4 "
-                "--class-name person"
+                highlight(
+                    ">> vaila/getpixelvideo: STOP — F9 exports a POSE dataset "
+                    "(ONE object/frame; your markers become its keypoints).\n"
+                    ">> vaila/getpixelvideo: If these markers came from SAM/YOLO "
+                    "per-player boxes, this dataset CANNOT detect players "
+                    "individually (yolotrain will block it as a mis-export).\n"
+                    ">> vaila/getpixelvideo: For DETECTION/tracking of N people use "
+                    "the boxes instead:\n"
+                    ">> vaila/getpixelvideo:   uv run python -m vaila.sam_to_yolo "
+                    "build --sam-tracks sam_tracks.csv --video VIDEO.mp4 "
+                    "--class-name person"
+                )
             )
 
         class_for_pose = current_label if current_label else "object"

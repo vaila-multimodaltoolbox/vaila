@@ -3,8 +3,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 10 August 2026
-Version: 0.3.102
+Update Date: 11 August 2026
+Version: 0.3.103
 Python Version: 3.12.9
 
 Description:
@@ -50,12 +50,14 @@ matplotlib.use("TkAgg")  # Força backend interativo
 from pathlib import Path
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .geometric_reid import (
         GeometricFrameLinker,
         GeometricLinkerConfig,
         assignment_min_cost,
     )
 except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from geometric_reid import (  # ty: ignore[unresolved-import]
         GeometricFrameLinker,
         GeometricLinkerConfig,
@@ -1258,10 +1260,10 @@ def main_cli(argv: list[str] | None = None) -> int:
         print(f">> vaila/reid_markers: ERROR - {exc}")
         return 1
 
-    print(
-        ">> vaila/reid_markers: Equivalent CLI (copy/paste):\n"
-        f'>>   uv run python -u -m vaila.reid_markers --input "{input_path}" '
-        f'--max-ids {stats["max_ids"]} --output "{out_path}"'
+    print_gui_cli_mirror(
+        "vaila/reid_markers",
+        f'uv run python -u -m vaila.reid_markers --input "{input_path}" '
+        f'--max-ids {stats["max_ids"]} --output "{out_path}"',
     )
     print(
         f">> vaila/reid_markers: schema={stats['schema']} | frames={stats['frames']} | "
@@ -1947,10 +1949,10 @@ def run_geometric_merge_with_dialog(df: pd.DataFrame, file_path: str, schema: st
         messagebox.showerror("Geometric ReID", f"Failed: {exc}")
         return
 
-    print(
-        ">> vaila/reid_markers: Equivalent CLI (copy/paste):\n"
-        f'>>   uv run python -u -m vaila.reid_markers --input "{file_path}" '
-        f'--max-ids {stats["max_ids"]} --output "{out_path}"'
+    print_gui_cli_mirror(
+        "vaila/reid_markers",
+        f'uv run python -u -m vaila.reid_markers --input "{file_path}" '
+        f'--max-ids {stats["max_ids"]} --output "{out_path}"',
     )
     print(
         f">> vaila/reid_markers: schema={stats['schema']} | frames={stats['frames']} | "
