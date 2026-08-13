@@ -265,3 +265,6 @@ sam_3d_body/
 # Test output directories
 tests/**/processed_sapiens_*/
 tests/**/processed_sam_*/
+
+# Local chessboard / multi-cam calibration fixtures (large videos; keep local-only)
+tests/chessboard_calib/

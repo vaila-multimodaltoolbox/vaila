@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.3.99"
-__updated__ = "05 August 2026"
+__version__ = "0.3.105"
+__updated__ = "13 August 2026"
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,7 +140,15 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
     ),
     "reid_marker": CliRunHint(("uv run vaila/reid_markers.py",), "Marker Re-ID GUI."),
     # Frame C_B
-    "extract_png_from_videos": CliRunHint(("uv run vaila/videoprocessor.py",), "Video ↔ PNG GUI."),
+    "extract_png_from_videos": CliRunHint(
+        (
+            "uv run vaila/extractpng.py",
+            "uv run vaila/extractpng.py extract -i /path/to/videos",
+            "uv run vaila/extractpng.py create -i /path/to/png_dirs --fps 30 --codec 264",
+            "uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5",
+        ),
+        "Video ↔ PNG (GUI or CLI).",
+    ),
     "crop_faces_atletas": CliRunHint(
         (
             "uv run vaila/crop_faces_atletas.py --download-model",
