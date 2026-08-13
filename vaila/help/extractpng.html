@@ -1,94 +1,75 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - extractpng</title>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>extractpng — <i>vailá</i></title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+        background: #f5f5f5;
+        color: #333;
+      }
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: #fff;
+        padding: 28px;
+        border-radius: 8px;
+      }
+      h1 {
+        border-bottom: 3px solid #3498db;
+        padding-bottom: 8px;
+      }
+      code,
+      pre {
+        background: #f0f4f8;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      pre {
+        padding: 12px;
+        overflow-x: auto;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <h1>vailá - extractpng</h1>
-
-        <div class="module-info">
-            <h3>📋 Module Information</h3>
-            <p><strong>Category:</strong> Tools</p>
-            <p><strong>File:</strong> vaila\extractpng.py</p>
-            <p><strong>Lines:</strong> 497</p>
-            <p><strong>Size:</strong> 16763 characters</p>
-            <p><strong>Version:</strong> 0.3.45</p>
-            <p><strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
-        </div>
-
-        
-
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-================================================================================
-Extract PNG Tool - extractpng.py
-================================================================================
-Author: Prof. Dr. Paulo R. P. Santiago
-Laboratory of Biomechanics and Motor Control (LaBioCoM)
-School of Physical Education and Sport of Ribeirão Preto
-University of São Paulo (USP)
-
-Contact: paulosantiago@usp.br
-Laboratory website: https://github.com/vaila-multimodaltoolbox/vaila
-
-Created: December 15, 2023
-Last Updated: 23 May 2026
-Version: 0.3.45
-
-Description:
-------------
-This module offers functionality to either extract PNG frames from video files or
-create videos from a sequence of PNG images. It is designed for applications in
-machine learning, computer vision, and biomechanics, ensuring that all frames and
-videos maintain consistent quality and formatting.
-
-The main features of the module include:
-- Extract PNG frames from videos in RGB format
-- Create videos from PNG sequences
-- ...</pre>
-        </div>
-
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 10</p>
-            <ul><li><code>extract_png_from_videos</code></li><li><code>extract_select_frames_from_video</code></li><li><code>get_fps_from_user</code></li><li><code>create_video_from_png</code></li><li><code>is_pattern_consistent</code></li><li><code>is_nvidia_gpu_available</code></li><li><code>get_fps</code></li><li><code>get_video_info</code></li><li><code>show_completion_message</code></li><li><code>run</code></li></ul>
-        </div>
-
-        <div class="footer">
-            <p>📅 Generated automatically on: 23/05/2026 17:30:00</p>
-            <p>🔗 Part of vailá - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
-        </div>
+      <h1>extractpng.py — Video ↔ PNG</h1>
+      <p>
+        <strong>Version:</strong> 0.3.105<br />
+        <strong>Updated:</strong> 13 August 2026<br />
+        <strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago
+      </p>
+      <p>
+        Part of <i>vailá</i>. Extract PNG frames from videos, build videos from
+        PNG sequences, or grab selected frames. One simple Tkinter window; full
+        CLI for headless use.
+      </p>
+      <h2>GUI</h2>
+      <p>Frame C → <strong>Video↔PNG</strong>, or:</p>
+      <pre>uv run vaila/extractpng.py</pre>
+      <ol>
+        <li>Choose mode: Video → PNG / PNG → Video / Select frames</li>
+        <li>Browse input (output optional)</li>
+        <li>Set options, then <strong>Run</strong></li>
+      </ol>
+      <h2>CLI</h2>
+      <pre>uv run vaila/extractpng.py extract -i /path/to/videos
+uv run vaila/extractpng.py create -i /path/to/png_dirs --fps 30 --codec 264
+uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7</pre>
+      <h2>Notes</h2>
+      <ul>
+        <li>
+          FFmpeg <code>-hwaccel auto</code> is placed <em>before</em>
+          <code>-i</code> (input option). No forced <code>hevc_cuvid</code>;
+          software decode is the fallback.
+        </li>
+        <li>Default PNG pattern: <code>%09d.png</code></li>
+      </ul>
     </div>
-</body>
+  </body>
 </html>

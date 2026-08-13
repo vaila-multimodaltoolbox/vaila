@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 11 August 2026
-Version: 0.3.104
+Update: 13 August 2026
+Version: 0.3.105
 Python Version: 3.12.13
 
 Description:
@@ -39,7 +39,8 @@ Pose / ML:
 
 How to use:
 ------------
-1. Run ``uv run vaila/getpixelvideo.py`` (no args opens the media picker), or pass CLI paths.
+1. Run ``uv run vaila/getpixelvideo.py`` (no args opens one file picker), or pass CLI paths.
+   Video / single PNG / PNG sequence are auto-detected (pick any frame in a PNG folder).
 2. Optional: Load existing markers (Load button).
 3. Mark, TAB between slots, **Ctrl+G** to jump to a keypoint number, Save.
 
@@ -187,8 +188,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.69"
-GETPIXELVIDEO_UPDATE_DATE = "04 July 2026"
+GETPIXELVIDEO_VERSION = "0.3.105"
+GETPIXELVIDEO_UPDATE_DATE = "13 August 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -11708,8 +11709,82 @@ def _write_pose_data_yaml(
         print(f"ERROR: failed to write YOLO pose data.yaml at {yaml_path}: {exc}")
 
 
+def _dir_contains_png_files(directory: str) -> bool:
+    try:
+        return os.path.isdir(directory) and any(
+            f.lower().endswith(".png") for f in os.listdir(directory)
+        )
+    except OSError:
+        return False
+
+
+def _resolve_png_sequence_directory(directory: str, *, max_subdirs: int = 500) -> str | None:
+    """Use directory if it contains PNGs, else first immediate subdirectory that does."""
+    if not directory or not os.path.isdir(directory):
+        return None
+    if _dir_contains_png_files(directory):
+        return os.path.abspath(directory)
+    try:
+        entries = sorted(os.listdir(directory))
+    except OSError:
+        return None
+    checked = 0
+    for name in entries:
+        if checked >= max_subdirs:
+            break
+        sub = os.path.join(directory, name)
+        if os.path.isdir(sub):
+            checked += 1
+            if _dir_contains_png_files(sub):
+                return os.path.abspath(sub)
+    return None
+
+
+def classify_media_path(path: str) -> tuple[str | None, str | None]:
+    """Auto-detect video / single PNG / PNG sequence from a file or directory path.
+
+    Rules:
+    - Directory → PNG sequence (this dir or first child with PNGs).
+    - ``.png`` with sibling PNGs (>1) → PNG sequence of the parent folder.
+    - Lone ``.png`` → single PNG.
+    - Any other existing file → video.
+
+    Returns:
+        ``(resolved_path, source_type)`` or ``(None, None)`` if unusable.
+    """
+    if not path:
+        return (None, None)
+    path = os.path.abspath(str(path).strip())
+    if os.path.isdir(path):
+        resolved = _resolve_png_sequence_directory(path)
+        if resolved:
+            count = sum(1 for f in os.listdir(resolved) if f.lower().endswith(".png"))
+            print(f"PNG sequence selected: {resolved} ({count} images)")
+            return (resolved, "png_sequence")
+        print(f"Directory has no PNG frames: {path}")
+        return (None, None)
+    if not os.path.isfile(path):
+        print(f"Path not found: {path}")
+        return (None, None)
+    if path.lower().endswith(".png"):
+        parent = os.path.dirname(path)
+        try:
+            png_count = sum(1 for f in os.listdir(parent) if f.lower().endswith(".png"))
+        except OSError:
+            png_count = 1
+        if png_count > 1:
+            print(f"PNG sequence detected from frame: {parent} ({png_count} images)")
+            return (parent, "png_sequence")
+        print(f"Image selected: {path}")
+        return (path, "single_png")
+    print(f"Video selected: {path}")
+    return (path, "video")
+
+
 def _get_media_path_linux():
     """Linux-native media selection using zenity to avoid Tkinter/Pygame conflicts.
+
+    Single file dialog — source type is auto-detected (pick any PNG in a sequence folder).
 
     Returns:
         tuple: (path, source_type) or (None, None) if cancelled.
@@ -11719,61 +11794,14 @@ def _get_media_path_linux():
     except (subprocess.CalledProcessError, FileNotFoundError):
         return _get_media_path_terminal()
 
-    # Step 1: Choose File or Folder
-    result = subprocess.run(
-        [
-            "zenity",
-            "--list",
-            "--radiolist",
-            "--title=Open Media",
-            "--text=Select video/image file or PNG sequence folder",
-            "--column=Pick",
-            "--column=Option",
-            "--print-column=2",
-            "TRUE",
-            "Open Video or Image File",
-            "FALSE",
-            "Open PNG Sequence (Folder)",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        return (None, None)
-
-    choice = result.stdout.strip()
-    if choice == "Open PNG Sequence (Folder)":
-        result = subprocess.run(
-            [
-                "zenity",
-                "--file-selection",
-                "--directory",
-                "--title=Select Folder with PNG Sequence",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return (None, None)
-        path = result.stdout.strip()
-        count = sum(1 for f in os.listdir(path) if f.lower().endswith(".png"))
-        if count == 0:
-            print("Selected folder contains no .png files.")
-            return (None, None)
-        print(f"PNG sequence selected: {path} ({count} images)")
-        return (path, "png_sequence")
-
-    # choice == "Open Video or Image File"
     result = subprocess.run(
         [
             "zenity",
             "--file-selection",
-            "--title=Select Video or Image File",
-            "--file-filter=Video files|*.mp4 *.avi *.mov *.mkv *.MP4 *.AVI *.MOV *.MKV",
+            "--title=Select video, PNG, or any frame from a PNG sequence folder",
+            "--file-filter=Video files|*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM",
             "--file-filter=PNG image|*.png *.PNG",
-            "--file-filter=All supported|*.mp4 *.avi *.mov *.mkv *.png",
+            "--file-filter=All supported|*.mp4 *.avi *.mov *.mkv *.webm *.png",
         ],
         capture_output=True,
         text=True,
@@ -11781,56 +11809,29 @@ def _get_media_path_linux():
     )
     if result.returncode != 0 or not result.stdout.strip():
         return (None, None)
-    path = result.stdout.strip()
-    if path.lower().endswith(".png"):
-        print(f"Image selected: {path}")
-        return (path, "single_png")
-    print(f"Video selected: {path}")
-    return (path, "video")
+    return classify_media_path(result.stdout.strip())
 
 
 def _get_media_path_terminal():
     """Terminal fallback when no GUI dialog is available."""
     try:
         print("\nOpen media - Terminal mode (zenity not available)")
-        print("  1. Open Video or Image File")
-        print("  2. Open PNG Sequence (Folder)")
-        print("  q. Cancel")
-        choice = input("Choice [1]: ").strip() or "1"
+        print("Enter path to a video, PNG file, or PNG sequence folder (q = cancel)")
+        path = input("Path: ").strip()
     except EOFError:
         print("No interactive terminal. Install zenity for GUI: sudo apt install zenity")
         return (None, None)
-    if choice.lower() == "q":
+    if not path or path.lower() == "q":
         return (None, None)
-    if choice == "2":
-        try:
-            path = input("Enter folder path: ").strip()
-        except EOFError:
-            return (None, None)
-        if not path or not os.path.isdir(path):
-            print("Invalid directory.")
-            return (None, None)
-        count = sum(1 for f in os.listdir(path) if f.lower().endswith(".png"))
-        if count == 0:
-            print("Folder contains no .png files.")
-            return (None, None)
-        return (path, "png_sequence")
-    try:
-        path = input("Enter video/image file path: ").strip()
-    except EOFError:
-        return (None, None)
-    if not path or not os.path.isfile(path):
-        print("Invalid file.")
-        return (None, None)
-    if path.lower().endswith(".png"):
-        return (path, "single_png")
-    return (path, "video")
+    return classify_media_path(path)
 
 
 def get_media_path():
-    """Let user choose video, single PNG, or directory of PNG sequence.
+    """Open one file picker; auto-detect video, single PNG, or PNG sequence.
 
     On Linux, uses zenity to avoid Tkinter/Pygame display conflicts.
+    For a PNG sequence, select any frame in the folder (or pass the folder path
+    via CLI / terminal).
 
     Returns:
         tuple: (path, source_type) where source_type is "video" | "single_png" | "png_sequence",
@@ -11841,71 +11842,26 @@ def get_media_path():
 
     try:
         import tkinter as tk
-        from tkinter import filedialog, messagebox
+        from tkinter import filedialog
 
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
         root.update_idletasks()
 
-        result = [None, None]  # mutable holder for callback
-
-        def on_file():
-            file_types = [
-                ("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV"),
-                ("PNG Image", "*.png *.PNG"),
-                ("All supported", "*.mp4 *.avi *.mov *.mkv *.png"),
-            ]
-            path = filedialog.askopenfilename(
-                title="Select Video or Image File", filetypes=file_types
-            )
-            if path:
-                path = path.strip()
-                if path.lower().endswith(".png"):
-                    result[0], result[1] = path, "single_png"
-                    print(f"Image selected: {path}")
-                else:
-                    result[0], result[1] = path, "video"
-                    print(f"Video selected: {path}")
-            dialog.destroy()
-
-        def on_sequence():
-            path = filedialog.askdirectory(title="Select Folder with PNG Sequence")
-            if path:
-                path = path.strip()
-                count = sum(1 for f in os.listdir(path) if f.lower().endswith(".png"))
-                if count == 0:
-                    messagebox.showerror(
-                        "No PNGs",
-                        "Selected folder contains no .png files.",
-                    )
-                else:
-                    result[0], result[1] = path, "png_sequence"
-                    print(f"PNG sequence selected: {path} ({count} images)")
-            dialog.destroy()
-
-        dialog = tk.Toplevel(root)
-        dialog.title("Open Media")
-        dialog.attributes("-topmost", True)
-        dialog.grab_set()
-        tk.Label(dialog, text="Open video/image or PNG sequence folder", font=("Arial", 10)).pack(
-            pady=10, padx=20
+        file_types = [
+            ("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV *.webm *.WEBM"),
+            ("PNG Image", "*.png *.PNG"),
+            ("All supported", "*.mp4 *.avi *.mov *.mkv *.webm *.png"),
+        ]
+        path = filedialog.askopenfilename(
+            title="Select video, PNG, or any frame from a PNG sequence folder",
+            filetypes=file_types,
         )
-        btn_frame = tk.Frame(dialog)
-        btn_frame.pack(pady=10, padx=20)
-        tk.Button(btn_frame, text="Open Video / Image File", command=on_file, width=24).pack(
-            side="left", padx=5
-        )
-        tk.Button(
-            btn_frame, text="Open Image Sequence (Folder)", command=on_sequence, width=24
-        ).pack(side="left", padx=5)
-        tk.Button(dialog, text="Cancel", command=dialog.destroy).pack(pady=10)
-
-        dialog.wait_window()
         root.destroy()
-
-        path, source_type = result[0], result[1]
-        return (path if path else None, source_type)
+        if not path:
+            return (None, None)
+        return classify_media_path(path.strip())
 
     except Exception as e:
         print(f"Error with file dialog: {e}")
@@ -12028,37 +11984,6 @@ def run_getpixelvideo(
         break
 
 
-def _dir_contains_png_files(directory: str) -> bool:
-    try:
-        return os.path.isdir(directory) and any(
-            f.lower().endswith(".png") for f in os.listdir(directory)
-        )
-    except OSError:
-        return False
-
-
-def _resolve_png_sequence_directory(directory: str, *, max_subdirs: int = 500) -> str | None:
-    """Use directory if it contains PNGs, else first immediate subdirectory that does."""
-    if not directory or not os.path.isdir(directory):
-        return None
-    if _dir_contains_png_files(directory):
-        return os.path.abspath(directory)
-    try:
-        entries = sorted(os.listdir(directory))
-    except OSError:
-        return None
-    checked = 0
-    for name in entries:
-        if checked >= max_subdirs:
-            break
-        sub = os.path.join(directory, name)
-        if os.path.isdir(sub):
-            checked += 1
-            if _dir_contains_png_files(sub):
-                return os.path.abspath(sub)
-    return None
-
-
 if __name__ == "__main__":
     if "-h" in sys.argv or "--help" in sys.argv:
         print(
@@ -12069,7 +11994,7 @@ if __name__ == "__main__":
             "  --dataset DIR       YOLO / multi-video dataset root\n"
             "  --fifa / --fifa-dataset [DIR]  FIFA labeling mode\n"
             "  --export-bbox-coords PATH  Convert bbox tracking/contours to five coordinate CSVs and exit\n"
-            "Run without arguments to open the media picker.\n"
+            "Run without arguments to open one file picker (type auto-detected).\n"
             "Full options are documented in the module docstring (top of getpixelvideo.py)."
         )
         raise SystemExit(0)
@@ -12162,27 +12087,12 @@ if __name__ == "__main__":
         idx = sys.argv.index(opt)
         if idx + 1 < len(sys.argv):
             file_path = sys.argv[idx + 1]
-            if os.path.isfile(file_path):
-                if file_path.lower().endswith(".png"):
-                    initial_media_path = file_path
-                    initial_source_type = "single_png"
-                else:
-                    initial_media_path = file_path
-                    initial_source_type = "video"
-            elif os.path.isdir(file_path):
-                resolved = _resolve_png_sequence_directory(file_path)
-                if resolved:
-                    initial_media_path = resolved
-                    initial_source_type = "png_sequence"
-                    if resolved != os.path.abspath(file_path):
-                        print(f"PNG sequence: using subdirectory with frames: {resolved}")
-                else:
-                    print(
-                        f"Error: {opt} directory contains no PNG frames (checked one level of "
-                        f"subfolders): {file_path}"
-                    )
+            resolved_path, resolved_type = classify_media_path(file_path)
+            if resolved_path and resolved_type:
+                initial_media_path = resolved_path
+                initial_source_type = resolved_type
             else:
-                print(f"Error: {opt} path is not a file or directory: {file_path}")
+                print(f"Error: {opt} path is not usable media: {file_path}")
 
     run_getpixelvideo(
         initial_dataset_dir=initial_dataset_dir,

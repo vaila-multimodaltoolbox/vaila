@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 13 August 2026
+Version: 0.3.105
 
 Example of usage:
 uv run vaila.py
@@ -254,7 +254,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 11.Aug.2026 v0.3.104 (Python 3.12.13)
+    vailá - 13.Aug.2026 v0.3.105 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -369,7 +369,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 11.Aug.2026 v0.3.104 (Python 3.12.13)")
+        self.title("vailá - 13.Aug.2026 v0.3.105 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -2932,18 +2932,10 @@ class Vaila(tk.Tk):
 
     # C_B_r1_c1
     def extract_png_from_videos(self):
-        """Runs the video to PNG frame extraction module.
+        """Open the Video ↔ PNG tool (extract / create / select frames)."""
+        from vaila.extractpng import run_extractpng_gui
 
-        This function runs the video to PNG frame extraction module, which can be used to
-        extract PNG frames from video files. The module will prompt the user to select the
-        directory containing the video files and input the sample rate and start and end
-        indices for analysis.
-
-        """
-        from vaila.extractpng import VideoProcessor
-
-        processor = VideoProcessor()
-        processor.run()
+        run_extractpng_gui(parent=self)
 
     # C_B_r1_c2
     def crop_faces_atletas(self):
