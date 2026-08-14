@@ -1,13 +1,14 @@
 """Tests for the SAM3-guided Sapiens2 pipeline.
 
-Update Date: 01 August 2026
-Version: 0.3.89
+Update Date: 14 August 2026
+Version: 0.3.105
 """
 
 from __future__ import annotations
 
 import csv
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -366,6 +367,117 @@ def test_plan_video_processing_resume_skip_reuse_and_rerun(
     assert not (failed / "FAILED_sam3sapiens2.txt").exists()
     assert not (failed / "sam3" / "FAILED_sam.txt").exists()
     assert not (failed / "sam3" / "_chunks").exists()
+
+
+def test_write_batch_input_marker_and_find_batch_input_path_roundtrip(tmp_path: Path) -> None:
+    output_base = tmp_path / "processed_sam3sapiens2_20260101_000000"
+    output_base.mkdir()
+    source = tmp_path / "videos"
+    source.mkdir()
+    combo.write_batch_input_marker(output_base, source, "sam3sapiens2")
+    marker = output_base / "BATCH_INPUT.json"
+    assert marker.is_file()
+    recorded = json.loads(marker.read_text(encoding="utf-8"))
+    assert recorded["schema"] == "vaila_sam3sapiens2_batch_input_v1"
+    assert Path(recorded["input"]) == source
+    assert combo.find_batch_input_path(output_base) == source
+
+
+def test_find_batch_input_path_falls_back_to_batch_summary_when_marker_missing(
+    tmp_path: Path,
+) -> None:
+    # Older/completed runs from before the BATCH_INPUT.json marker existed
+    # still record --input in the end-of-run batch summary.
+    output_base = tmp_path / "processed_sam3sapiens2_20260101_000000"
+    output_base.mkdir()
+    source = tmp_path / "videos"
+    source.mkdir()
+    (output_base / "sam3sapiens2_batch_summary.json").write_text(
+        json.dumps({"schema": "vaila_sam3sapiens2_batch_v1", "input": str(source)}),
+        encoding="utf-8",
+    )
+    assert combo.find_batch_input_path(output_base) == source
+
+
+def test_find_batch_input_path_returns_none_for_unmarked_directory(tmp_path: Path) -> None:
+    output_base = tmp_path / "processed_sam3sapiens2_20260101_000000"
+    output_base.mkdir()
+    assert combo.find_batch_input_path(output_base) is None
+
+
+def test_resolve_auto_resume_output_base_matches_existing_run_by_input(tmp_path: Path) -> None:
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    source = tmp_path / "videos"
+    source.mkdir()
+
+    older = output_parent / "processed_sam3sapiens2_20260101_000000"
+    older.mkdir()
+    combo.write_batch_input_marker(older, source, "sam3sapiens2")
+
+    newer = output_parent / "processed_sam3sapiens2_20260102_000000"
+    newer.mkdir()
+    combo.write_batch_input_marker(newer, source, "sam3sapiens2")
+
+    output_base, is_resume = combo.resolve_auto_resume_output_base(
+        output_parent, source, "sam3sapiens2", fresh=False
+    )
+    assert is_resume is True
+    assert output_base == newer  # newest match wins
+
+
+def test_resolve_auto_resume_output_base_ignores_unrelated_input(tmp_path: Path) -> None:
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    other_source = tmp_path / "other_videos"
+    other_source.mkdir()
+    unrelated = output_parent / "processed_sam3sapiens2_20260101_000000"
+    unrelated.mkdir()
+    combo.write_batch_input_marker(unrelated, other_source, "sam3sapiens2")
+
+    this_source = tmp_path / "videos"
+    this_source.mkdir()
+    output_base, is_resume = combo.resolve_auto_resume_output_base(
+        output_parent, this_source, "sam3sapiens2", fresh=False
+    )
+    assert is_resume is False
+    assert output_base != unrelated
+    assert output_base.name.startswith("processed_sam3sapiens2_")
+
+
+def test_resolve_auto_resume_output_base_fresh_forces_new_dir(tmp_path: Path) -> None:
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    source = tmp_path / "videos"
+    source.mkdir()
+    existing = output_parent / "processed_sam3sapiens2_20260101_000000"
+    existing.mkdir()
+    combo.write_batch_input_marker(existing, source, "sam3sapiens2")
+
+    output_base, is_resume = combo.resolve_auto_resume_output_base(
+        output_parent, source, "sam3sapiens2", fresh=True
+    )
+    assert is_resume is False
+    assert output_base != existing
+
+
+def test_build_parser_exposes_fresh_flag_default_false(tmp_path: Path) -> None:
+    args = combo._build_parser().parse_args(["-i", "clip.mp4", "-o", str(tmp_path)])
+    assert args.fresh is False
+    args = combo._build_parser().parse_args(["-i", "clip.mp4", "-o", str(tmp_path), "--fresh"])
+    assert args.fresh is True
+
+
+def test_main_rejects_fresh_with_resume(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    resume_dir = tmp_path / "processed_sam3sapiens2_20260101_000000"
+    resume_dir.mkdir()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["sam3sapiens2.py", "-i", "clip.mp4", "--resume", str(resume_dir), "--fresh"],
+    )
+    with pytest.raises(SystemExit):
+        combo.main()
 
 
 def test_plan_video_processing_honours_external_sam_results(
