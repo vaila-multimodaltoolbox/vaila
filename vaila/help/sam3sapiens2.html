@@ -21,10 +21,10 @@
 <body><div class="container">
   <h1>SAM3+Sapiens2 (<code>sam3sapiens2.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.3.104 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-11<br>
+    <strong>Version:</strong> 0.3.105 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-14<br>
     <strong>GUI:</strong> Frame B → Markerless 2D → <strong>SAM3+Sapiens2</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA; SAM3 and Sapiens2 optional stacks.
-    <p><strong>Retomada:</strong> use <code>--resume RUN_DIR -i INPUT_DIR</code>; somente resultados com cobertura completa comprovada são reutilizados.</p>
+    <p><strong>Retomada:</strong> use <code>--resume RUN_DIR -i INPUT_DIR</code>; somente resultados com cobertura completa comprovada são reutilizados. Sem <code>--resume</code>, repetir o mesmo <code>-i</code>/<code>-o</code> já retoma sozinho (auto-resume); use <code>--fresh</code> para forçar pasta nova.</p>
     <p><strong>Selected-ID rerender:</strong> after a run, use
     <a href="sam3sapiens2_visualize.html">sam3sapiens2_visualize</a>
     (GUI <strong>SAM3+Sapiens2 Visualize ID</strong>, or CLI <code>--id</code> / interactive prompt).</p>
@@ -100,5 +100,7 @@ uv run vaila/vaila_sam.py --download-weights</code></pre>
   --model 1b
 </code></pre>
 <p>Skips only summaries marked <code>completed=true</code> with the source frame count. Local SAM is reused only when <code>sam_frames_meta.csv</code> covers every source frame; a partial <code>sam_tracks.csv</code> is rerun. Between SAM3 and Sapiens2, descendants are terminated and free VRAM must return to the pre-SAM baseline.</p>
+<h3>Automatic resume (default, no flag needed)</h3>
+<p>Re-running the same command auto-detects a matching <code>processed_sam3sapiens2_*</code> directory under <code>-o</code> (via a <code>BATCH_INPUT.json</code> marker or the completed run's own batch summary) and resumes it like <code>--resume</code> would, printing <code>[SKIP] Already processed: &lt;name&gt;</code> per completed video. Pass <code>--fresh</code> to force a new timestamped output directory instead; <code>--fresh</code> and <code>--resume</code> are mutually exclusive.</p>
 
 </body></html>

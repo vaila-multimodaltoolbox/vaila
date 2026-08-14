@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 14 August 2026
+Version: 0.3.105
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -115,8 +115,10 @@ try:
         find_local_sam_dir,
         load_sam_guidance,
         prepare_sam_rerun_dir,
+        resolve_auto_resume_output_base,
         resolve_sam_results_dir,
         run_sam_stage,
+        write_batch_input_marker,
     )
     from .vaila_sam import _open_sam3_video_writer
 except ImportError:  # standalone execution
@@ -148,8 +150,10 @@ except ImportError:  # standalone execution
         find_local_sam_dir,
         load_sam_guidance,
         prepare_sam_rerun_dir,
+        resolve_auto_resume_output_base,
         resolve_sam_results_dir,
         run_sam_stage,
+        write_batch_input_marker,
     )
     from vaila_sam import _open_sam3_video_writer  # ty: ignore[unresolved-import]
 
@@ -1863,6 +1867,15 @@ def _build_parser() -> argparse.ArgumentParser:
             "videos, retry failures, and reuse existing sam3/sam_tracks.csv."
         ),
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help=(
+            "Ignore any matching previous processed_sam3dinov3_* run under "
+            "--output and start a new timestamped output directory. Default "
+            "behavior auto-resumes a matching run without needing --resume."
+        ),
+    )
     parser.add_argument("-t", "--text", default="person", help="SAM3 text prompt")
     parser.add_argument(
         "--sam-results",
@@ -1964,6 +1977,8 @@ def main() -> None:
         parser.error("--focal-px must be > 0")
     if args.stride < 1:
         parser.error("--stride must be >= 1")
+    if args.fresh and args.resume is not None:
+        parser.error("--fresh and --resume are mutually exclusive")
 
     input_path = args.input.expanduser().resolve()
     output_parent = (
@@ -1990,11 +2005,17 @@ def main() -> None:
         output_base = args.resume.expanduser().resolve()
         if not output_base.is_dir():
             parser.error(f"resume directory does not exist: {output_base}")
+        is_resume = True
         _log(f"Resume mode: reusing {output_base}")
     else:
-        timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_base = output_parent / f"processed_sam3dinov3_{timestamp}"
+        output_base, is_resume = resolve_auto_resume_output_base(
+            output_parent, input_path, "sam3dinov3", fresh=args.fresh
+        )
+        if is_resume:
+            _log(f"Auto-resume: found matching run, reusing {output_base}")
+    resume_flag = args.resume is not None or is_resume
     output_base.mkdir(parents=True, exist_ok=True)
+    write_batch_input_marker(output_base, input_path, "sam3dinov3")
 
     if args.dry_run:
         lines = _build_dry_run_report(videos, output_base, args)
@@ -2004,6 +2025,14 @@ def main() -> None:
         print(f"Dry-run report: {report}", flush=True)
         return
 
+    completed_count = sum(
+        1 for video in videos if load_completed_summary(output_base / video.stem) is not None
+    )
+    _log(
+        f"Resume: {completed_count}/{len(videos)} videos already completed, "
+        f"{len(videos) - completed_count} remaining"
+    )
+
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     failed: list[str] = []
     summaries: list[dict[str, Any]] = []
@@ -2012,11 +2041,11 @@ def main() -> None:
 
     for index, video in enumerate(videos, start=1):
         output_dir = output_base / video.stem
-        if args.resume is not None:
+        if resume_flag:
             done = load_completed_summary(output_dir)
             if done is not None:
                 summaries.append(done)
-                _log(f"Resume: skipping completed video {video.name}")
+                _log(f"[SKIP] Already processed: {video.name}")
                 continue
 
         sam_dir: Path | None = None
