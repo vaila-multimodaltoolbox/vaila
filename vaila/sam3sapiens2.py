@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 14 August 2026
+Version: 0.3.105
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -23,11 +23,15 @@ Usage:
         -i /path/to/videos -o /path/to/output \
         --sam-results /path/to/processed_sam_YYYYMMDD_HHMMSS
 
-    # Resume a partial/failed processed_sam3sapiens2_* run:
+    # Resume a partial/failed processed_sam3sapiens2_* run (explicit pin):
     uv run python -u vaila/sam3sapiens2.py \
         -i /path/to/videos \
         --resume /path/to/processed_sam3sapiens2_YYYYMMDD_HHMMSS \
         --model 1b
+
+    # Auto-resume (default): re-running with the same -i/-o finds a matching
+    # processed_sam3sapiens2_* under -o on its own, skips completed videos.
+    # Pass --fresh to force a brand-new timestamped output directory instead.
 
     # GUI: omit arguments, or Frame B -> YOLO + FB -> SAM3+Sapiens2
 
@@ -538,6 +542,81 @@ def prepare_sam_rerun_dir(output_dir: Path) -> None:
     chunks = output_dir / "sam3" / "_chunks"
     if chunks.is_dir():
         shutil.rmtree(chunks, ignore_errors=True)
+
+
+def find_batch_input_path(output_base: Path) -> Path | None:
+    """Return the ``--input`` recorded for an existing batch output dir, if any.
+
+    Checked in order: the ``BATCH_INPUT.json`` marker written at batch start
+    (survives an interrupted run), then the end-of-run
+    ``{module}_batch_summary.json`` (covers completed runs from before this
+    marker existed). Returns None when neither is present or parseable —
+    such a directory can never be auto-matched, only explicitly --resume'd.
+    """
+    marker = output_base / "BATCH_INPUT.json"
+    if marker.is_file():
+        try:
+            raw = json.loads(marker.read_text(encoding="utf-8")).get("input")
+        except (OSError, ValueError):
+            raw = None
+        if isinstance(raw, str):
+            return Path(raw)
+    for name in ("sam3sapiens2_batch_summary.json", "sam3dinov3_batch_summary.json"):
+        summary_path = output_base / name
+        if not summary_path.is_file():
+            continue
+        try:
+            raw = json.loads(summary_path.read_text(encoding="utf-8")).get("input")
+        except (OSError, ValueError):
+            raw = None
+        if isinstance(raw, str):
+            return Path(raw)
+    return None
+
+
+def write_batch_input_marker(output_base: Path, input_path: Path, module_tag: str) -> None:
+    """Record ``--input`` on a fresh/resumed output_base for later auto-matching."""
+    marker = output_base / "BATCH_INPUT.json"
+    try:
+        marker.write_text(
+            json.dumps(
+                {"schema": f"vaila_{module_tag}_batch_input_v1", "input": str(input_path)},
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        _log(f"WARNING: could not write auto-resume marker {marker}: {exc}")
+
+
+def resolve_auto_resume_output_base(
+    output_parent: Path,
+    input_path: Path,
+    module_tag: str,
+    *,
+    fresh: bool,
+) -> tuple[Path, bool]:
+    """Pick the batch output_base: reuse a matching prior run unless ``fresh``.
+
+    Scans ``output_parent`` for ``processed_{module_tag}_*`` directories,
+    newest first, and reuses the first whose recorded ``--input`` resolves to
+    the same path as ``input_path``. Falls back to a new timestamped
+    directory when ``fresh`` is set or no match is found.
+
+    Returns ``(output_base, is_resume)``.
+    """
+    if not fresh and output_parent.is_dir():
+        candidates = sorted(
+            (p for p in output_parent.glob(f"processed_{module_tag}_*") if p.is_dir()),
+            reverse=True,
+        )
+        for candidate in candidates:
+            recorded = find_batch_input_path(candidate)
+            if recorded is not None and recorded.expanduser().resolve() == input_path:
+                return candidate, True
+    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    return output_parent / f"processed_{module_tag}_{timestamp}", False
 
 
 def _object_polygons(obj: dict[str, Any] | None) -> list[np.ndarray]:
@@ -1850,6 +1929,11 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="RUN_DIR",
         help="Resume an existing processed_sam3sapiens2_* directory: skip completed videos, retry failures, and reuse existing sam3/sam_tracks.csv.",
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Ignore any matching previous processed_sam3sapiens2_* run under --output and start a new timestamped output directory. Default behavior auto-resumes a matching run without needing --resume.",
+    )
     parser.add_argument("-t", "--text", default="person", help="SAM3 text prompt")
     parser.add_argument(
         "--sam-results",
@@ -1926,6 +2010,8 @@ def main() -> None:
         parser.error("--outside-contour-factor must be in [0,1]")
     if args.bbox_padding < 0:
         parser.error("--bbox-padding must be >= 0")
+    if args.fresh and args.resume is not None:
+        parser.error("--fresh and --resume are mutually exclusive")
 
     input_path = args.input.expanduser().resolve()
     output_parent = (
@@ -1950,11 +2036,17 @@ def main() -> None:
         output_base = args.resume.expanduser().resolve()
         if not output_base.is_dir():
             parser.error(f"resume directory does not exist: {output_base}")
+        is_resume = True
         _log(f"Resume mode: reusing {output_base}")
     else:
-        timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_base = output_parent / f"processed_sam3sapiens2_{timestamp}"
+        output_base, is_resume = resolve_auto_resume_output_base(
+            output_parent, input_path, "sam3sapiens2", fresh=args.fresh
+        )
+        if is_resume:
+            _log(f"Auto-resume: found matching run, reusing {output_base}")
+    resume_flag = args.resume is not None or is_resume
     output_base.mkdir(parents=True, exist_ok=True)
+    write_batch_input_marker(output_base, input_path, "sam3sapiens2")
     if args.dry_run:
         lines = _build_dry_run_report(videos, output_base, args)
         report = output_base / "SAM3SAPIENS2_DRY_RUN.txt"
@@ -1962,6 +2054,19 @@ def main() -> None:
         print("\n".join(lines), flush=True)
         print(f"Dry-run report: {report}", flush=True)
         return
+
+    completed_count = sum(
+        1
+        for video in videos
+        if load_completed_summary(
+            output_base / video.stem, expected_frames=_video_frame_count(video)
+        )
+        is not None
+    )
+    _log(
+        f"Resume: {completed_count}/{len(videos)} videos already completed, "
+        f"{len(videos) - completed_count} remaining"
+    )
 
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     failed: list[str] = []
@@ -1972,14 +2077,14 @@ def main() -> None:
         action, sam_dir, summary = plan_video_processing(
             video,
             output_dir,
-            resume=args.resume is not None,
+            resume=resume_flag,
             sam_results=args.sam_results,
             single_video=len(videos) == 1,
         )
         if action == "skip":
             assert summary is not None
             summaries.append(summary)
-            _log(f"Resume: skipping completed video {video.name}")
+            _log(f"[SKIP] Already processed: {video.name}")
             continue
         if action == "reuse_sam":
             assert sam_dir is not None
@@ -2028,7 +2133,10 @@ def main() -> None:
             print("\n" + "=" * 72, file=sys.stderr)
             print(f"[ERROR] SAM3+Sapiens2 failed on {video.name}: {exc}", file=sys.stderr)
             print(">> Required setup/install commands (CLI):", file=sys.stderr)
-            print("   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes", file=sys.stderr)
+            print(
+                "   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes",
+                file=sys.stderr,
+            )
             print("   bash bin/setup_sapiens2.sh", file=sys.stderr)
             print("   uv pip install -e .local/third_party/sapiens2", file=sys.stderr)
             print("=" * 72 + "\n", file=sys.stderr)

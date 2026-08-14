@@ -3,12 +3,12 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.3.104
-- **Updated:** 2026-08-11
+- **Version:** 0.3.105
+- **Updated:** 2026-08-14
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
-- **Retomada:** `--resume /caminho/processed_sam3dinov3_...` pula vídeos já concluídos e reaproveita `sam3/sam_tracks.csv`; informe também `-i` com a pasta original.
+- **Retomada:** `--resume /caminho/processed_sam3dinov3_...` pula vídeos já concluídos e reaproveita `sam3/sam_tracks.csv`; informe também `-i` com a pasta original. Sem `--resume`, uma execução repetida com o mesmo `-i`/`-o` já retoma sozinha o `processed_sam3dinov3_*` correspondente (auto-resume); use `--fresh` para forçar uma pasta nova.
 
 ## What this pipeline does
 
@@ -114,7 +114,25 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run
 | `--save-mesh`            | off       | Write per-frame MHR vertices to `meshes/*.npz` (large)          |
 | `--no-overlay`           | off       | Skip the overlay video                                          |
 | `--dry-run`              | off       | Validate and print the plan, no GPU inference                   |
-| `--resume RUN_DIR`       | –         | Continue an interrupted batch                                   |
+| `--resume RUN_DIR`       | –         | Continue an interrupted batch (explicit pin)                    |
+| `--fresh`                | off       | Ignore any matching prior run under `-o`; force a new output dir |
+
+### Automatic resume (default, no flag needed)
+
+Re-running the same command (same `-i` and `-o`) auto-detects a matching
+`processed_sam3dinov3_*` directory already under `-o` — via a
+`BATCH_INPUT.json` marker written at batch start, or the completed run's own
+`sam3dinov3_batch_summary.json` — and resumes it exactly like `--resume`
+would, printing:
+
+```text
+Auto-resume: found matching run, reusing /path/to/processed_sam3dinov3_...
+Resume: 3/8 videos already completed, 5 remaining
+[SKIP] Already processed: clip_003.mp4
+```
+
+Pass `--fresh` to ignore any match and start a brand-new timestamped output
+directory instead. `--fresh` and `--resume` are mutually exclusive.
 
 ## Outputs
 
