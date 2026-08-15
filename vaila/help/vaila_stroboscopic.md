@@ -1,101 +1,99 @@
-# Stroboscopic Effect Generator
+# Stroboscopic & Stromotion Generator
 
-**Script:** `vaila/vaila_stroboscopic.py`
+**Script:** `vaila/vaila_stroboscopic.py`  
+**Version:** `0.3.105`  
+**Updated:** `15 August 2026`
 
 ## Overview
 
-This tool generates a **stroboscopic (chronophotography) image** from a video. It supports:
+This tool generates **stroboscopic (chronophotography) images and videos** from biomechanical and sports video recordings. It supports four distinct modes:
 
-- **Pose overlay** from a CSV of landmarks (legacy vailá mode).
-- **Video-only motion strobe** (videoStrobe-style): extract moving pixels and composite them into one image.
-- **Video-only multishot stack** (multishot-style): stack sampled frames using `max` or `add` accumulation.
+1. **`stromotion` (Default / AI Mode):** Dartfish-style chronophotography using **MediaPipe Selfie Segmentation** (`.tflite`). Automatically extracts the moving athlete and seamlessly composites them onto a clean estimated background (median or first frame). Produces both high-resolution composite PNG and MP4 video.
+2. **`pose` (Skeleton Mode):** Overlays 2D joint skeleton landmarks across sampled frames from a CSV coordinate file.
+3. **`motion` (Motion Difference Mode):** Extracts moving pixels via frame differencing without neural networks.
+4. **`stack` (Multishot Blend Mode):** Blends sampled frames using `max` (peak exposure) or `add` (exposure accumulation).
 
-## Key Features
-
-- **Temporal Gradient:** Skeletons are colored from **Blue (Start)** to **Red (End)**, clearly showing the direction of movement.
-- **Enhanced Visualization:** Uses the vaila-standard "Enhanced Skeleton" style, which includes:
-  - Explicit segments (Arm, Forearm, Thigh, Leg, etc.)
-  - Computed midpoints (Neck, Mid-Hip, Mid-Shoulder)
-  - Color-coded sides (Left=Sky Blue, Right=Coral)
-- **Automatic Data Detection:** Can automatically find the corresponding CSV file if naming conventions are followed.
-- **Flexible Input:** Works via GUI (file picker) or Command Line Interface (CLI).
-- **Video-only modes:** `--mode motion` and `--mode stack` do **not** require a CSV.
+---
 
 ## Usage
 
 ### 1. GUI Method (Recommended)
 
 1. Launch `vaila.py`.
-2. Navigate to the **Visualization** frame (Frame C).
-3. Click the **"Stroboscopic"** button.
-4. Select your video file in the dialog window.
-   - The script will look for a CSV with the same name (e.g., `video.mp4` -> `video.csv` or `video_vaila_analyzed.csv`).
-5. The output image (`_stroboscopic.png`) will be saved in the same directory.
+2. In **Frame C (Tools & Visualization)**, click **Stroboscopic**.
+3. In the interactive settings dialog:
+   - Select your input **Video**.
+   - Choose the **Mode** (`stromotion`, `pose`, `motion`, or `stack`).
+   - Adjust **Frame Interval**, **Background Mode**, **Outline**, or **Segmentation Threshold**.
+   - Click **▶ Run**.
+4. The GUI prints a copy-pasteable `>> Equivalent CLI` mirror command to the terminal for easy automation.
+
+---
 
 ### 2. Command Line Interface (CLI)
 
-You can run the script directly from the terminal for batch processing or advanced control.
+Run directly from the terminal for batch processing or scripts:
 
+#### A. AI Stromotion (Default)
 ```bash
-uv run vaila/vaila_stroboscopic.py -v /path/to/video.mp4 -i 10
+uv run python -u vaila/vaila_stroboscopic.py \
+    -v /path/to/video.mp4 \
+    -o /path/to/output_dir \
+    --mode stromotion \
+    -i 10 \
+    --bg-mode median \
+    --bg-samples 10 \
+    --seg-threshold 0.5 \
+    --feather-px 5 \
+    --outline
 ```
 
-**Arguments:**
-
-- `-v`, `--video`: Path to the input video file (Required if not using GUI).
-- `-c`, `--csv`: Path to the pixel coordinates CSV file (Optional, auto-detected if omitted).
-- `-o`, `--output`: Path for the output PNG image (Optional).
-- `-i`, `--interval`: Frame interval for the strobe effect (Default: 10). A higher number means fewer skeletons drawn.
-- `--mode`: `pose` (default), `motion`, or `stack`.
-
-### Modes (CLI)
-
-#### `--mode pose` (default)
-
-Overlay multiple skeleton instances from CSV landmarks.
-
+#### B. Pose Skeleton Mode (with CSV)
 ```bash
-uv run vaila/vaila_stroboscopic.py --mode pose -v /path/to/video.mp4 -c /path/to/coords.csv -i 10
+uv run python -u vaila/vaila_stroboscopic.py \
+    -v /path/to/video.mp4 \
+    -c /path/to/coordinates.csv \
+    --mode pose \
+    -i 10
 ```
 
-#### `--mode motion` (video-only)
-
-videoStrobe-style motion extraction: computes a motion mask by frame differencing, then accumulates only the moving pixels.
-
+#### C. Motion Difference Mode
 ```bash
-uv run vaila/vaila_stroboscopic.py --mode motion -v /path/to/video.mp4 \
-  --threshold 50 --blend-ratio 1.0 --blur-size 5 --open-kernel-size 5 \
-  --frame-interval 1
+uv run python -u vaila/vaila_stroboscopic.py \
+    -v /path/to/video.mp4 \
+    --mode motion \
+    -i 5
 ```
 
-Optional stable background (median of sampled frames, `strobe2.py` style):
-
+#### D. Multishot Stack Mode
 ```bash
-uv run vaila/vaila_stroboscopic.py --mode motion -v /path/to/video.mp4 \
-  --stable-background --background-samples 10
+uv run python -u vaila/vaila_stroboscopic.py \
+    -v /path/to/video.mp4 \
+    --mode stack \
+    -i 5 \
+    --stack-op max
 ```
 
-#### `--mode stack` (video-only)
+---
 
-multishot-style stacking from sampled frames.
+## CLI Options & Parameters
 
-```bash
-# Max exposure (default)
-uv run vaila/vaila_stroboscopic.py --mode stack -v /path/to/video.mp4 --frame-interval 5 --stack-op max
-
-# Add + normalize
-uv run vaila/vaila_stroboscopic.py --mode stack -v /path/to/video.mp4 --frame-interval 5 --stack-op add
-```
-
-## Codec note (H.265 / HEVC)
-
-Some Linux OpenCV builds cannot decode HEVC/H.265 videos unless FFmpeg/GStreamer support is available.
-If you see **\"Error opening video\"** or frame count is zero, convert the input to H.264 (AVC) before running.
-
-## Output
-
-The tool produces a high-resolution PNG image overlaying the skeletons onto the first frame of the video (background darkened for contrast).
-
-**Example Output:**
-![Stroboscopic Example](images/stroboscopic_example.png)
-_(Note: Example image placeholder)_
+| Option | Description | Default |
+| :--- | :--- | :--- |
+| `-v, --video` | Path to input video file | GUI picker |
+| `-o, --output` | Path to output directory or image file | Video dir |
+| `-i, --interval` | Frame interval for sampling | `10` |
+| `--mode` | Effect mode: `stromotion`, `pose`, `motion`, `stack` | `stromotion` |
+| `-c, --csv` | Path to 2D landmarks CSV (for `pose` mode) | Auto-detect |
+| `--bg-mode` | Background mode: `median` or `first` | `median` |
+| `--bg-samples` | Number of frame samples to compute median background | `10` |
+| `--seg-threshold`| Confidence threshold for person segmentation (0.0–1.0) | `0.5` |
+| `--feather-px` | Edge blur / feathering radius in pixels | `5` |
+| `--outline` | Draw colored outline around the segmented subjects | `False` |
+| `--outline-color`| Outline RGB color (e.g. `255,255,255` or `0,255,0`) | `255,255,255` |
+| `--outline-thickness`| Outline thickness in pixels | `2` |
+| `--no-video` | Disable generation of output `.mp4` video | `False` |
+| `--no-frames` | Disable saving individual PNG cutouts | `False` |
+| `--stack-op` | Stack operator for `stack` mode: `max` or `add` | `max` |
+| `--model-selection`| 1 = Landscape (144x256), 0 = Square (256x256) | `1` |
+| `--open-help` | Open this documentation in default web browser | `False` |
