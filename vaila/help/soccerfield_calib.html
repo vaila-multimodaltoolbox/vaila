@@ -34,6 +34,7 @@
       <div class="feature-box">
         <strong>Module:</strong> <code>vaila/soccerfield_calib.py</code><br />
         <strong>GUI button:</strong> <code>Soccer Tools → Soccer-Field Calib</code> (Frame B)<br />
+        <strong>Version:</strong> 0.3.104 · 11 August 2026<br />
         <strong>CLI:</strong> <code>uv run vaila/soccerfield_calib.py …</code><br />
         Reference: <code>vaila/models/soccerfield_ref3d.csv</code> (29 FIFA keypoints, 105 × 68 m)
       </div>
@@ -45,13 +46,16 @@
 
       <div class="warning">
         <strong>This is a single-frame / static-camera tool.</strong> If the camera moves (typical broadcast),
-        use <code>fifa_to_dlt.py</code> (Frame B → <strong>Soccer Tools → FIFA cams→DLT</strong>) for per-frame DLT instead.
+        use supplied camera parameters through <code>fifa_to_dlt.py</code>, or
+        <a href="soccerfield_vitruvian_dlt3d.html">Vitruvian DLT3D</a> when calibration must be
+        recovered from pitch landmarks plus goal/player verticals.
       </div>
 
       <h2>When to use which calibration</h2>
       <table>
         <tr><th>Tool</th><th>Camera</th><th>Per-frame?</th><th>Use</th></tr>
         <tr><td><code>soccerfield_calib.py</code></td><td>fixed</td><td>No (single homography)</td><td>Static cam, fallback</td></tr>
+        <tr><td><code>soccerfield_vitruvian_dlt3d.py</code></td><td>moving</td><td>Supported frames</td><td>Pitch plane + goal/player vertical controls</td></tr>
         <tr><td><code>fifa_to_dlt.py</code></td><td>moving</td><td>Yes</td><td>Broadcast pan/tilt/zoom</td></tr>
         <tr><td><code>rec2d_one_dlt2d.py</code></td><td>fixed</td><td>1 row</td><td>Tripod 2D</td></tr>
         <tr><td><code>rec3d_one_dlt3d.py</code></td><td>fixed (multi-cam)</td><td>1 row / cam</td><td>Static lab</td></tr>
@@ -179,11 +183,12 @@ uv run vaila/rec2d.py \
         <li><code>soccerfield_keypoints_ai.py</code> — AI seed for the 32 keypoints</li>
         <li><code>getpixelvideo.py</code> — manual click / refine</li>
         <li><code>fifa_to_dlt.py</code> — per-frame DLT for moving camera</li>
+        <li><code>soccerfield_vitruvian_dlt3d.py</code> — field plane + Vitruvian bbox verticals</li>
         <li><code>rec2d.py</code> / <code>rec3d.py</code> — pixel → world reconstruction</li>
         <li><code>vaila_sam.html</code> — SAM 3 + FIFA pipeline</li>
       </ul>
 
-      <div class="footer">vailá — Multimodal Toolbox · AGPL-3.0 · Generated April 2026 ·
+      <div class="footer">vailá — Multimodal Toolbox · AGPL-3.0 · Updated 11 August 2026 ·
         <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></div>
     </div>
   </body>

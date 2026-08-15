@@ -38,6 +38,7 @@ This page provides a comprehensive reference of all modules available in the vai
 ### 3D Reconstruction
 - **`dlt2d`**: 2D Direct Linear Transformation camera calibration
 - **`dlt3d`**: 3D Direct Linear Transformation multi-camera calibration
+- **`soccerfield_vitruvian_dlt3d`**: time-varying football-camera DLT3D from pitch-plane landmarks plus measured or anthropometric vertical controls
 - **`rec2d`**: 2D reconstruction from calibrated cameras
 - **`rec3d`**: 3D reconstruction from multiple calibrated cameras
 

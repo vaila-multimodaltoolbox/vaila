@@ -398,17 +398,27 @@ uv run python -m vaila.soccerfield_keypoints_ai \
   --imgsz 1280 --conf 0.30 --draw-min-conf 0.40 \
   --device 0 --stride 5 --max-frames 60 --overlay-video
 
-# 3) DLT2D homography (single frame as a sanity check)
-uv run vaila/soccerfield_calib.py \
-  -v tests/sport_fields/ENG_FRA_220243.mp4 \
-  -p tests/sport_fields/runs/pitch_kps/processed_field_kps_*/field_keypoints_getpixelvideo.csv \
-  --frame 0 \
-  -o tests/sport_fields/runs/calib
+# 3) Time-varying DLT3D from pitch plane + Vitruvian bbox verticals
+uv run python -m vaila.soccerfield_vitruvian_dlt3d \
+  --field-pixels tests/sport_fields/runs/pitch_kps/processed_field_kps_*/field_keypoints_getpixelvideo.csv \
+  --bbox-bottom tests/sport_fields/runs/sam3/processed_sam_*/*/sam_vaila_bottom.csv \
+  --bbox-top tests/sport_fields/runs/sam3/processed_sam_*/*/sam_vaila_top.csv \
+  --default-height-m 1.80 \
+  --output tests/sport_fields/runs/vitruvian_dlt3d
 
 # 4) Open the overlays and the report
 xdg-open tests/sport_fields/runs/sam3/processed_sam_*/*/*_sam_overlay.mp4
 xdg-open tests/sport_fields/runs/pitch_kps/processed_field_kps_*/field_keypoints_overlay.mp4
 ```
+
+The default height is a declared weak fallback. Prefer an explicit
+`track,height_m` table with `--heights`, or add measured goalpost/scene
+verticals with `--known-verticals`. At least two spatially distinct verticals
+are required to estimate the three DLT coefficients that multiply Z. Every
+successful frame receives its own DLT row; unsupported frames are reported and
+skipped rather than filled by linear interpolation of raw projective
+coefficients. See
+[`vaila/help/soccerfield_vitruvian_dlt3d.md`](../vaila/help/soccerfield_vitruvian_dlt3d.md).
 
 ---
 
@@ -420,7 +430,7 @@ xdg-open tests/sport_fields/runs/pitch_kps/processed_field_kps_*/field_keypoints
 | `403 from huggingface.co` | licence not accepted | accept on HF, then `uv run hf auth login` |
 | SAM 3 OOM in batch | 1 leak in CUDA workspaces | already mitigated by subprocess-per-video; do not pass `--no-isolate-batch` |
 | Pitch keypoints all clustered | old / collapsed model | use the bundled `pitch32_recipeA_400ep/best.pt` |
-| Players ok, world coords wrong | camera moves but you used `soccerfield_calib` | switch to `fifa dlt-export` (per-frame DLT) |
+| Players ok, world coords wrong | camera moves but you used one planar/static calibration | use `fifa dlt-export` or Vitruvian DLT3D per frame |
 | `cv2.VideoCapture not found` | broken OpenCV | `uv pip install --reinstall opencv-python==4.10.0.84` |
 | `hf` ModuleNotFoundError typer | env issue | `uv add typer` or set `HF_TOKEN` in `.env` |
 

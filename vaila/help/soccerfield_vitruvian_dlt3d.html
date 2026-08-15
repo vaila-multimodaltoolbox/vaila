@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vitruvian DLT3D — vailá</title>
+    <style>
+      body { font-family: "Segoe UI", sans-serif; line-height: 1.55; margin: 0; padding: 20px; background: #f5f5f5; color: #263238; }
+      .container { max-width: 1050px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 18px rgba(0,0,0,.09); }
+      h1 { color: #1f4e68; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+      h2 { color: #34495e; border-left: 4px solid #3498db; padding-left: 10px; margin-top: 28px; }
+      code { background: #eef1f3; padding: 1px 5px; border-radius: 3px; }
+      pre { background: #f7f8f9; border: 1px solid #dde3e7; padding: 12px; overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #d9dfe3; padding: 8px; text-align: left; }
+      .note { background: #fff3cd; border: 1px solid #e7bd36; padding: 13px; border-radius: 5px; }
+      .feature { background: #e8f4fd; border: 1px solid #3498db; padding: 13px; border-radius: 5px; }
+      a { color: #2475a8; }
+    </style>
+  </head>
+  <body><div class="container">
+    <h1>Time-varying Vitruvian DLT3D</h1>
+    <div class="feature"><strong>Module:</strong> <code>vaila/soccerfield_vitruvian_dlt3d.py</code><br />
+      <strong>Version:</strong> 0.3.104 · 11 August 2026<br />
+      <strong>Role:</strong> pitch plane + player/goal vertical controls → one DLT3D row per supported frame</div>
+
+    <h2>Geometry</h2>
+    <p>Pitch landmarks determine the eight projective coefficients visible on <code>Z=0</code>. The
+      bottom centre of a tracked player bbox is inverted through that plane to <code>(X,Y,0)</code>.
+      Its top centre is assigned <code>(X,Y,h)</code> from an anthropometric height prior. These
+      non-coplanar controls estimate the remaining DLT coefficients that multiply <code>Z</code>.</p>
+    <p>Measured goalpost or scene verticals may be added with a higher weight. Player boxes are the
+      Vitruvian fallback when those structures are not visible.</p>
+
+    <div class="note"><strong>Rank and interpretation:</strong> one vertical gives only two equations.
+      At least two spatially distinct verticals and rank three are required. This calibrates a camera;
+      it does not turn arbitrary single-view joint observations into unique 3D points.</div>
+
+    <h2>Inputs</h2>
+    <table><tr><th>Flag</th><th>Content</th></tr>
+      <tr><td><code>--field-pixels</code></td><td>Per-frame 32-pitch-point CSV</td></tr>
+      <tr><td><code>--bbox-bottom</code></td><td>SAM bottom-centre anchors</td></tr>
+      <tr><td><code>--bbox-top</code></td><td>SAM top-centre anchors</td></tr>
+      <tr><td><code>--heights</code></td><td>Explicit track heights or roster for the documented rank fallback</td></tr>
+      <tr><td><code>--known-verticals</code></td><td>Optional goalpost/scene vertical controls</td></tr></table>
+
+    <h2>Example</h2>
+    <pre>uv run python -m vaila.soccerfield_vitruvian_dlt3d \
+  --field-pixels runs/pitch/field_keypoints_getpixelvideo.csv \
+  --bbox-bottom runs/sam/VIDEO/sam_vaila_bottom.csv \
+  --bbox-top runs/sam/VIDEO/sam_vaila_top.csv \
+  --heights anthropometry_match.csv \
+  --output runs/vitruvian_dlt3d</pre>
+
+    <h2>Outputs and cautions</h2>
+    <p>The tool writes a multirow <code>.dlt3d</code>, per-frame diagnostics, the complete vertical
+      control table, and height-assignment provenance. Bbox controls are down-weighted because pose,
+      jumps, occlusion, and mask padding perturb the apparent vertical. Frames that do not satisfy
+      field-count or rank requirements are reported and skipped. Raw DLT coefficients are not interpolated.</p>
+
+    <h2>Related</h2>
+    <p><a href="soccerfield_calib.html">Planar soccer calibration</a> ·
+      <a href="soccerfield_keypoints_ai.html">Field KPs AI</a> ·
+      <a href="vaila_sam.html">SAM 3 workflow</a> ·
+      <a href="monocular_dlt_align.html">Monocular DLT alignment</a></p>
+  </div></body>
+</html>
