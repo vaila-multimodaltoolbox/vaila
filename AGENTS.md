@@ -543,6 +543,29 @@ Version sync: `0.3.72 / 06 July 2026`.
 
 Version sync: `0.3.76 / 07 July 2026`.
 
+### SAM3 + Sapiens2 CLI Batch Tuning & GPU Optimization (August 2026, session 2026-08-15)
+
+**Module:** `vaila/sam3sapiens2.py` (SAM3-guided top-down Sapiens2 pose with DETR disabled, retaining SAM3 `obj_id`s).
+
+**Headless & CLI Execution:**
+- Fully supports headless CLI via `-i /path/to/videos -o /path/to/output --model 1b --pose-batch-size 16`.
+- Bypasses Tkinter GUI dialogs completely when `-i`/`-o` (or `--resume`) are supplied.
+- Operates under text-mode `/usr/local/bin/gpumode --cuda` (`systemctl isolate multi-user.target`), freeing 100% of dedicated GPU VRAM from desktop compositing (Xorg/Wayland).
+
+**RTX 4090 (24GB) Benchmarks (Sapiens2 1B, 308 keypoints, 1024x768 crops):**
+- Batch 4: 7.93 GiB alloc | 9.57 GiB res | 2.45 crops/s
+- Batch 8: 10.33 GiB alloc | 13.54 GiB res | 2.67 crops/s (compute saturated)
+- Batch 12: 12.72 GiB alloc | 17.40 GiB res | 2.66 crops/s
+- Batch 16: 15.11 GiB alloc | 21.22 GiB res | 2.67 crops/s (recommended max)
+- Batch 24: 18.68 GiB alloc | 22.73 GiB res | 2.58 crops/s (<1.3 GiB headroom)
+
+**Key Operational Rules:**
+1. **Batch Sizing:** Use `--pose-batch-size 16`. Sapiens 1B compute saturates at batch 8–16; batch 24 gives no extra throughput and risks CUDA OOM during multi-video batches.
+2. **Single-Subject Videos:** With 1 person per frame, VRAM footprint remains ~7.19 GiB. Use `--max-persons 1` to filter out background false positives.
+3. **`--flip-test` (TTA):** Runs 2 forward passes per crop (normal + horizontal flip), doubling Sapiens2 inference time (~2x slower) with zero VRAM penalty; recommended when maximum joint precision is needed.
+
+**Skill:** `.claude/skills/sam3sapiens2-pose/SKILL.md`.
+
 ## Caveman mode (optional)
 
 [Caveman](https://github.com/JuliusBrussee/caveman) is a skills/plugin pack for AI coding agents (Claude Code, Cursor, Gemini CLI, Windsurf, Copilot, and 30+ others). It steers the model toward terse replies: fewer filler words and articles, typically **~65–75% fewer output tokens** while keeping technical content intact.

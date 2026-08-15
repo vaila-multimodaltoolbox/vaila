@@ -3,11 +3,11 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.3.104
-- **Updated:** 2026-08-11
+- **Version:** 0.3.105
+- **Updated:** 2026-08-14
 - **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes
-- **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original.
+- **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original. Sem `--resume`, uma execução repetida com o mesmo `-i`/`-o` já retoma sozinha o `processed_sam3sapiens2_*` correspondente (auto-resume); use `--fresh` para forçar uma pasta nova.
 - **Selected-ID rerender:** after a run, use [sam3sapiens2_visualize](sam3sapiens2_visualize.md) (GUI **SAM3+Sapiens2 Visualize ID**, or CLI `--id` / interactive prompt). Overlay matches SAM3 contour + Sapiens2 left/right skeleton colors.
 
 ## What this pipeline changes
@@ -106,6 +106,23 @@ uv run python -u vaila/sam3sapiens2.py \
 - failed videos clear stale `_chunks` / `FAILED_*.txt` and re-run SAM3 via the CUDA-clean coordinator, then Sapiens2.
 
 GUI: **Resume run (optional)** in the SAM3+Sapiens2 dialog.
+
+### Automatic resume (default, no flag needed)
+
+Re-running the same command (same `-i` and `-o`) auto-detects a matching
+`processed_sam3sapiens2_*` directory already under `-o` — via a
+`BATCH_INPUT.json` marker written at batch start, or the completed run's own
+`sam3sapiens2_batch_summary.json` — and resumes it exactly like `--resume`
+would, printing:
+
+```text
+Auto-resume: found matching run, reusing /path/to/processed_sam3sapiens2_...
+Resume: 3/8 videos already completed, 5 remaining
+[SKIP] Already processed: clip_003.mp4
+```
+
+Pass `--fresh` to ignore any match and start a brand-new timestamped output
+directory instead. `--fresh` and `--resume` are mutually exclusive.
 
 ### Reuse a completed SAM3 batch
 

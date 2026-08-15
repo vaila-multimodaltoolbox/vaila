@@ -11,6 +11,7 @@ import argparse
 import csv
 import gzip
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -32,8 +33,10 @@ from vaila.sam3dinov3 import (
     _write_readme,
     build_worker_command,
     keypoint_names,
+    resolve_auto_resume_output_base,
     resolve_sam3d_assets,
     skeleton_edges,
+    write_batch_input_marker,
     write_camera_csv,
     write_long_joint_angles_csv,
     write_long_keypoints_csvs,
@@ -668,3 +671,59 @@ def test_worker_namespace_has_every_attribute_the_pipeline_reads(tmp_path: Path)
     ):
         assert hasattr(args, attr), f"parser is missing --{attr.replace('_', '-')}"
     assert isinstance(args, argparse.Namespace)
+
+
+def test_build_parser_exposes_fresh_flag_default_false(tmp_path: Path) -> None:
+    from vaila.sam3dinov3 import _build_parser
+
+    args = _build_parser().parse_args(["-i", "clip.mp4", "-o", str(tmp_path)])
+    assert args.fresh is False
+    args = _build_parser().parse_args(["-i", "clip.mp4", "-o", str(tmp_path), "--fresh"])
+    assert args.fresh is True
+
+
+def test_main_rejects_fresh_with_resume(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from vaila.sam3dinov3 import main
+
+    resume_dir = tmp_path / "processed_sam3dinov3_20260101_000000"
+    resume_dir.mkdir()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["sam3dinov3.py", "-i", "clip.mp4", "--resume", str(resume_dir), "--fresh"],
+    )
+    with pytest.raises(SystemExit):
+        main()
+
+
+def test_resolve_auto_resume_output_base_is_shared_from_sam3sapiens2_and_uses_module_tag(
+    tmp_path: Path,
+) -> None:
+    # sam3dinov3.py imports these from sam3sapiens2.py rather than duplicating
+    # them; this proves the import wiring works and the module_tag keeps the
+    # two pipelines' auto-resume directories from ever colliding.
+    output_parent = tmp_path / "out"
+    output_parent.mkdir()
+    source = tmp_path / "videos"
+    source.mkdir()
+
+    sapiens_run = output_parent / "processed_sam3sapiens2_20260101_000000"
+    sapiens_run.mkdir()
+    write_batch_input_marker(sapiens_run, source, "sam3sapiens2")
+
+    # A sam3sapiens2 run for the same input must never be picked up as a
+    # sam3dinov3 auto-resume match.
+    output_base, is_resume = resolve_auto_resume_output_base(
+        output_parent, source, "sam3dinov3", fresh=False
+    )
+    assert is_resume is False
+    assert output_base.name.startswith("processed_sam3dinov3_")
+
+    dinov3_run = output_parent / "processed_sam3dinov3_20260102_000000"
+    dinov3_run.mkdir()
+    write_batch_input_marker(dinov3_run, source, "sam3dinov3")
+    output_base, is_resume = resolve_auto_resume_output_base(
+        output_parent, source, "sam3dinov3", fresh=False
+    )
+    assert is_resume is True
+    assert output_base == dinov3_run

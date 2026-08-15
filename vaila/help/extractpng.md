@@ -1,65 +1,54 @@
 # extractpng
 
-## 📋 Module Information
+## Module Information
 
 - **Category:** Tools
-- **File:** `vaila\extractpng.py`
-- **Lines:** 497
-- **Size:** 16763 characters
-- **Version:** 0.3.45
+- **File:** `vaila/extractpng.py`
+- **Version:** 0.3.105
+- **Updated:** 13 August 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago
-- **GUI Interface:** ✅ Yes
+- **GUI Interface:** Yes (one window)
 
-## 📖 Description
+## Description
 
+*vailá* Video ↔ PNG tool: extract PNG frames from videos, build videos from PNG
+sequences, or grab selected frames. One simple Tkinter window; full CLI for
+headless runs.
 
-================================================================================
-Extract PNG Tool - extractpng.py
-================================================================================
-Author: Prof. Dr. Paulo R. P. Santiago
-Laboratory of Biomechanics and Motor Control (LaBioCoM)
-School of Physical Education and Sport of Ribeirão Preto
-University of São Paulo (USP)
+## GUI
 
-Contact: paulosantiago@usp.br
-Laboratory website: https://github.com/vaila-multimodaltoolbox/vaila
+Frame C → **Video↔PNG**, or:
 
-Created: December 15, 2023
-Last Updated: 23 May 2026
-Version: 0.3.45
+```bash
+uv run vaila/extractpng.py
+```
 
-Description:
-------------
-This module offers functionality to either extract PNG frames from video files or
-create videos from a sequence of PNG images. It is designed for applications in
-machine learning, computer vision, and biomechanics, ensuring that all frames and
-videos maintain consistent quality and formatting.
+One window:
 
-The main features of the module include:
-- Extract PNG frames from videos in RGB format
-- Create videos from PNG sequences
-- ...
+1. Choose mode: **Video → PNG** / **PNG → Video** / **Select frames**
+2. Browse input (and optional output)
+3. Set options for the mode
+4. **Run**
 
-## 🔧 Main Functions
+On Run, the terminal prints a copy-paste CLI mirror (`>> vaila/extractpng`).
 
-**Total functions found:** 10
+## CLI
 
-- `extract_png_from_videos`
-- `extract_select_frames_from_video`
-- `get_fps_from_user`
-- `create_video_from_png`
-- `is_pattern_consistent`
-- `is_nvidia_gpu_available`
-- `get_fps`
-- `get_video_info`
-- `show_completion_message`
-- `run`
+```bash
+uv run vaila/extractpng.py extract -i /path/to/videos
+uv run vaila/extractpng.py extract -i /path/to/videos -o /path/to/out --pattern %09d.png
+uv run vaila/extractpng.py create -i /path/to/png_dirs --fps 30 --codec 264
+uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7
+```
 
+## Notes
 
-
+- FFmpeg `-hwaccel auto` is an **input** option (placed before `-i`). There is
+  no forced `hevc_cuvid` decoder; software decode is the automatic fallback.
+- Default PNG pattern: `%09d.png`
+- Batch extract writes `vaila_extractpng_<timestamp>/<stem>_png/` plus
+  `video_info.txt` per video.
 
 ---
 
-📅 **Generated automatically on:** 23/05/2026 17:30:00
-🔗 **Part of vailá - Multimodal Toolbox**
-🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+**Part of** *vailá* — Multimodal Toolbox

@@ -1,0 +1,56 @@
+{
+  "loop": "sam3-batch-auto-resume-loop",
+  "status": "success",
+  "updated": "2026-08-14",
+  "step0_finding": {
+    "batch_summary_write_timing": "end_of_run_only",
+    "consequence": "an interrupted run has no sam3sapiens2_batch_summary.json / sam3dinov3_batch_summary.json, so auto-detect cannot rely on it alone",
+    "resolution": "write_batch_input_marker() writes BATCH_INPUT.json into output_base immediately after mkdir(), before the per-video loop starts; find_batch_input_path() checks the marker first, then falls back to the end-of-run batch summary for older/completed runs predating the marker"
+  },
+  "design": {
+    "no_new_history_ledger": true,
+    "reused_existing_completion_marker": "sam3sapiens2_summary.json / sam3dinov3_summary.json via load_completed_summary()",
+    "shared_helper_location": "vaila/sam3sapiens2.py (find_batch_input_path, write_batch_input_marker, resolve_auto_resume_output_base)",
+    "shared_helper_import": "vaila/sam3dinov3.py imports all three from sam3sapiens2.py via the existing dual-import pattern (module_tag parameter keeps the two pipelines' output dirs from colliding)",
+    "new_flag": "--fresh (both scripts), mutually exclusive with --resume",
+    "skip_message_format": "[SKIP] Already processed: <video.name>"
+  },
+  "targets": [
+    {
+      "id": "sam3sapiens2.py: helper + main() wiring",
+      "accepted": true,
+      "evidence": "ruff clean, ty diagnostic count unchanged (4, pre-existing, unrelated SimpleNamespace/Namespace mismatches), header bumped to v0.3.105 / 2026-08-14"
+    },
+    {
+      "id": "sam3dinov3.py: import + main() wiring",
+      "accepted": true,
+      "evidence": "same governing check, module_tag=\"sam3dinov3\" keeps auto-resume dirs distinct from sam3sapiens2's"
+    },
+    {
+      "id": "tests: red-before/green-after",
+      "accepted": true,
+      "evidence": "pre-fix: `git stash push -- vaila/sam3sapiens2.py vaila/sam3dinov3.py` -> pytest collection ImportError (resolve_auto_resume_output_base missing). post-fix: 71/71 passed (60 pre-existing + 11 new). Baseline was 60/60."
+    },
+    {
+      "id": "metadata: headers, help docs, README, index",
+      "accepted": true,
+      "evidence": "vaila/sam3sapiens2.py, vaila/sam3dinov3.py, vaila/help/{sam3sapiens2,sam3dinov3}.md/.html, vaila/help/index.md/.html, README.md all bumped to 2026-08-14 / v0.3.105"
+    }
+  ],
+  "governing_check": {
+    "ruff": "All checks passed! (vaila/sam3sapiens2.py, vaila/sam3dinov3.py, tests/test_sam3sapiens2.py, tests/test_sam3dinov3.py)",
+    "ty": "4 diagnostics, identical count before and after (git-stash-verified baseline) -- all in test files, pre-existing SimpleNamespace-vs-argparse.Namespace mismatches unrelated to this change",
+    "pytest": "71 passed in ~1s (tests/test_sam3sapiens2.py + tests/test_sam3dinov3.py)"
+  },
+  "human_checkpoint": {
+    "path": "/media/preto/Expansion/Anna/All_videos_subjects_Sync/S4/s4_pre_R_ah (3 real videos, 2704x1520, 7757 frames each)",
+    "hardware": "RTX 4090, sam3sapiens2.py --model 0.4b --device 0",
+    "run1": "processed_sam3sapiens2_20260814_112443 created fresh; SAM3 stage completed for all 3 videos (sam_frames_meta.csv: 7757/7757 rows each); Sapiens2 stage failed for all 3 with FileNotFoundError: sapiens2_0.4b_pose.safetensors not found (pre-existing env gap on this machine -- weights never downloaded via bin/setup_sapiens2.sh). Batch done: 0/3 succeeded, exit=1 as designed.",
+    "run2": "same -i/-o, no --resume, no --fresh. Printed 'Auto-resume: found matching run, reusing processed_sam3sapiens2_20260814_112443' and 'Resume: 0/3 videos already completed, 3 remaining', then action=reuse_sam for all 3 videos (SAM3 stage skipped entirely, straight to Sapiens2 which failed again on the same missing checkpoint). Batch done: 0/3 succeeded -- expected, same root cause.",
+    "proven": "coordinator-level auto-resume directory detection (BATCH_INPUT.json marker) + per-video SAM3-stage reuse, both without any --resume flag, on real 7757-frame footage",
+    "not_proven_on_real_data": "full video-level completed=true skip ([SKIP] Already processed:) -- blocked by the missing Sapiens2 checkpoint on this machine, unrelated to this change. Proven only via unit tests with a synthetic completed summary fixture (test_write_batch_input_marker_and_find_batch_input_path_roundtrip and friends).",
+    "operator_decision": "accepted the partial real-data proof as sufficient; did not download Sapiens2 weights to complete the full loop. Test output (202M under /media/preto/Expansion/Anna/vaila_test_output) deleted after the checkpoint."
+  },
+  "iterations_used": 1,
+  "cost_per_accepted_change": "1 iteration / 4 targets accepted"
+}

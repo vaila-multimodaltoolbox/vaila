@@ -50,7 +50,7 @@ This page provides a comprehensive reference of all modules available in the vai
 
 ### Video Manipulation
 - **`videoprocessor`**: Video merging, splitting, and batch processing
-- **`extractpng`**: Video frame extraction to PNG images
+- **`extractpng`**: Video ↔ PNG (extract frames, build video from PNG sequences, or grab selected frames; one GUI + CLI)
 - **`cutvideo`**: Video cutting and trimming operations
 - **`resize_video`**: Video resolution modification tools
 
