@@ -27,6 +27,26 @@ def _write_synthetic_video(
     vw.release()
 
 
+def test_mode_stromotion_writes_output(tmp_path: Path) -> None:
+    from vaila.vaila_stroboscopic import generate_stromotion
+
+    vid = tmp_path / "person_move.mp4"
+    _write_synthetic_video(vid, n=30)
+    out_dir = tmp_path / "strobe_out"
+    ok = generate_stromotion(
+        vid,
+        output_dir=out_dir,
+        frame_interval=5,
+        bg_mode="median",
+        save_individual_frames=True,
+        save_video=True,
+    )
+    assert ok is True
+    assert (out_dir / f"{vid.stem}_stromotion.png").is_file()
+    assert (out_dir / f"{vid.stem}_stromotion.mp4").is_file()
+    assert (out_dir / f"{vid.stem}_stromotion_frames").is_dir()
+
+
 def test_mode_stack_writes_output(tmp_path: Path) -> None:
     from vaila.vaila_stroboscopic import generate_stack_multishot
 

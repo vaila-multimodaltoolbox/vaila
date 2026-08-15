@@ -3,14 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - Stroboscopic Generator Help</title>
+    <title>vailá - Stroboscopic & Stromotion Generator Help</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background-color: #f5f5f5; font-size: 18px; }
         .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
         h2 { color: #34495e; margin-top: 30px; border-left: 5px solid #3498db; padding-left: 10px; background-color: #e8f4f8; padding: 10px; }
+        h3 { color: #2980b9; margin-top: 20px; }
         code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: monospace; }
-        pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        pre { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: monospace; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
         .back-link { display: inline-block; margin-bottom: 20px; text-decoration: none; color: #3498db; font-weight: bold; }
         .back-link:hover { text-decoration: underline; }
     </style>
@@ -19,91 +23,163 @@
     <div class="container">
         <a href="index.html" class="back-link">← Back to Index</a>
         
-        <h1>Stroboscopic Effect Generator</h1>
-        <p><strong>Script:</strong> <code>vaila/vaila_stroboscopic.py</code></p>
+        <h1>Stroboscopic & Stromotion Generator</h1>
+        <p><strong>Script:</strong> <code>vaila/vaila_stroboscopic.py</code> | <strong>Version:</strong> 0.3.105 | <strong>Updated:</strong> 15 August 2026</p>
 
         <h2>Overview</h2>
-        <p>This tool generates a <strong>stroboscopic (chronophotography) image</strong> from a video.</p>
-        <ul>
-            <li><strong>pose</strong> (legacy): overlay multiple skeleton instances from a CSV of landmarks.</li>
-            <li><strong>motion</strong> (video-only): videoStrobe-style motion extraction (frame differencing + mask refinement).</li>
-            <li><strong>stack</strong> (video-only): multishot-style stacking from sampled frames (<code>max</code> or <code>add</code>).</li>
-        </ul>
-
-        <h2>Key Features</h2>
-        <ul>
-            <li><strong>Temporal Gradient:</strong> Skeletons are colored from <strong>Blue (Start)</strong> to <strong>Red (End)</strong>, clearly showing the direction of movement.</li>
-            <li><strong>Enhanced Visualization:</strong> Uses the vaila-standard "Enhanced Skeleton" style, which includes:
-                <ul>
-                    <li>Explicit segments (Arm, Forearm, Thigh, Leg, etc.)</li>
-                    <li>Computed midpoints (Neck, Mid-Hip, Mid-Shoulder)</li>
-                    <li>Color-coded sides (Left=Sky Blue, Right=Coral)</li>
-                </ul>
-            </li>
-            <li><strong>Automatic Data Detection:</strong> Can automatically find the corresponding CSV file if naming conventions are followed.</li>
-            <li><strong>Flexible Input:</strong> Works via GUI (file picker) or Command Line Interface (CLI).</li>
-            <li><strong>Video-only modes:</strong> <code>--mode motion</code> and <code>--mode stack</code> do <strong>not</strong> require a CSV.</li>
-        </ul>
+        <p>This tool generates <strong>stroboscopic (chronophotography) images and videos</strong> from biomechanical and sports video recordings. It supports four distinct modes:</p>
+        <ol>
+            <li><strong><code>stromotion</code> (Default / AI Mode):</strong> Dartfish-style chronophotography using <strong>MediaPipe Selfie Segmentation</strong>. Automatically cuts out the moving athlete and seamlessly composites them onto an estimated background over time. Produces both composite PNG and MP4 video.</li>
+            <li><strong><code>pose</code> (Skeleton Mode):</strong> Overlays 2D joint skeleton landmarks across sampled frames from a CSV coordinate file.</li>
+            <li><strong><code>motion</code> (Motion Difference Mode):</strong> Extracts moving pixels via frame differencing without neural networks.</li>
+            <li><strong><code>stack</code> (Multishot Blend Mode):</strong> Blends sampled frames using <code>max</code> (peak exposure) or <code>add</code> (exposure accumulation).</li>
+        </ol>
 
         <h2>Usage</h2>
 
         <h3>1. GUI Method (Recommended)</h3>
         <ol>
             <li>Launch <code>vaila.py</code>.</li>
-            <li>Navigate to the <strong>Visualization</strong> frame (Frame C).</li>
-            <li>Click the <strong>"Stroboscopic"</strong> button.</li>
-            <li>Select your video file in the dialog window.
+            <li>Navigate to <strong>Frame C (Tools & Visualization)</strong> and click <strong>"Stroboscopic"</strong>.</li>
+            <li>In the settings dialog:
                 <ul>
-                    <li>The script will look for a CSV with the same name (e.g., <code>video.mp4</code> → <code>video.csv</code> or <code>video_vaila_analyzed.csv</code>).</li>
+                    <li>Select your input <strong>Video</strong>.</li>
+                    <li>Choose the <strong>Mode</strong> (<code>stromotion</code>, <code>pose</code>, <code>motion</code>, or <code>stack</code>).</li>
+                    <li>Set <strong>Frame Interval</strong>, <strong>Background Mode</strong>, or <strong>Outline</strong> options.</li>
+                    <li>Click <strong>▶ Run</strong>.</li>
                 </ul>
             </li>
-            <li>The output image (<code>_stroboscopic.png</code>) will be saved in the same directory.</li>
+            <li>The GUI automatically prints a copy-pasteable <code>&gt;&gt; Equivalent CLI</code> command to the terminal for reproducibility.</li>
         </ol>
 
         <h3>2. Command Line Interface (CLI)</h3>
-        <p>You can run the script directly from the terminal for batch processing or advanced control.</p>
+        <p>Run directly from the terminal for batch processing or scripts:</p>
 
-        <pre>uv run vaila/vaila_stroboscopic.py -v /path/to/video.mp4 -i 10</pre>
+        <h4>A. AI Stromotion (Default)</h4>
+        <pre>uv run python -u vaila/vaila_stroboscopic.py \
+    -v /path/to/video.mp4 \
+    -o /path/to/output_dir \
+    --mode stromotion \
+    -i 10 \
+    --bg-mode median \
+    --bg-samples 10 \
+    --seg-threshold 0.5 \
+    --feather-px 5 \
+    --outline</pre>
 
-        <p><strong>Arguments:</strong></p>
-        <ul>
-            <li><code>-v</code>, <code>--video</code>: Path to the input video file (Required if not using GUI).</li>
-            <li><code>-c</code>, <code>--csv</code>: Path to the pixel coordinates CSV file (Optional, auto-detected if omitted).</li>
-            <li><code>-o</code>, <code>--output</code>: Path for the output PNG image (Optional).</li>
-            <li><code>-i</code>, <code>--interval</code>: Frame interval for the strobe effect (Default: 10). A higher number means fewer skeletons drawn.</li>
-            <li><code>--mode</code>: <code>pose</code> (default), <code>motion</code>, or <code>stack</code>.</li>
-        </ul>
+        <h4>B. Pose Skeleton Mode (with CSV)</h4>
+        <pre>uv run python -u vaila/vaila_stroboscopic.py \
+    -v /path/to/video.mp4 \
+    -c /path/to/coordinates.csv \
+    --mode pose \
+    -i 10</pre>
 
-        <h2>Modes (CLI)</h2>
+        <h4>C. Motion Difference Mode</h4>
+        <pre>uv run python -u vaila/vaila_stroboscopic.py \
+    -v /path/to/video.mp4 \
+    --mode motion \
+    -i 5</pre>
 
-        <h3><code>--mode pose</code> (default)</h3>
-        <pre>uv run vaila/vaila_stroboscopic.py --mode pose -v /path/to/video.mp4 -c /path/to/coords.csv -i 10</pre>
+        <h4>D. Multishot Stack Mode</h4>
+        <pre>uv run python -u vaila/vaila_stroboscopic.py \
+    -v /path/to/video.mp4 \
+    --mode stack \
+    -i 5 \
+    --stack-op max</pre>
 
-        <h3><code>--mode motion</code> (video-only)</h3>
-        <p>videoStrobe-style motion extraction: compute a motion mask by frame differencing, then composite only moving pixels.</p>
-        <pre>uv run vaila/vaila_stroboscopic.py --mode motion -v /path/to/video.mp4 \
-  --threshold 50 --blend-ratio 1.0 --blur-size 5 --open-kernel-size 5 \
-  --frame-interval 1</pre>
-        <p>Optional stable background (median of sampled frames):</p>
-        <pre>uv run vaila/vaila_stroboscopic.py --mode motion -v /path/to/video.mp4 --stable-background --background-samples 10</pre>
-
-        <h3><code>--mode stack</code> (video-only)</h3>
-        <pre># Max exposure (default)
-uv run vaila/vaila_stroboscopic.py --mode stack -v /path/to/video.mp4 --frame-interval 5 --stack-op max
-
-# Add + normalize
-uv run vaila/vaila_stroboscopic.py --mode stack -v /path/to/video.mp4 --frame-interval 5 --stack-op add</pre>
-
-        <h2>Codec note (H.265 / HEVC)</h2>
-        <p>Some Linux OpenCV builds cannot decode HEVC/H.265 videos unless FFmpeg/GStreamer support is available. If you see <code>Error opening video</code> or frame count is zero, convert the input to H.264 (AVC) before running.</p>
-
-        <h2>Output</h2>
-        <p>The tool produces a high-resolution PNG image overlaying the skeletons onto the first frame of the video (background darkened for contrast).</p>
-        
-        <div style="text-align: center; margin-top: 20px; color: #888;">
-            <p><em>(Example output would be displayed here)</em></p>
-        </div>
-
+        <h2>CLI Parameters Reference</h2>
+        <table>
+            <tr>
+                <th>Option</th>
+                <th>Description</th>
+                <th>Default</th>
+            </tr>
+            <tr>
+                <td><code>-v, --video</code></td>
+                <td>Path to input video file</td>
+                <td>GUI picker</td>
+            </tr>
+            <tr>
+                <td><code>-o, --output</code></td>
+                <td>Path to output directory or image file</td>
+                <td>Video directory</td>
+            </tr>
+            <tr>
+                <td><code>-i, --interval</code></td>
+                <td>Frame sampling interval</td>
+                <td><code>10</code></td>
+            </tr>
+            <tr>
+                <td><code>--mode</code></td>
+                <td>Effect mode: <code>stromotion</code>, <code>pose</code>, <code>motion</code>, <code>stack</code></td>
+                <td><code>stromotion</code></td>
+            </tr>
+            <tr>
+                <td><code>-c, --csv</code></td>
+                <td>Path to 2D landmarks CSV (for <code>pose</code> mode)</td>
+                <td>Auto-detect</td>
+            </tr>
+            <tr>
+                <td><code>--bg-mode</code></td>
+                <td>Background mode: <code>median</code> or <code>first</code></td>
+                <td><code>median</code></td>
+            </tr>
+            <tr>
+                <td><code>--bg-samples</code></td>
+                <td>Number of frame samples for median background</td>
+                <td><code>10</code></td>
+            </tr>
+            <tr>
+                <td><code>--seg-threshold</code></td>
+                <td>Segmentation confidence threshold (0.0–1.0)</td>
+                <td><code>0.5</code></td>
+            </tr>
+            <tr>
+                <td><code>--feather-px</code></td>
+                <td>Edge feathering blur radius in pixels</td>
+                <td><code>5</code></td>
+            </tr>
+            <tr>
+                <td><code>--outline</code></td>
+                <td>Draw colored outline around the segmented subjects</td>
+                <td><code>False</code></td>
+            </tr>
+            <tr>
+                <td><code>--outline-color</code></td>
+                <td>Outline RGB color (e.g. <code>255,255,255</code>)</td>
+                <td><code>255,255,255</code></td>
+            </tr>
+            <tr>
+                <td><code>--outline-thickness</code></td>
+                <td>Outline thickness in pixels</td>
+                <td><code>2</code></td>
+            </tr>
+            <tr>
+                <td><code>--no-video</code></td>
+                <td>Disable composite MP4 video generation</td>
+                <td><code>False</code></td>
+            </tr>
+            <tr>
+                <td><code>--no-frames</code></td>
+                <td>Disable saving individual PNG cutouts</td>
+                <td><code>False</code></td>
+            </tr>
+            <tr>
+                <td><code>--stack-op</code></td>
+                <td>Stack operator: <code>max</code> or <code>add</code></td>
+                <td><code>max</code></td>
+            </tr>
+            <tr>
+                <td><code>--model-selection</code></td>
+                <td>1 = Landscape (144x256), 0 = Square (256x256)</td>
+                <td><code>1</code></td>
+            </tr>
+            <tr>
+                <td><code>--open-help</code></td>
+                <td>Open this documentation in browser</td>
+                <td><code>False</code></td>
+            </tr>
+        </table>
     </div>
 </body>
 </html>
