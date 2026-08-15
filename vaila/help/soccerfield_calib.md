@@ -4,7 +4,7 @@
 
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/soccerfield_calib.py`
-- **Version:** 0.3.44 (May 2026)
+- **Version:** 0.3.104 (11 August 2026)
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes — **Frame B → Soccer Tools → Soccer-Field Calib**
 - **CLI Interface:** Yes
@@ -20,17 +20,23 @@ using a small set of clicked pixel keypoints (≥ 6) and the canonical
 3D reference:
 
 - **Legacy 29-pt metre grid:** [`vaila/models/soccerfield_ref3d.csv`](../models/soccerfield_ref3d.csv) (getpixelvideo manual clicks with point names).
-- **32-pt FIFA-dataset order (pitch / YOLO F07VI):** [`vaila/models/soccerfield_ref3d_fifa_dataset.csv`](../models/soccerfield_ref3d_fifa_dataset.csv) — same `p1`…`p32` order as `soccerfield_keypoints_ai` → `field_keypoints_getpixelvideo.csv`.
+
+The automatic 32-point `p1`…`p32` sequence is consumed directly by
+`soccerfield_vitruvian_dlt3d.py`. For this legacy named-point module, columns
+must carry the semantic names in the selected reference or be supplied in
+matching order through `--keypoints`.
 
 Outputs:
 
-- `<stem>_ref2d.csv` — world XY pairs used for fitting (metres, FIFA centre-field system for the FIFA-dataset file)
-- `<stem>.dlt2d` — one or **many rows** (`frame`, 8 DLT coeffs) when `--all-frames` is used with a multi-row pixel CSV (compatible with `vaila/rec2d.py`)
+- `<stem>_ref2d.csv` — world XY pairs used for fitting
+- `<stem>.dlt2d` — one selected frame with 8 DLT coefficients (compatible with `vaila/rec2d.py`)
 - `<stem>_homography_report.txt` — per-point reprojection error
 - `cameras/<stem>_homography.npz` (when `--data-root` is given) —
   fallback for FIFA sequences without an official `cameras/<stem>.npz`
 
-`# TODO: Z vertical (DLT3D future work)` — only Z = 0 ground plane today.
+This module intentionally stops at the Z=0 ground plane. The implemented
+`soccerfield_vitruvian_dlt3d.py` module adds measured goalpost controls and/or
+weak player-bbox height verticals to estimate a time-varying DLT3D camera.
 
 ---
 
@@ -38,26 +44,28 @@ Outputs:
 
 | Tool | Camera | Per frame? | Use |
 |---|---|---|---|
-| `soccerfield_calib.py` | fixed / static **or** AI CSV | **Optional** (`--all-frames`) | Single H from clicks; **per-frame DLT** from `field_keypoints_getpixelvideo.csv` + `--pitch32` |
+| `soccerfield_calib.py` | fixed / static | one selected frame | Named manual/corrected points on Z=0 |
+| `soccerfield_vitruvian_dlt3d.py` | moving broadcast | one row for every supported frame | Pitch plane + goal/player verticals; no raw-coefficient interpolation |
 | `fifa_to_dlt.py` (a.k.a. **`fifa dlt-export`**) | **moving broadcast** | **Yes** (one row / frame) | Pan/tilt/zoom — required for real broadcast |
 | `rec2d_one_dlt2d.py` | fixed | one row of 8 coeffs | Tripod 2D reconstruction |
 | `rec3d_one_dlt3d.py` | fixed (multi-cam) | one row of 11 coeffs/cam | Static lab |
 | `rec2d.py` / `rec3d.py` | moving | per-frame DLT | Broadcast |
 
-> If the camera moves, **always** use the FIFA `cameras/*.npz` route.
-> `soccerfield_calib.py` is a single-frame / static-camera tool.
+> For moving cameras, use supplied per-frame `cameras/*.npz` when available.
+> Otherwise, the Vitruvian DLT3D module can estimate supported frames directly
+> from pitch landmarks and vertical controls. `soccerfield_calib.py` itself
+> remains the plane-only component.
 
 ---
 
 ## Step-by-step (GUI from vailá button)
 
-Launching **Soccer-Field Calib** with no CLI args opens a short dialog:
+The SAM workflow can launch a short **Soccer-Field Calib** dialog:
 
-1. Choose **`field_keypoints_getpixelvideo.csv`** (or any paired `frame,p1_x,p1_y,…` CSV).
-2. Choose an **output folder**.
-3. Enable **Pitch32** when the CSV comes from `soccerfield_keypoints_ai` (auto-ticked if the filename contains `field_keypoints`).
-4. Enable **All frames** to write **one DLT row per CSV row** (broadcast / moving plane approximated frame-wise).
-5. **Run**.
+1. Choose a per-video SAM output directory.
+2. Optionally choose a named-point pixel CSV; otherwise open `getpixelvideo`.
+3. Mark at least six semantic field points on the selected frame.
+4. Run the single-frame Z=0 calibration.
 
 For manual clicks only (no CSV yet), use the CLI with `-v` video to open getpixelvideo, or prepare pixels first.
 
@@ -108,17 +116,6 @@ uv run vaila/soccerfield_calib.py \
   --frame 0 \
   -o /path/to/output_dir
 ```
-
-### Recipe 2b — `soccerfield_keypoints_ai` wide CSV, DLT per frame
-
-```bash
-uv run python -m vaila.soccerfield_calib \
-  -p /path/to/processed_field_kps_*/field_keypoints_getpixelvideo.csv \
-  --pitch32 --all-frames \
-  -o /path/to/calib_out
-```
-
-Uses `vaila/models/soccerfield_ref3d_fifa_dataset.csv` by default with `--pitch32`. Output `*.dlt2d` has one row per frame with enough visible points (≥ 6 by default).
 
 ### Recipe 3 — FIFA fallback (no official cameras NPZ)
 
@@ -233,11 +230,14 @@ uv run python -m vaila.soccerfield_keypoints_ai \
 
 # 2. Optional manual refine in getpixelvideo (open the wide CSV).
 
-# 3. DLT2D homography (single static frame from the video)
-uv run vaila/soccerfield_calib.py \
-  -v video.mp4 \
-  -p out_kps/processed_field_kps_*/field_keypoints_getpixelvideo.csv \
-  --frame 0 -o out_calib/
+# 3a. Static frame: rename/match the visible pN columns to semantic field names,
+#     then run soccerfield_calib.py with --frame 0.
+# 3b. Moving camera: combine the 32-point CSV with SAM bbox verticals:
+uv run python -m vaila.soccerfield_vitruvian_dlt3d \
+  --field-pixels out_kps/processed_field_kps_*/field_keypoints_getpixelvideo.csv \
+  --bbox-bottom out_sam/VIDEO/sam_vaila_bottom.csv \
+  --bbox-top out_sam/VIDEO/sam_vaila_top.csv \
+  --heights anthropometry_match.csv --output out_calib/
 
 # 4. Reconstruct player pixels → field metres
 uv run vaila/rec2d.py \
@@ -246,9 +246,9 @@ uv run vaila/rec2d.py \
   --output-dir player_world/ --rate 30
 ```
 
-For **broadcast (moving camera)**, replace step 3 by the FIFA
-`cameras/*.npz` → per-frame DLT route — see
-`vaila/help/vaila_sam.html` (section *Full broadcast pipeline*).
+For **broadcast (moving camera)**, supplied `cameras/*.npz` remain the strongest
+route. The Vitruvian route above is the implemented calibration fallback when
+only image field evidence and vertical controls are available.
 
 ---
 
@@ -258,7 +258,7 @@ For **broadcast (moving camera)**, replace step 3 by the FIFA
 |---|---|---|
 | "Need at least 6 points" | Not enough clicks | Click 8–10 well-distributed kps |
 | Huge world error (>5 m) | Wrong correspondence | Verify name ↔ world xy in `--list-keypoints` |
-| Fit fine, players still wrong | Camera moves between frames | Use `fifa_to_dlt.py` (per-frame DLT) instead |
+| Fit fine, players still wrong | Camera moves between frames | Use `fifa_to_dlt.py` or `soccerfield_vitruvian_dlt3d.py` per frame |
 | `pitch_keypoints.png` index ≠ FIFA name | Two indexing systems | The 32-id system (AI seed) is generic; the 29 FIFA names are the calibration targets — match by visual location |
 
 ---
@@ -268,8 +268,9 @@ For **broadcast (moving camera)**, replace step 3 by the FIFA
 - `soccerfield_keypoints_ai.py` — AI seed for the 32 keypoints
 - `getpixelvideo.py` — manual click / refine
 - `fifa_to_dlt.py` — per-frame DLT for moving camera
+- `soccerfield_vitruvian_dlt3d.py` — time-varying pitch + Vitruvian DLT3D
 - `vaila/rec2d.py`, `vaila/rec3d.py` — pixel → world reconstruction
 - `vaila/dlt2d.py`, `vaila/dlt3d.py` — DLT math
 - `vaila/help/vaila_sam.html` — FIFA pipeline + broadcast section
 
-Generated: April 26, 2026.
+Updated: 11 August 2026.

@@ -23,7 +23,8 @@ This tool calculates the transformation between 2D pixel coordinates and 2D fiel
 
 ## Broadcast vs. Static
 - For **static cameras**, a single DLT row is sufficient.
-- For **moving/broadcast cameras**, use the **FIFA cams→DLT** workflow to generate per-frame calibration.
+- For **moving/broadcast cameras** with supplied camera parameters, use the **FIFA cams→DLT** workflow.
+- Without supplied camera parameters, use `soccerfield_vitruvian_dlt3d.py` to combine per-frame pitch landmarks with goalpost or player-bbox vertical controls.
 
 ---
 See also: [FIFA Workflow](../../docs/fifa_workflow.md), [DLT Reconstruction](../../docs/dlt2d.md)
