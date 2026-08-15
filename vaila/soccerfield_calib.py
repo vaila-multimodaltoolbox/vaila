@@ -19,15 +19,14 @@ Pipeline (per video):
 Batch reconstruction of player pixel trajectories → field metres is available
 through :func:`reconstruct_world_coords`, which wraps :func:`vaila.rec2d.rec2d`.
 
-Z vertical (vertical anchors — goalposts, sideboards, anthropometry)::
+This module remains the Z=0 component.  Time-varying DLT3D calibration from
+the same field plane plus measured goalpost controls and/or weak player-bbox
+height verticals is implemented in :mod:`vaila.soccerfield_vitruvian_dlt3d`.
 
-    # TODO: Z vertical (DLT3D future work, deferred)
-    #   - left_goal_top_post, right_goal_top_post (Z = 2.44 m)
-    #   - stadium sideboards / crossbar endpoints
-    #   - average player height (1.80 m) as a reprojection prior
-    # This script only handles the Z = 0 ground plane today.
-
-Author: vailá team (17 April 2026).
+Author: vailá team
+Created: 17 April 2026
+Update Date: 11 August 2026
+Version: 0.3.104
 """
 
 from __future__ import annotations

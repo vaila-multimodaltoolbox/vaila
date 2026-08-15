@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 137 | **Categories:** 7 | **Generated on:** 14/08/2026 (v0.3.105)
+**Total documented modules:** 138 | **Categories:** 7 | **Generated on:** 11/08/2026 (v0.3.104)
 
 ## Markerless 2D chooser (Frame B → B1_r1_c4)
 
@@ -128,6 +128,9 @@ Frame B button **Markerless 3D** opens (v0.3.101 — Sapiens2 3D Pose gained an 
 - **soccerfield_calib (Soccer-Field Calib)**
   - [📄 HTML](soccerfield_calib.html)
   - [📝 Markdown](soccerfield_calib.md)
+- **soccerfield_vitruvian_dlt3d (Pitch + Vitruvian DLT3D)**
+  - [📄 HTML](soccerfield_vitruvian_dlt3d.html)
+  - [📝 Markdown](soccerfield_vitruvian_dlt3d.md)
 - **vek (vaila-ElasticKick)**
   - [📄 HTML](vek.html)
   - [📝 Markdown](vek.md)
