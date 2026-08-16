@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 06 August 2026
-Version: 0.3.99
+Update Date: 16 August 2026
+Version: 0.3.106
 
 Description:
     CPU-only rerenderer for an existing SAM3+DINOv3 3D (SAM 3D Body) run. It
@@ -85,7 +85,9 @@ MESH_EXPORT_FORMATS = ("none", "obj", "ply")
 
 
 def _log(message: str) -> None:
-    print(f">> vaila/sam3dinov3_visualize: {message}", flush=True)
+    # Detached/long-running renders must not die on a dropped terminal (EIO/BrokenPipe).
+    with contextlib.suppress(OSError, BrokenPipeError):
+        print(f">> vaila/sam3dinov3_visualize: {message}", flush=True)
 
 
 def _try_import_tqdm() -> Any:
@@ -439,7 +441,10 @@ def _open_writer(path: Path, fps: float, size: tuple[int, int]) -> tuple[cv2.Vid
     for suffix, codec in ((".mp4", "mp4v"), (".avi", "XVID")):
         candidate = path.with_suffix(suffix)
         writer = cv2.VideoWriter(
-            str(candidate), cv2.VideoWriter_fourcc(*codec), fps, size  # ty: ignore[unresolved-attribute]
+            str(candidate),
+            cv2.VideoWriter_fourcc(*codec),
+            fps,
+            size,  # ty: ignore[unresolved-attribute]
         )
         if writer.isOpened():
             return writer, candidate
@@ -505,7 +510,9 @@ def render_selected_video(
                 step = max(1, total_frames // 10)
                 if frame_count % step == 0 or frame_count == total_frames:
                     pct = (frame_count / total_frames) * 100.0
-                    _log(f"Rendering ID {selected_id}: frame {frame_count}/{total_frames} ({pct:.1f}%)")
+                    _log(
+                        f"Rendering ID {selected_id}: frame {frame_count}/{total_frames} ({pct:.1f}%)"
+                    )
             elif frame_count % 100 == 0:
                 _log(f"Rendering ID {selected_id}: frame {frame_count}...")
     finally:

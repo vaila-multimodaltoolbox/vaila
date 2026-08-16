@@ -4,8 +4,8 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.104
-- **Updated:** 2026-08-11
+- **Version:** 0.3.107
+- **Updated:** 2026-08-16
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -266,6 +266,37 @@ Sapiens2 in vailá is **top-down** pose — it does not estimate all joints on t
 **When to lower:** CUDA **OOM** on crowded frames → try `--pose-batch-size 1`. Also consider lowering `--max-persons` to cap detections.
 
 **Not `--stride`:** stride skips *frames*; pose-batch-size batches *persons within one frame*.
+
+**It's a VRAM ceiling, not a throughput knob.** Because the realized batch is
+`min(pose_batch_size, persons_in_this_frame)`, raising it above the number of
+people actually in your footage has little to no effect on the real GPU work
+— it only raises how large a simultaneous batch *can* get on a crowded
+frame. Use `--profile` (below) if you want to measure this on your own
+footage instead of guessing.
+
+#### `--profile` — diagnose where time goes at a given batch size (v0.3.107)
+
+Add `--profile` to any run to get a per-stage timing breakdown printed at the
+end of each video, plus a `pose_profile.json` written next to its output
+dir:
+
+- **CPU preprocess** — `pipeline()` warp/normalize per crop.
+- **H2D + normalize** — moving each crop to the GPU.
+- **GPU forward** — the actual `model(inputs)` pass(es) (both passes when
+  `--flip-test` is on).
+- **CPU sync + decode** — `.cpu()` + keypoint decode.
+- **Realized batch-size histogram** — how many chunks actually hit size 1,
+  2, 3… vs your requested `--pose-batch-size` ceiling, and what percentage
+  of chunks reached that ceiling.
+
+Diagnostic only, off by default, zero overhead when omitted, CLI-only (no
+GUI checkbox). To compare two batch sizes on the same clip:
+
+```bash
+uv run vaila/vaila_sapiens.py -i clip.mp4 -o out2  --pose-batch-size 2  --profile
+uv run vaila/vaila_sapiens.py -i clip.mp4 -o out16 --pose-batch-size 16 --profile
+diff <(jq -S . out2/*/pose_profile.json) <(jq -S . out16/*/pose_profile.json)
+```
 
 #### Detection thresholds
 

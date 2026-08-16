@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 14 August 2026
-Version: 0.3.105
+Update Date: 16 August 2026
+Version: 0.3.107
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -54,6 +54,7 @@ import shlex
 import shutil
 import sys
 import tkinter as tk
+import traceback
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
@@ -145,7 +146,9 @@ class CombinedGuiSettings:
 
 
 def _log(message: str) -> None:
-    print(f">> vaila/sam3sapiens2: {message}", flush=True)
+    # Overnight/detached runs must not die on a dropped terminal (EIO/BrokenPipe).
+    with contextlib.suppress(OSError, BrokenPipeError):
+        print(f">> vaila/sam3sapiens2: {message}", flush=True)
 
 
 def _repo_root() -> Path:
@@ -1437,15 +1440,22 @@ def run_sam_stage(
         raise RuntimeError(f"SAM3 stage returned incomplete output: {reason}")
 
 
-def _write_failure(output_dir: Path, video_path: Path, reason: str) -> None:
+def _write_failure(
+    output_dir: Path,
+    video_path: Path,
+    reason: str,
+    traceback_str: str | None = None,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "FAILED_sam3sapiens2.txt").write_text(
+    body = (
         "SAM3+Sapiens2 FAILED\n"
         f"video={video_path}\n"
         f"timestamp={dt.datetime.now().isoformat(timespec='seconds')}\n"
-        f"reason={reason}\n",
-        encoding="utf-8",
+        f"reason={reason}\n"
     )
+    if traceback_str:
+        body += f"\nTraceback:\n{traceback_str}\n"
+    (output_dir / "FAILED_sam3sapiens2.txt").write_text(body, encoding="utf-8")
 
 
 def _process_one_video(
@@ -1491,7 +1501,7 @@ def _process_one_video(
             draw_ids=not args.no_draw_id,
         )
     except Exception as exc:
-        _write_failure(output_dir, video_path, str(exc))
+        _write_failure(output_dir, video_path, str(exc), traceback.format_exc())
         raise
 
 
@@ -1685,7 +1695,6 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
             frm.grid(sticky="nsew")
             self.input_var = tk.StringVar()
             self.output_var = tk.StringVar()
-            self.resume_var = tk.StringVar()
             self.sam_var = tk.StringVar()
             self.prompt_var = tk.StringVar(value="person")
             self.model_var = tk.StringVar(value="1b")
@@ -1709,18 +1718,12 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
                 text=(
                     "SAM3 defines bbox, contour and ID; Sapiens2 pose runs without DETR. "
                     "Use Dir… for batch (all videos in a folder) or File… for one clip. "
-                    "Resume… continues a previous processed_sam3sapiens2_* run."
+                    "Re-running with the same output parent auto-resumes a matching "
+                    "previous processed_sam3sapiens2_* run."
                 ),
             ).grid(row=1, column=0, columnspan=5, sticky="w", pady=(0, 10))
             self._input_path_row(frm, 2)
             self._path_row(frm, 3, "Output parent", self.output_var, self._browse_output)
-            self._path_row(
-                frm,
-                4,
-                "Resume run (optional)",
-                self.resume_var,
-                self._browse_resume,
-            )
             self._path_row(
                 frm,
                 5,
@@ -1822,14 +1825,6 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
             if path:
                 self.output_var.set(path)
 
-        def _browse_resume(self) -> None:
-            path = filedialog.askdirectory(
-                parent=self,
-                title="Select processed_sam3sapiens2_* run to resume",
-            )
-            if path:
-                self.resume_var.set(path)
-
         def _browse_sam(self) -> None:
             path = filedialog.askdirectory(
                 parent=self,
@@ -1854,14 +1849,10 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
                         "Use Dir… for a folder of .mp4/.avi/.mov/.mkv/.webm files, "
                         "or File… for a single clip."
                     )
-                resume_raw = self.resume_var.get().strip()
-                resume = Path(resume_raw).expanduser() if resume_raw else None
-                if resume is not None and not resume.is_dir():
-                    raise ValueError(f"Resume run directory not found: {resume}")
                 output_raw = self.output_var.get().strip()
                 output_parent = Path(output_raw).expanduser() if output_raw else None
-                if resume is None and output_parent is None:
-                    raise ValueError("Select an output parent folder, or a Resume run directory.")
+                if output_parent is None:
+                    raise ValueError("Select an output parent folder.")
                 sam_raw = self.sam_var.get().strip()
                 sam_results = Path(sam_raw).expanduser() if sam_raw else None
                 if sam_results is not None and not sam_results.exists():
@@ -1870,7 +1861,7 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
                 result = CombinedGuiSettings(
                     input_path=input_path,
                     output_parent=output_parent,
-                    resume=resume,
+                    resume=None,
                     sam_results=sam_results,
                     prompt=self.prompt_var.get().strip() or "person",
                     model=self.model_var.get().strip() or "1b",

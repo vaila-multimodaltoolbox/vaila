@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 14 August 2026
-Version: 0.3.105
+Update Date: 16 August 2026
+Version: 0.3.107
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -77,6 +77,7 @@ import os
 import shlex
 import sys
 import tkinter as tk
+import traceback
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
@@ -327,7 +328,9 @@ class Sam3dGuiSettings:
 def _log(message: str) -> None:
     # ``>>`` instead of ``[brackets]``: absl logging (pulled in by mediapipe /
     # opencv) silently swallows bracketed stdout prefixes.
-    print(f">> vaila/sam3dinov3: {message}", flush=True)
+    # Overnight/detached runs must not die on a dropped terminal (EIO/BrokenPipe).
+    with contextlib.suppress(OSError, BrokenPipeError):
+        print(f">> vaila/sam3dinov3: {message}", flush=True)
 
 
 def _module_dir() -> Path:
@@ -1107,15 +1110,22 @@ Weights      https://huggingface.co/{DEFAULT_HF_REPO_ID}
     return path
 
 
-def _write_failure(output_dir: Path, video_path: Path, reason: str) -> None:
+def _write_failure(
+    output_dir: Path,
+    video_path: Path,
+    reason: str,
+    traceback_str: str | None = None,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "FAILED_sam3dinov3.txt").write_text(
+    body = (
         "SAM3+DINOv3 (SAM 3D Body) FAILED\n"
         f"video={video_path}\n"
         f"timestamp={dt.datetime.now().isoformat(timespec='seconds')}\n"
-        f"reason={reason}\n",
-        encoding="utf-8",
+        f"reason={reason}\n"
     )
+    if traceback_str:
+        body += f"\nTraceback:\n{traceback_str}\n"
+    (output_dir / "FAILED_sam3dinov3.txt").write_text(body, encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -1421,7 +1431,7 @@ def _process_one_video(
         guidance = load_sam_guidance(sam_dir)
         summary = run_sam3d_from_sam(video_path, output_dir, guidance, args)
     except Exception as exc:
-        _write_failure(output_dir, video_path, str(exc))
+        _write_failure(output_dir, video_path, str(exc), traceback.format_exc())
         raise
     with contextlib.suppress(OSError):
         (output_dir / "FAILED_sam3dinov3.txt").unlink(missing_ok=True)
@@ -1620,7 +1630,6 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
 
             self.input_var = tk.StringVar()
             self.output_var = tk.StringVar()
-            self.resume_var = tk.StringVar()
             self.sam_var = tk.StringVar()
             self.weights_var = tk.StringVar(value=str(default_weights_dir()))
             self.prompt_var = tk.StringVar(value="person")
@@ -1676,7 +1685,6 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
             row += 1
 
             _path_row("Output parent", self.output_var, self._browse_output)
-            _path_row("Resume run (optional)", self.resume_var, self._browse_resume)
             _path_row("Existing SAM results (optional)", self.sam_var, self._browse_sam)
             _path_row("SAM 3D Body weights dir", self.weights_var, self._browse_weights)
 
@@ -1748,13 +1756,6 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
             if path:
                 self.output_var.set(path)
 
-        def _browse_resume(self) -> None:
-            path = filedialog.askdirectory(
-                parent=self, title="Select processed_sam3dinov3_* run to resume"
-            )
-            if path:
-                self.resume_var.set(path)
-
         def _browse_sam(self) -> None:
             path = filedialog.askdirectory(
                 parent=self, title="Select processed_sam_* or per-video SAM directory"
@@ -1783,14 +1784,10 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                 videos = _find_videos(input_path)
                 if not videos:
                     raise ValueError(f"No supported videos found under: {input_path}")
-                resume_raw = self.resume_var.get().strip()
-                resume = Path(resume_raw).expanduser() if resume_raw else None
-                if resume is not None and not resume.is_dir():
-                    raise ValueError(f"Resume run directory not found: {resume}")
                 output_raw = self.output_var.get().strip()
                 output_parent = Path(output_raw).expanduser() if output_raw else None
-                if resume is None and output_parent is None:
-                    raise ValueError("Select an output parent folder, or a Resume run directory.")
+                if output_parent is None:
+                    raise ValueError("Select an output parent folder.")
                 sam_raw = self.sam_var.get().strip()
                 sam_results = Path(sam_raw).expanduser() if sam_raw else None
                 if sam_results is not None and not sam_results.exists():
@@ -1804,7 +1801,7 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                 result = Sam3dGuiSettings(
                     input_path=input_path,
                     output_parent=output_parent,
-                    resume=resume,
+                    resume=None,
                     sam_results=sam_results,
                     prompt=self.prompt_var.get().strip() or "person",
                     device=max(0, int(self.device_var.get())),

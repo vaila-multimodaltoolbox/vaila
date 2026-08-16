@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.3.105
-- **Updated:** 2026-08-14
+- **Version:** 0.3.107
+- **Updated:** 2026-08-16
 - **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes
 - **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original. Sem `--resume`, uma execução repetida com o mesmo `-i`/`-o` já retoma sozinha o `processed_sam3sapiens2_*` correspondente (auto-resume); use `--fresh` para forçar uma pasta nova.
@@ -105,7 +105,9 @@ uv run python -u vaila/sam3sapiens2.py \
 - a mere `sam_tracks.csv` is not enough: partial SAM runs are rejected and rerun;
 - failed videos clear stale `_chunks` / `FAILED_*.txt` and re-run SAM3 via the CUDA-clean coordinator, then Sapiens2.
 
-GUI: **Resume run (optional)** in the SAM3+Sapiens2 dialog.
+GUI: no field for this (removed in v0.3.107) — re-running with the same
+output parent auto-resumes automatically (see below). `--resume` for an
+explicit path override is CLI-only.
 
 ### Automatic resume (default, no flag needed)
 
