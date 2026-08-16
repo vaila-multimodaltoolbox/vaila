@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 06 August 2026
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 16 August 2026
+Version: 0.3.106
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery, complementing
@@ -125,6 +125,7 @@ import os
 import re
 import sys
 import tkinter as tk
+import traceback
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
@@ -267,7 +268,9 @@ INFERENCE_TYPES = ("full", "body", "hand")
 def _log(message: str) -> None:
     # ``>>`` instead of ``[brackets]``: absl logging (pulled in by mediapipe /
     # opencv) silently swallows bracketed stdout prefixes.
-    print(f">> vaila/sapiens2_3d: {message}", flush=True)
+    # Overnight/detached runs must not die on a dropped terminal (EIO/BrokenPipe).
+    with contextlib.suppress(OSError, BrokenPipeError):
+        print(f">> vaila/sapiens2_3d: {message}", flush=True)
 
 
 def _module_dir() -> Path:
@@ -680,15 +683,22 @@ Weights      https://huggingface.co/{DEFAULT_HF_REPO_ID}
     return path
 
 
-def _write_failure(output_dir: Path, video_path: Path, reason: str) -> None:
+def _write_failure(
+    output_dir: Path,
+    video_path: Path,
+    reason: str,
+    traceback_str: str | None = None,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "FAILED_sapiens2_3d.txt").write_text(
+    body = (
         "Sapiens2-guided SAM 3D Body FAILED\n"
         f"video={video_path}\n"
         f"timestamp={dt.datetime.now().isoformat(timespec='seconds')}\n"
-        f"reason={reason}\n",
-        encoding="utf-8",
+        f"reason={reason}\n"
     )
+    if traceback_str:
+        body += f"\nTraceback:\n{traceback_str}\n"
+    (output_dir / "FAILED_sapiens2_3d.txt").write_text(body, encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -1091,7 +1101,7 @@ def _process_one_video(
         guidance, lookup, json_path = _resolve_sapiens2_front_end(video_path, output_dir, args)
         return run_sapiens2_guided_sam3d(video_path, output_dir, guidance, lookup, json_path, args)
     except Exception as exc:  # noqa: BLE001 - recorded, then re-raised for the caller to count
-        _write_failure(output_dir, video_path, str(exc))
+        _write_failure(output_dir, video_path, str(exc), traceback.format_exc())
         raise
     finally:
         _release_gpu_memory()

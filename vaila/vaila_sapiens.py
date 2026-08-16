@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 16 August 2026
+Version: 0.3.107
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -68,8 +68,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import tkinter as tk
 import tomllib
+import traceback
 import webbrowser
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -246,7 +248,46 @@ Biomechanics / vailá downstream CSVs (written after every run)
 
 def _sapiens_log(message: str) -> None:
     """Terminal progress line (>> prefix survives absl/mediapipe stdout filtering)."""
-    print(f">> vaila/vaila_sapiens: {message}", flush=True)
+    # Overnight/detached runs must not die on a dropped terminal (EIO/BrokenPipe).
+    with contextlib.suppress(OSError, BrokenPipeError):
+        print(f">> vaila/vaila_sapiens: {message}", flush=True)
+
+
+def _format_pose_profile_summary(
+    stats: dict[str, float],
+    frames: int,
+    persons: int,
+    batch_histogram: dict[int, int],
+    requested_batch_size: int,
+) -> dict[str, Any]:
+    """Pure ``--profile`` summary builder -- no torch/CUDA, unit-testable alone.
+
+    ``stats`` holds accumulated seconds per stage (``cpu_preprocess``,
+    ``h2d_normalize``, ``gpu_forward``, ``cpu_sync_decode``, ``wall_total``).
+    """
+    wall_total = stats.get("wall_total", 0.0)
+    stage_ms = {name: seconds * 1000.0 for name, seconds in stats.items()}
+    stage_pct = {
+        name: (100.0 * seconds / wall_total if wall_total > 0 else 0.0)
+        for name, seconds in stats.items()
+        if name != "wall_total"
+    }
+    batch_histogram_sorted = dict(sorted(batch_histogram.items()))
+    total_chunks = sum(batch_histogram_sorted.values())
+    ceiling_reached_pct = (
+        100.0 * batch_histogram_sorted.get(requested_batch_size, 0) / total_chunks
+        if total_chunks > 0
+        else 0.0
+    )
+    return {
+        "frames": frames,
+        "stage_ms": stage_ms,
+        "stage_pct": stage_pct,
+        "avg_persons_per_frame": (persons / frames if frames > 0 else 0.0),
+        "batch_histogram_sorted": batch_histogram_sorted,
+        "ceiling_reached_pct": ceiling_reached_pct,
+        "requested_batch_size": requested_batch_size,
+    }
 
 
 def _parse_gui_inference_fields(
@@ -828,8 +869,7 @@ def _require_sapiens_installed() -> None:
             ">> Required setup commands (CLI):\n"
             "   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes\n"
             "   bash bin/setup_sapiens2.sh\n"
-            "   uv pip install -e .local/third_party/sapiens2\n"
-            + "=" * 72 + "\n"
+            "   uv pip install -e .local/third_party/sapiens2\n" + "=" * 72 + "\n"
         )
         print(msg, file=sys.stderr)
         raise ImportError(
@@ -868,6 +908,7 @@ class PoseInferenceSession:
         max_persons: int = 8,
         pose_batch_size: int = 2,
         use_detector: bool = True,
+        profile: bool = False,
     ) -> None:
         _require_sapiens_installed()
         if not spec.config_path.is_file():
@@ -903,6 +944,12 @@ class PoseInferenceSession:
         self.max_persons = max(1, int(max_persons))
         self.pose_batch_size = max(1, int(pose_batch_size))
         self.use_detector = bool(use_detector)
+        self.profile = bool(profile)
+        # Diagnostic timing only fires on a real CUDA session; a CPU-only
+        # session has nothing to synchronize and torch.cuda.synchronize()
+        # would be pointless (or unsafe if CUDA was never initialized).
+        self._prof_cuda = self.profile and str(device).lower().startswith("cuda")
+        self._prof_reset()
 
         _sapiens_log(
             f"Loading Sapiens2 pose ({spec.arch}) from {spec.checkpoint_path.name} on {device} …"
@@ -1023,6 +1070,56 @@ class PoseInferenceSession:
         global_boxes = _restore_sapiens_roi_bboxes(local_boxes, polygon, offset)
         return global_boxes[: self.max_persons], polygon
 
+    def _prof_reset(self) -> None:
+        """(Re)initialize the ``--profile`` accumulators. Cheap even when off."""
+        self._prof_stats: dict[str, float] = {
+            "cpu_preprocess": 0.0,
+            "h2d_normalize": 0.0,
+            "gpu_forward": 0.0,
+            "cpu_sync_decode": 0.0,
+            "wall_total": 0.0,
+        }
+        self._prof_frames = 0
+        self._prof_persons = 0
+        self._prof_batch_histogram: dict[int, int] = {}
+
+    def log_profile_summary(self, *, json_path: Path | None = None) -> dict[str, Any] | None:
+        """Print (and optionally save) the ``--profile`` per-stage breakdown.
+
+        No-op when profiling is off or no frames were processed. Never raises
+        -- a diagnostic write must not fail an otherwise-successful run.
+        """
+        if not self.profile or self._prof_frames == 0:
+            return None
+        summary = _format_pose_profile_summary(
+            self._prof_stats,
+            self._prof_frames,
+            self._prof_persons,
+            self._prof_batch_histogram,
+            self.pose_batch_size,
+        )
+        _sapiens_log(
+            f"--profile summary: {summary['frames']} frames, "
+            f"{summary['stage_ms']['wall_total']:.1f} ms total, "
+            f"avg {summary['avg_persons_per_frame']:.2f} persons/frame"
+        )
+        for name in ("cpu_preprocess", "h2d_normalize", "gpu_forward", "cpu_sync_decode"):
+            _sapiens_log(
+                f"  {name}: {summary['stage_ms'][name]:.1f} ms ({summary['stage_pct'][name]:.1f}%)"
+            )
+        histogram_text = ", ".join(
+            f"{size}:{count}" for size, count in summary["batch_histogram_sorted"].items()
+        )
+        _sapiens_log(
+            f"  realized batch sizes (requested ceiling={summary['requested_batch_size']}): "
+            f"{histogram_text} -- ceiling reached in "
+            f"{summary['ceiling_reached_pct']:.1f}% of chunks"
+        )
+        if json_path is not None:
+            with contextlib.suppress(OSError):
+                json_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        return summary
+
     def process_frame(
         self, image_bgr: np.ndarray, *, roi: SapiensRoi | None = None
     ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
@@ -1060,8 +1157,13 @@ class PoseInferenceSession:
         keypoints: list[np.ndarray] = []
         keypoint_scores: list[np.ndarray] = []
         batch_size = self.pose_batch_size
+        t_frame0 = time.perf_counter() if self.profile else 0.0
         for start in range(0, len(bboxes), batch_size):
             chunk = bboxes[start : start + batch_size]
+            if self.profile:
+                self._prof_batch_histogram[len(chunk)] = (
+                    self._prof_batch_histogram.get(len(chunk), 0) + 1
+                )
             inputs_list = []
             data_samples_list = []
             for local_idx, bbox in enumerate(chunk):
@@ -1071,12 +1173,24 @@ class PoseInferenceSession:
                 data_info: dict[str, Any] = {"img": source_image}
                 data_info["bbox"] = bbox[None]
                 data_info["bbox_score"] = np.ones(1, dtype=np.float32)
-                data = self.model.pipeline(data_info)
-                data = self.model.data_preprocessor(data)
+                if self.profile:
+                    t0 = time.perf_counter()
+                    data = self.model.pipeline(data_info)
+                    self._prof_stats["cpu_preprocess"] += time.perf_counter() - t0
+                    t0 = time.perf_counter()
+                    data = self.model.data_preprocessor(data)
+                    self._prof_stats["h2d_normalize"] += time.perf_counter() - t0
+                else:
+                    data = self.model.pipeline(data_info)
+                    data = self.model.data_preprocessor(data)
                 inputs_list.append(data["inputs"])
                 data_samples_list.append(data["data_samples"])
 
             inputs = torch.cat(inputs_list, dim=0)
+            if self.profile:
+                if self._prof_cuda:
+                    torch.cuda.synchronize()
+                t_fwd0 = time.perf_counter()
             with torch.inference_mode():
                 pred = self.model(inputs)
                 if self.flip_test and self.model.pose_metainfo is not None:
@@ -1085,6 +1199,11 @@ class PoseInferenceSession:
                     flip_indices = self.model.pose_metainfo["flip_indices"]
                     pred_flipped = pred_flipped[:, flip_indices]
                     pred = (pred + pred_flipped) / 2.0
+            if self.profile:
+                if self._prof_cuda:
+                    torch.cuda.synchronize()
+                self._prof_stats["gpu_forward"] += time.perf_counter() - t_fwd0
+                t_dec0 = time.perf_counter()
 
             pred_np = pred.cpu().numpy()
             for i, data_samples in enumerate(data_samples_list):
@@ -1095,6 +1214,12 @@ class PoseInferenceSession:
                 keypoints_i = keypoints_i / input_size * bbox_scale + bbox_center - 0.5 * bbox_scale
                 keypoints.append(keypoints_i[0])
                 keypoint_scores.append(keypoint_scores_i[0])
+            if self.profile:
+                self._prof_stats["cpu_sync_decode"] += time.perf_counter() - t_dec0
+                self._prof_persons += len(chunk)
+        if self.profile:
+            self._prof_frames += 1
+            self._prof_stats["wall_total"] += time.perf_counter() - t_frame0
         return keypoints, keypoint_scores, [np.asarray(b) for b in bboxes]
 
     def render_overlay(
@@ -2071,16 +2196,23 @@ def write_sapiens_getpixelvideo_pose_csvs(
     return written
 
 
-def _write_failure_marker(output_dir: Path, video_path: Path, reason: str) -> None:
+def _write_failure_marker(
+    output_dir: Path,
+    video_path: Path,
+    reason: str,
+    traceback_str: str | None = None,
+) -> None:
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
-        (output_dir / "FAILED_sapiens.txt").write_text(
+        body = (
             f"Sapiens2 Pose FAILED\n"
             f"video={video_path.resolve()}\n"
             f"timestamp={dt.datetime.now().isoformat(timespec='seconds')}\n"
-            f"reason={reason}\n",
-            encoding="utf-8",
+            f"reason={reason}\n"
         )
+        if traceback_str:
+            body += f"\nTraceback:\n{traceback_str}\n"
+        (output_dir / "FAILED_sapiens.txt").write_text(body, encoding="utf-8")
     except OSError:
         pass
 
@@ -2228,6 +2360,7 @@ def _build_sapiens_cli_argv(
     appearance_reid_threshold: float = DEFAULT_APPEARANCE_REID_THRESHOLD,
     flip_test: bool = False,
     pose_batch_size: int | None = None,
+    profile: bool = False,
     roi_config: Path | str | None = None,
     quiet: bool = False,
     for_subprocess: bool = False,
@@ -2264,6 +2397,8 @@ def _build_sapiens_cli_argv(
     ]
     if pose_batch_size is not None:
         cmd += ["--pose-batch-size", str(max(1, int(pose_batch_size)))]
+    if profile:
+        cmd.append("--profile")
     if roi_config is not None:
         cmd += ["--roi-config", str(Path(roi_config).expanduser().resolve())]
     if flip_test:
@@ -2327,6 +2462,7 @@ def _build_isolated_sapiens_cmd(
     flip_test: bool,
     max_persons: int,
     pose_batch_size: int | None,
+    profile: bool = False,
     reid_max_gap: int = DEFAULT_REID_MAX_GAP,
     reid_max_dist: float = DEFAULT_REID_MAX_DIST_PX,
     reid_min_iou: float = DEFAULT_REID_MIN_IOU,
@@ -2363,6 +2499,7 @@ def _build_isolated_sapiens_cmd(
         appearance_reid_threshold=appearance_reid_threshold,
         flip_test=flip_test,
         pose_batch_size=pose_batch_size,
+        profile=profile,
         roi_config=roi_config,
         for_subprocess=True,
     )
@@ -2401,13 +2538,14 @@ def _run_sapiens_batch(
     flip_test: bool = False,
     max_persons: int = 8,
     pose_batch_size: int | None = None,
+    profile: bool = False,
     roi_config: Path | str | None = None,
 ) -> tuple[int, list[str]]:
     """Process videos sequentially; emit log lines parsed by the GUI subprocess poller."""
     failed: list[str] = []
     succeeded = 0
     for idx, vf in enumerate(videos, start=1):
-        print(f"Processing video {idx}/{len(videos)}: {vf.name}", flush=True)
+        _sapiens_log(f"Processing video {idx}/{len(videos)}: {vf.name}")
         out_dir = output_base / vf.stem
         try:
             run_sapiens_on_video(
@@ -2434,17 +2572,18 @@ def _run_sapiens_batch(
                 flip_test=flip_test,
                 max_persons=max_persons,
                 pose_batch_size=pose_batch_size,
+                profile=profile,
                 roi_config=roi_config,
             )
             succeeded += 1
-            print(f"  Done: {out_dir}", flush=True)
+            _sapiens_log(f"  Done: {out_dir}")
         except Exception as e:
             failed.append(f"{vf.name}: {e}")
-            _write_failure_marker(out_dir, vf, str(e))
-            print(f"  ERROR on {vf.name}: {e}", flush=True)
+            _write_failure_marker(out_dir, vf, str(e), traceback.format_exc())
+            _sapiens_log(f"  ERROR on {vf.name}: {e}")
         finally:
             _release_sapiens_gpu_memory()
-    print(f"\nAll done. Output: {output_base}", flush=True)
+    _sapiens_log(f"\nAll done. Output: {output_base}")
     return succeeded, failed
 
 
@@ -2558,6 +2697,7 @@ def run_sapiens_on_video(
     flip_test: bool = False,
     max_persons: int = 8,
     pose_batch_size: int | None = None,
+    profile: bool = False,
     stabilize_ids: bool = True,
     reid_max_gap: int = DEFAULT_REID_MAX_GAP,
     reid_max_dist: float = DEFAULT_REID_MAX_DIST_PX,
@@ -2638,6 +2778,7 @@ def run_sapiens_on_video(
         flip_test=flip_test,
         max_persons=max_persons,
         pose_batch_size=micro_batch,
+        profile=profile,
     )
 
     cap = cv2.VideoCapture(str(video_path))
@@ -2793,6 +2934,7 @@ def run_sapiens_on_video(
         )
 
     _release_sapiens_gpu_memory(session)
+    session.log_profile_summary(json_path=output_dir / "pose_profile.json" if profile else None)
 
     payload = {
         "video": stem,
@@ -3985,6 +4127,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--profile",
+        action="store_true",
+        help=(
+            "Diagnostic: print a per-stage CPU-preprocess/H2D/GPU-forward/decode timing "
+            "breakdown at the end of each video, plus the realized pose-batch-size "
+            "histogram, and write pose_profile.json next to its output dir. "
+            "Zero overhead when off (default)."
+        ),
+    )
+    parser.add_argument(
         "--roi-config",
         type=Path,
         default=None,
@@ -4145,12 +4297,13 @@ def main() -> None:
                 flip_test=flip_test,
                 max_persons=max_persons,
                 pose_batch_size=pose_batch_size,
+                profile=bool(args.profile),
                 roi_config=roi_config,
             )
-            print(f"  Done: {out_dir}")
+            _sapiens_log(f"  Done: {out_dir}")
         except Exception as e:
-            _write_failure_marker(out_dir, video, str(e))
-            print(f"  ERROR on {video.name}: {e}")
+            _write_failure_marker(out_dir, video, str(e), traceback.format_exc())
+            _sapiens_log(f"  ERROR on {video.name}: {e}")
             raise SystemExit(1) from e
         return
 
@@ -4199,7 +4352,9 @@ def main() -> None:
     use_isolation = not args.no_isolate_batch
     if use_isolation:
         scope = "single-video" if len(videos) == 1 else "each video"
-        print(f"[Sapiens2] subprocess-per-video isolation: ENABLED ({scope} in a fresh process)")
+        _sapiens_log(
+            f"[Sapiens2] subprocess-per-video isolation: ENABLED ({scope} in a fresh process)"
+        )
         failed: list[str] = []
         succeeded = 0
         env = os.environ.copy()
@@ -4209,7 +4364,7 @@ def main() -> None:
         else:
             env.pop("TQDM_DISABLE", None)
         for idx, vf in enumerate(videos, 1):
-            print(f"Processing video {idx}/{len(videos)}: {vf.name}", flush=True)
+            _sapiens_log(f"Processing video {idx}/{len(videos)}: {vf.name}")
             if not args.quiet:
                 _sapiens_log(
                     "Spawning isolated worker — expect 1–2 min of model load, "
@@ -4234,6 +4389,7 @@ def main() -> None:
                 flip_test=flip_test,
                 max_persons=max_persons,
                 pose_batch_size=pose_batch_size,
+                profile=bool(args.profile),
                 roi_config=roi_config,
                 reid_max_gap=args.reid_max_gap,
                 reid_max_dist=args.reid_max_dist,
@@ -4250,17 +4406,17 @@ def main() -> None:
                     cmd,
                     env=env,
                     device=int(args.device),
-                    log=lambda message: print(f"  [Sapiens2] {message}", flush=True),
+                    log=lambda message: _sapiens_log(f"  [Sapiens2] {message}"),
                 )
                 rc = gpu_result.returncode
             except KeyboardInterrupt:
-                print(f"  INTERRUPTED on {vf.name}")
+                _sapiens_log(f"  INTERRUPTED on {vf.name}")
                 raise
             except GpuMemoryRecoveryError as exc:
                 reason = f"GPU cleanup barrier failed: {exc}"
                 failed.append(f"{vf.name}: {reason}")
-                _write_failure_marker(out_dir, vf, reason)
-                print(f"  ERROR on {vf.name}: {reason}", flush=True)
+                _write_failure_marker(out_dir, vf, reason, traceback.format_exc())
+                _sapiens_log(f"  ERROR on {vf.name}: {reason}")
                 raise SystemExit(1) from exc
             if rc == 0:
                 complete, reason = validate_sapiens_run_complete(
@@ -4269,15 +4425,15 @@ def main() -> None:
                 )
                 if complete:
                     succeeded += 1
-                    print(f"  Done: {out_dir} — {reason}", flush=True)
+                    _sapiens_log(f"  Done: {out_dir} — {reason}")
                 else:
                     failed.append(f"{vf.name}: {reason}")
                     _write_failure_marker(out_dir, vf, reason)
-                    print(f"  ERROR on {vf.name}: {reason}", flush=True)
+                    _sapiens_log(f"  ERROR on {vf.name}: {reason}")
             else:
                 failed.append(f"{vf.name}: subprocess exit={rc}")
-                print(f"  ERROR on {vf.name}: subprocess exit={rc}", flush=True)
-        print(f"\nAll done. Output: {output_base}", flush=True)
+                _sapiens_log(f"  ERROR on {vf.name}: subprocess exit={rc}")
+        _sapiens_log(f"\nAll done. Output: {output_base}")
         if failed:
             raise SystemExit(1)
         if succeeded == 0:
@@ -4308,6 +4464,7 @@ def main() -> None:
         flip_test=flip_test,
         max_persons=max_persons,
         pose_batch_size=pose_batch_size,
+        profile=bool(args.profile),
         roi_config=roi_config,
     )
     if failed:

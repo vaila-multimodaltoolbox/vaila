@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 16 August 2026
+Version: 0.3.106
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -99,6 +99,7 @@ import subprocess
 import sys
 import time
 import tkinter as tk
+import traceback
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
@@ -1808,7 +1809,9 @@ def _run_sam3_postprocess_for_dir(
         if log is not None:
             log(msg)
         else:
-            print(msg, flush=True)
+            # Overnight/detached runs must not die on a dropped terminal (EIO/BrokenPipe).
+            with contextlib.suppress(OSError, BrokenPipeError):
+                print(msg, flush=True)
 
     try:
         from vaila.sam_postprocess import extract_points_from_sam_run, write_vaila_anchor_csvs
@@ -2747,7 +2750,9 @@ def _process_video_chunked(
         if log is not None:
             log(s)
         else:
-            print(s)
+            # Overnight/detached runs must not die on a dropped terminal (EIO/BrokenPipe).
+            with contextlib.suppress(OSError, BrokenPipeError):
+                print(s)
 
     # Determine chunk size.  This is OOM-recovery territory: by definition we
     # are running because the in-process retry ladder failed for the source
@@ -2904,7 +2909,7 @@ def _process_video_chunked(
         except GpuMemoryRecoveryError as e:
             reason = f"GPU cleanup barrier failed after chunk {ci + 1}: {e}"
             _log(f"  [SAM3-CHUNK] {reason}")
-            _write_failure_marker(output_dir, video_file, reason)
+            _write_failure_marker(output_dir, video_file, reason, traceback.format_exc())
             return False, reason
         except Exception as e:
             _log(f"  [SAM3-CHUNK] Exception on chunk {ci + 1}: {e}")
@@ -4369,18 +4374,25 @@ def _sam3_build_oom_retry_attempts(
     return uniq
 
 
-def _write_failure_marker(output_dir: Path, video_path: Path, reason: str) -> None:
+def _write_failure_marker(
+    output_dir: Path,
+    video_path: Path,
+    reason: str,
+    traceback_str: str | None = None,
+) -> None:
     """Mark a video as failed inside its (otherwise empty) output dir."""
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         marker = output_dir / "FAILED_sam.txt"
-        marker.write_text(
+        body = (
             f"SAM 3 video FAILED\n"
             f"video={video_path.resolve()}\n"
             f"timestamp={dt.datetime.now().isoformat(timespec='seconds')}\n"
-            f"reason={reason}\n",
-            encoding="utf-8",
+            f"reason={reason}\n"
         )
+        if traceback_str:
+            body += f"\nTraceback:\n{traceback_str}\n"
+        marker.write_text(body, encoding="utf-8")
     except OSError:
         pass
 
@@ -4432,7 +4444,9 @@ def _process_one_video_with_oom_retry(
         if log is not None:
             log(s)
         else:
-            print(s)
+            # Overnight/detached runs must not die on a dropped terminal (EIO/BrokenPipe).
+            with contextlib.suppress(OSError, BrokenPipeError):
+                print(s)
 
     n_src_frames = _video_frame_count(str(video_file))
     attempts = _sam3_build_oom_retry_attempts(
@@ -4492,7 +4506,7 @@ def _process_one_video_with_oom_retry(
         except Exception as e:
             last_err = str(e)
             if not _is_cuda_oom_error(e):
-                _write_failure_marker(output_dir, video_file, last_err)
+                _write_failure_marker(output_dir, video_file, last_err, traceback.format_exc())
                 return False, last_err
             if attempt_idx >= len(attempts):
                 # Fall through to chunking fallback
@@ -4566,7 +4580,7 @@ def _process_one_video_with_oom_retry(
         except Exception as e:
             last_err = str(e)
             if not _is_cuda_oom_error(e):
-                _write_failure_marker(output_dir, video_file, last_err)
+                _write_failure_marker(output_dir, video_file, last_err, traceback.format_exc())
                 return False, last_err
     # All retry attempts exhausted — fall back to divide-and-conquer chunking.
     # This splits the video into temporal segments small enough for VRAM,
@@ -6225,12 +6239,18 @@ def main() -> None:
         # with EXIT_NEEDS_CHUNKING, we can run ``_process_video_chunked`` from
         # *here* (the coordinator), spawning chunk subprocesses against a
         # near-empty GPU instead of the 20 GiB-poisoned victim process.
+        def _log(message: str) -> None:
+            # Overnight/detached stride=1 runs must not die on a dropped terminal
+            # (EIO/BrokenPipe) -- log lines are best-effort, never fatal.
+            with contextlib.suppress(OSError, BrokenPipeError):
+                print(message, flush=True)
+
         use_isolation = not args.no_isolate_batch
         failed_cli: list[str] = []
 
         if use_isolation:
             scope = "single-video" if len(video_files) == 1 else "each video"
-            print(f"[batch] subprocess-per-video isolation: ENABLED ({scope} in a fresh process)")
+            _log(f"[batch] subprocess-per-video isolation: ENABLED ({scope} in a fresh process)")
 
             def _build_isolated_cmd(video_file: Path, out_dir: Path) -> list[str]:
                 cmd_local = [
@@ -6293,9 +6313,9 @@ def main() -> None:
                 return cmd_local
 
             for idx, video_file in enumerate(video_files, 1):
-                print(f"\n{'=' * 60}")
-                print(f"Processing video {idx}/{len(video_files)}: {video_file.name} (isolated)")
-                print(f"{'=' * 60}")
+                _log(f"\n{'=' * 60}")
+                _log(f"Processing video {idx}/{len(video_files)}: {video_file.name} (isolated)")
+                _log(f"{'=' * 60}")
                 exact_output = os.environ.get("VAILA_SAM_COORDINATOR_OUTPUT_DIR")
                 out_dir = (
                     Path(exact_output).resolve() if exact_output else output_base / video_file.stem
@@ -6310,11 +6330,11 @@ def main() -> None:
                         cmd,
                         env=env,
                         device=0,
-                        log=lambda message: print(f"  [SAM3] {message}", flush=True),
+                        log=lambda message: _log(f"  [SAM3] {message}"),
                     )
                     rc = gpu_result.returncode
                 except KeyboardInterrupt:
-                    print(f"  INTERRUPTED on {video_file.name}")
+                    _log(f"  INTERRUPTED on {video_file.name}")
                     failed_cli.append(f"{video_file.name}: interrupted")
                     raise
                 if rc == 0:
@@ -6323,13 +6343,13 @@ def main() -> None:
                         expected_frames=_video_frame_count(str(video_file)),
                     )
                     if complete:
-                        print(f"  Done: {out_dir} — {reason}")
+                        _log(f"  Done: {out_dir} — {reason}")
                         continue
                     rc = 1
                     _write_failure_marker(out_dir, video_file, reason)
-                    print(f"  ERROR on {video_file.name}: {reason}")
+                    _log(f"  ERROR on {video_file.name}: {reason}")
                 if rc == EXIT_NEEDS_CHUNKING:
-                    print(
+                    _log(
                         f"  [coordinator] {video_file.name}: per-video subprocess requested chunked fallback; "
                         "running chunked divide-and-conquer from coordinator (clean GPU)..."
                     )
@@ -6370,20 +6390,20 @@ def main() -> None:
                         postprocess_points=args.postprocess_points,
                     )
                     if chunk_ok:
-                        print(f"  Done (chunked): {out_dir} — {chunk_msg}")
+                        _log(f"  Done (chunked): {out_dir} — {chunk_msg}")
                     else:
                         err_msg = f"chunked fallback failed: {chunk_msg}"
-                        print(f"  ERROR on {video_file.name}: {err_msg}")
+                        _log(f"  ERROR on {video_file.name}: {err_msg}")
                         failed_cli.append(f"{video_file.name}: {err_msg}")
                 else:
                     err_msg = _format_subprocess_exit_diagnosis(rc)
-                    print(f"  ERROR on {video_file.name}: {err_msg}")
+                    _log(f"  ERROR on {video_file.name}: {err_msg}")
                     failed_cli.append(f"{video_file.name}: {err_msg}")
         else:
             for idx, video_file in enumerate(video_files, 1):
-                print(f"\n{'=' * 60}")
-                print(f"Processing video {idx}/{len(video_files)}: {video_file.name}")
-                print(f"{'=' * 60}")
+                _log(f"\n{'=' * 60}")
+                _log(f"Processing video {idx}/{len(video_files)}: {video_file.name}")
+                _log(f"{'=' * 60}")
                 exact_output = os.environ.get("VAILA_SAM_COORDINATOR_OUTPUT_DIR")
                 out_dir = (
                     Path(exact_output).resolve() if exact_output else output_base / video_file.stem
@@ -6416,16 +6436,16 @@ def main() -> None:
                     overlap_frames=int(getattr(args, "overlap_frames", 2)),
                 )
                 if ok:
-                    print(f"  Done: {out_dir}")
+                    _log(f"  Done: {out_dir}")
                 else:
-                    print(f"  ERROR on {video_file.name}: {err}")
+                    _log(f"  ERROR on {video_file.name}: {err}")
                     failed_cli.append(f"{video_file.name}: {err}")
                 _release_sam3_gpu_memory()
-        print(f"\nAll done. Output: {output_base}")
+        _log(f"\nAll done. Output: {output_base}")
         if failed_cli:
-            print(f"Failed ({len(failed_cli)}/{len(video_files)}):")
+            _log(f"Failed ({len(failed_cli)}/{len(video_files)}):")
             for line in failed_cli:
-                print(f"  - {line}")
+                _log(f"  - {line}")
 
         all_failed = len(failed_cli) >= len(video_files)
         if args.postprocess_points != "none" and not all_failed:
@@ -6436,19 +6456,19 @@ def main() -> None:
                     write_vaila_anchor_csvs_for_batch,
                 )
 
-                print(f"\n[postprocess] mode={args.postprocess_points}")
+                _log(f"\n[postprocess] mode={args.postprocess_points}")
                 outs = extract_points_for_batch(ob, mode=args.postprocess_points)
                 vaila_outs = write_vaila_anchor_csvs_for_batch(ob)
-                print(
+                _log(
                     f"[postprocess] wrote {len(outs)} sam_points.csv + "
                     f"{len(vaila_outs)} vailá anchor CSV(s)."
                 )
             except Exception as exc:
-                print(f"[postprocess] FAILED: {exc}")
+                _log(f"[postprocess] FAILED: {exc}")
                 if not failed_cli:
                     failed_cli.append(f"postprocess: {exc}")
         elif args.postprocess_points != "none" and all_failed:
-            print("\n[postprocess] skipped because all SAM 3 video runs failed.")
+            _log("\n[postprocess] skipped because all SAM 3 video runs failed.")
 
         if failed_cli:
             raise SystemExit(3)

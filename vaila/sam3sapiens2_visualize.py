@@ -3,8 +3,8 @@ Project: vailá
 Script: sam3sapiens2_visualize.py
 Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Creation Date: 31 July 2026
-Update Date: 05 August 2026
-Version: 0.3.99
+Update Date: 16 August 2026
+Version: 0.3.106
 
 Description:
     CPU-only rerenderer for an existing SAM3+Sapiens2 run. It selects one
@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import datetime as dt
 import json
@@ -86,7 +87,9 @@ _SAPIENS_STYLE_CACHE: Any = _STYLE_UNSET
 
 
 def _log(message: str) -> None:
-    print(f">> vaila/sam3sapiens2_visualize: {message}", flush=True)
+    # Detached/long-running renders must not die on a dropped terminal (EIO/BrokenPipe).
+    with contextlib.suppress(OSError, BrokenPipeError):
+        print(f">> vaila/sam3sapiens2_visualize: {message}", flush=True)
 
 
 def _safe_int(value: Any) -> int | None:

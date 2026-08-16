@@ -1,7 +1,7 @@
 # SAM3+DINOv3 3D — Visualize selected ID
 
-**Version:** 0.3.99
-**Updated:** 2026-08-06
+**Version:** 0.3.106
+**Updated:** 2026-08-16
 
 This CPU-only tool rerenders an existing `processed_sam3dinov3_*` (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights, so it is safe to run right after a GPU inference run to isolate one person, and does not repeat GPU allocation.
 

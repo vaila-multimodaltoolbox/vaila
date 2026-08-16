@@ -30,7 +30,7 @@
     <h1>Sapiens2 Pose (<code>vaila_sapiens.py</code>)</h1>
 
     <div class="module-info">
-        <p><strong>Version:</strong> 0.3.89 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-01</p>
+        <p><strong>Version:</strong> 0.3.107 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-16</p>
         <p><strong>GUI:</strong> Frame B → <strong>Markerless 2D</strong> → <strong>Sapiens2 Pose</strong></p>
         <p><strong>Category:</strong> Markerless 2D / Meta (Facebook)</p>
     </div>
@@ -276,6 +276,29 @@ uv run vaila/vaila_sapiens.py \
         knob for VRAM during pose inference.</p>
     <p><strong>Not the same as <code>--stride</code>:</strong> stride skips <em>frames</em>; pose-batch-size batches
         <em>persons within one frame</em>.</p>
+    <p><strong>It's a VRAM ceiling, not a throughput knob.</strong> Because the realized batch is
+        <code>min(pose_batch_size, persons_in_this_frame)</code>, raising it above the number of people actually in
+        your footage has little to no effect on the real GPU work — it only raises how large a simultaneous batch
+        <em>can</em> get on a crowded frame. Use <code>--profile</code> (below) if you want to measure this on your
+        own footage instead of guessing.</p>
+
+    <h3 id="profile"><code>--profile</code> — diagnose where time goes at a given batch size (v0.3.107)</h3>
+    <p>Add <code>--profile</code> to any run to get a per-stage timing breakdown printed at the end of each video,
+        plus a <code>pose_profile.json</code> written next to its output dir:</p>
+    <ul>
+        <li><strong>CPU preprocess</strong> — <code>pipeline()</code> warp/normalize per crop.</li>
+        <li><strong>H2D + normalize</strong> — moving each crop to the GPU.</li>
+        <li><strong>GPU forward</strong> — the actual <code>model(inputs)</code> pass(es) (both passes when
+            <code>--flip-test</code> is on).</li>
+        <li><strong>CPU sync + decode</strong> — <code>.cpu()</code> + keypoint decode.</li>
+        <li><strong>Realized batch-size histogram</strong> — how many chunks actually hit size 1, 2, 3… vs your
+            requested <code>--pose-batch-size</code> ceiling, and what percentage of chunks reached that ceiling.</li>
+    </ul>
+    <p>Diagnostic only, off by default, zero overhead when omitted, CLI-only (no GUI checkbox). To compare two batch
+        sizes on the same clip:</p>
+    <pre><code>uv run vaila/vaila_sapiens.py -i clip.mp4 -o out2  --pose-batch-size 2  --profile
+uv run vaila/vaila_sapiens.py -i clip.mp4 -o out16 --pose-batch-size 16 --profile
+diff &lt;(jq -S . out2/*/pose_profile.json) &lt;(jq -S . out16/*/pose_profile.json)</code></pre>
 
     <h3>Detection thresholds</h3>
     <table>

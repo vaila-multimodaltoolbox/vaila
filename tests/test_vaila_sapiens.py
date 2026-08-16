@@ -410,6 +410,72 @@ def test_build_sapiens_cli_argv_includes_all_inference_flags() -> None:
     assert "--output-base" not in argv
 
 
+def test_build_sapiens_cli_argv_includes_profile_flag() -> None:
+    argv_on = vs._build_sapiens_cli_argv(
+        input_path=Path("/in/vid.mp4"),
+        out_parent=Path("/out"),
+        profile=True,
+        for_subprocess=False,
+    )
+    assert "--profile" in argv_on
+
+    argv_off = vs._build_sapiens_cli_argv(
+        input_path=Path("/in/vid.mp4"),
+        out_parent=Path("/out"),
+        for_subprocess=False,
+    )
+    assert "--profile" not in argv_off
+
+
+def test_pose_inference_session_profile_defaults_off() -> None:
+    import inspect
+
+    params = inspect.signature(vs.PoseInferenceSession.__init__).parameters
+    assert params["profile"].default is False
+    # Adding the new kwarg must not disturb the existing pose_batch_size default.
+    assert params["pose_batch_size"].default == 2
+
+
+def test_format_pose_profile_summary_pure_function() -> None:
+    stats = {
+        "cpu_preprocess": 0.010,
+        "h2d_normalize": 0.005,
+        "gpu_forward": 0.030,
+        "cpu_sync_decode": 0.005,
+        "wall_total": 0.050,
+    }
+    summary = vs._format_pose_profile_summary(
+        stats,
+        frames=10,
+        persons=25,
+        batch_histogram={1: 3, 2: 7},
+        requested_batch_size=2,
+    )
+    assert summary["frames"] == 10
+    stage_pct_sum = sum(summary["stage_pct"].values())
+    assert stage_pct_sum == pytest.approx(100.0, abs=0.5)
+    assert summary["avg_persons_per_frame"] == pytest.approx(2.5)
+    assert summary["batch_histogram_sorted"] == {1: 3, 2: 7}
+    assert summary["ceiling_reached_pct"] == pytest.approx(70.0)
+    assert summary["stage_ms"]["wall_total"] == pytest.approx(50.0)
+
+
+def test_format_pose_profile_summary_zero_frames_does_not_raise() -> None:
+    stats = {
+        "cpu_preprocess": 0.0,
+        "h2d_normalize": 0.0,
+        "gpu_forward": 0.0,
+        "cpu_sync_decode": 0.0,
+        "wall_total": 0.0,
+    }
+    summary = vs._format_pose_profile_summary(
+        stats, frames=0, persons=0, batch_histogram={}, requested_batch_size=2
+    )
+    assert summary["frames"] == 0
+    assert summary["avg_persons_per_frame"] == 0.0
+    assert summary["ceiling_reached_pct"] == 0.0
+
+
 def test_format_sapiens_cli_command_omits_output_base() -> None:
     """User-facing GUI→CLI mirror must show only -o, not internal --output-base."""
     cmd = vs._format_sapiens_cli_command(
