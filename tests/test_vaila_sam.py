@@ -1,7 +1,7 @@
 """Light tests for vaila_sam helpers (no GPU / no HF download).
 
-Update Date: 01 August 2026
-Version: 0.3.89
+Update Date: 17 August 2026
+Version: 0.3.107
 """
 
 from __future__ import annotations
@@ -74,9 +74,17 @@ def test_composite_masks_bgr_rich_draws_contour_and_label() -> None:
     assert int((diff > 0).sum()) > 0
 
 
-def test_sam3_build_oom_retry_attempts_extends_below_32() -> None:
+def test_sam3_build_oom_retry_attempts_extends_below_32(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """When auto-VRAM caps at 32, OOM retry must still try 24→8 (regression)."""
     from vaila.vaila_sam import _sam3_build_oom_retry_attempts
+
+    # Pin auto VRAM so this does not depend on the host GPU.
+    monkeypatch.setattr(
+        "vaila.vaila_sam._sam3_vram_profile",
+        lambda: {"safe_frames": 2117.0},
+    )
 
     assert _sam3_build_oom_retry_attempts(32) == [32, 24, 16, 12, 8, 4, 2, 1]
     chain0 = _sam3_build_oom_retry_attempts(0, total_frames=2117)

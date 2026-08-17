@@ -1,0 +1,46 @@
+{
+  "loop": "treadmill-lc-refactor-loop",
+  "status": "completed",
+  "updated": "2026-08-17",
+  "governing_check_baseline": {
+    "pytest": "48 passed in tests/test_treadmill_lc.py; 919 passed in full suite",
+    "ruff": "clean (vaila/treadmill_lc.py and tests/test_treadmill_lc.py)",
+    "ty": "clean"
+  },
+  "pipeline_stages": [
+    "1. Zero Offset (apply_zero_offset: tare baseline subtraction)",
+    "2. Calibration Matrix (apply_calibration_matrix: voltage to kg/BW scaling)",
+    "3. Coordinate Transformation (apply_coordinate_transformation: 4-cell geometry to COP medial_lateral, anterior_posterior, vertical)",
+    "4. Signal Filtering (apply_signal_filtering: Butterworth lowpass filter)",
+    "5. Event Detection (detect_events: strikes and steps with 0=Right, 1=Left encoding)"
+  ],
+  "targets": [
+    {
+      "id": "Target 1: Pipeline Reordering & Data Structures",
+      "accepted": true,
+      "evidence": "apply_zero_offset -> apply_calibration_matrix -> apply_coordinate_transformation -> apply_signal_filtering -> detect_events implemented and verified. Side encoding: 0=Right, 1=Left. Standard English keys (medial_lateral, anterior_posterior, vertical)."
+    },
+    {
+      "id": "Target 2: Unified CLI & TOML Configuration",
+      "accepted": true,
+      "evidence": "load_unified_config implemented. CLI supports --config, --input-dir, --output-dir, --step, --gui. Headless execution verified. Single-window launcher dialog implemented."
+    },
+    {
+      "id": "Target 3: Rich Console Dashboard",
+      "accepted": true,
+      "evidence": "print_treadmill_config_summary and print_pipeline_milestone implemented matching sam3sapiens2.py Rich console panel/table layout."
+    },
+    {
+      "id": "Target 4: Test Suite & Fixture Hardening",
+      "accepted": true,
+      "evidence": "48/48 tests in tests/test_treadmill_lc.py passing cleanly. Full repo suite (919 passed, 11 skipped) green."
+    },
+    {
+      "id": "Target 5: Documentation & Metadata",
+      "accepted": true,
+      "evidence": "Headers updated in vaila/treadmill_lc.py (v0.3.107, 2026-08-17). Updated vaila/help/treadmill_lc.md and vaila/help/treadmill_lc.html."
+    }
+  ],
+  "iterations_used": 1,
+  "cost_per_accepted_change": null
+}

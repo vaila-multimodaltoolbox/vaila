@@ -2,159 +2,286 @@
 
 ## Overview
 
-The **Treadmill LC** tool processes instrumented treadmill load-cell data in a guided workflow for running analysis. It supports artifact adjustment with interpolation review, signal filtering, calibration, body-weight normalization, center of pressure (COP), step detection, per-step metrics, and subject-day summaries.
+The **Treadmill LC** tool processes instrumented treadmill load-cell data in a robust, standardized workflow for running biomechanics analysis. It supports artifact adjustment with interpolation review, signal filtering, calibration, body-weight normalization, automatic signal-start detection, center of pressure (COP), step detection, per-step metrics, and subject-day summaries.
 
-Use it from **Multimodal Analysis -> Treadmill LC**. The full workflow is:
+Use it from **Frame B: Multimodal Analysis -> B_B_r5_c2 - Treadmill LC**.
 
-1. **Filter**
-2. **Adjust + Interpolate**
-3. **Process Metrics**
+## Repeat a GUI run from the terminal
 
-The tool is TOML-configurable so the same settings can be reused for batch processing.
+The GUI follows the same GUI→CLI mirror convention as `sam3sapiens2.py`.
+When you click **Run Full Pipeline** or a stage button, the terminal immediately
+prints:
+
+1. a Rich table with the effective paths, step, filters, interpolation, and
+   processing parameters;
+2. the two saved run-history TOMLs (one in the input directory and one in the
+   output root);
+3. a bold-yellow `>> vaila/treadmill_lc: Equivalent CLI` banner containing a
+   shell-quoted, copy/paste command.
+
+The banner is printed again when the GUI run finishes. **Use the final banner**:
+by then its TOML has also recorded choices made in interactive windows,
+including artifact intervals, the approved interpolation method for each trial,
+and each trial's analysis window. The replay therefore does not reopen Tkinter
+dialogs.
+
+```text
+====================================================================================================
+>> vaila/treadmill_lc: Equivalent CLI for the completed GUI run (copy/paste):
+>>   uv run vaila/treadmill_lc.py --config '/data/run/treadmill_lc_run_history.toml' --input-dir '/data/run' --output-dir '/data/run/output' --step all
+====================================================================================================
+```
+
+Copy the command beginning with `uv run`. Paths containing spaces are quoted
+automatically. Redirected logs and `NO_COLOR=1` keep the banner as plain text,
+without ANSI escape codes.
+
+### 5-Stage Logical Calibration & Biomechanics Pipeline
+
+The processing pipeline strictly adheres to the following sequence:
+
+1. **Zero Offset**: Baseline tare voltage subtraction: $V_{\text{offset\_corrected}} = V_{\text{raw}} - \bar{V}_{\text{tare}}$.
+2. **Calibration Matrix**: Gain and scaling transformation to Body Weight units: $F_{\text{cells}} = (m \cdot V_{\text{cells}} + b) / W_{\text{kg}}$, $F_{\text{vertical}} = \sum F_{\text{cells}}$.
+3. **Coordinate Transformation**: Conversion using deck geometry (58.0 cm Mediolateral $\times$ 113.0 cm Anteroposterior) to standard English biomechanics channels: `medial_lateral` (COP X), `anterior_posterior` (COP Y), and `vertical` (GRF total).
+4. **Signal Filtering**: Zero-phase Butterworth low-pass filtering on all physical channels.
+5. **Event Detection**: Support strike segmentation with a single **`sidefoot`** column:
+   - `sidefoot: 0` = Right
+   - `sidefoot: 1` = Left
+
+---
 
 ## Expected Files
 
-The input folder can contain trial files, calibration files, and Borg metadata files. The tool separates these automatically by filename.
+The input folder can contain trial files, calibration files, and Borg metadata files. The tool separates these automatically by filename:
 
 - **Running trials**: `s*_d*_t*.csv`
-- **Tare calibration**: `s*_d*_tara.csv`
-- **Participant weight calibration**: `s*_d*_peso.csv`
+- **Tare calibration**: `s*_d*_tare.csv` (legacy `s*_d*_tara.csv` still accepted)
+- **Participant weight calibration**: `s*_d*_weight.csv` (legacy `s*_d*_peso.csv` still accepted)
 - **Plate-weight calibration**: `s*_d*_*kg.csv`, for example `s01_d01_20kg.csv`
-- **Borg metadata**: `borg_*.txt`
+- **Borg metadata**: `borg_*.txt` or `info_*.txt`
 
-Borg TXT files are not processed as trials. When a matching Borg file has a `Peso` column, the value is used as participant body weight. If the `Tent` value has the configured problem marker, such as `T02*`, the corresponding trial is flagged for adjustment/interpolation review.
+Borg/info TXT files are not processed as trials. When a matching metadata file has a `Weight` column (legacy `Peso` is still accepted), the value is used as participant body weight unless `--weight` or an explicit TOML `weight` overrides it. If the `Trial` value has the configured problem marker, such as `T02*`, the corresponding trial is flagged for adjustment/interpolation review.
+
+---
 
 ## Processing Stages
 
-### 1. Filter
+### 1. Filter (Zero-Phase + PSD)
 
 This stage smooths the signal while preserving treadmill force behavior.
 
-- Default filter: low-pass Butterworth SOS at 40 Hz.
+- Default filter: low-pass Butterworth SOS at 40 Hz (configurable via TOML).
 - Median filtering uses `scipy.ndimage.median_filter` with configurable edge mode; default is `nearest`.
 - Zero-phase filtering uses `sosfiltfilt`.
 - Optional mains-noise notch filtering supports 50 Hz and 60 Hz power grids.
 - Available `filter_type` values: `lowpass`, `bandpass`, `highpass`, `median`, and `none`.
 
-During batch filtering, the GUI previews one calibration file and one running file. After approval, the same filter settings are applied to the remaining files without opening a plot for every file.
-
-Filtered running CSV files are saved inside `filtered_YYYYMMDD_HHMMSS` with the canonical `sXX_dYY_tZZ.csv` name, even if the input folder contains a legacy `*_LIMPO.csv` or `*_clean.csv` file. Calibration files keep their calibration names. Frequency diagnostics are saved to `filter_analysis_YYYYMMDD_HHMMSS` with explicit `filter_` names, such as `s01_d01_t01_filter_spectrum_metrics.csv` and `s01_d01_t01_filter_Cell_1_spectrum.png`.
+Filtered running CSV files are saved inside stable `filtered` with the canonical
+`sXX_dYY_tZZ.csv` name. Frequency diagnostics are saved to stable
+`filter_analysis` with explicit `filter_` names, such as
+`s01_d01_t01_filter_spectrum_metrics.csv` and
+`s01_d01_t01_filter_Cell_1_spectrum.png`. Both become timestamped when `-T` is
+enabled.
 
 ### 2. Adjust + Interpolate
 
 This stage is used to correct artifacts after filtering and before metric extraction.
 
-- Plot the four load cells and the summed signal.
-- Select the affected load cell channels in a single multi-selection dialog, then mark intervals only on the selected cell plots.
-- Mark one or more artifact intervals with START/END click pairs. The selected limits are redrawn as vertical dashed START/END lines, matching the processing-window selection style. ENTER is accepted only when every START has a matching END.
-- Use right click to undo markings when available.
-- Choose the interval treatment: remove segment, set to `NaN`, set to zero, neutral mean, or linear bridge.
-- Compare up to four interpolation methods visually.
-- Choose the final interpolation method.
-- Approve the preview before saving. If rejected, the same file is reopened for correction.
-
-A timestamped `clean_YYYYMMDD_HHMMSS` folder is created for each adjustment run so previous runs are not overwritten. Every running trial is written there with its original name (`sXX_dYY_tZZ.csv`): adjusted/interpolated trials contain the corrected signal, and trials without marked intervals are copied unchanged. Adjustment and interpolation metadata are saved beside the CSV as:
-
-- `*_adjust_intervals.json`
-- `*_adjust_intervals.toml`
-- `*_adjust_intervals.csv`
-
-The metadata records intervals, selected cells, interval treatment, selected interpolation methods, final method, and interpolation parameters.
+- Plots the four load cells and the summed signal.
+- Interactive click-based marking of artifact intervals.
+- Interval treatments: remove segment, set to `NaN`, set to zero, neutral mean, or linear bridge.
+- Multi-method interpolation preview and approval.
+- Sidecar metadata is stored in `.json`, `.toml`, and `.csv`.
 
 ### 3. Process Metrics
 
-This stage calibrates the four load-cell signals and computes running metrics.
+This stage executes the 5-stage calibration pipeline and extracts spatial, temporal, kinetic, and asymmetry metrics:
 
 - Uses matching calibration files from the same subject-day group (`sXX_dYY`).
 - Uses the central 5 seconds of each calibration recording to avoid edge transients.
-- Supports simple calibration using `tara` and `peso`.
-- Supports plate-weight calibration using `*kg.csv` files as complementary calibration points.
-- Uses Borg `Peso` automatically when available, with TOML/manual value as fallback.
-- Allows manual analysis-window selection. Click START and optional END, then press Enter. One click means START to the final sample. Invalid selections reopen the same file.
-- Detects steps and saves temporal, force, impulse, loading-rate, COP, and asymmetry metrics.
+- Computes spatial COP metrics using standard English keys: `cop_medial_lateral_mean`, `cop_anterior_posterior_mean`, `cop_medial_lateral_range`, `cop_anterior_posterior_range`, `cop_anterior_posterior_initial`, `cop_anterior_posterior_final`.
+- Detects steps with a single `sidefoot` column: `0` (Right) and `1` (Left).
+- Computes Asymmetry Index (`*_ASI`), right mean/std (`*_mean_R`, `*_std_R`), and left mean/std (`*_mean_L`, `*_std_L`).
+- In headless mode, resolves each analysis window from CLI indices, then the
+  trial's TOML window, then automatic detection. Automatic start is the first
+  peak returned by `scipy.signal.find_peaks` whose height reaches 50% of the
+  signal maximum; automatic end is the signal length.
 
-All pipeline output stages use timestamped folders so previous runs are not overwritten. Processing outputs are saved to:
+Outputs:
+- `results/sXX_dYY_tZZ_processing_steps.csv`
+- `results/sXX_dYY_processing_metrics.csv`
+- `figures/` overview, COP trajectory, strike attributes, stride map, and interactive HTML report.
 
-- `results_YYYYMMDD_HHMMSS`
-- `figures_YYYYMMDD_HHMMSS`
-
-Step details are saved per attempt as `*_processing_steps.csv`. Biomechanical metrics are consolidated once per subject-day as `sXX_dYY_processing_metrics.csv`.
-
-## COP Convention
-
-The load-cell layout is interpreted as:
-
-- Cell 1: superior left
-- Cell 2: inferior left
-- Cell 3: superior right
-- Cell 4: inferior right
-
-Distances:
-
-- Left-right distance: 58 cm
-- Anterior-posterior distance: 113 cm
-
-COP is calculated in centimeters with origin at the center of the treadmill. In the figures, **COP X** is medio-lateral and is shown on the horizontal axis. **COP Y** is anterior-posterior and is shown on the vertical axis. The COP trace represents the center of load/contact over the instrumented deck; it is not belt displacement and should not be interpreted as stride length along the treadmill.
-
-## Figures
-
-Each processed attempt can save:
-
-- `processing_overview.png`: total GRF, detected support regions, peaks, and first derivative over time in seconds.
-- `processing_strike_attributes.png`: original-inspired strike panels for representative steps, marking peak force, transient, max loading-slope point, derivative, and colored impulse regions.
-- `processing_stride_map.png`: full detected support regions plus all strikes normalized to 0-100% support for visual inspection of consistency and asymmetry.
-- `processing_cop_trajectory.png`: full analyzed COP contact-load trajectory in centimeters, with time shown by color, fixed 58 x 113 cm deck limits, and the four load-cell positions.
-- `processing_cop_report_interactive.html`: optional tugturn-style interactive report with GRF, derivative, deck geometry, load-cell positions, and full COP trajectory.
-
-All time axes and time colorbars use seconds, based on the configured sample rate (`fs`, default `1000 Hz`).
-
-## Output Naming
-
-Output names include the stage whenever the file contains derived diagnostics or metrics. Signal stages treat `sXX_dYY_tZZ.csv` as the standard running-trial name. Legacy `sXX_dYY_tZZ_LIMPO.csv` files are still accepted as input, but the current adjustment and filtering stages write corrected, unchanged, and filtered trials with the canonical original trial name so the next stage sees one homogeneous set. Sidecar CSV files such as `*_adjust_intervals.csv`, `*_filter_spectrum_metrics.csv`, and `*_processing_steps.csv` are ignored by later stages.
-
-- Adjusted/interpolated data for the next stage: `clean_YYYYMMDD_HHMMSS/s01_d01_t01.csv`
-- Filtered data for the next stage: `filtered_YYYYMMDD_HHMMSS/s01_d01_t01.csv`
-- Filtering spectrum figure: `filter_analysis_YYYYMMDD_HHMMSS/s01_d01_t01_filter_Cell_1_spectrum.png`
-- Filtering spectrum metrics: `filter_analysis_YYYYMMDD_HHMMSS/s01_d01_t01_filter_spectrum_metrics.csv`
-- Processing step table: `results_YYYYMMDD_HHMMSS/s01_d01_t01_processing_steps.csv`
-- Processing daily metrics: `results_YYYYMMDD_HHMMSS/s01_d01_processing_metrics.csv`
-- Processing figures: saved directly in the figures folder with trial prefix (e.g. `figures_YYYYMMDD_HHMMSS/s01_d01_t01_processing_overview.png`, `s01_d01_t01_processing_strike_attributes.png`, `s01_d01_t01_processing_stride_map.png`, `s01_d01_t01_processing_cop_trajectory.png`, and `s01_d01_t01_processing_cop_report_interactive.html`)
-
-
-## TOML Configuration
-
-The GUI can create or load a TOML file before processing. The main sections are:
-
-- `[pipeline]`: controls full-pipeline execution.
-- `[general]`: shared paths, file patterns, and sample rate.
-- `[adjust]`: artifact marking, metadata marker, and interval treatment.
-- `[interpolation]`: method comparison and noninteractive interpolation defaults.
-- `[filters]`: median window, filter type, cutoff frequencies, edge mode, and notch settings.
-- `[processing]`: calibration, body weight, optional processing filter, analysis window, legacy valley/cut step detection, negative-GRF clipping, and report options.
-
-For batch processing, create a TOML once, review it in the GUI editor, then reuse it for folders collected under the same conditions.
-
-## GUI Usage
-
-Open **Multimodal Analysis -> Treadmill LC** and choose:
-
-- **Run Full Pipeline**: Filter -> Adjust + Interpolate -> Process Metrics.
-- **Filter Only**: Only filtering and frequency diagnostics.
-- **Adjust + Interpolate**: Only artifact correction and interpolation review.
-- **Process Metrics Only**: Only calibration and running metrics.
-- **Create TOML Template**: Save a reusable configuration file.
-- **Help**: Open this documentation.
-
-## CLI Usage
-
-Run the tool from a terminal:
-
-```bash
-uv run python -m vaila.treadmill_lc --input-dir /path/to/csv_folder --step all
-```
-
-Common `--step` values are `all`, `adjust`, `filter`, and `process`.
+Stage folders are stable by default: `clean`, `adjusted`, `filtered`,
+`filter_analysis`, `figures`, and `results` are cleared and recreated on a
+rerun with the same output path. Enable **Timestamped output folders** in the
+GUI or pass `--timestamp-output`/`-T` to preserve every run in new timestamped
+directories. When
+**Output Dir**, `--output-dir`, and `paths.output_dir` are empty, both GUI and
+CLI create `<input-dir>/output/`. This shared resolution is what makes the
+printed GUI command write to the same place as the original run.
 
 ---
-- **Version**: 0.3.99
-- **Updated**: 05 August 2026
+
+## TOML configuration and run history
+
+A unified `.toml` configures paths, selected step, filtering, interpolation,
+and processing:
+
+```toml
+weight = 72.0 # optional explicit participant weight
+
+[paths]
+input_dir = "tests/treadmill_lc"
+output_dir = "tests/treadmill_lc/output"
+
+[execution]
+step = "process"
+timestamp_output = false
+
+[filters]
+median_window = 5
+filter_type = "lowpass"
+lowpass_cutoff = 40.0
+bandpass_lowcut = 0.0
+bandpass_highcut = 40.0
+filter_order = 4
+edge_mode = "nearest"
+
+[interpolation]
+max_comparison_methods = 4
+spline_order = 3
+rbf_window_size = 200
+
+[processing]
+participant_weight_kg = 70.0
+use_advanced_calibration = true
+filter_cutoff_hz = 50.0
+apply_processing_filter = false
+detection_threshold_bw = 0.1
+generate_figures = true
+generate_interactive_report = true
+```
+
+Every GUI or CLI run overwrites a single
+`treadmill_lc_run_history.toml` at the input directory and the same filename at
+the output root. Stable stage folders are reused by default; timestamped stage
+folders are created only when `--timestamp-output`/`-T` (or the GUI checkbox)
+is enabled. Runs do not accumulate extra history copies.
+
+After a GUI run, generated replay sections are appended to the same history:
+
+```toml
+[adjustments.s01_d01_t01]
+adjustment_mode = "nan"
+processed = true
+
+[adjustments.s01_d01_t01.interpolation]
+status = "adjusted_and_interpolated"
+final_method = "pchip"
+spline_order = 3
+rbf_window_size = 200
+
+[[adjustments.s01_d01_t01.intervals]]
+start_index = 1250
+end_index_exclusive = 1390
+cells_0based = [0, 2]
+
+[analysis_windows.s01_d01_t01]
+start_index = 5000
+end_index_exclusive = 45000
+source_samples = 60000
+start_source = "gui"
+end_source = "gui"
+```
+
+These sections reproduce GUI-only decisions headlessly. They normally should
+not be edited manually.
+
+---
+
+## CLI Usage & Headless Mode
+
+CLI execution does not open GUI windows. Rich tables and milestones print the
+effective parameters, paths, stage, completion status, and replay command.
+
+```bash
+# Fully automatic process run without reading TOML. The CLI weight also
+# overrides a Weight/Peso value found in info/Borg metadata:
+uv run vaila/treadmill_lc.py -i path/to/csvs -o path/to/results -s process -a -w 72.0
+
+# Override a window manually while keeping all other TOML settings:
+uv run vaila/treadmill_lc.py -i path/to/csvs -s process -b 526 -e 60000
+
+# Keep a separate timestamped copy instead of reusing stable stage folders:
+uv run vaila/treadmill_lc.py -i path/to/csvs -s all -T
+
+# Best option: paste the final command printed by GUI Run:
+uv run vaila/treadmill_lc.py -c path/to/treadmill_lc_run_history.toml \
+  -i path/to/csvs -o path/to/results -s all
+
+# Build a new full run manually:
+uv run vaila/treadmill_lc.py -c path/to/config.toml -i path/to/raw_csvs -o path/to/results -s all
+
+# Run a specific stage; output defaults to path/to/csvs/output/:
+uv run vaila/treadmill_lc.py -i path/to/csvs -s filter
+
+# Generated histories already contain paths and step, so this shorter form also works:
+uv run vaila/treadmill_lc.py -c path/to/treadmill_lc_run_history.toml
+
+# Open the single-window launcher GUI:
+uv run vaila/treadmill_lc.py -g
+```
+
+Short aliases are also available: `-i/-o` for input/output, `-c` or `-t` for
+config/TOML path, `-s` for step, `-w` for weight, `-b/-e` for start/end,
+`-a` for automatic mode, `-T` for timestamped output, and `-g` for GUI. The
+long forms remain accepted. Both `uv run vaila/treadmill_lc.py --help` and
+`uv run vaila/treadmill_lc.py -h` show the complete current CLI.
+
+After an input directory is selected, the GUI displays the matching subject's
+`Weight`/`Peso` from `info_*.txt` or `borg_*.txt`. If no metadata is available,
+it labels the existing fallback instead of silently presenting it as the
+subject's weight.
+
+The main GUI is only the launcher. Its Run buttons execute the loaded TOML in
+the same non-interactive mode as CLI: recorded adjustment and analysis-window
+choices are reused, no foot-strike selection figure is opened, and stages do
+not pause for preview, confirmation, or success message boxes. Progress and
+errors remain visible in the GUI log and terminal.
+
+`--toml-path` defaults to `treadmill_lc_run_history.toml`, resolved inside the
+input directory. For backward compatibility, the CLI next tries
+`processing_configuration_used.toml`. If neither exists, it prints a warning,
+uses the built-in settings, detects each start automatically, and continues.
+`--config` remains the strict replay option: an explicitly requested missing
+config is an error. `--force-auto` ignores all TOML settings; supply
+`--input-dir` with it.
+
+### CLI/TOML priority
+
+| Value | Resolution order |
+|---|---|
+| Participant weight | `--weight` → TOML `weight` → matching info/Borg `Weight`/`Peso` → existing 70 kg fallback |
+| Start index | `--start-index` → `[analysis_windows.<trial>]` → first large impact peak |
+| Exclusive end index | `--end-index` → `[analysis_windows.<trial>]` → total signal samples |
+
+CLI and automatically detected windows are written back to both stable run
+histories with `start_source` and `end_source`, so the next run is reproducible.
+
+### GUI button to CLI step mapping
+
+| GUI action | Printed `--step` | Headless replay |
+|---|---:|---|
+| Run Full Pipeline | `all` | Filter → adjustment replay → interpolation compatibility pass → metrics |
+| Filter Only | `filter` | Applies the recorded filter settings |
+| Adjust + Interp | `adjust` | Replays recorded intervals and final interpolation method |
+| Process Only | `process` | Reuses each recorded analysis window |
+
+If a manual CLI config has no recorded adjustment or analysis-window sections,
+the run safely applies no interactive artifact edits and detects the analysis
+start automatically.
+
+---
+- **Version**: 0.3.107
+- **Updated**: 17 August 2026
