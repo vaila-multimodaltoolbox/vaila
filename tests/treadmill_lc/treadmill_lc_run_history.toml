@@ -1,0 +1,43 @@
+[paths]
+input_dir = "/home/preto/Preto/vaila/tests/treadmill_lc"
+output_dir = "/home/preto/Preto/vaila/tests/treadmill_lc/output"
+
+[execution]
+step = "all"
+timestamp_output = false
+created_at = "2026-08-17T17:19:17-03:00"
+vaila_version = "0.3.107"
+force_auto = false
+
+[adjustments]
+
+[filters]
+median_window = 5
+filter_type = "lowpass"
+lowpass_cutoff = 40.0
+bandpass_lowcut = 0.0
+bandpass_highcut = 40.0
+filter_order = 4
+edge_mode = "nearest"
+
+[interpolation]
+max_comparison_methods = 4
+spline_order = 3
+rbf_window_size = 200
+
+[processing]
+participant_weight_kg = 61.6
+participant_weight_source = "cli"
+use_advanced_calibration = false
+filter_cutoff_hz = 50.0
+apply_processing_filter = false
+detection_threshold_bw = 0.1
+generate_figures = true
+generate_interactive_report = true
+
+[analysis_windows.s01_d01_t01]
+start_index = 42
+end_index_exclusive = 60000
+source_samples = 60000
+start_source = "automatic"
+end_source = "automatic"
