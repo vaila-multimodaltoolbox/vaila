@@ -9,8 +9,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 05 August 2026
-Version: 0.3.99
+Update Date: 17 August 2026
+Version: 0.3.107
 
 Description:
 ------------
@@ -21,10 +21,10 @@ body-weight normalization, COP calculation, step detection, and running metrics.
 Usage:
 ------
 GUI:
-    uv run python -m vaila.treadmill_lc
+    uv run vaila/treadmill_lc.py
 
 CLI:
-    uv run python -m vaila.treadmill_lc --input-dir data --step all
+    uv run vaila/treadmill_lc.py -i data -s all
 
 License:
 --------
@@ -33,6 +33,7 @@ This program is licensed under the GNU Affero General Public License v3.0.
 """
 
 import argparse
+import contextlib
 import gc
 import json
 import os
@@ -43,6 +44,7 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
+from typing import Any
 
 import matplotlib
 
@@ -54,13 +56,48 @@ import numpy as np
 import pandas as pd
 import toml
 from matplotlib.patches import Rectangle
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 from scipy.fft import fft, fftfreq
 from scipy.interpolate import Rbf
 from scipy.ndimage import median_filter
 from scipy.signal import butter, find_peaks, sosfiltfilt, welch
 
+try:
+    from .cli_highlight import print_gui_cli_mirror
+except ImportError:  # Standalone execution: python vaila/treadmill_lc.py
+    from cli_highlight import print_gui_cli_mirror
+
 FS = 1000
-VERSION = "0.3.99"
+VERSION = "0.3.107"
+CLI_STEPS = ("all", "adjust", "interpolate", "filter", "process")
+CLI_SCRIPT_PATH = "vaila/treadmill_lc.py"
+RUN_HISTORY_PREFIX = "treadmill_lc_run_history"
+RUN_HISTORY_FILENAME = f"{RUN_HISTORY_PREFIX}.toml"
+DEFAULT_TOML_PATH = RUN_HISTORY_FILENAME
+AUTO_START_PEAK_RATIO = 0.5
+SIDEFOOT_RIGHT = 0
+SIDEFOOT_LEFT = 1
+_SIDEFOOT_PLOT_COLORS = {SIDEFOOT_RIGHT: "tab:red", SIDEFOOT_LEFT: "tab:green"}
+
+
+def _sidefoot(step: dict[str, Any]) -> int:
+    """Return 0 (right) or 1 (left) from a step dict.
+
+    Canonical key is ``sidefoot``. Legacy ``side`` (0/1) and ``foot`` (R/L)
+    are accepted so older in-memory dicts still plot.
+    """
+    if "sidefoot" in step:
+        return int(step["sidefoot"])
+    if "side" in step:
+        return int(step["side"])
+    if step.get("foot") == "L":
+        return SIDEFOOT_LEFT
+    return SIDEFOOT_RIGHT
+
+
+console = Console()
 
 
 def _matplotlib_backend_name() -> str:
@@ -83,18 +120,126 @@ def _ensure_interactive_backend() -> None:
     plt.switch_backend("TkAgg")
 
 
+def print_treadmill_config_summary(
+    config: dict[str, Any],
+    input_dir: str | Path | None = None,
+    output_dir: str | Path | None = None,
+    mode: str = "Headless CLI",
+    step: str | None = None,
+) -> None:
+    """Print every effective CLI parameter in a Rich table."""
+    with contextlib.suppress(OSError, BrokenPipeError):
+        table = Table(show_header=True, header_style="bold magenta", expand=True)
+        table.add_column("Parameter", style="cyan", no_wrap=True)
+        table.add_column("Value", style="green")
+        table.add_column("Category", style="dim")
+
+        table.add_row("Execution Mode", mode, "System")
+        effective_step = step or str(config.get("execution", {}).get("step", "all"))
+        table.add_row("Pipeline Step", effective_step, "Execution")
+        timestamp_output = bool(config.get("execution", {}).get("timestamp_output", False))
+        table.add_row(
+            "Output Folder Mode",
+            "timestamped" if timestamp_output else "stable/reused",
+            "Execution",
+        )
+        if input_dir:
+            table.add_row("Input Directory", str(input_dir), "Paths")
+        if output_dir:
+            table.add_row("Output Directory", str(output_dir), "Paths")
+
+        for section in ("filters", "interpolation", "processing"):
+            values = config.get(section, {})
+            if not isinstance(values, dict):
+                continue
+            for key, value in values.items():
+                label = key.replace("_", " ").title()
+                display_value = str(value).lower() if isinstance(value, bool) else str(value)
+                table.add_row(label, display_value, section.title())
+
+        adjustments = config.get("adjustments", {})
+        if isinstance(adjustments, dict):
+            for trial, metadata in adjustments.items():
+                interpolation = metadata.get("interpolation", {})
+                method = interpolation.get("final_method", interpolation.get("status", "none"))
+                interval_count = len(metadata.get("intervals", []))
+                table.add_row(
+                    f"{trial} Adjustment",
+                    f"method={method}, intervals={interval_count}",
+                    "GUI Replay",
+                )
+        windows = config.get("analysis_windows", {})
+        if isinstance(windows, dict):
+            for trial, window in windows.items():
+                table.add_row(
+                    f"{trial} Analysis Window",
+                    f"{window.get('start_index', 0)}:{window.get('end_index_exclusive', 'end')}",
+                    "GUI Replay",
+                )
+
+        panel = Panel(
+            table,
+            title=f"[bold blue]vailá Multimodal Toolbox — Treadmill LC (v{VERSION})[/bold blue]",
+            subtitle="[dim]Zero Offset → Calibration Matrix → Coordinate Transformation → Signal Filtering → Event Detection[/dim]",
+            border_style="blue",
+        )
+        console.print(panel)
+
+
+def print_run_history_paths(paths: list[Path]) -> None:
+    """Print replay instructions for the generated execution histories."""
+    with contextlib.suppress(OSError, BrokenPipeError):
+        table = Table(show_header=True, header_style="bold magenta", expand=True)
+        table.add_column("Saved Run History", style="green")
+        table.add_column("Replay Command", style="cyan")
+        for path in paths:
+            table.add_row(str(path), f"uv run {CLI_SCRIPT_PATH} --config {path}")
+        console.print(
+            Panel(
+                table,
+                title="[bold blue]Reproducible TOML History[/bold blue]",
+                border_style="blue",
+            )
+        )
+
+
+def print_pipeline_milestone(
+    stage_num: int,
+    total_stages: int,
+    name: str,
+    details: str = "",
+    status: str = "success",
+) -> None:
+    """Print pipeline progress and status lines via rich console."""
+    with contextlib.suppress(OSError, BrokenPipeError):
+        if status == "success":
+            icon = "[bold green]✓[/bold green]"
+            tag = f"[bold cyan][Stage {stage_num}/{total_stages}][/bold cyan]"
+        elif status == "running":
+            icon = "[bold yellow]⚙[/bold yellow]"
+            tag = f"[bold yellow][Stage {stage_num}/{total_stages}][/bold yellow]"
+        else:
+            icon = "[bold red]✗[/bold red]"
+            tag = f"[bold red][Stage {stage_num}/{total_stages}][/bold red]"
+
+        msg = f"{icon} {tag} [bold]{name}[/bold]"
+        if details:
+            msg += f" — [dim]{details}[/dim]"
+        console.print(msg)
+
+
 # =============================================================================
 # STAGE 1: ARTIFACT REMOVAL
 # =============================================================================
 
 
-def merge_intervals(intervalos):
+def merge_intervals(intervals):
     """Merges overlapping or adjacent intervals into a single interval."""
-    if not intervalos:
+    if not intervals:
         return []
-    intervalos = sorted(intervalos, key=lambda x: x[0])
-    merged = [intervalos[0]]
-    for current in intervalos[1:]:
+    intervals = sorted(intervals, key=lambda x: x[0])
+    merged = [intervals[0]]
+    for current in intervals[1:]:
         last = merged[-1]
         if current[0] <= last[1]:  # overlaps or touches
             merged[-1] = (last[0], max(last[1], current[1]))
@@ -103,14 +248,14 @@ def merge_intervals(intervalos):
     return merged
 
 
-def capture_clicks_with_undo(fig, ax, t, sinal, color, parent=None):
+def capture_clicks_with_undo(fig, ax, t, signal, color, parent=None):
     """Captures mouse clicks on a matplotlib figure for marking intervals."""
     # Caller must already be on TkAgg (_ensure_interactive_backend) before creating fig.
-    pontos = []
+    points = []
 
     def redraw_markers():
         ax.clear()
-        ax.plot(t, sinal, color=color, lw=1.2)
+        ax.plot(t, signal, color=color, lw=1.2)
         ax.set_title(
             "CELL - Left click START/END; Right: undo last; ENTER finishes\n"
             "Markers follow the processing-window style: vertical dashed START/END lines",
@@ -120,27 +265,27 @@ def capture_clicks_with_undo(fig, ax, t, sinal, color, parent=None):
         ax.set_ylabel("Voltage (V)")
         ax.grid(True, alpha=0.4)
 
-        for i, point in enumerate(pontos):
+        for i, point in enumerate(points):
             interval_number = (i // 2) + 1
             label = f"START {interval_number}" if i % 2 == 0 else f"END {interval_number}"
             line_color = "green" if i % 2 == 0 else "red"
             ax.axvline(point, color=line_color, linestyle="--", linewidth=1.2, label=label)
-        if pontos:
+        if points:
             ax.legend(loc="upper right")
         fig.canvas.draw_idle()
 
     def on_click(event):
         if event.button == 1:  # Left: add
             if event.xdata is not None:
-                pontos.append(event.xdata)
+                points.append(event.xdata)
                 redraw_markers()
-        elif event.button == 3 and pontos:  # Right: undo last
-            pontos.pop()
+        elif event.button == 3 and points:  # Right: undo last
+            points.pop()
             redraw_markers()
 
     def on_key(event):
         if event.key == "enter":
-            if len(pontos) % 2 == 1:
+            if len(points) % 2 == 1:
                 messagebox.showwarning(
                     "Incomplete interval",
                     "Each interpolation segment needs START and END. "
@@ -155,7 +300,7 @@ def capture_clicks_with_undo(fig, ax, t, sinal, color, parent=None):
     fig.canvas.mpl_connect("key_press_event", on_key)
     plt.show(block=True)
     plt.close(fig)
-    return pontos
+    return points
 
 
 def plot_segments(ax, t, y, color, label, dt_tol=0.0011):
@@ -168,12 +313,12 @@ def plot_segments(ax, t, y, color, label, dt_tol=0.0011):
         ax.plot(t[s:e], y[s:e], color=color, lw=1.5, label=label if s == 0 else None)
 
 
-def reset_times(t_limpo):
+def reset_times(t_clean):
     """Resets timestamps to create a continuous time array."""
-    if len(t_limpo) == 0:
-        return t_limpo
-    dt = np.median(np.diff(t_limpo))
-    t_reset = np.arange(len(t_limpo)) * dt
+    if len(t_clean) == 0:
+        return t_clean
+    dt = np.median(np.diff(t_clean))
+    t_reset = np.arange(len(t_clean)) * dt
     return t_reset
 
 
@@ -228,14 +373,14 @@ def _finite_or_none(value):
     return None
 
 
-def _linear_bridge_values(dados, start, end, column):
+def _linear_bridge_values(cell_data, start, end, column):
     """Return replacement values between the closest valid boundary samples."""
     count = max(0, int(end) - int(start))
     if count == 0:
         return np.array([], dtype=float)
 
-    before = _finite_or_none(dados[start - 1, column]) if start > 0 else None
-    after = _finite_or_none(dados[end, column]) if end < len(dados) else None
+    before = _finite_or_none(cell_data[start - 1, column]) if start > 0 else None
+    after = _finite_or_none(cell_data[end, column]) if end < len(cell_data) else None
 
     if before is not None and after is not None:
         return np.linspace(before, after, count + 2, dtype=float)[1:-1]
@@ -244,7 +389,7 @@ def _linear_bridge_values(dados, start, end, column):
     if after is not None:
         return np.full(count, after, dtype=float)
 
-    channel_mean = np.nanmean(dados[:, column])
+    channel_mean = np.nanmean(cell_data[:, column])
     if not np.isfinite(channel_mean):
         channel_mean = 0.0
     return np.full(count, float(channel_mean), dtype=float)
@@ -297,7 +442,7 @@ def _normalize_adjustment_intervals(intervals, n_samples, n_cols):
     return [(start, end, sorted(cells)) for (start, end), cells in sorted(grouped.items())]
 
 
-def _replacement_values_for_cells(dados, start, end, mode, cells):
+def _replacement_values_for_cells(cell_data, start, end, mode, cells):
     """Build replacement values for selected cell columns only."""
     count = max(0, int(end) - int(start))
     cells = list(cells)
@@ -308,7 +453,7 @@ def _replacement_values_for_cells(dados, start, end, mode, cells):
 
     values = np.zeros((count, len(cells)), dtype=float)
     for out_col, cell in enumerate(cells):
-        bridge = _linear_bridge_values(dados, start, end, cell)
+        bridge = _linear_bridge_values(cell_data, start, end, cell)
         if mode == "linear":
             values[:, out_col] = bridge
         elif mode == "neutral_mean":
@@ -347,16 +492,16 @@ def _interval_records(intervals, t, mode):
     return records
 
 
-def apply_adjustment_intervals(t, dados, intervals, mode="nan"):
+def apply_adjustment_intervals(t, cell_data, intervals, mode="nan"):
     """Apply marked artifact intervals using remove, NaN, zero, neutral_mean, or linear mode."""
     mode = normalize_adjustment_mode(mode)
     n_samples = len(t)
-    n_cols = dados.shape[1]
+    n_cols = cell_data.shape[1]
     clipped = _normalize_adjustment_intervals(intervals, n_samples, n_cols)
 
     records = _interval_records(clipped, t, mode)
     if not clipped:
-        return t.copy(), dados.copy(), records
+        return t.copy(), cell_data.copy(), records
 
     if mode == "remove":
         # Removing rows changes the shared time base, so this mode remains global even when
@@ -365,9 +510,9 @@ def apply_adjustment_intervals(t, dados, intervals, mode="nan"):
         good_mask = np.ones(n_samples, dtype=bool)
         for start, end in row_intervals:
             good_mask[start:end] = False
-        return t[good_mask], dados[good_mask, :], records
+        return t[good_mask], cell_data[good_mask, :], records
 
-    adjusted = dados.astype(float, copy=True)
+    adjusted = cell_data.astype(float, copy=True)
     for start, end, cells in clipped:
         adjusted[start:end, cells] = _replacement_values_for_cells(
             adjusted, start, end, mode, cells
@@ -414,22 +559,43 @@ def save_adjustment_metadata(file_path, interval_records, mode, interpolation_me
     return [str(json_path), str(toml_path), str(csv_path)]
 
 
-def clean_signal_with_clicks(file_path, parent=None):
+def record_adjustment_in_config(
+    config: dict[str, Any] | None,
+    file_path: str | Path,
+    interval_records: list[dict[str, Any]],
+    mode: str,
+    interpolation_metadata: dict[str, Any] | None = None,
+) -> None:
+    """Record GUI artifact choices in the unified config for headless replay."""
+    if config is None:
+        return
+    interpolation = interpolation_metadata or {}
+    key = Path(file_path).stem.lower()
+    config.setdefault("adjustments", {})[key] = {
+        "source_file": Path(file_path).name,
+        "adjustment_mode": mode,
+        "processed": bool(interpolation.get("processed", True)),
+        "interpolation": interpolation,
+        "intervals": interval_records,
+    }
+
+
+def clean_signal_with_clicks(file_path, parent=None, config: dict[str, Any] | None = None):
     """Mark artifacts and immediately choose the best interpolation method."""
     _ensure_interactive_backend()
     df = pd.read_csv(file_path, header=None)
     t = df[0].values
-    dados = df.iloc[:, 1:5].values.astype(float)
-    cores = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+    cell_data = df.iloc[:, 1:5].values.astype(float)
+    cell_colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
 
     try:
         while True:
             fig_overview, ax = plt.subplots(5, 1, figsize=(14, 10), sharex=True)
             for i in range(4):
-                plot_segments(ax[i], t, dados[:, i], cores[i], None)
+                plot_segments(ax[i], t, cell_data[:, i], cell_colors[i], None)
                 ax[i].set_ylabel(f"Cell {i + 1}")
                 ax[i].grid(True)
-            plot_segments(ax[4], t, dados.sum(axis=1), "black", None)
+            plot_segments(ax[4], t, cell_data.sum(axis=1), "black", None)
             ax[4].set_ylabel("Sum")
             ax[4].set_xlabel("Time (s)")
             ax[4].grid(True)
@@ -443,7 +609,14 @@ def clean_signal_with_clicks(file_path, parent=None):
                 parent=parent,
             ):
                 plt.close(fig_overview)
-                return None, dados, []
+                record_adjustment_in_config(
+                    config,
+                    file_path,
+                    [],
+                    "none",
+                    {"status": "no_adjustment", "processed": True},
+                )
+                return None, cell_data, []
 
             is_interpolation = ask_yes_no_english(
                 "Select Action Type",
@@ -463,7 +636,14 @@ def clean_signal_with_clicks(file_path, parent=None):
                 messagebox.showinfo(
                     "Info", "No load cells were selected. No adjustments applied.", parent=parent
                 )
-                return None, dados, []
+                record_adjustment_in_config(
+                    config,
+                    file_path,
+                    [],
+                    "none",
+                    {"status": "no_adjustment", "processed": True},
+                )
+                return None, cell_data, []
 
             if not is_interpolation:
                 messagebox.showwarning(
@@ -485,52 +665,68 @@ def clean_signal_with_clicks(file_path, parent=None):
                     "excluded",
                     interpolation_metadata={"status": "excluded", "processed": False},
                 )
-                return None, dados, metadata_paths
+                record_adjustment_in_config(
+                    config,
+                    file_path,
+                    interval_records,
+                    "excluded",
+                    {"status": "excluded", "processed": False},
+                )
+                return None, cell_data, metadata_paths
 
-            intervalos_marcados = []
+            marked_intervals = []
 
             for cell in selected_cells:
-                fig_cel, ax_cel = plt.subplots(figsize=(16, 8))
-                ax_cel.plot(t, dados[:, cell], color=cores[cell], lw=1.2)
-                ax_cel.set_title(
+                fig_cell, ax_cell = plt.subplots(figsize=(16, 8))
+                ax_cell.plot(t, cell_data[:, cell], color=cell_colors[cell], lw=1.2)
+                ax_cell.set_title(
                     f"CELL {cell + 1} - Left click START/END; Right: undo last\n"
                     "Press ENTER to confirm only after every START has an END",
                     fontsize=14,
                 )
-                ax_cel.set_xlabel("Time (s)")
-                ax_cel.set_ylabel("Voltage (V)")
-                ax_cel.grid(True, alpha=0.4)
+                ax_cell.set_xlabel("Time (s)")
+                ax_cell.set_ylabel("Voltage (V)")
+                ax_cell.grid(True, alpha=0.4)
                 plt.tight_layout()
 
-                pontos = capture_clicks_with_undo(
-                    fig_cel, ax_cel, t, dados[:, cell], cores[cell], parent=parent
+                points = capture_clicks_with_undo(
+                    fig_cell, ax_cell, t, cell_data[:, cell], cell_colors[cell], parent=parent
                 )
 
-                if len(pontos) == 0:
+                if len(points) == 0:
                     continue
 
-                for i in range(0, len(pontos), 2):
-                    t_start = min(pontos[i], pontos[i + 1])
-                    t_end = max(pontos[i], pontos[i + 1])
+                for i in range(0, len(points), 2):
+                    t_start = min(points[i], points[i + 1])
+                    t_end = max(points[i], points[i + 1])
                     idx_start = np.searchsorted(t, t_start, side="left")
                     idx_end = np.searchsorted(t, t_end, side="right")
                     if idx_end > idx_start:
-                        intervalos_marcados.append(
+                        marked_intervals.append(
                             {"start": idx_start, "end": idx_end, "cells": [cell]}
                         )
 
             plt.close("all")
 
-            if not intervalos_marcados:
+            if not marked_intervals:
                 messagebox.showinfo(
                     "Info", "No intervals were marked. Nothing will be adjusted.", parent=parent
                 )
-                return None, dados, []
+                record_adjustment_in_config(
+                    config,
+                    file_path,
+                    [],
+                    "none",
+                    {"status": "no_adjustment", "processed": True},
+                )
+                return None, cell_data, []
 
-            config = get_default_interp_config()
-            interp_config = config["interpolation"]
+            interp_config = get_default_interp_config()["interpolation"].copy()
+            configured_interpolation = (config or {}).get("interpolation", {})
+            if isinstance(configured_interpolation, dict):
+                interp_config.update(configured_interpolation)
             _, gap_data, interval_records = apply_adjustment_intervals(
-                t, dados, intervalos_marcados, mode="nan"
+                t, cell_data, marked_intervals, mode="nan"
             )
             df_gaps = pd.DataFrame(gap_data)
 
@@ -579,7 +775,7 @@ def clean_signal_with_clicks(file_path, parent=None):
 
                 for cell_idx, cell in enumerate(selected_cells):
                     ax = axes[cell_idx]
-                    ax.plot(t, dados[:, cell], color="gray", alpha=0.3, label="Original")
+                    ax.plot(t, cell_data[:, cell], color="gray", alpha=0.3, label="Original")
                     ax.plot(
                         t, df_gaps.values[:, cell], color="black", alpha=0.5, label="Marked Gap"
                     )
@@ -608,7 +804,7 @@ def clean_signal_with_clicks(file_path, parent=None):
                 )
 
                 ax_sum.plot(
-                    t, np.sum(dados, axis=1), color="gray", alpha=0.25, label="Original Sum"
+                    t, np.sum(cell_data, axis=1), color="gray", alpha=0.25, label="Original Sum"
                 )
                 ax_sum.plot(
                     t,
@@ -664,7 +860,7 @@ def clean_signal_with_clicks(file_path, parent=None):
                     gc.collect()
                     continue
 
-                dados_adjusted = results_comparison[final_method].copy()
+                adjusted_cell_data = results_comparison[final_method].copy()
                 interpolation_metadata = {
                     "status": "adjusted_and_interpolated",
                     "selected_methods": selected_methods,
@@ -685,8 +881,15 @@ def clean_signal_with_clicks(file_path, parent=None):
                     "nan",
                     interpolation_metadata=interpolation_metadata,
                 )
+                record_adjustment_in_config(
+                    config,
+                    file_path,
+                    interval_records,
+                    "nan",
+                    interpolation_metadata,
+                )
 
-                output_data = np.column_stack((t, dados_adjusted))
+                output_data = np.column_stack((t, adjusted_cell_data))
                 output_name = file_path.replace(".csv", "_clean.csv")
                 np.savetxt(
                     output_name, output_data, delimiter=",", fmt="%.8f", header="", comments=""
@@ -697,7 +900,7 @@ def clean_signal_with_clicks(file_path, parent=None):
                     "Interval and interpolation metadata saved as TOML/JSON/CSV.",
                     parent=parent,
                 )
-                return output_name, dados_adjusted, metadata_paths
+                return output_name, adjusted_cell_data, metadata_paths
     finally:
         plt.close("all")
         gc.collect()
@@ -778,16 +981,36 @@ def deduplicate_trial_files(files: list[str]) -> list[str]:
     return [selected[key] for key in sorted(selected)]
 
 
+def is_tare_calibration_file(filename: str) -> bool:
+    """Return True for tare/zero calibration CSVs (English and legacy Portuguese names)."""
+    stem = Path(filename).stem.lower()
+    return bool(re.fullmatch(r"s\d+_d\d+_(tare|tara)", stem))
+
+
+def is_bodyweight_calibration_file(filename: str) -> bool:
+    """Return True for participant-weight calibration CSVs (English and legacy names)."""
+    stem = Path(filename).stem.lower()
+    return bool(re.fullmatch(r"s\d+_d\d+_(weight|peso)", stem))
+
+
 def is_calibration_file(filename: str) -> bool:
     """Return True for load-cell calibration CSV files only."""
-    name_lower = filename.lower()
+    name_lower = Path(filename).name.lower()
     if not name_lower.endswith(".csv"):
         return False
     return (
-        "tara" in name_lower
-        or "peso" in name_lower
+        is_tare_calibration_file(name_lower)
+        or is_bodyweight_calibration_file(name_lower)
         or re.search(r"s\d+_d\d+_\d+kg\.csv$", name_lower) is not None
     )
+
+
+def is_subject_metadata_file(filename: str) -> bool:
+    """Return True for Borg/info metadata files used to read body weight."""
+    name_lower = Path(filename).name.lower()
+    if not name_lower.endswith(".txt"):
+        return False
+    return "borg" in name_lower or name_lower.startswith("info_")
 
 
 def discover_calibration_and_borg(folder, subject_str, day_str):
@@ -812,8 +1035,8 @@ def discover_calibration_and_borg(folder, subject_str, day_str):
         except Exception:
             continue
 
-    tara_file = None
-    peso_file = None
+    tare_file = None
+    weight_file = None
     plate_files = []
     borg_file = None
 
@@ -832,16 +1055,19 @@ def discover_calibration_and_borg(folder, subject_str, day_str):
             for name in os.listdir(d):
                 name_lower = name.lower()
 
-                # Check for Borg file
-                if "borg" in name_lower and prefix_regex.search(name_lower) and not borg_file:
-                    borg_file = os.path.join(d, name)
+                if is_subject_metadata_file(name) and prefix_regex.search(name_lower):
+                    candidate = os.path.join(d, name)
+                    if borg_file is None or (
+                        "borg" in name_lower and "borg" not in Path(borg_file).name.lower()
+                    ):
+                        borg_file = candidate
 
                 # Check if matches subject_day prefix
                 if prefix_regex.search(name_lower) and name_lower.endswith(".csv"):
-                    if "tara" in name_lower and not tara_file:
-                        tara_file = os.path.join(d, name)
-                    elif "peso" in name_lower and not peso_file:
-                        peso_file = os.path.join(d, name)
+                    if is_tare_calibration_file(name) and not tare_file:
+                        tare_file = os.path.join(d, name)
+                    elif is_bodyweight_calibration_file(name) and not weight_file:
+                        weight_file = os.path.join(d, name)
                     elif "kg" in name_lower:
                         full_path = os.path.join(d, name)
                         if full_path not in plate_files:
@@ -849,34 +1075,81 @@ def discover_calibration_and_borg(folder, subject_str, day_str):
         except Exception as e:
             print(f"Error listing directory {d}: {e}")
 
-    return tara_file, peso_file, plate_files, borg_file
+    return tare_file, weight_file, plate_files, borg_file
+
+
+METADATA_WEIGHT_COLUMNS = ("Weight", "Peso", "peso", "weight", "BodyWeight", "body_weight")
+
+
+def _first_matching_column(df: pd.DataFrame, names: tuple[str, ...]) -> str | None:
+    """Return the first matching column name, ignoring surrounding whitespace and case."""
+    stripped = {str(col).strip(): col for col in df.columns}
+    lowered = {str(col).strip().lower(): col for col in df.columns}
+    for name in names:
+        if name in df.columns:
+            return name
+        if name in stripped:
+            return stripped[name]
+        if name.lower() in lowered:
+            return lowered[name.lower()]
+    return None
 
 
 def get_group_weight_from_borg(borg_path):
-    """Parses a Borg file to extract the participant's body weight from the first row."""
+    """Parse a Borg/info metadata file and return body weight from the first row."""
     try:
         if not os.path.exists(borg_path):
             return None
 
         df = None
+        weight_col = None
         for sep in [",", ";", "\t"]:
             try:
                 temp_df = pd.read_csv(borg_path, sep=sep)
                 temp_df.columns = [c.strip() for c in temp_df.columns]
-                if "Peso" in temp_df.columns:
+                weight_col = _first_matching_column(temp_df, METADATA_WEIGHT_COLUMNS)
+                if weight_col is not None:
                     df = temp_df
                     break
             except Exception:
                 continue
 
-        if df is None:
-            print(f"Borg file {borg_path} missing Peso column.")
+        if df is None or weight_col is None:
+            print(f"Metadata file {borg_path} missing Weight column.")
             return None
 
         if not df.empty:
-            return float(df["Peso"].iloc[0])
+            return float(df[weight_col].iloc[0])
     except Exception as e:
-        print(f"Error parsing Borg file {borg_path}: {e}")
+        print(f"Error parsing metadata file {borg_path}: {e}")
+    return None
+
+
+def infer_subject_weight_kg(folder: str | Path) -> float | None:
+    """Infer the first subject/day body weight available in an input folder."""
+    folder_path = Path(folder)
+    trial_files = sorted(path.name for path in folder_path.iterdir() if is_trial_file(path.name))
+    subject_day = None
+    if trial_files:
+        match = re.search(r"s(\d+)_d(\d+)", trial_files[0], re.IGNORECASE)
+        if match:
+            subject_day = (match.group(1), match.group(2))
+
+    borg_path = None
+    if subject_day:
+        _, _, _, borg_path = discover_calibration_and_borg(
+            str(folder_path), subject_day[0], subject_day[1]
+        )
+    if borg_path:
+        weight = get_group_weight_from_borg(borg_path)
+        if weight is not None:
+            return float(weight)
+
+    for path in sorted(folder_path.iterdir()):
+        if is_subject_metadata_file(path.name):
+            weight = get_group_weight_from_borg(str(path))
+            if weight is not None:
+                return float(weight)
     return None
 
 
@@ -937,16 +1210,39 @@ def make_timestamped_output_dir(parent_folder, prefix):
     return path
 
 
-def run_adjust_stage(parent=None, initial_dir=None) -> str | None:
-    """Executes the visual click-based artifact adjustment stage, ignoring calibration files."""
-    folder = initial_dir or filedialog.askdirectory(
-        title="Select folder with CSV files", parent=parent
+def make_output_dir(parent_folder, prefix, timestamp_output: bool = False):
+    """Create a stage directory, reusing it unless timestamp mode is requested."""
+    if timestamp_output:
+        return make_timestamped_output_dir(parent_folder, prefix)
+
+    path = os.path.join(parent_folder, prefix)
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+    elif os.path.exists(path):
+        os.remove(path)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def run_adjust_stage(
+    parent=None,
+    initial_dir=None,
+    config: dict[str, Any] | None = None,
+    output_dir: str | Path | None = None,
+    headless: bool = False,
+) -> str | None:
+    """Executes the artifact adjustment stage, ignoring calibration files."""
+    folder = initial_dir or (
+        filedialog.askdirectory(title="Select folder with CSV files", parent=parent)
+        if not headless
+        else None
     )
     if not folder:
         return None
 
-    base_folder = get_output_base_folder(folder)
-    output_folder = make_timestamped_output_dir(base_folder, "clean")
+    base_folder = output_dir or get_output_base_folder(folder)
+    timestamp_output = bool((config or {}).get("execution", {}).get("timestamp_output", False))
+    output_folder = make_output_dir(base_folder, "clean", timestamp_output)
 
     trial_files = []
     calibration_files = []
@@ -966,30 +1262,55 @@ def run_adjust_stage(parent=None, initial_dir=None) -> str | None:
     calibration_files.sort()
 
     if not trial_files and not calibration_files:
-        messagebox.showerror("Error", "No CSV files found in the folder.", parent=parent)
+        if not headless:
+            messagebox.showerror("Error", "No CSV files found in the folder.", parent=parent)
         return None
     # Process trial files interactively. The downstream filter stage expects one
-    # homogeneous batch, so every trial is written to LIMPOS with its original name.
+    # homogeneous batch, so every trial is written to the clean folder with its original name.
     for file in trial_files:
         file_path = os.path.join(folder, file)
         output_path = os.path.join(output_folder, file)
         print(f"\nProcessing trial: {file}")
         try:
-            saved, _, metadata_paths = clean_signal_with_clicks(file_path, parent=parent)
-            if saved:
-                shutil.move(saved, output_path)
-                print(f"Saved adjusted/interpolated trial for filtering: {file}")
+            if headless:
+                # Prefer GUI-recorded choices embedded in the run-history TOML;
+                # fall back to legacy sidecars beside the input trial.
+                meta = get_recorded_adjustment(config, file_path) or load_adjustment_metadata(
+                    file_path
+                )
+                if meta:
+                    replayed = replay_adjustment_from_metadata(file_path, meta)
+                    np.savetxt(output_path, replayed, delimiter=",", fmt="%.8f")
+                    if meta.get("intervals"):
+                        save_adjustment_metadata(
+                            output_path,
+                            meta["intervals"],
+                            str(meta.get("adjustment_mode", "nan")),
+                            interpolation_metadata=meta.get("interpolation", {}),
+                        )
+                    print(f"Replayed GUI adjustment metadata for: {file}")
+                else:
+                    shutil.copy2(file_path, output_path)
+                    print(f"Headless mode: copied trial without interactive clicking: {file}")
             else:
-                shutil.copy2(file_path, output_path)
-                print(f"No adjustment applied. Copied unchanged trial for filtering: {file}")
-            for metadata_path in metadata_paths:
-                if metadata_path and os.path.exists(metadata_path):
-                    shutil.move(
-                        metadata_path,
-                        os.path.join(output_folder, os.path.basename(metadata_path)),
-                    )
+                saved, _, metadata_paths = clean_signal_with_clicks(
+                    file_path, parent=parent, config=config
+                )
+                if saved:
+                    shutil.move(saved, output_path)
+                    print(f"Saved adjusted/interpolated trial for filtering: {file}")
+                else:
+                    shutil.copy2(file_path, output_path)
+                    print(f"No adjustment applied. Copied unchanged trial for filtering: {file}")
+                for metadata_path in metadata_paths:
+                    if metadata_path and os.path.exists(metadata_path):
+                        shutil.copy2(
+                            metadata_path,
+                            os.path.join(output_folder, os.path.basename(metadata_path)),
+                        )
         except Exception as e:
-            messagebox.showerror("Error", f"Failed on {file}:\n{e}", parent=parent)
+            if not headless:
+                messagebox.showerror("Error", f"Failed on {file}:\n{e}", parent=parent)
             print(e)
 
     # Copy calibration files directly
@@ -999,9 +1320,12 @@ def run_adjust_stage(parent=None, initial_dir=None) -> str | None:
         print(f"Copying calibration file directly: {file}")
         shutil.copy2(src_path, dest_path)
 
-    messagebox.showinfo(
-        "Finished", f"All files processed!\nCleaned files are in:\n{output_folder}", parent=parent
-    )
+    if not headless:
+        messagebox.showinfo(
+            "Finished",
+            f"All files processed!\nCleaned files are in:\n{output_folder}",
+            parent=parent,
+        )
     return output_folder
 
 
@@ -1434,17 +1758,18 @@ def apply_rbf_interp(df, column_idx, window_size=200):
 
 
 def _base_trial_stem_from_adjusted(file_path):
-    """Return trial stem without the adjustment suffix."""
+    """Return trial stem without the English or legacy Portuguese adjustment suffix."""
     stem = Path(file_path).stem
-    if stem.endswith("_LIMPO"):
-        return stem[: -len("_LIMPO")]
-    if stem.endswith("_clean"):
+    lower = stem.lower()
+    if lower.endswith("_limpo"):
+        return stem[: -len("_limpo")]
+    if lower.endswith("_clean"):
         return stem[: -len("_clean")]
     return stem
 
 
 def find_adjustment_metadata_file(file_path):
-    """Find adjustment interval sidecar for a LIMPOS trial file."""
+    """Find adjustment interval sidecar for a clean/legacy trial file."""
     folder = Path(file_path).parent
     base = _base_trial_stem_from_adjusted(file_path)
     for suffix in ["json", "toml", "csv"]:
@@ -1592,7 +1917,54 @@ def interpolate_dataframe_methods(df_filtered, selected_methods, spline_order, r
     return results_comparison
 
 
-def preprocess_file_interp(file_path, config, fs=1000, root=None):
+def get_recorded_adjustment(
+    config: dict[str, Any] | None, file_path: str | Path
+) -> dict[str, Any] | None:
+    """Return GUI-recorded adjustment metadata for a trial, if available."""
+    adjustments = (config or {}).get("adjustments", {})
+    if not isinstance(adjustments, dict):
+        return None
+    path = Path(file_path)
+    keys = [path.stem.lower(), Path(canonical_trial_filename(path.name)).stem.lower()]
+    for key in keys:
+        value = adjustments.get(key)
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def replay_adjustment_from_metadata(file_path: str | Path, metadata: dict[str, Any]) -> np.ndarray:
+    """Reproduce GUI artifact/interpolation choices without opening dialogs."""
+    df = pd.read_csv(file_path, sep=",", header=None)
+    t = df.iloc[:, 0].to_numpy(dtype=float)
+    cells = df.iloc[:, 1:5].to_numpy(dtype=float)
+    intervals = adjustment_metadata_to_interval_specs(metadata)
+    interpolation = metadata.get("interpolation", {})
+
+    if metadata.get("processed") is False or metadata.get("adjustment_mode") == "excluded":
+        return df.to_numpy()
+    if not intervals or metadata.get("adjustment_mode") == "none":
+        return df.to_numpy()
+
+    if interpolation.get("status") == "adjusted_and_interpolated":
+        final_method = str(interpolation.get("final_method", "")).strip()
+        if not final_method:
+            raise ValueError(f"Recorded interpolation method is missing for {Path(file_path).name}")
+        _, gap_cells, _ = apply_adjustment_intervals(t, cells, intervals, mode="nan")
+        results = interpolate_dataframe_methods(
+            pd.DataFrame(gap_cells),
+            [final_method],
+            int(interpolation.get("spline_order", 3)),
+            int(interpolation.get("rbf_window_size", 200)),
+        )
+        return np.column_stack((t, results[final_method]))
+
+    mode = normalize_adjustment_mode(str(metadata.get("adjustment_mode", "nan")))
+    adjusted_t, adjusted_cells, _ = apply_adjustment_intervals(t, cells, intervals, mode=mode)
+    return np.column_stack((adjusted_t, adjusted_cells))
+
+
+def preprocess_file_interp(file_path, config, fs=1000, root=None, headless=False):
     """Compatibility pass for sidecars that still need interpolation."""
     max_selection = config["interpolation"]["max_comparison_methods"]
     spline_order = config["interpolation"]["spline_order"]
@@ -1619,12 +1991,14 @@ def preprocess_file_interp(file_path, config, fs=1000, root=None):
     if _records_require_removed_source(records):
         original_source = _source_file_for_removed_adjustment(file_path, metadata)
         if original_source is None:
-            messagebox.showwarning(
-                "Interpolation skipped",
-                f"{source_path.name} used remove mode, but the original source file was not found.\n"
-                "The shortened file will be copied unchanged.",
-                parent=root,
+            warning = (
+                f"{source_path.name} used remove mode, but the original source file was not "
+                "found. The shortened file will be copied unchanged."
             )
+            if headless:
+                print(f"Interpolation skipped: {warning}")
+            else:
+                messagebox.showwarning("Interpolation skipped", warning, parent=root)
             df = pd.read_csv(file_path, sep=",", header=None)
             return df.values, df.iloc[:, 1:5].values, df[0].values, False
         source_path = original_source
@@ -1641,6 +2015,19 @@ def preprocess_file_interp(file_path, config, fs=1000, root=None):
             f"No valid interpolation intervals for {os.path.basename(file_path)}. Copying unchanged."
         )
         return df.values, raw, t, False
+
+    if headless:
+        print(
+            f"No recorded final interpolation for {os.path.basename(file_path)}. "
+            "Headless compatibility pass copied the adjusted signal unchanged."
+        )
+        current_df = pd.read_csv(file_path, sep=",", header=None)
+        return (
+            current_df.to_numpy(),
+            current_df.iloc[:, 1:5].to_numpy(),
+            current_df.iloc[:, 0].to_numpy(),
+            False,
+        )
 
     try:
         _ensure_interactive_backend()
@@ -1772,20 +2159,34 @@ def preprocess_file_interp(file_path, config, fs=1000, root=None):
         gc.collect()
 
 
-def run_interpolate_stage(parent=None, initial_dir=None) -> str | None:
+def run_interpolate_stage(
+    parent=None,
+    initial_dir=None,
+    config: dict[str, Any] | None = None,
+    output_dir: str | Path | None = None,
+    headless: bool = False,
+) -> str | None:
     """Executes sidecar-driven multi-method interpolation for adjusted files."""
-    folder = initial_dir or filedialog.askdirectory(title="Folder with CSVs", parent=parent)
+    folder = initial_dir or (
+        filedialog.askdirectory(title="Folder with CSVs", parent=parent) if not headless else None
+    )
     if not folder:
         return None
 
-    base_folder = get_output_base_folder(folder)
-    path_interp = make_timestamped_output_dir(base_folder, "adjusted")
+    base_folder = output_dir or get_output_base_folder(folder)
+    timestamp_output = bool((config or {}).get("execution", {}).get("timestamp_output", False))
+    path_interp = make_output_dir(base_folder, "adjusted", timestamp_output)
 
-    dialog = InterpConfigDialog(parent)
-    if not dialog.result:
-        return None
+    if config and ("interpolation" in config or "spline_order" in config):
+        interp_config = config if "interpolation" in config else {"interpolation": config}
+    elif not headless:
+        dialog = InterpConfigDialog(parent)
+        if not dialog.result:
+            return None
+        interp_config = dialog.result
+    else:
+        interp_config = get_default_interp_config()
 
-    interp_config = dialog.result
     config_save_path = os.path.join(path_interp, "interpolation_configuration_used.toml")
     save_interp_config(interp_config, config_save_path)
 
@@ -1795,9 +2196,9 @@ def run_interpolate_stage(parent=None, initial_dir=None) -> str | None:
         for f in os.listdir(folder):
             if not f.lower().endswith(".csv"):
                 continue
-            if "tara" in f.lower() or "peso" in f.lower() or "kg" in f.lower():
+            if is_calibration_file(f):
                 calibration_files.append(f)
-            else:
+            elif is_trial_file(f):
                 trial_files.append(f)
         trial_files.sort()
         calibration_files.sort()
@@ -1806,7 +2207,12 @@ def run_interpolate_stage(parent=None, initial_dir=None) -> str | None:
         for f in trial_files:
             print(f"Processing trial file: {f}...")
             fp = os.path.join(folder, f)
-            saved, _, _, did_interpolate = preprocess_file_interp(fp, interp_config, root=parent)
+            saved, _, _, did_interpolate = preprocess_file_interp(
+                fp,
+                interp_config,
+                root=parent,
+                headless=headless,
+            )
             if saved is not None:
                 if did_interpolate:
                     print(f"Saving interpolated: {f}...")
@@ -1825,16 +2231,18 @@ def run_interpolate_stage(parent=None, initial_dir=None) -> str | None:
             print(f"Copying calibration file directly: {f}")
             shutil.copy2(src_path, dest_path)
     except Exception as e:
-        messagebox.showerror(
-            "Error", f"An error occurred: {e}\n\nCheck the console for details.", parent=parent
-        )
+        if not headless:
+            messagebox.showerror(
+                "Error", f"An error occurred: {e}\n\nCheck the console for details.", parent=parent
+            )
         print(e)
         return None
     finally:
         plt.close("all")
-        messagebox.showinfo(
-            "Completed", "Processing completed. Check 'adjusted' folder.", parent=parent
-        )
+        if not headless:
+            messagebox.showinfo(
+                "Completed", "Processing completed. Check 'adjusted' folder.", parent=parent
+            )
 
     return path_interp
 
@@ -2161,7 +2569,7 @@ def apply_filter(signal, filter_type="lowpass", fs=1000, **kwargs):
     return sosfiltfilt(sos, sig)
 
 
-def analyze_spectrum_filt(cells, timestamps, file_name, path_analise, fs=1000):
+def analyze_spectrum_filt(cells, timestamps, file_name, analysis_path, fs=1000):
     """Performs frequency domain analysis on load cell signals."""
     _ensure_noninteractive_backend()
     try:
@@ -2209,7 +2617,7 @@ def analyze_spectrum_filt(cells, timestamps, file_name, path_analise, fs=1000):
             plt.tight_layout()
             plt.savefig(
                 os.path.join(
-                    path_analise,
+                    analysis_path,
                     f"{Path(file_name).stem}_filter_{channels[i].replace(' ', '_')}_spectrum.png",
                 )
             )
@@ -2250,11 +2658,11 @@ def analyze_spectrum_filt(cells, timestamps, file_name, path_analise, fs=1000):
         ax[1].grid(True)
 
         plt.tight_layout()
-        plt.savefig(os.path.join(path_analise, f"{Path(file_name).stem}_filter_sum_spectrum.png"))
+        plt.savefig(os.path.join(analysis_path, f"{Path(file_name).stem}_filter_sum_spectrum.png"))
         plt.close(fig)
 
         pd.DataFrame.from_dict(metrics, orient="index").to_csv(
-            os.path.join(path_analise, f"{Path(file_name).stem}_filter_spectrum_metrics.csv")
+            os.path.join(analysis_path, f"{Path(file_name).stem}_filter_spectrum_metrics.csv")
         )
     finally:
         plt.close("all")
@@ -2330,30 +2738,36 @@ def preprocess_file_filt(file_path, config, fs=1000, root=None, preview=True, co
         gc.collect()
 
 
-def run_filter_stage(parent=None, initial_dir=None) -> str | None:
+def run_filter_stage(
+    parent=None,
+    initial_dir=None,
+    config: dict[str, Any] | None = None,
+    output_dir: str | Path | None = None,
+    headless: bool = False,
+) -> str | None:
     """Executes edge-safe filtering and spectral FFT/PSD analysis."""
-    folder = initial_dir or filedialog.askdirectory(title="Folder with CSVs", parent=parent)
+    folder = initial_dir or (
+        filedialog.askdirectory(title="Folder with CSVs", parent=parent) if not headless else None
+    )
     if not folder:
         return None
 
-    base_folder = get_output_base_folder(folder)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path_filt = os.path.join(base_folder, f"filtered_{timestamp}")
-    path_analise = os.path.join(base_folder, f"filter_analysis_{timestamp}")
-    suffix = 1
-    while os.path.exists(path_filt) or os.path.exists(path_analise):
-        path_filt = os.path.join(base_folder, f"filtered_{timestamp}_{suffix:02d}")
-        path_analise = os.path.join(base_folder, f"filter_analysis_{timestamp}_{suffix:02d}")
-        suffix += 1
-    os.makedirs(path_filt, exist_ok=False)
-    os.makedirs(path_analise, exist_ok=False)
+    base_folder = output_dir or get_output_base_folder(folder)
+    timestamp_output = bool((config or {}).get("execution", {}).get("timestamp_output", False))
+    path_filt = make_output_dir(base_folder, "filtered", timestamp_output)
+    analysis_path = make_output_dir(base_folder, "filter_analysis", timestamp_output)
 
-    dialog = FilterConfigDialog(parent)
-    if not dialog.result:
-        return None
+    if config and ("filters" in config or "filter_type" in config):
+        filter_config = config if "filters" in config else {"filters": config}
+    elif not headless:
+        dialog = FilterConfigDialog(parent)
+        if not dialog.result:
+            return None
+        filter_config = dialog.result
+    else:
+        filter_config = get_default_filter_config()
 
-    filter_config = dialog.result
-    config_save_path = os.path.join(path_analise, "filtering_configuration_used.toml")
+    config_save_path = os.path.join(analysis_path, "filtering_configuration_used.toml")
     save_filter_config(filter_config, config_save_path)
 
     try:
@@ -2377,7 +2791,7 @@ def run_filter_stage(parent=None, initial_dir=None) -> str | None:
             print(f"Filtering {len(files)} {category_label}...")
             category_approved = False
             for idx, f in enumerate(files):
-                preview = idx == 0
+                preview = (idx == 0) and not headless and (_matplotlib_backend_name() != "agg")
                 print(f"Processing {category_key} file: {f}...")
                 fp = os.path.join(folder, f)
                 confirm_message = None
@@ -2400,13 +2814,13 @@ def run_filter_stage(parent=None, initial_dir=None) -> str | None:
                     break
                 if preview:
                     category_approved = True
-                if not preview and not category_approved:
-                    break
+                if not preview and not category_approved and not headless:
+                    pass
 
                 if processed is not None and t is not None:
                     output_name = canonical_trial_filename(f) if category_key == "running" else f
                     print(f"Analyzing spectrum of {f}...")
-                    analyze_spectrum_filt(processed, t, output_name, path_analise)
+                    analyze_spectrum_filt(processed, t, output_name, analysis_path)
                     if saved is not None:
                         print(f"Saving filtered: {output_name}...")
                         np.savetxt(
@@ -2420,24 +2834,26 @@ def run_filter_stage(parent=None, initial_dir=None) -> str | None:
                 plt.close("all")
                 gc.collect()
     except Exception as e:
-        messagebox.showerror(
-            "Error", f"An error occurred: {e}\n\nCheck the console for details.", parent=parent
-        )
+        if not headless:
+            messagebox.showerror(
+                "Error", f"An error occurred: {e}\n\nCheck the console for details.", parent=parent
+            )
         print(e)
         return None
     finally:
         plt.close("all")
-        messagebox.showinfo(
-            "Completed",
-            f"Filtering completed.\n\nFiltered data: {path_filt}\nFilter analysis: {path_analise}",
-            parent=parent,
-        )
+        if not headless:
+            messagebox.showinfo(
+                "Completed",
+                f"Filtering completed.\n\nFiltered data: {path_filt}\nFilter analysis: {analysis_path}",
+                parent=parent,
+            )
 
     return path_filt
 
 
 # =============================================================================
-# STAGE 4: BIOMECHANICAL ANALYSIS
+# STAGE 4: BIOMECHANICAL ANALYSIS & CONFIGURATION
 # =============================================================================
 
 
@@ -2446,6 +2862,7 @@ def get_default_process_config():
     return {
         "processing": {
             "participant_weight_kg": 70.0,
+            "participant_weight_source": "fallback",
             "use_advanced_calibration": False,
             "filter_cutoff_hz": 50.0,
             "apply_processing_filter": False,
@@ -2453,6 +2870,25 @@ def get_default_process_config():
             "generate_figures": True,
             "generate_interactive_report": True,
         }
+    }
+
+
+def get_default_unified_config() -> dict[str, Any]:
+    """Get complete unified configuration dictionary for all treadmill stages."""
+    return {
+        "paths": {
+            "input_dir": "",
+            "output_dir": "",
+        },
+        "execution": {
+            "step": "all",
+            "timestamp_output": False,
+        },
+        "adjustments": {},
+        "analysis_windows": {},
+        "filters": get_default_filter_config()["filters"],
+        "interpolation": get_default_interp_config()["interpolation"],
+        "processing": get_default_process_config()["processing"],
     }
 
 
@@ -2490,10 +2926,216 @@ def load_process_config(filepath):
                     ),
                 }
             )
+            if "participant_weight_kg" in proc and "participant_weight_source" not in proc:
+                config["processing"]["participant_weight_source"] = "toml"
         return config
     except Exception as e:
         print(f"Error loading config: {e}")
         return None
+
+
+def load_unified_config(filepath: str | Path) -> dict[str, Any]:
+    """Load configuration settings from a TOML file (supports full or partial configs)."""
+    config = get_default_unified_config()
+    try:
+        p = Path(filepath)
+        if not p.exists():
+            return config
+        with open(p, encoding="utf-8") as f:
+            toml_data = toml.load(f)
+
+        if "paths" in toml_data and isinstance(toml_data["paths"], dict):
+            config["paths"].update(toml_data["paths"])
+        if "execution" in toml_data and isinstance(toml_data["execution"], dict):
+            config["execution"].update(toml_data["execution"])
+        if "adjustments" in toml_data and isinstance(toml_data["adjustments"], dict):
+            config["adjustments"].update(toml_data["adjustments"])
+        if "analysis_windows" in toml_data and isinstance(toml_data["analysis_windows"], dict):
+            config["analysis_windows"].update(toml_data["analysis_windows"])
+        if "filters" in toml_data and isinstance(toml_data["filters"], dict):
+            config["filters"].update(toml_data["filters"])
+        if "interpolation" in toml_data and isinstance(toml_data["interpolation"], dict):
+            config["interpolation"].update(toml_data["interpolation"])
+        if "processing" in toml_data and isinstance(toml_data["processing"], dict):
+            processing = dict(toml_data["processing"])
+            if "weight" in processing:
+                processing["participant_weight_kg"] = float(processing.pop("weight"))
+                processing.setdefault("participant_weight_source", "toml")
+            config["processing"].update(processing)
+            if (
+                "participant_weight_kg" in processing
+                and "participant_weight_source" not in processing
+            ):
+                config["processing"]["participant_weight_source"] = "toml"
+
+        # Map root-level properties if defined without table headers
+        for k in [
+            "participant_weight_kg",
+            "filter_cutoff_hz",
+            "detection_threshold_bw",
+            "use_advanced_calibration",
+            "apply_processing_filter",
+            "generate_figures",
+            "generate_interactive_report",
+        ]:
+            if k in toml_data:
+                config["processing"][k] = toml_data[k]
+        if "weight" in toml_data:
+            config["processing"]["participant_weight_kg"] = float(toml_data["weight"])
+            config["processing"]["participant_weight_source"] = "toml"
+        elif "participant_weight_kg" in toml_data:
+            config["processing"]["participant_weight_source"] = "toml"
+        return config
+    except Exception as e:
+        print(f"Error loading unified config from {filepath}: {e}")
+        return config
+
+
+def prepare_cli_execution(
+    config: dict[str, Any],
+    input_dir: str | Path,
+    output_dir: str | Path | None,
+    step: str | None,
+) -> tuple[dict[str, Any], Path, Path, str]:
+    """Resolve effective CLI paths/step and return a complete replayable config."""
+    input_path = Path(input_dir).expanduser().resolve()
+    configured_output = str(output_dir).strip() if output_dir else ""
+    output_path = (
+        Path(configured_output).expanduser().resolve()
+        if configured_output
+        else input_path / "output"
+    )
+
+    configured_step = str(step or config.get("execution", {}).get("step", "all")).lower()
+    effective_step = configured_step if configured_step in CLI_STEPS else "all"
+
+    effective_config = get_default_unified_config()
+    for section in (
+        "filters",
+        "interpolation",
+        "processing",
+        "adjustments",
+        "analysis_windows",
+    ):
+        section_values = config.get(section, {})
+        if isinstance(section_values, dict):
+            effective_config[section].update(section_values)
+    effective_config["paths"] = {
+        "input_dir": str(input_path),
+        "output_dir": str(output_path),
+    }
+    timestamp_output = bool(config.get("execution", {}).get("timestamp_output", False))
+    effective_config["execution"] = {
+        "step": effective_step,
+        "timestamp_output": timestamp_output,
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "vaila_version": VERSION,
+    }
+
+    output_path.mkdir(parents=True, exist_ok=True)
+    return effective_config, input_path, output_path, effective_step
+
+
+def save_cli_run_history(
+    config: dict[str, Any], input_dir: str | Path, output_dir: str | Path
+) -> list[Path]:
+    """Write one run-history TOML at the input root and one at the output root.
+
+    The filename is stable (no timestamp). Each run overwrites the same files so
+    results_* subfolders share a single replay config instead of accumulating copies.
+    """
+    input_path = Path(input_dir).resolve()
+    output_path = Path(output_dir).resolve()
+    destinations = list(dict.fromkeys((input_path, output_path)))
+    paths = []
+    for destination in destinations:
+        destination.mkdir(parents=True, exist_ok=True)
+        path = destination / RUN_HISTORY_FILENAME
+        with open(path, "w", encoding="utf-8") as history_file:
+            toml.dump(config, history_file)
+        paths.append(path)
+    return paths
+
+
+def update_cli_run_history(config: dict[str, Any], paths: list[Path]) -> None:
+    """Rewrite all history copies after GUI-only choices have been recorded."""
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as history_file:
+            toml.dump(config, history_file)
+
+
+def format_treadmill_gui_cli_command(
+    history_path: str | Path,
+    input_dir: str | Path,
+    output_dir: str | Path,
+    step: str,
+) -> list[str]:
+    """Build the exact copy/paste CLI mirror for a GUI execution."""
+    return [
+        "uv",
+        "run",
+        CLI_SCRIPT_PATH,
+        "--config",
+        str(Path(history_path).resolve()),
+        "--input-dir",
+        str(Path(input_dir).resolve()),
+        "--output-dir",
+        str(Path(output_dir).resolve()),
+        "--step",
+        step,
+    ]
+
+
+def prepare_gui_cli_run(
+    config: dict[str, Any],
+    input_dir: str | Path,
+    output_dir: str | Path | None,
+    step: str,
+) -> tuple[dict[str, Any], Path, Path, list[Path], list[str]]:
+    """Create GUI run history and print its highlighted, reproducible CLI mirror."""
+    effective_config, input_path, output_path, effective_step = prepare_cli_execution(
+        config,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        step=step,
+    )
+    history_paths = save_cli_run_history(effective_config, input_path, output_path)
+    cli = format_treadmill_gui_cli_command(
+        history_paths[0], input_path, output_path, effective_step
+    )
+    print_treadmill_config_summary(
+        effective_config,
+        input_dir=input_path,
+        output_dir=output_path,
+        mode="GUI Run → reproducible CLI",
+        step=effective_step,
+    )
+    print_run_history_paths(history_paths)
+    print_gui_cli_mirror("vaila/treadmill_lc", cli)
+    return effective_config, input_path, output_path, history_paths, cli
+
+
+def finish_gui_cli_run(
+    config: dict[str, Any], history_paths: list[Path], cli: list[str], *, succeeded: bool
+) -> None:
+    """Persist GUI-only selections and repeat the mirror at the terminal tail."""
+    update_cli_run_history(config, history_paths)
+    paths = config.get("paths", {})
+    print_treadmill_config_summary(
+        config,
+        input_dir=paths.get("input_dir"),
+        output_dir=paths.get("output_dir"),
+        mode="Completed GUI Run → reproducible CLI" if succeeded else "GUI Run Request",
+        step=config.get("execution", {}).get("step", "all"),
+    )
+    print_run_history_paths(history_paths)
+    note = (
+        "Equivalent CLI for the completed GUI run (copy/paste):"
+        if succeeded
+        else "Equivalent CLI/history for this GUI request (copy/paste after reviewing):"
+    )
+    print_gui_cli_mirror("vaila/treadmill_lc", cli, note=note)
 
 
 class ProcessConfigDialog(simpledialog.Dialog):
@@ -2634,6 +3276,7 @@ class ProcessConfigDialog(simpledialog.Dialog):
         if self.use_toml and self.loaded_config:
             self.result = self.loaded_config
             self.result["processing"]["participant_weight_kg"] = float(self.weight_entry.get())
+            self.result["processing"]["participant_weight_source"] = "gui"
             self.result["processing"]["filter_cutoff_hz"] = float(self.fc_entry.get())
             self.result["processing"]["detection_threshold_bw"] = float(self.threshold_entry.get())
             self.result["processing"]["use_advanced_calibration"] = self.adv_calib_var.get()
@@ -2646,6 +3289,7 @@ class ProcessConfigDialog(simpledialog.Dialog):
             self.result = {
                 "processing": {
                     "participant_weight_kg": float(self.weight_entry.get()),
+                    "participant_weight_source": "gui",
                     "use_advanced_calibration": self.adv_calib_var.get(),
                     "filter_cutoff_hz": float(self.fc_entry.get()),
                     "apply_processing_filter": self.apply_filter_var.get(),
@@ -2656,57 +3300,196 @@ class ProcessConfigDialog(simpledialog.Dialog):
             }
 
 
-def butterworth_filter(dat, fc=50, fs=FS, ordem=4, tipo="low"):
+def butterworth_filter(dat, fc=50, fs=FS, order=4, btype="low"):
     """Applies a stable zero-phase Butterworth filter to the data."""
     w = fc / (fs / 2)
-    sos = butter(ordem, w, tipo, output="sos")
+    sos = butter(order, w, btype, output="sos")
     return sosfiltfilt(sos, dat, axis=0)
 
 
+# =============================================================================
+# 5-STAGE LOGICAL CALIBRATION & BIOMECHANICS PIPELINE
+# 1. Zero Offset -> 2. Calibration Matrix -> 3. Coordinate Transformation ->
+# 4. Signal Filtering -> 5. Event Detection
+# =============================================================================
+
+
+def apply_zero_offset(cells: np.ndarray, tare_mean: np.ndarray) -> np.ndarray:
+    """Stage 1: Zero Offset / Tare baseline subtraction.
+
+    V_offset_corrected = V_raw - V_tare
+    """
+    return np.asarray(cells, dtype=float) - np.asarray(tare_mean, dtype=float)
+
+
+def apply_calibration_matrix(
+    offset_corrected_cells: np.ndarray,
+    weight_kg: float = 70.0,
+    m: float = 1.0,
+    b: float = 0.0,
+    **kwargs: Any,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Stage 2: Calibration Matrix / Gain transformation.
+
+    Converts offset-corrected voltages to force in Body Weight (BW) units.
+    F_cells_kg = m * V_cells + b
+    F_cells_bw = F_cells_kg / weight_kg
+    F_vertical = sum(F_cells_bw)
+    """
+    if "calib_slope" in kwargs:
+        m = float(kwargs["calib_slope"])
+    if "calib_intercept" in kwargs:
+        b = float(kwargs["calib_intercept"])
+    offset_corrected_cells = np.asarray(offset_corrected_cells, dtype=float)
+    grf_kg = m * offset_corrected_cells + b
+    grf_bw = grf_kg / float(weight_kg)
+    grf_vertical = np.sum(grf_bw, axis=1) if offset_corrected_cells.ndim > 1 else np.sum(grf_bw)
+    return grf_bw, grf_vertical
+
+
+def apply_coordinate_transformation(grf_bw: np.ndarray) -> dict[str, np.ndarray]:
+    """Stage 3: Coordinate Transformation to physical COP & force components.
+
+    Deck Geometry: 58.0 cm ML width (X: -29 to +29 cm), 113.0 cm AP length (Y: -56.5 to +56.5 cm).
+    Cell 1: Anterior-Left  (-29.0, +56.5)
+    Cell 2: Posterior-Left (-29.0, -56.5)
+    Cell 3: Anterior-Right (+29.0, +56.5)
+    Cell 4: Posterior-Right (+29.0, -56.5)
+
+    Returns standard English biomechanics dictionary:
+      - 'medial_lateral': COP X (cm)
+      - 'anterior_posterior': COP Y (cm)
+      - 'vertical': Total GRF in Body Weight (BW)
+      - 'grf_bw_cells': Per-cell GRF in BW
+    """
+    cop_ml, cop_ap = calculate_cop_system(grf_bw)
+    grf_vertical = np.sum(grf_bw, axis=1)
+    return {
+        "medial_lateral": cop_ml,
+        "anterior_posterior": cop_ap,
+        "vertical": grf_vertical,
+        "cop_x": cop_ml,
+        "cop_y": cop_ap,
+        "grf_total": grf_vertical,
+        "grf_bw_cells": grf_bw,
+    }
+
+
+def apply_signal_filtering(
+    biomech_channels: dict[str, np.ndarray] | np.ndarray,
+    fc: float = 50.0,
+    fs: int = FS,
+    order: int = 4,
+    **kwargs: Any,
+) -> dict[str, np.ndarray] | np.ndarray:
+    """Stage 4: Signal Filtering (zero-phase Butterworth low-pass filter)."""
+    if "cutoff_hz" in kwargs:
+        fc = float(kwargs["cutoff_hz"])
+    if "filter_order" in kwargs:
+        order = int(kwargs["filter_order"])
+
+    if isinstance(biomech_channels, np.ndarray):
+        return butterworth_filter(biomech_channels, fc=fc, fs=fs, order=order)
+
+    filtered = dict(biomech_channels)
+    if "vertical" in biomech_channels:
+        filtered["vertical"] = butterworth_filter(
+            biomech_channels["vertical"], fc=fc, fs=fs, order=order
+        )
+        filtered["grf_total"] = filtered["vertical"]
+    if "medial_lateral" in biomech_channels:
+        filtered["medial_lateral"] = butterworth_filter(
+            biomech_channels["medial_lateral"], fc=fc, fs=fs, order=order
+        )
+        filtered["cop_x"] = filtered["medial_lateral"]
+    if "anterior_posterior" in biomech_channels:
+        filtered["anterior_posterior"] = butterworth_filter(
+            biomech_channels["anterior_posterior"], fc=fc, fs=fs, order=order
+        )
+        filtered["cop_y"] = filtered["anterior_posterior"]
+    if "grf_bw_cells" in biomech_channels:
+        filtered["grf_bw_cells"] = butterworth_filter(
+            biomech_channels["grf_bw_cells"], fc=fc, fs=fs, order=order
+        )
+    return filtered
+
+
+def detect_events(
+    grf_vertical: np.ndarray,
+    start_idx: int = 0,
+    fs: int = FS,
+    threshold: float = 0.1,
+    mode: str = "legacy_valley",
+    **kwargs: Any,
+) -> tuple[list[dict[str, Any]], np.ndarray]:
+    """Stage 5: Event Detection (strikes and steps).
+
+    Enforces a single ``sidefoot`` code on each step:
+      0 = Right
+      1 = Left
+    """
+    if "start" in kwargs:
+        start_idx = int(kwargs["start"])
+    steps, peaks = detect_steps(
+        grf_vertical, start_idx=start_idx, fs=fs, threshold=threshold, mode=mode
+    )
+    for step in steps:
+        step["sidefoot"] = _sidefoot(step)
+        step.pop("side", None)
+        step.pop("foot", None)
+    return steps, peaks
+
+
 def load_data(
-    caminho_csv,
-    caminho_tara,
-    caminho_peso,
-    peso_kg,
-    fc_filtro=50,
+    csv_path,
+    tare_path,
+    weight_path,
+    weight_kg,
+    filter_cutoff=50,
     m=1.0,
     b=0.0,
     apply_processing_filter=False,
 ):
-    """Loads and processes running data from CSV files."""
-    df = pd.read_csv(caminho_csv, sep=",", header=None)
+    """Loads and processes running data following the 5-stage calibration pipeline:
+    1. Zero Offset -> 2. Calibration Matrix -> 3. Coordinate Transformation ->
+    4. Signal Filtering -> 5. Event Detection.
+    """
+    df = pd.read_csv(csv_path, sep=",", header=None)
     cells = -1 * df[[1, 2, 3, 4]].to_numpy()
 
-    tara_vals = read_calibration_cells(caminho_tara)
-    tara_media = np.mean(tara_vals, axis=0)
-    dados = cells - tara_media
+    # Stage 1: Zero Offset
+    tare_vals = read_calibration_cells(tare_path)
+    tare_mean = np.mean(tare_vals, axis=0)
+    offset_corrected = apply_zero_offset(cells, tare_mean)
 
-    dados_filtrados = butterworth_filter(dados, fc=fc_filtro) if apply_processing_filter else dados
-
-    peso_vals = read_calibration_cells(caminho_peso)
-    peso_corrigido = peso_vals - tara_media
-    soma_peso = np.sum(np.mean(peso_corrigido, axis=0))
-
+    # Compute calibration polynomial parameters if needed
+    weight_vals = read_calibration_cells(weight_path)
+    corrected_weight = weight_vals - tare_mean
+    weight_sum = np.sum(np.mean(corrected_weight, axis=0))
     if m == 1.0 and b == 0.0:
-        m, b = np.polyfit([0, soma_peso], [0, peso_kg], 1)
+        m, b = np.polyfit([0, weight_sum], [0, weight_kg], 1)
 
-    grf_kg = m * dados_filtrados + b
-    grf_bw = grf_kg / peso_kg
-    grf_total = np.sum(grf_bw, axis=1)
+    # Stage 2: Calibration Matrix
+    grf_bw, grf_total = apply_calibration_matrix(offset_corrected, m=m, b=b, weight_kg=weight_kg)
+
+    # Stage 4: Signal Filtering (if enabled)
+    if apply_processing_filter:
+        grf_bw = butterworth_filter(grf_bw, fc=filter_cutoff)
+        grf_total = np.sum(grf_bw, axis=1)
 
     return grf_bw, grf_total, m, b
 
 
 def calculate_cop_system(grf_bw):
-    """Calculates COP in centimeters using cell order 1 TL, 2 BL, 3 TR, 4 BR."""
+    """Calculates COP in centimeters: 1 anterior-left, 2 posterior-left, 3 anterior-right, 4 posterior-right."""
     half_width_cm = 58.0 / 2.0
     half_length_cm = 113.0 / 2.0
     positions = np.array(
         [
-            [-half_width_cm, half_length_cm],  # Cell 1 - top left
-            [-half_width_cm, -half_length_cm],  # Cell 2 - bottom left
-            [half_width_cm, half_length_cm],  # Cell 3 - top right
-            [half_width_cm, -half_length_cm],  # Cell 4 - bottom right
+            [-half_width_cm, half_length_cm],  # Cell 1 - anterior left
+            [-half_width_cm, -half_length_cm],  # Cell 2 - posterior left
+            [half_width_cm, half_length_cm],  # Cell 3 - anterior right
+            [half_width_cm, -half_length_cm],  # Cell 4 - posterior right
         ]
     )
 
@@ -2719,26 +3502,26 @@ def calculate_cop_system(grf_bw):
     return cop_x, cop_y
 
 
-def strikeattr(datres, fs=FS):
+def strikeattr(strike, fs=FS):
     """Extracts biomechanical attributes from a single foot strike."""
-    datres = np.array(datres)
-    pos_peaks_datres, _ = find_peaks(datres)
-    pos_peakmax = np.argmax(datres)
-    val_peakmax = max(datres)
+    strike = np.array(strike)
+    strike_peak_indices, _ = find_peaks(strike)
+    pos_peakmax = np.argmax(strike)
+    val_peakmax = max(strike)
 
-    der_datres = np.diff(datres)
-    pos_maxdiff = np.argmax(der_datres)
-    val_maxdiff = max(der_datres)
+    strike_derivative = np.diff(strike)
+    pos_maxdiff = np.argmax(strike_derivative)
+    val_maxdiff = max(strike_derivative)
 
-    peaks_derdatres, _ = find_peaks(-1 * der_datres[pos_maxdiff:pos_peakmax])
-    if len(peaks_derdatres) == 0:
+    neg_derivative_peaks, _ = find_peaks(-1 * strike_derivative[pos_maxdiff:pos_peakmax])
+    if len(neg_derivative_peaks) == 0:
         pos_itransient = np.nan
         val_itransient = np.nan
     else:
-        pos_itransient = peaks_derdatres[0] + 1 + pos_maxdiff
-        val_itransient = datres[pos_itransient]
+        pos_itransient = neg_derivative_peaks[0] + 1 + pos_maxdiff
+        val_itransient = strike[pos_itransient]
 
-    der_post = np.diff(datres[pos_peakmax:])
+    der_post = np.diff(strike[pos_peakmax:])
     if len(der_post) > 0:
         min_der_post = min(der_post)
         max_unloading_rate = -min_der_post * fs
@@ -2747,15 +3530,15 @@ def strikeattr(datres, fs=FS):
 
     attr1 = val_peakmax
     attr2 = pos_peakmax
-    attr3 = len(pos_peaks_datres)
-    attr4 = len(datres)
+    attr3 = len(strike_peak_indices)
+    attr4 = len(strike)
     attr5 = val_itransient
     attr6 = pos_itransient
-    attr7 = datres[pos_maxdiff + 1] if pos_maxdiff + 1 < len(datres) else np.nan
+    attr7 = strike[pos_maxdiff + 1] if pos_maxdiff + 1 < len(strike) else np.nan
     attr8 = pos_maxdiff + 1
-    attr9 = np.trapezoid(datres)
-    attr10 = np.trapezoid(datres[: pos_peakmax + 1]) if pos_peakmax > 0 else np.nan
-    attr15 = np.trapezoid(datres[pos_peakmax:]) if pos_peakmax < len(datres) else np.nan
+    attr9 = np.trapezoid(strike)
+    attr10 = np.trapezoid(strike[: pos_peakmax + 1]) if pos_peakmax > 0 else np.nan
+    attr15 = np.trapezoid(strike[pos_peakmax:]) if pos_peakmax < len(strike) else np.nan
     attr12 = attr8 * attr7 if not np.isnan(attr7) else np.nan
 
     if np.isnan(attr6):
@@ -2763,11 +3546,11 @@ def strikeattr(datres, fs=FS):
         attr13 = np.nan
         attr14 = np.nan
     else:
-        attr11 = np.trapezoid(datres[: int(attr6) + 1]) if attr6 > 0 else np.nan
+        attr11 = np.trapezoid(strike[: int(attr6) + 1]) if attr6 > 0 else np.nan
         attr13 = (
-            np.trapezoid(datres[int(attr6) : pos_peakmax + 1]) if attr6 < pos_peakmax else np.nan
+            np.trapezoid(strike[int(attr6) : pos_peakmax + 1]) if attr6 < pos_peakmax else np.nan
         )
-        attr14 = np.trapezoid(datres[int(attr8) : int(attr6) + 1]) if attr8 < attr6 else np.nan
+        attr14 = np.trapezoid(strike[int(attr8) : int(attr6) + 1]) if attr8 < attr6 else np.nan
 
     attr16 = attr1 * fs / attr2 if attr2 != 0 else np.nan
     attr17 = val_maxdiff * fs
@@ -2806,8 +3589,8 @@ def strikeattr(datres, fs=FS):
     }
 
 
-def calculate_kinempo_metrics_strike(grf_total, start, end, cop_x, cop_y, fs=FS):
-    """Calculates spatial (COP) metrics for an individual strike."""
+def calculate_kinetic_metrics_strike(grf_total, start, end, cop_x, cop_y, fs=FS):
+    """Calculates spatial (COP) metrics for an individual strike using standard English biomechanics keys."""
     strike = grf_total[start:end]
     cop_x_s = cop_x[start:end] if cop_x is not None else np.zeros_like(strike)
     cop_y_s = cop_y[start:end] if cop_y is not None else np.zeros_like(strike)
@@ -2815,19 +3598,36 @@ def calculate_kinempo_metrics_strike(grf_total, start, end, cop_x, cop_y, fs=FS)
     if len(strike) == 0:
         return {}
 
-    mask_contato = strike > 0.01
-    cop_x_contato = cop_x_s[mask_contato]
-    cop_y_contato = cop_y_s[mask_contato]
+    contact_mask = strike > 0.01
+    cop_x_contact = cop_x_s[contact_mask]
+    cop_y_contact = cop_y_s[contact_mask]
+
+    mean_ml = float(np.mean(cop_x_contact)) if len(cop_x_contact) > 0 else 0.0
+    mean_ap = float(np.mean(cop_y_contact)) if len(cop_y_contact) > 0 else 0.0
+    std_ml = float(np.std(cop_x_contact)) if len(cop_x_contact) > 1 else 0.0
+    std_ap = float(np.std(cop_y_contact)) if len(cop_y_contact) > 1 else 0.0
+    range_ml = float(np.ptp(cop_x_contact)) if len(cop_x_contact) > 0 else 0.0
+    range_ap = float(np.ptp(cop_y_contact)) if len(cop_y_contact) > 0 else 0.0
+    init_ap = float(cop_y_contact[0]) if len(cop_y_contact) > 0 else 0.0
+    final_ap = float(cop_y_contact[-1]) if len(cop_y_contact) > 0 else 0.0
 
     return {
-        "cop_x_mean": np.mean(cop_x_contato) if len(cop_x_contato) > 0 else 0,
-        "cop_y_mean": np.mean(cop_y_contato) if len(cop_y_contato) > 0 else 0,
-        "cop_x_std": np.std(cop_x_contato) if len(cop_x_contato) > 1 else 0,
-        "cop_y_std": np.std(cop_y_contato) if len(cop_y_contato) > 1 else 0,
-        "cop_x_range": np.ptp(cop_x_contato) if len(cop_x_contato) > 0 else 0,
-        "cop_y_range": np.ptp(cop_y_contato) if len(cop_y_contato) > 0 else 0,
-        "cop_y_initial": cop_y_contato[0] if len(cop_y_contato) > 0 else 0,
-        "cop_y_final": cop_y_contato[-1] if len(cop_y_contato) > 0 else 0,
+        "cop_x_mean": mean_ml,
+        "cop_y_mean": mean_ap,
+        "cop_x_std": std_ml,
+        "cop_y_std": std_ap,
+        "cop_x_range": range_ml,
+        "cop_y_range": range_ap,
+        "cop_y_initial": init_ap,
+        "cop_y_final": final_ap,
+        "cop_medial_lateral_mean": mean_ml,
+        "cop_anterior_posterior_mean": mean_ap,
+        "cop_medial_lateral_std": std_ml,
+        "cop_anterior_posterior_std": std_ap,
+        "cop_medial_lateral_range": range_ml,
+        "cop_anterior_posterior_range": range_ap,
+        "cop_anterior_posterior_initial": init_ap,
+        "cop_anterior_posterior_final": final_ap,
     }
 
 
@@ -2853,6 +3653,136 @@ def normalize_analysis_window_points(points, n_samples):
     if end_idx <= start_idx:
         return None
     return start_idx, end_idx
+
+
+def record_analysis_window_in_config(
+    config: dict[str, Any] | None,
+    file_name: str,
+    start_idx: int,
+    end_idx: int,
+    n_samples: int,
+    *,
+    start_source: str | None = None,
+    end_source: str | None = None,
+) -> None:
+    """Persist a resolved process window in the replayable run config."""
+    if config is None:
+        return
+    key = Path(canonical_trial_filename(file_name)).stem.lower()
+    window = {
+        "start_index": int(start_idx),
+        "end_index_exclusive": int(end_idx),
+        "source_samples": int(n_samples),
+    }
+    if start_source:
+        window["start_source"] = start_source
+    if end_source:
+        window["end_source"] = end_source
+    config.setdefault("analysis_windows", {})[key] = window
+
+
+def get_recorded_analysis_window(
+    config: dict[str, Any] | None, file_name: str, n_samples: int
+) -> tuple[int, int] | None:
+    """Load and validate a GUI-selected process window for headless replay."""
+    windows = (config or {}).get("analysis_windows", {})
+    if not isinstance(windows, dict):
+        return None
+    key = Path(canonical_trial_filename(file_name)).stem.lower()
+    recorded = windows.get(key)
+    if not isinstance(recorded, dict):
+        return None
+    start = recorded.get("start_index")
+    end = recorded.get("end_index_exclusive")
+    if start is None or end is None:
+        return None
+    return normalize_analysis_window_points([start, end], n_samples)
+
+
+def detect_signal_start_index(
+    signal: np.ndarray | list[float],
+    peak_ratio: float = AUTO_START_PEAK_RATIO,
+    min_peak_distance_samples: int = FS // 10,
+) -> int:
+    """Return the first large impact peak in a vertical-force signal.
+
+    A peak is considered large when its height is at least ``peak_ratio`` of
+    the finite signal maximum. The default 100 ms separation rejects tiny local
+    oscillations inside the same contact. Signals without a positive detectable
+    peak safely start at sample zero.
+    """
+    values = np.asarray(signal, dtype=float).reshape(-1)
+    if values.size == 0:
+        return 0
+    if not 0 < peak_ratio <= 1:
+        raise ValueError("peak_ratio must be greater than 0 and at most 1")
+    if min_peak_distance_samples < 1:
+        raise ValueError("min_peak_distance_samples must be at least 1")
+
+    finite = np.isfinite(values)
+    if not finite.any():
+        return 0
+    finite_max = float(np.max(values[finite]))
+    if finite_max <= 0:
+        return 0
+
+    clean = values.copy()
+    clean[~finite] = -np.inf
+    peaks, _ = find_peaks(
+        clean,
+        height=finite_max * peak_ratio,
+        distance=min_peak_distance_samples,
+    )
+    return int(peaks[0]) if len(peaks) else 0
+
+
+def resolve_analysis_window(
+    config: dict[str, Any] | None,
+    file_name: str,
+    signal: np.ndarray | list[float],
+) -> tuple[int, int, str, str]:
+    """Resolve one trial window using CLI, TOML, then automatic detection."""
+    values = np.asarray(signal).reshape(-1)
+    n_samples = len(values)
+    if n_samples == 0:
+        return 0, 0, "automatic", "automatic"
+
+    execution = (config or {}).get("execution", {})
+    if not isinstance(execution, dict):
+        execution = {}
+    force_auto = bool(execution.get("force_auto", False))
+    cli_start = execution.get("start_index")
+    cli_end = execution.get("end_index_exclusive")
+
+    recorded = None if force_auto else get_recorded_analysis_window(config, file_name, n_samples)
+    automatic_start = detect_signal_start_index(values)
+
+    if cli_start is not None:
+        start_idx = int(cli_start)
+        start_source = "cli"
+    elif recorded is not None:
+        start_idx = recorded[0]
+        start_source = "toml"
+    else:
+        start_idx = automatic_start
+        start_source = "automatic"
+
+    if cli_end is not None:
+        end_idx = int(cli_end)
+        end_source = "cli"
+    elif recorded is not None:
+        end_idx = recorded[1]
+        end_source = "toml"
+    else:
+        end_idx = n_samples
+        end_source = "automatic"
+
+    normalized = normalize_analysis_window_points([start_idx, end_idx], n_samples)
+    if normalized is None:
+        raise ValueError(
+            f"Invalid analysis window for {file_name}: start={start_idx}, end={end_idx}"
+        )
+    return normalized[0], normalized[1], start_source, end_source
 
 
 def select_analysis_window(grf_total_raw, file_name, parent=None):
@@ -2958,13 +3888,13 @@ def select_analysis_window(grf_total_raw, file_name, parent=None):
         return start_idx, end_idx
 
 
-def _legacy_threshold_window(dat1, posmin, limiar):
+def _legacy_threshold_window(offset_signal, min_index, window_samples):
     """Return the threshold window used by the original selectstrikes routine."""
-    start = max(int(posmin) - int(limiar), 0)
-    end = min(int(posmin) + int(limiar), len(dat1))
+    start = max(int(min_index) - int(window_samples), 0)
+    end = min(int(min_index) + int(window_samples), len(offset_signal))
     if end <= start:
-        return dat1
-    return dat1[start:end]
+        return offset_signal
+    return offset_signal[start:end]
 
 
 def detect_steps_peak_to_valley(grf_total, start_idx=0, fs=FS, threshold=0.1):
@@ -2992,14 +3922,14 @@ def detect_steps_peak_to_valley(grf_total, start_idx=0, fs=FS, threshold=0.1):
         end = valleys_between_peaks[i] if i < len(valleys_between_peaks) else peaks[i + 1]
         if end <= start:
             continue
-        side = "D" if i % 2 == 0 else "E"
+        sidefoot = SIDEFOOT_RIGHT if i % 2 == 0 else SIDEFOOT_LEFT
         steps.append(
             {
                 "idx_start": int(start),
                 "idx_end": int(end),
                 "t_start": float(t[start]),
                 "t_end": float(t[end]),
-                "foot": side,
+                "sidefoot": sidefoot,
                 "detection_mode": "peak_to_valley_fallback",
             }
         )
@@ -3007,7 +3937,7 @@ def detect_steps_peak_to_valley(grf_total, start_idx=0, fs=FS, threshold=0.1):
     return steps, peaks
 
 
-def detect_steps_legacy_valley(grf_total, start_idx=0, fs=FS, threshold=0.1, limiar=18):
+def detect_steps_legacy_valley(grf_total, start_idx=0, fs=FS, threshold=0.1, window_samples=18):
     """Detect foot strikes using the valley/cut logic from ia_treadmill.selectstrikes.
 
     The legacy algorithm thresholds a minimum-shifted signal and finds valleys in the
@@ -3018,34 +3948,34 @@ def detect_steps_legacy_valley(grf_total, start_idx=0, fs=FS, threshold=0.1, lim
     if len(signal) < 3:
         return [], []
 
-    limiar = int(limiar)
-    if limiar % 2 != 0:
-        limiar += 1
-    limiar = max(limiar, 2)
+    window_samples = int(window_samples)
+    if window_samples % 2 != 0:
+        window_samples += 1
+    window_samples = max(window_samples, 2)
 
-    datmin = float(np.nanmin(signal))
-    if not np.isfinite(datmin):
+    signal_min = float(np.nanmin(signal))
+    if not np.isfinite(signal_min):
         return [], []
-    posmin = int(np.nanargmin(signal))
-    dat1 = signal - datmin
-    threshold_window = _legacy_threshold_window(dat1, posmin, limiar)
+    min_index = int(np.nanargmin(signal))
+    offset_signal = signal - signal_min
+    threshold_window = _legacy_threshold_window(offset_signal, min_index, window_samples)
     if len(threshold_window) == 0:
         return [], []
 
     auto_threshold = float(np.nanmax(threshold_window) + 2 * np.nanstd(threshold_window))
     effective_threshold = max(auto_threshold, float(threshold))
-    active_mask = dat1 > effective_threshold
+    active_mask = offset_signal > effective_threshold
     active_indices = np.flatnonzero(active_mask)
-    dat2 = dat1[active_mask]
-    if len(dat2) < 3:
+    active_signal = offset_signal[active_mask]
+    if len(active_signal) < 3:
         return [], []
 
-    dat2inv = -1 * dat2
-    peak_height = float(np.nanmean(dat2inv) + np.nanstd(dat2inv))
-    distance = max(int(round(fs / limiar)), 1)
-    cuts, _ = find_peaks(dat2inv, height=peak_height, distance=distance)
+    inverted_active = -1 * active_signal
+    peak_height = float(np.nanmean(inverted_active) + np.nanstd(inverted_active))
+    distance = max(int(round(fs / window_samples)), 1)
+    cuts, _ = find_peaks(inverted_active, height=peak_height, distance=distance)
     if len(cuts) < 2:
-        cuts, _ = find_peaks(dat2inv, distance=distance)
+        cuts, _ = find_peaks(inverted_active, distance=distance)
     if len(cuts) % 2 != 0:
         cuts = cuts[:-1]
     if len(cuts) < 2:
@@ -3059,7 +3989,7 @@ def detect_steps_legacy_valley(grf_total, start_idx=0, fs=FS, threshold=0.1, lim
         if cut_end <= cut_start:
             continue
 
-        legacy_signal = dat2[cut_start:cut_end]
+        legacy_signal = active_signal[cut_start:cut_end]
         if len(legacy_signal) < 3:
             continue
 
@@ -3072,14 +4002,14 @@ def detect_steps_legacy_valley(grf_total, start_idx=0, fs=FS, threshold=0.1, lim
         peak_original = int(active_indices[cut_start + peak_local])
         peaks_original.append(peak_original)
 
-        side = "D" if i % 2 == 0 else "E"
+        sidefoot = SIDEFOOT_RIGHT if i % 2 == 0 else SIDEFOOT_LEFT
         steps.append(
             {
                 "idx_start": original_start,
                 "idx_end": original_end,
                 "t_start": original_start / fs,
                 "t_end": original_end / fs,
-                "foot": side,
+                "sidefoot": sidefoot,
                 "detection_mode": "legacy_valley",
                 "legacy_signal": legacy_signal,
                 "legacy_cut_start_index": cut_start,
@@ -3089,7 +4019,7 @@ def detect_steps_legacy_valley(grf_total, start_idx=0, fs=FS, threshold=0.1, lim
                 "legacy_peak_index": peak_original,
                 "legacy_threshold_bw": effective_threshold,
                 "legacy_auto_threshold_bw": auto_threshold,
-                "legacy_signal_offset_min_bw": datmin,
+                "legacy_signal_offset_min_bw": signal_min,
             }
         )
 
@@ -3111,17 +4041,17 @@ def calculate_general_metrics(steps, grf_total, fs=FS):
     if len(steps) < 2:
         return {}
 
-    t_stance_d, t_stance_e = [], []
+    t_stance_r, t_stance_l = [], []
     t_double = []
     total_time = steps[-1]["t_end"]
 
     for i in range(len(steps)):
         p = steps[i]
         t_stance = p["t_end"] - p["t_start"]
-        if p["foot"] == "D":
-            t_stance_d.append(t_stance)
+        if _sidefoot(p) == SIDEFOOT_RIGHT:
+            t_stance_r.append(t_stance)
         else:
-            t_stance_e.append(t_stance)
+            t_stance_l.append(t_stance)
 
         if i < len(steps) - 1:
             p_next = steps[i + 1]
@@ -3129,44 +4059,44 @@ def calculate_general_metrics(steps, grf_total, fs=FS):
             if t_double_i > 0:
                 t_double.append(t_double_i)
 
-    n_d = sum(1 for p in steps if p["foot"] == "D")
-    n_e = sum(1 for p in steps if p["foot"] == "E")
+    n_r = sum(1 for p in steps if _sidefoot(p) == SIDEFOOT_RIGHT)
+    n_l = sum(1 for p in steps if _sidefoot(p) == SIDEFOOT_LEFT)
 
     return {
         "n_steps_total": len(steps),
-        "n_steps_D": n_d,
-        "n_steps_E": n_e,
+        "n_steps_R": n_r,
+        "n_steps_L": n_l,
         "analysis_time_s": total_time,
         "cadence_steps_min": len(steps) * 60 / total_time if total_time > 0 else 0,
-        "t_stance_mean_D_s": np.mean(t_stance_d) if t_stance_d else np.nan,
-        "t_stance_mean_E_s": np.mean(t_stance_e) if t_stance_e else np.nan,
-        "t_stance_std_D_s": np.std(t_stance_d) if t_stance_d else np.nan,
-        "t_stance_std_E_s": np.std(t_stance_e) if t_stance_e else np.nan,
+        "t_stance_mean_R_s": np.mean(t_stance_r) if t_stance_r else np.nan,
+        "t_stance_mean_L_s": np.mean(t_stance_l) if t_stance_l else np.nan,
+        "t_stance_std_R_s": np.std(t_stance_r) if t_stance_r else np.nan,
+        "t_stance_std_L_s": np.std(t_stance_l) if t_stance_l else np.nan,
         "t_double_mean_s": np.mean(t_double) if t_double else np.nan,
         "t_double_std_s": np.std(t_double) if t_double else np.nan,
-        "t_double_percent": (np.mean(t_double) / np.mean(t_stance_d + t_stance_e) * 100)
+        "t_double_percent": (np.mean(t_double) / np.mean(t_stance_r + t_stance_l) * 100)
         if t_double
         else np.nan,
     }
 
 
-def calculate_asymmetry(values_d, values_e):
+def calculate_asymmetry(values_r, values_l):
     """Calculates the Asymmetry Index (ASI) between right and left foot."""
-    mean_d = np.mean(values_d) if values_d else 0
-    mean_e = np.mean(values_e) if values_e else 0
-    std_d = np.std(values_d) if values_d else 0
-    std_e = np.std(values_e) if values_e else 0
+    mean_r = np.mean(values_r) if values_r else 0
+    mean_l = np.mean(values_l) if values_l else 0
+    std_r = np.std(values_r) if values_r else 0
+    std_l = np.std(values_l) if values_l else 0
 
-    if mean_d + mean_e == 0:
-        return {"ASI": 0, "mean_D": 0, "mean_E": 0, "std_D": 0, "std_E": 0}
+    if mean_r + mean_l == 0:
+        return {"ASI": 0, "mean_R": 0, "mean_L": 0, "std_R": 0, "std_L": 0}
 
-    asi = abs(mean_d - mean_e) / ((mean_d + mean_e) / 2) * 100
+    asi = abs(mean_r - mean_l) / ((mean_r + mean_l) / 2) * 100
     return {
         "ASI": asi,
-        "mean_D": mean_d,
-        "mean_E": mean_e,
-        "std_D": std_d,
-        "std_E": std_e,
+        "mean_R": mean_r,
+        "mean_L": mean_l,
+        "std_R": std_r,
+        "std_L": std_l,
     }
 
 
@@ -3175,8 +4105,8 @@ def _representative_steps(steps, max_steps=4):
     if not steps:
         return []
     selected = []
-    for foot in ["D", "E"]:
-        foot_steps = [step for step in steps if step.get("foot") == foot]
+    for sidefoot in (SIDEFOOT_RIGHT, SIDEFOOT_LEFT):
+        foot_steps = [step for step in steps if _sidefoot(step) == sidefoot]
         if foot_steps:
             selected.append(foot_steps[len(foot_steps) // 2])
     if len(selected) < max_steps:
@@ -3285,7 +4215,7 @@ def _plot_strike_diagnostics(grf_total, steps, file_name, output_dir, fs=FS):
         try:
             for row, step in enumerate(representative):
                 signal = _step_signal(step, grf_total)
-                title = f"Step {steps.index(step) + 1} ({step.get('foot', '?')}) - attributes"
+                title = f"Step {steps.index(step) + 1} (sidefoot={_sidefoot(step)}) - attributes"
                 _plot_strike_attribute_panel(axes[row, 0], axes[row, 1], signal, title, fs)
             handles, labels = axes[0, 0].get_legend_handles_labels()
             if handles:
@@ -3304,12 +4234,11 @@ def _plot_strike_diagnostics(grf_total, steps, file_name, output_dir, fs=FS):
         try:
             time_s = np.arange(len(grf_total)) / fs
             ax_full.plot(time_s, grf_total, color="black", linewidth=0.55, alpha=0.75)
-            colors = {"D": "tab:red", "E": "tab:green"}
             for step in steps:
                 ax_full.axvspan(
                     step["idx_start"] / fs,
                     step["idx_end"] / fs,
-                    color=colors.get(step.get("foot"), "gray"),
+                    color=_SIDEFOOT_PLOT_COLORS.get(_sidefoot(step), "gray"),
                     alpha=0.16,
                 )
                 peak = step.get("legacy_peak_index")
@@ -3331,7 +4260,7 @@ def _plot_strike_diagnostics(grf_total, steps, file_name, output_dir, fs=FS):
                 ax_norm.plot(
                     norm_x,
                     norm_y,
-                    color=colors.get(step.get("foot"), "gray"),
+                    color=_SIDEFOOT_PLOT_COLORS.get(_sidefoot(step), "gray"),
                     alpha=0.18,
                     linewidth=0.8,
                 )
@@ -3364,7 +4293,7 @@ def _write_interactive_cop_report(
     time_s = (indices / FS).astype(float).tolist()
     grf_ds = np.asarray(grf_total)[indices].astype(float).tolist()
     derivative_ds = np.asarray(derivative)[indices].astype(float).tolist()
-    # Treadmill view: medio-lateral displacement is horizontal, anterior-posterior is vertical.
+    # Treadmill view: mediolateral displacement is horizontal, anteroposterior is vertical.
     cop_horizontal = np.asarray(cop_x)[indices].astype(float).tolist()
     cop_vertical = np.asarray(cop_y)[indices].astype(float).tolist()
 
@@ -3388,7 +4317,7 @@ def _write_interactive_cop_report(
                 "y0": 0,
                 "y1": 1,
                 "fillcolor": "rgba(220, 38, 38, 0.10)"
-                if step.get("foot") == "D"
+                if _sidefoot(step) == SIDEFOOT_RIGHT
                 else "rgba(22, 163, 74, 0.10)",
                 "line": {"width": 0},
             }
@@ -3460,10 +4389,10 @@ h2 {{ color: #34495e; font-size: 18px; font-weight: 600; margin-top: 0; }}
 <div class="container">
 <h1><i>vailá</i> - Load Cells COP Interactive Report</h1>
 <h2>Trial: {file_name}</h2>
-<div class="note">COP is plotted over the fixed load-cell geometry: 58 cm medio-lateral by 113 cm anterior-posterior. The trajectory represents the contact-load center on the instrumented treadmill deck, not belt displacement and not stride length along the treadmill.</div>
+<div class="note">COP is plotted over the fixed load-cell geometry: 58 cm mediolateral by 113 cm anteroposterior. The trajectory represents the contact-load center on the instrumented treadmill deck, not belt displacement and not stride length along the treadmill.</div>
 <div class="metric-grid">
-  <div class="metric-card"><strong>Horizontal axis</strong>COP X, medio-lateral position in centimeters.</div>
-  <div class="metric-card"><strong>Vertical axis</strong>COP Y, anterior-posterior position in centimeters.</div>
+  <div class="metric-card"><strong>Horizontal axis</strong>COP X, mediolateral position in centimeters.</div>
+  <div class="metric-card"><strong>Vertical axis</strong>COP Y, anteroposterior position in centimeters.</div>
   <div class="metric-card"><strong>Cell layout</strong>1 = anterior-left, 2 = posterior-left, 3 = anterior-right, 4 = posterior-right.</div>
 </div>
 <h3 class="section-title">Ground Reaction Force</h3>
@@ -3500,8 +4429,8 @@ Plotly.newPlot('cop', [{{
   text: data.cell_labels, textposition: 'top center', marker: {{size: 10, color: '#111827', symbol: 'square'}}
 }}], {{
   title: 'COP Contact-Load Location on 58 x 113 cm Treadmill Deck',
-  xaxis: {{title: 'COP X - Medio-Lateral (cm)', range: data.deck.x_range, zeroline: false}},
-  yaxis: {{title: 'COP Y - Anterior-Posterior (cm)', range: data.deck.y_range, scaleanchor: 'x', scaleratio: 1, zeroline: false}},
+  xaxis: {{title: 'COP X - Mediolateral (cm)', range: data.deck.x_range, zeroline: false}},
+  yaxis: {{title: 'COP Y - Anteroposterior (cm)', range: data.deck.y_range, scaleanchor: 'x', scaleratio: 1, zeroline: false}},
   shapes: [deckShape, ...centerLines], template: 'plotly_white'
 }}, {{responsive: true}});
 </script>
@@ -3534,13 +4463,12 @@ def plot_trial_figures(
     fig_all, (ax_grf, ax_der) = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
     try:
         ax_grf.plot(time_s, grf_total, "b-", linewidth=0.5, alpha=0.7)
-        colors = {"D": "red", "E": "green"}
         for step in steps:
             ax_grf.axvspan(
                 step["idx_start"] / FS,
                 step["idx_end"] / FS,
                 alpha=0.2,
-                color=colors.get(step["foot"], "gray"),
+                color=_SIDEFOOT_PLOT_COLORS.get(_sidefoot(step), "gray"),
             )
         for idx, peak in enumerate(peaks):
             color = "red" if idx % 2 == 0 else "green"
@@ -3609,8 +4537,8 @@ def plot_trial_figures(
             ax_cop.scatter(cop_x[-1], cop_y[-1], c="red", s=50, marker="x", label="End")
         ax_cop.set_xlim(-50, 50)
         ax_cop.set_ylim(-100, 100)
-        ax_cop.set_xlabel("COP X - Medio-Lateral (cm)")
-        ax_cop.set_ylabel("COP Y - Anterior-Posterior (cm)")
+        ax_cop.set_xlabel("COP X - Mediolateral (cm)")
+        ax_cop.set_ylabel("COP Y - Anteroposterior (cm)")
         ax_cop.set_title(
             f"COP Contact-Load Location: {file_name}\n"
             "Fixed load-cell deck: 58 cm ML x 113 cm AP; not belt displacement"
@@ -3632,31 +4560,49 @@ def plot_trial_figures(
     gc.collect()
 
 
-def run_process_stage(parent=None, initial_dir=None) -> str | None:
+def run_process_stage(
+    parent=None,
+    initial_dir=None,
+    config: dict[str, Any] | None = None,
+    output_dir: str | Path | None = None,
+    headless: bool = False,
+) -> str | None:
     """Executes the biomechanical analysis and calibration stage."""
-    folder = initial_dir or filedialog.askdirectory(
-        title="Select directory with CSV files", parent=parent
+    folder = initial_dir or (
+        filedialog.askdirectory(title="Select directory with CSV files", parent=parent)
+        if not headless
+        else None
     )
     if not folder:
         return None
 
-    dialog = ProcessConfigDialog(parent)
-    if not dialog.result:
-        return None
+    if config and ("processing" in config or "participant_weight_kg" in config):
+        proc_config = config.get("processing", config)
+        full_config = config if "processing" in config else {"processing": proc_config}
+    elif not headless:
+        dialog = ProcessConfigDialog(parent)
+        if not dialog.result:
+            return None
+        proc_config = dialog.result["processing"]
+        full_config = dialog.result
+    else:
+        full_config = get_default_process_config()
+        proc_config = full_config["processing"]
 
-    proc_config = dialog.result["processing"]
-    fallback_peso_kg = proc_config["participant_weight_kg"]
-    use_calib_avancada = proc_config["use_advanced_calibration"]
-    fc_filter = proc_config["filter_cutoff_hz"]
-    apply_processing_filter = proc_config.get("apply_processing_filter", False)
-    threshold = proc_config["detection_threshold_bw"]
-    generate_figures = proc_config["generate_figures"]
-    generate_interactive_report = proc_config.get("generate_interactive_report", True)
+    fallback_weight_kg = float(proc_config.get("participant_weight_kg", 70.0))
+    configured_weight_source = str(proc_config.get("participant_weight_source", "")).lower()
+    use_advanced_calibration = bool(proc_config.get("use_advanced_calibration", False))
+    fc_filter = float(proc_config.get("filter_cutoff_hz", 50.0))
+    apply_processing_filter = bool(proc_config.get("apply_processing_filter", False))
+    threshold = float(proc_config.get("detection_threshold_bw", 0.1))
+    generate_figures = bool(proc_config.get("generate_figures", True))
+    generate_interactive_report = bool(proc_config.get("generate_interactive_report", True))
 
     # Identify running CSV files (trials)
     running_files = sorted([f for f in os.listdir(folder) if is_trial_file(f)])
     if not running_files:
-        messagebox.showerror("Error", "No running CSV files found.", parent=parent)
+        if not headless:
+            messagebox.showerror("Error", "No running CSV files found.", parent=parent)
         return None
 
     # Group trials by subject and day (sXX_dXX)
@@ -3668,17 +4614,15 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
             groups[key] = []
         groups[key].append(f)
 
-    base_folder = get_output_base_folder(folder)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path_figures = os.path.join(base_folder, f"figures_{timestamp}")
-    path_results = os.path.join(base_folder, f"results_{timestamp}")
-    os.makedirs(path_figures, exist_ok=True)
-    os.makedirs(path_results, exist_ok=True)
+    base_folder = output_dir or get_output_base_folder(folder)
+    timestamp_output = bool(full_config.get("execution", {}).get("timestamp_output", False))
+    path_figures = make_output_dir(base_folder, "figures", timestamp_output)
+    path_results = make_output_dir(base_folder, "results", timestamp_output)
 
     config_save_path = os.path.join(path_results, "processing_configuration_used.toml")
-    save_process_config(dialog.result, config_save_path)
+    save_process_config(full_config, config_save_path)
 
-    colunas_orig = [
+    original_columns = [
         "peak_GRF_BW",
         "t_to_peak_s",
         "n_peaks",
@@ -3704,7 +4648,7 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
         "max_loading_rate_BW_s",
     ]
 
-    colunas_cinempo = [
+    kinetic_columns = [
         "cop_x_mean",
         "cop_y_mean",
         "cop_x_std",
@@ -3727,33 +4671,35 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                 subj_str, day_str = "01", "01"
 
             # Auto-discover calibration files
-            tara_file, peso_file, plate_files, borg_file = discover_calibration_and_borg(
+            tare_file, weight_file, plate_files, borg_file = discover_calibration_and_borg(
                 folder, subj_str, day_str
             )
 
             # Manual prompt fallback if auto-discovery fails
-            if not tara_file:
-                print(f"   Tara file not found for {key.upper()}. Please select it manually.")
-                tara_file = filedialog.askopenfilename(
-                    title=f"Select Tara (Tare) File for {key.upper()}",
+            if not tare_file and not headless:
+                print(f"   Tare file not found for {key.upper()}. Please select it manually.")
+                tare_file = filedialog.askopenfilename(
+                    title=f"Select Tare File for {key.upper()}",
                     filetypes=[("CSV", "*.csv")],
                     parent=parent,
                 )
-            if not peso_file:
-                print(f"   Peso file not found for {key.upper()}. Please select it manually.")
-                peso_file = filedialog.askopenfilename(
+            if not weight_file and not headless:
+                print(
+                    f"   Weight calibration file not found for {key.upper()}. Please select it manually."
+                )
+                weight_file = filedialog.askopenfilename(
                     title=f"Select Weight File for {key.upper()}",
                     filetypes=[("CSV", "*.csv")],
                     parent=parent,
                 )
 
-            if not tara_file or not peso_file:
-                print(f"   Skipping group {key.upper()} due to missing tara/peso file.")
+            if not tare_file or not weight_file:
+                print(f"   Skipping group {key.upper()} due to missing tare/weight file.")
                 continue
 
             print(f"   Using Calibration Files for {key.upper()}:")
-            print(f"     Tara: {os.path.basename(tara_file)}")
-            print(f"     Peso: {os.path.basename(peso_file)}")
+            print(f"     Tare: {os.path.basename(tare_file)}")
+            print(f"     Weight: {os.path.basename(weight_file)}")
             if borg_file:
                 print(f"     Borg: {os.path.basename(borg_file)}")
             if plate_files:
@@ -3761,29 +4707,35 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                     f"     Plates ({len(plate_files)} files): {[os.path.basename(pf) for pf in plate_files]}"
                 )
 
-            # Basic Pre-computation for the group
-            tara_vals = read_calibration_cells(tara_file)
-            tara_media = np.mean(tara_vals, axis=0)
+            # Basic Pre-computation for the group (Stage 1: Zero offset)
+            tare_vals = read_calibration_cells(tare_file)
+            tare_mean = np.mean(tare_vals, axis=0)
 
-            peso_vals = read_calibration_cells(peso_file)
-            peso_corrigido = peso_vals - tara_media
-            soma_peso = np.sum(np.mean(peso_corrigido, axis=0))
+            weight_vals = read_calibration_cells(weight_file)
+            corrected_weight = weight_vals - tare_mean
+            weight_sum = np.sum(np.mean(corrected_weight, axis=0))
 
             # Parse body weight from Borg file (once per subject-day group)
             group_weight = None
             if borg_file:
                 group_weight = get_group_weight_from_borg(borg_file)
 
-            if group_weight is not None:
-                peso_kg = group_weight
-                print(f"   Using body weight from Borg for group: {peso_kg} kg")
+            if configured_weight_source in {"cli", "toml", "gui"}:
+                weight_kg = fallback_weight_kg
+                print(
+                    f"   Using {configured_weight_source.upper()} body weight for group: "
+                    f"{weight_kg} kg"
+                )
+            elif group_weight is not None:
+                weight_kg = group_weight
+                print(f"   Using body weight from Borg for group: {weight_kg} kg")
             else:
-                peso_kg = fallback_peso_kg
-                print(f"   Using fallback body weight for group: {peso_kg} kg")
+                weight_kg = fallback_weight_kg
+                print(f"   Using fallback body weight for group: {weight_kg} kg")
 
-            # Perform calibration fit (once per subject-day group)
+            # Stage 2: Calibration fit
             m, b = 1.0, 0.0
-            if use_calib_avancada and len(plate_files) > 0:
+            if use_advanced_calibration and len(plate_files) > 0:
                 summed_readings = [0.0]
                 known_weights = [0.0]
 
@@ -3794,21 +4746,21 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                         w = int(w_match.group(1))
                         if w > 0:
                             cell_p = read_calibration_cells(pf)
-                            corrected_p = np.mean(cell_p, axis=0) - tara_media
+                            corrected_p = np.mean(cell_p, axis=0) - tare_mean
                             summed_readings.append(np.sum(corrected_p))
                             known_weights.append(float(w))
 
-                summed_readings.append(soma_peso)
-                known_weights.append(peso_kg)
+                summed_readings.append(weight_sum)
+                known_weights.append(weight_kg)
 
                 if len(summed_readings) > 2:
                     m, b = np.polyfit(summed_readings, known_weights, 1)
                     print(f"   Advanced calibration for group: m={m:.6f}, b={b:.6f}")
                 else:
-                    m, b = np.polyfit([0, soma_peso], [0, peso_kg], 1)
+                    m, b = np.polyfit([0, weight_sum], [0, weight_kg], 1)
                     print(f"   Simple calibration for group: m={m:.6f}, b={b:.6f}")
             else:
-                m, b = np.polyfit([0, soma_peso], [0, peso_kg], 1)
+                m, b = np.polyfit([0, weight_sum], [0, weight_kg], 1)
                 print(f"   Simple calibration for group: m={m:.6f}, b={b:.6f}")
 
             group_metrics_rows = []
@@ -3827,23 +4779,54 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
 
                 grf_bw, grf_total_raw, _, _ = load_data(
                     os.path.join(folder, file),
-                    tara_file,
-                    peso_file,
-                    peso_kg,
+                    tare_file,
+                    weight_file,
+                    weight_kg,
                     int(fc_filter),
                     m,
                     b,
                     apply_processing_filter=apply_processing_filter,
                 )
 
-                start_idx, end_idx = select_analysis_window(grf_total_raw, file, parent=parent)
+                if headless:
+                    start_idx, end_idx, start_source, end_source = resolve_analysis_window(
+                        full_config, file, grf_total_raw
+                    )
+                    record_analysis_window_in_config(
+                        full_config,
+                        file,
+                        start_idx,
+                        end_idx,
+                        len(grf_total_raw),
+                        start_source=start_source,
+                        end_source=end_source,
+                    )
+                    print(
+                        f"   Analysis window: [{start_idx}:{end_idx}] "
+                        f"(start={start_source}, end={end_source})"
+                    )
+                else:
+                    start_idx, end_idx = select_analysis_window(grf_total_raw, file, parent=parent)
+                    record_analysis_window_in_config(
+                        full_config,
+                        file,
+                        start_idx,
+                        end_idx,
+                        len(grf_total_raw),
+                        start_source="gui",
+                        end_source="gui",
+                    )
                 grf_total = grf_total_raw[start_idx:end_idx]
 
-                cop_x_full, cop_y_full = calculate_cop_system(grf_bw)
+                # Stage 3: Coordinate Transformation
+                cop_channels = apply_coordinate_transformation(grf_bw)
+                cop_x_full = cop_channels["medial_lateral"]
+                cop_y_full = cop_channels["anterior_posterior"]
                 cop_x = cop_x_full[start_idx:end_idx]
                 cop_y = cop_y_full[start_idx:end_idx]
 
-                steps, peaks = detect_steps(grf_total, 0, FS, threshold, mode="legacy_valley")
+                # Stage 5: Event Detection
+                steps, peaks = detect_events(grf_total, 0, FS, threshold, mode="legacy_valley")
                 general_metrics = calculate_general_metrics(steps, grf_total, FS)
                 file_rows = []
 
@@ -3851,15 +4834,17 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                     print("   No steps detected.")
                     general_metrics = {
                         "n_steps_total": 0,
-                        "n_steps_D": 0,
-                        "n_steps_E": 0,
+                        "n_steps_R": 0,
+                        "n_steps_L": 0,
                         "analysis_time_s": len(grf_total) / FS if len(grf_total) else 0,
                         "cadence_steps_min": 0,
-                        "t_stance_mean_D_s": 0,
-                        "t_stance_mean_E_s": 0,
+                        "t_stance_mean_R_s": 0,
+                        "t_stance_mean_L_s": 0,
                         "t_double_mean_s": 0,
                     }
-                    pd.DataFrame([]).to_csv(
+                    pd.DataFrame(
+                        columns=["step_number", "sidefoot", "t_start_s", "t_end_s"]
+                    ).to_csv(
                         os.path.join(path_results, f"{base_name}_processing_steps.csv"),
                         index=False,
                         float_format="%.8f",
@@ -3895,13 +4880,13 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                     attrs_orig = strikeattr(strike_grf, FS)
                     idx_start_global = p["idx_start"]
                     idx_end_global = p["idx_end"]
-                    attrs_cinempo = calculate_kinempo_metrics_strike(
+                    kinetic_attrs = calculate_kinetic_metrics_strike(
                         grf_total, idx_start_global, idx_end_global, cop_x, cop_y, FS
                     )
                     file_rows.append(
                         {
                             "step_number": i + 1,
-                            "foot": p["foot"],
+                            "sidefoot": _sidefoot(p),
                             "t_start_s": p["t_start"],
                             "t_end_s": p["t_end"],
                             "detection_mode": p.get("detection_mode", "legacy_valley"),
@@ -3920,32 +4905,36 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                                 "legacy_signal_offset_min_bw", np.nan
                             ),
                             **dict(attrs_orig.items()),
-                            **dict(attrs_cinempo.items()),
+                            **dict(kinetic_attrs.items()),
                         }
                     )
 
                 df_file = pd.DataFrame(file_rows)
-                df_d = (
-                    df_file[df_file["foot"] == "D"].copy() if len(df_file) > 0 else pd.DataFrame()
+                df_r = (
+                    df_file[df_file["sidefoot"] == SIDEFOOT_RIGHT].copy()
+                    if len(df_file) > 0
+                    else pd.DataFrame()
                 )
-                df_e = (
-                    df_file[df_file["foot"] == "E"].copy() if len(df_file) > 0 else pd.DataFrame()
+                df_l = (
+                    df_file[df_file["sidefoot"] == SIDEFOOT_LEFT].copy()
+                    if len(df_file) > 0
+                    else pd.DataFrame()
                 )
 
                 asymmetry_metrics = {}
-                for col in colunas_orig + colunas_cinempo:
-                    vals_d = (
-                        df_d[col].dropna().tolist() if col in df_d.columns and len(df_d) > 0 else []
+                for col in original_columns + kinetic_columns:
+                    vals_r = (
+                        df_r[col].dropna().tolist() if col in df_r.columns and len(df_r) > 0 else []
                     )
-                    vals_e = (
-                        df_e[col].dropna().tolist() if col in df_e.columns and len(df_e) > 0 else []
+                    vals_l = (
+                        df_l[col].dropna().tolist() if col in df_l.columns and len(df_l) > 0 else []
                     )
-                    asi = calculate_asymmetry(vals_d, vals_e)
+                    asi = calculate_asymmetry(vals_r, vals_l)
                     asymmetry_metrics[f"{col}_ASI"] = asi["ASI"]
-                    asymmetry_metrics[f"{col}_mean_D"] = asi["mean_D"]
-                    asymmetry_metrics[f"{col}_mean_E"] = asi["mean_E"]
-                    asymmetry_metrics[f"{col}_std_D"] = asi["std_D"]
-                    asymmetry_metrics[f"{col}_std_E"] = asi["std_E"]
+                    asymmetry_metrics[f"{col}_mean_R"] = asi["mean_R"]
+                    asymmetry_metrics[f"{col}_mean_L"] = asi["mean_L"]
+                    asymmetry_metrics[f"{col}_std_R"] = asi["std_R"]
+                    asymmetry_metrics[f"{col}_std_L"] = asi["std_L"]
 
                 final_metrics = {
                     "file": file,
@@ -3985,11 +4974,14 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
                 )
                 print(f"   Saved daily metrics: {os.path.basename(group_metrics_path)}")
 
+        save_process_config(full_config, config_save_path)
         print("\n>>> Processing complete!")
-        messagebox.showinfo("Success", "Analysis complete!", parent=parent)
+        if not headless:
+            messagebox.showinfo("Success", "Analysis complete!", parent=parent)
     except Exception as e:
         print(f"An error occurred: {e}")
-        messagebox.showerror("Error", f"An error occurred: {e}", parent=parent)
+        if not headless:
+            messagebox.showerror("Error", f"An error occurred: {e}", parent=parent)
     finally:
         plt.close("all")
 
@@ -3997,26 +4989,46 @@ def run_process_stage(parent=None, initial_dir=None) -> str | None:
 
 
 # =============================================================================
-# LAUNCHER GUI
+# LAUNCHER GUI (SINGLE STREAMLINED WINDOW)
 # =============================================================================
 
 
-class LoadCellTreadmillDialog(tk.Toplevel):
-    """Launcher dialog with step buttons."""
+class LoadCellTreadmillDialog:
+    """Single streamlined launcher dialog with TOML configuration and workflow execution."""
 
     def __init__(self, parent: tk.Misc | None = None) -> None:
-        super().__init__(parent)
-        self.title("Treadmill LC - Treadmill GRF")
-        self.geometry("600x460")
-        self.minsize(560, 440)
-        self.transient(parent)
+        self.parent = parent
+        if parent is None:
+            self.window = tk.Tk()
+            self._owns_root = True
+        elif isinstance(parent, (tk.Tk, tk.Toplevel)):
+            self.window = tk.Toplevel(parent)
+            self.window.transient(parent)
+            self._owns_root = False
+        else:
+            self.window = tk.Toplevel(parent)
+            self._owns_root = False
+
+        self.window.title("vailá - Treadmill LC Biomechanics")
+        self.window.geometry("680x560")
+        self.window.minsize(620, 500)
+
+        self.pipeline_config: dict[str, Any] = get_default_unified_config()
+        self.config_path_var = tk.StringVar(master=self.window, value="")
+        self.input_dir_var = tk.StringVar(master=self.window, value="")
+        self.output_dir_var = tk.StringVar(master=self.window, value="")
+        self.body_weight_var = tk.StringVar(master=self.window, value="Not detected")
+        self.timestamp_output_var = tk.BooleanVar(master=self.window, value=False)
+        self.summary_text_var = tk.StringVar(
+            master=self.window, value="Default configuration loaded."
+        )
 
         # Apply Premium Aesthetics
-        self.configure(bg="#f5f7fa")
-        style = ttk.Style()
+        self.window.configure(bg="#f8fafc")
+        style = ttk.Style(self.window)
         style.theme_use("clam")
-        style.configure("TFrame", background="#f5f7fa")
-        style.configure("TLabel", background="#f5f7fa", font=("Helvetica", 10))
+        style.configure("TFrame", background="#f8fafc")
+        style.configure("TLabel", background="#f8fafc", font=("Helvetica", 10))
         style.configure(
             "Primary.TButton",
             font=("Helvetica", 10, "bold"),
@@ -4034,199 +5046,778 @@ class LoadCellTreadmillDialog(tk.Toplevel):
         )
         style.map("Secondary.TButton", background=[("active", "#cbd5e1")])
 
-        frame = ttk.Frame(self, padding=18)
-        frame.pack(fill="both", expand=True)
+        main_frame = ttk.Frame(self.window, padding=16)
+        main_frame.pack(fill="both", expand=True)
 
+        # Header
         ttk.Label(
-            frame,
-            text="Treadmill LC - Treadmill GRF",
+            main_frame,
+            text="Treadmill Load Cells Biomechanics Analysis",
             font=("Helvetica", 14, "bold"),
-            foreground="#1e293b",
-        ).pack(pady=(0, 10))
+            foreground="#0f172a",
+        ).pack(pady=(0, 4))
 
         ttk.Label(
-            frame,
-            text="Run the full sequence or launch one pipeline step. Signal filtering runs before artifact adjustment and interpolation.",
-            wraplength=540,
+            main_frame,
+            text="5-Stage Logical Pipeline: Zero Offset → Calibration Matrix → Coordinate Transformation → Signal Filtering → Event Detection",
+            wraplength=640,
             justify="center",
             foreground="#64748b",
-        ).pack(pady=(0, 16))
+            font=("Helvetica", 9),
+        ).pack(pady=(0, 12))
 
-        buttons_grid = ttk.Frame(frame)
-        buttons_grid.pack(fill="x", pady=8)
+        # Config & Directories Card
+        config_frame = ttk.LabelFrame(main_frame, text="Configuration & Directories", padding=10)
+        config_frame.pack(fill="x", pady=(0, 10))
+
+        # TOML Config File
+        r0 = ttk.Frame(config_frame)
+        r0.pack(fill="x", pady=2)
+        ttk.Label(r0, text="Config TOML:", width=14).pack(side="left")
+        ttk.Entry(r0, textvariable=self.config_path_var).pack(
+            side="left", fill="x", expand=True, padx=4
+        )
+        ttk.Button(r0, text="Browse...", style="Secondary.TButton", command=self._browse_toml).pack(
+            side="left"
+        )
+
+        # Input Directory
+        r1 = ttk.Frame(config_frame)
+        r1.pack(fill="x", pady=2)
+        ttk.Label(r1, text="Input CSV Dir:", width=14).pack(side="left")
+        ttk.Entry(r1, textvariable=self.input_dir_var).pack(
+            side="left", fill="x", expand=True, padx=4
+        )
+        ttk.Button(
+            r1, text="Browse...", style="Secondary.TButton", command=self._browse_input_dir
+        ).pack(side="left")
+
+        # Output Directory (Optional)
+        r2 = ttk.Frame(config_frame)
+        r2.pack(fill="x", pady=2)
+        ttk.Label(r2, text="Output Dir (opt):", width=14).pack(side="left")
+        ttk.Entry(r2, textvariable=self.output_dir_var).pack(
+            side="left", fill="x", expand=True, padx=4
+        )
+        ttk.Button(
+            r2, text="Browse...", style="Secondary.TButton", command=self._browse_output_dir
+        ).pack(side="left")
+
+        r3 = ttk.Frame(config_frame)
+        r3.pack(fill="x", pady=2)
+        ttk.Label(r3, text="Body Weight (kg):", width=14).pack(side="left")
+        ttk.Label(r3, textvariable=self.body_weight_var, foreground="#0f766e").pack(
+            side="left", padx=4
+        )
+        ttk.Checkbutton(
+            r3,
+            text="Timestamped output folders",
+            variable=self.timestamp_output_var,
+        ).pack(side="right")
+
+        # Config Summary Label
+        ttk.Label(
+            config_frame,
+            textvariable=self.summary_text_var,
+            font=("Helvetica", 9, "italic"),
+            foreground="#3b82f6",
+        ).pack(anchor="w", pady=(4, 0))
+
+        # Actions Card
+        actions_card = ttk.LabelFrame(main_frame, text="Execution Pipeline", padding=10)
+        actions_card.pack(fill="x", pady=(0, 10))
 
         # Primary Action: Run Full Pipeline
         ttk.Button(
-            buttons_grid,
-            text="🚀 Run Full Pipeline",
+            actions_card,
+            text="🚀 Run Full Pipeline (Filter → Adjust/Interpolate → Process)",
             style="Primary.TButton",
             command=self._run_full_pipeline,
-        ).pack(fill="x", pady=4)
+        ).pack(fill="x", pady=3)
 
-        # Secondary Actions
-        stages_frame = ttk.LabelFrame(buttons_grid, text="Individual Stages", padding=10)
-        stages_frame.pack(fill="x", pady=6)
-
+        # Stage Buttons Grid
+        stage_btn_row = ttk.Frame(actions_card)
+        stage_btn_row.pack(fill="x", pady=3)
         ttk.Button(
-            stages_frame,
-            text="1. Filter Only (Zero-Phase + PSD)",
+            stage_btn_row,
+            text="1. Filter Only",
             style="Secondary.TButton",
             command=lambda: self._execute_stage("filter"),
-        ).pack(fill="x", pady=3)
-
+        ).pack(side="left", expand=True, fill="x", padx=2)
         ttk.Button(
-            stages_frame,
-            text="2. Adjust + Interpolate",
+            stage_btn_row,
+            text="2. Adjust + Interp",
             style="Secondary.TButton",
             command=lambda: self._execute_stage("adjust"),
-        ).pack(fill="x", pady=3)
-
+        ).pack(side="left", expand=True, fill="x", padx=2)
         ttk.Button(
-            stages_frame,
-            text="3. Process Metrics Only (Biomechanical Metrics)",
+            stage_btn_row,
+            text="3. Process Only",
             style="Secondary.TButton",
             command=lambda: self._execute_stage("process"),
-        ).pack(fill="x", pady=3)
+        ).pack(side="left", expand=True, fill="x", padx=2)
 
-        actions_frame = ttk.Frame(frame)
-        actions_frame.pack(fill="x", pady=6)
+        # Log Card
+        log_frame = ttk.LabelFrame(main_frame, text="Execution Log", padding=6)
+        log_frame.pack(fill="both", expand=True, pady=(0, 10))
+        self.log_text = tk.Text(
+            log_frame, height=6, bg="#ffffff", fg="#1e293b", font=("Courier", 9)
+        )
+        self.log_text.pack(fill="both", expand=True)
 
+        # Footer Actions
+        footer = ttk.Frame(main_frame)
+        footer.pack(fill="x")
         ttk.Button(
-            actions_frame, text="📖 Help Docs", style="Secondary.TButton", command=self._open_help
-        ).pack(side="left", expand=True, fill="x", padx=4)
+            footer, text="📖 Help Docs", style="Secondary.TButton", command=self._open_help
+        ).pack(side="left", padx=4)
+        ttk.Button(footer, text="✖ Close", style="Secondary.TButton", command=self.destroy).pack(
+            side="right", padx=4
+        )
 
-        ttk.Button(
-            actions_frame, text="✖ Close", style="Secondary.TButton", command=self.destroy
-        ).pack(side="right", expand=True, fill="x", padx=4)
+        self._update_summary()
+        self._write_log("Ready. Select input directory or TOML configuration to begin.")
+        self._write_log(
+            "Run prints a highlighted Equivalent CLI command and saves replay TOMLs. "
+            "Output folders are reused unless timestamped output is enabled."
+        )
 
-        self._write_log("System initialized. Select a workflow button above.")
+    def destroy(self) -> None:
+        """Close and destroy the window."""
+        win = getattr(self, "window", None)
+        if win is not None and hasattr(win, "destroy"):
+            win.destroy()
 
     def _write_log(self, message: str) -> None:
-        print(f"[{Path(__file__).name}] {message}")
-        self.update_idletasks()
+        ts = datetime.now().strftime("%H:%M:%S")
+        if hasattr(self, "log_text"):
+            self.log_text.insert("end", f"[{ts}] {message}\n")
+            self.log_text.see("end")
+        win = getattr(self, "window", None)
+        if win is not None and hasattr(win, "update_idletasks"):
+            win.update_idletasks()
+
+    def _browse_toml(self) -> None:
+        win = getattr(self, "window", getattr(self, "parent", None))
+        fp = filedialog.askopenfilename(
+            title="Select Treadmill Processing TOML Configuration",
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
+            parent=win,
+        )
+        if fp:
+            self.config_path_var.set(fp)
+            self.pipeline_config = load_unified_config(fp)
+            if self.pipeline_config.get("paths", {}).get("input_dir"):
+                self.input_dir_var.set(self.pipeline_config["paths"]["input_dir"])
+            if self.pipeline_config.get("paths", {}).get("output_dir"):
+                self.output_dir_var.set(self.pipeline_config["paths"]["output_dir"])
+            self.timestamp_output_var.set(
+                bool(self.pipeline_config.get("execution", {}).get("timestamp_output", False))
+            )
+            if self.pipeline_config.get("paths", {}).get("input_dir"):
+                self._sync_subject_weight(self.pipeline_config["paths"]["input_dir"])
+            self._update_summary()
+            self._write_log(f"Loaded TOML configuration from: {fp}")
+
+    def _browse_input_dir(self) -> None:
+        win = getattr(self, "window", getattr(self, "parent", None))
+        d = filedialog.askdirectory(title="Select Input CSV Directory", parent=win)
+        if d:
+            self.input_dir_var.set(d)
+            self._sync_subject_weight(d)
+            self._update_summary()
+            self._write_log(f"Selected input directory: {d}")
+
+    def _browse_output_dir(self) -> None:
+        win = getattr(self, "window", getattr(self, "parent", None))
+        d = filedialog.askdirectory(title="Select Output Directory (Optional)", parent=win)
+        if d:
+            self.output_dir_var.set(d)
+            self._write_log(f"Selected output directory: {d}")
+
+    def _update_summary(self) -> None:
+        proc = self.pipeline_config.get("processing", {})
+        filt = self.pipeline_config.get("filters", {})
+        w = proc.get("participant_weight_kg", 70.0)
+        fc = proc.get("filter_cutoff_hz", filt.get("lowpass_cutoff", 50.0))
+        th = proc.get("detection_threshold_bw", 0.1)
+        adv = proc.get("use_advanced_calibration", False)
+        source = str(proc.get("participant_weight_source", "")).lower()
+        if self.input_dir_var.get().strip() or source in {"cli", "toml", "gui", "metadata"}:
+            if source == "metadata":
+                self.body_weight_var.set(f"{w:g} (info/Borg)")
+            elif source in {"cli", "toml", "gui"}:
+                self.body_weight_var.set(f"{w:g}")
+            else:
+                self.body_weight_var.set(f"{w:g} (fallback)")
+        else:
+            self.body_weight_var.set("Not detected — select input")
+        self.summary_text_var.set(
+            f"Body Weight: {self.body_weight_var.get()} | Filter Cutoff: {fc} Hz | "
+            f"Event Threshold: {th} BW | Multi-Plate Calib: {'Yes' if adv else 'No'}"
+        )
+
+    def _sync_subject_weight(self, input_dir: str | Path) -> None:
+        """Populate the GUI weight display from the selected subject metadata."""
+        try:
+            detected = infer_subject_weight_kg(input_dir)
+        except (OSError, ValueError, TypeError) as exc:
+            self._write_log(f"Could not infer subject body weight: {exc}")
+            return
+        if detected is None:
+            return
+        proc = self.pipeline_config.setdefault("processing", {})
+        source = str(proc.get("participant_weight_source", "")).lower()
+        if source not in {"cli", "toml", "gui"}:
+            proc["participant_weight_kg"] = detected
+            proc["participant_weight_source"] = "metadata"
+        self.body_weight_var.set(f"{detected:g} (info/Borg)")
+
+    def _sync_gui_runtime_options(self) -> None:
+        execution = self.pipeline_config.setdefault("execution", {})
+        execution["timestamp_output"] = bool(self.timestamp_output_var.get())
+
+    def _get_target_dirs(self) -> tuple[str | None, str | None]:
+        input_dir = self.input_dir_var.get().strip() or None
+        output_dir = self.output_dir_var.get().strip() or None
+        self._sync_gui_runtime_options()
+        if input_dir:
+            self._sync_subject_weight(input_dir)
+            self._update_summary()
+        return input_dir, output_dir
 
     def _execute_stage(self, stage: str) -> None:
-        self._write_log(f"Starting stage: {stage}...")
+        win = getattr(self, "window", getattr(self, "parent", None))
+        input_dir, output_dir = self._get_target_dirs()
+        if not input_dir:
+            input_dir = filedialog.askdirectory(title="Select Folder with CSV Files", parent=win)
+            if not input_dir:
+                return
+            self.input_dir_var.set(input_dir)
+
+        try:
+            (
+                self.pipeline_config,
+                input_path,
+                output_path,
+                history_paths,
+                cli,
+            ) = prepare_gui_cli_run(self.pipeline_config, input_dir, output_dir, stage)
+        except (OSError, ValueError) as exc:
+            self._write_log(f"ERROR preparing reproducible CLI: {exc}")
+            messagebox.showerror("CLI Replay Error", str(exc), parent=win)
+            return
+
+        self.input_dir_var.set(str(input_path))
+        self.output_dir_var.set(str(output_path))
+        self._write_log(f"Run history saved to: {history_paths[0]}")
+        self._write_log(f"Starting stage: {stage} on '{input_path}'...")
+        res = None
         try:
             if stage == "adjust":
-                run_adjust_stage(parent=self)
+                res = run_adjust_stage(
+                    parent=None,
+                    initial_dir=str(input_path),
+                    config=self.pipeline_config,
+                    output_dir=output_path,
+                    headless=True,
+                )
             elif stage == "filter":
-                run_filter_stage(parent=self)
+                res = run_filter_stage(
+                    parent=None,
+                    initial_dir=str(input_path),
+                    config=self.pipeline_config,
+                    output_dir=output_path,
+                    headless=True,
+                )
             elif stage == "process":
-                run_process_stage(parent=self)
-            self._write_log(f"Stage {stage} finished.")
+                res = run_process_stage(
+                    parent=None,
+                    initial_dir=str(input_path),
+                    config=self.pipeline_config,
+                    output_dir=output_path,
+                    headless=True,
+                )
+            if res:
+                self._write_log(f"Stage '{stage}' completed successfully! Output: {res}")
+            else:
+                self._write_log(f"Stage '{stage}' finished or was cancelled.")
         except Exception as exc:
             self._write_log(f"ERROR in stage {stage}: {exc}")
             messagebox.showerror(
-                "Stage Error", f"Error executing stage {stage}:\n{exc}", parent=self
+                "Stage Error", f"Error executing stage {stage}:\n{exc}", parent=win
             )
+        finally:
+            finish_gui_cli_run(self.pipeline_config, history_paths, cli, succeeded=res is not None)
 
     def _run_full_pipeline(self) -> None:
+        win = getattr(self, "window", getattr(self, "parent", None))
+        input_dir, output_dir = self._get_target_dirs()
+        if not input_dir:
+            input_dir = filedialog.askdirectory(
+                title="Select Folder with Raw CSV Files", parent=win
+            )
+            if not input_dir:
+                return
+            self.input_dir_var.set(input_dir)
+
+        try:
+            (
+                self.pipeline_config,
+                input_path,
+                output_path,
+                history_paths,
+                cli,
+            ) = prepare_gui_cli_run(self.pipeline_config, input_dir, output_dir, "all")
+        except (OSError, ValueError) as exc:
+            self._write_log(f"ERROR preparing reproducible CLI: {exc}")
+            messagebox.showerror("CLI Replay Error", str(exc), parent=win)
+            return
+
+        self.input_dir_var.set(str(input_path))
+        self.output_dir_var.set(str(output_path))
+        self._write_log(f"Run history saved to: {history_paths[0]}")
         self._write_log(
-            "Starting Full Sequential Pipeline (Filtragem -> Ajuste+Interpolação -> Processamento)"
+            "Starting Full Sequential Pipeline (Filter → Adjust+Interpolate → Process)..."
         )
+        succeeded = False
+        try:
+            # 1. Filtering
+            self._write_log("Executing Stage 1: Signal Filtering...")
+            filtered_folder = run_filter_stage(
+                parent=None,
+                initial_dir=str(input_path),
+                config=self.pipeline_config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not filtered_folder:
+                self._write_log("Pipeline stopped after Stage 1 (Filtering).")
+                return
 
-        # 1. Ask for raw folder
-        raw_folder = filedialog.askdirectory(title="Select folder with raw CSV files", parent=self)
-        if not raw_folder:
-            self._write_log("Pipeline canceled by user.")
-            return
+            # 2. Adjustment & Interpolation
+            self._write_log(
+                f"Executing Stage 2: Artifact Adjustment on folder '{filtered_folder}'..."
+            )
+            clean_folder = run_adjust_stage(
+                parent=None,
+                initial_dir=filtered_folder,
+                config=self.pipeline_config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not clean_folder:
+                self._write_log("Pipeline stopped after Stage 2 (Adjustment).")
+                return
 
-        # 2. Stage 1: Filter raw signals
-        self._write_log("Executing Stage 1: Signal Filtering...")
-        filtrado_folder = run_filter_stage(parent=self, initial_dir=raw_folder)
-        if not filtrado_folder:
-            self._write_log("Pipeline stopped after Stage 1 (Filtering).")
-            return
+            adjusted_folder = run_interpolate_stage(
+                parent=None,
+                initial_dir=clean_folder,
+                config=self.pipeline_config,
+                output_dir=output_path,
+                headless=True,
+            )
+            interp_target = adjusted_folder or clean_folder
 
-        # 3. Stage 2: Adjust + Interpolate filtered signals
-        self._write_log(
-            f"Executing Stage 2: Artifact Adjustment + Interpolation on folder '{filtrado_folder}'..."
-        )
-        limpos_folder = run_adjust_stage(parent=self, initial_dir=filtrado_folder)
-        if not limpos_folder:
-            self._write_log("Pipeline stopped after Stage 2 (Adjustment+Interpolation).")
-            return
+            # 3. Processing Metrics
+            self._write_log(
+                f"Executing Stage 3: Biomechanical Metrics on folder '{interp_target}'..."
+            )
+            results_folder = run_process_stage(
+                parent=None,
+                initial_dir=interp_target,
+                config=self.pipeline_config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not results_folder:
+                self._write_log("Pipeline stopped after Stage 3 (Processing).")
+                return
 
-        # 4. Stage 3: Process Metrics
-        self._write_log(f"Executing Stage 3: Biomechanical Metrics on folder '{limpos_folder}'...")
-        results_folder = run_process_stage(parent=self, initial_dir=limpos_folder)
-        if not results_folder:
-            self._write_log("Pipeline stopped after Stage 3 (Processing).")
-            return
-
-        self._write_log("Pipeline completed successfully!")
-        messagebox.showinfo(
-            "Success",
-            f"Full pipeline executed successfully!\n\nResults saved to:\n{results_folder}",
-            parent=self,
-        )
+            succeeded = True
+            self._write_log("Pipeline completed successfully!")
+        finally:
+            finish_gui_cli_run(self.pipeline_config, history_paths, cli, succeeded=succeeded)
 
     def _open_help(self) -> None:
+        win = getattr(self, "window", getattr(self, "parent", None))
         help_path = Path(__file__).resolve().parent / "help" / "treadmill_lc.html"
         if help_path.exists():
             webbrowser.open_new_tab(help_path.as_uri())
         else:
-            messagebox.showinfo("Help", f"Help file not found:\n{help_path}", parent=self)
+            messagebox.showinfo("Help", f"Help file not found:\n{help_path}", parent=win)
 
 
 def run_treadmill_lc_gui(parent: tk.Misc | None = None) -> None:
-    """Entry point used by vaila.py."""
-    owns_root = parent is None
-    root = tk.Tk() if owns_root else parent
-    if owns_root:
-        root.withdraw()
-    dialog = LoadCellTreadmillDialog(root)
-    dialog.grab_set()
-    dialog.wait_window()
-    if owns_root:
-        root.destroy()
+    """Entry point used by vaila.py and standalone execution."""
+    app = LoadCellTreadmillDialog(parent)
+    if app._owns_root:
+        app.window.mainloop()
+    else:
+        app.window.grab_set()
+        app.window.wait_window()
 
 
 # =============================================================================
-# CLI ENTRY POINT
+# CLI ENTRY POINT & HEADLESS TOML SUPPORT
 # =============================================================================
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="vailá load cell treadmill processing",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        prog="treadmill_lc.py",
+        description="vailá load-cell instrumented treadmill processing and biomechanics analysis.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Launch single-window GUI:
+  uv run vaila/treadmill_lc.py
+  uv run vaila/treadmill_lc.py --gui
+
+  # Automatic headless processing without TOML:
+  uv run vaila/treadmill_lc.py -i tests/treadmill_lc -s process -a -w 61.6
+
+  # Override only the analysis window; other settings still come from TOML:
+  uv run vaila/treadmill_lc.py -i tests/treadmill_lc -s process -b 526 -e 60000
+
+  # Run full pipeline headlessly into an explicit output root:
+  uv run vaila/treadmill_lc.py -c config.toml -i /path/to/raw_csvs -o /path/to/results -s all
+
+  # Re-run from the stable history written at the input or output root:
+  uv run vaila/treadmill_lc.py -c /path/to/treadmill_lc_run_history.toml
+        """,
     )
-    parser.add_argument("--input-dir", help="Folder with load-cell CSV files")
+    parser.add_argument("-c", "--config", metavar="TOML", help="Path to configuration TOML file")
     parser.add_argument(
+        "-t",
+        "--toml-path",
+        metavar="TOML",
+        default=DEFAULT_TOML_PATH,
+        help=f"Fallback TOML path (default: {DEFAULT_TOML_PATH})",
+    )
+    parser.add_argument(
+        "-i", "--input-dir", metavar="DIR", help="Folder containing load-cell CSV files"
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        metavar="DIR",
+        help="Output root (default: INPUT_DIR/output)",
+    )
+    parser.add_argument(
+        "-s",
         "--step",
-        choices=["all", "adjust", "interpolate", "filter", "process"],
-        default="all",
-        help="Pipeline step to run",
+        choices=CLI_STEPS,
+        default=None,
+        help="Pipeline step (default: value from TOML, otherwise all)",
+    )
+    parser.add_argument(
+        "-g", "--gui", action="store_true", help="Force GUI mode (opens single-window launcher)"
+    )
+    parser.add_argument("-w", "--weight", type=float, help="Participant body weight in kg")
+    parser.add_argument(
+        "-b",
+        "--start",
+        "--start-index",
+        dest="start_index",
+        type=int,
+        help="First analysis sample (inclusive)",
+    )
+    parser.add_argument(
+        "-e",
+        "--end",
+        "--end-index",
+        dest="end_index",
+        type=int,
+        help="Last analysis sample (exclusive)",
+    )
+    parser.add_argument(
+        "-a",
+        "--auto",
+        "--force-auto",
+        dest="force_auto",
+        action="store_true",
+        help="Ignore TOML settings and automatically detect each signal start",
+    )
+    parser.add_argument(
+        "-T",
+        "--timestamp",
+        "--timestamp-output",
+        dest="timestamp_output",
+        action="store_true",
+        help="Create timestamped stage folders instead of reusing output folders",
     )
     return parser.parse_args(argv)
 
 
+def _resolve_optional_toml_path(toml_path: str, input_dir: str | None) -> Path:
+    """Resolve the fallback TOML relative to the input directory when possible."""
+    candidate = Path(toml_path).expanduser()
+    if not candidate.is_absolute() and input_dir:
+        input_candidate = Path(input_dir).expanduser() / candidate
+        if input_candidate.is_file() or toml_path == DEFAULT_TOML_PATH:
+            return input_candidate
+    return candidate
+
+
+def _validate_cli_overrides(args: argparse.Namespace) -> str | None:
+    """Return a user-facing validation error for invalid CLI overrides."""
+    if args.weight is not None and args.weight <= 0:
+        return "--weight must be greater than zero"
+    if args.start_index is not None and args.start_index < 0:
+        return "--start-index must be zero or greater"
+    if args.end_index is not None and args.end_index <= 0:
+        return "--end-index must be greater than zero"
+    if (
+        args.start_index is not None
+        and args.end_index is not None
+        and args.end_index <= args.start_index
+    ):
+        return "--end-index must be greater than --start-index"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    if args.input_dir:
-        # CLI run triggers GUI stage on target directory directly
-        root = tk.Tk()
-        root.withdraw()
-        if args.step == "all":
-            # sequential pipeline on input_dir
-            filtrado = run_filter_stage(parent=root, initial_dir=args.input_dir)
-            if filtrado:
-                limpos = run_adjust_stage(parent=root, initial_dir=filtrado)
-                if limpos:
-                    ajustado = run_interpolate_stage(parent=root, initial_dir=limpos)
-                    if ajustado:
-                        run_process_stage(parent=root, initial_dir=ajustado)
-        elif args.step == "adjust":
-            run_adjust_stage(parent=root, initial_dir=args.input_dir)
-        elif args.step == "interpolate":
-            run_interpolate_stage(parent=root, initial_dir=args.input_dir)
-        elif args.step == "filter":
-            run_filter_stage(parent=root, initial_dir=args.input_dir)
-        elif args.step == "process":
-            run_process_stage(parent=root, initial_dir=args.input_dir)
-        root.destroy()
+
+    cli_requested = any(
+        (
+            args.config,
+            args.input_dir,
+            args.force_auto,
+            args.weight is not None,
+            args.start_index is not None,
+            args.end_index is not None,
+            args.toml_path != DEFAULT_TOML_PATH,
+            args.timestamp_output,
+        )
+    )
+
+    # CLI Headless mode triggered by any CLI processing option unless --gui is explicit.
+    if cli_requested and not args.gui:
+        _ensure_noninteractive_backend()
+
+        validation_error = _validate_cli_overrides(args)
+        if validation_error:
+            console.print(f"[bold red]Error:[/bold red] {validation_error}")
+            return 2
+
+        # Load configuration
+        config_path = None
+        if args.force_auto:
+            config = get_default_unified_config()
+            console.print("[yellow]Automatic mode:[/yellow] TOML settings were ignored.")
+        elif args.config:
+            config_path = Path(args.config).expanduser()
+            if not config_path.is_file():
+                console.print(
+                    f"[bold red]Error:[/bold red] Configuration file not found: {config_path}"
+                )
+                return 1
+            config = load_unified_config(config_path)
+        else:
+            config_path = _resolve_optional_toml_path(args.toml_path, args.input_dir)
+            if config_path.is_file():
+                config = load_unified_config(config_path)
+            else:
+                legacy_path = (
+                    Path(args.input_dir).expanduser() / "processing_configuration_used.toml"
+                    if args.input_dir and args.toml_path == DEFAULT_TOML_PATH
+                    else None
+                )
+                if legacy_path is not None and legacy_path.is_file():
+                    config_path = legacy_path
+                    config = load_unified_config(config_path)
+                else:
+                    console.print(
+                        f"[yellow]Warning:[/yellow] TOML not found: {config_path}. "
+                        "Using built-in defaults and automatic analysis windows."
+                    )
+                    config = get_default_unified_config()
+
+        if args.weight is not None:
+            config.setdefault("processing", {})["participant_weight_kg"] = float(args.weight)
+            config["processing"]["participant_weight_source"] = "cli"
+
+        configured_paths = config.get("paths", {})
+        input_dir = args.input_dir or configured_paths.get("input_dir")
+        if not input_dir and config_path is not None:
+            candidate_dir = config_path.resolve().parent
+            if os.path.isdir(candidate_dir):
+                input_dir = str(candidate_dir)
+
+        if not input_dir or not os.path.isdir(input_dir):
+            console.print(
+                f"[bold red]Error:[/bold red] Input directory not found or not specified: {input_dir}"
+            )
+            return 1
+
+        processing = config.setdefault("processing", {})
+        weight_source = str(processing.get("participant_weight_source", "fallback")).lower()
+        if weight_source not in {"cli", "toml", "gui"}:
+            detected_weight = infer_subject_weight_kg(input_dir)
+            if detected_weight is not None:
+                processing["participant_weight_kg"] = detected_weight
+                processing["participant_weight_source"] = "metadata"
+
+        requested_output_dir = args.output_dir or configured_paths.get("output_dir")
+        try:
+            config, input_path, output_path, step = prepare_cli_execution(
+                config,
+                input_dir=input_dir,
+                output_dir=requested_output_dir,
+                step=args.step,
+            )
+            execution = config.setdefault("execution", {})
+            execution["force_auto"] = bool(args.force_auto)
+            execution["timestamp_output"] = bool(
+                args.timestamp_output or execution.get("timestamp_output", False)
+            )
+            if args.start_index is not None:
+                execution["start_index"] = int(args.start_index)
+            if args.end_index is not None:
+                execution["end_index_exclusive"] = int(args.end_index)
+            history_paths = save_cli_run_history(config, input_path, output_path)
+        except OSError as exc:
+            console.print(f"[bold red]Error preparing output/history:[/bold red] {exc}")
+            return 1
+
+        print_treadmill_config_summary(
+            config,
+            input_dir=input_path,
+            output_dir=output_path,
+            mode="Headless CLI",
+            step=step,
+        )
+        print_run_history_paths(history_paths)
+
+        if step == "all":
+            print_pipeline_milestone(1, 3, "Signal Filtering", f"Input: {input_path}", "running")
+            filtered_dir = run_filter_stage(
+                parent=None,
+                initial_dir=str(input_path),
+                config=config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not filtered_dir:
+                console.print("[bold red]Pipeline failed at filtering stage.[/bold red]")
+                return 1
+            print_pipeline_milestone(
+                1, 3, "Signal Filtering Complete", f"Saved: {filtered_dir}", "success"
+            )
+
+            print_pipeline_milestone(
+                2, 3, "Artifact Adjustment & Interpolation", f"Input: {filtered_dir}", "running"
+            )
+            clean_dir = run_adjust_stage(
+                parent=None,
+                initial_dir=filtered_dir,
+                config=config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not clean_dir:
+                console.print("[bold red]Pipeline failed at adjustment stage.[/bold red]")
+                return 1
+
+            adjusted_dir = run_interpolate_stage(
+                parent=None,
+                initial_dir=clean_dir,
+                config=config,
+                output_dir=output_path,
+                headless=True,
+            )
+            interp_result_dir = adjusted_dir or clean_dir
+            print_pipeline_milestone(
+                2,
+                3,
+                "Adjustment & Interpolation Complete",
+                f"Saved: {interp_result_dir}",
+                "success",
+            )
+
+            print_pipeline_milestone(
+                3,
+                3,
+                "Biomechanical Metrics Processing",
+                f"Input: {interp_result_dir}",
+                "running",
+            )
+            results_dir = run_process_stage(
+                parent=None,
+                initial_dir=interp_result_dir,
+                config=config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not results_dir:
+                console.print("[bold red]Pipeline failed at processing stage.[/bold red]")
+                return 1
+            print_pipeline_milestone(
+                3, 3, "Full Pipeline Complete", f"Results saved to: {results_dir}", "success"
+            )
+
+        elif step == "filter":
+            print_pipeline_milestone(1, 1, "Signal Filtering", f"Input: {input_path}", "running")
+            res = run_filter_stage(
+                parent=None,
+                initial_dir=str(input_path),
+                config=config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not res:
+                return 1
+            print_pipeline_milestone(1, 1, "Signal Filtering Complete", f"Saved: {res}", "success")
+
+        elif step == "adjust":
+            print_pipeline_milestone(1, 1, "Artifact Adjustment", f"Input: {input_path}", "running")
+            res = run_adjust_stage(
+                parent=None,
+                initial_dir=str(input_path),
+                config=config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not res:
+                return 1
+            print_pipeline_milestone(
+                1, 1, "Artifact Adjustment Complete", f"Saved: {res}", "success"
+            )
+
+        elif step == "interpolate":
+            print_pipeline_milestone(1, 1, "Interpolation", f"Input: {input_path}", "running")
+            res = run_interpolate_stage(
+                parent=None,
+                initial_dir=str(input_path),
+                config=config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not res:
+                return 1
+            print_pipeline_milestone(1, 1, "Interpolation Complete", f"Saved: {res}", "success")
+
+        elif step == "process":
+            print_pipeline_milestone(
+                1,
+                1,
+                "Biomechanical Metrics Processing",
+                f"Input: {input_path}",
+                "running",
+            )
+            res = run_process_stage(
+                parent=None,
+                initial_dir=str(input_path),
+                config=config,
+                output_dir=output_path,
+                headless=True,
+            )
+            if not res:
+                return 1
+            print_pipeline_milestone(1, 1, "Processing Complete", f"Saved: {res}", "success")
+        update_cli_run_history(config, history_paths)
         return 0
 
     run_treadmill_lc_gui()

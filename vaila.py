@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 16 August 2026
+Update Date: 17 August 2026
 Version: 0.3.107
 
 Example of usage:
@@ -254,7 +254,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 16.Aug.2026 v0.3.107 (Python 3.12.13)
+    vailá - 17.Aug.2026 v0.3.107 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -369,7 +369,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 16.Aug.2026 v0.3.107 (Python 3.12.13)")
+        self.title("vailá - 17.Aug.2026 v0.3.107 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -2431,9 +2431,7 @@ class Vaila(tk.Tk):
     # B6_r7_c3
     def treadmill_lc(self):
         """Run load-cell treadmill GRF processing with step-based TOML workflow."""
-        from vaila import treadmill_lc
-
-        treadmill_lc.run_treadmill_lc_gui(parent=self)
+        run_vaila_module("vaila.treadmill_lc", "vaila/treadmill_lc.py")
 
     # B_r2_c4
     def gnss_analysis(self):
@@ -3638,7 +3636,9 @@ class Vaila(tk.Tk):
         if importlib.util.find_spec("sam3") is None:
             missing.append("SAM3: uv sync --extra sam")
         if importlib.util.find_spec("sapiens") is None:
-            missing.append("Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh (or uv pip install -e .local/third_party/sapiens2)")
+            missing.append(
+                "Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh (or uv pip install -e .local/third_party/sapiens2)"
+            )
         if missing:
             cli_hint = (
                 ">> Required CLI install commands:\n"
@@ -3654,7 +3654,10 @@ class Vaila(tk.Tk):
             print("=" * 72 + "\n", file=sys.stderr)
             messagebox.showerror(
                 "SAM3+Sapiens2 — dependencies",
-                "Install CUDA pipelines before running:\n\n" + "\n".join(missing) + "\n\n" + cli_hint,
+                "Install CUDA pipelines before running:\n\n"
+                + "\n".join(missing)
+                + "\n\n"
+                + cli_hint,
                 parent=self,
             )
             return
@@ -3687,10 +3690,7 @@ class Vaila(tk.Tk):
                 f"--local-dir {weights_dir}"
             )
         if missing:
-            cli_hint = (
-                ">> Required CLI install commands:\n"
-                "   bash bin/setup_fifa_sam3d.sh\n"
-            )
+            cli_hint = ">> Required CLI install commands:\n   bash bin/setup_fifa_sam3d.sh\n"
             print("\n" + "=" * 72, file=sys.stderr)
             print("[ERROR] SAM3+DINOv3 3D — Missing dependencies:", file=sys.stderr)
             for m in missing:
@@ -3699,7 +3699,10 @@ class Vaila(tk.Tk):
             print("=" * 72 + "\n", file=sys.stderr)
             messagebox.showerror(
                 "SAM3+DINOv3 3D — dependencies",
-                "Install the CUDA pipeline before running:\n\n" + "\n\n".join(missing) + "\n\n" + cli_hint,
+                "Install the CUDA pipeline before running:\n\n"
+                + "\n\n".join(missing)
+                + "\n\n"
+                + cli_hint,
                 parent=self,
             )
             return
@@ -3731,7 +3734,9 @@ class Vaila(tk.Tk):
         if importlib.util.find_spec("sam3") is None:
             missing.append("SAM3: uv sync --extra sam")
         if importlib.util.find_spec("sapiens") is None:
-            missing.append("Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh (or uv pip install -e .local/third_party/sapiens2)")
+            missing.append(
+                "Sapiens2: uv sync --extra sapiens && bash bin/setup_sapiens2.sh (or uv pip install -e .local/third_party/sapiens2)"
+            )
         if importlib.util.find_spec("sam_3d_body") is None:
             missing.append("SAM 3D Body: bash bin/setup_fifa_sam3d.sh")
 
@@ -3758,7 +3763,10 @@ class Vaila(tk.Tk):
             print("=" * 72 + "\n", file=sys.stderr)
             messagebox.showerror(
                 "Sapiens2 3D Pose — dependencies",
-                "Install both CUDA pipelines before running:\n\n" + "\n\n".join(missing) + "\n\n" + cli_hint,
+                "Install both CUDA pipelines before running:\n\n"
+                + "\n\n".join(missing)
+                + "\n\n"
+                + cli_hint,
                 parent=self,
             )
             return
