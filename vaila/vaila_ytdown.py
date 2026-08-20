@@ -4,8 +4,8 @@ YouTube High Quality Downloader - vaila_ytdown.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Create: 10 October 2025
-Update: 18 February 2026
-Version: 0.1.4
+Update: 20 August 2026
+Version: 0.3.108
 
 Description:
 ------------
@@ -18,7 +18,7 @@ Key Features:
 - Prioritizes streams with higher FPS (60fps when available)
 - Automatically selects best video and audio quality
 - Batch download from a file with URLs (one per line)
-- Uses yt-dlp for maximum compatibility and regular updates
+- Uses yt-dlp (+ yt-dlp-ejs) with Deno/Node JS runtime when available
 
 How to use - GUI (default):
 ----------------------------
@@ -77,7 +77,7 @@ from rich.progress import (
 
 # Try to import yt-dlp
 try:
-    import yt_dlp  # type: ignore
+    import yt_dlp
 except ImportError:
     print("Error: yt-dlp package is required. Install it with:")
     print("pip install yt-dlp")
@@ -96,11 +96,50 @@ except ImportError:
 # Rich console for pretty output
 console = Console()
 
+# Preferred JS runtimes for YouTube EJS challenges (yt-dlp wiki/EJS).
+_JS_RUNTIME_CANDIDATES = ("deno", "node", "qjs")
+
 
 def get_help_html_path():
     """Return absolute path to vaila_ytdown.html (next to this script)."""
     script_dir = Path(__file__).resolve().parent
     return script_dir / "help" / "vaila_ytdown.html"
+
+
+def detect_js_runtimes() -> dict[str, dict[str, str]]:
+    """Return yt-dlp ``js_runtimes`` map for Deno/Node/QuickJS found on PATH.
+
+    Deno is preferred (enabled by default upstream). Node needs explicit enable.
+    """
+    runtimes: dict[str, dict[str, str]] = {}
+    for name in _JS_RUNTIME_CANDIDATES:
+        path = shutil.which(name)
+        if not path:
+            continue
+        key = "quickjs" if name == "qjs" else name
+        runtimes[key] = {"path": path}
+    return runtimes
+
+
+def build_ytdlp_base_opts(**overrides) -> dict:
+    """Shared yt-dlp options: cert skip, JS runtimes, EJS remote fallback."""
+    opts: dict = {
+        "no_check_certificate": True,
+        "noplaylist": True,
+        "retries": 10,
+        "fragment_retries": 10,
+        "extractor_retries": 3,
+    }
+    js_runtimes = detect_js_runtimes()
+    if js_runtimes:
+        opts["js_runtimes"] = js_runtimes
+    # Prefer bundled yt-dlp-ejs; allow GitHub fetch if the package is missing/outdated.
+    try:
+        import yt_dlp_ejs  # noqa: F401
+    except ImportError:
+        opts["remote_components"] = {"ejs:github"}
+    opts.update(overrides)
+    return opts
 
 
 # Simplified function to read URLs from file - no resolution parsing needed
@@ -125,6 +164,7 @@ class YTDownloader:
         self.current_video_title = ""
         self.progress_callback = None
         self.status_callback = None
+        self._js_runtime_warned = False
 
         # Check if ffmpeg is available
         self.ffmpeg_available = self._check_ffmpeg()
@@ -132,22 +172,33 @@ class YTDownloader:
             console.print(
                 "[yellow]Warning: ffmpeg not found in PATH. Using yt-dlp's embedded version.[/yellow]"
             )
+        self._warn_missing_js_runtime_once()
 
     def _check_ffmpeg(self):
         """Check if ffmpeg is available in the system path."""
         return shutil.which("ffmpeg") is not None
 
+    def _warn_missing_js_runtime_once(self) -> None:
+        """Warn once when no Deno/Node/QuickJS is available for YouTube EJS."""
+        if self._js_runtime_warned or detect_js_runtimes():
+            return
+        self._js_runtime_warned = True
+        console.print(
+            "[yellow]Warning: No JavaScript runtime (deno/node) found for YouTube. "
+            "Install Deno (recommended) or Node.js ≥22 to avoid HTTP 403 / missing formats. "
+            "See https://github.com/yt-dlp/yt-dlp/wiki/EJS[/yellow]"
+        )
+
     def get_video_info(self, url):
         """Get detailed information about the video with enhanced resolution and FPS tracking."""
-        ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "format": "best",
-            "simulate": True,
-            "dump_single_json": True,
-            "no_check_certificate": True,
-        }
+        ydl_opts = build_ytdlp_base_opts(
+            quiet=True,
+            no_warnings=True,
+            skip_download=True,
+            format="best",
+            simulate=True,
+            dump_single_json=True,
+        )
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -243,22 +294,21 @@ class YTDownloader:
             f"{filename_prefix + '_' if filename_prefix else ''}%(title)s.%(ext)s",
         )
 
-        # Set up download options with max FPS preference
-        ydl_opts = {
-            "format": format_spec,
-            "outtmpl": outtmpl,
-            "progress_hooks": [progress_hook],
-            "merge_output_format": "mp4",
-            "postprocessors": [
+        # Set up download options with max FPS preference + YouTube EJS/JS runtime
+        ydl_opts = build_ytdlp_base_opts(
+            format=format_spec,
+            outtmpl=outtmpl,
+            progress_hooks=[progress_hook],
+            merge_output_format="mp4",
+            postprocessors=[
                 {
                     "key": "FFmpegVideoConvertor",
                     "preferedformat": "mp4",
                 }
             ],
-            "writethumbnail": False,
-            "writeinfojson": False,
-            "no_check_certificate": True,
-        }
+            writethumbnail=False,
+            writeinfojson=False,
+        )
 
         try:
             # First get extended video information for the detailed info file
@@ -369,21 +419,20 @@ class YTDownloader:
             f"{filename_prefix + '_' if filename_prefix else ''}%(title)s.%(ext)s",
         )
 
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": outtmpl,
-            "progress_hooks": [progress_hook],
-            "postprocessors": [
+        ydl_opts = build_ytdlp_base_opts(
+            format="bestaudio/best",
+            outtmpl=outtmpl,
+            progress_hooks=[progress_hook],
+            postprocessors=[
                 {
                     "key": "FFmpegExtractAudio",
                     "preferredcodec": "mp3",
                     "preferredquality": "192",  # Pode ajustar a qualidade (ex: '320')
                 }
             ],
-            "writethumbnail": False,
-            "writeinfojson": False,  # Pode querer manter True para ter info
-            "no_check_certificate": True,
-        }
+            writethumbnail=False,
+            writeinfojson=False,  # Pode querer manter True para ter info
+        )
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:

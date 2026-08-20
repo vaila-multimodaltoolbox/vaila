@@ -3,8 +3,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 20 August 2026
+Version: 0.3.108
 Python Version: 3.12.9
 
 Description:
@@ -15,6 +15,8 @@ by getpixelvideo.py. It offers the following functionalities:
 1. Marker merging: Combine markers that represent the same object
 2. Gap filling: Fill gaps where a marker temporarily disappears
 3. Swaps: Fix cases where IDs were swapped in certain frame intervals
+4. Class-aware geometric ReID: merge fragmented YOLO tracklets independently
+   per label, so different object classes never compete for identity slots
 
 ================================================================================
 """
@@ -31,6 +33,7 @@ import tkinter as tk
 import warnings
 from tkinter import Button as TkButton
 from tkinter import Frame, Label, Tk, filedialog, messagebox, simpledialog, ttk
+from typing import Any, cast
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -1046,6 +1049,73 @@ def merge_fragmented_ids_geometric(
     return merged, stats
 
 
+def merge_fragmented_ids_by_label(
+    long_df: pd.DataFrame,
+    *,
+    max_ids: int | None = None,
+    max_gap: int = 12,
+    max_dist: float = 180.0,
+    min_iou: float = 0.05,
+    direction_weight: float = 0.5,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Run geometric ReID independently for every detected class label.
+
+    YOLO's wide tracking export may contain people, balls, rackets, and other
+    classes in the same file. Identity slots are class-local: a ball must
+    never consume or match a person's stable ID. ``max_ids`` therefore applies
+    per label. Inputs without label metadata keep the original single-group
+    behavior.
+    """
+    label_col = next((c for c in long_df.columns if str(c).strip().lower() == "label"), None)
+    if label_col is None or long_df[label_col].dropna().empty:
+        return merge_fragmented_ids_geometric(
+            long_df,
+            max_ids=max_ids,
+            max_gap=max_gap,
+            max_dist=max_dist,
+            min_iou=min_iou,
+            direction_weight=direction_weight,
+        )
+
+    pieces: list[pd.DataFrame] = []
+    per_label: dict[str, dict[str, object]] = {}
+    for label, group in long_df.dropna(subset=[label_col]).groupby(label_col, sort=True):
+        merged_group, group_stats = merge_fragmented_ids_geometric(
+            group.reset_index(drop=True),
+            max_ids=max_ids,
+            max_gap=max_gap,
+            max_dist=max_dist,
+            min_iou=min_iou,
+            direction_weight=direction_weight,
+        )
+        merged_group[label_col] = str(label)
+        pieces.append(merged_group)
+        per_label[str(label)] = group_stats
+
+    if not pieces:
+        return merge_fragmented_ids_geometric(long_df, max_ids=max_ids)
+
+    merged = pd.concat(pieces, ignore_index=True).sort_values(
+        ["frame", label_col, "stable_id"]
+    )
+    stats: dict[str, object] = {
+        "frames": int(long_df["frame"].nunique()),
+        "raw_ids": int(long_df["raw_slot"].nunique()),
+        "stable_ids": int(
+            sum(int(cast(Any, s["stable_ids"])) for s in per_label.values())
+        ),
+        "forced_reassignments": int(
+            sum(int(cast(Any, s["forced_reassignments"])) for s in per_label.values())
+        ),
+        "max_ids": int(max_ids) if max_ids else None,
+        "dropped_rows": int(
+            sum(int(cast(Any, s["dropped_rows"])) for s in per_label.values())
+        ),
+        "per_label": per_label,
+    }
+    return merged.reset_index(drop=True), stats
+
+
 def write_bbox_wide_slot_output(
     original_df: pd.DataFrame,
     merged_long: pd.DataFrame,
@@ -1061,9 +1131,18 @@ def write_bbox_wide_slot_output(
     extra_field_names = [
         c for c in merged_long.columns if c not in _LONG_DETECTION_COLUMNS and c != "stable_id"
     ]
-    stable_ids = sorted(int(s) for s in merged_long["stable_id"].dropna().unique())
-
-    merged_dedup = merged_long.drop_duplicates(subset=["frame", "stable_id"], keep="first")
+    label_col = next(
+        (c for c in merged_long.columns if str(c).strip().lower() == "label"), None
+    )
+    if label_col is not None and not merged_long[label_col].dropna().empty:
+        groups = [
+            (str(label), group.copy())
+            for label, group in merged_long.dropna(subset=[label_col]).groupby(
+                label_col, sort=True
+            )
+        ]
+    else:
+        groups = [(None, merged_long)]
 
     # Build every column as a plain dict first and concat once -- assigning
     # columns one at a time into a growing DataFrame (the previous approach)
@@ -1071,16 +1150,28 @@ def write_bbox_wide_slot_output(
     # this width (4 + len(extra_field_names) columns x len(stable_ids) slots)
     # and is measurably slower on a 16k-frame, 16-slot real file.
     columns: dict[str, np.ndarray] = {"Frame": full_frames}
-    for sid in stable_ids:
-        slot_label = f"{slot_prefix}_{sid:02d}"
-        sub = merged_dedup.loc[merged_dedup["stable_id"] == sid].set_index("frame")
-        sub = sub.reindex(full_frames)
-        columns[f"X_min_{slot_label}"] = sub["x1"].to_numpy()
-        columns[f"Y_min_{slot_label}"] = sub["y1"].to_numpy()
-        columns[f"X_max_{slot_label}"] = sub["x2"].to_numpy()
-        columns[f"Y_max_{slot_label}"] = sub["y2"].to_numpy()
-        for field in extra_field_names:
-            columns[f"{field}_{slot_label}"] = sub[field].to_numpy()
+    for label, group in groups:
+        group_prefix = f"{label}_id" if label else slot_prefix
+        stable_ids = sorted(int(s) for s in group["stable_id"].dropna().unique())
+        merged_dedup = group.drop_duplicates(subset=["frame", "stable_id"], keep="first")
+        for sid in stable_ids:
+            slot_label = f"{group_prefix}_{sid:02d}"
+            sub = merged_dedup.loc[merged_dedup["stable_id"] == sid].set_index("frame")
+            sub = sub.reindex(full_frames)
+            present = sub["x1"].notna().to_numpy()
+            columns[f"X_min_{slot_label}"] = sub["x1"].to_numpy()
+            columns[f"Y_min_{slot_label}"] = sub["y1"].to_numpy()
+            columns[f"X_max_{slot_label}"] = sub["x2"].to_numpy()
+            columns[f"Y_max_{slot_label}"] = sub["y2"].to_numpy()
+            for field in extra_field_names:
+                values = sub[field].to_numpy()
+                field_lower = str(field).strip().lower()
+                if field_lower == "tracker id":
+                    values = np.where(present, sid, np.nan)
+                elif field_lower == "label" and label is not None:
+                    values = np.full(len(sub), np.nan, dtype=object)
+                    values[present] = label
+                columns[f"{field}_{slot_label}"] = values
     out = pd.DataFrame(columns)
 
     out_path = Path(out_path)
@@ -1157,7 +1248,7 @@ def run_geometric_merge(
     long_df = extract_long_detections(df, schema)
 
     effective_max_ids = int(max_ids) if max_ids else estimate_max_ids(long_df)
-    merged, stats = merge_fragmented_ids_geometric(
+    merged, stats = merge_fragmented_ids_by_label(
         long_df,
         max_ids=effective_max_ids,
         max_gap=max_gap,

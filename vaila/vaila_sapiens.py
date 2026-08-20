@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 16 August 2026
-Version: 0.3.107
+Update Date: 19 August 2026
+Version: 0.3.108
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -3130,8 +3130,12 @@ def build_dry_run_report(
     return lines
 
 
-def download_weights(model: str = DEFAULT_MODEL_KEY) -> None:
-    """Download pose checkpoint + DETR detector via Hugging Face Hub (Python API)."""
+def download_weights(model: str = DEFAULT_MODEL_KEY, *, include_detector: bool = True) -> None:
+    """Download pose checkpoint + DETR detector via Hugging Face Hub (Python API).
+
+    ``include_detector`` is False for the SAM3-guided pipeline, which feeds
+    Sapiens2 with SAM boxes and never loads DETR.
+    """
     from huggingface_hub import hf_hub_download, snapshot_download
 
     key = _normalize_model_key(model)
@@ -3150,9 +3154,54 @@ def download_weights(model: str = DEFAULT_MODEL_KEY) -> None:
     )
     print(f"✓ Downloaded\n  path: {pose_path}")
 
-    print(f"[Sapiens2] Downloading detector: {DETECTOR_HF_REPO}")
-    snapshot_download(repo_id=DETECTOR_HF_REPO, local_dir=str(det_dir))
+    if include_detector:
+        print(f"[Sapiens2] Downloading detector: {DETECTOR_HF_REPO}")
+        snapshot_download(repo_id=DETECTOR_HF_REPO, local_dir=str(det_dir))
     print(f"[Sapiens2] Weights downloaded under {ckpt_root}")
+
+
+def ensure_model_assets(
+    model: str = DEFAULT_MODEL_KEY, *, include_detector: bool = True
+) -> SapiensModelSpec:
+    """Resolve a model spec, downloading the pose weights when they are absent.
+
+    The pose config ships with the ``sapiens2`` source tree, so a missing config
+    is a setup problem that no download can fix and is raised immediately.
+    """
+    spec = resolve_model_spec(model)
+    if not spec.config_path.is_file():
+        raise FileNotFoundError(
+            f"Sapiens2 pose config not found: {spec.config_path}\nRun: bash bin/setup_sapiens2.sh"
+        )
+
+    needs_pose = not spec.checkpoint_path.is_file()
+    needs_detector = include_detector and not spec.detector_path.is_dir()
+    if not needs_pose and not needs_detector:
+        return spec
+
+    what = "pose checkpoint" if needs_pose else "DETR detector"
+    if needs_pose and needs_detector:
+        what = "pose checkpoint + DETR detector"
+    print(
+        f"[Sapiens2] Missing {what} for model '{spec.model_key}' - downloading now "
+        "(one-time, several GB).",
+        flush=True,
+    )
+    download_weights(spec.model_key, include_detector=needs_detector)
+
+    still_missing: list[str] = []
+    if not spec.checkpoint_path.is_file():
+        still_missing.append(str(spec.checkpoint_path))
+    if include_detector and not spec.detector_path.is_dir():
+        still_missing.append(str(spec.detector_path))
+    if still_missing:
+        listed = "\n".join(f"   - {m}" for m in still_missing)
+        raise FileNotFoundError(
+            f"Sapiens2 download finished but assets are still missing:\n{listed}\n"
+            "Check the network connection and Hugging Face access, then run:\n"
+            f"   uv run vaila/vaila_sapiens.py --download-weights --model {spec.model_key}"
+        )
+    return spec
 
 
 class SapiensBatchProgress(tk.Toplevel):

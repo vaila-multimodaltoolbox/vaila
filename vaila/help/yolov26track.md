@@ -4,8 +4,8 @@
 
 - **Category:** Ml
 - **File:** `vaila/yolov26track.py`
-- **Version:** 0.3.104
-- **Updated:** 11 August 2026
+- **Version:** 0.3.108
+- **Updated:** 20 August 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -30,6 +30,7 @@ This script performs object detection and tracking on video files using the **YO
 - **Single-pass track+pose (v0.3.66)**: geometric ID stabilize (SAM3-style IoU+centroid linker), upscaled bbox ROI for YOLO pose, global keypoint remap in the same tracking loop
 - **Unified geometric Re-ID (v0.3.68)**: shared `vaila/geometric_reid.py` module — Hungarian assignment + velocity-direction penalty + optional homography gate; replaces old greedy matching in YOLO, SAM, and markers. CLI exposes `--reid-max-gap`, `--reid-max-dist`, `--reid-min-iou`, `--reid-direction-weight`, `--reid-homography`, `--appearance-reid`
 - **New outputs (pose mode)**: `all_id_pose.csv`, `yolo_reid_links.csv`, `<stem>_track_pose_overlay.mp4`, `{label}_id_NN_pose.csv`
+- **Five automatic bbox keypoint tables**: `yolo_vaila_center.csv`, `yolo_vaila_bottom.csv`, `yolo_vaila_top.csv`, `yolo_vaila_left.csv`, `yolo_vaila_right.csv` — same `frame,x1,y1,...,xN,yN` convention as SAM3/Sapiens2
 - **Segmentation exports** (when model provides masks): `yolo_masks_manifest.csv` (`frame,id,area,mask_png`), `yolo_contours.json` (schema `vaila_yolo_contours_v1` with top-level `video`, `width`, `height`, `fps`, `n_frames`, `object_ids` aligned with SAM-style consumers), `yolo_masks/` PNGs
 
 ### YOLO26 Models Available
@@ -105,8 +106,12 @@ Outputs (in `<video_dir>/processed_yolotrack_<stem>_<timestamp>/` by default,
 or `--output DIR`):
 
 - `<stem>_markers.csv` — **getpixelvideo point format** `frame,p1_x,p1_y,...,pN_x,pN_y` (one anchor point per player). **This is the file you feed into REC2D (`rec2d.py`) / REC3D (`rec3d.py`)** with your DLT parameters.
+- `yolo_vaila_center.csv`, `yolo_vaila_bottom.csv`, `yolo_vaila_top.csv`, `yolo_vaila_left.csv`, `yolo_vaila_right.csv` — five bbox keypoint tables generated automatically in the SAM3/Sapiens2-compatible `frame,x1,y1,...,xN,yN` schema. With `--max-ids`/offline ReID they use the stable identity table.
 - `{label}_id_NN.csv` — one per tracked ID (`Frame, Tracker ID, Label, X_min, Y_min, X_max, Y_max, Confidence, Color_R/G/B`)
-- `all_id_detection.csv` — wide bbox table, **load this in getpixelvideo** (`Load Tracking CSV`) to edit/inspect tracks
+- `all_id_detection.csv` — raw wide bbox table before the bounded ReID merge
+- `all_id_detection_reid_maxidsN.csv` — class-aware stable bbox table written
+  automatically when `--max-ids N` is set; this is the recommended
+  getpixelvideo/downstream input because fragmented tracklets are merged
 - `<stem>_track_overlay.mp4` — annotated **H.264 MP4** (bbox only; skip with `--no-save-video`)
 - `<stem>_track_pose_overlay.mp4` — bbox + skeleton overlay when `--pose` (default on)
 - `all_id_pose.csv` — long-format pose keypoints for all IDs
@@ -127,39 +132,41 @@ Key flags:
 - `--appearance-reid-threshold F` — cosine similarity threshold (default 0.6)
 
 - `--anchor center|bottom|top|left|right|corners` — which point of the bbox becomes the marker for REC2D/REC3D. Default `bottom` (foot/ground contact), best for planar gait/field kinematics; use `center` for centroid trajectories.
-- `--max-ids N` — keep only the N most persistent IDs, re-ranked 1..N (recommended to clean up fragmented tracklets; also gives stable `p1..pN` columns). **Drop-based**: ids outside the top-N are discarded, not merged — see `--reid-postprocess` below for a merge-based alternative.
+- `--max-ids N` — preserve every raw tracklet, then use
+  `vaila/reid_markers.py` to merge fragments into at most N stable IDs **per
+  class**. Person, ball, racket, and other classes use independent identity
+  pools. No detection is dropped when N covers that class's peak concurrency.
 - `--classes 0 32` — restrict class indices; `--vid-stride N` — process every Nth frame; `--device auto|cuda|cpu`; `--conf/--iou/--imgsz`.
 
-### Optional post-process: reid_markers geometric merge (v0.3.102)
+### Automatic class-aware reid_markers merge (v0.3.107)
 
-`--reid-postprocess` (default off) runs `reid_markers`' offline **Geometric
-ReID (2D + velocity, `max_ids`-bounded slot pool)** on `all_id_detection.csv`
-right after it's written — **additive only**: `--max-ids` (drop-based,
-above) and `--stabilize-ids` (the Hungarian linker during tracking) run
-exactly as they always have, unmodified, regardless of this flag. Unlike
-`--max-ids`, the post-process merge never drops a detection row (only a
-raw tracker id label changes), and correctly recovers from
-`--stabilize-ids` occasionally producing more stable ids than the live
-`--max-ids` cap (an unbounded-slot artifact in the live linker; fixed at
-the source too via `geometric_reid.py`'s new `max_tracks`, see
-`geometric_reid.md`).
+Setting `--max-ids N` automatically runs `reid_markers`' offline **Geometric
+ReID (Hungarian assignment + bbox IoU + centroid distance + velocity
+direction)** on `all_id_detection.csv`. The former top-N persistence cap was
+removed because it discarded short fragments before they could be matched.
+The merge now runs independently per `Label`, preventing detections such as a
+ball from consuming a person's stable ID.
 
 ```bash
 uv run python -m vaila.yolov26track track \
   --model yolo26n.pt --source video.mp4 --output out/ \
-  --max-ids 16 --reid-postprocess --reid-postprocess-max-ids 16
+  --max-ids 16
 ```
 
-`--reid-postprocess-max-ids` defaults to the same value as `--max-ids`
-when set, else auto-estimates from peak concurrent detections. See
-`reid_markers.md` for the merge engine itself.
+`--reid-postprocess` remains available when automatic peak-concurrency
+estimation is desired without setting `--max-ids`.
+`--reid-postprocess-max-ids` can override the limit. See `reid_markers.md`.
 
 ### Biomechanics / kinematics flow (REC2D / REC3D)
 
 1. Train a detector (see `yolotrain` / `sam_to_yolo`).
-2. `track` each camera video → `<stem>_markers.csv` (use the **same `--anchor`** and **`--max-ids`** for every camera so `p1..pN` columns line up across views for REC3D).
+2. `track` each camera video with the same `--anchor`; use the stable
+   `all_id_detection_reid_maxidsN.csv` identity table when correcting or
+   aligning the resulting point tracks across cameras.
 3. Run **REC2D** (single camera, planar) or **REC3D** (multi-camera) with your DLT2D/DLT3D parameters; the markers CSV is the direct pixel-coordinate input (`frame,p1_x,p1_y,...`).
-4. Need manual correction? Open the video in **getpixelvideo** and `Load Tracking CSV` (the `*_markers.csv` or `all_id_detection.csv`).
+4. Need manual correction? Open the video in **getpixelvideo** and load
+   `all_id_detection_reid_maxidsN.csv` when present (otherwise
+   `all_id_detection.csv`).
 
 ## 🎮 Usage: Tracking Workflow
 

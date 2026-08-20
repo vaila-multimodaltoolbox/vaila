@@ -11,6 +11,7 @@ from vaila.reid_markers import (
     load_homography_matrix,
     merge_fragmented_ids_geometric,
     normalize_marker_input,
+    run_geometric_merge,
     sam_tracks_to_marker_points,
     write_bbox_wide_slot_output,
 )
@@ -264,6 +265,46 @@ def test_writer_roundtrip_preserves_all_detection_cells_bounded_to_max_ids() -> 
     non_null_bbox_cells = out_read.filter(regex=r"^X_min_").notna().to_numpy().sum()
     assert non_null_bbox_cells == 8
     assert len(out_read) == 4  # Frame range preserved exactly
+
+
+def test_run_geometric_merge_keeps_class_identity_pools_separate(tmp_path) -> None:
+    """Person and ball fragments must not compete for the same two ID slots."""
+    df = _bbox_wide_slot_df(
+        person_id_01={"frames": [0, 1, 2], "x1": [100, 110, 120], "y1": [200] * 3},
+        person_id_10={"frames": [3, 4, 5], "x1": [130, 140, 150], "y1": [200] * 3},
+        sports_ball_id_02={"frames": [0, 1, 2], "x1": [500, 510, 520], "y1": [300] * 3},
+        sports_ball_id_09={"frames": [3, 4, 5], "x1": [530, 540, 550], "y1": [300] * 3},
+    )
+    for slot in ("person_id_01", "person_id_10"):
+        df[f"Label_{slot}"] = pd.Series(
+            ["person" if present else np.nan for present in df[f"X_min_{slot}"].notna()],
+            dtype=object,
+        )
+        df[f"Tracker ID_{slot}"] = np.where(df[f"X_min_{slot}"].notna(), 1, np.nan)
+    for slot in ("sports_ball_id_02", "sports_ball_id_09"):
+        df[f"Label_{slot}"] = pd.Series(
+            [
+                "sports ball" if present else np.nan
+                for present in df[f"X_min_{slot}"].notna()
+            ],
+            dtype=object,
+        )
+        df[f"Tracker ID_{slot}"] = np.where(df[f"X_min_{slot}"].notna(), 2, np.nan)
+
+    input_path = tmp_path / "all_id_detection.csv"
+    output_path = tmp_path / "all_id_detection_reid_maxids2.csv"
+    df.to_csv(input_path, index=False)
+    _, stats = run_geometric_merge(input_path, max_ids=2, output_path=output_path)
+    out = pd.read_csv(output_path)
+
+    assert stats["dropped_rows"] == 0
+    assert stats["per_label"]["person"]["stable_ids"] == 1
+    assert stats["per_label"]["sports ball"]["stable_ids"] == 1
+    assert "X_min_person_id_01" in out
+    assert "X_min_sports ball_id_01" in out
+    assert out.filter(regex=r"^X_min_person_id_").notna().sum().sum() == 6
+    assert out.filter(regex=r"^X_min_sports ball_id_").notna().sum().sum() == 6
+    assert set(out["Tracker ID_person_id_01"].dropna()) == {1.0}
 
 
 def test_estimate_max_ids_empty_long_df_returns_one() -> None:

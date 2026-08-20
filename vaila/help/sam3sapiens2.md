@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.3.107
-- **Updated:** 2026-08-16
+- **Version:** 0.3.108
+- **Updated:** 2026-08-19
 - **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes
 - **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original. Sem `--resume`, uma execução repetida com o mesmo `-i`/`-o` já retoma sozinha o `processed_sam3sapiens2_*` correspondente (auto-resume); use `--fresh` para forçar uma pasta nova.
@@ -34,6 +34,12 @@ uv run vaila/vaila_sam.py --download-weights
 ```
 
 Inference requires an NVIDIA CUDA GPU. SAM3/Sapiens2 model licenses remain Meta licenses, separate from vailá's AGPL source license.
+
+`bin/setup_sapiens2.sh` only fetches the `1b` pose checkpoint. When you pick another size (`0.4b`, `0.8b`, `5b`), the run downloads the missing checkpoint automatically before the SAM3 stage starts, so a batch never burns GPU time only to fail at the pose stage. To fetch one ahead of time:
+
+```bash
+uv run vaila/vaila_sapiens.py --download-weights --model 0.4b
+```
 
 ## GUI
 

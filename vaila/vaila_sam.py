@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 16 August 2026
-Version: 0.3.106
+Update Date: 19 August 2026
+Version: 0.3.108
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -584,6 +584,30 @@ def download_sam3_weights_to_vaila_models() -> Path:
     if not ckpt.is_file():
         raise RuntimeError(f"Download finished but checkpoint missing: {ckpt}")
     return ckpt
+
+
+def ensure_sam3_checkpoint(checkpoint: Path | None) -> Path:
+    """Resolve the SAM3 checkpoint, downloading into ``vaila/models/sam3/`` when absent.
+
+    An explicit ``checkpoint`` that does not exist still raises (the user pointed
+    at a specific wrong path); only the "nothing found in any default location"
+    case triggers a download, so this runs safely as a batch preflight before
+    GPU work starts instead of failing per-video deep into a run.
+    """
+    resolved = _resolve_sam3_checkpoint_file(checkpoint)
+    if resolved is not None:
+        return resolved
+    print(
+        "[SAM3] Checkpoint not found locally - downloading facebook/sam3 into "
+        "vaila/models/sam3/ (one-time, several GB)...",
+        flush=True,
+    )
+    try:
+        return download_sam3_weights_to_vaila_models()
+    except Exception as e:
+        if _is_gated_repo_error(e):
+            raise RuntimeError(_hf_access_help()) from e
+        raise
 
 
 def _is_gated_repo_error(exc: BaseException) -> bool:
@@ -6085,6 +6109,7 @@ def main() -> None:
             _print_sam3_install_instructions()
             open_sam3_install_help_in_browser()
             raise SystemExit(1)
+        ensure_sam3_checkpoint(args.checkpoint)
         _sam3_guard_cuda_cli()
         ok, err = _process_one_video_with_oom_retry(
             single,
@@ -6219,6 +6244,9 @@ def main() -> None:
             _print_sam3_install_instructions()
             open_sam3_install_help_in_browser()
             raise SystemExit(1)
+        # Resolve/download once here so N per-video subprocesses below don't each
+        # race a redundant download (or fail one-by-one) if the checkpoint is missing.
+        ensure_sam3_checkpoint(args.checkpoint)
         _sam3_guard_cuda_cli()
 
         # Subprocess-per-video isolation is the ONLY reliable fix for the SAM3

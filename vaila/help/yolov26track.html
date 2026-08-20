@@ -104,8 +104,8 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Ml</p>
             <p><strong>File:</strong> vaila/yolov26track.py</p>
-            <p><strong>Version:</strong> 0.3.104</p>
-            <p><strong>Updated:</strong> 11 August 2026</p>
+            <p><strong>Version:</strong> 0.3.108</p>
+            <p><strong>Updated:</strong> 20 August 2026</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -124,6 +124,7 @@
                 <li>Automatic GPU detection (CUDA/MPS/CPU)</li>
                 <li>Run modes: <code>track</code>, <code>track+pose</code> (default), <code>track+seg</code>, <code>run_all (track+seg+pose)</code></li>
                 <li>Single-pass track+pose (v0.3.66): geometric ID stabilize, upscaled bbox ROI, <code>all_id_pose.csv</code>, <code>yolo_reid_links.csv</code>, <code>&lt;stem&gt;_track_pose_overlay.mp4</code></li>
+                <li>Five automatic bbox keypoint tables: <code>yolo_vaila_center.csv</code>, <code>yolo_vaila_bottom.csv</code>, <code>yolo_vaila_top.csv</code>, <code>yolo_vaila_left.csv</code>, and <code>yolo_vaila_right.csv</code>, using the SAM3/Sapiens2-compatible <code>frame,x1,y1,...,xN,yN</code> schema</li>
                 <li>Segmentation exports (when masks available): <code>yolo_masks_manifest.csv</code> (<code>frame,id,area,mask_png</code>), <code>yolo_contours.json</code> (SAM-style top-level metadata + <code>frames</code>), <code>yolo_masks/</code>; <code>processed_*_seg.mp4</code> / <code>_all.mp4</code> via H.264 FFmpeg like bbox outputs</li>
                 <li>Tracking-directory discovery for pose-from-tracking: recursive scan for <code>*_id_*.csv</code> under a chosen root (e.g. <code>vailatracker_*</code>)</li>
                 <li>TensorRT: <code>trtexec</code> args match TRT 10; full stderr on failure; fallback to <code>.pt</code></li>
@@ -172,16 +173,18 @@
             <p>Outputs in <code>&lt;video_dir&gt;/processed_yolotrack_&lt;stem&gt;_&lt;timestamp&gt;/</code> (or <code>--output DIR</code>):</p>
             <ul>
                 <li><code>&lt;stem&gt;_markers.csv</code> — getpixelvideo point format <code>frame,p1_x,p1_y,...,pN_x,pN_y</code> (one anchor point per player). <strong>Feed this into REC2D (<code>rec2d.py</code>) / REC3D (<code>rec3d.py</code>)</strong> with your DLT parameters.</li>
-                <li><code>{label}_id_NN.csv</code> + <code>all_id_detection.csv</code> — per-ID bbox tracks; load <code>all_id_detection.csv</code> in getpixelvideo to edit/inspect.</li>
+                <li><code>yolo_vaila_center.csv</code>, <code>yolo_vaila_bottom.csv</code>, <code>yolo_vaila_top.csv</code>, <code>yolo_vaila_left.csv</code>, <code>yolo_vaila_right.csv</code> — five bbox keypoint tables generated automatically with the SAM3/Sapiens2-compatible <code>frame,x1,y1,...,xN,yN</code> schema. Offline ReID identities are used when enabled.</li>
+                <li><code>{label}_id_NN.csv</code> + <code>all_id_detection.csv</code> — raw per-ID bbox tracks.</li>
+                <li><code>all_id_detection_reid_maxidsN.csv</code> — class-aware stable bbox table written automatically with <code>--max-ids N</code>; this is the recommended getpixelvideo/downstream input.</li>
                 <li><code>&lt;stem&gt;_track_overlay.mp4</code> — annotated <strong>H.264 MP4</strong> (never a bulky <code>.avi</code>; <code>--no-save-video</code> to skip).</li>
             </ul>
-            <p>Flags: <code>--anchor center|bottom|top|left|right|corners</code> (marker point of bbox; default <code>bottom</code> = foot), <code>--max-ids N</code> (keep N most persistent IDs, re-rank 1..N → stable <code>p1..pN</code>; <strong>drop-based</strong>), <code>--classes 0 32</code>, <code>--vid-stride N</code>, <code>--device auto|cuda|cpu</code>, <code>--conf/--iou/--imgsz</code>.</p>
-            <p><strong>Optional post-process (v0.3.102):</strong> <code>--reid-postprocess</code> runs <code>reid_markers</code>' offline Geometric ReID (2D + velocity, <code>max_ids</code>-bounded slot pool, merge-based not drop-based) on <code>all_id_detection.csv</code> after it's written — additive only, does not change <code>--max-ids</code>/<code>--stabilize-ids</code>. Optional <code>--reid-postprocess-max-ids</code> overrides the default (same value as <code>--max-ids</code>). See <a href="reid_markers.html">reid_markers</a>.</p>
-            <p><strong>Kinematics flow:</strong> use the <em>same</em> <code>--anchor</code> and <code>--max-ids</code> for every camera so <code>p1..pN</code> columns line up across views for REC3D.</p>
+            <p>Flags: <code>--anchor center|bottom|top|left|right|corners</code> (marker point of bbox; default <code>bottom</code> = foot), <code>--max-ids N</code> (preserve all tracklets, then merge into at most N stable IDs <strong>per class</strong> with <code>reid_markers</code>), <code>--classes 0 32</code>, <code>--vid-stride N</code>, <code>--device auto|cuda|cpu</code>, <code>--conf/--iou/--imgsz</code>.</p>
+            <p><strong>Automatic class-aware ReID (v0.3.107):</strong> setting <code>--max-ids N</code> automatically runs <code>reid_markers</code>' Hungarian + IoU + centroid + velocity merge. The old top-N persistence cap was removed because it discarded fragments before matching. Each label has an independent identity pool. <code>--reid-postprocess</code> remains available for auto-estimation without a fixed limit. See <a href="reid_markers.html">reid_markers</a>.</p>
+            <p><strong>Kinematics flow:</strong> use the same <code>--anchor</code> for every camera and use <code>all_id_detection_reid_maxidsN.csv</code> as the stable identity table when aligning point tracks across views.</p>
         </div>
 
         <div class="footer">
-            <p>📅 Last Updated: August 10, 2026 (v0.3.102)</p>
+            <p>📅 Last Updated: August 20, 2026 (v0.3.108)</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
