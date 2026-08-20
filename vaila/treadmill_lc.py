@@ -9,8 +9,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 17 August 2026
-Version: 0.3.107
+Update Date: 20 August 2026
+Version: 0.3.108
 
 Description:
 ------------
@@ -70,7 +70,7 @@ except ImportError:  # Standalone execution: python vaila/treadmill_lc.py
     from cli_highlight import print_gui_cli_mirror
 
 FS = 1000
-VERSION = "0.3.107"
+VERSION = "0.3.108"
 CLI_STEPS = ("all", "adjust", "interpolate", "filter", "process")
 CLI_SCRIPT_PATH = "vaila/treadmill_lc.py"
 RUN_HISTORY_PREFIX = "treadmill_lc_run_history"

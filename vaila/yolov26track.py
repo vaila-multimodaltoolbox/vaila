@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 20 August 2026
+Version: 0.3.108
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -32,6 +32,16 @@ Requirements:
     - Additional dependencies as imported (numpy, csv, etc.)
 
 Change History:
+    - v0.3.107: Added five automatic SAM/Sapiens-style bbox anchor tables:
+               ``yolo_vaila_center.csv``, ``yolo_vaila_bottom.csv``,
+               ``yolo_vaila_top.csv``, ``yolo_vaila_left.csv``, and
+               ``yolo_vaila_right.csv``. When offline ReID is enabled, these
+               tables use its stable identities.
+    - v0.3.107: ``--max-ids`` now preserves all raw tracklets and runs the
+               class-aware ``reid_markers`` geometric merge automatically;
+               GUI writes ``all_id_detection_reid_maxidsN.csv``. Identity
+               pools are independent per class, preventing balls/rackets from
+               consuming person IDs.
     - v0.3.66: Single-pass track+pose pipeline — geometric ID linker (SAM3-style
                IoU+centroid), upscaled bbox ROI for YOLO pose, global keypoint
                remap, ``all_id_pose.csv``, ``yolo_reid_links.csv``, and
@@ -153,6 +163,21 @@ class _Tee:
         for s in self._streams:
             with contextlib.suppress(Exception):
                 s.flush()
+
+    def isatty(self) -> bool:
+        """Mirror TTY capability of the live output stream.
+
+        ``cli_highlight.highlight`` checks ``sys.stdout.isatty()`` before
+        emitting ANSI sequences. Logging replaces stdout with this tee, so it
+        must retain that standard stream interface.
+        """
+        for stream in self._streams:
+            isatty = getattr(stream, "isatty", None)
+            if callable(isatty):
+                with contextlib.suppress(Exception):
+                    if isatty():
+                        return True
+        return False
 
 
 def _setup_run_logging(tag: str) -> _RunLog:
@@ -1541,8 +1566,8 @@ class TrackerConfigDialog(simpledialog.Dialog):
         )
         btn_load_roi.pack(side="left", padx=5)
 
-        # Max tracked IDs (post-tracking rerank cap)
-        tk.Label(master, text="Max tracked IDs (cap):").grid(
+        # Max tracked IDs per class (post-tracking geometric ReID merge)
+        tk.Label(master, text="Max tracked IDs/class (ReID):").grid(
             row=9, column=0, padx=5, pady=5, sticky="w"
         )
         self.max_tracked_ids = tk.Entry(master, width=10)
@@ -1551,27 +1576,24 @@ class TrackerConfigDialog(simpledialog.Dialog):
         help_text_max_ids = tk.Label(master, text="?", cursor="hand2", fg="blue")
         help_text_max_ids.grid(row=9, column=2, padx=5, pady=5, sticky="w")
         max_ids_tooltip = (
-            "Max tracked IDs (post-tracking rerank cap):\n"
-            "0  - Disabled (keep all IDs from BoT-SORT)\n"
-            "N  - After tracking, keep only the top-N IDs ranked\n"
-            "     by number of frames detected (persistence).\n\n"
+            "Max tracked IDs per class (ReID merge):\n"
+            "0  - Disabled (keep the online tracker output)\n"
+            "N  - Merge fragmented tracklets into at most N stable IDs\n"
+            "     per class using vaila/reid_markers.py.\n\n"
             "Recommended for football (soccer 11x11 + 4 referees):\n"
             "    22 to 26\n\n"
             "How it works:\n"
-            "  1. First pass: BoT-SORT runs normally (yolo26x detector +\n"
-            "     ReID via yolo26n-cls, with GMC) and writes the full\n"
-            "     per-ID stream to memory.\n"
-            "  2. Count frames per raw tracker ID across the whole video.\n"
-            "  3. Keep the N most persistent raw IDs; re-map them to\n"
-            "     stable sequential IDs (1..N) by persistence rank.\n"
-            "  4. All other IDs (short tracklets, noise, ghost tracks)\n"
-            "     are dropped (label them '?').\n\n"
+            "  1. BoT-SORT writes every detected tracklet.\n"
+            "  2. reid_markers matches tracklets with Hungarian assignment,\n"
+            "     bbox IoU, centroid distance, and velocity direction.\n"
+            "  3. Each class has an independent identity pool, so a ball\n"
+            "     never consumes a person's ID.\n"
+            "  4. No detection is dropped when N covers the true peak\n"
+            "     concurrency for that class.\n\n"
             "Side effects:\n"
-            "  - Output CSVs and annotated video reflect the cleaned IDs.\n"
-            "  - Applied uniformly to detection, pose and segmentation\n"
-            "     sub-trackers.\n"
-            "  - Increases total processing time because results are\n"
-            "     buffered and a second pass re-renders outputs."
+            "  - Writes all_id_detection_reid_maxidsN.csv beside the raw CSV.\n"
+            "  - The corrected CSV is the recommended downstream input.\n"
+            "  - The annotated video remains the online-tracker preview."
         )
         help_text_max_ids.bind("<Enter>", lambda e: self.show_help(e, max_ids_tooltip))
         help_text_max_ids.bind("<Leave>", self.hide_help)
@@ -2771,15 +2793,42 @@ def resolve_reid_postprocess_max_ids(
     """Resolve the max_ids value for --reid-postprocess.
 
     Precedence: an explicit ``--reid-postprocess-max-ids`` wins; otherwise
-    fall back to ``--max-ids`` (the live drop-based cap) when it was
-    actually set (``> 0``); otherwise ``None``, letting reid_markers
-    auto-estimate from peak concurrent detections itself.
+    fall back to ``--max-ids`` (the automatic class-aware merge limit) when
+    set (``> 0``); otherwise ``None``, letting reid_markers auto-estimate
+    from peak concurrent detections itself.
     """
     if reid_postprocess_max_ids:
         return int(reid_postprocess_max_ids)
     if max_ids and max_ids > 0:
         return int(max_ids)
     return None
+
+
+def run_reid_markers_postprocess(
+    combined_csv: str,
+    *,
+    max_ids: int | None,
+    output_path: str | Path,
+    max_gap: int = 12,
+    max_dist: float = 180.0,
+    min_iou: float = 0.05,
+    direction_weight: float = 0.5,
+) -> tuple[Path, dict[str, object]]:
+    """Consolidate tracker fragments with reid_markers' class-aware matcher."""
+    try:
+        from .reid_markers import run_geometric_merge
+    except ImportError:
+        from reid_markers import run_geometric_merge  # ty: ignore[unresolved-import]
+
+    return run_geometric_merge(
+        combined_csv,
+        max_ids=max_ids,
+        output_path=output_path,
+        max_gap=max_gap,
+        max_dist=max_dist,
+        min_iou=min_iou,
+        direction_weight=direction_weight,
+    )
 
 
 def rerank_buffered_stream(
@@ -5320,10 +5369,16 @@ def run_yolov26track():
                 f"video={os.path.basename(video_path)} | frames≈{total_frames} | "
                 f"tracker={tracker_name} | device={config['device']}",
             )
-            if max_tracked_ids := int(config.get("max_tracked_ids", 0) or 0):
+            reid_max_ids = int(config.get("max_tracked_ids", 0) or 0)
+            # The former live cap kept only the N longest raw tracklets and
+            # discarded later fragments before they could be matched. Keep
+            # every detection here; reid_markers performs the bounded merge
+            # after the combined CSV is complete.
+            max_tracked_ids = 0
+            if reid_max_ids > 0:
                 _track_log(
-                    f"ID cap enabled (top-{max_tracked_ids}): phase 1 = YOLO inference, "
-                    "phase 2 = write overlays/CSVs"
+                    f"reid_markers enabled: merge tracklets into at most "
+                    f"{reid_max_ids} stable IDs per class after tracking"
                 )
             else:
                 _track_log("Streaming track + writing overlays/CSVs in one pass")
@@ -5889,8 +5944,48 @@ def run_yolov26track():
 
             # Create combined wide CSV and merged wide per-label CSV(s) after processing each video
             combined_csv = create_combined_detection_csv(output_dir)
+            anchor_source_csv = combined_csv
             if combined_csv:
                 print(f"Combined detection tracking file created: {combined_csv}")
+
+            if combined_csv and reid_max_ids > 0:
+                reid_output = os.path.join(
+                    output_dir,
+                    f"all_id_detection_reid_maxids{reid_max_ids}.csv",
+                )
+                _track_banner(
+                    "reid_markers class-aware merge",
+                    f"max_ids={reid_max_ids} per class | input={combined_csv}",
+                )
+                try:
+                    reid_path, reid_stats = run_reid_markers_postprocess(
+                        combined_csv,
+                        max_ids=reid_max_ids,
+                        output_path=reid_output,
+                        max_gap=int(cast(Any, config.get("reid_max_gap", 12))),
+                        max_dist=float(cast(Any, config.get("reid_max_dist", 180.0))),
+                        min_iou=float(cast(Any, config.get("reid_min_iou", 0.05))),
+                        direction_weight=float(cast(Any, config.get("reid_direction_weight", 0.5))),
+                    )
+                    print(
+                        f"[yolov26track] Stable class-aware ReID CSV: {reid_path}\n"
+                        f"[yolov26track] ReID stats: {reid_stats}"
+                    )
+                    anchor_source_csv = str(reid_path)
+                except Exception as exc:  # noqa: BLE001
+                    logging.exception("reid_markers post-process failed")
+                    print(f"[yolov26track] ERROR: reid_markers merge failed: {exc}")
+
+            if anchor_source_csv:
+                try:
+                    anchor_paths = write_yolo_vaila_anchor_csvs(anchor_source_csv, output_dir)
+                    print(
+                        "[yolov26track] YOLO vailá anchor CSVs: "
+                        + ", ".join(path.name for path in anchor_paths)
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logging.exception("YOLO vailá anchor CSV export failed")
+                    print(f"[yolov26track] ERROR: anchor CSV export failed: {exc}")
 
             merged_csv = create_merged_detection_csv(output_dir, total_frames)
             if merged_csv:
@@ -6097,6 +6192,8 @@ _BBOX_ANCHOR_ALIASES_CLI: dict[str, str] = {
     "top-centre": "top",
 }
 
+YOLO_VAILA_ANCHORS = ("center", "bottom", "top", "left", "right")
+
 
 def _anchor_xy_from_bbox_cli(
     x1: float, y1: float, x2: float, y2: float, anchor: str
@@ -6131,6 +6228,83 @@ def _anchor_xy_from_bbox_cli(
     if a == "bottom-right":
         return x2, y2
     return cx, cy
+
+
+def write_yolo_vaila_anchor_csvs(
+    bbox_wide_csv: str | Path,
+    output_dir: str | Path | None = None,
+) -> list[Path]:
+    """Write five SAM/Sapiens-style bbox-anchor tables from a wide tracking CSV.
+
+    The input is ``all_id_detection*.csv`` with one bbox column group per
+    tracked slot. Outputs are ``yolo_vaila_<anchor>.csv`` with the simple
+    ``frame,x1,y1,...,xN,yN`` schema used by SAM3/Sapiens2, getpixelvideo,
+    REC2D, and REC3D. Slot order follows the bbox groups in the source CSV.
+    """
+    source = Path(bbox_wide_csv)
+    df = pd.read_csv(source)
+    frame_col = next(
+        (col for col in df.columns if str(col).strip().lower() == "frame"),
+        None,
+    )
+    if frame_col is None:
+        raise ValueError(f"No frame column found in {source}")
+
+    slot_fields: list[tuple[str, dict[str, str]]] = []
+    for col in df.columns:
+        col_name = str(col)
+        if not col_name.startswith("X_min_"):
+            continue
+        suffix = col_name.removeprefix("X_min_")
+        fields = {
+            "x1": col_name,
+            "y1": f"Y_min_{suffix}",
+            "x2": f"X_max_{suffix}",
+            "y2": f"Y_max_{suffix}",
+        }
+        if all(field in df.columns for field in fields.values()):
+            slot_fields.append((suffix, fields))
+
+    if not slot_fields:
+        raise ValueError(f"No complete wide bbox slots found in {source}")
+
+    frames = pd.to_numeric(df[frame_col], errors="coerce").to_numpy()
+    bboxes: list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
+    for _suffix, fields in slot_fields:
+        bboxes.append(
+            tuple(
+                pd.to_numeric(df[fields[key]], errors="coerce").to_numpy(dtype=np.float64)
+                for key in ("x1", "y1", "x2", "y2")
+            )
+        )
+
+    target_dir = Path(output_dir) if output_dir is not None else source.parent
+    target_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for anchor in YOLO_VAILA_ANCHORS:
+        columns: dict[str, np.ndarray] = {"frame": frames}
+        for slot_idx, (x1, y1, x2, y2) in enumerate(bboxes, start=1):
+            cx = 0.5 * (x1 + x2)
+            cy = 0.5 * (y1 + y2)
+            if anchor == "center":
+                x, y = cx, cy
+            elif anchor == "bottom":
+                x, y = cx, y2
+            elif anchor == "top":
+                x, y = cx, y1
+            elif anchor == "left":
+                x, y = x1, cy
+            else:  # right
+                x, y = x2, cy
+            valid = np.isfinite(x1) & np.isfinite(y1) & np.isfinite(x2) & np.isfinite(y2)
+            columns[f"x{slot_idx}"] = np.where(valid, x, np.nan)
+            columns[f"y{slot_idx}"] = np.where(valid, y, np.nan)
+
+        out_path = target_dir / f"yolo_vaila_{anchor}.csv"
+        pd.DataFrame(columns).to_csv(out_path, index=False, float_format="%.4f")
+        written.append(out_path)
+
+    return written
 
 
 def _write_markers_csv_from_buffer(
@@ -6724,6 +6898,8 @@ def run_track_cli(argv: list[str] | None = None) -> int:
       * ``<stem>_markers.csv`` — getpixelvideo point format
         ``frame,p1_x,p1_y,...,pN_x,pN_y`` (one anchor point per player); feeds
         ``rec2d.py`` / ``rec3d.py`` directly.
+      * ``yolo_vaila_{center,bottom,top,left,right}.csv`` — five automatic
+        SAM/Sapiens-style bbox keypoint tables (``frame,x1,y1,...``).
       * ``<stem>_track_overlay.mp4`` — H.264 overlay (never a bulky ``.avi``).
 
     Unlike Ultralytics ``yolo track`` (which only saves a video), this emits the
@@ -6775,7 +6951,9 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         "--max-ids",
         type=int,
         default=0,
-        help="Keep only the N most persistent IDs, re-ranked 1..N (0 = no cap).",
+        help=(
+            "Merge fragments into at most N stable IDs per class with reid_markers (0 = disabled)."
+        ),
     )
     parser.add_argument(
         "--anchor",
@@ -6858,9 +7036,7 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         help=(
             "After writing all_id_detection.csv, run reid_markers' offline geometric "
             "merge (2D + velocity, max_ids-bounded slot pool) on it as an additional "
-            "post-process step. Additive only -- does not change --max-ids (drop-based, "
-            "still applied during tracking above) or --stabilize-ids in any way; both "
-            "run exactly as before regardless of this flag."
+            "post-process step. This is enabled automatically when --max-ids is set."
         ),
     )
     parser.add_argument(
@@ -6960,10 +7136,10 @@ def run_track_cli(argv: list[str] | None = None) -> int:
     )
 
     if args.max_ids and args.max_ids > 0:
-        rerank_map = build_id_rerank_map(id_counts, int(args.max_ids))
-        kept = len(rerank_map)
-        print(f"[yolov26track] ID cap: keeping top-{kept} of {len(id_counts)} raw IDs.")
-        buffer = rerank_buffered_stream(buffer, rerank_map)
+        print(
+            f"[yolov26track] ReID limit: preserving all {len(id_counts)} raw tracklets "
+            f"for class-aware merge into max {int(args.max_ids)} IDs per class."
+        )
 
     names = getattr(model, "names", None)
     if isinstance(names, dict):
@@ -7029,16 +7205,7 @@ def run_track_cli(argv: list[str] | None = None) -> int:
     combined = create_combined_detection_csv(output_dir)
 
     reid_postprocess_output: str | None = None
-    if args.reid_postprocess and combined:
-        # Additive-only: reid_markers.run_geometric_merge() is called on the
-        # all_id_detection.csv file already written above -- --max-ids
-        # (drop-based, applied inside the tracking loop) and --stabilize-ids
-        # (GeometricFrameLinker, applied inside _apply_geometric_stabilize_to_buffer
-        # above) already ran, unmodified, exactly as they always have.
-        try:
-            from .reid_markers import run_geometric_merge
-        except ImportError:
-            from reid_markers import run_geometric_merge  # ty: ignore[unresolved-import]
+    if (args.reid_postprocess or (args.max_ids and args.max_ids > 0)) and combined:
         postprocess_max_ids = resolve_reid_postprocess_max_ids(
             args.reid_postprocess_max_ids, args.max_ids
         )
@@ -7047,7 +7214,20 @@ def run_track_cli(argv: list[str] | None = None) -> int:
             f"input={combined} | max_ids={postprocess_max_ids or 'auto'}",
         )
         try:
-            out_path, reid_stats = run_geometric_merge(combined, max_ids=postprocess_max_ids)
+            max_ids_label = postprocess_max_ids or "auto"
+            reid_output_path = os.path.join(
+                output_dir,
+                f"all_id_detection_reid_maxids{max_ids_label}.csv",
+            )
+            out_path, reid_stats = run_reid_markers_postprocess(
+                combined,
+                max_ids=postprocess_max_ids,
+                output_path=reid_output_path,
+                max_gap=int(args.reid_max_gap),
+                max_dist=float(args.reid_max_dist),
+                min_iou=float(args.reid_min_iou),
+                direction_weight=float(args.reid_direction_weight),
+            )
             reid_postprocess_output = str(out_path)
             print(
                 ">> yolov26track: reid_markers merge: "
@@ -7063,6 +7243,12 @@ def run_track_cli(argv: list[str] | None = None) -> int:
             )
         except Exception as exc:  # noqa: BLE001 - post-process is best-effort, never fatal
             print(f">> yolov26track: reid_markers merge failed (non-fatal): {exc}")
+
+    anchor_csvs: list[Path] = []
+    anchor_source_csv = reid_postprocess_output or combined
+    if anchor_source_csv:
+        _track_banner("Writing five YOLO vailá anchor CSVs", Path(anchor_source_csv).name)
+        anchor_csvs = write_yolo_vaila_anchor_csvs(anchor_source_csv, output_dir)
 
     _track_banner("Writing REC2D/REC3D markers CSV", f"anchor={args.anchor}")
     markers_csv, n_markers = _write_markers_csv_from_buffer(
@@ -7082,7 +7268,12 @@ def run_track_cli(argv: list[str] | None = None) -> int:
     if combined:
         print(f"[yolov26track] combined bbox CSV (getpixelvideo): {combined}")
     if reid_postprocess_output:
-        print(f"[yolov26track] reid_markers geometric merge output: {reid_postprocess_output}")
+        print(
+            f"[yolov26track] reid_markers geometric merge output (recommended): "
+            f"{reid_postprocess_output}"
+        )
+    if anchor_csvs:
+        print(f"[yolov26track] YOLO vailá anchor CSVs: {', '.join(p.name for p in anchor_csvs)}")
     print(f"[yolov26track] REC2D/REC3D markers CSV (frame,p1_x,p1_y,...): {markers_csv}")
     if overlay:
         print(f"[yolov26track] overlay video (.mp4): {overlay}")
@@ -7101,9 +7292,11 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         "[yolov26track] Kinematics flow: feed the *_markers.csv into "
         "REC2D (rec2d.py) / REC3D (rec3d.py) with your DLT params."
     )
+    recommended_bbox = reid_postprocess_output or combined
     print(
         "[yolov26track] To edit/inspect: open the video in getpixelvideo, "
-        "Load Tracking CSV -> all_id_detection.csv (bbox) or the *_markers.csv (points)."
+        f"Load Tracking CSV -> {recommended_bbox or 'all_id_detection.csv'} "
+        "(bbox) or the *_markers.csv (points)."
     )
     return 0
 

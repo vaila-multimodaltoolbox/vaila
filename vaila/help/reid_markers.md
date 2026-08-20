@@ -4,8 +4,8 @@
 
 - **Category:** Processing
 - **File:** `vaila/reid_markers.py`
-- **Version:** 0.3.104
-- **Updated:** 11 August 2026
+- **Version:** 0.3.108
+- **Updated:** 20 August 2026
 - **Author:** Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **CLI Interface:** ✅ Yes (new, v0.3.102) — `uv run python -u -m vaila.reid_markers --input ...`
@@ -17,8 +17,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 09 June 2026
-Version: 0.3.47
+Update Date: 20 August 2026
+Version: 0.3.108
 Python Version: 3.12.9
 
 Description:
@@ -30,6 +30,8 @@ by getpixelvideo.py. It offers the following functionalities:
 2. Gap filling: Fill gaps where a marker temporarily disappears
 3. Swaps: Fix cases where IDs were swapped in certain frame intervals
 4. Geometric ReID: stabilize marker IDs using 2D distance, velocity direction, and optional homography
+5. Class-aware YOLO ReID: merge each label independently so balls, rackets,
+   and people never compete for the same stable identity slots
 
 ================================================================================
 
@@ -58,6 +60,10 @@ the swap-fixer GUI flow.
   and SAM chunk-linking use) via its new `max_tracks` slot pool — no
   second Hungarian/IoU implementation. Omit `--max-ids` to auto-estimate
   from the observed peak simultaneous detections.
+- **Class-aware YOLO merge (v0.3.107)**: when a bbox-wide input carries
+  `Label_*` columns, ReID runs independently per label and `max_ids` applies
+  per class. The output preserves names such as `person_id_01` and
+  `sports ball_id_01`; `Tracker ID` is rewritten to the stable ID.
 - **No detections are dropped**: every input row keeps a `stable_id`,
   except the one unavoidable case where a single frame genuinely has more
   simultaneous detections than `max_ids` allows — reported honestly via
@@ -75,10 +81,11 @@ the swap-fixer GUI flow.
   back to the legacy manual-column-selection swap-fixer for files that
   don't match a recognized schema — no workflow regression for existing
   users. Prints the equivalent `>>` CLI command on every run.
-- **`yolov26track.py` integration**: an additive, opt-in `--reid-postprocess`
-  flag runs this merge on `all_id_detection.csv` right after it's written,
-  without changing `yolov26track`'s own live `--max-ids` (drop-based) or
-  `--stabilize-ids` in any way. See `yolov26track.md`.
+- **`yolov26track.py` integration (v0.3.107)**: `--max-ids N` now preserves
+  every raw tracklet and automatically writes
+  `all_id_detection_reid_maxidsN.csv`. The old persistence-ranked drop cap is
+  no longer used because it removed fragments before ReID could match them.
+  See `yolov26track.md`.
 
 Validated against a real 16,693-frame tracking CSV: 388 raw fragmented ids
 (no live cap) merged to exactly `max_ids=18` (peak concurrency was
@@ -131,6 +138,6 @@ cleanly re-consolidated 17 → 16 with zero dropped rows.
 
 ---
 
-📅 **Last Updated:** 04 July 2026 (v0.3.68)
+📅 **Last Updated:** 20 August 2026 (v0.3.108)
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

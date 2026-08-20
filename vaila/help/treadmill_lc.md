@@ -283,5 +283,5 @@ the run safely applies no interactive artifact edits and detects the analysis
 start automatically.
 
 ---
-- **Version**: 0.3.107
-- **Updated**: 17 August 2026
+- **Version**: 0.3.108
+- **Updated**: 20 August 2026

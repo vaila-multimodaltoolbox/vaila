@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 
 def test_mask_to_polygons_smoke() -> None:
@@ -151,3 +152,56 @@ def test_auto_export_custom_path_uses_source_pt(tmp_path: Path) -> None:
     hw.gpu_info["cuda_capable"] = False
     resolved = hw.auto_export(str(custom))
     assert resolved == str(custom.resolve())
+
+
+def test_logging_tee_supports_cli_highlight_tty_check(monkeypatch) -> None:
+    """The run logger must not break GUI-to-CLI mirror printing."""
+    import io
+
+    from vaila.cli_highlight import highlight
+    from vaila.yolov26track import _Tee
+
+    tee = _Tee(io.StringIO(), io.StringIO())
+    assert tee.isatty() is False
+    monkeypatch.setattr(sys, "stdout", tee)
+    assert highlight("CLI command") == "CLI command"
+
+
+def test_write_yolo_vaila_anchor_csvs_matches_sam_sapiens_schema(tmp_path: Path) -> None:
+    from vaila.yolov26track import YOLO_VAILA_ANCHORS, write_yolo_vaila_anchor_csvs
+
+    source = tmp_path / "all_id_detection.csv"
+    pd.DataFrame(
+        {
+            "Frame": [0, 1],
+            "X_min_person_id_01": [10.0, np.nan],
+            "Y_min_person_id_01": [20.0, np.nan],
+            "X_max_person_id_01": [30.0, np.nan],
+            "Y_max_person_id_01": [60.0, np.nan],
+            "X_min_person_id_02": [100.0, 110.0],
+            "Y_min_person_id_02": [50.0, 55.0],
+            "X_max_person_id_02": [140.0, 150.0],
+            "Y_max_person_id_02": [90.0, 95.0],
+        }
+    ).to_csv(source, index=False)
+
+    written = write_yolo_vaila_anchor_csvs(source)
+
+    assert [path.name for path in written] == [
+        f"yolo_vaila_{anchor}.csv" for anchor in YOLO_VAILA_ANCHORS
+    ]
+    center = pd.read_csv(tmp_path / "yolo_vaila_center.csv")
+    assert center.columns.tolist() == ["frame", "x1", "y1", "x2", "y2"]
+    np.testing.assert_allclose(center.loc[0, ["x1", "y1"]], [20.0, 40.0])
+    np.testing.assert_allclose(center.loc[0, ["x2", "y2"]], [120.0, 70.0])
+    assert center.loc[1, ["x1", "y1"]].isna().all()
+
+    expected_slot_1 = {
+        "bottom": (20.0, 60.0),
+        "top": (20.0, 20.0),
+        "left": (10.0, 40.0),
+        "right": (30.0, 40.0),
+    }
+    for anchor, expected in expected_slot_1.items():
+        table = pd.read_csv(tmp_path / f"yolo_vaila_{anchor}.csv")
+        np.testing.assert_allclose(table.loc[0, ["x1", "y1"]], expected)

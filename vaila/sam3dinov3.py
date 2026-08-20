@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 16 August 2026
-Version: 0.3.107
+Update Date: 19 August 2026
+Version: 0.3.108
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -387,6 +387,43 @@ def resolve_sam3d_assets(weights_dir: Path | None) -> tuple[Path, Path]:
             f"     (or: uv run hf download {DEFAULT_HF_REPO_ID} --local-dir {root})"
         )
     return ckpt, mhr
+
+
+def ensure_sam3d_assets(weights_dir: Path | None) -> tuple[Path, Path]:
+    """Resolve SAM 3D Body (DINOv3) weights, downloading the gated repo if absent.
+
+    Runs before the SAM3 stage starts, so a missing checkpoint fails immediately
+    instead of after SAM3 has already segmented and exported the whole clip.
+    """
+    try:
+        return resolve_sam3d_assets(weights_dir)
+    except FileNotFoundError:
+        pass
+
+    root = (weights_dir or default_weights_dir()).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    print(
+        f"[SAM3D] Weights not found under {root} - downloading {DEFAULT_HF_REPO_ID} "
+        "(one-time, several GB)...",
+        flush=True,
+    )
+    from huggingface_hub import snapshot_download
+
+    try:
+        snapshot_download(repo_id=DEFAULT_HF_REPO_ID, local_dir=str(root))
+    except Exception as e:
+        gated = type(e).__name__ == "GatedRepoError" or "403" in str(e)
+        hint = (
+            f"Accept the license at https://huggingface.co/{DEFAULT_HF_REPO_ID}, "
+            "then: uv run hf auth login --force\n"
+            if gated
+            else ""
+        )
+        raise RuntimeError(
+            f"Failed to download {DEFAULT_HF_REPO_ID}: {e}\n\n{hint}"
+            "Or run the full setup: bash bin/setup_fifa_sam3d.sh"
+        ) from e
+    return resolve_sam3d_assets(weights_dir)
 
 
 def _sam3d_import_error(exc: Exception) -> RuntimeError:
@@ -1976,6 +2013,11 @@ def main() -> None:
         parser.error("--stride must be >= 1")
     if args.fresh and args.resume is not None:
         parser.error("--fresh and --resume are mutually exclusive")
+
+    if not args.dry_run:
+        # SAM 3D Body / DINOv3 weights only; the SAM3 *video* checkpoint used by the
+        # per-video subprocess is resolved/downloaded by vaila_sam.py's own preflight.
+        ensure_sam3d_assets(args.weights_dir)
 
     input_path = args.input.expanduser().resolve()
     output_parent = (

@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 16 August 2026
-Version: 0.3.107
+Update Date: 19 August 2026
+Version: 0.3.108
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -77,6 +77,7 @@ try:
         _open_sam3_video_writer,
         _release_sapiens_gpu_memory,
         _resolve_sapiens_keypoint_names,
+        ensure_model_assets,
         flatten_instances_to_csv_rows,
         resolve_model_spec,
         write_sapiens_biomechanics_csvs,
@@ -96,6 +97,7 @@ except ImportError:
         _open_sam3_video_writer,
         _release_sapiens_gpu_memory,
         _resolve_sapiens_keypoint_names,
+        ensure_model_assets,
         flatten_instances_to_csv_rows,
         resolve_model_spec,
         write_sapiens_biomechanics_csvs,
@@ -1981,6 +1983,18 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _preflight_sapiens_assets(model_key: str) -> None:
+    """Make sure the Sapiens2 pose weights exist before the SAM3 stage starts.
+
+    The pose session is only built after SAM3 has segmented and exported the
+    whole clip (minutes of GPU work per video), so a missing checkpoint would
+    otherwise surface at the very end of every video in a batch. Missing
+    weights are downloaded here and the run continues. DETR is never loaded by
+    this pipeline, so the detector is not required.
+    """
+    ensure_model_assets(model_key, include_detector=False)
+
+
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
@@ -2003,6 +2017,9 @@ def main() -> None:
         parser.error("--bbox-padding must be >= 0")
     if args.fresh and args.resume is not None:
         parser.error("--fresh and --resume are mutually exclusive")
+
+    if not args.dry_run:
+        _preflight_sapiens_assets(args.model)
 
     input_path = args.input.expanduser().resolve()
     output_parent = (

@@ -1,10 +1,9 @@
-"""Tests for yolov26track.py's additive --reid-postprocess hook.
+"""Tests for yolov26track.py's class-aware reid_markers post-process hook.
 
-The hook is additive-only: --max-ids (drop-based, live) and --stabilize-ids
-(GeometricFrameLinker, live) are untouched regardless of this flag -- see
-loops/reid-markers-geometric-max-ids-loop.md Goal §8. No GPU/model/video is
-needed to test the resolution logic or CLI wiring; the actual merge call is
-covered end-to-end by tests/test_reid_markers_cli.py.
+``--max-ids`` now preserves all raw tracklets and automatically enables the
+bounded merge per class; ``--reid-postprocess`` also supports auto-estimation.
+No GPU/model/video is needed to test resolution or CLI wiring; the actual
+merge is covered end-to-end by tests/test_reid_markers_cli.py.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ def test_resolve_prefers_explicit_postprocess_max_ids() -> None:
     assert resolve_reid_postprocess_max_ids(7, 16) == 7
 
 
-def test_resolve_falls_back_to_live_max_ids_when_postprocess_unset() -> None:
+def test_resolve_falls_back_to_tracker_max_ids_when_postprocess_unset() -> None:
     assert resolve_reid_postprocess_max_ids(None, 16) == 16
 
 

@@ -21,7 +21,7 @@
 <body><div class="container">
   <h1>SAM3+Sapiens2 (<code>sam3sapiens2.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.3.107 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-16<br>
+    <strong>Version:</strong> 0.3.108 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-19<br>
     <strong>GUI:</strong> Frame B → Markerless 2D → <strong>SAM3+Sapiens2</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA; SAM3 and Sapiens2 optional stacks.
     <p><strong>Retomada:</strong> use <code>--resume RUN_DIR -i INPUT_DIR</code>; somente resultados com cobertura completa comprovada são reutilizados. Sem <code>--resume</code>, repetir o mesmo <code>-i</code>/<code>-o</code> já retoma sozinho (auto-resume); use <code>--fresh</code> para forçar pasta nova.</p>
@@ -92,6 +92,8 @@
 bash bin/setup_sapiens2.sh
 uv run hf auth login
 uv run vaila/vaila_sam.py --download-weights</code></pre>
+  <p><code>bin/setup_sapiens2.sh</code> only fetches the <code>1b</code> pose checkpoint. Picking another size (<code>0.4b</code>, <code>0.8b</code>, <code>5b</code>) downloads the missing checkpoint automatically before the SAM3 stage starts, so a batch never burns GPU time only to fail at the pose stage. To fetch one ahead of time:</p>
+  <pre><code>uv run vaila/vaila_sapiens.py --download-weights --model 0.4b</code></pre>
   <p>See also <a href="vaila_sam.html">SAM3 help</a> and <a href="vaila_sapiens.html">Sapiens2 help</a>.</p>
 </div><h3>Resume a partial / failed run</h3>
 <pre><code>uv run python -u vaila/sam3sapiens2.py \

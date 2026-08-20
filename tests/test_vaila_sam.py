@@ -1,7 +1,7 @@
 """Light tests for vaila_sam helpers (no GPU / no HF download).
 
-Update Date: 17 August 2026
-Version: 0.3.107
+Update Date: 20 August 2026
+Version: 0.3.108
 """
 
 from __future__ import annotations

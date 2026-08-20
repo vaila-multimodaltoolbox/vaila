@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/vaila_ytdown.py`
-- **Version:** 0.3.38
+- **Version:** 0.3.108
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **HTML Help:** [vaila_ytdown.html](vaila_ytdown.html) (open in browser or use **? Help** in the GUI)
@@ -64,11 +64,13 @@ YouTube High Quality Downloader for the vailá toolbox. Downloads videos in the 
 - Progress tracking and batch download from URL files
 - **Direct URL input** for quick downloads
 - Audio-only mode: MP3 from YouTube URLs
-- Uses **yt-dlp** for compatibility and updates
+- Uses **yt-dlp** (`yt-dlp[default]`, includes `yt-dlp-ejs`) for YouTube JS challenges
+- Auto-detects **Deno** / **Node.js** / QuickJS on `PATH` to avoid HTTP 403 mid-download
 
 ### Requirements
 
-- **yt-dlp:** `pip install yt-dlp`
+- **yt-dlp:** `uv sync` (dependency `yt-dlp[default]`) — keep updated (`uv lock --upgrade-package yt-dlp`)
+- **JavaScript runtime (recommended):** [Deno](https://deno.land/) or Node.js ≥22 on `PATH` — see [yt-dlp EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS)
 - **ffmpeg:** must be installed and in PATH (for merging video/audio)
 
 ---
@@ -122,6 +124,7 @@ python -m vaila.vaila_ytdown --no-gui -u "https://..."
 ## 🔧 Main Functions
 
 - `read_urls_from_file` — Read URLs from a text file
+- `detect_js_runtimes` / `build_ytdlp_base_opts` — YouTube EJS / JS runtime yt-dlp options
 - `run_ytdown` — Main entry point (CLI + GUI)
 - `get_video_info` — Get video metadata and formats
 - `download_video` — Download video (best quality)
@@ -134,6 +137,6 @@ python -m vaila.vaila_ytdown --no-gui -u "https://..."
 
 ---
 
-📅 **Updated:** 2026  
-🔗 **Part of vailá - Multimodal Toolbox**  
+📅 **Updated:** 2026-08-20  
+🔗 **Part of _vailá_ - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
