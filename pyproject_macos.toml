@@ -1,6 +1,6 @@
 [project]
 name = "vaila"
-version = "0.3.108"
+version = "0.3.110"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -110,7 +110,6 @@ dependencies = [
     "wordcloud",
     "rich",
     "ydata_profiling",
-    "xonsh[full]",
     "intel-openmp; sys_platform != 'darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64')",
     "yt-dlp[default]",
     "openai",

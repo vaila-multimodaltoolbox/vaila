@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 20 August 2026
-Version: 0.3.108
+Update Date: 23 August 2026
+Version: 0.3.110
 
 Example of usage:
 uv run vaila.py
@@ -58,9 +58,12 @@ import contextlib
 import importlib.util
 import os
 import platform
+import shlex
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 
 # Third-party imports
 import tkinter as tk
@@ -135,6 +138,93 @@ def _print_sapiens_install_instructions() -> None:
     print("\n" + "=" * 72, file=sys.stderr)
     print(_sapiens_install_instructions(), file=sys.stderr)
     print("=" * 72 + "\n", file=sys.stderr)
+
+
+def _vaila_project_root() -> Path:
+    """Directory containing pyproject.toml (repo root or install tree)."""
+    script_dir = Path(__file__).resolve().parent
+    if script_dir.name == "vaila" and (script_dir.parent / "pyproject.toml").exists():
+        return script_dir.parent
+    cwd = Path.cwd()
+    if (cwd / "pyproject.toml").exists():
+        return cwd
+    if (script_dir / "pyproject.toml").exists():
+        return script_dir
+    return cwd
+
+
+def _write_vaila_shell_launcher(project_root: Path) -> Path:
+    """Write a small script that cd's to the project and activates .venv."""
+    if platform.system() == "Windows":
+        activate = project_root / ".venv" / "Scripts" / "Activate.ps1"
+        root_ps = str(project_root).replace("'", "''")
+        lines = [f"Set-Location -LiteralPath '{root_ps}'"]
+        if activate.is_file():
+            activate_ps = str(activate).replace("'", "''")
+            lines.append(f"& '{activate_ps}'")
+        else:
+            lines.append("Write-Host 'No .venv found. Run: uv sync'")
+        fd, path = tempfile.mkstemp(suffix=".ps1", text=True)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("\r\n".join(lines) + "\r\n")
+        return Path(path)
+
+    activate = project_root / ".venv" / "bin" / "activate"
+    root_q = shlex.quote(str(project_root))
+    lines = [
+        "#!/usr/bin/env bash",
+        f"cd {root_q} || exit 1",
+    ]
+    if activate.is_file():
+        lines.append("source .venv/bin/activate")
+    else:
+        lines.append('echo "No .venv found. Run: uv sync"')
+    lines.append('exec "${SHELL:-bash}"')
+    fd, path = tempfile.mkstemp(suffix=".sh", text=True)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.chmod(path, 0o755)
+    return Path(path)
+
+
+def _launch_system_terminal(script_path: Path) -> bool:
+    """Open the OS default terminal running ``script_path`` (.sh or .ps1)."""
+    if platform.system() == "Windows":
+        for shell, args in (
+            ("pwsh", ["-NoExit", "-File", str(script_path)]),
+            ("powershell", ["-NoExit", "-File", str(script_path)]),
+        ):
+            if shutil.which(shell):
+                try:
+                    subprocess.Popen([shell, *args])
+                    return True
+                except OSError:
+                    continue
+        return False
+
+    if platform.system() == "Darwin":
+        try:
+            subprocess.Popen(["open", "-a", "Terminal", str(script_path)])
+            return True
+        except OSError:
+            return False
+
+    script = str(script_path)
+    terminals = [
+        ("gnome-terminal", ["--", "bash", script]),
+        ("konsole", ["-e", "bash", script]),
+        ("xfce4-terminal", ["-e", f"bash {shlex.quote(script)}"]),
+        ("x-terminal-emulator", ["-e", f"bash {shlex.quote(script)}"]),
+        ("xterm", ["-hold", "-e", "bash", script]),
+    ]
+    for name, args in terminals:
+        if shutil.which(name):
+            try:
+                subprocess.Popen([name, *args], start_new_session=True)
+                return True
+            except OSError:
+                continue
+    return False
 
 
 # Add the vaila directory to Python path to ensure modules can be found
@@ -254,7 +344,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 20.Aug.2026 v0.3.108 (Python 3.12.13)
+    vailá - 23.Aug.2026 v0.3.110 (Python 3.12.13)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -329,7 +419,7 @@ C_C_r5_c1 - vailá         C_C_r5_c2 - vailá          C_C_r5_c3 - vailá
 
 Type 'h' for help or 'exit' to quit.
 
-Use the button 'imagination!' to access command-line (xonsh) tools for advanced multimodal analysis!
+Use the button 'imagination!' to open a terminal with the vailá virtual environment active.
 """
 
 print(text)
@@ -369,7 +459,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 20.Aug.2026 v0.3.108 (Python 3.12.13)")
+        self.title("vailá - 23.Aug.2026 v0.3.110 (Python 3.12.13)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -407,6 +497,10 @@ class Vaila(tk.Tk):
 
         if gui:
             self.create_widgets()
+            # Non-blocking: checks GitHub main in a background thread, cached
+            # ~20h, never raises. Lets users know a newer install script is
+            # up before they hit a bug already fixed on main.
+            self.after(2000, lambda: self._start_update_check(force=False, manual=False))
         else:
             self.withdraw()
 
@@ -1569,9 +1663,15 @@ class Vaila(tk.Tk):
         bottom_frame.pack(pady=10)
 
         help_btn = tk.Button(bottom_frame, text="Help", command=self.display_help)
+        update_btn = tk.Button(
+            bottom_frame,
+            text="Check for Updates",
+            command=lambda: self._start_update_check(force=True, manual=True),
+        )
         exit_btn = tk.Button(bottom_frame, text="Exit", command=self.quit_app)
 
         help_btn.pack(side="left", padx=5)
+        update_btn.pack(side="left", padx=5)
         exit_btn.pack(side="left", padx=5)
 
         # Create a frame for the license label
@@ -3424,66 +3524,116 @@ class Vaila(tk.Tk):
 
         webbrowser.open("https://github.com/vaila-multimodaltoolbox/vaila")
 
-    def open_terminal_shell(self):
-        # Open a new terminal with uv run xonsh
-        """Opens a new terminal with xonsh shell using uv run.
+    # -- Update check (GitHub main branch) ---------------------------------
+    def _start_update_check(self, force: bool = False, manual: bool = False):
+        """Kick off a background update check and start polling for its result."""
+        import queue
 
-        The Multimodal Toolbox provides a convenient way to open a new terminal with
-        xonsh shell. On macOS, the Terminal app is used. On Windows,
-        PowerShell 7 is used, and on Linux, the default terminal emulator is used.
+        from vaila.update_checker import check_for_updates_async
 
-        The xonsh shell is started using `uv run xonsh`, which automatically uses
-        the project's virtual environment and dependencies managed by uv.
+        result_queue: queue.Queue = queue.Queue()
+        check_for_updates_async(result_queue.put, force=force)
+        self._poll_update_check(result_queue, manual=manual)
 
-        Note: This function requires uv to be installed and the command to be run
-        from the project root directory.
-        """
-        # import os
-        from pathlib import Path
+    def _poll_update_check(self, result_queue, manual: bool):
+        """Tkinter is not thread-safe: hop the worker-thread result back onto
+        the GUI thread by polling the queue with `after` instead of touching
+        widgets from the background thread."""
+        import queue
 
-        # Get the project root directory (where pyproject.toml should be)
         try:
-            # Try to get the directory of this script
-            script_dir = Path(__file__).parent.absolute()
-            # If we're in vaila/vaila.py, go up one level to project root
-            if script_dir.name == "vaila" and (script_dir.parent / "pyproject.toml").exists():
-                project_root = script_dir.parent
+            result = result_queue.get_nowait()
+        except queue.Empty:
+            self.after(300, lambda: self._poll_update_check(result_queue, manual=manual))
+            return
+        self._handle_update_check_result(result, manual=manual)
+
+    def _handle_update_check_result(self, result, manual: bool):
+        if result.update_available:
+            self._show_update_available_dialog(result)
+        elif manual:
+            if result.checked:
+                messagebox.showinfo(
+                    "vailá - Check for Updates",
+                    "You're up to date.\n\n"
+                    f"Installed: v{result.local_version}\n"
+                    f"Latest on GitHub (main): v{result.remote_version}",
+                )
             else:
-                # Otherwise, assume current directory or script directory
-                project_root = Path.cwd()
-                if not (project_root / "pyproject.toml").exists():
-                    project_root = script_dir
-        except Exception:
-            project_root = Path.cwd()
+                messagebox.showwarning(
+                    "vailá - Check for Updates",
+                    "Could not reach GitHub to check for updates.\n"
+                    "Check your internet connection and try again.",
+                )
 
-        project_root_str = str(project_root)
+    def _show_update_available_dialog(self, result):
+        from vaila.update_checker import get_install_command, skip_version
 
-        if platform.system() == "Darwin":  # For macOS
-            subprocess.Popen(
-                [
-                    "osascript",
-                    "-e",
-                    f'tell application "Terminal" to do script "cd {project_root_str} && uv run xonsh"',
-                ]
-            )
+        command = get_install_command()
 
-        elif platform.system() == "Windows":  # For Windows
-            subprocess.Popen(
-                f'start pwsh -NoExit -Command "cd {project_root_str}; uv run xonsh"',
-                shell=True,
-            )
+        dlg = tk.Toplevel(self)
+        dlg.title("vailá - Update Available")
+        dlg.geometry("640x260")
+        dlg.transient(self)
 
-        elif platform.system() == "Linux":  # For Linux
-            subprocess.Popen(
-                [
-                    "x-terminal-emulator",
-                    "-e",
-                    "bash",
-                    "-c",
-                    f"cd {project_root_str} && uv run xonsh",
-                ],
-                start_new_session=True,
-            )
+        tk.Label(
+            dlg,
+            text=(
+                f"A new version of vailá is available on GitHub (main branch).\n\n"
+                f"Installed: v{result.local_version}    →    Latest: v{result.remote_version}\n\n"
+                "Run this command in your terminal to update:"
+            ),
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", padx=12, pady=(12, 6))
+
+        cmd_text = tk.Text(dlg, height=3, wrap="word")
+        cmd_text.insert("1.0", command)
+        cmd_text.config(state="disabled")
+        cmd_text.pack(fill="x", padx=12, pady=6)
+
+        btn_row = tk.Frame(dlg)
+        btn_row.pack(pady=10)
+
+        def do_copy():
+            self.clipboard_clear()
+            self.clipboard_append(command)
+
+        def do_open_github():
+            import webbrowser
+
+            webbrowser.open("https://github.com/vaila-multimodaltoolbox/vaila")
+
+        def do_skip():
+            if result.remote_version:
+                skip_version(result.remote_version)
+            dlg.destroy()
+
+        tk.Button(btn_row, text="Copy Command", command=do_copy, width=14).pack(side="left", padx=4)
+        tk.Button(btn_row, text="Open GitHub", command=do_open_github, width=14).pack(
+            side="left", padx=4
+        )
+        tk.Button(btn_row, text="Skip This Version", command=do_skip, width=16).pack(
+            side="left", padx=4
+        )
+        tk.Button(btn_row, text="Remind Me Later", command=dlg.destroy, width=14).pack(
+            side="left", padx=4
+        )
+
+    def open_terminal_shell(self):
+        """Open the system terminal with the vailá project dir and .venv active."""
+        project_root = _vaila_project_root()
+        script_path = _write_vaila_shell_launcher(project_root)
+        if _launch_system_terminal(script_path):
+            return
+        messagebox.showinfo(
+            "vailá - imagination!",
+            "Could not detect a terminal emulator.\n\n"
+            f"Open a terminal manually, then run:\n\n"
+            f"  cd {project_root}\n"
+            f"  source .venv/bin/activate   # Linux/macOS\n"
+            f"  .\\.venv\\Scripts\\Activate.ps1  # Windows PowerShell",
+        )
 
     def quit_app(self):
         """Quits the Multimodal Toolbox application.
