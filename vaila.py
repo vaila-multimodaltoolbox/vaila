@@ -3524,7 +3524,7 @@ class Vaila(tk.Tk):
 
         webbrowser.open("https://github.com/vaila-multimodaltoolbox/vaila")
 
-    # -- Update check (GitHub main branch) ---------------------------------
+    # -- Update check (git fetch origin/main, or pyproject fallback) ---------
     def _start_update_check(self, force: bool = False, manual: bool = False):
         """Kick off a background update check and start polling for its result."""
         import queue
@@ -3553,44 +3553,84 @@ class Vaila(tk.Tk):
             self._show_update_available_dialog(result)
         elif manual:
             if result.checked:
-                messagebox.showinfo(
-                    "vailá - Check for Updates",
-                    "You're up to date.\n\n"
-                    f"Installed: v{result.local_version}\n"
-                    f"Latest on GitHub (main): v{result.remote_version}",
-                )
+                if result.is_git_repo:
+                    commit_line = result.local_commit or "?"
+                    behind_line = (
+                        f"{result.commits_behind} commit(s) behind origin/main."
+                        if result.commits_behind
+                        else "In sync with origin/main."
+                    )
+                    messagebox.showinfo(
+                        "vailá - Check for Updates",
+                        "You're up to date.\n\n"
+                        f"Package: v{result.local_version}\n"
+                        f"Commit: {commit_line}\n"
+                        f"{behind_line}",
+                    )
+                else:
+                    messagebox.showinfo(
+                        "vailá - Check for Updates",
+                        "You're up to date.\n\n"
+                        f"Installed: v{result.local_version}\n"
+                        f"Latest on GitHub (main): v{result.remote_version}",
+                    )
             else:
-                messagebox.showwarning(
-                    "vailá - Check for Updates",
-                    "Could not reach GitHub to check for updates.\n"
-                    "Check your internet connection and try again.",
-                )
+                detail = result.error or "unknown error"
+                if result.is_git_repo:
+                    messagebox.showwarning(
+                        "vailá - Check for Updates",
+                        "Could not check git for updates.\n\n"
+                        f"Details: {detail}\n\n"
+                        "Ensure git is installed and origin/main is configured.",
+                    )
+                else:
+                    messagebox.showwarning(
+                        "vailá - Check for Updates",
+                        "Could not reach GitHub to check for updates.\n"
+                        "Check your internet connection and try again.",
+                    )
 
     def _show_update_available_dialog(self, result):
-        from vaila.update_checker import get_install_command, skip_version
+        from vaila.update_checker import (
+            get_git_pull_command,
+            get_install_command,
+            git_pull_async,
+            skip_version,
+        )
 
-        command = get_install_command()
+        is_git = result.is_git_repo
+        command = get_git_pull_command() if is_git else get_install_command()
 
         dlg = tk.Toplevel(self)
         dlg.title("vailá - Update Available")
-        dlg.geometry("640x260")
+        dlg.geometry("680x300" if is_git else "640x260")
         dlg.transient(self)
 
-        tk.Label(
-            dlg,
-            text=(
+        if is_git:
+            summary = (
+                f"New commit(s) on origin/main are not in your local clone.\n\n"
+                f"Package: v{result.local_version}\n"
+                f"Local: {result.local_commit}    →    origin/main: {result.remote_commit}\n"
+                f"Behind by: {result.commits_behind} commit(s)\n\n"
+                "Update now with git pull, or copy the command below:"
+            )
+        else:
+            summary = (
                 f"A new version of vailá is available on GitHub (main branch).\n\n"
                 f"Installed: v{result.local_version}    →    Latest: v{result.remote_version}\n\n"
                 "Run this command in your terminal to update:"
-            ),
-            justify="left",
-            anchor="w",
-        ).pack(fill="x", padx=12, pady=(12, 6))
+            )
+
+        tk.Label(dlg, text=summary, justify="left", anchor="w").pack(fill="x", padx=12, pady=(12, 6))
 
         cmd_text = tk.Text(dlg, height=3, wrap="word")
         cmd_text.insert("1.0", command)
         cmd_text.config(state="disabled")
         cmd_text.pack(fill="x", padx=12, pady=6)
+
+        status_var = tk.StringVar(value="")
+        status_label = tk.Label(dlg, textvariable=status_var, fg="blue", anchor="w", justify="left")
+        status_label.pack(fill="x", padx=12)
 
         btn_row = tk.Frame(dlg)
         btn_row.pack(pady=10)
@@ -3605,17 +3645,49 @@ class Vaila(tk.Tk):
             webbrowser.open("https://github.com/vaila-multimodaltoolbox/vaila")
 
         def do_skip():
-            if result.remote_version:
-                skip_version(result.remote_version)
+            target = result.remote_commit if is_git else result.remote_version
+            if target:
+                skip_version(target)
             dlg.destroy()
 
+        def on_pull_done(pull_result):
+            if pull_result.success:
+                status_var.set("Update complete. Restart vailá to use the new files.")
+                messagebox.showinfo(
+                    "vailá - Update Complete",
+                    f"{pull_result.message}\n\nRestart vailá to load the update.",
+                )
+            else:
+                status_var.set("git pull failed — see message.")
+                messagebox.showerror("vailá - Update Failed", pull_result.message)
+
+        def do_pull():
+            if not is_git:
+                return
+            status_var.set("Running git pull…")
+            import queue
+
+            pull_queue: queue.Queue = queue.Queue()
+            git_pull_async(pull_queue.put)
+
+            def poll_pull():
+                try:
+                    pull_result = pull_queue.get_nowait()
+                except queue.Empty:
+                    dlg.after(300, poll_pull)
+                    return
+                on_pull_done(pull_result)
+
+            poll_pull()
+
         tk.Button(btn_row, text="Copy Command", command=do_copy, width=14).pack(side="left", padx=4)
+        if is_git:
+            tk.Button(btn_row, text="Update Now", command=do_pull, width=14).pack(side="left", padx=4)
         tk.Button(btn_row, text="Open GitHub", command=do_open_github, width=14).pack(
             side="left", padx=4
         )
-        tk.Button(btn_row, text="Skip This Version", command=do_skip, width=16).pack(
-            side="left", padx=4
-        )
+        skip_label = "Skip This Commit" if is_git else "Skip This Version"
+        tk.Button(btn_row, text=skip_label, command=do_skip, width=16).pack(side="left", padx=4)
         tk.Button(btn_row, text="Remind Me Later", command=dlg.destroy, width=14).pack(
             side="left", padx=4
         )

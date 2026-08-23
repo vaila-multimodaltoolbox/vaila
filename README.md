@@ -83,12 +83,12 @@ cd path\to\vaila
 .\install_vaila_win.ps1
 ```
 
-> **Staying up to date:** the GUI checks GitHub's `main` branch for a newer
-> version on startup (non-blocking, cached ~20h) and shows the one-line
-> command above when one is available — use **Check for Updates** (bottom
-> button bar) to check on demand. `main` is the rolling release; there are
-> no separate version tags, so re-running the install command above is how
-> you update.
+> **Staying up to date:** in a **git clone**, the GUI runs `git fetch origin main`
+> and compares your local `HEAD` with `origin/main` (any new commit counts —
+> not only pyproject version bumps). Use **Check for Updates** to fetch on demand
+> and **Update Now** to run `git pull --ff-only origin main`. Automatic checks
+> on startup are cached ~20 h. Install trees without `.git` fall back to comparing
+> `pyproject.toml` with GitHub's `main` and show the one-line install command.
 
 ## Introduction
 
