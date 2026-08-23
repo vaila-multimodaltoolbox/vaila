@@ -65,14 +65,23 @@ Unlike `rec3d_one_dlt3d`, this module does not export C3D; use `rec3d_one_dlt3d`
 
 Every run also writes a `.bvh` file (each marker as an independent ROOT node — there is no rigid skeleton model, since marker sets vary by tracker) and a `_blender_skeleton_viz.py` companion script. The BVH imports natively into Blender; running the companion script inside Blender's Text Editor afterward draws bone connections between the markers using the `--skeleton` JSON's `"connections"` list (`[["pA","pB"], ...]`, referencing the **1-based** `pN` column index — always renumbered positionally, regardless of the original tracker's own column labels).
 
-Ready-made presets for every tracker vailá supports ship in `vaila/skeletons/`:
+Ready-made presets for every tracker vailá supports ship in `vaila/skeletons/` (and test templates in `tests/skeleton_templates/`):
 
-| File | Keypoint set |
-|------|-------------|
-| `mediapipe_pose33.json` | MediaPipe BlazePose (33 kp) |
-| `yolo_coco17.json` | YOLO / COCO-17 |
-| `sam3dinov3_mhr70.json` | SAM3+DINOv3 (SAM 3D Body) MHR70 |
-| `sapiens2_goliath308.json` | Sapiens2 Sociopticon/Goliath (308 kp) |
+| File | Keypoint set | Points |
+|------|-------------|--------|
+| `fifa_body15.json` | FIFA Skeletal Challenge 2026 | 15 |
+| `yolo_coco17.json` | YOLO / COCO-17 | 17 |
+| `mediapipe_hand21.json` | MediaPipe Hand (Single) | 21 |
+| `openpose_body25.json` | OpenPose Body-25 | 25 |
+| `halpe26.json` | Halpe 26 Body+Feet | 26 |
+| `soccerfield_calib29.json` | Soccer Field 29 Keypoints | 29 |
+| `soccerfield_pitch32.json` | Soccer Field 32 Keypoints | 32 |
+| `mediapipe_pose33.json` | MediaPipe BlazePose | 33 |
+| `mediapipe_hands42.json` | MediaPipe Both Hands | 42 |
+| `sam3dinov3_mhr70.json` | SAM3+DINOv3 (SAM 3D Body) MHR70 | 70 |
+| `mediapipe_holistic75.json` | MediaPipe Holistic (Body+Hands) | 75 |
+| `coco_wholebody133.json` | COCO WholeBody / Sapiens-133 | 133 |
+| `sapiens2_goliath308.json` | Sapiens2 Sociopticon/Goliath | 308 |
 
 Pick the preset matching the tracker that produced your pixel CSVs (without a `--skeleton` JSON, a hardcoded MediaPipe-33 default is used). `--swap-yz` swaps Y/Z axes so height ends up vertical (Z-up) in Blender — **this is the default since v0.3.99**; pass `--no-swap-yz` to keep the raw DLT axes.
 

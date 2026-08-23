@@ -41,7 +41,7 @@ Everything the generator needs is recoverable from the folder, so runs produced 
 | Frame count and capture rate | The BVH `MOTION` header (`Frames:`, `Frame Time:`), refined by `POINT:RATE` in `<base>_m.c3d` when the two agree |
 | Marker layout, never-reconstructed markers | The reconstruction CSV |
 | Mesh sequence | A `meshes_obj/` or `meshes_ply/` subfolder |
-| Skeleton connections | Inferred from the marker **count**: 17 → `yolo_coco17`, 33 → `mediapipe_pose33`, 70 → `sam3dinov3_mhr70`, 308 → `sapiens2_goliath308` |
+| Skeleton connections | Inferred from the marker **count**: 15 → `fifa_body15`, 17 → `yolo_coco17`, 21 → `mediapipe_hand21`, 25 → `openpose_body25`, 26 → `halpe26`, 29 → `soccerfield_calib29`, 32 → `soccerfield_pitch32`, 33 → `mediapipe_pose33`, 42 → `mediapipe_hands42`, 70 → `sam3dinov3_mhr70`, 75 → `mediapipe_holistic75`, 133 → `coco_wholebody133`, 308 → `sapiens2_goliath308` |
 
 The count, not the highest marker index, is what identifies the layout — `sapiens2_goliath308`'s connection list tops out at `p63` despite the layout having 308 markers.
 

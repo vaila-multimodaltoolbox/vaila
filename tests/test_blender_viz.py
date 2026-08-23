@@ -86,18 +86,23 @@ def test_parse_bvh_header_returns_none_for_garbage(tmp_path):
 @pytest.mark.parametrize(
     ("n_markers", "expected"),
     [
+        (15, "fifa_body15.json"),
         (17, "yolo_coco17.json"),
+        (21, "mediapipe_hand21.json"),
+        (25, "openpose_body25.json"),
+        (26, "halpe26.json"),
+        (29, "soccerfield_calib29.json"),
+        (32, "soccerfield_pitch32.json"),
         (33, "mediapipe_pose33.json"),
+        (42, "mediapipe_hands42.json"),
         (70, "sam3dinov3_mhr70.json"),
+        (75, "mediapipe_holistic75.json"),
+        (133, "coco_wholebody133.json"),
         (308, "sapiens2_goliath308.json"),
     ],
 )
 def test_infer_skeleton_preset_matches_shipped_layouts(n_markers, expected):
-    """Marker COUNT is the discriminator, not the max marker index.
-
-    sapiens2_goliath308's connection list tops out at p63 despite the layout
-    having 308 markers, so an index-based rule would misfile it as MHR70.
-    """
+    """Marker COUNT is the discriminator, not the max marker index."""
     resolved = blender_viz.infer_skeleton_preset(n_markers)
     assert resolved is not None
     assert Path(resolved).name == expected

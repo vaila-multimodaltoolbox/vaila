@@ -9,9 +9,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.104
+Version: 0.3.110
 Created: 05 August 2026
-Last Updated: 11 August 2026
+Last Updated: 23 August 2026
 
 Description:
     Launches Blender directly from vailá with a rec3d reconstruction already
@@ -28,25 +28,27 @@ Description:
 
     Until now the user had to open Blender, load that script in the Text
     Editor and press Run Script. This module removes that step: it finds the
-    Blender executable, resolves (or regenerates) the companion script, and
-    runs ``blender --python <script>``, which executes the script on startup
-    because it calls ``main()`` at module bottom.
+    companion script, discovers Blender (via ``VAILA_BLENDER`` env var, saved
+    config, or standard system install paths), and launches it with
+    ``--python <script>``.
 
 Usage:
-    GUI (from vailá): Frame C -> Visualization -> Animation Blender
+    # Open the latest rec3d reconstruction in a folder
+    uv run python -m vaila.blender_viz -i /path/to/vaila_rec3d_YYYYMMDD_HHMMSS
 
-    CLI:
-      uv run python -m vaila.blender_viz -i /path/to/vaila_rec3d_YYYYMMDD_HHMMSS
-      uv run python -m vaila.blender_viz -i /path/to/rec3d_..._blender_skeleton_viz.py
-      uv run python -m vaila.blender_viz -i RUN_DIR --regenerate
-      uv run python -m vaila.blender_viz -i RUN_DIR --blender /snap/bin/blender
-      uv run python -m vaila.blender_viz -i RUN_DIR --background   # headless check
+    # Point directly at the companion script
+    uv run python -m vaila.blender_viz -i /path/to/rec3d_..._blender_skeleton_viz.py
+
+    # Force a companion script rebuild (e.g. if the folder was moved)
+    uv run python -m vaila.blender_viz -i /path/to/run --regenerate
+
+    # Headless / smoke-test mode (runs Blender in background, exits)
+    uv run python -m vaila.blender_viz -i /path/to/run --background
+
+    # GUI: omit arguments, or Frame C-C -> Visualization -> Animation Blender
 
 License:
-    This program is free software: you can redistribute it and/or modify it
-    under the terms of the GNU General Public License as published by the
-    Free Software Foundation, either version 3 of the License, or (at your
-    option) any later version.
+    This program is licensed under the GNU Affero General Public License v3.0.
 ================================================================================
 """
 
@@ -63,7 +65,10 @@ from pathlib import Path
 
 try:
     from .cli_highlight import print_gui_cli_mirror
-    from .rec3d import find_unreconstructed_markers, generate_blender_companion_script
+    from .rec3d import (
+        find_unreconstructed_markers,
+        generate_blender_companion_script,
+    )
 except ImportError:  # standalone execution
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from rec3d import (  # ty: ignore[unresolved-import]
@@ -78,9 +83,18 @@ COMPANION_SUFFIX = "_blender_skeleton_viz.py"
 # sapiens2_goliath308's connection list tops out at p63 even though the layout
 # has 308 markers.
 SKELETON_PRESET_BY_MARKER_COUNT = {
+    15: "fifa_body15.json",
     17: "yolo_coco17.json",
+    21: "mediapipe_hand21.json",
+    25: "openpose_body25.json",
+    26: "halpe26.json",
+    29: "soccerfield_calib29.json",
+    32: "soccerfield_pitch32.json",
     33: "mediapipe_pose33.json",
+    42: "mediapipe_hands42.json",
     70: "sam3dinov3_mhr70.json",
+    75: "mediapipe_holistic75.json",
+    133: "coco_wholebody133.json",
     308: "sapiens2_goliath308.json",
 }
 
