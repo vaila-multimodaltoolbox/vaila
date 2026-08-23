@@ -1,15 +1,16 @@
-"""Tests for vaila.update_checker (offline-safe: version parsing/compare + local read).
-
-Network-dependent behavior (fetch_remote_version, check_for_updates_async) is
-exercised manually / in CI smoke runs, not here - these tests must pass with
-no internet access.
-"""
+"""Tests for vaila.update_checker (offline-safe helpers + local git status)."""
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 from vaila.update_checker import (
+    get_git_pull_command,
     get_install_command,
     get_local_version,
+    git_status_behind_main,
+    is_git_repository,
     is_newer,
     parse_version,
 )
@@ -45,5 +46,35 @@ def test_get_install_command_per_os():
     assert "install_vaila_linux.sh" in linux_cmd
     assert "install_vaila_mac.sh" in mac_cmd
     assert "install_vaila_win.ps1" in win_cmd
-    # Unknown platform falls back to the Linux one-liner rather than raising.
     assert get_install_command("PlanNine") == linux_cmd
+
+
+def test_get_git_pull_command_contains_cd_and_pull():
+    cmd = get_git_pull_command()
+    assert "git pull" in cmd
+    assert "origin main" in cmd
+
+
+def test_is_git_repository_for_this_checkout():
+    root = Path(__file__).resolve().parent.parent
+    assert is_git_repository(root) is True
+
+
+def test_git_status_behind_main_in_sync_when_fetched():
+    root = Path(__file__).resolve().parent.parent
+    if not is_git_repository(root):
+        return
+    fetch = subprocess.run(
+        ["git", "fetch", "--quiet", "origin", "main"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if fetch.returncode != 0:
+        return
+    behind, local_short, remote_short, err = git_status_behind_main(root)
+    assert err is None
+    assert local_short
+    assert remote_short
+    assert behind >= 0

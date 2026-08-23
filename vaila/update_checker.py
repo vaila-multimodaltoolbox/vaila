@@ -11,26 +11,19 @@ Version: 0.3.110
 
 Description:
 ------------
-Lightweight, stdlib-only GitHub "main branch" update checker for vailá.
+Git-based update checker for vailá git clones.
 
-vailá is installed/updated via a one-line install script (see README.md and
-install_vaila_linux.sh / install_vaila_mac.sh / install_vaila_win.ps1), not a
-package manager, so the GUI has no other way to learn a newer version landed
-on GitHub. This module:
+When the project directory is a git repository, the GUI compares the local
+``HEAD`` with ``origin/main`` (``git fetch`` + rev-list) so any new commit is
+detected — not only pyproject.toml version bumps. Manual **Check for Updates**
+always fetches; automatic startup checks respect a ~20 h cache.
 
-  - Reads the installed version from the local pyproject.toml (single source
-    of truth already used by vaila.py's header/banner).
-  - Fetches the version declared in pyproject.toml on the GitHub `main`
-    branch (raw.githubusercontent.com, no auth, no API rate limit).
-  - Compares them and reports whether an update is available, plus the
-    OS-specific one-line command to re-run to update.
-  - Caches the last check (~/.vaila/update_check_cache.json) so vailá does
-    not hit GitHub on every launch, and remembers a "skip this version".
+Non-git installs (one-line installer trees without ``.git``) fall back to
+comparing the local pyproject version with GitHub's ``main`` pyproject.toml.
 
-All network I/O fails soft (returns None / checked=False) - no internet
-access must never block or crash the GUI. Call check_for_updates_async()
-from a background thread; deliver its result back to the GUI thread via a
-queue polled with Tk's `after` (Tkinter is not thread-safe).
+All network / git I/O fails soft. Run ``check_for_updates_async()`` and
+``git_pull_async()`` from background threads; marshal results to Tk via a
+queue polled with ``after``.
 ===============================================================================
 """
 
@@ -38,6 +31,7 @@ from __future__ import annotations
 
 import json
 import platform
+import subprocess
 import threading
 import time
 import tomllib
@@ -53,7 +47,9 @@ RAW_PYPROJECT_URL = (
 )
 CACHE_FILE = Path.home() / ".vaila" / "update_check_cache.json"
 CHECK_INTERVAL_SECONDS = 20 * 60 * 60  # ~20h between automatic checks
-REQUEST_TIMEOUT = 4.0  # seconds
+GIT_TIMEOUT = 30.0  # seconds for fetch / rev-parse
+GIT_PULL_TIMEOUT = 180.0  # seconds
+REQUEST_TIMEOUT = 4.0  # seconds (non-git fallback)
 
 # Exact one-liners from README.md "Install vaila with a single command!"
 INSTALL_COMMANDS = {
@@ -80,8 +76,100 @@ def get_install_command(system: str | None = None) -> str:
     return INSTALL_COMMANDS.get(system, INSTALL_COMMANDS["Linux"])
 
 
+def get_git_pull_command(project_root: Path | None = None) -> str:
+    """Copy-paste command for updating a git clone."""
+    root = project_root or _project_root()
+    return f"cd {root} && git pull --ff-only origin main"
+
+
 def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent
+
+
+def is_git_repository(project_root: Path | None = None) -> bool:
+    root = project_root or _project_root()
+    return (root / ".git").is_dir()
+
+
+def _run_git(
+    args: list[str],
+    project_root: Path,
+    *,
+    timeout: float = GIT_TIMEOUT,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def git_fetch_main(project_root: Path | None = None) -> tuple[bool, str | None]:
+    """Fetch origin/main. Returns (ok, error_code_or_message)."""
+    root = project_root or _project_root()
+    if not is_git_repository(root):
+        return False, "not_a_git_repo"
+    try:
+        proc = _run_git(["fetch", "--quiet", "origin", "main"], root)
+    except (OSError, subprocess.TimeoutExpired):
+        return False, "git_fetch_failed"
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        return False, detail or "git_fetch_failed"
+    return True, None
+
+
+def git_status_behind_main(
+    project_root: Path | None = None,
+) -> tuple[int, str | None, str | None, str | None]:
+    """Commits on origin/main not in HEAD. Returns (behind, local_short, remote_short, error)."""
+    root = project_root or _project_root()
+    if not is_git_repository(root):
+        return 0, None, None, "not_a_git_repo"
+
+    local_proc = _run_git(["rev-parse", "--short", "HEAD"], root)
+    remote_proc = _run_git(["rev-parse", "--short", "origin/main"], root)
+    if local_proc.returncode != 0:
+        return 0, None, None, "git_head_unavailable"
+    if remote_proc.returncode != 0:
+        return 0, None, None, "origin_main_unavailable"
+
+    local_short = local_proc.stdout.strip()
+    remote_short = remote_proc.stdout.strip()
+
+    count_proc = _run_git(["rev-list", "--count", "HEAD..origin/main"], root)
+    if count_proc.returncode != 0:
+        return 0, local_short, remote_short, "git_rev_list_failed"
+    try:
+        behind = int(count_proc.stdout.strip())
+    except ValueError:
+        return 0, local_short, remote_short, "git_rev_list_failed"
+    return behind, local_short, remote_short, None
+
+
+def git_pull_main(project_root: Path | None = None) -> tuple[bool, str]:
+    """Fast-forward pull from origin/main. Returns (success, combined output)."""
+    root = project_root or _project_root()
+    if not is_git_repository(root):
+        return False, "Not a git repository."
+    try:
+        proc = _run_git(
+            ["pull", "--ff-only", "origin", "main"],
+            root,
+            timeout=GIT_PULL_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "git pull timed out."
+    except OSError as exc:
+        return False, str(exc)
+
+    output = "\n".join(part.strip() for part in (proc.stdout, proc.stderr) if part.strip())
+    if proc.returncode != 0:
+        return False, output or "git pull failed."
+    return True, output or "Already up to date."
 
 
 def get_local_version() -> str | None:
@@ -96,7 +184,7 @@ def get_local_version() -> str | None:
 
 
 def fetch_remote_version(timeout: float = REQUEST_TIMEOUT) -> str | None:
-    """Version declared in pyproject.toml on the GitHub `main` branch, or None."""
+    """Version declared in pyproject.toml on the GitHub ``main`` branch, or None."""
     try:
         req = urllib.request.Request(
             RAW_PYPROJECT_URL, headers={"User-Agent": "vaila-update-checker"}
@@ -112,9 +200,7 @@ def fetch_remote_version(timeout: float = REQUEST_TIMEOUT) -> str | None:
 
 
 def parse_version(version: str) -> tuple[int, ...]:
-    """'0.3.110' -> (0, 3, 110); tolerant of a non-numeric suffix on the last
-    chunk (e.g. '0.3.110rc1' -> (0, 3, 110)), by reading only the leading
-    digit run of each chunk rather than every digit in it."""
+    """'0.3.110' -> (0, 3, 110); tolerant of a non-numeric suffix on the last chunk."""
     parts = []
     for chunk in version.split("."):
         digits = ""
@@ -149,21 +235,87 @@ def _save_cache(data: dict) -> None:
 
 @dataclass
 class UpdateCheckResult:
-    checked: bool  # True if we have a confirmed remote_version (fresh or cached)
-    local_version: str | None = None
-    remote_version: str | None = None
+    checked: bool
     update_available: bool = False
+    local_version: str | None = None
+    remote_version: str | None = None  # git: origin/main short sha; fallback: remote semver
+    commits_behind: int = 0
+    local_commit: str | None = None
+    remote_commit: str | None = None
+    is_git_repo: bool = False
     error: str | None = None
 
 
-def check_for_updates(force: bool = False) -> UpdateCheckResult:
-    """Synchronous check (does network I/O) - call from a background thread.
+@dataclass
+class GitPullResult:
+    success: bool
+    message: str
 
-    Respects the on-disk cache unless force=True (manual "Check for Updates").
-    """
+
+def _check_git_updates(force: bool, local_version: str | None) -> UpdateCheckResult:
+    project_root = _project_root()
     cache = _load_cache()
     now = time.time()
-    local_version = get_local_version()
+
+    fresh_enough = not force and (now - cache.get("last_check", 0)) < CHECK_INTERVAL_SECONDS
+    if fresh_enough and cache.get("last_remote_commit"):
+        behind, local_short, remote_short, err = git_status_behind_main(project_root)
+        if err is None:
+            skip = cache.get("skip_commit")
+            available = behind > 0 and remote_short != skip
+            return UpdateCheckResult(
+                checked=True,
+                local_version=local_version,
+                remote_version=remote_short,
+                commits_behind=behind,
+                local_commit=local_short,
+                remote_commit=remote_short,
+                is_git_repo=True,
+                update_available=available,
+            )
+
+    ok, fetch_err = git_fetch_main(project_root)
+    cache["last_check"] = now
+    if not ok:
+        _save_cache(cache)
+        return UpdateCheckResult(
+            checked=False,
+            local_version=local_version,
+            is_git_repo=True,
+            error=fetch_err or "git_fetch_failed",
+        )
+
+    behind, local_short, remote_short, err = git_status_behind_main(project_root)
+    if err:
+        _save_cache(cache)
+        return UpdateCheckResult(
+            checked=False,
+            local_version=local_version,
+            is_git_repo=True,
+            error=err,
+        )
+
+    cache["last_remote_commit"] = remote_short
+    _save_cache(cache)
+
+    skip = cache.get("skip_commit")
+    available = behind > 0 and remote_short != skip
+    return UpdateCheckResult(
+        checked=True,
+        local_version=local_version,
+        remote_version=remote_short,
+        commits_behind=behind,
+        local_commit=local_short,
+        remote_commit=remote_short,
+        is_git_repo=True,
+        update_available=available,
+    )
+
+
+def _check_pyproject_updates(force: bool, local_version: str | None) -> UpdateCheckResult:
+    """Fallback for install trees without a .git directory."""
+    cache = _load_cache()
+    now = time.time()
 
     fresh_enough = not force and (now - cache.get("last_check", 0)) < CHECK_INTERVAL_SECONDS
     if fresh_enough:
@@ -202,25 +354,40 @@ def check_for_updates(force: bool = False) -> UpdateCheckResult:
     )
 
 
+def check_for_updates(force: bool = False) -> UpdateCheckResult:
+    """Synchronous check — call from a background thread."""
+    local_version = get_local_version()
+    if is_git_repository():
+        return _check_git_updates(force, local_version)
+    return _check_pyproject_updates(force, local_version)
+
+
 def skip_version(version: str) -> None:
-    """Remember the user dismissed the notice for this remote version."""
+    """Remember the user dismissed the notice (commit sha or semver string)."""
     cache = _load_cache()
-    cache["skip_version"] = version
+    if is_git_repository():
+        cache["skip_commit"] = version
+    else:
+        cache["skip_version"] = version
     _save_cache(cache)
 
 
 def check_for_updates_async(
     on_result: Callable[[UpdateCheckResult], None], force: bool = False
 ) -> None:
-    """Run check_for_updates() on a background thread.
-
-    ``on_result`` is invoked from that worker thread - callers touching
-    Tkinter must marshal back onto the GUI thread themselves (e.g. push the
-    result onto a queue.Queue and poll it with Tk's ``after``).
-    """
+    """Run check_for_updates() on a background thread."""
 
     def worker() -> None:
-        result = check_for_updates(force=force)
-        on_result(result)
+        on_result(check_for_updates(force=force))
 
     threading.Thread(target=worker, daemon=True, name="vaila-update-check").start()
+
+
+def git_pull_async(on_result: Callable[[GitPullResult], None]) -> None:
+    """Run git_pull_main() on a background thread."""
+
+    def worker() -> None:
+        ok, message = git_pull_main()
+        on_result(GitPullResult(success=ok, message=message))
+
+    threading.Thread(target=worker, daemon=True, name="vaila-git-pull").start()
