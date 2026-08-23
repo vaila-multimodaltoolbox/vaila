@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.3.108"
-__updated__ = "20 August 2026"
+__version__ = "0.3.110"
+__updated__ = "23 August 2026"
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,8 +214,9 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
     ),
     "quit_app": CliRunHint((), invoke_handler=True),
     "open_terminal_shell": CliRunHint(
-        ("xonsh",),
-        "Interactive xonsh shell (imagination! button).",
+        (),
+        "Opens the system terminal with the vailá .venv activated (imagination! button).",
+        invoke_handler=True,
     ),
 }
 

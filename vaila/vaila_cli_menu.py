@@ -17,8 +17,8 @@ from vaila.vaila_cli_hints import CliRunHint, get_cli_hint
 if TYPE_CHECKING:
     from vaila import Vaila
 
-__version__ = "0.3.108"
-__updated__ = "20 August 2026"
+__version__ = "0.3.110"
+__updated__ = "23 August 2026"
 
 _ROW_RE = re.compile(r"_r(\d+)_")
 _COL_RE = re.compile(r"_c(\d+)$")
@@ -151,7 +151,9 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     # Global
     VailaMenuEntry("HELP", "_", "Global", "Help", "display_help"),
     VailaMenuEntry("EXIT", "_", "Global", "Exit", "quit_app"),
-    VailaMenuEntry("SHELL", "_", "Global", "imagination! (xonsh shell)", "open_terminal_shell"),
+    VailaMenuEntry(
+        "SHELL", "_", "Global", "imagination! (system terminal + .venv)", "open_terminal_shell"
+    ),
 )
 
 _SECTION_TITLES: dict[str, str] = {
