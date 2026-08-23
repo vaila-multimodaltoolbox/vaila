@@ -57,7 +57,7 @@
             <tr><td>Frame count and capture rate</td><td>The BVH <code>MOTION</code> header (<code>Frames:</code>, <code>Frame Time:</code>), refined by <code>POINT:RATE</code> in <code>&lt;base&gt;_m.c3d</code> when the two agree.</td></tr>
             <tr><td>Marker layout, never-reconstructed markers</td><td>The reconstruction CSV.</td></tr>
             <tr><td>Mesh sequence</td><td>A <code>meshes_obj/</code> or <code>meshes_ply/</code> subfolder.</td></tr>
-            <tr><td>Skeleton connections</td><td>Inferred from the marker <strong>count</strong>: 17 &rarr; <code>yolo_coco17</code>, 33 &rarr; <code>mediapipe_pose33</code>, 70 &rarr; <code>sam3dinov3_mhr70</code>, 308 &rarr; <code>sapiens2_goliath308</code>.</td></tr>
+            <tr><td>Skeleton connections</td><td>Inferred from the marker <strong>count</strong>: 15 &rarr; <code>fifa_body15</code>, 17 &rarr; <code>yolo_coco17</code>, 21 &rarr; <code>mediapipe_hand21</code>, 25 &rarr; <code>openpose_body25</code>, 26 &rarr; <code>halpe26</code>, 29 &rarr; <code>soccerfield_calib29</code>, 32 &rarr; <code>soccerfield_pitch32</code>, 33 &rarr; <code>mediapipe_pose33</code>, 42 &rarr; <code>mediapipe_hands42</code>, 70 &rarr; <code>sam3dinov3_mhr70</code>, 75 &rarr; <code>mediapipe_holistic75</code>, 133 &rarr; <code>coco_wholebody133</code>, 308 &rarr; <code>sapiens2_goliath308</code>.</td></tr>
         </table>
         <p>The count, not the highest marker index, is what identifies the layout — <code>sapiens2_goliath308</code>'s connection list tops out at <code>p63</code> despite the layout having 308 markers.</p>
 

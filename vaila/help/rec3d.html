@@ -74,13 +74,22 @@
 
         <h2>Skeleton visualization (--swap-yz / --skeleton)</h2>
         <p>Every run also writes a <code>.bvh</code> file (each marker as an independent ROOT node) and a <code>_blender_skeleton_viz.py</code> companion script. The BVH imports natively into Blender; running the companion script inside Blender's Text Editor afterward draws bone connections between the markers using the <code>--skeleton</code> JSON's <code>"connections"</code> list (<code>[["pA","pB"], ...]</code>, referencing the <strong>1-based</strong> <code>pN</code> column index — always renumbered positionally, regardless of the original tracker's own column labels).</p>
-        <p>Ready-made presets for every tracker vailá supports ship in <code>vaila/skeletons/</code>:</p>
+        <p>Ready-made presets for every tracker vailá supports ship in <code>vaila/skeletons/</code> (and test templates in <code>tests/skeleton_templates/</code>):</p>
         <table>
-            <tr><th>File</th><th>Keypoint set</th></tr>
-            <tr><td><code>mediapipe_pose33.json</code></td><td>MediaPipe BlazePose (33 kp)</td></tr>
-            <tr><td><code>yolo_coco17.json</code></td><td>YOLO / COCO-17</td></tr>
-            <tr><td><code>sam3dinov3_mhr70.json</code></td><td>SAM3+DINOv3 (SAM 3D Body) MHR70</td></tr>
-            <tr><td><code>sapiens2_goliath308.json</code></td><td>Sapiens2 Sociopticon/Goliath (308 kp)</td></tr>
+            <tr><th>File</th><th>Keypoint set</th><th>Points</th></tr>
+            <tr><td><code>fifa_body15.json</code></td><td>FIFA Skeletal Challenge 2026</td><td>15</td></tr>
+            <tr><td><code>yolo_coco17.json</code></td><td>YOLO / COCO-17</td><td>17</td></tr>
+            <tr><td><code>mediapipe_hand21.json</code></td><td>MediaPipe Hand (Single)</td><td>21</td></tr>
+            <tr><td><code>openpose_body25.json</code></td><td>OpenPose Body-25</td><td>25</td></tr>
+            <tr><td><code>halpe26.json</code></td><td>Halpe 26 Body+Feet</td><td>26</td></tr>
+            <tr><td><code>soccerfield_calib29.json</code></td><td>Soccer Field 29 Keypoints</td><td>29</td></tr>
+            <tr><td><code>soccerfield_pitch32.json</code></td><td>Soccer Field 32 Keypoints</td><td>32</td></tr>
+            <tr><td><code>mediapipe_pose33.json</code></td><td>MediaPipe BlazePose</td><td>33</td></tr>
+            <tr><td><code>mediapipe_hands42.json</code></td><td>MediaPipe Both Hands</td><td>42</td></tr>
+            <tr><td><code>sam3dinov3_mhr70.json</code></td><td>SAM3+DINOv3 (SAM 3D Body) MHR70</td><td>70</td></tr>
+            <tr><td><code>mediapipe_holistic75.json</code></td><td>MediaPipe Holistic (Body+Hands)</td><td>75</td></tr>
+            <tr><td><code>coco_wholebody133.json</code></td><td>COCO WholeBody / Sapiens-133</td><td>133</td></tr>
+            <tr><td><code>sapiens2_goliath308.json</code></td><td>Sapiens2 Sociopticon/Goliath</td><td>308</td></tr>
         </table>
         <p>Pick the preset matching the tracker that produced your pixel CSVs (without <code>--skeleton</code>, a hardcoded MediaPipe-33 default is used). <code>--swap-yz</code> swaps Y/Z axes so height ends up vertical (Z-up) in Blender — <strong>this is the default since v0.3.99</strong>; pass <code>--no-swap-yz</code> to keep the raw DLT axes.</p>
 

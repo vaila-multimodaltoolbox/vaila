@@ -213,7 +213,7 @@ python -m vaila.rec3d_one_dlt3d --gui
 | **mesh_alignment** | Umeyama similarity fit + OBJ/PLY I/O used by the mesh-export feature. |
 | **joint_kinematics** | Shared math for `rec3d_*_joint_angles.csv` — local joint angles re-exported from whichever camera's mesh-source directory has one. |
 | **sam3dinov3_visualize** | Produces the per-camera "Visualize ID" mesh-source directories consumed by `--mesh-source-dir`. |
-| **vaila/skeletons/** | Ready-made `--skeleton` presets (MediaPipe, YOLO/COCO-17, SAM3+DINOv3 MHR70, Sapiens2 Goliath-308). |
+| **vaila/skeletons/** | Ready-made `--skeleton` presets (MediaPipe, YOLO/COCO-17, SAM3+DINOv3 MHR70, Sapiens2 Goliath-308, FIFA-15, OpenPose-25, Hands, Holistic, Halpe, WholeBody, Soccer Field). Templates also in `tests/skeleton_templates/`. |
 | **readcsv_export** | CSV → C3D (used internally); batch convert. |
 | **readc3d_export** | C3D → CSV; inspect C3D. |
 | **viewc3d** / **viewc3d_pyvista** | Visualize C3D files. |
