@@ -39,24 +39,34 @@ Install _vaila_ with a single command!
 
 **🐧 Linux:**
 
+One-line installer:
+
 ```bash
 wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh | bash
 ```
 
+If you **already cloned** the repo, prefer running the local script (keeps `uv.lock` / `git pull` clean):
+
 ```bash
-cd path\to\vaila
-.\install_vaila_linux.sh
+cd path/to/vaila
+chmod +x install_vaila_linux.sh
+./install_vaila_linux.sh
 ```
 
 **🍎 macOS:**
+
+One-line installer:
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
 ```
 
+If you **already cloned** the repo, prefer running the local script (keeps `uv.lock` / `git pull` clean):
+
 ```bash
-cd path\to\vaila
-.\install_vaila_mac.sh
+cd path/to/vaila
+chmod +x install_vaila_mac.sh
+./install_vaila_mac.sh
 ```
 
 **🪟 Windows:**
@@ -426,33 +436,68 @@ See [Running _vailá_ — GUI and CLI](#running-vailá--gui-and-cli) below (Desk
 
 ## 🐧 For Linux
 
-Installation uses **uv** (Conda is no longer supported).
+Installation is streamlined using **uv** with automatic GPU detection (Conda is no longer supported).
 
-### Using uv
+### 1. **Download _vailá_**
 
-We provide an automated installation script that handles everything for you (dependencies, uv installation, virtual environment, etc.).
+- **Option A (Git):**
 
-1. **Make the script executable**:
+  ```bash
+  git clone https://github.com/vaila-multimodaltoolbox/vaila
+  cd vaila
+  ```
 
-   ```bash
-   chmod +x install_vaila_linux.sh
-   ```
+- **Option B (Zip):**
+  - Download the `.zip` file from the [_vailá_ GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+  - Extract it
+  - **Important:** Rename the folder from `vaila-main` to `vaila`
+  - Open a terminal inside the folder (`cd path/to/vaila`)
 
-2. **Run the installation script**:
+### 2. **Run the Installation Script**
 
-   ```bash
-   ./install_vaila_linux.sh
-   ```
+If you **already cloned** the repo, prefer running the local script (keeps `uv.lock` / `git pull` clean):
 
-   The script will:
-   1. Detect if you have an **NVIDIA GPU**.
-   2. Ask if you want to install with GPU support (optimizes for CUDA 12.8).
-   3. Automatically select and apply the correct configuration template:
-      - **GPU detected + user chooses GPU**: Uses `pyproject_linux_cuda12.toml` (CUDA 12.8, TensorRT)
-      - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
-   4. Install **uv** and all dependencies with the selected configuration.
+```bash
+cd path/to/vaila
+chmod +x install_vaila_linux.sh
+./install_vaila_linux.sh
+```
 
-3. **Manual Installation (Alternative)**
+The script will:
+
+1. Detect if you have an **NVIDIA GPU**.
+2. Ask if you want to install with GPU support (optimizes for CUDA 12.8).
+3. Automatically select and apply the correct configuration template:
+   - **GPU detected + user chooses GPU**: Uses `pyproject_linux_cuda12.toml` (CUDA 12.8, TensorRT)
+   - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+4. Install **uv** and all dependencies with the selected configuration.
+
+**Note:** Default install location is **Local/Portable** (the current repo directory). Choose option **[2]** for user profile install (`~/vaila`).
+
+**Git pull after install:** portable installs into a clone keep the committed `uv.lock` (CPU) so `git pull` works. If you chose CUDA, `pyproject.toml` / `uv.lock` become local overrides — restore before pulling:
+
+```bash
+git restore uv.lock pyproject.toml
+git pull
+# then re-apply: bash bin/setup_pyproject.sh
+```
+
+### 3. **What the Script Does**
+
+The installation script automatically:
+
+- Checks for **uv**; if missing, installs it automatically
+- **Detects your hardware** (NVIDIA GPU via `nvidia-smi`) and prompts for GPU support preference
+- **Selects the optimal configuration template** (`pyproject_linux_cuda12.toml` or `pyproject_universal_cpu.toml`)
+- **Applies the template** to `pyproject.toml` **before** creating the virtual environment
+- Installs **Python 3.12.13** (via uv) securely isolated for _vailá_
+- Creates a virtual environment (`.venv`) with the correct dependencies from the start
+- Syncs all dependencies using `uv sync` (with `--extra gpu` if GPU support was selected)
+- Installs system packages via package manager if needed (`python3-tk`, `ffmpeg`, etc.)
+- Configures desktop shortcut and application launcher (`~/.local/share/applications/vaila.desktop`)
+- **Automatically falls back** to CPU-only configuration if GPU installation fails
+
+### 4. **Manual Installation (Alternative)**
 
 If you prefer to install manually using uv:
 
@@ -496,43 +541,62 @@ uv run vaila.py
 
 ## 🍎 For macOS
 
-Installation uses **uv** (Conda is no longer supported).
+Installation is streamlined using **uv** with Apple Silicon Metal/MPS acceleration detection (Conda is no longer supported).
 
-### Installation Script
+### 1. **Download _vailá_**
 
-1. **Make the script executable**:
+- **Option A (Git):**
 
-   ```bash
-   chmod +x install_vaila_mac.sh
-   ```
+  ```bash
+  git clone https://github.com/vaila-multimodaltoolbox/vaila
+  cd vaila
+  ```
 
-2. **Run the installation script**:
+- **Option B (Zip):**
+  - Download the `.zip` file from the [_vailá_ GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+  - Extract it
+  - **Important:** Rename the folder from `vaila-main` to `vaila`
+  - Open a terminal inside the folder (`cd path/to/vaila`)
 
-   ```bash
-   ./install_vaila_mac.sh
-   ```
+### 2. **Run the Installation Script**
 
-   The script will:
-   1. Detect your architecture (**Apple Silicon** vs **Intel**).
-   2. If Apple Silicon, ask if you want to use **Metal/MPS** acceleration (recommended).
-   3. Automatically select and apply the correct configuration template:
-      - **Apple Silicon + user chooses Metal**: Uses `pyproject_macos.toml` (Metal/MPS optimized)
-      - **Intel or user chooses CPU-only**: Uses `pyproject_universal_cpu.toml` (CPU-only)
-   4. Install **uv** and all dependencies with the selected configuration.
+If you **already cloned** the repo, prefer running the local script (keeps `uv.lock` / `git pull` clean):
 
-The uv installer will automatically:
+```bash
+cd path/to/vaila
+chmod +x install_vaila_mac.sh
+./install_vaila_mac.sh
+```
 
-- Install/update uv if needed
-- Install Python 3.12.13 via uv
-- Create a virtual environment
-- Install all dependencies
-- Set up the macOS application bundle with icon
-- Create a launcher in Applications folder
-- Install system dependencies via Homebrew (if needed)
+The script will:
+
+1. Detect your architecture (**Apple Silicon** `arm64` vs **Intel** `x86_64`).
+2. If Apple Silicon, ask if you want to use **Metal/MPS** acceleration (recommended).
+3. Automatically select and apply the correct configuration template:
+   - **Apple Silicon + user chooses Metal**: Uses `pyproject_macos.toml` (Metal/MPS optimized)
+   - **Intel or user chooses CPU-only**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+4. Install **uv** and all dependencies with the selected configuration.
+
+**Note:** Default install location is **Local/Portable** (the current repo directory). Choose option **[2]** for user profile install (`~/vaila`).
+
+### 3. **What the Script Does**
+
+The installation script automatically:
+
+- Checks for **uv**; if missing, installs it automatically
+- Installs system dependencies via Homebrew (if needed)
+- **Detects your architecture** (Apple Silicon vs Intel) and prompts for Metal/MPS acceleration
+- **Selects the optimal configuration template** (`pyproject_macos.toml` or `pyproject_universal_cpu.toml`)
+- **Applies the template** to `pyproject.toml` **before** creating the virtual environment
+- Installs **Python 3.12.13** (via uv) securely isolated for _vailá_
+- Creates a virtual environment (`.venv`) with the correct dependencies from the start
+- Syncs all dependencies using `uv sync`
+- Sets up the macOS application bundle with icon in Applications folder
+- **Automatically falls back** to CPU-only configuration if Metal installation fails
 
 **Notes:**
 
-- You may be prompted for your password when the script uses sudo to create the symbolic link.
+- You may be prompted for your password when the script uses sudo to create the symbolic link or application launcher.
 
 ---
 
