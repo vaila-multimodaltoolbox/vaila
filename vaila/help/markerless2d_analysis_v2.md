@@ -436,9 +436,10 @@ Install via:
 pip install opencv-python mediapipe numpy pandas ultralytics torch scipy toml
 ```
 
-Or use the vaila environment:
+Or use the vailá uv environment (from repo root):
 ```bash
-conda activate vaila
+uv sync
+uv run vaila/markerless2d_analysis_v2.py
 ```
 
 ---

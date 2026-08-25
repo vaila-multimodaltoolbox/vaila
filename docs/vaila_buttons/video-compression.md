@@ -146,7 +146,7 @@ python -m vaila.compress_videos_h266 --dir /path/to/videos --preset slow --qp 28
 
 - Your FFmpeg may not be compiled with NVENC support
 - System-packaged FFmpeg (apt, brew) often lacks NVENC
-- Install FFmpeg with NVENC: `conda install -c conda-forge ffmpeg` or download from https://www.gyan.dev/ffmpeg/builds/
+- Install FFmpeg with NVENC: `winget install Gyan.FFmpeg` or download from https://www.gyan.dev/ffmpeg/builds/
 
 ### H.266 "libvvenc not found"
 
@@ -177,8 +177,8 @@ python -m vaila.compress_videos_h266 --dir /path/to/videos --preset slow --qp 28
 ### FFmpeg Installation
 
 ```bash
-# Conda (recommended — includes many encoders)
-conda install -c conda-forge ffmpeg
+# Windows (NVENC builds)
+winget install Gyan.FFmpeg
 
 # Ubuntu/Debian
 sudo apt install ffmpeg

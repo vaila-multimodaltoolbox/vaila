@@ -225,17 +225,14 @@ This module integrates with other vailá tools:
 
 #### FFmpeg Installation
 ```bash
-# Conda (recommended)
-conda install -c conda-forge ffmpeg
+# Windows (recommended)
+winget install Gyan.FFmpeg
 
 # Ubuntu/Debian
 sudo apt install ffmpeg
 
 # macOS
 brew install ffmpeg
-
-# Windows
-# Download from https://ffmpeg.org/download.html
 ```
 
 ## References

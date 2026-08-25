@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 21 August 2026
-Update Date: 24 August 2026
+Update Date: 25 August 2026
 Version: 0.3.113
 
 Description:
@@ -63,9 +63,13 @@ INSTALL_COMMANDS = {
     ),
     "Windows": (
         "[Net.ServicePointManager]::SecurityProtocol = "
-        "[Net.ServicePointManager]::SecurityProtocol -bor 3072; "
-        "irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/"
-        "install_vaila_win.ps1 | iex"
+        "[Net.ServicePointManager]::SecurityProtocol -bor 3072\n"
+        "$i = Join-Path $env:TEMP 'install_vaila_win.ps1'\n"
+        "Invoke-WebRequest -Uri "
+        "'https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/"
+        "install_vaila_win.ps1' -OutFile $i -UseBasicParsing\n"
+        "Unblock-File -Path $i -ErrorAction SilentlyContinue\n"
+        "& powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$i\""
     ),
 }
 
