@@ -17,8 +17,8 @@ from vaila.vaila_cli_hints import CliRunHint, get_cli_hint
 if TYPE_CHECKING:
     from vaila import Vaila
 
-__version__ = "0.3.110"
-__updated__ = "23 August 2026"
+__version__ = "0.3.113"
+__updated__ = "24 August 2026"
 
 _ROW_RE = re.compile(r"_r(\d+)_")
 _COL_RE = re.compile(r"_c(\d+)$")
@@ -100,7 +100,7 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     VailaMenuEntry("B6_r7_c4", "B", "Multimodal Analysis", "vailá", "show_vaila_message"),
     VailaMenuEntry("B6_r7_c5", "B", "Multimodal Analysis", "vailá", "show_vaila_message"),
     # Frame C_A — Data Files
-    VailaMenuEntry("C_A_r1_c1", "C_A", "Data Files", "Edit CSV", "reorder_csv_data"),
+    VailaMenuEntry("C_A_r1_c1", "C_A", "Data Files", "Edit CSV/C3D", "reorder_csv_data"),
     VailaMenuEntry("C_A_r1_c2", "C_A", "Data Files", "C3D <--> CSV", "convert_c3d_csv"),
     VailaMenuEntry("C_A_r1_c3", "C_A", "Data Files", "Smooth & Filter", "gapfill_split"),
     VailaMenuEntry("C_A_r2_c1", "C_A", "Data Files", "DLT/REC 2D-3D", "dlt_rec_toolkit"),
@@ -149,6 +149,7 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     VailaMenuEntry("C_C_r5_c1", "C_C", "Visualization", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_C_r5_c2", "C_C", "Visualization", "vailá", "show_vaila_message"),
     # Global
+    VailaMenuEntry("GPUTEST", "_", "Global", "GPU Test (CUDA, PyTorch, AI Stack)", "run_gpu_test"),
     VailaMenuEntry("HELP", "_", "Global", "Help", "display_help"),
     VailaMenuEntry("EXIT", "_", "Global", "Exit", "quit_app"),
     VailaMenuEntry(

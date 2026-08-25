@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 19 February 2026
-Version: 0.0.8
+Update Date: 24 August 2026
+Version: 0.3.112
 Python Version: 3.12.13
 
 Description:
@@ -90,6 +90,7 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 ===============================================================================
 """
 
+import contextlib
 import datetime
 import os
 import sys
@@ -107,19 +108,60 @@ from rich import print
 from scipy.interpolate import UnivariateSpline
 from statsmodels.tsa.arima.model import ARIMA
 
-# Import filter_utils - handle both relative and absolute imports
+# Import filter_utils + shared numerical core (GUI/CLI parity)
 try:
     from .filter_utils import butter_filter
+    from .interp_smooth_core import (
+        align_signals_for_comparison,
+        apply_smoothing_1d,
+        compute_derivatives,
+        compute_residual_metrics,
+        estimate_sampling_rate,
+        first_signal_column,
+        is_frame_column_name,
+        is_index_column,
+        is_time_column_name,
+        lowess_smooth,  # noqa: F401 — re-export for callers/tests
+        rebuild_frame_index,
+        recommend_butterworth,
+        resample_dataframe,
+        savgol_smooth,  # noqa: F401 — re-export for callers/tests
+        validate_butterworth_params,
+        validate_time_axis,
+    )
 except ImportError:
     try:
         from filter_utils import butter_filter
+        from interp_smooth_core import (  # ty: ignore[unresolved-import]
+            align_signals_for_comparison,
+            apply_smoothing_1d,
+            compute_derivatives,
+            compute_residual_metrics,
+            estimate_sampling_rate,
+            first_signal_column,
+            is_frame_column_name,
+            is_index_column,
+            is_time_column_name,
+            lowess_smooth,  # noqa: F401
+            rebuild_frame_index,
+            recommend_butterworth,
+            resample_dataframe,
+            savgol_smooth,  # noqa: F401
+            validate_butterworth_params,
+            validate_time_axis,
+        )
     except ImportError:
-        print("Warning: filter_utils not found. Butterworth filtering will be disabled.")
+        print("Warning: filter_utils / interp_smooth_core not found.")
 
         def butter_filter(data, **kwargs):
             print("Butterworth filter not available - filter_utils not found")
             return data
 
+        raise
+
+# Explicit re-exports (GUI/CLI callers and tests import these from this module)
+savgol_smooth = savgol_smooth
+lowess_smooth = lowess_smooth
 
 # =============================================================================
 # ROBUST SPIKE REMOVAL AND NAN HANDLING FUNCTIONS
@@ -566,7 +608,7 @@ def save_smooth_config_toml(config_result, filepath):
     """
     Save the applied configuration to smooth_config.toml so it is the single source of truth.
     config_result: dict with keys padding, interp_method, interp_params, smooth_method,
-                   smooth_params, max_gap, do_split, sample_rate (optional).
+                   smooth_params, max_gap, do_split, sample_rate (optional), resample fields.
     """
     interp = {
         "method": config_result.get("interp_method", "linear"),
@@ -580,12 +622,26 @@ def save_smooth_config_toml(config_result, filepath):
     split = {"enabled": config_result.get("do_split", False)}
     sr = config_result.get("sample_rate")
     time_col = {"sample_rate": float(sr) if sr is not None and sr > 0 else 0.0}
+    resample = {
+        "enabled": bool(config_result.get("resample", False)),
+        "original_rate": float(config_result["original_rate"])
+        if config_result.get("original_rate")
+        else 0.0,
+        "final_rate": float(config_result["final_rate"])
+        if config_result.get("final_rate")
+        else 0.0,
+        "antialias": bool(config_result.get("antialias", True)),
+        "antialias_cutoff": float(config_result["antialias_cutoff"])
+        if config_result.get("antialias_cutoff")
+        else 0.0,
+    }
     data = {
         "interpolation": interp,
         "smoothing": smooth,
         "padding": padding,
         "split": split,
         "time_column": time_col,
+        "resample": resample,
     }
     with open(filepath, "w", encoding="utf-8") as f:
         toml.dump(data, f)
@@ -596,7 +652,7 @@ def load_smooth_config_for_analysis(filepath):
     """
     Load smooth_config.toml and return config in the format expected by
     perform_analysis / process_file (interp_method, smooth_method, smooth_params, padding, max_gap,
-    do_split, sample_rate).
+    do_split, sample_rate, resampling).
     """
     with open(filepath, encoding="utf-8") as f:
         data = toml.load(f)
@@ -605,6 +661,7 @@ def load_smooth_config_for_analysis(filepath):
     padding_pct = data.get("padding", {}).get("percent", 10.0)
     split = data.get("split", {})
     time_col = data.get("time_column", {})
+    resample = data.get("resample", {})
     smooth_params = {k: v for k, v in smoothing.items() if k != "method"}
     sample_rate = time_col.get("sample_rate") or 0.0
     try:
@@ -613,6 +670,14 @@ def load_smooth_config_for_analysis(filepath):
             sample_rate = None
     except (TypeError, ValueError):
         sample_rate = None
+
+    def _pos(val):
+        try:
+            v = float(val)
+            return v if v > 0 else None
+        except (TypeError, ValueError):
+            return None
+
     return {
         "interp_method": interp.get("method", "linear"),
         "interp_params": {k: v for k, v in interp.items() if k not in ["method", "max_gap"]},
@@ -622,6 +687,11 @@ def load_smooth_config_for_analysis(filepath):
         "max_gap": int(interp.get("max_gap", 60)),
         "do_split": bool(split.get("enabled", False)),
         "sample_rate": sample_rate,
+        "resample": bool(resample.get("enabled", False)),
+        "original_rate": _pos(resample.get("original_rate")),
+        "final_rate": _pos(resample.get("final_rate")),
+        "antialias": bool(resample.get("antialias", True)),
+        "antialias_cutoff": _pos(resample.get("antialias_cutoff")),
     }
 
 
@@ -662,6 +732,7 @@ class InterpolationConfigDialog:
         self.lowess_it = tk.StringVar(value="3")
         self.butter_cutoff = tk.StringVar(value="10.0")
         self.butter_fs = tk.StringVar(value="100.0")
+        self.butter_order = tk.StringVar(value="4")
         self.kalman_iterations = tk.StringVar(value="5")
         self.kalman_mode = tk.StringVar(value="1")
         self.spline_smoothing = tk.StringVar(value="1.0")
@@ -888,10 +959,20 @@ class InterpolationConfigDialog:
             anchor="w", pady=(0, 10)
         )
 
-        tk.Label(f5, text="Sampling Freq (fs, Hz):").pack(anchor="w")
+        tk.Label(f5, text="Sampling Freq (fs, Hz / FPS):").pack(anchor="w")
         tk.Entry(f5, textvariable=self.butter_fs).pack(fill="x", pady=(0, 2))
         tk.Label(
             f5, text="Tip: fps of the video or capture freq", fg="gray", font=("Arial", 9)
+        ).pack(anchor="w", pady=(0, 8))
+        tk.Label(f5, text="Filter Order:").pack(anchor="w")
+        tk.Entry(f5, textvariable=self.butter_order).pack(fill="x", pady=(0, 2))
+        tk.Label(
+            f5,
+            text="Require 0 < cutoff < fs/2 (Nyquist). Invalid values are rejected, not clamped.",
+            fg="gray",
+            font=("Arial", 9),
+            wraplength=320,
+            justify="left",
         ).pack(anchor="w")
         self.param_frames["5"] = f5
 
@@ -939,9 +1020,53 @@ class InterpolationConfigDialog:
         )
 
         tk.Label(
-            self.tab_general, text="Sample Rate Override (optional):", font=("Arial", 10, "bold")
+            self.tab_general,
+            text="Time Column Sample Rate Override (Hz / FPS):",
+            font=("Arial", 10, "bold"),
         ).pack(anchor="w", pady=(15, 5))
+        tk.Label(
+            self.tab_general,
+            text=(
+                "Enter the acquisition/video sampling rate only when the Time column "
+                "needs to be recalculated. Leave empty to preserve the original Time values. "
+                "This does not replace Butterworth fs."
+            ),
+            wraplength=360,
+            justify="left",
+            fg="#444",
+        ).pack(anchor="w")
         tk.Entry(self.tab_general, textvariable=self.sample_rate).pack(fill="x", pady=5)
+
+        # Optional final resampling (GUI ↔ CLI parity)
+        self.resample_var = tk.BooleanVar(value=False)
+        self.original_rate_var = tk.StringVar(value="")
+        self.final_rate_var = tk.StringVar(value="")
+        self.antialias_var = tk.BooleanVar(value=True)
+        tk.Label(self.tab_general, text="Resample Final Data:", font=("Arial", 10, "bold")).pack(
+            anchor="w", pady=(15, 5)
+        )
+        tk.Checkbutton(
+            self.tab_general, text="Enable final resampling", variable=self.resample_var
+        ).pack(anchor="w")
+        tk.Label(self.tab_general, text="Original Sampling Rate (Hz / FPS):").pack(anchor="w")
+        tk.Entry(self.tab_general, textvariable=self.original_rate_var).pack(fill="x", pady=2)
+        tk.Label(self.tab_general, text="Final Sampling Rate (Hz / FPS):").pack(anchor="w")
+        tk.Entry(self.tab_general, textvariable=self.final_rate_var).pack(fill="x", pady=2)
+        tk.Checkbutton(
+            self.tab_general,
+            text="Anti-alias before downsample (explicit Butterworth)",
+            variable=self.antialias_var,
+        ).pack(anchor="w", pady=2)
+        tk.Label(
+            self.tab_general,
+            text=(
+                "Hz = samples/s; FPS = frames/s. Both describe sampling rate for this tool. "
+                "Upsampling does not create new measured information."
+            ),
+            wraplength=360,
+            justify="left",
+            fg="#444",
+        ).pack(anchor="w", pady=(4, 0))
 
     def build_analysis_panel(self):
         self.analysis_top = tk.Frame(self.analysis_panel)
@@ -984,11 +1109,15 @@ class InterpolationConfigDialog:
                     messagebox.showerror("Error", "No numeric columns found.")
                     return
 
+                # Prefer a signal column over Time / frame index
+                signal_cols = [c for c in numeric_cols if not is_index_column(str(c))]
+                initial_col = signal_cols[0] if signal_cols else numeric_cols[0]
+
                 if self.col_combo:
                     for widget in self.col_frame.winfo_children():
                         widget.destroy()
 
-                self.test_col_var = tk.StringVar(value=numeric_cols[0])
+                self.test_col_var = tk.StringVar(value=initial_col)
                 self.col_combo = ttk.Combobox(
                     self.col_frame,
                     values=numeric_cols,
@@ -1012,9 +1141,122 @@ class InterpolationConfigDialog:
                     fg="blue",
                 ).pack(side="left", padx=5)
 
-                self.run_analysis(numeric_cols[0])
+                self._maybe_recommend_butterworth(initial_col)
+                self._setup_preview_traces()
+                self.run_analysis(initial_col)
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load: {e}")
+
+    def _maybe_recommend_butterworth(self, column_name: str) -> None:
+        """Data-driven Butterworth recommendation on CSV load (GUI only)."""
+        if self.test_data is None:
+            return
+        first = self.test_data.columns[0]
+        time_vals = self.test_data[first] if is_time_column_name(first) else None
+        info = validate_time_axis(time_vals) if time_vals is not None else None
+        rate, source, warns = estimate_sampling_rate(
+            time_vals,
+            configured_rate=float(self.butter_fs.get()) if self.butter_fs.get().strip() else None,
+        )
+        if rate is None or rate <= 0:
+            self.recommend_label = getattr(self, "recommend_label", None)
+            if self.recommend_label is None:
+                self.recommend_label = tk.Label(
+                    self.analysis_top, text="", fg="#333", justify="left", wraplength=520
+                )
+                self.recommend_label.pack(side="bottom", anchor="w", pady=4)
+            self.recommend_label.configure(
+                text="Recommended configuration: unavailable (no usable sampling rate)."
+            )
+            return
+        series = self.test_data[column_name].to_numpy(dtype=float)
+        try:
+            rec = recommend_butterworth(series, fs=float(rate))
+        except Exception as e:
+            print(f"Recommendation failed: {e}")
+            return
+        self.butter_fs.set(str(rec["fs"]))
+        self.butter_cutoff.set(f"{rec['recommended_cutoff']:.3f}")
+        self.butter_order.set(str(rec["filter_order"]))
+        # Switch combo to Butterworth for preview
+        self.smooth_combo.set("Butterworth")
+        self.on_smooth_change()
+        metrics = compute_residual_metrics(
+            series,
+            apply_smoothing_1d(
+                pd.Series(series).interpolate(method="linear", limit_direction="both").to_numpy(),
+                "butterworth",
+                {
+                    "fs": rec["fs"],
+                    "cutoff": rec["recommended_cutoff"],
+                    "order": rec["filter_order"],
+                },
+            ),
+        )
+        status = info.status if info else "none"
+        text = (
+            f"Recommended configuration (residual-RMS heuristic, not unique optimum)\n"
+            f"Selected column: {column_name}\n"
+            f"Effective sampling rate: {rate:.4g} Hz / FPS ({source}; Time={status})\n"
+            f"Recommended filter: Butterworth order {rec['filter_order']}\n"
+            f"Recommended cutoff: {rec['recommended_cutoff']:.3f} Hz\n"
+            f"Residual RMS: {metrics['rms']:.4g} | Nyquist: {rec['nyquist']:.4g} Hz"
+        )
+        if warns or rec.get("warnings"):
+            text += "\nWarnings: " + " | ".join([*warns, *rec.get("warnings", [])])
+        if not hasattr(self, "recommend_label") or self.recommend_label is None:
+            self.recommend_label = tk.Label(
+                self.analysis_top, text="", fg="#333", justify="left", wraplength=520
+            )
+            self.recommend_label.pack(side="bottom", anchor="w", pady=4)
+        self.recommend_label.configure(text=text)
+
+    def _setup_preview_traces(self) -> None:
+        """Auto-refresh analysis preview when method/params change (debounced)."""
+        if getattr(self, "_preview_traces_ready", False):
+            return
+        self._preview_after_id = None
+
+        def _schedule(*_args):
+            if self.test_data is None or not hasattr(self, "test_col_var"):
+                return
+            if self._preview_after_id is not None:
+                with contextlib.suppress(Exception):
+                    self.window.after_cancel(self._preview_after_id)
+            self._preview_after_id = self.window.after(250, self._debounced_preview)
+
+        for var in [
+            self.smooth_method_var,
+            self.savgol_window,
+            self.savgol_poly,
+            self.lowess_frac,
+            self.lowess_it,
+            self.butter_cutoff,
+            self.butter_fs,
+            self.butter_order,
+            self.kalman_iterations,
+            self.kalman_mode,
+            self.spline_smoothing,
+            self.arima_p,
+            self.arima_d,
+            self.arima_q,
+            self.median_kernel,
+            self.hampel_window,
+            self.hampel_sigma,
+        ]:
+            with contextlib.suppress(Exception):
+                var.trace_add("write", _schedule)
+        self._preview_traces_ready = True
+
+    def _debounced_preview(self) -> None:
+        self._preview_after_id = None
+        if self.test_data is None or not hasattr(self, "test_col_var"):
+            return
+        try:
+            self.run_analysis(self.test_col_var.get())
+        except Exception as e:
+            # Incomplete typed values while editing fields are expected
+            print(f"Preview refresh skipped: {e}")
 
     def get_current_analysis_config(self):
         return self.get_config()
@@ -1041,8 +1283,24 @@ class InterpolationConfigDialog:
 
         processed_data, padded_data = self.process_column_for_analysis(original_data, config)
 
-        first_derivative = np.gradient(processed_data)
-        second_derivative = np.gradient(first_derivative)
+        time_for_deriv = None
+        fs_for_deriv = None
+        first_col = self.test_data.columns[0]
+        if is_time_column_name(first_col):
+            time_for_deriv = np.asarray(self.test_data[first_col].values, dtype=float)
+        sr = config.get("sample_rate")
+        if sr is not None and float(sr) > 0:
+            fs_for_deriv = float(sr)
+        elif config.get("smooth_method") == "butterworth":
+            try:
+                fs_for_deriv = float(config["smooth_params"].get("fs", 0)) or None
+            except (TypeError, ValueError, AttributeError):
+                fs_for_deriv = None
+        deriv = compute_derivatives(processed_data, time=time_for_deriv, fs=fs_for_deriv)
+        first_derivative = deriv.first
+        second_derivative = deriv.second
+        self._last_derivative_mode = deriv.mode
+        self._last_derivative_warnings = list(deriv.warnings)
 
         valid_mask = ~np.isnan(original_data)
         residuals = np.full_like(original_data, np.nan)
@@ -1107,11 +1365,20 @@ class InterpolationConfigDialog:
 
         ax3 = fig.add_subplot(3, 2, 3)
         ax3.plot(frame_numbers, first_derivative, "-", linewidth=1.5, color="magenta", alpha=0.7)
-        ax3.set_title("First Derivative (Velocity)", fontweight="bold")
+        if getattr(self, "_last_derivative_mode", "per_sample") == "per_sample":
+            ax3.set_title("First Derivative (per sample)", fontweight="bold")
+        else:
+            ax3.set_title(f"First Derivative ({deriv.units_first})", fontweight="bold")
 
         ax4 = fig.add_subplot(3, 2, 4)
         ax4.plot(frame_numbers, second_derivative, "-", linewidth=1.5, color="cyan", alpha=0.7)
-        ax4.set_title("Second Derivative (Acceleration)", fontweight="bold")
+        if getattr(self, "_last_derivative_mode", "per_sample") == "per_sample":
+            ax4.set_title("Second Derivative (per sample²)", fontweight="bold")
+        else:
+            ax4.set_title(f"Second Derivative ({deriv.units_second})", fontweight="bold")
+
+        if getattr(self, "_last_derivative_warnings", None):
+            fig.suptitle(" | ".join(self._last_derivative_warnings), fontsize=8, color="#844")
 
         fig.tight_layout()
         canvas = FigureCanvasTkAgg(fig, master=self.plot_frame)
@@ -1119,11 +1386,19 @@ class InterpolationConfigDialog:
         canvas.get_tk_widget().pack(fill="both", expand=True)
 
     def validate(self):
+        from tkinter import messagebox
+
         try:
+            if int(self.smooth_method_var.get()) == 5:
+                fs = float(self.butter_fs.get())
+                cutoff = float(self.butter_cutoff.get())
+                order = int(self.butter_order.get())
+                errors = validate_butterworth_params(fs, cutoff, order)
+                if errors:
+                    messagebox.showerror("Invalid Butterworth parameters", "\n".join(errors))
+                    return False
             return True
         except ValueError as e:
-            from tkinter import messagebox
-
             messagebox.showerror("Error", f"Invalid input: {e}")
             return False
 
@@ -1161,6 +1436,7 @@ class InterpolationConfigDialog:
             smooth_params = {
                 "cutoff": float(self.butter_cutoff.get()),
                 "fs": float(self.butter_fs.get()),
+                "order": int(self.butter_order.get()),
             }
         elif smooth_method == 6:
             smooth_params = {"smoothing_factor": float(self.spline_smoothing.get())}
@@ -1183,6 +1459,12 @@ class InterpolationConfigDialog:
         sr_val = self.sample_rate.get().strip()
         sr = float(sr_val) if sr_val else None
 
+        def _optional_float(var):
+            raw = var.get().strip() if hasattr(var, "get") else ""
+            if not raw:
+                return None
+            return float(raw)
+
         return {
             "padding": float(self.padding_var.get()),
             "interp_method": interp_map[interp_method],
@@ -1192,6 +1474,15 @@ class InterpolationConfigDialog:
             "max_gap": int(self.max_gap_var.get()),
             "do_split": self.split_var.get(),
             "sample_rate": sr,
+            "resample": bool(self.resample_var.get()) if hasattr(self, "resample_var") else False,
+            "original_rate": _optional_float(self.original_rate_var)
+            if hasattr(self, "original_rate_var")
+            else None,
+            "final_rate": _optional_float(self.final_rate_var)
+            if hasattr(self, "final_rate_var")
+            else None,
+            "antialias": bool(self.antialias_var.get()) if hasattr(self, "antialias_var") else True,
+            "antialias_cutoff": None,
         }
 
     def ok(self):
@@ -1267,6 +1558,7 @@ class InterpolationConfigDialog:
         if smoothing.get("method") == "butterworth":
             self.butter_cutoff.set(str(smoothing.get("cutoff", 10.0)))
             self.butter_fs.set(str(smoothing.get("fs", 100.0)))
+            self.butter_order.set(str(smoothing.get("order", 4)))
         elif smoothing.get("method") == "savgol":
             self.savgol_window.set(str(smoothing.get("window_length", 7)))
             self.savgol_poly.set(str(smoothing.get("polyorder", 3)))
@@ -1277,6 +1569,15 @@ class InterpolationConfigDialog:
         sr = config.get("time_column", {}).get("sample_rate", 0.0)
         if sr > 0:
             self.sample_rate.set(str(sr))
+
+        resample = config.get("resample", {})
+        if hasattr(self, "resample_var"):
+            self.resample_var.set(bool(resample.get("enabled", False)))
+            orig = resample.get("original_rate", 0.0) or 0.0
+            final = resample.get("final_rate", 0.0) or 0.0
+            self.original_rate_var.set(str(orig) if orig else "")
+            self.final_rate_var.set(str(final) if final else "")
+            self.antialias_var.set(bool(resample.get("antialias", True)))
 
     def load_toml_config(self):
         import os
@@ -1325,48 +1626,28 @@ class InterpolationConfigDialog:
 
         if config["smooth_method"] != "none":
             try:
-                if config["smooth_method"] == "savgol":
-                    padded_data = savgol_smooth(
-                        padded_data,
-                        config["smooth_params"]["window_length"],
-                        config["smooth_params"]["polyorder"],
+                helpers = {
+                    "kalman_smooth": kalman_smooth,
+                    "spline_smooth": spline_smooth,
+                    "arima_smooth": arima_smooth,
+                    "median_filter_smooth": median_filter_smooth,
+                    "hampel_filter": hampel_filter,
+                }
+                if config["smooth_method"] == "butterworth":
+                    params = config["smooth_params"]
+                    errors = validate_butterworth_params(
+                        float(params["fs"]),
+                        float(params["cutoff"]),
+                        int(params.get("order", 4)),
                     )
-                elif config["smooth_method"] == "lowess":
-                    padded_data = lowess_smooth(
-                        padded_data, config["smooth_params"]["frac"], config["smooth_params"]["it"]
-                    )
-                elif config["smooth_method"] == "kalman":
-                    padded_data = kalman_smooth(
-                        padded_data,
-                        config["smooth_params"]["n_iter"],
-                        config["smooth_params"]["mode"],
-                    ).flatten()
-                elif config["smooth_method"] == "butterworth":
-                    if not np.isnan(padded_data).all():
-                        padded_data = butter_filter(
-                            padded_data,
-                            fs=config["smooth_params"]["fs"],
-                            filter_type="low",
-                            cutoff=config["smooth_params"]["cutoff"],
-                            order=4,
-                        )
-                elif config["smooth_method"] == "splines":
-                    padded_data = spline_smooth(
-                        padded_data, s=config["smooth_params"]["smoothing_factor"]
-                    )
-                elif config["smooth_method"] == "arima":
-                    padded_data = arima_smooth(
-                        padded_data,
-                        order=(
-                            config["smooth_params"]["p"],
-                            config["smooth_params"]["d"],
-                            config["smooth_params"]["q"],
-                        ),
-                    )
-                elif config["smooth_method"] == "median":
-                    padded_data = median_filter_smooth(
-                        padded_data, kernel_size=config["smooth_params"].get("kernel_size", 5)
-                    )
+                    if errors:
+                        raise ValueError("; ".join(errors))
+                padded_data = apply_smoothing_1d(
+                    padded_data,
+                    config["smooth_method"],
+                    config.get("smooth_params") or {},
+                    helpers=helpers,
+                )
             except Exception as e:
                 print(f"Error in smoothing: {str(e)}")
 
@@ -1385,54 +1666,19 @@ class InterpolationConfigDialog:
             padded_residuals = (
                 np.pad(residuals, pad_len, mode="edge") if pad_len > 0 else residuals.copy()
             )
-
-            if config["smooth_method"] == "savgol":
-                filtered_residuals = savgol_smooth(
-                    padded_residuals,
-                    config["smooth_params"]["window_length"],
-                    config["smooth_params"]["polyorder"],
-                )
-            elif config["smooth_method"] == "lowess":
-                filtered_residuals = lowess_smooth(
-                    padded_residuals, config["smooth_params"]["frac"], config["smooth_params"]["it"]
-                )
-            elif config["smooth_method"] == "kalman":
-                filtered_residuals = kalman_smooth(
-                    padded_residuals,
-                    config["smooth_params"]["n_iter"],
-                    config["smooth_params"]["mode"],
-                ).flatten()
-            elif config["smooth_method"] == "butterworth":
-                if not np.isnan(padded_residuals).all():
-                    filtered_residuals = butter_filter(
-                        padded_residuals,
-                        fs=config["smooth_params"]["fs"],
-                        filter_type="low",
-                        cutoff=config["smooth_params"]["cutoff"],
-                        order=4,
-                    )
-                else:
-                    filtered_residuals = padded_residuals
-            elif config["smooth_method"] == "splines":
-                filtered_residuals = spline_smooth(
-                    padded_residuals, s=config["smooth_params"]["smoothing_factor"]
-                )
-            elif config["smooth_method"] == "arima":
-                filtered_residuals = arima_smooth(
-                    padded_residuals,
-                    order=(
-                        config["smooth_params"]["p"],
-                        config["smooth_params"]["d"],
-                        config["smooth_params"]["q"],
-                    ),
-                )
-            elif config["smooth_method"] == "median":
-                filtered_residuals = median_filter_smooth(
-                    padded_residuals, kernel_size=config["smooth_params"]["kernel_size"]
-                )
-            else:
-                filtered_residuals = padded_residuals
-
+            helpers = {
+                "kalman_smooth": kalman_smooth,
+                "spline_smooth": spline_smooth,
+                "arima_smooth": arima_smooth,
+                "median_filter_smooth": median_filter_smooth,
+                "hampel_filter": hampel_filter,
+            }
+            filtered_residuals = apply_smoothing_1d(
+                padded_residuals,
+                config["smooth_method"],
+                config.get("smooth_params") or {},
+                helpers=helpers,
+            )
             if pad_len > 0:
                 filtered_residuals = filtered_residuals[pad_len:-pad_len]
             return filtered_residuals
@@ -1837,7 +2083,9 @@ def process_file(file_path, dest_dir, config):
 
         # Detect if first column is Time
         first_col = df.columns[0]
-        is_time_column = first_col.lower() in ["time", "t", "tempo"]
+        original_columns = list(df.columns)
+        original_had_time = is_time_column_name(first_col)
+        is_time_column = original_had_time
 
         # Get sample rate from config
         sample_rate = config.get("sample_rate")
@@ -1879,7 +2127,16 @@ def process_file(file_path, dest_dir, config):
             print(f"First column '{first_col}' treated as frame numbers")
             # Try to preserve as integers if possible, otherwise use as-is
             try:
-                df[first_col] = df[first_col].astype(int)
+                frame_vals = pd.to_numeric(df[first_col], errors="coerce")
+                if frame_vals.isna().any():
+                    raise ValueError("non-numeric frame values")
+                # Safe integer frames only when values are whole numbers
+                if np.allclose(
+                    frame_vals.to_numpy(dtype=float), np.round(frame_vals.to_numpy(dtype=float))
+                ):
+                    df[first_col] = frame_vals.round().astype(np.int64)
+                else:
+                    raise ValueError("non-integer frame values")
                 min_frame = int(df[first_col].min())
                 max_frame = int(df[first_col].max())
                 print(f"Frame range: {min_frame} to {max_frame}")
@@ -1918,45 +2175,22 @@ def process_file(file_path, dest_dir, config):
             print(f"Applying padding of {pad_len} frames")
 
             if is_time_column:
-                # For time column, calculate time values for padding
+                first_time = float(df[first_col].iloc[0])
+                last_time = float(df[first_col].iloc[-1])
                 if sample_rate is not None and sample_rate > 0:
-                    # Calculate time before and after
-                    first_time = df[first_col].iloc[0]
-                    last_time = df[first_col].iloc[-1]
                     time_step = 1.0 / sample_rate
-
-                    # Create time values for padding
-                    pad_before_times = np.arange(
-                        first_time - pad_len * time_step, first_time, time_step
-                    )
-                    pad_after_times = np.arange(
-                        last_time + time_step,
-                        last_time + (pad_len + 1) * time_step,
-                        time_step,
-                    )
-
-                    pad_before = pd.DataFrame({first_col: pad_before_times})
-                    pad_after = pd.DataFrame({first_col: pad_after_times})
+                elif len(df) > 1:
+                    time_step = float(df[first_col].iloc[1] - df[first_col].iloc[0])
                 else:
-                    # Use original time values pattern
-                    first_time = df[first_col].iloc[0]
-                    last_time = df[first_col].iloc[-1]
-                    if len(df) > 1:
-                        time_step = df[first_col].iloc[1] - df[first_col].iloc[0]
-                    else:
-                        time_step = 0.001  # Default fallback
+                    time_step = 0.001  # Default fallback
 
-                    pad_before_times = np.arange(
-                        first_time - pad_len * time_step, first_time, time_step
-                    )
-                    pad_after_times = np.arange(
-                        last_time + time_step,
-                        last_time + (pad_len + 1) * time_step,
-                        time_step,
-                    )
+                # Exact element counts: np.arange with a float step can overshoot by one
+                offsets = np.arange(1, pad_len + 1, dtype=float)
+                pad_before_times = first_time - offsets[::-1] * time_step
+                pad_after_times = last_time + offsets * time_step
 
-                    pad_before = pd.DataFrame({first_col: pad_before_times})
-                    pad_after = pd.DataFrame({first_col: pad_after_times})
+                pad_before = pd.DataFrame({first_col: pad_before_times})
+                pad_after = pd.DataFrame({first_col: pad_after_times})
             else:
                 # For frame numbers
                 pad_before = pd.DataFrame({first_col: range(min_frame - pad_len, min_frame)})
@@ -1974,8 +2208,13 @@ def process_file(file_path, dest_dir, config):
             df = pd.concat([pad_before, df, pad_after]).reset_index(drop=True)
             print(f"Shape after padding: {df.shape}")
 
-        # Process numeric columns
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.drop(first_col)
+        # Process numeric signal columns only; Time/frame indices are never smoothed
+        skip_cols = {first_col, "_internal_index"}
+        numeric_cols = [
+            c
+            for c in df.select_dtypes(include=[np.number]).columns
+            if c not in skip_cols and not is_index_column(str(c))
+        ]
         print(f"Processing {len(numeric_cols)} numeric columns")
 
         # STEP 1: Apply interpolation to each column
@@ -2156,96 +2395,35 @@ def process_file(file_path, dest_dir, config):
                     else:
                         data_for_smoothing = data
 
-                    # Apply the selected smoothing method
-                    smoothed_result = None
-
-                    if config["smooth_method"] == "savgol":
-                        params = config["smooth_params"]
-                        smoothed_result = savgol_smooth(
-                            data_for_smoothing, params["window_length"], params["polyorder"]
-                        )
-                        print(
-                            f"Applied Savitzky-Golay filter with window={params['window_length']}, order={params['polyorder']}"
-                        )
-
-                    elif config["smooth_method"] == "lowess":
-                        params = config["smooth_params"]
-                        smoothed_result = lowess_smooth(
-                            data_for_smoothing, params["frac"], params["it"]
-                        )
-                        print(
-                            f"Applied LOWESS smoothing with fraction={params['frac']}, iterations={params['it']}"
-                        )
-
-                    elif config["smooth_method"] == "kalman":
-                        params = config["smooth_params"]
-                        smoothed_result = kalman_smooth(
-                            data_for_smoothing, params["n_iter"], params["mode"]
-                        )
-                        print(
-                            f"Applied Kalman filter with {params['n_iter']} iterations in {params['mode']} mode"
-                        )
-
-                    elif config["smooth_method"] == "butterworth":
-                        params = config["smooth_params"]
-                        try:
-                            fs = float(params["fs"])
-                            cutoff = float(params["cutoff"])
-
-                            # Ensure cutoff frequency is valid
-                            if cutoff >= fs / 2:
-                                cutoff = fs / 2 - 1
-                                print(f"Warning: Adjusted cutoff frequency to {cutoff} Hz")
-
-                            # Use butter_filter from filter_utils.py
-                            smoothed_result = butter_filter(
-                                data_for_smoothing,
-                                fs=fs,
-                                filter_type="low",
-                                cutoff=cutoff,
-                                order=4,
-                                padding=True,
+                    # Apply the selected smoothing method via shared core
+                    helpers = {
+                        "kalman_smooth": kalman_smooth,
+                        "spline_smooth": spline_smooth,
+                        "arima_smooth": arima_smooth,
+                        "median_filter_smooth": median_filter_smooth,
+                        "hampel_filter": hampel_filter,
+                    }
+                    try:
+                        if config["smooth_method"] == "butterworth":
+                            params = config["smooth_params"]
+                            errors = validate_butterworth_params(
+                                float(params["fs"]),
+                                float(params["cutoff"]),
+                                int(params.get("order", 4)),
                             )
-                            print(f"Applied Butterworth filter with cutoff={cutoff} Hz, fs={fs} Hz")
-
-                        except Exception as e:
-                            print(f"Error filtering column {col}: {str(e)}")
-                            print("Keeping original data for this column")
-                            smoothed_result = data_for_smoothing
-
-                    elif config["smooth_method"] == "splines":
-                        params = config["smooth_params"]
-                        smoothed_result = spline_smooth(
-                            data_for_smoothing, s=float(params["smoothing_factor"])
+                            if errors:
+                                raise ValueError("; ".join(errors))
+                        smoothed_result = apply_smoothing_1d(
+                            data_for_smoothing,
+                            config["smooth_method"],
+                            config.get("smooth_params") or {},
+                            helpers=helpers,
                         )
-                        print(
-                            f"Applied Spline smoothing with smoothing factor={params['smoothing_factor']}"
-                        )
-
-                    elif config["smooth_method"] == "arima":
-                        params = config["smooth_params"]
-                        order = (int(params["p"]), int(params["d"]), int(params["q"]))
-                        smoothed_result = arima_smooth(data_for_smoothing, order=order)
-                        print(f"Applied ARIMA filter with order={order}")
-
-                    elif config["smooth_method"] == "median":
-                        params = config["smooth_params"]
-                        kernel_size = int(params.get("kernel_size", 5))
-                        smoothed_result = median_filter_smooth(
-                            data_for_smoothing, kernel_size=kernel_size
-                        )
-                        print(f"Applied Moving Median filter with kernel_size={kernel_size}")
-
-                    elif config["smooth_method"] == "hampel":
-                        params = config["smooth_params"]
-                        window_size = int(params.get("window_size", 7))
-                        n_sigmas = float(params.get("n_sigmas", 3))
-                        smoothed_result = hampel_filter(
-                            data_for_smoothing, window_size=window_size, n_sigmas=n_sigmas
-                        )
-                        print(
-                            f"Applied Hampel filter with window_size={window_size}, n_sigmas={n_sigmas}"
-                        )
+                        print(f"Applied {config['smooth_method']} smoothing")
+                    except Exception as e:
+                        print(f"Error filtering column {col}: {str(e)}")
+                        print("Keeping original data for this column")
+                        smoothed_result = data_for_smoothing
 
                     # Apply the smoothed result
                     if smoothed_result is not None:
@@ -2315,13 +2493,98 @@ def process_file(file_path, dest_dir, config):
         if "_internal_index" in df.columns:
             df = df.drop(columns=["_internal_index"])
 
+        # Optional final resampling (after interp + smooth)
+        if config.get("resample"):
+            orig_rate = config.get("original_rate")
+            final_rate = config.get("final_rate")
+            if not orig_rate or not final_rate:
+                # Infer original from Time / sample_rate when possible
+                if is_time_column and sample_rate:
+                    orig_rate = float(sample_rate)
+                elif is_time_column:
+                    rate, source, warns = estimate_sampling_rate(df[first_col])
+                    for w in warns:
+                        file_info["warnings"].append(w)
+                    orig_rate = rate
+                    print(f"Detected/Configured Original Rate: {orig_rate} Hz / FPS ({source})")
+            if not orig_rate or not final_rate:
+                msg = (
+                    "Resampling requested but original_rate/final_rate missing; "
+                    "set both explicitly or provide a usable Time column + final_rate."
+                )
+                print(msg)
+                file_info["warnings"].append(msg)
+            else:
+                internal_time_col = "_vaila_resample_time"
+                if original_had_time:
+                    time_axis = np.asarray(df[first_col], dtype=float)
+                else:
+                    time_axis = np.arange(len(df), dtype=float) / float(orig_rate)
+
+                index_cols = [c for c in df.columns if is_index_column(c)]
+                signal_cols = [
+                    c for c in df.select_dtypes(include=[np.number]).columns if c not in index_cols
+                ]
+
+                work = pd.DataFrame({internal_time_col: time_axis})
+                for col in signal_cols:
+                    work[col] = df[col].to_numpy()
+                for col in df.columns:
+                    if col not in index_cols and col not in signal_cols:
+                        work[col] = df[col].to_numpy()
+
+                # Warn if butterworth cutoff violates final Nyquist
+                if config.get("smooth_method") == "butterworth":
+                    cutoff = float(config.get("smooth_params", {}).get("cutoff", 0))
+                    if cutoff >= float(final_rate) / 2.0:
+                        warn = (
+                            f"Smoothing cutoff ({cutoff} Hz) >= final Nyquist "
+                            f"({float(final_rate) / 2.0} Hz); aliasing risk after downsample."
+                        )
+                        print(warn)
+                        file_info["warnings"].append(warn)
+
+                resampled, rs_warns = resample_dataframe(
+                    work,
+                    time_col=internal_time_col,
+                    original_rate=float(orig_rate),
+                    final_rate=float(final_rate),
+                    numeric_cols=signal_cols,
+                    antialias=bool(config.get("antialias", True)),
+                    antialias_cutoff=config.get("antialias_cutoff"),
+                )
+                for w in rs_warns:
+                    print(w)
+                    file_info["warnings"].append(w)
+
+                n_out = len(resampled)
+                resampled_time = resampled[internal_time_col].to_numpy()
+                out_data: dict[str, np.ndarray | pd.Series] = {}
+                for col in original_columns:
+                    if is_time_column_name(col):
+                        if original_had_time:
+                            out_data[col] = resampled_time
+                    elif is_frame_column_name(col):
+                        out_data[col] = rebuild_frame_index(n_out)
+                    elif col in resampled.columns:
+                        out_data[col] = resampled[col].to_numpy()
+
+                df = pd.DataFrame(out_data)[original_columns]
+                first_col = original_columns[0]
+                is_time_column = original_had_time
+
+                print(
+                    f"Resampled: {orig_rate} → {final_rate} Hz / FPS "
+                    f"({file_info['original_size']} → {len(df)} samples)"
+                )
+
         # Detect float format from original file
         float_format = detect_float_format(file_info["original_path"])
         print(f"Using float format: {float_format}")
 
         # For time column, ensure proper precision
         time_precision = None
-        if is_time_column:
+        if original_had_time:
             if sample_rate is not None and sample_rate > 0:
                 # Use precision based on sample rate (same logic as readc3d_export.py)
                 try:
@@ -2349,10 +2612,7 @@ def process_file(file_path, dest_dir, config):
                     # Check decimal places in original time values
                     sample_time = float(original_first_col.iloc[1])
                     time_str = f"{sample_time:.10f}".rstrip("0").rstrip(".")
-                    if "." in time_str:
-                        time_precision = len(time_str.split(".")[1])
-                    else:
-                        time_precision = 3  # Default
+                    time_precision = len(time_str.split(".")[1]) if "." in time_str else 3
                     print(
                         f"Detected time precision from original file: {time_precision} decimal places"
                     )
@@ -2361,7 +2621,7 @@ def process_file(file_path, dest_dir, config):
         print(f"\nSaving processed file to: {output_path}")
 
         # If time column has specific precision, format it separately
-        if is_time_column and time_precision is not None:
+        if original_had_time and time_precision is not None:
             # Create a copy for saving
             df_to_save = df.copy()
             # Format time column with specific precision
@@ -2546,26 +2806,46 @@ def generate_report(dest_dir, config, processed_files):
                     original_df = pd.read_csv(file_info["original_path"])
                     processed_df = pd.read_csv(file_info["output_path"])
 
-                    # Find first numeric column (excluding the first column which is usually frame number)
-                    numeric_cols = original_df.select_dtypes(include=[np.number]).columns
-                    if len(numeric_cols) > 1:  # Skip first column if it's numeric
-                        first_numeric_col = numeric_cols[1]
-                    else:
-                        first_numeric_col = numeric_cols[0]
+                    first_numeric_col = first_signal_column(original_df)
+                    if first_numeric_col is None or first_numeric_col not in processed_df.columns:
+                        f.write(f"File {idx}: {file_info['original_filename']}\n")
+                        f.write("Error during verification: no comparable signal column found\n")
+                        f.write("-" * 40 + "\n\n")
+                        continue
 
-                    # Get first 10 values from both files
-                    original_values = original_df[first_numeric_col].head(10).values
-                    processed_values = processed_df[first_numeric_col].head(10).values
+                    all_original = np.asarray(original_df[first_numeric_col].values, dtype=float)
+                    all_processed = np.asarray(processed_df[first_numeric_col].values, dtype=float)
 
-                    # Calculate percentage differences for first 10 values
-                    differences = np.abs(
-                        (np.array(processed_values) - np.array(original_values))
-                        / np.array(original_values)
-                        * 100
+                    orig_rate = (
+                        float(config["original_rate"])
+                        if config.get("resample") and config.get("original_rate")
+                        else None
                     )
+                    final_rate = (
+                        float(config["final_rate"])
+                        if config.get("resample") and config.get("final_rate")
+                        else None
+                    )
+                    orig_aligned, proc_aligned, align_note = align_signals_for_comparison(
+                        all_original,
+                        all_processed,
+                        original_rate=orig_rate,
+                        final_rate=final_rate,
+                    )
+
+                    n_head = min(10, len(orig_aligned))
+                    original_values = orig_aligned[:n_head]
+                    processed_values = proc_aligned[:n_head]
+
+                    # Calculate percentage differences for first N aligned values
+                    denom_head = np.where(np.abs(original_values) > 1e-12, original_values, np.nan)
+                    differences = np.abs((processed_values - original_values) / denom_head * 100)
+                    differences = np.where(np.isfinite(differences), differences, 0.0)
 
                     f.write(f"File {idx}: {file_info['original_filename']}\n")
                     f.write(f"Column: {first_numeric_col}\n")
+                    if align_note != "same_length":
+                        f.write(f"Alignment: {align_note}\n")
                     f.write(
                         "Original Values: "
                         + ", ".join([f"{x:.6f}" for x in original_values])
@@ -2581,23 +2861,18 @@ def generate_report(dest_dir, config, processed_files):
                         + ", ".join([f"{x:.2f}%" for x in differences])
                         + "\n"
                     )
-                    f.write(f"Average Difference (first 10): {np.mean(differences):.2f}%\n")
+                    f.write(f"Average Difference (first {n_head}): {np.mean(differences):.2f}%\n")
                     f.write("-" * 40 + "\n")
 
-                    # Complete column comparison
+                    # Complete column comparison (aligned length)
                     f.write("\nComplete Column Analysis:\n")
                     f.write("-" * 40 + "\n")
 
-                    # Get all values from both columns
-                    all_original = original_df[first_numeric_col].values
-                    all_processed = processed_df[first_numeric_col].values
-
-                    # Calculate differences for all values
-                    all_differences = np.abs(
-                        (np.array(all_processed) - np.array(all_original))
-                        / np.array(all_original)
-                        * 100
-                    )
+                    denom = np.where(np.abs(orig_aligned) > 1e-12, orig_aligned, np.nan)
+                    all_differences = np.abs((proc_aligned - orig_aligned) / denom * 100)
+                    all_differences = all_differences[np.isfinite(all_differences)]
+                    if all_differences.size == 0:
+                        all_differences = np.array([0.0])
 
                     # Calculate statistics
                     mean_diff = np.mean(all_differences)
@@ -2682,16 +2957,25 @@ def run_fill_split_dialog(parent=None):
         config_dialog.window.wait_window()
 
     config = None
+    dialog_canceled = False
     if hasattr(config_dialog, "result") and config_dialog.result is not None:
         config = config_dialog.result
     else:
+        dialog_canceled = True
         # No result from dialog: try smooth_config.toml in cwd so batch can use last saved config
         path_cwd = os.path.join(os.getcwd(), SMOOTH_CONFIG_FILENAME)
         if os.path.isfile(path_cwd):
             config = load_smooth_config_for_analysis(path_cwd)
             print(f"Using config from {path_cwd}")
+            dialog_canceled = False
     if config is None:
-        print("Operation canceled by user (no config and no smooth_config.toml).")
+        if dialog_canceled:
+            print("Operation canceled by user.")
+        else:
+            print(
+                "Missing configuration: no dialog result and no smooth_config.toml "
+                "in the current directory. Save a template from the GUI or pass -c/--config."
+            )
         print("================================================")
         return
 
@@ -2796,40 +3080,103 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
     return dest_dir, processed_files, report_path
 
 
+def _merge_cli_over_config(base: dict | None, args) -> dict:
+    """CLI args override TOML; documented defaults fill the rest.
+
+    Precedence: explicit CLI argument > explicit TOML value > documented default.
+    """
+    try:
+        from .interp_smooth_core import default_processing_config
+    except ImportError:
+        from interp_smooth_core import default_processing_config  # ty: ignore[unresolved-import]
+
+    cfg = dict(default_processing_config())
+    if base:
+        cfg.update({k: v for k, v in base.items() if v is not None})
+
+    def _set_if(flag_name, key, transform=lambda x: x):
+        val = getattr(args, flag_name, None)
+        if val is not None:
+            cfg[key] = transform(val)
+
+    _set_if("interp_method", "interp_method", str)
+    _set_if("max_gap", "max_gap", int)
+    _set_if("smooth_method", "smooth_method", str)
+    _set_if("padding", "padding", float)
+    if getattr(args, "split", None) is not None and args.split:
+        cfg["do_split"] = True
+    _set_if("time_column_rate", "sample_rate", float)
+
+    params = dict(cfg.get("smooth_params") or {})
+    for flag, key, cast in [
+        ("window_length", "window_length", int),
+        ("polyorder", "polyorder", int),
+        ("frac", "frac", float),
+        ("iterations", "it", int),
+        ("cutoff", "cutoff", float),
+        ("fs", "fs", float),
+        ("filter_order", "order", int),
+        ("smoothing_factor", "smoothing_factor", float),
+        ("arima_p", "p", int),
+        ("arima_d", "d", int),
+        ("arima_q", "q", int),
+        ("median_kernel", "kernel_size", int),
+        ("hampel_window", "window_size", int),
+        ("hampel_sigma", "n_sigmas", float),
+    ]:
+        val = getattr(args, flag, None)
+        if val is not None:
+            params[key] = cast(val)
+    cfg["smooth_params"] = params
+
+    if getattr(args, "resample", False):
+        cfg["resample"] = True
+    _set_if("original_rate", "original_rate", float)
+    _set_if("final_rate", "final_rate", float)
+    if getattr(args, "no_antialias", False):
+        cfg["antialias"] = False
+    _set_if("antialias_cutoff", "antialias_cutoff", float)
+    return cfg
+
+
 def _cli_run():
-    """CLI entry: argparse for --input, --output, --config (TOML)."""
+    """CLI entry: argparse for batch processing with optional TOML + direct flags."""
     import argparse
 
     parser = argparse.ArgumentParser(
         prog="interp_smooth_split.py",
-        description="""
-Interpolate, smooth, and split CSV data using configurable methods.
-Configuration is read from a TOML file (smooth_config.toml) which can be
-created via the GUI 'Save Template' button or manually.
-        """,
+        description=(
+            "Interpolate, smooth, optionally resample, and split CSV time-series data.\n"
+            "GUI and CLI share the same numerical core (interp_smooth_core).\n"
+            "Precedence: explicit CLI flags > TOML values > documented defaults."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Open GUI (default when no arguments):
-  %(prog)s
-  %(prog)s --gui
+  # Basic (TOML or defaults + flags):
+  uv run vaila/interp_smooth_split.py -i ./data
 
-  # CLI: process CSVs in ./data using config from that dir or cwd:
-  %(prog)s -i ./data
+  # Butterworth (fs = acquisition rate; cutoff must be < fs/2):
+  uv run vaila/interp_smooth_split.py -i ./data --smooth-method butterworth \\
+      --fs 100 --cutoff 10 --filter-order 4
 
-  # CLI: process with explicit output directory:
-  %(prog)s -i ./data -o ./results
+  # Savitzky-Golay:
+  uv run vaila/interp_smooth_split.py -i ./data --smooth-method savgol \\
+      --window-length 7 --polyorder 3
 
-  # CLI: process with explicit config file:
-  %(prog)s -i ./data -c ./smooth_config.toml
+  # Time-column rebuild (does NOT replace Butterworth fs):
+  uv run vaila/interp_smooth_split.py -i ./data --time-column-rate 240
 
-  # CLI: all flags together:
-  %(prog)s -i ./data -o ./out -c ./my_config.toml
+  # Downsample 100 → 50 Hz with explicit anti-alias:
+  uv run vaila/interp_smooth_split.py -i ./data --resample \\
+      --original-rate 100 --final-rate 50
 
-Workflow:
-  1. Run in GUI mode first to configure parameters and test them.
-  2. Click 'Save Template' to create a smooth_config.toml.
-  3. Use CLI mode (-i, -o, -c) for automated batch processing.
+  # Upsample 30 → 60 Hz (representation only; not new measurements):
+  uv run vaila/interp_smooth_split.py -i ./data --resample \\
+      --original-rate 30 --final-rate 60
+
+  # TOML + override one flag:
+  uv run vaila/interp_smooth_split.py -i ./data -c ./smooth_config.toml --cutoff 8
         """,
     )
     parser.add_argument("-i", "--input", metavar="DIR", help="Input directory containing CSV files")
@@ -2843,17 +3190,101 @@ Workflow:
         "-c",
         "--config",
         metavar="TOML",
-        help="Path to smooth_config.toml (default: smooth_config.toml in input dir or cwd)",
+        help="Path to smooth_config.toml (optional; CLI flags override its values)",
     )
     parser.add_argument("--gui", action="store_true", help="Launch GUI instead of CLI")
+
+    parser.add_argument(
+        "--interp-method", choices=["linear", "cubic", "nearest", "kalman", "none", "skip"]
+    )
+    parser.add_argument("--max-gap", type=int)
+    parser.add_argument(
+        "--smooth-method",
+        choices=[
+            "none",
+            "savgol",
+            "lowess",
+            "kalman",
+            "butterworth",
+            "splines",
+            "arima",
+            "median",
+            "hampel",
+        ],
+    )
+    parser.add_argument("--window-length", type=int)
+    parser.add_argument("--polyorder", type=int)
+    parser.add_argument("--frac", type=float)
+    parser.add_argument("--iterations", type=int)
+    parser.add_argument("--cutoff", type=float)
+    parser.add_argument("--fs", type=float, help="Butterworth sampling frequency (Hz / FPS)")
+    parser.add_argument("--filter-order", type=int)
+    parser.add_argument("--smoothing-factor", type=float)
+    parser.add_argument("--arima-p", type=int)
+    parser.add_argument("--arima-d", type=int)
+    parser.add_argument("--arima-q", type=int)
+    parser.add_argument("--median-kernel", type=int)
+    parser.add_argument("--hampel-window", type=int)
+    parser.add_argument("--hampel-sigma", type=float)
+    parser.add_argument("--padding", type=float)
+    parser.add_argument("--split", action="store_true")
+    parser.add_argument(
+        "--time-column-rate",
+        type=float,
+        help="Rebuild Time as frame/rate; does not replace Butterworth fs",
+    )
+    parser.add_argument("--resample", action="store_true")
+    parser.add_argument("--original-rate", type=float)
+    parser.add_argument("--final-rate", type=float)
+    parser.add_argument("--no-antialias", action="store_true")
+    parser.add_argument("--antialias-cutoff", type=float)
     args = parser.parse_args()
 
-    if args.gui or (not args.input and not args.output and not args.config):
+    # Any processing flag implies CLI mode even without -i when alone? Still require -i.
+    processing_flags = (
+        any(
+            getattr(args, name) is not None and getattr(args, name) is not False
+            for name in [
+                "interp_method",
+                "max_gap",
+                "smooth_method",
+                "window_length",
+                "polyorder",
+                "frac",
+                "iterations",
+                "cutoff",
+                "fs",
+                "filter_order",
+                "smoothing_factor",
+                "arima_p",
+                "arima_d",
+                "arima_q",
+                "median_kernel",
+                "hampel_window",
+                "hampel_sigma",
+                "padding",
+                "time_column_rate",
+                "original_rate",
+                "final_rate",
+                "antialias_cutoff",
+            ]
+        )
+        or args.split
+        or args.resample
+        or args.no_antialias
+    )
+
+    if args.gui or (
+        not args.input and not args.output and not args.config and not processing_flags
+    ):
         run_fill_split_dialog()
         return
 
     if not args.input:
-        print("Error: --input is required for CLI mode. Use --gui to open the graphical interface.")
+        print(
+            "Error: --input is required for CLI mode. "
+            "Use --gui for the interactive tester, or pass -i DIR."
+        )
         sys.exit(1)
 
     source_dir = os.path.abspath(args.input)
@@ -2861,26 +3292,32 @@ Workflow:
         print(f"Error: Input is not a directory: {source_dir}")
         sys.exit(1)
 
-    config = None
-    if args.config and os.path.isfile(args.config):
-        config = load_smooth_config_for_analysis(os.path.abspath(args.config))
+    base = None
+    if args.config:
+        if not os.path.isfile(args.config):
+            print(f"Error: Config file not found: {args.config}")
+            sys.exit(1)
+        base = load_smooth_config_for_analysis(os.path.abspath(args.config))
         print(f"Using config from {args.config}")
     else:
         path_in_source = os.path.join(source_dir, SMOOTH_CONFIG_FILENAME)
         if os.path.isfile(path_in_source):
-            config = load_smooth_config_for_analysis(path_in_source)
+            base = load_smooth_config_for_analysis(path_in_source)
             print(f"Using config from {path_in_source}")
         else:
             path_cwd = os.path.join(os.getcwd(), SMOOTH_CONFIG_FILENAME)
             if os.path.isfile(path_cwd):
-                config = load_smooth_config_for_analysis(path_cwd)
+                base = load_smooth_config_for_analysis(path_cwd)
                 print(f"Using config from {path_cwd}")
-    if config is None:
+
+    if base is None and not processing_flags:
         print(
-            "Error: No configuration found. Create smooth_config.toml (e.g. via GUI Apply) or pass --config PATH."
+            "Error: Missing configuration. Provide -c/--config, place smooth_config.toml "
+            "in the input dir/cwd, or pass processing flags (e.g. --smooth-method none)."
         )
         sys.exit(1)
 
+    config = _merge_cli_over_config(base, args)
     dest_dir = os.path.abspath(args.output) if args.output else None
     run_batch(source_dir, config, dest_dir=dest_dir, use_messagebox=False)
 

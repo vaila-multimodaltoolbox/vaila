@@ -72,6 +72,7 @@ def test_png_dirs_to_process(tmp_path: Path) -> None:
 
 def test_build_cli_argv_extract() -> None:
     argv = ep.build_cli_argv("extract", input_path="/videos", pattern="%07d.png")
+    assert argv[:3] == ["uv", "run", "vaila/extractpng.py"]
     assert "extract" in argv
     assert "-i" in argv
     assert "/videos" in argv

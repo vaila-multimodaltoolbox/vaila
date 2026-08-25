@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 25 September 2024
-Update Date: 03 February 2026
-Version: 0.2.1
+Update Date: 24 August 2026
+Version: 0.3.113
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -48,6 +48,19 @@ Contact:
 
 Version history:
 - v0.2.0 (28 February 2025): Added support for saving COP data in a combined CSV file.
+- v0.3.111 (24 August 2026): Added `c3d_markers_to_dataframe()`, a headless
+  (no Tk) C3D -> marker-DataFrame reader used by `edit_csv_c3d.py`'s
+  Edit CSV/C3D pipeline.
+- v0.3.112 (24 August 2026): Fixed `importc3d()` reshape crash on C3D files
+  with >255 markers. POINT:LABELS is capped at 255 entries per C3D's param
+  format and overflow markers land in LABELS2/LABELS3/...; only "LABELS" was
+  read, desyncing the label count from `point_data`'s marker axis. Added
+  `get_point_labels()` to merge all LABELS* groups, used by `importc3d()`,
+  `_calculate_marker_health()`, and the didactic inspector's marker list.
+- v0.3.113 (24 August 2026): Hoisted the `__main__` launcher's nested
+  `open_menu()` to module level (now importable/testable) and switched its
+  4 buttons from raw `tk.Button` to a `ttk.LabelFrame("Actions")` with
+  consistent ttk styling, matching rearrange_data.py's grouped GUI pattern.
 
 Usage:
 - Run the script, select the input directory containing .c3d files, and specify an output directory.
@@ -471,7 +484,7 @@ class C3DReportGenerator:
         if "POINT" not in self.parameters:
             return stats
 
-        labels = self.parameters["POINT"]["LABELS"]["value"]
+        labels = get_point_labels(self.parameters["POINT"])
         # Data shape: (3, n_markers, n_frames)
         points_data = self.data["points"]
 
@@ -878,7 +891,7 @@ class DidacticC3DInspector:
         txt_markers.pack(fill=tk.X)
 
         if "POINT" in self.params:
-            lbls = self.params["POINT"].get("LABELS", {}).get("value", [])
+            lbls = get_point_labels(self.params["POINT"])
             if lbls:
                 if isinstance(lbls[0], list):
                     lbls = lbls[0]
@@ -1044,6 +1057,30 @@ def save_events(datac3d, file_name, output_dir):
     print(f"Events CSV saved at: {events_file_path}")
 
 
+def get_point_labels(point_params):
+    """
+    Merge POINT:LABELS with its continuation groups (LABELS2, LABELS3, ...).
+
+    The C3D parameter format caps a single LABELS group at 255 entries, so
+    files with more than 255 markers (e.g. multi-camera/multi-body captures)
+    split the remaining names into LABELS2, LABELS3, etc. Reading only
+    "LABELS" silently truncates the marker list and desyncs it from
+    `point_data`'s marker axis (see importc3d's reshape below).
+
+    Args:
+        point_params: `datac3d["parameters"]["POINT"]` dict.
+
+    Returns:
+        list of label values, concatenated in LABELS, LABELS2, LABELS3, ... order.
+    """
+    labels = list(point_params.get("LABELS", {}).get("value", []))
+    suffix = 2
+    while f"LABELS{suffix}" in point_params:
+        labels.extend(point_params[f"LABELS{suffix}"]["value"])
+        suffix += 1
+    return labels
+
+
 def importc3d(dat):
     """
     Import C3D file data and parameters.
@@ -1062,7 +1099,7 @@ def importc3d(dat):
     point_data = datac3d["data"]["points"]
     points_residuals = datac3d["data"]["meta_points"]["residuals"]
     analogs = datac3d["data"]["analogs"]
-    marker_labels = datac3d["parameters"]["POINT"]["LABELS"]["value"]
+    marker_labels = get_point_labels(datac3d["parameters"]["POINT"])
     analog_labels = datac3d["parameters"]["ANALOG"]["LABELS"]["value"]
     analog_units = (
         datac3d["parameters"]["ANALOG"]
@@ -1102,6 +1139,85 @@ def importc3d(dat):
         analog_freq,
         datac3d,
     )
+
+
+def c3d_markers_to_dataframe(path):
+    """
+    Headless C3D -> CSV marker DataFrame, no Tk/dialogs, safe to call from any process.
+
+    Extracted from `save_to_files`'s marker-CSV schema (`Time` + `LABEL_X/Y/Z`
+    columns) instead of duplicating it, so this stays the single source of
+    truth for that column convention. ezc3d already surfaces occluded
+    (negative-residual) samples as NaN on read-back, so no extra masking is
+    needed here -- the NaN flows straight into the CSV and, on write-back via
+    `auto_create_c3d_from_csv`, becomes a negative residual again.
+
+    Args:
+        path: Path to the .c3d file.
+
+    Returns:
+        (markers_df, meta) where `markers_df` has columns `Time, LABEL_X,
+        LABEL_Y, LABEL_Z, ...` and `meta` is a dict with `marker_labels`,
+        `marker_freq`, `analog_freq`, `analog_labels`, `analog_units`,
+        `point_units`, and `analog_df` (a `Time` + analog-channel DataFrame,
+        or None when the file has no analog channels).
+    """
+    (
+        markers,
+        marker_labels,
+        marker_freq,
+        analogs,
+        points_residuals,
+        analog_labels,
+        analog_units,
+        analog_freq,
+        datac3d,
+    ) = importc3d(str(path))
+
+    marker_columns = [f"{label}_{axis}" for label in marker_labels for axis in ("X", "Y", "Z")]
+    if markers.size > 0:
+        markers_df = pd.DataFrame(markers, columns=marker_columns)
+        time_precision = get_time_precision(marker_freq)
+        markers_df.insert(
+            0,
+            "Time",
+            pd.Series(
+                [f"{i / marker_freq:.{time_precision}f}" for i in range(markers_df.shape[0])],
+                name="Time",
+            ),
+        )
+    else:
+        markers_df = pd.DataFrame(columns=["Time"])
+
+    analog_df = None
+    if analogs.size > 0:
+        analog_df = pd.DataFrame(analogs.squeeze(axis=0).T, columns=analog_labels)
+        analog_time_precision = get_time_precision(analog_freq)
+        analog_df.insert(
+            0,
+            "Time",
+            pd.Series(
+                [f"{i / analog_freq:.{analog_time_precision}f}" for i in range(analog_df.shape[0])],
+                name="Time",
+            ),
+        )
+
+    try:
+        point_units = datac3d["parameters"]["POINT"]["UNITS"]["value"][0]
+    except (KeyError, IndexError):
+        point_units = "mm"
+
+    meta = {
+        "marker_labels": list(marker_labels),
+        "marker_freq": float(marker_freq),
+        "analog_labels": list(analog_labels),
+        "analog_units": list(analog_units),
+        "analog_freq": float(analog_freq),
+        "point_units": point_units,
+        "analog_df": analog_df,
+        "points_residuals": points_residuals,
+    }
+    return markers_df, meta
 
 
 def save_empty_file(file_path):
@@ -2049,66 +2165,71 @@ def batch_convert_c3d_to_csv():
     root.destroy()  # Close the Tkinter resources
 
 
+def open_menu():
+    """Standalone launcher menu (used when running this script directly).
+
+    Grouped into one "Actions" ttk.LabelFrame with a consistent ttk style,
+    matching rearrange_data.py's ColumnReorderGUI button grouping.
+    """
+    root = Tk()
+    root.title("C3D Export & Inspection Tool")
+    root.geometry("500x400")
+
+    # Center window
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x_c = int((screen_width / 2) - (500 / 2))
+    y_c = int((screen_height / 2) - (400 / 2))
+    root.geometry(f"500x400+{x_c}+{y_c}")
+
+    style = ttk.Style()
+    style.configure("TButton", font=("Arial", 12))
+    style.configure("Accent.TButton", font=("Arial", 12, "bold"))
+    style.configure("Danger.TButton", font=("Arial", 12), foreground="red")
+    style.configure("TLabelframe.Label", font=("Arial", 10, "bold"))
+
+    # Title
+    label = tk.Label(root, text="Select Mode", font=("Arial", 16, "bold"))
+    label.pack(pady=20)
+
+    # Buttons
+    def run_batch():
+        root.destroy()
+        batch_convert_c3d_to_csv()
+
+    def run_single():
+        root.destroy()
+        convert_c3d_to_csv()
+
+    def run_inspect():
+        print("Starting C3D Inspection Tool...")
+        print(f"Running: {pathlib.Path(__file__).name}")
+        print(f"Directory: {pathlib.Path(__file__).parent.resolve()}")
+        # Launch the inspection tool
+        root.destroy()
+        inspect_c3d_gui()
+
+    actions = ttk.LabelFrame(root, text="Actions")
+    actions.pack(fill=tk.X, padx=20, pady=10)
+
+    ttk.Button(actions, text="Batch Convert (Directory)", command=run_batch).pack(
+        fill=tk.X, padx=10, pady=6
+    )
+    ttk.Button(actions, text="Single Convert (File)", command=run_single).pack(
+        fill=tk.X, padx=10, pady=6
+    )
+    ttk.Button(actions, text="Inspect C3D File", command=run_inspect, style="Accent.TButton").pack(
+        fill=tk.X, padx=10, pady=6
+    )
+
+    ttk.Button(root, text="Exit", command=root.destroy, style="Danger.TButton").pack(pady=20)
+
+    root.mainloop()
+
+
 if __name__ == "__main__":
     print("Starting C3D Export & Inspection Tool...")
     print(f"Running: {pathlib.Path(__file__).name}")
     print(f"Directory: {pathlib.Path(__file__).parent.resolve()}")
-
-    # Create Main Menu GUI
-    def open_menu():
-        root = Tk()
-        root.title("C3D Export & Inspection Tool")
-        root.geometry("500x400")
-
-        # Center window
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        x_c = int((screen_width / 2) - (500 / 2))
-        y_c = int((screen_height / 2) - (400 / 2))
-        root.geometry(f"500x400+{x_c}+{y_c}")
-
-        # Title
-        label = tk.Label(root, text="Select Mode", font=("Arial", 16, "bold"))
-        label.pack(pady=20)
-
-        # Buttons
-        def run_batch():
-            root.destroy()
-            batch_convert_c3d_to_csv()
-
-        def run_single():
-            root.destroy()
-            convert_c3d_to_csv()
-
-        def run_inspect():
-            print("Starting C3D Inspection Tool...")
-            print(f"Running: {pathlib.Path(__file__).name}")
-            print(f"Directory: {pathlib.Path(__file__).parent.resolve()}")
-            # Launch the inspection tool
-            root.destroy()
-            inspect_c3d_gui()
-
-        btn_font = ("Arial", 12)
-
-        tk.Button(
-            root, text="Batch Convert (Directory)", command=run_batch, font=btn_font, width=25
-        ).pack(pady=10)
-        tk.Button(
-            root, text="Single Convert (File)", command=run_single, font=btn_font, width=25
-        ).pack(pady=10)
-        tk.Button(
-            root,
-            text="Inspect C3D File",
-            command=run_inspect,
-            font=btn_font,
-            width=25,
-            bg="#e1f5fe",
-        ).pack(pady=10)
-
-        tk.Button(root, text="Exit", command=root.destroy, font=btn_font, width=10, fg="red").pack(
-            pady=20
-        )
-
-        root.mainloop()
 
     open_menu()

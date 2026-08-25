@@ -26,6 +26,7 @@ This page provides a comprehensive reference of all modules available in the vai
 ### File Management
 - **`filemanager`**: Comprehensive file operations (rename, copy, move, transfer)
 - **`rearrange_data`**: CSV data reorganization and column manipulation
+- **`edit_csv_c3d`**: Edit CSV/C3D — applies `rearrange_data`'s column editor to `.csv` and `.c3d` files, round-tripping `.c3d` through CSV
 - **`readc3d_export`**: C3D file reading and CSV export functionality
 - **`readcsv_export`**: CSV to C3D conversion tools
 

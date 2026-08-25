@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 138 | **Categories:** 7 | **Generated on:** 23/08/2026 (v0.3.110)
+**Total documented modules:** 140 | **Categories:** 7 | **Generated on:** 24/08/2026 (v0.3.113)
 
 ## Markerless 2D chooser (Frame B → B1_r1_c4)
 
@@ -238,6 +238,9 @@ Frame B button **Markerless 3D** opens (v0.3.101 — Sapiens2 3D Pose gained an 
 - **drawboxe**
   - [📄 HTML](drawboxe.html)
   - [📝 Markdown](drawboxe.md)
+- **edit_csv_c3d**
+  - [📄 HTML](edit_csv_c3d.html)
+  - [📝 Markdown](edit_csv_c3d.md)
 - **ellipse**
   - [📄 HTML](ellipse.html)
   - [📝 Markdown](ellipse.md)
@@ -367,6 +370,9 @@ Frame B button **Markerless 3D** opens (v0.3.101 — Sapiens2 3D Pose gained an 
 - **sapiens2_3d (Sapiens2-keypoint-guided bbox tightening → SAM 3D Body mesh)**
   - [📄 HTML](sapiens2_3d.html)
   - [📝 Markdown](sapiens2_3d.md)
+- **sapiens3d_kinematics (Sapiens2 REC3D C3D → Hip/Knee/Ankle rotation matrices, quaternions, Euler/Cardan angles)**
+  - [📄 HTML](sapiens3d_kinematics.html)
+  - [📝 Markdown](sapiens3d_kinematics.md)
 - **vaila_stroboscopic (Stroboscopic Generator)**
   - [📄 HTML](vaila_stroboscopic.html)
   - [📝 Markdown](vaila_stroboscopic.md)

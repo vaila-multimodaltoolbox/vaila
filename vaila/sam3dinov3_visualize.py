@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 16 August 2026
-Version: 0.3.106
+Update Date: 24 August 2026
+Version: 0.3.112
 
 Description:
     CPU-only rerenderer for an existing SAM3+DINOv3 3D (SAM 3D Body) run. It
@@ -442,9 +442,9 @@ def _open_writer(path: Path, fps: float, size: tuple[int, int]) -> tuple[cv2.Vid
         candidate = path.with_suffix(suffix)
         writer = cv2.VideoWriter(
             str(candidate),
-            cv2.VideoWriter_fourcc(*codec),
+            cv2.VideoWriter_fourcc(*codec),  # ty: ignore[unresolved-attribute]
             fps,
-            size,  # ty: ignore[unresolved-attribute]
+            size,
         )
         if writer.isOpened():
             return writer, candidate

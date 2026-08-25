@@ -3,6 +3,9 @@
 Only the CPU-side logic is covered: keypoint metadata, the SAM->SAM 3D Body
 batch bridge, and the CSV/JSON writers. The GPU inference itself needs the gated
 ``facebook/sam-3d-body-dinov3`` weights and CUDA, so it is out of scope here.
+
+Update Date: 24 August 2026
+Version: 0.3.112
 """
 
 from __future__ import annotations
@@ -527,7 +530,10 @@ def test_ensure_importable_finds_checkout_root(tmp_path: Path, monkeypatch):
 
     monkeypatch.setenv("VAILA_SAM3D_BODY_DIR", str(checkout))
     monkeypatch.delitem(sys.modules, "sam_3d_body", raising=False)
-    monkeypatch.setattr(sys, "path", list(sys.path))
+    clean_path = [p for p in sys.path if "sam_3d_body" not in p and "sam-3d-body" not in p]
+    monkeypatch.setattr(sys, "path", clean_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("vaila.sam3dinov3._module_dir", lambda: tmp_path / "fake_pkg", raising=True)
 
     found = ensure_sam3d_importable()
     assert found == checkout.resolve()

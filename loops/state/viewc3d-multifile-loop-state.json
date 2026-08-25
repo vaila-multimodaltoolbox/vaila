@@ -1,0 +1,50 @@
+{
+  "loop": "viewc3d-multifile",
+  "status": "success",
+  "iteration_count": 7,
+  "budget": {"max_iterations": 15},
+  "frozen_design_decisions": {
+    "load_key": "Ctrl+L (register_key_action_callback on ord('L'), mods&2) -- plain L already bound to set_view_limits, every other letter already single-bound",
+    "color_policy": "available_colors[len(loaded_files) % len(available_colors)] fixed at load time; existing C key still cycles only file index 0",
+    "timeline_policy": "master_fps = max(fps) by default, min(fps) if user opts to downsample; nearest-index frame mapping, no interpolation of marker data; shorter recordings hold last frame",
+    "scope_freeze": "trails/skeleton/measurement/swap-editing stay scoped to file index 0 only; matplotlib fallback and run_viewc3d_from_array untouched"
+  },
+  "step0_checks": {
+    "repo_clean_on_multiview_branch": true,
+    "fixtures_readable": true,
+    "fixture_fps": {"rec3d_200hz.c3d": 200.0, "rec3d_240hz.c3d": 240.0},
+    "fixture_frames": {"rec3d_200hz.c3d": 8074, "rec3d_240hz.c3d": 8298}
+  },
+  "ranked_targets": [
+    {"id": "1_pure_helpers", "status": "done", "evidence": "resolve_master_fps, master_frame_count, map_master_frame_to_local, assign_file_color added; 10/10 unit tests pass (tests/test_viewc3d_multifile.py)"},
+    {"id": "2_loadedc3d_container", "status": "done", "evidence": "LoadedC3D class added (color, model, points array, spheres, local_frame_index(), duration_seconds)"},
+    {"id": "3_ctrl_l_load_action", "status": "done", "evidence": "l_key_action registered via register_key_action_callback(ord('L'), ...); mods&2 -> load_additional_c3d_files(), else set_view_limits() (plain L unchanged)"},
+    {"id": "4_update_spheres_multifile", "status": "done", "evidence": "update_spheres() redraws loaded_files_extra spheres via each file's local_frame_index(); 16 call sites switched to get_master_frame_data(current_frame); nav bounds (next/prev/±60/jump_to_end) use master_num_frames"},
+    {"id": "5_fps_downsample_prompt", "status": "done", "evidence": "load_additional_c3d_files() detects FPS mismatch, prompts downsample-to-lowest vs keep-highest, calls recompute_master_timeline()"},
+    {"id": "6_title_help_docstring", "status": "done", "evidence": "module docstring (Description/Key Features/Keyboard Shortcuts), window title (+N file(s), Ctrl+L hint), in-code show_help() HTML, vaila/help/viewc3d.md, vaila/help/viewc3d.html, vaila/help/view3d_eng_help.html all updated"},
+    {"id": "7_metadata_bump", "status": "done", "evidence": "vaila.py 0.3.110->0.3.111; viewc3d.py header Version/Last Updated matched; README.md Last updated -> 2026-08-24; vaila/help/index.md + index.html Generated on -> 24/08/2026 (v0.3.111)"}
+  ],
+  "evidence": {
+    "governing_check": {
+      "ruff_check_fix": "All checks passed! (vaila/viewc3d.py)",
+      "ruff_format": "1 file reformatted (vaila/viewc3d.py)",
+      "ty_check": "17 pre-existing diagnostics, all outside new code (matplotlib fallback axes/scatter/zlim, tomli optional-import, dynamic tk.messagebox/o3d.visualization submodule warnings, swap_range dict typing, viewer._next_frame dynamic attr) -- none in resolve_master_fps/master_frame_count/map_master_frame_to_local/assign_file_color/LoadedC3D/load_additional_c3d_files/l_key_action/get_master_frame_data/recompute_master_timeline",
+      "pytest_multifile": "10 passed in 1.08s (tests/test_viewc3d_multifile.py)",
+      "pytest_full_repo": "1030 passed, 11 skipped, 4 warnings in 141.58s (tests/) -- no regressions"
+    },
+    "real_fixture_smoke": {
+      "description": "Pure helpers exercised end-to-end against the real VailaModel-loaded fixtures (not just hand-picked constants)",
+      "rec3d_200hz.c3d": "200.0 Hz, 8074 frames",
+      "rec3d_240hz.c3d": "240.0 Hz, 8298 frames",
+      "resolve_master_fps_default": 240.0,
+      "master_frame_count": 9689,
+      "map_master_frame_to_local_last_index_to_200hz": 8073,
+      "matches_hand_computed_test_values": true
+    },
+    "import_smoke": "run_viewc3d importable, signature (c3d_path=None), module loads with no import-time errors",
+    "manual_gui_smoke": {
+      "status": "not performed",
+      "reason": "Session has DISPLAY (:10, ThinLinc Xvnc) but no xdotool/wmctrl for scripted key-press automation, and Open3D's VisualizerWithKeyCallback blocks the process in its own event loop -- safe unattended automation of Ctrl+L + file-dialog selection + visual color/sync verification was not available in this environment. This is level-5 evidence per the loop's verification ladder (human checkpoint), explicitly non-gating for 'success'. Recommended manual step for a human with a display: `uv run vaila/viewc3d.py tests/viewc3d/rec3d_200hz.c3d`, press Ctrl+L, select tests/viewc3d/rec3d_240hz.c3d, confirm two marker colors render and playback stays in sync (or the downsample prompt appears and works)."
+    }
+  }
+}

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 19 March 2026
-Version: 0.0.8
+Update Date: 24 August 2026
+Version: 0.3.112
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -34,6 +34,10 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.3.112: Regrouped ColumnReorderGUI's 13 flat tk.Button widgets into
+      4 ttk.LabelFrame sections (Columns / Combine Files / Import to vailá /
+      Advanced) with a consistent ttk style, matching readc3d_export.py's
+      grouped-actions GUI pattern.
     - v0.0.7: Added custom math operation feature with NumPy, Pandas, and SciPy support
     - v0.0.6: Added functionality to save the second half of each CSV file
     - v0.0.4: Added functionality to save the second half of each CSV file
@@ -564,92 +568,68 @@ class ColumnReorderGUI(tk.Tk):
         # Update listboxes
         self.update_listbox()
 
-        # Add button frame
+        # Button column: grouped ttk.LabelFrame sections instead of one flat
+        # stack, so related actions (columns / file combining / importers /
+        # advanced) read as a tree of categories rather than a button soup.
+        style = ttk.Style()
+        style.configure("TButton", font=("default", 9))
+        style.configure("TLabelframe.Label", font=("default", 9, "bold"))
+
         button_frame = tk.Frame(self.header_frame)
-        button_frame.grid(row=1, column=2, padx=10, pady=10, sticky="ns")
+        button_frame.grid(row=1, column=2, padx=10, pady=10, sticky="n")
 
-        # Add all buttons
-        self.convert_button = tk.Button(
-            button_frame, text="Convert Units", command=self.convert_units
+        def add_section(title):
+            section = ttk.LabelFrame(button_frame, text=title)
+            section.pack(fill=tk.X, pady=(0, 8))
+            return section
+
+        def add_button(section, text, command):
+            btn = ttk.Button(section, text=text, command=command)
+            btn.pack(fill=tk.X, padx=5, pady=3)
+            return btn
+
+        columns_section = add_section("Columns")
+        self.convert_button = add_button(columns_section, "Convert Units", self.convert_units)
+        self.modify_labref_button = add_button(
+            columns_section, "Modify Lab Ref System", self.modify_labref
         )
-        self.convert_button.grid(row=0, column=0, padx=5, pady=5, sticky="n")
+        add_button(columns_section, "Reset Index Col 0", self.reset_index_column_0)
 
-        self.modify_labref_button = tk.Button(
-            button_frame, text="Modify Lab Ref System", command=self.modify_labref
+        combine_section = add_section("Combine Files")
+        add_button(combine_section, "Merge CSV", self.merge_csv)
+        add_button(combine_section, "Stack/Append CSV", self.stack_csv)
+        add_button(combine_section, "Save 2nd Half CSV", self.save_second_half)
+
+        import_section = add_section("Import to vailá")
+        add_button(
+            import_section,
+            "Convert YOLO Tracker to vailá",
+            lambda: batch_convert_yolo_tracker(self.directory_path),
         )
-        self.modify_labref_button.grid(row=1, column=0, padx=5, pady=5, sticky="n")
-
-        merge_button = tk.Button(button_frame, text="Merge CSV", command=self.merge_csv)
-        merge_button.grid(row=2, column=0, padx=5, pady=5, sticky="n")
-
-        stack_button = tk.Button(button_frame, text="Stack/Append CSV", command=self.stack_csv)
-        stack_button.grid(row=3, column=0, padx=5, pady=5, sticky="n")
-
-        # Add new YOLO Tracker button
-        yolo_tracker_button = tk.Button(
-            button_frame,
-            text="Convert YOLO Tracker to vailá",
-            command=lambda: batch_convert_yolo_tracker(self.directory_path),
+        add_button(
+            import_section,
+            "Convert MediaPipe to vailá",
+            lambda: batch_convert_mediapipe(self.directory_path),
         )
-        yolo_tracker_button.grid(row=4, column=0, padx=5, pady=5, sticky="n")
-
-        # MediaPipe button
-        mediapipe_button = tk.Button(
-            button_frame,
-            text="Convert MediaPipe to vailá",
-            command=lambda: batch_convert_mediapipe(self.directory_path),
+        add_button(
+            import_section,
+            "Convert Dvideo to vailá",
+            lambda: batch_convert_dvideo(self.directory_path),
         )
-        mediapipe_button.grid(row=5, column=0, padx=5, pady=5, sticky="n")
-
-        # DVideo button
-        dvideo_button = tk.Button(
-            button_frame,
-            text="Convert Dvideo to vailá",
-            command=lambda: batch_convert_dvideo(self.directory_path),
+        add_button(
+            import_section,
+            "Convert DLC to vailá",
+            lambda: batch_convert_dlc(self.directory_path),
         )
-        dvideo_button.grid(row=6, column=0, padx=5, pady=5, sticky="n")
-
-        # DLC button
-        dlc_button = tk.Button(
-            button_frame,
-            text="Convert DLC to vailá",
-            command=lambda: batch_convert_dlc(self.directory_path),
+        add_button(
+            import_section,
+            "Convert Kinovea to vailá",
+            lambda: batch_convert_kinovea(self.directory_path),
         )
-        dlc_button.grid(row=7, column=0, padx=5, pady=5, sticky="n")
+        add_button(import_section, "Standardize Header", standardize_header)
 
-        # Standardize button
-        standardize_button = tk.Button(
-            button_frame, text="Standardize Header", command=standardize_header
-        )
-        standardize_button.grid(row=8, column=0, padx=5, pady=5, sticky="n")
-
-        # Kinovea button
-        kinovea_button = tk.Button(
-            button_frame,
-            text="Convert Kinovea to vailá",
-            command=lambda: batch_convert_kinovea(self.directory_path),
-        )
-        kinovea_button.grid(row=9, column=0, padx=5, pady=5, sticky="n")
-
-        # Save 2nd Half button
-        second_half_button = tk.Button(
-            button_frame, text="Save 2nd Half CSV", command=self.save_second_half
-        )
-        second_half_button.grid(row=10, column=0, padx=5, pady=5, sticky="n")
-
-        # Reset index column 0 button
-        reset_index_button = tk.Button(
-            button_frame, text="Reset Index Col 0", command=self.reset_index_column_0
-        )
-        reset_index_button.grid(row=11, column=0, padx=5, pady=5, sticky="n")
-
-        # Custom Math Operation button
-        custom_math_button = tk.Button(
-            button_frame,
-            text="Custom Math Operation",
-            command=self.custom_math_operation,
-        )
-        custom_math_button.grid(row=12, column=0, padx=5, pady=5, sticky="n")
+        advanced_section = add_section("Advanced")
+        add_button(advanced_section, "Custom Math Operation", self.custom_math_operation)
 
         # Configure bindings
         self.setup_bindings()

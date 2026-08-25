@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.2.0
+Version: 0.3.111
 Created: 06 February 2025
-Last Updated: 10 February 2026
+Last Updated: 24 August 2026
 
 To run:
   uv run viewc3d.py [path/to/file.c3d]
@@ -26,10 +26,13 @@ Advanced 3D viewer for C3D files with adaptive visualization for different scale
 Automatically detects and converts units (millimeters/meters) with enhanced confidence scoring.
 Features adaptive ground plane, grid, and camera positioning based on data scale.
 Features soccer field lines and penalty areas.
+Supports loading multiple C3D files into one running viewer (Ctrl+L), each with
+its own marker color, synced to one timeline even when source FPS rates differ.
 
     Architecture:
     - VailaModel: data layer (C3D acquisition, GetPointFrame, GetFrameNumber, GetPointFrequency)
     - VailaView: visualization layer (Open3D; trails, dynamic grid, Z-up, picking)
+    - LoadedC3D: per-file viewer state (color, spheres) for files added via Ctrl+L
 
     Key Features:
     - Adaptive visualization for small (lab) to large (soccer field) scales
@@ -39,6 +42,9 @@ Features soccer field lines and penalty areas.
     - Ground grid toggle and field line customization
     - Trails (ghosting) with older segments drawn darker; Z-up camera when appropriate
     - Marker picking: ` / ~ to cycle highlighted marker (yellow)
+    - Multi-file loading (Ctrl+L): per-file marker colors; timeline syncs to the
+      highest-FPS file by default, with a prompt to downsample to the lowest FPS
+      instead when rates differ (nearest-index playback lookup, no data mutation)
     - Matplotlib fallback for systems without OpenGL support
 
     Keyboard Shortcuts:
@@ -47,6 +53,7 @@ Features soccer field lines and penalty areas.
       ↑ ↓ - Forward/Backward 60 frames
       S/E - Jump to start/end
       Space - Play/Pause animation
+      Ctrl+L - Load additional C3D file(s) into this viewer
 
     Markers:
       +/-/= - Increase/Decrease marker size
@@ -700,6 +707,89 @@ class VailaModel:
         z_range = z_max - z_min
         y_range = y_max - y_min
         return z_range > y_range
+
+
+# -----------------------------------------------------------------------------
+# Multi-file support: pure timeline/color helpers (no Open3D/Tk dependency,
+# independently testable) plus a lightweight per-file viewer-state container.
+# -----------------------------------------------------------------------------
+def resolve_master_fps(fps_list, downsample_to_lowest=False):
+    """
+    Pick the master playback FPS for a set of loaded C3D files.
+
+    By default the highest FPS is used (finest timeline resolution); when
+    ``downsample_to_lowest`` is True, the lowest FPS is used instead (every
+    higher-FPS file's playback is effectively decimated to match it).
+    """
+    if not fps_list:
+        raise ValueError("fps_list must not be empty")
+    return min(fps_list) if downsample_to_lowest else max(fps_list)
+
+
+def master_frame_count(durations_seconds, master_fps):
+    """
+    Total frames on the master timeline: the longest recording's duration
+    (in seconds), expressed at the master FPS.
+    """
+    if not durations_seconds:
+        raise ValueError("durations_seconds must not be empty")
+    return round(max(durations_seconds) * master_fps)
+
+
+def map_master_frame_to_local(master_idx, master_fps, file_fps, file_num_frames):
+    """
+    Nearest-index playback lookup: map a master-timeline frame index to the
+    corresponding frame index in one loaded file's own array.
+
+    Pure index selection only -- never interpolates or mutates marker
+    position data. A file shorter than the master timeline holds its last
+    frame once its own recording has ended (clamped, not looped).
+    """
+    if file_num_frames <= 0:
+        raise ValueError("file_num_frames must be positive")
+    local_idx = round(master_idx * file_fps / master_fps)
+    return max(0, min(local_idx, file_num_frames - 1))
+
+
+def assign_file_color(load_index, available_colors):
+    """
+    Deterministic color assignment for the Nth loaded file (0-based),
+    cycling through the existing palette when more files are loaded than
+    there are palette entries.
+    """
+    if not available_colors:
+        raise ValueError("available_colors must not be empty")
+    return available_colors[load_index % len(available_colors)]
+
+
+class LoadedC3D:
+    """
+    One additional C3D file loaded into a running viewer via Ctrl+L.
+
+    Bundles a VailaModel with the per-file Open3D render state (assigned
+    color, sphere geometries, base vertex arrays) and the frame-mapping
+    callable that projects the shared master-timeline index onto this
+    file's own frame index (see map_master_frame_to_local).
+    """
+
+    def __init__(self, model, color, load_index):
+        assert isinstance(model, VailaModel)
+        self.model = model
+        self.color = color
+        self.load_index = load_index
+        self.spheres = []
+        self.spheres_bases = []
+
+    def local_frame_index(self, master_idx, master_fps):
+        return map_master_frame_to_local(
+            master_idx,
+            master_fps,
+            self.model.get_point_frequency(),
+            self.model.get_frame_number(),
+        )
+
+    def duration_seconds(self):
+        return self.model.get_frame_number() / self.model.get_point_frequency()
 
 
 # -----------------------------------------------------------------------------
@@ -1836,6 +1926,99 @@ def run_viewc3d(c3d_path=None):
     for sphere in spheres:
         vis.add_geometry(sphere)
 
+    # --- Multi-file support (Ctrl+L) ---------------------------------------
+    # `points`/`fps`/`num_frames`/`spheres` above stay the file-0 (originally
+    # opened) file's own data, unchanged. `master_fps`/`master_num_frames`
+    # start equal to file 0's own values (single-file behavior identical to
+    # before) and only diverge once an additional file is loaded via Ctrl+L.
+    # `loaded_files_extra` holds one LoadedC3D per Ctrl+L-loaded file (file 0
+    # itself is not duplicated into this list). See
+    # loops/viewc3d-multifile-loop.md for the frozen design decisions.
+    master_fps = fps
+    master_num_frames = num_frames
+    loaded_files_extra = []
+    downsample_to_lowest = [False]  # mutable box: read/written by the load handler below
+
+    def get_master_frame_data(master_idx):
+        """File-0 frame data for a master-timeline index (nearest-index lookup)."""
+        local_idx = map_master_frame_to_local(master_idx, master_fps, fps, num_frames)
+        return points[local_idx]
+
+    def recompute_master_timeline():
+        nonlocal master_fps, master_num_frames
+        all_fps = [fps] + [lf.model.get_point_frequency() for lf in loaded_files_extra]
+        all_durations = [num_frames / fps] + [lf.duration_seconds() for lf in loaded_files_extra]
+        master_fps = resolve_master_fps(all_fps, downsample_to_lowest[0])
+        master_num_frames = master_frame_count(all_durations, master_fps)
+        viewer.fps = master_fps
+
+    def load_additional_c3d_files(_vis_obj=None):
+        """Ctrl+L: open a multi-select dialog and load more C3D files into this viewer."""
+        root = _create_centered_tk_root()
+        paths = filedialog.askopenfilenames(
+            parent=root,
+            title="Load additional C3D file(s)",
+            filetypes=[("C3D files", "*.c3d"), ("All files", "*.*")],
+        )
+        root.destroy()
+        if not paths:
+            return False
+
+        prompted = False
+        for path in paths:
+            try:
+                new_model = VailaModel(path)
+            except Exception as e:
+                print(f"[red]Failed to load {path}: {e}[/red]")
+                continue
+
+            new_fps = new_model.get_point_frequency()
+            current_fps_set = {fps} | {lf.model.get_point_frequency() for lf in loaded_files_extra}
+            if not prompted and abs(new_fps - next(iter(current_fps_set))) > 1e-6:
+                prompted = True
+                answer_root = _create_centered_tk_root()
+                downsample_to_lowest[0] = messagebox.askyesno(
+                    "FPS Mismatch",
+                    "Loaded files have different FPS rates.\n\n"
+                    "Downsample the higher-FPS file(s) to match the LOWEST FPS?\n"
+                    "(No keeps the timeline at the HIGHEST FPS, the default.)",
+                    parent=answer_root,
+                )
+                answer_root.destroy()
+
+            load_index = len(loaded_files_extra) + 1  # file 0 is the originally opened file
+            color, color_name = assign_file_color(load_index, available_colors)
+            lf = LoadedC3D(new_model, color, load_index)
+            lf_points = new_model.get_points()
+            for i in range(new_model.get_point_number()):
+                sphere = o3d.geometry.TriangleMesh.create_sphere(
+                    radius=current_radius, resolution=8
+                )
+                base_vertices = np.asarray(sphere.vertices).copy()
+                sphere.vertices = o3d.utility.Vector3dVector(base_vertices + lf_points[0][i])
+                sphere.paint_uniform_color(color)
+                vis.add_geometry(sphere)
+                lf.spheres.append(sphere)
+                lf.spheres_bases.append(base_vertices)
+            loaded_files_extra.append(lf)
+            print(
+                f"[green]Loaded {os.path.basename(path)}: "
+                f"{new_model.get_point_number()} markers @ {new_fps} fps, "
+                f"color={color_name}[/green]"
+            )
+
+        recompute_master_timeline()
+        update_spheres(get_master_frame_data(current_frame))
+        loaded_names = ", ".join(
+            os.path.basename(lf.model.get_filepath()) for lf in loaded_files_extra
+        )
+        print(
+            f"[cyan]Master timeline: {master_fps} fps, {master_num_frames} frames "
+            f"(downsample_to_lowest={downsample_to_lowest[0]}). "
+            f"Extra files loaded: {loaded_names or 'none'}[/cyan]"
+        )
+        return False
+
     # Marker visibility: None = all visible, else set of indices to show
     visible_marker_indices = None
     markers_in_scene = set(range(num_markers))
@@ -2528,7 +2711,7 @@ def run_viewc3d(c3d_path=None):
             points = pts[:, selected_indices, :]
 
             # Update visualization
-            update_spheres(points[current_frame])
+            update_spheres(get_master_frame_data(current_frame))
             if marker_labels_visible[0]:
                 update_marker_labels()
 
@@ -2548,7 +2731,7 @@ def run_viewc3d(c3d_path=None):
             points = pts[:, selected_indices, :]
 
             # Update visualization
-            update_spheres(points[current_frame])
+            update_spheres(get_master_frame_data(current_frame))
             if marker_labels_visible[0]:
                 update_marker_labels()
 
@@ -3052,7 +3235,7 @@ def run_viewc3d(c3d_path=None):
         print(f"\nExporting PNG sequence to: {out_dir}")
         for fidx in range(num_frames):
             current_frame = fidx
-            update_spheres(points[current_frame])
+            update_spheres(get_master_frame_data(current_frame))
             out_path = os.path.join(out_dir, f"frame_{fidx:05d}.png")
             try:
                 vis.capture_screen_image(out_path, do_render=True)
@@ -3060,7 +3243,7 @@ def run_viewc3d(c3d_path=None):
                 print(f"\n[red]Failed at frame {fidx}:[/red] {exc}")
                 break
         current_frame = start_frame
-        update_spheres(points[current_frame])
+        update_spheres(get_master_frame_data(current_frame))
         is_playing = was_playing
         print("\nPNG sequence export done")
         return False
@@ -3256,7 +3439,7 @@ def run_viewc3d(c3d_path=None):
         try:
             for fidx in range(num_frames):
                 current_frame = fidx
-                update_spheres(points[current_frame])
+                update_spheres(get_master_frame_data(current_frame))
                 png_path = temp_dir / f"frame_{fidx:05d}.png"
                 vis.capture_screen_image(str(png_path), do_render=True)
 
@@ -3290,7 +3473,7 @@ def run_viewc3d(c3d_path=None):
             print(f"\n[red]ffmpeg failed:[/red] {exc}")
         finally:
             current_frame = start_frame
-            update_spheres(points[current_frame])
+            update_spheres(get_master_frame_data(current_frame))
             is_playing = was_playing
             with contextlib.suppress(Exception):
                 shutil.rmtree(tmp_dir)
@@ -3652,6 +3835,20 @@ def run_viewc3d(c3d_path=None):
                 sphere.paint_uniform_color(base_color)
             vis.update_geometry(sphere)
 
+        # Redraw each Ctrl+L-loaded extra file at its own mapped frame index
+        # (nearest-index lookup onto the master timeline; see
+        # loops/viewc3d-multifile-loop.md). Trails/skeleton/measurement below
+        # stay scoped to file 0 only -- explicit non-goal for this feature.
+        for lf in loaded_files_extra:
+            local_idx = lf.local_frame_index(current_frame, master_fps)
+            lf_frame_data = lf.model.get_points()[local_idx]
+            for i, sphere in enumerate(lf.spheres):
+                new_pos = lf_frame_data[i]
+                if np.isnan(new_pos).any():
+                    continue
+                sphere.vertices = o3d.utility.Vector3dVector(lf.spheres_bases[i] + new_pos)
+                vis.update_geometry(sphere)
+
         # Update marker labels if they are visible
         update_marker_labels()
 
@@ -3668,9 +3865,9 @@ def run_viewc3d(c3d_path=None):
 
         # Optional per-frame console info
         if verbose_frame[0]:
-            frame_info = f"Frame {current_frame + 1}/{num_frames}"
+            frame_info = f"Frame {current_frame + 1}/{master_num_frames}"
             print(
-                f"\r{frame_info} - Time: {(current_frame / fps):.3f}s",
+                f"\r{frame_info} - Time: {(current_frame / master_fps):.3f}s",
                 end="",
                 flush=True,
             )
@@ -3679,10 +3876,12 @@ def run_viewc3d(c3d_path=None):
         vis.update_renderer()
 
     # Update the window title with the current frame
-    frame_info = f"Frame {current_frame + 1}/{num_frames}"
+    frame_info = f"Frame {current_frame + 1}/{master_num_frames}"
+    files_suffix = f" | +{len(loaded_files_extra)} file(s)" if loaded_files_extra else ""
     new_title = (
-        f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | {frame_info} | FPS: {fps} | "
-        "Keys: [←→: Frame, ↑↓: 60 Frames, +/-: Size, C: Color, Space: Play, H: Help] | "
+        f"C3D Viewer | File: {file_name} | Markers: {num_markers}/{total_markers} | {frame_info} | "
+        f"FPS: {master_fps}{files_suffix} | "
+        "Keys: [←→: Frame, ↑↓: 60 Frames, +/-: Size, C: Color, Ctrl+L: Load, Space: Play, H: Help] | "
         "Mouse: [Left: Rotate, Middle/Right: Pan, Wheel: Zoom]"
     )
 
@@ -3692,34 +3891,34 @@ def run_viewc3d(c3d_path=None):
         vis.set_window_name(new_title)
     except AttributeError:
         # If not available, just print the current frame in the terminal
-        print(f"\rFrame {current_frame + 1}/{num_frames}", end="", flush=True)
+        print(f"\rFrame {current_frame + 1}/{master_num_frames}", end="", flush=True)
 
     vis.poll_events()
     vis.update_renderer()
 
     def next_frame(vis_obj):
         nonlocal current_frame
-        current_frame = (current_frame + 1) % num_frames
-        update_spheres(points[current_frame])
+        current_frame = (current_frame + 1) % master_num_frames
+        update_spheres(get_master_frame_data(current_frame))
         return False
 
     def previous_frame(vis_obj):
         nonlocal current_frame
-        current_frame = (current_frame - 1) % num_frames
-        update_spheres(points[current_frame])
+        current_frame = (current_frame - 1) % master_num_frames
+        update_spheres(get_master_frame_data(current_frame))
         return False
 
     # Modificar as funções para avançar/voltar 60 frames:
     def forward_60_frames(_vis_obj):
         nonlocal current_frame
-        current_frame = (current_frame + 60) % num_frames
-        update_spheres(points[current_frame])
+        current_frame = (current_frame + 60) % master_num_frames
+        update_spheres(get_master_frame_data(current_frame))
         return False
 
     def backward_60_frames(_vis_obj):
         nonlocal current_frame
-        current_frame = (current_frame - 60) % num_frames
-        update_spheres(points[current_frame])
+        current_frame = (current_frame - 60) % master_num_frames
+        update_spheres(get_master_frame_data(current_frame))
         return False
 
     def toggle_play(_vis_obj=None):
@@ -3935,6 +4134,12 @@ M - Toggle ground grid
 R - Reset camera view
 L - Set view limits
 
+        MULTI-FILE
+        Ctrl+L - Load additional C3D file(s) into this viewer.
+        Each loaded file gets its own marker color (see window title).
+        Timeline syncs to the highest-FPS file by default; a prompt offers
+        downsampling to the lowest FPS instead when rates differ.
+
         DATA
 U - Override unit conversion (mm/m)
 
@@ -3973,15 +4178,15 @@ O - Manual swap markers (visual editing)
     def jump_to_start(_vis_obj):
         nonlocal current_frame
         current_frame = 0
-        update_spheres(points[current_frame])
+        update_spheres(get_master_frame_data(current_frame))
         print("\nJumped to START (Frame 1)")
         return False
 
     def jump_to_end(_vis_obj):
         nonlocal current_frame
-        current_frame = num_frames - 1
-        update_spheres(points[current_frame])
-        print(f"\nJumped to END (Frame {num_frames})")
+        current_frame = master_num_frames - 1
+        update_spheres(get_master_frame_data(current_frame))
+        print(f"\nJumped to END (Frame {master_num_frames})")
         return False
 
     # Add variables to control the ground and background colors
@@ -4111,7 +4316,7 @@ O - Manual swap markers (visual editing)
             vis.add_geometry(spheres[i], reset_bounding_box=False)
 
         # Update current frame
-        update_spheres(points[current_frame])
+        update_spheres(get_master_frame_data(current_frame))
 
         print("[bold green]Unit conversion override applied![/bold green]")
         return False
@@ -4237,7 +4442,7 @@ O - Manual swap markers (visual editing)
                 visible_marker_indices = selected
                 markers_in_scene = set(selected)
             root.destroy()
-            update_spheres(points[current_frame])
+            update_spheres(get_master_frame_data(current_frame))
             n = len(visible_marker_indices) if visible_marker_indices else num_markers
             print(f"\nMarkers visible: {n}/{num_markers}")
 
@@ -4288,7 +4493,17 @@ O - Manual swap markers (visual editing)
     vis.register_key_callback(
         ord("O"), open_marker_visibility_dialog
     )  # Marker visibility (show/hide)
-    vis.register_key_callback(ord("L"), set_view_limits)  # View limits
+
+    def l_key_action(vis_obj, action, mods):
+        # action: 0=RELEASE, 1=PRESS, 2=REPEAT; mods: bitmask, 2=CTRL
+        if action == 1:
+            if mods & 2:  # Ctrl+L: load additional C3D file(s)
+                return load_additional_c3d_files(vis_obj)
+            elif not mods:  # plain L: set custom view limits (unchanged)
+                return set_view_limits(vis_obj)
+        return False
+
+    vis.register_key_action_callback(ord("L"), l_key_action)  # L / Ctrl+L
     vis.register_key_callback(ord("R"), reset_camera_view)  # Reset camera
 
     # Information and help
@@ -4306,7 +4521,7 @@ O - Manual swap markers (visual editing)
         )
         name = selected_marker_names[picked_marker_index[0]]
         print(f"\nPicked marker: {picked_marker_index[0]} - {name}")
-        update_spheres(points[current_frame])
+        update_spheres(get_master_frame_data(current_frame))
         return False
 
     def cycle_pick_backward(_vis_obj):
@@ -4320,7 +4535,7 @@ O - Manual swap markers (visual editing)
         )
         name = selected_marker_names[picked_marker_index[0]]
         print(f"\nPicked marker: {picked_marker_index[0]} - {name}")
-        update_spheres(points[current_frame])
+        update_spheres(get_master_frame_data(current_frame))
         return False
 
     vis.register_key_callback(96, cycle_pick_forward)  # ` (backtick)

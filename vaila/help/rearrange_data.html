@@ -40,12 +40,22 @@
             <p><strong>File:</strong> vaila\rearrange_data.py</p>
             <p><strong>Lines:</strong> 1772</p>
             <p><strong>Size:</strong> 68536 characters</p>
-            <p><strong>Version:</strong> 0.0.6</p>
+            <p><strong>Version:</strong> 0.3.111</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
 
-        
+        <div class="docstring">
+            <h3>🔗 Edit CSV/C3D</h3>
+            <p>Frame C button <code>C_A_r1_c1</code> no longer calls this module
+            directly — it now runs <a href="edit_csv_c3d.html">edit_csv_c3d</a>
+            (<a href="edit_csv_c3d.md">MD</a>), which reuses <code>ColumnReorderGUI</code>
+            from this file but also accepts <code>.c3d</code> files (converted to
+            CSV, edited, converted back). Use this module's own
+            <code>rearrange_data_in_directory()</code> / <code>--yolo-tracker</code>
+            CLI for the CSV-only entry point; use <code>edit_csv_c3d.py</code> for a
+            directory that mixes <code>.csv</code> and <code>.c3d</code>.</p>
+        </div>
 
         <div class="docstring">
             <h3>📖 Description</h3>
@@ -57,8 +67,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 25 Jul 2025
-Version: 0.0.6
+Update Date: 24 August 2026
+Version: 0.3.111
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -92,7 +102,7 @@ License:
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Generated automatically on: 15/10/2025 08:04:44 (Edit CSV/C3D note added 24/08/2026)</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

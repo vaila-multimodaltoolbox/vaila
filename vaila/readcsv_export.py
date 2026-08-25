@@ -3,9 +3,9 @@
 readcsv_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Version: 0.3.99
+Version: 0.3.111
 Created: 25 September 2024
-Last Updated: 04 August 2026
+Last Updated: 24 August 2026
 Python Version: 3.12.13
 
 Description:

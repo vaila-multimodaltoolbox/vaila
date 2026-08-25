@@ -1,29 +1,31 @@
-# Which conversion would you like to perform? - Button C_r1_c1
+# Edit CSV/C3D - Button C_A_r1_c1
 
 ## Overview
 
-**Button Position:** C_r1_c1  
-**Method Name:** `reorder_csv_data`  
-**Button Text:** Which conversion would you like to perform?
+**Button Position:** C_A_r1_c1  
+**Method Name:** `reorder_csv_data` (`vaila.py`) → `edit_csv_c3d.run_edit_csv_c3d` (`vaila/edit_csv_c3d.py`)  
+**Button Text:** Edit CSV/C3D
 
 ## Description
 
-Runs the Reorder CSV Data module.
-
-        This function runs the Reorder CSV Data module, which can be used to reorder the
-        columns of CSV files. It allows the user to select the directory containing the
-        CSV files and reorder the columns according to their preference. The module will
-        then save the reordered CSV files in a new directory.
-
-        The user will be prompted to select the directory containing the CSV files.
+Runs the Edit CSV/C3D module. Lets the user pick a directory containing
+`.csv` and/or `.c3d` files and edits them with `rearrange_data.py`'s
+`ColumnReorderGUI`. `.c3d` files are converted to a marker CSV first
+(`readc3d_export.c3d_markers_to_dataframe`), edited alongside any `.csv`
+files, then converted back to `.c3d` (`readcsv_export.
+auto_create_c3d_from_csv`), preserving point rate, analog rate, units,
+analog channels, and occlusion (NaN ↔ negative residual). Source files are
+never overwritten; every run writes into a fresh
+`processed_edit_csv_c3d_YYYYMMDD_HHMMSS/` directory. Clicking **Run**
+prints the equivalent CLI command. Full details:
+[`vaila/help/edit_csv_c3d.md`](../../vaila/help/edit_csv_c3d.md).
 
 ## Usage
 
-1. Click the **Which conversion would you like to perform?** button in the vailá GUI
-2. Follow the prompts in the dialog windows
-3. Select input files/directories as requested
-4. Configure parameters if needed
-5. Review the output files
+1. Click the **Edit CSV/C3D** button in the vailá GUI
+2. Select the directory containing `.csv` and/or `.c3d` files
+3. Edit columns in the `ColumnReorderGUI` editor, then close it (`Esc` to save & exit)
+4. Review the output files in the printed output directory
 
 ## Related Scripts
 

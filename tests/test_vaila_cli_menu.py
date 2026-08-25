@@ -183,7 +183,7 @@ def test_tools_grid_aligns_three_columns() -> None:
     assert "C_A Data Files" in out
     assert "C_B Video/Image" in out
     assert "C_C Visualiz." in out
-    assert "45.r1_c1 Edit CSV" in out
+    assert "45.r1_c1 Edit CSV/C3D" in out
     assert "60.r1_c1 Video" in out
     assert "75.r1_c1 Show C3D" in out
     # Old glued multi-cell rows must not appear

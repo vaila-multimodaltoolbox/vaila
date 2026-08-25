@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.3.110"
-__updated__ = "23 August 2026"
+__version__ = "0.3.113"
+__updated__ = "24 August 2026"
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +118,9 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
     ),
     "show_vaila_message": CliRunHint((), "Placeholder — future vailá module."),
     # Frame C_A
-    "reorder_csv_data": CliRunHint(("uv run vaila/rearrange_data.py",), "Edit/reorder CSV GUI."),
+    "reorder_csv_data": CliRunHint(
+        ("uv run vaila/edit_csv_c3d.py --help",), "Edit/reorder CSV and C3D GUI."
+    ),
     "convert_c3d_csv": CliRunHint(
         ("uv run vaila.py",), "C3D ↔ CSV conversion — GUI chooser in main app."
     ),
@@ -207,6 +209,11 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
         ("uv run vaila/vaila_stroboscopic.py",), "Stroboscopic video GUI."
     ),
     # Global
+    "run_gpu_test": CliRunHint(
+        ("uv run python vaila/gputest.py",),
+        "Runs GPU, PyTorch, CUDA, and AI stack diagnostics (SAM 3, Sapiens2, YOLO).",
+        invoke_handler=True,
+    ),
     "display_help": CliRunHint(
         ("uv run vaila.py",),
         "Opens help index in browser from GUI, or see vaila/help/index.html",
