@@ -1,7 +1,7 @@
 """Tests for the SAM3-guided Sapiens2 pipeline.
 
-Update Date: 14 August 2026
-Version: 0.3.105
+Update Date: 24 August 2026
+Version: 0.3.112
 """
 
 from __future__ import annotations

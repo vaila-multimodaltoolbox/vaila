@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 23 August 2026
-Version: 0.3.110
+Update Date: 24 August 2026
+Version: 0.3.113
 
 Example of usage:
 uv run vaila.py
@@ -398,7 +398,7 @@ B6_r7_c4 - vailá          B6_r7_c5 - vailá
 
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
-C_A_r1_c1 - Edit CSV      C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
+C_A_r1_c1 - Edit CSV/C3D  C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
 C_A_r2_c1 - DLT/REC 2D-3D (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
 C_A_r2_c2 - vailá         C_A_r2_c3 - vailá
 C_A_r3_c1 - vailá         C_A_r3_c2 - vailá          C_A_r3_c3 - vailá
@@ -1294,10 +1294,10 @@ class Vaila(tk.Tk):
 
         ## VVVVVVVVVVVVVVV DATA BUTTONS VVVVVVVVVVVVVVVV
         # C_A - Data Files sub-columns
-        # C_A_r1_c1 - Data Files: Edit CSV
+        # C_A_r1_c1 - Data Files: Edit CSV/C3D
         reorder_csv_btn = tk.Button(
             tools_col1,
-            text="Edit CSV",
+            text="Edit CSV/C3D",
             command=self.reorder_csv_data,
             width=button_width,
         )
@@ -1376,11 +1376,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_A_r4_c2 - Data Files: vailá
-        vaila_btn10 = tk.Button(
+        # C_A_r4_c2 - Data Files: Sapiens2 3D Kinematics
+        sapiens3d_kinematics_btn = tk.Button(
             tools_col1,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Sapiens2 3D Kinematics",
+            command=self.run_sapiens3d_kinematics,
             width=button_width,
         )
 
@@ -1427,7 +1427,7 @@ class Vaila(tk.Tk):
         vaila_c_a_r3_c2.grid(row=2, column=1, padx=2, pady=2)
         vaila_c_a_r3_c3.grid(row=2, column=2, padx=2, pady=2)
         reid_marker_btn.grid(row=3, column=0, padx=2, pady=2)
-        vaila_btn10.grid(row=3, column=1, padx=2, pady=2)
+        sapiens3d_kinematics_btn.grid(row=3, column=1, padx=2, pady=2)
         vaila_btn11.grid(row=3, column=2, padx=2, pady=2)
         vaila_btn12.grid(row=4, column=0, padx=2, pady=2)
         vaila_btn13.grid(row=4, column=1, padx=2, pady=2)
@@ -1663,6 +1663,11 @@ class Vaila(tk.Tk):
         bottom_frame.pack(pady=10)
 
         help_btn = tk.Button(bottom_frame, text="Help", command=self.display_help)
+        gpu_test_btn = tk.Button(
+            bottom_frame,
+            text="GPU Test",
+            command=self.run_gpu_test,
+        )
         update_btn = tk.Button(
             bottom_frame,
             text="Check for Updates",
@@ -1671,6 +1676,7 @@ class Vaila(tk.Tk):
         exit_btn = tk.Button(bottom_frame, text="Exit", command=self.quit_app)
 
         help_btn.pack(side="left", padx=5)
+        gpu_test_btn.pack(side="left", padx=5)
         update_btn.pack(side="left", padx=5)
         exit_btn.pack(side="left", padx=5)
 
@@ -2769,21 +2775,38 @@ class Vaila(tk.Tk):
 
         startblock.run_startblock_gui()
 
-    # C_r1_c1
+    # C_A_r1_c1
     def reorder_csv_data(self):
-        """Runs the Reorder CSV Data module.
+        """Runs the Edit CSV/C3D module.
 
-        This function runs the Reorder CSV Data module, which can be used to reorder the
-        columns of CSV files. It allows the user to select the directory containing the
-        CSV files and reorder the columns according to their preference. The module will
-        then save the reordered CSV files in a new directory.
+        Lets the user pick a directory containing `.csv` and/or `.c3d` files
+        and edits them with the same column-reorder tools (`rearrange_data.
+        ColumnReorderGUI`). `.c3d` files are round-tripped through CSV and
+        converted back to `.c3d`; source files are never overwritten. Prints
+        the equivalent CLI command for the run.
 
-        The user will be prompted to select the directory containing the CSV files.
-
+        Launched in a subprocess because ``ColumnReorderGUI`` subclasses
+        ``tk.Tk`` and must not share the main *vailá* root.
         """
-        from vaila import rearrange_data
+        run_vaila_module("vaila.edit_csv_c3d", "vaila/edit_csv_c3d.py")
 
-        rearrange_data.rearrange_data_in_directory()  # Edit CSV
+    # C_A_r4_c2
+    def run_sapiens3d_kinematics(self):
+        """Runs the Sapiens2 3D Kinematics module.
+
+        Lets the user pick a Sapiens2 REC3D `.c3d` file and computes pelvis/
+        thigh/shank/foot local coordinate systems plus relative Hip/Knee/
+        Ankle joint rotation matrices, quaternions, and Euler/Cardan angles
+        (raw and neutral-zeroed), writing CSV/JSON outputs and QC plots to a
+        timestamped `processed_sapiens3d_kinematics_*` directory next to the
+        input file. See `vaila/sapiens3d_kinematics.py` module docstring for
+        the keypoint-mapping resolution order and the functional/surrogate
+        scientific-limitation disclosure (this is not Plug-in Gait).
+
+        Launched in a subprocess so its own Tkinter dialog never shares the
+        main *vailá* root.
+        """
+        run_vaila_module("vaila.sapiens3d_kinematics", "vaila/sapiens3d_kinematics.py")
 
     # C_A_r1_c2
     def convert_c3d_csv(self):
@@ -3519,6 +3542,23 @@ class Vaila(tk.Tk):
         else:
             messagebox.showerror("Error", f"Help file not found:\n{help_file_path}")
 
+    def run_gpu_test(self):
+        """Run GPU, PyTorch, CUDA, and AI model diagnostics (terminal report + GUI dialog)."""
+        print("\n" + "=" * 60)
+        print("Launching: GPU & AI Stack Diagnostics (vaila.gputest)")
+        print(">> Equivalent launch CLI: uv run python vaila/gputest.py")
+        print(
+            "Validating: PyTorch, CUDA, sam3dinov3.py, sam3sapiens2.py, "
+            "markerless2d_yolo26.py, yolov26track.py"
+        )
+        print("=" * 60 + "\n")
+        try:
+            from vaila.gputest import show_gpu_diagnostics_dialog
+        except ImportError:
+            from gputest import show_gpu_diagnostics_dialog  # type: ignore[no-redef]
+
+        show_gpu_diagnostics_dialog(parent=self)
+
     def open_link(self, event=None):
         import webbrowser
 
@@ -3621,7 +3661,9 @@ class Vaila(tk.Tk):
                 "Run this command in your terminal to update:"
             )
 
-        tk.Label(dlg, text=summary, justify="left", anchor="w").pack(fill="x", padx=12, pady=(12, 6))
+        tk.Label(dlg, text=summary, justify="left", anchor="w").pack(
+            fill="x", padx=12, pady=(12, 6)
+        )
 
         cmd_text = tk.Text(dlg, height=3, wrap="word")
         cmd_text.insert("1.0", command)
@@ -3682,7 +3724,9 @@ class Vaila(tk.Tk):
 
         tk.Button(btn_row, text="Copy Command", command=do_copy, width=14).pack(side="left", padx=4)
         if is_git:
-            tk.Button(btn_row, text="Update Now", command=do_pull, width=14).pack(side="left", padx=4)
+            tk.Button(btn_row, text="Update Now", command=do_pull, width=14).pack(
+                side="left", padx=4
+            )
         tk.Button(btn_row, text="Open GitHub", command=do_open_github, width=14).pack(
             side="left", padx=4
         )

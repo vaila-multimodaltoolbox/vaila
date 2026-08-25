@@ -268,3 +268,4 @@ tests/**/processed_sam_*/
 
 # Local chessboard / multi-cam calibration fixtures (large videos; keep local-only)
 tests/chessboard_calib/
+tests/viewc3d/**/_staging/

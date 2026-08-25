@@ -1,106 +1,162 @@
 # interp_smooth_split
 
-## 📋 Module Information
+## Module Information
 
 - **Category:** Processing
-- **File:** `vaila/interp_smooth_split.py`
-- **Version:** 0.2.0
+- **File:** `vaila/interp_smooth_split.py` (+ shared core `vaila/interp_smooth_core.py`)
+- **Version:** 0.3.112
 - **Author:** Paulo R. P. Santiago
-- **GUI:** ✅ | **CLI:** ✅
+- **GUI:** yes | **CLI:** yes
+- **Updated:** 24 August 2026
 
-## 📖 Description
+## Description
 
-Ferramenta para preencher dados em falta em ficheiros CSV (interpolação), suavização e divisão de dados. Destinada a análise biomecânica e séries temporais.
+*vailá* tool for gap filling (interpolation), smoothing/filtering, optional final
+resampling, and optional dataset splitting of CSV time-series used in biomechanics.
 
-### Funcionalidades principais
+GUI and CLI call the **same numerical core** (`interp_smooth_core`). The interactive
+preview/tester stays GUI-only.
 
-1. **Interpolação (preenchimento de gaps)**  
-   Linear, cúbica, nearest, Kalman, Hampel; ou nenhuma / skip.
+### Pipeline
 
-2. **Suavização**  
-   Nenhuma, Savitzky-Golay, LOWESS, Kalman, Butterworth, Splines, ARIMA, Mediana Móvel, Hampel.
+```text
+CSV → validate → gap handling → smooth/filter at original rate
+    → residual/derivative analysis (GUI) → optional resample → output CSV
+```
 
-3. **Configuração em TOML**  
-   `smooth_config.toml`: fonte única de verdade. Ao aplicar no diálogo o ficheiro é gravado; a análise de qualidade e o processamento (GUI ou CLI) usam estes valores quando o ficheiro existir. O diretório de output também recebe uma cópia do TOML usado.
+### Gap filling
 
-4. **Análise de qualidade**  
-   Botão "Analyze Quality": CSV de teste, análise por coluna, Winter residual (fc 1–15 Hz, fs em Hz). Selecção de coluna com Combobox (lista permanece aberta até escolher).
+`linear`, `cubic`, `nearest`, `kalman`, `none`, `skip`
 
-5. **Padding** e **divisão de dados** configuráveis.
+### Smoothing
+
+`none`, `savgol`, `lowess`, `kalman`, `butterworth`, `splines`, `arima`, `median`, `hampel`
+
+### Sampling-rate semantics
+
+| Concept | Meaning |
+| --- | --- |
+| Butterworth `fs` | Filter sampling frequency (Hz / FPS of the signal being filtered) |
+| Time Column Sample Rate Override | Rebuild `Time = frame / rate` only; does **not** replace Butterworth `fs` |
+| Original / Final rate | Optional final resampling grid |
+
+### Index columns
+
+Columns named `Time`/`t`/`tempo` and `frame`/`frames`/`frame_index` are treated as index
+axes, never as signals: they are excluded from gap filling, smoothing, and resampling
+interpolation regardless of their position in the file.
+
+After resampling, index columns are rebuilt. CSV files whose first column is `frame` keep
+that column first with integer values `0 … N−1` (no synthetic `Time` column is added).
+Files that already have `Time` keep it on the resampled time grid; an existing `frame`
+column is reset to `0 … N−1`.
+
+Padding adds and removes exactly `int(rows × percent / 100)` rows on each edge, so the
+output always has the same row count as the input when resampling is off.
+
+Cutoff must satisfy `0 < cutoff < fs/2`. Invalid cutoffs raise errors; they are **not**
+silently clamped.
+
+Hz means samples per second; FPS means frames per second. Both describe sampling rate
+for this tool.
+
+### Derivatives
+
+When a valid Time axis exists: `np.gradient(y, time)` (units / s and / s²).
+When only a constant rate is known: use `dt = 1/fs`.
+Otherwise: per-sample derivatives (not labeled as physical velocity/acceleration).
+
+### Resampling
+
+Optional stage **after** smoothing. Shared target Time grid for all numeric columns.
+Downsampling can apply an explicit anti-alias Butterworth (`--no-antialias` to disable).
+Upsampling interpolates the processed signal; it does **not** create new measured data.
+
+### Automatic Butterworth recommendation (GUI)
+
+Winter-style residual-RMS heuristic over candidate cutoffs. Displayed as a
+**recommended configuration** (best candidate under that criterion), not as a unique optimum.
 
 ---
 
-## Como executar
+## How to run
 
-### GUI (por defeito)
-
-- **Módulo:**  
-  `python -m vaila.interp_smooth_split`
-
-- **Script:**  
-  `python vaila/interp_smooth_split.py`
-
-- **Forçar GUI com argumentos:**  
-  `python -m vaila.interp_smooth_split --gui`
-
-Abre o diálogo de configuração; após Apply escolhe-se o diretório de origem. O output é escrito num subdir com timestamp (ex.: `processed_linear_lowess_YYYYMMDD_HHMMSS`).
-
-### CLI (linha de comando)
-
-A configuração é lida, por ordem de prioridade, de:
-
-1. `--config` / `-c` (caminho para um TOML)
-2. `smooth_config.toml` no diretório de entrada
-3. `smooth_config.toml` no diretório atual
-
-Se não for encontrado nenhum config, o script termina com erro (pode criar um TOML via Apply na GUI ou usar um template).
-
-**Argumentos:**
-
-| Argumento          | Descrição                                                                                       |
-| ------------------ | ----------------------------------------------------------------------------------------------- |
-| `positional_input` | Ficheiro CSV ou Diretório com ficheiros CSV (substitui o `-i`)                                  |
-| `-i`, `--input`    | Ficheiro CSV ou Diretório (alternativa ao argumento posicional)                                 |
-| `-o`, `--output`   | Diretório de saída (opcional; por defeito é criado um subdir com timestamp dentro de `--input`) |
-| `-c`, `--config`   | Caminho para `smooth_config.toml` (opcional)                                                    |
-| `--gui`            | Abre a interface gráfica em vez de correr em CLI                                                |
-
-**Exemplos:**
+### GUI
 
 ```bash
-# Usar smooth_config.toml no diretório de entrada ou no cwd para processar um ficheiro
-python -m vaila.interp_smooth_split ./data/meuarquivo.csv
+uv run vaila/interp_smooth_split.py
+uv run vaila/interp_smooth_split.py --gui
+```
 
-# Indicar diretório de saída e ficheiro de config
-python -m vaila.interp_smooth_split ./data -o ./results -c ./smooth_config.toml
+### CLI
 
-# Só indicar entrada; output = subdir com timestamp dentro de ./data
-python -m vaila.interp_smooth_split ./data
+Precedence: **explicit CLI flags > TOML > defaults**.
+
+### GUI action → CLI
+
+| GUI action | CLI |
+| --- | --- |
+| Gap fill method | `--interp-method linear\|cubic\|nearest\|kalman\|none\|skip` |
+| Max gap (frames) | `--max-gap N` |
+| Smooth none | `--smooth-method none` |
+| Savitzky-Golay | `--smooth-method savgol --window-length W --polyorder P` |
+| LOWESS | `--smooth-method lowess --frac F --iterations I` |
+| Kalman | `--smooth-method kalman` (+ TOML/params `n_iter`, `mode`) |
+| Butterworth | `--smooth-method butterworth --fs FS --cutoff FC --filter-order O` |
+| Splines | `--smooth-method splines --smoothing-factor S` |
+| ARIMA | `--smooth-method arima --arima-p P --arima-d D --arima-q Q` |
+| Moving median | `--smooth-method median --median-kernel K` |
+| Hampel | `--smooth-method hampel --hampel-window W --hampel-sigma S` |
+| Padding % | `--padding PCT` |
+| Split dataset | `--split` |
+| Time Column Sample Rate Override | `--time-column-rate HZ` |
+| Enable final resampling | `--resample --original-rate R0 --final-rate R1` |
+| Disable anti-alias | `--no-antialias` |
+| Interactive preview / Winter / recommend | GUI only |
+
+```bash
+# Basic
+uv run vaila/interp_smooth_split.py -i ./data
+
+# Butterworth
+uv run vaila/interp_smooth_split.py -i ./data --smooth-method butterworth \
+    --fs 100 --cutoff 10 --filter-order 4
+
+# Savitzky-Golay
+uv run vaila/interp_smooth_split.py -i ./data --smooth-method savgol \
+    --window-length 7 --polyorder 3
+
+# Time-column rebuild (not Butterworth fs)
+uv run vaila/interp_smooth_split.py -i ./data --time-column-rate 240
+
+# Downsample
+uv run vaila/interp_smooth_split.py -i ./data --resample \
+    --original-rate 100 --final-rate 50
+
+# Upsample
+uv run vaila/interp_smooth_split.py -i ./data --resample \
+    --original-rate 30 --final-rate 60
+
+# TOML + override
+uv run vaila/interp_smooth_split.py -i ./data -c ./smooth_config.toml --cutoff 8
 ```
 
 ---
 
-## Ficheiro de configuração (TOML)
+## TOML (`smooth_config.toml`)
 
-- **smooth_config.toml** (gravado ao aplicar no diálogo ou na pasta de output de cada run):
-  - `[interpolation]`: method, max_gap
-  - `[smoothing]`: method e parâmetros (frac, it para LOWESS; cutoff, fs para Butterworth; etc.)
-  - `[padding]`: percent
-  - `[split]`: enabled
-  - `[time_column]`: sample_rate
+Sections: `[interpolation]`, `[smoothing]`, `[padding]`, `[split]`, `[time_column]`,
+`[resample]` (`enabled`, `original_rate`, `final_rate`, `antialias`, `antialias_cutoff`).
 
 ---
 
-## 🔧 Funções principais
+## Tests
 
-- `run_fill_split_dialog` — Abre o diálogo GUI e, após Apply, processamento em batch.
-- `run_batch(source_path, config, dest_dir=None, use_messagebox=True)` — Processa um CSV ou todos os CSV em `source_path` com a config dada; usado pela GUI e pela CLI.
-- `process_file` — Processa um CSV com a configuração fornecida.
-- `load_smooth_config_for_analysis` / `save_smooth_config_toml` — Leitura/gravação de `smooth_config.toml`.
-- `winter_residual_analysis` — Análise de resíduos Winter (Butterworth, RMS, sugestão de fc).
+```bash
+uv run pytest tests/test_interp_smooth_split.py -v
+```
 
 ---
 
-📅 **Atualizado:** 2026  
-🔗 **Parte do vailá - Multimodal Toolbox**  
-🌐 [Repositório GitHub](https://github.com/vaila-multimodaltoolbox/vaila)
+Part of *vailá* — Multimodal Toolbox  
+https://github.com/vaila-multimodaltoolbox/vaila

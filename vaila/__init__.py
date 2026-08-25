@@ -20,6 +20,7 @@ from .compress_videos_h264 import compress_videos_h264_gui
 from .compress_videos_h265 import compress_videos_h265_gui
 from .data_processing import read_cluster_csv, read_mocap_csv
 from .drawboxe import run_drawboxe
+from .edit_csv_c3d import run_edit_csv_c3d
 from .extractpng import VideoProcessor
 from .filemanager import (
     copy_file,
@@ -65,6 +66,7 @@ __all__ = [
     "headersidx",
     "reshapedata",
     "rearrange_data_in_directory",
+    "run_edit_csv_c3d",
     "batch_cut_videos",
     "run_drawboxe",
     "compress_videos_h264_gui",

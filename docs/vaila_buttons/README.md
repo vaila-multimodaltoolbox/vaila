@@ -53,7 +53,7 @@ Each button in the vailá GUI has its own documentation file:
 | Soccer Tools | VEK ElasticKick | `vek` | [vek-elastickick.md](vek-elastickick.md) |
 | B_r7_c1 | FIFA cams→DLT | `fifa_cams_to_dlt_per_frame` | [fifa-to-dlt.md](fifa-to-dlt.md) |
 | B_r7_c2 | FIFA Dataset Builder | `fifa_dataset_builder` | [fifa-dataset-builder.md](fifa-dataset-builder.md) |
-| C_A_r1_c1 | Edit CSV | `reorder_csv_data` | [reorder-csv-data.md](reorder-csv-data.md) |
+| C_A_r1_c1 | Edit CSV/C3D | `reorder_csv_data` (runs `edit_csv_c3d.py`) | [reorder-csv-data.md](reorder-csv-data.md) |
 | C_A_r1_c2 | C3D <--> CSV | `convert_c3d_csv` | [convert-c3d-csv.md](convert-c3d-csv.md) |
 | C_A_r1_c3 | Smooth & Filter | `gapfill_split` | [smooth-filter.md](smooth-filter.md) |
 | C_A_r2_c1 | DLT/REC 2D-3D | `dlt_rec_toolkit` | coringa: Make DLT2D ([dlt2d.md](dlt2d.md)), Rec2D 1DLT ([rec2d-one-dlt2d.md](rec2d-one-dlt2d.md)), Rec2D MultiDLT ([rec2d.md](rec2d.md)), Make DLT3D ([dlt3d.md](dlt3d.md)), Rec3D 1DLT ([rec3d-one-dlt3d.md](rec3d-one-dlt3d.md)), Rec3D MultiDLT ([rec3d.md](rec3d.md)) |

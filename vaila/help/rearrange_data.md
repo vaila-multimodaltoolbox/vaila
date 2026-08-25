@@ -6,7 +6,7 @@
 - **File:** `vaila\rearrange_data.py`
 - **Lines:** 1772
 - **Size:** 68536 characters
-- **Version:** 0.0.6
+- **Version:** 0.3.111
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -20,8 +20,16 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 25 Jul 2025
-Version: 0.0.6
+Update Date: 24 August 2026
+Version: 0.3.111
+
+> **Edit CSV/C3D:** the Frame C `C_A_r1_c1` button no longer calls this
+> module directly — it now runs [`edit_csv_c3d`](edit_csv_c3d.html)
+> ([MD](edit_csv_c3d.md)), which reuses `ColumnReorderGUI` from this file
+> for the actual editing but also accepts `.c3d` files (converted to CSV,
+> edited, converted back). Use this module's own `rearrange_data_in_directory()`
+> / `--yolo-tracker` CLI when you specifically want the CSV-only entry point;
+> use `edit_csv_c3d.py` for a directory that mixes `.csv` and `.c3d`.
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -77,6 +85,6 @@ License:
 
 ---
 
-📅 **Generated automatically on:** 15/10/2025 08:04:44
+📅 **Generated automatically on:** 15/10/2025 08:04:44 (Edit CSV/C3D note added 24/08/2026)
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

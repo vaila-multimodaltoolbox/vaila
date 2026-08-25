@@ -38,18 +38,19 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Visualization</p>
             <p><strong>File:</strong> vaila\viewc3d.py</p>
-            <p><strong>Version:</strong> 0.2.0</p>
+            <p><strong>Version:</strong> 0.3.111</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
 
         <div class="docstring">
             <h3>📖 Description</h3>
-            <p>Advanced 3D viewer for C3D files with adaptive visualization (Open3D backend). <strong>To run:</strong> <code>uv run viewc3d.py</code>. The toolbox also provides a PyVista-based viewer: <code>viewc3d_pyvista.py</code> (see help in that module).</p>
+            <p>Advanced 3D viewer for C3D files with adaptive visualization (Open3D backend). <strong>To run:</strong> <code>uv run viewc3d.py</code>. The toolbox also provides a PyVista-based viewer: <code>viewc3d_pyvista.py</code> (see help in that module). Supports loading multiple C3D files into one running viewer (<code>Ctrl+L</code>), each with its own marker color, synced to one timeline even when source FPS rates differ.</p>
             <h4>Architecture</h4>
             <ul>
                 <li><strong>VailaModel</strong> (data layer): GetPointFrame, GetFrameNumber, GetPointFrequency, get_bounds(), is_z_up()</li>
                 <li><strong>VailaView</strong> (Open3D layer): Scene, trails, dynamic grid, Z-up camera, marker picking</li>
+                <li><strong>LoadedC3D</strong>: per-file viewer state (color, spheres) for files added via <code>Ctrl+L</code></li>
             </ul>
             <h4>Key Features</h4>
             <ul>
@@ -57,13 +58,15 @@
                 <li>Trails with ghosting (older segments darker), Z-up camera when Z range &gt; Y range</li>
                 <li>Marker picking: <code>`</code> / <code>~</code> to cycle and highlight one marker (yellow)</li>
                 <li>Grid and ground from data bounds; Matplotlib fallback if no OpenGL</li>
+                <li><strong>Multi-file loading (<code>Ctrl+L</code>)</strong>: add more C3D files at runtime, each with a distinct marker color; timeline syncs to the highest-FPS loaded file by default, with a prompt to downsample to the lowest FPS instead (nearest-index playback lookup, no data mutated)</li>
             </ul>
         </div>
 
         <div class="functions">
             <h3>🔧 Main Functions / Classes</h3>
-            <p><strong>Classes:</strong> <code>VailaModel</code>, <code>VailaView</code></p>
+            <p><strong>Classes:</strong> <code>VailaModel</code>, <code>VailaView</code>, <code>LoadedC3D</code></p>
             <p><strong>Entry:</strong> <code>run_viewc3d</code></p>
+            <p><strong>Multi-file sync:</strong> <code>resolve_master_fps</code>, <code>master_frame_count</code>, <code>map_master_frame_to_local</code>, <code>assign_file_color</code></p>
             <p><strong>Data/UI:</strong> <code>load_c3d_file</code>, <code>select_markers</code>, <code>detect_c3d_units</code></p>
             <p><strong>Scene:</strong> <code>create_ground_plane</code>, <code>create_ground_grid</code>, <code>create_football_field_lines</code>, <code>load_field_lines_from_csv</code></p>
             <p><strong>Fallback:</strong> <code>run_viewc3d_fallback</code> (Matplotlib when OpenGL unavailable)</p>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá - Sapiens2 3D Kinematics</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; color: #222; }
+    .container { max-width: 980px; margin: auto; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
+    h1 { color: #24384d; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+    h2 { color: #34495e; margin-top: 28px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+    code { background: #eef1f5; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f4f6f8; border: 1px solid #dce1e6; padding: 14px; overflow-x: auto; }
+    .info { background: #eef6fb; border-left: 4px solid #3498db; padding: 12px 15px; }
+    .ok { background: #edf8f0; border: 1px solid #a9d7b2; padding: 12px 15px; }
+    .warn { background: #fdf3e7; border-left: 4px solid #e67e22; padding: 12px 15px; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    th, td { border: 1px solid #dce1e6; padding: 6px 10px; text-align: left; }
+    th { background: #f4f6f8; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+  </style>
+</head>
+<body><div class="container">
+  <h1>Sapiens2 3D Kinematics (<code>sapiens3d_kinematics.py</code>)</h1>
+  <div class="info">
+    <strong>Category:</strong> Data Files &nbsp;|&nbsp;
+    <strong>Version:</strong> 0.3.113 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-24<br>
+    <strong>GUI:</strong> Frame C → Data Files → <strong>Sapiens2 3D Kinematics</strong> (<code>C_A_r4_c2</code>)<br>
+    <strong>CLI:</strong> Yes
+  </div>
+
+  <h2>Purpose</h2>
+  <p>Computes functional 3D lower-limb kinematics — pelvis / thigh(L,R) /
+  shank(L,R) / foot(L,R) local coordinate systems, relative <strong>Hip</strong>,
+  <strong>Knee</strong>, and <strong>Ankle</strong> joint rotation matrices,
+  quaternions, and Euler/Cardan angles — from a Sapiens2 REC3D <code>.c3d</code>
+  file.</p>
+  <p>Pipeline: Sapiens2 2D keypoints → REC3D (DLT triangulation) → C3D with
+  generic <code>p1..pN</code> point labels. Neither <code>rec3d.py</code> nor
+  <code>rec3d_one_dlt3d.py</code> carries keypoint names into the C3D writer,
+  so semantic identity is lost at export time unless it can be recovered
+  afterward — which is exactly what this module's landmark resolver does
+  before computing anything.</p>
+
+  <h2>Keypoint mapping — read this before trusting any output</h2>
+  <p>A REC3D-exported C3D never stores which anatomical landmark each
+  <code>pN</code> is. The module resolves the mapping in this order, and
+  refuses to guess if none apply:</p>
+  <ol>
+    <li><strong>Direct label match</strong> — if the C3D's own point labels
+      are already semantic (<code>left_hip</code>, <code>l_hip</code>,
+      <code>LHip</code>, ...), match them directly.</li>
+    <li><strong>Canonical 308-keypoint order</strong> — if the true point
+      count (<code>POINT:LABELS</code> merged with its
+      <code>LABELS2</code>/<code>LABELS3</code>/... continuation groups via
+      <code>vaila.readc3d_export.get_point_labels</code> — a naive read of
+      <code>POINT:LABELS</code> alone silently truncates at the C3D format's
+      255-entry-per-group cap) is exactly <strong>308</strong>,
+      <code>pN</code> is treated as the 1-based index into the canonical
+      Sapiens2 "Sociopticon" order shipped at
+      <code>vaila/skeletons/sapiens2_goliath308.json</code>. This is the
+      common case for a full-topology Sapiens2 REC3D export.</li>
+    <li><strong>Explicit <code>--keypoint-map</code></strong> — if the point
+      count matches no known canonical topology in the repository, the
+      module raises <code>LandmarkResolutionError</code> naming the missing
+      anatomical slots instead of fabricating a mapping.</li>
+  </ol>
+  <pre>{"left_hip": "p10", "right_hip": "p11", "left_knee": "p12", ...}</pre>
+  <p>(point labels or 0-based integer indices are both accepted).</p>
+
+  <h2>Scientific limitation — functional markerless model, not Plug-in Gait</h2>
+  <div class="warn">Sapiens2 provides no equivalent of Vicon's THI/TIB wands,
+  femoral/tibial epicondyle markers, or an anatomical calibration trial.
+  Without those, the longitudinal (axial-rotation) axis of the thigh and
+  shank is not directly observable from hip/knee/ankle joint centers alone.
+  Segment frames are built from joint centers only (Gram-Schmidt) — a
+  <strong>functional/surrogate</strong> model:
+    <ul>
+      <li><strong>flexion/extension</strong> (first Euler rotation, both
+        sequences) is the most directly observable component;</li>
+      <li><strong>ab/adduction</strong> (frontal plane) is a functional
+        estimate;</li>
+      <li><strong>internal/external rotation</strong> (transverse plane /
+        axial) is a surrogate estimate and should <strong>not</strong> be
+        interpreted as anatomically identical to Plug-in Gait's axial
+        rotation.</li>
+    </ul>
+  Thigh and shank frames no longer depend on the adjacent segment (thigh does
+  not use ankle; shank does not use hip) — each derives its mediolateral axis
+  from the pelvis (thigh) or from the already-built proximal segment's own Y
+  axis, chain-propagated distally (shank). This removes the straight-leg
+  (collinear hip-knee-ankle) singularity the joint-center-only Gram-Schmidt
+  construction previously had. A residual, anatomically distinct singularity
+  remains if the thigh's own long axis (hip→knee) happens to be parallel to
+  the pelvis's mediolateral axis (femur pointing directly sideways) — a
+  degenerate hip-abduction pose, not triggered by knee flexion.
+  <br><br>
+  The pelvis frame requires a superior landmark (neck, or the midpoint of
+  both shoulders). When neither is available, the module does
+  <strong>not</strong> fabricate a plausible-looking pelvis orientation: it
+  emits <code>NaN</code> for the pelvis's anterior/vertical axes (and
+  therefore for <code>R_hip</code>) and records a QC warning in
+  <code>kinematics_metadata.json</code>'s <code>qc_warnings</code> list and
+  on stderr. The pelvis's mediolateral axis is unaffected and still usable
+  as the thigh frames' secondary reference.</div>
+  <p>Reference: Wu G et al., <i>J Biomech</i> 2002;35:543-548, DOI:
+  10.1016/S0021-9290(01)00222-6 (ISB joint-coordinate-system convention,
+  followed in spirit — not letter, since no ASIS/PSIS/epicondyle markers are
+  available); Grood &amp; Suntay (1983) for the general
+  joint-coordinate-system concept.</p>
+
+  <h2>Quaternion convention</h2>
+  <p><i>vailá</i> already has three mutually inconsistent quaternion
+  conventions across <code>rotation.py</code> (docstring claims scalar-first
+  <code>(w,x,y,z)</code> but the code actually returns scipy's scalar-last
+  <code>[x,y,z,w]</code> — a known, unfixed repo bug), <code>joint_kinematics.py</code>
+  (scalar-first <code>[w,x,y,z]</code>, correctly documented), and the IMU
+  modules (scalar-first <code>[w,x,y,z]</code>). <strong>This module</strong>
+  uses scipy's native scalar-last <code>[x, y, z, w]</code>
+  (<code>Rotation.as_quat()</code> directly, with no docstring/code
+  mismatch), with per-DOF temporal sign continuity enforced
+  (<code>dot(q[t], q[t-1]) &lt; 0 → q[t] *= -1</code>). Output CSV columns
+  are named <code>..._qx, ..._qy, ..._qz, ..._qw</code> so the convention is
+  unambiguous without reading this doc.</p>
+
+  <h2>Euler/Cardan conventions</h2>
+  <p>Two sequences are written for every segment/joint (scipy intrinsic,
+  uppercase-letter sequence strings):</p>
+  <ul>
+    <li><code>functional_xyz</code> — <code>XYZ</code> for all three joints
+      (this module's own default).</li>
+    <li><code>vicon_compatible</code> — Hip <code>YXZ</code>, Knee
+      <code>YXZ</code>, Ankle <code>YZX</code> (matches current Plug-in Gait
+      lower-body rotation orders; the axis <strong>assignment</strong> to
+      anatomical flexion/ab-adduction/rotation still carries the
+      functional/surrogate caveat above — matching the rotation
+      <em>order</em> is not the same as matching the anatomical
+      calibration).</li>
+  </ul>
+
+  <h2>Coordinate frame definitions</h2>
+  <table>
+    <tr><th>Segment</th><th>Origin</th><th>Primary axis</th><th>Secondary reference</th></tr>
+    <tr><td>Pelvis</td><td>mid-hip</td><td>Y = left_hip − right_hip</td><td>neck (or mid-shoulder) − mid_hip for the up direction</td></tr>
+    <tr><td>Thigh</td><td>hip</td><td>Z = knee − hip</td><td>pelvis mediolateral axis (left_hip − right_hip) — independent of knee/ankle</td></tr>
+    <tr><td>Shank</td><td>knee</td><td>Z = ankle − knee</td><td>the thigh frame's own Y axis, chain-propagated — independent of hip/heel/toe</td></tr>
+    <tr><td>Foot</td><td>ankle</td><td>X = toe − heel</td><td>(knee − ankle) component orthogonal to X</td></tr>
+  </table>
+  <p><strong>Left/right sign convention:</strong> each segment is built once
+  from an unsigned, side-independent secondary reference, then the
+  right-side frame is corrected by a single fixed local 180° rotation
+  (<code>R_right = R_raw @ diag(1, −1, −1)</code> for thigh/shank,
+  <code>diag(−1, 1, −1)</code> for foot — always a proper rotation, since
+  both are signed permutations of the identity with determinant +1).
+  Verified against a synthetic sagittal-mirror test: a naive per-side sign
+  flip folded into the auxiliary vector before the cross product (the
+  previous convention) reported matching flexion/extension between mirrored
+  left/right legs but inconsistent signs on ab/adduction, varus/valgus, and
+  axial-rotation/inversion-eversion; the fixed post-hoc rotation reports all
+  three Euler components consistently for both sides
+  (<code>tests/test_sapiens3d_kinematics.py::test_mirror_left_right_report_consistent_anatomical_signs</code>).</p>
+  <p>Relative joint rotations:</p>
+  <pre>R_hip   = R_pelvis.T @ R_thigh
+R_knee  = R_thigh.T @ R_shank
+R_ankle = R_shank.T @ R_foot</pre>
+  <p>Every rotation matrix is projected onto SO(3) via SVD/polar
+  decomposition (<code>project_to_so3</code>) before use, and every frame's
+  determinant and orthogonality error (<code>||RᵀR − I||</code>) are written
+  to the angle CSVs as QC columns.</p>
+
+  <h2>Raw and neutral-zeroed orientations</h2>
+  <p>Pass <code>--neutral-frames start:end</code> (0-based, half-open) to
+  additionally compute a neutral pose (quaternion-averaged over that frame
+  range, Markley et al. 2007) and zero every segment/joint rotation against
+  it (<code>R_zeroed[t] = R_neutral.T @ R[t]</code>). Raw and neutral-zeroed
+  outputs are written as separate CSVs.</p>
+
+  <h2>GUI</h2>
+  <p>Click <strong>Sapiens2 3D Kinematics</strong>, browse to a Sapiens2
+  REC3D <code>.c3d</code> file, optionally a <code>--keypoint-map</code>
+  JSON, set the Butterworth cutoff (default 6 Hz; 0 disables filtering) and
+  an optional neutral-frame range, then <strong>Run</strong>. The equivalent
+  CLI command is printed to the terminal before the run starts. Outputs are
+  written to a timestamped
+  <code>processed_sapiens3d_kinematics_YYYYMMDD_HHMMSS/</code> directory
+  next to the input file.</p>
+
+  <h2>CLI</h2>
+  <pre># No args -&gt; GUI (same as the button)
+uv run vaila/sapiens3d_kinematics.py
+
+# Headless run
+uv run vaila/sapiens3d_kinematics.py -i path/to/rec3d.c3d \
+    [--keypoint-map map.json] [--cutoff 6.0] \
+    [--neutral-frames 0:30] [--output-dir OUTPUT_DIR] [--no-plots]</pre>
+
+  <h2>Outputs</h2>
+  <p>Written to <code>processed_sapiens3d_kinematics_YYYYMMDD_HHMMSS/</code>:</p>
+  <ul>
+    <li><code>&lt;stem&gt;_segment_rotations_raw.csv</code>,
+      <code>&lt;stem&gt;_joint_rotations_raw.csv</code> — full 3×3 rotation
+      matrices per frame.</li>
+    <li><code>&lt;stem&gt;_segment_angles_raw.csv</code>,
+      <code>&lt;stem&gt;_joint_angles_raw.csv</code> — quaternion
+      (<code>qx,qy,qz,qw</code>), both Euler sequences (in degrees), and
+      per-frame QC (<code>det</code>, <code>orth_err</code>) columns.</li>
+    <li><code>*_neutral.csv</code> variants of the above (only when
+      <code>--neutral-frames</code> is given).</li>
+    <li><code>&lt;stem&gt;_kinematics_metadata.json</code> — resolved
+      landmark mapping, resolution method, quaternion/Euler convention
+      notes, frame definitions, and the scientific-limitations text.</li>
+    <li>QC plots (unless <code>--no-plots</code>): joint Euler angles, SO(3)
+      determinant/orthogonality error, quaternion components (left side),
+      pelvis frame determinant, and a raw-vs-neutral-zeroed hip flexion
+      comparison.</li>
+  </ul>
+
+  <h2>Reused vailá utilities</h2>
+  <ul>
+    <li><code>vaila.readc3d_export.get_point_labels</code> — 255-cap-safe
+      C3D point-label read (not reimplemented).</li>
+    <li><code>vaila.filter_utils.butter_filter</code> — Butterworth
+      zero-phase low-pass filtering of the 3D trajectories.</li>
+    <li><code>scipy.spatial.transform.Rotation</code> — matrix ↔
+      quaternion ↔ Euler conversions.</li>
+  </ul>
+  <div class="ok"><code>rotation.py</code> and <code>joint_kinematics.py</code>
+  are deliberately <strong>not</strong> reused for the frame/rotation math
+  itself (different scope and quaternion convention — see above); their own
+  conventions are unaffected by this module.</div>
+
+  <h2>Tests</h2>
+  <pre>uv run pytest tests/test_sapiens3d_kinematics.py -v</pre>
+  <p>Covers landmark resolution (direct label match, canonical-308 match,
+  explicit <code>--keypoint-map</code>, and the deliberate refusal when
+  neither applies), synthetic known-rotation validation (frame properness,
+  SO(3) projection, Euler round-trips for all three joint sequences,
+  quaternion unit-norm/scalar-last convention, temporal sign continuity,
+  neutral-zero calibration), and real-fixture QC against
+  <code>tests/viewc3d/rec3d_240hz.c3d</code> (308-point canonical mapping;
+  confirms <code>tests/viewc3d/rec3d_200hz.c3d</code>, 224 points, correctly
+  raises <code>LandmarkResolutionError</code> instead of guessing).</p>
+
+  <div class="footer">
+    <i>vailá</i> — Versatile Anarcho Integrated Liberation Ánalysis · v0.3.113
+  </div>
+</div></body>
+</html>

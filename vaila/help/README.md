@@ -115,6 +115,7 @@ Each script help should include:
 - `filtering.md/html` - Data filtering
 - `filter_utils.md/html` - Filter utilities
 - `rearrange_data.md/html` - Data rearrangement
+- `edit_csv_c3d.md/html` - Edit CSV/C3D (CSV + C3D column editing, round-trips C3D through CSV)
 - `reid_markers.md/html` - Marker re-identification
 - And more...
 

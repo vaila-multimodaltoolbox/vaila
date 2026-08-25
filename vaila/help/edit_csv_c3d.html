@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá - Edit CSV/C3D</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; color: #222; }
+    .container { max-width: 980px; margin: auto; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
+    h1 { color: #24384d; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+    h2 { color: #34495e; margin-top: 28px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+    code { background: #eef1f5; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f4f6f8; border: 1px solid #dce1e6; padding: 14px; overflow-x: auto; }
+    .info { background: #eef6fb; border-left: 4px solid #3498db; padding: 12px 15px; }
+    .ok { background: #edf8f0; border: 1px solid #a9d7b2; padding: 12px 15px; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+  </style>
+</head>
+<body><div class="container">
+  <h1>Edit CSV/C3D (<code>edit_csv_c3d.py</code>)</h1>
+  <div class="info">
+    <strong>Category:</strong> Data Files &nbsp;|&nbsp;
+    <strong>Version:</strong> 0.3.111 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-08-24<br>
+    <strong>GUI:</strong> Frame C → Data Files → <strong>Edit CSV/C3D</strong> (<code>C_A_r1_c1</code>)<br>
+    <strong>CLI:</strong> Yes
+  </div>
+
+  <h2>Purpose</h2>
+  <p>Frame C button <code>C_A_r1_c1</code> (previously "Edit CSV") opens a directory
+  that holds <code>.csv</code> and/or <code>.c3d</code> files and applies the same
+  column-editing tools from <code>rearrange_data.py</code>'s
+  <code>ColumnReorderGUI</code> to both:</p>
+  <ul>
+    <li><code>.csv</code> files go straight into the editor, exactly like the old
+      "Edit CSV" button.</li>
+    <li><code>.c3d</code> files are converted to a marker CSV first (headless,
+      via <code>readc3d_export.c3d_markers_to_dataframe</code>), edited alongside
+      the CSVs, then converted back to <code>.c3d</code> (via
+      <code>readcsv_export.auto_create_c3d_from_csv</code>), preserving
+      <strong>POINT RATE</strong>, <strong>ANALOG RATE</strong>,
+      <strong>POINT UNITS</strong>, analog channels, and occlusion residual
+      flags (a <code>NaN</code> sample in the CSV round-trips back to a
+      negative C3D residual — never silently parked at the world origin).</li>
+  </ul>
+  <p>Source files are never overwritten. Every run writes into a fresh
+  <code>processed_edit_csv_c3d_YYYYMMDD_HHMMSS/</code> directory.</p>
+  <div class="ok">The <strong>C3D &lt;--&gt; CSV</strong> button (<code>C_A_r1_c2</code>,
+  the <code>readc3d_export.py</code> / <code>readcsv_export.py</code> batch
+  converters) is a separate tool and is not replaced by this module — use it
+  for one-off full C3D↔CSV exports without the column editor.</div>
+
+  <h2>GUI</h2>
+  <p>Click <strong>Edit CSV/C3D</strong>, pick a directory containing
+  <code>.csv</code> and/or <code>.c3d</code> files. Hidden files (dotfiles) are
+  ignored. The same <code>ColumnReorderGUI</code> editor used by the old
+  "Edit CSV" button opens on the combined set — <code>.c3d</code> files appear
+  as their staged marker CSV (<code>Time, LABEL_X, LABEL_Y, LABEL_Z, ...</code>).
+  Edit and close the editor (<code>Esc</code> for Save &amp; Exit, or
+  <code>Ctrl+S</code> for an intermediate save) as usual. After the editor
+  closes:</p>
+  <ul>
+    <li>Files that started as <code>.csv</code> are written to
+      <code>&lt;output&gt;/&lt;stem&gt;_final.csv</code>.</li>
+    <li>Files that started as <code>.c3d</code> are converted back and written
+      to <code>&lt;output&gt;/&lt;stem&gt;.c3d</code>.</li>
+  </ul>
+  <p>Clicking <strong>Run</strong> prints the equivalent CLI command inside a
+  highlighted banner in the terminal — copy/paste it to repeat this run
+  headlessly.</p>
+
+  <h2>CLI</h2>
+  <pre><code># No args -> GUI (same as the button)
+uv run vaila/edit_csv_c3d.py
+
+# GUI, pre-filled with a directory
+uv run vaila/edit_csv_c3d.py -i INPUT_DIR [-o OUTPUT_DIR]
+
+# Headless: round-trip every .csv/.c3d file with no column changes
+uv run vaila/edit_csv_c3d.py -i INPUT_DIR -o OUTPUT_DIR --identity
+
+# Headless: keep/reorder columns by exact header name (CSV and C3D markers)
+uv run vaila/edit_csv_c3d.py -i INPUT_DIR -o OUTPUT_DIR --columns Time,p1_X,p1_Y,p1_Z</code></pre>
+  <p>Headless mode (<code>--identity</code> or <code>--columns</code>) never
+  opens a Tk window — it is safe to run in a script or CI.
+  <code>--columns</code> mirrors <code>rearrange_data.reshapedata</code>'s
+  filtering: only existing headers are kept, in the order given. For
+  <code>.c3d</code>-derived data, <code>auto_create_c3d_from_csv</code>
+  derives marker labels from complete <code>LABEL_X/Y/Z</code> triples in
+  column order, so a <code>--columns</code> list touching C3D markers must
+  keep whole X/Y/Z triples together and in order, or the round-tripped C3D
+  will be malformed.</p>
+
+  <h2>Scientific contract</h2>
+  <ul>
+    <li>POINT RATE, ANALOG RATE, and POINT UNITS (m vs mm) from the source
+      <code>.c3d</code> are preserved on write-back.</li>
+    <li>Analog channels are preserved when present (round-tripped through the
+      same <code>Time</code> + channel-column CSV schema used by the
+      <strong>C3D &lt;--&gt; CSV</strong> exporter).</li>
+    <li>A <code>NaN</code> sample in the edited CSV becomes a
+      <strong>negative residual</strong> in the written C3D
+      (occluded/untracked), never a valid sample sitting at the world origin
+      — see <code>tests/test_c3d_invalid_points.py</code> and
+      <code>tests/test_edit_csv_c3d.py</code>.</li>
+    <li>Coordinate frame / axis labels are unchanged; this tool
+      reorders/edits columns, it does not re-express lab axes (use
+      <code>rearrange_data</code>'s existing lab-reference action on the CSV
+      for that).</li>
+  </ul>
+
+  <h2>Tests</h2>
+  <pre><code>uv run pytest tests/test_edit_csv_c3d.py tests/test_c3d_invalid_points.py tests/test_vaila_cli_menu.py -v</code></pre>
+
+  <div class="footer">
+    <p>📅 Added: 24/08/2026</p>
+    <p>🔗 Part of <i>vailá</i> - Multimodal Toolbox</p>
+    <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+  </div>
+</div></body>
+</html>

@@ -136,6 +136,7 @@
                 <div class="keyboard-shortcut"><strong>↑ ↓</strong> - Forward/Backward 60 frames</div>
                 <div class="keyboard-shortcut"><strong>S/E</strong> - Jump to start/end</div>
                 <div class="keyboard-shortcut"><strong>Space or Enter</strong> - Play/Pause animation</div>
+                <div class="keyboard-shortcut"><strong>Ctrl+L</strong> - Load additional C3D file(s)</div>
             </div>
 
             <div class="module-section">
@@ -275,6 +276,24 @@
                 <li><strong>`</strong> (backtick): next marker</li>
                 <li><strong>~</strong> (tilde): previous marker</li>
                 <li>Picked marker name and index shown in console</li>
+            </ul>
+        </div>
+
+        <div class="feature-highlight">
+            <h3>🗂️ Multi-File Loading (Ctrl+L)</h3>
+            <ul>
+                <li><strong>Ctrl+L</strong>: open a file dialog and load one or more additional
+                    <code>.c3d</code> files into the currently running viewer (plain <strong>L</strong>
+                    keeps setting custom view limits, unchanged)</li>
+                <li>Each loaded file's markers get their own color, assigned in load order from
+                    the existing marker-color palette (cycles if more than 11 files are loaded)</li>
+                <li>The playback timeline syncs to the <strong>highest-FPS</strong> loaded file by
+                    default; a prompt appears when FPS rates differ, offering to downsample the
+                    higher-FPS file(s) to match the <strong>lowest</strong> FPS instead</li>
+                <li>Frame mapping is a nearest-index lookup only (no interpolation of marker
+                    data); a shorter recording holds its last frame once its own timeline ends</li>
+                <li>Trails, dynamic skeleton, measurement line, and marker-swap editing stay
+                    scoped to the first-loaded file</li>
             </ul>
         </div>
 

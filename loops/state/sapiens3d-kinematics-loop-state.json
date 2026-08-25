@@ -1,0 +1,56 @@
+{
+  "loop": "sapiens3d-kinematics",
+  "status": "success",
+  "iteration_count": 2,
+  "budget": {"max_iterations": 40},
+  "frozen_design_decisions": {
+    "gui_placement": "new flat button, Frame C-A (Data Files), label 'Sapiens2 3D Kinematics' -- user-selected, overriding repo's general chooser-consolidation trend for this C3D-post-processing tool",
+    "module_filename": "vaila/sapiens3d_kinematics.py",
+    "quaternion_convention": "scipy scalar-last [x, y, z, w], deliberate divergence from joint_kinematics.py (scalar-first) and rotation.py (docstring claims scalar-first, code returns scalar-last -- known repo bug)",
+    "reused_not_reimplemented": ["vaila/filter_utils.py:butter_filter", "scipy.spatial.transform.Rotation"],
+    "not_reused_by_design": ["rotation.py:createortbase*/calcmatrot/rotmat2euler/rotmat2quat", "joint_kinematics.py:local_rotations_from_global/rotmat_to_euler_xyz_deg/rotmat_to_quat_wxyz"]
+  },
+  "step0_checks": {
+    "repo_clean_on_branch": null,
+    "fixtures_readable": null,
+    "fixture_facts": {
+      "rec3d_240hz.c3d": {"rate_hz": 240.0, "n_points": 308, "labels": "p1..p308 (merged POINT:LABELS+LABELS2, verified via vaila.readc3d_export.get_point_labels; naive POINT:LABELS-only read undercounts to 255 due to the C3D 255-per-group cap)", "units": "m", "n_frames": 8298},
+      "rec3d_200hz.c3d": {"rate_hz": 200.0, "n_points": 224, "labels": "p1..p224 (merged)", "units": "mm", "n_frames": 8074}
+    },
+    "keypoint_mapping_resolved": true,
+    "keypoint_mapping_method": "rec3d_240hz.c3d: n_points==308 matches vaila/skeletons/sapiens2_goliath308.json canonical Sociopticon order exactly (1-based pN -> names[N-1]; spot-verified p10=left_hip, p11=right_hip against live `sapiens` package parse_pose_metainfo output) -> automatic canonical-308 mapping used, no manual input needed. rec3d_200hz.c3d: n_points==224, does not match any known canonical topology in-repo -> resolver correctly refuses and requires an explicit --keypoint-map (unresolved for that file, by design, not fabricated).",
+    "sapiens_package_importable_in_env": true,
+    "current_vaila_version_at_freeze_time": "0.3.111"
+  },
+  "ranked_targets": [
+    {"id": "0_keypoint_mapping", "status": "done", "evidence": "rec3d_240hz.c3d true point count is 308 (not 255 -- earlier read was truncated by the C3D 255-per-LABELS-group cap); merged via get_point_labels() matches vaila/skeletons/sapiens2_goliath308.json canonical order exactly. rec3d_200hz.c3d (224 pts) has no resolvable canonical mapping and correctly requires --keypoint-map."},
+    {"id": "1_pure_geometry_functions", "status": "done", "evidence": "vaila/sapiens3d_kinematics.py: build_pelvis_frame/build_thigh_frame/build_shank_frame/build_foot_frame (Gram-Schmidt, joint-centers-only), project_to_so3 (SVD/polar), relative rotation composition (R_pelvis.T@R_thigh etc.)."},
+    {"id": "2_synthetic_rotation_tests", "status": "done", "evidence": "tests/test_sapiens3d_kinematics.py: 27 synthetic tests (frame properness, SO(3) projection/drift-correction, Euler round-trips for XYZ/YXZ/YZX at 4 angle sets, quaternion unit-norm + scalar-last convention, temporal sign continuity, neutral-zero calibration, landmark resolution incl. explicit --keypoint-map and refusal path) -- all pass."},
+    {"id": "3_c3d_read_landmark_filter_glue", "status": "done", "evidence": "read_c3d_points() (ezc3d + get_point_labels, unit-scaled to metres), resolve_landmarks() 3-path fallback, maybe_filter_points() (butter_filter reuse, gap-aware per contiguous run)."},
+    {"id": "4_neutral_calibration", "status": "done", "evidence": "neutral_zero() -- quaternion-mean (Markley 2007) neutral pose, R_zeroed=R_neutral.T@R; unit test confirms neutral pose maps exactly to identity."},
+    {"id": "5_csv_json_writers", "status": "done", "evidence": "write_outputs() -- 8 CSVs (segment/joint rotations+angles, raw+neutral) plus kinematics_metadata.json (mapping, conventions, frame defs, scientific_limitations)."},
+    {"id": "6_qc_plots", "status": "done", "evidence": "write_qc_plots() -- 5 PNGs: joint Euler angles, SO(3) det/orthogonality error, quaternion components (left side), pelvis determinant, raw-vs-neutral hip flexion comparison."},
+    {"id": "7_cli", "status": "done", "evidence": "argparse CLI (-i/--keypoint-map/--cutoff/--neutral-frames/--output-dir/--no-plots); `uv run vaila/sapiens3d_kinematics.py -i tests/viewc3d/rec3d_240hz.c3d --neutral-frames 0:30` produced 14 files, det=1.0/orth_err=0.0 across all 8298 frames."},
+    {"id": "8_gui_dialog_and_button", "status": "done", "evidence": "run_sapiens3d_kinematics_gui() Toplevel/Tk dialog; vaila.py: repurposed vaila_btn10 (C_A_r4_c2) -> sapiens3d_kinematics_btn, text='Sapiens2 3D Kinematics', command=self.run_sapiens3d_kinematics -> run_vaila_module('vaila.sapiens3d_kinematics', 'vaila/sapiens3d_kinematics.py')."},
+    {"id": "9_help_doc_and_index", "status": "done", "evidence": "vaila/help/sapiens3d_kinematics.md + .html created; vaila/help/index.md (alphabetical entry + module count 139->140) and index.html (C_A_r4_c2 card) updated."},
+    {"id": "10_metadata_bump", "status": "done", "evidence": "vaila.py 0.3.111->0.3.112; new module header dated 2026-08-24 v0.3.112; vaila/help/index.md + index.html 'Generated on'/module-count bumped to v0.3.112/140. README.md 'Last updated' was already 2026-08-24 (untouched, already current)."},
+    {"id": "11_real_fixture_smoke_run", "status": "done", "evidence": "CLI run against tests/viewc3d/rec3d_240hz.c3d: landmark_method=canonical_308_order, 8298/8298 frames valid for all 6 joints, det(R)=1.0 and orth_err=0.0 (rounded) across every frame; 14 output files written and verified, then removed (smoke-test artifact, not committed)."}
+  ],
+  "evidence": {
+    "governing_check": {
+      "ruff_check_fix": "All checks passed! (vaila/sapiens3d_kinematics.py, vaila.py, tests/test_sapiens3d_kinematics.py)",
+      "ruff_format": "1 file reformatted (test file only, whitespace), 2 unchanged",
+      "ty_check": "1 pre-existing diagnostic in vaila.py (unresolved-import vaila_cli_menu, standalone-execution fallback at line 4282, unrelated to this change, present before this edit) -- zero diagnostics in vaila/sapiens3d_kinematics.py",
+      "pytest_new_module": "29 passed in tests/test_sapiens3d_kinematics.py",
+      "pytest_full_repo": "1086 passed, 11 skipped, 7 warnings in 146.14s (tests/) -- no regressions"
+    },
+    "real_fixture_smoke": {
+      "rec3d_240hz.c3d": "240 Hz, 308 points, 8298 frames -- landmark resolution: canonical_308_order (automatic, no manual mapping needed)",
+      "rec3d_200hz.c3d": "200 Hz, 224 points, 8074 frames -- compute_kinematics() correctly raises LandmarkResolutionError (covered by test_real_fixture_224_has_no_canonical_mapping)",
+      "qc_result": "8298/8298 frames valid across all 6 joint rotations (left/right hip/knee/ankle); det(R)=1.0, orthogonality error=0.0 (both at printed precision) for every frame"
+    }
+  },
+  "lessons": [
+    "Straight-leg (collinear hip-knee-ankle) poses are a genuine singularity of joint-center-only Gram-Schmidt frame construction -- documented in module docstring and metadata scientific_limitations, and the synthetic test fixture had to avoid exact collinearity for this reason (not a bug, a real geometric limit)."
+  ]
+}

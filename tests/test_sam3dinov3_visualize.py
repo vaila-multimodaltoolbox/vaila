@@ -1,7 +1,7 @@
 """Tests for the selected-ID SAM3+DINOv3 3D rerenderer.
 
-Update Date: 03 August 2026
-Version: 0.3.98
+Update Date: 24 August 2026
+Version: 0.3.112
 """
 
 from __future__ import annotations

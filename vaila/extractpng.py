@@ -7,8 +7,8 @@ Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/vaila-multimodaltoolbox/vaila
 
 Created: December 15, 2023
-Update: 13 August 2026
-Version: 0.3.105
+Update: 24 August 2026
+Version: 0.3.111
 Python Version: 3.12.13
 
 Description:
@@ -43,7 +43,7 @@ from tkinter import filedialog, messagebox, ttk
 try:
     from .cli_highlight import print_gui_cli_mirror
 except ImportError:
-    from cli_highlight import print_gui_cli_mirror
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
 
 VIDEO_EXTENSIONS = (".avi", ".mp4", ".mov", ".mkv", ".webm", ".m4v")
 DEFAULT_PATTERN = "%09d.png"
@@ -368,8 +368,7 @@ def build_cli_argv(
     codec: str = "264",
     frames: str | None = None,
 ) -> list[str]:
-    script = str(Path(__file__).resolve())
-    argv = [sys.executable, script, mode, "-i", input_path]
+    argv = ["uv", "run", "vaila/extractpng.py", mode, "-i", input_path]
     if output_path:
         argv.extend(["-o", output_path])
     if mode == "extract":
@@ -390,10 +389,11 @@ class ExtractPngApp:
     """Single easy GUI for extract / create / select-frames."""
 
     def __init__(self, parent: tk.Misc | None = None):
+        default_root = getattr(tk, "_default_root", None)
         if parent is not None:
             self.root = tk.Toplevel(parent)
-        elif tk._default_root is not None:
-            self.root = tk.Toplevel(tk._default_root)
+        elif default_root is not None:
+            self.root = tk.Toplevel(default_root)
         else:
             self.root = tk.Tk()
 
@@ -414,16 +414,15 @@ class ExtractPngApp:
         self._on_mode_change()
 
     def _build(self) -> None:
-        pad = {"padx": 10, "pady": 4}
         frm = ttk.Frame(self.root, padding=12)
         frm.pack(fill="both", expand=True)
 
         ttk.Label(frm, text="Video ↔ PNG", font=("TkDefaultFont", 12, "bold")).grid(
-            row=0, column=0, columnspan=3, sticky="w", **pad
+            row=0, column=0, columnspan=3, sticky="w", padx=10, pady=4
         )
 
         mode_row = ttk.Frame(frm)
-        mode_row.grid(row=1, column=0, columnspan=3, sticky="w", **pad)
+        mode_row.grid(row=1, column=0, columnspan=3, sticky="w", padx=10, pady=4)
         ttk.Label(mode_row, text="Mode:").pack(side="left", padx=(0, 8))
         for value, label in (
             ("extract", "Video → PNG"),
@@ -438,23 +437,27 @@ class ExtractPngApp:
                 command=self._on_mode_change,
             ).pack(side="left", padx=4)
 
-        ttk.Label(frm, text="Input:").grid(row=2, column=0, sticky="w", **pad)
+        ttk.Label(frm, text="Input:").grid(row=2, column=0, sticky="w", padx=10, pady=4)
         ttk.Entry(frm, textvariable=self.input_var, width=56).grid(
-            row=2, column=1, sticky="ew", **pad
+            row=2, column=1, sticky="ew", padx=10, pady=4
         )
-        ttk.Button(frm, text="Browse…", command=self._browse_input).grid(row=2, column=2, **pad)
+        ttk.Button(frm, text="Browse…", command=self._browse_input).grid(
+            row=2, column=2, padx=10, pady=4
+        )
 
-        ttk.Label(frm, text="Output:").grid(row=3, column=0, sticky="w", **pad)
+        ttk.Label(frm, text="Output:").grid(row=3, column=0, sticky="w", padx=10, pady=4)
         ttk.Entry(frm, textvariable=self.output_var, width=56).grid(
-            row=3, column=1, sticky="ew", **pad
+            row=3, column=1, sticky="ew", padx=10, pady=4
         )
-        ttk.Button(frm, text="Browse…", command=self._browse_output).grid(row=3, column=2, **pad)
+        ttk.Button(frm, text="Browse…", command=self._browse_output).grid(
+            row=3, column=2, padx=10, pady=4
+        )
         ttk.Label(frm, text="(leave empty for timestamped folder next to input)").grid(
             row=4, column=1, sticky="w", padx=10
         )
 
         self.options_frame = ttk.LabelFrame(frm, text="Options", padding=8)
-        self.options_frame.grid(row=5, column=0, columnspan=3, sticky="ew", **pad)
+        self.options_frame.grid(row=5, column=0, columnspan=3, sticky="ew", padx=10, pady=4)
 
         self.pattern_label = ttk.Label(self.options_frame, text="PNG pattern:")
         self.pattern_entry = ttk.Entry(self.options_frame, textvariable=self.pattern_var, width=24)
@@ -472,19 +475,20 @@ class ExtractPngApp:
         self.frames_entry = ttk.Entry(self.options_frame, textvariable=self.frames_var, width=28)
 
         btn_row = ttk.Frame(frm)
-        btn_row.grid(row=6, column=0, columnspan=3, sticky="e", **pad)
+        btn_row.grid(row=6, column=0, columnspan=3, sticky="e", padx=10, pady=4)
         ttk.Button(btn_row, text="Run", command=self._run).pack(side="right", padx=4)
         ttk.Button(btn_row, text="Close", command=self.root.destroy).pack(side="right", padx=4)
 
         ttk.Label(frm, textvariable=self.status_var, wraplength=520).grid(
-            row=7, column=0, columnspan=3, sticky="w", **pad
+            row=7, column=0, columnspan=3, sticky="w", padx=10, pady=4
         )
 
         frm.columnconfigure(1, weight=1)
 
     def _on_mode_change(self) -> None:
         for w in self.options_frame.winfo_children():
-            w.grid_forget()
+            if isinstance(w, tk.Widget):
+                w.grid_forget()
         mode = self.mode.get()
         if mode == "extract":
             self.pattern_label.grid(row=0, column=0, sticky="w", padx=4, pady=2)
