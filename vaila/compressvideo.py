@@ -18,16 +18,16 @@
 #
 # Requirements:
 # - FFmpeg must be installed and accessible in the system PATH.
-# - This script is designed to work in a Conda environment where FFmpeg is
-#   installed via conda-forge.
 #
 # Dependencies:
 # - Python 3.12.9
 # - Tkinter (included with Python)
-# - FFmpeg (installed via Conda or available in PATH)
+# - FFmpeg (system install or on PATH)
 #
-# Installation of FFmpeg in Conda:
-#   conda install -c conda-forge ffmpeg
+# Installation of FFmpeg:
+#   Windows: winget install Gyan.FFmpeg (or install_vaila_win.ps1 as Administrator)
+#   Linux:   sudo apt install ffmpeg  (or your distro package manager)
+#   macOS:   brew install ffmpeg
 #
 # Note:
 # This process may take several hours depending on the size of the videos

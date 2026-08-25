@@ -4,8 +4,8 @@ cube2d_kinematics.py
 ===============================================================================
 Author: Prof. Dr. Paulo Roberto Pereira Santiago
 created: 2025-01-16
-updated: 2025-06-09
-version: 0.0.3
+updated: 2026-08-25
+version: 0.3.113
 python version: 3.12.9
 
 Description:
@@ -67,8 +67,8 @@ during processing. The coordinates should represent positions in meters relative
 to a defined origin point (typically the center of the movement area).
 
 Example files can be found in the tests/Cube2d_kinematics directory.
-conda activate vaila
-python vaila/cube2d_kinematics.py
+From the vailá repo root:
+uv run vaila/cube2d_kinematics.py
 """
 
 import os

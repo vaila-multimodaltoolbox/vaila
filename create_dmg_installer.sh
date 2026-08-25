@@ -201,10 +201,7 @@ To install vaila (easy way):
 
 2. Open Applications (e.g. from the Dock or Finder) and double-click "Install vaila.app".
 
-3. A Terminal window will open and run the installer.
-   When asked, choose:
-   - Option 1: uv (recommended, modern, fast)
-   - Option 2: Conda (legacy, for compatibility)
+3. A Terminal window will open and run the uv installer.
 
 4. When the installation finishes, you can find vaila in:
    - Launchpad
@@ -476,6 +473,6 @@ echo "Users should:"
 echo "  1. Double-click the .dmg file to mount it"
 echo "  2. Drag 'Install vaila.app' to the Applications folder"
 echo "  3. Double-click 'Install vaila.app' to run the installer (Terminal will open)"
-echo "  4. Choose uv (recommended) or Conda when prompted"
+echo "  4. Follow the Terminal prompts to complete the uv installation"
 echo ""
 

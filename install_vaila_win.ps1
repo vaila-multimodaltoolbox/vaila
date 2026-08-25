@@ -1,7 +1,7 @@
 <#
     Script: install_vaila_win.ps1
     Description: Installs the vaila - Multimodal Toolbox on Windows using uv (Astral).
-                 Conda is no longer supported; uv is the single install method.
+                 Official install method: uv (Astral).
     Usage:
         1. Download/clone the repository.
         2. Open PowerShell (Administrator recommended for full installation).
@@ -17,12 +17,14 @@
               - Without admin: C:\Users\<user>\vaila
         - Portable/git installs keep the committed uv.lock so `git pull` works.
         - Profile / Program Files copies may regenerate uv.lock (no git tree).
+        - Remote one-liner: after IWR download, run `Unblock-File` on the temp script
+          (Mark-of-the-Web) before `-File` execution — see README Install Now.
         - Safe with `irm ... | iex`: empty $PSScriptRoot falls back to the current
           directory; if that folder is not a vaila clone, portable installs to .\vaila.
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 24 August 2026
+    Updated: 25 August 2026
     Version: 0.3.113
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
@@ -55,6 +57,11 @@ trap {
 
 # Enable TLS 1.2 (and 1.3 if available) for HTTPS
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+
+# Mark-of-the-Web: scripts downloaded to TEMP need Unblock-File before execution
+If ($PSCommandPath -and ($PSCommandPath -like "$env:TEMP*")) {
+    Unblock-File -Path $PSCommandPath -ErrorAction SilentlyContinue
+}
 
 # Check if running as administrator
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)

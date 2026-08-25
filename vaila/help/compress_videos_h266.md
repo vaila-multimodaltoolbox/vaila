@@ -18,7 +18,7 @@ with the `libvvenc` encoder. Supports both a **GUI** (Tkinter dialog) and **CLI*
 - H.266/VVC encoding is **EXTREMELY SLOW** and CPU-intensive
 - **No GPU acceleration** available for VVC in common FFmpeg builds
 - Requires a **special FFmpeg build** compiled with `libvvenc` support
-- Standard system FFmpeg (apt, brew, conda) usually does **NOT** include `libvvenc`
+- Standard system FFmpeg (apt, brew, winget) usually does **NOT** include `libvvenc`
 
 ### Key Features
 

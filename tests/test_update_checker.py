@@ -46,6 +46,8 @@ def test_get_install_command_per_os():
     assert "install_vaila_linux.sh" in linux_cmd
     assert "install_vaila_mac.sh" in mac_cmd
     assert "install_vaila_win.ps1" in win_cmd
+    assert "Unblock-File" in win_cmd
+    assert "powershell.exe" in win_cmd
     assert get_install_command("PlanNine") == linux_cmd
 
 

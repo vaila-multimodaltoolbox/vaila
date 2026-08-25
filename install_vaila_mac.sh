@@ -4,7 +4,7 @@
 #                                                                                       #
 # Script: install_vaila_mac.sh                                                          #
 # Description: Installs the vaila - Multimodal Toolbox on macOS using uv (Astral).      #
-#              Conda is no longer supported; uv is the single install method.           #
+#              Official install method: uv (Astral).                                      #
 #                                                                                       #
 # Usage:                                                                                #
 #   1. Download/clone the repository.                                                   #

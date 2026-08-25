@@ -30,7 +30,7 @@ The script automatically removes duplicate ".mp4" extensions from the new file n
 4. **Organized Output**: Saves all cut videos in a "cut_videos" subdirectory inside the specified output directory.
 
 ### Dependencies:
-- FFmpeg (installed via Conda or available in PATH)
+- FFmpeg (system install or on PATH; see install_vaila_*.sh / README)
 - tkinter (for file and directory selection dialogs)
 - rich (for enhanced console output)
 

@@ -184,15 +184,13 @@
             <li><strong>NVIDIA Drivers:</strong> Latest drivers installed (<code>nvidia-smi</code> to verify)</li>
             <li><strong>CUDA Toolkit:</strong> Required for MediaPipe GPU delegate
                 <ul>
-                    <li>Linux: Install via NVIDIA website or <code>conda install -c nvidia cuda-toolkit</code></li>
-                    <li>Windows: Download from NVIDIA Developer website</li>
+                    <li>Linux / Windows: Install from <a href="https://developer.nvidia.com/cuda-downloads">NVIDIA CUDA Toolkit</a></li>
                     <li>macOS: Not supported (no CUDA NVIDIA support)</li>
                 </ul>
             </li>
             <li><strong>cuDNN:</strong> CUDA Deep Neural Network Library
                 <ul>
-                    <li>Usually included with CUDA Toolkit installation</li>
-                    <li>Or install via: <code>conda install -c nvidia cudnn</code></li>
+                    <li>Install from <a href="https://developer.nvidia.com/cudnn">NVIDIA cuDNN</a> (match your CUDA version)</li>
                 </ul>
             </li>
             <li><strong>MediaPipe:</strong> Version with GPU delegate support (<code>pip install --upgrade mediapipe</code>)</li>

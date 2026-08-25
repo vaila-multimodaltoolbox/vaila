@@ -35,10 +35,9 @@ Requirements:
 - Tkinter for the GUI components (usually included with Python).
 
 Installation of FFmpeg (for video processing):
-- **Conda (recommended)**:
-  ```bash
-  conda install -c conda-forge ffmpeg
-  ```
+- **Windows:** `winget install Gyan.FFmpeg` or run `install_vaila_win.ps1` as Administrator
+- **Linux:** `sudo apt install ffmpeg` (Debian/Ubuntu) or your distro package manager
+- **macOS:** `brew install ffmpeg`
 
 """
 

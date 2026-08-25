@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-08-24
+**Last updated:** 2026-08-25
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -77,7 +77,8 @@ Preferred (downloads to a temp file, then runs with `-File` so paths work):
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072
 $i = Join-Path $env:TEMP 'install_vaila_win.ps1'
 Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1' -OutFile $i -UseBasicParsing
-powershell -ExecutionPolicy Bypass -File $i
+Unblock-File -Path $i -ErrorAction SilentlyContinue
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$i"
 ```
 
 Or short form (`irm | iex` also works; portable installs to `.\vaila` under your current folder if you are not already inside a clone):
@@ -277,12 +278,12 @@ vaila
 
 ### ⚡ Engine: Powered by _uv_
 
-_vailá_ uses **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is the single, official installation method for all platforms** (Windows, Linux, macOS). Conda is no longer supported.
+_vailá_ uses **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is the single, official installation method for all platforms** (Windows, Linux, macOS).
 
 **Why uv:**
 
-- **Speed:** Installation is **10-100x faster** than legacy Conda setups.
-- **Simplicity:** You no longer need to pre-install Anaconda or Miniconda.
+- **Speed:** Resolves and installs dependencies in seconds.
+- **Simplicity:** No separate Python distribution required — uv manages Python 3.12 for you.
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
 - **Dynamic Hardware Optimization:** Automatically detects hardware (NVIDIA GPU, Apple Silicon) and selects the optimized configuration template for your system.
@@ -426,7 +427,6 @@ The installation script automatically:
 - The installation script requires **administrative privileges** to install system components (FFmpeg, Windows Terminal)
 - If you run without admin privileges, some features may be skipped, but _vailá_ will still be installed
 - The script dynamically configures paths, so no manual adjustments are necessary
-- **No Conda required:** Conda is no longer supported; the installer uses `uv` only.
 
 **Erro de SSL/TLS ao baixar o script?** Se aparecer "could not establish trust relationship for the SSL/TLS secure channel", use o one-liner da seção [Install Now](#-install-now-one-line) (com a linha que ativa TLS 1.2).
 
@@ -438,7 +438,7 @@ See [Running _vailá_ — GUI and CLI](#running-vailá--gui-and-cli) below (Desk
 
 ## 🐧 For Linux
 
-Installation is streamlined using **uv** with automatic GPU detection (Conda is no longer supported).
+Installation is streamlined using **uv** with automatic GPU detection.
 
 ### 1. **Download _vailá_**
 
@@ -543,7 +543,7 @@ uv run vaila.py
 
 ## 🍎 For macOS
 
-Installation is streamlined using **uv** with Apple Silicon Metal/MPS acceleration detection (Conda is no longer supported).
+Installation is streamlined using **uv** with Apple Silicon Metal/MPS acceleration detection.
 
 ### 1. **Download _vailá_**
 

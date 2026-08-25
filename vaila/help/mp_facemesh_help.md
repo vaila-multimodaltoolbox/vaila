@@ -43,12 +43,10 @@ When MediaPipe implements full GPU support for FaceLandmarker, you will need:
 - **NVIDIA GPU**: Any CUDA-capable NVIDIA GPU
 - **NVIDIA Drivers**: Latest drivers installed (`nvidia-smi` to verify)
 - **CUDA Toolkit**: Required for MediaPipe GPU delegate
-  - Linux: Install via NVIDIA website or `conda install -c nvidia cuda-toolkit`
-  - Windows: Download from NVIDIA Developer website
+  - Linux / Windows: Install from [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-downloads)
   - macOS: Not supported (no CUDA NVIDIA support)
 - **cuDNN**: CUDA Deep Neural Network Library
-  - Usually included with CUDA Toolkit installation
-  - Or install via: `conda install -c nvidia cudnn`
+  - Install from [NVIDIA cuDNN](https://developer.nvidia.com/cudnn) (match your CUDA version)
 - **MediaPipe**: Version with GPU delegate support (`pip install --upgrade mediapipe`)
 
 ### Verifying GPU Setup

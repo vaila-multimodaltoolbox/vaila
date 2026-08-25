@@ -6,14 +6,12 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 19 December 2025
-Update Date: 19 December 2025
-Version: 0.1.0
+Update Date: 25 August 2026
+Version: 0.3.113
 
 Example of usage:
-First activate the vaila environment:
-conda activate vaila
-Then run the pynalty.py script:
-python pynalty.py -i input_directory -o output_directory -c config.toml
+From the vailá repo root (with dependencies installed via uv):
+uv run vaila/pynalty.py -i input_directory -o output_directory -c config.toml
 
 Description:
 This script processes videos from a specified input directory,
