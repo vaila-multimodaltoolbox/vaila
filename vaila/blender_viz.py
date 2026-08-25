@@ -9,9 +9,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.110
+Version: 0.3.113
 Created: 05 August 2026
-Last Updated: 23 August 2026
+Last Updated: 24 August 2026
 
 Description:
     Launches Blender directly from vailá with a rec3d reconstruction already

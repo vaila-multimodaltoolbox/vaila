@@ -7022,7 +7022,7 @@ wheels = [
 
 [[package]]
 name = "vaila"
-version = "0.3.110"
+version = "0.3.113"
 source = { editable = "." }
 dependencies = [
     { name = "absl-py" },

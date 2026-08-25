@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 21 August 2026
-Update Date: 23 August 2026
-Version: 0.3.110
+Update Date: 24 August 2026
+Version: 0.3.113
 
 Description:
 ------------

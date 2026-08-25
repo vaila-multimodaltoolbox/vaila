@@ -141,6 +141,13 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
         "Make DLT3D, Rec3D 1DLT/MultiDLT. Each keeps its own GUI/CLI unchanged.",
     ),
     "reid_marker": CliRunHint(("uv run vaila/reid_markers.py",), "Marker Re-ID GUI."),
+    "run_sapiens3d_kinematics": CliRunHint(
+        (
+            "uv run python -m vaila.sapiens3d_kinematics --help",
+            "uv run python -m vaila.sapiens3d_kinematics -i /path/to/rec3d_sapiens.c3d",
+        ),
+        "Sapiens2 3D Kinematics — joint rotation matrices, quaternions, and Cardan angles from REC3D C3D.",
+    ),
     # Frame C_B
     "extract_png_from_videos": CliRunHint(
         (
