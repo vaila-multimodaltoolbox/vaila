@@ -371,6 +371,21 @@ Installation is now streamlined using **uv** with automatic GPU detection.
   cd vaila
   ```
 
+  > **SSH clone on Windows:** if checkout fails on `osnet_x0_25_msmt17.onnx` with
+  > `Permission denied (publickey)` during Git LFS, either clone with **HTTPS** (above)
+  > or repair the partial clone:
+  >
+  > ```powershell
+  > cd vaila
+  > git config lfs.url https://github.com/vaila-multimodaltoolbox/vaila.git/info/lfs
+  > git lfs pull
+  > git restore --source=HEAD :/
+  > ```
+  >
+  > `install_vaila_win.ps1` also attempts this repair automatically when it detects
+  > LFS pointer files. Newer commits store small default models as plain Git blobs
+  > (no LFS) via `.lfsconfig` + updated `vaila/models/.gitattributes`.
+
 - **Option B (Zip):**
   - Download the `.zip` file from the [_vailá_ GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
   - Extract it

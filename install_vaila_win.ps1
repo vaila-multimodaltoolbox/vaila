@@ -25,7 +25,7 @@
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
     Updated: 25 August 2026
-    Version: 0.3.113
+    Version: 0.3.114
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
     Parameters:
@@ -41,6 +41,43 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Repair-GitLfsCheckoutIfNeeded {
+    param([string]$RepoRoot)
+
+    If (-Not (Test-Path (Join-Path $RepoRoot ".git"))) { return }
+
+    $probe = Join-Path $RepoRoot "vaila\models\osnet_x0_25_msmt17.onnx"
+    If (-Not (Test-Path $probe)) { return }
+
+    $probeSize = (Get-Item $probe -ErrorAction SilentlyContinue).Length
+    If ($probeSize -ge 8192) { return }
+
+    Write-Host "Git LFS checkout incomplete (pointer file ~$probeSize bytes at osnet model)." -ForegroundColor Yellow
+    Write-Host "Repairing via HTTPS LFS endpoint (common after SSH clone on Windows)..." -ForegroundColor Yellow
+
+    If (-Not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Warning "git not found — cannot repair LFS checkout automatically."
+        return
+    }
+
+    Push-Location $RepoRoot
+    Try {
+        git config lfs.url https://github.com/vaila-multimodaltoolbox/vaila.git/info/lfs 2>$null
+        git lfs install 2>$null
+        git lfs pull 2>&1 | ForEach-Object { Write-Host $_ }
+        git restore --source=HEAD :/ 2>&1 | ForEach-Object { Write-Host $_ }
+        $after = (Get-Item $probe -ErrorAction SilentlyContinue).Length
+        If ($after -ge 8192) {
+            Write-Host "Git LFS repair completed ($after bytes)." -ForegroundColor Green
+        } Else {
+            Write-Warning "Git LFS repair may have failed — osnet model is still $after bytes."
+            Write-Warning "Try: git clone https://github.com/vaila-multimodaltoolbox/vaila.git"
+        }
+    } Finally {
+        Pop-Location
+    }
+}
 
 trap {
     Write-Host ""
@@ -156,6 +193,8 @@ If (Test-Path (Join-Path $scriptRoot "pyproject.toml")) {
 } ElseIf (Test-Path (Join-Path $vailaProgramPath "pyproject.toml")) {
     $projectDir = $vailaProgramPath
 }
+
+Repair-GitLfsCheckoutIfNeeded -RepoRoot $projectDir
 
 # Bootstrap: clone repo if destination (or cwd) has no pyproject.toml
 If (-Not (Test-Path "$projectDir\pyproject.toml")) {
