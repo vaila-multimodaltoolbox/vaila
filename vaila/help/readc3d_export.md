@@ -6,7 +6,8 @@
 - **File:** `vaila\readc3d_export.py`
 - **Lines:** 1986
 - **Size:** 82210 characters
-- **Version:** 0.2.1
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -19,7 +20,7 @@ Author: Prof. Paulo R. P. Santiago
 Creation Date: 25 September 2024
 Update Date: 03 February 2026
 Version: 0.2.1
-Python Version: 3.12.13
+Python Version: 3.12.14
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,

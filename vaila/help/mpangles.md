@@ -4,12 +4,12 @@
 
 - **Category:** Utils
 - **File:** `vaila/mpangles.py`
-- **Version:** 0.3.98
+- **Version:** 0.3.114
 - **Author:** Paulo R. P. Santiago
 - **Email:** paulosantiago@usp.br
 - **Creation Date:** 31 March 2025
-- **Update Date:** 02 August 2026
-- **Python Version:** 3.12.13
+- **Update Date:** 25 August 2026
+- **Python Version:** 3.12.14
 - **GUI Interface:** ✅ Yes
 - **License:** AGPL v3.0
 
@@ -156,7 +156,7 @@ process_video_with_visualization("video.mp4", csv_path="video_pixel_vaila.csv", 
 
 ## ⚠️ Requirements
 
-- **Python:** 3.12.13 or compatible.
+- **Python:** 3.12.14 or compatible.
 - **Libraries:** pandas, numpy, opencv-python, scipy, rich; tkinter (GUI). Optional: matplotlib (for stick figure sequence in report).
 
 ## 🐛 Troubleshooting
@@ -177,4 +177,4 @@ AGPL v3.0.
 
 ---
 
-**Last Updated:** 02 August 2026 · Part of vailá - Multimodal Toolbox
+**Last Updated:** 25 August 2026

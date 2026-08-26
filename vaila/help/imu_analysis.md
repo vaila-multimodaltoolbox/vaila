@@ -6,7 +6,8 @@
 - **File:** `vaila\imu_analysis.py`
 - **Lines:** 410
 - **Size:** 13033 characters
-- **Version:** 1.2
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Prof. Ph.D. Paulo Santiago (paulosantiago@usp.br)
 - **GUI Interface:** ✅ Yes
 

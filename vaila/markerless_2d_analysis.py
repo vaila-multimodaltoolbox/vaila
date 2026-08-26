@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 25 August 2026
+Version: 0.3.114
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -59,7 +59,7 @@ Usage:
   landmark coordinates in original video dimensions.
 
 Requirements:
-- Python 3.12.13
+- Python 3.12.14
 - OpenCV (`pip install opencv-python`)
 - MediaPipe (`pip install mediapipe`)
 - Tkinter (usually included with Python installations)

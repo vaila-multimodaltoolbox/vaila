@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 19 December 2025
 Update Date: 25 August 2026
-Version: 0.3.113
+Version: 0.3.114
 
 Example of usage:
 From the vailá repo root (with dependencies installed via uv):
@@ -29,7 +29,7 @@ Usage:
   coordinates in original video dimensions.
 
 Requirements:
-- Python 3.12.13
+- Python 3.12.14
 - OpenCV (`pip install opencv-python`)
 - MediaPipe (`pip install mediapipe`)
 - Tkinter (usually included with Python installations)

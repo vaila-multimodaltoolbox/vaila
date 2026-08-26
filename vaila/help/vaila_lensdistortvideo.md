@@ -6,7 +6,8 @@
 - **File:** `vaila\vaila_lensdistortvideo.py`
 - **Lines:** 349
 - **Size:** 11795 characters
-- **Version:** 0.3.45
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **CLI Support:** ✅ Yes
@@ -22,7 +23,7 @@ GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 10 October 2024
 Update Date: 06 February 2026
 Version: 0.1.4
-Python Version: 3.12.13
+Python Version: 3.12.14
 ===============================================================================
 
 # Camera Calibration Parameters and Their Meanings

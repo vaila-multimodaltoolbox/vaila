@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 28 July 2026
-Version: 0.3.85
+Update Date: 25 August 2026
+Version: 0.3.114
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -51,7 +51,7 @@ Usage:
   specifying the cuts.
 
 Requirements:
-- Python 3.12.13
+- Python 3.12.14
 - Direct synchronization handoff:
   `python cutvideo.py --video reference.mp4 --sync-file session_sync.txt`.
 - OpenCV (`pip install opencv-python`)

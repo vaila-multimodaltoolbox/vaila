@@ -5,8 +5,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Created: February 18 2025
-Last Updated: March 27 2026
-Version: 0.0.4
+Last Updated: 25 August 2026
+Version: 0.3.114
 
 Description:
 This script combines YOLO26 for person detection/tracking with MediaPipe for pose estimation.
@@ -34,7 +34,7 @@ CLI Arguments:
     --gui             Force GUI mode even when -i is provided
 
 Requirements:
-- Python 3.12.13
+- Python 3.12.14
 - OpenCV (`pip install opencv-python`)
 - MediaPipe (`pip install mediapipe`)
 - Tkinter (usually included with Python installations)

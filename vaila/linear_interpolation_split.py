@@ -4,9 +4,9 @@ linear_interpolation_split.py
 ===============================================================================
 Author: Paulo R. P. Santiago
 Created: 7 October 2024
-Updated: 20 February 2026
-Version: 0.0.12
-Python Version: 3.12.13
+Updated: 25 August 2026
+Version: 0.3.114
+Python Version: 3.12.14
 
 Description:
 ------------

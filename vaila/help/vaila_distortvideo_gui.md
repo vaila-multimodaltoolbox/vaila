@@ -6,7 +6,8 @@
 - **File:** `vaila\vaila_distortvideo_gui.py`
 - **Lines:** 779
 - **Size:** 27058 characters
-- **Version:** 0.1.1
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -19,7 +20,7 @@ vaila_distortvideo_gui.py
 Author: Prof. Paulo R. P. Santiago
 Date: 06 Feb 2026
 Version: 0.0.3
-Python Version: 3.12.13
+Python Version: 3.12.14
 ===============================================================================
 
 This script processes videos applying lens distortion correction based on

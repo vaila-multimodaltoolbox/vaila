@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/numberframes.py`
-- **Version:** 0.3.45
+- **Version:** 0.3.114
 - **Author:** Paulo R. P. Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -270,6 +270,6 @@ All values saved with 9 decimal precision for maximum accuracy.
 
 ---
 
-📅 **Last Updated:** 23 May 2026  
+📅 **Last Updated:** 25 August 2026
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
