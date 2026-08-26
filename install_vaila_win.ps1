@@ -8,6 +8,10 @@
         3. Navigate to the root directory of the repository.
         4. Run: .\install_vaila_win.ps1
     Notes:
+        - PowerShell 7 (pwsh), git, and Node.js LTS are auto-installed via winget if
+          missing (a "naked" Windows box ships with none of them) before anything
+          else runs. If pwsh cannot be installed, generated shortcuts fall back to
+          powershell.exe instead of failing silently.
         - uv will be automatically installed if not present.
         - Python 3.12.14 will be installed via `uv python install`.
         - Installation location (prompt; Enter = portable default):
@@ -24,7 +28,7 @@
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 25 August 2026
+    Updated: 26 August 2026
     Version: 0.3.114
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
@@ -125,6 +129,80 @@ If ($runningViaIex) {
 }
 
 # ============================================================================
+# PREREQUISITES: PowerShell 7 (pwsh), Git, Node.js
+# ============================================================================
+# A freshly-installed ("naked") Windows machine ships with none of these.
+# Git is required below to clone the repo (Bootstrap Mode); pwsh is what the
+# generated shortcuts/run scripts target; Node.js is not needed by vaila's
+# Python toolchain but is a common companion dependency (e.g. Claude Code
+# CLI) so we install it too, best-effort. Must run BEFORE any git usage.
+
+function Update-SessionPath {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+
+function Install-WingetPrerequisite {
+    param(
+        [string]$Name,
+        [string]$CommandName,
+        [string]$WingetId,
+        [switch]$Optional
+    )
+
+    If (Get-Command $CommandName -ErrorAction SilentlyContinue) {
+        Write-Host "$Name is already installed." -ForegroundColor Green
+        return $true
+    }
+
+    Write-Host "$Name not found." -ForegroundColor Yellow
+    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    If (-Not $wingetAvailable) {
+        If ($Optional) {
+            Write-Warning "$Name is missing and winget is not available to install it. Skipping (optional)."
+        } Else {
+            Write-Warning "$Name is missing and winget is not available. Install App Installer from the Microsoft Store (https://aka.ms/getwinget), then re-run this script."
+        }
+        return $false
+    }
+
+    Write-Host "Installing $Name via winget ($WingetId)..." -ForegroundColor Cyan
+    Try {
+        & winget install --id $WingetId -e --silent --accept-package-agreements --accept-source-agreements 2>&1 | ForEach-Object { Write-Host $_ }
+    } Catch {
+        Write-Warning "winget install of $Name failed: $_"
+    }
+    Start-Sleep -Seconds 3
+    Update-SessionPath
+    If (Get-Command $CommandName -ErrorAction SilentlyContinue) {
+        Write-Host "$Name installed successfully." -ForegroundColor Green
+        return $true
+    } Else {
+        Write-Warning "$Name install could not be verified (may need admin rights or a new terminal session)."
+        return $false
+    }
+}
+
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "Checking prerequisites (PowerShell 7, Git, Node.js)" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
+
+$null = Install-WingetPrerequisite -Name "Git" -CommandName "git" -WingetId "Git.Git"
+$script:PwshOk = Install-WingetPrerequisite -Name "PowerShell 7" -CommandName "pwsh" -WingetId "Microsoft.PowerShell"
+$null = Install-WingetPrerequisite -Name "Node.js LTS" -CommandName "node" -WingetId "OpenJS.NodeJS.LTS" -Optional
+
+# Shortcuts / run scripts prefer pwsh (PowerShell 7) but fall back to Windows
+# PowerShell so a machine where the pwsh install failed (no admin, no winget,
+# offline) is still left with working shortcuts instead of dead ones.
+If ($script:PwshOk -or (Get-Command pwsh -ErrorAction SilentlyContinue)) {
+    $script:PwshExe = "pwsh.exe"
+} Else {
+    Write-Warning "pwsh.exe is not available — generated shortcuts will use powershell.exe instead."
+    $script:PwshExe = "powershell.exe"
+}
+Write-Host ""
+
+# ============================================================================
 # INSTALL LOCATION
 # ============================================================================
 
@@ -202,7 +280,7 @@ If (-Not (Test-Path "$projectDir\pyproject.toml")) {
     Write-Host "Cloning vaila repository from GitHub..." -ForegroundColor Cyan
 
     If (-Not (Get-Command git -ErrorAction SilentlyContinue)) {
-         Write-Error "git is not installed. Please install git first."
+         Write-Error "git is not installed and could not be auto-installed (see prerequisites check above). Install it manually: https://git-scm.com/download/win"
          Exit 1
     }
 
@@ -622,6 +700,16 @@ if ($samChoice -eq "y" -or $samChoice -eq "Y") {
     $useSamExtra = $true
 }
 
+$useSapiensExtra = $false
+If ($useGPU) {
+    Write-Host ""
+    Write-Host "Install optional Sapiens2 Pose (Meta 308-keypoint pose, extra 'sapiens', CUDA)? [y/N]" -ForegroundColor Cyan
+    $sapiensChoice = Read-Host
+    if ($sapiensChoice -eq "y" -or $sapiensChoice -eq "Y") {
+        $useSapiensExtra = $true
+    }
+}
+
 $useFifaExtra = $false
 If ($useGPU) {
     Write-Host ""
@@ -705,6 +793,7 @@ function Invoke-VailaUvSync {
     If ($Frozen) { $syncArgs += "--frozen" }
     if ($useGPU) { $syncArgs += @("--extra", "gpu") }
     if ($useSamExtra) { $syncArgs += @("--extra", "sam") }
+    if ($useSapiensExtra) { $syncArgs += @("--extra", "sapiens") }
     if ($useFifaExtra) { $syncArgs += @("--extra", "fifa") }
     & uv @syncArgs
     return $LASTEXITCODE
@@ -727,6 +816,74 @@ Try {
     }
     Write-Host "Dependencies installed successfully." -ForegroundColor Green
 
+    # Verify + repair CUDA wheel integrity (GPU template only).
+    # Real bug hit in production (Linux): uv sync can report "nothing to do" for
+    # an nvidia-*-cu12 package whose dist-info is present but whose actual .dll/.so
+    # payload is missing on disk (broken hardlink / interrupted extraction / disk
+    # full) -- import torch then fails, invisible to uv's own bookkeeping.
+    if ($useGPU) {
+        Write-Host ""
+        Write-Host "Verifying NVIDIA/PyTorch CUDA wheel integrity..." -ForegroundColor Yellow
+        Try {
+            $broken = & uv run python bin\verify_cuda_libs.py --quiet 2>$null
+            $broken = $broken | Where-Object { $_ -and $_.Trim() -ne "" }
+            If ($broken) {
+                Write-Warning "Corrupted CUDA wheels detected (metadata present, files missing): $($broken -join ' ')"
+                Write-Host "Reinstalling only the broken packages..." -ForegroundColor Yellow
+                $repairArgs = @("sync")
+                ForEach ($pkg in $broken) { $repairArgs += @("--reinstall-package", $pkg) }
+                if ($useGPU) { $repairArgs += @("--extra", "gpu") }
+                if ($useSamExtra) { $repairArgs += @("--extra", "sam") }
+                if ($useSapiensExtra) { $repairArgs += @("--extra", "sapiens") }
+                if ($useFifaExtra) { $repairArgs += @("--extra", "fifa") }
+                & uv @repairArgs
+                $stillBroken = & uv run python bin\verify_cuda_libs.py --quiet 2>$null
+                $stillBroken = $stillBroken | Where-Object { $_ -and $_.Trim() -ne "" }
+                If ($stillBroken) {
+                    Write-Warning "Still broken after reinstall: $($stillBroken -join ' ')"
+                    Write-Warning "Check disk space and, if the uv cache and .venv are on different drives, try: `$env:UV_LINK_MODE = 'copy'  then re-run this installer."
+                } Else {
+                    Write-Host "CUDA wheel integrity repaired." -ForegroundColor Green
+                }
+            } Else {
+                Write-Host "CUDA wheel integrity verified." -ForegroundColor Green
+            }
+        } Catch {
+            Write-Warning "Could not run CUDA wheel integrity check: $_"
+        }
+        & uv run python -c "import torch; print('torch', torch.__version__, '- CUDA available:', torch.cuda.is_available())"
+        If ($LASTEXITCODE -ne 0) {
+            Write-Warning "torch import still failing after CUDA wheel repair -- see errors above."
+        }
+    }
+
+    # Verify + repair the Sapiens2 editable install.
+    # Real bug hit in production (Linux): `uv sync` (even with --extra sapiens) does
+    # not know about the local editable checkout at .local\third_party\sapiens2 --
+    # a plain sync can silently drop it. Re-register it if the checkout exists on
+    # disk but the package no longer imports (cheap, no network).
+    if ($useSapiensExtra) {
+        $sapiensImportOk = $false
+        Try {
+            & uv run python -c "import sapiens" 2>$null | Out-Null
+            $sapiensImportOk = ($LASTEXITCODE -eq 0)
+        } Catch {
+            $sapiensImportOk = $false
+        }
+        If (-Not $sapiensImportOk) {
+            $sapiensCheckout = Join-Path $vailaProgramPath ".local\third_party\sapiens2"
+            If (Test-Path $sapiensCheckout) {
+                Write-Warning "sapiens checkout exists but is not importable -- re-registering editable install..."
+                Try {
+                    & uv pip install -e $sapiensCheckout
+                    Write-Host "sapiens editable install repaired." -ForegroundColor Green
+                } Catch {
+                    Write-Warning "Failed to repair sapiens editable install; run: pwsh bin\setup_sapiens2.ps1"
+                }
+            }
+        }
+    }
+
     if ($useSamExtra) {
         Write-Host ""
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
@@ -740,6 +897,32 @@ Try {
                 & uv run hf auth login
             } catch {
                 Write-Warning "hf auth login failed or was cancelled."
+            }
+        }
+    }
+
+    if ($useSapiensExtra) {
+        Write-Host ""
+        Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+        Write-Host "Sapiens2 Pose (optional): clone + weights via bin/setup_sapiens2.ps1" -ForegroundColor Cyan
+        Write-Host "  - Clones facebookresearch/sapiens2 into .local\third_party\sapiens2 (editable install)" -ForegroundColor Cyan
+        Write-Host "  - Downloads pose (1B default) + DETR detector to vaila\models\sapiens2\" -ForegroundColor Cyan
+        Write-Host "  - GUI: Frame B -> YOLO + FB -> Sapiens2 Pose" -ForegroundColor Cyan
+        Write-Host "  - License: Meta Sapiens2 License (not AGPL) — see vaila\help\vaila_sapiens.md" -ForegroundColor Cyan
+        Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+        $sapiensSetupNow = Read-Host "Run 'bin/setup_sapiens2.ps1' now from $vailaProgramPath? [y/N]"
+        if ($sapiensSetupNow -eq "y" -or $sapiensSetupNow -eq "Y") {
+            $sapiensScript = Join-Path $vailaProgramPath "bin\setup_sapiens2.ps1"
+            If (Test-Path $sapiensScript) {
+                Try {
+                    Set-Location $vailaProgramPath
+                    & $sapiensScript
+                } Catch {
+                    Write-Warning "setup_sapiens2.ps1 failed or was cancelled. You can run it later:"
+                    Write-Warning "  cd `"$vailaProgramPath`" ; pwsh bin\setup_sapiens2.ps1"
+                }
+            } Else {
+                Write-Warning "bin\setup_sapiens2.ps1 not found. Run manually after updating the repo."
             }
         }
     }
@@ -834,7 +1017,7 @@ Write-Host "Creating run_vaila.bat script..." -ForegroundColor Yellow
 @"
 @echo off
 cd /d "$vailaProgramPath"
-pwsh.exe -ExecutionPolicy Bypass -File "run_vaila.ps1"
+$script:PwshExe -ExecutionPolicy Bypass -File "run_vaila.ps1"
 pause
 "@ | Out-File -FilePath $runScriptBat -Encoding ASCII
 
@@ -855,12 +1038,12 @@ ForEach ($path in $possibleWtIconPaths) {
 }
 
 # Setup Windows Terminal profile
-$wtCommandLine = "pwsh.exe -ExecutionPolicy Bypass -NoExit -File `"$runScript`""
+$wtCommandLine = "$script:PwshExe -ExecutionPolicy Bypass -NoExit -File `"$runScript`""
 Set-WindowsTerminalProfile -CommandLine $wtCommandLine -IconPath $wtIconPath
 
 # Create shortcuts
-New-DesktopShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
-New-StartMenuShortcut -TargetPath "pwsh.exe" -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
+New-DesktopShortcut -TargetPath $script:PwshExe -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
+New-StartMenuShortcut -TargetPath $script:PwshExe -Arguments "-ExecutionPolicy Bypass -NoExit -File `"$runScript`"" -WorkingDirectory $vailaProgramPath
 
 # ============================================================================
 # SYSTEM DEPENDENCIES (FFmpeg, Windows Terminal, rsync/scp)

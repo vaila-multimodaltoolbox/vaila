@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-08-25
+**Last updated:** 2026-08-26
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -70,6 +70,12 @@ chmod +x install_vaila_mac.sh
 ```
 
 **🪟 Windows:**
+
+> **Bare/"naked" Windows (no PowerShell 7, git, or Node.js yet)?** No problem — the
+> commands below only need the built-in `powershell.exe` (Windows PowerShell 5.1,
+> present on every Windows 10/11 install). `install_vaila_win.ps1` auto-installs
+> PowerShell 7 (pwsh), git, and Node.js LTS via `winget` as its first step before
+> doing anything else.
 
 Preferred (downloads to a temp file, then runs with `-File` so paths work):
 
