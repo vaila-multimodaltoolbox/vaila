@@ -29,7 +29,7 @@
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
     Updated: 26 August 2026
-    Version: 0.3.114
+    Version: 0.3.115
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
     Parameters:

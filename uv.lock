@@ -6981,7 +6981,7 @@ wheels = [
 
 [[package]]
 name = "vaila"
-version = "0.3.114"
+version = "0.3.115"
 source = { editable = "." }
 dependencies = [
     { name = "absl-py" },

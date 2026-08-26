@@ -91,7 +91,7 @@
     }
 
     .section {
-      margin-bottom: 36px;
+      margin-bottom: 28px;
       background: #fff;
       padding: 20px 22px;
       border-radius: 8px;
@@ -102,23 +102,18 @@
       margin-bottom: 0.35em;
     }
 
-    hr {
-      border: none;
-      border-top: 1px solid #ccc;
-      margin: 36px 0;
-    }
-
     footer {
       text-align: center;
       font-size: 0.9rem;
       color: #666;
+      margin-top: 28px;
     }
   </style>
 </head>
 
 <body>
   <main>
-    <h1>vailá</h1>
+    <h1><i>vailá</i></h1>
     <p class="tagline">
       <strong>Versatile Anarcho Integrated Liberation Ánalysis</strong> — open-source Python&nbsp;3.12 toolbox for
       multimodal biomechanical and movement analysis (IMU, MoCap, markerless 2D/3D, EMG, force plates, GNSS/GPS, and
@@ -126,140 +121,54 @@
     </p>
 
     <div class="hero-card" id="start-here">
-      <h2>Start here — in-app module &amp; tool help</h2>
+      <h2>Start here — full script help list</h2>
       <p>
-        Per-module HTML help (SAM, stroboscopic, DLT/reconstruction, video tools, etc.) lives under
-        <code>vaila/help/</code>. Open the index to browse every linked topic from one place.
+        Every module and tool help page lives under <code>vaila/help/</code>. Open the index for the project idea plus
+        a complete catalog with HTML and Markdown links.
       </p>
-      <a class="primary-link" href="../vaila/help/index.html">Open vailá Help Index →</a>
+      <a class="primary-link" href="../vaila/help/index.html">Open <i>vailá</i> Help Index →</a>
       <p class="secondary-links">
-        Same path on disk: <code>vaila/help/index.html</code>
+        Markdown: <a href="../vaila/help/index.md"><code>vaila/help/index.md</code></a>
+        · regenerate with <code>uv run python bin/generate_help_index.py</code>
       </p>
     </div>
 
     <div class="section" id="english">
-      <h2>English — project overview</h2>
-
-      <h3>What you get</h3>
+      <h2>Project overview</h2>
       <ul class="tight">
         <li><strong>Frame A — File manager:</strong> rename, import/export, copy/move, tree, find, SSH transfer.</li>
-        <li><strong>Frame B — Multimodal analysis:</strong> IMU, MoCap, markerless (MP/YOLO), EMG, force plates, GNSS, SAM 3 video segmentation, soccer-field calibration, sprint analysis, and TUG/turn.</li>
-        <li><strong>Frame C — Tools:</strong> CSV/C3D workflows, DLT 2D/3D reconstruction, video (compress, cut, resize, sync) and image utilities, stroboscopic generation, and sports field visualization.</li>
+        <li><strong>Frame B — Multimodal analysis:</strong> IMU, MoCap, markerless, EMG, force plates, GNSS, and related pipelines.</li>
+        <li><strong>Frame C — Tools:</strong> CSV/C3D, DLT 2D/3D, video/image utilities, plots and visualization.</li>
       </ul>
-      <p>
-        Optional stacks (CUDA/GPU templates, extras) are documented in the repository README and in AGENTS.md; the
-        <a href="../vaila/help/index.html">Help Index</a> focuses on what each tool does and how to open it from the GUI.
-      </p>
-
-      <h3>GUI button reference (Markdown)</h3>
-      <p>
-        Long-form descriptions of individual GUI buttons live under <code>docs/vaila_buttons/</code>:
-        <a href="vaila_buttons/README.md">Button documentation index</a>.
-      </p>
-
-      <h3>PDF transcription from Brainstorm</h3>
-      <p>
-        Brainstorm includes <strong>Transcribe PDFs</strong> for typed, scanned, and handwritten exam PDFs:
-        <a href="../vaila/help/transcribe_pdfs.html">PDF transcription guide</a>.
-      </p>
-
-      <h3>Quick run (after install)</h3>
+      <h3>Quick run</h3>
       <pre><code>uv run vaila.py</code></pre>
-      <p>
-        One-line installers and platform notes: see
-        <a href="https://github.com/vaila-multimodaltoolbox/vaila">the project on GitHub</a> or the root
-        <code>README.md</code> in your clone.
-      </p>
-
-      <h3>Contributing</h3>
-      <p>
-        Pull requests and issues are welcome on GitHub. See <code>CONTRIBUTING.md</code> in the repository.
-      </p>
-
-      <h3>License</h3>
-      <p>
-        Licensed under the <strong>GNU Affero General Public License v3.0</strong> (AGPL-3.0). See the
-        <code>LICENSE</code> file in the repository.
-      </p>
-
-      <h3>How to cite</h3>
-      <pre><code>@misc{vaila2024,
-  title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
-  author={Paulo R. P. Santiago and Abel G. Chinaglia and others},
-  year={2024},
-  url={https://github.com/vaila-multimodaltoolbox/vaila}
-}</code></pre>
-    </div>
-
-    <hr>
-
-    <div class="section" id="portuguese">
-      <h2>Português — visão geral do projeto</h2>
-
-      <div class="hero-card" style="margin-top:0;">
-        <h2 style="margin-top:0;">Índice de ajuda dos módulos</h2>
-        <p>
-          A documentação HTML por ferramenta (SAM, estroboscópio, DLT/reconstrução, vídeo, etc.) está em
-          <code>vaila/help/</code>. Use o índice para navegar a partir de um único lugar.
-        </p>
-        <a class="primary-link" href="../vaila/help/index.html">Abrir índice de ajuda do vailá →</a>
-      </div>
-
-      <h3>O que é o vailá</h3>
-      <p>
-        Caixa de ferramentas multimodal em Python&nbsp;3.12 para análise do movimento e biomecânica, com interface
-        desktop em Tkinter, integrando IMU, MoCap, rastreamento markerless 2D/3D, EMG, plataformas de força, GNSS/GPS e
-        outros fluxos de dados.
-      </p>
+      <h3>Guides</h3>
       <ul class="tight">
-        <li><strong>Quadro A — Arquivos:</strong> renomear, importar/exportar, copiar/mover, árvore, busca, SSH.</li>
-        <li><strong>Quadro B — Análise multimodal:</strong> IMU, MoCap, markerless (MP/YOLO), EMG, força, GNSS, segmentação de vídeo SAM 3, calibração de campo de futebol, análise de sprint e TUG/turn.</li>
-        <li><strong>Quadro C — Ferramentas:</strong> CSV/C3D, DLT 2D/3D, utilitários de vídeo (compressão, corte, redimensionamento, sincronia), geração estroboscópica e visualização de quadras esportivas.</li>
+        <li><a href="fifa_workflow.md">FIFA Skeletal Tracking Light workflow</a></li>
+        <li><a href="vek.md">vaila-ElasticKick (VEK)</a></li>
+        <li><a href="dlt_reconstruction_and_mesh_alignment.md">DLT 3D reconstruction and mesh alignment</a></li>
+        <li><a href="vaila_buttons/README.md">GUI button documentation</a></li>
+        <li><a href="../vaila/help/transcribe_pdfs.html">PDF transcription (Brainstorm)</a></li>
+        <li><a href="../vaila/help/gpu_guide.html">Hardware &amp; GPU guide</a></li>
       </ul>
       <p>
-        Detalhes de cada módulo: <a href="../vaila/help/index.html">índice em <code>vaila/help/index.html</code></a>.
+        Install notes and extras: <a href="../README.md">README</a> ·
+        <a href="../AGENTS.md">AGENTS.md</a> ·
+        <a href="../CONTRIBUTING.md">CONTRIBUTING.md</a> · AGPL-3.0
       </p>
-
-      <h3>Documentação dos botões da GUI</h3>
-      <p>
-        Textos por botão: <a href="vaila_buttons/README.md">índice em <code>docs/vaila_buttons/</code></a>.
-      </p>
-
-      <h3>Transcrição de PDFs no Brainstorm</h3>
-      <p>
-        O Brainstorm inclui <strong>Transcribe PDFs</strong> para PDFs de provas digitadas, escaneadas ou manuscritas:
-        <a href="../vaila/help/transcribe_pdfs.html">guia de transcrição de PDFs</a>.
-      </p>
-
-      <h3>Executar após instalação</h3>
-      <pre><code>uv run vaila.py</code></pre>
-      <p>
-        Instalação em uma linha e requisitos por sistema: veja o README no GitHub ou na raiz do repositório clonado.
-      </p>
-
-      <h3>Contribuição</h3>
-      <p>
-        Contribuições são bem-vindas via pull request ou issue no GitHub; veja <code>CONTRIBUTING.md</code>.
-      </p>
-
-      <h3>Licença</h3>
-      <p>
-        Licenciado sob <strong>GNU Affero General Public License v3.0</strong> (AGPL-3.0). Consulte o arquivo
-        <code>LICENSE</code>.
-      </p>
-
-      <h3>Como citar</h3>
-      <pre><code>@misc{vaila2024,
-  title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
-  author={Paulo R. P. Santiago and Abel G. Chinaglia and outros},
-  year={2024},
-  url={https://github.com/vaila-multimodaltoolbox/vaila}
-}</code></pre>
     </div>
 
-    <footer>
-      <p>&copy; 2026 vailá — documentation entry: <code>docs/help.html</code></p>
-    </footer>
+    <div class="section" id="portugues">
+      <h2>Português — visão geral</h2>
+      <p>
+        Caixa de ferramentas multimodal em Python&nbsp;3.12 para análise do movimento e biomecânica (Tkinter).
+        Lista completa dos scripts:
+        <a href="../vaila/help/index.html">índice de ajuda</a>.
+      </p>
+      <pre><code>uv run vaila.py</code></pre>
+    </div>
+
+    <footer>© 2026 <i>vailá</i> — Multimodal Toolbox</footer>
   </main>
 </body>
 

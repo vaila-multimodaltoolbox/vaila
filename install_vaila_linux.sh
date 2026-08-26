@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 25 August 2026
-# Version: 0.3.114
+# Updated: 26 August 2026
+# Version: 0.3.115
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)               #
 #########################################################################################
 

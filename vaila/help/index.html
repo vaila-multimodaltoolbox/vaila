@@ -4,21 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - Help Index</title>
+    <title>vailá — Help Index</title>
     <style>
         body {
             font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
             margin: 0;
             line-height: 1.55;
-            background: radial-gradient(1200px 600px at 10% 0%, #eef2ff 0%, rgba(238, 242, 255, 0) 60%),
-                radial-gradient(900px 500px at 90% 10%, #fce7f3 0%, rgba(252, 231, 243, 0) 55%),
-                #f6f7fb;
-            font-size: 18px;
+            background: #f6f7fb;
+            font-size: 17px;
             color: #111;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1100px;
             margin: 28px auto;
             background: #fff;
             padding: 28px;
@@ -37,68 +35,26 @@
 
         h2 {
             color: #111;
-            margin-top: 40px;
-            border-left: 4px solid #111;
-            background: #fff;
+            margin-top: 36px;
+            border-left: 4px solid #1e3a5f;
+            background: #fafafa;
             padding: 10px 12px;
             border-radius: 0 10px 10px 0;
-            font-size: 20px;
+            font-size: 1.15rem;
         }
 
-        h3 {
-            color: #111;
-            margin-top: 20px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
-            font-size: 18px;
-        }
-
-        .grid-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 15px;
-            margin: 15px 0;
-        }
-
-        .tool-card {
-            border: 1px solid #ddd;
-            border-radius: 12px;
-            padding: 12px 12px 10px 12px;
-            background: #fff;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            transition: box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease;
-        }
-
-        .tool-card:hover {
-            box-shadow: 0 10px 18px rgba(0, 0, 0, 0.10);
-            transform: translateY(-1px);
-            border-color: #c9c9c9;
-        }
-
-        .muted {
+        .tagline {
             color: #333;
+            margin: 0 0 14px 0;
         }
 
-        .sep {
-            opacity: 0.55;
-            padding: 0 6px;
+        .frames {
+            margin: 0 0 18px 0;
+            padding-left: 1.2em;
         }
 
-        .text-sm {
-            font-size: 0.85em;
-        }
-
-        .mb-sm {
-            margin: 0 0 10px 0;
-        }
-
-        .footer {
-            margin-top: 50px;
-            text-align: center;
-            color: #111;
-            font-size: 0.9em;
+        .frames li {
+            margin-bottom: 0.25em;
         }
 
         .links {
@@ -108,12 +64,17 @@
 
         .links a {
             font-weight: 700;
-            color: #111;
+            color: #1e3a5f;
             text-decoration: none;
         }
 
         .links a:hover {
             text-decoration: underline;
+        }
+
+        .sep {
+            opacity: 0.55;
+            padding: 0 6px;
         }
 
         .topbar {
@@ -160,26 +121,9 @@
             color: #222;
         }
 
-        .tool-title {
-            font-weight: bold;
-            color: #111;
-            margin-bottom: 5px;
-        }
-
-        .tool-links a {
-            font-size: 1em;
-            margin-right: 10px;
-            text-decoration: none;
-            color: #111;
-        }
-
-        .tool-links a:hover {
-            text-decoration: underline;
-        }
-
         .banner {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-            background: linear-gradient(180deg, #fcfcfc, #f7f7f7);
+            background: #f7f7f7;
             color: #111;
             padding: 12px 14px;
             border-radius: 12px;
@@ -189,36 +133,80 @@
             border: 1px solid #e6e6e6;
         }
 
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .tool-card {
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 12px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .tool-card:hover {
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+            border-color: #c9c9c9;
+        }
+
+        .tool-title {
+            font-weight: bold;
+            color: #111;
+            margin-bottom: 6px;
+        }
+
+        .tool-links a {
+            font-size: 0.95em;
+            margin-right: 8px;
+            text-decoration: none;
+            color: #1e3a5f;
+        }
+
+        .tool-links a:hover {
+            text-decoration: underline;
+        }
+
+        .muted {
+            color: #444;
+        }
+
+        .text-sm {
+            font-size: 0.88em;
+        }
+
+        .mb-sm {
+            margin: 0 0 10px 0;
+        }
+
         .is-hidden {
             display: none !important;
         }
 
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            color: #555;
+            font-size: 0.9em;
+        }
+
         code {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-            font-size: 0.95em;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.92em;
             background: #f3f4f6;
             padding: 0.1em 0.35em;
             border-radius: 0.4em;
-            border: 1px solid #e5e7eb;
         }
 
         @media (max-width: 640px) {
-            body {
-                font-size: 16px;
-            }
-
             .container {
                 margin: 14px auto;
                 padding: 16px;
-                border-radius: 12px;
-            }
-
-            h2 {
-                font-size: 18px;
-            }
-
-            .pill {
-                font-size: 13px;
             }
         }
     </style>
@@ -226,580 +214,853 @@
 
 <body>
     <div class="container">
-        <h1><i>vailá</i> — Help</h1>
+        <h1><i>vailá</i> — Help Index</h1>
+
+        <p class="tagline">
+            <strong>Versatile Anarcho Integrated Liberation Ánalysis</strong> — open-source
+            Python&nbsp;3.12 multimodal toolbox for biomechanical and movement analysis
+            (IMU, MoCap, markerless 2D/3D, EMG, force plates, GNSS/GPS, and more),
+            with a Tkinter desktop GUI.
+        </p>
+
+        <ul class="frames">
+            <li><strong>Frame A</strong> — File manager (rename, import/export, copy/move, tree, find, SSH)</li>
+            <li><strong>Frame B</strong> — Multimodal analysis pipelines</li>
+            <li><strong>Frame C</strong> — Data, video/image, and visualization tools</li>
+        </ul>
 
         <div class="links">
-            <a href="../../docs/index.md">Open Project Documentation</a>
+            <a href="../../docs/index.md">Project documentation</a>
             <span class="sep" aria-hidden="true">|</span>
-            <a href="gpu_guide.html">Hardware & GPU Diagnostics Guide</a>
+            <a href="../../docs/help.html">Docs hub (HTML)</a>
             <span class="sep" aria-hidden="true">|</span>
-            <a href="../../docs/fifa_workflow.md">FIFA Workflow</a>
+            <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a>
         </div>
 
         <div class="topbar">
             <div class="searchbox">
                 <span class="pill">Search</span>
                 <input id="toolSearch" type="text"
-                    placeholder="Type a tool name (e.g., Sapiens, SAM, YOLO, Soccer Tools, Rec2D, tugturn)...">
+                    placeholder="Type a script name (e.g. imu, SAM, rec3d, tugturn)...">
             </div>
-            <span class="pill">Layout: matches <code>vaila.py</code> CLI list</span>
+            <span class="pill">153 topics · 7 categories</span>
         </div>
 
-        <pre class="banner">vailá - 25.Aug.2026 v0.3.114 (Python 3.12.14)</pre>
+        <pre class="banner">Generated on 26/08/2026 · v0.3.115 · uv run python bin/generate_help_index.py</pre>
 
-        <div>
-            <h2>File Manager (Frame A)</h2>
+            <h2>Analysis (27)</h2>
             <div class="grid-container">
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c1 - Rename</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="animal_open_field animal_open_field">
+                    <div class="tool-title">animal_open_field</div>
+                    <p class="muted text-sm mb-sm">This script processes movement data of animals in an open field test, performing comprehensive kinematic analyses and generating visualizations to evaluate a...</p>
+                    <div class="tool-links"><a href="animal_open_field.html">HTML</a> | <a href="animal_open_field.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c2 - Import</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="cluster_analysis cluster_analysis">
+                    <div class="tool-title">cluster_analysis</div>
+                    <p class="muted text-sm mb-sm">This Python script processes motion capture data for trunk and pelvis rotations using clusters of anatomical markers. It reads CSV files with marker position...</p>
+                    <div class="tool-links"><a href="cluster_analysis.html">HTML</a> | <a href="cluster_analysis.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c3 - Export</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="cube2d_kinematics cube2d_kinematics">
+                    <div class="tool-title">cube2d_kinematics</div>
+                    <p class="muted text-sm mb-sm">This module provides functionality for analyzing 2D kinematics data from cube-based movement assessments.</p>
+                    <div class="tool-links"><a href="cube2d_kinematics.html">HTML</a> | <a href="cube2d_kinematics.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c4 - Copy</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="emg_labiocom emg_labiocom">
+                    <div class="tool-title">emg_labiocom</div>
+                    <p class="muted text-sm mb-sm">This module analyzes surface EMG (sEMG) signals with time-domain,</p>
+                    <div class="tool-links"><a href="emg_labiocom.html">HTML</a> | <a href="emg_labiocom.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c5 - Move</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="forceplate_analysis forceplate_analysis">
+                    <div class="tool-title">forceplate_analysis</div>
+                    <p class="muted text-sm mb-sm">This script serves as the central control interface for the VAILA (Virtual Analysis</p>
+                    <div class="tool-links"><a href="forceplate_analysis.html">HTML</a> | <a href="forceplate_analysis.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c6 - Remove</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="gnss_analysis gnss_analysis">
+                    <div class="tool-title">gnss_analysis</div>
+                    <p class="muted text-sm mb-sm">Este script lê um file GPX contendo informações de latitude, longitude, elevação, tempo, velocidade (speed) e cadência (cad).</p>
+                    <div class="tool-links"><a href="gnss_analysis.html">HTML</a> | <a href="gnss_analysis.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c7 - Tree</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="imu_analysis imu_analysis">
+                    <div class="tool-title">imu_analysis</div>
+                    <p class="muted text-sm mb-sm">This script performs IMU sensor data analysis from CSV and C3D files. It processes accelerometer and gyroscope data, calculates tilt angles and Euler angles,...</p>
+                    <div class="tool-links"><a href="imu_analysis.html">HTML</a> | <a href="imu_analysis.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c8 - Find</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="markerless_2d_analysis markerless_2d_analysis.py">
+                    <div class="tool-title">markerless_2d_analysis</div>
+                    <p class="muted text-sm mb-sm">This script performs batch processing of videos for 2D pose estimation using MediaPipe's Pose model. It processes videos from a specified input directory, ov...</p>
+                    <div class="tool-links"><a href="markerless_2d_analysis.html">HTML</a> | <a href="markerless_2d_analysis.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">A_r1_c9 - Transfer</div>
-                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="markerless_3d_analysis markerless_3d_analysis">
+                    <div class="tool-title">markerless_3d_analysis</div>
+                    <p class="muted text-sm mb-sm">Launches a Tkinter GUI to collect all parameters and save a .toml config file (with sensible defaults).</p>
+                    <div class="tool-links"><a href="markerless_3d_analysis.html">HTML</a> | <a href="markerless_3d_analysis.md">MD</a></div>
                 </div>
-            </div>
-        </div>
-
-        <div>
-            <h2>Multimodal Analysis (Frame B)</h2>
-            <div class="grid-container">
-                <div class="tool-card">
-                    <div class="tool-title">B1_r1_c1 - IMU</div>
-                    <div class="tool-links"><a href="imu_analysis.html">HTML</a> | <a href="imu_analysis.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="markerless_live markerless_live">
+                    <div class="tool-title">markerless_live</div>
+                    <p class="muted text-sm mb-sm">This script performs real-time pose estimation and angle calculation using either YOLO or MediaPipe's Pose model. It provides a graphical interface for selec...</p>
+                    <div class="tool-links"><a href="markerless_live.html">HTML</a> | <a href="markerless_live.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B1_r1_c2 - Motion Capture Cluster</div>
-                    <div class="tool-links"><a href="cluster_analysis.html">HTML</a> | <a
-                            href="cluster_analysis.md">MD</a></div>
+                <div class="tool-card" data-name="mocap_analysis mocap_analysis">
+                    <div class="tool-title">mocap_analysis</div>
+                    <p class="muted text-sm mb-sm">This script performs batch processing of videos for 3D pose estimation using</p>
+                    <div class="tool-links"><a href="mocap_analysis.html">HTML</a> | <a href="mocap_analysis.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B1_r1_c3 - Motion Capture Full Body</div>
-                    <div class="tool-links"><a href="mocap_analysis.html">HTML</a> | <a href="mocap_analysis.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="mp_facemesh_help face mesh analysis - help">
+                    <div class="tool-title">mp_facemesh_help</div>
+                    <p class="muted text-sm mb-sm">Welcome to the Face Mesh Analysis module. This tool performs batch processing of videos for 2D face mesh detection using MediaPipe's FaceMesh model. It proce...</p>
+                    <div class="tool-links"><a href="mp_facemesh_help.html">HTML</a> | <a href="mp_facemesh_help.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B1_r1_c4 - Markerless 2D (chooser)</div>
-                    <div class="tool-links"><a href="markerless2d_analysis_v2.html">HTML</a> | <a
-                            href="markerless2d_analysis_v2.md">MD</a> ·
-                        <a href="#yolo-fb">absorbed tools ↓</a></div>
+                <div class="tool-card" data-name="pynalty_help user guide - pynalty analysis tool">
+                    <div class="tool-title">pynalty_help</div>
+                    <p class="muted text-sm mb-sm">Pynalty is a specialized video analysis tool designed to calculate penalty kick statistics, specifically the ball's velocity and distance traveled. Integrate...</p>
+                    <div class="tool-links"><a href="pynalty_help.html">HTML</a> | <a href="pynalty_help.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B1_r1_c5 - Markerless 3D (chooser)</div>
-                    <div class="tool-links"><a href="markerless_3d_analysis.html">HTML</a> | <a
-                            href="markerless_3d_analysis.md">MD</a> ·
-                        <a href="sam3dinov3.html">SAM3+DINOv3 3D</a> ·
-                        <a href="sam3dinov3_visualize.html">Visualize ID</a> ·
-                        <a href="sapiens2_3d.html">Sapiens2 3D Pose</a></div>
+                <div class="tool-card" data-name="run_vector_coding run_vector_coding">
+                    <div class="tool-title">run_vector_coding</div>
+                    <p class="muted text-sm mb-sm">Time normalize data to n_points.</p>
+                    <div class="tool-links"><a href="run_vector_coding.html">HTML</a> | <a href="run_vector_coding.md">MD</a></div>
                 </div>
-
-                <div class="tool-card">
-                    <div class="tool-title">B2_r2_c1 - Vector Coding</div>
-                    <div class="tool-links"><a href="run_vector_coding.html">HTML</a> | <a
-                            href="run_vector_coding.md">MD</a></div>
+                <div class="tool-card" data-name="sit2stand sit2stand">
+                    <div class="tool-title">sit2stand</div>
+                    <p class="muted text-sm mb-sm">This module provides comprehensive functionality for analyzing sit-to-stand movements using force plate data. It supports batch processing of C3D and CSV fil...</p>
+                    <div class="tool-links"><a href="sit2stand.html">HTML</a> | <a href="sit2stand.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B2_r2_c2 - EMG</div>
-                    <div class="tool-links"><a href="emg_labiocom.html">HTML</a> | <a href="emg_labiocom.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="soccerfield_calib soccerfield_calib">
+                    <div class="tool-title">soccerfield_calib</div>
+                    <p class="muted text-sm mb-sm">soccerfield_calib.py fits a DLT2D homography (8 coefficients) that</p>
+                    <div class="tool-links"><a href="soccerfield_calib.html">HTML</a> | <a href="soccerfield_calib.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B2_r2_c3 - Force Plate</div>
-                    <div class="tool-links"><a href="forceplate_analysis.html">HTML</a> | <a
-                            href="forceplate_analysis.md">MD</a></div>
+                <div class="tool-card" data-name="soccerfield_keypoints_ai soccerfield_keypoints_ai">
+                    <div class="tool-title">soccerfield_keypoints_ai</div>
+                    <p class="muted text-sm mb-sm">soccerfield_keypoints_ai detects up to 32 soccer-field</p>
+                    <div class="tool-links"><a href="soccerfield_keypoints_ai.html">HTML</a> | <a href="soccerfield_keypoints_ai.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B2_r2_c4 - GNSS/GPS</div>
-                    <div class="tool-links"><a href="gnss_analysis.html">HTML</a> | <a href="gnss_analysis.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="soccerfield_vitruvian_dlt3d soccerfield_vitruvian_dlt3d">
+                    <div class="tool-title">soccerfield_vitruvian_dlt3d</div>
+                    <p class="muted text-sm mb-sm">Purpose: time-varying DLT3D calibration from pitch landmarks plus Vitruvian player-box verticals</p>
+                    <div class="tool-links"><a href="soccerfield_vitruvian_dlt3d.html">HTML</a> | <a href="soccerfield_vitruvian_dlt3d.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B2_r2_c5 - MEG/EEG</div>
-                    <div class="tool-links"><span>(Coming Soon)</span></div>
+                <div class="tool-card" data-name="treadmill_lc treadmill lc - treadmill grf help">
+                    <div class="tool-title">treadmill_lc</div>
+                    <p class="muted text-sm mb-sm">The Treadmill LC tool processes instrumented treadmill load-cell data in a robust, standardized workflow for running biomechanics analysis. It supports artif...</p>
+                    <div class="tool-links"><a href="treadmill_lc.html">HTML</a> | <a href="treadmill_lc.md">MD</a></div>
                 </div>
-
-                <div class="tool-card">
-                    <div class="tool-title">B3_r3_c1 - HR/ECG</div>
-                    <div class="tool-links"><span>(Coming Soon)</span></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">Yolo + Markerless_MP (in Markerless 2D chooser)</div>
-                    <div class="tool-links"><a href="markerless2d_mpyolo.html">HTML</a> |
-                        <a href="markerless2d_mpyolo.md">MD</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">B3_r3_c3 - Vertical Jump</div>
-                    <div class="tool-links"><a href="vaila_and_jump.html">HTML</a> | <a href="vaila_and_jump.md">MD</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">B3_r3_c4 - Cube2D</div>
-                    <div class="tool-links"><a href="cube2d_kinematics.html">HTML</a> | <a
-                            href="cube2d_kinematics.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">B3_r3_c5 - Animal Open Field</div>
-                    <div class="tool-links"><a href="animal_open_field.html">HTML</a> | <a
-                            href="animal_open_field.md">MD</a></div>
-                </div>
-
-                <div class="tool-card">
-                    <div class="tool-title">B4_r4_c2 - ML Walkway</div>
-                    <div class="tool-links"><a href="ml_models_training.html">HTML</a> | <a
-                            href="ml_models_training.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">Markerless Hands (in Markerless 2D chooser)</div>
-                    <div class="tool-links"><a href="mphands.html">HTML</a> | <a href="mphands.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">MP Angles (in Markerless 2D chooser)</div>
-                    <div class="tool-links"><a href="mpangles.html">HTML</a> | <a href="mpangles.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">Markerless Live (in Markerless 2D chooser)</div>
-                    <div class="tool-links"><a href="markerless_live.html">HTML</a> | <a
-                            href="markerless_live.md">MD</a></div>
-                </div>
-
-                <div class="tool-card">
-                    <div class="tool-title">B4_r5_c1 - Ultrasound</div>
-                    <div class="tool-links"><a href="usvideoia.html">HTML</a> | <a href="usvideoia.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">B4_r5_c2 - Brainstorm</div>
-                    <div class="tool-links"><a href="brainstorm.html">HTML</a> | <a href="brainstorm.md">MD</a><br>
-                        <a href="transcribe_pdfs.html">PDF Transcription</a> | <a href="transcribe_pdfs.md">MD</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">B4_r5_c3 - Scout</div>
-                    <div class="tool-links"><a href="scout_vaila.html">HTML</a> | <a href="scout_vaila.md">MD</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">B4_r5_c4 - StartBlock</div>
-                    <div class="tool-links"><a href="force_cube_fig.html">HTML</a> | <a href="force_cube_fig.md">MD</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">B4_r5_c5 - Pynalty</div>
-                    <div class="tool-links"><a href="pynalty_help.html">HTML</a> | <a href="pynalty_help.md">MD</a>
-                    </div>
-                </div>
-
-                <div class="tool-card">
-                    <div class="tool-title">B5_r6_c1 - Sprint</div>
-                    <div class="tool-links"><a href="vailasprint_help.html">HTML</a> | <a
-                            href="vailasprint_help.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">Face Mesh (in Markerless 2D chooser)</div>
-                    <div class="tool-links"><a href="mp_facemesh_help.html">HTML</a> | <a
-                            href="mp_facemesh_help.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">B5_r6_c3 - tugturn</div>
+                <div class="tool-card" data-name="tugturn tug and turn">
+                    <div class="tool-title">tugturn</div>
+                    <p class="muted text-sm mb-sm">Instrumented Timed Up and Go (TUG) analysis with markerless 3D kinematics, robust</p>
                     <div class="tool-links"><a href="tugturn.html">HTML</a> | <a href="tugturn.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B5_r6_c4 - Soccer Tools</div>
-                    <div class="tool-links">
-                        <a href="../../docs/fifa_workflow.md">docs/fifa_workflow.md</a> |
-                        <a href="soccerfield_keypoints_ai.html">Field KPs (AI)</a> |
-                        <a href="soccerfield_calib.html">Soccer-Field Calib</a> |
-                        <a href="soccerfield_vitruvian_dlt3d.html">Vitruvian DLT3D</a> |
-                        <a href="vek.html">VEK ElasticKick</a> |
-                        <a href="vaila_sam.html">FIFA cams→DLT (via SAM/FIFA)</a>
-                        <span class="text-sm">(AI keypoints + DLT2D/DLT3D calib + VEK + FIFA utilities)</span>
-                    </div>
+                <div class="tool-card" data-name="vaila_and_jump vaila_and_jump">
+                    <div class="tool-title">vaila_and_jump</div>
+                    <p class="muted text-sm mb-sm">This script processes jump data from multiple .csv files in a specified directory, performing biomechanical calculations based on either the time of flight o...</p>
+                    <div class="tool-links"><a href="vaila_and_jump.html">HTML</a> | <a href="vaila_and_jump.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B5_r6_c5 - Deadlift</div>
-                    <div class="tool-links"><a href="vaila_deadlift.html">HTML</a> | <a href="vaila_deadlift.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="vaila_and_jump_help vaila_and_jump_help">
+                    <div class="tool-title">vaila_and_jump_help</div>
+                    <p class="muted text-sm mb-sm">Time-of-Flight: estimate jump height from flight time</p>
+                    <div class="tool-links"><a href="vaila_and_jump_help.html">HTML</a> | <a href="vaila_and_jump_help.md">MD</a></div>
                 </div>
-
-                <div class="tool-card">
-                    <div class="tool-title">B6_r7_c1 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
+                <div class="tool-card" data-name="vaila_deadlift vaila_deadlift">
+                    <div class="tool-title">vaila_deadlift</div>
+                    <p class="muted text-sm mb-sm">Deadlift/RDL biomechanical analysis supporting two data types:</p>
+                    <div class="tool-links"><a href="vaila_deadlift.html">HTML</a> | <a href="vaila_deadlift.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B6_r7_c2 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
+                <div class="tool-card" data-name="vaila_deadlift_imu vaila_deadlift_imu">
+                    <div class="tool-title">vaila_deadlift_imu</div>
+                    <p class="muted text-sm mb-sm">Dedicated IMU-only Deadlift / RDL analysis using AHRS sensor fusion. This is</p>
+                    <div class="tool-links"><a href="vaila_deadlift_imu.html">HTML</a> | <a href="vaila_deadlift_imu.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B6_r7_c3 - Treadmill LC</div>
-                    <div class="tool-links"><a href="treadmill_lc.html">HTML</a> | <a
-                            href="treadmill_lc.md">MD</a></div>
+                <div class="tool-card" data-name="vailasprint_br_help vaila analise de sprint (20m) - ajuda">
+                    <div class="tool-title">vailasprint_br_help</div>
+                    <p class="muted text-sm mb-sm">Bem-vindo ao modulo vaila Sprint Analysis. Esta ferramenta fornece uma analise biomecanica e de desempenho detalhada de sprints lineares de 20 metros e teste...</p>
+                    <div class="tool-links"><a href="vailasprint_br_help.html">HTML</a> | <a href="vailasprint_br_help.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B6_r7_c4 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
+                <div class="tool-card" data-name="vailasprint_help vaila sprint analysis (20m) - help">
+                    <div class="tool-title">vailasprint_help</div>
+                    <p class="muted text-sm mb-sm">Welcome to the vaila Sprint Analysis module. This tool provides a comprehensive biomechanical and performance analysis of 20-meter linear sprints and Change...</p>
+                    <div class="tool-links"><a href="vailasprint_help.html">HTML</a> | <a href="vailasprint_help.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">B6_r7_c5 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
+                <div class="tool-card" data-name="vek vaila-elastickick (vek)">
+                    <div class="tool-title">vek</div>
+                    <p class="muted text-sm mb-sm">VEK estimates biomechanical and mechanical variables from a soccer/futsal kick</p>
+                    <div class="tool-links"><a href="vek.html">HTML</a> | <a href="vek.md">MD</a></div>
                 </div>
             </div>
-        </div>
 
-
-        <div id="yolo-fb">
-            <h2>Markerless 2D / 3D — absorbed tools (formerly "YOLO + FB")</h2>
-            <p class="mb-sm">
-                <strong>v0.3.97:</strong> the standalone <strong>YOLO + FB</strong> and
-                <strong>Yolo + Markerless_MP</strong> buttons were merged into the
-                <strong>Markerless 2D</strong> (<code>B1_r1_c4</code>) and
-                <strong>Markerless 3D</strong> (<code>B1_r1_c5</code>) choosers — 2D-only
-                tools moved to Markerless 2D, the 3D-native SAM3+DINOv3 pair moved to
-                Markerless 3D. Each button below still prints a copy-paste launcher CLI
-                to the terminal, unchanged:
-                <code>Tracker (v26)</code>, <code>Pose (video)</code>, <code>Pose (tracking)</code>,
-                <code>Seg (v26)</code>, <code>SAM 3 video</code>, <code>Sapiens2 Pose</code>,
-                <code>SAM3+Sapiens2</code>, <code>SAM3+Sapiens2 Visualize ID</code>,
-                <code>SAM3+DINOv3 3D</code>, <code>SAM3+DINOv3 Visualize ID</code>,
-                <code>Train YOLOv26</code>.
-                <strong>v0.3.98</strong> additionally folded four more standalone
-                2D buttons into Markerless 2D's new "Other 2D tools" section:
-                <code>Markerless Hands</code>, <code>MP Angles</code>, <code>Face Mesh</code>,
-                <code>Markerless Live</code>.
-                <br>
-                <strong>Docs:</strong> <a href="../../docs/vaila_buttons/yolo-fb.md">docs/vaila_buttons/yolo-fb.md</a>
-            </p>
+            <h2>ML (19)</h2>
             <div class="grid-container">
-                <div class="tool-card">
-                    <div class="tool-title">Tracker (v26)</div>
-                    <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="markerless2d_analysis_v2 markerless2d_analysis_v2.py - professional documentation">
+                    <div class="tool-title">markerless2d_analysis_v2</div>
+                    <p class="muted text-sm mb-sm">markerless2d_analysis_v2.py is an advanced 2D pose estimation tool that combines state-of-the-art computer vision models (YOLOv11 and MediaPipe) to extract h...</p>
+                    <div class="tool-links"><a href="markerless2d_analysis_v2.html">HTML</a> | <a href="markerless2d_analysis_v2.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">Pose (video)</div>
-                    <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a>
-                        <span class="text-sm">(YOLOv26 pose on video)</span>
-                    </div>
+                <div class="tool-card" data-name="markerless2d_mpyolo markerless2d_mpyolo">
+                    <div class="tool-title">markerless2d_mpyolo</div>
+                    <p class="muted text-sm mb-sm">This script combines YOLOv12 for person detection/tracking with MediaPipe for pose estimation.</p>
+                    <div class="tool-links"><a href="markerless2d_mpyolo.html">HTML</a> | <a href="markerless2d_mpyolo.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">Pose (tracking)</div>
-                    <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a>
-                        <span class="text-sm">(track → pose per ID)</span>
-                    </div>
+                <div class="tool-card" data-name="markerless3d_analysis_v2 markerless3d_analysis_v2">
+                    <div class="tool-title">markerless3d_analysis_v2</div>
+                    <p class="muted text-sm mb-sm">Versão aprimorada do script markerless_3D_analysis.py que incorpora detecção prévia</p>
+                    <div class="tool-links"><a href="markerless3d_analysis_v2.html">HTML</a> | <a href="markerless3d_analysis_v2.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">Seg (v26)</div>
-                    <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a>
-                        <span class="text-sm">(segmentation model)</span>
-                    </div>
+                <div class="tool-card" data-name="ml_models_training ml_models_training">
+                    <div class="tool-title">ml_models_training</div>
+                    <p class="muted text-sm mb-sm">Plots the metrics for each model in a bar chart with different colors and similar scales, and saves them as PNG files.</p>
+                    <div class="tool-links"><a href="ml_models_training.html">HTML</a> | <a href="ml_models_training.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">SAM 3 video</div>
-                    <div class="tool-links"><a href="vaila_sam.html">HTML</a> | <a href="vaila_sam.md">MD</a>
-                        <span class="text-sm">(segmentation + FIFA pipeline)</span>
-                    </div>
+                <div class="tool-card" data-name="ml_valid_models ml_valid_models">
+                    <div class="tool-title">ml_valid_models</div>
+                    <p class="muted text-sm mb-sm">This script validates previously trained machine learning models by testing their performance on a separate validation dataset. It loads models trained with...</p>
+                    <div class="tool-links"><a href="ml_valid_models.html">HTML</a> | <a href="ml_valid_models.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">Sapiens2 Pose</div>
-                    <div class="tool-links"><a href="vaila_sapiens.html">HTML</a> | <a href="vaila_sapiens.md">MD</a>
-                        <span class="text-sm">(308 keypoints, CUDA, rectangle/polygon ROI)</span>
-                    </div>
+                <div class="tool-card" data-name="rf_trackers rf_trackers">
+                    <div class="tool-title">rf_trackers</div>
+                    <p class="muted text-sm mb-sm">Combines Ultralytics YOLO26 (default checkpoint yolo26x.pt under vaila/models/) with [Roboflow trackers](https://github.com/roboflow/trackers) 2.4.x (SORT, B...</p>
+                    <div class="tool-links"><a href="rf_trackers.html">HTML</a> | <a href="rf_trackers.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">SAM3+Sapiens2</div>
-                    <div class="tool-links"><a href="sam3sapiens2.html">HTML</a> | <a href="sam3sapiens2.md">MD</a>
-                        <span class="text-sm">(SAM bbox/contour/ID → DETR-free 308-keypoint pose)</span>
-                    </div>
+                <div class="tool-card" data-name="sam3dinov3 sam3+dinov3 3d (`sam3dinov3.py`)">
+                    <div class="tool-title">sam3dinov3</div>
+                    <p class="muted text-sm mb-sm">GUI: Frame B → Markerless 3D → SAM3+DINOv3 3D</p>
+                    <div class="tool-links"><a href="sam3dinov3.html">HTML</a> | <a href="sam3dinov3.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">SAM3+DINOv3 3D</div>
-                    <div class="tool-links"><a href="sam3dinov3.html">HTML</a> | <a href="sam3dinov3.md">MD</a>
-                        <span class="text-sm">(SAM bbox/mask → SAM 3D Body markerless 3D MHR mesh)</span>
-                    </div>
+                <div class="tool-card" data-name="sam3dinov3_visualize sam3+dinov3 3d — visualize selected id">
+                    <div class="tool-title">sam3dinov3_visualize</div>
+                    <p class="muted text-sm mb-sm">This CPU-only tool rerenders an existing processed_sam3dinov3_ (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights, so it is...</p>
+                    <div class="tool-links"><a href="sam3dinov3_visualize.html">HTML</a> | <a href="sam3dinov3_visualize.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">Sapiens2 3D Pose</div>
-                    <div class="tool-links"><a href="sapiens2_3d.html">HTML</a> | <a href="sapiens2_3d.md">MD</a>
-                        <span class="text-sm">(Sapiens2-keypoint-guided bbox tightening → same SAM 3D Body mesh; optional DLT3D/ref3d auto-chain to the calibrated lab frame)</span>
-                    </div>
+                <div class="tool-card" data-name="sam3sapiens2 sam3+sapiens2 (`sam3sapiens2.py`)">
+                    <div class="tool-title">sam3sapiens2</div>
+                    <p class="muted text-sm mb-sm">GUI: Frame B → Markerless 2D → SAM3+Sapiens2</p>
+                    <div class="tool-links"><a href="sam3sapiens2.html">HTML</a> | <a href="sam3sapiens2.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">Train YOLOv26</div>
+                <div class="tool-card" data-name="sam3sapiens2_visualize sam3+sapiens2 — visualize selected id">
+                    <div class="tool-title">sam3sapiens2_visualize</div>
+                    <p class="muted text-sm mb-sm">This CPU-only tool rerenders an existing processed_sam3sapiens2_ result. It does not load SAM3 or Sapiens2 weights, so it is safe for visualization after an...</p>
+                    <div class="tool-links"><a href="sam3sapiens2_visualize.html">HTML</a> | <a href="sam3sapiens2_visualize.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="sam_to_yolo sam_to_yolo">
+                    <div class="tool-title">sam_to_yolo</div>
+                    <p class="muted text-sm mb-sm">Converts a SAM 3 video tracking export (sam_tracks.csv or its</p>
+                    <div class="tool-links"><a href="sam_to_yolo.html">HTML</a> | <a href="sam_to_yolo.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="sapiens2_3d sapiens2 3d pose (`sapiens2_3d.py`)">
+                    <div class="tool-title">sapiens2_3d</div>
+                    <p class="muted text-sm mb-sm">GUI: Frame B → Markerless 3D → Sapiens2 3D Pose</p>
+                    <div class="tool-links"><a href="sapiens2_3d.html">HTML</a> | <a href="sapiens2_3d.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_mlwalkway vaila_mlwalkway">
+                    <div class="tool-title">vaila_mlwalkway</div>
+                    <p class="muted text-sm mb-sm">Create by: Abel G. Chinaglia &amp; Paulo R. P. Santiago</p>
+                    <div class="tool-links"><a href="vaila_mlwalkway.html">HTML</a> | <a href="vaila_mlwalkway.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_sam vaila_sam">
+                    <div class="tool-title">vaila_sam</div>
+                    <p class="muted text-sm mb-sm">vaila_sam performs video segmentation using SAM 3 (Segment Anything Model 3) from Meta. It supports text-prompt masks via Hugging Face checkpoints for single...</p>
+                    <div class="tool-links"><a href="vaila_sam.html">HTML</a> | <a href="vaila_sam.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_sapiens vaila_sapiens.py">
+                    <div class="tool-title">vaila_sapiens</div>
+                    <p class="muted text-sm mb-sm">Top-down Sapiens2 Pose (308 keypoints, Sociopticon topology) on video.</p>
+                    <div class="tool-links"><a href="vaila_sapiens.html">HTML</a> | <a href="vaila_sapiens.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="walkway_ml_prediction walkway_ml_prediction">
+                    <div class="tool-title">walkway_ml_prediction</div>
+                    <p class="muted text-sm mb-sm">Função para carregar modelos e realizar previsões</p>
+                    <div class="tool-links"><a href="walkway_ml_prediction.html">HTML</a> | <a href="walkway_ml_prediction.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="yolotrain yolotrain">
+                    <div class="tool-title">yolotrain</div>
+                    <p class="muted text-sm mb-sm">YOLO26-first trainer for datasets generated by vaila/getpixelvideo.py, vaila/vaila_sam.py workflows, and existing Ultralytics YOLO datasets. It detects datas...</p>
                     <div class="tool-links"><a href="yolotrain.html">HTML</a> | <a href="yolotrain.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">YOLO - ReID (appearance)</div>
-                    <div class="tool-links"><a href="reid_yolotrack.html">HTML</a> | <a href="reid_yolotrack.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="yolov11track yolov11track">
+                    <div class="tool-title">yolov11track</div>
+                    <p class="muted text-sm mb-sm">This script performs object detection and tracking on video files using the YOLO model v11, with integrated pose estimation capabilities. It provides a compr...</p>
+                    <div class="tool-links"><a href="yolov11track.html">HTML</a> | <a href="yolov11track.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">YOLO - Track (v11, legacy)</div>
-                    <div class="tool-links"><a href="yolov11track.html">HTML</a> | <a href="yolov11track.md">MD</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div>
-            <h2>Tools Available (Frame C)</h2>
-
-            <h3>-&gt; C_A: Data Files</h3>
-            <div class="grid-container">
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r1_c1 - Edit CSV/C3D</div>
-                    <div class="tool-links"><a href="edit_csv_c3d.html">HTML</a> | <a href="edit_csv_c3d.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r1_c2 - C3D &lt;--&gt; CSV</div>
-                    <div class="tool-links"><a href="vpython_c3d.html">HTML</a> | <a href="vpython_c3d.md">MD</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r1_c3 - Smooth &amp; Filter</div>
-                    <div class="tool-links"><a href="interp_smooth_split.html">HTML</a> | <a
-                            href="interp_smooth_split.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r2_c1 - DLT/REC 2D-3D (chooser)</div>
-                    <div class="tool-links">
-                        <a href="dlt2d.html">DLT2D</a> ·
-                        <a href="rec2d_one_dlt2d.html">Rec2D 1DLT</a> ·
-                        <a href="rec2d.html">Rec2D MultiDLT</a> ·
-                        <a href="dlt3d.html">DLT3D</a> ·
-                        <a href="rec3d_one_dlt3d.html">Rec3D 1DLT</a> ·
-                        <a href="rec3d.html">Rec3D MultiDLT</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r4_c1 - ReID Marker</div>
-                    <div class="tool-links"><a href="reid_markers.html">HTML</a> | <a href="reid_markers.md">MD</a>
-                    </div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r4_c2 - Sapiens2 3D Kinematics</div>
-                    <div class="tool-links"><a href="sapiens3d_kinematics.html">HTML</a> | <a
-                            href="sapiens3d_kinematics.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r4_c3 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r5_c1 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r5_c2 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_A_r5_c3 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
+                <div class="tool-card" data-name="yolov26track yolov26track">
+                    <div class="tool-title">yolov26track</div>
+                    <p class="muted text-sm mb-sm">This script performs object detection and tracking on video files using the YOLO model v26 (latest version), with integrated pose estimation capabilities. It...</p>
+                    <div class="tool-links"><a href="yolov26track.html">HTML</a> | <a href="yolov26track.md">MD</a></div>
                 </div>
             </div>
 
-            <h3>-&gt; C_B: Video and Image</h3>
+            <h2>Processing (21)</h2>
             <div class="grid-container">
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r1_c1 - Video &lt;--&gt; PNG</div>
-                    <div class="tool-links"><a href="extractpng.html">HTML</a> | <a href="extractpng.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="data_processing data_processing">
+                    <div class="tool-title">data_processing</div>
+                    <p class="muted text-sm mb-sm">Determines the number of header lines in a CSV file.</p>
+                    <div class="tool-links"><a href="data_processing.html">HTML</a> | <a href="data_processing.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r1_c2 - Crop Face</div>
-                    <div class="tool-links"><a href="crop_faces_atletas.html">HTML</a> | <a
-                            href="crop_faces_atletas.md">MD</a></div>
+                <div class="tool-card" data-name="dlt2d dlt2d">
+                    <div class="tool-title">dlt2d</div>
+                    <p class="muted text-sm mb-sm">Calculates Direct Linear Transformation (DLT2D) parameters (8 coefficients) from a pixel-coordinate calibration file and a corresponding real-world 2D refere...</p>
+                    <div class="tool-links"><a href="dlt2d.html">HTML</a> | <a href="dlt2d.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r1_c3 - Draw Box</div>
-                    <div class="tool-links"><a href="drawboxe.html">HTML</a> | <a href="drawboxe.md">MD</a></div>
+                <div class="tool-card" data-name="dlt3d dlt3d">
+                    <div class="tool-title">dlt3d</div>
+                    <p class="muted text-sm mb-sm">Calculates Direct Linear Transformation (DLT3D) parameters (11 coefficients) from a pixel-coordinate calibration file and a corresponding real-world 3D refer...</p>
+                    <div class="tool-links"><a href="dlt3d.html">HTML</a> | <a href="dlt3d.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r2_c1 - Compress Video</div>
-                    <div class="tool-links"><a href="compressvideo.html">HTML</a> | <a href="compressvideo.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="filter_utils filter_utils">
+                    <div class="tool-title">filter_utils</div>
+                    <p class="muted text-sm mb-sm">Modified butter_filter to handle multidimensional data.</p>
+                    <div class="tool-links"><a href="filter_utils.html">HTML</a> | <a href="filter_utils.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r2_c2 - <i>vailá</i></div>
-                    <div class="tool-links"><a href="#">-</a></div>
+                <div class="tool-card" data-name="filtering filtering">
+                    <div class="tool-title">filtering</div>
+                    <p class="muted text-sm mb-sm">Run the script from the command line:</p>
+                    <div class="tool-links"><a href="filtering.html">HTML</a> | <a href="filtering.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r2_c3 - Make Sync file</div>
-                    <div class="tool-links"><a href="syncvid.html">HTML</a> | <a href="syncvid.md">MD</a>
-                        <span class="text-sm">(Pygame + typed frames → direct Cut Video)</span>
-                    </div>
+                <div class="tool-card" data-name="geometric_reid geometric_reid">
+                    <div class="tool-title">geometric_reid</div>
+                    <p class="muted text-sm mb-sm">Shared geometric Re-ID helpers used by YOLO tracking, SAM chunk linking, and</p>
+                    <div class="tool-links"><a href="geometric_reid.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r3_c1 - GetPixelCoord</div>
-                    <div class="tool-links"><a href="getpixelvideo.html">EN</a> | <a href="getpixelvideo_pt.html">PT</a>
-                    </div>
+                <div class="tool-card" data-name="help_reid_markers help_reid_markers">
+                    <div class="tool-title">help_reid_markers</div>
+                    <p class="muted text-sm mb-sm">Help topic for `help_reid_markers`.</p>
+                    <div class="tool-links"><a href="help_reid_markers.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r3_c2 - Metadata info</div>
-                    <div class="tool-links"><a href="numberframes.html">HTML</a> | <a href="numberframes.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="interp_smooth_split interp_smooth_split">
+                    <div class="tool-title">interp_smooth_split</div>
+                    <p class="muted text-sm mb-sm">vailá tool for gap filling (interpolation), smoothing/filtering, optional final</p>
+                    <div class="tool-links"><a href="interp_smooth_split.html">HTML</a> | <a href="interp_smooth_split.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r3_c3 - Merge|Split Video</div>
-                    <div class="tool-links"><a href="merge_multivideos.html">HTML</a> | <a
-                            href="merge_multivideos.md">MD</a></div>
+                <div class="tool-card" data-name="joint_kinematics joint_kinematics">
+                    <div class="tool-title">joint_kinematics</div>
+                    <p class="muted text-sm mb-sm">Shared math turning SAM 3D Body's per-joint rotation output into biomechanically usable joint angles (Euler/Cardan degrees + quaternion), consumed by sam3din...</p>
+                    <div class="tool-links"><a href="joint_kinematics.html">HTML</a> | <a href="joint_kinematics.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r4_c1 - Distort Video/data</div>
-                    <div class="tool-links"><a href="vaila_distortvideo_gui.html">HTML</a> | <a
-                            href="vaila_distortvideo_gui.md">MD</a> | <a href="vaila_datdistort.html">DAT/CSV</a></div>
+                <div class="tool-card" data-name="mesh_alignment mesh_alignment">
+                    <div class="tool-title">mesh_alignment</div>
+                    <p class="muted text-sm mb-sm">Shared support module for rec3d_one_dlt3d's mesh-for-Blender export feature. Provides:</p>
+                    <div class="tool-links"><a href="mesh_alignment.html">HTML</a> | <a href="mesh_alignment.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r4_c2 - Cut Video</div>
-                    <div class="tool-links"><a href="cutvideo.html">HTML</a> | <a href="cutvideo.md">MD</a></div>
+                <div class="tool-card" data-name="modifylabref modifylabref">
+                    <div class="tool-title">modifylabref</div>
+                    <p class="muted text-sm mb-sm">This script is designed for rotating and transforming 3D motion capture data.</p>
+                    <div class="tool-links"><a href="modifylabref.html">HTML</a> | <a href="modifylabref.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r4_c3 - Resize Video</div>
-                    <div class="tool-links"><a href="resize_video.html">HTML</a> | <a href="resize_video.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="monocular_dlt_align monocular_dlt_align">
+                    <div class="tool-title">monocular_dlt_align</div>
+                    <p class="muted text-sm mb-sm">What problem this solves</p>
+                    <div class="tool-links"><a href="monocular_dlt_align.html">HTML</a> | <a href="monocular_dlt_align.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r5_c1 - YT Downloader</div>
-                    <div class="tool-links"><a href="vaila_ytdown.html">HTML</a> | <a href="vaila_ytdown.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="readc3d_export readc3d_export">
+                    <div class="tool-title">readc3d_export</div>
+                    <p class="muted text-sm mb-sm">This script processes .c3d files, extracting marker data, analog data, events, and points residuals, and saves them into CSV files. It also allows the option...</p>
+                    <div class="tool-links"><a href="readc3d_export.html">HTML</a> | <a href="readc3d_export.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r5_c2 - Insert Audio</div>
-                    <div class="tool-links"><a href="vaila_iaudiovid.html">HTML</a> | <a
-                            href="vaila_iaudiovid.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_B_r5_c3 - rm Dup PNG</div>
-                    <div class="tool-links"><a href="rm_duplicateframes.html">HTML</a> | <a
-                            href="rm_duplicateframes.md">MD</a></div>
-                </div>
-            </div>
-
-            <h3>-&gt; C_C: Visualization</h3>
-            <div class="grid-container">
-                <div class="tool-card">
-                    <div class="tool-title">C_C_r1_c1 - Show C3D</div>
-                    <div class="tool-links"><a href="viewc3d.html">HTML</a> | <a href="viewc3d.md">MD</a></div>
-                </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_C_r1_c2 - Show CSV 3D</div>
+                <div class="tool-card" data-name="readcsv readcsv">
+                    <div class="tool-title">readcsv</div>
+                    <p class="muted text-sm mb-sm">This script provides tools for reading CSV files and displaying their contents. It includes functions for: - Detecting the delimiter used in the file. - Dete...</p>
                     <div class="tool-links"><a href="readcsv.html">HTML</a> | <a href="readcsv.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_C_r2_c1 - Plot 2D</div>
-                    <div class="tool-links"><a href="vailaplot2d.html">HTML</a> | <a href="vailaplot2d.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="readcsv_export readcsv_export">
+                    <div class="tool-title">readcsv_export</div>
+                    <p class="muted text-sm mb-sm">This script provides functionality to convert CSV files containing point and analog data into the C3D format, commonly used for motion capture data analysis....</p>
+                    <div class="tool-links"><a href="readcsv_export.html">HTML</a> | <a href="readcsv_export.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_C_r2_c2 - Plot 3D</div>
-                    <div class="tool-links"><a href="vailaplot3d.html">HTML</a> | <a href="vailaplot3d.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="rearrange_data rearrange_data">
+                    <div class="tool-title">rearrange_data</div>
+                    <p class="muted text-sm mb-sm">This script provides tools for rearranging and processing CSV data files. It includes functions for: - Reordering columns. - Merging and stacking CSV files....</p>
+                    <div class="tool-links"><a href="rearrange_data.html">HTML</a> | <a href="rearrange_data.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_C_r3_c1 - Draw Sports</div>
-                    <div class="tool-links"><a href="sports_fields_courts.html">HTML</a></div>
+                <div class="tool-card" data-name="rec2d rec2d">
+                    <div class="tool-title">rec2d</div>
+                    <p class="muted text-sm mb-sm">Batch 2D reconstruction using the Direct Linear Transformation (DLT2D) method, with DLT2D parameters that vary per frame (a DLT &quot;matrix&quot; — one row per frame,...</p>
+                    <div class="tool-links"><a href="rec2d.html">HTML</a> | <a href="rec2d.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_C_r3_c2 - Stroboscopic</div>
-                    <div class="tool-links"><a href="vaila_stroboscopic.html">HTML</a> | <a
-                            href="vaila_stroboscopic.md">MD</a>
-                    </div>
+                <div class="tool-card" data-name="rec2d_one_dlt2d rec2d_one_dlt2d">
+                    <div class="tool-title">rec2d_one_dlt2d</div>
+                    <p class="muted text-sm mb-sm">Batch 2D reconstruction using the Direct Linear Transformation (DLT2D) method with one fixed set of DLT2D parameters (the file's first row) applied to every...</p>
+                    <div class="tool-links"><a href="rec2d_one_dlt2d.html">HTML</a> | <a href="rec2d_one_dlt2d.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">C_C_r4_c1 - Animation Blender</div>
-                    <div class="tool-links"><a href="blender_viz.html">HTML</a> | <a
-                            href="blender_viz.md">MD</a></div>
+                <div class="tool-card" data-name="rec3d rec3d">
+                    <div class="tool-title">rec3d</div>
+                    <p class="muted text-sm mb-sm">Batch 3D reconstruction using the Direct Linear Transformation (DLT) method with multiple cameras and DLT3D parameters that vary per frame — a DLT &quot;matrix&quot; (...</p>
+                    <div class="tool-links"><a href="rec3d.html">HTML</a> | <a href="rec3d.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">Show C3D (PyVista)</div>
-                    <div class="tool-links"><a href="view3d_pyvista_help.html">HTML</a> | <a
-                            href="viewc3d_pyvista.md">MD</a></div>
+                <div class="tool-card" data-name="rec3d_one_dlt3d rec3d_one_dlt3d">
+                    <div class="tool-title">rec3d_one_dlt3d</div>
+                    <p class="muted text-sm mb-sm">Batch 3D reconstruction using the Direct Linear Transformation (DLT) method with multiple cameras and one fixed set of DLT3D parameters per camera (the whole...</p>
+                    <div class="tool-links"><a href="rec3d_one_dlt3d.html">HTML</a> | <a href="rec3d_one_dlt3d.md">MD</a></div>
                 </div>
-                <div class="tool-card">
-                    <div class="tool-title">Show C3D (classic)</div>
-                    <div class="tool-links"><a href="showc3d.html">HTML</a> | <a href="showc3d.md">MD</a></div>
+                <div class="tool-card" data-name="reid_markers reid_markers">
+                    <div class="tool-title">reid_markers</div>
+                    <p class="muted text-sm mb-sm">Marker Re-identification Tool - reid_markers.py</p>
+                    <div class="tool-links"><a href="reid_markers.html">HTML</a> | <a href="reid_markers.md">MD</a></div>
                 </div>
             </div>
-        </div>
+
+            <h2>Tools (54)</h2>
+            <div class="grid-container">
+                <div class="tool-card" data-name="batchcut batchcut">
+                    <div class="tool-title">batchcut</div>
+                    <p class="muted text-sm mb-sm">Batch Video Cutting Script with GPU Acceleration</p>
+                    <div class="tool-links"><a href="batchcut.html">HTML</a> | <a href="batchcut.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="brainstorm brainstorm">
+                    <div class="tool-title">brainstorm</div>
+                    <p class="muted text-sm mb-sm">brainstorm.py is a Tkinter workspace for creative text workflows inside vailá. It records or loads audio, transcribes speech, edits text prompts, generates m...</p>
+                    <div class="tool-links"><a href="brainstorm.html">HTML</a> | <a href="brainstorm.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="codec_benchmark codec_benchmark">
+                    <div class="tool-title">codec_benchmark</div>
+                    <p class="muted text-sm mb-sm">Systematically benchmarks H.264, H.265 (HEVC), and H.266 (VVC) codecs on a dataset of videos.</p>
+                    <div class="tool-links"><a href="codec_benchmark.html">HTML</a> | <a href="codec_benchmark.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="compress_videos_h264 compress_videos_h264">
+                    <div class="tool-title">compress_videos_h264</div>
+                    <p class="muted text-sm mb-sm">Compresses videos in a specified directory to H.264 (AVC) format using FFmpeg.</p>
+                    <div class="tool-links"><a href="compress_videos_h264.html">HTML</a> | <a href="compress_videos_h264.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="compress_videos_h265 compress_videos_h265">
+                    <div class="tool-title">compress_videos_h265</div>
+                    <p class="muted text-sm mb-sm">Compresses videos in a specified directory to H.265 (HEVC) format using FFmpeg.</p>
+                    <div class="tool-links"><a href="compress_videos_h265.html">HTML</a> | <a href="compress_videos_h265.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="compress_videos_h266 compress_videos_h266">
+                    <div class="tool-title">compress_videos_h266</div>
+                    <p class="muted text-sm mb-sm">Compresses videos in a specified directory to H.266 (VVC) format using FFmpeg</p>
+                    <div class="tool-links"><a href="compress_videos_h266.html">HTML</a> | <a href="compress_videos_h266.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="convert_videos_ts_to_mp4 convert_videos_ts_to_mp4">
+                    <div class="tool-title">convert_videos_ts_to_mp4</div>
+                    <p class="muted text-sm mb-sm">This script converts all .TS video files in a selected directory to .mp4 format and removes the audio track using FFmpeg. It provides a GUI for selecting the...</p>
+                    <div class="tool-links"><a href="convert_videos_ts_to_mp4.html">HTML</a> | <a href="convert_videos_ts_to_mp4.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="cop_analysis cop_analysis">
+                    <div class="tool-title">cop_analysis</div>
+                    <p class="muted text-sm mb-sm">Plot the CoP pathway with points only (no connecting lines)</p>
+                    <div class="tool-links"><a href="cop_analysis.html">HTML</a> | <a href="cop_analysis.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="cop_calculate cop_calculate">
+                    <div class="tool-title">cop_calculate</div>
+                    <p class="muted text-sm mb-sm">This script allows users to select six (6) headers for force plate data analysis.</p>
+                    <div class="tool-links"><a href="cop_calculate.html">HTML</a> | <a href="cop_calculate.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="crop_faces_atletas crop faces atletas - crop face">
+                    <div class="tool-title">crop_faces_atletas</div>
+                    <p class="muted text-sm mb-sm">crop_faces_atletas.py batch-processes athlete photos and creates square face crops suitable for 5 x 5 cm outputs at 300 DPI. It uses MediaPipe Face Detector...</p>
+                    <div class="tool-links"><a href="crop_faces_atletas.html">HTML</a> | <a href="crop_faces_atletas.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="cutvideo cutvideo.py">
+                    <div class="tool-title">cutvideo</div>
+                    <p class="muted text-sm mb-sm">Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with in...</p>
+                    <div class="tool-links"><a href="cutvideo.html">HTML</a> | <a href="cutvideo.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="drawboxe drawboxe">
+                    <div class="tool-title">drawboxe</div>
+                    <p class="muted text-sm mb-sm">drawboxe is a tool for drawing boxes and polygons on videos. It allows you to create rectangular, trapezoidal, and free-form polygons to process videos, fill...</p>
+                    <div class="tool-links"><a href="drawboxe.html">HTML</a> | <a href="drawboxe.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="edit_csv_c3d edit csv/c3d (`edit_csv_c3d.py`)">
+                    <div class="tool-title">edit_csv_c3d</div>
+                    <p class="muted text-sm mb-sm">GUI: Frame C → Data Files → Edit CSV/C3D (C_A_r1_c1)</p>
+                    <div class="tool-links"><a href="edit_csv_c3d.html">HTML</a> | <a href="edit_csv_c3d.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="ellipse ellipse">
+                    <div class="tool-title">ellipse</div>
+                    <p class="muted text-sm mb-sm">The module includes:</p>
+                    <div class="tool-links"><a href="ellipse.html">HTML</a> | <a href="ellipse.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="extractpng extractpng">
+                    <div class="tool-title">extractpng</div>
+                    <p class="muted text-sm mb-sm">vailá Video ↔ PNG tool: extract PNG frames from videos, build videos from PNG</p>
+                    <div class="tool-links"><a href="extractpng.html">HTML</a> | <a href="extractpng.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="filemanager filemanager.py">
+                    <div class="tool-title">filemanager</div>
+                    <p class="muted text-sm mb-sm">GUI toolkit for file operations (copy, move, remove, import/export, rename, tree, find, transfer). Provides terminal feedback for each action and supports pa...</p>
+                    <div class="tool-links"><a href="filemanager.html">HTML</a> | <a href="filemanager.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="fixnoise fixnoise">
+                    <div class="tool-title">fixnoise</div>
+                    <p class="muted text-sm mb-sm">This script is designed to batch process CSV files, applying a noise filter (fixnoise) interactively.</p>
+                    <div class="tool-links"><a href="fixnoise.html">HTML</a> | <a href="fixnoise.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="force_cmj force_cmj">
+                    <div class="tool-title">force_cmj</div>
+                    <p class="muted text-sm mb-sm">🔗 Part of vailá - Multimodal Toolbox</p>
+                    <div class="tool-links"><a href="force_cmj.html">HTML</a> | <a href="force_cmj.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="force_cube_fig force_cube_fig">
+                    <div class="tool-title">force_cube_fig</div>
+                    <p class="muted text-sm mb-sm">Force Platform Data Analysis Toolkit - force_cube_fig.py</p>
+                    <div class="tool-links"><a href="force_cube_fig.html">HTML</a> | <a href="force_cube_fig.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="getcampardistortlens getcampardistortlens">
+                    <div class="tool-title">getcampardistortlens</div>
+                    <p class="muted text-sm mb-sm">Receives a list of paths to chessboard images,</p>
+                    <div class="tool-links"><a href="getcampardistortlens.html">HTML</a> | <a href="getcampardistortlens.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="getpixelvideo user guide - pixel coordinate tool (getpixelvideo.py)">
+                    <div class="tool-title">getpixelvideo</div>
+                    <p class="muted text-sm mb-sm">The Pixel Coordinate Tool (getpixelvideo.py) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Dev...</p>
+                    <div class="tool-links"><a href="getpixelvideo.html">HTML</a> | <a href="getpixelvideo.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="getpixelvideo_pt guia do usuário - pixel coordinate tool (getpixelvideo.py)">
+                    <div class="tool-title">getpixelvideo_pt</div>
+                    <p class="muted text-sm mb-sm">A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em q...</p>
+                    <div class="tool-links"><a href="getpixelvideo_pt.html">HTML</a> | <a href="getpixelvideo_pt.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="grf_gait grf_gait">
+                    <div class="tool-title">grf_gait</div>
+                    <p class="muted text-sm mb-sm">Gait Data Analysis Toolkit - grf_gait.py</p>
+                    <div class="tool-links"><a href="grf_gait.html">HTML</a> | <a href="grf_gait.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="join2dataset join2dataset">
+                    <div class="tool-title">join2dataset</div>
+                    <p class="muted text-sm mb-sm">This script consolidates multiple CSV files located in subdirectories of a given</p>
+                    <div class="tool-links"><a href="join2dataset.html">HTML</a> | <a href="join2dataset.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="linear_interpolation_split linear_interpolation_split">
+                    <div class="tool-title">linear_interpolation_split</div>
+                    <p class="muted text-sm mb-sm">This script provides functionality to either fill missing data in CSV files using linear interpolation or split data into a separate CSV file. It is intended...</p>
+                    <div class="tool-links"><a href="linear_interpolation_split.html">HTML</a> | <a href="linear_interpolation_split.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="load_vicon_csv_split_batch load_vicon_csv_split_batch">
+                    <div class="tool-title">load_vicon_csv_split_batch</div>
+                    <p class="muted text-sm mb-sm">This Python script processes CSV files generated from the VICON Nexus system and splits the data into separate files by device. It processes only the CSV fil...</p>
+                    <div class="tool-links"><a href="load_vicon_csv_split_batch.html">HTML</a> | <a href="load_vicon_csv_split_batch.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="merge_multivideos merge_multivideos">
+                    <div class="tool-title">merge_multivideos</div>
+                    <p class="muted text-sm mb-sm">Licensed under GNU Lesser General Public License v3.0</p>
+                    <div class="tool-links"><a href="merge_multivideos.html">HTML</a> | <a href="merge_multivideos.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="mergestack mergestack">
+                    <div class="tool-title">mergestack</div>
+                    <p class="muted text-sm mb-sm">This script allows you to merge and stack CSV files.</p>
+                    <div class="tool-links"><a href="mergestack.html">HTML</a> | <a href="mergestack.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="numberframes numberframes.py">
+                    <div class="tool-title">numberframes</div>
+                    <p class="muted text-sm mb-sm">This script provides scientific-grade video metadata extraction with high precision for research applications. It analyzes video files within a selected dire...</p>
+                    <div class="tool-links"><a href="numberframes.html">HTML</a> | <a href="numberframes.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="numstepsmp numstepsmp">
+                    <div class="tool-title">numstepsmp</div>
+                    <p class="muted text-sm mb-sm">Opens a dialog to select a CSV file of foot coordinates and calculates the number of steps based on foot position using MediaPipe data. Includes Butterworth...</p>
+                    <div class="tool-links"><a href="numstepsmp.html">HTML</a> | <a href="numstepsmp.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="process_gait_features process_gait_features">
+                    <div class="tool-title">process_gait_features</div>
+                    <p class="muted text-sm mb-sm">This script extracts spatial and temporal features from gait analysis data stored in .csv files. It computes metrics such as mean, variance, range, speed, an...</p>
+                    <div class="tool-links"><a href="process_gait_features.html">HTML</a> | <a href="process_gait_features.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="resize_video resize_video">
+                    <div class="tool-title">resize_video</div>
+                    <p class="muted text-sm mb-sm">This script provides tools for improving pose detection in videos: 1. Batch resize videos to higher resolutions (2x-8x) 2. Crop specific regions of interest...</p>
+                    <div class="tool-links"><a href="resize_video.html">HTML</a> | <a href="resize_video.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="rm_duplicateframes rm_duplicateframes">
+                    <div class="tool-title">rm_duplicateframes</div>
+                    <p class="muted text-sm mb-sm">Remove Duplicate Frames Tool - rm_duplicateframes.py</p>
+                    <div class="tool-links"><a href="rm_duplicateframes.html">HTML</a> | <a href="rm_duplicateframes.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="rotation rotation">
+                    <div class="tool-title">rotation</div>
+                    <p class="muted text-sm mb-sm">This Python script provides a comprehensive set of tools for performing 3D rotation and transformation operations using numpy and scipy. It includes methods...</p>
+                    <div class="tool-links"><a href="rotation.html">HTML</a> | <a href="rotation.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="sapiens3d_kinematics sapiens2 3d kinematics (`sapiens3d_kinematics.py`)">
+                    <div class="tool-title">sapiens3d_kinematics</div>
+                    <p class="muted text-sm mb-sm">GUI: Frame C → Data Files → Sapiens2 3D Kinematics (C_A_r4_c2)</p>
+                    <div class="tool-links"><a href="sapiens3d_kinematics.html">HTML</a> | <a href="sapiens3d_kinematics.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="scout_vaila scout_vaila">
+                    <div class="tool-title">scout_vaila</div>
+                    <p class="muted text-sm mb-sm">Integrated GUI to annotate sports events on a virtual soccer field and generate quick analyses (e.g., heatmaps). Inspired by manual scouting tools and design...</p>
+                    <div class="tool-links"><a href="scout_vaila.html">HTML</a> | <a href="scout_vaila.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="scout_vaila_pt vailá scout - ferramenta de observação esportiva">
+                    <div class="tool-title">scout_vaila_pt</div>
+                    <p class="muted text-sm mb-sm">O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos em um campo de futebol virtual e gerar analysiss rápidas (ex: mapas de calor). É p...</p>
+                    <div class="tool-links"><a href="scout_vaila_pt.html">HTML</a> | <a href="scout_vaila_pt.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="skout_bundle skout_bundle">
+                    <div class="tool-title">skout_bundle</div>
+                    <p class="muted text-sm mb-sm">Skout bundle: convert Skout.exe ASCII export to vailá scout CSV and</p>
+                    <div class="tool-links"><a href="skout_bundle.html">HTML</a> | <a href="skout_bundle.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="spectral_features spectral_features">
+                    <div class="tool-title">spectral_features</div>
+                    <p class="muted text-sm mb-sm">Added robust handling for empty frequency ranges.</p>
+                    <div class="tool-links"><a href="spectral_features.html">HTML</a> | <a href="spectral_features.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="stabilogram_analysis stabilogram_analysis">
+                    <div class="tool-title">stabilogram_analysis</div>
+                    <p class="muted text-sm mb-sm">This module provides a comprehensive set of functions for analyzing Center of Pressure (CoP) data obtained from force plate measurements in postural control...</p>
+                    <div class="tool-links"><a href="stabilogram_analysis.html">HTML</a> | <a href="stabilogram_analysis.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="standardize_header standardize_header">
+                    <div class="tool-title">standardize_header</div>
+                    <p class="muted text-sm mb-sm">This script is designed to standardize headers across multiple CSV files in a selected directory. It allows users to select a specific line to use as the hea...</p>
+                    <div class="tool-links"><a href="standardize_header.html">HTML</a> | <a href="standardize_header.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="sync_flash sync_flash">
+                    <div class="tool-title">sync_flash</div>
+                    <p class="muted text-sm mb-sm">This script provides a function to automatically detect brightness levels in a specific</p>
+                    <div class="tool-links"><a href="sync_flash.html">HTML</a> | <a href="sync_flash.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="syncvid syncvid — pygame multi-video synchronization">
+                    <div class="tool-title">syncvid</div>
+                    <p class="muted text-sm mb-sm">syncvid opens every supported video from one target directory in a fast Pygame player. Playback and frame navigation follow the same conventions as cutvideo....</p>
+                    <div class="tool-links"><a href="syncvid.html">HTML</a> | <a href="syncvid.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="transcribe_pdfs transcribe_pdfs">
+                    <div class="tool-title">transcribe_pdfs</div>
+                    <p class="muted text-sm mb-sm">transcribe_pdfs.py converts PDF exams or handwritten/scanned documents into text files. It supports:</p>
+                    <div class="tool-links"><a href="transcribe_pdfs.html">HTML</a> | <a href="transcribe_pdfs.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="usound_biomec1 usound_biomec1">
+                    <div class="tool-title">usound_biomec1</div>
+                    <p class="muted text-sm mb-sm">Module to analyze ultrasound images with manual thickness measurements and</p>
+                    <div class="tool-links"><a href="usound_biomec1.html">HTML</a> | <a href="usound_biomec1.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="usvideoia usvideoia">
+                    <div class="tool-title">usvideoia</div>
+                    <p class="muted text-sm mb-sm">This module provides a standalone script for Video Super-Resolution (VSR) upscale functionality. It can be imported into resize_video.py or run directly.</p>
+                    <div class="tool-links"><a href="usvideoia.html">HTML</a> | <a href="usvideoia.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_datdistort vaila_datdistort">
+                    <div class="tool-title">vaila_datdistort</div>
+                    <p class="muted text-sm mb-sm">This tool applies lens distortion correction to 2D coordinates from DAT/CSV files using the same camera calibration parameters as vaila_lensdistortvideo.py....</p>
+                    <div class="tool-links"><a href="vaila_datdistort.html">HTML</a> | <a href="vaila_datdistort.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_distortvideo_gui vaila_distortvideo_gui">
+                    <div class="tool-title">vaila_distortvideo_gui</div>
+                    <p class="muted text-sm mb-sm">This script processes videos applying lens distortion correction based on</p>
+                    <div class="tool-links"><a href="vaila_distortvideo_gui.html">HTML</a> | <a href="vaila_distortvideo_gui.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_iaudiovid vaila_iaudiovid">
+                    <div class="tool-title">vaila_iaudiovid</div>
+                    <p class="muted text-sm mb-sm">Video Audio Processing Tool - vaila_iaudiovid.py</p>
+                    <div class="tool-links"><a href="vaila_iaudiovid.html">HTML</a> | <a href="vaila_iaudiovid.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_lensdistortvideo vaila_lensdistortvideo">
+                    <div class="tool-title">vaila_lensdistortvideo</div>
+                    <p class="muted text-sm mb-sm">Camera Calibration Parameters and Their Meanings</p>
+                    <div class="tool-links"><a href="vaila_lensdistortvideo.html">HTML</a> | <a href="vaila_lensdistortvideo.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_stroboscopic stroboscopic &amp; stromotion generator">
+                    <div class="tool-title">vaila_stroboscopic</div>
+                    <p class="muted text-sm mb-sm">This tool generates stroboscopic (chronophotography) images and videos from biomechanical and sports video recordings. It supports four distinct modes:</p>
+                    <div class="tool-links"><a href="vaila_stroboscopic.html">HTML</a> | <a href="vaila_stroboscopic.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_upscaler vaila_upscaler">
+                    <div class="tool-title">vaila_upscaler</div>
+                    <p class="muted text-sm mb-sm">🔗 Part of vailá - Multimodal Toolbox</p>
+                    <div class="tool-links"><a href="vaila_upscaler.html">HTML</a> | <a href="vaila_upscaler.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_ytdown vaila_ytdown">
+                    <div class="tool-title">vaila_ytdown</div>
+                    <p class="muted text-sm mb-sm">YouTube High Quality Downloader for the vailá toolbox. Downloads videos in the highest quality possible, prioritizing resolution and framerate (FPS), or audi...</p>
+                    <div class="tool-links"><a href="vaila_ytdown.html">HTML</a> | <a href="vaila_ytdown.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="videoprocessor videoprocessor">
+                    <div class="tool-title">videoprocessor</div>
+                    <p class="muted text-sm mb-sm">This script allows users to process and edit video files, enabling batch processing of videos. Users can choose between two main operations: 1. Merging a vid...</p>
+                    <div class="tool-links"><a href="videoprocessor.html">HTML</a> | <a href="videoprocessor.md">MD</a></div>
+                </div>
+            </div>
+
+            <h2>Utils (19)</h2>
+            <div class="grid-container">
+                <div class="tool-card" data-name="backup_markerless backup_markerless">
+                    <div class="tool-title">backup_markerless</div>
+                    <p class="muted text-sm mb-sm">This script performs batch processing of videos for 2D pose estimation using</p>
+                    <div class="tool-links"><a href="backup_markerless.html">HTML</a> | <a href="backup_markerless.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="common_utils common_utils">
+                    <div class="tool-title">common_utils</div>
+                    <p class="muted text-sm mb-sm">🔗 Part of vailá - Multimodal Toolbox</p>
+                    <div class="tool-links"><a href="common_utils.html">HTML</a> | <a href="common_utils.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="compressvideo compressvideo (⚠️ deprecated)">
+                    <div class="tool-title">compressvideo</div>
+                    <p class="muted text-sm mb-sm">Legacy script that compresses videos to either H.264 or H.265 format using FFmpeg.</p>
+                    <div class="tool-links"><a href="compressvideo.html">HTML</a> | <a href="compressvideo.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="dialogsuser dialogsuser">
+                    <div class="tool-title">dialogsuser</div>
+                    <p class="muted text-sm mb-sm">This Python module provides a simple graphical user interface (GUI) using Tkinter to collect user input for the sample rate and file type. It validates the i...</p>
+                    <div class="tool-links"><a href="dialogsuser.html">HTML</a> | <a href="dialogsuser.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="dialogsuser_cluster dialogsuser_cluster">
+                    <div class="tool-title">dialogsuser_cluster</div>
+                    <p class="muted text-sm mb-sm">This Python module provides a graphical user interface (GUI) using Tkinter to collect input from the user regarding configuration details for two clusters. T...</p>
+                    <div class="tool-links"><a href="dialogsuser_cluster.html">HTML</a> | <a href="dialogsuser_cluster.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="dlc2vaila dlc2vaila">
+                    <div class="tool-title">dlc2vaila</div>
+                    <p class="muted text-sm mb-sm">This script converts DLC (DeepLabCut) CSV files into a format compatible with</p>
+                    <div class="tool-links"><a href="dlc2vaila.html">HTML</a> | <a href="dlc2vaila.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="example_batch_usage example_batch_usage">
+                    <div class="tool-title">example_batch_usage</div>
+                    <p class="muted text-sm mb-sm">Example script demonstrating how to use the batch processing functionality</p>
+                    <div class="tool-links"><a href="example_batch_usage.html">HTML</a> | <a href="example_batch_usage.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="listjointsnames listjointsnames">
+                    <div class="tool-title">listjointsnames</div>
+                    <p class="muted text-sm mb-sm">🔗 Part of vailá - Multimodal Toolbox</p>
+                    <div class="tool-links"><a href="listjointsnames.html">HTML</a> | <a href="listjointsnames.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="markerless_2d_analysis_nvidia markerless_2d_analysis_nvidia.py">
+                    <div class="tool-title">markerless_2d_analysis_nvidia</div>
+                    <p class="muted text-sm mb-sm">This script performs batch processing of videos for 2D pose estimation using MediaPipe's Pose model with NVIDIA GPU acceleration. It is identical to the CPU...</p>
+                    <div class="tool-links"><a href="markerless_2d_analysis_nvidia.html">HTML</a> | <a href="markerless_2d_analysis_nvidia.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="modifylabref_cli modifylabref_cli">
+                    <div class="tool-title">modifylabref_cli</div>
+                    <p class="muted text-sm mb-sm">🔗 Part of vailá - Multimodal Toolbox</p>
+                    <div class="tool-links"><a href="modifylabref_cli.html">HTML</a> | <a href="modifylabref_cli.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="mpangles mp angles - mediapipe angle calculation">
+                    <div class="tool-title">mpangles</div>
+                    <p class="muted text-sm mb-sm">The MP Angles module calculates absolute and relative joint angles from landmark coordinates obtained from MediaPipe pose estimation. It processes CSV files...</p>
+                    <div class="tool-links"><a href="mpangles.html">HTML</a> | <a href="mpangles.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="mphands mphands">
+                    <div class="tool-title">mphands</div>
+                    <p class="muted text-sm mb-sm">Created by: Flávia Pessoni Faleiros Macêdo &amp; Paulo Roberto Pereira Santiago</p>
+                    <div class="tool-links"><a href="mphands.html">HTML</a> | <a href="mphands.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="native_file_dialog native_file_dialog">
+                    <div class="tool-title">native_file_dialog</div>
+                    <p class="muted text-sm mb-sm">This module provides native file dialogs that work without conflicts with Pygame. It uses system-native dialogs via subprocess to avoid event loop conflicts.</p>
+                    <div class="tool-links"><a href="native_file_dialog.html">HTML</a> | <a href="native_file_dialog.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="reid_yolotrack reid_yolotrack">
+                    <div class="tool-title">reid_yolotrack</div>
+                    <p class="muted text-sm mb-sm">Post-track appearance Re-ID using OSNet embeddings (via boxmot). Merges fragmented IDs that geometric Re-ID cannot resolve (same uniform, long re-entry gaps).</p>
+                    <div class="tool-links"><a href="reid_yolotrack.html">HTML</a> | <a href="reid_yolotrack.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="reidmplrswap reidmplrswap">
+                    <div class="tool-title">reidmplrswap</div>
+                    <p class="muted text-sm mb-sm">reidmplrswap.py — Detect and fix abrupt left/right swaps in marker tracks</p>
+                    <div class="tool-links"><a href="reidmplrswap.html">HTML</a> | <a href="reidmplrswap.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="reidvideogui reidvideogui">
+                    <div class="tool-title">reidvideogui</div>
+                    <p class="muted text-sm mb-sm">This tool combines the functionalities of reid_markers.py and getpixelvideo.py to provide a synchronized view of marker trajectories alongside the video. 1....</p>
+                    <div class="tool-links"><a href="reidvideogui.html">HTML</a> | <a href="reidvideogui.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="utils utils">
+                    <div class="tool-title">utils</div>
+                    <p class="muted text-sm mb-sm">vailá - Multimodal Toolbox</p>
+                    <div class="tool-links"><a href="utils.html">HTML</a> | <a href="utils.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vaila_manifest vaila_manifest">
+                    <div class="tool-title">vaila_manifest</div>
+                    <p class="muted text-sm mb-sm">Multimodal Toolbox. The script opens a new window that shows a message with</p>
+                    <div class="tool-links"><a href="vaila_manifest.html">HTML</a> | <a href="vaila_manifest.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vpython_c3d vpython_c3d">
+                    <div class="tool-title">vpython_c3d</div>
+                    <p class="muted text-sm mb-sm">Abre um diálogo para selecionar um file C3D e carrega os dados dos marcadores.</p>
+                    <div class="tool-links"><a href="vpython_c3d.html">HTML</a> | <a href="vpython_c3d.md">MD</a></div>
+                </div>
+            </div>
+
+            <h2>Visualization (7)</h2>
+            <div class="grid-container">
+                <div class="tool-card" data-name="blender_viz blender_viz">
+                    <div class="tool-title">blender_viz</div>
+                    <p class="muted text-sm mb-sm">Opens a rec3d reconstruction in Blender with the animation already imported and the scene already configured. It replaces the manual routine of launching Ble...</p>
+                    <div class="tool-links"><a href="blender_viz.html">HTML</a> | <a href="blender_viz.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="plotting plotting">
+                    <div class="tool-title">plotting</div>
+                    <p class="muted text-sm mb-sm">This Python script provides tools for visualizing orthonormal bases in 3D using both matplotlib and plotly. It is particularly useful for visualizing biomech...</p>
+                    <div class="tool-links"><a href="plotting.html">HTML</a> | <a href="plotting.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="showc3d showc3d">
+                    <div class="tool-title">showc3d</div>
+                    <p class="muted text-sm mb-sm">This script visualizes marker data from a C3D file using Matplotlib. Marker positions are converted from millimeters to meters. The user is prompted to selec...</p>
+                    <div class="tool-links"><a href="showc3d.html">HTML</a> | <a href="showc3d.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vailaplot2d vailaplot2d">
+                    <div class="tool-title">vailaplot2d</div>
+                    <p class="muted text-sm mb-sm">This script provides functionality for generating 2D plots within vailá:Versatile</p>
+                    <div class="tool-links"><a href="vailaplot2d.html">HTML</a> | <a href="vailaplot2d.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="vailaplot3d vailaplot3d">
+                    <div class="tool-title">vailaplot3d</div>
+                    <p class="muted text-sm mb-sm">🔗 Part of vailá - Multimodal Toolbox</p>
+                    <div class="tool-links"><a href="vailaplot3d.html">HTML</a> | <a href="vailaplot3d.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="viewc3d viewc3d">
+                    <div class="tool-title">viewc3d</div>
+                    <p class="muted text-sm mb-sm">Advanced 3D viewer for C3D files with adaptive visualization for different scales.</p>
+                    <div class="tool-links"><a href="viewc3d.html">HTML</a> | <a href="viewc3d.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="viewc3d_pyvista viewc3d_pyvista">
+                    <div class="tool-title">viewc3d_pyvista</div>
+                    <p class="muted text-sm mb-sm">VTK-based 3D viewer for C3D and CSV marker data. Timeline, interactive marker picking (left-click to select), skeleton connections, trails, export (screensho...</p>
+                    <div class="tool-links"><a href="viewc3d_pyvista.md">MD</a></div>
+                </div>
+            </div>
+
+            <h2>Guides (6)</h2>
+            <div class="grid-container">
+                <div class="tool-card" data-name="brainstorm_guide brainstorm - ai creative assistant guide">
+                    <div class="tool-title">BRAINSTORM_GUIDE</div>
+                    <p class="muted text-sm mb-sm">The Brainstorm tool is an AI-powered creative assistant that transforms your voice recordings into music, art prompts, and creative ideas. Version 0.3.0 brin...</p>
+                    <div class="tool-links"><a href="BRAINSTORM_GUIDE.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="gpu_guide dynamic hardware optimization &amp; gpu diagnostic guide">
+                    <div class="tool-title">gpu_guide</div>
+                    <p class="muted text-sm mb-sm">vailá is designed to adapt intelligently to the hardware it runs on. Whether you are using a high-end workstation with an RTX 4090 or a sleek laptop with lim...</p>
+                    <div class="tool-links"><a href="gpu_guide.html">HTML</a> | <a href="gpu_guide.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="markerless2d_yolo26 markerless 2d yolov26 pose help">
+                    <div class="tool-title">markerless2d_yolo26</div>
+                    <p class="muted text-sm mb-sm">This tool provides 2D pose estimation using YOLOv26/v11 models.</p>
+                    <div class="tool-links"><a href="markerless2d_yolo26.html">HTML</a> | <a href="markerless2d_yolo26.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="soccerfield soccer field visualization">
+                    <div class="tool-title">soccerfield</div>
+                    <p class="muted text-sm mb-sm">This module has been merged into vaila/drawsportsfields.py.</p>
+                    <div class="tool-links"><a href="soccerfield.html">HTML</a> | <a href="soccerfield.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="sports_fields_courts draw sports fields / courts">
+                    <div class="tool-title">sports_fields_courts</div>
+                    <p class="muted text-sm mb-sm">Main GUI button: Draw Sports (Frame C, visualization column).</p>
+                    <div class="tool-links"><a href="sports_fields_courts.html">HTML</a> | <a href="sports_fields_courts.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="tennis_court tennis court visualization">
+                    <div class="tool-title">tennis_court</div>
+                    <p class="muted text-sm mb-sm">This module has been merged into vaila/drawsportsfields.py.</p>
+                    <div class="tool-links"><a href="tennis_court.html">HTML</a> | <a href="tennis_court.md">MD</a></div>
+                </div>
+            </div>
 
         <div class="footer">
-            <p class="muted">Generated based on <i>vailá</i> v0.3.114 layout. Generated on 25/08/2026.</p>
+            © 2026 <i>vailá</i> — Multimodal Toolbox
         </div>
-
-        <script>
-            (function () {
-                const input = document.getElementById("toolSearch");
-                const cards = Array.from(document.querySelectorAll(".tool-card"));
-                if (!input) return;
-
-                function norm(s) {
-                    return (s || "")
-                        .toLowerCase()
-                        .normalize("NFKD")
-                        .replace(/\\p{Diacritic}/gu, "");
-                }
-
-                const searchCache = new Map();
-                for (const c of cards) {
-                    searchCache.set(c, norm(c.textContent));
-                }
-
-                function applyFilter() {
-                    const q = norm(input.value.trim());
-                    for (const c of cards) {
-                        const text = searchCache.get(c) || "";
-                        c.classList.toggle("is-hidden", !(q === "" || text.includes(q)));
-                    }
-                }
-
-                let raf = 0;
-                input.addEventListener("input", function () {
-                    if (raf) cancelAnimationFrame(raf);
-                    raf = requestAnimationFrame(function () {
-                        raf = 0;
-                        applyFilter();
-                    });
-                });
-            })();
-        </script>
     </div>
+
+    <script>
+        (function () {
+            const input = document.getElementById("toolSearch");
+            if (!input) return;
+            const cards = Array.from(document.querySelectorAll(".tool-card"));
+            input.addEventListener("input", function () {
+                const q = (input.value || "").trim().toLowerCase();
+                cards.forEach(function (card) {
+                    const name = card.getAttribute("data-name") || "";
+                    const show = !q || name.indexOf(q) !== -1;
+                    card.classList.toggle("is-hidden", !show);
+                });
+            });
+        })();
+    </script>
 </body>
 
 </html>

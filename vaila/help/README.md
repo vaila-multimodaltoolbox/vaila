@@ -10,16 +10,16 @@ Each script in `vaila/` has its own help documentation:
 
 ## Directory Organization
 
-Help files are organized by category/subdirectory:
+Help pages live **flat** under `vaila/help/` (one `.md` + `.html` pair per topic). Categories are declared inside each page’s Module Information and used by the index generator.
 
-- **analysis/** - Analysis scripts (IMU, EMG, force plate, etc.)
-- **ml/** - Machine Learning scripts (YOLO, ML walkway, etc.)
-- **processing/** - Data processing scripts (DLT, filtering, etc.)
-- **tools/** - Utility tools
-- **utils/** - Utility functions
-- **visualization/** - Visualization scripts
-- **sit2stand/** - Sit-to-stand analysis
-- Root level - General help files
+## Current Help Files
+
+The authoritative catalog is the generated index (all topics, with links):
+
+- [`index.html`](index.html) — searchable HTML
+- [`index.md`](index.md) — Markdown list for GitHub / editors
+
+Do not maintain a hand-curated subset list here; run the generator after adding pages.
 
 ## Script Help Format
 
@@ -77,73 +77,36 @@ Each script help should include:
     - Data flow
     - Integration examples
 
-## Current Help Files
-
-### Analysis Scripts
-- `markerless_2d_analysis.md/html` - Standard MediaPipe pose estimation
-- `markerless_3d_analysis.md/html` - 3D pose estimation
-- `markerless_live.md/html` - Live pose estimation
-- `imu_analysis.md/html` - IMU data analysis
-- `emg_labiocom.md/html` - EMG analysis
-- `forceplate_analysis.md/html` - Force plate analysis
-- `gnss_analysis.md/html` - GNSS/GPS analysis
-- `mocap_analysis.md/html` - Motion capture analysis
-- `cluster_analysis.md/html` - Cluster analysis
-- `cube2d_kinematics.md/html` - 2D kinematics
-- `run_vector_coding.md/html` - Vector coding analysis
-- `vaila_and_jump.md/html` - Jump analysis
-- `animal_open_field.md/html` - Animal open field analysis
-- `mp_facemesh_help.md/html` - Face Mesh Analysis with iris landmarks (478 landmarks)
-
-### Machine Learning Scripts
-- `markerless2d_analysis_v2.md/html` - Advanced YOLO+MediaPipe pose estimation
-- `markerless2d_mpyolo.md/html` - MediaPipe+YOLO integration
-- `markerless3d_analysis_v2.md/html` - Advanced 3D pose estimation
-- `vaila_mlwalkway.md/html` - ML walkway analysis
-- `ml_models_training.md/html` - ML model training
-- `ml_valid_models.md/html` - ML model validation
-- `walkway_ml_prediction.md/html` - Walkway ML prediction
-- `yolotrain.md/html` - YOLO training
-- `yolov11track.md/html` - YOLOv11 tracking
-- `yolov12track.md/html` - YOLOv12 tracking
-
-### Processing Scripts
-- `dlt2d.md/html` - 2D DLT calibration
-- `dlt3d.md/html` - 3D DLT calibration
-- `rec2d.md/html` - 2D reconstruction
-- `rec3d.md/html` - 3D reconstruction
-- `filtering.md/html` - Data filtering
-- `filter_utils.md/html` - Filter utilities
-- `rearrange_data.md/html` - Data rearrangement
-- `edit_csv_c3d.md/html` - Edit CSV/C3D (CSV + C3D column editing, round-trips C3D through CSV)
-- `reid_markers.md/html` - Marker re-identification
-- And more...
-
 ## Adding New Script Help
 
 When adding help for a new script:
 
-1. Determine the appropriate category/subdirectory
-2. Create both `.md` and `.html` files with the script name
-3. Follow the standard format outlined above
-4. Include all relevant technical details
-5. Update this README with the new script
+1. Create both `.md` and `.html` files named after the script (flat under `vaila/help/`)
+2. Include **Category** in the Module Information section (Analysis, ML, Processing, Tools, Utils, Visualization, or Guides)
+3. Write a clear Description / Overview paragraph (used as the one-liner in the index)
+4. Regenerate the catalog indexes:
+
+```bash
+uv run python bin/generate_help_index.py
+```
+
+That writes `vaila/help/index.md` and `vaila/help/index.html` with the project intro plus a full linked list of every help topic. Do **not** hand-edit those indexes except via the generator.
 
 ## Mandatory: keep help synced with code (version/date)
 
 Whenever any `*.py` script is updated, also update the matching help files:
 
-- main index: `vaila/help/index.md` + `vaila/help/index.html` (“Generated on”)
 - module help: `vaila/help/<module>.md` + `vaila/help/<module>.html` (Version + Updated)
+- regenerate main index: `uv run python bin/generate_help_index.py`
 - root `README.md`: `Last updated: YYYY-MM-DD`
 
 Global version source: `vaila.py` header/banner. Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
 
 ## Related Documentation
 
-- Button documentation: `docs/vaila_buttons/` - Contains documentation for GUI buttons
-- Module documentation: `docs/modules/` - Contains module-level documentation
+- Project docs hub: `docs/index.md` · `docs/help.html`
+- Button documentation: `docs/vaila_buttons/`
 
 ---
 
-**Last Updated:** May 2026
+**Last Updated:** August 2026

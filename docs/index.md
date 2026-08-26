@@ -1,70 +1,60 @@
-# vailá
+# *vailá*
 
 **Versatile Anarcho Integrated Liberation Ánalysis** — open-source Python 3.12 toolbox for multimodal biomechanical and movement analysis (IMU, MoCap, markerless 2D/3D, EMG, force plates, GNSS/GPS, and more), with a Tkinter-based desktop GUI.
 
 ---
 
-## 🚀 Start here — In-app module & tool help
+## Start here — full script help list
 
-Per-module HTML help (SAM, stroboscopic, DLT/reconstruction, video tools, etc.) lives under `vaila/help/`. Open the index to browse every linked topic from one place.
+Every module/tool help page (HTML + Markdown) is listed in one place:
 
-### [**Open vailá Help Index →**](../vaila/help/index.html)
-> Same path on disk: `vaila/help/index.html`
+### [**Open *vailá* Help Index →**](../vaila/help/index.html)
 
-### 🏆 FIFA Skeletal Tracking Light 2026 — End-to-end workflow
+> Same path on disk: `vaila/help/index.html` · Markdown: [`vaila/help/index.md`](../vaila/help/index.md)
 
-Step-by-step recipe (CLI + GUI) covering SAM 3 player masks, the AI-seed
-soccer-pitch keypoints, DLT2D homography, FIFA per-frame DLT export, 3D
-pose and Codabench submission:
+Regenerate the catalog after adding help pages:
 
-→ [docs/fifa_workflow.md](fifa_workflow.md)
-
-### ⚽ vaila-ElasticKick (VEK)
-
-Elastic-band resisted soccer/futsal kicking assessment from pose CSV, ball
-tracking and band calibration:
-
-→ [docs/vek.md](vek.md)
-
-### 📐 DLT 3D Reconstruction and Mesh Alignment — Theory and Validation
-
-Didactic derivation of the DLT method (calibration + multi-camera
-triangulation) and the Umeyama similarity-transform mesh alignment that
-fuses SAM3+DINOv3's monocular body mesh into the DLT world frame, with real
-validation numbers and honestly-stated open items:
-
-→ [docs/dlt_reconstruction_and_mesh_alignment.md](dlt_reconstruction_and_mesh_alignment.md)
+```bash
+uv run python bin/generate_help_index.py
+```
 
 ---
 
-## 🇬🇧 English — Project Overview
+## English — project overview
 
 ### What you get
+
 - **Frame A — File manager:** rename, import/export, copy/move, tree, find, SSH transfer.
 - **Frame B — Multimodal analysis:** IMU, MoCap, markerless, EMG, force plates, GNSS, and related pipelines.
 - **Frame C — Tools:** CSV/C3D workflows, DLT 2D/3D reconstruction, video and image utilities, plots and visualization.
 
-Optional stacks (CUDA/GPU templates, extras) are documented in the repository README and in [AGENTS.md](../AGENTS.md); the [Help Index](../vaila/help/index.html) focuses on what each tool does and how to open it from the GUI.
-
-### GUI button reference (Markdown)
-Long-form descriptions of individual GUI buttons live under `docs/vaila_buttons/`: [Button documentation index](vaila_buttons/README.md).
-
-### PDF transcription from Brainstorm
-Brainstorm now includes **Transcribe PDFs** for typed, scanned, and handwritten exam PDFs: [vaila/help/transcribe_pdfs.md](../vaila/help/transcribe_pdfs.md) / [HTML](../vaila/help/transcribe_pdfs.html).
+Optional stacks (CUDA/GPU templates, extras): root [`README.md`](../README.md) and [`AGENTS.md`](../AGENTS.md).
 
 ### Quick run (after install)
+
 ```bash
 uv run vaila.py
 ```
-One-line installers and platform notes: see [the project on GitHub](https://github.com/vaila-multimodaltoolbox/vaila) or the root `README.md` in your clone.
+
+### Guides (optional deep dives)
+
+- [FIFA Skeletal Tracking Light workflow](fifa_workflow.md)
+- [vaila-ElasticKick (VEK)](vek.md)
+- [DLT 3D reconstruction and mesh alignment](dlt_reconstruction_and_mesh_alignment.md)
+- [GUI button documentation](vaila_buttons/README.md)
+- [PDF transcription (Brainstorm)](../vaila/help/transcribe_pdfs.md)
+- [Hardware & GPU guide](../vaila/help/gpu_guide.md)
 
 ### Contributing
-Pull requests and issues are welcome on GitHub. See `CONTRIBUTING.md` in the repository.
+
+Pull requests and issues are welcome on GitHub. See [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ### License
-Licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). See the `LICENSE` file in the repository.
+
+Licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). See the `LICENSE` file.
 
 ### How to cite
+
 ```bibtex
 @misc{vaila2024,
   title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
@@ -76,46 +66,37 @@ Licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). See th
 
 ---
 
-## 🇧🇷 Português — Visão Geral do Projeto
+## Português — visão geral do projeto
 
 ### Índice de ajuda dos módulos
-A documentação HTML por ferramenta (SAM, estroboscópio, DLT/reconstrução, vídeo, etc.) está em `vaila/help/`. Use o índice para navegar a partir de um único lugar.
 
-### [**Abrir índice de ajuda do vailá →**](../vaila/help/index.html)
+Documentação HTML/Markdown por ferramenta: [`vaila/help/index.html`](../vaila/help/index.html).
 
-### O que é o vailá
+### O que é o *vailá*
+
 Caixa de ferramentas multimodal em Python 3.12 para análise do movimento e biomecânica, com interface desktop em Tkinter, integrando IMU, MoCap, rastreamento markerless 2D/3D, EMG, plataformas de força, GNSS/GPS e outros fluxos de dados.
 
 - **Quadro A — Arquivos:** renomear, importar/exportar, copiar/mover, árvore, busca, SSH.
 - **Quadro B — Análise multimodal:** IMU, MoCap, markerless, EMG, força, GNSS, etc.
 - **Quadro C — Ferramentas:** CSV/C3D, DLT 2D/3D, vídeo/imagem, visualização.
 
-Detalhes de cada módulo: [índice em `vaila/help/index.html`](../vaila/help/index.html).
-
-### Documentação dos botões da GUI
-Textos por botão: [índice em `docs/vaila_buttons/`](vaila_buttons/README.md).
-
 ### Executar após instalação
+
 ```bash
 uv run vaila.py
 ```
-Instalação em uma linha e requisitos por sistema: veja o README no GitHub ou na raiz do repositório clonado.
 
-### Contribuição
-Contribuições são bem-vindas via pull request ou issue no GitHub; veja `CONTRIBUTING.md`.
+### Guias
 
-### Licença
-Licenciado sob **GNU Affero General Public License v3.0** (AGPL-3.0). Consulte o arquivo `LICENSE`.
+- [Workflow FIFA](fifa_workflow.md)
+- [VEK](vek.md)
+- [DLT 3D e alinhamento de mesh](dlt_reconstruction_and_mesh_alignment.md)
+- [Botões da GUI](vaila_buttons/README.md)
 
-### Como citar
-```bibtex
-@misc{vaila2024,
-  title={vailá - Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox},
-  author={Paulo R. P. Santiago e Abel G. Chinaglia e outros},
-  year={2024},
-  url={https://github.com/vaila-multimodaltoolbox/vaila}
-}
-```
+### Contribuição / Licença / Citação
+
+Ver seções em inglês acima (`CONTRIBUTING.md`, AGPL-3.0, BibTeX).
 
 ---
-© 2026 vailá — documentation entry: `docs/help.html`
+
+© 2026 *vailá* — documentation entry: `docs/help.html`
