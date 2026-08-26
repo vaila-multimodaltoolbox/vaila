@@ -252,7 +252,7 @@ Contains segment angles in degrees (format depends on user selection):
 
 ### System Requirements
 
-- Python 3.12.13 or compatible
+- Python 3.12.14 or compatible
 - Sufficient disk space for output files
 - FFmpeg (for video codec support, if processing videos)
 

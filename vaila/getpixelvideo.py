@@ -6,9 +6,9 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 13 August 2026
-Version: 0.3.105
-Python Version: 3.12.13
+Update: 25 August 2026
+Version: 0.3.114
+Python Version: 3.12.14
 
 Description:
 ------------

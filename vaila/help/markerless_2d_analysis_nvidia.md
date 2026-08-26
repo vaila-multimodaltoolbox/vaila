@@ -5,7 +5,8 @@
 - **Category:** Utils
 - **File:** `vaila/markerless_2d_analysis_nvidia.py`
 - **Lines:** 3902
-- **Version:** 0.7.1 (NVIDIA GPU Optimized)
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -229,7 +230,7 @@ process_video(
 ## 💻 Requirements
 
 ### System Requirements
-- **Python**: 3.12.13+
+- **Python**: 3.12.14+
 - **OS**: Linux, macOS, Windows
 - **RAM**: 4GB minimum (8GB+ recommended for large videos)
 - **GPU**: **NVIDIA GPU with CUDA support required** (for GPU mode)

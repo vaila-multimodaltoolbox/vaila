@@ -6,7 +6,8 @@
 - **File:** `vaila\readcsv_export.py`
 - **Lines:** 971
 - **Size:** 36912 characters
-- **Version:** 25 September 2024
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 

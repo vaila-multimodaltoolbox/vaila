@@ -3,10 +3,10 @@
 readcsv_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Version: 0.3.111
+Version: 0.3.114
 Created: 25 September 2024
-Last Updated: 24 August 2026
-Python Version: 3.12.13
+Last Updated: 25 August 2026
+Python Version: 3.12.14
 
 Description:
 This script provides functionality to convert CSV files containing point and analog data

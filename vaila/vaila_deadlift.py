@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 28 May 2026
-Update Date: 09 June 2026
-Version: 0.3.49
+Update Date: 25 August 2026
+Version: 0.3.114
 
 Companion module:
 -----------------
@@ -15,7 +15,7 @@ Companion module:
 Madgwick / Mahony AHRS sensor fusion (proper orientation tracking, magnetometer
 support, Earth-frame gravity removal). Wired to GUI button **B6_r7_c1 -
 Deadlift IMU**.
-Python Version: 3.12.13
+Python Version: 3.12.14
 
 Description:
 ------------

@@ -4,10 +4,10 @@
 
 - **Category:** Processing
 - **File:** `vaila/interp_smooth_split.py` (+ shared core `vaila/interp_smooth_core.py`)
-- **Version:** 0.3.112
+- **Version:** 0.3.114
 - **Author:** Paulo R. P. Santiago
 - **GUI:** yes | **CLI:** yes
-- **Updated:** 24 August 2026
+- **Updated:** 25 August 2026
 
 ## Description
 

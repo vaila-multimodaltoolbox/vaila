@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 11 August 2026
-Version: 0.3.104
+Update: 25 August 2026
+Version: 0.3.114
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -39,7 +39,7 @@ Usage example:
   # From main vailá GUI: Frame B → Markerless 2D → Advanced (YOLO + MediaPipe)
 
 Requirements:
-- Python 3.12.13
+- Python 3.12.14
 - OpenCV (pip install opencv-python)
 - MediaPipe (pip install mediapipe)
 - Ultralytics (pip install ultralytics)

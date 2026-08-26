@@ -4,8 +4,9 @@ vaila_distortvideo_gui.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
 Date: 06 Feb 2026
-Version: 0.0.3
-Python Version: 3.12.13
+Update Date: 25 August 2026
+Version: 0.3.114
+Python Version: 3.12.14
 ===============================================================================
 
 This script processes videos applying lens distortion correction based on

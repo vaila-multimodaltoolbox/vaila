@@ -6,7 +6,8 @@
 - **File:** `vaila\markerless2d_mpyolo.py`
 - **Lines:** 2300
 - **Size:** 84006 characters
-- **Version:** 0.1.0 - Enhanced
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Prof. Dr. Paulo Santiago
 - **GUI Interface:** ✅ Yes
 

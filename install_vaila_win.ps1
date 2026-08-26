@@ -9,7 +9,7 @@
         4. Run: .\install_vaila_win.ps1
     Notes:
         - uv will be automatically installed if not present.
-        - Python 3.12.13 will be installed via `uv python install`.
+        - Python 3.12.14 will be installed via `uv python install`.
         - Installation location (prompt; Enter = portable default):
           * [1] Current directory (Local/Portable) - default / recommended
           * [2] User profile or Program Files:
@@ -505,19 +505,19 @@ If ($uvVersion) {
 }
 Write-Host ""
 
-# Install Python 3.12.13 via uv if needed
+# Install Python 3.12.14 via uv if needed
 Write-Host "Checking Python version..." -ForegroundColor Yellow
 Try {
-    $pythonVersion = & uv python list 2>$null | Select-String "3.12.13"
+    $pythonVersion = & uv python list 2>$null | Select-String "3.12.14"
     If (-Not $pythonVersion) {
-        Write-Host "Python 3.12.13 not found. Installing via uv..." -ForegroundColor Yellow
-        & uv python install 3.12.13
-        Write-Host "Python 3.12.13 installed successfully." -ForegroundColor Green
+        Write-Host "Python 3.12.14 not found. Installing via uv..." -ForegroundColor Yellow
+        & uv python install 3.12.14
+        Write-Host "Python 3.12.14 installed successfully." -ForegroundColor Green
     } Else {
-        Write-Host "Python 3.12.13 found." -ForegroundColor Green
+        Write-Host "Python 3.12.14 found." -ForegroundColor Green
     }
 } Catch {
-    Write-Warning "Could not verify Python 3.12.13 installation. Continuing..."
+    Write-Warning "Could not verify Python 3.12.14 installation. Continuing..."
 }
 
 # Check if we're already in the installation directory
@@ -651,7 +651,7 @@ If ($useGPU) {
 Write-Host ""
 Write-Host "Initializing uv project..." -ForegroundColor Yellow
 If (-Not (Test-Path ".python-version")) {
-    & uv python pin 3.12.13
+    & uv python pin 3.12.14
 }
 
 # Create virtual environment
@@ -667,7 +667,7 @@ If (Test-Path ".venv") {
 }
 
 Try {
-    & uv venv --python 3.12.13
+    & uv venv --python 3.12.14
     If ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to create virtual environment."
         Exit 1

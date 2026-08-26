@@ -6,7 +6,7 @@
 - **File:** `vaila\vaila_and_jump.py`
 - **Lines:** 6051
 - **Size:** ~150000 characters
-- **Version:** 0.3.47
+- **Version:** 0.3.114
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **Last Update:** 03 June 2026
@@ -314,6 +314,6 @@ This script is licensed under the GNU General Public License v3.0.
 
 ---
 
-📅 **Last Updated:** 03 June 2026
+📅 **Last Updated:** 25 August 2026
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

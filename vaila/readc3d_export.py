@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 25 September 2024
-Update Date: 24 August 2026
-Version: 0.3.113
+Update Date: 25 August 2026
+Version: 0.3.114
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -33,7 +33,7 @@ Features:
 - Saves a summary file with points residuals information.
 
 Dependencies:
-- Python 3.12.13
+- Python 3.12.14
 - ezc3d
 - Pandas
 - Tkinter

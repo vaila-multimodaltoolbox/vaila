@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 24 August 2026
-Version: 0.3.113
+Update Date: 25 August 2026
+Version: 0.3.114
 
 Example of usage:
 uv run vaila.py
@@ -344,7 +344,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 24.Aug.2026 v0.3.113 (Python 3.12.13)
+    vailá - 25.Aug.2026 v0.3.114 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -460,7 +460,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 24.Aug.2026 v0.3.113 (Python 3.12.13)")
+        self.title("vailá - 25.Aug.2026 v0.3.114 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None

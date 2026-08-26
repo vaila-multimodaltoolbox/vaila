@@ -4,7 +4,7 @@ Automatically generated documentation for all Python modules in vailá Multimoda
 
 [📂 Open Project Documentation (./docs)](../../docs/index.md)
 
-**Total documented modules:** 140 | **Categories:** 7 | **Generated on:** 24/08/2026 (v0.3.113)
+**Total documented modules:** 140 | **Categories:** 7 | **Generated on:** 25/08/2026 (v0.3.114)
 
 ## Markerless 2D chooser (Frame B → B1_r1_c4)
 

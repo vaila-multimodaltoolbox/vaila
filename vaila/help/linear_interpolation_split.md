@@ -6,7 +6,8 @@
 - **File:** `vaila\linear_interpolation_split.py`
 - **Lines:** 163
 - **Size:** 5935 characters
-- **Version:** 1.1.2
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 

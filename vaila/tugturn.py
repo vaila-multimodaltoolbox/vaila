@@ -6,9 +6,9 @@ Authors:
     - Paulo R. P. Santiago
     - Abel G. Chinaglia
 Created: 20 February 2026
-Updated: 29 June 2026
-Version: 0.3.67
-Python Version: 3.12.13
+Updated: 25 August 2026
+Version: 0.3.114
+Python Version: 3.12.14
 
 Description:
 ------------

@@ -2,8 +2,8 @@
 
 - **Category:** Analysis
 - **File:** `vaila/vaila_deadlift.py`
-- **Version:** 0.3.49
-- **Updated:** 2026-06-09
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **GUI Interface:** Yes - Frame B -> **Deadlift** (B5_r6_c5). The button opens a data-source dialog: *Kinematics (MediaPipe)* routes here; *IMU (AHRS)* routes to [`vaila_deadlift_imu`](vaila_deadlift_imu.md).
 
 ## Description

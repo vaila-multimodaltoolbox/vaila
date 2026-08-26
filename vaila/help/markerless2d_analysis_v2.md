@@ -5,12 +5,12 @@
 - **Category:** Machine Learning / Computer Vision / Biomechanics Analysis
 - **File:** `vaila/markerless2d_analysis_v2.py`
 - **Lines of Code:** 2,442
-- **Version:** 0.3.85
+- **Version:** 0.3.114
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
 - **Creation Date:** 29 July 2024
-- **Last Updated:** 23 July 2026
+- **Last Updated:** 25 August 2026
 - **GUI Interface:** ✅ Yes (Tkinter-based)
 - **CLI:** ✅ Yes (`-i` / `-o` / optional `-c`)
 - **License:** AGPL-3.0-or-later
@@ -406,14 +406,14 @@ process_video(
 
 ### Minimum Requirements
 - **OS:** Windows 10+, macOS 10.15+, Linux (Ubuntu 20.04+)
-- **Python:** 3.12.13
+- **Python:** 3.12.14
 - **RAM:** 4 GB (8 GB recommended)
 - **Storage:** 500 MB for models + video storage
 - **CPU:** Multi-core processor (4+ cores recommended)
 
 ### Recommended Requirements
 - **OS:** Latest version of Windows/macOS/Linux
-- **Python:** 3.12.13
+- **Python:** 3.12.14
 - **RAM:** 16 GB or more
 - **GPU:** NVIDIA GPU with CUDA support (6 GB+ VRAM)
 - **Storage:** SSD with 10+ GB free space

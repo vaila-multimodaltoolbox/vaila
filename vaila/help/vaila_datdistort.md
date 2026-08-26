@@ -4,7 +4,8 @@
 
 - **Category:** Tools
 - **File:** `vaila/vaila_datdistort.py`
-- **Version:** 0.0.5
+- **Version:** 0.3.114
+- **Updated:** 25 August 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **CLI Support:** ✅ Yes

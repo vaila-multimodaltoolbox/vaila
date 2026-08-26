@@ -154,7 +154,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 24.Aug.2026 v0.3.113 (Python 3.12.13)
+vailá - 25.Aug.2026 v0.3.114 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -426,7 +426,7 @@ The installation script automatically:
 - **Detects your hardware** (NVIDIA GPU) and prompts for GPU support preference
 - **Selects the optimal configuration template** (`pyproject_win_cuda12.toml` or `pyproject_universal_cpu.toml`)
 - **Applies the template** to `pyproject.toml` **before** creating the virtual environment
-- Installs **Python 3.12.13** (via uv) securely isolated for _vailá_
+- Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync` (with `--extra gpu` if GPU support was selected)
 - Installs **FFmpeg** and **Windows Terminal** (if running as Administrator)
@@ -507,7 +507,7 @@ The installation script automatically:
 - **Detects your hardware** (NVIDIA GPU via `nvidia-smi`) and prompts for GPU support preference
 - **Selects the optimal configuration template** (`pyproject_linux_cuda12.toml` or `pyproject_universal_cpu.toml`)
 - **Applies the template** to `pyproject.toml` **before** creating the virtual environment
-- Installs **Python 3.12.13** (via uv) securely isolated for _vailá_
+- Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync` (with `--extra gpu` if GPU support was selected)
 - Installs system packages via package manager if needed (`python3-tk`, `ffmpeg`, etc.)
@@ -535,10 +535,10 @@ cd vaila
 # (or explicitly: cp pyproject_universal_cpu.toml pyproject.toml)
 
 # Initialize Python version (uses the pyproject.toml you just configured)
-uv python pin 3.12.13
+uv python pin 3.12.14
 
 # Create virtual environment (uses the pyproject.toml you just configured)
-uv venv --python 3.12.13
+uv venv --python 3.12.14
 
 # Generate lock file
 uv lock --upgrade
@@ -605,7 +605,7 @@ The installation script automatically:
 - **Detects your architecture** (Apple Silicon vs Intel) and prompts for Metal/MPS acceleration
 - **Selects the optimal configuration template** (`pyproject_macos.toml` or `pyproject_universal_cpu.toml`)
 - **Applies the template** to `pyproject.toml` **before** creating the virtual environment
-- Installs **Python 3.12.13** (via uv) securely isolated for _vailá_
+- Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync`
 - Sets up the macOS application bundle with icon in Applications folder
@@ -862,7 +862,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current package line in the checked-in tree: **`0.3.113`**, matching the GUI/CLI banners in `vaila.py`.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current package line in the checked-in tree: **`0.3.114`**, matching the GUI/CLI banners in `vaila.py`.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 
