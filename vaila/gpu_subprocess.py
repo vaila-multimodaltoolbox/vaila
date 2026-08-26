@@ -2,13 +2,20 @@
 Project: vailá
 Script: gpu_subprocess.py
 Authors: Paulo Santiago et al.
-Update Date: 01 August 2026
-Version: 0.3.89
+Update Date: 26 August 2026
+Version: 0.3.116
 
 Description:
     Process-group isolation and GPU-memory recovery barriers for CUDA workers.
     This internal helper avoids cascading OOM failures when a worker exits but
     leaves descendant processes or a CUDA context alive.
+
+    Also owns ``ensure_cuda_nvrtc_env()``: in venvs where torch's cu13
+    wheels coexist with older cu12 nvidia packages, ``libnvrtc-builtins.so``
+    can live outside the default dynamic-loader search path, so any
+    torch.compile-triggering worker (sam3dinov3.py, sapiens2_3d.py) can fail
+    every frame internally while still exiting 0. This patches the child's
+    ``LD_LIBRARY_PATH`` so that failure mode cannot happen silently.
 """
 
 from __future__ import annotations
@@ -17,9 +24,12 @@ import contextlib
 import os
 import signal
 import subprocess
+import sys
+import sysconfig
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -154,6 +164,61 @@ def wait_for_gpu_memory_recovery(
         time.sleep(max(0.05, float(poll_seconds)))
 
 
+def ensure_cuda_nvrtc_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Patch ``LD_LIBRARY_PATH`` so cu13 ``libnvrtc-builtins`` is discoverable.
+
+    Some venvs end up with torch's cu13 wheels alongside older cu12 nvidia
+    packages. The cu13 ``nvidia/cu13/lib`` directory has no RPATH and is not
+    on the loader's default search path, while the cu12 ``nvidia/cuda_nvrtc``
+    layout is -- so a torch.compile-triggering call can fail to find
+    ``libnvrtc-builtins.so`` and every frame silently fails while the
+    process still exits 0. This looks for that directory relative to the
+    running interpreter and prepends it if it isn't already covered.
+
+    POSIX-only (the bug is Linux/glibc dynamic-loader specific); a no-op
+    elsewhere or when the directory can't be found. Pure function: returns a
+    new dict, never mutates ``env``/``os.environ``.
+    """
+    merged = dict(os.environ if env is None else env)
+    if os.name != "posix":
+        return merged
+    purelib = sysconfig.get_paths().get("purelib")
+    if not purelib:
+        return merged
+    nvrtc_dir = Path(purelib) / "nvidia" / "cu13" / "lib"
+    if not nvrtc_dir.is_dir():
+        return merged
+    if not any(nvrtc_dir.glob("libnvrtc-builtins.so*")):
+        return merged
+    existing = merged.get("LD_LIBRARY_PATH", "")
+    entries = [p for p in existing.split(os.pathsep) if p]
+    if str(nvrtc_dir) in entries:
+        return merged
+    merged["LD_LIBRARY_PATH"] = os.pathsep.join([str(nvrtc_dir), *entries])
+    return merged
+
+
+def reexec_self_if_nvrtc_env_missing() -> None:
+    """Re-exec the current process with a patched ``LD_LIBRARY_PATH`` if needed.
+
+    Call once, at the very top of a script that may trigger torch.compile on
+    CUDA in-process (``sam3dinov3.py``, ``sapiens2_3d.py``), before any heavy
+    import -- this covers direct CLI invocation, which bypasses
+    ``run_isolated_gpu_subprocess`` (the GUI dispatch path already gets the
+    same fix there). No-op if the fix isn't needed, isn't POSIX, or was
+    already applied (guarded by ``_VAILA_NVRTC_FIXED`` to avoid a re-exec
+    loop).
+    """
+    if os.name != "posix" or os.environ.get("_VAILA_NVRTC_FIXED") == "1":
+        return
+    patched = ensure_cuda_nvrtc_env()
+    if patched.get("LD_LIBRARY_PATH") == os.environ.get("LD_LIBRARY_PATH"):
+        return
+    patched["_VAILA_NVRTC_FIXED"] = "1"
+    argv = list(getattr(sys, "orig_argv", None) or [sys.executable, *sys.argv])
+    os.execve(sys.executable, argv, patched)
+
+
 def run_isolated_gpu_subprocess(
     cmd: Sequence[str],
     *,
@@ -171,7 +236,7 @@ def run_isolated_gpu_subprocess(
     :class:`GpuMemoryRecoveryError` even when the worker returned zero, because
     launching another model in that state would create a misleading cascade.
     """
-    child_env = dict(env) if env is not None else os.environ.copy()
+    child_env = ensure_cuda_nvrtc_env(env)
     baseline = gpu_free_memory_mib(device, env=child_env)
     group_kwargs = popen_process_group_kwargs()
     for key, value in group_kwargs.items():

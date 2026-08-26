@@ -1,0 +1,43 @@
+{
+  "loop": "interp-smooth-split-c3d-loop",
+  "status": "success",
+  "updated": "2026-08-26",
+  "note": "Implemented C3D support in interp_smooth_split; loop targets verified by pytest.",
+  "governing_check_baseline": {
+    "pytest": "43 passed (test_interp_smooth_split.py + test_interp_smooth_split_c3d.py)",
+    "ruff": "clean on touched files"
+  },
+  "targets": [
+    {"id": "stage-write-plumbing", "accepted": true, "evidence": "process_c3d_file + run_batch .c3d branch"},
+    {"id": "identity-roundtrip", "accepted": true, "evidence": "test_c3d_identity_round_trip PASSED"},
+    {"id": "occlusion-residuals", "accepted": true, "evidence": "test_c3d_occlusion_residuals_preserved PASSED"},
+    {"id": "analogs-when-present", "accepted": true, "evidence": "test_c3d_analog_preserved_when_present PASSED"},
+    {"id": "smooth-affects-points", "accepted": true, "evidence": "test_c3d_savgol_changes_points PASSED"},
+    {"id": "split-two-c3d", "accepted": true, "evidence": "test_c3d_split_writes_two_c3d PASSED; do_split also implemented for CSV"},
+    {"id": "cli-gui-surface", "accepted": true, "evidence": "CLI help C3D; GUI load C3D; print_gui_cli_mirror; headless no Tk"},
+    {"id": "metadata-help", "accepted": true, "evidence": "header 0.3.115; help md/html; index updated"}
+  ],
+  "attempts": [
+    {
+      "id": 1,
+      "result": "accepted",
+      "summary": "Full C3D bridge + tests + help"
+    }
+  ],
+  "accepted_changes": [
+    "vaila/interp_smooth_split.py",
+    "tests/test_interp_smooth_split_c3d.py",
+    "vaila/help/interp_smooth_split.md",
+    "vaila/help/interp_smooth_split.html",
+    "vaila/help/index.md",
+    "vaila/help/index.html"
+  ],
+  "lessons": [
+    "Analog frame count must be point_frames * (analog_rate / point_rate) for ezc3d write."
+  ],
+  "cost": {
+    "iterations": 1,
+    "accepted_changes": 1,
+    "tool_turns": null
+  }
+}

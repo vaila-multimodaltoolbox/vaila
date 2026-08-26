@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - rec3d_mesh_pipeline</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 860px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #212529; margin-top: 18px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; }
+        pre { background: #f1f3f5; padding: 14px; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        ul { margin: 10px 0; padding-left: 24px; }
+        ol { margin: 10px 0; padding-left: 24px; }
+        .note { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i>vailá</i> - rec3d_mesh_pipeline</h1>
+
+        <div class="module-info">
+            <h3>Module information</h3>
+            <p><strong>Category:</strong> Processing / Markerless 3D</p>
+            <p><strong>File:</strong> vaila/rec3d_mesh_pipeline.py</p>
+            <p><strong>Version:</strong> 0.3.116</p>
+            <p><strong>Author:</strong> Paulo Santiago</p>
+            <p><strong>GUI:</strong> Yes — Frame B → Markerless 3D → Multi-Camera Mesh Pipeline &nbsp; <strong>CLI:</strong> Yes</p>
+            <p><strong>Runtime:</strong> GPU per camera (sapiens2_3d.py stage); merge stage is CPU only</p>
+        </div>
+
+        <h2>What problem this solves</h2>
+        <p>A real 3-camera dataset showed that a Blender-ready 3D mesh can be produced from <code>sam3sapiens2.py</code> output by chaining three existing scripts by hand:</p>
+        <ol>
+            <li><code>sapiens2_3d.py</code> per camera — Sapiens2-guided SAM 3D Body/DINOv3 mesh.</li>
+            <li><code>sam3dinov3_visualize.py</code> per camera — extract one person's mesh bundle (works unmodified against <code>sapiens2_3d.py</code> output, same <code>vaila_sam3dinov3_v1</code> schema).</li>
+            <li><code>rec3d_one_dlt3d.py --mesh-source-dir</code> — triangulate/merge N cameras into one aligned mesh sequence (OBJ/PLY + BVH + C3D) for Blender.</li>
+        </ol>
+        <p>This module wraps that proven chain behind one button (and CLI) so it can be repeated on other files without manual orchestration. It does not reimplement any of the three scripts; it only orchestrates them, validates each stage's real result, and reports what happened.</p>
+
+        <h2>The NVRTC/CUDA environment bug this closes</h2>
+        <p>In venvs where torch's cu13 wheels coexist with older cu12 nvidia packages, <code>libnvrtc-builtins.so</code> can live outside the default dynamic-loader search path (<code>nvidia/cu13/lib</code>, no RPATH) — so a torch.compile-triggering worker (<code>sapiens2_3d.py</code>, <code>sam3dinov3.py</code>) can fail <strong>every frame internally while still exiting 0</strong>. The only reliable signal is the printed <code>Batch done: N ok, M failed</code> line, never the exit code alone.</p>
+        <p><code>vaila/gpu_subprocess.py::ensure_cuda_nvrtc_env()</code> patches the child's <code>LD_LIBRARY_PATH</code> before every GPU-isolated subprocess launch (fixes the GUI path for free), and <code>reexec_self_if_nvrtc_env_missing()</code> self-re-execs a direct CLI invocation of <code>sapiens2_3d.py</code>/<code>sam3dinov3.py</code> with the same fix before any heavy import — so this pipeline's button needs no manual <code>export LD_LIBRARY_PATH</code> step.</p>
+
+        <h2>Input — TOML manifest</h2>
+        <p>N cameras is variable, so a flat per-camera CLI flag doesn't fit; the manifest follows vailá's existing TOML-configured-CLI convention (<code>interp_smooth_split.py -c smooth_config.toml</code>):</p>
+        <pre><code>output_dir = "/path/to/out_parent"
+export_mesh = "obj"          # obj | ply
+overwrite = false
+
+[[camera]]
+video = "/path/c1.mp4"
+sapiens2_results = "/path/c1_sam3sapiens2_visualized_id_04"
+dlt3d = "/path/c1.dlt3d"
+id = 4                        # optional; auto if exactly one ID exists
+
+[[camera]]
+video = "/path/c2.mp4"
+sapiens2_results = "/path/c2_..."
+dlt3d = "/path/c2.dlt3d"</code></pre>
+        <p><code>sapiens2_results</code> may instead be <code>sam_results</code> (a raw SAM3 run), matching <code>sapiens2_3d.py</code>'s own two input modes. At least 2 cameras are required — DLT3D triangulation needs 2+ views.</p>
+
+        <h2>Pipeline stages</h2>
+        <ol>
+            <li><strong>Validate</strong> the manifest: <code>&gt;= 2</code> cameras, every video/dlt3d path exists, every results dir exists, <code>export_mesh in {obj, ply}</code>.</li>
+            <li><strong>Per camera</strong>, run <code>sapiens2_3d.py -i video -o &lt;out&gt;/camN_sapiens2_3d --save-mesh --export-mesh obj</code> (no <code>--dlt3d</code>/<code>--ref3d</code> — the raw combined per-camera output, not the DLT-aligned monocular one, is what <code>sam3dinov3_visualize.py</code> needs) via <code>run_isolated_gpu_subprocess</code>. Parses the logged <code>Batch done: N ok, M failed</code> line and aborts the whole run with a clear error if it's missing or <code>M &gt; 0</code> — exit code is never trusted alone.</li>
+            <li><strong>Per camera</strong>, resolve the person ID (manifest <code>id</code>, or the sole available ID) and call <code>visualize_selected_id()</code> in-process to extract that person's mesh bundle.</li>
+            <li><strong>Merge</strong>: <code>rec3d_one_dlt3d.py --dlt3d &lt;cam1.dlt3d&gt; ... --mesh-source-dir &lt;bundle1&gt; ... --export-mesh obj -o &lt;out&gt;</code>, checked for a produced <code>rec3d_*.csv</code>.</li>
+            <li>Writes <code>&lt;out&gt;/pipeline_report.json</code> (per-camera logs, chosen IDs, mesh bundle dirs, merge log) for headless-run auditability.</li>
+        </ol>
+
+        <h2>GUI</h2>
+        <p><code>RecMeshPipelineDialog</code> — one row per camera (Browse buttons for video / results dir / <code>.dlt3d</code>, optional person ID), <strong>Add camera</strong>/<strong>Remove</strong> (minimum 2 enforced), shared output dir / mesh format / overwrite settings. <strong>Run</strong> writes the manifest and relaunches this same script headlessly as an isolated GPU subprocess — the GUI thread never blocks on GPU work.</p>
+
+        <h2>Example</h2>
+        <pre><code>uv run python -u vaila/rec3d_mesh_pipeline.py --config pipeline.toml</code></pre>
+
+        <h2>Outputs</h2>
+        <p><code>&lt;output_dir&gt;/vaila_rec3d_mesh_pipeline_YYYYMMDD_HHMMSS/</code>:</p>
+        <table>
+            <tr><th>Path</th><th>Content</th></tr>
+            <tr><td><code>camN_&lt;label&gt;_sapiens2_3d/</code></td><td>Per-camera <code>sapiens2_3d.py</code> run + <code>sapiens2_3d.log</code></td></tr>
+            <tr><td><code>mesh_bundles/camN_&lt;label&gt;_id_NN/</code></td><td>Per-camera extracted mesh bundle (<code>sam3dinov3_visualize.py</code> output)</td></tr>
+            <tr><td><code>rec3d_*.csv</code>, <code>meshes_obj/</code> (or <code>_ply/</code>), <code>.bvh</code>, <code>.c3d</code></td><td>Final merged multi-camera mesh sequence (<code>rec3d_one_dlt3d.py</code> output)</td></tr>
+            <tr><td><code>rec3d_one_dlt3d.log</code></td><td>Merge-stage log</td></tr>
+            <tr><td><code>pipeline_report.json</code></td><td>Per-camera stage results + final output dir, for auditability</td></tr>
+        </table>
+
+        <h2>Caveats</h2>
+        <ul>
+            <li>Every camera stage runs sequentially and any single failure aborts the whole run (fail fast) rather than merging a partial set.</li>
+            <li>The person ID must resolve unambiguously per camera (set <code>id</code> in the manifest when a camera's results dir has more than one person).</li>
+        </ul>
+
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><a href="sapiens2_3d.html">sapiens2_3d</a></td><td>Stage 1 — per-camera Sapiens2-guided 3D mesh</td></tr>
+            <tr><td><a href="sam3dinov3_visualize.html">sam3dinov3_visualize</a></td><td>Stage 2 — per-camera mesh bundle extraction</td></tr>
+            <tr><td><a href="rec3d_one_dlt3d.html">rec3d_one_dlt3d</a></td><td>Stage 3 — multi-camera DLT3D merge</td></tr>
+            <tr><td><a href="monocular_dlt_align.html">monocular_dlt_align</a></td><td>Single-camera alternative when only 1 view is available</td></tr>
+        </table>
+
+        <h2>Testing</h2>
+        <ul>
+            <li><code>tests/test_rec3d_mesh_pipeline.py</code> — manifest validation (min-2-cameras gate, missing video/dlt3d/results-dir errors, <code>sapiens2_results</code>/<code>sam_results</code> alias, <code>export_mesh</code> validation) and <code>ensure_cuda_nvrtc_env()</code>'s pure path-patching logic (no GPU needed).</li>
+        </ul>
+
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

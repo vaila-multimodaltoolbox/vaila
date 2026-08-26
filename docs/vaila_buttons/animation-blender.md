@@ -1,10 +1,14 @@
-# Animation Blender (`C_C_r4_c1`, v0.3.99)
+# Animation Blender (`C_C_r4_c1`, v0.3.117)
 
 ## Overview
 
 Frame C → **Visualization** → **Animation Blender** opens a *rec3d* reconstruction in Blender with the animation already imported and the scene already configured. It replaces the manual routine: launch Blender, load `<base>_blender_skeleton_viz.py` in the Text Editor, press **Run Script**.
 
 Module: [`vaila/blender_viz.py`](../../vaila/blender_viz.py) · handler: `Vaila.animation_blender` · help: [`vaila/help/blender_viz.md`](../../vaila/help/blender_viz.md)
+
+## Saving so anyone can open it (v0.3.117)
+
+After the companion script runs, **File > Save As** now produces a single self-contained `.blend`: the skeleton (BVH action) already saved fine, and as of v0.3.117 the per-frame body mesh does too, since it is baked into the mesh's own Shape Keys (one per frame, `CONSTANT`-interpolated) instead of a live Python `frame_change_post` handler holding coordinates in memory. A handler and a plain dict are not Blender data-blocks and never survived a save/reload — the mesh used to freeze on whatever frame it was on at save time. See `generate_blender_companion_script()` in [`vaila/rec3d.py`](../../vaila/rec3d.py) and the "Saving the mesh animation" section of [`vaila/help/rec3d.md`](../../vaila/help/rec3d.md) for the mechanism, and `docs/claude-session-notes-archive.md` for the verification evidence (fresh-process reopen, coordinates checked against the source OBJ files).
 
 ## Why the companion script and not a plain import
 

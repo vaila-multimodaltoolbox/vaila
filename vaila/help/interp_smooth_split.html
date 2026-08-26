@@ -18,13 +18,16 @@
     <div class="container">
       <h1>interp_smooth_split</h1>
       <p>
-        <i>vailá</i> CSV gap-fill / smooth / optional resample tool.
-        Version <strong>0.3.114</strong> · Updated <strong>25 August 2026</strong>.
+        <i>vailá</i> CSV/C3D gap-fill / smooth / optional resample tool.
+        Version <strong>0.3.115</strong> · Updated <strong>26 August 2026</strong>.
         Shared core: <code>vaila/interp_smooth_core.py</code> (GUI ↔ CLI parity).
+        C3D uses the same bridge as Edit CSV/C3D (<code>c3d_markers_to_dataframe</code> →
+        process → <code>auto_create_c3d_from_csv</code>).
       </p>
 
       <h2>Pipeline</h2>
-      <pre>CSV → validate → gaps → smooth at original rate → optional resample → output</pre>
+      <pre>CSV  → validate → gaps → smooth → optional resample → CSV
+C3D  → marker CSV → same pipeline → C3D (labels, RATE, UNITS, residuals, analogs)</pre>
 
       <h2>Sampling-rate semantics</h2>
       <table>

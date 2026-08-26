@@ -35,45 +35,41 @@
         <h1>vailá - vailaplot2d</h1>
 
         <div class="module-info">
-            <h3>📋 Module Information</h3>
+            <h3>Module Information</h3>
             <p><strong>Category:</strong> Visualization</p>
-            <p><strong>File:</strong> vaila\vailaplot2d.py</p>
-            <p><strong>Lines:</strong> 1450</p>
-            <p><strong>Size:</strong> 52560 characters</p>
-            <p><strong>Version:</strong> 0.0.2</p>
+            <p><strong>File:</strong> vaila/vailaplot2d.py</p>
+            <p><strong>Version:</strong> 0.3.116</p>
             <p><strong>Author:</strong> Prof. Paulo Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
+            <p><strong>Updated:</strong> 26 August 2026</p>
+            <p><strong>GUI Interface:</strong> Yes</p>
         </div>
 
-        
+        <div class="docstring">
+            <h3>Joint Angles</h3>
+            <p>
+              Button <strong>Joint Angles</strong> loads long-format
+              <code>*_joint_angles.csv</code> (frame, person_id, joint_name,
+              euler_x/y/z_deg). Pick person + joint (defaults prefer left/right knee).
+              Optional fs (Hz) → X in seconds; else X = frame.
+              Y curves (deg): Flexion/Extension, Abduction/Adduction,
+              Internal/External Rotation — display aliases for Cardan XYZ columns.
+            </p>
+        </div>
 
         <div class="docstring">
-            <h3>📖 Description</h3>
+            <h3>Description</h3>
             <pre>
 ================================================================================
 vailaplot2d.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Created: 23 September 2024
-Updated: 03 June 2025
-Version: 0.0.2
+Updated: 26 August 2026
+Version: 0.3.116
 
-Description:
-------------
-This script provides functionality for generating 2D plots within vailá:Versatile
-Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. It includes
-a graphical user interface (GUI) for selecting and plotting various graph types,
-such as scatter plots, angle-angle plots, and confidence intervals. Additionally,
-the script offers buttons to clear all plots from memory, clear cached data,
-and create new figure windows for refreshed plotting.
-
-Plot Types Supported:
----------------------
-1. Time Scatter Plot: Plots time-series data across multiple headers from selected
-   files.
-2. Angle-Angle Plot: Displays relationships between two angles based on header pairs
-   from the selected files.
-3...</pre>
+Plot types: Time Scatter, Angle-Angle, Confidence Interval, Boxplot, SPM,
+XY Plot, Joint Angles (long CSV).
+</pre>
         </div>
 
         <div class="functions">

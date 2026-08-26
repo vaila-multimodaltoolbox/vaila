@@ -1,0 +1,58 @@
+{
+  "loop": "interp-smooth-split-parity-loop",
+  "status": "ready",
+  "updated": "2026-08-26",
+  "note": "Specification written; loop not executed. Baseline audited before first iteration.",
+  "assumptions_logged": [
+    "End state = method/contract parity coverage (user did not name a crash or feature).",
+    "Destination = ./loops/ (repo convention).",
+    "Trigger = manual.",
+    "Budget = 12 iterations / 40 tool-turns.",
+    "No launcher artifact requested."
+  ],
+  "governing_check_baseline": {
+    "pytest": "35 passed in tests/test_interp_smooth_split.py (2026-08-26)",
+    "ruff": "not re-run at spec write; required on first iteration",
+    "ty": "not re-run at spec write; required on first iteration"
+  },
+  "targets": [
+    {
+      "id": "gap-fill-methods",
+      "accepted": false,
+      "evidence": "No dedicated apply_interpolation_1d tests for cubic/nearest/kalman/none/skip/max_gap as of baseline."
+    },
+    {
+      "id": "smooth-helpers",
+      "accepted": false,
+      "evidence": "kalman/splines/arima/median/hampel lack helper-path tests; savgol/lowess/butterworth covered."
+    },
+    {
+      "id": "split",
+      "accepted": false,
+      "evidence": "All process_file tests use do_split=False."
+    },
+    {
+      "id": "index-padding-rate",
+      "accepted": false,
+      "evidence": "Partial coverage exists (frame exclusion, padding row count, Nyquist); extend without weakening."
+    },
+    {
+      "id": "cli-toml",
+      "accepted": false,
+      "evidence": "Help/resample and flag-override tests exist; expand headless -i/-c/-o fixture exit-0 coverage as needed."
+    },
+    {
+      "id": "parity-shared-path",
+      "accepted": false,
+      "evidence": "test_gui_cli_config_parity_via_shared_smoothing exists; keep as floor, add method variants if gaps remain."
+    }
+  ],
+  "attempts": [],
+  "accepted_changes": [],
+  "lessons": [],
+  "cost": {
+    "iterations": 0,
+    "accepted_changes": 0,
+    "tool_turns": 0
+  }
+}

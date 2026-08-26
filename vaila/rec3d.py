@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.104
+Version: 0.3.117
 Created: August 03, 2025
-Last Updated: 11 August 2026
+Last Updated: 26 August 2026
 
 Description:
     Batch 3D reconstruction using per-frame Direct Linear Transformation (DLT3D)
@@ -624,8 +624,21 @@ def import_mesh_sequence():
     Every frame shares one topology, so instead of creating 631 objects (or
     depending on the "Stop Motion OBJ"/OBJSequence extension, which is not
     bundled with Blender and silently left the mesh un-imported when
-    missing), this builds a single mesh and swaps its vertex positions on
-    frame change. Only one frame's worth of geometry is ever live.
+    missing), this bakes the whole sequence into ONE mesh's native Shape
+    Keys -- one key per frame, each keyframed to value=1 only on its own
+    frame (CONSTANT interpolation, so frames swap discretely instead of
+    blending into each other).
+
+    This used to swap the single mesh's vertex positions from a Python
+    dict on every frame_change_post callback -- fast, but that dict and
+    the registered callback only ever existed in the running Blender
+    session's memory. Blender's .blend format does not serialize either
+    one, so File > Save As kept the skeleton/BVH but froze the mesh on
+    whatever frame it was on at save time, with no way to replay it in a
+    fresh Blender process. Shape keys and their value F-curves ARE real
+    data-blocks (like any mesh or action), so this is what makes a saved
+    .blend self-contained: it plays back correctly with no vailá, no
+    Python handler, and no OBJ folder anywhere near it.
     """
     if not MESH_DIR or not os.path.isdir(MESH_DIR):
         print("No mesh sequence directory; skipping mesh import.")
@@ -636,11 +649,13 @@ def import_mesh_sequence():
         print(f"No .obj frames in {MESH_DIR}; skipping mesh import.")
         return None
 
-    # Re-runs must not stack meshes or handlers.
-    _unregister_mesh_handler()
+    # Re-runs must not stack meshes or shape keys.
     old = bpy.data.objects.get(MESH_OBJECT_NAME)
     if old:
         bpy.data.objects.remove(old, do_unlink=True)
+    old_mesh = bpy.data.meshes.get(MESH_OBJECT_NAME)
+    if old_mesh:
+        bpy.data.meshes.remove(old_mesh)
 
     print(f"Loading {len(frames)} mesh frames from {os.path.basename(MESH_DIR)} ...")
     coords_per_frame = []
@@ -654,54 +669,68 @@ def import_mesh_sequence():
             print(f"  {i + 1}/{len(frames)} frames")
 
     n_verts = len(coords_per_frame[0]) // 3
+    n_frames_mesh = len(coords_per_frame)
+    first = coords_per_frame[0]
     mesh = bpy.data.meshes.new(MESH_OBJECT_NAME)
-    mesh.from_pydata([(0.0, 0.0, 0.0)] * n_verts, [], faces)
+    mesh.from_pydata(
+        [(first[3 * v], first[3 * v + 1], first[3 * v + 2]) for v in range(n_verts)],
+        [],
+        faces,
+    )
     mesh.update()
     obj = bpy.data.objects.new(MESH_OBJECT_NAME, mesh)
     bpy.context.scene.collection.objects.link(obj)
 
-    # Stash on the handler so it survives without globals leaking.
-    _MESH_STATE["object_name"] = MESH_OBJECT_NAME
-    _MESH_STATE["coords"] = coords_per_frame
-    _register_mesh_handler()
-    _apply_mesh_frame(bpy.context.scene)
+    obj.shape_key_add(name="Basis", from_mix=False)
+    for i, coords in enumerate(coords_per_frame):
+        key = obj.shape_key_add(name=f"frame_{i:06d}", from_mix=False)
+        key.data.foreach_set("co", coords)
+        if (i + 1) % 100 == 0 or i + 1 == n_frames_mesh:
+            print(f"  shape key {i + 1}/{n_frames_mesh}")
 
-    print(f"Mesh sequence ready: {len(frames)} frames, {n_verts} verts, "
-          f"frame {FRAME_START} onwards (no add-on required)")
+    _keyframe_mesh_shape_keys(mesh, n_frames_mesh)
+
+    print(f"Mesh sequence baked: {n_frames_mesh} frames, {n_verts} verts, as native "
+          f"Shape Keys from frame {FRAME_START} onward -- survives File > Save As, "
+          f"no add-on and no running Python handler required.")
     return obj
 
 
-_MESH_STATE = {"object_name": None, "coords": None}
+def _keyframe_mesh_shape_keys(mesh, n_frames_mesh):
+    """Keyframe every frame's shape key so exactly one is active at a time.
 
-
-def _apply_mesh_frame(scene):
-    """Push the current frame's vertex positions into the live mesh."""
-    coords = _MESH_STATE.get("coords")
-    name = _MESH_STATE.get("object_name")
-    if not coords or not name:
-        return
-    obj = bpy.data.objects.get(name)
-    if obj is None:
-        return
-    idx = min(max(scene.frame_current - FRAME_START, 0), len(coords) - 1)
-    obj.data.vertices.foreach_set("co", coords[idx])
-    obj.data.update_tag()
-    obj.update_tag()
-
-
-def _vaila_mesh_frame_handler(scene, _depsgraph=None):
-    _apply_mesh_frame(scene)
-
-
-def _unregister_mesh_handler():
-    for handlers in (bpy.app.handlers.frame_change_post, bpy.app.handlers.frame_change_pre):
-        for h in list(handlers):
-            if getattr(h, "__name__", "") == "_vaila_mesh_frame_handler":
-                handlers.remove(h)
-
-
-def _register_mesh_handler():
-    bpy.app.handlers.frame_change_post.append(_vaila_mesh_frame_handler)
+    Each key gets value=1 only at its own frame, bounded by value=0 on the
+    frame immediately before and after (shared with the neighbouring key's
+    own boundary, so this is ~2 keyframes per frame, not one pair per key
+    times every frame). CONSTANT interpolation is what turns that into a
+    discrete swap -- linear would visibly blend the two meshes together
+    for the frame in between instead of cutting straight to the new one.
+    """
+    # Ask Blender to stamp every new keyframe as CONSTANT itself, instead of
+    # reaching into the Action afterwards: Blender 4.4+'s layered-Action
+    # rework moved fcurves off Action.fcurves onto per-layer/per-strip
+    # channelbags, so a version-specific traversal is exactly the kind of
+    # thing that silently breaks on the next Blender release. This
+    # preference is the same switch the keyframe-insert UI itself uses, and
+    # has existed unchanged since Blender 2.8.
+    prefs = bpy.context.preferences.edit
+    previous_interpolation = prefs.keyframe_new_interpolation_type
+    prefs.keyframe_new_interpolation_type = 'CONSTANT'
+    try:
+        key_blocks = mesh.shape_keys.key_blocks
+        for i in range(n_frames_mesh):
+            real_frame = FRAME_START + i
+            key = key_blocks[f"frame_{i:06d}"]
+            if i > 0:
+                key.value = 0.0
+                key.keyframe_insert(data_path="value", frame=real_frame - 1)
+            key.value = 1.0
+            key.keyframe_insert(data_path="value", frame=real_frame)
+            if i < n_frames_mesh - 1:
+                key.value = 0.0
+                key.keyframe_insert(data_path="value", frame=real_frame + 1)
+    finally:
+        prefs.keyframe_new_interpolation_type = previous_interpolation
 
 
 def create_skeleton_visualization(bvh_armature):

@@ -6,17 +6,22 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 26 August 2026
+Version: 0.3.115
 Python Version: 3.12.14
 
 Description:
 ------------
-This script provides functionality to fill missing data in CSV files using
+This script provides functionality to fill missing data in CSV (and C3D) files using
 linear interpolation, Kalman filter, Savitzky-Golay filter, nearest value fill,
-or to split data into a separate CSV file. It is intended for use in biomechanical
+or to split data into a separate file. It is intended for use in biomechanical
 data analysis, where gaps in time-series data can be filled and datasets can be
 split for further analysis.
+
+C3D support (v0.3.115): each ``.c3d`` is staged to marker CSV via
+``c3d_markers_to_dataframe``, processed by the shared pipeline, then written
+back with ``auto_create_c3d_from_csv`` (labels, POINT RATE/UNITS, residuals,
+analogs when present) — the same bridge used by ``edit_csv_c3d``.
 
 Key Features:
 -------------
@@ -48,8 +53,9 @@ Usage:
 1) GUI mode (default): no arguments, or --gui
    $ uv run vaila/interp_smooth_split.py
    $ uv run vaila/interp_smooth_split.py --gui
-   Opens the configuration dialog; after Apply you choose the source directory.
-   Output is written to a timestamped subdir (e.g. processed_linear_lowess_YYYYMMDD_HHMMSS).
+   Opens the configuration dialog; after Apply you choose the source directory
+   (``.csv`` and/or ``.c3d``). Output is written to a timestamped subdir
+   (e.g. processed_linear_lowess_YYYYMMDD_HHMMSS).
    Configuration can be saved/loaded as smooth_config.toml.
 
 2) CLI mode: pass -i/--input (and optionally -o/--output, -c/--config)
@@ -60,14 +66,14 @@ Usage:
    If no config is found, an error is printed.
 
    Arguments:
-     -i, --input  DIR   Input directory containing CSV files (required)
+     -i, --input  DIR   Input directory containing CSV and/or C3D files (required)
      -o, --output DIR   Output directory (default: timestamped subdir inside input)
      -c, --config TOML  Path to smooth_config.toml configuration file
      --gui              Launch GUI instead of CLI
 
    Examples:
      # Process using config from input dir or cwd:
-     $ uv run vaila/interp_smooth_split.py -i /path/to/csv_dir
+     $ uv run vaila/interp_smooth_split.py -i /path/to/csv_or_c3d_dir
 
      # Process with explicit output directory:
      $ uv run vaila/interp_smooth_split.py -i ./data -o ./results
@@ -1095,13 +1101,31 @@ class InterpolationConfigDialog:
         import pandas as pd
 
         file_path = filedialog.askopenfilename(
-            title="Select CSV file for testing",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Select CSV or C3D file for testing",
+            filetypes=[
+                ("CSV / C3D", "*.csv *.c3d"),
+                ("CSV files", "*.csv"),
+                ("C3D files", "*.c3d"),
+                ("All files", "*.*"),
+            ],
         )
         if file_path:
             try:
                 self.test_data_path = file_path
-                self.test_data = pd.read_csv(file_path)
+                if str(file_path).lower().endswith(".c3d"):
+                    try:
+                        from .readc3d_export import c3d_markers_to_dataframe
+                    except ImportError:
+                        from readc3d_export import (  # ty: ignore[unresolved-import]
+                            c3d_markers_to_dataframe,
+                        )
+                    self.test_data, _meta = c3d_markers_to_dataframe(file_path)
+                    if "Time" in self.test_data.columns:
+                        self.test_data["Time"] = pd.to_numeric(
+                            self.test_data["Time"], errors="coerce"
+                        )
+                else:
+                    self.test_data = pd.read_csv(file_path)
                 self.test_label.configure(text=os.path.basename(file_path))
 
                 numeric_cols = self.test_data.select_dtypes(include=[np.number]).columns.tolist()
@@ -2617,20 +2641,43 @@ def process_file(file_path, dest_dir, config):
                         f"Detected time precision from original file: {time_precision} decimal places"
                     )
 
-        # Save processed DataFrame
+        # Save processed DataFrame (optionally split into two halves)
         print(f"\nSaving processed file to: {output_path}")
 
-        # If time column has specific precision, format it separately
-        if original_had_time and time_precision is not None:
-            # Create a copy for saving
-            df_to_save = df.copy()
-            # Format time column with specific precision
-            df_to_save[first_col] = df_to_save[first_col].apply(lambda x: f"{x:.{time_precision}f}")
-            # Save with default float format for other columns
-            df_to_save.to_csv(output_path, index=False, float_format=float_format)
+        def _write_df(path: str, frame: pd.DataFrame) -> None:
+            if original_had_time and time_precision is not None:
+                df_to_save = frame.copy()
+                df_to_save[first_col] = df_to_save[first_col].apply(
+                    lambda x: f"{x:.{time_precision}f}"
+                )
+                df_to_save.to_csv(path, index=False, float_format=float_format)
+            else:
+                frame.to_csv(path, index=False, float_format=float_format)
+
+        if config.get("do_split"):
+            mid = len(df) // 2
+            if mid <= 0 or mid >= len(df):
+                file_info["warnings"].append(
+                    "Split skipped: not enough rows to split into two non-empty parts."
+                )
+                _write_df(output_path, df)
+            else:
+                part1 = df.iloc[:mid].reset_index(drop=True)
+                part2 = df.iloc[mid:].reset_index(drop=True)
+                stem, _ext = os.path.splitext(output_filename)
+                part1_path = os.path.join(dest_dir, f"{stem}_part1.csv")
+                part2_path = os.path.join(dest_dir, f"{stem}_part2.csv")
+                _write_df(part1_path, part1)
+                _write_df(part2_path, part2)
+                # Keep a full copy as well for callers that only look at output_path
+                _write_df(output_path, df)
+                file_info["output_part1_path"] = part1_path
+                file_info["output_part2_path"] = part2_path
+                file_info["part1_size"] = len(part1)
+                file_info["part2_size"] = len(part2)
+                print(f"Split saved: {part1_path} ({len(part1)}) + {part2_path} ({len(part2)})")
         else:
-            # Save normally
-            df.to_csv(output_path, index=False, float_format=float_format)
+            _write_df(output_path, df)
 
         print("File saved successfully!")
 
@@ -2936,6 +2983,147 @@ def generate_report(dest_dir, config, processed_files):
     return report_path
 
 
+def _c3d_io_imports():
+    """Lazy dual-import for C3D staging helpers (package + standalone)."""
+    try:
+        from .readc3d_export import c3d_markers_to_dataframe
+        from .readcsv_export import auto_create_c3d_from_csv
+    except ImportError:
+        from readc3d_export import c3d_markers_to_dataframe  # ty: ignore[unresolved-import]
+        from readcsv_export import auto_create_c3d_from_csv  # ty: ignore[unresolved-import]
+    return c3d_markers_to_dataframe, auto_create_c3d_from_csv
+
+
+def _config_for_c3d(config: dict, meta: dict) -> dict:
+    """Inject POINT RATE into sample_rate / Butterworth fs when unset."""
+    cfg = dict(config)
+    rate = float(meta.get("marker_freq") or 0.0) or None
+    sample_rate = cfg.get("sample_rate")
+    if rate and (sample_rate is None or float(sample_rate) <= 0):
+        cfg["sample_rate"] = rate
+    params = dict(cfg.get("smooth_params") or {})
+    if (
+        cfg.get("smooth_method") == "butterworth"
+        and rate
+        and (params.get("fs") is None or float(params.get("fs") or 0) <= 0)
+    ):
+        params["fs"] = rate
+        cfg["smooth_params"] = params
+    return cfg
+
+
+def _split_analog_df(
+    analog_df: pd.DataFrame | None, mid_point_frames: int, point_rate: float, analog_rate: float
+):
+    """Split analog rows proportional to the point-frame midpoint."""
+    if analog_df is None or len(analog_df) == 0:
+        return None, None
+    ratio = float(analog_rate) / float(point_rate) if point_rate else 1.0
+    mid_a = int(round(mid_point_frames * ratio))
+    mid_a = max(0, min(len(analog_df), mid_a))
+    return analog_df.iloc[:mid_a].copy(), analog_df.iloc[mid_a:].copy()
+
+
+def _csv_to_c3d_path(csv_path: str) -> str:
+    stem, _ = os.path.splitext(csv_path)
+    return f"{stem}.c3d"
+
+
+def _write_c3d_from_processed_csv(
+    csv_path: str,
+    meta: dict,
+    auto_create_c3d_from_csv,
+    *,
+    analog_df: pd.DataFrame | None = None,
+) -> str:
+    """Read a processed marker CSV and write a sibling ``.c3d``."""
+    points_df = pd.read_csv(csv_path)
+    if "Time" in points_df.columns:
+        points_df["Time"] = pd.to_numeric(points_df["Time"], errors="coerce")
+    out_c3d = _csv_to_c3d_path(csv_path)
+    auto_create_c3d_from_csv(
+        points_df,
+        out_c3d,
+        analog_df=analog_df if analog_df is not None else meta.get("analog_df"),
+        point_rate=float(meta.get("marker_freq") or 100.0),
+        analog_rate=float(meta.get("analog_freq") or 1000.0),
+        point_units=meta.get("point_units"),
+    )
+    return out_c3d
+
+
+def process_c3d_file(file_path: str, dest_dir: str, config: dict) -> dict:
+    """Stage ``.c3d`` → CSV → ``process_file`` → write ``.c3d`` (and split halves)."""
+    import tempfile
+
+    c3d_markers_to_dataframe, auto_create_c3d_from_csv = _c3d_io_imports()
+    markers_df, meta = c3d_markers_to_dataframe(file_path)
+    cfg = _config_for_c3d(config, meta)
+
+    staging = tempfile.mkdtemp(prefix="vaila_iss_c3d_")
+    try:
+        stem = sanitize_filename(os.path.splitext(os.path.basename(file_path))[0])
+        staged_csv = os.path.join(staging, f"{stem}.csv")
+        markers_df.to_csv(staged_csv, index=False)
+
+        file_info = process_file(staged_csv, dest_dir, cfg)
+        if file_info is None or file_info.get("error"):
+            if file_info is not None:
+                file_info["original_path"] = file_path
+                file_info["original_filename"] = os.path.basename(file_path)
+            return file_info
+
+        file_info["original_path"] = file_path
+        file_info["original_filename"] = os.path.basename(file_path)
+        file_info["input_kind"] = "c3d"
+        file_info["csv_output_path"] = file_info.get("output_path")
+
+        point_rate = float(meta.get("marker_freq") or 100.0)
+        analog_rate = float(meta.get("analog_freq") or 1000.0)
+        analog_df = meta.get("analog_df")
+
+        if config.get("do_split") and file_info.get("output_part1_path"):
+            mid = int(file_info.get("part1_size") or 0)
+            a1, a2 = _split_analog_df(analog_df, mid, point_rate, analog_rate)
+            c3d1 = _write_c3d_from_processed_csv(
+                file_info["output_part1_path"], meta, auto_create_c3d_from_csv, analog_df=a1
+            )
+            c3d2 = _write_c3d_from_processed_csv(
+                file_info["output_part2_path"], meta, auto_create_c3d_from_csv, analog_df=a2
+            )
+            full_c3d = _write_c3d_from_processed_csv(
+                file_info["output_path"], meta, auto_create_c3d_from_csv, analog_df=analog_df
+            )
+            file_info["output_part1_path"] = c3d1
+            file_info["output_part2_path"] = c3d2
+            file_info["output_path"] = full_c3d
+        else:
+            out_c3d = _write_c3d_from_processed_csv(
+                file_info["output_path"], meta, auto_create_c3d_from_csv, analog_df=analog_df
+            )
+            file_info["output_path"] = out_c3d
+
+        return file_info
+    except Exception as e:
+        return {
+            "original_path": file_path,
+            "original_filename": os.path.basename(file_path),
+            "output_path": None,
+            "warnings": [f"Error processing C3D: {e}"],
+            "error": True,
+            "original_size": 0,
+            "original_columns": 0,
+            "total_missing": 0,
+            "columns_with_missing": {},
+            "input_kind": "c3d",
+        }
+    finally:
+        with contextlib.suppress(Exception):
+            for name in os.listdir(staging):
+                os.remove(os.path.join(staging, name))
+            os.rmdir(staging)
+
+
 def run_fill_split_dialog(parent=None):
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
@@ -2980,7 +3168,7 @@ def run_fill_split_dialog(parent=None):
         return
 
     # Select source directory
-    source_dir = filedialog.askdirectory(title="Select Source Directory")
+    source_dir = filedialog.askdirectory(title="Select Source Directory (CSV and/or C3D)")
     if not source_dir:
         print("Operation canceled by user.")
         print("================================================")
@@ -2992,12 +3180,32 @@ def run_fill_split_dialog(parent=None):
         config = load_smooth_config_for_analysis(path_in_source)
         print(f"Using config from {path_in_source}")
 
+    try:
+        from .cli_highlight import print_gui_cli_mirror
+    except ImportError:
+        from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+
+    print_gui_cli_mirror(
+        "vaila/interp_smooth_split",
+        [
+            "uv",
+            "run",
+            "vaila/interp_smooth_split.py",
+            "-i",
+            source_dir,
+            "--smooth-method",
+            str(config.get("smooth_method", "none")),
+            "--interp-method",
+            str(config.get("interp_method", "none")),
+        ],
+    )
+
     run_batch(source_dir, config, dest_dir=None, use_messagebox=True)
 
 
 def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
     """
-    Process all CSV files in source_dir with the given config.
+    Process all CSV and C3D files in source_dir with the given config.
     If dest_dir is None, create a timestamped subdir inside source_dir.
     If use_messagebox is False (CLI), print results instead of showing dialogs.
     Returns (dest_dir, processed_files, report_path or None).
@@ -3036,29 +3244,40 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
     save_smooth_config_toml(config, os.path.join(dest_dir, SMOOTH_CONFIG_FILENAME))
 
     processed_files = []
-    for filename in os.listdir(source_dir):
-        if filename.endswith(".csv"):
-            try:
-                file_info = process_file(os.path.join(source_dir, filename), dest_dir, config)
-                if file_info is not None:
-                    processed_files.append(file_info)
-                else:
-                    print(f"Warning: No information returned for file {filename}")
-            except Exception as e:
-                print(f"Error processing file {filename}: {str(e)}")
-                processed_files.append(
-                    {
-                        "original_path": os.path.join(source_dir, filename),
-                        "original_filename": filename,
-                        "warnings": [f"Error: {str(e)}"],
-                        "error": True,
-                        "original_size": 0,
-                        "original_columns": 0,
-                        "total_missing": 0,
-                        "columns_with_missing": {},
-                        "output_path": None,
-                    }
-                )
+    for filename in sorted(os.listdir(source_dir)):
+        lower = filename.lower()
+        if not (lower.endswith(".csv") or lower.endswith(".c3d")):
+            continue
+        # Skip nested processed_* outputs and config dumps accidentally listed
+        if filename.startswith("processed_") or filename == SMOOTH_CONFIG_FILENAME:
+            continue
+        src = os.path.join(source_dir, filename)
+        if not os.path.isfile(src):
+            continue
+        try:
+            if lower.endswith(".c3d"):
+                file_info = process_c3d_file(src, dest_dir, config)
+            else:
+                file_info = process_file(src, dest_dir, config)
+            if file_info is not None:
+                processed_files.append(file_info)
+            else:
+                print(f"Warning: No information returned for file {filename}")
+        except Exception as e:
+            print(f"Error processing file {filename}: {str(e)}")
+            processed_files.append(
+                {
+                    "original_path": src,
+                    "original_filename": filename,
+                    "warnings": [f"Error: {str(e)}"],
+                    "error": True,
+                    "original_size": 0,
+                    "original_columns": 0,
+                    "total_missing": 0,
+                    "columns_with_missing": {},
+                    "output_path": None,
+                }
+            )
     processed_files = [pf for pf in processed_files if pf is not None]
 
     report_path = None
@@ -3076,7 +3295,7 @@ def run_batch(source_dir, config, dest_dir=None, use_messagebox=True):
         if use_messagebox:
             messagebox.showwarning("Warning", "No files were successfully processed.")
         else:
-            print("Warning: No CSV files were successfully processed.")
+            print("Warning: No CSV/C3D files were successfully processed.")
     return dest_dir, processed_files, report_path
 
 
@@ -3146,7 +3365,8 @@ def _cli_run():
     parser = argparse.ArgumentParser(
         prog="interp_smooth_split.py",
         description=(
-            "Interpolate, smooth, optionally resample, and split CSV time-series data.\n"
+            "Interpolate, smooth, optionally resample, and split CSV/C3D time-series data.\n"
+            "C3D files are staged to marker CSV, processed, then written back as C3D.\n"
             "GUI and CLI share the same numerical core (interp_smooth_core).\n"
             "Precedence: explicit CLI flags > TOML values > documented defaults."
         ),
@@ -3179,7 +3399,9 @@ Examples:
   uv run vaila/interp_smooth_split.py -i ./data -c ./smooth_config.toml --cutoff 8
         """,
     )
-    parser.add_argument("-i", "--input", metavar="DIR", help="Input directory containing CSV files")
+    parser.add_argument(
+        "-i", "--input", metavar="DIR", help="Input directory containing CSV and/or C3D files"
+    )
     parser.add_argument(
         "-o",
         "--output",
