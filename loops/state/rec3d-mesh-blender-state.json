@@ -114,6 +114,58 @@
   "sibling_loop_status": {
     "dlt-distortion-loop": "not started (no distortion modeling implemented yet)"
   },
+  "session_2026_08_26_jessica_dataset_run": {
+    "goal": "user asked how rec3d_one_dlt3d.py can produce Blender mesh using sam3sapiens2.py output (jessica dataset, 3 cameras, multi-person scene). Verified end-to-end, no code changes needed -- rec3d_one_dlt3d.py's existing --mesh-source-dir/--export-mesh feature already supports this; the missing piece was purely a workflow: sapiens2_3d.py (Sapiens2-guided SAM3D Body/DINOv3) run per camera + sam3dinov3_visualize.py to extract one person's mesh bundle per camera.",
+    "input_path": "/home/preto/data/sep_runcod_01072026/REC3D_COD/jessica/ (3 cameras c1/c2/c3, multi-person SAM3+Sapiens2 combined runs, one ID pre-selected per camera via sam3sapiens2_visualize.py: c1->id_04, c2->id_08, c3->id_03)",
+    "pipeline": [
+      "1. sapiens2_3d.py -i c{N}_cod.mp4 --sapiens2-results c{N}_cod_sam3sapiens2_visualized_id_NN --save-mesh --export-mesh obj  (per camera, writes combined multi-person MHR70+mesh bundle, same schema as sam3dinov3.py)",
+      "2. sam3dinov3_visualize.py --sam3d-results <camera output dir> --video c{N}_cod.mp4 --id <selected person> --export-mesh obj -o mesh_bundles/c{N}_cod_id_NN  (confirmed works unmodified against sapiens2_3d.py output -- identical predictions.json schema 'vaila_sam3dinov3_v1')",
+      "3. rec3d_one_dlt3d.py --dlt3d c1.dlt3d c2.dlt3d c3.dlt3d --mesh-source-dir mesh_bundles/c1_cod_id_04 mesh_bundles/c2_cod_id_08 mesh_bundles/c3_cod_id_03 --export-mesh obj -o vaila_rec3d_out"
+    ],
+    "result": {
+      "frames": 631,
+      "markers": 70,
+      "mesh_frames_written": 631,
+      "mesh_frames_interpolated": 0,
+      "mesh_frames_skipped": 0,
+      "sequence_contiguous": true,
+      "camera_switches": 81,
+      "residual_m": {"mean": 0.0145, "median": 0.0141, "max": 0.0337},
+      "frozen_thresholds_m": {"median_lt": 0.03, "p95_lt": 0.05, "max_lt": 0.08},
+      "output_dir": "/home/preto/data/sep_runcod_01072026/REC3D_COD/jessica/vaila_rec3d_out/vaila_rec3d_20260826_121305"
+    },
+    "environment_bug_found_and_fixed": {
+      "id": "nvrtc-builtins-not-found-cu130",
+      "severity": "high (silent 100% failure, exit code 0)",
+      "symptom": "sapiens2_3d.py exits 0 but internally every frame's torch.compile-triggered CUDA kernel fails: 'nvrtc: error: failed to open libnvrtc-builtins.so.13.0'. Authoritative signal is the printed 'Batch done: N ok, M failed' line, NOT the process exit code.",
+      "cause": "torch 2.11.0+cu130's nvrtc-builtins lib lives at nonstandard .venv/lib/python3.12/site-packages/nvidia/cu13/lib/ (no RPATH/$ORIGIN entry), while older coexisting cu12 nvidia packages use the expected nvidia/cuda_nvrtc/lib/ path that IS on the loader's search path.",
+      "fix": "export LD_LIBRARY_PATH=<venv>/lib/python3.12/site-packages/nvidia/cu13/lib:$LD_LIBRARY_PATH before any sapiens2_3d.py/sam3dinov3.py torch.compile-triggering GPU run in this venv."
+    },
+    "level5_checkpoint": {"status": "not_yet_performed_by_user"}
+  },
+  "session_2026_08_26_mesh_shapekey_portability_fix": {
+    "goal": "user goal: 'como posso abrir a animation do mesh no blender e salvar para qualquer pessoa conseguir abrir?' -- opening was already solved by blender_viz.py; saving so a fresh Blender install with no vaila/script/OBJ folder can still play it was not.",
+    "root_cause": "generate_blender_companion_script()'s import_mesh_sequence() swapped mesh vertices per-frame from a Python module dict (_MESH_STATE) via a bpy.app.handlers.frame_change_post callback. Neither a dict nor a registered handler is a Blender data-block, so File > Save As kept the BVH skeleton but froze the mesh at whatever frame was current when saved.",
+    "fix": "rewrote import_mesh_sequence() to bake the whole sequence into the mesh's native Shape Keys -- one key per frame (frame_{i:06d}), each keyframed value=1 only on its own frame with CONSTANT interpolation (bpy.context.preferences.edit.keyframe_new_interpolation_type, restored after) so frames swap discretely. Shape keys and their keyframes are real data-blocks, so this saves/reloads exactly like the BVH action already did. Removed _MESH_STATE/_apply_mesh_frame/_vaila_mesh_frame_handler/(un)register_mesh_handler entirely.",
+    "blender_5_2_bug_found_and_fixed": {
+      "symptom": "AttributeError: 'Action' object has no attribute 'fcurves', raised after all 631 shape keys and their keyframes were already inserted",
+      "cause": "Blender 4.4+'s layered-Actions rework moved F-curves off Action.fcurves onto per-layer/per-strip channelbags; first fix attempt walked mesh.shape_keys.animation_data.action.fcurves post-hoc to set CONSTANT interpolation.",
+      "fix": "set bpy.context.preferences.edit.keyframe_new_interpolation_type = 'CONSTANT' before the keyframing loop instead -- same preference the keyframe-insert UI uses, stable since Blender 2.8, no Action/fcurve traversal needed."
+    },
+    "verification": {
+      "method": "regenerated companion script against the real jessica dataset (631 frames, 18439 verts), ran headlessly to build scene (~30s incl. shape-key bake), chained a second --python call in the same Blender invocation to save a .blend, moved that single file into an empty directory (no OBJ folder, no companion script, no vaila), then in a SEPARATE fresh headless Blender process (no companion script involved) reopened it and sampled depsgraph-evaluated vertex-0 world position at two frames 300 apart",
+      "blend_size_mb": 122.6,
+      "vert0_frame1": [1.307847023010254, 0.09517399966716766, 1.5763670206069946],
+      "vert0_frame1_source_obj": "frame_000000.obj v line: v 1.307847 0.095174 1.576367 -- exact match",
+      "vert0_frame301": [1.2242729663848877, 1.9851230382919312, 1.1762830018997192],
+      "vert0_frame301_source_obj": "frame_000300.obj v line: v 1.224273 1.985123 1.176283 -- exact match",
+      "n_shape_keys": 632,
+      "reopen_only_wall_time_s": 1.58,
+      "regression_tests": "tests/test_rec3d_blender_alignment.py + tests/test_blender_viz.py -- 52 passed, unchanged"
+    },
+    "version": "0.3.117",
+    "level5_checkpoint": {"status": "verified_by_agent_fresh_process_reopen_not_yet_confirmed_by_user"}
+  },
   "pre_existing_bug_annotated": {
     "files": ["vaila/rec3d.py", "vaila/rec2d.py"],
     "issue": "messagebox.showinfo() called unconditionally on the CLI success path, no gui= guard -> hangs or TclError headlessly",

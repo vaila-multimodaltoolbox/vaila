@@ -1,0 +1,31 @@
+{
+  "loop": "vailaplot2d-joint-angles-loop",
+  "status": "success",
+  "updated": "2026-08-26",
+  "governing_check": {
+    "ruff": "clean",
+    "pytest": "7 passed in tests/test_vailaplot2d_joint_angles.py",
+    "external_smoke": "left-knee person_id=8 → 219 frames"
+  },
+  "targets": [
+    {"id": "load-filter-helper", "accepted": true, "evidence": "load_joint_angles_series + is_joint_angles_dataframe"},
+    {"id": "plot-three-components", "accepted": true, "evidence": "plot_joint_angles_time Agg test"},
+    {"id": "gui-button-dispatch", "accepted": true, "evidence": "Joint Angles button → joint_angles_time"},
+    {"id": "person-joint-selectors", "accepted": true, "evidence": "ask_joint_angles_params dialog"},
+    {"id": "tests-synthetic", "accepted": true, "evidence": "7 pytest passed"},
+    {"id": "metadata-help", "accepted": true, "evidence": "header 0.3.116 + help md/html + index"},
+    {"id": "optional-external-smoke", "accepted": true, "evidence": "jessica CSV left-knee person 8"}
+  ],
+  "accepted_changes": [
+    "vaila/vailaplot2d.py",
+    "tests/test_vailaplot2d_joint_angles.py",
+    "vaila/help/vailaplot2d.md",
+    "vaila/help/vailaplot2d.html",
+    "vaila/help/index.md",
+    "vaila/help/index.html"
+  ],
+  "cost": {
+    "iterations": 1,
+    "accepted_changes": 1
+  }
+}

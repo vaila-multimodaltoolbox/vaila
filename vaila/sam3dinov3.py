@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 24 August 2026
-Version: 0.3.112
+Update Date: 26 August 2026
+Version: 0.3.116
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -89,7 +89,7 @@ import numpy as np
 
 try:
     from .cli_highlight import print_gui_cli_mirror
-    from .gpu_subprocess import run_isolated_gpu_subprocess
+    from .gpu_subprocess import reexec_self_if_nvrtc_env_missing, run_isolated_gpu_subprocess
     from .joint_kinematics import (
         MHR127_NUM_JOINTS,
         MHR127_PARENTS,
@@ -124,7 +124,10 @@ try:
     from .vaila_sam import _open_sam3_video_writer
 except ImportError:  # standalone execution
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
-    from gpu_subprocess import run_isolated_gpu_subprocess  # ty: ignore[unresolved-import]
+    from gpu_subprocess import (  # ty: ignore[unresolved-import]
+        reexec_self_if_nvrtc_env_missing,
+        run_isolated_gpu_subprocess,
+    )
     from joint_kinematics import (  # ty: ignore[unresolved-import]
         MHR127_NUM_JOINTS,
         MHR127_PARENTS,
@@ -157,6 +160,11 @@ except ImportError:  # standalone execution
         write_batch_input_marker,
     )
     from vaila_sam import _open_sam3_video_writer  # ty: ignore[unresolved-import]
+
+# Fix a silent-failure environment bug before any torch.compile-triggering
+# call happens (direct CLI run; the GUI subprocess-dispatch path below gets
+# the same fix inside run_isolated_gpu_subprocess itself).
+reexec_self_if_nvrtc_env_missing()
 
 DEFAULT_WEIGHTS_SUBDIR = Path("models") / "sam-3d-dinov3"
 DEFAULT_HF_REPO_ID = "facebook/sam-3d-body-dinov3"

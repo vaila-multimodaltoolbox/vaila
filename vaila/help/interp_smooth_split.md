@@ -4,25 +4,30 @@
 
 - **Category:** Processing
 - **File:** `vaila/interp_smooth_split.py` (+ shared core `vaila/interp_smooth_core.py`)
-- **Version:** 0.3.114
+- **Version:** 0.3.115
 - **Author:** Paulo R. P. Santiago
 - **GUI:** yes | **CLI:** yes
-- **Updated:** 25 August 2026
+- **Updated:** 26 August 2026
 
 ## Description
 
 *vailá* tool for gap filling (interpolation), smoothing/filtering, optional final
-resampling, and optional dataset splitting of CSV time-series used in biomechanics.
+resampling, and optional dataset splitting of CSV **and C3D** time-series used in
+biomechanics.
 
 GUI and CLI call the **same numerical core** (`interp_smooth_core`). The interactive
-preview/tester stays GUI-only.
+preview/tester stays GUI-only (CSV or C3D load for preview).
 
 ### Pipeline
 
 ```text
-CSV → validate → gap handling → smooth/filter at original rate
-    → residual/derivative analysis (GUI) → optional resample → output CSV
+CSV  → validate → gap handling → smooth/filter → optional resample → output CSV
+C3D  → marker CSV (c3d_markers_to_dataframe) → same pipeline → C3D (auto_create_c3d_from_csv)
 ```
+
+C3D write-back preserves POINT labels, RATE, UNITS, occlusion residuals (NaN → negative
+residual), and analog channels when present — same bridge as **Edit CSV/C3D**.
+When Butterworth `fs` is unset for a C3D input, POINT RATE is used.
 
 ### Gap filling
 

@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 06 August 2026
-Update Date: 16 August 2026
-Version: 0.3.106
+Update Date: 26 August 2026
+Version: 0.3.116
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery, complementing
@@ -138,7 +138,7 @@ import numpy as np
 try:
     from .cli_highlight import print_gui_cli_mirror
     from .geometric_reid import bbox_iou_xyxy
-    from .gpu_subprocess import run_isolated_gpu_subprocess
+    from .gpu_subprocess import reexec_self_if_nvrtc_env_missing, run_isolated_gpu_subprocess
     from .monocular_dlt_align import (
         DEFAULT_EXPORT_MESH as DLT_DEFAULT_EXPORT_MESH,
     )
@@ -192,7 +192,10 @@ try:
 except ImportError:  # standalone execution
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from geometric_reid import bbox_iou_xyxy  # ty: ignore[unresolved-import]
-    from gpu_subprocess import run_isolated_gpu_subprocess  # ty: ignore[unresolved-import]
+    from gpu_subprocess import (  # ty: ignore[unresolved-import]
+        reexec_self_if_nvrtc_env_missing,
+        run_isolated_gpu_subprocess,
+    )
     from monocular_dlt_align import (  # ty: ignore[unresolved-import]
         DEFAULT_EXPORT_MESH as DLT_DEFAULT_EXPORT_MESH,
     )
@@ -243,6 +246,11 @@ except ImportError:  # standalone execution
         resolve_sam_results_dir,
         run_sapiens_from_sam,
     )
+
+# Fix a silent-failure environment bug before any torch.compile-triggering
+# call happens (direct CLI run; the GUI subprocess-dispatch path below gets
+# the same fix inside run_isolated_gpu_subprocess itself).
+reexec_self_if_nvrtc_env_missing()
 
 # --------------------------------------------------------------------------- #
 # Sapiens2-guidance constants (this module only; do not confuse with SAM3's

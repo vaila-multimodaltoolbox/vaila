@@ -6,7 +6,7 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/rec3d.py` |
-| **Version** | 0.3.99 |
+| **Version** | 0.3.117 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -90,6 +90,14 @@ Pick the preset matching the tracker that produced your pixel CSVs (without a `-
 Run `rec3d_*_blender_skeleton_viz.py` inside Blender (Text Editor > Run Script) on an empty scene and it will, in order: set the scene rate and frame range, import the BVH, and draw the skeleton bones. It is also safe to run *after* importing the BVH/C3D by hand — it will not duplicate an existing armature and still fixes the scene settings.
 
 **Why the script sets the scene rate itself:** Blender's BVH importer defaults to `update_scene_fps=False` and `update_scene_duration=False`. Importing a 631-frame / 120 Hz capture with File > Import > BVH therefore leaves the scene at **24 fps with `frame_end=250`** — the animation plays in slow motion (26 s instead of 5.3 s) and stops a third of the way through, while an imported C3D (whose importer *does* read `POINT:RATE`) plays correctly. The exported data was never wrong; only the scene settings were. Fractional capture rates are preserved exactly through Blender's `fps`/`fps_base` pair (e.g. 119.88012001 Hz → `fps=120`, `fps_base=1.001`).
+
+### Saving the mesh animation so anyone can open it (v0.3.117)
+
+Once the companion script has run (via the **Animation Blender** button/CLI or manually), the whole scene — BVH skeleton, bone armature *and* the per-frame body mesh — is now made of real Blender data-blocks. A plain **File > Save As** produces a single self-contained `.blend` that plays back correctly in a *fresh* Blender install, on any machine, with no *vailá*, no Python script, and no `meshes_obj/`/`.bvh` folder anywhere near it.
+
+Before v0.3.117, the mesh sequence was swapped frame-by-frame from a Python dict via a live `frame_change_post` handler — fast to build, but neither the dict nor the handler is a Blender data-block, so neither one survives a save/reload; reopening a saved file showed the skeleton fine but the mesh frozen on whatever frame it was saved at. The mesh sequence is now baked into the mesh's own **Shape Keys** instead (one key per frame, keyframed to `value=1` only on its own frame with `CONSTANT` interpolation so frames swap discretely) — the same mechanism Blender uses to save any other shape-keyed animation, so it is exactly as portable as the BVH action already was.
+
+This does make the mesh object itself heavier to build (one shape key per frame, so a 631-frame / ~18k-vertex sequence takes on the order of 30 s to bake and saves to a `.blend` on the order of 100+ MB) — that cost is paid once, at save time, in exchange for the result being shareable as a single file.
 
 ---
 

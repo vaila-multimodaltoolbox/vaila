@@ -1,73 +1,49 @@
 # vailaplot2d
 
-## 📋 Module Information
+## Module Information
 
 - **Category:** Visualization
-- **File:** `vaila\vailaplot2d.py`
-- **Lines:** 1450
-- **Size:** 52560 characters
-- **Version:** 0.0.2
+- **File:** `vaila/vailaplot2d.py`
+- **Version:** 0.3.116
 - **Author:** Prof. Paulo Santiago
-- **GUI Interface:** ✅ Yes
+- **GUI:** yes | **CLI:** limited (helpers headless)
+- **Updated:** 26 August 2026
 
-## 📖 Description
+## Description
 
+*vailá* 2D plotting tool (Frame C → **Plot 2D**). Supports time scatter, angle-angle,
+confidence intervals, boxplot, SPM, XY, and **Joint Angles** for long-format
+`*_joint_angles.csv` exports from REC3D / SAM3D / Sapiens3D.
 
-================================================================================
-vailaplot2d.py
-================================================================================
-Author: Prof. Paulo Santiago
-Created: 23 September 2024
-Updated: 03 June 2025
-Version: 0.0.2
+### Joint Angles
 
-Description:
-------------
-This script provides functionality for generating 2D plots within vailá:Versatile
-Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. It includes
-a graphical user interface (GUI) for selecting and plotting various graph types,
-such as scatter plots, angle-angle plots, and confidence intervals. Additionally,
-the script offers buttons to clear all plots from memory, clear cached data,
-and create new figure windows for refreshed plotting.
+1. Click **Joint Angles**.
+2. Select a `*_joint_angles.csv` (columns: `frame`, `person_id`, `joint_name`,
+   `euler_x_deg`, `euler_y_deg`, `euler_z_deg`, …).
+3. Choose **person_id** and **joint_name** (defaults prefer `left-knee` /
+   `right-knee`). Optional **fs** (Hz): if set, X = `frame / fs` in seconds;
+   otherwise X = frame index.
+4. Plot shows three curves (degrees):
+   - `euler_x_deg` → **Flexion/Extension**
+   - `euler_y_deg` → **Abduction/Adduction**
+   - `euler_z_deg` → **Internal/External Rotation**
 
-Plot Types Supported:
----------------------
-1. Time Scatter Plot: Plots time-series data across multiple headers from selected
-   files.
-2. Angle-Angle Plot: Displays relationships between two angles based on header pairs
-   from the selected files.
-3...
+These legend aliases are display labels for Cardan XYZ columns from the exporter.
+Clinical axis/sign meaning follows `vaila/joint_kinematics.py` and the producing
+pipeline — the plotter does not re-derive rotations.
 
-## 🔧 Main Functions
+Headless helpers (tests / scripts):
 
-**Total functions found:** 20
+```python
+from vaila.vailaplot2d import load_joint_angles_series, plot_joint_angles_time
+import pandas as pd
 
-- `clear_plots`
-- `clear_data`
-- `new_figure`
-- `save_figure`
-- `select_plot_type`
-- `plot_time_scatter`
-- `plot_angle_angle`
-- `plot_confidence_interval`
-- `plot_boxplot`
-- `plot_spm`
-- `select_file`
-- `read_excel_with_sheet_selection`
-- `get_file_headers`
-- `detect_c3d_units`
-- `read_c3d_file`
-- `read_csv_with_encoding`
-- `get_csv_headers`
-- `select_headers_gui`
-- `run_plot_2d`
-- `create_window`
+df = pd.read_csv("…_joint_angles.csv")
+t, series = load_joint_angles_series(df, person_id=8, joint_name="left-knee", fs=100.0)
+plot_joint_angles_time(df, person_id=8, joint_name="left-knee", fs=100.0, show=True)
+```
 
+## Other plot types
 
-
-
----
-
-📅 **Generated automatically on:** 15/10/2025 08:04:44
-🔗 **Part of vailá - Multimodal Toolbox**
-🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+Time Scatter, Angle-Angle, Confidence Interval, Boxplot, SPM, XY Plot — see GUI
+buttons. Clear / New Figure / Save controls manage matplotlib windows.

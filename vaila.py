@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 26 August 2026
-Version: 0.3.115
+Version: 0.3.117
 
 Example of usage:
 uv run vaila.py
@@ -2488,6 +2488,16 @@ class Vaila(tk.Tk):
             )
             self.monocular_dlt_align()
 
+        def use_rec3d_mesh_pipeline():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 3D",
+                "Multi-Camera Mesh Pipeline",
+                "uv run python -u vaila/rec3d_mesh_pipeline.py",
+                note="repeat Sapiens2 3D -> Visualize ID -> DLT3D merge on other files (N cameras)",
+            )
+            self.rec3d_mesh_pipeline_video()
+
         place_section("SAM3+DINOv3 (3D)")
         place_button("SAM3+DINOv3 3D", use_sam3dinov3, width=26)
         place_button("SAM3+DINOv3 Visualize ID", use_sam3dinov3_visualize, width=26)
@@ -2495,6 +2505,8 @@ class Vaila(tk.Tk):
         place_button("Sapiens2 3D Pose", use_sapiens2_3d, width=26)
         place_section("Calibrated world frame (needs .dlt3d)")
         place_button("Monocular -> DLT world", use_monocular_dlt_align, width=26)
+        place_section("Multi-camera pipeline (repeat on other files)")
+        place_button("Multi-Camera Mesh Pipeline", use_rec3d_mesh_pipeline, width=26)
 
     # B_r2_c1
     def vector_coding(self):
@@ -4092,6 +4104,21 @@ class Vaila(tk.Tk):
         run_vaila_module(
             "vaila.monocular_dlt_align",
             "vaila/monocular_dlt_align.py",
+            extra_py_flags=("-u",),
+        )
+
+    def rec3d_mesh_pipeline_video(self):
+        """Repeat the proven Sapiens2 -> Visualize ID -> DLT3D mesh chain on other files."""
+        print("\n" + "=" * 60)
+        print("Launching: vaila.rec3d_mesh_pipeline")
+        print(">> Equivalent launch CLI: uv run python -u vaila/rec3d_mesh_pipeline.py")
+        print("Features: N-camera TOML manifest chains sapiens2_3d.py -> sam3dinov3_visualize.py")
+        print("          -> rec3d_one_dlt3d.py --mesh-source-dir into one Blender-ready mesh.")
+        print("Runtime: GPU per camera (Sapiens2 stage); NVRTC env fix applied automatically.")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.rec3d_mesh_pipeline",
+            "vaila/rec3d_mesh_pipeline.py",
             extra_py_flags=("-u",),
         )
 

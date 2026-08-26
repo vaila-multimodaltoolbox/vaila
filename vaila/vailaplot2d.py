@@ -3,18 +3,17 @@
 vailaplot2d.py
 ================================================================================
 Author: Prof. Paulo Santiago
-Created: 23 September 2024
-Updated: 19 March 2026
-Version: 0.0.3
+Creation Date: 23 September 2024
+Updated: 26 August 2026
+Version: 0.3.116
 
 Description:
 ------------
 This script provides functionality for generating 2D plots within vailá:Versatile
 Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox. It includes
 a graphical user interface (GUI) for selecting and plotting various graph types,
-such as scatter plots, angle-angle plots, and confidence intervals. Additionally,
-the script offers buttons to clear all plots from memory, clear cached data,
-and create new figure windows for refreshed plotting.
+such as scatter plots, angle-angle plots, confidence intervals, and long-format
+joint-angle time series (REC3D / SAM3D ``*_joint_angles.csv``).
 
 Plot Types Supported:
 ---------------------
@@ -29,6 +28,9 @@ Plot Types Supported:
    multiple headers.
 6. XY Plot: Cartesian 2D plot of X vs Y coordinates with equal aspect ratio,
    auto-detects _x/_y column pairs or accepts manual pair selection.
+7. Joint Angles: Long-format ``*_joint_angles.csv`` — pick person_id + joint_name;
+   X = frame (or time in s if fs given); Y = euler_x/y/z_deg with Flex/Ext,
+   Abd/Add, Int/Ext legend aliases (Cardan XYZ from the exporter).
 
 Functionalities:
 ----------------
@@ -66,6 +68,7 @@ from tkinter import (
     Toplevel,
     filedialog,
     messagebox,
+    ttk,
 )
 
 import matplotlib.pyplot as plt
@@ -90,7 +93,7 @@ from rich import print
 
 # Try to import additional libraries for different file formats
 try:
-    import openpyxl  # For Excel files
+    import openpyxl  # noqa: F401 — probe Excel support
 
     EXCEL_SUPPORT = True
 except ImportError:
@@ -100,7 +103,7 @@ except ImportError:
 # Optional ODS support
 ODS_SUPPORT = False
 try:
-    from odf import opendocument  # type: ignore[import]
+    from odf import opendocument  # type: ignore[import]  # noqa: F401 — probe ODS
 
     ODS_SUPPORT = True
 except ImportError:
@@ -125,6 +128,266 @@ current_figures = []  # Keep track of generated matplotlib figures
 base_colors = ["r", "g", "b"]
 additional_colors = list(mcolors.TABLEAU_COLORS.keys())
 predefined_colors = base_colors + additional_colors
+
+# Long-format joint-angle CSV (REC3D / SAM3D / Sapiens3D exporters)
+JOINT_ANGLES_REQUIRED_COLS = (
+    "frame",
+    "person_id",
+    "joint_name",
+    "euler_x_deg",
+    "euler_y_deg",
+    "euler_z_deg",
+)
+JOINT_ANGLES_EULER_COLS = ("euler_x_deg", "euler_y_deg", "euler_z_deg")
+JOINT_ANGLES_LEGEND = {
+    "euler_x_deg": "Flexion/Extension",
+    "euler_y_deg": "Abduction/Adduction",
+    "euler_z_deg": "Internal/External Rotation",
+}
+JOINT_NAME_PREFERENCES = ("left-knee", "right-knee", "left-hip", "right-hip")
+
+
+def is_joint_angles_dataframe(df: pd.DataFrame) -> bool:
+    """True when ``df`` matches the long-format joint-angles schema."""
+    if df is None or df.empty:
+        return False
+    cols = {str(c) for c in df.columns}
+    return all(c in cols for c in JOINT_ANGLES_REQUIRED_COLS)
+
+
+def prefer_joint_name(joint_names: list[str] | tuple[str, ...]) -> str:
+    """Pick a default joint: knees/hips first, else first sorted name."""
+    names = [str(n) for n in joint_names]
+    for pref in JOINT_NAME_PREFERENCES:
+        if pref in names:
+            return pref
+    if not names:
+        raise ValueError("No joint_name values available")
+    return sorted(names)[0]
+
+
+def load_joint_angles_series(
+    df: pd.DataFrame,
+    *,
+    person_id,
+    joint_name: str,
+    fs: float | None = None,
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Filter long-format joint-angles table to one person + joint.
+
+    Returns
+    -------
+    t : ndarray
+        X axis — ``frame`` values, or ``frame / fs`` seconds when ``fs > 0``.
+    series : dict
+        Keys ``euler_x_deg``, ``euler_y_deg``, ``euler_z_deg`` (degrees).
+        NaNs are preserved (matplotlib draws gaps).
+    """
+    if not is_joint_angles_dataframe(df):
+        missing = [c for c in JOINT_ANGLES_REQUIRED_COLS if c not in df.columns]
+        raise ValueError(
+            "Not a joint-angles CSV (need frame, person_id, joint_name, "
+            f"euler_x/y/z_deg). Missing: {missing}"
+        )
+
+    person_id_num = pd.to_numeric(person_id, errors="coerce")
+    mask = (df["person_id"] == person_id) | (
+        pd.to_numeric(df["person_id"], errors="coerce") == person_id_num
+    )
+    mask = mask & (df["joint_name"].astype(str) == str(joint_name))
+    sub = df.loc[mask].copy()
+    if sub.empty:
+        raise ValueError(
+            f"No rows for person_id={person_id!r} joint_name={joint_name!r}. "
+            f"Available persons: {sorted(df['person_id'].dropna().unique().tolist())}; "
+            f"joints sample: {sorted(df['joint_name'].astype(str).unique().tolist())[:12]}"
+        )
+
+    sub = sub.sort_values("frame")
+    frames = pd.to_numeric(sub["frame"], errors="coerce").to_numpy(dtype=float)
+    t = frames / float(fs) if fs is not None and float(fs) > 0 else frames
+
+    series = {
+        col: pd.to_numeric(sub[col], errors="coerce").to_numpy(dtype=float)
+        for col in JOINT_ANGLES_EULER_COLS
+    }
+    return t, series
+
+
+def plot_joint_angles_time(
+    df: pd.DataFrame,
+    *,
+    person_id,
+    joint_name: str,
+    fs: float | None = None,
+    ax=None,
+    show: bool = False,
+):
+    """Plot Flex/Ext, Abd/Add, Int/Ext vs time for one joint (headless-safe).
+
+    Legend aliases map to Cardan XYZ columns from the exporter; clinical axis
+    meaning is owned by ``joint_kinematics`` / the producing pipeline.
+    """
+    t, series = load_joint_angles_series(df, person_id=person_id, joint_name=joint_name, fs=fs)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        current_figures.append(fig)
+    else:
+        fig = ax.figure
+
+    for col in JOINT_ANGLES_EULER_COLS:
+        ax.plot(t, series[col], label=JOINT_ANGLES_LEGEND[col], linewidth=1.5)
+
+    xlabel = "Time (s)" if (fs is not None and float(fs) > 0) else "Frame"
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Angle (deg)")
+    ax.set_title(f"Joint angles — {joint_name} (person_id={person_id})")
+    ax.legend(loc="best")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    if show:
+        plt.show()
+    return fig, ax, t, series
+
+
+def ask_joint_angles_params(df: pd.DataFrame, parent=None) -> dict | None:
+    """Modal dialog: person_id, joint_name, optional sample rate fs (Hz)."""
+    if not is_joint_angles_dataframe(df):
+        messagebox.showerror(
+            "Joint Angles",
+            "Selected file is not a long-format joint_angles CSV "
+            "(need frame, person_id, joint_name, euler_x/y/z_deg).",
+            parent=parent,
+        )
+        return None
+
+    persons = sorted(df["person_id"].dropna().unique().tolist(), key=lambda x: (str(type(x)), x))
+    joints = sorted(df["joint_name"].astype(str).unique().tolist())
+    if not persons or not joints:
+        messagebox.showerror(
+            "Joint Angles", "No person_id / joint_name values found.", parent=parent
+        )
+        return None
+
+    default_joint = prefer_joint_name(joints)
+    result: dict | None = None
+
+    win = Toplevel(parent) if parent is not None else Tk()
+    win.title("Joint Angles — select person & joint")
+    win.geometry("420x220")
+    if parent is not None:
+        win.transient(parent)
+        win.grab_set()
+
+    frm = Frame(win, padx=16, pady=16)
+    frm.pack(fill="both", expand=True)
+
+    Label(frm, text="person_id:").grid(row=0, column=0, sticky="w", pady=6)
+    person_var = StringVar(value=str(persons[0]))
+    person_cb = ttk.Combobox(
+        frm, textvariable=person_var, values=[str(p) for p in persons], state="readonly", width=28
+    )
+    person_cb.grid(row=0, column=1, sticky="ew", pady=6)
+
+    Label(frm, text="joint_name:").grid(row=1, column=0, sticky="w", pady=6)
+    joint_var = StringVar(value=default_joint)
+    joint_cb = ttk.Combobox(frm, textvariable=joint_var, values=joints, state="readonly", width=28)
+    joint_cb.grid(row=1, column=1, sticky="ew", pady=6)
+
+    Label(frm, text="fs (Hz, empty=frame):").grid(row=2, column=0, sticky="w", pady=6)
+    fs_var = StringVar(value="")
+    ttk.Entry(frm, textvariable=fs_var, width=30).grid(row=2, column=1, sticky="ew", pady=6)
+
+    Label(
+        frm,
+        text="Y: euler_x/y/z → Flex/Ext, Abd/Add, Int/Ext (deg)",
+        font=("Arial", 8),
+        fg="#444",
+    ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+    def _ok():
+        nonlocal result
+        fs_raw = fs_var.get().strip()
+        fs_val = None
+        if fs_raw:
+            try:
+                fs_val = float(fs_raw)
+                if fs_val <= 0:
+                    raise ValueError("fs must be > 0")
+            except ValueError as e:
+                messagebox.showerror("Joint Angles", f"Invalid fs: {e}", parent=win)
+                return
+        # Map combobox string back to original person_id type when possible
+        person_str = person_var.get()
+        person_sel = persons[0]
+        for p in persons:
+            if str(p) == person_str:
+                person_sel = p
+                break
+        result = {
+            "person_id": person_sel,
+            "joint_name": joint_var.get(),
+            "fs": fs_val,
+        }
+        win.destroy()
+
+    def _cancel():
+        nonlocal result
+        result = None
+        win.destroy()
+
+    btn_row = Frame(frm)
+    btn_row.grid(row=4, column=0, columnspan=2, pady=16)
+    Button(btn_row, text="Plot", command=_ok, width=12).pack(side="left", padx=6)
+    Button(btn_row, text="Cancel", command=_cancel, width=12).pack(side="left", padx=6)
+
+    frm.columnconfigure(1, weight=1)
+    win.protocol("WM_DELETE_WINDOW", _cancel)
+    if parent is not None:
+        parent.wait_window(win)
+    else:
+        win.mainloop()
+    return result
+
+
+def run_joint_angles_plot_for_files(file_paths: list[str], parent=None) -> int:
+    """Load each CSV, ask params once (first file), plot all matching files."""
+    if not file_paths:
+        return 0
+    first = file_paths[0]
+    df0 = loaded_data_cache.get(first)
+    if df0 is None:
+        df0 = read_csv_with_encoding(first, skipfooter=0)
+        loaded_data_cache[first] = df0
+    params = ask_joint_angles_params(df0, parent=parent)
+    if not params:
+        return 0
+
+    n_ok = 0
+    for path in file_paths:
+        df = loaded_data_cache.get(path)
+        if df is None:
+            df = read_csv_with_encoding(path, skipfooter=0)
+            loaded_data_cache[path] = df
+        try:
+            new_figure()
+            plot_joint_angles_time(
+                df,
+                person_id=params["person_id"],
+                joint_name=params["joint_name"],
+                fs=params.get("fs"),
+                show=False,
+            )
+            n_ok += 1
+        except Exception as e:
+            messagebox.showerror(
+                "Joint Angles",
+                f"{os.path.basename(path)}: {e}",
+                parent=parent,
+            )
+    if n_ok:
+        plt.show(block=False)
+    return n_ok
 
 
 # Function to clear all plots from memory
@@ -291,6 +554,21 @@ class PlotGUI:
         )
         btn_xy.grid(row=1, column=2, padx=8, pady=8, sticky="ew")
         self.plot_buttons.append(btn_xy)
+
+        # Row 3 — joint-angle long CSV
+        btn_ja = Button(
+            plot_type_frame,
+            text="Joint Angles",
+            command=lambda: self._set_plot_type("joint_angles_time"),
+            width=20,
+            height=2,
+            font=("Arial", 10),
+        )
+        btn_ja.grid(row=2, column=0, padx=8, pady=8, sticky="ew")
+        self.plot_buttons.append(btn_ja)
+
+        for col in range(3):
+            plot_type_frame.grid_columnconfigure(col, weight=1)
 
         # Control buttons frame
         control_frame = LabelFrame(main_frame, text="Plot Controls", padx=15, pady=15)
@@ -553,10 +831,30 @@ class FileSelectionWindow:
                 messagebox.showerror("Error", f"No headers found in {os.path.basename(file_path)}")
                 return
 
-            selected = select_headers_gui(headers, file_path)
-            if selected:
-                self.selected_headers.extend(selected)
-                print(f"[DEBUG] Headers selected from GUI: {selected}")
+            if self.plot_type == "joint_angles_time":
+                df = loaded_data_cache.get(file_path)
+                if not is_joint_angles_dataframe(df):
+                    messagebox.showerror(
+                        "Joint Angles",
+                        f"{os.path.basename(file_path)} is not a long-format "
+                        "joint_angles CSV (need frame, person_id, joint_name, "
+                        "euler_x/y/z_deg).",
+                    )
+                    self.selected_files.remove(file_path)
+                    loaded_data_cache.pop(file_path, None)
+                    return
+                # Skip column picker — person/joint chosen at Plot time
+                self.selected_headers = list(JOINT_ANGLES_EULER_COLS)
+                print(
+                    f"[DEBUG] Joint-angles schema OK: "
+                    f"{df['joint_name'].nunique()} joints, "
+                    f"{df['person_id'].nunique()} persons"
+                )
+            else:
+                selected = select_headers_gui(headers, file_path)
+                if selected:
+                    self.selected_headers.extend(selected)
+                    print(f"[DEBUG] Headers selected from GUI: {selected}")
 
             # Update status
             self.file_count_label.config(text=f"Files selected: {len(self.selected_files)}")
@@ -572,7 +870,10 @@ class FileSelectionWindow:
 
     def on_plot(self):
         """Handler for plotting the selected data"""
-        if not self.selected_files or not self.selected_headers:
+        if not self.selected_files:
+            messagebox.showwarning("Warning", "Please select at least one file.")
+            return
+        if self.plot_type != "joint_angles_time" and not self.selected_headers:
             messagebox.showwarning("Warning", "Please select at least one file and header.")
             return
 
@@ -585,21 +886,26 @@ class FileSelectionWindow:
         print(f"Files: {[os.path.basename(f) for f in selected_files]}")
         print(f"Headers: {selected_headers}")
 
-        # Create a new figure for the plot
-        new_figure()
+        if self.plot_type == "joint_angles_time":
+            n = run_joint_angles_plot_for_files(selected_files, parent=self.window)
+            if n == 0:
+                return
+        else:
+            # Create a new figure for the plot
+            new_figure()
 
-        if self.plot_type == "time_scatter":
-            plot_time_scatter()
-        elif self.plot_type == "angle_angle":
-            plot_angle_angle()
-        elif self.plot_type == "confidence_interval":
-            plot_confidence_interval()
-        elif self.plot_type == "boxplot":
-            plot_boxplot()
-        elif self.plot_type == "spm":
-            plot_spm()
-        elif self.plot_type == "xy_plot":
-            plot_xy()
+            if self.plot_type == "time_scatter":
+                plot_time_scatter()
+            elif self.plot_type == "angle_angle":
+                plot_angle_angle()
+            elif self.plot_type == "confidence_interval":
+                plot_confidence_interval()
+            elif self.plot_type == "boxplot":
+                plot_boxplot()
+            elif self.plot_type == "spm":
+                plot_spm()
+            elif self.plot_type == "xy_plot":
+                plot_xy()
 
         # Update parent status
         if hasattr(self.parent, "status_var"):
@@ -741,7 +1047,7 @@ def plot_time_scatter():
                     first_file_data = read_c3d_file(selected_files[0])
                 else:
                     first_file_data = None
-            except:
+            except Exception:
                 first_file_data = None
 
         if first_file_data is not None and len(first_file_data.columns) > 0:
@@ -888,7 +1194,9 @@ def plot_confidence_interval():
 
             for i in range(n_bootstrap):
                 # Randomly sample columns with replacement
-                sampled_cols = np.random.choice(headers, size=len(headers), replace=True)
+                sampled_cols = np.random.choice(  # noqa: NPY002
+                    headers, size=len(headers), replace=True
+                )
                 bootstrap_medians[:, i] = data[sampled_cols].median(axis=1)
 
             # Calculate 95% confidence interval

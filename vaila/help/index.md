@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 153 | **Categories:** 7 | **Generated on:** 26/08/2026 (v0.3.115)
+**Documented topics:** 154 | **Categories:** 7 | **Generated on:** 26/08/2026 (v0.3.117)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -112,7 +112,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **yolov26track** — This script performs object detection and tracking on video files using the YOLO model v26 (latest version), with integrated pose estimation capabilities. It...
   - [HTML](yolov26track.html) · [Markdown](yolov26track.md)
 
-## Processing (21)
+## Processing (22)
 
 - **data_processing** — Determines the number of header lines in a CSV file.
   - [HTML](data_processing.html) · [Markdown](data_processing.md)
@@ -152,6 +152,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](rec2d_one_dlt2d.html) · [Markdown](rec2d_one_dlt2d.md)
 - **rec3d** — Batch 3D reconstruction using the Direct Linear Transformation (DLT) method with multiple cameras and DLT3D parameters that vary per frame — a DLT "matrix" (...
   - [HTML](rec3d.html) · [Markdown](rec3d.md)
+- **rec3d_mesh_pipeline** — What problem this solves
+  - [HTML](rec3d_mesh_pipeline.html) · [Markdown](rec3d_mesh_pipeline.md)
 - **rec3d_one_dlt3d** — Batch 3D reconstruction using the Direct Linear Transformation (DLT) method with multiple cameras and one fixed set of DLT3D parameters per camera (the whole...
   - [HTML](rec3d_one_dlt3d.html) · [Markdown](rec3d_one_dlt3d.md)
 - **reid_markers** — Marker Re-identification Tool - reid_markers.py
@@ -317,7 +319,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](plotting.html) · [Markdown](plotting.md)
 - **showc3d** — This script visualizes marker data from a C3D file using Matplotlib. Marker positions are converted from millimeters to meters. The user is prompted to selec...
   - [HTML](showc3d.html) · [Markdown](showc3d.md)
-- **vailaplot2d** — This script provides functionality for generating 2D plots within vailá:Versatile
+- **vailaplot2d** — vailá 2D plotting tool (Frame C → Plot 2D). Supports time scatter, angle-angle,
   - [HTML](vailaplot2d.html) · [Markdown](vailaplot2d.md)
 - **vailaplot3d** — 🔗 Part of vailá - Multimodal Toolbox
   - [HTML](vailaplot3d.html) · [Markdown](vailaplot3d.md)
