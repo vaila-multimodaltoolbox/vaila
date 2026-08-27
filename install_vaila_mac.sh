@@ -22,8 +22,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                            #
-# Update: 26 August 2026
-# Version: 0.3.115
+# Update: 27 August 2026
+# Version: 0.3.117
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -39,6 +39,322 @@ echo ""
 
 # Define paths
 USER_HOME="$HOME"
+
+# ============================================================================
+# APP BUNDLE (function) — defined early so it can be exercised in isolation
+# by loops/dmg-installer-macos-path-loop.md via VAILA_TEST_APP_BUNDLE_ONLY=1,
+# without running uv sync / Python install / SAM/FIFA prompts first.
+# Called for real near the end of the normal install flow (see "create_app_bundle"
+# call site after dependency setup).
+# ============================================================================
+
+create_app_bundle() {
+    APP_NAME="vaila"
+    APP_DIR="$USER_HOME/Applications/$APP_NAME.app"
+    mkdir -p "$USER_HOME/Applications"
+
+    echo "Creating macOS Application Bundle at $APP_DIR..."
+
+    mkdir -p "$APP_DIR/Contents/MacOS"
+    mkdir -p "$APP_DIR/Contents/Resources"
+
+    cat <<EOF > "$APP_DIR/Contents/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>vaila</string>
+    <key>CFBundleIconFile</key>
+    <string>vaila.icns</string>
+    <key>CFBundleIconName</key>
+    <string>vaila</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.vaila.toolbox</string>
+    <key>CFBundleName</key>
+    <string>vaila</string>
+    <key>CFBundleDisplayName</key>
+    <string>vaila</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.3.51</string>
+    <key>CFBundleVersion</key>
+    <string>0.3.51</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.13</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>Terminal</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+    if [ -z "$RUN_SCRIPT" ]; then
+        RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
+    fi
+
+    cat <<EOF > "$APP_DIR/Contents/MacOS/vaila"
+#!/bin/bash
+# Open Terminal by bundle ID (works in any system language: English, Portuguese, etc.)
+open -b com.apple.Terminal "$RUN_SCRIPT"
+EOF
+
+    chmod +x "$APP_DIR/Contents/MacOS/vaila"
+
+    # Handle icon
+    ICON_CREATED=false
+    ICON_SRC=""
+
+    for icon_path in "$PROJECT_DIR/docs/images/vaila.icns" "$VAILA_HOME/docs/images/vaila.icns" "$PROJECT_DIR/vaila/images/vaila.icns" "$VAILA_HOME/vaila/images/vaila.icns"; do
+        if [ -f "$icon_path" ]; then
+            ICON_SRC="$icon_path"
+            echo "Found icon at: $ICON_SRC"
+            break
+        fi
+    done
+
+    if [ -z "$ICON_SRC" ]; then
+        ICONSET_DIR=""
+        for iconset_path in "$VAILA_HOME/docs/images/vaila.iconset" "$PROJECT_DIR/docs/images/vaila.iconset" "$VAILA_HOME/vaila/images/vaila.iconset" "$PROJECT_DIR/vaila/images/vaila.iconset"; do
+            if [ -d "$iconset_path" ]; then
+                ICONSET_DIR="$iconset_path"
+                break
+            fi
+        done
+
+        if [ -n "$ICONSET_DIR" ]; then
+            echo "Found iconset directory at $ICONSET_DIR"
+            echo "Converting iconset to .icns format using iconutil..."
+
+            TEMP_ICNS="/tmp/vaila.icns"
+            if command -v iconutil &> /dev/null; then
+                if iconutil -c icns "$ICONSET_DIR" -o "$TEMP_ICNS" 2>/dev/null; then
+                    ICON_SRC="$TEMP_ICNS"
+                    ICON_CREATED=true
+                    echo "Icon converted successfully from iconset using iconutil."
+                fi
+            fi
+        fi
+    fi
+
+    if [ -z "$ICON_SRC" ]; then
+        PNG_SRC=""
+        for png_path in "$VAILA_HOME/docs/images/vaila_logo.png" "$PROJECT_DIR/docs/images/vaila_logo.png" \
+                     "$VAILA_HOME/docs/images/vaila_ico.png" "$PROJECT_DIR/docs/images/vaila_ico.png" \
+                     "$VAILA_HOME/vaila/images/vaila_logo.png" "$PROJECT_DIR/vaila/images/vaila_logo.png" \
+                     "$VAILA_HOME/vaila/images/vaila_ico_mac.png" "$PROJECT_DIR/vaila/images/vaila_ico_mac.png"; do
+            if [ -f "$png_path" ]; then
+                PNG_SRC="$png_path"
+                break
+            fi
+        done
+
+        if [ -n "$PNG_SRC" ]; then
+            echo "Found PNG image at $PNG_SRC"
+            echo "Creating .icns from PNG using Pillow..."
+
+            TEMP_ICNS="/tmp/vaila.icns"
+
+            cat > /tmp/create_icns.py << 'PYTHON_SCRIPT'
+import sys
+from PIL import Image
+
+def create_icns_from_png(png_path, icns_path):
+    try:
+        img = Image.open(png_path)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            rgb_img.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
+            img = rgb_img
+        img.save(icns_path, format='ICNS')
+        return True
+    except Exception as e:
+        print(f"Error creating ICNS: {e}", file=sys.stderr)
+        return False
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        sys.exit(1)
+    png_path = sys.argv[1]
+    icns_path = sys.argv[2]
+    success = create_icns_from_png(png_path, icns_path)
+    sys.exit(0 if success else 1)
+PYTHON_SCRIPT
+
+            # Use venv Python directly (avoids uv run resolution issues on macOS)
+            if [ -f ".venv/bin/python" ]; then
+                if .venv/bin/python /tmp/create_icns.py "$PNG_SRC" "$TEMP_ICNS" 2>/dev/null; then
+                    if [ -f "$TEMP_ICNS" ]; then
+                        ICON_SRC="$TEMP_ICNS"
+                        ICON_CREATED=true
+                        echo "Icon created successfully from PNG using Pillow."
+                    fi
+                fi
+            elif uv run python /tmp/create_icns.py "$PNG_SRC" "$TEMP_ICNS" 2>/dev/null; then
+                if [ -f "$TEMP_ICNS" ]; then
+                    ICON_SRC="$TEMP_ICNS"
+                    ICON_CREATED=true
+                    echo "Icon created successfully from PNG using Pillow."
+                fi
+            fi
+
+            rm -f /tmp/create_icns.py
+        fi
+    fi
+
+    if [ -n "$ICON_SRC" ]; then
+        echo "Copying icon to application bundle..."
+        cp "$ICON_SRC" "$APP_DIR/Contents/Resources/vaila.icns"
+        echo "Icon copied successfully."
+
+        if [ "$ICON_CREATED" = true ] && [ "$ICON_SRC" = "/tmp/vaila.icns" ]; then
+            rm -f "$TEMP_ICNS"
+        fi
+
+        touch "$APP_DIR"
+        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
+        command -v mdimport &> /dev/null && mdimport "$APP_DIR" 2>/dev/null || true
+        if [[ "${VAILA_TEST_APP_BUNDLE_ONLY:-0}" != "1" ]]; then
+            killall Finder 2>/dev/null || true
+        fi
+    else
+        echo "Warning: Icon file (vaila.icns or vaila.iconset) not found. Application will use default icon."
+    fi
+
+    echo "Application Bundle created at $APP_DIR."
+
+    # Apply icon using Python script (AppKit). Needs a real venv/uv — skipped
+    # under the loop's sandboxed check (VAILA_HOME there has no venv, and this
+    # step doesn't affect the path/registration assertions being checked).
+    if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ] && [[ "${VAILA_TEST_APP_BUNDLE_ONLY:-0}" != "1" ]]; then
+        echo ""
+        echo "Setting application icon..."
+        cd "$VAILA_HOME"
+        if [ -f "$PROJECT_DIR/set_mac_icon.py" ]; then
+            if [ -f ".venv/bin/python" ]; then
+                if .venv/bin/python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
+                    echo "Icon applied successfully to App Bundle."
+                fi
+                if .venv/bin/python "$PROJECT_DIR/set_mac_icon.py" "$VAILA_HOME" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
+                    echo "Icon applied successfully to installation directory."
+                fi
+            else
+                if uv run python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
+                    echo "Icon applied successfully to App Bundle."
+                fi
+                if uv run python "$PROJECT_DIR/set_mac_icon.py" "$VAILA_HOME" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
+                    echo "Icon applied successfully to installation directory."
+                fi
+            fi
+        fi
+
+        touch "$APP_DIR"
+        touch "$VAILA_HOME"
+    fi
+
+    # ------------------------------------------------------------------
+    # App shortcut path choice: local-only (~/Applications, default, no
+    # admin password) or also system-wide (/Applications, requires sudo).
+    # VAILA_INSTALL_PATH_CHOICE=local|applications skips the prompt (used by
+    # --non-interactive and by the loop's sandboxed check). SYSTEM_APPLICATIONS_DIR
+    # is overridable via VAILA_TEST_APPLICATIONS_DIR so the check never touches
+    # the real /Applications or invokes real sudo.
+    # ------------------------------------------------------------------
+    SYSTEM_APPLICATIONS_DIR="${VAILA_TEST_APPLICATIONS_DIR:-/Applications}"
+    SYSTEM_APP_LINK="$SYSTEM_APPLICATIONS_DIR/vaila.app"
+
+    INSTALL_PATH_CHOICE="${VAILA_INSTALL_PATH_CHOICE:-}"
+    if [ -z "$INSTALL_PATH_CHOICE" ]; then
+        if [ -t 0 ]; then
+            echo ""
+            echo "---------------------------------------------"
+            echo "App Shortcut Location"
+            echo "  [1] Local only (~/Applications) - Recommended, no admin password"
+            echo "  [2] System-wide (/Applications) - all users, requires admin password (sudo)"
+            echo "---------------------------------------------"
+            printf "Choose an option [1-2] (default: 1): "
+            read -r APP_PATH_OPTION
+            APP_PATH_OPTION=${APP_PATH_OPTION:-1}
+            if [[ "$APP_PATH_OPTION" == "2" ]]; then
+                INSTALL_PATH_CHOICE="applications"
+            else
+                INSTALL_PATH_CHOICE="local"
+            fi
+        else
+            INSTALL_PATH_CHOICE="local"
+        fi
+    fi
+
+    if [[ "$INSTALL_PATH_CHOICE" == "applications" ]]; then
+        echo ""
+        echo "Creating symbolic link in $SYSTEM_APPLICATIONS_DIR..."
+        # Skip sudo when the target has been redirected away from the real
+        # /Applications (loop sandbox owns that temp dir already).
+        if [[ -n "${VAILA_TEST_APPLICATIONS_DIR:-}" ]]; then
+            SUDO_CMD=""
+        else
+            SUDO_CMD="sudo"
+        fi
+        mkdir -p "$SYSTEM_APPLICATIONS_DIR" 2>/dev/null || true
+
+        if [ -e "$SYSTEM_APP_LINK" ]; then
+            echo "Removing existing symlink in $SYSTEM_APPLICATIONS_DIR..."
+            $SUDO_CMD rm -rf "$SYSTEM_APP_LINK"
+        fi
+
+        echo "Creating symlink from $SYSTEM_APP_LINK to $APP_DIR..."
+        $SUDO_CMD ln -s "$APP_DIR" "$SYSTEM_APP_LINK"
+
+        if [ -L "$SYSTEM_APP_LINK" ]; then
+            if [[ -n "$SUDO_CMD" ]]; then
+                $SUDO_CMD chown -h "${USER}:admin" "$SYSTEM_APP_LINK"
+            fi
+            echo "Symlink created successfully in $SYSTEM_APPLICATIONS_DIR."
+
+            /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$SYSTEM_APP_LINK" 2>/dev/null || true
+            command -v mdimport &> /dev/null && mdimport "$SYSTEM_APP_LINK" 2>/dev/null || true
+            touch "$SYSTEM_APP_LINK" 2>/dev/null || true
+        else
+            echo "Warning: Failed to create symlink in $SYSTEM_APPLICATIONS_DIR."
+        fi
+    else
+        echo ""
+        echo "Local-only install: skipping $SYSTEM_APPLICATIONS_DIR symlink (no admin password needed)."
+        echo "vaila.app is available at $APP_DIR (Launchpad, Spotlight)."
+    fi
+
+    # Rebuild Launch Services database and refresh Finder/Dock icon cache.
+    # Skipped under the loop's sandboxed check — these affect the real,
+    # system-wide LaunchServices domains regardless of APP_DIR being sandboxed.
+    if [[ "${VAILA_TEST_APP_BUNDLE_ONLY:-0}" != "1" ]]; then
+        echo ""
+        echo "Rebuilding Launch Services cache..."
+        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user 2>/dev/null || true
+
+        echo "Restarting Finder and Dock..."
+        killall Finder 2>/dev/null || true
+        killall Dock 2>/dev/null || true
+
+        echo ""
+        echo "Icon cache refreshed. The vaila logo should appear correctly now."
+    fi
+}
+
+# Loop-only test harness hook: run create_app_bundle in isolation (no uv
+# sync / Python install / SAM/FIFA prompts). Requires VAILA_HOME, PROJECT_DIR
+# pre-set via env; RUN_SCRIPT defaults to $VAILA_HOME/run_vaila.sh.
+if [[ "${VAILA_TEST_APP_BUNDLE_ONLY:-0}" == "1" ]]; then
+    echo "[test-harness] VAILA_TEST_APP_BUNDLE_ONLY=1 — running create_app_bundle only."
+    : "${VAILA_HOME:?VAILA_HOME must be set for VAILA_TEST_APP_BUNDLE_ONLY}"
+    : "${PROJECT_DIR:?PROJECT_DIR must be set for VAILA_TEST_APP_BUNDLE_ONLY}"
+    : "${RUN_SCRIPT:=$VAILA_HOME/run_vaila.sh}"
+    create_app_bundle
+    exit 0
+fi
 
 # ============================================================================
 # INSTALL LOCATION
@@ -525,244 +841,12 @@ fi
 
 # ============================================================================
 # APP BUNDLE
+# (function definition lives near the top of this file — see
+#  "APP BUNDLE (function)" section right after INSTALL LOCATION — so the
+#  loop check in loops/dmg-installer-macos-path-loop.md can call it in
+#  isolation via VAILA_TEST_APP_BUNDLE_ONLY=1, without uv sync / Python
+#  install / SAM/FIFA prompts running first.)
 # ============================================================================
-
-create_app_bundle() {
-    APP_NAME="vaila"
-    APP_DIR="$USER_HOME/Applications/$APP_NAME.app"
-    mkdir -p "$USER_HOME/Applications"
-
-    echo "Creating macOS Application Bundle at $APP_DIR..."
-
-    mkdir -p "$APP_DIR/Contents/MacOS"
-    mkdir -p "$APP_DIR/Contents/Resources"
-
-    cat <<EOF > "$APP_DIR/Contents/Info.plist"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>vaila</string>
-    <key>CFBundleIconFile</key>
-    <string>vaila.icns</string>
-    <key>CFBundleIconName</key>
-    <string>vaila</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.vaila.toolbox</string>
-    <key>CFBundleName</key>
-    <string>vaila</string>
-    <key>CFBundleDisplayName</key>
-    <string>vaila</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.3.51</string>
-    <key>CFBundleVersion</key>
-    <string>0.3.51</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>10.13</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.utilities</string>
-    <key>Terminal</key>
-    <true/>
-</dict>
-</plist>
-EOF
-
-    if [ -z "$RUN_SCRIPT" ]; then
-        RUN_SCRIPT="$VAILA_HOME/run_vaila.sh"
-    fi
-
-    cat <<EOF > "$APP_DIR/Contents/MacOS/vaila"
-#!/bin/bash
-# Open Terminal by bundle ID (works in any system language: English, Portuguese, etc.)
-open -b com.apple.Terminal "$RUN_SCRIPT"
-EOF
-
-    chmod +x "$APP_DIR/Contents/MacOS/vaila"
-
-    # Handle icon
-    ICON_CREATED=false
-    ICON_SRC=""
-
-    for icon_path in "$PROJECT_DIR/docs/images/vaila.icns" "$VAILA_HOME/docs/images/vaila.icns" "$PROJECT_DIR/vaila/images/vaila.icns" "$VAILA_HOME/vaila/images/vaila.icns"; do
-        if [ -f "$icon_path" ]; then
-            ICON_SRC="$icon_path"
-            echo "Found icon at: $ICON_SRC"
-            break
-        fi
-    done
-
-    if [ -z "$ICON_SRC" ]; then
-        ICONSET_DIR=""
-        for iconset_path in "$VAILA_HOME/docs/images/vaila.iconset" "$PROJECT_DIR/docs/images/vaila.iconset" "$VAILA_HOME/vaila/images/vaila.iconset" "$PROJECT_DIR/vaila/images/vaila.iconset"; do
-            if [ -d "$iconset_path" ]; then
-                ICONSET_DIR="$iconset_path"
-                break
-            fi
-        done
-
-        if [ -n "$ICONSET_DIR" ]; then
-            echo "Found iconset directory at $ICONSET_DIR"
-            echo "Converting iconset to .icns format using iconutil..."
-
-            TEMP_ICNS="/tmp/vaila.icns"
-            if command -v iconutil &> /dev/null; then
-                if iconutil -c icns "$ICONSET_DIR" -o "$TEMP_ICNS" 2>/dev/null; then
-                    ICON_SRC="$TEMP_ICNS"
-                    ICON_CREATED=true
-                    echo "Icon converted successfully from iconset using iconutil."
-                fi
-            fi
-        fi
-    fi
-
-    if [ -z "$ICON_SRC" ]; then
-        PNG_SRC=""
-        for png_path in "$VAILA_HOME/docs/images/vaila_logo.png" "$PROJECT_DIR/docs/images/vaila_logo.png" \
-                     "$VAILA_HOME/docs/images/vaila_ico.png" "$PROJECT_DIR/docs/images/vaila_ico.png" \
-                     "$VAILA_HOME/vaila/images/vaila_logo.png" "$PROJECT_DIR/vaila/images/vaila_logo.png" \
-                     "$VAILA_HOME/vaila/images/vaila_ico_mac.png" "$PROJECT_DIR/vaila/images/vaila_ico_mac.png"; do
-            if [ -f "$png_path" ]; then
-                PNG_SRC="$png_path"
-                break
-            fi
-        done
-
-        if [ -n "$PNG_SRC" ]; then
-            echo "Found PNG image at $PNG_SRC"
-            echo "Creating .icns from PNG using Pillow..."
-
-            TEMP_ICNS="/tmp/vaila.icns"
-
-            cat > /tmp/create_icns.py << 'PYTHON_SCRIPT'
-import sys
-from PIL import Image
-
-def create_icns_from_png(png_path, icns_path):
-    try:
-        img = Image.open(png_path)
-        if img.mode in ('RGBA', 'LA', 'P'):
-            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            rgb_img.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
-            img = rgb_img
-        img.save(icns_path, format='ICNS')
-        return True
-    except Exception as e:
-        print(f"Error creating ICNS: {e}", file=sys.stderr)
-        return False
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        sys.exit(1)
-    png_path = sys.argv[1]
-    icns_path = sys.argv[2]
-    success = create_icns_from_png(png_path, icns_path)
-    sys.exit(0 if success else 1)
-PYTHON_SCRIPT
-
-            # Use venv Python directly (avoids uv run resolution issues on macOS)
-            if [ -f ".venv/bin/python" ]; then
-                if .venv/bin/python /tmp/create_icns.py "$PNG_SRC" "$TEMP_ICNS" 2>/dev/null; then
-                    if [ -f "$TEMP_ICNS" ]; then
-                        ICON_SRC="$TEMP_ICNS"
-                        ICON_CREATED=true
-                        echo "Icon created successfully from PNG using Pillow."
-                    fi
-                fi
-            elif uv run python /tmp/create_icns.py "$PNG_SRC" "$TEMP_ICNS" 2>/dev/null; then
-                if [ -f "$TEMP_ICNS" ]; then
-                    ICON_SRC="$TEMP_ICNS"
-                    ICON_CREATED=true
-                    echo "Icon created successfully from PNG using Pillow."
-                fi
-            fi
-
-            rm -f /tmp/create_icns.py
-        fi
-    fi
-
-    if [ -n "$ICON_SRC" ]; then
-        echo "Copying icon to application bundle..."
-        cp "$ICON_SRC" "$APP_DIR/Contents/Resources/vaila.icns"
-        echo "Icon copied successfully."
-
-        if [ "$ICON_CREATED" = true ] && [ "$ICON_SRC" = "/tmp/vaila.icns" ]; then
-            rm -f "$TEMP_ICNS"
-        fi
-
-        touch "$APP_DIR"
-        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR" 2>/dev/null || true
-        killall Finder 2>/dev/null || true
-    else
-        echo "Warning: Icon file (vaila.icns or vaila.iconset) not found. Application will use default icon."
-    fi
-
-    echo "Application Bundle created at $APP_DIR."
-
-    # Apply icon using Python script (AppKit)
-    if [ -f "$APP_DIR/Contents/Resources/vaila.icns" ]; then
-        echo ""
-        echo "Setting application icon..."
-        cd "$VAILA_HOME"
-        if [ -f "$PROJECT_DIR/set_mac_icon.py" ]; then
-            if [ -f ".venv/bin/python" ]; then
-                if .venv/bin/python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
-                    echo "Icon applied successfully to App Bundle."
-                fi
-                if .venv/bin/python "$PROJECT_DIR/set_mac_icon.py" "$VAILA_HOME" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
-                    echo "Icon applied successfully to installation directory."
-                fi
-            else
-                if uv run python "$PROJECT_DIR/set_mac_icon.py" "$APP_DIR" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
-                    echo "Icon applied successfully to App Bundle."
-                fi
-                if uv run python "$PROJECT_DIR/set_mac_icon.py" "$VAILA_HOME" "$APP_DIR/Contents/Resources/vaila.icns" 2>&1 | grep -v -i "tensorrt" || true; then
-                    echo "Icon applied successfully to installation directory."
-                fi
-            fi
-        fi
-
-        touch "$APP_DIR"
-        touch "$VAILA_HOME"
-    fi
-
-    # Create symbolic link in /Applications
-    echo ""
-    echo "Creating symbolic link in /Applications..."
-    if [ -e "/Applications/vaila.app" ]; then
-        echo "Removing existing symlink in /Applications..."
-        sudo rm -rf "/Applications/vaila.app"
-    fi
-
-    echo "Creating symlink from /Applications/vaila.app to $APP_DIR..."
-    sudo ln -s "$APP_DIR" "/Applications/vaila.app"
-
-    if [ -L "/Applications/vaila.app" ]; then
-        sudo chown -h "${USER}:admin" "/Applications/vaila.app"
-        echo "Symlink created successfully in /Applications."
-
-        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/vaila.app" 2>/dev/null || true
-        touch "/Applications/vaila.app" 2>/dev/null || true
-    else
-        echo "Warning: Failed to create symlink in /Applications."
-    fi
-
-    # Rebuild Launch Services database
-    echo ""
-    echo "Rebuilding Launch Services cache..."
-    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user 2>/dev/null || true
-
-    echo "Restarting Finder and Dock..."
-    killall Finder 2>/dev/null || true
-    killall Dock 2>/dev/null || true
-
-    echo ""
-    echo "Icon cache refreshed. The vaila logo should appear correctly now."
-}
 
 create_app_bundle
 
@@ -794,5 +878,10 @@ echo "Ways to run vaila:"
 echo "1. Recommended: $RUN_SCRIPT"
 echo "2. Or: cd \"$VAILA_HOME\" && .venv/bin/python vaila.py"
 echo "3. Or: cd \"$VAILA_HOME\" && uv run vaila.py"
-echo "4. App bundle: Launchpad, /Applications/vaila.app, or ~/Applications/vaila.app"
+if [[ "${INSTALL_PATH_CHOICE:-local}" == "applications" ]]; then
+    echo "4. App bundle: Launchpad, Spotlight, /Applications/vaila.app, or ~/Applications/vaila.app"
+else
+    echo "4. App bundle: Launchpad, Spotlight, or ~/Applications/vaila.app (local-only; re-run and choose"
+    echo "   option [2] at the App Shortcut Location prompt to also add /Applications/vaila.app)"
+fi
 echo ""
