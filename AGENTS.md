@@ -143,7 +143,7 @@ vaila/                 ← root
 └── uv.lock
 ```
 
-**`vaila/models/`:** Reference **`.csv`** (and similar small files) are **tracked**. Downloaded weights (**`.pt`**, **`.ckpt`**, **`.onnx`**, **`.engine`**, **`.task`**, **`.safetensors`**, etc.) and **`vaila/models/**/.cache/`** are **gitignored**; fetch via first run or **`hf download`** (e.g. [facebook/sam3](https://huggingface.co/facebook/sam3), `facebook/sam-3d-body-dinov3`). Small default **`.pkl`** (walkway ML) may stay tracked if **< 20 MiB**. Pre-commit blocks staged files **≥ 20 MiB**. Details: [CONTRIBUTING.md](CONTRIBUTING.md#vaila-models-directory). **`tests/SAM/*.mp4`** is gitignored (place sample locally; see `tests/SAM/README.md`).
+**`vaila/models/`:** Reference **`.csv`** (and similar small files) are **tracked**. Downloaded weights (**`.pt`**, **`.ckpt`**, **`.onnx`**, **`.engine`**, **`.task`**, **`.safetensors`**, etc.) and **`vaila/models/**/.cache/`** are **gitignored**; fetch via first run or Hub download on **each PC** (see **[docs/huggingface_setup.md](docs/huggingface_setup.md)** — `huggingface-hub>=1.22`, `hf auth login`, lock cleanup for `0.00B` stalls). Examples: [facebook/sam3](https://huggingface.co/facebook/sam3), `facebook/sam-3d-body-dinov3` via `bash bin/setup_fifa_sam3d.sh`. Small default **`.pkl`** (walkway ML) may stay tracked if **< 20 MiB**. Pre-commit blocks staged files **≥ 20 MiB**. Details: [CONTRIBUTING.md](CONTRIBUTING.md#vaila-models-directory). **`tests/SAM/*.mp4`** is gitignored (place sample locally; see `tests/SAM/README.md`).
 
 ## Platform-Specific Configuration
 

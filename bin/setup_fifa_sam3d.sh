@@ -56,8 +56,23 @@ echo ">> [1/3] Installing sam_3d_body runtime dependencies (--no-deps)..."
 # ----------------------------------------------------------------- weights DL
 echo ">> [2/3] Downloading facebook/sam-3d-body-dinov3 weights to ${WEIGHTS_DIR}..."
 mkdir -p "${WEIGHTS_DIR}"
-(cd "${REPO_ROOT}" && uv run hf download facebook/sam-3d-body-dinov3 \
-  --local-dir "${WEIGHTS_DIR}")
+# Prefer huggingface_hub API (same pattern as bin/setup_sapiens2.sh). Older
+# huggingface_hub + typer>=0.26 made ``hf download`` print click.Exit(0) and
+# return exit 1 even after a successful transfer, aborting this script under
+# ``set -e``. Stale local-dir locks can also leave progress at "0.00B".
+if [[ -d "${WEIGHTS_DIR}/.cache/huggingface/download" ]]; then
+  find "${WEIGHTS_DIR}/.cache/huggingface/download" -name '*.lock' -delete 2>/dev/null || true
+fi
+(cd "${REPO_ROOT}" && uv run python -c "
+from pathlib import Path
+from huggingface_hub import snapshot_download
+
+root = Path(r'''${WEIGHTS_DIR}''')
+root.mkdir(parents=True, exist_ok=True)
+print(f'>> snapshot_download facebook/sam-3d-body-dinov3 -> {root}', flush=True)
+snapshot_download(repo_id='facebook/sam-3d-body-dinov3', local_dir=str(root))
+print('>> download finished', flush=True)
+")
 
 # -------------------------------------------------------------------- checks
 echo ">> [3/3] Validating layout..."

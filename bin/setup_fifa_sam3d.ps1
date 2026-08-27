@@ -55,9 +55,23 @@ try {
 # --- [2/3] weights download -------------------------------------------------
 Write-Host ">> [2/3] Downloading facebook/sam-3d-body-dinov3 weights to $WeightsDir..."
 New-Item -ItemType Directory -Path $WeightsDir -Force | Out-Null
+# Prefer huggingface_hub API (same pattern as bin/setup_sapiens2.ps1). Older
+# huggingface_hub + typer>=0.26 made ``hf download`` dump click.Exit(0) and
+# return exit 1 even after success.
+Get-ChildItem -Path (Join-Path $WeightsDir ".cache\huggingface\download") -Filter "*.lock" -Recurse -ErrorAction SilentlyContinue |
+  Remove-Item -Force -ErrorAction SilentlyContinue
 Push-Location $RepoRoot
 try {
-  uv run hf download facebook/sam-3d-body-dinov3 --local-dir $WeightsDir
+  $weightsEscaped = $WeightsDir.Replace("'", "''")
+  uv run python -c @"
+from pathlib import Path
+from huggingface_hub import snapshot_download
+root = Path(r'$weightsEscaped')
+root.mkdir(parents=True, exist_ok=True)
+print(f'>> snapshot_download facebook/sam-3d-body-dinov3 -> {root}', flush=True)
+snapshot_download(repo_id='facebook/sam-3d-body-dinov3', local_dir=str(root))
+print('>> download finished', flush=True)
+"@
 } finally {
   Pop-Location
 }

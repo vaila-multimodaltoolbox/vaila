@@ -1,6 +1,6 @@
 [project]
 name = "vaila"
-version = "0.3.115"
+version = "0.3.117"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -179,6 +179,10 @@ packages = ["vaila"]
 override-dependencies = [
     "regex>=2025.11.3",
     "setuptools>=83",
+    # hf CLI: hub<1.22 + typer>=0.26 dumps click.Exit(0) after success (exit 1).
+    # Also unsticks large gated downloads that stall at "0.00B (incomplete total)".
+    "huggingface-hub>=1.22.0",
+    "click>=8.4.2",
 ]
 
 [[tool.uv.index]]

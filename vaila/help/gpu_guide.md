@@ -83,9 +83,14 @@ bash bin/setup_fifa_sam3d.sh
 ```
 
 ### 4. Gated Hugging Face Weights Authentication
+
+Full per-PC steps (licenses, hub version, lock cleanup): **[docs/huggingface_setup.md](../../docs/huggingface_setup.md)**.
+
 ```bash
 uv run hf auth login
+uv run hf auth whoami   # must exit 0 (need huggingface-hub >= 1.22)
 uv run vaila/vaila_sam.py --download-weights
+bash bin/setup_fifa_sam3d.sh   # SAM 3D Body → vaila/models/sam-3d-dinov3/
 uv run vaila/vaila_sapiens.py --download-weights --model 1b
 ```
 

@@ -1,11 +1,22 @@
 SAM 3 (facebook/sam3) — gated on Hugging Face / Meta license.
 
-1. Create a Hugging Face account, accept the SAM 3 license on the model card:
+On EVERY machine (weights are gitignored; do not commit .pt):
+
+1. Accept the SAM 3 license on the model card (browser, once per HF account):
    https://huggingface.co/facebook/sam3
-2. Log in locally (token with read access):
+2. Sync a current checkout so huggingface-hub >= 1.22 (fixes Exit:0 / 0.00B stalls):
+   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+3. Log in (token with Read access):
    uv run hf auth login
-3. Download weights and config into this folder:
-   uv run hf download facebook/sam3 --local-dir vaila/models/sam3
-   (checkpoint is expected as vaila/models/sam3/sam3.pt after download — see vaila/vaila_sam.py)
+   uv run hf auth whoami    # must exit 0, no traceback
+4. Download into this folder:
+   uv run vaila/vaila_sam.py --download-weights
+   # or: uv run hf download facebook/sam3 --local-dir vaila/models/sam3
+   Expect: vaila/models/sam3/sam3.pt
+
+Stuck at "Downloading (incomplete total...): 0.00B"?
+  find .cache/huggingface/download -name '*.lock' -delete
+  then re-run --download-weights
 
 Dependencies: uv sync --extra sam  |  NVIDIA CUDA at runtime for video.
+Full guide: docs/huggingface_setup.md

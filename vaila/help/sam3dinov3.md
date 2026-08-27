@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.3.108
-- **Updated:** 2026-08-19
+- **Version:** 0.3.117
+- **Updated:** 2026-08-27
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
@@ -35,15 +35,19 @@ per-joint 3D trajectories usable for biomechanics.
 ## Requirements
 
 ```bash
-# SAM 3 (CUDA) stack
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+# SAM 3 (CUDA) stack — do this on every machine (weights are not in git)
+bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,fifa --yes
 uv run hf auth login
+uv run hf auth whoami   # must exit 0; need huggingface-hub >= 1.22
 uv run vaila/vaila_sam.py --download-weights
 
 # SAM 3D Body: clones facebookresearch/sam-3d-body and downloads gated weights
 # (accept the license on the model card first)
 bash bin/setup_fifa_sam3d.sh
 ```
+
+Per-PC Hub login, version pins, and `0.00B` / lock recovery:
+**[docs/huggingface_setup.md](../../docs/huggingface_setup.md)**.
 
 > **Why there is no `pip install -e`.** Upstream `sam-3d-body` ships no
 > `pyproject.toml`/`setup.py`, so it cannot be installed as a package. The setup

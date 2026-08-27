@@ -1,6 +1,6 @@
 [project]
 name = "vaila"
-version = "0.3.115"
+version = "0.3.117"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -117,7 +117,6 @@ dependencies = [
     "psutil",
     "pyzmq",
     "protobuf",
-    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
     "ruff",
     "vpython",
     "pyvista",
@@ -129,6 +128,10 @@ dev = [
     "ruff",
     "ty>=0.0.16",
     "pytest>=8.0.0",
+]
+gpu = [
+    "tensorrt",
+    "nvidia-ml-py",
 ]
 upscaler = [
     "diffusers>=0.38.0",
@@ -176,7 +179,21 @@ packages = ["vaila"]
 override-dependencies = [
     "regex>=2025.11.3",
     "setuptools>=83",
+    # hf CLI: hub<1.22 + typer>=0.26 dumps click.Exit(0) after success (exit 1).
+    # Also unsticks large gated downloads that stall at "0.00B (incomplete total)".
+    "huggingface-hub>=1.22.0",
+    "click>=8.4.2",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
 
 [tool.uv.workspace]
 # Workspace configuration if needed
