@@ -1,0 +1,53 @@
+{
+  "loop": "dmg-installer-macos-path-loop",
+  "iteration": 1,
+  "budget": {"max_iterations": 6, "max_tokens": 150000},
+  "baseline_git_ref": "eabe1dca35926076dce7e2668fd7541869e713e9",
+  "attempts": [
+    {
+      "iteration": 1,
+      "target": "install_vaila_mac.sh: add local(default)/applications install-path choice for app shortcut, guard sudo, add Spotlight registration",
+      "change_summary": "Moved create_app_bundle() near top of file, gated by VAILA_TEST_APP_BUNDLE_ONLY=1 test-harness hook. Added VAILA_INSTALL_PATH_CHOICE (local default | applications) with interactive prompt (default local, no sudo) when no choice supplied and stdin is a tty; non-tty/no-choice defaults to local. Guarded the /Applications sudo symlink block to only run for the 'applications' choice; SYSTEM_APPLICATIONS_DIR overridable via VAILA_TEST_APPLICATIONS_DIR (skips sudo when overridden). Added mdimport (plain, not -d1) alongside existing lsregister -f calls on both the local and system app paths for Spotlight indexing. Guarded killall Finder/Dock + full lsregister -kill rebuild + Python icon-apply step behind VAILA_TEST_APP_BUNDLE_ONLY so sandboxed checks never touch real system state. Updated final 'Ways to run vaila' echo to reflect actual choice made. Bumped header Update/Version to match vaila.py (0.3.117, 2026-08-27).",
+      "check_evidence": {
+        "bash_n": "SYNTAX OK",
+        "case_local_default": {"exit": 0, "app_bundle_exists": true, "system_dir_untouched": true},
+        "case_applications": {"exit": 0, "app_bundle_exists": true, "system_symlink_exists": true, "symlink_target_correct": true},
+        "case_default_noninteractive_notty": {"exit": 0, "resolved_to": "local", "app_bundle_exists": true, "system_dir_untouched": true},
+        "lsregister_exit": 0,
+        "mdimport_exit": 0
+      },
+      "regressions": "none observed against prior assertions (none existed at baseline; script had no local/applications choice at all — always unconditional sudo)",
+      "outcome": "accepted"
+    }
+  ],
+  "accepted": [1],
+  "rejected": [],
+  "lessons": [
+    "mdimport -d1 requires -t (test-import only, does not index) — real indexing is plain `mdimport <path>` (implied -i).",
+    "ruff/ty do not apply to install_vaila_mac.sh (bash, not Python) — governing check corrected to bash -n only; shellcheck not installed in this sandbox.",
+    "killall Finder/Dock and the full lsregister -kill LaunchServices rebuild are real system-wide side effects even when APP_DIR is sandboxed under a fake HOME — must be explicitly gated behind the test-harness flag, not assumed safe just because the target path is redirected."
+  ],
+  "real_smoke_test": {
+    "run_at": "2026-08-27T00:51:00-03:00",
+    "trigger": "explicit user request to run real end-to-end test",
+    "command": "printf '\\n\\nn\\nn\\n\\n' | bash install_vaila_mac.sh   (answers: install-loc=default portable, Metal/MPS=default Y, sam=n, fifa=n, app-shortcut=default local)",
+    "exit_code": 0,
+    "log_path": "/tmp/vaila_real_install_log.txt",
+    "errors_or_warnings": "none (grep for error/warning/fail found only a benign pre-existing 'pkgconf already up-to-date' brew notice, unrelated to this change)",
+    "filesystem_evidence": {
+      "app_bundle": "/Users/preto/Applications/vaila.app exists, Info.plist + icon + MacOS/vaila launcher present",
+      "system_applications_symlink": "/Applications/vaila.app symlink pre-existed from a prior (pre-patch) install, unmodified this run — confirms local choice correctly skipped the sudo/system-write path (no sudo prompt occurred, no 'Removing existing symlink' log line)"
+    },
+    "registration_evidence": {
+      "lsregister_dump": "/Users/preto/Applications/vaila.app present in LaunchServices dump (Launchpad-visible)",
+      "mdfind_by_bundle_id": "kMDItemCFBundleIdentifier == 'com.vaila.toolbox' resolved to /Users/preto/Applications/vaila.app",
+      "mdfind_by_name": "vaila.app resolved to /Users/preto/Applications/vaila.app"
+    },
+    "known_minor_noise": "lsregister -dump also still lists the now-deleted iteration-1 sandbox path (/private/tmp/vaila_loop_test_iter1/...) — a stale LaunchServices entry from the earlier sandboxed check, harmless (points to a path that no longer exists, does not appear in Launchpad).",
+    "outstanding": "level-5 human checkpoint only: visually open Launchpad / Spotlight-search 'vaila' and confirm the icon renders as expected — file-system and LaunchServices/Spotlight evidence above cannot substitute for eyes-on confirmation."
+  },
+  "cost": {"iterations_run": 1},
+  "status": "success",
+  "terminal_state": "success",
+  "completion_note": "All governing-check assertions pass after iteration 1 (bash -n, 6 test assertions, lsregister exit 0, mdimport exit 0, default resolves to local). Real end-to-end smoke test also passed for real (see real_smoke_test above): local choice used, no sudo invoked, app bundle created, Spotlight/LaunchServices confirm indexing. Only the level-5 human visual Launchpad/Spotlight check remains, by design (not automatable)."
+}
