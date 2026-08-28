@@ -109,10 +109,37 @@ shank_length_m = 0.40</pre>
       <li>Team batch: <code>team_jump_quality_zscores_&lt;timestamp&gt;.csv</code> and a report with height distribution, Z-score matrix, and QC highlights</li>
     </ul>
 
+    <h3>Calibration Check (read this first)</h3>
+    <div class="note">
+      Airborne, the centre of mass is a projectile, so fitting a parabola to it must return
+      <em>g</em> = 9.81 m/s&sup2;. This is the only check independent of the two values you type in:
+      <code>g<sub>measured</sub> = 9.81 &middot; (fps<sub>entered</sub>/fps<sub>true</sub>)&sup2; &middot; (scale<sub>true</sub>/scale<sub>entered</sub>)</code>.
+      Outside 85-115% of 9.81 the run is flagged <code>calibration_error</code> and the report gives
+      the implied frame-rate and scale corrections plus a <code>*_freefall_check.png</code> figure.
+      <strong>The usual cause is entering the playback fps of a slow-motion clip</strong> (e.g. 120 when
+      the camera captured at 240): that quarters the measured <em>g</em>.
+    </div>
+
+    <h3>Jump Height: which number to use</h3>
+    <ul>
+      <li><code>height_com_takeoff_ref_m</code> &mdash; peak CoM minus CoM at foot-off. <strong>The jump height</strong>; recommended by QC.</li>
+      <li><code>height_cg_method_m</code> &mdash; peak CoM above <em>standing</em> height. Larger, because the CoM already rises before the feet leave the ground.</li>
+      <li><code>height_foot_contact_method_m</code> &mdash; g&middot;t&sup2;/8 from last foot-off to first foot contact. Should agree with the first.</li>
+      <li><code>height_flight_time_method_m</code> &mdash; g&middot;t&sup2;/8 over the CoM-baseline crossing interval. <strong>Not a flight time</strong>; shown only to expose the difference.</li>
+    </ul>
+
+    <h3>Phase Events (not interchangeable)</h3>
+    <ul>
+      <li><code>takeoff_frame</code> / <code>landing_frame</code> &mdash; CoM crosses its <strong>standing baseline</strong>, not foot-off/contact.</li>
+      <li><code>takeoff_frame_foot_contact</code> / <code>landing_frame_foot_contact</code> &mdash; last foot-off / first foot contact.</li>
+      <li><code>takeoff_frame_kinetic</code> &mdash; last propulsion frame with a positive modelled GRF.</li>
+    </ul>
+
     <h3>Kinematic Analysis & Risk Screening</h3>
     <ul>
-       <li><strong>Valgus Ratio</strong>: Knee Sep. / Hip Sep. (&lt; 0.8 indicates risk)</li>
-       <li><strong>FPPA</strong>: Frontal Plane Projection Angle (&gt; 10&deg; indicates high risk)</li>
+       <li><strong>Valgus Ratio</strong>: Knee Sep. / Hip Sep. The ratio <em>decreases</em> as the knees collapse inward, so <strong>&lt; 0.8 indicates a valgus pattern</strong>; &gt; 1 means knees wider than hips (varus).</li>
+       <li><strong>FPPA</strong>: Frontal Plane Projection Angle, |FPPA| = 180&deg; &minus; angle(HIP-KNEE-ANKLE). The sign is anatomical &mdash; the knee offset from the HIP&rarr;ANKLE line is projected onto the medial direction of that limb &mdash; giving one convention for both sides: <strong>positive = valgus</strong> (the ACL mechanism), <strong>negative = varus</strong>. |FPPA| &gt; 10&deg; indicates risk, and valgus and varus are reported as distinct findings.</li>
+       <li><strong>Peak excursions</strong>: <code>max_valgus_angle_*</code> and <code>max_varus_angle_*</code> are tracked separately over the 0.2 s post-landing window, plus <code>peak_fppa_deviation_*</code> for the largest deviation in either direction.</li>
        <li><strong>Robustness</strong>: Smart frame search to handle occlusions during Squat phase</li>
     </ul>
 
@@ -122,13 +149,14 @@ shank_length_m = 0.40</pre>
       <li>Takeoff velocity: v = sqrt(2 g h)</li>
       <li>Potential energy: Ep = m g h</li>
       <li>Kinetic energy: Ek = ½ m v²</li>
-      <li>Average propulsion power: P̄ = (Ek + Ep) / tprop</li>
-      <li>Vertical force: F(t) = m [a(t) + g]</li>
-      <li>Instantaneous power: P(t) = F(t) · v(t)</li>
+      <li>Average propulsion power: P̄ = m g h / tprop &mdash; Ek at take-off and Ep at the apex are the <em>same</em> energy (v is derived from h), so they are never summed; <code>total_energy_J</code> = m g h</li>
+      <li>Propulsion work power: P̄work = (m g h + m g dsquat) / tprop</li>
+      <li>Vertical force: F(t) = m [a(t) + g] &mdash; valid <strong>only in contact</strong>; forced to 0 during flight, where the true GRF is zero</li>
+      <li>Instantaneous power: P(t) = F(t) · v(t), from a CoM low-pass filtered at 12 Hz (zero-lag Butterworth) before differentiation</li>
     </ul>
 
     <div class="note">
-      <strong>Notes:</strong> Use the actual capture FPS for slow-motion recordings (e.g., 240 Hz). Normalized CSV is simplest; pixel CSV is supported via scaling. Units: m, s, W, J.
+      <strong>Notes:</strong> Use the actual <em>capture</em> FPS for slow-motion recordings (e.g., 240 Hz), not the playback FPS. <strong>ffprobe will not tell you this</strong>: a retimed slow-motion clip reports its <em>playback</em> rate (a real 240 fps trial reports <code>r_frame_rate = 30.02</code>). If unsure, run once and read the free-fall calibration check, which reports the implied FPS from gravity itself. Normalized CSV is simplest; pixel CSV is supported via scaling. Units: m, s, W, J.
     </div>
   </section>
 
@@ -205,8 +233,8 @@ shank_length_m = 0.40</pre>
 
     <h3>Análise Cinemática e Risco</h3>
     <ul>
-       <li><strong>Razão de Valgo</strong>: Sep. Joelho / Sep. Quadril (&lt; 0.8 indica risco)</li>
-       <li><strong>FPPA</strong>: Ângulo de Projeção no Plano Frontal (&gt; 10&deg; indica alto risco)</li>
+       <li><strong>Razão de Valgo</strong>: Sep. Joelho / Sep. Quadril. A razão <em>diminui</em> conforme os joelhos colapsam para dentro, portanto <strong>&lt; 0.8 indica padrão de valgo</strong>; &gt; 1 significa joelhos mais afastados que os quadris (varo).</li>
+       <li><strong>FPPA</strong>: Ângulo de Projeção no Plano Frontal, |FPPA| = 180&deg; &minus; ângulo(QUADRIL-JOELHO-TORNOZELO). O sinal é anatômico &mdash; o desvio do joelho em relação à linha QUADRIL&rarr;TORNOZELO é projetado na direção medial do membro &mdash; com uma única convenção para os dois lados: <strong>positivo = valgo</strong> (mecanismo do LCA), <strong>negativo = varo</strong>. |FPPA| &gt; 10&deg; indica risco.</li>
        <li><strong>Robustez</strong>: Busca inteligente de quadros para lidar com oclusões na fase de Agachamento</li>
     </ul>
 
@@ -216,19 +244,21 @@ shank_length_m = 0.40</pre>
       <li>Velocidade de decolagem: v = sqrt(2 g h)</li>
       <li>Energia potencial: Ep = m g h</li>
       <li>Energia cinética: Ek = ½ m v²</li>
-      <li>Potência média: P̄ = (Ek + Ep) / tprop</li>
-      <li>Força vertical: F(t) = m [a(t) + g]</li>
+      <li>Potência média: P̄ = m g h / tprop &mdash; Ek na decolagem e Ep no ápice são a <em>mesma</em> energia, portanto nunca são somadas</li>
+      <li>Força vertical: F(t) = m [a(t) + g] &mdash; válida <strong>apenas em contato</strong>; forçada a 0 durante o voo</li>
       <li>Potência instantânea: P(t) = F(t) · v(t)</li>
     </ul>
 
     <div class="note">
       <strong>Observações:</strong> Use o FPS correto para tempos precisos. Em câmera lenta,
-      prefira a taxa real de captura, quando disponível. Unidades: m, s, W, J.
+      use a taxa real de <em>captura</em> (ex.: 240 Hz), não a de reprodução. Se houver dúvida,
+      rode uma vez e leia a verificação de queda livre: ela informa o FPS implícito.
+      Unidades: m, s, W, J.
     </div>
   </section>
 
   <div class="foot">
-    Author: Prof. Paulo R. P. Santiago — License: GPL-3.0
+    Version: 0.3.117 — Updated: 27 August 2026 — Author: Prof. Paulo R. P. Santiago — License: GPL-3.0
   </div>
 </body>
 </html>

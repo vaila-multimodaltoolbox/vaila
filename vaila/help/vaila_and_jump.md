@@ -4,12 +4,12 @@
 
 - **Category:** Analysis
 - **File:** `vaila\vaila_and_jump.py`
-- **Lines:** 6051
+- **Lines:** 7311
 - **Size:** ~150000 characters
-- **Version:** 0.3.114
+- **Version:** 0.3.117
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
-- **Last Update:** 03 June 2026
+- **Last Update:** 27 August 2026
 
 ## 📖 Description
 
@@ -305,8 +305,27 @@ The script generates:
 - For accurate results, MediaPipe landmark detection should be of good quality
 - Shank length calibration is critical for accurate metric calculations
 - FPPA calculations use rigorous vector-based methods for clinical validity
-- Right side FPPA values are inverted for consistent visualization (both sides show valgus as positive)
+- FPPA sign is anatomical, not geometric: the knee's offset from the HIP→ANKLE line is
+  projected onto the *medial* direction of that limb (hip → contralateral hip), so
+  **positive = valgus** and **negative = varus** on *both* sides. A cross-product sign
+  cannot be used directly, because it mirrors between limbs
 - Robust CMJ phase detection anchors propulsion and takeoff before the maximum CoM height
+- `takeoff_frame` / `landing_frame` are the frames where the CoM crosses its **standing
+  baseline**, not foot-off and foot-contact. Use `takeoff_frame_foot_contact`,
+  `landing_frame_foot_contact` and `flight_time_foot_contact_s` for flight events
+- Jump height: `height_com_takeoff_ref_m` (peak CoM minus CoM at foot-off) is the
+  comparable jump height and is what the QC recommends. `height_cg_method_m` /
+  `height_com_above_standing_m` measure the peak above *standing* height and are larger
+- **Free-fall calibration check:** gravity is recovered by fitting a parabola to the CoM
+  during flight. A measured *g* outside 85–115% of 9.81 m/s² proves the frame rate or the
+  pixel-to-metre scale is wrong; the report gives both implied corrections. The most
+  common cause is entering the playback fps for a slow-motion clip (e.g. 120 instead
+  of the 240 fps capture rate)
+- The CoM is low-pass filtered at 12 Hz (zero-lag Butterworth) before differentiation, and
+  the modelled ground reaction force is forced to zero during flight, where it is
+  physically zero
+- Potential energy at the apex and kinetic energy at take-off are the **same** energy
+  (v is derived from h), so `total_energy_J` is m·g·h and never their sum
 
 ## 📄 License
 
@@ -314,6 +333,6 @@ This script is licensed under the GNU General Public License v3.0.
 
 ---
 
-📅 **Last Updated:** 25 August 2026
+📅 **Last Updated:** 27 August 2026
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

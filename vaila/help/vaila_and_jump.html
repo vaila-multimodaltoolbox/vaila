@@ -47,12 +47,12 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Analysis</p>
             <p><strong>File:</strong> vaila\vaila_and_jump.py</p>
-            <p><strong>Lines:</strong> 6051</p>
+            <p><strong>Lines:</strong> 7311</p>
             <p><strong>Size:</strong> ~150000 characters</p>
-            <p><strong>Version:</strong> 0.3.114</p>
+            <p><strong>Version:</strong> 0.3.117</p>
             <p><strong>Author:</strong> Prof. Paulo R. P. Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
-            <p><strong>Last Update:</strong> 03 June 2026</p>
+            <p><strong>Last Update:</strong> 27 August 2026</p>
         </div>
 
         <div class="docstring">
@@ -74,7 +74,7 @@
                 <li><strong>Risk Classification:</strong> Evidence-based categorization (< 5° Good, 5°-10° Moderate, > 10° High Risk)</li>
                 <li><strong>FPPA Time Series Plot:</strong> Visualization of adduction/abduction angles over time with key events</li>
                 <li><strong>Multi-Moment Landing Analysis:</strong> Stick figures showing FPPA values, knee/ankle separation, and risk classification</li>
-                <li><strong>Consistent Visualization:</strong> Right side FPPA sign inversion for uniform display (both sides show valgus as positive)</li>
+                <li><strong>Unified FPPA Sign:</strong> the knee offset from the HIP&rarr;ANKLE line is projected onto the medial direction of each limb, so <strong>positive = valgus</strong> and <strong>negative = varus</strong> on both sides</li>
             </ul>
         </div>
 
@@ -280,13 +280,18 @@ anchor_events_to_com_peak = true</pre>
                 <li>For accurate results, MediaPipe landmark detection should be of good quality</li>
                 <li>Shank length calibration is critical for accurate metric calculations</li>
                 <li>FPPA calculations use rigorous vector-based methods for clinical validity</li>
-                <li>Right side FPPA values are inverted for consistent visualization (both sides show valgus as positive)</li>
+                <li>FPPA sign is anatomical, not geometric: a cross-product sign mirrors between limbs and cannot be used directly. Positive = valgus, negative = varus, on both sides</li>
+                <li><code>takeoff_frame</code> / <code>landing_frame</code> are CoM standing-baseline crossings, <strong>not</strong> foot-off and foot-contact. Use <code>takeoff_frame_foot_contact</code>, <code>landing_frame_foot_contact</code> and <code>flight_time_foot_contact_s</code> for flight events</li>
+                <li>Jump height: <code>height_com_takeoff_ref_m</code> (peak CoM minus CoM at foot-off) is the comparable jump height and is what the QC recommends; <code>height_cg_method_m</code> measures the peak above <em>standing</em> height and is larger</li>
+                <li><strong>Free-fall calibration check:</strong> gravity is recovered from the CoM trajectory during flight. A measured <em>g</em> outside 85-115% of 9.81 m/s&sup2; proves the frame rate or the pixel-to-metre scale is wrong; the report gives both implied corrections. The usual cause is entering the playback fps for a slow-motion clip (e.g. 120 instead of the 240 fps capture rate)</li>
+                <li>The CoM is low-pass filtered at 12 Hz (zero-lag Butterworth) before differentiation, and the modelled ground reaction force is forced to zero during flight</li>
+                <li>Potential energy at the apex and kinetic energy at take-off are the <em>same</em> energy, so <code>total_energy_J</code> is m&middot;g&middot;h and never their sum</li>
                 <li>Robust CMJ phase detection anchors propulsion and takeoff before the maximum CoM height</li>
             </ul>
         </div>
 
         <div class="footer">
-            <p>📅 <strong>Last Updated:</strong> 25 August 2026</p>
+            <p>📅 <strong>Last Updated:</strong> 27 August 2026</p>
             <p>🔗 <strong>Part of vailá - Multimodal Toolbox</strong></p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
