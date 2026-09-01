@@ -28,8 +28,8 @@
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 26 August 2026
-    Version: 0.3.115
+    Updated: 01 September 2026
+    Version: 0.3.118
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
     Parameters:
@@ -77,6 +77,40 @@ function Repair-GitLfsCheckoutIfNeeded {
         } Else {
             Write-Warning "Git LFS repair may have failed — osnet model is still $after bytes."
             Write-Warning "Try: git clone https://github.com/vaila-multimodaltoolbox/vaila.git"
+        }
+    } Finally {
+        Pop-Location
+    }
+}
+
+function Repair-SshOriginIfNeeded {
+    # An SSH origin (git@github.com:...) needs a GitHub SSH key most Windows
+    # machines don't have configured, which breaks both a plain `git pull`
+    # and the GUI's "Check for Updates" (git fetch) with a raw
+    # "Permission denied (publickey)" error. Rewrite it to HTTPS in place.
+    param(
+        [string]$RepoRoot,
+        [string]$RemoteName = "origin"
+    )
+
+    If (-Not (Test-Path (Join-Path $RepoRoot ".git"))) { return }
+    If (-Not (Get-Command git -ErrorAction SilentlyContinue)) { return }
+
+    Push-Location $RepoRoot
+    Try {
+        $remoteUrl = git remote get-url $RemoteName 2>$null
+        If ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($remoteUrl)) { return }
+        If ($remoteUrl -like "git@github.com:*" -or $remoteUrl -like "ssh://git@github.com/*") {
+            $httpsUrl = "https://github.com/vaila-multimodaltoolbox/vaila.git"
+            Write-Host "Remote '$RemoteName' uses SSH ($remoteUrl)." -ForegroundColor Yellow
+            Write-Host "Switching '$RemoteName' to HTTPS ($httpsUrl) so git pull / Check for Updates work without an SSH key..." -ForegroundColor Yellow
+            git remote set-url $RemoteName $httpsUrl 2>$null
+            If ($LASTEXITCODE -eq 0) {
+                Write-Host "Remote '$RemoteName' now uses HTTPS." -ForegroundColor Green
+            } Else {
+                Write-Warning "Could not rewrite remote '$RemoteName' automatically. Run manually:"
+                Write-Warning "  git -C `"$RepoRoot`" remote set-url $RemoteName $httpsUrl"
+            }
         }
     } Finally {
         Pop-Location
@@ -320,6 +354,7 @@ If (-Not (Test-Path "$projectDir\pyproject.toml")) {
             Remove-Item -Path $cloneTarget -Force -ErrorAction SilentlyContinue
         }
         If (Test-Path $cloneTarget) {
+            Repair-SshOriginIfNeeded -RepoRoot $cloneTarget
             git -C $cloneTarget pull --ff-only 2>$null
             If (-Not (Test-Path (Join-Path $cloneTarget "pyproject.toml"))) {
                 Remove-Item -Path $cloneTarget -Recurse -Force -ErrorAction SilentlyContinue
@@ -647,6 +682,7 @@ $script:LockWasRegenerated = $false
 
 If ($isGitTree) {
     Write-Host "Git working tree detected at $vailaProgramPath — keeping committed uv.lock." -ForegroundColor Green
+    Repair-SshOriginIfNeeded -RepoRoot $vailaProgramPath
 } ElseIf (Test-Path "$vailaProgramPath\uv.lock") {
     Write-Host "Removing uv.lock in profile/Program Files install (no git tree)..." -ForegroundColor Yellow
     Remove-Item -Path "$vailaProgramPath\uv.lock" -Force -ErrorAction SilentlyContinue
@@ -1242,7 +1278,25 @@ Write-Host "  - Desktop shortcut" -ForegroundColor Yellow
 Write-Host "  - Start Menu shortcut" -ForegroundColor Yellow
 Write-Host "  - Windows Terminal profile 'vaila'" -ForegroundColor Yellow
 Write-Host "  - Double-click run_vaila.bat" -ForegroundColor Yellow
+Write-Host "  - uv run vaila   (from `"$vailaProgramPath`", no activation needed)" -ForegroundColor Yellow
 Write-Host ""
+Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+Write-Host "Activate the .venv manually (optional — the launchers above" -ForegroundColor Cyan
+Write-Host "and 'uv run' do not require this):" -ForegroundColor Cyan
+Write-Host "  PowerShell : .venv\Scripts\Activate.ps1" -ForegroundColor Yellow
+Write-Host "               (blocked by policy? Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass)" -ForegroundColor DarkYellow
+Write-Host "  CMD        : .venv\Scripts\activate.bat" -ForegroundColor Yellow
+Write-Host "  Git Bash   : source .venv/Scripts/activate" -ForegroundColor Yellow
+Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
+If ($isGitTree) {
+    Write-Host "Keeping this git clone up to date:" -ForegroundColor Cyan
+    Write-Host "  git pull --ff-only origin main   (or use the GUI's Check for Updates)" -ForegroundColor Yellow
+    Write-Host "  uv self update                   (updates uv itself)" -ForegroundColor Yellow
+    Write-Host "  uv sync                          (re-syncs deps to the committed uv.lock)" -ForegroundColor Yellow
+    Write-Host "  uv sync --upgrade                (opt-in: also bumps deps beyond uv.lock)" -ForegroundColor Yellow
+    Write-Host "  (there is no 'uv run sync' — 'sync' and 'self update' are uv subcommands, not scripts to run)" -ForegroundColor DarkYellow
+    Write-Host ""
+}
 Write-Host "Restart your computer to ensure all changes take effect." -ForegroundColor Yellow
 Write-Host ""
 Pause

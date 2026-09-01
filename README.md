@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-08-27
+**Last updated:** 2026-09-01
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -454,6 +454,46 @@ The installation script automatically:
 ### 4. **Launching _vailá_**
 
 See [Running _vailá_ — GUI and CLI](#running-vailá--gui-and-cli) below (Desktop/Start Menu shortcut, Windows Terminal profile, or `uv run vaila.py`).
+
+### 5. **Environment Activation**
+
+The launchers above (shortcuts, `run_vaila.bat`/`run_vaila.ps1`, `uv run vaila.py`) never
+need the `.venv` activated — `uv run` finds it automatically. If you want a `.venv`-activated
+shell instead (e.g. to run other `uv`/`python`/`ruff` commands directly), open a terminal in
+the project root and run the command for your shell:
+
+- **PowerShell:**
+
+  ```powershell
+  .venv\Scripts\Activate.ps1
+  ```
+
+  If execution is blocked by policy, run once per session:
+
+  ```powershell
+  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+  ```
+
+- **Command Prompt (CMD):**
+
+  ```dos
+  .venv\Scripts\activate.bat
+  ```
+
+- **Git Bash:**
+
+  ```bash
+  source .venv/Scripts/activate
+  ```
+
+**Troubleshooting — "Permission denied (publickey)" when checking for updates:**
+this means your git `origin` remote is set to SSH (`git@github.com:...`), which needs a
+GitHub SSH key most machines don't have configured. The GUI's **Check for Updates**
+now detects this and offers to switch it to HTTPS automatically; to do it yourself:
+
+```powershell
+git remote set-url origin https://github.com/vaila-multimodaltoolbox/vaila.git
+```
 
 ---
 
