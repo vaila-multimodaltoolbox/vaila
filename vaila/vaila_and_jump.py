@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 27 August 2026
+Version: 0.3.117
 Python Version: 3.12.14
 
 Description:
@@ -160,6 +160,7 @@ import base64
 import contextlib
 import math
 import os
+import textwrap
 import tkinter as tk
 import webbrowser
 from datetime import datetime
@@ -170,6 +171,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from rich import print
+from scipy.signal import butter, filtfilt
 
 try:  # Python 3.11+
     import tomllib as _toml_reader
@@ -181,6 +183,13 @@ CMJ_HEIGHT_REVIEW_THRESHOLD_M = 0.80
 CMJ_HEIGHT_ERROR_THRESHOLD_M = 1.00
 CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M = 0.12
 CMJ_HEIGHT_DISCREPANCY_RATIO = 0.25
+
+# Acceptance band for the measured gravitational acceleration recovered from the
+# CoM trajectory during flight (see _gravity_consistency_check). +/-15% tolerates
+# markerless tracking noise and smoothing while still catching a wrong frame rate
+# (a 2x FPS error shows up as a 4x error in g) or a wrong pixel-to-metre scale.
+GRAVITY_CHECK_MIN_RATIO = 0.85
+GRAVITY_CHECK_MAX_RATIO = 1.15
 
 
 def _display_path(path: object) -> str:
@@ -793,10 +802,170 @@ def _cmj_height_status(height_m: float | None) -> tuple[str, str]:
     return "plausible", "Within the expected CMJ markerless range."
 
 
+COM_KINETICS_LOWPASS_HZ = 12.0
+
+
+def _lowpass_com(signal: np.ndarray, fps: float, cutoff_hz: float | None = None) -> np.ndarray:
+    """Zero-lag low-pass filter for a CoM trace before it is differentiated.
+
+    Velocity and acceleration are obtained by numerical differentiation, which
+    amplifies high-frequency marker jitter by f and f^2 respectively. Without
+    filtering, the "instantaneous peak power" of a markerless trial is a
+    differentiation artefact rather than a measurement. A 4th-order zero-lag
+    (filtfilt) Butterworth at 12 Hz keeps the CMJ CoM bandwidth while removing
+    that jitter.
+
+    Falls back to the unfiltered signal when the trial is too short for filtfilt
+    padding or the sampling rate is too low for the cutoff.
+    """
+    cutoff = float(cutoff_hz or COM_KINETICS_LOWPASS_HZ)
+    fps_value = _as_float_or_none(fps)
+    if fps_value is None or fps_value <= 0:
+        return signal
+
+    nyquist = fps_value / 2.0
+    if cutoff >= nyquist:
+        return signal
+
+    finite = np.isfinite(signal)
+    if not finite.all():
+        if not finite.any():
+            return signal
+        idx = np.arange(len(signal))
+        signal = np.interp(idx, idx[finite], signal[finite])
+
+    order = 4
+    if len(signal) <= 3 * (2 * order + 1):
+        return signal
+
+    try:
+        b, a = butter(order, cutoff / nyquist, btype="low")
+        return filtfilt(b, a, signal)
+    except ValueError:
+        return signal
+
+
+def _gravity_consistency_check(
+    cg_y_m: object, takeoff_frame: object, landing_frame: object, fps: float
+) -> dict[str, object]:
+    """Recover gravity from the CoM trajectory during flight as an independent scale/FPS check.
+
+    During the airborne phase the CoM is a projectile, so its vertical position
+    must follow y(t) = y0 + v0*t - g*t^2/2 with g = 9.81 m/s^2. Fitting a
+    parabola to the measured CoM therefore recovers a *measured* g that depends
+    only on the two calibration inputs the operator supplies:
+
+        g_measured = g_true * (fps_entered / fps_true)^2 * (scale_true / scale_entered)
+
+    A g_measured far from 9.81 is proof that the frame rate or the pixel->metre
+    conversion is wrong, and it is the only check in this pipeline that can catch
+    it without external reference data. Both implied corrections are reported so
+    the operator can see which input to revisit:
+
+      * wrong FPS  -> fps_implied  = fps * sqrt(9.81 / g_measured)
+      * wrong scale-> scale_factor = 9.81 / g_measured (multiply conversion factor)
+
+    Args:
+        cg_y_m: vertical CoM series in metres (array-like).
+        takeoff_frame: first airborne frame (prefer last foot-off).
+        landing_frame: first frame back in contact (prefer first foot contact).
+        fps: frame rate used for the analysis.
+
+    Returns:
+        dict of ``gravity_check_*`` keys; status is one of ``ok``,
+        ``suspect_fps_or_scale`` or ``insufficient_data``.
+    """
+    result: dict[str, object] = {
+        "gravity_check_status": "insufficient_data",
+        "gravity_check_g_measured_m_s2": None,
+        "gravity_check_ratio": None,
+        "gravity_check_fps_implied": None,
+        "gravity_check_scale_factor": None,
+        "gravity_check_n_samples": 0,
+        "gravity_check_note": "Flight window too short to fit a projectile trajectory.",
+    }
+
+    takeoff = _as_int_or_none(takeoff_frame)
+    landing = _as_int_or_none(landing_frame)
+    fps_value = _as_float_or_none(fps)
+    if takeoff is None or landing is None or not fps_value or fps_value <= 0:
+        return result
+
+    try:
+        y = np.asarray(cg_y_m, dtype=float)
+    except (TypeError, ValueError):
+        return result
+
+    start = max(0, takeoff)
+    end = min(len(y), landing + 1)
+    if end - start < 7:
+        return result
+
+    # Trim the first and last 20% of the window: touchdown/foot-off transients and
+    # marker smoothing bleed contact dynamics into the edges of the flight phase.
+    trim = int(0.2 * (end - start))
+    start_fit, end_fit = start + trim, end - trim
+    if end_fit - start_fit < 5:
+        start_fit, end_fit = start, end
+
+    idx = np.arange(start_fit, end_fit)
+    segment = y[start_fit:end_fit]
+    finite = np.isfinite(segment)
+    if finite.sum() < 5:
+        return result
+
+    t = idx[finite] / fps_value
+    coeffs = np.polyfit(t, segment[finite], 2)
+    g_measured = float(-2.0 * coeffs[0])
+    result["gravity_check_n_samples"] = int(finite.sum())
+    result["gravity_check_g_measured_m_s2"] = g_measured
+
+    if g_measured <= 0:
+        result["gravity_check_status"] = "suspect_fps_or_scale"
+        result["gravity_check_note"] = (
+            "CoM does not decelerate during the detected flight window: the flight "
+            "phase or the vertical axis sign is wrong."
+        )
+        return result
+
+    ratio = g_measured / 9.81
+    result["gravity_check_ratio"] = ratio
+    result["gravity_check_fps_implied"] = fps_value * math.sqrt(9.81 / g_measured)
+    result["gravity_check_scale_factor"] = 9.81 / g_measured
+
+    if GRAVITY_CHECK_MIN_RATIO <= ratio <= GRAVITY_CHECK_MAX_RATIO:
+        result["gravity_check_status"] = "ok"
+        result["gravity_check_note"] = (
+            f"Measured g = {g_measured:.2f} m/s^2 during flight "
+            f"({ratio * 100:.0f}% of 9.81): frame rate and scale are consistent."
+        )
+    else:
+        result["gravity_check_status"] = "suspect_fps_or_scale"
+        result["gravity_check_note"] = (
+            f"Measured g = {g_measured:.2f} m/s^2 during flight, "
+            f"{ratio * 100:.0f}% of 9.81. Every height, velocity and power value is "
+            f"affected. Either the frame rate is wrong (implied fps "
+            f"~{result['gravity_check_fps_implied']:.0f} instead of {fps_value:.0f}) or the "
+            f"pixel-to-metre scale is wrong (multiply the conversion factor by "
+            f"{result['gravity_check_scale_factor']:.3f}). Check the video frame rate first."
+        )
+    return result
+
+
 def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, object]:
     """Flag implausible CMJ heights and prefer foot-contact flight time when useful."""
     cg_height = _as_float_or_none(phase_results.get("height_cg_method_m"))
-    cg_status, cg_note = _cmj_height_status(cg_height)
+
+    # Take-off referenced CoM rise (peak CoM minus CoM at foot-off). This is the
+    # quantity that is dimensionally comparable with a flight-time height; the
+    # standing-referenced `height_cg_method_m` additionally contains the CoM rise
+    # that happens while the feet are still on the ground, so comparing THAT
+    # against the flight-time height compares two different quantities and
+    # manufactures a discrepancy even for a perfectly tracked trial.
+    takeoff_ref_height = _as_float_or_none(phase_results.get("height_com_takeoff_ref_m"))
+
+    primary_height = takeoff_ref_height if takeoff_ref_height is not None else cg_height
+    cg_status, cg_note = _cmj_height_status(primary_height)
 
     foot_takeoff_frame = _latest_valid_frame(
         phase_results.get("left_takeoff_frame"),
@@ -810,8 +979,17 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
         foot_takeoff_frame, foot_landing_frame, fps
     )
 
-    recommended = cg_height
-    recommended_source = "cg_method"
+    # Default to the take-off referenced CoM rise: that is the jump height, and it
+    # is what the 0.80 / 1.00 m plausibility thresholds below are calibrated for.
+    # `height_cg_method_m` (peak above standing) is larger by the CoM rise that
+    # occurs before the feet leave the ground, so using it as the headline height
+    # overestimated the jump and made every trial look closer to the error band.
+    if takeoff_ref_height is not None and takeoff_ref_height > 0:
+        recommended = takeoff_ref_height
+        recommended_source = "com_takeoff_ref"
+    else:
+        recommended = cg_height
+        recommended_source = "cg_method"
     recommended_flight_time = _as_float_or_none(phase_results.get("flight_time_s"))
     recommended_takeoff_frame = _as_int_or_none(phase_results.get("takeoff_frame"))
     recommended_landing_frame = _as_int_or_none(phase_results.get("landing_frame"))
@@ -854,10 +1032,17 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
 
     height_discrepancy = None
     height_discrepancy_ratio = None
-    if cg_height is not None and foot_height is not None:
-        height_discrepancy = abs(cg_height - foot_height)
-        if max(abs(cg_height), abs(foot_height)) > 0:
-            height_discrepancy_ratio = height_discrepancy / max(abs(cg_height), abs(foot_height))
+    # Compare like with like: flight-phase CoM rise vs flight-time height.
+    comparison_height = takeoff_ref_height if takeoff_ref_height is not None else cg_height
+    comparison_source = (
+        "height_com_takeoff_ref_m" if takeoff_ref_height is not None else "height_cg_method_m"
+    )
+    if comparison_height is not None and foot_height is not None:
+        height_discrepancy = abs(comparison_height - foot_height)
+        if max(abs(comparison_height), abs(foot_height)) > 0:
+            height_discrepancy_ratio = height_discrepancy / max(
+                abs(comparison_height), abs(foot_height)
+            )
         if height_discrepancy >= CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M or (
             height_discrepancy_ratio is not None
             and height_discrepancy_ratio >= CMJ_HEIGHT_DISCREPANCY_RATIO
@@ -924,6 +1109,9 @@ def _cmj_height_quality_check(phase_results: dict, fps: float) -> dict[str, obje
         "flight_time_foot_contact_s": foot_flight_time,
         "height_foot_contact_method_m": foot_height,
         "com_landing_after_foot_s": com_landing_after_foot_s,
+        "height_qc_comparison_m": comparison_height,
+        "height_qc_comparison_source": comparison_source,
+        "height_com_takeoff_ref_m": takeoff_ref_height,
     }
 
 
@@ -1045,6 +1233,16 @@ def identify_jump_phases(
             landing_pos = peak_pos + 1 + int(np.nanargmin(np.abs(post_peak)))
     landing_frame = int(data.index[landing_pos])
 
+    # WARNING ON SEMANTICS: `takeoff_frame` and `landing_frame` above are the
+    # frames where the CoM crosses its STANDING baseline going up and coming back
+    # down. They are NOT foot-off and foot-contact. The CoM is already above
+    # baseline while the feet are still on the ground, and stays above baseline
+    # after touchdown until the knees flex, so the interval between them is
+    # systematically LONGER than the true flight time. The quantities below are
+    # therefore labelled as "com_baseline" and must not be read as flight time /
+    # flight height; use `flight_time_foot_contact_s` and
+    # `height_com_takeoff_ref_m` for that. They are kept because downstream plots
+    # and the team report consume these keys.
     flight_time = 0
     if takeoff_frame is not None and landing_frame is not None and landing_frame > takeoff_frame:
         flight_time = (landing_frame - takeoff_frame) / fps
@@ -1110,6 +1308,43 @@ def identify_jump_phases(
         if not right_landing_candidates.empty:
             right_landing_idx = int(right_landing_candidates.index[0])
 
+    # --- Take-off referenced CoM jump height -------------------------------
+    # `height_cg_method_m` is the peak CoM rise above the STANDING reference.
+    # That is not the jump height: at foot-off the CoM is already well above
+    # standing height (full hip/knee extension, ankle plantarflexion, arm swing),
+    # so the standing-referenced peak overestimates the jump by that rise. The
+    # flight-phase height is the rise of the CoM AFTER the feet leave the ground:
+    #     h_flight = y_peak - y_takeoff
+    # This is the value that is comparable with the flight-time estimate
+    # g*t^2/8 and with force-plate impulse-momentum heights.
+    def _pos_of(frame_label):
+        if frame_label is None:
+            return None
+        try:
+            pos = data.index.get_loc(frame_label)
+        except KeyError:
+            return None
+        return pos if isinstance(pos, (int, np.integer)) else None
+
+    foot_off_frame = None
+    foot_off_candidates = [f for f in (left_takeoff_idx, right_takeoff_idx) if f is not None]
+    if foot_off_candidates:
+        # Flight starts when the LAST foot leaves the ground.
+        foot_off_frame = max(foot_off_candidates)
+
+    takeoff_ref_frame = foot_off_frame if foot_off_frame is not None else takeoff_frame
+    takeoff_ref_source = "last_foot_off" if foot_off_frame is not None else "com_baseline_cross"
+
+    com_y_at_takeoff = None
+    height_com_takeoff_ref = None
+    takeoff_ref_pos = _pos_of(takeoff_ref_frame)
+    if takeoff_ref_pos is not None and 0 <= takeoff_ref_pos < n_samples:
+        value = raw_values[takeoff_ref_pos]
+        if np.isfinite(value):
+            com_y_at_takeoff = float(value)
+            if takeoff_ref_pos <= peak_pos:
+                height_com_takeoff_ref = float(max_cg_height - com_y_at_takeoff)
+
     propulsion_time_value = 0
     if takeoff_frame is not None and squat_frame is not None and takeoff_frame > squat_frame:
         propulsion_time_value = (takeoff_frame - squat_frame) / fps
@@ -1136,11 +1371,24 @@ def identify_jump_phases(
         "max_height_frame": max_height_frame,
         "landing_frame": landing_frame,
         "flight_time_s": flight_time,
+        # Unambiguous aliases: these are CoM-baseline crossings, not foot events.
+        "com_baseline_up_frame": takeoff_frame,
+        "com_baseline_down_frame": landing_frame,
+        "com_above_baseline_time_s": flight_time,
         "max_height_m": max_cg_height,
         "propulsion_time_s": propulsion_time_value,
         "ascent_time_s": ascent_time_value,
         "descent_time_s": descent_time_value,
         "height_cg_method_m": max_cg_height,
+        # Peak CoM above the standing reference (kept under its historical name).
+        "height_com_above_standing_m": max_cg_height,
+        # Flight-phase CoM rise: peak CoM minus CoM at foot-off. This is the
+        # physically comparable "jump height" from the CoM method.
+        "height_com_takeoff_ref_m": height_com_takeoff_ref,
+        "com_y_at_takeoff_m": com_y_at_takeoff,
+        "takeoff_ref_frame": takeoff_ref_frame,
+        "takeoff_ref_source": takeoff_ref_source,
+        "foot_off_frame": foot_off_frame,
         "squat_depth_m": abs(min_cg_height),
         "height_flight_time_method_m": height_from_flight_time,
         "height_left_foot_m": left_foot_height,
@@ -1200,86 +1448,78 @@ def calculate_kinematics(data, results):
             return row[f"{prefix}_x_m"], row[f"{prefix}_y_m"]
         return row.get(f"{prefix}_x", 0), row.get(f"{prefix}_y", 0)
 
-    def calculate_fppa_vector_2d(hip_x, hip_y, knee_x, knee_y, ankle_x, ankle_y):
+    def calculate_knee_angle_2d(hip_x, hip_y, knee_x, knee_y, ankle_x, ankle_y):
         """
-        Calculate FPPA (Frontal Plane Projection Angle) using rigorous 2D vector method.
+        Included (internal) hip-knee-ankle angle in the image plane, in degrees.
 
-        Based on scientific literature: DOI 10.1016/j.heliyon.2024 - Figure 4
+        180 deg = fully extended limb; smaller values = more flexed. This is a
+        projected angle, so it is only a proxy for true 3D knee flexion.
+        """
+        ba_x, ba_y = hip_x - knee_x, hip_y - knee_y
+        bc_x, bc_y = ankle_x - knee_x, ankle_y - knee_y
+        mag_ba = math.hypot(ba_x, ba_y)
+        mag_bc = math.hypot(bc_x, bc_y)
+        if mag_ba < 1e-6 or mag_bc < 1e-6:
+            return None
+        cos_angle = (ba_x * bc_x + ba_y * bc_y) / (mag_ba * mag_bc)
+        cos_angle = max(-1.0, min(1.0, cos_angle))
+        return math.degrees(math.acos(cos_angle))
 
-        FPPA is calculated as the internal angle at the knee joint between:
-        - Vector v1: HIP -> KNEE (Femur vector)
-        - Vector v2: KNEE -> ANKLE (Tibia vector)
+    def calculate_fppa_vector_2d(hip_x, hip_y, knee_x, knee_y, ankle_x, ankle_y, medial_dir_x=None):
+        """
+        Frontal Plane Projection Angle (FPPA) at the knee, in degrees.
 
-        The FPPA represents the deviation from straight alignment (180°).
+        FPPA is the deviation of the hip-knee-ankle chain from straight
+        alignment (internal angle of 180 deg):
+
+            |FPPA| = 180 deg - angle(HIP-KNEE-ANKLE)
+
+        The SIGN is anatomical, not geometric. A cross-product sign flips
+        between the left and the right limb for the same anatomical direction,
+        so it cannot be used directly for both sides (that produced mirrored
+        signs for a symmetric squat). Instead the knee's perpendicular offset
+        from the HIP->ANKLE line is projected onto the medial direction of that
+        limb, which is the direction from this hip towards the contralateral
+        hip. This is mirror-safe and independent of which way the subject faces.
 
         Args:
-            hip_x, hip_y: Hip coordinates
-            knee_x, knee_y: Knee coordinates
-            ankle_x, ankle_y: Ankle coordinates
+            hip_x, hip_y, knee_x, knee_y, ankle_x, ankle_y: joint coordinates.
+            medial_dir_x: x-component of the vector from this limb's hip to the
+                contralateral hip. Only its sign is used. When None, the sign is
+                left unresolved and the magnitude is returned as positive, which
+                is why every caller should supply it.
 
         Returns:
-            float: FPPA angle in degrees (unified convention for left and right)
-            - 0° = straight alignment (180° internal angle)
-            - Positive = Valgus (adduction - knee collapses medially/inward toward midline)
-            - Negative = Varus (abduction - knee collapses laterally/outward away from midline)
+            float: signed FPPA in degrees under a unified convention for both
+            limbs:
+              0 deg  = straight alignment
+              > 0    = VALGUS  (knee collapses medially, towards the midline)
+              < 0    = VARUS   (knee deviates laterally, away from the midline)
         """
-        # Vector v1: HIP -> KNEE (Femur vector, pointing from hip to knee)
-        v1_x = knee_x - hip_x
-        v1_y = knee_y - hip_y
-
-        # Vector v2: KNEE -> ANKLE (Tibia vector, pointing from knee to ankle)
-        v2_x = ankle_x - knee_x
-        v2_y = ankle_y - knee_y
-
-        # Check for zero vectors
-        mag_v1 = math.sqrt(v1_x**2 + v1_y**2)
-        mag_v2 = math.sqrt(v2_x**2 + v2_y**2)
-
-        if mag_v1 < 1e-6 or mag_v2 < 1e-6:
+        internal_angle_deg = calculate_knee_angle_2d(hip_x, hip_y, knee_x, knee_y, ankle_x, ankle_y)
+        if internal_angle_deg is None:
             return 0.0
 
-        # Calculate vectors pointing away from knee (for internal angle calculation)
-        # Vector from knee to hip (reversed v1)
-        ba_x = hip_x - knee_x
-        ba_y = hip_y - knee_y
-
-        # Vector from knee to ankle (v2)
-        bc_x = ankle_x - knee_x
-        bc_y = ankle_y - knee_y
-
-        # Calculate internal angle using dot product method
-        # cos(θ) = (BA · BC) / (|BA| * |BC|)
-        mag_ba = math.sqrt(ba_x**2 + ba_y**2)
-        mag_bc = math.sqrt(bc_x**2 + bc_y**2)
-
-        if mag_ba < 1e-6 or mag_bc < 1e-6:
-            return 0.0
-
-        dot_product = ba_x * bc_x + ba_y * bc_y
-        cos_angle = dot_product / (mag_ba * mag_bc)
-
-        # Clamp to [-1, 1] to avoid numerical errors
-        cos_angle = max(-1.0, min(1.0, cos_angle))
-
-        # Calculate internal angle at the knee (in degrees)
-        internal_angle_deg = math.degrees(math.acos(cos_angle))
-
-        # Calculate cross product to determine valgus/varus direction
-        # Cross product = ba_x * bc_y - ba_y * bc_x
-        cross_product = ba_x * bc_y - ba_y * bc_x
-
-        # FPPA is the deviation from 180° (straight alignment)
-        # Internal angle of 180° = straight leg = 0° FPPA
+        # Magnitude: deviation from a straight (180 deg) limb.
         deviation = 180.0 - internal_angle_deg
-
-        # Use cross product sign to determine valgus/varus direction
-        # We then apply unified convention: positive = valgus, negative = varus (both sides)
         if abs(deviation) < 0.1:  # Essentially straight
-            fppa_angle = 0.0
-        else:
-            # Varus (lateral collapse) → negative; Valgus (medial collapse) → positive
-            fppa_angle = -abs(deviation) if cross_product > 0 else abs(deviation)
-        return fppa_angle
+            return 0.0
+
+        # Sign: is the knee medial (valgus) or lateral (varus) relative to the
+        # HIP->ANKLE line?
+        ha_x, ha_y = ankle_x - hip_x, ankle_y - hip_y
+        denom = ha_x * ha_x + ha_y * ha_y
+        if denom < 1e-12:
+            return abs(deviation)
+        t = ((knee_x - hip_x) * ha_x + (knee_y - hip_y) * ha_y) / denom
+        offset_x = knee_x - (hip_x + t * ha_x)
+
+        if medial_dir_x is None or abs(medial_dir_x) < 1e-9:
+            # Cannot resolve medial/lateral: report magnitude only.
+            return abs(deviation)
+
+        medial_component = offset_x * (1.0 if medial_dir_x > 0 else -1.0)
+        return abs(deviation) if medial_component > 0 else -abs(deviation)
 
     propulsion_frame = results.get("propulsion_start_frame", results.get("squat_frame"))
     landing_frame = results.get("landing_frame")
@@ -1312,8 +1552,8 @@ def calculate_kinematics(data, results):
             ankle_sep_series.append(ankle_sep)
 
             # Calculate FPPA for time series (unified: positive = valgus, negative = varus)
-            fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-            fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+            fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y, rh_x - lh_x)
+            fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y, lh_x - rh_x)
             fppa_right = (
                 fppa_right if fppa_right is not None and not math.isnan(fppa_right) else np.nan
             )
@@ -1401,16 +1641,22 @@ def calculate_kinematics(data, results):
             kinematics[f"valgus_ratio_{phase_name}"] = None
 
         # FPPA (Frontal Plane Projection Angle) - unified convention: positive = valgus, negative = varus
-        fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-        fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+        fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y, rh_x - lh_x)
+        fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y, lh_x - rh_x)
         fppa_right = fppa_right if fppa_right is not None else None
 
         kinematics[f"fppa_left_{phase_name}_deg"] = fppa_left
         kinematics[f"fppa_right_{phase_name}_deg"] = fppa_right
 
-        # Frontal-plane knee angle (Hip-Knee-Ankle); same as FPPA (not sagittal flexion)
-        kinematics[f"knee_angle_left_{phase_name}_deg"] = fppa_left
-        kinematics[f"knee_angle_right_{phase_name}_deg"] = fppa_right
+        # Projected knee angle (included HIP-KNEE-ANKLE angle, 180 deg = extended).
+        # This is a distinct quantity from FPPA; previously it duplicated the FPPA
+        # value, which made the exported knee angles meaningless.
+        kinematics[f"knee_angle_left_{phase_name}_deg"] = calculate_knee_angle_2d(
+            lh_x, lh_y, lk_x, lk_y, la_x, la_y
+        )
+        kinematics[f"knee_angle_right_{phase_name}_deg"] = calculate_knee_angle_2d(
+            rh_x, rh_y, rk_x, rk_y, ra_x, ra_y
+        )
 
         # KASR (Knee-to-Ankle Separation Ratio) & KSD
         ankle_sep = dist_2d(la_x, la_y, ra_x, ra_y)
@@ -1438,8 +1684,12 @@ def calculate_kinematics(data, results):
             la_x, la_y = get_coords(row_40ms, "left_ankle")
             ra_x, ra_y = get_coords(row_40ms, "right_ankle")
 
-            fppa_left_40ms = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-            fppa_right_40ms = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+            fppa_left_40ms = calculate_fppa_vector_2d(
+                lh_x, lh_y, lk_x, lk_y, la_x, la_y, rh_x - lh_x
+            )
+            fppa_right_40ms = calculate_fppa_vector_2d(
+                rh_x, rh_y, rk_x, rk_y, ra_x, ra_y, lh_x - rh_x
+            )
             fppa_right_40ms = fppa_right_40ms if fppa_right_40ms is not None else None
             kinematics["fppa_left_landing_40ms_deg"] = fppa_left_40ms
             kinematics["fppa_right_landing_40ms_deg"] = fppa_right_40ms
@@ -1456,8 +1706,12 @@ def calculate_kinematics(data, results):
             la_x, la_y = get_coords(row_100ms, "left_ankle")
             ra_x, ra_y = get_coords(row_100ms, "right_ankle")
 
-            fppa_left_100ms = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-            fppa_right_100ms = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
+            fppa_left_100ms = calculate_fppa_vector_2d(
+                lh_x, lh_y, lk_x, lk_y, la_x, la_y, rh_x - lh_x
+            )
+            fppa_right_100ms = calculate_fppa_vector_2d(
+                rh_x, rh_y, rk_x, rk_y, ra_x, ra_y, lh_x - rh_x
+            )
             fppa_right_100ms = fppa_right_100ms if fppa_right_100ms is not None else None
             kinematics["fppa_left_landing_100ms_deg"] = fppa_left_100ms
             kinematics["fppa_right_landing_100ms_deg"] = fppa_right_100ms
@@ -1468,10 +1722,18 @@ def calculate_kinematics(data, results):
         window_frames = int(0.2 * fps)  # 0.2 seconds window
         end_window = min(len(data), landing_frame + window_frames)
 
-        max_valgus_left = None
-        max_valgus_right = None
-        max_valgus_frame_left = None
-        max_valgus_frame_right = None
+        # Under the unified convention positive = valgus and negative = varus for
+        # BOTH limbs, so the peak valgus is a max() and the peak varus a min().
+        # Tracking only max() previously reported the *least* varus value as the
+        # "max valgus" for a limb that never went valgus.
+        peaks = {
+            "valgus": {"left": None, "right": None},
+            "varus": {"left": None, "right": None},
+        }
+        peak_frames = {
+            "valgus": {"left": None, "right": None},
+            "varus": {"left": None, "right": None},
+        }
 
         if end_window > landing_frame:
             for frame_idx in range(landing_frame, end_window):
@@ -1487,28 +1749,41 @@ def calculate_kinematics(data, results):
                 la_x, la_y = get_coords(row, "left_ankle")
                 ra_x, ra_y = get_coords(row, "right_ankle")
 
-                # Calculate FPPA for this frame (positive = valgus)
-                fppa_left = calculate_fppa_vector_2d(lh_x, lh_y, lk_x, lk_y, la_x, la_y)
-                fppa_right = calculate_fppa_vector_2d(rh_x, rh_y, rk_x, rk_y, ra_x, ra_y)
-                fppa_right = fppa_right if fppa_right is not None else None
+                fppa_by_side = {
+                    "left": calculate_fppa_vector_2d(
+                        lh_x, lh_y, lk_x, lk_y, la_x, la_y, rh_x - lh_x
+                    ),
+                    "right": calculate_fppa_vector_2d(
+                        rh_x, rh_y, rk_x, rk_y, ra_x, ra_y, lh_x - rh_x
+                    ),
+                }
 
-                # Track maximum valgus (positive = valgus in unified convention)
-                if max_valgus_left is None or (
-                    fppa_left is not None and fppa_left > max_valgus_left
-                ):
-                    max_valgus_left = fppa_left
-                    max_valgus_frame_left = frame_idx
+                for side, value in fppa_by_side.items():
+                    if value is None:
+                        continue
+                    if peaks["valgus"][side] is None or value > peaks["valgus"][side]:
+                        peaks["valgus"][side] = value
+                        peak_frames["valgus"][side] = frame_idx
+                    if peaks["varus"][side] is None or value < peaks["varus"][side]:
+                        peaks["varus"][side] = value
+                        peak_frames["varus"][side] = frame_idx
 
-                if max_valgus_right is None or (
-                    fppa_right is not None and fppa_right > max_valgus_right
-                ):
-                    max_valgus_right = fppa_right
-                    max_valgus_frame_right = frame_idx
-
-        kinematics["max_valgus_angle_left_deg"] = max_valgus_left
-        kinematics["max_valgus_angle_right_deg"] = max_valgus_right
-        kinematics["max_valgus_frame_left"] = max_valgus_frame_left
-        kinematics["max_valgus_frame_right"] = max_valgus_frame_right
+        for side in ("left", "right"):
+            kinematics[f"max_valgus_angle_{side}_deg"] = peaks["valgus"][side]
+            kinematics[f"max_valgus_frame_{side}"] = peak_frames["valgus"][side]
+            kinematics[f"max_varus_angle_{side}_deg"] = peaks["varus"][side]
+            kinematics[f"max_varus_frame_{side}"] = peak_frames["varus"][side]
+            # Largest absolute frontal-plane deviation in the window, whichever
+            # direction it occurred in.
+            candidates = [
+                (peaks["valgus"][side], peak_frames["valgus"][side]),
+                (peaks["varus"][side], peak_frames["varus"][side]),
+            ]
+            candidates = [c for c in candidates if c[0] is not None]
+            if candidates:
+                value, frame_of_peak = max(candidates, key=lambda c: abs(c[0]))
+                kinematics[f"peak_fppa_deviation_{side}_deg"] = value
+                kinematics[f"peak_fppa_deviation_frame_{side}"] = frame_of_peak
 
     # 4. Landing Stability
     if landing_frame is not None and landing_frame < len(data):
@@ -1525,71 +1800,70 @@ def calculate_kinematics(data, results):
                 kinematics["landing_stability_sway_x"] = sway
                 kinematics["landing_stability_unit"] = "m" if "_m" in col_to_use else "norm"
 
-    # Validation: Print calculated angles for debugging
-    print("\n=== FPPA Validation (Vector-based calculation) ===")
-    print(f"Squat (Propulsion Start) - Left FPPA: {kinematics.get('fppa_left_squat_deg', 'N/A')}")
-    if isinstance(kinematics.get("fppa_left_squat_deg"), (int, float)):
-        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_left_squat_deg'))[0]}")
-    print(f"Squat (Propulsion Start) - Right FPPA: {kinematics.get('fppa_right_squat_deg', 'N/A')}")
-    if isinstance(kinematics.get("fppa_right_squat_deg"), (int, float)):
-        print(f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_right_squat_deg'))[0]}")
-    print(
-        f"Initial Contact (Landing) - Left FPPA: {kinematics.get('fppa_left_landing_deg', 'N/A')}"
+    # Validation summary. Printed as an aligned table so left/right asymmetry and
+    # the valgus/varus direction are readable at a glance; the previous two-line
+    # per-value format buried the sign, which is the clinically meaningful part.
+    print("\n" + "=" * 78)
+    print("FPPA - Frontal Plane Projection Angle (positive = VALGUS, negative = VARUS)")
+    print("=" * 78)
+    print(f"{'Event':<26}{'Frame':>7}{'Left':>10}{'Right':>10}  {'Interpretation':<22}")
+    print("-" * 78)
+
+    def _fppa_row(label, left_key, right_key, frame_key=None):
+        left = kinematics.get(left_key)
+        right = kinematics.get(right_key)
+        if not isinstance(left, (int, float)) and not isinstance(right, (int, float)):
+            return
+        frame = kinematics.get(frame_key) if frame_key else None
+        frame_text = str(frame) if frame is not None else "-"
+        left_text = f"{left:+.1f}" if isinstance(left, (int, float)) else "N/A"
+        right_text = f"{right:+.1f}" if isinstance(right, (int, float)) else "N/A"
+        worst = max(
+            (v for v in (left, right) if isinstance(v, (int, float))),
+            key=abs,
+            default=None,
+        )
+        verdict = _fppa_risk_short(worst)
+        print(f"{label:<26}{frame_text:>7}{left_text:>10}{right_text:>10}  {verdict:<22}")
+
+    _fppa_row("Squat (propulsion start)", "fppa_left_squat_deg", "fppa_right_squat_deg")
+    _fppa_row("Initial contact", "fppa_left_landing_deg", "fppa_right_landing_deg")
+    _fppa_row(
+        "IC + 40 ms",
+        "fppa_left_landing_40ms_deg",
+        "fppa_right_landing_40ms_deg",
+        "landing_40ms_frame",
     )
-    if isinstance(kinematics.get("fppa_left_landing_deg"), (int, float)):
-        print(
-            f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_left_landing_deg'))[0]}"
-        )
-    print(
-        f"Initial Contact (Landing) - Right FPPA: {kinematics.get('fppa_right_landing_deg', 'N/A')}"
+    _fppa_row(
+        "IC + 100 ms",
+        "fppa_left_landing_100ms_deg",
+        "fppa_right_landing_100ms_deg",
+        "landing_100ms_frame",
     )
-    if isinstance(kinematics.get("fppa_right_landing_deg"), (int, float)):
-        print(
-            f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_right_landing_deg'))[0]}"
-        )
-    if kinematics.get("fppa_left_landing_40ms_deg") is not None:
-        print(
-            f"IC + 40ms - Left FPPA: {kinematics.get('fppa_left_landing_40ms_deg'):.2f}° (Frame {kinematics.get('landing_40ms_frame')})"
-        )
-        print(
-            f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_left_landing_40ms_deg'))[0]}"
-        )
-    if kinematics.get("fppa_right_landing_40ms_deg") is not None:
-        print(
-            f"IC + 40ms - Right FPPA: {kinematics.get('fppa_right_landing_40ms_deg'):.2f}° (Frame {kinematics.get('landing_40ms_frame')})"
-        )
-        print(
-            f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_right_landing_40ms_deg'))[0]}"
-        )
-    if kinematics.get("fppa_left_landing_100ms_deg") is not None:
-        print(
-            f"IC + 100ms - Left FPPA: {kinematics.get('fppa_left_landing_100ms_deg'):.2f}° (Frame {kinematics.get('landing_100ms_frame')})"
-        )
-        print(
-            f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_left_landing_100ms_deg'))[0]}"
-        )
-    if kinematics.get("fppa_right_landing_100ms_deg") is not None:
-        print(
-            f"IC + 100ms - Right FPPA: {kinematics.get('fppa_right_landing_100ms_deg'):.2f}° (Frame {kinematics.get('landing_100ms_frame')})"
-        )
-        print(
-            f"  Risk: {_get_fppa_risk_classification(kinematics.get('fppa_right_landing_100ms_deg'))[0]}"
-        )
-    if kinematics.get("max_valgus_angle_left_deg") is not None:
-        print(
-            f"Max Valgus (0.2s post-landing) - Left: {kinematics.get('max_valgus_angle_left_deg'):.2f}° (Frame {kinematics.get('max_valgus_frame_left')})"
-        )
-        print(
-            f"  Risk: {_get_fppa_risk_classification(kinematics.get('max_valgus_angle_left_deg'))[0]}"
-        )
-    if kinematics.get("max_valgus_angle_right_deg") is not None:
-        print(
-            f"Max Valgus (0.2s post-landing) - Right: {kinematics.get('max_valgus_angle_right_deg'):.2f}° (Frame {kinematics.get('max_valgus_frame_right')})"
-        )
-        print(
-            f"  Risk: {_get_fppa_risk_classification(kinematics.get('max_valgus_angle_right_deg'))[0]}"
-        )
-    print("=" * 60)
+    print("-" * 78)
+
+    # Peak excursions in the 0.2 s post-landing window, reported per direction.
+    # A limb that never crossed into valgus must not be reported as having a
+    # "max valgus": that reversed the clinical meaning of the number.
+    for side in ("left", "right"):
+        valgus = kinematics.get(f"max_valgus_angle_{side}_deg")
+        varus = kinematics.get(f"max_varus_angle_{side}_deg")
+        label = side.capitalize()
+        if isinstance(valgus, (int, float)) and valgus > 0:
+            print(
+                f"Peak VALGUS {label:<6} {valgus:+6.1f}deg "
+                f"(frame {kinematics.get(f'max_valgus_frame_{side}')})  "
+                f"{_fppa_risk_short(valgus)}"
+            )
+        else:
+            print(f"Peak VALGUS {label:<6} none - this limb never crossed into valgus")
+        if isinstance(varus, (int, float)) and varus < 0:
+            print(
+                f"Peak VARUS  {label:<6} {varus:+6.1f}deg "
+                f"(frame {kinematics.get(f'max_varus_frame_{side}')})  "
+                f"{_fppa_risk_short(varus)}"
+            )
+    print("=" * 78)
 
     return kinematics
 
@@ -1613,8 +1887,13 @@ def plot_valgus_ratio(data, results, output_dir, base_name):
     )
 
     # Threshold line
-    plt.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5, label="Neutral (1.0)")
-    plt.axhline(y=0.8, color="red", linestyle="--", alpha=0.5, label="High Risk (< 0.8)")
+    plt.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5, label="Knees as wide as hips")
+    plt.axhline(
+        y=0.8, color="red", linestyle="--", alpha=0.5, label="Valgus screening cut-off (< 0.8)"
+    )
+    # The ratio DECREASES as the knees collapse inward, so the risk zone is below
+    # the cut-off, not above it.
+    plt.axhspan(0.0, 0.8, color="red", alpha=0.06)
 
     # Mark events
     propulsion_frame = results.get("propulsion_start_frame", results.get("squat_frame"))
@@ -1634,7 +1913,7 @@ def plot_valgus_ratio(data, results, output_dir, base_name):
         if not math.isnan(val) and val is not None:
             plt.scatter(landing_frame / fps, val, color="green", zorder=5)
 
-    plt.title("Knee-Hip Separation Ratio (Valgus Screening)")
+    plt.title("Knee-Hip Separation Ratio (below 1 = knees inside hips = valgus pattern)")
     plt.xlabel("Time (s)")
     plt.ylabel("Ratio (Knee Dist / Hip Dist)")
     plt.legend()
@@ -2315,8 +2594,8 @@ def plot_valgus_event(data, results, output_dir, base_name):
             landing_moments.append(("IC + 100ms", frame_100ms, "landing_100ms"))
 
         # Add Max Valgus moment if available
-        max_valgus_frame_left = results.get("max_valgus_frame_left")
-        max_valgus_frame_right = results.get("max_valgus_frame_right")
+        max_valgus_frame_left = results.get("peak_fppa_deviation_frame_left")
+        max_valgus_frame_right = results.get("peak_fppa_deviation_frame_right")
         if max_valgus_frame_left is not None or max_valgus_frame_right is not None:
             # Use the frame with maximum valgus (could be left or right)
             max_valgus_frame = (
@@ -2327,7 +2606,7 @@ def plot_valgus_event(data, results, output_dir, base_name):
             if max_valgus_frame_right is not None and max_valgus_frame_right > max_valgus_frame:
                 max_valgus_frame = max_valgus_frame_right
             if max_valgus_frame < len(data):
-                landing_moments.append(("Max Valgus", max_valgus_frame, "max_valgus"))
+                landing_moments.append(("Peak Frontal Deviation", max_valgus_frame, "max_valgus"))
 
         # Create figure with subplots for each moment (2 rows x 2 cols for larger view)
         n_moments = len(landing_moments)
@@ -2501,8 +2780,11 @@ def plot_valgus_event(data, results, output_dir, base_name):
                     fppa_l = results.get("fppa_left_landing_100ms_deg")
                     fppa_r = results.get("fppa_right_landing_100ms_deg")
                 elif phase_key == "max_valgus":
-                    fppa_l = results.get("max_valgus_angle_left_deg")
-                    fppa_r = results.get("max_valgus_angle_right_deg")
+                    # Largest frontal-plane deviation in the window, in whichever
+                    # direction it occurred. A limb that stayed in varus has no
+                    # "max valgus" to show.
+                    fppa_l = results.get("peak_fppa_deviation_left_deg")
+                    fppa_r = results.get("peak_fppa_deviation_right_deg")
                 else:
                     fppa_l = None
                     fppa_r = None
@@ -2579,36 +2861,88 @@ def generate_jump_plots(data, results, output_dir, base_name):
     time_max_power = results.get("time_max_power_s", None)
     power_takeoff = results.get("power_takeoff_W", None)
 
+    squat_frame = results.get("propulsion_start_frame")
+    # Instantaneous take-off power is evaluated at the kinetic take-off (GRF = 0),
+    # so it has to be drawn there rather than at the CoM-baseline crossing.
+    takeoff_frame_kinetic = results.get("takeoff_frame_kinetic", takeoff_frame)
+    flight_start = results.get("takeoff_frame_foot_contact")
+    flight_end = results.get("landing_frame_foot_contact")
+
     # Plot the instantaneous power curve
     plt.figure(figsize=(12, 6))
+    time_axis = data.index / fps
+
+    # Shade the phases so the curve is read against the movement, not against
+    # bare frame numbers.
+    if squat_frame is not None and takeoff_frame_kinetic is not None:
+        plt.axvspan(
+            squat_frame / fps,
+            takeoff_frame_kinetic / fps,
+            color="tab:green",
+            alpha=0.10,
+            label="Propulsion",
+        )
+    if flight_start is not None and flight_end is not None and flight_end > flight_start:
+        plt.axvspan(
+            flight_start / fps,
+            flight_end / fps,
+            color="tab:blue",
+            alpha=0.10,
+            label="Flight (GRF = 0)",
+        )
+
     plt.plot(
-        data.index / fps,
+        time_axis,
         data["power"],
         label="Instantaneous Power (W)",
         color="purple",
     )
+    plt.axhline(0, color="black", linewidth=0.8, alpha=0.6)
 
-    if takeoff_frame is not None:
-        plt.axvline(takeoff_frame / fps, color="g", linestyle="--", label="Takeoff")
+    if takeoff_frame_kinetic is not None:
+        plt.axvline(
+            takeoff_frame_kinetic / fps,
+            color="g",
+            linestyle="--",
+            label="Takeoff (GRF = 0)",
+        )
 
     if max_power is not None and time_max_power is not None:
-        plt.axvline(time_max_power, color="orange", linestyle=":", label="Max. Power")
-        plt.scatter(time_max_power, max_power, color="orange", zorder=5, label="Max. Power")
-
-    if power_takeoff is not None and takeoff_frame is not None:
         plt.scatter(
-            takeoff_frame / fps,
+            time_max_power,
+            max_power,
+            color="orange",
+            zorder=5,
+            s=60,
+            label=f"Peak power ({max_power:.0f} W)",
+        )
+
+    if power_takeoff is not None and takeoff_frame_kinetic is not None:
+        plt.scatter(
+            takeoff_frame_kinetic / fps,
             power_takeoff,
             color="g",
             zorder=5,
-            label="Power Takeoff",
+            s=60,
+            label=f"Takeoff power ({power_takeoff:.0f} W)",
         )
 
     plt.xlabel("Time (s)")
     plt.ylabel("Power (W)")
-    plt.title("Instantaneous Power during the jump")
-    plt.legend(loc="upper left")
-    plt.grid(True)
+    plt.title("Instantaneous CoM Power (12 Hz low-pass; GRF forced to 0 during flight)")
+    plt.legend(loc="upper left", fontsize=8)
+    plt.grid(True, alpha=0.3)
+
+    if str(results.get("gravity_check_status")) == "suspect_fps_or_scale":
+        plt.gcf().text(
+            0.5,
+            0.01,
+            "CALIBRATION SUSPECT - frame rate or scale is wrong; power values are not valid",
+            ha="center",
+            fontsize=10,
+            color="white",
+            bbox={"facecolor": "#b71c1c", "alpha": 0.9, "boxstyle": "round"},
+        )
 
     # Saving the plot
     power_plot_path = os.path.join(output_dir, f"{base_name}_power_curve_{timestamp}.png")
@@ -2617,6 +2951,90 @@ def generate_jump_plots(data, results, output_dir, base_name):
     plot_files.append(power_plot_path)
 
     return plot_files
+
+
+def plot_freefall_check(data, results, output_dir, base_name):
+    """Plot the measured CoM during flight against an ideal 9.81 m/s^2 parabola.
+
+    This is the visual form of the gravity consistency check: during the airborne
+    phase the CoM must be a projectile, so any systematic gap between the measured
+    trace and the ideal free-fall curve is proof that the frame rate or the
+    pixel-to-metre scale is wrong, independently of any anatomical assumption.
+    """
+    fps = float(results.get("fps") or 0)
+    flight_start = _as_int_or_none(results.get("takeoff_frame_foot_contact"))
+    flight_end = _as_int_or_none(results.get("landing_frame_foot_contact"))
+    if not fps or flight_start is None or flight_end is None or flight_end <= flight_start:
+        return None
+
+    column = "cg_y_m_filtered" if "cg_y_m_filtered" in data.columns else "cg_y_m"
+    if column not in data.columns:
+        return None
+
+    y = pd.to_numeric(data[column], errors="coerce").to_numpy(dtype=float)
+    lo = max(0, flight_start)
+    hi = min(len(y), flight_end + 1)
+    if hi - lo < 5:
+        return None
+
+    t = (np.arange(lo, hi) - lo) / fps
+    measured = y[lo:hi]
+    finite = np.isfinite(measured)
+    if finite.sum() < 5:
+        return None
+
+    # Ideal trajectory: same start height, same apex time, but true gravity.
+    apex_idx = int(np.nanargmax(measured))
+    t_apex = t[apex_idx] if t[apex_idx] > 0 else t[-1] / 2.0
+    v0_ideal = 9.81 * t_apex
+    ideal = measured[0] + v0_ideal * t - 0.5 * 9.81 * t**2
+
+    g_measured = _as_float_or_none(results.get("gravity_check_g_measured_m_s2"))
+    status = str(results.get("gravity_check_status") or "")
+    ok = status == "ok"
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    ax.plot(t, measured, color="tab:blue", linewidth=2.5, label="Measured CoM during flight")
+    ax.plot(
+        t,
+        ideal,
+        color="tab:red",
+        linewidth=2,
+        linestyle="--",
+        label="Ideal free fall (g = 9.81 m/s²)",
+    )
+    ax.fill_between(t, measured, ideal, color="tab:red", alpha=0.12)
+
+    ax.set_xlabel("Time since last foot-off (s)")
+    ax.set_ylabel("CoM vertical position (m)")
+    subtitle = (
+        f"measured g = {g_measured:.2f} m/s²" if g_measured is not None else "g not estimated"
+    )
+    ax.set_title(f"Free-Fall Calibration Check — {subtitle}", fontweight="bold")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="lower center", fontsize=9)
+
+    if ok:
+        message = "Frame rate and scale are consistent with gravity."
+        colour = "#2e7d32"
+    else:
+        message = str(results.get("gravity_check_note") or "Calibration suspect.")
+        colour = "#b71c1c"
+    fig.text(
+        0.5,
+        -0.02,
+        "\n".join(textwrap.wrap(message, 95)),
+        ha="center",
+        va="top",
+        fontsize=9,
+        color="white",
+        bbox={"facecolor": colour, "alpha": 0.92, "boxstyle": "round"},
+    )
+
+    filepath = os.path.join(output_dir, f"{base_name}_freefall_check.png")
+    fig.savefig(filepath, dpi=100, bbox_inches="tight")
+    plt.close(fig)
+    return filepath
 
 
 def plot_jump_phases_analysis(
@@ -2981,6 +3399,19 @@ def draw_fppa_overlay(
     )
 
 
+def _fppa_risk_short(fppa_angle) -> str:
+    """Compact risk label for fixed-width terminal tables."""
+    if fppa_angle is None:
+        return "N/A"
+    abs_angle = abs(fppa_angle)
+    direction = "valgus" if fppa_angle > 0 else "varus"
+    if abs_angle < 5:
+        return "aligned"
+    if abs_angle <= 10:
+        return f"moderate {direction}"
+    return "HIGH RISK valgus" if direction == "valgus" else "marked varus"
+
+
 def _get_fppa_risk_classification(fppa_angle):
     """
     Classify FPPA angle into risk categories based on scientific evidence.
@@ -2995,13 +3426,20 @@ def _get_fppa_risk_classification(fppa_angle):
         return ("N/A", "black")
 
     abs_angle = abs(fppa_angle)
+    # Sign convention (see calculate_fppa_vector_2d): positive = valgus (medial
+    # knee collapse), negative = varus (lateral deviation). These are different
+    # mechanisms, so they must not be collapsed into one label: dynamic valgus is
+    # the pattern associated with the non-contact ACL injury mechanism, varus is
+    # not. Reporting "valgus or varus" made the output undiagnostic.
+    direction = "Valgus" if fppa_angle > 0 else "Varus"
+
     if abs_angle < 5:
         return ("Good Alignment", "green")
-    elif abs_angle <= 10:
-        return ("Moderate Risk", "orange")
-    else:
-        # Note: High risk applies to both excessive valgus (negative) and varus (positive)
-        return ("High Risk / Excessive Dynamic Valgus or Varus", "red")
+    if abs_angle <= 10:
+        return (f"Moderate {direction}", "orange")
+    if direction == "Valgus":
+        return ("High Risk / Excessive Dynamic Valgus", "red")
+    return ("Marked Dynamic Varus (not the ACL valgus pattern)", "purple")
 
 
 def _format_fppa_with_risk(fppa_angle):
@@ -3026,6 +3464,112 @@ def _format_optional_float(value: object, digits: int = 3) -> str:
     return f"{parsed:.{digits}f}" if parsed is not None else "N/A"
 
 
+def _gravity_qc_report_html(results: dict) -> str:
+    """Render the flight-phase gravity check, the pipeline's calibration alarm."""
+    status = str(results.get("gravity_check_status") or "")
+    if not status:
+        return ""
+
+    colors = {
+        "ok": "#2e7d32",
+        "suspect_fps_or_scale": "#b71c1c",
+        "insufficient_data": "#616161",
+    }
+    color = colors.get(status, "#616161")
+    g_measured = results.get("gravity_check_g_measured_m_s2")
+    ratio = results.get("gravity_check_ratio")
+    ratio_text = f"{float(ratio) * 100:.1f}%" if ratio is not None else "N/A"
+
+    banner = ""
+    if status == "suspect_fps_or_scale":
+        banner = (
+            '<p style="font-size:1.05em;"><strong>Every height, velocity, energy and '
+            "power value in this report is scaled by this error. Correct the frame "
+            "rate or the pixel-to-metre scale and re-run before interpreting the "
+            "results.</strong></p>"
+        )
+
+    return f"""
+        <h2>Calibration Check (Gravity During Flight)</h2>
+        <div class="note" style="border-left-color: {color};">
+            <p><strong>Status:</strong> <span style="color: {color}; font-weight: bold;">{status}</span></p>
+            <p>During the airborne phase the centre of mass is a projectile, so fitting
+            a parabola to it must return <em>g</em> = 9.81 m/s&sup2;. This is the only
+            check here that is independent of the operator-supplied frame rate and
+            pixel-to-metre scale, because an error in either one shows up directly in
+            the recovered <em>g</em>:
+            <code>g<sub>measured</sub> = 9.81 &middot; (fps<sub>entered</sub>/fps<sub>true</sub>)&sup2; &middot; (scale<sub>true</sub>/scale<sub>entered</sub>)</code>.</p>
+            <p><strong>Note:</strong> {results.get("gravity_check_note", "N/A")}</p>
+            {banner}
+        </div>
+        <table>
+            <tr><th>Metric</th><th>Value</th><th>Unit / Meaning</th></tr>
+            <tr><td>Measured g during flight</td><td>{_format_optional_float(g_measured, 2)}</td><td>m/s&sup2; (expected 9.81)</td></tr>
+            <tr><td>Ratio to 9.81</td><td>{ratio_text}</td><td>acceptance band 85-115%</td></tr>
+            <tr><td>Implied frame rate</td><td>{_format_optional_float(results.get("gravity_check_fps_implied"), 1)}</td><td>fps, if the scale is correct (entered: {results.get("fps", "N/A")})</td></tr>
+            <tr><td>Implied scale correction</td><td>{_format_optional_float(results.get("gravity_check_scale_factor"), 3)}</td><td>multiply the conversion factor, if the fps is correct</td></tr>
+            <tr><td>Samples fitted</td><td>{results.get("gravity_check_n_samples", "N/A")}</td><td>frames inside the flight window</td></tr>
+        </table>
+    """
+
+
+def _height_methods_report_html(results: dict) -> str:
+    """Side-by-side comparison of every jump-height estimate, with what each means."""
+    rows = [
+        (
+            "CoM rise, flight phase",
+            results.get("height_com_takeoff_ref_m"),
+            "peak CoM &minus; CoM at foot-off. <strong>The comparable jump height.</strong>",
+        ),
+        (
+            "CoM rise above standing",
+            results.get("height_com_above_standing_m", results.get("height_cg_method_m")),
+            "peak CoM &minus; standing CoM. Includes the rise that happens while the "
+            "feet are still on the ground, so it is larger than the jump height.",
+        ),
+        (
+            "Flight time (foot contact)",
+            results.get("height_foot_contact_method_m"),
+            "g&middot;t&sup2;/8 with t = last foot-off &rarr; first foot contact.",
+        ),
+        (
+            "CoM above baseline (not flight)",
+            results.get("height_flight_time_method_m"),
+            "g&middot;t&sup2;/8 over the CoM-baseline crossing interval. <strong>Not a "
+            "flight time</strong>; shown only to expose the difference.",
+        ),
+        (
+            "Foot marker (left / right)",
+            None,
+            "peak foot-marker rise; sensitive to tracking noise.",
+        ),
+    ]
+
+    body = ""
+    for label, value, meaning in rows:
+        if label.startswith("Foot marker"):
+            shown = (
+                f"{_format_optional_float(results.get('height_left_foot_m'))} / "
+                f"{_format_optional_float(results.get('height_right_foot_m'))}"
+            )
+        else:
+            shown = _format_optional_float(value)
+        body += f"<tr><td>{label}</td><td>{shown}</td><td>{meaning}</td></tr>"
+
+    return f"""
+        <h2>Jump Height: All Methods</h2>
+        <div class="note">
+            <p>These methods measure different things and only the first and third are
+            expected to agree. A large gap between them means the phase detection or the
+            calibration is wrong, not that one method is "better".</p>
+        </div>
+        <table>
+            <tr><th>Method</th><th>Height (m)</th><th>What it actually measures</th></tr>
+            {body}
+        </table>
+    """
+
+
 def _height_qc_report_html(results: dict) -> str:
     status = results.get("height_qc_status")
     if not status:
@@ -3036,6 +3580,7 @@ def _height_qc_report_html(results: dict) -> str:
         "very_high_plausible": "#ef6c00",
         "manual_review": "#c62828",
         "probable_error": "#b71c1c",
+        "calibration_error": "#b71c1c",
         "missing": "#616161",
     }
     color = colors.get(str(status), "#616161")
@@ -3061,6 +3606,55 @@ def _height_qc_report_html(results: dict) -> str:
             <tr><td>Correction applied</td><td>{correction}</td><td>recommended height used for velocity/energy/power</td></tr>
         </table>
     """
+
+
+def _phase_frame_rows_html(results: dict) -> str:
+    """Rows for the phase table, each labelled with the event definition used."""
+    fps = _as_float_or_none(results.get("fps")) or 0.0
+    rows = [
+        (
+            "Countermovement bottom",
+            results.get("propulsion_start_frame"),
+            "lowest smoothed CoM before the peak",
+        ),
+        (
+            "CoM crosses standing height (up)",
+            results.get("com_baseline_up_frame", results.get("takeoff_frame")),
+            "CoM returns to standing height &mdash; <strong>not</strong> take-off",
+        ),
+        (
+            "Take-off (last foot-off)",
+            results.get("takeoff_frame_foot_contact"),
+            "last foot marker rises above the standing foot height",
+        ),
+        (
+            "Take-off (kinetic, GRF = 0)",
+            results.get("takeoff_frame_kinetic"),
+            "last propulsion frame with a positive modelled GRF",
+        ),
+        ("CoM peak", results.get("max_height_frame"), "maximum CoM height"),
+        (
+            "Landing (first foot contact)",
+            results.get("landing_frame_foot_contact"),
+            "first foot marker back at the standing foot height",
+        ),
+        (
+            "CoM crosses standing height (down)",
+            results.get("com_baseline_down_frame", results.get("landing_frame")),
+            "CoM back at standing height, after touchdown",
+        ),
+    ]
+
+    html = ""
+    for label, frame, definition in rows:
+        frame_value = _as_int_or_none(frame)
+        frame_text = str(frame_value) if frame_value is not None else "N/A"
+        time_text = f"{frame_value / fps:.3f}" if (frame_value is not None and fps) else "N/A"
+        html += (
+            f"<tr><td>{label}</td><td>{frame_text}</td>"
+            f"<td>{time_text}</td><td>{definition}</td></tr>"
+        )
+    return html
 
 
 def generate_html_report(data, results, plot_files, output_dir, base_name):
@@ -3271,11 +3865,15 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
 
             <h4>3. Average Propulsion Power</h4>
             <p>
-              <code>P<sub>avg</sub> = (KE<sub>takeoff</sub> + PE<sub>max</sub>) / t<sub>propulsion</sub></code> (energy method; reported as <code>power_avg_propulsion_W</code>).<br>
+              <code>P<sub>avg</sub> = m&middot;g&middot;h / t<sub>propulsion</sub></code> (energy method; reported as <code>power_avg_propulsion_W</code>).<br>
+              Note that KE at take-off and PE at the apex are the <em>same</em> energy measured at two instants (v<sub>takeoff</sub> is derived from h), so they must not be summed.<br>
+              <code>power_avg_propulsion_work_W</code> additionally includes the work needed to raise the CoM from the bottom of the countermovement: <code>(m&middot;g&middot;h + m&middot;g&middot;d<sub>squat</sub>) / t<sub>propulsion</sub></code>.<br>
               The CSV also exports <code>power_avg_propulsion_phase_W</code>: mean of instantaneous power over the propulsion phase.
             </p>
         </div>
 
+        {_gravity_qc_report_html(results)}
+        {_height_methods_report_html(results)}
         {_height_qc_report_html(results)}
 
         <h2>Jump Metrics</h2>
@@ -3495,49 +4093,100 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
                 <td>{f"{results.get('landing_100ms_frame', 0) / results.get('fps', 30):.3f}" if results.get("landing_100ms_frame") is not None else "N/A"}</td>
             </tr>
             <tr>
-                <td><strong>Max Valgus (0.2s window)</strong></td>
-                <td>{_format_fppa_with_risk(results.get("max_valgus_angle_left_deg"))}</td>
-                <td>{_format_fppa_with_risk(results.get("max_valgus_angle_right_deg"))}</td>
-                <td>L: {results.get("max_valgus_frame_left", "N/A")}, R: {results.get("max_valgus_frame_right", "N/A")}</td>
-                <td>L: {f"{results.get('max_valgus_frame_left', 0) / results.get('fps', 30):.3f}" if results.get("max_valgus_frame_left") is not None else "N/A"}, R: {f"{results.get('max_valgus_frame_right', 0) / results.get('fps', 30):.3f}" if results.get("max_valgus_frame_right") is not None else "N/A"}</td>
+                <td><strong>Peak deviation (0.2 s window)</strong></td>
+                <td>{_format_fppa_with_risk(results.get("peak_fppa_deviation_left_deg"))}</td>
+                <td>{_format_fppa_with_risk(results.get("peak_fppa_deviation_right_deg"))}</td>
+                <td>L: {results.get("peak_fppa_deviation_frame_left", "N/A")}, R: {results.get("peak_fppa_deviation_frame_right", "N/A")}</td>
+                <td>L: {f"{results.get('peak_fppa_deviation_frame_left', 0) / results.get('fps', 30):.3f}" if results.get("peak_fppa_deviation_frame_left") is not None else "N/A"}, R: {f"{results.get('peak_fppa_deviation_frame_right', 0) / results.get('fps', 30):.3f}" if results.get("peak_fppa_deviation_frame_right") is not None else "N/A"}</td>
             </tr>
         </table>
 
         <h2>Jump Phase Frames</h2>
+        <div class="note">
+            <p>Three different event definitions appear below and they do not coincide.
+            Reading a CoM-baseline crossing as "take-off" is the single most common way
+            to overestimate flight time and jump height in this pipeline, so each row
+            states what it actually detects.</p>
+        </div>
         <table>
             <tr>
-                <th>Phase</th>
+                <th>Event</th>
                 <th>Frame</th>
                 <th>Time (s)</th>
+                <th>How it is detected</th>
             </tr>
-            <tr>
-                <td>Takeoff</td>
-                <td>{results["takeoff_frame"] if results["takeoff_frame"] is not None else "N/A"}</td>
-                <td>{f"{results['takeoff_frame'] / results['fps']:.3f}" if results["takeoff_frame"] is not None else "N/A"}</td>
-            </tr>
-            <tr>
-                <td>Maximum Height</td>
-                <td>{results["max_height_frame"] if results["max_height_frame"] is not None else "N/A"}</td>
-                <td>{f"{results['max_height_frame'] / results['fps']:.3f}" if results["max_height_frame"] is not None else "N/A"}</td>
-            </tr>
-            <tr>
-                <td>Landing</td>
-                <td>{results["landing_frame"] if results["landing_frame"] is not None else "N/A"}</td>
-                <td>{f"{results['landing_frame'] / results['fps']:.3f}" if results["landing_frame"] is not None else "N/A"}</td>
-            </tr>
+            {_phase_frame_rows_html(results)}
         </table>
 
         <h2>Jump Analysis Visualizations</h2>
     """
 
-    # Add images to the report
+    # Add images to the report. Captions explain what each figure shows; the bare
+    # file name told the reader nothing.
+    plot_captions = {
+        "freefall_check": (
+            "Free-fall calibration check",
+            "Measured CoM during flight against an ideal 9.81 m/s&sup2; parabola. A visible "
+            "gap means the frame rate or the pixel-to-metre scale is wrong.",
+        ),
+        "power_curve": (
+            "Instantaneous CoM power",
+            "CoM low-pass filtered at 12 Hz before differentiation; ground reaction force "
+            "is forced to zero during the flight phase, where it is physically zero.",
+        ),
+        "jump_phases_analysis": (
+            "Jump phases",
+            "CoM trajectory with the detected phase boundaries.",
+        ),
+        "cg_feet_analysis": (
+            "CoM and feet",
+            "CoM against foot-marker height; foot-off and foot-contact are read from the feet.",
+        ),
+        "normalized_diagnostic": (
+            "Normalised diagnostic",
+            "Tracking-quality overview of the normalised signals.",
+        ),
+        "stickfigures_phases": (
+            "Stick figures by phase",
+            "One posture per detected phase, using the same frames as the results table.",
+        ),
+        "stickfigures_cg": (
+            "Stick figures with CoM path",
+            "Postures overlaid on the CoM trajectory.",
+        ),
+        "valgus_ratio": (
+            "Knee-hip separation ratio",
+            "Knee separation divided by hip separation. Values BELOW 1 mean the knees are "
+            "closer together than the hips (valgus pattern); values above 1 mean the knees "
+            "are wider than the hips (varus pattern).",
+        ),
+        "valgus_event_squat": (
+            "Frontal-plane alignment at the squat",
+            "Knee alignment at the deepest point of the countermovement.",
+        ),
+        "valgus_event_landing": (
+            "Frontal-plane alignment at landing",
+            "Knee alignment at initial contact and the following landing window.",
+        ),
+        "fppa_time_series": (
+            "FPPA over time",
+            "Frontal Plane Projection Angle for both knees. Positive = valgus (medial "
+            "collapse), negative = varus (lateral deviation).",
+        ),
+    }
+
     for plot_file in plot_files:
         plot_filename = os.path.basename(plot_file)
+        title, caption = next(
+            (v for k, v in plot_captions.items() if k in plot_filename),
+            (plot_filename, ""),
+        )
         # Use relative paths in the HTML
         html_content += f"""
         <div class="img-container">
-            <img src="{plot_filename}" alt="Jump analysis plot">
-            <p><em>{plot_filename}</em></p>
+            <h3>{title}</h3>
+            <img src="{plot_filename}" alt="{title}">
+            <p><em>{caption or plot_filename}</em></p>
         </div>
         """
 
@@ -3777,23 +4426,98 @@ def process_mediapipe_data(input_file, output_dir):
         height_qc_results = _cmj_height_quality_check(jump_phase_results, fps)
         jump_phase_results.update(height_qc_results)
 
-        # Calculate power metrics first
+        # Independent scale/frame-rate check: gravity recovered from the CoM
+        # trajectory during the airborne phase. Prefer the foot-contact window,
+        # which is a real flight phase; fall back to the CoM-baseline window.
+        gravity_takeoff = jump_phase_results.get(
+            "takeoff_frame_foot_contact"
+        ) or jump_phase_results.get("takeoff_frame")
+        gravity_landing = jump_phase_results.get(
+            "landing_frame_foot_contact"
+        ) or jump_phase_results.get("landing_frame")
+        gravity_results = _gravity_consistency_check(
+            data["cg_y_m"].to_numpy() if "cg_y_m" in data.columns else None,
+            gravity_takeoff,
+            gravity_landing,
+            fps,
+        )
+        jump_phase_results.update(gravity_results)
+
+        # A failed gravity check invalidates every scaled quantity, so it must
+        # override the height verdict. Otherwise a trial whose frame rate is off
+        # by 2x still reports "plausible" simply because the (wrongly scaled)
+        # number happens to land inside the expected range.
+        if gravity_results.get("gravity_check_status") == "suspect_fps_or_scale":
+            gated_note = (
+                f"{height_qc_results.get('height_qc_note', '')} "
+                f"CALIBRATION: {gravity_results.get('gravity_check_note')}"
+            ).strip()
+            height_qc_results["height_qc_status"] = "calibration_error"
+            height_qc_results["height_qc_recommended_status"] = "calibration_error"
+            height_qc_results["height_qc_note"] = gated_note
+            jump_phase_results.update(height_qc_results)
+
+        if gravity_results.get("gravity_check_status") == "suspect_fps_or_scale":
+            print("\n*** CALIBRATION WARNING ***")
+            print(f"  {gravity_results.get('gravity_check_note')}")
+            print("***************************\n")
+
+        # Calculate power metrics first.
+        # Low-pass the CoM before differentiating twice. Markerless CoM traces
+        # carry per-frame jitter; differentiation amplifies it by f and double
+        # differentiation by f^2, so an unfiltered acceleration is dominated by
+        # noise and the resulting "peak power" is a noise spike rather than a
+        # physiological value. 12 Hz zero-lag Butterworth is above the CMJ signal
+        # bandwidth and is the usual choice for jump CoM kinematics.
         dt = 1 / fps
-        vel_cg = np.gradient(data["cg_y_m"], dt)
+        cg_y_for_kinetics = _lowpass_com(data["cg_y_m"].to_numpy(dtype=float), fps)
+        data["cg_y_m_filtered"] = cg_y_for_kinetics
+        vel_cg = np.gradient(cg_y_for_kinetics, dt)
         data["cg_vy"] = vel_cg
         acc_cg = np.gradient(vel_cg, dt)
         data["cg_ay"] = acc_cg
-        force_vertical = mass * (acc_cg + 9.81)
-        data["force_vertical"] = force_vertical
-        power = force_vertical * vel_cg
-        data["power"] = power
 
-        # Calculate power metrics during propulsion
+        # Vertical GRF from the CoM equation of motion: F_grf - m*g = m*a  =>
+        # F_grf = m*(a + g). This only holds while the athlete is in contact with
+        # the ground. During flight the true GRF is exactly zero, and the formula
+        # instead returns m*(a_measured + 9.81), i.e. pure differentiation noise
+        # (and a large phantom force whenever the measured flight acceleration is
+        # not -9.81). Those phantom values were being carried into the power
+        # curve and plotted as if they were real, so mask the airborne frames.
+        force_vertical = mass * (acc_cg + 9.81)
+        power = force_vertical * vel_cg
+
+        airborne = np.zeros(len(data), dtype=bool)
+        flight_start = _as_int_or_none(
+            jump_phase_results.get("takeoff_frame_foot_contact")
+        ) or _as_int_or_none(jump_phase_results.get("takeoff_ref_frame"))
+        flight_end = _as_int_or_none(
+            jump_phase_results.get("landing_frame_foot_contact")
+        ) or _as_int_or_none(jump_phase_results.get("landing_frame"))
+        if flight_start is not None and flight_end is not None and flight_end > flight_start:
+            lo = max(0, flight_start + 1)
+            hi = min(len(data), flight_end)
+            airborne[lo:hi] = True
+            force_vertical[airborne] = 0.0
+            power[airborne] = 0.0
+
+        data["force_vertical"] = force_vertical
+        data["power"] = power
+        data["airborne"] = airborne
+
+        # Calculate power metrics during propulsion.
+        # Propulsion runs from the bottom of the countermovement to foot-off, so
+        # it must end at the real take-off frame. Ending it at the CoM-baseline
+        # crossing truncated the phase before peak power in many trials.
         takeoff_frame = jump_phase_results["takeoff_frame"]
         squat_frame = jump_phase_results["propulsion_start_frame"]
+        propulsion_end_frame = (
+            _as_int_or_none(jump_phase_results.get("takeoff_ref_frame")) or takeoff_frame
+        )
 
-        if takeoff_frame is not None and squat_frame is not None:
-            propulsion_frames = range(squat_frame, takeoff_frame + 1)
+        if propulsion_end_frame is not None and squat_frame is not None:
+            propulsion_end_frame = min(propulsion_end_frame, len(power) - 1)
+            propulsion_frames = range(squat_frame, propulsion_end_frame + 1)
             power_propulsion = power[propulsion_frames]
             # Max power restricted to propulsion phase only (not landing eccentric phase)
             max_power = np.max(power_propulsion) if len(power_propulsion) > 0 else 0
@@ -3808,10 +4532,31 @@ def process_mediapipe_data(input_file, output_dir):
             )
             time_max_power = idx_max_power / fps
 
-            # Calculate takeoff power
-            power_takeoff = power[takeoff_frame] if takeoff_frame < len(power) else 0
+            # Instantaneous power at foot-off.
+            #
+            # `takeoff_frame` is only the frame where the CoM crosses its standing
+            # baseline, far too early. But the marker-based foot-off frame is also
+            # not exact: it is detected from a 2 cm marker-height threshold, so it
+            # lands a few frames AFTER the athlete stopped pushing, where the CoM
+            # is already decelerating and m*(a+g) is negative. Evaluating power
+            # there returned a large negative "take-off power".
+            #
+            # Kinetic foot-off is when the vertical GRF reaches zero, so use the
+            # last frame of the propulsion phase at which the modelled GRF is
+            # still positive.
+            marker_takeoff_frame = (
+                _as_int_or_none(jump_phase_results.get("takeoff_ref_frame")) or takeoff_frame
+            )
+            power_takeoff_frame = min(marker_takeoff_frame, len(power) - 1)
+            search_lo = max(0, squat_frame)
+            positive_grf = np.flatnonzero(force_vertical[search_lo : power_takeoff_frame + 1] > 0)
+            if len(positive_grf) > 0:
+                power_takeoff_frame = search_lo + int(positive_grf[-1])
+            power_takeoff = power[power_takeoff_frame] if power_takeoff_frame < len(power) else 0
+            jump_phase_results["takeoff_frame_kinetic"] = int(power_takeoff_frame)
         else:
             max_power = 0
+            avg_power_propulsion = 0
             idx_max_power = 0
             time_max_power = 0
             power_takeoff = 0
@@ -3825,11 +4570,25 @@ def process_mediapipe_data(input_file, output_dir):
         potential_energy = calculate_potential_energy(mass, jump_height) if jump_height else 0
         kinetic_energy = calculate_kinetic_energy(mass, velocity_takeoff)
 
+        # Total mechanical energy of the jump.
+        #
+        # NOTE: potential_energy and kinetic_energy are NOT independent here.
+        # velocity_takeoff is derived from the height as v = sqrt(2*g*h), so
+        # KE_takeoff = 0.5*m*v^2 = m*g*h = PE_apex exactly. They are the same
+        # energy measured at two instants (all kinetic at take-off, all potential
+        # at the apex), so summing them double-counted it and doubled every
+        # quantity derived from the sum.
+        total_energy = potential_energy if potential_energy else 0.0
+
+        # Net propulsion work also has to raise the CoM back up from the bottom of
+        # the countermovement, so it exceeds m*g*h by m*g*squat_depth.
+        squat_depth_m = _as_float_or_none(jump_phase_results.get("squat_depth_m")) or 0.0
+        propulsion_work = total_energy + mass * 9.81 * squat_depth_m
+
         # Calculate average propulsion power
         propulsion_time = jump_phase_results.get("propulsion_time_s", 0)
-        power_avg_propulsion = (
-            (potential_energy + kinetic_energy) / propulsion_time if propulsion_time > 0 else 0
-        )
+        power_avg_propulsion = total_energy / propulsion_time if propulsion_time > 0 else 0
+        power_avg_propulsion_work = propulsion_work / propulsion_time if propulsion_time > 0 else 0
 
         # Prepare comprehensive results
         results = {
@@ -3958,6 +4717,20 @@ def process_mediapipe_data(input_file, output_dir):
             "height_used_for_power_m": round(jump_height, 3) if jump_height is not None else None,
         }
         results.update(height_qc_results)
+        results.update(gravity_results)
+        for key in (
+            "height_com_above_standing_m",
+            "height_com_takeoff_ref_m",
+            "com_y_at_takeoff_m",
+            "takeoff_ref_frame",
+            "takeoff_ref_source",
+            "foot_off_frame",
+            "com_baseline_up_frame",
+            "com_baseline_down_frame",
+            "com_above_baseline_time_s",
+            "takeoff_frame_kinetic",
+        ):
+            results[key] = jump_phase_results.get(key)
 
         # Collect all relevant data for the database (complete CSV)
         db_row = {
@@ -4050,11 +4823,11 @@ def process_mediapipe_data(input_file, output_dir):
             # Energies
             "potential_energy_J": potential_energy,
             "kinetic_energy_J": kinetic_energy,
-            "total_energy_J": (
-                (potential_energy + kinetic_energy)
-                if (potential_energy is not None and kinetic_energy is not None)
-                else None
-            ),
+            # Total mechanical energy = m*g*h. PE_apex and KE_takeoff are the same
+            # energy at two instants, so they must not be added together.
+            "total_energy_J": total_energy,
+            "propulsion_work_J": propulsion_work,
+            "power_avg_propulsion_work_W": power_avg_propulsion_work,
             # Powers
             "power_takeoff_W": power_takeoff,
             "power_avg_propulsion_W": power_avg_propulsion,
@@ -4171,23 +4944,49 @@ def process_mediapipe_data(input_file, output_dir):
         calibrated_data.to_csv(output_calibrated_file, index=False, float_format="%.6f")
         print(f"Calibrated data saved: {output_calibrated_file}")
 
-        # Generate stick figures
+        # Generate stick figures.
+        # Pass the phase frames from the analysis: both plotting helpers used to
+        # re-detect the phases themselves with a cruder, unsmoothed rule, so the
+        # figures were annotated with frames that did not match the numbers in the
+        # results CSV and the HTML report.
+        phase_frames_for_plots = [
+            0,
+            jump_phase_results.get("propulsion_start_frame"),
+            jump_phase_results.get("takeoff_ref_frame") or jump_phase_results.get("takeoff_frame"),
+            jump_phase_results.get("max_height_frame"),
+            jump_phase_results.get("landing_frame_foot_contact")
+            or jump_phase_results.get("landing_frame"),
+        ]
+        if any(f is None for f in phase_frames_for_plots):
+            phase_frames_for_plots = None
+        else:
+            phase_frames_for_plots = [int(f) for f in phase_frames_for_plots]
+
         stickfig_phases_file = os.path.join(
             output_dir, f"{base_name}_stickfigures_phases_{timestamp}.png"
         )
-        plot_jump_stickfigures_subplot(output_calibrated_file, stickfig_phases_file)
+        plot_jump_stickfigures_subplot(
+            output_calibrated_file, stickfig_phases_file, frames_plot=phase_frames_for_plots
+        )
         plot_files.append(stickfig_phases_file)
 
         stickfig_output_file = os.path.join(
             output_dir, f"{base_name}_stickfigures_cg_{timestamp}.png"
         )
-        plot_jump_stickfigures_with_cg(output_calibrated_file, stickfig_output_file)
+        plot_jump_stickfigures_with_cg(
+            output_calibrated_file, stickfig_output_file, frames_plot=phase_frames_for_plots
+        )
         plot_files.append(stickfig_output_file)
 
         # Calculate Kinematics (after processing and calibration)
         # Note: data should have '_m' columns by now if calibration succeeded
         kinematic_results = calculate_kinematics(data, results)
         results.update(kinematic_results)
+
+        # Free-fall calibration check plot (before the HTML report so it is embedded)
+        freefall_plot = plot_freefall_check(data, results, output_dir, base_name)
+        if freefall_plot:
+            plot_files.append(freefall_plot)
 
         # Generate valgus plots (before HTML report so they're included)
         valgus_plot = plot_valgus_ratio(data, results, output_dir, base_name)
@@ -4558,7 +5357,7 @@ def _team_quality_table(df: pd.DataFrame) -> pd.DataFrame:
         (table["team_qc_flag"] == "ok")
         & (
             discrepancy.ge(CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M)
-            | status_text.isin(["manual_review", "probable_error"])
+            | status_text.isin(["manual_review", "probable_error", "calibration_error"])
         ),
         "team_qc_flag",
     ] = "review"
@@ -4741,7 +5540,7 @@ def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str
         (df["team_qc_flag"] == "ok")
         & (
             discrepancy.ge(CMJ_HEIGHT_DISCREPANCY_THRESHOLD_M)
-            | status_text.isin(["manual_review", "probable_error"])
+            | status_text.isin(["manual_review", "probable_error", "calibration_error"])
         ),
         "team_qc_flag",
     ] = "review"
@@ -4994,6 +5793,8 @@ def _team_full_table_html(df: pd.DataFrame) -> str:
         "height_qc_status",
         "height_qc_recommended_source",
         "height_qc_correction_applied",
+        "gravity_check_status",
+        "gravity_check_g_measured_m_s2",
         "team_qc_flag",
         "mass_kg",
         "flight_time_com_method_s",
@@ -6280,17 +7081,27 @@ def plot_jump_stickfigures_subplot(
         if i == 0:
             ax.legend(loc="upper right", fontsize=10)
 
-    # Add overall title
-    # Calculate jump height relative to initial position (assuming normalized or relative coords)
+    # Add overall title.
+    # Report BOTH CoM heights, because they answer different questions and the
+    # standing-referenced one alone reads as an inflated jump height.
     try:
-        jump_height = df[cg_y_col].max()
+        peak_height = float(df[cg_y_col].max())
     except Exception:
-        jump_height = 0
+        peak_height = 0.0
 
-    fig.suptitle(
-        f"Vertical Jump Phases with Center of Gravity (CG) - CG Jump Height: {jump_height:.3f} m",
-        fontsize=16,
-    )
+    flight_height = None
+    try:
+        takeoff_frame_for_title = frames_plot[2]
+        cg_at_takeoff = float(df[cg_y_col].iloc[takeoff_frame_for_title])
+        if peak_height >= cg_at_takeoff:
+            flight_height = peak_height - cg_at_takeoff
+    except Exception:
+        flight_height = None
+
+    title = f"Vertical Jump Phases with Center of Gravity (CG) — CoM above standing: {peak_height:.3f} m"
+    if flight_height is not None:
+        title += f"  |  CoM rise after take-off (jump height): {flight_height:.3f} m"
+    fig.suptitle(title, fontsize=15)
 
     # Adjust layout
     plt.tight_layout(rect=(0, 0, 1, 0.95))  # Leave space for suptitle

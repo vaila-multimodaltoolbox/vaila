@@ -1,8 +1,8 @@
 """
 Unit tests for vaila/vaila_and_jump.py — pure calculation functions.
 
-Update Date: 03 June 2026
-Version: 0.3.47
+Update Date: 27 August 2026
+Version: 0.3.117
 
 These tests verify each atomic calculation function in isolation,
 using known inputs and expected outputs based on physics formulas.
@@ -22,11 +22,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vaila.vaila_and_jump import (
     _cmj_height_quality_check,
+    _get_fppa_risk_classification,
+    _gravity_consistency_check,
     _iter_jump_data_dirs,
     _jump_context_from_cfg,
     _load_jump_context_from_file,
     _load_jump_context_from_toml,
     _looks_like_vaila_output_csv,
+    _lowpass_com,
     _parse_locale_float,
     _team_summary_table,
     calculate_average_power,
@@ -470,3 +473,247 @@ class TestTeamBatchHelpers:
         assert height_row["mean"] == pytest.approx(0.35)
         assert height_row["min"] == pytest.approx(0.30)
         assert height_row["max"] == pytest.approx(0.40)
+
+
+# ──────────────────────────────────────────────
+# 13. Regression tests for the 2026-08-27 correctness fixes
+# ──────────────────────────────────────────────
+class TestFppaSignConvention:
+    """FPPA must use one anatomical sign convention for both limbs.
+
+    A cross-product sign flips between the left and the right limb for the same
+    anatomical direction, so a symmetric posture used to come out with mirrored
+    signs (e.g. left -34 deg, right +21 deg) and valgus could not be told from
+    varus.
+    """
+
+    @staticmethod
+    def _posture(left_knee_x, right_knee_x):
+        # Subject faces the camera: left hip at +x, right hip at -x, midline x=0.
+        row = {
+            "left_hip_x": 0.10,
+            "left_hip_y": 1.00,
+            "left_knee_x": left_knee_x,
+            "left_knee_y": 0.55,
+            "left_ankle_x": 0.10,
+            "left_ankle_y": 0.10,
+            "right_hip_x": -0.10,
+            "right_hip_y": 1.00,
+            "right_knee_x": right_knee_x,
+            "right_knee_y": 0.55,
+            "right_ankle_x": -0.10,
+            "right_ankle_y": 0.10,
+            "cg_x": 0.0,
+            "cg_y": 0.9,
+        }
+        return pd.DataFrame([row, row, row])
+
+    def test_symmetric_valgus_is_positive_on_both_sides(self):
+        # Both knees pulled towards the midline (x = 0) => valgus on both sides.
+        data = self._posture(left_knee_x=0.02, right_knee_x=-0.02)
+        results = {"fps": 60, "propulsion_start_frame": 1, "landing_frame": 2}
+
+        kinematics = calculate_kinematics(data, results)
+
+        assert kinematics["fppa_left_squat_deg"] > 0
+        assert kinematics["fppa_right_squat_deg"] > 0
+        assert kinematics["fppa_left_squat_deg"] == pytest.approx(
+            kinematics["fppa_right_squat_deg"], abs=1e-6
+        )
+
+    def test_symmetric_varus_is_negative_on_both_sides(self):
+        # Both knees pushed away from the midline => varus on both sides.
+        data = self._posture(left_knee_x=0.18, right_knee_x=-0.18)
+        results = {"fps": 60, "propulsion_start_frame": 1, "landing_frame": 2}
+
+        kinematics = calculate_kinematics(data, results)
+
+        assert kinematics["fppa_left_squat_deg"] < 0
+        assert kinematics["fppa_right_squat_deg"] < 0
+        assert kinematics["fppa_left_squat_deg"] == pytest.approx(
+            kinematics["fppa_right_squat_deg"], abs=1e-6
+        )
+
+    def test_knee_angle_is_not_a_copy_of_fppa(self):
+        data = self._posture(left_knee_x=0.02, right_knee_x=-0.02)
+        results = {"fps": 60, "propulsion_start_frame": 1, "landing_frame": 2}
+
+        kinematics = calculate_kinematics(data, results)
+
+        knee_angle = kinematics["knee_angle_left_squat_deg"]
+        fppa = kinematics["fppa_left_squat_deg"]
+        # The included hip-knee-ankle angle is near-extended, i.e. near 180 deg,
+        # and is a completely different quantity from the FPPA deviation.
+        assert knee_angle != pytest.approx(fppa)
+        assert 90.0 < knee_angle <= 180.0
+        assert knee_angle == pytest.approx(180.0 - abs(fppa), abs=1e-6)
+
+    def test_peak_varus_is_tracked_separately_from_peak_valgus(self):
+        # A limb that stays in varus for the whole landing window must not be
+        # reported as having a "max valgus" equal to its least-varus frame.
+        rows = []
+        for knee_offset in (0.16, 0.18, 0.22, 0.19):
+            rows.append(
+                {
+                    "left_hip_x": 0.10,
+                    "left_hip_y": 1.00,
+                    "left_knee_x": knee_offset,
+                    "left_knee_y": 0.55,
+                    "left_ankle_x": 0.10,
+                    "left_ankle_y": 0.10,
+                    "right_hip_x": -0.10,
+                    "right_hip_y": 1.00,
+                    "right_knee_x": -knee_offset,
+                    "right_knee_y": 0.55,
+                    "right_ankle_x": -0.10,
+                    "right_ankle_y": 0.10,
+                    "cg_x": 0.0,
+                    "cg_y": 0.9,
+                }
+            )
+        data = pd.DataFrame(rows)
+        results = {"fps": 60, "propulsion_start_frame": 0, "landing_frame": 0}
+
+        kinematics = calculate_kinematics(data, results)
+
+        # Never valgus, so the peak "valgus" value stays negative...
+        assert kinematics["max_valgus_angle_left_deg"] < 0
+        # ...and the true peak excursion is the most-varus frame (index 2).
+        assert kinematics["max_varus_frame_left"] == 2
+        assert kinematics["max_varus_angle_left_deg"] < kinematics["max_valgus_angle_left_deg"]
+        assert kinematics["peak_fppa_deviation_frame_left"] == 2
+
+
+class TestFppaRiskClassification:
+    def test_valgus_and_varus_are_not_collapsed_into_one_label(self):
+        valgus_label, _ = _get_fppa_risk_classification(20.0)
+        varus_label, _ = _get_fppa_risk_classification(-20.0)
+
+        assert valgus_label != varus_label
+        assert "Valgus" in valgus_label
+        assert "Varus" in varus_label
+
+    def test_small_deviation_is_good_alignment(self):
+        assert _get_fppa_risk_classification(2.0)[0] == "Good Alignment"
+        assert _get_fppa_risk_classification(-2.0)[0] == "Good Alignment"
+
+
+class TestGravityConsistencyCheck:
+    @staticmethod
+    def _projectile(fps, g, n=60, v0=2.5):
+        t = np.arange(n) / fps
+        return 1.0 + v0 * t - 0.5 * g * t**2
+
+    def test_correct_calibration_passes(self):
+        fps = 240.0
+        y = self._projectile(fps, 9.81)
+
+        check = _gravity_consistency_check(y, 0, len(y) - 1, fps)
+
+        assert check["gravity_check_status"] == "ok"
+        assert check["gravity_check_g_measured_m_s2"] == pytest.approx(9.81, abs=0.05)
+
+    def test_frame_rate_entered_at_half_the_true_value_is_caught(self):
+        # Trajectory really sampled at 240 Hz but analysed as if it were 120 Hz.
+        true_fps = 240.0
+        y = self._projectile(true_fps, 9.81)
+
+        check = _gravity_consistency_check(y, 0, len(y) - 1, fps=120.0)
+
+        assert check["gravity_check_status"] == "suspect_fps_or_scale"
+        # Halving the frame rate quarters the measured g.
+        assert check["gravity_check_g_measured_m_s2"] == pytest.approx(9.81 / 4, abs=0.05)
+        assert check["gravity_check_fps_implied"] == pytest.approx(true_fps, rel=0.02)
+
+    def test_scale_error_reports_the_correction_factor(self):
+        fps = 240.0
+        y = self._projectile(fps, 9.81) / 2.0  # metres-per-pixel too small by 2x
+
+        check = _gravity_consistency_check(y, 0, len(y) - 1, fps)
+
+        assert check["gravity_check_status"] == "suspect_fps_or_scale"
+        assert check["gravity_check_scale_factor"] == pytest.approx(2.0, rel=0.02)
+
+    def test_short_window_is_reported_as_insufficient(self):
+        check = _gravity_consistency_check(np.array([1.0, 1.1, 1.0]), 0, 2, 240.0)
+
+        assert check["gravity_check_status"] == "insufficient_data"
+
+
+class TestComKinematicsLowpass:
+    def test_filter_removes_jitter_but_keeps_the_signal(self):
+        fps = 240.0
+        t = np.arange(240) / fps
+        clean = np.sin(2 * np.pi * 1.5 * t)
+        rng = np.random.default_rng(0)
+        noisy = clean + rng.normal(0, 0.01, size=clean.shape)
+
+        filtered = _lowpass_com(noisy, fps)
+
+        # Compare on the interior: filtfilt padding distorts the very edges.
+        interior = slice(20, -20)
+        rms_before = np.sqrt(np.mean((noisy[interior] - clean[interior]) ** 2))
+        rms_after = np.sqrt(np.mean((filtered[interior] - clean[interior]) ** 2))
+        assert rms_after < rms_before
+
+    def test_returns_input_when_cutoff_exceeds_nyquist(self):
+        signal = np.array([0.0, 1.0, 2.0, 3.0])
+
+        assert np.array_equal(_lowpass_com(signal, fps=10.0), signal)
+
+
+class TestTakeoffReferencedHeight:
+    """`height_cg_method_m` measures the CoM peak above STANDING height.
+
+    The jump height is the CoM rise after the feet leave the ground, so the two
+    differ by the rise that happens during the push-off. Reporting the standing
+    referenced value as the jump height overestimated it.
+    """
+
+    def test_qc_prefers_the_takeoff_referenced_height(self):
+        phase_results = {
+            "height_cg_method_m": 0.40,
+            "height_com_takeoff_ref_m": 0.20,
+            # 97 frames of flight at 240 fps => g*t^2/8 = 0.20 m, so the two
+            # methods agree and no correction is triggered.
+            "left_takeoff_frame": 20,
+            "right_takeoff_frame": 20,
+            "left_landing_frame": 117,
+            "right_landing_frame": 117,
+        }
+
+        qc = _cmj_height_quality_check(phase_results, fps=240)
+
+        assert qc["height_qc_recommended_source"] == "com_takeoff_ref"
+        assert qc["height_qc_recommended_m"] == pytest.approx(0.20)
+        assert qc["height_qc_comparison_source"] == "height_com_takeoff_ref_m"
+
+    def test_agreeing_methods_produce_a_small_discrepancy(self):
+        # 48 frames of flight at 240 fps => 0.2 s => g*t^2/8 = 0.049 m.
+        phase_results = {
+            "height_cg_method_m": 0.25,
+            "height_com_takeoff_ref_m": 0.049,
+            "left_takeoff_frame": 20,
+            "right_takeoff_frame": 20,
+            "left_landing_frame": 68,
+            "right_landing_frame": 68,
+        }
+
+        qc = _cmj_height_quality_check(phase_results, fps=240)
+
+        assert qc["height_qc_discrepancy_m"] == pytest.approx(0.0, abs=0.005)
+        assert qc["height_qc_correction_applied"] is False
+
+
+class TestEnergyBookkeeping:
+    def test_potential_and_kinetic_energy_are_the_same_energy(self):
+        # v_takeoff is derived from h, so KE at take-off == PE at the apex.
+        mass, height = 80.0, 0.35
+        velocity = calculate_velocity(height)
+
+        potential = calculate_potential_energy(mass, height)
+        kinetic = calculate_kinetic_energy(mass, velocity)
+
+        assert kinetic == pytest.approx(potential)
+        # Therefore the total mechanical energy of the jump is m*g*h, NOT their sum.
+        assert potential == pytest.approx(mass * 9.81 * height)
