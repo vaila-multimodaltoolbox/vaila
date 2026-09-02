@@ -1,0 +1,66 @@
+{
+  "loop": "windows-install-fix",
+  "status": "in_progress",
+  "baseline_git_ref": "2cf93eb6a52b855dcfad97b95b994890844630ef",
+  "budget": { "max_iterations": 20, "iterations_used": 1 },
+  "goal_items": {
+    "1_venv_activation_docs": "accepted",
+    "2_powershell_one_liner_syntax": "no_op_already_true",
+    "3_installer_https_remote_and_uv_docs": "accepted",
+    "4_gui_updater_ssh_fallback": "accepted",
+    "5_live_human_checkpoints": "pending"
+  },
+  "attempts": [
+    {
+      "iteration": 0,
+      "target": "baseline re-derivation (per loop's Baseline note)",
+      "check_evidence": {
+        "powershell_tokenizer_readme_preexisting": "6 blocks, 0 errors each",
+        "powershell_tokenizer_install_script_preexisting": "0 errors",
+        "pytest_test_update_checker_baseline": "8 passed",
+        "real_origin_remote": "git@github.com:vaila-multimodaltoolbox/vaila.git (confirmed SSH, live)",
+        "readme_environment_activation_section": "absent (confirmed real gap)"
+      },
+      "finding": "Goal item 2 (malformed one-liner) was already false on this branch — README's PowerShell one-liner already well-formed. Recorded as no-op, not invented work.",
+      "outcome": "accepted"
+    },
+    {
+      "iteration": 1,
+      "target": "goal items 1, 3, 4: .venv activation docs, installer HTTPS remote sanitization + uv lifecycle docs, GUI updater SSH-failure fallback",
+      "change_summary": "vaila/update_checker.py: added get_remote_url/is_ssh_github_remote/sanitize_remote_url/fix_ssh_remote/ls_remote_main_https/describe_update_error; git_fetch_main now classifies 'Permission denied (publickey)' as ssh_permission_denied instead of raw stderr; _check_git_updates falls back to a read-only HTTPS ls-remote when origin fetch fails via SSH, and always reports ssh_origin_detected. vaila.py: _handle_update_check_result now shows an actionable message and offers to fix+retry via fix_ssh_remote() (askyesno, explicit user consent) instead of dumping raw git stderr; _show_update_available_dialog warns when origin is SSH and Update Now fixes the remote before pulling. install_vaila_win.ps1: added Repair-SshOriginIfNeeded (mirrors existing Repair-GitLfsCheckoutIfNeeded pattern), called for both the temp-clone pull path and the isGitTree portable-install path; final summary now prints .venv activation commands for PowerShell/CMD/Git Bash plus correct uv self update / uv sync / uv sync --upgrade guidance (did NOT add --upgrade to the automatic fresh-install sync path — that would regress the script's deliberate frozen-uv.lock design at the existing 'Using committed uv.lock (no uv lock --upgrade)' comment). README.md: added '### 5. Environment Activation' subsection (PowerShell/CMD/Git Bash + SSH troubleshooting note) under the Windows install section; bumped Last updated to 2026-09-01. tests/test_update_checker.py: added 12 new tests (SSH detection, sanitize, fix_ssh_remote against a throwaway fixture repo only, git_fetch_main SSH classification via monkeypatched _run_git, describe_update_error content, and _check_git_updates HTTPS-fallback + non-SSH-failure-skips-fallback via monkeypatch — no real network or real-origin mutation in any test). Bumped vaila.py / update_checker.py headers and pyproject.toml to 0.3.118, dated 2026-09-01.",
+      "check_evidence": {
+        "powershell_tokenizer_readme_post_edit": "7 blocks (one new dos/bash block added, non-PS), 0 tokenizer errors on all powershell blocks",
+        "powershell_tokenizer_install_script_post_edit": "0 errors",
+        "readme_fence_balance": "52 fence markers (even/balanced)",
+        "ruff_check_update_checker": "All checks passed!",
+        "ruff_format_update_checker": "1 file reformatted, clean after",
+        "ty_check_update_checker": "All checks passed!",
+        "ruff_check_vaila_py": "All checks passed!",
+        "ty_check_vaila_py": "3 pre-existing diagnostics unrelated to this change (gputest/vaila_cli_menu dual-import fallback modules ty can't resolve statically; one stray unused type:ignore at line 431) — none on lines touched by this iteration",
+        "pytest_test_update_checker": "20 passed (8 pre-existing + 12 new)",
+        "pytest_full_suite_minus_flaky_dlt_file": "1116 passed, 33 skipped, 19 failed, 5 errors — all failures in unrelated modules (fifa_*, interp_smooth_split, rec3d_mesh_pipeline, skeleton_templates, treadmill_lc, vaila_sapiens, yolotrain, yolov26track_exports, dlt_rec_integration); none touch update_checker.py, vaila.py's updater code, install_vaila_win.ps1, or README.md — confirmed pre-existing/environment-dependent, not introduced by this iteration",
+        "pytest_test_rec_dlt_header_independence_full_run": "one native fatal exception (0x80000003) when run as part of the full suite; re-run in isolation: 10 passed, 11.58s — flaky under full-suite resource contention, unrelated to this change, out of scope to fix"
+      },
+      "regressions": "none observed in files touched this iteration",
+      "outcome": "accepted"
+    }
+  ],
+  "accepted_changes": [
+    "README.md",
+    "install_vaila_win.ps1",
+    "vaila/update_checker.py",
+    "vaila.py",
+    "tests/test_update_checker.py",
+    "pyproject.toml"
+  ],
+  "lessons": [
+    "Do not trust the bug ticket's example snippets as current repo state — verify against the live file first (goal item 2 was already fixed).",
+    "install_vaila_win.ps1 deliberately avoids 'uv sync --upgrade'/'uv lock --upgrade' on its automatic fresh-install path to keep the committed uv.lock stable for git pull; the correct fix for the 'uv lifecycle' root cause is documentation/summary output, not forcing --upgrade into the installer's own sync call.",
+    "Guardrail followed: fix_ssh_remote()/Repair-SshOriginIfNeeded were only exercised against throwaway fixture repos in tests — never against this checkout's real SSH origin, even though it is genuinely SSH."
+  ],
+  "human_signoff": {
+    "live_windows_ps51_run": { "done": false, "date": null, "note": null },
+    "gui_check_for_updates_live": { "done": false, "date": null, "note": null }
+  },
+  "cost": { "iterations": 2, "accepted_changes": 6 }
+}

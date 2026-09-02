@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 21 August 2026
-Update Date: 25 August 2026
-Version: 0.3.113
+Update Date: 01 September 2026
+Version: 0.3.118
 
 Description:
 ------------
@@ -20,6 +20,16 @@ always fetches; automatic startup checks respect a ~20 h cache.
 
 Non-git installs (one-line installer trees without ``.git``) fall back to
 comparing the local pyproject version with GitHub's ``main`` pyproject.toml.
+
+An ``origin`` remote set to SSH (``git@github.com:...``) has no key on most
+client machines, so ``git fetch`` fails with "Permission denied (publickey)".
+``git_fetch_main`` classifies that failure as ``"ssh_permission_denied"``
+instead of surfacing the raw git stderr; ``_check_git_updates`` then falls
+back to a read-only ``git ls-remote`` over HTTPS so the comparison can still
+succeed. ``describe_update_error`` turns any error code into one actionable
+message shared by the GUI and any headless/CLI caller, and
+``fix_ssh_remote`` can rewrite the SSH origin to HTTPS in place (only ever
+called after explicit user confirmation — never automatically).
 
 All network / git I/O fails soft. Run ``check_for_updates_async()`` and
 ``git_pull_async()`` from background threads; marshal results to Tk via a
@@ -42,10 +52,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_URL = "https://github.com/vaila-multimodaltoolbox/vaila"
+HTTPS_REMOTE_URL = "https://github.com/vaila-multimodaltoolbox/vaila.git"
 RAW_PYPROJECT_URL = (
     "https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/pyproject.toml"
 )
 CACHE_FILE = Path.home() / ".vaila" / "update_check_cache.json"
+_SSH_REMOTE_PREFIXES = ("git@github.com:", "ssh://git@github.com/")
+_SSH_AUTH_FAILURE_MARKERS = (
+    "permission denied (publickey)",
+    "could not read from remote repository",
+)
 CHECK_INTERVAL_SECONDS = 20 * 60 * 60  # ~20h between automatic checks
 GIT_TIMEOUT = 30.0  # seconds for fetch / rev-parse
 GIT_PULL_TIMEOUT = 180.0  # seconds
@@ -69,7 +85,7 @@ INSTALL_COMMANDS = {
         "'https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/"
         "install_vaila_win.ps1' -OutFile $i -UseBasicParsing\n"
         "Unblock-File -Path $i -ErrorAction SilentlyContinue\n"
-        "& powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$i\""
+        '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$i"'
     ),
 }
 
@@ -111,6 +127,107 @@ def _run_git(
     )
 
 
+def get_remote_url(project_root: Path | None = None, remote: str = "origin") -> str | None:
+    """Current URL configured for `remote`, or None if unavailable."""
+    root = project_root or _project_root()
+    if not is_git_repository(root):
+        return None
+    try:
+        proc = _run_git(["remote", "get-url", remote], root)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
+def is_ssh_github_remote(url: str | None) -> bool:
+    """True if `url` is an SSH github.com remote (needs a key most machines lack)."""
+    if not url:
+        return False
+    return url.startswith(_SSH_REMOTE_PREFIXES)
+
+
+def sanitize_remote_url(url: str | None) -> str | None:
+    """HTTPS equivalent for an SSH vailá github.com remote, else None (no change needed)."""
+    if not is_ssh_github_remote(url):
+        return None
+    return HTTPS_REMOTE_URL
+
+
+def fix_ssh_remote(project_root: Path | None = None, remote: str = "origin") -> tuple[bool, str]:
+    """Rewrite an SSH `remote` to HTTPS in place. Returns (changed, message).
+
+    Only call this after explicit user confirmation (e.g. a GUI dialog) —
+    never automatically, since it mutates the user's real git configuration.
+    """
+    root = project_root or _project_root()
+    url = get_remote_url(root, remote)
+    https_url = sanitize_remote_url(url)
+    if https_url is None:
+        return False, f"'{remote}' is already HTTPS (or unavailable); nothing to change."
+    try:
+        proc = _run_git(["remote", "set-url", remote, https_url], root)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        return False, detail or f"failed to rewrite remote '{remote}'."
+    return True, f"'{remote}' rewritten from SSH to {https_url}"
+
+
+def _is_ssh_auth_failure(detail: str) -> bool:
+    lowered = detail.lower()
+    return any(marker in lowered for marker in _SSH_AUTH_FAILURE_MARKERS)
+
+
+def ls_remote_main_https() -> tuple[str | None, str | None]:
+    """Read-only `git ls-remote` of origin/main over HTTPS (no local remote change).
+
+    Used as a fallback comparison when the local `origin` remote can't be
+    fetched (e.g. SSH auth failure). Returns (short_sha, error).
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "ls-remote", HTTPS_REMOTE_URL, "main"],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None, "ls_remote_failed"
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None, "ls_remote_failed"
+    sha_full = proc.stdout.split()[0]
+    return sha_full[:7], None
+
+
+def describe_update_error(error: str | None, ssh_origin_detected: bool = False) -> str:
+    """Human-actionable text for an `UpdateCheckResult.error` code.
+
+    Shared by the GUI and any headless/CLI caller so both surfaces give the
+    same guidance instead of a raw git stack trace.
+    """
+    if error == "ssh_permission_denied" or (error and ssh_origin_detected):
+        return (
+            "git could not authenticate over SSH to GitHub "
+            "(Permission denied (publickey)).\n\n"
+            "Your 'origin' remote is set to SSH (git@github.com:...), which "
+            "needs a GitHub SSH key most machines don't have configured.\n\n"
+            f"Fix: git remote set-url origin {HTTPS_REMOTE_URL}"
+        )
+    if error == "not_a_git_repo":
+        return "This install is not a git clone; use the one-line installer to update."
+    if error == "origin_main_unavailable":
+        return "origin/main isn't available locally yet. Run: git fetch origin main"
+    if error == "ls_remote_failed":
+        return "Could not reach GitHub over HTTPS either. Check your internet connection."
+    if error:
+        return f"Details: {error}"
+    return "Unknown error."
+
+
 def git_fetch_main(project_root: Path | None = None) -> tuple[bool, str | None]:
     """Fetch origin/main. Returns (ok, error_code_or_message)."""
     root = project_root or _project_root()
@@ -122,6 +239,8 @@ def git_fetch_main(project_root: Path | None = None) -> tuple[bool, str | None]:
         return False, "git_fetch_failed"
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip()
+        if _is_ssh_auth_failure(detail):
+            return False, "ssh_permission_denied"
         return False, detail or "git_fetch_failed"
     return True, None
 
@@ -248,6 +367,8 @@ class UpdateCheckResult:
     remote_commit: str | None = None
     is_git_repo: bool = False
     error: str | None = None
+    ssh_origin_detected: bool = False  # origin is git@github.com:... — GUI can offer a fix
+    used_https_fallback: bool = False  # comparison came from ls-remote, not a local fetch
 
 
 @dataclass
@@ -260,6 +381,7 @@ def _check_git_updates(force: bool, local_version: str | None) -> UpdateCheckRes
     project_root = _project_root()
     cache = _load_cache()
     now = time.time()
+    ssh_detected = is_ssh_github_remote(get_remote_url(project_root))
 
     fresh_enough = not force and (now - cache.get("last_check", 0)) < CHECK_INTERVAL_SECONDS
     if fresh_enough and cache.get("last_remote_commit"):
@@ -276,17 +398,43 @@ def _check_git_updates(force: bool, local_version: str | None) -> UpdateCheckRes
                 remote_commit=remote_short,
                 is_git_repo=True,
                 update_available=available,
+                ssh_origin_detected=ssh_detected,
             )
 
     ok, fetch_err = git_fetch_main(project_root)
     cache["last_check"] = now
     if not ok:
+        if fetch_err == "ssh_permission_denied":
+            remote_short, _ls_err = ls_remote_main_https()
+            if remote_short is not None:
+                local_proc = _run_git(["rev-parse", "--short", "HEAD"], project_root)
+                local_short = local_proc.stdout.strip() if local_proc.returncode == 0 else None
+                _save_cache(cache)
+                # ls-remote gives no rev-list distance over HTTPS without a
+                # local fetch, so "behind" is a 0/1 different-or-not signal.
+                behind = 1 if (local_short and local_short != remote_short) else 0
+                skip = cache.get("skip_commit")
+                available = behind > 0 and remote_short != skip
+                return UpdateCheckResult(
+                    checked=True,
+                    local_version=local_version,
+                    remote_version=remote_short,
+                    commits_behind=behind,
+                    local_commit=local_short,
+                    remote_commit=remote_short,
+                    is_git_repo=True,
+                    update_available=available,
+                    error=fetch_err,
+                    ssh_origin_detected=True,
+                    used_https_fallback=True,
+                )
         _save_cache(cache)
         return UpdateCheckResult(
             checked=False,
             local_version=local_version,
             is_git_repo=True,
             error=fetch_err or "git_fetch_failed",
+            ssh_origin_detected=ssh_detected,
         )
 
     behind, local_short, remote_short, err = git_status_behind_main(project_root)
@@ -297,6 +445,7 @@ def _check_git_updates(force: bool, local_version: str | None) -> UpdateCheckRes
             local_version=local_version,
             is_git_repo=True,
             error=err,
+            ssh_origin_detected=ssh_detected,
         )
 
     cache["last_remote_commit"] = remote_short
@@ -313,6 +462,7 @@ def _check_git_updates(force: bool, local_version: str | None) -> UpdateCheckRes
         remote_commit=remote_short,
         is_git_repo=True,
         update_available=available,
+        ssh_origin_detected=ssh_detected,
     )
 
 

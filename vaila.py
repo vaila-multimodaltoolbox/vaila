@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 27 August 2026
-Version: 0.3.117
+Update Date: 01 September 2026
+Version: 0.3.118
 
 Example of usage:
 uv run vaila.py
@@ -3628,14 +3628,30 @@ class Vaila(tk.Tk):
                         f"Latest on GitHub (main): v{result.remote_version}",
                     )
             else:
-                detail = result.error or "unknown error"
+                from vaila.update_checker import describe_update_error
+
+                ssh_detected = getattr(result, "ssh_origin_detected", False)
+                detail = describe_update_error(result.error, ssh_detected)
                 if result.is_git_repo:
-                    messagebox.showwarning(
-                        "vailá - Check for Updates",
-                        "Could not check git for updates.\n\n"
-                        f"Details: {detail}\n\n"
-                        "Ensure git is installed and origin/main is configured.",
-                    )
+                    if ssh_detected:
+                        fix_now = messagebox.askyesno(
+                            "vailá - Check for Updates",
+                            f"{detail}\n\nSwitch 'origin' to HTTPS now and retry?",
+                        )
+                        if fix_now:
+                            from vaila.update_checker import fix_ssh_remote
+
+                            changed, fix_message = fix_ssh_remote()
+                            messagebox.showinfo("vailá - Fix Remote", fix_message)
+                            if changed:
+                                self._start_update_check(force=True, manual=manual)
+                            return
+                    else:
+                        messagebox.showwarning(
+                            "vailá - Check for Updates",
+                            f"Could not check git for updates.\n\n{detail}\n\n"
+                            "Ensure git is installed and origin/main is configured.",
+                        )
                 else:
                     messagebox.showwarning(
                         "vailá - Check for Updates",
@@ -3645,6 +3661,7 @@ class Vaila(tk.Tk):
 
     def _show_update_available_dialog(self, result):
         from vaila.update_checker import (
+            fix_ssh_remote,
             get_git_pull_command,
             get_install_command,
             git_pull_async,
@@ -3652,11 +3669,12 @@ class Vaila(tk.Tk):
         )
 
         is_git = result.is_git_repo
+        ssh_detected = getattr(result, "ssh_origin_detected", False)
         command = get_git_pull_command() if is_git else get_install_command()
 
         dlg = tk.Toplevel(self)
         dlg.title("vailá - Update Available")
-        dlg.geometry("680x300" if is_git else "640x260")
+        dlg.geometry("680x340" if (is_git and ssh_detected) else "680x300" if is_git else "640x260")
         dlg.transient(self)
 
         if is_git:
@@ -3667,6 +3685,12 @@ class Vaila(tk.Tk):
                 f"Behind by: {result.commits_behind} commit(s)\n\n"
                 "Update now with git pull, or copy the command below:"
             )
+            if ssh_detected:
+                summary += (
+                    "\n\nNote: your 'origin' remote uses SSH (git@github.com:...), which "
+                    "needs a GitHub SSH key most machines don't have. 'Update Now' "
+                    "switches it to HTTPS first."
+                )
         else:
             summary = (
                 f"A new version of vailá is available on GitHub (main branch).\n\n"
@@ -3719,6 +3743,14 @@ class Vaila(tk.Tk):
         def do_pull():
             if not is_git:
                 return
+            if ssh_detected:
+                status_var.set("Switching origin to HTTPS…")
+                dlg.update_idletasks()
+                changed, fix_message = fix_ssh_remote()
+                if not changed:
+                    status_var.set(fix_message)
+                    messagebox.showerror("vailá - Fix Remote Failed", fix_message)
+                    return
             status_var.set("Running git pull…")
             import queue
 
