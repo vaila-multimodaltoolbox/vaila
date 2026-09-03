@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Roberto Pereira Santiago
-Version: 0.3.93
+Version: 0.3.119
 Create: 24 February, 2025
-Last Updated: 01 August 2026
+Last Updated: 02 September 2026
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -20,6 +20,8 @@ Description:
 
     New Features:
       - Generates a REF3D template (with _x, _y, _z columns) from the pixel file.
+      - Auto-detects REF3D layout (format 1 wide CSV, format 2 xyz rows, format 3 indexed xyz rows)
+        and normalizes internally to format 1 before DLT3D.
       - Validates that the REF3D file contains the three axes for each point.
       - Updated calculation of DLT parameters (11 parameters) using least squares.
       - Graphical file selection using Tkinter.
@@ -54,38 +56,135 @@ def read_pixel_file(file_path):
     return df
 
 
-def read_ref3d_file(file_path):
-    """Reads the REF3D file and checks if the _z columns are present."""
-    df = pd.read_csv(file_path)
-    # Dynamically determine the number of points from the input file
-    # instead of hardcoding to 25 points
-    input_columns = list(df.columns)
-
-    # Find all point columns (p1_x, p1_y, p2_x, p2_y, etc.)
-    point_columns = [
-        col for col in input_columns if col.startswith("p") and ("_x" in col or "_y" in col)
-    ]
-
-    # Determine the highest point number
-    point_numbers = set()
-    for col in point_columns:
-        # Extract the number from column names like "p1_x", "p20_y", etc.
-        if "_" in col:
+def _point_numbers_from_columns(columns) -> set[int]:
+    """Point indices (the N in pN_x/pN_y/pN_z) present in a column list."""
+    numbers: set[int] = set()
+    for col in columns:
+        if col.startswith("p") and "_" in col:
             parts = col.split("_")
-            if len(parts) >= 2:
-                point_num = parts[0][1:]  # Remove 'p' from 'p1', 'p20', etc.
-                if point_num.isdigit():
-                    point_numbers.add(int(point_num))
+            if len(parts) >= 2 and parts[0][1:].isdigit():
+                numbers.add(int(parts[0][1:]))
+    return numbers
 
-    num_points = max(point_numbers) if point_numbers else 0
 
-    # Generate expected columns for the 3D reference file
+def _is_format1_dataframe(df: pd.DataFrame) -> bool:
+    """True when *df* already uses the wide format-1 header (frame, p1_x, …)."""
+    if "frame" not in df.columns:
+        return False
+    return bool(_point_numbers_from_columns(df.columns))
+
+
+def _validate_format1_dataframe(df: pd.DataFrame) -> pd.DataFrame | None:
+    """Ensure format-1 REF3D has contiguous p1..pN with _x/_y/_z columns."""
+    point_numbers = _point_numbers_from_columns(df.columns)
+    if not point_numbers:
+        return None
+    num_points = max(point_numbers)
     expected_columns = []
     for i in range(1, num_points + 1):
         expected_columns.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z"])
     if not all(col in df.columns for col in expected_columns):
-        print("Error: REF3D file does not contain the expected columns with _z coordinates!")
         return None
+    return df
+
+
+def _build_format1_from_point_rows(rows: list[tuple[int, float, float, float]]) -> pd.DataFrame:
+    """Convert (p_index, x, y, z) tuples into a single-row format-1 DataFrame."""
+    row_map = {idx: (x, y, z) for idx, x, y, z in rows}
+    data: dict[str, list[float | int]] = {"frame": [0]}
+    for idx in sorted(row_map):
+        x, y, z = row_map[idx]
+        data[f"p{idx}_x"] = [x]
+        data[f"p{idx}_y"] = [y]
+        data[f"p{idx}_z"] = [z]
+    return pd.DataFrame(data)
+
+
+def detect_ref3d_format(file_path: str) -> int | None:
+    """
+    Detect REF3D file layout.
+
+    Returns 1 (wide CSV with header), 2 (xyz rows, no header), 3 (index + xyz rows),
+    or None when the file cannot be classified.
+    """
+    path = os.path.abspath(file_path)
+    if not os.path.isfile(path):
+        return None
+
+    with open(path, encoding="utf-8") as handle:
+        first_line = handle.readline().strip()
+    if not first_line:
+        return None
+
+    lowered = first_line.lower()
+    if lowered.startswith("frame,") or ",p1_x," in lowered or lowered.endswith(",p1_x"):
+        return 1
+
+    raw = pd.read_csv(path, header=None)
+    if raw.empty:
+        return None
+
+    ncols = raw.shape[1]
+    if ncols == 3:
+        numeric = pd.to_numeric(raw.stack(), errors="coerce")
+        if numeric.notna().all():
+            return 2
+    if ncols == 4:
+        index_col = pd.to_numeric(raw.iloc[:, 0], errors="coerce")
+        coords = pd.to_numeric(raw.iloc[:, 1:].stack(), errors="coerce")
+        if (
+            index_col.notna().all()
+            and coords.notna().all()
+            and np.allclose(index_col.to_numpy(), np.round(index_col.to_numpy()))
+        ):
+            return 3
+
+    # Last chance: header row without the literal substring checks above.
+    headed = pd.read_csv(path)
+    if _is_format1_dataframe(headed):
+        return 1
+    return None
+
+
+def normalize_ref3d_to_format1(file_path: str) -> pd.DataFrame | None:
+    """
+    Load any supported REF3D variant and return the canonical format-1 DataFrame.
+
+    Format 1: ``frame,p1_x,p1_y,p1_z,...`` (wide, optional multi-row per frame).
+    Format 2: one ``x,y,z`` triplet per row, no header; row order defines p1..pN.
+    Format 3: one ``index,x,y,z`` row per point, no header; index column defines pN.
+    """
+    fmt = detect_ref3d_format(file_path)
+    if fmt is None:
+        return None
+
+    if fmt == 1:
+        df = pd.read_csv(file_path)
+        return _validate_format1_dataframe(df)
+
+    raw = pd.read_csv(file_path, header=None)
+    rows: list[tuple[int, float, float, float]] = []
+    if fmt == 2:
+        for row_idx in range(len(raw)):
+            row = raw.iloc[row_idx]
+            x, y, z = (float(row[0]), float(row[1]), float(row[2]))
+            rows.append((row_idx + 1, x, y, z))
+    else:
+        for _, row in raw.iterrows():
+            idx = int(row[0])
+            x, y, z = (float(row[1]), float(row[2]), float(row[3]))
+            rows.append((idx, x, y, z))
+
+    if len(rows) < 6:
+        return None
+    return _validate_format1_dataframe(_build_format1_from_point_rows(rows))
+
+
+def read_ref3d_file(file_path):
+    """Read REF3D (formats 1–3) and return normalized format-1 coordinates."""
+    df = normalize_ref3d_to_format1(file_path)
+    if df is None:
+        print("Error: REF3D file does not contain the expected columns with _z coordinates!")
     return df
 
 

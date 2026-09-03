@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: vailá team
-Version: 0.3.104
+Version: 0.3.118
 Created: 11 August 2026
-Update Date: 11 August 2026
+Update Date: 02 September 2026
 ================================================================================
 Description:
     Estimate a time-varying DLT3D camera from two complementary sources:
@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -185,7 +186,10 @@ def load_field_reference(csv_path: Path | str) -> dict[str, np.ndarray]:
     result: dict[str, np.ndarray] = {}
     for row_index, row in df.iterrows():
         xy = np.array([float(row["x"]), float(row["y"])], dtype=float)
-        result[f"p{row_index + 1}"] = xy
+        result[f"p{int(row_index) + 1}"] = xy
+        if "point_number" in df.columns:
+            with suppress(Exception):
+                result[f"p{int(row['point_number'])}"] = xy
         if "point_name" in df.columns:
             result[str(row["point_name"]).strip().lower()] = xy
     return result

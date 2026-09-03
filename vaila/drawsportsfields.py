@@ -6,14 +6,18 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 20 March 2025
-Updated: 24 April 2026
-Version: 0.0.3
+Updated: 02 September 2026
+Version: 0.3.118
 
 Description:
     Unified sports-field/court visualization module.
     Draws soccer fields, tennis courts, basketball/volleyball/handball/futsal
     courts using matplotlib, with support for overlaying marker trajectories,
     scout events, KDE heatmaps, and configurable surface color schemes.
+
+    Export REF3D: select a subset of model / FIFA-32 control points and write a
+    ``.ref3d`` file for ``dlt3d.py`` (then ``rec3d_one_dlt3d.py``) paired with
+    pixel CSVs from ``getpixelvideo.py``.
 
 Usage:
     GUI:
@@ -53,33 +57,40 @@ from pathlib import Path
 from tkinter import Button, Frame, filedialog, messagebox
 from typing import TYPE_CHECKING, Any
 
+# OpenCV (pulled in transitively) ships Qt plugins that abort Tk/Matplotlib GUIs
+# on Linux with "Could not load the Qt platform plugin xcb". Strip that path
+# before any GUI / backend init.
+_qt_plugin = os.environ.get("QT_QPA_PLATFORM_PLUGIN_PATH", "")
+if "cv2" in _qt_plugin.replace("\\", "/").lower():
+    os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+_qt_plugin_path = os.environ.get("QT_PLUGIN_PATH", "")
+if "cv2" in _qt_plugin_path.replace("\\", "/").lower():
+    os.environ.pop("QT_PLUGIN_PATH", None)
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-import matplotlib
+import matplotlib  # noqa: E402
 
 matplotlib.use("TkAgg")
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from rich import print
+import matplotlib.patches as patches  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import seaborn as sns  # noqa: E402
+from matplotlib.backends.backend_tkagg import (  # noqa: E402
+    FigureCanvasTkAgg,
+    NavigationToolbar2Tk,
+)
+from rich import print  # noqa: E402
 
 try:
     from .fifa_dataset_builder import (
         CANONICAL_KP_NAMES_32,
-        ROBOFLOW_FIELD_LENGTH_CM,
-        ROBOFLOW_FIELD_WIDTH_CM,
-        _canonical_vertices_cm,
     )
 except ImportError:
     from fifa_dataset_builder import (  # ty: ignore[unresolved-import]
         CANONICAL_KP_NAMES_32,
-        ROBOFLOW_FIELD_LENGTH_CM,
-        ROBOFLOW_FIELD_WIDTH_CM,
-        _canonical_vertices_cm,
     )
 
 # Full FIFA layout reference names required by plot_field() (see models/soccerfield_ref3d.csv)
@@ -428,8 +439,92 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
 
     # Convert DataFrame to dictionary for easier access
     points = {
-        row["point_name"]: (row["x"], row["y"], row["point_number"]) for _, row in df.iterrows()
+        str(row["point_name"]): (
+            float(row["x"]),
+            float(row["y"]),
+            int(row["point_number"])
+            if "point_number" in df.columns and pd.notna(row["point_number"])
+            else idx + 1,
+        )
+        for idx, row in df.iterrows()
     }
+
+    # Normalize / alias point names to bridge landmark and dataset formats
+    _ALIASES: dict[str, tuple[str, ...]] = {
+        "midfield_left": ("midfield_bottom",),
+        "midfield_right": ("midfield_top",),
+        "center_circle_top_intersection": ("center_circle_top",),
+        "center_circle_bottom_intersection": ("center_circle_bottom",),
+        "left_penalty_area_bottom_left": ("left_pen_box_bottom_outer",),
+        "left_penalty_area_top_left": ("left_pen_box_bottom_inner",),
+        "left_penalty_area_bottom_right": ("left_pen_box_top_outer",),
+        "left_penalty_area_top_right": ("left_pen_box_top_inner",),
+        "left_goal_area_bottom_left": ("left_goal_area_bottom_outer",),
+        "left_goal_area_top_left": ("left_goal_area_bottom_inner",),
+        "left_goal_area_bottom_right": ("left_goal_area_top_outer",),
+        "left_goal_area_top_right": ("left_goal_area_top_inner",),
+        "right_penalty_area_bottom_left": ("right_pen_box_bottom_outer",),
+        "right_penalty_area_top_left": ("right_pen_box_bottom_inner",),
+        "right_penalty_area_bottom_right": ("right_pen_box_top_outer",),
+        "right_penalty_area_top_right": ("right_pen_box_top_inner",),
+        "right_goal_area_bottom_left": ("right_goal_area_bottom_outer",),
+        "right_goal_area_top_left": ("right_goal_area_bottom_inner",),
+        "right_goal_area_bottom_right": ("right_goal_area_top_outer",),
+        "right_goal_area_top_right": ("right_goal_area_top_inner",),
+        "left_goal_bottom_post": ("left_goal_bottom_post_base",),
+        "left_goal_top_post": ("left_goal_top_post_base",),
+        "right_goal_bottom_post": ("right_goal_bottom_post_base",),
+        "right_goal_top_post": ("right_goal_top_post_base",),
+    }
+    for target, alts in _ALIASES.items():
+        if target not in points:
+            for alt in alts:
+                if alt in points:
+                    points[target] = points[alt]
+                    break
+
+    # Determine center field
+    if "center_field" not in points:
+        if (
+            "center_circle_left" in points
+            and "center_circle_right" in points
+            and "center_circle_top_intersection" in points
+            and "center_circle_bottom_intersection" in points
+        ):
+            cx = (points["center_circle_left"][0] + points["center_circle_right"][0]) / 2.0
+            cy = (
+                points["center_circle_top_intersection"][1]
+                + points["center_circle_bottom_intersection"][1]
+            ) / 2.0
+            points["center_field"] = (cx, cy, 0)
+        elif "midfield_left" in points and "midfield_right" in points:
+            cx = (points["midfield_left"][0] + points["midfield_right"][0]) / 2.0
+            cy = (points["midfield_left"][1] + points["midfield_right"][1]) / 2.0
+            points["center_field"] = (cx, cy, 0)
+        else:
+            points["center_field"] = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0, 0)
+
+    # Resolve corner points if missing
+    if "bottom_left_corner" not in points:
+        points["bottom_left_corner"] = (min_x, min_y, 0)
+    if "top_left_corner" not in points:
+        points["top_left_corner"] = (min_x, max_y, 0)
+    if "bottom_right_corner" not in points:
+        points["bottom_right_corner"] = (max_x, min_y, 0)
+    if "top_right_corner" not in points:
+        points["top_right_corner"] = (max_x, max_y, 0)
+
+    # Resolve goal posts if missing
+    if "left_goal_bottom_post" not in points:
+        cy = points["center_field"][1]
+        gx = min_x if min_x < 0 else 0.0
+        points["left_goal_bottom_post"] = (gx, cy - 3.66, 0)
+        points["left_goal_top_post"] = (gx, cy + 3.66, 0)
+    if "right_goal_bottom_post" not in points:
+        cy = points["center_field"][1]
+        gx = max_x if min_x < 0 else 105.0
+        points["right_goal_bottom_post"] = (gx, cy - 3.66, 0)
+        points["right_goal_top_post"] = (gx, cy + 3.66, 0)
 
     # Get colors
     colors = _get_colors("soccer", color_scheme)
@@ -513,9 +608,15 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
     )
 
     # Center circle - radius derived from points
-    center_circle_radius = abs(
-        points["center_circle_top_intersection"][1] - points["center_field"][1]
-    )
+    if "center_circle_top_intersection" in points:
+        center_circle_radius = abs(
+            points["center_circle_top_intersection"][1] - points["center_field"][1]
+        )
+    elif "center_circle_top" in points:
+        center_circle_radius = abs(points["center_circle_top"][1] - points["center_field"][1])
+    else:
+        center_circle_radius = 9.15
+
     draw_circle(
         ax,
         points["center_field"][0:2],
@@ -582,62 +683,58 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
     )
 
     # Left penalty arc - fully dynamic
-    l_arc_center = points["left_penalty_spot"][0:2]
-    # Calculate radius from spot to one of the intersection points
-    l_arc_radius = math.hypot(
-        points["left_penalty_arc_left_intersection"][0] - l_arc_center[0],
-        points["left_penalty_arc_left_intersection"][1] - l_arc_center[1],
-    )
-
-    # Intersection line x-coordinate
-    l_intersect_x = points["left_penalty_arc_left_intersection"][
-        0
-    ]  # Assumes both intersection points share this x
-
-    # Determine angles using the provided intersection points
-    # Ensure y-coordinates define bottom and top correctly for angle calculation
-    y_intersect_1_l = points["left_penalty_arc_left_intersection"][1]
-    y_intersect_2_l = points["left_penalty_arc_right_intersection"][1]
-
-    # Sort y_coords to ensure bottom_angle corresponds to lower y and top_angle to higher y for the arc segment
-    l_y_for_bottom_angle = min(y_intersect_1_l, y_intersect_2_l)
-    l_y_for_top_angle = max(y_intersect_1_l, y_intersect_2_l)
-
-    l_bottom_angle = math.degrees(
-        math.atan2(l_y_for_bottom_angle - l_arc_center[1], l_intersect_x - l_arc_center[0])
-    )
-    l_top_angle = math.degrees(
-        math.atan2(l_y_for_top_angle - l_arc_center[1], l_intersect_x - l_arc_center[0])
-    )
-
-    # Normalizing the angles for correct Arc drawing
-    # No explicit normalization needed if relying on atan2 range and Arc interpretation.
-    # Matplotlib's Arc draws counter-clockwise from theta1 to theta2.
-    # For the left arc, the segment should be from the angle corresponding to the lower y-intersection point
-    # to the angle corresponding to the higher y-intersection point.
-
-    # Original code logic: theta1=bottom_angle, theta2=top_angle
-    # Ensure correct order for drawing the visible segment.
-    # After atan2, l_bottom_angle might be > l_top_angle if crossing 0/360 (e.g. 330 and 30)
-    # We need the smaller sweep. The default ordering usually works if intersection points are consistent.
-    if abs(l_top_angle - l_bottom_angle) > 180:  # If it's the major arc, swap them
-        if l_bottom_angle < l_top_angle:
-            l_bottom_angle += 360
-        else:
-            l_top_angle += 360
-
-    # The original fixed code had bottom_angle potentially > top_angle after normalization (e.g., 315 and 45).
-    # For Arc, theta1 to theta2 counter-clockwise. For left penalty arc, this implies bottom_angle is theta1.
-    draw_arc(
-        ax,
-        l_arc_center,
-        l_arc_radius,
-        theta1=l_bottom_angle,
-        theta2=l_top_angle,
-        edgecolor=line_c,
-        linewidth=2,
-        zorder=1,
-    )
+    if (
+        "left_penalty_arc_left_intersection" in points
+        and "left_penalty_arc_right_intersection" in points
+        and "left_penalty_spot" in points
+    ):
+        l_arc_center = points["left_penalty_spot"][0:2]
+        l_arc_radius = math.hypot(
+            points["left_penalty_arc_left_intersection"][0] - l_arc_center[0],
+            points["left_penalty_arc_left_intersection"][1] - l_arc_center[1],
+        )
+        l_intersect_x = points["left_penalty_arc_left_intersection"][0]
+        y_intersect_1_l = points["left_penalty_arc_left_intersection"][1]
+        y_intersect_2_l = points["left_penalty_arc_right_intersection"][1]
+        l_y_for_bottom_angle = min(y_intersect_1_l, y_intersect_2_l)
+        l_y_for_top_angle = max(y_intersect_1_l, y_intersect_2_l)
+        l_bottom_angle = math.degrees(
+            math.atan2(l_y_for_bottom_angle - l_arc_center[1], l_intersect_x - l_arc_center[0])
+        )
+        l_top_angle = math.degrees(
+            math.atan2(l_y_for_top_angle - l_arc_center[1], l_intersect_x - l_arc_center[0])
+        )
+        if abs(l_top_angle - l_bottom_angle) > 180:
+            if l_bottom_angle < l_top_angle:
+                l_bottom_angle += 360
+            else:
+                l_top_angle += 360
+        draw_arc(
+            ax,
+            l_arc_center,
+            l_arc_radius,
+            theta1=l_bottom_angle,
+            theta2=l_top_angle,
+            edgecolor=line_c,
+            linewidth=2,
+            zorder=1,
+        )
+    elif "left_penalty_spot" in points and "left_penalty_area_top_left" in points:
+        l_arc_center = points["left_penalty_spot"][0:2]
+        l_arc_radius = 9.15
+        dx = points["left_penalty_area_top_left"][0] - l_arc_center[0]
+        if 0 < dx < l_arc_radius:
+            theta = math.degrees(math.acos(dx / l_arc_radius))
+            draw_arc(
+                ax,
+                l_arc_center,
+                l_arc_radius,
+                theta1=-theta,
+                theta2=theta,
+                edgecolor=line_c,
+                linewidth=2,
+                zorder=1,
+            )
 
     # Right penalty area - dimensions from points
     rp_anchor = points[
@@ -685,75 +782,149 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
     )
 
     # Right penalty arc - fully dynamic
-    r_arc_center = points["right_penalty_spot"][0:2]
-    r_arc_radius = math.hypot(
-        points["right_penalty_arc_left_intersection"][0] - r_arc_center[0],
-        points["right_penalty_arc_left_intersection"][1] - r_arc_center[1],
-    )
-    r_intersect_x = points["right_penalty_arc_left_intersection"][0]
-
-    y_intersect_1_r = points["right_penalty_arc_left_intersection"][1]
-    y_intersect_2_r = points["right_penalty_arc_right_intersection"][1]
-
-    # For the right arc, angles are on the left side of the circle (typically 90 to 270 degrees)
-    # The "top" intersection point (larger y) will have a smaller angle (e.g., 135 deg)
-    # The "bottom" intersection point (smaller y) will have a larger angle (e.g., 225 deg)
-    r_y_for_top_angle = max(
-        y_intersect_1_r, y_intersect_2_r
-    )  # Corresponds to theta1 in original right arc
-    r_y_for_bottom_angle = min(
-        y_intersect_1_r, y_intersect_2_r
-    )  # Corresponds to theta2 in original right arc
-
-    r_top_angle_calc = math.degrees(
-        math.atan2(r_y_for_top_angle - r_arc_center[1], r_intersect_x - r_arc_center[0])
-    )
-    r_bottom_angle_calc = math.degrees(
-        math.atan2(r_y_for_bottom_angle - r_arc_center[1], r_intersect_x - r_arc_center[0])
-    )
-
-    # Original code logic: theta1=top_angle, theta2=bottom_angle
-    # Ensure correct order for drawing the visible segment.
-    if abs(r_bottom_angle_calc - r_top_angle_calc) > 180:  # If it's the major arc, swap them
-        if r_top_angle_calc < r_bottom_angle_calc:
-            r_top_angle_calc += 360
-        else:
-            r_bottom_angle_calc += 360
-
-    draw_arc(
-        ax,
-        r_arc_center,
-        r_arc_radius,
-        theta1=r_top_angle_calc,  # Theta1 is the angle for the "upper" intersection point of the arc segment
-        theta2=r_bottom_angle_calc,  # Theta2 is the angle for the "lower" intersection point
-        edgecolor=line_c,
-        linewidth=2,
-        zorder=1,
-    )
+    if (
+        "right_penalty_arc_left_intersection" in points
+        and "right_penalty_arc_right_intersection" in points
+        and "right_penalty_spot" in points
+    ):
+        r_arc_center = points["right_penalty_spot"][0:2]
+        r_arc_radius = math.hypot(
+            points["right_penalty_arc_left_intersection"][0] - r_arc_center[0],
+            points["right_penalty_arc_left_intersection"][1] - r_arc_center[1],
+        )
+        r_intersect_x = points["right_penalty_arc_left_intersection"][0]
+        y_intersect_1_r = points["right_penalty_arc_left_intersection"][1]
+        y_intersect_2_r = points["right_penalty_arc_right_intersection"][1]
+        r_y_for_top_angle = max(y_intersect_1_r, y_intersect_2_r)
+        r_y_for_bottom_angle = min(y_intersect_1_r, y_intersect_2_r)
+        r_top_angle_calc = math.degrees(
+            math.atan2(r_y_for_top_angle - r_arc_center[1], r_intersect_x - r_arc_center[0])
+        )
+        r_bottom_angle_calc = math.degrees(
+            math.atan2(r_y_for_bottom_angle - r_arc_center[1], r_intersect_x - r_arc_center[0])
+        )
+        if abs(r_bottom_angle_calc - r_top_angle_calc) > 180:
+            if r_top_angle_calc < r_bottom_angle_calc:
+                r_top_angle_calc += 360
+            else:
+                r_bottom_angle_calc += 360
+        draw_arc(
+            ax,
+            r_arc_center,
+            r_arc_radius,
+            theta1=r_top_angle_calc,
+            theta2=r_bottom_angle_calc,
+            edgecolor=line_c,
+            linewidth=2,
+            zorder=1,
+        )
+    elif "right_penalty_spot" in points and "right_penalty_area_top_left" in points:
+        r_arc_center = points["right_penalty_spot"][0:2]
+        r_arc_radius = 9.15
+        dx = r_arc_center[0] - points["right_penalty_area_top_left"][0]
+        if 0 < dx < r_arc_radius:
+            theta = math.degrees(math.acos(dx / r_arc_radius))
+            draw_arc(
+                ax,
+                r_arc_center,
+                r_arc_radius,
+                theta1=180 - theta,
+                theta2=180 + theta,
+                edgecolor=line_c,
+                linewidth=2,
+                zorder=1,
+            )
 
     # Left goal line - thicker than the other lines
-    draw_line(
-        ax,
-        points["left_goal_bottom_post"][0:2],
-        points["left_goal_top_post"][0:2],
-        color=line_c,
-        linewidth=8,
-        zorder=2,
-    )
+    if "left_goal_bottom_post" in points and "left_goal_top_post" in points:
+        draw_line(
+            ax,
+            points["left_goal_bottom_post"][0:2],
+            points["left_goal_top_post"][0:2],
+            color=line_c,
+            linewidth=8,
+            zorder=2,
+        )
 
     # Right goal line - thicker than the other lines
-    draw_line(
-        ax,
-        points["right_goal_bottom_post"][0:2],
-        points["right_goal_top_post"][0:2],
-        color=line_c,
-        linewidth=8,
-        zorder=2,
-    )
+    if "right_goal_bottom_post" in points and "right_goal_top_post" in points:
+        draw_line(
+            ax,
+            points["right_goal_bottom_post"][0:2],
+            points["right_goal_top_post"][0:2],
+            color=line_c,
+            linewidth=8,
+            zorder=2,
+        )
+
+    # Goal nets (if net points available, e.g. expanded 48-point FIFA model)
+    if (
+        "left_goal_net_bottom_ground" in points
+        and "left_goal_net_top_ground" in points
+        and "left_goal_bottom_post" in points
+        and "left_goal_top_post" in points
+    ):
+        draw_line(
+            ax,
+            points["left_goal_bottom_post"][0:2],
+            points["left_goal_net_bottom_ground"][0:2],
+            color=line_c,
+            linewidth=1.5,
+            zorder=1,
+        )
+        draw_line(
+            ax,
+            points["left_goal_top_post"][0:2],
+            points["left_goal_net_top_ground"][0:2],
+            color=line_c,
+            linewidth=1.5,
+            zorder=1,
+        )
+        draw_line(
+            ax,
+            points["left_goal_net_bottom_ground"][0:2],
+            points["left_goal_net_top_ground"][0:2],
+            color=line_c,
+            linewidth=1.5,
+            zorder=1,
+        )
+    if (
+        "right_goal_net_bottom_ground" in points
+        and "right_goal_net_top_ground" in points
+        and "right_goal_bottom_post" in points
+        and "right_goal_top_post" in points
+    ):
+        draw_line(
+            ax,
+            points["right_goal_bottom_post"][0:2],
+            points["right_goal_net_bottom_ground"][0:2],
+            color=line_c,
+            linewidth=1.5,
+            zorder=1,
+        )
+        draw_line(
+            ax,
+            points["right_goal_top_post"][0:2],
+            points["right_goal_net_top_ground"][0:2],
+            color=line_c,
+            linewidth=1.5,
+            zorder=1,
+        )
+        draw_line(
+            ax,
+            points["right_goal_net_bottom_ground"][0:2],
+            points["right_goal_net_top_ground"][0:2],
+            color=line_c,
+            linewidth=1.5,
+            zorder=1,
+        )
 
     # Add point numbers to the field for reference (only if enabled)
     if show_reference_points:
-        for _name, (x, y, num) in points.items():
+        orig_names = set(df["point_name"].astype(str)) if "point_name" in df.columns else set()
+        for name, (x, y, num) in points.items():
+            if orig_names and name not in orig_names:
+                continue
             # Adjust text offset based on field size for better visibility
             text_offset_x = field_width * 0.005
             text_offset_y = field_height * 0.005
@@ -779,43 +950,308 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
     return fig, ax
 
 
+def _fifa32_dataset_xy_from_field_points(
+    points: dict[str, tuple[float, float, int]],
+) -> list[tuple[float, float]] | None:
+    """Place canonical 32 dataset keypoints on the drawn FIFA pitch lines.
+
+    Roboflow template proportions (120×70 m) differ from
+    ``soccerfield_ref3d_fifa.csv`` (104.9×67.9 m). Stretching Roboflow cm
+    onto the FIFA corners therefore puts interior KPs (penalty spot, pen-box
+    inners, centre-circle L/R, …) off the painted lines. Derive each index
+    from the same named geometry ``plot_field`` already uses.
+    """
+    if all(name in points for name in CANONICAL_KP_NAMES_32):
+        return [(float(points[name][0]), float(points[name][1])) for name in CANONICAL_KP_NAMES_32]
+
+    required = {
+        "top_left_corner",
+        "bottom_left_corner",
+        "top_right_corner",
+        "bottom_right_corner",
+        "midfield_left",
+        "midfield_right",
+        "center_field",
+        "center_circle_top_intersection",
+        "center_circle_bottom_intersection",
+        "left_penalty_area_top_left",
+        "left_penalty_area_top_right",
+        "left_penalty_area_bottom_left",
+        "left_penalty_area_bottom_right",
+        "left_goal_area_top_left",
+        "left_goal_area_top_right",
+        "left_goal_area_bottom_left",
+        "left_goal_area_bottom_right",
+        "left_penalty_spot",
+        "right_penalty_area_top_left",
+        "right_penalty_area_top_right",
+        "right_penalty_area_bottom_left",
+        "right_penalty_area_bottom_right",
+        "right_goal_area_top_left",
+        "right_goal_area_top_right",
+        "right_goal_area_bottom_left",
+        "right_goal_area_bottom_right",
+        "right_penalty_spot",
+    }
+    if not required.issubset(points):
+        return None
+
+    def xy(name: str) -> tuple[float, float]:
+        return (float(points[name][0]), float(points[name][1]))
+
+    # FIFA CSV left-box naming: "bottom*" = goal line, "top*" = toward midfield;
+    # "right" = +Y (image top), "left" = -Y.
+    lp_inner_x = xy("left_penalty_area_top_right")[0]
+    lg_y_top = xy("left_goal_area_top_right")[1]
+    lg_y_bot = xy("left_goal_area_top_left")[1]
+    rp_inner_x = xy("right_penalty_area_top_right")[0]
+    rg_y_top = xy("right_goal_area_top_right")[1]
+    rg_y_bot = xy("right_goal_area_top_left")[1]
+    cx, cy = xy("center_field")
+    circle_r = abs(xy("center_circle_top_intersection")[1] - cy)
+
+    return [
+        xy("top_left_corner"),  # 0
+        xy("left_penalty_area_bottom_right"),  # 1
+        xy("left_goal_area_bottom_right"),  # 2
+        xy("left_goal_area_bottom_left"),  # 3
+        xy("left_penalty_area_bottom_left"),  # 4
+        xy("bottom_left_corner"),  # 5
+        xy("left_goal_area_top_right"),  # 6
+        xy("left_goal_area_top_left"),  # 7
+        xy("left_penalty_spot"),  # 8
+        xy("left_penalty_area_top_right"),  # 9
+        (lp_inner_x, lg_y_top),  # 10
+        (lp_inner_x, lg_y_bot),  # 11
+        xy("left_penalty_area_top_left"),  # 12
+        xy("midfield_right"),  # 13 midfield top (+Y)
+        xy("center_circle_top_intersection"),  # 14
+        xy("center_circle_bottom_intersection"),  # 15
+        xy("midfield_left"),  # 16 midfield bottom (-Y)
+        xy("right_penalty_area_top_right"),  # 17
+        (rp_inner_x, rg_y_top),  # 18
+        (rp_inner_x, rg_y_bot),  # 19
+        xy("right_penalty_area_top_left"),  # 20
+        xy("right_penalty_spot"),  # 21
+        xy("right_goal_area_top_right"),  # 22
+        xy("right_goal_area_top_left"),  # 23
+        xy("top_right_corner"),  # 24
+        xy("right_penalty_area_bottom_right"),  # 25
+        xy("right_goal_area_bottom_right"),  # 26
+        xy("right_goal_area_bottom_left"),  # 27
+        xy("right_penalty_area_bottom_left"),  # 28
+        xy("bottom_right_corner"),  # 29
+        (cx - circle_r, cy),  # 30
+        (cx + circle_r, cy),  # 31
+    ]
+
+
+@dataclass(frozen=True)
+class FieldControlPoint:
+    """One selectable control point for REF3D export (DLT3D calibration)."""
+
+    key: str
+    label: str
+    x: float
+    y: float
+    z: float
+    source_index: int
+    source_name: str
+
+
+def list_model_control_points(df: pd.DataFrame) -> list[FieldControlPoint]:
+    """List control points from a sports-field model CSV (``point_name``, ``x``, ``y``, ``z``)."""
+    required = {"point_name", "x", "y"}
+    if not required.issubset(df.columns):
+        return []
+    has_num = "point_number" in df.columns
+    has_z = "z" in df.columns
+    out: list[FieldControlPoint] = []
+    for idx, (_, row) in enumerate(df.iterrows(), start=1):
+        name = str(row["point_name"])
+        num = int(row["point_number"]) if has_num and pd.notna(row["point_number"]) else idx
+        z = float(row["z"]) if has_z and pd.notna(row["z"]) else 0.0
+        out.append(
+            FieldControlPoint(
+                key=f"model:{num}:{name}",
+                label=f"{num:02d}  {name}",
+                x=float(row["x"]),
+                y=float(row["y"]),
+                z=z,
+                source_index=num,
+                source_name=name,
+            )
+        )
+    return out
+
+
+def list_fifa32_control_points(
+    points: dict[str, tuple[float, float, int]],
+) -> list[FieldControlPoint]:
+    """List the 32 canonical FIFA dataset keypoints for REF3D export."""
+    xy_list = _fifa32_dataset_xy_from_field_points(points)
+    if xy_list is None:
+        return []
+    out: list[FieldControlPoint] = []
+    for idx, ((x, y), name) in enumerate(zip(xy_list, CANONICAL_KP_NAMES_32, strict=True)):
+        out.append(
+            FieldControlPoint(
+                key=f"fifa32:{idx}:{name}",
+                label=f"{idx:02d}  {name}",
+                x=float(x),
+                y=float(y),
+                z=0.0,
+                source_index=idx,
+                source_name=name,
+            )
+        )
+    return out
+
+
+def build_ref3d_dataframe(
+    selected: list[FieldControlPoint],
+    *,
+    index_base: int = 1,
+    frame: int = 0,
+) -> pd.DataFrame:
+    """Build a one-row ``.ref3d`` DataFrame with contiguous ``pN_x/_y/_z`` columns.
+
+    ``dlt3d.read_ref3d_file`` requires contiguous indices from 1..max (or a
+    contiguous block starting at ``index_base``). Prefer ``index_base=1`` for
+    ``dlt3d.py`` / ``rec3d_one_dlt3d.py``.
+    """
+    if index_base not in (0, 1):
+        raise ValueError("index_base must be 0 or 1")
+    if not selected:
+        raise ValueError("At least one control point is required")
+    row: dict[str, float | int] = {"frame": int(frame)}
+    for offset, pt in enumerate(selected):
+        i = index_base + offset
+        row[f"p{i}_x"] = float(pt.x)
+        row[f"p{i}_y"] = float(pt.y)
+        row[f"p{i}_z"] = float(pt.z)
+    return pd.DataFrame([row])
+
+
+def build_ref3d_map_dataframe(
+    selected: list[FieldControlPoint],
+    *,
+    index_base: int = 1,
+) -> pd.DataFrame:
+    """Companion map: exported ``pN`` ↔ model / FIFA-32 source identity."""
+    rows = []
+    for offset, pt in enumerate(selected):
+        i = index_base + offset
+        rows.append(
+            {
+                "p_index": i,
+                "source_index": pt.source_index,
+                "source_name": pt.source_name,
+                "x": pt.x,
+                "y": pt.y,
+                "z": pt.z,
+                "key": pt.key,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_pixel_template_dataframe(
+    n_points: int,
+    *,
+    index_base: int = 1,
+    frame: int = 0,
+) -> pd.DataFrame:
+    """Empty pixel CSV template matching the REF3D ``pN`` labels for getpixelvideo."""
+    row: dict[str, float | int | str] = {"frame": int(frame)}
+    for offset in range(n_points):
+        i = index_base + offset
+        row[f"p{i}_x"] = ""
+        row[f"p{i}_y"] = ""
+    return pd.DataFrame([row])
+
+
+def write_ref3d_export(
+    output_ref3d: str | Path,
+    selected: list[FieldControlPoint],
+    *,
+    index_base: int = 1,
+    write_pixel_template: bool = True,
+) -> dict[str, Path]:
+    """Write ``.ref3d`` + ``.ref3d_map.csv`` (+ optional pixel template).
+
+    Returns paths written under keys ``ref3d``, ``map``, and optionally ``pixel_template``.
+    """
+    if len(selected) < 6:
+        raise ValueError(f"DLT3D needs at least 6 non-coplanar control points; got {len(selected)}")
+    out = Path(output_ref3d)
+    if out.suffix.lower() != ".ref3d":
+        out = out.with_suffix(".ref3d")
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    ref_df = build_ref3d_dataframe(selected, index_base=index_base)
+    map_df = build_ref3d_map_dataframe(selected, index_base=index_base)
+    ref_df.to_csv(out, index=False)
+    map_path = out.with_name(out.stem + ".ref3d_map.csv")
+    map_df.to_csv(map_path, index=False)
+    written: dict[str, Path] = {"ref3d": out, "map": map_path}
+    if write_pixel_template:
+        pix_path = out.with_name(out.stem + "_pixel_template.csv")
+        build_pixel_template_dataframe(len(selected), index_base=index_base).to_csv(
+            pix_path, index=False
+        )
+        written["pixel_template"] = pix_path
+    return written
+
+
+def _highlight_export_points_on_ax(
+    ax: plt.Axes,
+    selected: list[FieldControlPoint],
+    *,
+    index_base: int = 1,
+) -> None:
+    """Draw cyan rings + p-index labels for the current REF3D selection."""
+    for offset, pt in enumerate(selected):
+        p_i = index_base + offset
+        ax.plot(
+            pt.x,
+            pt.y,
+            marker="o",
+            markersize=9,
+            markerfacecolor="none",
+            markeredgecolor="#00E5FF",
+            markeredgewidth=2.0,
+            zorder=30,
+        )
+        ax.text(
+            pt.x + 0.4,
+            pt.y + 0.4,
+            f"p{p_i}",
+            fontsize=8,
+            color="#003344",
+            weight="bold",
+            bbox={"facecolor": "#00E5FF", "alpha": 0.85, "boxstyle": "round,pad=0.15"},
+            zorder=31,
+        )
+
+
 def _draw_fifa32_dataset_keypoints_overlay(
     ax: plt.Axes,
     points: dict[str, tuple[float, float, int]],
 ) -> None:
     """Overlay FIFA builder canonical 32 keypoints on the current soccer field.
 
-    Mapping strategy:
-    - canonical points from `fifa_dataset_builder` are in Roboflow top-left
-      normalized coordinates (x right, y down).
-    - `drawsportsfields` field uses y-up coordinates; we map normalized
-      coordinates to the currently loaded field extents from corner points.
+    Positions come from the loaded FIFA pitch geometry (``soccerfield_ref3d_fifa.csv``),
+    not from a Roboflow-proportion stretch, so markers sit on the drawn lines.
+    Index/order still match ``CANONICAL_KP_NAMES_32`` / getpixelvideo FIFA mode.
     """
-    required = {"bottom_left_corner", "top_left_corner", "bottom_right_corner", "top_right_corner"}
-    if not required.issubset(points):
+    xy_list = _fifa32_dataset_xy_from_field_points(points)
+    if xy_list is None or len(xy_list) != len(CANONICAL_KP_NAMES_32):
         return
 
-    xs = [points[name][0] for name in required]
-    ys = [points[name][1] for name in required]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    width = max_x - min_x
-    height = max_y - min_y
-    if width <= 0 or height <= 0:
-        return
-
-    canonical_cm = _canonical_vertices_cm()
-    lx = float(ROBOFLOW_FIELD_LENGTH_CM)
-    wy = float(ROBOFLOW_FIELD_WIDTH_CM)
-
-    for idx, ((x_cm, y_cm), kp_name) in enumerate(
-        zip(canonical_cm, CANONICAL_KP_NAMES_32, strict=False)
+    for idx, ((x_field, y_field), kp_name) in enumerate(
+        zip(xy_list, CANONICAL_KP_NAMES_32, strict=True)
     ):
-        x_norm = x_cm / lx
-        y_norm = y_cm / wy  # y-down
-        x_field = min_x + x_norm * width
-        y_field = max_y - y_norm * height  # convert y-down -> y-up
-
         ax.plot(
             x_field,
             y_field,
@@ -847,10 +1283,59 @@ def _draw_fifa32_dataset_keypoints_overlay(
             zorder=19,
         )
 
+    expanded_kps = (
+        ("left_goal_bottom_post_base", 32),
+        ("left_goal_top_post_base", 33),
+        ("left_goal_bottom_post_top", 34),
+        ("left_goal_top_post_top", 35),
+        ("left_goal_net_bottom_ground", 36),
+        ("left_goal_net_top_ground", 37),
+        ("left_corner_flag_top", 38),
+        ("left_corner_flag_bottom", 39),
+        ("right_goal_bottom_post_base", 40),
+        ("right_goal_top_post_base", 41),
+        ("right_goal_bottom_post_top", 42),
+        ("right_goal_top_post_top", 43),
+        ("right_goal_net_bottom_ground", 44),
+        ("right_goal_net_top_ground", 45),
+        ("right_corner_flag_top", 46),
+        ("right_corner_flag_bottom", 47),
+    )
+    has_expanded = any(name in points for name, _ in expanded_kps)
+    if has_expanded:
+        for kp_name, idx in expanded_kps:
+            if kp_name in points:
+                xf, yf = float(points[kp_name][0]), float(points[kp_name][1])
+                ax.plot(
+                    xf,
+                    yf,
+                    marker="s",
+                    markersize=4.5,
+                    markerfacecolor="#00E5FF",
+                    markeredgecolor="black",
+                    markeredgewidth=0.8,
+                    zorder=18,
+                )
+                ax.text(
+                    xf + 0.35,
+                    yf + 0.35,
+                    str(idx),
+                    fontsize=7.0,
+                    color="black",
+                    weight="bold",
+                    bbox={"facecolor": "#c8f7ff", "alpha": 0.9, "boxstyle": "round,pad=0.15"},
+                    zorder=19,
+                )
+
+    caption = (
+        "FIFA dataset keypoints: 0..47 (canonical order; 32 pitch + 16 3D goal/flag features)"
+        if has_expanded
+        else "FIFA dataset keypoints: 0..31 (canonical order; positions from FIFA pitch lines)"
+    )
     ax.text(
         0.015,
         0.02,
-        "FIFA dataset keypoints: 0..31 (canonical order from fifa_dataset_builder/getpixelvideo)",
+        caption,
         transform=ax.transAxes,
         fontsize=8,
         color="white",
@@ -962,11 +1447,13 @@ def plot_simple_field(
     draw_line(ax, bl, br, color=line_c, linewidth=lw, zorder=1)
     draw_line(ax, tl, tr, color=line_c, linewidth=lw, zorder=1)
 
-    if "midfield_left" in points and "midfield_right" in points:
+    mf_bot = points.get("midfield_left") or points.get("midfield_bottom")
+    mf_top = points.get("midfield_right") or points.get("midfield_top")
+    if mf_bot is not None and mf_top is not None:
         draw_line(
             ax,
-            points["midfield_left"][:2],
-            points["midfield_right"][:2],
+            mf_bot[:2],
+            mf_top[:2],
             color=line_c,
             linewidth=lw,
             zorder=1,
@@ -1774,6 +2261,12 @@ SPORT_REGISTRY.update(
             title="FIFA Skeletal Tracking Pitch",
             plot_fn=plot_field,
         ),
+        "fifa_center": SportDef(
+            label="FIFA Pitch (Center Origin)",
+            model_csv="soccerfield_ref3d_fifa_center.csv",
+            title="FIFA Pitch (Origin at Center 0,0,0)",
+            plot_fn=plot_field,
+        ),
         "fifa_dataset": SportDef(
             label="FIFA Dataset Labeling (32 KP order)",
             model_csv="soccerfield_ref3d_fifa.csv",
@@ -1815,14 +2308,38 @@ SPORT_REGISTRY.update(
 
 
 def _detect_sport(csv_path: str, df: pd.DataFrame) -> str | None:
-    """Detect sport from CSV content (soccer) or filename (all others)."""
-    names = set(df["point_name"].astype(str))
-    if _SOCCER_FIELD_POINT_NAMES.issubset(names):
-        return "soccer"
+    """Detect sport from filename and CSV content."""
     base = Path(csv_path).stem.lower()
-    for key in SPORT_REGISTRY:
+    names = set(df["point_name"].astype(str)) if "point_name" in df.columns else set()
+
+    # 1. Exact or specific FIFA model filename matching
+    if "fifa_dataset" in base:
+        return "fifa_dataset"
+    if "fifa_center" in base:
+        return "fifa_center"
+    if "fifa" in base:
+        return "fifa"
+
+    # 2. Other sports by longest key first
+    for key in sorted(SPORT_REGISTRY, key=len, reverse=True):
         if key in base:
             return key
+
+    # 3. Content-based detection for dataset layout (FIFA dataset 32/48 keypoints)
+    if {"midfield_top", "midfield_bottom", "top_left_corner"}.issubset(names) or {
+        "left_pen_box_top_outer",
+        "right_pen_box_top_outer",
+    }.issubset(names):
+        return "fifa_dataset"
+
+    # 4. Content-based detection for standard FIFA soccer field (37 points)
+    if _SOCCER_FIELD_POINT_NAMES.issubset(names):
+        if "center" in base:
+            return "fifa_center"
+        if "fifa" in base:
+            return "fifa"
+        return "soccer"
+
     return None
 
 
@@ -2262,7 +2779,8 @@ def run_soccerfield(
     selected_teams = [None]  # Store currently selected teams for scout data
     selected_players = [None]  # Store currently selected players for scout data
     selected_actions = [None]  # Store currently selected actions for scout data
-
+    export_selected_points: list[list[FieldControlPoint]] = [[]]  # REF3D selection highlight
+    export_index_base: list[int] = [1]
     # Variables for manual marker creation
     manual_marker_mode = [False]  # Whether manual marker mode is active
     current_marker_number = [1]  # Número do marcador atual
@@ -2338,6 +2856,13 @@ def run_soccerfield(
 
             # Setup event handlers for manual marker mode
             setup_manual_marker_events(canvas)
+
+            # Re-draw REF3D selection highlights if any
+            if export_selected_points[0]:
+                _highlight_export_points_on_ax(
+                    ax, export_selected_points[0], index_base=export_index_base[0]
+                )
+                canvas.draw()
 
             print("Field plotted successfully!")
 
@@ -2605,6 +3130,189 @@ def run_soccerfield(
 
         select_window.transient(root)
         select_window.grab_set()
+
+    def _collect_export_control_points() -> tuple[list[FieldControlPoint], str]:
+        """Build the selectable list from the loaded field model (and FIFA-32 overlay)."""
+        if not current_field_csv[0] or not os.path.isfile(current_field_csv[0]):
+            return [], ""
+        df = pd.read_csv(current_field_csv[0])
+        sport = forced_sport or _detect_sport(current_field_csv[0], df)
+        if sport == "fifa_dataset":
+            points = {
+                str(row["point_name"]): (
+                    float(row["x"]),
+                    float(row["y"]),
+                    int(row["point_number"]) if "point_number" in df.columns else 0,
+                )
+                for _, row in df.iterrows()
+            }
+            pts = list_fifa32_control_points(points)
+            return pts, "FIFA dataset keypoints 0..31 (canonical order)"
+        pts = list_model_control_points(df)
+        return pts, f"Model points from {Path(current_field_csv[0]).name}"
+
+    def open_export_ref3d_dialog():
+        """Select model / FIFA-32 control points and export a DLT3D ``.ref3d`` file."""
+        candidates, source_label = _collect_export_control_points()
+        if not candidates:
+            messagebox.showerror(
+                "Error",
+                "No field model loaded, or the CSV has no point_name/x/y columns.",
+            )
+            return
+
+        win = tk.Toplevel(root)
+        win.title("Export REF3D for DLT3D")
+        win.geometry("520x560")
+        win.transient(root)
+        win.grab_set()
+
+        tk.Label(
+            win,
+            text=(
+                f"{source_label}\n"
+                "Select ≥6 points (non-coplanar for full DLT3D). "
+                "Exported as contiguous p1..pN for dlt3d.py + getpixelvideo."
+            ),
+            justify=tk.LEFT,
+            wraplength=480,
+        ).pack(anchor="w", padx=10, pady=(10, 4))
+
+        list_frame = Frame(win)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        listbox = tk.Listbox(
+            list_frame,
+            selectmode=tk.MULTIPLE,
+            yscrollcommand=scrollbar.set,
+            font=("TkFixedFont", 10),
+        )
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
+
+        for pt in candidates:
+            listbox.insert(tk.END, f"{pt.label}  ({pt.x:.3f}, {pt.y:.3f}, {pt.z:.3f})")
+
+        prev_keys = {p.key for p in export_selected_points[0]}
+        if prev_keys:
+            for i, pt in enumerate(candidates):
+                if pt.key in prev_keys:
+                    listbox.selection_set(i)
+        else:
+            listbox.select_set(0, tk.END)
+
+        opts = Frame(win)
+        opts.pack(fill=tk.X, padx=10, pady=4)
+        index_base_var = tk.IntVar(value=1)
+        tk.Label(opts, text="p-index base:").pack(side=tk.LEFT)
+        tk.Radiobutton(opts, text="1 (dlt3d)", variable=index_base_var, value=1).pack(
+            side=tk.LEFT, padx=4
+        )
+        tk.Radiobutton(opts, text="0 (FIFA getpixel slots)", variable=index_base_var, value=0).pack(
+            side=tk.LEFT, padx=4
+        )
+        write_template_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            opts, text="Also write pixel CSV template", variable=write_template_var
+        ).pack(side=tk.LEFT, padx=8)
+
+        btn_row = Frame(win)
+        btn_row.pack(fill=tk.X, padx=10, pady=10)
+
+        def select_all():
+            listbox.select_set(0, tk.END)
+
+        def deselect_all():
+            listbox.selection_clear(0, tk.END)
+
+        def do_export():
+            idxs = list(listbox.curselection())
+            if not idxs:
+                messagebox.showerror("Error", "Select at least one point.")
+                return
+            chosen = [candidates[i] for i in idxs]
+            if len(chosen) < 6 and not messagebox.askyesno(
+                "Fewer than 6 points",
+                f"Only {len(chosen)} point(s) selected. DLT3D needs ≥6 "
+                "non-coplanar points. Export anyway?",
+            ):
+                return
+            default_name = (
+                Path(current_field_csv[0]).stem + "_selected.ref3d"
+                if current_field_csv[0]
+                else "field_selected.ref3d"
+            )
+            path = filedialog.asksaveasfilename(
+                parent=win,
+                title="Save REF3D for DLT3D",
+                defaultextension=".ref3d",
+                initialfile=default_name,
+                filetypes=[("REF3D files", "*.ref3d"), ("All files", "*.*")],
+            )
+            if not path:
+                return
+            try:
+                # Allow <6 only when user confirmed; write_ref3d_export enforces ≥6.
+                if len(chosen) < 6:
+                    out = Path(path)
+                    if out.suffix.lower() != ".ref3d":
+                        out = out.with_suffix(".ref3d")
+                    ref_df = build_ref3d_dataframe(chosen, index_base=int(index_base_var.get()))
+                    map_df = build_ref3d_map_dataframe(chosen, index_base=int(index_base_var.get()))
+                    ref_df.to_csv(out, index=False)
+                    map_path = out.with_name(out.stem + ".ref3d_map.csv")
+                    map_df.to_csv(map_path, index=False)
+                    written = {"ref3d": out, "map": map_path}
+                    if write_template_var.get():
+                        pix_path = out.with_name(out.stem + "_pixel_template.csv")
+                        build_pixel_template_dataframe(
+                            len(chosen), index_base=int(index_base_var.get())
+                        ).to_csv(pix_path, index=False)
+                        written["pixel_template"] = pix_path
+                else:
+                    written = write_ref3d_export(
+                        path,
+                        chosen,
+                        index_base=int(index_base_var.get()),
+                        write_pixel_template=bool(write_template_var.get()),
+                    )
+            except Exception as exc:
+                messagebox.showerror("Export failed", str(exc))
+                return
+
+            export_selected_points[0] = chosen
+            export_index_base[0] = int(index_base_var.get())
+            if current_ax[0] is not None:
+                _highlight_export_points_on_ax(
+                    current_ax[0], chosen, index_base=export_index_base[0]
+                )
+                if current_canvas[0] is not None:
+                    current_canvas[0].draw()
+
+            msg_lines = [f"REF3D: {written['ref3d']}", f"Map:   {written['map']}"]
+            if "pixel_template" in written:
+                msg_lines.append(f"Pixel: {written['pixel_template']}")
+            msg_lines.append(
+                "\nNext: mark the same pN order in getpixelvideo.py, then run "
+                "dlt3d.py (pixel CSV + this .ref3d) → .dlt3d for rec3d_one_dlt3d.py."
+            )
+            print(">> vaila/drawsportsfields: REF3D export")
+            for line in msg_lines:
+                print(f"   {line}")
+            messagebox.showinfo("REF3D exported", "\n".join(msg_lines))
+            win.destroy()
+
+        tk.Button(btn_row, text="Select All", command=select_all, bg="#4CAF50", fg="white").pack(
+            side=tk.LEFT, padx=4
+        )
+        tk.Button(
+            btn_row, text="Deselect All", command=deselect_all, bg="#f44336", fg="white"
+        ).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_row, text="Export REF3D…", command=do_export, bg="#1565C0", fg="white").pack(
+            side=tk.RIGHT, padx=4
+        )
+        tk.Button(btn_row, text="Cancel", command=win.destroy).pack(side=tk.RIGHT, padx=4)
 
     def toggle_manual_marker_mode():
         """Toggle the manual marker creation mode"""
@@ -3541,6 +4249,16 @@ def run_soccerfield(
         command=lambda: clear_all_markers(),
         bg="white",
         fg="black",
+        padx=10,
+        pady=5,
+    ).pack(side=tk.LEFT, padx=5, pady=5)
+
+    Button(
+        button_frame,
+        text="Export REF3D…",
+        command=open_export_ref3d_dialog,
+        bg="#1565C0",
+        fg="white",
         padx=10,
         pady=5,
     ).pack(side=tk.LEFT, padx=5, pady=5)

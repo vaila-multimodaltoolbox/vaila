@@ -55,6 +55,7 @@ tests/SAM/*.mp4
 tests/sport_fields/*.mp4
 # Ignore mp4 in Train_yolo directory
 tests/Train_yolo/*.mp4
+tests/syncvid/*.mp4
 
 # General temporary files
 .DS_Store

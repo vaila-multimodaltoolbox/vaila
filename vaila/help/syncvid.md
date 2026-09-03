@@ -4,8 +4,8 @@
 
 - **Category:** Tools → Video and Image
 - **File:** `vaila/syncvid.py`
-- **Version:** 0.3.85
-- **Updated:** 2026-07-29
+- **Version:** 0.3.119
+- **Updated:** 2026-09-02
 - **GUI:** Frame C → **Make Sync file**
 - **CLI:** `uv run vaila/syncvid.py`
 
@@ -33,6 +33,22 @@ The generated versioned TXT maps one inclusive reference-camera interval into eq
    - **Save + Cut Video** — save and open Cut Video immediately without another file chooser.
 
 Clicking a field selects its current contents for quick replacement. **Tab/Shift+Tab** moves through all fields and **Enter** validates the active field. All displayed and saved frames are **1-based and inclusive**; internal Python calculations remain 0-based.
+
+## Load / Resume
+
+Every **Save sync** or **Save + Cut Video** also writes a `.json` checkpoint next to the sync TXT (same name, `.json` extension) capturing every field's text, the current camera, the current playback frame, and the output path.
+
+Click **Load / Resume** at any time to reopen a checkpoint through a file picker and restore that state:
+
+- All **Sync frame** fields, **Reference video**, **Reference start**, and **Reference end** are refilled.
+- The active camera and its exact playback frame are restored.
+- Works for a checkpoint saved from **Save sync** (an in-progress session) or **Save + Cut Video** (a completed one) — the status bar names which.
+- A camera the checkpoint mentions that is not present in the currently opened directory is skipped, not fatal; the status bar lists any skipped camera name.
+- A missing file, corrupt JSON, or a checkpoint missing required keys shows a clear status-bar error instead of crashing the player.
+
+## Help viewer (Linux/WSL)
+
+The **Help** button opens this page in a browser. It tries, in order, the `BROWSER` environment variable, native Linux GUI browsers (`xdg-open`, `google-chrome`, `firefox`, `chromium`) found on `PATH`, then `wslview` only when WSL interop is actually available, then Python's `webbrowser` module. If every attempt fails, the page's `file://` path is printed to the console instead of crashing — this avoids the `wslview`/`reg.exe` failure (`grep: /proc/sys/fs/binfmt_misc/WSLInterop: No such file or directory`) seen in WSL setups without working interop.
 
 ## Pygame controls
 
@@ -109,4 +125,4 @@ uv run vaila/syncvid.py -i /path/to/camera_directory --dry-run
 
 ---
 
-Part of **vailá — Multimodal Toolbox**. Updated 29 July 2026.
+Part of **vailá — Multimodal Toolbox**. Updated 2 September 2026.

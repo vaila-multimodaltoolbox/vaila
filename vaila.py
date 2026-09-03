@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 01 September 2026
-Version: 0.3.118
+Update Date: 02 September 2026
+Version: 0.3.119
 
 Example of usage:
 uv run vaila.py
@@ -387,11 +387,14 @@ B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 B4_r4_c1 - vailá          B4_r4_c2 - ML Walkway      B4_r4_c3 - vailá
 B4_r4_c4 - vailá          B4_r4_c5 - vailá
 
-B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
-B5_r5_c4 - Start Block    B5_r5_c5 - Pynalty
+B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - vailá
+B5_r5_c4 - Start Block    B5_r5_c5 - vailá
 
 B5_r6_c1 - Sprint         B5_r6_c2 - vailá           B5_r6_c3 - tugturn
-B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
+B5_r6_c4 - Soccer Tools (coringa: Field KPs AI, Soccer-Field Calib,
+            FIFA cams→DLT, FIFA Dataset Builder, VEK ElasticKick,
+            FIFA: merge manual labels, Scout, Pynalty)
+B5_r6_c5 - Deadlift
 
 B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - Treadmill LC
 B6_r7_c4 - vailá          B6_r7_c5 - vailá
@@ -881,15 +884,17 @@ class Vaila(tk.Tk):
             B5:
             - Ultrasound
             - Brainstorm
-            - Scout
+            - vailá (placeholder)
             - Start Block
-            - Pynalty
+            - vailá (placeholder)
             B6:
             - Sprint
-            - Face Mesh
+            - vailá (placeholder)
             - tugturn
-            - SAM
-            - Soccer-Field Calib
+            - Soccer Tools (coringa: Field KPs AI, Soccer-Field Calib,
+              FIFA cams→DLT, FIFA Dataset Builder, VEK ElasticKick,
+              FIFA: merge manual labels, Scout, Pynalty)
+            - Deadlift
             B6_r7:
             - Treadmill LC (col 3)
             - vailá (×4 placeholders)
@@ -1142,12 +1147,12 @@ class Vaila(tk.Tk):
             command=self.brainstorm,
         )
 
-        # B5_r5_c3 - Scout
-        scout_btn = tk.Button(
+        # B5_r5_c3 - vailá (placeholder; Scout moved into Soccer Tools)
+        vaila_b5_r5_c3 = tk.Button(
             row5_frame,
-            text="Scout",
+            text="vailá",
             width=button_width,
-            command=self.scout,
+            command=self.show_vaila_message,
         )
 
         # B5_r5_c4 - Start Block
@@ -1158,20 +1163,20 @@ class Vaila(tk.Tk):
             command=self.startblock,
         )
 
-        # B5_r5_c5 - Pynalty
-        pynalty_btn = tk.Button(
+        # B5_r5_c5 - vailá (placeholder; Pynalty moved into Soccer Tools)
+        vaila_b5_r5_c5 = tk.Button(
             row5_frame,
-            text="Pynalty",
+            text="vailá",
             width=button_width,
-            command=self.pynalty,
+            command=self.show_vaila_message,
         )
 
         # Pack row5 buttons
         ultrasound_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         brainstorm_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        scout_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b5_r5_c3.pack(side="left", expand=True, fill="x", padx=2, pady=2)
         startblock_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
-        pynalty_btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
+        vaila_b5_r5_c5.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
         # B6 - Sixth row of buttons (Sprint, vailá, vailá, vailá, vailá)
         row6_frame = tk.Frame(analysis_frame)
@@ -2776,7 +2781,7 @@ class Vaila(tk.Tk):
 
         brainstorm.run_brainstorm()
 
-    # B_r5_c3 - Scout
+    # Soccer Tools -> Scout
     def scout(self):
         """Runs the Scout module in a separate process to avoid Tk conflicts."""
         run_vaila_module("vaila.scout_vaila", "vaila/scout_vaila.py")
@@ -3830,6 +3835,7 @@ class Vaila(tk.Tk):
 
         run_plot_3d()
 
+    # Soccer Tools -> Pynalty
     def pynalty(self):
         """Runs the Pynalty analysis tool."""
         run_vaila_module("vaila.pynalty", "vaila/pynalty.py")
@@ -4170,7 +4176,7 @@ class Vaila(tk.Tk):
         ).pack(anchor="w")
         tk.Label(
             frm,
-            text="Field keypoints (YOLO pose), calibration (DLT2D), VEK e utilitários FIFA.",
+            text="Field keypoints (YOLO pose), calibration (DLT2D), VEK, scouting e utilitários FIFA.",
             font=("default", self.font_size),
         ).pack(anchor="w", pady=(4, 10))
 
@@ -4213,6 +4219,18 @@ class Vaila(tk.Tk):
             command=lambda: (win.destroy(), self.fifa_manual_merge()),
             width=22,
         ).grid(row=3, column=0, padx=4, pady=4, sticky="we", columnspan=2)
+        tk.Button(
+            btn_frame,
+            text="Scout",
+            command=lambda: (win.destroy(), self.scout()),
+            width=22,
+        ).grid(row=4, column=0, padx=4, pady=4, sticky="we")
+        tk.Button(
+            btn_frame,
+            text="Pynalty",
+            command=lambda: (win.destroy(), self.pynalty()),
+            width=22,
+        ).grid(row=4, column=1, padx=4, pady=4, sticky="we")
 
         for col in (0, 1):
             btn_frame.grid_columnconfigure(col, weight=1)

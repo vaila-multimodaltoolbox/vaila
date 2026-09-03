@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.3.114
+- **Version:** 0.3.119
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -15,6 +15,7 @@
 Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with inclusive frame counts and high-resolution timestamps (.6f).
 
 ### Key Updates
+- **Fewer confirmations on the syncvid handoff (v0.3.119):** when `syncvid`'s **Save + Cut Video** launches Cut Video directly (`--sync-file`), Escape no longer asks *"Sync mode detected. Process all videos...?"* before rendering — clicking Save + Cut Video already is that confirmation. A sync file loaded manually inside Cut Video (**F** key) still asks, since the user may only be reviewing an old file. The follow-up "Sync Processing Complete" dialog was also dropped as redundant with the final Success dialog.
 - **Direct Sync Video handoff (v0.3.85):** `syncvid` launches Cut Video with `--video` and `--sync-file`; the reference and exact sync interval are preloaded without reopening either chooser.
 - **Safe sync v2:** strict versioned TSV parser with legacy TXT compatibility, exact filename/unique-stem matching, 1-based file ↔ 0-based internal conversion, atomic writes, and traversal/symlink/range validation.
 - **TOML cuts**: Saves/loads `*_cuts.toml` with 1-based frames, `.6f` precision, `frame_count = end - start + 1` (duration = `frame_count / fps`), plus `output_dir` and per-cut `output_file` entries. Windows paths stored as POSIX to avoid escaping issues.
@@ -68,7 +69,7 @@ Heittor_cod_02
 uv run vaila/cutvideo.py --video /path/to/reference.mp4 --sync-file /path/to/session_sync.txt
 ```
 
-This is launched by **syncvid → Save + Open Cut Video**. It validates all files before opening pygame and bypasses both file choosers.
+This is launched by **syncvid → Save + Cut Video**. It validates all files before opening pygame, bypasses both file choosers, and — since this handoff already carries the user's explicit intent to process — skips the "Sync Mode" confirmation on Escape and renders directly.
 
 ## 🎮 Controls (UI)
 
@@ -118,5 +119,5 @@ This is launched by **syncvid → Save + Open Cut Video**. It validates all file
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 25 August 2026
+📅 **Last Updated:** 02 September 2026
 🔗 **Part of vailá - Multimodal Toolbox**

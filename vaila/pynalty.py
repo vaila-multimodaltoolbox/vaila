@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 19 December 2025
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 02 September 2026
+Version: 0.3.119
 
 Example of usage:
 From the vailá repo root (with dependencies installed via uv):
@@ -20,9 +20,13 @@ velocity to CSV files. The script also generates a
 video with the landmarks overlaid on the original frames.
 
 Usage:
-- Run the script to open a graphical interface for selecting the input directory
-  containing video files (.mp4, .avi, .mov), the output directory, and for
-  specifying the MediaPipe configuration parameters.
+- GUI mode: click "Pynalty" inside the "Soccer Tools" launcher in the vailá
+  main window (Frame B), or run ``uv run vaila/pynalty.py`` with no flags to
+  open a file-picker dialog for the input video.
+- CLI mode: ``uv run vaila/pynalty.py -i video.mp4 -o output_dir -c config.toml``
+  skips the file dialog and preloads the output directory / TOML config; the
+  interactive pygame overlay window still opens for marking kick/goal/calibration
+  points. Pass ``--gui`` to force the file dialog even when ``-i`` is given.
 - Choose whether to enable video resize for better pose detection
 - The script processes each video, generating an output video with overlaid pose
   landmarks, and CSV files containing both normalized and pixel-based landmark
@@ -44,6 +48,7 @@ License:
     This project is licensed under the terms of AGPLv3.0.
 """
 
+import argparse
 import csv
 import os
 import sys
@@ -56,6 +61,11 @@ import numpy as np
 import pygame
 from numpy import linalg as LA
 from numpy.linalg import inv
+
+try:
+    from .cli_highlight import print_gui_cli_mirror  # package import
+except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # standalone fallback
 
 # Tentar importar toml, se não tiver usa json como fallback ou avisa
 try:
@@ -1454,55 +1464,82 @@ def load_video_file_dialog():
     return file_path
 
 
-if __name__ == "__main__":
-    import argparse
-
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Pynalty - Penalty Knock Analysis")
     parser.add_argument("-i", "--input", help="Path to input video file")
     parser.add_argument("-o", "--output", help="Path to output directory (optional)")
     parser.add_argument("-c", "--config", help="Path to config/toml file (optional)")
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Force the file-picker dialog even if -i is given",
+    )
+    return parser
 
-    args = parser.parse_args()
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI + GUI entry point.
+
+    GUI mode: no ``-i``/``--gui`` needed — a file-picker dialog opens.
+    CLI mode: ``uv run vaila/pynalty.py -i video.mp4 -o out_dir -c config.toml``
+    runs headlessly against the given video (still opens the pygame overlay
+    window for the interactive marking workflow, but skips the file dialog).
+    """
+    args = build_parser().parse_args(argv)
 
     vid_path = None
-    if args.input:
-        vid_path = args.input
-    elif len(sys.argv) > 1 and not args.input:  # Fallback for direct path
-        if not sys.argv[1].startswith("-"):
+    if not args.gui:
+        if args.input:
+            vid_path = args.input
+        elif len(sys.argv) > 1 and not args.input and not sys.argv[1].startswith("-"):
+            # Fallback for a bare positional path, e.g. `pynalty.py video.mp4`
             vid_path = sys.argv[1]
 
     if not vid_path:
         vid_path = load_video_file_dialog()
 
-    if vid_path:
-        # Check if file exists
-        if not os.path.exists(vid_path):
-            print(f"Error: Video file not found: {vid_path}")
-            sys.exit(1)
-
-        app = PynaltyApp(vid_path)
-
-        # Determine output strategy
-        # Currently PynaltyApp.get_results_dir() uses video_path dirname
-        # If user supplied -o, we should probably set an internal result_dir_override
-        if args.output:
-            if not os.path.exists(args.output):
-                os.makedirs(args.output, exist_ok=True)
-            app.output_dir_override = args.output
-
-        # If config is passed, try to load it immediately
-        if args.config:
-            if os.path.exists(args.config):
-                print(f"Loading config from {args.config}...")
-                try:
-                    with open(args.config) as f:
-                        data = toml.load(f)
-                    app.load_from_data(data)
-                except Exception as e:
-                    print(f"Failed to load config: {e}")
-            else:
-                print(f"Config file not found: {args.config}")
-
-        app.run()
-    else:
+    if not vid_path:
         print("No video selected.")
+        return 1
+
+    # Check if file exists
+    if not os.path.exists(vid_path):
+        print(f"Error: Video file not found: {vid_path}")
+        return 1
+
+    cli_argv = ["-i", vid_path]
+    if args.output:
+        cli_argv += ["-o", args.output]
+    if args.config:
+        cli_argv += ["-c", args.config]
+    print_gui_cli_mirror("vaila/pynalty", ["uv", "run", "vaila/pynalty.py", *cli_argv])
+
+    app = PynaltyApp(vid_path)
+
+    # Determine output strategy
+    # Currently PynaltyApp.get_results_dir() uses video_path dirname
+    # If user supplied -o, we should probably set an internal result_dir_override
+    if args.output:
+        if not os.path.exists(args.output):
+            os.makedirs(args.output, exist_ok=True)
+        app.output_dir_override = args.output
+
+    # If config is passed, try to load it immediately
+    if args.config:
+        if os.path.exists(args.config):
+            print(f"Loading config from {args.config}...")
+            try:
+                with open(args.config) as f:
+                    data = toml.load(f)
+                app.load_from_data(data)
+            except Exception as e:
+                print(f"Failed to load config: {e}")
+        else:
+            print(f"Config file not found: {args.config}")
+
+    app.run()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
 Email: paulosantiago@usp.br and rafaell_mmonteiro@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 22 August 2025
-Version: 0.1.5
+Update Date: 02 September 2026
+Version: 0.3.119
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
@@ -16,13 +16,16 @@ Description:
     drawn to scale using standard FIFA dimensions (105m x 68m).
 
 Usage:
-    Click in button Scout in the vaila GUI
-    python vaila.py
-    or
-    Run from the command line:
+    GUI mode: click "Scout" inside the "Soccer Tools" launcher in the vailá
+    main window (Frame B), or run with no flags to auto-locate/create the
+    default TOML config:
+        uv run vaila/scout_vaila.py
+    or:
         python -m vaila.scout_vaila
-    or enter the vaila directory and run:
-        python scout_vaila.py
+
+    CLI mode: load a specific config non-interactively before the window
+    opens (the annotation workflow itself stays interactive):
+        uv run vaila/scout_vaila.py -c my_scout_config.toml
 
 
 Requirements:
@@ -51,6 +54,7 @@ License:
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import time
 import tkinter as tk
@@ -65,6 +69,11 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from rich import print
+
+try:
+    from .cli_highlight import print_gui_cli_mirror  # package import
+except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # standalone fallback
 
 # --- Config I/O helpers (TOML) -------------------------------------------------
 try:  # Python 3.11+
@@ -2349,16 +2358,62 @@ def _locate_or_init_config() -> dict:
     return cfg
 
 
-def run_scout():
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Scout vailá: soccer/futsal scouting annotation GUI"
+    )
+    parser.add_argument(
+        "-c", "--config", help="Path to a Scout TOML config (skips auto-locate/-init)"
+    )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Open the Scout Tkinter GUI (default; kept for parity with other vailá CLIs)",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI + GUI entry point.
+
+    GUI mode: ``uv run vaila/scout_vaila.py`` with no flags auto-locates (or
+    creates) the default TOML config and opens the annotation window.
+    CLI mode: ``uv run vaila/scout_vaila.py -c my_scout_config.toml`` loads a
+    specific roster/config non-interactively, then opens the same window
+    (Scout's annotation workflow is inherently interactive — there is no
+    headless run).
+    """
+    args = build_parser().parse_args(argv)
+
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
     print("Running Scout vailá")
     print("================================================")
 
-    cfg = _locate_or_init_config()
+    if args.config:
+        cfg_path = Path(args.config)
+        cfg = read_toml_config(cfg_path)
+        if cfg is None:
+            print(f"Error: config file not found or invalid: {cfg_path}")
+            return 1
+        print(f"Using config: {cfg_path}")
+    else:
+        cfg = _locate_or_init_config()
+
+    print_gui_cli_mirror(
+        "vaila/scout_vaila",
+        ["uv", "run", "vaila/scout_vaila.py", "-c", str(args.config or DEFAULT_CFG_FILENAME)],
+    )
+
     app = ScoutApp(cfg)
     app.mainloop()
+    return 0
+
+
+def run_scout() -> None:
+    """Backwards-compatible GUI-only entry point (equivalent to ``main([])``)."""
+    main([])
 
 
 if __name__ == "__main__":
-    run_scout()
+    raise SystemExit(main())

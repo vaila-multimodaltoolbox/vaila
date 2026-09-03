@@ -50,6 +50,23 @@
         <p>This reference is intended to reduce keypoint index swaps while clicking in
         <code>vaila/getpixelvideo.py</code>.</p>
 
+        <h2>Export REF3D for DLT3D</h2>
+        <p>Button <strong>Export REF3D…</strong> (after a field model is loaded):</p>
+        <ol>
+          <li>Multi-select control points from the loaded model (or the 32 FIFA
+            dataset keypoints when <code>--type fifa_dataset</code>).</li>
+          <li>Choose p-index base <strong>1</strong> (recommended for
+            <code>dlt3d.py</code>) or <strong>0</strong> (FIFA getpixelvideo
+            slot style).</li>
+          <li>Saves <code>*.ref3d</code>, <code>*.ref3d_map.csv</code>, and
+            optional <code>*_pixel_template.csv</code>.</li>
+        </ol>
+        <p>Workflow: mark the same <code>pN</code> order in getpixelvideo →
+          <code>dlt3d.py</code> (pixel + <code>.ref3d</code>) →
+          <code>.dlt3d</code> for <code>rec3d_one_dlt3d.py</code>.
+          (<code>fifa_to_dlt.py</code> is the alternate path from FIFA
+          <code>cameras/*.npz</code>, not this REF3D file.)</p>
+
         <div class="note">
             <strong>Note:</strong> All sports are unified under <code>vaila/drawsportsfields.py</code>.
             Each surface has a dedicated <code>plot_*</code> function registered in
