@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.104
+Version: 0.3.120
 Created: 02 August 2025
-Last Updated: 11 August 2026
+Last Updated: 03 September 2026
 
 ================================================================================
 Description
@@ -819,6 +819,12 @@ def run_reconstruction(
         if df.empty:
             return _err(f"DLT3D file {os.path.basename(file)} is empty!")
         params = df.iloc[0, 1:].to_numpy().astype(float)
+        if np.isnan(params).any():
+            return _err(
+                f"DLT3D file {os.path.basename(file)} has missing/NaN calibration "
+                "parameters in its first row — recalibrate this camera before "
+                "reconstructing (this fixed-DLT path uses one row for every frame)."
+            )
         dlt_params_list.append(params)
 
     # Load pixel coordinate data for each camera.

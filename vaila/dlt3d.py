@@ -75,13 +75,17 @@ def _is_format1_dataframe(df: pd.DataFrame) -> bool:
 
 
 def _validate_format1_dataframe(df: pd.DataFrame) -> pd.DataFrame | None:
-    """Ensure format-1 REF3D has contiguous p1..pN with _x/_y/_z columns."""
+    """Ensure format-1 REF3D has _x/_y/_z columns for every detected point index.
+
+    Point indices are NOT assumed to be a 1-based contiguous range: pixel
+    files from getpixelvideo.py's default/sequential mode start at p0, so a
+    REF3D file may legitimately use p0..p(N-1) instead of p1..pN.
+    """
     point_numbers = _point_numbers_from_columns(df.columns)
     if not point_numbers:
         return None
-    num_points = max(point_numbers)
     expected_columns = []
-    for i in range(1, num_points + 1):
+    for i in sorted(point_numbers):
         expected_columns.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z"])
     if not all(col in df.columns for col in expected_columns):
         return None
@@ -218,10 +222,24 @@ def calculate_dlt3d_params(pixel_coords, ref_coords):
     return L
 
 
+def _point_has_axes(row, point_idx: int, suffixes: tuple[str, ...]) -> bool:
+    """True when *row* has non-empty (non-NaN) values for point_idx's given axes."""
+    return all(pd.notna(row.get(f"p{point_idx}{suffix}")) for suffix in suffixes)
+
+
 def process_files(pixel_file, ref3d_file):
     """
     Processes the pixel and REF3D files.
     If the REF3D file contains only one row, the same real-world points are used for every frame.
+
+    Empty/NaN pixel coordinates are skipped per point rather than crashing:
+    getpixelvideo.py's sequential-mode CSV keeps one row per video frame even
+    when markers were only placed on a single frame, leaving every other
+    frame's pN_x/pN_y blank. Feeding those NaNs straight into the
+    least-squares solve raised ``numpy.linalg.LinAlgError: SVD did not
+    converge`` instead of a clear message. Now, for each frame, only the
+    common points that actually have data are used; a frame is skipped (with
+    a message) when fewer than 6 such points remain.
     """
     pixel_df = read_pixel_file(pixel_file)
     ref_df = read_ref3d_file(ref3d_file)
@@ -262,20 +280,28 @@ def process_files(pixel_file, ref3d_file):
         )
 
     dlt_params_all = {}
+    skipped_frames = []
+
     # If the REF3D file consists of only one row, use it for all frames:
     if len(ref_df) == 1:
-        ref_coords_arr = []
         ref_line = ref_df.iloc[0]
-        for i in common_points:
-            ref_coords_arr.append([ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]])
-        ref_coords_arr = np.array(ref_coords_arr)
+        # Drop common points whose real-world coordinates are themselves empty.
+        ref_valid_points = [
+            i for i in common_points if _point_has_axes(ref_line, i, ("_x", "_y", "_z"))
+        ]
+        ref_coords_map = {
+            i: [ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]]
+            for i in ref_valid_points
+        }
         for _, row in pixel_df.iterrows():
-            pixel_coords_arr = []
-            for i in common_points:
-                pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
-            pixel_coords_arr = np.array(pixel_coords_arr)
-            L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
             frame = row["frame"]
+            frame_points = [i for i in ref_valid_points if _point_has_axes(row, i, ("_x", "_y"))]
+            if len(frame_points) < 6:
+                skipped_frames.append((frame, len(frame_points)))
+                continue
+            pixel_coords_arr = np.array([[row[f"p{i}_x"], row[f"p{i}_y"]] for i in frame_points])
+            ref_coords_arr = np.array([ref_coords_map[i] for i in frame_points])
+            L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
             dlt_params_all[frame] = L
     else:
         # If REF3D contains multiple rows, match the frame numbers
@@ -286,17 +312,37 @@ def process_files(pixel_file, ref3d_file):
                 print(f"Frame {frame} not found in REF3D file.")
                 continue
             ref_line = ref_line.iloc[0]
-            pixel_coords_arr = []
-            ref_coords_arr = []
-            for i in common_points:
-                pixel_coords_arr.append([row[f"p{i}_x"], row[f"p{i}_y"]])
-                ref_coords_arr.append(
+            frame_points = [
+                i
+                for i in common_points
+                if _point_has_axes(ref_line, i, ("_x", "_y", "_z"))
+                and _point_has_axes(row, i, ("_x", "_y"))
+            ]
+            if len(frame_points) < 6:
+                skipped_frames.append((frame, len(frame_points)))
+                continue
+            pixel_coords_arr = np.array([[row[f"p{i}_x"], row[f"p{i}_y"]] for i in frame_points])
+            ref_coords_arr = np.array(
+                [
                     [ref_line[f"p{i}_x"], ref_line[f"p{i}_y"], ref_line[f"p{i}_z"]]
-                )
-            pixel_coords_arr = np.array(pixel_coords_arr)
-            ref_coords_arr = np.array(ref_coords_arr)
+                    for i in frame_points
+                ]
+            )
             L = calculate_dlt3d_params(pixel_coords_arr, ref_coords_arr)
             dlt_params_all[frame] = L
+
+    if skipped_frames:
+        preview = ", ".join(f"{f} ({n} pt)" for f, n in skipped_frames[:10])
+        more = f", … +{len(skipped_frames) - 10} more" if len(skipped_frames) > 10 else ""
+        print(
+            f"Warning: skipped {len(skipped_frames)} frame(s) with fewer than 6 valid "
+            f"(non-empty) common points: {preview}{more}"
+        )
+
+    if not dlt_params_all:
+        print("Error: no frame had at least 6 valid (non-empty) common points; nothing to solve.")
+        return None
+
     return dlt_params_all
 
 
@@ -357,13 +403,17 @@ def main(pixel_file=None, real_file=None, create_ref=False):
                 if point_num.isdigit():
                     point_numbers.add(int(point_num))
 
-    num_points = max(point_numbers) if point_numbers else 0
-
     if create_ref:
         real_file = os.path.splitext(pixel_file)[0] + ".ref3d"
-        # Create a template with header for points with _x, _y, _z (default value 0.0)
+        # Create a template with header for points with _x, _y, _z (default value 0.0).
+        # IMPORTANT: use the ACTUAL point indices found in the pixel file, not
+        # range(1, max+1). getpixelvideo.py's default/sequential mode numbers
+        # markers starting at p0 (keypoint_start_idx=0, keypoint_index_base=0),
+        # so a pixel file with 10 markers has columns p0_x..p9_x. Assuming a
+        # 1-based range here silently dropped p0 and produced a REF3D template
+        # with one fewer point than the pixel file, shifted by one label.
         template_data = {"frame": [0]}
-        for i in range(1, num_points + 1):
+        for i in sorted(point_numbers):
             template_data[f"p{i}_x"] = [0]
             template_data[f"p{i}_y"] = [0]
             template_data[f"p{i}_z"] = [0]
