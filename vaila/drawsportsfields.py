@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 20 March 2025
-Updated: 02 September 2026
-Version: 0.3.118
+Updated: 03 September 2026
+Version: 0.3.120
 
 Description:
     Unified sports-field/court visualization module.

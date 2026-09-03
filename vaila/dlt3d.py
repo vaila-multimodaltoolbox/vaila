@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Roberto Pereira Santiago
-Version: 0.3.119
+Version: 0.3.120
 Create: 24 February, 2025
-Last Updated: 02 September 2026
+Last Updated: 03 September 2026
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.

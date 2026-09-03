@@ -1,7 +1,7 @@
 """Unit tests for interactive multi-video synchronization.
 
-Update Date: 02 September 2026
-Version: 0.3.119
+Update Date: 03 September 2026
+Version: 0.3.120
 """
 
 from __future__ import annotations

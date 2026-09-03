@@ -4,8 +4,8 @@
 
 **Pynalty** is a specialized video analysis tool designed to calculate penalty kick statistics, specifically the ball's velocity and distance traveled. Integrated into the **vailá** toolbox, it provides a user-friendly interface to mark critical moments (kick and goal) and positions to automatically compute results based on goal calibration.
 
-**Version:** 0.3.119  
-**Date:** 02 September 2026  
+**Version:** 0.3.120  
+**Date:** 03 September 2026  
 **Project:** vailá - Multimodal Toolbox
 
 ## Key Features

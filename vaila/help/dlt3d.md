@@ -6,7 +6,7 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/dlt3d.py` |
-| **Version** | 0.3.119 |
+| **Version** | 0.3.120 |
 | **Author** | Paulo Roberto Pereira Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |

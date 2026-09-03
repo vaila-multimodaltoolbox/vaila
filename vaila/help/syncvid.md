@@ -4,8 +4,8 @@
 
 - **Category:** Tools → Video and Image
 - **File:** `vaila/syncvid.py`
-- **Version:** 0.3.119
-- **Updated:** 2026-09-02
+- **Version:** 0.3.120
+- **Updated:** 2026-09-03
 - **GUI:** Frame C → **Make Sync file**
 - **CLI:** `uv run vaila/syncvid.py`
 

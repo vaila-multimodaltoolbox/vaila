@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 02 September 2026
-Version: 0.3.119
+Update Date: 03 September 2026
+Version: 0.3.120
 
 Description:
 Create a frame-accurate synchronization plan with a fast Pygame player. Every

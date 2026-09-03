@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.3.113"
-__updated__ = "24 August 2026"
+__version__ = "0.3.120"
+__updated__ = "03 September 2026"
 
 
 @dataclass(frozen=True, slots=True)

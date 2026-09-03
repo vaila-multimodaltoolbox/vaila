@@ -4,8 +4,8 @@ Both `vaila.pynalty` and `vaila.scout_vaila` are interactive (pygame /
 Tkinter) tools, so these tests stay on the argument-parsing and
 error-before-GUI-opens paths only -- no display/mainloop is exercised.
 
-Update Date: 02 September 2026
-Version: 0.3.119
+Update Date: 03 September 2026
+Version: 0.3.120
 """
 
 from __future__ import annotations

@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: vailá team
-Version: 0.3.118
+Version: 0.3.120
 Created: 11 August 2026
-Update Date: 02 September 2026
+Update Date: 03 September 2026
 ================================================================================
 Description:
     Estimate a time-varying DLT3D camera from two complementary sources:

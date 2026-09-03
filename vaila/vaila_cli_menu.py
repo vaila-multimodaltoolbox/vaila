@@ -17,8 +17,8 @@ from vaila.vaila_cli_hints import CliRunHint, get_cli_hint
 if TYPE_CHECKING:
     from vaila import Vaila
 
-__version__ = "0.3.113"
-__updated__ = "24 August 2026"
+__version__ = "0.3.120"
+__updated__ = "03 September 2026"
 
 _ROW_RE = re.compile(r"_r(\d+)_")
 _COL_RE = re.compile(r"_c(\d+)$")

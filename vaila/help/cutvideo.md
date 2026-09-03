@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.3.119
+- **Version:** 0.3.120
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -119,5 +119,5 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 02 September 2026
+📅 **Last Updated:** 03 September 2026
 🔗 **Part of vailá - Multimodal Toolbox**

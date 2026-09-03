@@ -6,7 +6,7 @@
 - **File:** `vaila\scout_vaila.py`
 - **Lines:** 2510
 - **Size:** 95343 characters
-- **Version:** 0.3.119
+- **Version:** 0.3.120
 - **Author:** Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
 - **GUI Interface:** ✅ Yes
 
@@ -20,8 +20,8 @@ Author: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
 Email: paulosantiago@usp.br and rafaell_mmonteiro@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 02 September 2026
-Version: 0.3.119
+Update Date: 03 September 2026
+Version: 0.3.120
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate

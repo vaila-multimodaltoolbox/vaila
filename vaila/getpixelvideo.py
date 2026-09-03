@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 02 September 2026
-Version: 0.3.118
+Update: 03 September 2026
+Version: 0.3.120
 Python Version: 3.12.14
 
 Description:
@@ -188,8 +188,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.118"
-GETPIXELVIDEO_UPDATE_DATE = "02 September 2026"
+GETPIXELVIDEO_VERSION = "0.3.120"
+GETPIXELVIDEO_UPDATE_DATE = "03 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 

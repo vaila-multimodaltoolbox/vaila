@@ -7,8 +7,8 @@ PygameSyncPlayer session end to end. tests/test_syncvid.py keeps the fast
 synthetic-fixture unit tests; this file covers the real-decode paths the
 project's own goal asked for.
 
-Update Date: 02 September 2026
-Version: 0.3.119
+Update Date: 03 September 2026
+Version: 0.3.120
 """
 
 from __future__ import annotations

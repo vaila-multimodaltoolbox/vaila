@@ -201,7 +201,7 @@ def test_check_git_updates_falls_back_to_https_on_ssh_denial(monkeypatch):
 
     monkeypatch.setattr(uc, "_run_git", lambda args, root, timeout=uc.GIT_TIMEOUT: FakeRevParse())
 
-    result = uc._check_git_updates(force=True, local_version="0.3.118")
+    result = uc._check_git_updates(force=True, local_version="0.3.120")
 
     assert result.checked is True
     assert result.ssh_origin_detected is True
@@ -231,7 +231,7 @@ def test_check_git_updates_non_ssh_failure_skips_https_fallback(monkeypatch):
 
     monkeypatch.setattr(uc, "ls_remote_main_https", _unexpected_fallback)
 
-    result = uc._check_git_updates(force=True, local_version="0.3.118")
+    result = uc._check_git_updates(force=True, local_version="0.3.120")
 
     assert result.checked is False
     assert result.used_https_fallback is False
