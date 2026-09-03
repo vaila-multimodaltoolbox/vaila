@@ -1,0 +1,8 @@
+# vaila sync file v2
+# frame_base=1; frame ranges are inclusive
+video_file	output_file	start_frame	end_frame	sync_frame
+palxscri_h264_frame_17608_to_17689.mp4	palxscri_h264_frame_17608_to_17689_sync_16_frames_16_to_82.mp4	16	82	16
+palxscri_h264_frame_17953_to_18064.mp4	palxscri_h264_frame_17953_to_18064_sync_20_frames_20_to_86.mp4	20	86	20
+palxscri_h264_frame_18208_to_18347.mp4	palxscri_h264_frame_18208_to_18347_sync_31_frames_31_to_97.mp4	31	97	31
+palxscri_h264_frame_18515_to_18656.mp4	palxscri_h264_frame_18515_to_18656_sync_24_frames_24_to_90.mp4	24	90	24
+palxscri_h264_frame_18897_to_19134.mp4	palxscri_h264_frame_18897_to_19134_sync_42_frames_42_to_108.mp4	42	108	42

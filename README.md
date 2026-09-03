@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** see `vaila.py`. **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-01
+**Last updated:** 2026-09-02
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -203,11 +203,14 @@ B3_r3_c4 - Cube2D         B3_r3_c5 - Animal Open Field
 B4_r4_c1 - vailá          B4_r4_c2 - ML Walkway      B4_r4_c3 - vailá
 B4_r4_c4 - vailá          B4_r4_c5 - vailá
 
-B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - Scout
-B5_r5_c4 - Start Block    B5_r5_c5 - Pynalty
+B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - vailá
+B5_r5_c4 - Start Block    B5_r5_c5 - vailá
 
 B5_r6_c1 - Sprint         B5_r6_c2 - vailá           B5_r6_c3 - tugturn
-B5_r6_c4 - Soccer Tools   B5_r6_c5 - Deadlift
+B5_r6_c4 - Soccer Tools (coringa: Field KPs AI, Soccer-Field Calib,
+            FIFA cams→DLT, FIFA Dataset Builder, VEK ElasticKick,
+            FIFA: merge manual labels, Scout, Pynalty)
+B5_r6_c5 - Deadlift
 
 B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - Treadmill LC
 B6_r7_c4 - vailá          B6_r7_c5 - vailá

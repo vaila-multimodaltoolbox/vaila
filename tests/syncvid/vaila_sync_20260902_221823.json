@@ -1,0 +1,17 @@
+{
+  "completed": true,
+  "current_frame": 41,
+  "current_video": "palxscri_h264_frame_18897_to_19134.mp4",
+  "end": "82",
+  "output_file": "/home/preto/Preto/vaila/tests/syncvid/vaila_sync_20260902_221823.txt",
+  "reference": "palxscri_h264_frame_17608_to_17689.mp4",
+  "start": "16 ",
+  "sync_frames": {
+    "palxscri_h264_frame_17608_to_17689.mp4": "16",
+    "palxscri_h264_frame_17953_to_18064.mp4": "20",
+    "palxscri_h264_frame_18208_to_18347.mp4": "31",
+    "palxscri_h264_frame_18515_to_18656.mp4": "24",
+    "palxscri_h264_frame_18897_to_19134.mp4": "42"
+  },
+  "vaila_checkpoint": 1
+}

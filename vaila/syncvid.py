@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 29 July 2026
-Version: 0.3.85
+Update Date: 02 September 2026
+Version: 0.3.119
 
 Description:
 Create a frame-accurate synchronization plan with a fast Pygame player. Every
@@ -27,18 +27,21 @@ Frame convention:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import datetime as dt
 import io
+import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import tkinter as tk
 import webbrowser
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from tkinter import filedialog, messagebox
@@ -48,12 +51,90 @@ import cv2
 import pygame
 from rich import print
 
+
+def _scrub_cv2_qt_plugin_env() -> None:
+    """Undo cv2's QT_QPA_PLATFORM_PLUGIN_PATH/QT_QPA_FONTDIR import side effect.
+
+    Importing cv2 unconditionally overwrites these two variables with its own
+    bundled Qt runtime path, even though this module only uses cv2.VideoCapture
+    and never touches cv2's Qt GUI backend. Left in place, every child process
+    this module spawns (the Help button's webbrowser tab, the Cut Video
+    handoff subprocess) inherits the leaked value; if that child -- or
+    something it execs, such as a desktop's xdg-open handler -- is itself
+    Qt-based, it tries to load cv2's bundled xcb plugin against the system's
+    Qt/X11 and aborts with "qt.qpa.plugin: Could not load the Qt platform
+    plugin xcb" / "Aborted (core dumped)". Restore the system default by
+    removing only the values cv2 itself set.
+    """
+    for name in ("QT_QPA_PLATFORM_PLUGIN_PATH", "QT_QPA_FONTDIR"):
+        value = os.environ.get(name, "")
+        if "cv2" in value.replace("\\", "/").lower():
+            os.environ.pop(name, None)
+
+
+_scrub_cv2_qt_plugin_env()
+
+
+def _resilient_open_local_html(path: Path) -> None:
+    """Open a local HTML file, working around wslview/WSL-interop failures.
+
+    ``webbrowser.open_new_tab()`` resolves to ``wslview`` whenever ``BROWSER``
+    is unset and a ``wslview`` binary is on PATH -- which WSL's default
+    Python distributions ship even when WSL interop itself is broken (no
+    WSLg, a restricted/systemd-less distro, a container). wslview then shells
+    out to ``reg.exe``/``explorer.exe`` through that interop and dies with
+    ``grep: /proc/sys/fs/binfmt_misc/WSLInterop: No such file or directory``
+    and ``wslview: line 216: .../reg.exe: No such file or directory`` --
+    exactly the Help-button failure this works around. Native Linux GUI
+    browsers are tried directly first; wslview is only considered once
+    interop is confirmed to actually work; ``webbrowser`` is kept as a last
+    library-level fallback for platforms (macOS, native Windows) where it
+    already resolves correctly. A launch failure never reaches the caller --
+    the last resort is printing the ``file://`` URI, so Help can never crash
+    the pygame loop or spam a traceback to stderr.
+    """
+    uri = path.resolve().as_uri()
+    candidates: list[list[str]] = []
+
+    browser_env = os.environ.get("BROWSER", "").strip()
+    if browser_env:
+        candidates.append([browser_env, uri])
+
+    for name in ("xdg-open", "google-chrome", "firefox", "chromium", "chromium-browser"):
+        if shutil.which(name):
+            candidates.append([name, uri])
+
+    wsl_interop_available = Path("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+    if wsl_interop_available and shutil.which("wslview"):
+        candidates.append(["wslview", uri])
+
+    for command in candidates:
+        try:
+            subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+    with contextlib.suppress(webbrowser.Error, OSError):
+        if webbrowser.open_new_tab(uri):
+            return
+
+    print(f">> vaila/syncvid: Open this file in a browser to view Help:\n   {uri}")
+
+
 VIDEO_EXTENSIONS = frozenset({".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"})
 SYNC_FORMAT_HEADER = "# vaila sync file v2"
 SYNC_COLUMNS = ("video_file", "output_file", "start_frame", "end_frame", "sync_frame")
 MAX_SYNC_FILE_BYTES = 1_000_000
 MAX_SYNC_ENTRIES = 10_000
 MAX_FRAME_NUMBER = 2_147_483_647
+CHECKPOINT_SCHEMA_VERSION = 1
+MAX_CHECKPOINT_FILE_BYTES = 1_000_000
 
 
 PLAYBACK_SPEED_STEPS: tuple[float, ...] = (
@@ -543,6 +624,115 @@ def read_sync_file(sync_file: str | Path) -> list[SyncPlanEntry]:
     return entries
 
 
+def build_checkpoint_state(
+    *,
+    reference: str,
+    start: str,
+    end: str,
+    sync_frames: Mapping[str, str],
+    current_video: str,
+    current_frame: int,
+    output_file: str | Path | None,
+    completed: bool,
+) -> dict[str, Any]:
+    """Build the JSON-serializable "Load / Resume" checkpoint for the current UI state."""
+    return {
+        "vaila_checkpoint": CHECKPOINT_SCHEMA_VERSION,
+        "reference": reference,
+        "start": start,
+        "end": end,
+        "sync_frames": dict(sync_frames),
+        "current_video": current_video,
+        "current_frame": int(current_frame),
+        "output_file": str(output_file) if output_file else None,
+        "completed": bool(completed),
+    }
+
+
+def write_checkpoint_file(state: Mapping[str, Any], checkpoint_file: str | Path) -> Path:
+    """Atomically write a "Load / Resume" checkpoint next to the sync file."""
+    output_path = Path(checkpoint_file).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(state, indent=2, sort_keys=True, ensure_ascii=False)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix=f".{output_path.name}.",
+            suffix=".tmp",
+            dir=output_path.parent,
+            delete=False,
+        ) as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temporary_path = Path(handle.name)
+        os.replace(temporary_path, output_path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+    return output_path
+
+
+def read_checkpoint_file(checkpoint_file: str | Path) -> dict[str, Any]:
+    """Read and strictly validate a "Load / Resume" checkpoint JSON file.
+
+    Every validation failure -- missing keys, wrong types, corrupt JSON, an
+    oversized file -- raises SyncFileError with a message the caller can show
+    directly in the status bar; nothing here ever raises an opaque exception
+    or crashes the player.
+    """
+    path = Path(checkpoint_file).expanduser().resolve()
+    if not path.is_file():
+        raise SyncFileError(f"Checkpoint file not found: {path}")
+    if path.stat().st_size > MAX_CHECKPOINT_FILE_BYTES:
+        raise SyncFileError(
+            f"Checkpoint file is larger than {MAX_CHECKPOINT_FILE_BYTES} bytes: {path}"
+        )
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except UnicodeError as exc:
+        raise SyncFileError(f"Checkpoint file is not valid UTF-8: {path}") from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SyncFileError(f"Checkpoint file is not valid JSON: {path} ({exc})") from exc
+    if not isinstance(data, dict):
+        raise SyncFileError(f"Checkpoint file must contain a JSON object: {path}")
+
+    required = (
+        "vaila_checkpoint",
+        "reference",
+        "start",
+        "end",
+        "sync_frames",
+        "current_video",
+        "current_frame",
+    )
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise SyncFileError(f"Checkpoint file is missing key(s) {missing}: {path}")
+    if not all(
+        isinstance(data[key], str) for key in ("reference", "start", "end", "current_video")
+    ):
+        raise SyncFileError(
+            f"Checkpoint 'reference'/'start'/'end'/'current_video' must be text: {path}"
+        )
+    current_frame = data["current_frame"]
+    if isinstance(current_frame, bool) or not isinstance(current_frame, int) or current_frame < 0:
+        raise SyncFileError(f"Checkpoint 'current_frame' must be a non-negative integer: {path}")
+    sync_frames = data["sync_frames"]
+    if not isinstance(sync_frames, dict) or not all(
+        isinstance(name, str) and isinstance(value, str) for name, value in sync_frames.items()
+    ):
+        raise SyncFileError(f"Checkpoint 'sync_frames' must map video names to text: {path}")
+    output_file = data.get("output_file")
+    if output_file is not None and not isinstance(output_file, str):
+        raise SyncFileError(f"Checkpoint 'output_file' must be text or null: {path}")
+    return data
+
+
 def find_sync_entry(
     entries: Sequence[SyncPlanEntry], video_path: str | Path
 ) -> SyncPlanEntry | None:
@@ -722,6 +912,9 @@ class PygameSyncPlayer:
     PANEL_MAX_WIDTH = 470
     CONTROL_HEIGHT = 146
     ROW_HEIGHT = 40
+    # Reserved height (px) at the bottom of the side panel for the status
+    # line, the three action-button rows, and the footer hint.
+    ACTIONS_AREA_HEIGHT = 179
 
     def __init__(
         self,
@@ -779,6 +972,7 @@ class PygameSyncPlayer:
         self.small_font = pygame.font.SysFont("verdana", 13)
         self.tiny_font = pygame.font.SysFont("verdana", 11)
         self.title_font = pygame.font.SysFont("verdana", 18, bold=True)
+        self.title_font_italic = pygame.font.SysFont("verdana", 18, italic=True)
         self.large_font = pygame.font.SysFont("verdana", 24, bold=True)
         self.button_rects: dict[str, pygame.Rect] = {}
         self.video_row_rects: dict[str, pygame.Rect] = {}
@@ -791,6 +985,10 @@ class PygameSyncPlayer:
             "vailá Sync | Space Play/Pause | Left/Right 1 frame | "
             "Up/Down or -/+ 60 frames | [/] Speed | PgUp/PgDn Video"
         )
+        icon_path = Path(__file__).resolve().parent / "images" / "vaila_ico_mac.png"
+        if icon_path.is_file():
+            with contextlib.suppress(pygame.error):
+                pygame.display.set_icon(pygame.image.load(str(icon_path)))
         self._open_video(0)
 
     @property
@@ -910,7 +1108,7 @@ class PygameSyncPlayer:
         self._clamp_list_scroll()
 
     def _visible_row_count(self) -> int:
-        actions_top = self.window_height - 136
+        actions_top = self.window_height - self.ACTIONS_AREA_HEIGHT
         return max(1, (actions_top - 54 - 246) // self.ROW_HEIGHT)
 
     def _clamp_list_scroll(self) -> None:
@@ -1152,9 +1350,11 @@ class PygameSyncPlayer:
         )
         x = panel.x + 14
         content_width = panel.width - 28
+        vaila_label = self.title_font_italic.render("vailá", True, (248, 250, 252))
+        self.screen.blit(vaila_label, (x, 14))
         self.screen.blit(
-            self.title_font.render("Synchronization fields", True, (248, 250, 252)),
-            (x, 14),
+            self.title_font.render(" Sync", True, (248, 250, 252)),
+            (x + vaila_label.get_width(), 14),
         )
 
         self.screen.blit(
@@ -1256,7 +1456,7 @@ class PygameSyncPlayer:
             field.draw(self.screen, self.small_font)
             self.visible_fields.append(field)
 
-        actions_top = self.window_height - 136
+        actions_top = self.window_height - self.ACTIONS_AREA_HEIGHT
         status_rect = pygame.Rect(x, actions_top - 47, content_width, 40)
         self._draw_wrapped_status(status_rect)
 
@@ -1271,21 +1471,24 @@ class PygameSyncPlayer:
             first_width,
             32,
         )
+        load_rect = pygame.Rect(x, actions_top + 86, content_width, 32)
         self.button_rects["side:save"] = save_rect
         self.button_rects["side:save_cutvideo"] = save_cut_rect
         self.button_rects["side:help"] = help_rect
         self.button_rects["side:cancel"] = cancel_rect
+        self.button_rects["side:load"] = load_rect
         self._draw_button(save_rect, "Save sync", accent=True)
         self._draw_button(save_cut_rect, "Save + Cut Video", accent=True)
         self._draw_button(help_rect, "Help")
         self._draw_button(cancel_rect, "Cancel")
+        self._draw_button(load_rect, "Load / Resume")
 
         footer = self.tiny_font.render(
             "Tab fields | Enter validate | Ctrl+S save | Esc cancel",
             True,
             (164, 177, 190),
         )
-        self.screen.blit(footer, (x, actions_top + 84))
+        self.screen.blit(footer, (x, actions_top + 127))
 
     def _draw(self) -> None:
         self.screen.fill((18, 21, 25))
@@ -1317,6 +1520,8 @@ class PygameSyncPlayer:
             self._save(True)
         elif action == "side:help":
             self._open_help()
+        elif action == "side:load":
+            self._load_checkpoint()
         elif action == "side:cancel":
             self.running = False
 
@@ -1456,19 +1661,118 @@ class PygameSyncPlayer:
                 self.list_scroll -= int(event.y)
                 self._clamp_list_scroll()
 
+    @contextlib.contextmanager
+    def _sdl_window_minimized_for_dialog(self) -> Iterator[None]:
+        """Iconify the SDL window for the duration of a native Tk dialog.
+
+        Save and Load/Resume are the only places syncvid opens a native Tk
+        dialog while its own SDL window is still alive (Help and the Cut
+        Video handoff both fire-and-forget after the pygame loop has already
+        exited). Tk's ask*filename() blocks inside its own nested event
+        loop, so this process stops pumping the SDL window's queue for as
+        long as the dialog is open. On X11, a window that stops answering
+        the window manager while a second toolkit's top-level dialog grabs
+        focus is a known trigger for the whole desktop appearing to hang,
+        especially across multiple monitors. Iconifying the SDL window
+        before the dialog opens -- and restoring it via the same set_mode()
+        call already used for resize handling -- keeps only one top-level
+        window fighting for the window manager's attention at a time.
+        """
+        with contextlib.suppress(pygame.error):
+            pygame.display.iconify()
+        try:
+            yield
+        finally:
+            with contextlib.suppress(pygame.error):
+                self.screen = pygame.display.set_mode(
+                    (self.window_width, self.window_height), pygame.RESIZABLE
+                )
+
     def _choose_output_file(self) -> Path | None:
         if self.output_file is not None:
             return self.output_file
         timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        selected = filedialog.asksaveasfilename(
-            parent=self.dialog_parent,
-            title="Save vailá synchronization file",
-            initialdir=self.current_info.path.parent,
-            initialfile=f"vaila_sync_{timestamp}.txt",
-            defaultextension=".txt",
-            filetypes=[("vailá sync file", "*.txt"), ("All files", "*.*")],
-        )
+        with self._sdl_window_minimized_for_dialog():
+            selected = filedialog.asksaveasfilename(
+                parent=self.dialog_parent,
+                title="Save vailá synchronization file",
+                initialdir=self.current_info.path.parent,
+                initialfile=f"vaila_sync_{timestamp}.txt",
+                defaultextension=".txt",
+                filetypes=[("vailá sync file", "*.txt"), ("All files", "*.*")],
+            )
         return Path(selected).expanduser().resolve() if selected else None
+
+    def _checkpoint_state(self, *, completed: bool) -> dict[str, Any]:
+        """Snapshot everything needed to resume this UI session later.
+
+        ``completed`` marks whether this checkpoint came from "Save + Cut
+        Video" (the session is handed off downstream) or plain "Save sync"
+        (saved, but still open to being resumed/re-saved elsewhere).
+        """
+        return build_checkpoint_state(
+            reference=self.reference_field.text,
+            start=self.start_field.text,
+            end=self.end_field.text,
+            sync_frames={name: field.text for name, field in self.sync_fields.items()},
+            current_video=self.current_info.name,
+            current_frame=self.current_frame,
+            output_file=self.output_file,
+            completed=completed,
+        )
+
+    def _apply_checkpoint(self, data: Mapping[str, Any]) -> None:
+        """Restore session state (fields, position, UI) from a validated checkpoint.
+
+        Cameras the checkpoint mentions that are not part of the currently
+        loaded directory are skipped rather than rejected -- the checkpoint
+        may have been written against a different take of the same shoot.
+        """
+        known = {info.name for info in self.video_infos}
+        sync_frames = cast(dict[str, str], data["sync_frames"])
+        skipped = sorted(name for name in sync_frames if name not in known)
+        for name, text in sync_frames.items():
+            field = self.sync_fields.get(name)
+            if field is not None:
+                field.text = text
+
+        self.reference_field.text = cast(str, data["reference"])
+        self.start_field.text = cast(str, data["start"])
+        self.end_field.text = cast(str, data["end"])
+
+        output_file = data.get("output_file")
+        self.output_file = Path(output_file).expanduser().resolve() if output_file else None
+
+        current_video = cast(str, data["current_video"])
+        index = next(
+            (i for i, info in enumerate(self.video_infos) if info.name == current_video),
+            self.current_index,
+        )
+        self._open_video(index, target_frame=int(data["current_frame"]))
+        self._ensure_row_visible(index)
+
+        state_label = "completed session" if data.get("completed") else "in-progress session"
+        message = f"Resumed {state_label} from checkpoint"
+        if skipped:
+            message += f" (skipped unknown camera(s): {', '.join(skipped)})"
+        self._set_status(message)
+
+    def _load_checkpoint(self) -> None:
+        with self._sdl_window_minimized_for_dialog():
+            selected = filedialog.askopenfilename(
+                parent=self.dialog_parent,
+                title="Load / Resume vailá synchronization checkpoint",
+                initialdir=self.current_info.path.parent,
+                filetypes=[("vailá checkpoint", "*.json"), ("All files", "*.*")],
+            )
+        if not selected:
+            self._set_status("Load cancelled")
+            return
+        try:
+            data = read_checkpoint_file(Path(selected))
+            self._apply_checkpoint(data)
+        except (SyncWorkflowError, OSError) as exc:
+            self._set_status(f"Could not load checkpoint: {exc}", error=True)
 
     def _save(self, open_cutvideo: bool) -> None:
         try:
@@ -1487,11 +1791,24 @@ class PygameSyncPlayer:
         if output is None:
             self._set_status("Save cancelled")
             return
+        # Persist the resolved path so a Load/Resume checkpoint written below
+        # records where this session's sync file actually went, not just
+        # whatever (usually unset) value was preselected via --output.
+        self.output_file = output
         try:
             sync_file = write_sync_file(entries, output)
         except (OSError, SyncWorkflowError) as exc:
             self._set_status(str(exc), error=True)
             return
+
+        try:
+            checkpoint_file = write_checkpoint_file(
+                self._checkpoint_state(completed=open_cutvideo),
+                sync_file.with_suffix(".json"),
+            )
+            print(f">> vaila/syncvid: Checkpoint saved for Load/Resume: {checkpoint_file}")
+        except OSError as exc:
+            print(f">> vaila/syncvid: Warning: checkpoint was not saved ({exc})")
 
         reference_path = next(
             info.path for info in self.video_infos if info.name == reference_video
@@ -1522,7 +1839,7 @@ class PygameSyncPlayer:
     def _open_help() -> None:
         help_path = Path(__file__).resolve().parent / "help" / "syncvid.html"
         if help_path.is_file():
-            webbrowser.open_new_tab(help_path.as_uri())
+            _resilient_open_local_html(help_path)
 
     def run(self) -> SyncRunResult | None:
         """Run the player until Save or Cancel."""

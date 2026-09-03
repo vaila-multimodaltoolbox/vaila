@@ -185,18 +185,19 @@
 
         <h3>Executando a Aplicação</h3>
 
-        <h4>Opção 1: Da GUI do vailá</h4>
-        <p>Clique no botão "Scout" na interface main do vailá.</p>
+        <h4>Opção 1: Da GUI do vailá (modo GUI)</h4>
+        <p>Clique no botão "Scout" dentro do launcher <strong>Soccer Tools</strong> na interface main do vailá (Frame B).</p>
 
-        <h4>Opção 2: Linha de Comando</h4>
-        <pre><code>python vaila.py</code></pre>
+        <h4>Opção 2: Linha de Comando (modo GUI, sem flags)</h4>
+        <pre><code>uv run vaila/scout_vaila.py</code></pre>
+        <p>Localiza (ou cria) automaticamente o TOML de configuração padrão e abre a janela de anotação.</p>
 
         <h4>Opção 3: Módulo Direto</h4>
         <pre><code>python -m vaila.scout_vaila</code></pre>
 
-        <h4>Opção 4: Script Direto</h4>
-        <pre><code>cd vaila
-python scout_vaila.py</code></pre>
+        <h4>Opção 4: Linha de Comando (modo CLI, config explícito)</h4>
+        <pre><code>uv run vaila/scout_vaila.py -c meu_config.toml</code></pre>
+        <p>Carrega um config específico de forma não interativa antes de abrir a mesma janela (o fluxo de anotação em si permanece interativo).</p>
 
         <h2>Guia de Uso</h2>
 

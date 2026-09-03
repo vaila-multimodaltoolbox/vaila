@@ -100,8 +100,8 @@
         <h1>Pynalty - Penalty Kick Analysis Tool</h1>
 
         <div class="version-info">
-            <strong>Version:</strong> 0.1.0<br>
-            <strong>Date:</strong> 19 December 2025<br>
+            <strong>Version:</strong> 0.3.119<br>
+            <strong>Date:</strong> 02 September 2026<br>
             <strong>Project:</strong> vailá - Multimodal Toolbox
         </div>
 
@@ -134,9 +134,20 @@
         <section id="workflow">
             <h2>2. Workflow</h2>
             <ol>
-                <li><strong>Launch Pynalty</strong>: Click the "Pynalty" button in the vailá main window (Frame B, Row
-                    5).</li>
-                <li><strong>Load Video</strong>: Select the video file containing the penalty kick.</li>
+                <li><strong>Launch Pynalty</strong>:
+                    <ul>
+                        <li><strong>GUI mode:</strong> click "Pynalty" inside the <strong>Soccer Tools</strong>
+                            launcher in the <i>vailá</i> main window (Frame B), or run
+                            <code>uv run vaila/pynalty.py</code> with no flags to open a file-picker dialog.</li>
+                        <li><strong>CLI mode:</strong>
+                            <code>uv run vaila/pynalty.py -i video.mp4 -o output_dir -c config.toml</code>
+                            skips the file dialog and preloads the output directory / TOML config; the
+                            interactive marking window still opens. Pass <code>--gui</code> to force the file
+                            dialog even when <code>-i</code> is given.</li>
+                    </ul>
+                </li>
+                <li><strong>Load Video</strong>: Select the video file containing the penalty kick (skipped in
+                    CLI mode when <code>-i</code> is given).</li>
                 <li><strong>Select Kick Frame:</strong> Use arrows/slider to find the moment the kicker hits the
                     ball. Press <strong>ENTER</strong>.</li>
                 <li><strong>Mark Ball:</strong> Click on the center of the ball.</li>

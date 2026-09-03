@@ -4,8 +4,8 @@
 
 **Pynalty** is a specialized video analysis tool designed to calculate penalty kick statistics, specifically the ball's velocity and distance traveled. Integrated into the **vailá** toolbox, it provides a user-friendly interface to mark critical moments (kick and goal) and positions to automatically compute results based on goal calibration.
 
-**Version:** 0.1.0  
-**Date:** 19 December 2025  
+**Version:** 0.3.119  
+**Date:** 02 September 2026  
 **Project:** vailá - Multimodal Toolbox
 
 ## Key Features
@@ -19,8 +19,10 @@
 
 ## Workflow
 
-1.  **Launch Pynalty**: Click the "Pynalty" button in the vailá main window (Frame B, Row 5).
-2.  **Load Video**: Select the video file containing the penalty kick.
+1.  **Launch Pynalty**:
+    - **GUI mode:** click "Pynalty" inside the **Soccer Tools** launcher in the *vailá* main window (Frame B), or run `uv run vaila/pynalty.py` with no flags to open a file-picker dialog.
+    - **CLI mode:** `uv run vaila/pynalty.py -i video.mp4 -o output_dir -c config.toml` skips the file dialog and preloads the output directory / TOML config; the interactive marking window still opens. Pass `--gui` to force the file dialog even when `-i` is given.
+2.  **Load Video**: Select the video file containing the penalty kick (skipped in CLI mode when `-i` is given).
 3.  **Select Kick Frame**: Use arrows/slider to find the moment the kicker hits the ball. Press **ENTER**.
 4.  **Mark Ball (Kick)**: Click on the center of the ball.
 5.  **Mark Goalkeeper (Kick)**: Click on the center of the Goalkeeper at the kick moment.

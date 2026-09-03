@@ -21,7 +21,7 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <body><div class="container">
 <h1>Pygame Multi-Video Synchronization</h1>
 <div class="card"><strong>File:</strong> <code>vaila/syncvid.py</code><br>
-<strong>Version:</strong> 0.3.85 · <strong>Updated:</strong> 2026-07-29<br>
+<strong>Version:</strong> 0.3.119 · <strong>Updated:</strong> 2026-09-02<br>
 <strong>GUI:</strong> Frame C → Make Sync file</div>
 
 <h2>Purpose</h2>
@@ -39,6 +39,20 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <li>Save the TXT, or save and open Cut Video directly.</li>
 </ol>
 <p>Clicking a field selects it for replacement. Tab/Shift+Tab navigates fields and Enter validates. Displayed and saved frames are 1-based and inclusive.</p>
+
+<h2>Load / Resume</h2>
+<p>Every <strong>Save sync</strong> or <strong>Save + Cut Video</strong> also writes a <code>.json</code> checkpoint next to the sync TXT (same name, <code>.json</code> extension) capturing every field's text, the current camera, the current playback frame, and the output path.</p>
+<p>Click <strong>Load / Resume</strong> at any time to reopen a checkpoint through a file picker and restore that state:</p>
+<ul>
+<li>All <strong>Sync frame</strong> fields, <strong>Reference video</strong>, <strong>Reference start</strong>, and <strong>Reference end</strong> are refilled.</li>
+<li>The active camera and its exact playback frame are restored.</li>
+<li>Works for a checkpoint saved from <strong>Save sync</strong> (an in-progress session) or <strong>Save + Cut Video</strong> (a completed one) — the status bar names which.</li>
+<li>A camera the checkpoint mentions that is not present in the currently opened directory is skipped, not fatal; the status bar lists any skipped camera name.</li>
+<li>A missing file, corrupt JSON, or a checkpoint missing required keys shows a clear status-bar error instead of crashing the player.</li>
+</ul>
+
+<h2>Help viewer (Linux/WSL)</h2>
+<p>The <strong>Help</strong> button opens this page in a browser. It tries, in order, the <code>BROWSER</code> environment variable, native Linux GUI browsers (<code>xdg-open</code>, <code>google-chrome</code>, <code>firefox</code>, <code>chromium</code>) found on <code>PATH</code>, then <code>wslview</code> only when WSL interop is actually available, then Python's <code>webbrowser</code> module. If every attempt fails, the page's <code>file://</code> path is printed to the console instead of crashing — this avoids the <code>wslview</code>/<code>reg.exe</code> failure (<code>grep: /proc/sys/fs/binfmt_misc/WSLInterop: No such file or directory</code>) seen in WSL setups without working interop.</p>
 
 <h2>Pygame controls</h2>
 <table>
@@ -75,5 +89,5 @@ uv run vaila/syncvid.py -i /path/to/cameras -o /path/to/session_sync.txt
 uv run vaila/syncvid.py -i /path/to/cameras --dry-run</pre>
 
 <div class="card warn"><strong>Safety:</strong> every typed frame is range checked; ambiguous reference text, traversal, absolute paths, external symlinks, duplicates, oversized files and invalid ranges are rejected. Handoff uses <code>shell=False</code>.</div>
-<div class="footer">Part of vailá — Multimodal Toolbox · Updated 29 July 2026 (v0.3.85)</div>
+<div class="footer">Part of vailá — Multimodal Toolbox · Updated 2 September 2026 (v0.3.119)</div>
 </div></body></html>

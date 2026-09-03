@@ -23,7 +23,10 @@ def test_data(tmp_path):
     shutil.copy(animal_dir / "ref_real_openfield.ref2d", workspace / "real2d.ref2d")
 
     shutil.copy(dlt3d_dir / "pixelcorrds" / "c01_markers_1_line.csv", workspace / "pixels3d.csv")
-    shutil.copy(dlt3d_dir / "ref3d_realworld" / "ref3d_realworld.ref3d", workspace / "real3d.ref3d")
+    shutil.copy(
+        dlt3d_dir / "ref3d_realworld" / "ref3d_realworld_format1.ref3d",
+        workspace / "real3d.ref3d",
+    )
 
     # DLT files for rec3d
     shutil.copy(dlt3d_dir / "dlt3d" / "c01_markers_1_line.dlt3d", workspace / "cam1.dlt3d")

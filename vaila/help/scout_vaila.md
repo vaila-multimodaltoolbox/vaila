@@ -6,7 +6,7 @@
 - **File:** `vaila\scout_vaila.py`
 - **Lines:** 2510
 - **Size:** 95343 characters
-- **Version:** 0.1.5
+- **Version:** 0.3.119
 - **Author:** Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
 - **GUI Interface:** ✅ Yes
 
@@ -20,8 +20,8 @@ Author: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
 Email: paulosantiago@usp.br and rafaell_mmonteiro@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 22 August 2025
-Version: 0.1.5
+Update Date: 02 September 2026
+Version: 0.3.119
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
@@ -30,13 +30,16 @@ Description:
     drawn to scale using standard FIFA dimensions (105m x 68m).
 
 Usage:
-    Click in button Scout in the vaila GUI
-    python vaila.py
-    or
-    Run from the command line:
+    GUI mode: click "Scout" inside the "Soccer Tools" launcher in the vailá
+    main window (Frame B), or run with no flags to auto-locate/create the
+    default TOML config:
+        uv run vaila/scout_vaila.py
+    or:
         python -m vaila.scout_vaila
-    or enter the vaila directory and run:
-        python scout_vaila.py
+
+    CLI mode: load a specific config non-interactively before the window
+    opens (the annotation workflow itself stays interactive):
+        uv run vaila/scout_vaila.py -c my_scout_config.toml
 
 
 Requirements:

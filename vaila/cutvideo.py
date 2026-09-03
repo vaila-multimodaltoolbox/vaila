@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 02 September 2026
+Version: 0.3.119
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -42,6 +42,9 @@ Features:
 - Optional per-cut output names from a CSV/TXT list (GUI **Cut names** button or **N** / **V**):
   one name per line → cut 1 → name1.mp4, cut 2 → name2.mp4, …
 - Direct syncvid handoff via `--video` + `--sync-file` (no repeated file choosers).
+- Direct syncvid handoff skips the "Sync Mode" processing confirmation — the
+  click on syncvid's Save + Cut Video already is the user's consent; a sync
+  file loaded manually from inside Cut Video (F key) still confirms.
 - Safe v2 TSV sync parser with legacy TXT compatibility and path/range validation.
 - Hardware H.264 encode when available (NVENC / VideoToolbox; auto CPU libx264 fallback).
 
@@ -1758,6 +1761,13 @@ def play_video_with_cuts(video_path, *, sync_file=None):
 
     # Load existing cuts or sync file if available
     cuts, using_sync_file, sync_data = load_cuts_or_sync(video_path, sync_file=sync_file)
+    # True only when syncvid handed this session off directly via --sync-file:
+    # that click on "Save + Cut Video" already *is* the user's explicit
+    # confirmation to process the synced videos, so save_and_generate_videos()
+    # skips the extra "Sync Mode" prompt in that case. A sync file loaded
+    # manually from inside Cut Video (F key) still asks, since the user may
+    # only be reviewing an old file.
+    direct_handoff = sync_file is not None
     if len(cuts) > 0:
         if using_sync_file:
             print(f"Loaded {len(cuts)} sync points from sync file")
@@ -2388,19 +2398,17 @@ def play_video_with_cuts(video_path, *, sync_file=None):
         pygame.display.quit()
         print("Pygame display closed before video processing")
 
-        # If using sync file, process all videos in batch
+        # If using sync file, process all videos in batch. A direct syncvid
+        # handoff already carries the user's explicit intent to render, so
+        # it skips this gate; a manually loaded sync file still confirms.
         if using_sync_file and sync_data:
-            if messagebox.askyesno(
+            proceed = direct_handoff or messagebox.askyesno(
                 "Sync Mode",
-                "Sync mode detected. Do you want to process all videos in the directory according to the sync file?",
-            ):
-                success = batch_process_sync_videos(video_path, sync_data)
-                if success:
-                    messagebox.showinfo(
-                        "Sync Processing Complete",
-                        "All videos have been processed according to the sync file!",
-                    )
-                return success
+                "Sync mode detected. Process all videos in the directory according to the sync file?",
+            )
+            if not proceed:
+                return True
+            return batch_process_sync_videos(video_path, sync_data)
         else:
             # Regular cut processing
             if messagebox.askyesno(

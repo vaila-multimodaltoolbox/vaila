@@ -31,7 +31,7 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/dlt3d.py</p>
-            <p><strong>Version:</strong> 0.3.93</p>
+            <p><strong>Version:</strong> 0.3.119</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
@@ -39,6 +39,16 @@
         <h2>Description</h2>
         <p>Calculates <strong>Direct Linear Transformation (DLT3D)</strong> parameters (11 coefficients) from a pixel-coordinate calibration file and a corresponding real-world 3D reference (REF3D) file, one set of parameters per frame.</p>
         <p>The script can also generate a <strong>REF3D template</strong> (<code>_x</code>, <code>_y</code>, <code>_z</code> columns) from a pixel file for you to fill in with real-world 3D coordinates.</p>
+
+        <h3>REF3D file formats (auto-detected)</h3>
+        <p><code>read_ref3d_file</code> accepts three layouts and normalizes them internally to <strong>format 1</strong> (wide CSV):</p>
+        <table>
+            <tr><th>Format</th><th>Layout</th><th>Example fixture</th></tr>
+            <tr><td><strong>1</strong> (default)</td><td>Header <code>frame,p1_x,p1_y,p1_z,…</code>; one or more rows</td><td><code>tests/DLT3D_and_Rec3d/ref3d_realworld/ref3d_realworld_format1.ref3d</code></td></tr>
+            <tr><td><strong>2</strong></td><td>No header; one <code>x,y,z</code> row per point</td><td><code>…/ref3d_realworld_format2.ref3d</code></td></tr>
+            <tr><td><strong>3</strong></td><td>No header; one <code>index,x,y,z</code> row per point</td><td><code>…/ref3d_realworld_format3.ref3d</code></td></tr>
+        </table>
+        <p>Formats 2 and 3 are converted to format 1 before DLT3D; downstream <code>.dlt3d</code> output is identical for the same physical points.</p>
 
         <h3>Point matching (pixel ↔ REF3D)</h3>
         <p>Points are correlated by <strong>label</strong> — the point prefix before the underscore (e.g. <code>p3</code> in <code>p3_x</code>/<code>p3_y</code>/<code>p3_z</code>), not by column order. This lets the REF3D file define <strong>more</strong> calibration points than a given pixel/video file actually tracks; only the points common to both files are used.</p>
@@ -89,7 +99,9 @@ python vaila/dlt3d.py --pixel calib.csv --real calib.ref3d</pre>
         <table>
             <tr><th>Function</th><th>Description</th></tr>
             <tr><td><code>calculate_dlt3d_params</code></td><td>Compute 11 DLT3D parameters from real-world 3D and pixel coordinate pairs (least squares).</td></tr>
-            <tr><td><code>read_ref3d_file</code></td><td>Read and validate a REF3D file (checks _x/_y/_z columns are present for its own point range).</td></tr>
+            <tr><td><code>read_ref3d_file</code></td><td>Read REF3D formats 1–3; normalize to wide format 1; validate _x/_y/_z columns.</td></tr>
+            <tr><td><code>detect_ref3d_format</code></td><td>Return 1, 2, or 3 for a REF3D path (or <code>None</code> if unrecognized).</td></tr>
+            <tr><td><code>normalize_ref3d_to_format1</code></td><td>Load any supported REF3D variant as a format-1 DataFrame.</td></tr>
             <tr><td><code>process_files</code></td><td>Core logic: match points by label (≥6 common points required), match frames, compute DLT3D per frame.</td></tr>
             <tr><td><code>save_dlt_parameters</code></td><td>Write the .dlt3d CSV.</td></tr>
             <tr><td><code>main</code></td><td>GUI/CLI entry point.</td></tr>

@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 25 August 2026
-Version: 0.3.114
+Update: 02 September 2026
+Version: 0.3.118
 Python Version: 3.12.14
 
 Description:
@@ -18,14 +18,14 @@ integers where applicable. Marker backups go to ``.vaila_markers_history/`` (lat
 100 per video).
 
 Template Marker Mode (toolbar Template button):
-  - **FIFA Soccer-Field** (32 pitch keypoints, idx 0 = top_left_corner)
+  - **FIFA Soccer-Field** (48 pitch keypoints: 32 pitch lines + 16 3D goalposts, crossbar, net and corner flags, idx 0 = top_left_corner)
   - **MediaPipe Pose** (33 landmarks)
   - **YOLO Pose** (COCO-17 keypoints)
 
 FIFA mode (``--fifa`` / ``--fifa-dataset DIR`` / **Template:FIFA** toolbar button or ``K`` / TOML):
   Configure fixed keypoint count, start index, and 0/1-based headers via a
   **TOML** template (no Tk config dialog).
-  Default FIFA slot layout uses **32** pitch keypoints (idx **0 = top_left_corner**).
+  Default FIFA slot layout uses **48** pitch keypoints (idx **0 = top_left_corner**).
   Save writes a **sparse** matrix (empty cells for unmarked KPs).
 
 Pitch Guide (``G`` or button):
@@ -188,8 +188,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.105"
-GETPIXELVIDEO_UPDATE_DATE = "13 August 2026"
+GETPIXELVIDEO_VERSION = "0.3.118"
+GETPIXELVIDEO_UPDATE_DATE = "02 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -311,21 +311,26 @@ def _natural_sort_key(s):
 class PngSequenceFrameSource(FrameSource):
     """Directory of PNG files as a frame sequence."""
 
-    def __init__(self, directory):
+    def __init__(self, directory, start_index: int = 0):
         self._dir = Path(directory)
         paths = sorted(
             [self._dir / f for f in os.listdir(self._dir) if f.lower().endswith(".png")],
             key=_natural_sort_key,
         )
         self._paths = [str(p) for p in paths]
-        self._current = 0
-        self._opened = len(self._paths) > 0
+        n = len(self._paths)
+        if n:
+            self._current = max(0, min(int(start_index), n - 1))
+        else:
+            self._current = 0
+        self._opened = n > 0
         self._width = 0
         self._height = 0
         if self._paths:
-            first = cv2.imread(self._paths[0])
-            if first is not None:
-                self._height, self._width = first.shape[:2]
+            # Probe dimensions from the start frame (not always frame 0).
+            probe = cv2.imread(self._paths[self._current])
+            if probe is not None:
+                self._height, self._width = probe.shape[:2]
 
     def isOpened(self):  # noqa: N802 (match cv2.VideoCapture API)
         return self._opened
@@ -360,18 +365,45 @@ class PngSequenceFrameSource(FrameSource):
         self._opened = False
 
 
-def create_frame_source(path, source_type):
+def create_frame_source(path, source_type, start_index: int = 0):
     """Create a FrameSource from path and source_type.
 
     source_type: "video" | "single_png" | "png_sequence"
+    start_index: initial frame for PNG sequences (ignored otherwise).
     """
     if source_type == "video":
         return VideoFrameSource(path)
     if source_type == "single_png":
         return SinglePngFrameSource(path)
     if source_type == "png_sequence":
-        return PngSequenceFrameSource(path)
+        return PngSequenceFrameSource(path, start_index=start_index)
     raise ValueError(f"Unknown source_type: {source_type}")
+
+
+def _png_sequence_index_for_file(directory: str | Path, selected_file: str | Path) -> int:
+    """Natural-sorted index of ``selected_file`` within PNG frames in ``directory``."""
+    directory = Path(directory)
+    selected = Path(selected_file)
+    paths = sorted(
+        [directory / f for f in os.listdir(directory) if f.lower().endswith(".png")],
+        key=_natural_sort_key,
+    )
+    selected_name = selected.name
+    for i, p in enumerate(paths):
+        if p.name == selected_name:
+            return i
+    # Absolute-path match fallback (same file via different string form).
+    try:
+        selected_resolved = selected.resolve()
+    except OSError:
+        return 0
+    for i, p in enumerate(paths):
+        try:
+            if p.resolve() == selected_resolved:
+                return i
+        except OSError:
+            continue
+    return 0
 
 
 def get_image_sequence_metadata(path, source_type):
@@ -1636,6 +1668,55 @@ def pygame_file_dialog(
     return selected_file
 
 
+def load_pitch_guide_points(
+    prefer_fifa_dataset: bool = False,
+) -> tuple[list[dict], str, list[int]]:
+    """Load FIFA pitch-guide points from models/ directory.
+
+    Returns (points, source_path, flip_indices).
+    """
+    import pandas as _pd
+
+    fifa_dataset_csv = Path(__file__).parent / "models" / "soccerfield_ref3d_fifa_dataset.csv"
+    legacy_candidates = [
+        Path(__file__).parent / "models" / "soccerfield_ref3d_fifa_center.csv",
+        Path(__file__).parent / "models" / "soccerfield_ref3d_fifa.csv",
+        Path(__file__).parent / "models" / "soccerfield_ref3d.csv",
+    ]
+    if prefer_fifa_dataset:
+        candidates = [fifa_dataset_csv, *legacy_candidates]
+    else:
+        candidates = [*legacy_candidates, fifa_dataset_csv]
+
+    for _p in candidates:
+        if _p.exists():
+            try:
+                _df = _pd.read_csv(str(_p))
+                required_cols = {"point_name", "point_number"}
+                if required_cols.issubset(_df.columns):
+                    points = []
+                    flip_list: list[int] = []
+                    has_flip = "flip_idx" in _df.columns
+                    for _, row in _df.iterrows():
+                        points.append(
+                            {
+                                "point_name": str(row["point_name"]),
+                                "point_number": int(row["point_number"]),
+                                "x": float(row["x"]) if "x" in _df.columns else None,
+                                "y": float(row["y"]) if "y" in _df.columns else None,
+                                "z": float(row["z"]) if "z" in _df.columns else None,
+                            }
+                        )
+                        if has_flip:
+                            with suppress(Exception):
+                                flip_list.append(int(row["flip_idx"]))
+                    flip_idx = flip_list if (has_flip and len(flip_list) == len(points)) else []
+                    return points, str(_p), flip_idx
+            except Exception:
+                pass
+    return [], "", []
+
+
 def play_video_with_controls(
     video_path,
     coordinates=None,
@@ -1645,6 +1726,7 @@ def play_video_with_controls(
     frame_source=None,
     metadata=None,
     initial_fifa_mode=False,
+    initial_frame: int = 0,
 ):
     if frame_source is not None:
         cap = frame_source
@@ -1736,7 +1818,11 @@ def play_video_with_controls(
     fit_zoom_h = window_height / max(1, int(original_height))
     zoom_level = min(1.0, fit_zoom_w, fit_zoom_h)
     offset_x, offset_y = 0, 0
-    frame_count = 0
+    # Honour selected PNG / CLI start index (not always frame 0).
+    _init_f = max(0, int(initial_frame or 0))
+    if total_frames:
+        _init_f = min(_init_f, max(0, int(total_frames) - 1))
+    frame_count = _init_f
     paused = True
     scrolling = False
     dragging_slider = False
@@ -2010,51 +2096,10 @@ def play_video_with_controls(
         starting at ``point_number = 0`` (``top_left_corner``) and matches the
         layout of ``<dataset_root>/unified``.
         """
-        import pandas as _pd
-
         nonlocal pitch_guide_flip_idx
-
-        fifa_dataset_csv = Path(__file__).parent / "models" / "soccerfield_ref3d_fifa_dataset.csv"
-        legacy_candidates = [
-            Path(__file__).parent / "models" / "soccerfield_ref3d_fifa.csv",
-            Path(__file__).parent / "models" / "soccerfield_ref3d.csv",
-        ]
-        if prefer_fifa_dataset:
-            candidates = [fifa_dataset_csv, *legacy_candidates]
-        else:
-            candidates = [*legacy_candidates, fifa_dataset_csv]
-
-        for _p in candidates:
-            if _p.exists():
-                try:
-                    _df = _pd.read_csv(str(_p))
-                    required_cols = {"point_name", "point_number"}
-                    if required_cols.issubset(_df.columns):
-                        points = []
-                        flip_list: list[int] = []
-                        has_flip = "flip_idx" in _df.columns
-                        for _, row in _df.iterrows():
-                            points.append(
-                                {
-                                    "point_name": str(row["point_name"]),
-                                    "point_number": int(row["point_number"]),
-                                    "x": float(row["x"]) if "x" in _df.columns else None,
-                                    "y": float(row["y"]) if "y" in _df.columns else None,
-                                    "z": float(row["z"]) if "z" in _df.columns else None,
-                                }
-                            )
-                            if has_flip:
-                                with suppress(Exception):
-                                    flip_list.append(int(row["flip_idx"]))
-                        if has_flip and len(flip_list) == len(points):
-                            pitch_guide_flip_idx = flip_list
-                        else:
-                            pitch_guide_flip_idx = []
-                        return points, str(_p)
-                except Exception:
-                    pass
-        pitch_guide_flip_idx = []
-        return [], ""
+        pts, src, flips = load_pitch_guide_points(prefer_fifa_dataset=prefer_fifa_dataset)
+        pitch_guide_flip_idx = flips
+        return pts, src
 
     def _pitch_guide_status_message(prefix: str = "") -> str:
         """Status line for Pitch Guide (visual only — follows selected marker)."""
@@ -2232,8 +2277,8 @@ def play_video_with_controls(
         if not point_by_name:
             return None
 
-        width, height = 540, 360
-        margin_x, margin_y = 28, 38
+        width, height = 560, 360
+        margin_x, margin_y = 36, 38
         surface = pygame.Surface((width, height), pygame.SRCALPHA)
         surface.fill(_pg_fill)
 
@@ -2309,11 +2354,31 @@ def play_video_with_controls(
             if name in point_by_name:
                 pygame.draw.circle(surface, _pg_spot, map_xy(point_by_name[name]), 3)
 
+        # Goals and Nets
+        if has("left_goal_bottom_post_base", "left_goal_top_post_base"):
+            line("left_goal_bottom_post_base", "left_goal_top_post_base", 3)
+        if has("left_goal_bottom_post_base", "left_goal_net_bottom_ground"):
+            line("left_goal_bottom_post_base", "left_goal_net_bottom_ground", 1)
+        if has("left_goal_top_post_base", "left_goal_net_top_ground"):
+            line("left_goal_top_post_base", "left_goal_net_top_ground", 1)
+        if has("left_goal_net_bottom_ground", "left_goal_net_top_ground"):
+            line("left_goal_net_bottom_ground", "left_goal_net_top_ground", 1)
+
+        if has("right_goal_bottom_post_base", "right_goal_top_post_base"):
+            line("right_goal_bottom_post_base", "right_goal_top_post_base", 3)
+        if has("right_goal_bottom_post_base", "right_goal_net_bottom_ground"):
+            line("right_goal_bottom_post_base", "right_goal_net_bottom_ground", 1)
+        if has("right_goal_top_post_base", "right_goal_net_top_ground"):
+            line("right_goal_top_post_base", "right_goal_net_top_ground", 1)
+        if has("right_goal_net_bottom_ground", "right_goal_net_top_ground"):
+            line("right_goal_net_bottom_ground", "right_goal_net_top_ground", 1)
+
         # Title and points
         small_font = pygame.font.SysFont("verdana", 10, bold=True)
         title_font = pygame.font.SysFont("verdana", 12, bold=True)
+        n_pts = len(pitch_guide_points)
         title = title_font.render(
-            "FIFA Dataset Reference (32 kp, 0..31, idx 0 = top_left_corner)",
+            f"FIFA Dataset Reference ({n_pts} kp, 0..{max(0, n_pts - 1)}, idx 0 = top_left_corner)",
             True,
             (255, 255, 255),
         )
@@ -2330,7 +2395,9 @@ def play_video_with_controls(
             pygame.draw.circle(surface, fill, (px, py), radius)
             _lbl_rgb = _pg_label_text_highlight if is_current else _pg_label_text
             label = small_font.render(str(point["point_number"]), True, _lbl_rgb)
-            surface.blit(label, (px + 7, py - 8))
+            z_val = point.get("z", 0.0) or 0.0
+            lbl_dy = -17 if z_val > 0.0 else -8
+            surface.blit(label, (px + 7, py + lbl_dy))
 
         if current_idx is not None and 0 <= current_idx < len(pitch_guide_points):
             current = pitch_guide_points[current_idx]
@@ -2346,6 +2413,21 @@ def play_video_with_controls(
         pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(prefer_fifa_dataset=True)
         if pitch_guide_points:
             pitch_guide_mode = True
+            fifa_fixed_keypoints = len(pitch_guide_points)
+        n_fix = max(1, int(fifa_fixed_keypoints if fifa_fixed_keypoints else 48))
+        for fi in range(total_frames):
+            row = coordinates.get(fi, [])
+            if len(row) < n_fix:
+                coordinates[fi] = list(row) + [(None, None)] * (n_fix - len(row))
+        cur_row = coordinates.get(frame_count, [])
+        selected_marker_idx = next(
+            (
+                idx
+                for idx, pt in enumerate(cur_row[:n_fix])
+                if pt is None or (pt[0] is None and pt[1] is None)
+            ),
+            0,
+        )
 
     # Feature: Playback Speed
     playback_speed = 1.0  # 1.0 = Normal, 0.5 = Half speed, 2.0 = Double speed
@@ -4444,7 +4526,8 @@ def play_video_with_controls(
             coordinates = {i: [] for i in range(total_frames)}
         one_line_mode = False
         pitch_guide_fifa_mode = True
-        fifa_fixed_keypoints = 32
+        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(prefer_fifa_dataset=True)
+        fifa_fixed_keypoints = len(pitch_guide_points) if pitch_guide_points else 48
         fifa_start_keypoint = 0
         fifa_index_base = 0
         current_label = "football_pitch"
@@ -4462,8 +4545,15 @@ def play_video_with_controls(
             fi: {idx for idx in deleted_positions.get(fi, set()) if idx < n}
             for fi in range(total_frames)
         }
-        selected_marker_idx = 0
-        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(prefer_fifa_dataset=True)
+        cur_row = coordinates.get(frame_count, [])
+        selected_marker_idx = next(
+            (
+                idx
+                for idx, pt in enumerate(cur_row[:n])
+                if pt is None or (pt[0] is None and pt[1] is None)
+            ),
+            0,
+        )
         if pitch_guide_points:
             pitch_guide_mode = True
 
@@ -7059,6 +7149,10 @@ def play_video_with_controls(
             save_message_timer, \
             pitch_guide_points, \
             pitch_guide_source, \
+            pitch_guide_fifa_mode, \
+            pitch_guide_mode, \
+            template_mode, \
+            fifa_fixed_keypoints, \
             labels
 
         # Make backup of the current before loading a new one
@@ -7208,6 +7302,17 @@ def play_video_with_controls(
             if not ("_1_line" in input_file or len(df) == 1):
                 _kp_sync = _vaila_pitch_p_indices_from_columns(df.columns)
                 if _kp_sync and _kp_sync[0] == 0 and "frame" in df.columns:
+                    if not pitch_guide_fifa_mode:
+                        pitch_guide_fifa_mode = True
+                        template_mode = "fifa"
+                        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
+                            prefer_fifa_dataset=True
+                        )
+                        fifa_fixed_keypoints = max(
+                            len(pitch_guide_points) if pitch_guide_points else 48,
+                            _kp_sync[-1] + 1,
+                        )
+                        pitch_guide_mode = bool(pitch_guide_points)
                     _toml_neigh = _resolve_neighbor_fifa_toml(input_file)
                     if _toml_neigh:
                         ok_sync, msg_sync = _apply_fifa_toml_config(
@@ -7242,6 +7347,7 @@ def play_video_with_controls(
 
                 save_message_text = f"Loaded 1 line file: {os.path.basename(input_file)}"
                 one_line_mode = True
+                selected_marker_idx = 0
             else:
                 coordinates, loaded_labels, load_msg = load_marker_csv_df(
                     df,
@@ -7257,13 +7363,30 @@ def play_video_with_controls(
                     print(f"Re-applying {len(active_swap_rules)} swap rules to loaded data...")
                     coordinates = apply_swap_config(coordinates, active_swap_rules)
 
+                # Ensure all frames have at least fifa_fixed_keypoints slots if in FIFA mode
+                if pitch_guide_fifa_mode and fifa_fixed_keypoints:
+                    n_fix = max(1, int(fifa_fixed_keypoints))
+                    for fi in range(total_frames):
+                        row = coordinates.get(fi, [])
+                        if len(row) < n_fix:
+                            coordinates[fi] = list(row) + [(None, None)] * (n_fix - len(row))
+                    cur_row = coordinates.get(frame_count, [])
+                    first_missing = next(
+                        (
+                            idx
+                            for idx, pt in enumerate(cur_row[:n_fix])
+                            if pt is None or (pt[0] is None and pt[1] is None)
+                        ),
+                        0,
+                    )
+                    selected_marker_idx = first_missing
+                else:
+                    selected_marker_idx = 0
+
                 save_message_text = (
                     f"Loaded {load_msg}: {os.path.basename(input_file)}{_toml_sync_note}"
                 )
                 one_line_mode = False
-
-            # Always initialize on the first marker (index 0)
-            selected_marker_idx = 0
 
             showing_save_message = True
             save_message_timer = 90
@@ -11740,32 +11863,35 @@ def _resolve_png_sequence_directory(directory: str, *, max_subdirs: int = 500) -
     return None
 
 
-def classify_media_path(path: str) -> tuple[str | None, str | None]:
+def classify_media_path(path: str) -> tuple[str | None, str | None, int]:
     """Auto-detect video / single PNG / PNG sequence from a file or directory path.
 
     Rules:
-    - Directory → PNG sequence (this dir or first child with PNGs).
-    - ``.png`` with sibling PNGs (>1) → PNG sequence of the parent folder.
+    - Directory → PNG sequence (this dir or first child with PNGs), start frame 0.
+    - ``.png`` with sibling PNGs (>1) → PNG sequence of the parent folder, starting
+      at the selected file's natural-sorted index (not always the alphabetically
+      first frame).
     - Lone ``.png`` → single PNG.
     - Any other existing file → video.
 
     Returns:
-        ``(resolved_path, source_type)`` or ``(None, None)`` if unusable.
+        ``(resolved_path, source_type, start_frame_index)`` or ``(None, None, 0)``
+        if unusable. ``start_frame_index`` is only meaningful for ``png_sequence``.
     """
     if not path:
-        return (None, None)
+        return (None, None, 0)
     path = os.path.abspath(str(path).strip())
     if os.path.isdir(path):
         resolved = _resolve_png_sequence_directory(path)
         if resolved:
             count = sum(1 for f in os.listdir(resolved) if f.lower().endswith(".png"))
             print(f"PNG sequence selected: {resolved} ({count} images)")
-            return (resolved, "png_sequence")
+            return (resolved, "png_sequence", 0)
         print(f"Directory has no PNG frames: {path}")
-        return (None, None)
+        return (None, None, 0)
     if not os.path.isfile(path):
         print(f"Path not found: {path}")
-        return (None, None)
+        return (None, None, 0)
     if path.lower().endswith(".png"):
         parent = os.path.dirname(path)
         try:
@@ -11773,12 +11899,16 @@ def classify_media_path(path: str) -> tuple[str | None, str | None]:
         except OSError:
             png_count = 1
         if png_count > 1:
-            print(f"PNG sequence detected from frame: {parent} ({png_count} images)")
-            return (parent, "png_sequence")
+            start_idx = _png_sequence_index_for_file(parent, path)
+            print(
+                f"PNG sequence detected from frame: {parent} ({png_count} images); "
+                f"start index {start_idx} ({Path(path).name})"
+            )
+            return (parent, "png_sequence", start_idx)
         print(f"Image selected: {path}")
-        return (path, "single_png")
+        return (path, "single_png", 0)
     print(f"Video selected: {path}")
-    return (path, "video")
+    return (path, "video", 0)
 
 
 def _get_media_path_linux():
@@ -11787,7 +11917,7 @@ def _get_media_path_linux():
     Single file dialog — source type is auto-detected (pick any PNG in a sequence folder).
 
     Returns:
-        tuple: (path, source_type) or (None, None) if cancelled.
+        tuple: (path, source_type, start_frame) or (None, None, 0) if cancelled.
     """
     try:
         subprocess.run(["zenity", "--version"], capture_output=True, check=True)
@@ -11808,7 +11938,7 @@ def _get_media_path_linux():
         timeout=300,
     )
     if result.returncode != 0 or not result.stdout.strip():
-        return (None, None)
+        return (None, None, 0)
     return classify_media_path(result.stdout.strip())
 
 
@@ -11820,9 +11950,9 @@ def _get_media_path_terminal():
         path = input("Path: ").strip()
     except EOFError:
         print("No interactive terminal. Install zenity for GUI: sudo apt install zenity")
-        return (None, None)
+        return (None, None, 0)
     if not path or path.lower() == "q":
-        return (None, None)
+        return (None, None, 0)
     return classify_media_path(path)
 
 
@@ -11831,11 +11961,11 @@ def get_media_path():
 
     On Linux, uses zenity to avoid Tkinter/Pygame display conflicts.
     For a PNG sequence, select any frame in the folder (or pass the folder path
-    via CLI / terminal).
+    via CLI / terminal). The selected PNG becomes the starting frame index.
 
     Returns:
-        tuple: (path, source_type) where source_type is "video" | "single_png" | "png_sequence",
-        or (None, None) if cancelled.
+        tuple: (path, source_type, start_frame) where source_type is
+        "video" | "single_png" | "png_sequence", or (None, None, 0) if cancelled.
     """
     if platform.system() == "Linux":
         return _get_media_path_linux()
@@ -11860,7 +11990,7 @@ def get_media_path():
         )
         root.destroy()
         if not path:
-            return (None, None)
+            return (None, None, 0)
         return classify_media_path(path.strip())
 
     except Exception as e:
@@ -11868,12 +11998,12 @@ def get_media_path():
         import traceback
 
         traceback.print_exc()
-        return (None, None)
+        return (None, None, 0)
 
 
 def get_video_path():
     """Return single path for backward compatibility; prefers video/single_png from get_media_path."""
-    path, source_type = get_media_path()
+    path, _source_type, _start = get_media_path()
     return path
 
 
@@ -11886,6 +12016,7 @@ def run_getpixelvideo(
     initial_media_path=None,
     initial_source_type=None,
     initial_fifa_mode: bool = False,
+    initial_start_frame: int = 0,
 ):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
@@ -11893,11 +12024,14 @@ def run_getpixelvideo(
     print("Starting GetPixelVideo...")
     print("-" * 80)
 
+    start_frame = max(0, int(initial_start_frame or 0))
     if initial_media_path and initial_source_type:
         media_path, source_type = initial_media_path, initial_source_type
         print(f"Using CLI media: {media_path} ({source_type})")
+        if source_type == "png_sequence" and start_frame:
+            print(f"PNG sequence start frame index: {start_frame}")
     else:
-        media_path, source_type = get_media_path()
+        media_path, source_type, start_frame = get_media_path()
     if not media_path or not source_type:
         print("No media selected. Exiting.")
         return
@@ -11912,7 +12046,7 @@ def run_getpixelvideo(
 
     load_existing = False
 
-    frame_source = create_frame_source(media_path, source_type)
+    frame_source = create_frame_source(media_path, source_type, start_index=start_frame)
     if not frame_source.isOpened():
         print("Error opening media.")
         return
@@ -11923,6 +12057,8 @@ def run_getpixelvideo(
     total_frames = metadata.get("nb_frames") or int(frame_source.get(cv2.CAP_PROP_FRAME_COUNT))
     vw = metadata.get("width") or int(frame_source.get(cv2.CAP_PROP_FRAME_WIDTH))
     vh = metadata.get("height") or int(frame_source.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    if source_type == "png_sequence" and total_frames:
+        start_frame = max(0, min(start_frame, int(total_frames) - 1))
 
     if load_existing:
         loaded_data, labels = load_coordinates_from_file(total_frames, vw, vh)
@@ -11953,6 +12089,7 @@ def run_getpixelvideo(
             frame_source=frame_source,
             metadata=metadata,
             initial_fifa_mode=initial_fifa_mode,
+            initial_frame=start_frame,
         )
         # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
         if result and len(result) >= 3 and result[0] == "switch_video":
@@ -11963,11 +12100,11 @@ def run_getpixelvideo(
             labels = []
             # Re-open media for next iteration (path may be video, single_png, or png_sequence dir)
             frame_source.release()
-            media_path, source_type = get_media_path()
+            media_path, source_type, start_frame = get_media_path()
             if not media_path or not source_type:
                 break
             video_path = media_path
-            frame_source = create_frame_source(media_path, source_type)
+            frame_source = create_frame_source(media_path, source_type, start_index=start_frame)
             if not frame_source.isOpened():
                 print("Error opening media.")
                 break
@@ -11975,6 +12112,11 @@ def run_getpixelvideo(
                 metadata = get_precise_video_metadata(media_path)
             else:
                 metadata = get_image_sequence_metadata(media_path, source_type)
+            total_frames = metadata.get("nb_frames") or int(
+                frame_source.get(cv2.CAP_PROP_FRAME_COUNT)
+            )
+            if source_type == "png_sequence" and total_frames:
+                start_frame = max(0, min(start_frame, int(total_frames) - 1))
             total_frames = metadata.get("nb_frames") or int(
                 frame_source.get(cv2.CAP_PROP_FRAME_COUNT)
             )
@@ -12026,6 +12168,7 @@ if __name__ == "__main__":
     initial_dataset_dir = None
     initial_media_path = None
     initial_source_type = None
+    initial_start_frame = 0
     initial_fifa_mode = False
 
     if "--dataset" in sys.argv:
@@ -12063,6 +12206,7 @@ if __name__ == "__main__":
             if resolved:
                 initial_media_path = resolved
                 initial_source_type = "png_sequence"
+                initial_start_frame = 0
                 if resolved != os.path.abspath(seq_dir):
                     print(f"PNG sequence: using subdirectory with frames: {resolved}")
             else:
@@ -12077,6 +12221,7 @@ if __name__ == "__main__":
             if resolved:
                 initial_media_path = resolved
                 initial_source_type = "png_sequence"
+                initial_start_frame = 0
                 if resolved != os.path.abspath(seq_dir):
                     print(f"PNG sequence: using subdirectory with frames: {resolved}")
             else:
@@ -12087,10 +12232,11 @@ if __name__ == "__main__":
         idx = sys.argv.index(opt)
         if idx + 1 < len(sys.argv):
             file_path = sys.argv[idx + 1]
-            resolved_path, resolved_type = classify_media_path(file_path)
+            resolved_path, resolved_type, resolved_start = classify_media_path(file_path)
             if resolved_path and resolved_type:
                 initial_media_path = resolved_path
                 initial_source_type = resolved_type
+                initial_start_frame = resolved_start
             else:
                 print(f"Error: {opt} path is not usable media: {file_path}")
 
@@ -12099,4 +12245,5 @@ if __name__ == "__main__":
         initial_media_path=initial_media_path,
         initial_source_type=initial_source_type,
         initial_fifa_mode=initial_fifa_mode,
+        initial_start_frame=initial_start_frame,
     )

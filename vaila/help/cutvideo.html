@@ -25,8 +25,8 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.3.114</p>
-        <p><strong>Updated:</strong> 25 August 2026</p>
+        <p><strong>Version:</strong> 0.3.119</p>
+        <p><strong>Updated:</strong> 02 September 2026</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -42,6 +42,7 @@
     <div class="card">
         <h2>Key Updates</h2>
         <ul>
+            <li><strong>Fewer confirmations on the syncvid handoff (v0.3.119):</strong> when <strong>syncvid → Save + Cut Video</strong> launches Cut Video directly, Escape no longer asks "Sync mode detected. Process all videos...?" before rendering &mdash; clicking Save + Cut Video already is that confirmation. A sync file loaded manually inside Cut Video (<code>F</code> key) still asks. The redundant "Sync Processing Complete" dialog was also dropped in favor of the final Success dialog.</li>
             <li><strong>Direct syncvid handoff (v0.3.85):</strong> accepts <code>--video</code> + <code>--sync-file</code>, validates every source, and opens with the synchronized interval preloaded.</li>
             <li><strong>Safe sync v2:</strong> versioned TSV plus legacy TXT support; exact matching and traversal/symlink/range rejection.</li>
             <li><strong>TOML cuts</strong>: Saves/loads <code>{basename}_cuts.toml</code> with 1-based frames, .6f precision, <code>frame_count = end - start + 1</code>, plus <code>output_dir</code> and per-cut <code>output_file</code>. Paths stored as POSIX.</li>
@@ -81,7 +82,7 @@
     <div class="card">
         <h2>Direct synchronization CLI</h2>
         <pre>uv run vaila/cutvideo.py --video /path/to/reference.mp4 --sync-file /path/to/session_sync.txt</pre>
-        <p>This is launched by <strong>syncvid → Save + Open Cut Video</strong>; it validates all files and bypasses both choosers.</p>
+        <p>This is launched by <strong>syncvid → Save + Cut Video</strong>; it validates all files, bypasses both choosers, and skips the "Sync Mode" confirmation on Escape since this handoff already carries the user's explicit intent to render.</p>
     </div>
 
     <div class="card">
@@ -141,7 +142,7 @@
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 28 July 2026 (v0.3.85 - direct validated syncvid handoff)</p>
+        <p>📅 Last Updated: 02 September 2026 (v0.3.119 - fewer confirmations on direct syncvid handoff)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>

@@ -1,11 +1,13 @@
 """Unit tests for interactive multi-video synchronization.
 
-Update Date: 29 July 2026
-Version: 0.3.85
+Update Date: 02 September 2026
+Version: 0.3.119
 """
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
 import pytest
@@ -220,6 +222,276 @@ def test_find_sync_entry_never_uses_substring_matching() -> None:
     ]
     assert syncvid.find_sync_entry(entries, "cam1.mp4") == entries[0]
     assert syncvid.find_sync_entry(entries, "prefix_cam1_extra.mp4") is None
+
+
+def test_scrub_cv2_qt_plugin_env_removes_only_cv2s_own_leaked_paths(monkeypatch) -> None:
+    # cv2's import unconditionally overwrites these two vars with paths into
+    # its own bundled (often system-incompatible) Qt runtime. Every child
+    # process this module spawns -- Help's webbrowser tab, the Cut Video
+    # handoff subprocess -- inherits whatever is left in os.environ, and a
+    # Qt-based helper anywhere in that chain crashes with "Could not load the
+    # Qt platform plugin xcb" / "Aborted (core dumped)" if the leaked value
+    # survives. A legitimately-set, unrelated Qt path must be left alone.
+    monkeypatch.setenv(
+        "QT_QPA_PLATFORM_PLUGIN_PATH",
+        "/home/user/venv/lib/site-packages/cv2/qt/plugins",
+    )
+    monkeypatch.setenv("QT_QPA_FONTDIR", "C:\\Users\\me\\venv\\Lib\\site-packages\\cv2\\qt\\fonts")
+    syncvid._scrub_cv2_qt_plugin_env()
+    assert "QT_QPA_PLATFORM_PLUGIN_PATH" not in os.environ
+    assert "QT_QPA_FONTDIR" not in os.environ
+
+    monkeypatch.setenv("QT_QPA_PLATFORM_PLUGIN_PATH", "/usr/lib/x86_64-linux-gnu/qt5/plugins")
+    syncvid._scrub_cv2_qt_plugin_env()
+    assert os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] == "/usr/lib/x86_64-linux-gnu/qt5/plugins"
+
+
+def test_checkpoint_round_trips_through_build_write_read(tmp_path: Path) -> None:
+    state = syncvid.build_checkpoint_state(
+        reference="camera one.mp4",
+        start="10",
+        end="200",
+        sync_frames={"camera one.mp4": "50", "camera two.mp4": "60"},
+        current_video="camera two.mp4",
+        current_frame=123,
+        output_file=tmp_path / "sync.txt",
+        completed=True,
+    )
+    checkpoint_path = syncvid.write_checkpoint_file(state, tmp_path / "sync.json")
+    assert checkpoint_path.is_file()
+
+    loaded = syncvid.read_checkpoint_file(checkpoint_path)
+    assert loaded["vaila_checkpoint"] == syncvid.CHECKPOINT_SCHEMA_VERSION
+    assert loaded["reference"] == "camera one.mp4"
+    assert loaded["sync_frames"] == {"camera one.mp4": "50", "camera two.mp4": "60"}
+    assert loaded["current_video"] == "camera two.mp4"
+    assert loaded["current_frame"] == 123
+    assert loaded["output_file"] == str(tmp_path / "sync.txt")
+    assert loaded["completed"] is True
+
+
+def test_checkpoint_state_accepts_none_output_file(tmp_path: Path) -> None:
+    state = syncvid.build_checkpoint_state(
+        reference="a.mp4",
+        start="1",
+        end="10",
+        sync_frames={"a.mp4": "5"},
+        current_video="a.mp4",
+        current_frame=0,
+        output_file=None,
+        completed=False,
+    )
+    checkpoint_path = syncvid.write_checkpoint_file(state, tmp_path / "in_progress.json")
+    loaded = syncvid.read_checkpoint_file(checkpoint_path)
+    assert loaded["output_file"] is None
+    assert loaded["completed"] is False
+
+
+def test_write_checkpoint_file_replaces_existing_atomically(tmp_path: Path) -> None:
+    path = tmp_path / "checkpoint.json"
+    first = syncvid.build_checkpoint_state(
+        reference="a.mp4",
+        start="1",
+        end="10",
+        sync_frames={"a.mp4": "5"},
+        current_video="a.mp4",
+        current_frame=0,
+        output_file=None,
+        completed=False,
+    )
+    syncvid.write_checkpoint_file(first, path)
+    second = dict(first)
+    second["current_frame"] = 99
+    syncvid.write_checkpoint_file(second, path)
+    assert syncvid.read_checkpoint_file(path)["current_frame"] == 99
+    # No leftover temp files from the atomic write/replace dance.
+    assert list(tmp_path.glob(".*.tmp")) == []
+
+
+def test_read_checkpoint_file_rejects_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(syncvid.SyncFileError, match="not found"):
+        syncvid.read_checkpoint_file(tmp_path / "missing.json")
+
+
+def test_read_checkpoint_file_rejects_oversized_file(tmp_path: Path) -> None:
+    path = tmp_path / "huge.json"
+    path.write_text("x" * (syncvid.MAX_CHECKPOINT_FILE_BYTES + 1), encoding="utf-8")
+    with pytest.raises(syncvid.SyncFileError, match="larger than"):
+        syncvid.read_checkpoint_file(path)
+
+
+def test_read_checkpoint_file_rejects_corrupt_json(tmp_path: Path) -> None:
+    path = tmp_path / "corrupt.json"
+    path.write_text("{not valid json", encoding="utf-8")
+    with pytest.raises(syncvid.SyncFileError, match="not valid JSON"):
+        syncvid.read_checkpoint_file(path)
+
+
+def test_read_checkpoint_file_rejects_non_object_json(tmp_path: Path) -> None:
+    path = tmp_path / "array.json"
+    path.write_text("[1, 2, 3]", encoding="utf-8")
+    with pytest.raises(syncvid.SyncFileError, match="JSON object"):
+        syncvid.read_checkpoint_file(path)
+
+
+def test_read_checkpoint_file_rejects_missing_keys(tmp_path: Path) -> None:
+    path = tmp_path / "partial.json"
+    path.write_text(json.dumps({"vaila_checkpoint": 1, "reference": "a.mp4"}), encoding="utf-8")
+    with pytest.raises(syncvid.SyncFileError, match="missing key"):
+        syncvid.read_checkpoint_file(path)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"reference": 123}, "must be text"),
+        ({"current_frame": "5"}, "non-negative integer"),
+        ({"current_frame": -1}, "non-negative integer"),
+        ({"current_frame": True}, "non-negative integer"),
+        ({"sync_frames": {"a.mp4": 5}}, "map video names to text"),
+        ({"sync_frames": "not-a-dict"}, "map video names to text"),
+        ({"output_file": 5}, "must be text or null"),
+    ],
+)
+def test_read_checkpoint_file_rejects_wrong_field_types(
+    tmp_path: Path, overrides: dict, match: str
+) -> None:
+    base = {
+        "vaila_checkpoint": 1,
+        "reference": "a.mp4",
+        "start": "1",
+        "end": "10",
+        "sync_frames": {"a.mp4": "5"},
+        "current_video": "a.mp4",
+        "current_frame": 0,
+    }
+    base.update(overrides)
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps(base), encoding="utf-8")
+    with pytest.raises(syncvid.SyncFileError, match=match):
+        syncvid.read_checkpoint_file(path)
+
+
+def test_resilient_open_local_html_uses_browser_env_var_first(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    help_file = tmp_path / "help.html"
+    help_file.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setenv("BROWSER", "my-custom-browser")
+    monkeypatch.setattr(syncvid.shutil, "which", lambda _name: None)
+    captured = {}
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = command
+        raise AssertionError("stop after capturing the first candidate")
+
+    monkeypatch.setattr(syncvid.subprocess, "Popen", fake_popen)
+    with pytest.raises(AssertionError, match="stop after"):
+        syncvid._resilient_open_local_html(help_file)
+    assert captured["command"][0] == "my-custom-browser"
+
+
+def test_resilient_open_local_html_tries_native_browsers_before_wslview(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """wslview must never be tried while a native Linux browser is available,
+    even when WSL interop looks viable -- native browsers are strictly
+    preferred, matching the task's ordering requirement."""
+    help_file = tmp_path / "help.html"
+    help_file.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.delenv("BROWSER", raising=False)
+    monkeypatch.setattr(
+        syncvid.shutil, "which", lambda name: "/usr/bin/xdg-open" if name == "xdg-open" else None
+    )
+    monkeypatch.setattr(syncvid.Path, "exists", lambda self: True)
+    launched: list[list[str]] = []
+
+    def fake_popen(command, **kwargs):
+        launched.append(command)
+
+        class _Proc:
+            pass
+
+        return _Proc()
+
+    monkeypatch.setattr(syncvid.subprocess, "Popen", fake_popen)
+    syncvid._resilient_open_local_html(help_file)
+    assert launched
+    assert launched[0][0] == "xdg-open"
+
+
+def test_resilient_open_local_html_only_tries_wslview_when_interop_available(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    help_file = tmp_path / "help.html"
+    help_file.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.delenv("BROWSER", raising=False)
+    monkeypatch.setattr(
+        syncvid.shutil, "which", lambda name: "/usr/bin/wslview" if name == "wslview" else None
+    )
+
+    # Interop marker absent: wslview must never be attempted, so Popen is
+    # never called and we fall through to the print-URI last resort.
+    monkeypatch.setattr(syncvid.Path, "exists", lambda self: False)
+
+    def fail_popen(command, **kwargs):
+        raise AssertionError(f"must not launch a browser when interop is unavailable: {command}")
+
+    monkeypatch.setattr(syncvid.subprocess, "Popen", fail_popen)
+    monkeypatch.setattr(
+        syncvid.webbrowser,
+        "open_new_tab",
+        lambda _uri: (_ for _ in ()).throw(syncvid.webbrowser.Error("no browser")),
+    )
+    syncvid._resilient_open_local_html(help_file)  # must not raise
+
+
+def test_resilient_open_local_html_falls_back_to_printing_uri(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    help_file = tmp_path / "help.html"
+    help_file.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.delenv("BROWSER", raising=False)
+    monkeypatch.setattr(syncvid.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(syncvid.Path, "exists", lambda self: False)
+    monkeypatch.setattr(
+        syncvid.webbrowser,
+        "open_new_tab",
+        lambda _uri: (_ for _ in ()).throw(syncvid.webbrowser.Error("no browser")),
+    )
+    syncvid._resilient_open_local_html(help_file)
+    # rich.print wraps long lines at the console width, so the URI itself may
+    # be split across lines in the captured output -- compare with newlines
+    # collapsed instead of a literal substring match.
+    out = capsys.readouterr().out.replace("\n", "")
+    assert help_file.resolve().as_uri() in out
+
+
+def test_resilient_open_local_html_launch_failure_falls_through_to_next_candidate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A candidate whose Popen() raises OSError must not propagate or crash
+    the caller -- the next candidate (or the final print fallback) is tried."""
+    help_file = tmp_path / "help.html"
+    help_file.write_text("<html></html>", encoding="utf-8")
+    monkeypatch.delenv("BROWSER", raising=False)
+    monkeypatch.setattr(
+        syncvid.shutil,
+        "which",
+        lambda name: f"/usr/bin/{name}" if name in ("xdg-open", "firefox") else None,
+    )
+    monkeypatch.setattr(syncvid.Path, "exists", lambda self: False)
+    attempted: list[str] = []
+
+    def flaky_popen(command, **kwargs):
+        attempted.append(command[0])
+        if command[0] == "xdg-open":
+            raise OSError("no display")
+        return object()
+
+    monkeypatch.setattr(syncvid.subprocess, "Popen", flaky_popen)
+    syncvid._resilient_open_local_html(help_file)  # must not raise
+    assert attempted == ["xdg-open", "firefox"]
 
 
 def test_cutvideo_handoff_uses_argument_list_without_shell(monkeypatch, tmp_path: Path) -> None:

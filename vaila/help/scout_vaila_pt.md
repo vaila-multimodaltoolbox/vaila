@@ -39,24 +39,25 @@ O vailá Scout é uma aplicação GUI integrada para anotar eventos esportivos e
 
 ### Executando a Aplicação
 
-#### Opção 1: Da GUI do vailá
-Clique no botão "Scout" na interface main do vailá.
+#### Opção 1: Da GUI do vailá (modo GUI)
+Clique no botão "Scout" dentro do launcher **Soccer Tools** na interface main do vailá (Frame B).
 
-#### Opção 2: Linha de Comando
+#### Opção 2: Linha de Comando (modo GUI, sem flags)
 ```bash
-python vaila.py
+uv run vaila/scout_vaila.py
 ```
+Localiza (ou cria) automaticamente o TOML de configuração padrão e abre a janela de anotação.
 
 #### Opção 3: Módulo Direto
 ```bash
 python -m vaila.scout_vaila
 ```
 
-#### Opção 4: Script Direto
+#### Opção 4: Linha de Comando (modo CLI, config explícito)
 ```bash
-cd vaila
-python scout_vaila.py
+uv run vaila/scout_vaila.py -c meu_config.toml
 ```
+Carrega um config específico de forma não interativa antes de abrir a mesma janela (o fluxo de anotação em si permanece interativo).
 
 ## Guia de Uso
 

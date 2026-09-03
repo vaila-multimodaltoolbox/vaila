@@ -29,6 +29,23 @@ This mode draws the FIFA field and overlays:
 This reference is intended to reduce keypoint index swaps while clicking in
 `vaila/getpixelvideo.py`.
 
+## Export REF3D for DLT3D
+
+Button **Export REF3D…** (always available once a field model is loaded):
+
+1. Multi-select control points from the loaded model (or the 32 FIFA dataset
+   keypoints when `--type fifa_dataset`).
+2. Choose p-index base **1** (recommended for `dlt3d.py`) or **0** (FIFA
+   getpixelvideo slot style).
+3. Saves:
+   - `*.ref3d` — one-row world XYZ (`frame,p1_x,p1_y,p1_z,…`) for `dlt3d.py`
+   - `*.ref3d_map.csv` — `p_index` ↔ source name / index
+   - `*_pixel_template.csv` — empty pixel columns to fill / match in getpixelvideo
+
+Workflow: mark the same `pN` order in getpixelvideo → run `dlt3d.py` (pixel +
+`.ref3d`) → use the `.dlt3d` in `rec3d_one_dlt3d.py`. (`fifa_to_dlt.py` is the
+alternate path from FIFA `cameras/*.npz`, not this REF3D file.)
+
 ## CSV format
 
 Columns: `point_name`, `point_number`, `x`, `y`, `z` (metres).  

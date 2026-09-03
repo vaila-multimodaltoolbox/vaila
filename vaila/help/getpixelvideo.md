@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.114
+**Version:** 0.3.118
 **Date:** 23 June 2026  
-**Updated:** 25 August 2026
+**Updated:** 02 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -61,7 +61,7 @@ Optional one-off run without syncing the whole repo: `uv run --with opencv-pytho
 ## Getting Started
 
 1. **Run the script:** `uv run vaila/getpixelvideo.py` (or `python vaila/getpixelvideo.py` if your environment is already set up)
-2. **Select media:** One file picker — choose a video, a single PNG, or any frame from a PNG sequence folder (type is auto-detected; no video-vs-PNG question)
+2. **Select media:** One file picker — choose a video, a single PNG, or any frame from a PNG sequence folder (type is auto-detected; no video-vs-PNG question). When you pick a PNG inside a multi-frame folder, that frame is the starting position (not the alphabetically first file).
 3. **Load existing data:** Use 'Load' button in interface (optional)
 4. **Select format:** If loading data, choose CSV format:
    - **Auto-detect (recommended):** Automatically detects the format
