@@ -25,9 +25,9 @@
     <div class="container">
         <h1>vailá – PyVista 3D Viewer</h1>
         <div class="info">
-            <strong>Script:</strong> viewc3d_pyvista.py · <strong>Backend:</strong> PyVista (VTK)<br>
-            C3D and CSV marker visualization: timeline, picking, skeleton, trails, export (screenshot, PNG sequence, MP4).
-            Part of <strong>vailá - Multimodal Toolbox</strong>.
+            <strong>Script:</strong> viewc3d_pyvista.py · <strong>Backend:</strong> PyVista (VTK) · <strong>Version:</strong> 0.3.121<br>
+            C3D and CSV marker visualization: timeline, picking, skeleton, trails, export, multi-C3D overlay.<br>
+            CLI: <code>uv run vaila/viewc3d_pyvista.py -i a.c3d b.c3d</code> · Part of <i>vailá</i>.
         </div>
         <div class="warn">
             <strong>Warning:</strong> Do NOT press <span class="key">E</span> – VTK uses it to close the window.
@@ -66,8 +66,9 @@
             <tr><td><span class="key">X</span></td><td>Toggle marker name labels on/off</td></tr>
             <tr><td><span class="key">B</span></td><td>Cycle background: Dark → Gray → White</td></tr>
             <tr><td><span class="key">G</span></td><td>Toggle ground grid on/off</td></tr>
-            <tr><td><span class="key">C</span></td><td>Cycle marker color: Orange → Blue → Green → Red → White → Yellow → Purple → Cyan → Pink → Gray → Black</td></tr>
-            <tr><td><span class="key">M</span></td><td>Choose which markers to show/hide (dialog with checkboxes)</td></tr>
+            <tr><td><span class="key">C</span></td><td>Cycle marker color for file 0 only: Orange → Blue → Green → …</td></tr>
+            <tr><td><span class="key">L</span></td><td>Load additional C3D file(s) (multi-select; distinct colors; master FPS sync)</td></tr>
+            <tr><td><span class="key">M</span></td><td>Choose which markers to show/hide (dialog with checkboxes; file 0)</td></tr>
             <tr><td><span class="key">T</span></td><td>Toggle trajectory trail on/off</td></tr>
             <tr><td><span class="key">{</span> / <span class="key">}</span></td><td>Decrease / increase trail length (0, 25, 50, 100, 200 frames)</td></tr>
             <tr><td><span class="key">+</span> / <span class="key">−</span></td><td>Increase / decrease marker size (2–50 px)</td></tr>

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 04 September 2026
+Version: 0.3.121
 
 Example of usage:
 uv run vaila.py
@@ -344,7 +344,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 03.Sep.2026 v0.3.120 (Python 3.12.14)
+    vailá - 04.Sep.2026 v0.3.121 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -463,7 +463,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 03.Sep.2026 v0.3.120 (Python 3.12.14)")
+        self.title("vailá - 04.Sep.2026 v0.3.121 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -3406,12 +3406,32 @@ class Vaila(tk.Tk):
             dialog.destroy()
             from vaila.viewc3d import run_viewc3d
 
+            print(">> vaila/viewc3d: launcher CLI")
+            try:
+                from vaila.cli_highlight import print_gui_cli_mirror
+            except ImportError:
+                from cli_highlight import print_gui_cli_mirror
+            print_gui_cli_mirror(
+                "vaila/viewc3d",
+                ["uv", "run", "vaila/viewc3d.py"],
+                note="Equivalent CLI (file dialog if no path):",
+            )
             run_viewc3d()
 
         def open_pyvista():
             dialog.destroy()
-            from vaila.viewc3d_pyvista import MokkaLikeViewer
+            from vaila.viewc3d_pyvista import MokkaLikeViewer, build_viewc3d_pyvista_cli
 
+            print(">> vaila/viewc3d_pyvista: launcher CLI")
+            try:
+                from vaila.cli_highlight import print_gui_cli_mirror
+            except ImportError:
+                from cli_highlight import print_gui_cli_mirror
+            print_gui_cli_mirror(
+                "vaila/viewc3d_pyvista",
+                build_viewc3d_pyvista_cli(),
+                note="Equivalent CLI (multi-select dialog; use -i a.c3d b.c3d for files):",
+            )
             MokkaLikeViewer()
 
         tk.Button(dialog, text="Open3D viewer", command=open_open3d).pack(pady=5)

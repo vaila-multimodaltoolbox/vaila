@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>viewc3d_pyvista — vailá</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 28px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 8px; }
+        h2 { color: #34495e; margin-top: 24px; }
+        code, pre { background: #f4f4f4; border-radius: 4px; }
+        code { padding: 2px 6px; }
+        pre { padding: 12px; overflow-x: auto; }
+        .meta { color: #555; margin-bottom: 16px; }
+        ul { padding-left: 22px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>viewc3d_pyvista</h1>
+    <p class="meta"><strong>Version:</strong> 0.3.121 · <strong>Updated:</strong> 04 September 2026 · <strong>File:</strong> <code>vaila/viewc3d_pyvista.py</code> · Backend: PyVista (VTK)</p>
+    <p>VTK-based 3D viewer for C3D and CSV marker data. Multi-C3D overlay with per-file colors and a synced master timeline (Open3D Ctrl+L parity). Part of <i>vailá</i>.</p>
+
+    <h2>To run</h2>
+    <pre>uv run vaila/viewc3d_pyvista.py -i path/to/file.c3d
+uv run vaila/viewc3d_pyvista.py -i a.c3d b.c3d
+uv run vaila/viewc3d_pyvista.py path/to/one.c3d</pre>
+    <p>Omit paths for a multi-select dialog. Terminal prints <code>script=</code> and a <code>&gt;&gt; Equivalent CLI</code> mirror.</p>
+
+    <h2>Multi-file</h2>
+    <ul>
+        <li>CLI: <code>-i/--input</code> one or more paths</li>
+        <li>Startup: multi-select dialog</li>
+        <li>Runtime: key <strong>L</strong> loads more C3Ds</li>
+        <li>File 0 = Orange (C cycles file 0 only); extras get fixed palette colors</li>
+        <li>Master FPS = highest by default; mismatch prompt can downsample to lowest</li>
+    </ul>
+
+    <h2>Shortcuts</h2>
+    <p>See <a href="view3d_pyvista_help.html">view3d_pyvista_help.html</a> (also opened with <strong>H</strong> in the viewer).</p>
+
+    <p><em>Part of <i>vailá</i> — Multimodal Toolbox</em></p>
+</div>
+</body>
+</html>

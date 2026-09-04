@@ -10,18 +10,20 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.2.0
+Version: 0.3.121
 Created: 06 February 2025
-Last Updated: 11 February 2026
+Last Updated: 04 September 2026
 
 To run:
-  uv run viewc3d_pyvista.py [path/to/file.c3d]
-  python -m vaila.viewc3d_pyvista [path/to/file.c3d]
+  uv run vaila/viewc3d_pyvista.py -i path/to/file.c3d
+  uv run vaila/viewc3d_pyvista.py -i a.c3d b.c3d
+  uv run vaila/viewc3d_pyvista.py [path/to/file.c3d]
+  python -m vaila.viewc3d_pyvista -i a.c3d b.c3d
   CLI help:  python -m vaila.viewc3d_pyvista --help
   GUI help:  press H in the viewer (opens HTML)
 
 Dependencies:
-  pip install pyvista ezc3d numpy
+  pyvista, ezc3d, numpy (via uv sync)
 
 Description:
 ------------
@@ -30,15 +32,20 @@ Timeline, interactive marker picking, skeleton connections, trails,
 export (screenshot, PNG sequence, MP4), quality stats. Same palette
 and marker visibility options as the Open3D viewer (viewc3d.py).
 
+Multi-file: load several C3Ds (CLI ``-i`` / startup multi-select / key L)
+with per-file colors and a synced master timeline (Open3D Ctrl+L parity).
+
     Architecture:
     - MokkaLikeViewer: single class (state, init_gui, update_frame, key handlers)
+    - LoadedC3DPy: per-extra-file points + fixed color + PolyData actor
     - Load from C3D (load_c3d) or from arrays (from_array for CSV)
 
     Key Features:
     - C3D and CSV support; automatic unit detection (mm/m)
+    - Multi-C3D overlay with distinct colors (L / -i)
     - Left-click to select marker (name shown on screen)
-    - C cycles marker color (Orange, Blue, Green, Red, White, Yellow, …)
-    - M: dialog to show/hide markers
+    - C cycles marker color for file 0 only (Orange, Blue, Green, …)
+    - M: dialog to show/hide markers (file 0)
     - View presets (1–4), background cycle (B), grid (G), labels (X)
     - Trail (T), speed ([ ]), marker size (+ −), skeleton from JSON (J)
     - Export: K screenshot, Z PNG sequence, V MP4
@@ -48,7 +55,7 @@ and marker visibility options as the Open3D viewer (viewc3d.py).
     Keyboard Shortcuts (see H in viewer for full list):
     Navigation: Space Play | ← → ±1 | ↑ ↓ ±10 | PgUp/PgDn ±100 | S Start | End End
     View:      R Reset | 1–4 Presets | B Background | G Grid | X Labels | C Colors
-    Data:      T Trail | { } Trail length | [ ] Speed | + − Size | M Markers
+    Data:      L Load more C3D | T Trail | { } Trail length | [ ] Speed | + − Size | M Markers
     Skeleton:  J Load JSON
     Export:    K Screenshot | Z PNG seq | V MP4
     Info:      I Info | A Stats | D Distance | H Help | Escape Clear
@@ -60,6 +67,8 @@ and marker visibility options as the Open3D viewer (viewc3d.py).
 License:
     Affero General Public License v3.0 - AGPL-3.0
 """
+
+from __future__ import annotations
 
 import argparse
 import contextlib
@@ -73,11 +82,50 @@ import time
 import tkinter as tk
 import webbrowser
 from pathlib import Path
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 import ezc3d
 import numpy as np
 import pyvista as pv
+
+try:
+    from .cli_highlight import print_gui_cli_mirror
+except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+
+
+def resolve_master_fps(fps_list, downsample_to_lowest=False):
+    """Pick master playback FPS (max by default; min when downsample_to_lowest).
+
+    Same semantics as ``viewc3d.resolve_master_fps`` (kept local so PyVista
+    does not hard-require Open3D).
+    """
+    if not fps_list:
+        raise ValueError("fps_list must not be empty")
+    return min(fps_list) if downsample_to_lowest else max(fps_list)
+
+
+def master_frame_count(durations_seconds, master_fps):
+    """Longest recording duration expressed at master FPS."""
+    if not durations_seconds:
+        raise ValueError("durations_seconds must not be empty")
+    return round(max(durations_seconds) * master_fps)
+
+
+def map_master_frame_to_local(master_idx, master_fps, file_fps, file_num_frames):
+    """Nearest-index map from master timeline to one file's frame index."""
+    if file_num_frames <= 0:
+        raise ValueError("file_num_frames must be positive")
+    local_idx = round(master_idx * file_fps / master_fps)
+    return max(0, min(local_idx, file_num_frames - 1))
+
+
+def assign_file_color(load_index, available_colors):
+    """Deterministic palette color for the Nth loaded file (0-based)."""
+    if not available_colors:
+        raise ValueError("available_colors must not be empty")
+    return available_colors[load_index % len(available_colors)]
+
 
 # ---------------------------------------------------------------------------
 #  Suppress ALL VTK output (shader errors, warnings, etc.) — especially on
@@ -166,6 +214,126 @@ AVAILABLE_COLORS = [
 ]
 
 
+def merge_c3d_input_paths(
+    inputs: list[str] | None = None,
+    positional: str | None = None,
+) -> list[str]:
+    """Merge ``-i/--input`` paths with an optional positional path (order-preserving dedupe)."""
+    paths: list[str] = []
+    if inputs:
+        paths.extend(str(p) for p in inputs if p)
+    if positional:
+        paths.append(str(positional))
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in paths:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def build_viewc3d_pyvista_cli(paths: list[str] | None = None) -> list[str]:
+    """Argv list for the GUI→CLI mirror (``uv run vaila/viewc3d_pyvista.py [-i ...]``)."""
+    cmd = ["uv", "run", "vaila/viewc3d_pyvista.py"]
+    if paths:
+        cmd.extend(["-i", *paths])
+    return cmd
+
+
+def _load_c3d_arrays(path: str | Path) -> dict:
+    """Load one C3D into metres; returns points (n_frames, n_markers, 3), labels, fps, events, analog."""
+    path = str(path)
+    print(f"Loading: {path}...")
+    c = ezc3d.c3d(path)
+
+    points = c["data"]["points"]
+    labels = list(c["parameters"]["POINT"]["LABELS"]["value"])
+    frame_rate = float(c["parameters"]["POINT"]["RATE"]["value"][0])
+    n_frames = int(points.shape[2])
+    n_markers = int(points.shape[1])
+    print(f"Loaded {n_markers} markers, {n_frames} frames.")
+
+    points_data = np.transpose(points[:3, :, :], (2, 1, 0)).astype(np.float64)
+
+    max_coord = np.nanmax(np.abs(points_data))
+    if max_coord > 5000:
+        units = "mm"
+        points_data *= 0.001
+        print("Detected: Millimeters (converting to meters)")
+    else:
+        units = "m"
+        print("Detected: Meters")
+
+    points_data = np.nan_to_num(points_data, nan=-999.0)
+
+    c3d_events: list[dict] = []
+    try:
+        ep = c["parameters"].get("EVENT", {})
+        if ep:
+            evt_labels = ep.get("LABELS", {}).get("value", [])
+            evt_contexts = ep.get("CONTEXTS", {}).get("value", [])
+            evt_times = ep.get("TIMES", {}).get("value", [])
+            first_frame = (
+                c["parameters"]["POINT"].get("FRAMES", {}).get("value", [0])[0]
+                if "FRAMES" in c["parameters"]["POINT"]
+                else 0
+            )
+            for i, lab in enumerate(evt_labels):
+                t = evt_times[1][i] if len(evt_times) > 1 else 0
+                fr = int(round(t * frame_rate)) - first_frame
+                ctx = evt_contexts[i] if i < len(evt_contexts) else ""
+                c3d_events.append({"frame": fr, "label": lab, "context": ctx})
+            if c3d_events:
+                print(f"Loaded {len(c3d_events)} events.")
+    except Exception:
+        pass
+
+    analog_info: dict = {}
+    try:
+        an = c["parameters"].get("ANALOG", {})
+        n_ch = an.get("USED", {}).get("value", [0])[0] if an else 0
+        a_rate = an.get("RATE", {}).get("value", [0])[0] if an else 0
+        analog_info = {"n_channels": int(n_ch), "rate": float(a_rate)}
+    except Exception:
+        pass
+
+    return {
+        "path": path,
+        "points_data": points_data,
+        "labels": labels,
+        "frame_rate": frame_rate,
+        "n_frames": n_frames,
+        "n_markers": n_markers,
+        "units": units,
+        "c3d_events": c3d_events,
+        "analog_info": analog_info,
+    }
+
+
+class LoadedC3DPy:
+    """One additional C3D loaded into the running PyVista viewer (key L / CLI ``-i``)."""
+
+    def __init__(self, payload: dict, color, color_name: str, load_index: int):
+        self.path = payload["path"]
+        self.points_data = payload["points_data"]
+        self.labels = payload["labels"]
+        self.frame_rate = float(payload["frame_rate"])
+        self.n_frames = int(payload["n_frames"])
+        self.n_markers = int(payload["n_markers"])
+        self.color = color
+        self.color_name = color_name
+        self.load_index = load_index
+        self.point_cloud = None
+        self.point_cloud_actor = None
+
+    def duration_seconds(self) -> float:
+        return self.n_frames / self.frame_rate if self.frame_rate > 0 else 0.0
+
+    def local_frame_index(self, master_idx: int, master_fps: float) -> int:
+        return map_master_frame_to_local(master_idx, master_fps, self.frame_rate, self.n_frames)
+
+
 def _marker_color(name, idx=0):
     """Return a consistent RGB tuple [0-1] for a marker name (used for per-marker hash)."""
     h = hash(name) if name else idx * 137
@@ -187,7 +355,7 @@ class MokkaLikeViewer:
     # ── Shared default state factory ──────────────────────────────────────
     def _init_state(self):
         """Initialise ALL viewer state (called from __init__ and from_array)."""
-        # Data
+        # Data (file 0); n_frames / frame_rate become master timeline after recompute
         self.points_data = None
         self.labels: list[str] = []
         self.n_frames = 0
@@ -198,6 +366,13 @@ class MokkaLikeViewer:
         self.units = "m"
         self.c3d_events: list[dict] = []  # [{frame, label, context}, ...]
         self.analog_info: dict = {}  # {n_channels, rate}
+
+        # File-0 native timeline (master may differ when extras are loaded)
+        self._file0_frame_rate = 60.0
+        self._file0_n_frames = 0
+        self.loaded_files_extra: list[LoadedC3DPy] = []
+        self._downsample_to_lowest = False
+        self._c3d_paths: list[str] = []
 
         # PyVista objects
         self.plotter = None
@@ -242,15 +417,35 @@ class MokkaLikeViewer:
         self._visible_markers: set[str] | None = None
 
     # ── Constructor (C3D) ─────────────────────────────────────────────────
-    def __init__(self, c3d_path=None):
-        self.c3d_path = c3d_path
+    def __init__(self, c3d_path=None, c3d_paths=None):
+        """Open one or more C3D files.
+
+        ``c3d_path`` — single path (back-compat).
+        ``c3d_paths`` — sequence of paths (CLI ``-i`` / multi-select).
+        If both omitted, a multi-select file dialog opens.
+        """
+        if c3d_paths is not None:
+            paths = [str(p) for p in c3d_paths if p]
+        elif c3d_path is not None:
+            if isinstance(c3d_path, (list, tuple)):
+                paths = [str(p) for p in c3d_path if p]
+            else:
+                paths = [str(c3d_path)]
+        else:
+            paths = []
+
+        self.c3d_path = paths[0] if paths else None
         self._init_state()
         self._plotter_title = "Vaila - PyVista C3D Viewer"
 
-        if not self.c3d_path:
-            self.select_file()
-        if self.c3d_path:
-            self.load_c3d()
+        if not paths:
+            paths = self.select_files()
+            self.c3d_path = paths[0] if paths else None
+
+        if paths:
+            self._c3d_paths = list(paths)
+            self._print_cli_mirror(self._c3d_paths)
+            self.load_c3d_paths(paths)
             self.init_gui()
         else:
             print("No file selected.")
@@ -267,88 +462,223 @@ class MokkaLikeViewer:
         self.n_frames = self.points_data.shape[0]
         self.n_markers = self.points_data.shape[1]
         self.frame_rate = float(frame_rate)
+        self._file0_frame_rate = self.frame_rate
+        self._file0_n_frames = self.n_frames
         self._plotter_title = title or "Vaila - PyVista CSV Viewer"
         self.init_gui()
         return self
 
+    @staticmethod
+    def _print_cli_mirror(paths: list[str]) -> None:
+        script = Path(__file__).resolve()
+        print(f">> vaila/viewc3d_pyvista: script={script}")
+        print_gui_cli_mirror("vaila/viewc3d_pyvista", build_viewc3d_pyvista_cli(paths))
+
     # ── File selection ────────────────────────────────────────────────────
-    def select_file(self):
+    def select_files(self) -> list[str]:
+        """Multi-select C3D dialog (startup). Returns list of paths (may be empty)."""
         root = tk.Tk()
         root.withdraw()
-        self.c3d_path = filedialog.askopenfilename(
-            title="Select a C3D file",
-            filetypes=[("C3D Files", "*.c3d")],
+        paths = filedialog.askopenfilenames(
+            title="Select C3D file(s)",
+            filetypes=[("C3D Files", "*.c3d"), ("All files", "*.*")],
         )
         root.destroy()
+        return list(paths) if paths else []
 
-    # ── C3D loading ───────────────────────────────────────────────────────
+    def select_file(self):
+        """Back-compat single-file dialog; sets ``self.c3d_path``."""
+        paths = self.select_files()
+        self.c3d_path = paths[0] if paths else None
+
+    def _file0_local_frame(self, master_idx: int) -> int:
+        return map_master_frame_to_local(
+            int(master_idx),
+            self.frame_rate,
+            self._file0_frame_rate,
+            self._file0_n_frames,
+        )
+
+    def _apply_file0_payload(self, payload: dict) -> None:
+        self.c3d_path = payload["path"]
+        self.points_data = payload["points_data"]
+        self.labels = payload["labels"]
+        self._file0_frame_rate = float(payload["frame_rate"])
+        self._file0_n_frames = int(payload["n_frames"])
+        self.n_markers = int(payload["n_markers"])
+        self.units = payload["units"]
+        self.c3d_events = list(payload["c3d_events"])
+        self.analog_info = dict(payload["analog_info"])
+        self.frame_rate = self._file0_frame_rate
+        self.n_frames = self._file0_n_frames
+
     def load_c3d(self):
-        print(f"Loading: {self.c3d_path}...")
-        c = ezc3d.c3d(self.c3d_path)
+        """Load the primary C3D at ``self.c3d_path`` (single-file back-compat)."""
+        if not self.c3d_path:
+            return
+        self.load_c3d_paths([self.c3d_path])
 
-        points = c["data"]["points"]
-        self.labels = c["parameters"]["POINT"]["LABELS"]["value"]
-        self.frame_rate = c["parameters"]["POINT"]["RATE"]["value"][0]
-        self.n_frames = points.shape[2]
-        self.n_markers = points.shape[1]
-        print(f"Loaded {self.n_markers} markers, {self.n_frames} frames.")
+    def load_c3d_paths(self, paths: list[str]) -> None:
+        """Load file 0 + any extra paths with per-file colors and master timeline."""
+        if not paths:
+            return
+        payload0 = _load_c3d_arrays(paths[0])
+        self._apply_file0_payload(payload0)
+        self.loaded_files_extra.clear()
 
-        self.points_data = np.transpose(points[:3, :, :], (2, 1, 0))
+        prompted = False
+        for path in paths[1:]:
+            try:
+                payload = _load_c3d_arrays(path)
+            except Exception as e:
+                print(f"Failed to load {path}: {e}")
+                continue
+            new_fps = float(payload["frame_rate"])
+            fps_set = {self._file0_frame_rate} | {lf.frame_rate for lf in self.loaded_files_extra}
+            if not prompted and any(abs(new_fps - f) > 1e-6 for f in fps_set):
+                prompted = True
+                self._downsample_to_lowest = self._ask_downsample_fps()
+            self._attach_extra_from_payload(payload)
 
-        # Auto-detect units
-        max_coord = np.nanmax(np.abs(self.points_data))
-        if max_coord > 5000:
-            self.units = "mm"
-            self.points_data *= 0.001
-            print("Detected: Millimeters (converting to meters)")
-        else:
-            self.units = "m"
-            print("Detected: Meters")
+        self._recompute_master_timeline()
 
-        self.points_data = np.nan_to_num(self.points_data, nan=-999.0)
-
-        # ── Load events ──
+    @staticmethod
+    def _ask_downsample_fps() -> bool:
+        root = tk.Tk()
+        root.withdraw()
         try:
-            ep = c["parameters"].get("EVENT", {})
-            if ep:
-                evt_labels = ep.get("LABELS", {}).get("value", [])
-                evt_contexts = ep.get("CONTEXTS", {}).get("value", [])
-                evt_times = ep.get("TIMES", {}).get("value", [])
-                first_frame = (
-                    c["parameters"]["POINT"].get("FRAMES", {}).get("value", [0])[0]
-                    if "FRAMES" in c["parameters"]["POINT"]
-                    else 0
+            return bool(
+                messagebox.askyesno(
+                    "FPS Mismatch",
+                    "Loaded files have different FPS rates.\n\n"
+                    "Downsample the higher-FPS file(s) to match the LOWEST FPS?\n"
+                    "(No keeps the timeline at the HIGHEST FPS, the default.)",
+                    parent=root,
                 )
-                for i, lab in enumerate(evt_labels):
-                    t = evt_times[1][i] if len(evt_times) > 1 else 0
-                    fr = int(round(t * self.frame_rate)) - first_frame
-                    ctx = evt_contexts[i] if i < len(evt_contexts) else ""
-                    self.c3d_events.append({"frame": fr, "label": lab, "context": ctx})
-                if self.c3d_events:
-                    print(f"Loaded {len(self.c3d_events)} events.")
-        except Exception:
-            pass
+            )
+        finally:
+            root.destroy()
 
-        # ── Analog info ──
-        try:
-            an = c["parameters"].get("ANALOG", {})
-            n_ch = an.get("USED", {}).get("value", [0])[0] if an else 0
-            a_rate = an.get("RATE", {}).get("value", [0])[0] if an else 0
-            self.analog_info = {"n_channels": int(n_ch), "rate": float(a_rate)}
-        except Exception:
-            pass
+    def _attach_extra_from_payload(self, payload: dict) -> LoadedC3DPy:
+        load_index = len(self.loaded_files_extra) + 1
+        color, color_name = assign_file_color(load_index, AVAILABLE_COLORS)
+        lf = LoadedC3DPy(payload, color, color_name, load_index)
+        self.loaded_files_extra.append(lf)
+        print(
+            f"Extra file {Path(lf.path).name}: {lf.n_markers} markers @ {lf.frame_rate} fps, "
+            f"color={color_name}"
+        )
+        if self.plotter is not None:
+            self._ensure_extra_actor(lf, frame_idx=0)
+        return lf
+
+    def _recompute_master_timeline(self) -> None:
+        fps_list = [self._file0_frame_rate] + [lf.frame_rate for lf in self.loaded_files_extra]
+        durations = [
+            self._file0_n_frames / self._file0_frame_rate if self._file0_frame_rate else 0.0
+        ]
+        durations.extend(lf.duration_seconds() for lf in self.loaded_files_extra)
+        self.frame_rate = float(resolve_master_fps(fps_list, self._downsample_to_lowest))
+        self.n_frames = int(master_frame_count(durations, self.frame_rate))
+        if self.n_frames < 1:
+            self.n_frames = 1
+        print(
+            f"Master timeline: {self.frame_rate} fps, {self.n_frames} frames "
+            f"(downsample_to_lowest={self._downsample_to_lowest}; "
+            f"extras={len(self.loaded_files_extra)})"
+        )
+        self._sync_slider_range()
+
+    def _sync_slider_range(self) -> None:
+        if not getattr(self, "slider_widget", None):
+            return
+        with contextlib.suppress(Exception):
+            rep = self.slider_widget.GetRepresentation()
+            rep.SetMinimumValue(0)
+            rep.SetMaximumValue(max(0, self.n_frames - 1))
+            if self.current_frame >= self.n_frames:
+                self.current_frame = self.n_frames - 1
+            rep.SetValue(self.current_frame)
+
+    def _ensure_extra_actor(self, lf: LoadedC3DPy, frame_idx: int = 0) -> None:
+        local_idx = lf.local_frame_index(frame_idx, self.frame_rate)
+        pts = lf.points_data[local_idx]
+        valid_mask = ~np.all(pts == -999.0, axis=1)
+        valid_pts = pts[valid_mask] if valid_mask.any() else np.array([[0.0, 0.0, 0.0]])
+        n_pts = len(valid_pts)
+        do_rebuild = (
+            lf.point_cloud_actor is None
+            or lf.point_cloud is None
+            or lf.point_cloud.n_points != n_pts
+        )
+        if do_rebuild:
+            if lf.point_cloud_actor is not None:
+                with contextlib.suppress(Exception):
+                    self.plotter.remove_actor(lf.point_cloud_actor)
+                lf.point_cloud_actor = None
+            lf.point_cloud = pv.PolyData(valid_pts.copy())
+            lf.point_cloud_actor = self.plotter.add_mesh(
+                lf.point_cloud,
+                color=lf.color,
+                point_size=self._point_size,
+                render_points_as_spheres=True,
+                pickable=False,
+            )
+        else:
+            lf.point_cloud.points = valid_pts
+            if lf.point_cloud_actor is not None:
+                lf.point_cloud_actor.GetMapper().Update()
+
+    def _key_load_additional(self, _key=None):
+        """L: multi-select additional C3D files into the running viewer."""
+        root = tk.Tk()
+        root.withdraw()
+        paths = filedialog.askopenfilenames(
+            title="Load additional C3D file(s)",
+            filetypes=[("C3D Files", "*.c3d"), ("All files", "*.*")],
+        )
+        root.destroy()
+        if not paths:
+            self._show_feedback("L: No file selected")
+            return
+
+        prompted = False
+        added = 0
+        for path in paths:
+            try:
+                payload = _load_c3d_arrays(path)
+            except Exception as e:
+                print(f"Failed to load {path}: {e}")
+                continue
+            new_fps = float(payload["frame_rate"])
+            fps_set = {self._file0_frame_rate} | {lf.frame_rate for lf in self.loaded_files_extra}
+            if not prompted and any(abs(new_fps - f) > 1e-6 for f in fps_set):
+                prompted = True
+                self._downsample_to_lowest = self._ask_downsample_fps()
+            self._attach_extra_from_payload(payload)
+            self._c3d_paths.append(str(path))
+            added += 1
+
+        if added:
+            self._recompute_master_timeline()
+            self.update_frame(self.current_frame)
+            self._print_cli_mirror(self._c3d_paths)
+            self._show_feedback(f"L: Loaded {added} extra C3D(s)")
+        else:
+            self._show_feedback("L: No files loaded")
 
     # ══════════════════════════════════════════════════════════════════════
     #  Frame update
     # ══════════════════════════════════════════════════════════════════════
     def update_frame(self, frame_idx):
-        """Update geometry for the given frame."""
+        """Update geometry for the given master-timeline frame."""
         frame_idx = int(frame_idx)
         if frame_idx >= self.n_frames:
             frame_idx = 0
         self.current_frame = frame_idx
+        local0 = self._file0_local_frame(frame_idx)
 
-        current_points = self.points_data[frame_idx].copy()
+        current_points = self.points_data[local0].copy()
         valid_mask = ~np.all(current_points == -999.0, axis=1)
         # Apply marker visibility filter
         if self._visible_markers is not None:
@@ -392,24 +722,27 @@ class MokkaLikeViewer:
             if self.point_cloud_actor is not None:
                 self.point_cloud_actor.GetMapper().Update()
 
+        for lf in self.loaded_files_extra:
+            self._ensure_extra_actor(lf, frame_idx)
+
         # Status text
         time_s = frame_idx / self.frame_rate if self.frame_rate > 0 else 0
         speed_str = f"  Speed: {self.play_speed}x" if self.play_speed != 1.0 else ""
         n_vis = len(self._valid_indices)
+        extra_str = f"  +{len(self.loaded_files_extra)} files" if self.loaded_files_extra else ""
         self.text_actor.set_text(
             "lower_right",
-            f"Frame {frame_idx}/{self.n_frames - 1}  t={time_s:.3f}s  vis={n_vis}/{self.n_markers}{speed_str}",
+            f"Frame {frame_idx}/{self.n_frames - 1}  t={time_s:.3f}s  "
+            f"vis={n_vis}/{self.n_markers}{speed_str}{extra_str}",
         )
 
-        # Trail
-        if self.trail_frames > 0 and frame_idx != self._last_trail_frame:
-            self._update_trail(frame_idx)
-            self._last_trail_frame = frame_idx
+        # Trail / skeleton / labels — file 0 local frame only
+        if self.trail_frames > 0 and local0 != self._last_trail_frame:
+            self._update_trail(local0)
+            self._last_trail_frame = local0
 
-        # Skeleton
-        self._update_skeleton(frame_idx)
+        self._update_skeleton(local0)
 
-        # Labels
         if self._show_labels:
             self._draw_labels(valid_points, self._valid_indices)
 
@@ -498,9 +831,8 @@ class MokkaLikeViewer:
 
         # Distance mode
         if self._distance_mode:
-            self._distance_picks.append(
-                (marker_name, self.points_data[self.current_frame, orig_idx].copy())
-            )
+            local0 = self._file0_local_frame(self.current_frame)
+            self._distance_picks.append((marker_name, self.points_data[local0, orig_idx].copy()))
             if len(self._distance_picks) == 2:
                 self._draw_distance()
                 self._distance_mode = False
@@ -854,12 +1186,20 @@ class MokkaLikeViewer:
         self._point_size = min(50, self._point_size + 2)
         with contextlib.suppress(Exception):
             self.point_cloud_actor.GetProperty().SetPointSize(self._point_size)
+        for lf in self.loaded_files_extra:
+            if lf.point_cloud_actor is not None:
+                with contextlib.suppress(Exception):
+                    lf.point_cloud_actor.GetProperty().SetPointSize(self._point_size)
         self._show_feedback(f"+: Size {self._point_size}")
 
     def _key_marker_size_down(self, _key=None):
         self._point_size = max(2, self._point_size - 2)
         with contextlib.suppress(Exception):
             self.point_cloud_actor.GetProperty().SetPointSize(self._point_size)
+        for lf in self.loaded_files_extra:
+            if lf.point_cloud_actor is not None:
+                with contextlib.suppress(Exception):
+                    lf.point_cloud_actor.GetProperty().SetPointSize(self._point_size)
         self._show_feedback(f"−: Size {self._point_size}")
 
     # ══════════════════════════════════════════════════════════════════════
@@ -922,6 +1262,7 @@ class MokkaLikeViewer:
             f"File: {fname}",
             f"Frame: {self.current_frame}/{self.n_frames - 1}  Time: {t:.3f} s",
             f"Markers: {len(self._valid_indices)} visible / {self.n_markers} total",
+            f"Extra C3Ds: {len(self.loaded_files_extra)}  Master FPS: {self.frame_rate}",
             f"Frame rate: {self.frame_rate} Hz   Units: {self.units}",
             f"Speed: {self.play_speed}x   Trail: {self.trail_frames}",
         ]
@@ -945,14 +1286,16 @@ class MokkaLikeViewer:
         valid_vals = data[data != -999.0]
         lines = [
             "=== Quality Stats ===",
-            f"Frames: {self.n_frames}   Markers: {self.n_markers}",
+            f"Master frames: {self.n_frames} @ {self.frame_rate} Hz",
+            f"File0 frames: {self._file0_n_frames} @ {self._file0_frame_rate} Hz"
+            f"   Markers: {self.n_markers}",
             f"Coord range: [{valid_vals.min():.4f}, {valid_vals.max():.4f}] m"
             if valid_vals.size
             else "No valid data",
             f"Mean abs: {np.mean(np.abs(valid_vals)):.4f} m" if valid_vals.size else "",
         ]
         total_gaps = sum(gaps_per_marker)
-        lines.append(f"Total gap frames: {total_gaps} / {self.n_frames * self.n_markers}")
+        lines.append(f"Total gap frames: {total_gaps} / {self._file0_n_frames * self.n_markers}")
         worst = np.argmax(gaps_per_marker)
         lines.append(f"Worst marker: {self.labels[worst]} ({gaps_per_marker[worst]} gaps)")
         if self.c3d_events:
@@ -1064,13 +1407,13 @@ class MokkaLikeViewer:
             class _NoArrowZoomStyle(vtkInteractorStyleTrackballCamera):
                 _BLOCKED = {"Up", "Down", "Left", "Right"}
 
-                def OnKeyPress(self):
+                def OnKeyPress(self):  # noqa: N802
                     iren = self.GetInteractor()
                     if iren and iren.GetKeySym() in self._BLOCKED:
                         return  # swallow — our PyVista handlers deal with it
                     super().OnKeyPress()
 
-                def OnKeyRelease(self):
+                def OnKeyRelease(self):  # noqa: N802
                     iren = self.GetInteractor()
                     if iren and iren.GetKeySym() in self._BLOCKED:
                         return
@@ -1108,13 +1451,17 @@ class MokkaLikeViewer:
         self._valid_indices = np.where(valid_mask)[0]
         valid_pts0 = fp0[valid_mask] if valid_mask.any() else np.array([[0.0, 0.0, 0.0]])
         self.point_cloud = pv.PolyData(valid_pts0)
+        rgb0, _ = AVAILABLE_COLORS[self._color_index]
         self.point_cloud_actor = self.plotter.add_mesh(
             self.point_cloud,
-            color="#00ff00",
+            color=rgb0,
             point_size=self._point_size,
             render_points_as_spheres=True,
             pickable=True,
         )
+        self._last_color_index = self._color_index
+        for lf in self.loaded_files_extra:
+            self._ensure_extra_actor(lf, frame_idx=0)
 
         # Floor / grid
         self.plotter.show_grid(color="gray")
@@ -1141,7 +1488,7 @@ class MokkaLikeViewer:
         # Shortcuts reminder
         shortcuts = (
             "H Help | Space Play | ←→ ±1 | ↑↓ ±10 | PgUp/Dn ±100 | S Start | End End\n"
-            "1-4 Views | R Reset | B Bg | G Grid | X Labels | C Colors | T Trail\n"
+            "1-4 Views | R Reset | B Bg | G Grid | X Labels | C Colors | L Load C3D | T Trail\n"
             "[ ] Speed | +− Size | M Markers | J Skeleton | K Shot | D Dist | I Info | A Stats"
         )
         self.plotter.add_text(shortcuts, position="lower_left", font_size=8, color="gray")
@@ -1256,6 +1603,9 @@ class MokkaLikeViewer:
         # Marker visibility
         ke("m", self._key_marker_visibility)
         ke("M", self._key_marker_visibility)
+        # Load additional C3D(s)
+        ke("l", self._key_load_additional)
+        ke("L", self._key_load_additional)
 
         # Windows: use low-level key observer for Space and arrows
         if sys.platform == "win32":
@@ -1272,7 +1622,7 @@ class MokkaLikeViewer:
 
         print("\n--- Controls (press H for full help) ---")
         print("Space Play | ←→ ±1 | ↑↓ ±10 | PgUp/Dn ±100 | S Start | End End")
-        print("1-4 Views | R Reset | B Bg | G Grid | X Labels | C Colors | T Trail")
+        print("1-4 Views | R Reset | B Bg | G Grid | X Labels | C Colors | L Load C3D | T Trail")
         print(
             "{ } Trail len | [ ] Speed | +− Size | M Markers | J Skeleton | K Shot | Z PNGs | V MP4"
         )
@@ -1294,16 +1644,42 @@ class MokkaLikeViewer:
 # ═══════════════════════════════════════════════════════════════════════════
 #  Entry point
 # ═══════════════════════════════════════════════════════════════════════════
-if __name__ == "__main__":
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="vailá PyVista 3D viewer for C3D/CSV marker data. Press H in the viewer for full HTML help.",
+        description=(
+            "vailá PyVista 3D viewer for C3D/CSV marker data. "
+            "Multi-file: -i a.c3d b.c3d (per-file colors + master timeline). "
+            "Press H in the viewer for full HTML help; L loads more C3Ds."
+        ),
         prog="viewc3d_pyvista",
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        nargs="+",
+        dest="inputs",
+        default=None,
+        metavar="C3D",
+        help="One or more C3D paths to load (file 0 orange; extras get palette colors)",
     )
     parser.add_argument(
         "c3d_path",
         nargs="?",
         default=None,
-        help="Path to a C3D file (optional; file dialog opens if omitted)",
+        help="Optional positional C3D path (merged with -i; dialog if nothing given)",
     )
-    args = parser.parse_args()
-    viewer = MokkaLikeViewer(args.c3d_path)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    paths = merge_c3d_input_paths(args.inputs, args.c3d_path)
+    if paths:
+        MokkaLikeViewer(c3d_paths=paths)
+    else:
+        MokkaLikeViewer()
+
+
+if __name__ == "__main__":
+    main()
