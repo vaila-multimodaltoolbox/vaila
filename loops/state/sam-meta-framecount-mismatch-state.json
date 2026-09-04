@@ -1,0 +1,55 @@
+{
+  "loop": "sam-meta-framecount-mismatch",
+  "status": "success",
+  "iteration": 2,
+  "baseline": {
+    "video": "/home/preto/data/fmoura/JJ_Kabuto.mp4",
+    "metadata_frames": 393,
+    "decode_frames": 339,
+    "seek_last_meta_ok": false,
+    "post_fix_count": 339,
+    "incident": "/home/preto/data/fmoura/processed_sam3sapiens2_20260903_214003/JJ_Kabuto/sam3"
+  },
+  "attempts": [
+    {
+      "n": 1,
+      "change": "Added red tests for decode-authoritative _video_frame_count",
+      "result": "red: test_video_frame_count_prefers_decode_when_metadata_overreports asserted 10==7"
+    },
+    {
+      "n": 2,
+      "change": "_video_frame_count last-frame probe + sequential fallback; _split_video_into_chunks plans from decode count; sam3sapiens2 delegates to vaila_sam; help metadata",
+      "result": "accepted"
+    }
+  ],
+  "accepted_changes": [
+    "vaila/vaila_sam.py:_video_frame_count + _count_frames_sequential + split planning",
+    "vaila/sam3sapiens2.py:delegate _video_frame_count",
+    "tests/test_vaila_sam.py:3 new tests",
+    "vaila/help/vaila_sam.{md,html} + sam3sapiens2.{md,html}"
+  ],
+  "rejected_changes": [],
+  "evidence": [
+    "uv run pytest tests/test_vaila_sam.py tests/test_sam3sapiens2.py -v -> 66 passed, 1 skipped",
+    "uv run ruff check vaila/vaila_sam.py vaila/sam3sapiens2.py -> All checks passed",
+    "uv run ty check vaila/vaila_sam.py vaila/sam3sapiens2.py -> All checks passed",
+    "JJ_Kabuto _video_frame_count -> 339 with warning metadata=393"
+  ],
+  "lessons": [
+    "CAP_PROP_FRAME_COUNT can over-report; last-frame probe at n_meta-1 fails on JJ_Kabuto; sequential decode=339.",
+    "sam3sapiens2 had a duplicate metadata-only _video_frame_count; must delegate or the combo pipeline still fails after SAM fix."
+  ],
+  "decisions": [
+    "Do not weaken validate_sam_run_complete; fix expected count source only.",
+    "Honest metadata keeps fast last-frame probe path; mismatch pays sequential decode once."
+  ],
+  "cost": {"iterations_used": 2, "accepted_changes": 1},
+  "terminal_state": "success",
+  "completion_criteria": {
+    "1_helper_decode_authoritative": true,
+    "2_split_and_validate_same_count": true,
+    "3_regression_tests": true,
+    "4_existing_tests_pass": true,
+    "5_metadata_docs": true
+  }
+}

@@ -48,8 +48,8 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.3.108</p>
-            <p><strong>Updated:</strong> 19 August 2026</p>
+            <p><strong>Version:</strong> 0.3.120</p>
+            <p><strong>Updated:</strong> 03 September 2026</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
             <p><strong>CLI Interface:</strong> Yes (<code>-i</code>, <code>-o</code>, <code>-t</code>, ...)</p>
@@ -231,6 +231,11 @@ uv run vaila/vaila_sam.py -i video.mp4 -o output/ -t person --dry-run</code></pr
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td style="padding:6px; border:1px solid #ddd;"><code>incomplete SAM frame coverage: expected=N, present=M</code> with <code>failed_chunks=0</code> and a contiguous missing <strong>suffix</strong></td>
+              <td style="padding:6px; border:1px solid #ddd;">Older builds trusted container <code>nb_frames</code> / OpenCV <code>CAP_PROP_FRAME_COUNT</code>, which can <strong>over-report</strong> decodable frames (VFR / bad mux). Chunked SAM finished every real frame, then the coverage gate compared against inflated metadata. v0.3.120+ uses a last-frame probe and falls back to sequential decode (<code>&gt;&gt; vaila/vaila_sam: frame count metadata=… decodable=…</code>).</td>
+              <td style="padding:6px; border:1px solid #ddd;">Upgrade / re-run. Optional: re-encode the source so metadata matches decode. Mid-video holes still fail the gate (true incomplete runs).</td>
+            </tr>
             <tr>
               <td style="padding:6px; border:1px solid #ddd;"><code>Could not find bpe_simple_vocab_16e6.txt.gz</code></td>
               <td style="padding:6px; border:1px solid #ddd;">The <code>sam3==0.1.3</code> wheel omitted the CLIP tokenizer vocabulary; recent BoxMOT wheels can omit the same fallback asset.</td>

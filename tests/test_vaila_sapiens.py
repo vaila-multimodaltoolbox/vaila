@@ -32,6 +32,40 @@ def test_validate_sapiens_run_complete_rejects_partial_summary(tmp_path: Path) -
     assert "processed=8" in reason
 
 
+def test_video_frame_count_prefers_decodable_over_container_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Container nb_frames can over-report; the completion gate needs decodable frames."""
+    import cv2
+
+    class OverreportingCapture:
+        def __init__(self, _path: str) -> None:
+            self._pos = 0
+
+        def isOpened(self) -> bool:  # noqa: N802
+            return True
+
+        def get(self, prop: int) -> float:
+            return 10.0 if prop == cv2.CAP_PROP_FRAME_COUNT else 0.0
+
+        def set(self, prop: int, value: float) -> bool:
+            if prop == cv2.CAP_PROP_POS_FRAMES:
+                self._pos = int(value)
+            return True
+
+        def read(self) -> tuple[bool, np.ndarray | None]:
+            if self._pos >= 7:
+                return False, None
+            self._pos += 1
+            return True, np.zeros((8, 8, 3), dtype=np.uint8)
+
+        def release(self) -> None:
+            return None
+
+    monkeypatch.setattr(vs.cv2, "VideoCapture", OverreportingCapture)
+    assert vs._video_frame_count(tmp_path / "overreport.mp4") == 7
+
+
 def test_normalize_model_key_default() -> None:
     assert vs._normalize_model_key("1b") == "1b"
     assert vs._normalize_model_key("sapiens2_1b") == "1b"

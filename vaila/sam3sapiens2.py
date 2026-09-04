@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 24 August 2026
-Version: 0.3.112
+Update Date: 03 September 2026
+Version: 0.3.120
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -67,6 +67,7 @@ import numpy as np
 try:
     from .cli_highlight import print_gui_cli_mirror
     from .gpu_subprocess import run_isolated_gpu_subprocess
+    from .vaila_sam import _video_frame_count as _sam_video_frame_count
     from .vaila_sam import validate_sam_run_complete
     from .vaila_sapiens import (
         DEFAULT_KPT_THR,
@@ -87,6 +88,9 @@ try:
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from gpu_subprocess import run_isolated_gpu_subprocess  # ty: ignore[unresolved-import]
+    from vaila_sam import (  # ty: ignore[unresolved-import]
+        _video_frame_count as _sam_video_frame_count,
+    )
     from vaila_sam import validate_sam_run_complete  # ty: ignore[unresolved-import]
     from vaila_sapiens import (  # ty: ignore[unresolved-import]
         DEFAULT_KPT_THR,
@@ -260,12 +264,8 @@ def _find_videos(path: Path) -> list[Path]:
 
 
 def _video_frame_count(path: Path) -> int:
-    cap = cv2.VideoCapture(str(path))
-    if not cap.isOpened():
-        return 0
-    count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    cap.release()
-    return max(0, count)
+    """Decode-authoritative frame count (delegates to ``vaila_sam``)."""
+    return int(_sam_video_frame_count(str(path)))
 
 
 def _safe_float(value: Any, default: float) -> float:
@@ -1082,8 +1082,10 @@ def run_sapiens_from_sam(
     fps = float(cap_probe.get(cv2.CAP_PROP_FPS) or 30.0)
     width = int(cap_probe.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap_probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    n_frames = int(cap_probe.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     cap_probe.release()
+    # Container nb_frames can over-report decodable frames; the coverage gate
+    # below and the decode-early check must both use what OpenCV can read.
+    n_frames = _video_frame_count(video_path)
     if width <= 0 or height <= 0:
         raise ValueError(f"Invalid video dimensions: {width}x{height}")
     if (
