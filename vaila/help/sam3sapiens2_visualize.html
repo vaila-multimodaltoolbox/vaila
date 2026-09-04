@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>SAM3+Sapiens2 — Visualize selected ID</title></head>
 <body>
 <h1>SAM3+Sapiens2 — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.3.106 &nbsp; <strong>Updated:</strong> 2026-08-16</p>
+<p><strong>Version:</strong> 0.3.120 &nbsp; <strong>Updated:</strong> 2026-09-03</p>
 <p>This CPU-only tool rerenders an existing <code>processed_sam3sapiens2_*</code> result. It does not load SAM3 or Sapiens2 weights. Select one SAM identity, draw its contour, bounding box and Sapiens2 keypoints, and write filtered tracking/pose/contour artifacts plus an overlay video.</p>
 <h2>Overlay style (v0.3.96)</h2>
 <ol>
@@ -24,7 +24,7 @@
 <p>Use <code>--list-ids</code> to discover IDs and exit without rendering. <code>--dry-run</code> validates paths. <code>--overwrite</code> allows a non-empty output directory. <code>--kpt-thr</code> changes confidence filtering; <code>--no-all-keypoints</code> limits drawing to the 21 principal body points.</p>
 <h2>GUI</h2>
 <p>Frame B → <strong>Markerless 2D</strong> → <strong>SAM3+Sapiens2 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3sapiens2_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. Choose an <strong>output parent</strong> and an ID from the combobox. The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
-<p>Before rendering, the tool verifies the source frame count and image dimensions against the predictions. This prevents applying a synchronized result to the wrong original video.</p>
+<p>Before rendering, the tool verifies the source frame count and image dimensions against the predictions. This prevents applying a synchronized result to the wrong original video. <strong>v0.3.120:</strong> the comparison uses the <strong>decodable</strong> frame count instead of the container's <code>nb_frames</code>, so a mux that over-reports (<code>frames=393, expected 339</code>) no longer rejects the correct video; a genuinely different video still fails.</p>
 <p>Frames are zero-based and coordinates are full-frame pixels. SAM3 remains the identity authority.</p>
 </body>
 </html>

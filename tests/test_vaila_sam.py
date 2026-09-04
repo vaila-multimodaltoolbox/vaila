@@ -1,7 +1,7 @@
 """Light tests for vaila_sam helpers (no GPU / no HF download).
 
-Update Date: 20 August 2026
-Version: 0.3.108
+Update Date: 03 September 2026
+Version: 0.3.120
 """
 
 from __future__ import annotations
@@ -115,6 +115,106 @@ def test_validate_sam_run_complete_accepts_empty_detection_rows(tmp_path: Path) 
     out.mkdir()
     (out / "sam_frames_meta.csv").write_text("frame\n0\n1\n2\n", encoding="utf-8")
     assert validate_sam_run_complete(out, expected_frames=3)[0] is True
+
+
+def test_video_frame_count_prefers_decode_when_metadata_overreports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Container nb_frames can exceed decodable frames (JJ_Kabuto-class mux)."""
+    import cv2
+
+    import vaila.vaila_sam as sam
+
+    class OverreportCapture:
+        def __init__(self, _path: str) -> None:
+            self._i = 0
+            self.meta = 10
+            self.decode_n = 7
+
+        def isOpened(self) -> bool:  # noqa: N802
+            return True
+
+        def get(self, prop: int) -> float:
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return float(self.meta)
+            if prop == cv2.CAP_PROP_FPS:
+                return 30.0
+            return 0.0
+
+        def set(self, prop: int, val: float) -> bool:
+            if prop == cv2.CAP_PROP_POS_FRAMES:
+                self._i = int(val)
+            return True
+
+        def read(self) -> tuple[bool, np.ndarray | None]:
+            if self._i >= self.decode_n:
+                return False, None
+            self._i += 1
+            return True, np.zeros((8, 8, 3), dtype=np.uint8)
+
+        def release(self) -> None:
+            return None
+
+    monkeypatch.setattr(sam.cv2, "VideoCapture", OverreportCapture)
+    assert sam._video_frame_count("overreport.mp4") == 7
+
+
+def test_video_frame_count_trusts_metadata_when_last_frame_readable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import cv2
+
+    import vaila.vaila_sam as sam
+
+    class HonestCapture:
+        def __init__(self, _path: str) -> None:
+            self._i = 0
+            self.n = 5
+
+        def isOpened(self) -> bool:  # noqa: N802
+            return True
+
+        def get(self, prop: int) -> float:
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return float(self.n)
+            if prop == cv2.CAP_PROP_FPS:
+                return 30.0
+            return 0.0
+
+        def set(self, prop: int, val: float) -> bool:
+            if prop == cv2.CAP_PROP_POS_FRAMES:
+                self._i = int(val)
+            return True
+
+        def read(self) -> tuple[bool, np.ndarray | None]:
+            if self._i >= self.n:
+                return False, None
+            self._i += 1
+            return True, np.zeros((8, 8, 3), dtype=np.uint8)
+
+        def release(self) -> None:
+            return None
+
+    monkeypatch.setattr(sam.cv2, "VideoCapture", HonestCapture)
+    assert sam._video_frame_count("honest.mp4") == 5
+
+
+def test_chunked_coverage_accepts_decode_count_not_inflated_metadata(
+    tmp_path: Path,
+) -> None:
+    """Full decode coverage must pass validate when expected_frames is decodable N."""
+    from vaila.vaila_sam import validate_sam_run_complete
+
+    out = tmp_path / "sam"
+    out.mkdir()
+    decode_n = 339
+    meta_inflated = 393
+    rows = "\n".join(str(i) for i in range(decode_n))
+    (out / "sam_frames_meta.csv").write_text("frame\n" + rows + "\n", encoding="utf-8")
+    assert validate_sam_run_complete(out, expected_frames=decode_n)[0] is True
+    complete, reason = validate_sam_run_complete(out, expected_frames=meta_inflated)
+    assert complete is False
+    assert "missing=54" in reason
 
 
 def test_sam3_subsample_low_fps_signals_chunked_before_writer(

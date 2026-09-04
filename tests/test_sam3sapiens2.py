@@ -609,6 +609,90 @@ def test_dry_run_resume_plan_reports_skip_and_rerun(
     assert "--video-output-dir" not in joined
 
 
+class _OverreportingCapture:
+    """Capture whose container metadata claims more frames than decode yields."""
+
+    meta_frames = 10
+    decodable_frames = 7
+    width = 100
+    height = 80
+
+    def __init__(self, _path: str) -> None:
+        self._pos = 0
+
+    def isOpened(self) -> bool:  # noqa: N802
+        return True
+
+    def get(self, prop: int) -> float:
+        if prop == combo.cv2.CAP_PROP_FRAME_COUNT:
+            return float(self.meta_frames)
+        if prop == combo.cv2.CAP_PROP_FPS:
+            return 30.0
+        if prop == combo.cv2.CAP_PROP_FRAME_WIDTH:
+            return float(self.width)
+        if prop == combo.cv2.CAP_PROP_FRAME_HEIGHT:
+            return float(self.height)
+        return 0.0
+
+    def set(self, prop: int, value: float) -> bool:
+        if prop == combo.cv2.CAP_PROP_POS_FRAMES:
+            self._pos = int(value)
+        return True
+
+    def read(self) -> tuple[bool, np.ndarray | None]:
+        if self._pos >= self.decodable_frames:
+            return False, None
+        self._pos += 1
+        return True, np.zeros((self.height, self.width, 3), dtype=np.uint8)
+
+    def release(self) -> None:
+        return None
+
+
+class _SessionSentinelError(Exception):
+    """Raised by the stubbed Sapiens2 session to prove the gate was passed."""
+
+
+def test_run_sapiens_from_sam_gates_on_decodable_frames_not_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """JJ_Kabuto class: nb_frames=10 but only 7 frames decode and SAM covered all 7."""
+    sam_dir = _write_sam_fixture(tmp_path / "sam", frames=_OverreportingCapture.decodable_frames)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"")
+    monkeypatch.setattr(combo.cv2, "VideoCapture", _OverreportingCapture)
+
+    def _explode(*_args: object, **_kwargs: object) -> None:
+        raise _SessionSentinelError("Sapiens2 session reached")
+
+    monkeypatch.setattr(combo, "PoseInferenceSession", _explode)
+    with pytest.raises(_SessionSentinelError):
+        combo.run_sapiens_from_sam(video, tmp_path / "out", sam_dir)
+
+
+def test_run_sapiens_from_sam_still_rejects_a_real_mid_video_hole(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The coverage gate must keep failing when a decodable frame is truly missing."""
+    sam_dir = _write_sam_fixture(tmp_path / "sam", frames=_OverreportingCapture.decodable_frames)
+    meta = sam_dir / "sam_frames_meta.csv"
+    lines = meta.read_text(encoding="utf-8").splitlines(keepends=True)
+    meta.write_text(
+        "".join(line for line in lines if not line.startswith("3,")),
+        encoding="utf-8",
+    )
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"")
+    monkeypatch.setattr(combo.cv2, "VideoCapture", _OverreportingCapture)
+
+    def _explode(*_args: object, **_kwargs: object) -> None:
+        raise _SessionSentinelError("Sapiens2 must not load for an incomplete SAM run")
+
+    monkeypatch.setattr(combo, "PoseInferenceSession", _explode)
+    with pytest.raises(RuntimeError, match="SAM3 guidance is incomplete"):
+        combo.run_sapiens_from_sam(video, tmp_path / "out", sam_dir)
+
+
 def test_pose_session_without_detector_rejects_detector_entrypoint() -> None:
     session = object.__new__(vs.PoseInferenceSession)
     session.use_detector = False

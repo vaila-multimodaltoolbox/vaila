@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 19 August 2026
-Version: 0.3.108
+Update Date: 03 September 2026
+Version: 0.3.120
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -1353,13 +1353,55 @@ def _sam3_next_oom_tip(max_input_frames: int | None, *, fallback_to_one: bool = 
     return 1 if fallback_to_one else max_input_frames or 1
 
 
+def _count_frames_sequential(cap: cv2.VideoCapture) -> int:
+    """Count frames by decoding from the current position to EOF."""
+    n = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            break
+        n += 1
+    return n
+
+
 def _video_frame_count(video_path: str) -> int:
-    cap = cv2.VideoCapture(video_path)
+    """Return frames OpenCV can actually decode.
+
+    Container ``CAP_PROP_FRAME_COUNT`` / ``nb_frames`` can over-report (VFR or
+    bad mux). When a last-frame probe fails, fall back to sequential decode and
+    log the mismatch so SAM coverage gates use the decodable count.
+    """
+    vp = str(video_path)
+    cap = cv2.VideoCapture(vp)
     if not cap.isOpened():
         return 0
-    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    n_meta = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    if n_meta <= 0:
+        decoded = _count_frames_sequential(cap)
+        cap.release()
+        return max(0, decoded)
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, n_meta - 1)
+    ok, frame = cap.read()
+    if ok and frame is not None:
+        cap.release()
+        return n_meta
+
     cap.release()
-    return max(0, n)
+    cap = cv2.VideoCapture(vp)
+    if not cap.isOpened():
+        return 0
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    decoded = _count_frames_sequential(cap)
+    cap.release()
+    if decoded != n_meta:
+        with contextlib.suppress(OSError, BrokenPipeError):
+            print(
+                f">> vaila/vaila_sam: frame count metadata={n_meta} "
+                f"decodable={decoded} for {vp}; using decodable count",
+                flush=True,
+            )
+    return max(0, decoded)
 
 
 def validate_sam_run_complete(
@@ -2072,13 +2114,13 @@ def _split_video_into_chunks(
     cap = cv2.VideoCapture(vp)
     if not cap.isOpened():
         raise OSError(f"Could not open video for chunking: {vp}")
-    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
-    if n <= 0:
-        n = _video_frame_count(vp)
+    # Use decode-authoritative count so planning matches what chunk writers
+    # can actually extract (metadata nb_frames may over-report).
+    n = _video_frame_count(vp)
     if n <= 0:
         raise OSError(f"Video has 0 frames: {vp}")
 

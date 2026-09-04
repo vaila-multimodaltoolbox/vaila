@@ -4,8 +4,8 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.108
-- **Updated:** 2026-08-16
+- **Version:** 0.3.120
+- **Updated:** 2026-09-03
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -53,6 +53,8 @@ This clones `.local/third_party/sapiens2/` (gitignored) and downloads:
 Use `--flip-test` only when you need max accuracy and have headroom. Pass a **single `.mp4`**
 or a clean folder — batch scan skips `*_sapiens_overlay.*` and `processed_sapiens_*` subdirs.
 Each video runs in an isolated process group. After every worker, vailá terminates surviving descendants and waits for VRAM to return to its pre-worker baseline before starting the next video. If the barrier times out, the batch stops instead of cascading into OOM. A run is successful only after all source frames were decoded and `sapiens_summary.json` records matching `expected_frames` and `processed_frames`.
+
+**Frame counting (v0.3.120):** `expected_frames` is the number of frames OpenCV can actually **decode**, not the container's `nb_frames` / `CAP_PROP_FRAME_COUNT`. Some muxes (VFR, truncated recordings) over-report; when they disagree the terminal prints `>> vaila/vaila_sam: frame count metadata=… decodable=…` and the decodable count wins. Videos that decode fewer frames than their header claims no longer fail the completion gate.
 
 ### Terminal progress (v0.3.74)
 

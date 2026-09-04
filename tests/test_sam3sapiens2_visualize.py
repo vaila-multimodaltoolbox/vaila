@@ -149,6 +149,49 @@ def test_discovers_recorded_source_video_and_validates_alignment(tmp_path: Path)
         raise AssertionError("A frame-count mismatch must be rejected")
 
 
+def test_validate_source_video_accepts_metadata_that_overreports_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run rendered from 2 decodable frames must not be rejected by a lying nb_frames."""
+    run, video = _fixture_run(tmp_path)
+    payload = viz.load_predictions(run)
+
+    class OverreportingCapture:
+        def __init__(self, _path: str) -> None:
+            self._pos = 0
+
+        def isOpened(self) -> bool:  # noqa: N802
+            return True
+
+        def get(self, prop: int) -> float:
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return 5.0
+            if prop == cv2.CAP_PROP_FRAME_WIDTH:
+                return 80.0
+            if prop == cv2.CAP_PROP_FRAME_HEIGHT:
+                return 60.0
+            if prop == cv2.CAP_PROP_FPS:
+                return 10.0
+            return 0.0
+
+        def set(self, prop: int, value: float) -> bool:
+            if prop == cv2.CAP_PROP_POS_FRAMES:
+                self._pos = int(value)
+            return True
+
+        def read(self) -> tuple[bool, np.ndarray | None]:
+            if self._pos >= 2:
+                return False, None
+            self._pos += 1
+            return True, np.zeros((60, 80, 3), dtype=np.uint8)
+
+        def release(self) -> None:
+            return None
+
+    monkeypatch.setattr(viz.cv2, "VideoCapture", OverreportingCapture)
+    assert viz.validate_source_video(video, payload)["frames"] == 2
+
+
 def test_gui_output_is_new_child_of_selected_parent(tmp_path: Path) -> None:
     video = tmp_path / "clip.mp4"
     first = viz._unique_gui_output_dir(tmp_path, video, 4)

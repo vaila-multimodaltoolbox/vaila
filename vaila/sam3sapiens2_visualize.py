@@ -3,8 +3,8 @@ Project: vailá
 Script: sam3sapiens2_visualize.py
 Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Creation Date: 31 July 2026
-Update Date: 24 August 2026
-Version: 0.3.112
+Update Date: 03 September 2026
+Version: 0.3.120
 
 Description:
     CPU-only rerenderer for an existing SAM3+Sapiens2 run. It selects one
@@ -36,6 +36,11 @@ from typing import Any
 
 import cv2
 import numpy as np
+
+try:
+    from .vaila_sam import _video_frame_count
+except ImportError:
+    from vaila_sam import _video_frame_count  # ty: ignore[unresolved-import]
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 DEFAULT_KPT_THR = 0.30
@@ -275,12 +280,13 @@ def validate_source_video(video_path: Path, payload: dict[str, Any]) -> dict[str
     if not cap.isOpened():
         raise OSError(f"Could not open video: {video_path}")
     try:
-        frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
     finally:
         cap.release()
+    # Predictions cover decodable frames; container nb_frames can over-report.
+    frames = _video_frame_count(str(video_path))
 
     expected_frames = len(payload.get("frames", []))
     expected_size = payload.get("image_size") or []

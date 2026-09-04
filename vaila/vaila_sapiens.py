@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 19 August 2026
-Version: 0.3.108
+Update Date: 03 September 2026
+Version: 0.3.120
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -99,6 +99,7 @@ try:
     )
     from .sam_postprocess import VAILA_ANCHORS, _anchor_xy, _format_cell
     from .vaila_sam import _open_sam3_video_writer
+    from .vaila_sam import _video_frame_count as _sam_video_frame_count
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from geometric_reid import (  # ty: ignore[unresolved-import]
@@ -119,6 +120,9 @@ except ImportError:
         _format_cell,
     )
     from vaila_sam import _open_sam3_video_writer  # ty: ignore[unresolved-import]
+    from vaila_sam import (  # ty: ignore[unresolved-import]
+        _video_frame_count as _sam_video_frame_count,
+    )
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 DATASET = "shutterstock_goliath_3po"
@@ -455,12 +459,8 @@ def _find_videos(path: Path) -> list[Path]:
 
 
 def _video_frame_count(path: Path) -> int:
-    cap = cv2.VideoCapture(str(path))
-    if not cap.isOpened():
-        return 0
-    count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    cap.release()
-    return max(0, count)
+    """Decode-authoritative frame count (delegates to ``vaila_sam``)."""
+    return int(_sam_video_frame_count(str(path)))
 
 
 @dataclass(frozen=True)
@@ -2729,8 +2729,8 @@ def run_sapiens_on_video(
     fps_probe = float(cap_probe.get(cv2.CAP_PROP_FPS) or 30.0)
     w_probe = int(cap_probe.get(cv2.CAP_PROP_FRAME_WIDTH))
     h_probe = int(cap_probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    n_probe = int(cap_probe.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     cap_probe.release()
+    n_probe = _video_frame_count(video_path)
     roi, resolved_roi_path = _resolve_roi_config_for_video(roi_config, video_path)
     roi_polygon: np.ndarray | None = None
     roi_crop_rect: tuple[int, int, int, int] | None = None
@@ -2786,7 +2786,9 @@ def run_sapiens_on_video(
         raise OSError(f"Could not open video: {video_path}")
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    # Container nb_frames can over-report; the completion gate compares this
+    # against frames actually decoded, so it must be the decodable count.
+    n_frames = n_probe
 
     stem = video_path.stem
     overlay_path = output_dir / f"{stem}_sapiens_overlay.mp4"
@@ -3043,10 +3045,10 @@ def rerender_sapiens_overlay(
     cap_probe = cv2.VideoCapture(str(video_path))
     if not cap_probe.isOpened():
         raise OSError(f"Could not open video: {video_path}")
-    n_frames = int(cap_probe.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     frame_width = int(cap_probe.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
     frame_height = int(cap_probe.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     cap_probe.release()
+    n_frames = _video_frame_count(video_path)
     roi_polygon: np.ndarray | None = None
     roi_used_path = run_dir / "sapiens_roi_used.toml"
     if roi_used_path.is_file():
