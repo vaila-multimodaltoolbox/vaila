@@ -134,3 +134,53 @@ ai-memory search "biomechanics pipeline"
 ```
 
 ```
+
+## Cross-Platform Setup (Linux / macOS / Windows)
+
+The step-by-step plan above is shell-agnostic in intent but was written with
+Windows/bash mixed together. Two idempotent, repeatable scripts implement it
+per platform, safe to re-run (every step checks current state first):
+
+| Script                       | Platform                                | Run with            |
+| ----------------------------- | ---------------------------------------- | -------------------- |
+| `bin/setup_ai_memory.sh`      | Linux, macOS, WSL, Git Bash on Windows   | `bash bin/setup_ai_memory.sh` |
+| `bin/setup_ai_memory.ps1`     | Windows PowerShell                       | `pwsh bin/setup_ai_memory.ps1` (or `powershell -File ...`) |
+
+Both scripts perform all four sections above (binary install, workspace init,
+multi-agent harness configuration, verification) and are safe to run more
+than once — each step checks whether it's already done (binary present,
+daemon already responding, config file already written, `.gitignore` entry
+already present) before acting.
+
+### OS-specific notes
+
+- **`~/.cargo/bin` on PATH**: `rustup`'s own installer normally handles this
+  via `~/.cargo/env`. `setup_ai_memory.sh` also appends an explicit
+  `export PATH="$HOME/.cargo/bin:$PATH"` to `~/.bashrc` (Linux) or
+  `~/.bash_profile` (macOS, matching Terminal.app's default login-shell
+  behavior) / `~/.zshrc` if it isn't already there. On Windows, the Rust
+  installer (`rustup-init.exe`) adds `%USERPROFILE%\.cargo\bin` to the user
+  `PATH` automatically; `setup_ai_memory.ps1` does not modify `PATH` itself
+  and expects `cargo` to already resolve (open a new terminal after
+  installing Rust if it doesn't).
+- **Persisting the daemon across reboots** — none of the setup scripts do
+  this; `ai-memory serve --daemon` only survives the current login session.
+  If you want it to survive a reboot/logout:
+  - **Linux (systemd --user)**: create
+    `~/.config/systemd/user/ai-memory.service` with an `ExecStart=%h/.cargo/bin/ai-memory serve`
+    (no `--daemon`, let systemd supervise it) unit, then
+    `systemctl --user enable --now ai-memory`.
+  - **macOS (launchd)**: create a `~/Library/LaunchAgents/com.vaila.ai-memory.plist`
+    `LaunchAgent` pointing `ProgramArguments` at
+    `~/.cargo/bin/ai-memory serve`, then
+    `launchctl load ~/Library/LaunchAgents/com.vaila.ai-memory.plist`.
+  - **Windows**: register a Scheduled Task ("At log on") running
+    `ai-memory.exe serve`, or use `ai-memory serve --daemon` manually each
+    session — there is no first-class Windows service wrapper here.
+- **Repo-tracked config vs. local index**: `.ai-memory.toml`, `.cursor/mcp.json`,
+  `.cursor/rules/ai-memory.mdc`, and root `mcp.json` are meant to be committed
+  (they only carry `127.0.0.1` URLs, no secrets) so every clone — on any OS —
+  gets the same MCP wiring automatically; only the SQLite index
+  (`.ai-memory/*.db*`) and the Markdown wiki content are local/generated and
+  covered by the `.gitignore` entries above.
+

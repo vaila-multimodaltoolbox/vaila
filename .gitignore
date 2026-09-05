@@ -270,3 +270,8 @@ tests/**/processed_sam_*/
 # Local chessboard / multi-cam calibration fixtures (large videos; keep local-only)
 tests/chessboard_calib/
 tests/viewc3d/**/_staging/
+
+# ai-memory local index (installmemories.md); .ai-memory.toml and .ai-memory/wiki stay tracked
+.ai-memory/*.db
+.ai-memory/*.db-wal
+.ai-memory/*.db-shm

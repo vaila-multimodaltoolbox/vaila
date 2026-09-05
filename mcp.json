@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ai-memory": {
+      "type": "sse",
+      "url": "http://127.0.0.1:49374/mcp"
+    }
+  }
+}

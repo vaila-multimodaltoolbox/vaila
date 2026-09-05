@@ -1,0 +1,24 @@
+# ai-memory workspace configuration for vailá (vaila-multimodaltoolbox/vaila)
+#
+# PLACEHOLDER: this file was hand-authored as prep before the `ai-memory`
+# binary was installed. Once installed, run:
+#   ai-memory init --project vaila
+# and let it regenerate/overwrite this file with its real schema/defaults;
+# keep the repo metadata and paths below as a starting point if it merges
+# instead of overwriting.
+
+[project]
+name = "vaila"
+repository = "https://github.com/vaila-multimodaltoolbox/vaila"
+
+[index]
+# Local SQLite/FTS5 index database (gitignored; ephemeral, rebuildable)
+path = ".ai-memory/index.db"
+
+[wiki]
+# Markdown memory/handoff storage (tracked in git)
+path = ".ai-memory/wiki"
+
+[daemon]
+host = "127.0.0.1"
+port = 49374

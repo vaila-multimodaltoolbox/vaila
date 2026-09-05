@@ -1,0 +1,23 @@
+---
+description: ai-memory cross-agent shared memory integration
+alwaysApply: true
+---
+
+# ai-memory Integration
+
+This repository uses [`ai-memory`](https://github.com/akitaonrails/ai-memory) as
+shared, long-term memory across coding harnesses (Claude Code, Cursor Agent,
+OpenAI Codex, OpenCode, Gemini CLI). The daemon runs locally at
+`http://127.0.0.1:49374` and is registered as an MCP server (`.cursor/mcp.json`
+for Cursor, root `mcp.json` for other MCP-compatible CLIs).
+
+- **At the start of a session**: check `ai-memory` via MCP tools
+  (`search_memory`, `get_handoff`) for prior context, unresolved edge cases,
+  and architectural decisions relevant to the current task.
+- **Before exiting or concluding a major task**: summarize unresolved edge
+  cases, architectural decisions, and hardware/environment dependencies using
+  `create_handoff`, so the next agent (regardless of harness) can pick up
+  where this session left off.
+
+See `installmemories.md` at the repo root for the full setup plan and
+`.ai-memory.toml` for local index/wiki paths.
