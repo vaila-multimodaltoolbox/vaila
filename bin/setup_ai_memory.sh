@@ -14,6 +14,16 @@
 # ============================================================================
 set -euo pipefail
 
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  echo ">> ERROR: do not run this script with sudo / as root." >&2
+  echo "   It installs into YOUR \$HOME (~/.cargo, ~/.bashrc) and expects your" >&2
+  echo "   own rustup toolchain there. Under sudo, \$HOME becomes /root, so it" >&2
+  echo "   silently picks up root's (often older, distro) cargo instead —" >&2
+  echo "   e.g. missing the 'edition2024' feature. Re-run as your normal user:" >&2
+  echo "     bin/setup_ai_memory.sh" >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 DAEMON_HOST="127.0.0.1"
@@ -65,23 +75,34 @@ if command -v ai-memory >/dev/null 2>&1; then
   echo ">>   ai-memory already installed: $(command -v ai-memory)"
 else
   echo ">>   Installing ai-memory via cargo install --git ..."
-  cargo install --git https://github.com/akitaonrails/ai-memory.git
+  # Workspace repo has multiple binaries (cli/eval/importer); pin the CLI
+  # package explicitly, which is what produces the `ai-memory` binary.
+  cargo install --git https://github.com/akitaonrails/ai-memory.git ai-memory-cli
 fi
 
-if curl -fsS -m 3 "${DAEMON_URL}/healthz" >/dev/null 2>&1; then
+# ai-memory 2.0.3 has no `/healthz` route and no `serve --daemon` flag — the
+# server has a real MCP endpoint at `/mcp` instead (GET there returns 405,
+# not 200, since MCP is POST-only; that 405 is itself proof the port is up).
+# `curl` without `-f` exits 0 on any HTTP response, only failing on a refused
+# connection, which is exactly the "is something listening" check we want.
+if curl -sS -m 3 -o /dev/null "${DAEMON_URL}/mcp" 2>/dev/null; then
   echo ">>   ai-memory daemon already responding at ${DAEMON_URL}"
 else
   echo ">>   Starting ai-memory daemon (background)..."
-  ai-memory serve --daemon
-  sleep 1
-  curl -fsS -m 5 "${DAEMON_URL}/healthz" >/dev/null 2>&1 \
+  nohup ai-memory serve --transport http --bind "${DAEMON_HOST}:${DAEMON_PORT}" --enable-web \
+    > "${REPO_ROOT}/.ai-memory-daemon.log" 2>&1 < /dev/null &
+  disown
+  sleep 2
+  curl -sS -m 5 -o /dev/null "${DAEMON_URL}/mcp" 2>/dev/null \
     && echo ">>   Daemon is up." \
-    || echo ">>   (warning) Daemon did not respond yet; check 'ai-memory status' manually."
+    || echo ">>   (warning) Daemon did not respond yet; check 'ai-memory status' or ${REPO_ROOT}/.ai-memory-daemon.log manually."
 fi
 
 # ------------------------------------------------- [2/4] workspace init
 echo ">> [2/4] Repository workspace initialization"
-(cd "${REPO_ROOT}" && ai-memory init --project vaila)
+# `init` only lays out the data directory (no --project flag); ai-memory
+# scopes projects per-cwd automatically (basename strategy) via its hooks.
+(cd "${REPO_ROOT}" && ai-memory init)
 
 GITIGNORE="${REPO_ROOT}/.gitignore"
 if ! grep -q '^\.ai-memory/\*\.db$' "${GITIGNORE}" 2>/dev/null; then
@@ -93,12 +114,26 @@ fi
 # ------------------------------------------------- [3/4] harness configs
 echo ">> [3/4] Multi-agent harness configuration"
 
-if command -v claude >/dev/null 2>&1; then
-  echo ">>   Registering ai-memory MCP server with Claude Code..."
-  claude mcp add ai-memory "${DAEMON_URL}/mcp" || echo ">>   (note) claude mcp add reported an issue; check manually."
-  ai-memory install-hooks --harness claude-code || echo ">>   (note) install-hooks --harness claude-code reported an issue."
+echo ">>   Registering ai-memory MCP server + hooks with Claude Code..."
+# ai-memory ships its own client-aware writers for this — no need to shell
+# out to `claude mcp add`. install-mcp --apply edits ~/.claude.json in
+# place (name defaults to "ai-memory", timestamped backup written first);
+# install-hooks --apply wires the lifecycle hooks the same way. Flag is
+# `--agent`, not `--harness`.
+ai-memory install-mcp --client claude-code --apply \
+  || echo ">>   (note) install-mcp --client claude-code reported an issue; check manually."
+
+# `cargo install` only builds the binary — it doesn't copy the repo's
+# hooks/ scripts anywhere ai-memory looks by default (/usr/local/share/...
+# etc.), so install-hooks can't find them unless pointed at the checkout.
+AI_MEMORY_HOOKS_DIR="$(find "${HOME}/.cargo/git/checkouts" -maxdepth 3 -type d \
+  -path '*/ai-memory-*/*/hooks' 2>/dev/null | head -n1)"
+if [[ -n "${AI_MEMORY_HOOKS_DIR}" ]]; then
+  ai-memory install-hooks --agent claude-code --apply --hooks-dir "${AI_MEMORY_HOOKS_DIR}" \
+    || echo ">>   (note) install-hooks --agent claude-code reported an issue; check manually."
 else
-  echo ">>   'claude' CLI not found on PATH; skipping Claude Code MCP registration."
+  echo ">>   (note) couldn't find ai-memory's hooks/ dir under ~/.cargo/git/checkouts;"
+  echo "        re-run: ai-memory install-hooks --agent claude-code --apply --hooks-dir <path-to-hooks>"
 fi
 
 mkdir -p "${REPO_ROOT}/.cursor"
@@ -159,13 +194,32 @@ if [[ ! -f "${REPO_ROOT}/mcp.json" ]]; then
 EOF
 fi
 
-echo ">>   Running generic hook injection for other harnesses..."
-ai-memory install-hooks --harness generic || echo ">>   (note) install-hooks --harness generic reported an issue."
+# There is no single "generic" --agent value — every other harness (codex,
+# gemini-cli, open-code, ...) needs its own install-hooks/install-mcp call.
+# install-instructions covers them agent-agnostically instead: it drops an
+# idempotent, marker-delimited usage snippet + managed Agent Skills into the
+# project itself, readable by any harness regardless of native hook support.
+echo ">>   Previewing agent-agnostic ai-memory usage instructions..."
+# --print only: by default this command MUTATES CLAUDE.md/AGENTS.md (both
+# exist in this repo, so it would write to both) by inserting a marker-
+# delimited snippet. That's a real edit to two curated, hand-maintained
+# docs — preview it and apply by hand (drop --print) after reviewing the
+# diff, rather than have a bootstrap script silently rewrite them.
+(cd "${REPO_ROOT}" && ai-memory install-instructions --print) \
+  || echo ">>   (note) install-instructions --print reported an issue; check manually."
+echo ">>   (review the snippet above; re-run 'ai-memory install-instructions' without --print to apply)"
 
 # ------------------------------------------------- [4/4] verification
 echo ">> [4/4] Verification and sanity check"
-(cd "${REPO_ROOT}" && ai-memory ingest README.md 2>&1 | sed 's/^/>>   /') || true
-(cd "${REPO_ROOT}" && ai-memory search "biomechanics pipeline" 2>&1 | sed 's/^/>>   /') || true
+# No `ingest` subcommand exists in this CLI — the wiki fills organically via
+# lifecycle hooks during real sessions, or via `bootstrap` (needs an LLM
+# provider configured). Sanity-check with commands that always work instead.
+(cd "${REPO_ROOT}" && ai-memory status 2>&1 | sed 's/^/>>   /') || true
+# A 404 "project 'vaila' not found" here is expected on a brand-new install:
+# the project is created lazily by the first captured session (via the
+# hooks above), not by `init`. Re-run this search after your next real
+# Claude Code session in this repo.
+(cd "${REPO_ROOT}" && ai-memory search "vaila" 2>&1 | sed 's/^/>>   /') || true
 
 echo ""
 echo ">> Done. ai-memory should now be running at ${DAEMON_URL} with the"
