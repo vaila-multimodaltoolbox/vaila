@@ -4,10 +4,10 @@
 
 - **Category:** Visualization
 - **File:** `vaila/vailaplot2d.py`
-- **Version:** 0.3.116
+- **Version:** 0.3.121
 - **Author:** Prof. Paulo Santiago
 - **GUI:** yes | **CLI:** limited (helpers headless)
-- **Updated:** 26 August 2026
+- **Updated:** 04 September 2026
 
 ## Description
 
@@ -45,5 +45,9 @@ plot_joint_angles_time(df, person_id=8, joint_name="left-knee", fs=100.0, show=T
 
 ## Other plot types
 
-Time Scatter, Angle-Angle, Confidence Interval, Boxplot, SPM, XY Plot — see GUI
-buttons. Clear / New Figure / Save controls manage matplotlib windows.
+**Time Scatter:** plots selected columns vs a usable `Time`/`Tempo`/`Frame`
+column when present; otherwise vs sample index. Single-column force CSVs
+(e.g. only `fz_N`) therefore plot correctly instead of producing 0 series.
+
+Angle-Angle, Confidence Interval, Boxplot, SPM, XY Plot — see GUI buttons.
+Clear / New Figure / Save controls manage matplotlib windows.

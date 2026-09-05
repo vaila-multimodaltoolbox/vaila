@@ -4,8 +4,8 @@ vailaplot2d.py
 ================================================================================
 Author: Prof. Paulo Santiago
 Creation Date: 23 September 2024
-Updated: 26 August 2026
-Version: 0.3.116
+Updated: 04 September 2026
+Version: 0.3.121
 
 Description:
 ------------
@@ -18,7 +18,8 @@ joint-angle time series (REC3D / SAM3D ``*_joint_angles.csv``).
 Plot Types Supported:
 ---------------------
 1. Time Scatter Plot: Plots time-series data across multiple headers from selected
-   files.
+   files. Uses a usable Time/Tempo/Frame column when present; otherwise sample index
+   (fixes single-column force CSVs such as ``fz_N`` that previously produced 0 plots).
 2. Angle-Angle Plot: Displays relationships between two angles based on header pairs
    from the selected files.
 3. Confidence Interval Plot: Plots data with corresponding confidence intervals,
@@ -145,6 +146,53 @@ JOINT_ANGLES_LEGEND = {
     "euler_z_deg": "Internal/External Rotation",
 }
 JOINT_NAME_PREFERENCES = ("left-knee", "right-knee", "left-hip", "right-hip")
+_TIME_LIKE_NAMES = frozenset({"time", "tempo", "frame", "frames", "sample", "samples"})
+
+
+def is_usable_time_axis(series: pd.Series, name: str) -> bool:
+    """True when *name* looks like time/frame and values are a usable X axis."""
+    if str(name).lower() not in _TIME_LIKE_NAMES:
+        return False
+    try:
+        values = pd.to_numeric(series, errors="coerce")
+    except (TypeError, ValueError):
+        return False
+    if values.isna().all():
+        return False
+    unique_count = int(values.nunique(dropna=True))
+    if unique_count <= 2:
+        return False
+    return bool(values.is_monotonic_increasing)
+
+
+def resolve_time_scatter_x_axis(
+    data: pd.DataFrame,
+) -> tuple[pd.DataFrame, str, str]:
+    """Pick X for time-scatter: usable time/frame column, else sample index.
+
+    Force-plate / single-column CSVs often have no Time column (e.g. only ``fz_N``).
+    Using ``columns[0]`` as X then skipping that header produced 0 plots.
+
+    Returns
+    -------
+    data : DataFrame
+        Original frame, or a copy with ``Time_Index`` prepended.
+    x_column : str
+        Column name to use as X.
+    x_label : str
+        Axis label for ``plt.xlabel``.
+    """
+    if data is None or len(data.columns) == 0:
+        raise ValueError("No columns available for time-scatter X axis")
+
+    for col in data.columns:
+        if is_usable_time_axis(data[col], str(col)):
+            return data, str(col), str(col)
+
+    out = data.copy()
+    if "Time_Index" not in out.columns:
+        out.insert(0, "Time_Index", np.arange(1, len(out) + 1))
+    return out, "Time_Index", "Sample Index"
 
 
 def is_joint_angles_dataframe(df: pd.DataFrame) -> bool:
@@ -944,6 +992,7 @@ def plot_time_scatter():
         plt.figure()
 
     plot_count = 0
+    resolved_x_label = "Sample Index"
     for file_idx, file_path in enumerate(selected_files):
         print(
             f"[DEBUG] Processing file {file_idx + 1}/{len(selected_files)}: {os.path.basename(file_path)}"
@@ -975,24 +1024,13 @@ def plot_time_scatter():
                 print(f"Error reading {file_path}: {str(e)}")
                 continue
 
-        # Get the first column name (could be Time, Frame, or anything else)
         if len(data.columns) == 0:
             print(f"[DEBUG] No columns found in {os.path.basename(file_path)}")
             continue
 
-        x_column = data.columns[0]
-        print(f"[DEBUG] X-axis column: {x_column}")
-
-        # Check if Time column is problematic (only 0s and 1s or not increasing properly)
-        if x_column.lower() in ["time", "tempo", "frame"]:
-            unique_time_values = sorted(data[x_column].unique())
-            if len(unique_time_values) <= 2 or not data[x_column].is_monotonic_increasing:
-                print(f"[WARNING] Time column has issues: {unique_time_values}")
-                print("[DEBUG] Using row index as X-axis instead")
-                # Create a proper time axis using row index
-                data = data.copy()
-                data.insert(0, "Time_Index", range(1, len(data) + 1))
-                x_column = "Time_Index"
+        data, x_column, x_label = resolve_time_scatter_x_axis(data)
+        resolved_x_label = x_label
+        print(f"[DEBUG] X-axis column: {x_column} (label={x_label})")
 
         for header_idx, header in enumerate(selected_headers):
             print(f"[DEBUG] Checking header {header_idx + 1}/{len(selected_headers)}: {header}")
@@ -1002,7 +1040,7 @@ def plot_time_scatter():
                 print(f"[DEBUG] Available columns: {list(data.columns)}")
                 continue
 
-            if header == x_column:  # Skip if the header is the x-axis column
+            if header == x_column:  # Skip Time/Frame when also selected as a Y header
                 print(f"[DEBUG] Skipping {header} (same as x-axis)")
                 continue
 
@@ -1028,40 +1066,7 @@ def plot_time_scatter():
         )
         return
 
-    # Set x-label based on the first column name
-    if selected_files:
-        first_file_data = loaded_data_cache.get(selected_files[0])
-        if first_file_data is None:
-            file_ext = selected_files[0].lower().split(".")[-1]
-            try:
-                if file_ext == "csv":
-                    first_file_data = read_csv_with_encoding(selected_files[0], skipfooter=1)
-                elif file_ext == "xlsx":
-                    first_file_data = pd.read_excel(selected_files[0]) if EXCEL_SUPPORT else None
-                elif file_ext == "ods":
-                    if ODS_SUPPORT:
-                        first_file_data = pd.read_excel(selected_files[0], engine="odf")
-                    else:
-                        first_file_data = None
-                elif file_ext == "c3d":
-                    first_file_data = read_c3d_file(selected_files[0])
-                else:
-                    first_file_data = None
-            except Exception:
-                first_file_data = None
-
-        if first_file_data is not None and len(first_file_data.columns) > 0:
-            # Check if we're using Time_Index as x-axis
-            x_label = first_file_data.columns[0]
-            if x_label.lower() in ["time", "tempo", "frame"]:
-                unique_time_values = sorted(first_file_data[x_label].unique())
-                if (
-                    len(unique_time_values) <= 2
-                    or not first_file_data[x_label].is_monotonic_increasing
-                ):
-                    x_label = "Sample Index"
-            plt.xlabel(x_label)
-
+    plt.xlabel(resolved_x_label)
     plt.ylabel("Values")
     plt.title("Time Series Plot")
     plt.legend(loc="best", fontsize="small")

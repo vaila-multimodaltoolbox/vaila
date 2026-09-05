@@ -5,8 +5,8 @@
 - **Category:** Analysis
 - **File:** `vaila/markerless_2d_analysis.py`
 - **Lines:** 4259
-- **Version:** 0.3.114
-- **Updated:** 25 August 2026
+- **Version:** 0.3.121
+- **Updated:** 05 September 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -97,8 +97,10 @@ This script performs batch processing of videos for 2D pose estimation using Med
 - **min_detection_confidence** (0.0-1.0): Threshold to start detecting poses
 - **min_tracking_confidence** (0.0-1.0): Threshold to keep tracking poses
 - **model_complexity** (0-2): 0=fastest, 1=balanced, 2=most accurate
-- **enable_segmentation** (True/False): Draw person outline
-- **smooth_segmentation** (True/False): Smooth the outline
+- **enable_segmentation** (True/False): Request MediaPipe person mask; blend onto annotated MP4
+- **smooth_segmentation** (True/False): Smooth the outline (legacy Tasks option where supported)
+- **export_world_landmarks** (True/False, default True): Write `*_mp_world.csv` (meters + visibility)
+- **save_segmentation_mask** (True/False, default False): Save PNGs under `segmentation_masks/` (needs enable_segmentation)
 - **static_image_mode** (True/False): Treat each frame separately
 - **apply_filtering** (True/False): Apply built-in smoothing
 - **estimate_occluded** (True/False): Guess hidden body parts
@@ -157,19 +159,28 @@ For each processed video:
    - Original video resolution
    - Format: `frame_index, landmark_x_px, landmark_y_px, landmark_z`
 
-4. **Original Coordinates** (`*_mp_original.csv`)
+4. **World Coordinates** (`*_mp_world.csv`, default on)
+   - MediaPipe Tasks `world_landmarks` in **meters** (hip-relative metric frame)
+   - Per landmark: `x, y, z, visibility`
+   - Disable with `export_world_landmarks = false` / `--no-export-world-landmarks`
+
+5. **Segmentation masks** (`segmentation_masks/frame_XXXXXX.png`)
+   - Written when `save_segmentation_mask` and `enable_segmentation` are true
+   - Processing-frame space; also blended onto `*_mp.mp4` when segmentation is enabled
+
+6. **Original Coordinates** (`*_mp_original.csv`)
    - If resize was used, coordinates converted back to original dimensions
 
-5. **vailá Format** (`*_mp_vaila.csv`)
+7. **vailá Format** (`*_mp_vaila.csv`)
    - Format: `frame, p1_x, p1_y, p2_x, p2_y, ...`
 
-6. **Log File** (`log_info.txt`)
+8. **Log File** (`log_info.txt`)
    - Processing metadata
    - Video information
    - Configuration used
    - Detection statistics
 
-7. **Configuration File** (`configuration_used.toml`)
+9. **Configuration File** (`configuration_used.toml`)
    - All parameters used for processing
 
 ## 🚀 Usage

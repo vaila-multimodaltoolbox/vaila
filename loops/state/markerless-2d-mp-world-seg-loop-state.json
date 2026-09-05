@@ -1,0 +1,47 @@
+{
+  "loop": "markerless-2d-mp-world-seg",
+  "terminal_status": "success",
+  "baseline_commit": "11ae308",
+  "iterations": 3,
+  "tool_turns_approx": 25,
+  "accepted_goal_items": {
+    "1_config_keys": true,
+    "2_gui_toggles": true,
+    "3_cli_batch_flags": true,
+    "4_world_csv_path": true,
+    "5_segmentation_path": true,
+    "6_docs_metadata": true,
+    "7_regression": true
+  },
+  "attempts": [
+    {
+      "iteration": 0,
+      "change": "Added tests/test_markerless_2d_world_seg.py (red-before-green contract)",
+      "result": "accepted"
+    },
+    {
+      "iteration": 1,
+      "change": "Helpers + config/TOML/GUI/CLI + PoseLandmarkerOptions + process_video world/mask wiring + help/README metadata",
+      "result": "accepted"
+    },
+    {
+      "iteration": 2,
+      "change": "ruff SIM108 fix; getattr(os,nice) for ty on Windows; governing check + regression green",
+      "result": "accepted"
+    }
+  ],
+  "evidence": {
+    "governing_check": {
+      "ruff": "All checks passed!",
+      "ty": "All checks passed! exit 0",
+      "pytest_world_seg": "10 passed",
+      "pytest_regression": "tests/test_markerless2d_v2_tracker_reset.py + tests/test_markerless_2d_merge_warmup.py — 14 passed total"
+    }
+  },
+  "lessons": [
+    "enable_segmentation was already in TOML/GUI but PoseLandmarkerOptions never set output_segmentation_masks — Options wiring is required for masks.",
+    "ty unresolved-attribute on os.nice is Windows-platform noise; use getattr(os, 'nice', None).",
+    "World CSV adds visibility columns; keep norm/pixel schemas unchanged."
+  ],
+  "cost_per_accepted_change": "approx 25 turns / 3 accepted slices"
+}

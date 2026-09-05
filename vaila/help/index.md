@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 154 | **Categories:** 7 | **Generated on:** 04/09/2026 (v0.3.121)
+**Documented topics:** 154 | **Categories:** 7 | **Generated on:** 05/09/2026 (v0.3.121)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 

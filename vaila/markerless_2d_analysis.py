@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 05 September 2026
+Version: 0.3.121
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -76,15 +76,20 @@ Output:
 The following files are generated for each processed video:
 1. Processed Video (`*_mp.mp4`):
    The video with the 2D pose landmarks overlaid on the original frames.
+   When ``enable_segmentation`` is true, the person mask is blended onto frames.
 2. Normalized Landmark CSV (`*_mp_norm.csv`):
    A CSV file containing the landmark coordinates normalized to a scale between 0 and 1
    for each frame. These coordinates represent the relative positions of landmarks in the video.
 3. Pixel Landmark CSV (`*_mp_pixel.csv`):
    A CSV file containing the landmark coordinates in pixel format. The x and y coordinates
    are scaled to the video's resolution, representing the exact pixel positions of the landmarks.
-4. Original Coordinates CSV (`*_mp_original.csv`):
+4. World Landmark CSV (`*_mp_world.csv`) when ``export_world_landmarks`` is true (default):
+   MediaPipe Tasks ``world_landmarks`` in meters (hip-relative frame) plus visibility per point.
+5. Segmentation mask PNGs under ``segmentation_masks/`` when ``save_segmentation_mask`` is true
+   (requires ``enable_segmentation``). Masks are in processing-frame space.
+6. Original Coordinates CSV (`*_mp_original.csv`):
    If resize was used, coordinates converted back to original video dimensions.
-5. Log File (`log_info.txt`):
+7. Log File (`log_info.txt`):
    A log file containing video metadata and processing information.
 
 License:
@@ -223,6 +228,129 @@ landmark_names = [
     "left_foot_index",
     "right_foot_index",
 ]
+
+
+def build_world_csv_columns(names: list[str] | None = None) -> list[str]:
+    """CSV header for *_mp_world.csv: frame_index + x,y,z,visibility per landmark (meters)."""
+    names = names if names is not None else landmark_names
+    columns = ["frame_index"]
+    for name in names:
+        columns.extend([f"{name}_x", f"{name}_y", f"{name}_z", f"{name}_visibility"])
+    return columns
+
+
+def world_landmarks_to_row(
+    frame_index: int,
+    landmarks,
+    n_landmarks: int | None = None,
+) -> list[float]:
+    """Flatten world landmarks to one CSV row; missing pose → NaNs (not zeros)."""
+    n = n_landmarks if n_landmarks is not None else len(landmark_names)
+    row: list[float] = [float(frame_index)]
+    if landmarks is None:
+        row.extend([float("nan")] * (n * 4))
+        return row
+
+    lm_list = list(landmarks)
+    for i in range(n):
+        if i >= len(lm_list) or lm_list[i] is None:
+            row.extend([float("nan"), float("nan"), float("nan"), float("nan")])
+            continue
+        lm = lm_list[i]
+        if hasattr(lm, "x"):
+            vis = getattr(lm, "visibility", None)
+            if vis is None:
+                vis = getattr(lm, "presence", float("nan"))
+            row.extend([float(lm.x), float(lm.y), float(lm.z), float(vis)])
+        else:
+            vals = list(lm)
+            while len(vals) < 4:
+                vals.append(float("nan"))
+            row.extend([float(vals[0]), float(vals[1]), float(vals[2]), float(vals[3])])
+    return row
+
+
+def extract_world_landmarks_xyzv(pose_landmarker_result) -> list[list[float]] | None:
+    """Extract first-pose world landmarks as [[x,y,z,visibility], ...] (meters)."""
+    wl = getattr(pose_landmarker_result, "world_landmarks", None)
+    if not wl or len(wl) == 0:
+        return None
+    out: list[list[float]] = []
+    for lm in wl[0]:
+        vis = getattr(lm, "visibility", None)
+        if vis is None:
+            vis = getattr(lm, "presence", float("nan"))
+        out.append([float(lm.x), float(lm.y), float(lm.z), float(vis)])
+    return out
+
+
+def extract_segmentation_mask_array(pose_landmarker_result) -> np.ndarray | None:
+    """Return first segmentation mask as float ndarray, or None."""
+    masks = getattr(pose_landmarker_result, "segmentation_masks", None)
+    if not masks:
+        return None
+    m0 = masks[0]
+    arr = np.asarray(m0.numpy_view()) if hasattr(m0, "numpy_view") else np.asarray(m0)
+    return arr
+
+
+def blend_segmentation_mask(
+    frame_bgr: np.ndarray,
+    mask: np.ndarray | None,
+    alpha: float = 0.5,
+    color: tuple[int, int, int] = (0, 255, 0),
+) -> np.ndarray:
+    """Alpha-blend mask tint onto BGR frame; None/empty mask is a no-op."""
+    if mask is None:
+        return frame_bgr
+    out = frame_bgr.copy()
+    h, w = out.shape[:2]
+    m = np.asarray(mask)
+    if m.ndim == 3:
+        m = m[..., 0]
+    if m.shape[0] != h or m.shape[1] != w:
+        m = cv2.resize(m.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+    m = m.astype(np.float32)
+    if m.size and float(np.nanmax(m)) > 1.0:
+        m = m / 255.0
+    overlay = out.astype(np.float32)
+    color_arr = np.array(color, dtype=np.float32)
+    active = m > 0.1
+    for c in range(3):
+        ch = overlay[..., c]
+        ch[active] = (1.0 - alpha) * ch[active] + alpha * color_arr[c]
+        overlay[..., c] = ch
+    return overlay.astype(np.uint8)
+
+
+def pose_landmarker_wants_segmentation(pose_config: dict) -> bool:
+    """True when PoseLandmarkerOptions.output_segmentation_masks should be enabled."""
+    return bool(pose_config.get("enable_segmentation", False))
+
+
+def save_segmentation_mask_png(mask: np.ndarray, path: Path) -> None:
+    """Write mask as 8-bit PNG (processing-frame space)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    m = np.asarray(mask)
+    if m.ndim == 3:
+        m = m[..., 0]
+    m = m.astype(np.float32)
+    if m.size and float(np.nanmax(m)) <= 1.0:
+        m = m * 255.0
+    cv2.imwrite(str(path), np.clip(m, 0, 255).astype(np.uint8))
+
+
+def apply_batch_cli_world_seg_overrides(pose_config: dict, args) -> dict:
+    """Apply argparse BooleanOptionalAction overrides when not None."""
+    out = dict(pose_config)
+    if getattr(args, "export_world_landmarks", None) is not None:
+        out["export_world_landmarks"] = bool(args.export_world_landmarks)
+    if getattr(args, "enable_segmentation", None) is not None:
+        out["enable_segmentation"] = bool(args.enable_segmentation)
+    if getattr(args, "save_segmentation_mask", None) is not None:
+        out["save_segmentation_mask"] = bool(args.save_segmentation_mask)
+    return out
+
 
 # Standard Motion Capture Side Colors (BGR)
 # Lines
@@ -860,6 +988,8 @@ def get_default_config():
             "model_complexity": 2,
             "enable_segmentation": False,
             "smooth_segmentation": False,
+            "export_world_landmarks": True,
+            "save_segmentation_mask": False,
             "static_image_mode": False,
             # RunningMode.IMAGE for first N frames (full detection); 0 = off
             "image_bootstrap_first_frame": True,
@@ -904,6 +1034,8 @@ def get_flat_default_pose_config() -> dict:
         "model_complexity": mp["model_complexity"],
         "enable_segmentation": mp["enable_segmentation"],
         "smooth_segmentation": mp["smooth_segmentation"],
+        "export_world_landmarks": bool(mp.get("export_world_landmarks", True)),
+        "save_segmentation_mask": bool(mp.get("save_segmentation_mask", False)),
         "static_image_mode": mp["static_image_mode"],
         "image_bootstrap_first_frame": mp["image_bootstrap_first_frame"],
         "image_bootstrap_num_frames": int(mp.get("image_bootstrap_num_frames", 45)),
@@ -1019,6 +1151,8 @@ def save_config_to_toml(config, filepath):
                 "model_complexity": config.get("model_complexity", 2),
                 "enable_segmentation": config.get("enable_segmentation", False),
                 "smooth_segmentation": config.get("smooth_segmentation", False),
+                "export_world_landmarks": config.get("export_world_landmarks", True),
+                "save_segmentation_mask": config.get("save_segmentation_mask", False),
                 "static_image_mode": config.get("static_image_mode", False),
                 "image_bootstrap_first_frame": config.get("image_bootstrap_first_frame", True),
                 "image_bootstrap_num_frames": int(config.get("image_bootstrap_num_frames", 45)),
@@ -1129,6 +1263,18 @@ def save_config_to_toml(config, filepath):
                 f"smooth_segmentation = {str(mp['smooth_segmentation']).lower()}           # Smooth the outline (true/false)\n"
             )
             f.write("#                             # Only works if enable_segmentation = true\n")
+
+            f.write(
+                f"export_world_landmarks = {str(mp.get('export_world_landmarks', True)).lower()}     # Write *_mp_world.csv (meters + visibility)\n"
+            )
+            f.write(
+                "#                             # MediaPipe Tasks world frame (hip-relative meters)\n"
+            )
+
+            f.write(
+                f"save_segmentation_mask = {str(mp.get('save_segmentation_mask', False)).lower()}      # Save mask PNGs under segmentation_masks/\n"
+            )
+            f.write("#                             # Requires enable_segmentation = true\n")
 
             f.write(
                 f"static_image_mode = {str(mp['static_image_mode']).lower()}             # Treat each frame separately (true/false)\n"
@@ -1455,6 +1601,8 @@ def load_config_from_toml(filepath):
                     "model_complexity": int(mp.get("model_complexity", 2)),
                     "enable_segmentation": bool(mp.get("enable_segmentation", False)),
                     "smooth_segmentation": bool(mp.get("smooth_segmentation", False)),
+                    "export_world_landmarks": bool(mp.get("export_world_landmarks", True)),
+                    "save_segmentation_mask": bool(mp.get("save_segmentation_mask", False)),
                     "static_image_mode": bool(mp.get("static_image_mode", False)),
                     "image_bootstrap_first_frame": bool(
                         mp.get("image_bootstrap_first_frame", True)
@@ -1646,6 +1794,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
     model_complexity_entry: ttk.Entry
     enable_segmentation_entry: ttk.Entry
     smooth_segmentation_entry: ttk.Entry
+    export_world_landmarks_entry: ttk.Entry
+    save_segmentation_mask_entry: ttk.Entry
     static_image_mode_entry: ttk.Entry
     image_bootstrap_first_frame_entry: ttk.Entry
     image_bootstrap_num_frames_entry: ttk.Entry
@@ -1757,6 +1907,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
             ("Model Complexity (0, 1, 2):", "model_complexity_entry", "2"),
             ("Enable Segmentation (True/False):", "enable_segmentation_entry", "False"),
             ("Smooth Segmentation (True/False):", "smooth_segmentation_entry", "False"),
+            ("Export World Landmarks (True/False):", "export_world_landmarks_entry", "True"),
+            ("Save Segmentation Mask (True/False):", "save_segmentation_mask_entry", "False"),
             ("Static Image Mode (True/False):", "static_image_mode_entry", "False"),
             (
                 "Image bootstrap frame 0 (True/False):",
@@ -1980,6 +2132,12 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "model_complexity": default_config["mediapipe"]["model_complexity"],
                 "enable_segmentation": default_config["mediapipe"]["enable_segmentation"],
                 "smooth_segmentation": default_config["mediapipe"]["smooth_segmentation"],
+                "export_world_landmarks": default_config["mediapipe"].get(
+                    "export_world_landmarks", True
+                ),
+                "save_segmentation_mask": default_config["mediapipe"].get(
+                    "save_segmentation_mask", False
+                ),
                 "static_image_mode": default_config["mediapipe"]["static_image_mode"],
                 "image_bootstrap_first_frame": default_config["mediapipe"].get(
                     "image_bootstrap_first_frame", True
@@ -2229,6 +2387,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "model_complexity": int(self.model_complexity_entry.get()),
                 "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
                 "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+                "export_world_landmarks": self.export_world_landmarks_entry.get().lower() == "true",
+                "save_segmentation_mask": self.save_segmentation_mask_entry.get().lower() == "true",
                 "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
                 "image_bootstrap_first_frame": self.image_bootstrap_first_frame_entry.get().lower()
                 == "true",
@@ -2340,6 +2500,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                     summary += f"model_complexity: {config.get('model_complexity')}\n"
                     summary += f"enable_segmentation: {config.get('enable_segmentation')}\n"
                     summary += f"smooth_segmentation: {config.get('smooth_segmentation')}\n"
+                    summary += f"export_world_landmarks: {config.get('export_world_landmarks')}\n"
+                    summary += f"save_segmentation_mask: {config.get('save_segmentation_mask')}\n"
                     summary += f"static_image_mode: {config.get('static_image_mode')}\n"
                     summary += f"image_bootstrap_first_frame: {config.get('image_bootstrap_first_frame', True)}\n"
                     summary += f"image_bootstrap_num_frames: {config.get('image_bootstrap_num_frames', 45)}\n"
@@ -2643,6 +2805,12 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         if "smooth_segmentation" in config:
             self.smooth_segmentation_entry.delete(0, tk.END)
             self.smooth_segmentation_entry.insert(0, str(config["smooth_segmentation"]))
+        if "export_world_landmarks" in config:
+            self.export_world_landmarks_entry.delete(0, tk.END)
+            self.export_world_landmarks_entry.insert(0, str(config["export_world_landmarks"]))
+        if "save_segmentation_mask" in config:
+            self.save_segmentation_mask_entry.delete(0, tk.END)
+            self.save_segmentation_mask_entry.insert(0, str(config["save_segmentation_mask"]))
         if "static_image_mode" in config:
             self.static_image_mode_entry.delete(0, tk.END)
             self.static_image_mode_entry.insert(0, str(config["static_image_mode"]))
@@ -2776,6 +2944,8 @@ class ConfidenceInputDialog(simpledialog.Dialog):
                 "model_complexity": int(self.model_complexity_entry.get()),
                 "enable_segmentation": self.enable_segmentation_entry.get().lower() == "true",
                 "smooth_segmentation": self.smooth_segmentation_entry.get().lower() == "true",
+                "export_world_landmarks": self.export_world_landmarks_entry.get().lower() == "true",
+                "save_segmentation_mask": self.save_segmentation_mask_entry.get().lower() == "true",
                 "static_image_mode": self.static_image_mode_entry.get().lower() == "true",
                 "image_bootstrap_first_frame": self.image_bootstrap_first_frame_entry.get().lower()
                 == "true",
@@ -4362,11 +4532,13 @@ def process_frame_with_tasks_api(
     *,
     use_image_detect: bool = False,
     is_mps_gpu: bool = False,
+    return_extras: bool = False,
 ):
     """
     Process a single frame using MediaPipe Tasks API.
     Returns landmarks in normalized coordinates (mapped to full frame if cropping was used).
     Supports both bounding box and polygon ROI, including exclusion ROIs.
+    If return_extras=True, returns (landmarks, world_xyzv, segmentation_mask).
     """
     # First, apply exclusion masks if any exclusion ROIs are defined
     exclusion_rois = bbox_config.get("exclusion_rois", [])
@@ -4485,6 +4657,14 @@ def process_frame_with_tasks_api(
         pose_landmarker_result = landmarker.detect(mp_image)
     else:
         pose_landmarker_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+
+    world_xyzv = None
+    seg_mask = None
+    if pose_config.get("export_world_landmarks", True) or return_extras:
+        world_xyzv = extract_world_landmarks_xyzv(pose_landmarker_result)
+    if pose_landmarker_wants_segmentation(pose_config) or return_extras:
+        seg_mask = extract_segmentation_mask_array(pose_landmarker_result)
+
     if pose_landmarker_result.pose_landmarks and len(pose_landmarker_result.pose_landmarks) > 0:
         raw_landmarks = pose_landmarker_result.pose_landmarks[0]
         pose_landmarks_found = True
@@ -4562,9 +4742,13 @@ def process_frame_with_tasks_api(
         if pose_config.get("estimate_occluded", False):
             landmarks = estimate_occluded_landmarks(landmarks, list(landmarks_history))
 
+        if return_extras:
+            return landmarks, world_xyzv, seg_mask
         return landmarks
     else:
         # No pose detected
+        if return_extras:
+            return None, world_xyzv, seg_mask
         return None
 
 
@@ -4738,6 +4922,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
         min_pose_presence_confidence=pose_config.get("min_detection_confidence", 0.5),
         min_tracking_confidence=pose_config.get("min_tracking_confidence", 0.5),
         num_poses=1,
+        output_segmentation_masks=pose_landmarker_wants_segmentation(pose_config),
     )
 
     image_bootstrap_cfg = bool(pose_config.get("image_bootstrap_first_frame", True))
@@ -4752,6 +4937,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             min_pose_presence_confidence=pose_config.get("min_detection_confidence", 0.5),
             min_tracking_confidence=pose_config.get("min_tracking_confidence", 0.5),
             num_poses=1,
+            output_segmentation_masks=pose_landmarker_wants_segmentation(pose_config),
         )
         print(
             f"[POSE] IMAGE refine window: first {image_bootstrap_n} frames "
@@ -4894,6 +5080,14 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     # Initialize results containers
     normalized_landmarks_list = []
     pixel_landmarks_list = []
+    world_landmarks_list = []
+    export_world = bool(pose_config.get("export_world_landmarks", True))
+    save_seg_mask = bool(pose_config.get("save_segmentation_mask", False)) and (
+        pose_landmarker_wants_segmentation(pose_config)
+    )
+    seg_masks_dir = output_dir / "segmentation_masks" if save_seg_mask else None
+    if seg_masks_dir is not None:
+        seg_masks_dir.mkdir(parents=True, exist_ok=True)
     deque(maxlen=30)
 
     # Initialize prefix skip counter (set in warm-up logic inside with block)
@@ -5070,7 +5264,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     _image_lm_obj = None
 
             if use_dual and _image_lm_obj is not None:
-                landmarks_video = process_frame_with_tasks_api(
+                landmarks_video, world_video, mask_video = process_frame_with_tasks_api(
                     frame,
                     landmarker,
                     timestamp_ms,
@@ -5084,8 +5278,9 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     landmarks_history,
                     use_image_detect=False,
                     is_mps_gpu=is_mps_gpu,
+                    return_extras=True,
                 )
-                landmarks_image = process_frame_with_tasks_api(
+                landmarks_image, world_image, mask_image = process_frame_with_tasks_api(
                     frame,
                     _image_lm_obj,
                     timestamp_ms,
@@ -5099,10 +5294,22 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     landmarks_history,
                     use_image_detect=True,
                     is_mps_gpu=is_mps_gpu,
+                    return_extras=True,
                 )
-                landmarks = landmarks_image if landmarks_image is not None else landmarks_video
+                if landmarks_image is not None:
+                    landmarks, world_xyzv, seg_mask = (
+                        landmarks_image,
+                        world_image,
+                        mask_image,
+                    )
+                else:
+                    landmarks, world_xyzv, seg_mask = (
+                        landmarks_video,
+                        world_video,
+                        mask_video,
+                    )
             else:
-                landmarks = process_frame_with_tasks_api(
+                landmarks, world_xyzv, seg_mask = process_frame_with_tasks_api(
                     frame,
                     landmarker,
                     timestamp_ms,
@@ -5116,6 +5323,7 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     landmarks_history,
                     use_image_detect=False,
                     is_mps_gpu=is_mps_gpu,
+                    return_extras=True,
                 )
 
             # --- REVERSE-PREPEND: Skip output for prefix frames ---
@@ -5134,8 +5342,15 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
 
             # Draw on frame (Visualization)
             annotated_frame = frame.copy()
+            if pose_landmarker_wants_segmentation(pose_config):
+                annotated_frame = blend_segmentation_mask(annotated_frame, seg_mask)
+            if save_seg_mask and seg_mask is not None and seg_masks_dir is not None:
+                out_idx = len(normalized_landmarks_list)
+                save_segmentation_mask_png(seg_mask, seg_masks_dir / f"frame_{out_idx:06d}.png")
 
             if landmarks:
+                if export_world:
+                    world_landmarks_list.append(world_xyzv)
                 normalized_landmarks_list.append(landmarks)
 
                 # Convert to pixel for internal usage/drawing
@@ -5279,6 +5494,8 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                 nan_landmarks = [[np.nan, np.nan, np.nan] for _ in range(num_landmarks)]
                 normalized_landmarks_list.append(nan_landmarks)
                 pixel_landmarks_list.append(nan_landmarks)
+                if export_world:
+                    world_landmarks_list.append(None)
 
             out_video.write(annotated_frame)
             frame_count += 1
@@ -5411,6 +5628,17 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     # Also save the raw MP pixel format if needed
     df_pixel.to_csv(output_pixel_file_path, index=False, float_format="%.1f")
 
+    if export_world:
+        world_columns = build_world_csv_columns()
+        world_rows = [
+            world_landmarks_to_row(idx, frame_lms)
+            for idx, frame_lms in enumerate(world_landmarks_list)
+        ]
+        df_world = pd.DataFrame(world_rows, columns=pd.Index(world_columns))
+        output_world_path = output_dir / f"{video_path.stem}_mp_world.csv"
+        df_world.to_csv(output_world_path, index=False, float_format="%.6f")
+        print(f"World landmarks CSV saved → {output_world_path.name}")
+
     # 4. Save configuration used
     config_used_path = output_dir / "configuration_used.toml"
     try:
@@ -5461,8 +5689,19 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             f.write(f"  - Annotated Video: {video_path.stem}_mp.mp4\n")
             f.write(f"  - Normalized CSV: {video_path.stem}_mp_norm.csv\n")
             f.write(f"  - Pixel CSV: {video_path.stem}_mp_pixel.csv\n")
+            if export_world:
+                f.write(f"  - World Landmarks CSV: {video_path.stem}_mp_world.csv\n")
+            if save_seg_mask:
+                f.write("  - Segmentation masks: segmentation_masks/frame_XXXXXX.png\n")
             f.write(f"  - vailá Format CSV: {video_path.stem}_pixel_vaila.csv\n")
             f.write("  - Configuration: configuration_used.toml\n")
+            f.write(
+                f"  - export_world_landmarks: {pose_config.get('export_world_landmarks', True)}\n"
+            )
+            f.write(f"  - enable_segmentation: {pose_config.get('enable_segmentation', False)}\n")
+            f.write(
+                f"  - save_segmentation_mask: {pose_config.get('save_segmentation_mask', False)}\n"
+            )
         print(f"Log saved to: {log_path}")
     except Exception as e:
         print(f"Warning: Could not save log: {e}")
@@ -5596,6 +5835,21 @@ def process_videos_in_directory(existing_root=None):
 
     # Format and print equivalent CLI command (GUI->CLI mirror)
     nvenc_flag = " --nvenc" if pose_config.get("use_nvenc_encoder", False) else " --libx264-encode"
+    world_flag = (
+        " --export-world-landmarks"
+        if pose_config.get("export_world_landmarks", True)
+        else " --no-export-world-landmarks"
+    )
+    seg_flag = (
+        " --enable-segmentation"
+        if pose_config.get("enable_segmentation", False)
+        else " --no-enable-segmentation"
+    )
+    mask_flag = (
+        " --save-segmentation-mask"
+        if pose_config.get("save_segmentation_mask", False)
+        else " --no-save-segmentation-mask"
+    )
 
     import shlex
 
@@ -5604,8 +5858,8 @@ def process_videos_in_directory(existing_root=None):
 
     print_gui_cli_mirror(
         "vaila/markerless_2d_analysis",
-        f"uv run python vaila/markerless_2d_analysis.py -i {input_quoted} "
-        f"-o {output_quoted} --device {selected_device}{nvenc_flag}",
+        f"uv run python vaila/markerless_2d_analysis.py batch -i {input_quoted} "
+        f"-o {output_quoted} --device {selected_device}{nvenc_flag}{world_flag}{seg_flag}{mask_flag}",
     )
     print(f">> (GUI output saved under: {output_base})\n", flush=True)
 
@@ -5673,6 +5927,24 @@ def run_markerless_cli_batch(argv: list[str]) -> int:
         action="store_true",
         help="Skip 2s pause between files (GUI keeps pause for stability)",
     )
+    p.add_argument(
+        "--export-world-landmarks",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Write *_mp_world.csv (meters + visibility); default from TOML/defaults",
+    )
+    p.add_argument(
+        "--enable-segmentation",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Request MediaPipe segmentation masks + blend on annotated video",
+    )
+    p.add_argument(
+        "--save-segmentation-mask",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Save per-frame mask PNGs under segmentation_masks/",
+    )
     args = p.parse_args(argv)
     apply_linux_nvidia_egl_env()
 
@@ -5705,6 +5977,8 @@ def run_markerless_cli_batch(argv: list[str]) -> int:
         pose_config["use_nvenc_encoder"] = True
     elif args.libx264_encode:
         pose_config["use_nvenc_encoder"] = False
+
+    pose_config = apply_batch_cli_world_seg_overrides(pose_config, args)
 
     input_dir = args.input.expanduser().resolve()
     if not input_dir.is_dir():
@@ -5853,7 +6127,9 @@ def apply_cpu_throttling():
         try:
             import os
 
-            os.nice(5)  # Increase niceness (lower priority)
+            nice_fn = getattr(os, "nice", None)
+            if callable(nice_fn):
+                nice_fn(5)  # Increase niceness (lower priority)
         except Exception:
             pass
 
