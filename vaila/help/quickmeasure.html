@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - quickmeasure</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #333; margin-top: 20px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; color: #212529; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        pre { background: #e9ecef; padding: 14px; border-radius: 6px; overflow-x: auto; color: #212529; border: 1px solid #dee2e6; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - quickmeasure</h1>
+
+        <div class="module-info">
+            <h3>Module information</h3>
+            <p><strong>Category:</strong> Processing</p>
+            <p><strong>File:</strong> vaila/quickmeasure.py</p>
+            <p><strong>Version:</strong> 0.3.122</p>
+            <p><strong>Author:</strong> Paulo Santiago</p>
+            <p><strong>GUI:</strong> Yes (embedded in getpixelvideo.py) &nbsp; <strong>CLI:</strong> No</p>
+        </div>
+
+        <h2>Description</h2>
+        <p>Kinovea-style quick on-image measurement engine for <code>getpixelvideo.py</code>: click points on the video, then classify the current point set as <strong>Distance</strong>, <strong>Area</strong>, <strong>Velocity</strong>, or <strong>Acceleration</strong>. This module owns all quick-measurement <em>state</em>, <em>math</em>, and (for the pygame-based pieces) the <em>modal submenu + overlay rendering</em> — it does <strong>not</strong> reimplement calibration math, and <code>getpixelvideo.py</code> only owns the integration glue (a mode-toggle key, one click handler, one draw call, one help-text block), so the already-large host file stays a thin integration layer.</p>
+        <p>Calibration reuses the existing DLT2D pipeline exactly the way it already works elsewhere in vailá:</p>
+        <ul>
+            <li><strong>dlt2d.py</strong> (<code>dlt2d()</code>, <code>process_files()</code>) computes the 8 DLT2D coefficients from a pixel-calibration CSV + a <code>.ref2d</code> real-world reference file.</li>
+            <li><strong>rec2d_one_dlt2d.py</strong>'s <code>rec2d()</code> applies those fixed coefficients to convert a clicked pixel to real-world coordinates.</li>
+        </ul>
+        <p>Single-video sessions can only ever be calibrated with <strong>DLT2D</strong> — one image plane is 2D by construction. Stereo <strong>DLT3D</strong> triangulation (two synchronized cameras/videos, <code>rec3d_multicam()</code> from <code>rec3d.py</code>) is intentionally out of scope for this module's live single-video click session; it remains a batch/CLI workflow via <code>rec3d_one_dlt3d.py</code>.</p>
+
+        <h2>Point-set convention</h2>
+        <p>Fixed and documented, not user-configurable, so a result is reproducible from the clicks alone:</p>
+        <table>
+            <tr><th>Measurement</th><th>Uses</th></tr>
+            <tr><td>Distance</td><td>Last 2 clicked points</td></tr>
+            <tr><td>Area</td><td>All clicked points, in click order (shoelace polygon)</td></tr>
+            <tr><td>Velocity</td><td>Last 2 clicked points (needs fps + 2 distinct frames)</td></tr>
+            <tr><td>Acceleration</td><td>Last 3 clicked points (needs fps + 3 distinct frames)</td></tr>
+        </table>
+
+        <h2>Units</h2>
+        <ul>
+            <li><strong>Uncalibrated session:</strong> pixel units (<code>px</code>, <code>px/s</code>, <code>px/s^2</code>).</li>
+            <li><strong>Calibrated session</strong> (a DLT2D loaded): whatever unit the <code>.ref2d</code> file used (assumed metres — <code>m</code>, <code>m/s</code>, <code>m/s^2</code> — matching <code>dlt2d.py</code>/<code>rec2d.py</code>'s own convention); the caller may override <code>unit_label</code>.</li>
+        </ul>
+
+        <h2>Usage from getpixelvideo.py</h2>
+        <table>
+            <tr><th>Key</th><th>Action</th></tr>
+            <tr><td><code>Q</code></td><td>Toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active)</td></tr>
+            <tr><td>Left-click</td><td>Add a point</td></tr>
+            <tr><td>Right-click</td><td>Undo the last point</td></tr>
+            <tr><td>Middle-click</td><td>Pan (unchanged)</td></tr>
+            <tr><td><code>Enter</code></td><td>Open the classification submenu (<code>1</code> Distance, <code>2</code> Area, <code>3</code> Velocity, <code>4</code> Acceleration, <code>C</code> load calibration, <code>X</code> clear points, <code>Esc</code> close menu)</td></tr>
+            <tr><td><code>Backspace</code></td><td>Clear all quick-measure points</td></tr>
+        </table>
+        <p><code>Esc</code> in the main tool always means save-and-quit the whole application; it is never repurposed to exit Quick Measure mode — press <code>Q</code> again instead.</p>
+
+        <h2>Main functions / classes</h2>
+        <table>
+            <tr><th>Name</th><th>Description</th></tr>
+            <tr><td><code>QuickMeasureCalibration</code></td><td>Holds 8 DLT2D coefficients; <code>pixel_to_real()</code>; <code>from_dlt2d_file()</code>; <code>from_calibration_points()</code>.</td></tr>
+            <tr><td><code>QuickMeasureSession</code></td><td>Click-session state (fps, calibration, points); <code>add_point</code>, <code>undo_last</code>, <code>clear</code>, <code>measure_distance</code>, <code>measure_area</code>, <code>measure_velocity</code>, <code>measure_acceleration</code>, <code>measure(kind)</code>.</td></tr>
+            <tr><td><code>format_result</code></td><td>One-line human-readable string for a measurement result dict.</td></tr>
+            <tr><td><code>draw_quickmeasure_overlay</code></td><td>Draws clicked points + connecting lines on the pygame screen.</td></tr>
+            <tr><td><code>show_quickmeasure_menu</code></td><td>Blocking modal submenu (own pygame event loop, mirrors <code>show_help_dialog</code>'s pattern).</td></tr>
+        </table>
+
+        <h2>Related modules</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><strong>dlt2d</strong></td><td>Compute DLT2D coefficients from calibration (pixel + .ref2d reference).</td></tr>
+            <tr><td><strong>rec2d_one_dlt2d</strong></td><td>Apply one fixed set of DLT2D parameters to pixel coordinates (reused directly for pixel_to_real).</td></tr>
+            <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Batch stereo DLT3D reconstruction — the intended path for two-video 3D quick measurements (not covered by this module).</td></tr>
+            <tr><td><strong>getpixelvideo</strong></td><td>Host tool; owns only the hotkeys, click handler, overlay draw call, and help text for this feature.</td></tr>
+        </table>
+
+        <div class="footer">
+            <p>Part of <strong>vailá</strong> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

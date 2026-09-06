@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 03 September 2026
-Version: 0.3.120
+Update: 06 September 2026
+Version: 0.3.122
 Python Version: 3.12.14
 
 Description:
@@ -123,6 +123,11 @@ try:
     from .cli_highlight import highlight
 except ImportError:
     from cli_highlight import highlight  # ty: ignore[unresolved-import]
+
+try:
+    from . import quickmeasure
+except ImportError:
+    import quickmeasure  # ty: ignore[unresolved-import]
 
 if platform.system() == "Linux":
     os.environ["SDL_VIDEODRIVER"] = "x11"
@@ -1880,6 +1885,14 @@ def play_video_with_controls(
 
     # Feature: Click & Pass
     click_pass_mode = False
+
+    # Quick Measure mode (vaila/quickmeasure.py): click points, then classify
+    # them as Distance/Area/Velocity/Acceleration. Session persists across
+    # toggling the mode off/on so results stay visible; only Backspace/the
+    # in-menu "Clear" action drops points. Created lazily on first Q press so
+    # it always picks up the video's own `fps`.
+    quick_measure_mode = False
+    quickmeasure_session: quickmeasure.QuickMeasureSession | None = None
 
     # -----------------------------------------------------------------------
     # Pitch Guide (visual only): field overlay + reference image. Same clicks
@@ -4697,6 +4710,13 @@ def play_video_with_controls(
             "- H: Show this help",
             "- D: Delete all markers in the current frame",
             "- ?: Open documentation in browser",
+            "",
+            "=== QUICK MEASURE (Kinovea-style) ===",
+            "- Q: Toggle Quick Measure mode (exclusive with other click modes)",
+            "  - Left click: add a point   - Right click: undo last point",
+            "  - Backspace: clear all points",
+            "  - Enter: open Distance/Area/Velocity/Acceleration menu",
+            "    (menu also loads a DLT2D calibration for real-world units)",
             "",
             "=== LABELING MODE (Bounding Boxes) ===",
             "",
@@ -7806,6 +7826,13 @@ def play_video_with_controls(
             if drawing_box and current_box_rect is not None:
                 pygame.draw.rect(screen, (255, 0, 0), current_box_rect, 2)
 
+        # Draw Quick Measure clicked points (persists even after the mode is
+        # toggled off, so the last measurement stays visible on screen).
+        if quickmeasure_session is not None and quickmeasure_session.points:
+            quickmeasure.draw_quickmeasure_overlay(
+                screen, quickmeasure_session, zoom_level, crop_x, crop_y, font
+            )
+
         _mx_scr, _my_scr = pygame.mouse.get_pos()
         if _my_scr < window_height:
             _vxf = (_mx_scr + crop_x) / zoom_level
@@ -8145,6 +8172,44 @@ def play_video_with_controls(
                     save_message_text = (
                         f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
                     )
+                    showing_save_message = True
+                    save_message_timer = 30
+                elif event.key == pygame.K_q:
+                    quick_measure_mode = not quick_measure_mode
+                    if quick_measure_mode:
+                        # Click semantics differ from every other mode; keep it exclusive.
+                        labeling_mode = False
+                        one_line_mode = False
+                        auto_marking_mode = False
+                        sequential_mode = False
+                        pitch_guide_mode = False
+                        if quickmeasure_session is None:
+                            quickmeasure_session = quickmeasure.QuickMeasureSession(fps=fps)
+                        save_message_text = (
+                            "QUICK MEASURE mode ON — click points; "
+                            "Enter: classify, Backspace: clear, right-click: undo"
+                        )
+                    else:
+                        save_message_text = "Quick Measure mode OFF"
+                    showing_save_message = True
+                    save_message_timer = 90
+                elif (
+                    event.key == pygame.K_RETURN
+                    and quick_measure_mode
+                    and quickmeasure_session is not None
+                ):
+                    save_message_text = quickmeasure.show_quickmeasure_menu(
+                        screen, quickmeasure_session, window_width, window_height
+                    )
+                    showing_save_message = True
+                    save_message_timer = 150
+                elif (
+                    event.key == pygame.K_BACKSPACE
+                    and quick_measure_mode
+                    and quickmeasure_session is not None
+                ):
+                    quickmeasure_session.clear()
+                    save_message_text = "Quick Measure: points cleared"
                     showing_save_message = True
                     save_message_timer = 30
                 elif event.key == pygame.K_d:
@@ -9039,7 +9104,25 @@ def play_video_with_controls(
                     video_x = (x + crop_x) / zoom_level
                     video_y = (y + crop_y) / zoom_level
 
-                    if event.button == 1:  # Left click
+                    if quick_measure_mode and quickmeasure_session is not None:
+                        if event.button == 1:  # Left click: add a measure point
+                            n_pts = quickmeasure_session.add_point(frame_count, video_x, video_y)
+                            save_message_text = (
+                                f"Quick Measure: point {n_pts} added (frame {frame_count + 1})"
+                            )
+                            showing_save_message = True
+                            save_message_timer = 25
+                        elif event.button == 3:  # Right click: undo last point
+                            if quickmeasure_session.undo_last():
+                                save_message_text = "Quick Measure: last point removed"
+                            else:
+                                save_message_text = "Quick Measure: no points to remove"
+                            showing_save_message = True
+                            save_message_timer = 25
+                        elif event.button == 2:  # Middle click: still allow panning
+                            scrolling = True
+                            pygame.mouse.get_rel()
+                    elif event.button == 1:  # Left click
                         if labeling_mode:
                             # Start drawing bounding box
                             drawing_box = True

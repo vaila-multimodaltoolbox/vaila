@@ -3,15 +3,13 @@
 ## 📋 Module Information
 
 - **Category:** Processing
-- **File:** `vaila\readcsv.py`
-- **Lines:** 1842
-- **Size:** 65822 characters
-- **Version:** 0.0.4
+- **File:** `vaila/readcsv.py`
+- **Version:** 0.3.122
 - **Author:** Paulo Roberto Pereira Santiago
+- **Updated:** 06/09/2026
 - **GUI Interface:** ✅ Yes
 
 ## 📖 Description
-
 
 Project: vailá Multimodal Toolbox
 Script: readcsv.py - Read CSV File
@@ -20,17 +18,17 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 03 September 2025
-Version: 0.0.4
+Update Date: 06 September 2026
+Version: 0.3.122
 
 Description:
-    This script provides tools for reading CSV files and displaying their contents.
+    This script provides tools for reading CSV files and displaying their contents in 3D.
     It includes functions for:
     - Detecting the delimiter used in the file.
     - Detecting if the file has a header.
-    - Selecting markers to display.
-    - Selecting headers to display.
-    - Visualizing the data using Matplotlib or Open3D.
+    - Direct recognition and parsing of calibration model CSV tables (e.g. soccerfield_kiki.csv).
+    - Selecting markers to display with select-all preset.
+    - Visualizing the data using PyVista, Open3D, or Matplotlib (showc3d).
 
 Usage:
     Run the script from the command line:

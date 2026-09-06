@@ -1,0 +1,58 @@
+{
+  "loop": "getpixelvideo-quickmeasure-loop",
+  "baseline_commit": "0bbb862261b4a98f8f63e5f1deb31c0579255a8e",
+  "current_milestone": "done",
+  "status": "success",
+  "milestones": [
+    {
+      "id": 1,
+      "name": "quickmeasure.py core module (state + math + calibration reuse)",
+      "attempts": 1,
+      "outcome": "accepted",
+      "notes": "Created vaila/quickmeasure.py: QuickMeasureCalibration (from_dlt2d_file / from_calibration_points, reusing dlt2d.process_files and rec2d_one_dlt2d.rec2d — no reimplemented math), QuickMeasureSession (add_point/undo_last/clear/measure_*), format_result. Dual-import pattern with `# ty: ignore[unresolved-import]` on the bare fallback branch, matching rec3d_one_dlt3d.py's established convention."
+    },
+    {
+      "id": 2,
+      "name": "getpixelvideo.py thin integration layer",
+      "attempts": 1,
+      "outcome": "accepted",
+      "notes": "Added: dual-import of quickmeasure, two state vars (quick_measure_mode, quickmeasure_session), 3 new elif branches on Q/Enter/Backspace in the main hotkey chain, 1 overlay draw call, click-handler branch for add/undo/pan intercepted before existing labeling logic, 1 help-text block in show_help_dialog(). K_ESCAPE left untouched (always save-and-quit); Q/Enter/Backspace confirmed unused-or-safely-scoped via full pygame.K_* audit."
+    },
+    {
+      "id": 3,
+      "name": "Lint / format / type-check",
+      "attempts": 1,
+      "outcome": "accepted",
+      "evidence": "uv run ruff check vaila/quickmeasure.py vaila/getpixelvideo.py tests/test_quickmeasure.py -> All checks passed! | uv run ruff format ... -> 3 files left unchanged | uv run ty check vaila/quickmeasure.py vaila/getpixelvideo.py -> All checks passed!"
+    },
+    {
+      "id": 4,
+      "name": "Test fixtures + pytest suite (governing check)",
+      "attempts": 1,
+      "outcome": "accepted",
+      "evidence": "uv run pytest tests/test_quickmeasure.py tests/test_dlt_rec.py -v -> 26 passed. tests/fixtures/quickmeasure/{calib_pixels.csv,calib_ref.ref2d,sample.dlt2d,sample_bad_paramcount.dlt2d,calib_pixels_insufficient.csv,calib_ref_insufficient.ref2d} created with hand-derived values (affine DLT2D solution [100,0,100,0,100,100,0,0], shared with tests/test_dlt_rec.py::test_dlt2d_basic/test_rec2d_basic). 22 new tests cover: calibration load/compute + error paths (missing file, bad param count, insufficient calibration points -> NaN), uncalibrated Distance/Area/Velocity/Acceleration in px units with hand-computed expected values (atol=1e-3), calibrated (DLT2D) Distance/Area/Velocity/Acceleration in real-world units, undo/clear, unknown-kind error, format_result.",
+      "regression_check": "uv run pytest tests/test_dlt_rec.py tests/test_dlt_rec_integration.py -q -> baseline (pre-existing) has 4 passed + 5 errors (FileNotFoundError for tests/Animal_Open_Field/openfield_example1.csv, missing test data unrelated to this change) -- unchanged before/after quickmeasure work, confirmed not a regression introduced by this loop."
+    },
+    {
+      "id": 5,
+      "name": "Metadata sync",
+      "attempts": 1,
+      "outcome": "accepted",
+      "notes": "vaila/quickmeasure.py header: Version 0.3.122, Created/Updated 06 September 2026 (new file). vaila/getpixelvideo.py header bumped to Version 0.3.122 / Updated 06 September 2026. vaila/help/getpixelvideo.md + .html: version/date bumped, new 'Quick Measure mode (Q key)' section + Mode Controls table row added to both. New vaila/help/quickmeasure.md + .html created (rec2d_one_dlt2d.md template). vaila/help/index.md/.html regenerated via `uv run python bin/generate_help_index.py` -> 155 topics (was 154), quickmeasure listed under Processing. README.md 'Last updated: 2026-09-06' and pyproject.toml version 0.3.122 already matched (no change needed)."
+    }
+  ],
+  "scope_decisions": [
+    {
+      "decision": "Milestone 3 (DLT3D stereo, two-video 3D quick measurement) is explicitly deferred / out of scope for this pass.",
+      "rationale": "A live single-video pygame click UI has only one image plane, so only DLT2D applies. Stereo DLT3D triangulation needs two synchronized videos/cameras, which is a fundamentally different (batch, multi-file) workflow already served by rec3d_one_dlt3d.py. Documented plainly in quickmeasure.py's own module docstring and in vaila/help/quickmeasure.md.",
+      "confirmed_with_user": false
+    },
+    {
+      "decision": "GUI/CLI '>>' command-mirror parity (a convention elsewhere in vailá) is intentionally NOT implemented for this feature.",
+      "rationale": "Quick Measure is an inherently interactive, non-reproducible-by-replaying-one-command click session (unlike e.g. rec3d_one_dlt3d.py's batch reconstruction). The calibration-building step already has its own CLI via dlt2d.py directly, which quickmeasure.py reuses rather than wrapping.",
+      "confirmed_with_user": false
+    }
+  ],
+  "cumulative_turns_this_window": 1,
+  "terminal_state": "success"
+}

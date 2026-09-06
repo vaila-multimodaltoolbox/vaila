@@ -6,14 +6,24 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 20 March 2025
-Updated: 03 September 2026
-Version: 0.3.120
+Updated: 06 September 2026
+Version: 0.3.122
 
 Description:
     Unified sports-field/court visualization module.
     Draws soccer fields, tennis courts, basketball/volleyball/handball/futsal
     courts using matplotlib, with support for overlaying marker trajectories,
     scout events, KDE heatmaps, and configurable surface color schemes.
+
+    Includes the ``soccerfield_kiki.csv`` 49-keypoint FIFA pitch model with
+    differentiated position and orientation for coincident points (corner ground
+    points vs. flag tops, goal post bases vs. tops, net points behind the goal,
+    and the center spot inside the center circle).
+
+    Interactive Calibration Keypoint Editor: click directly on the field to define
+    label names and 3D coordinates, or type coordinates directly into the manual
+    entry form with presets, augment existing models, or build and export a new
+    model CSV/C3D from scratch, with instant 3D visualization preview.
 
     Export REF3D: select a subset of model / FIFA-32 control points and write a
     ``.ref3d`` file for ``dlt3d.py`` (then ``rec3d_one_dlt3d.py``) paired with
@@ -47,6 +57,7 @@ License:
 
 from __future__ import annotations
 
+import contextlib
 import math
 import os
 import tkinter as tk
@@ -228,7 +239,9 @@ COURT_COLORS = {
 def _get_colors(sport_key: str, scheme_name: str | None = None) -> dict[str, str]:
     """Helper to retrieve colors for a given sport and scheme."""
     sport_key = sport_key.lower()
-    if sport_key not in SPORT_COLORS:
+    if sport_key in ("fifa", "fifa_center", "fifa_dataset", "kiki"):
+        sport_key = "soccer"
+    elif sport_key not in SPORT_COLORS:
         sport_key = "generic"
 
     schemes = SPORT_COLORS[sport_key]
@@ -414,13 +427,13 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
     field_width = max_x - min_x
     field_height = max_y - min_y
 
-    # Define the margin around the field
-    margin = 2
+    # Define the margin around the field for annotations, nets, and labels
+    margin = 5.0
 
     # Use existing figsize, aspect ratio and dynamic limits will scale content
     fig, ax = plt.subplots(figsize=(10.5 + 0.4, 6.8 + 0.4))
-    ax.set_xlim(min_x - margin - 1, max_x + margin + 1)
-    ax.set_ylim(min_y - margin - 1, max_y + margin + 1)
+    ax.set_xlim(min_x - margin - 1.5, max_x + margin + 1.5)
+    ax.set_ylim(min_y - margin - 1.5, max_y + margin + 1.5)
     ax.set_aspect("equal")
 
     if show_axis_values:
@@ -532,12 +545,29 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
     outer_c = colors["outer"]
     line_c = colors["lines"]
 
-    # Draw extended area (including margin around the field)
+    # Determine playing pitch boundaries from corner points if available
+    if "bottom_left_corner" in points and "top_right_corner" in points:
+        pitch_x0 = float(points["bottom_left_corner"][0])
+        pitch_y0 = float(points["bottom_left_corner"][1])
+        pitch_w = float(points["top_right_corner"][0]) - pitch_x0
+        pitch_h = float(points["top_right_corner"][1]) - pitch_y0
+    else:
+        pitch_x0, pitch_y0 = min_x, min_y
+        pitch_w, pitch_h = field_width, field_height
+
+    ext_min_x = min(min_x, pitch_x0)
+    ext_max_x = max(max_x, pitch_x0 + pitch_w)
+    ext_min_y = min(min_y, pitch_y0)
+    ext_max_y = max(max_y, pitch_y0 + pitch_h)
+    ext_w = ext_max_x - ext_min_x
+    ext_h = ext_max_y - ext_min_y
+
+    # Draw extended area (including margin around the field and all features/net)
     draw_rectangle(
         ax,
-        (min_x - margin, min_y - margin),
-        field_width + 2 * margin,
-        field_height + 2 * margin,
+        (ext_min_x - margin, ext_min_y - margin),
+        ext_w + 2 * margin,
+        ext_h + 2 * margin,
         edgecolor="none",
         facecolor=outer_c,
         zorder=0,
@@ -546,9 +576,9 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
     # Draw the main playing surface with slightly darker green
     draw_rectangle(
         ax,
-        (min_x, min_y),  # Use min_x, min_y from DataFrame
-        field_width,  # Use calculated field_width
-        field_height,  # Use calculated field_height
+        (pitch_x0, pitch_y0),
+        pitch_w,
+        pitch_h,
         edgecolor="none",
         facecolor=playing_c,
         zorder=0.5,
@@ -922,30 +952,84 @@ def plot_field(df, show_reference_points=True, show_axis_values=False, color_sch
     # Add point numbers to the field for reference (only if enabled)
     if show_reference_points:
         orig_names = set(df["point_name"].astype(str)) if "point_name" in df.columns else set()
-        for name, (x, y, num) in points.items():
-            if orig_names and name not in orig_names:
-                continue
-            # Adjust text offset based on field size for better visibility
-            text_offset_x = field_width * 0.005
-            text_offset_y = field_height * 0.005
-            # Ensure a minimum offset if field is very small
-            offset_x = max(text_offset_x, 0.2)
-            offset_y = max(text_offset_y, 0.2)
-            ax.text(
-                x + offset_x,
-                y + offset_y,
-                str(num),
-                color="black",
-                fontsize=8,
-                weight="bold",
-                bbox={
-                    "facecolor": "white",
-                    "alpha": 0.7,
-                    "boxstyle": "round",
-                    "pad": 0.2,
-                },  # added pad
-                zorder=10,
-            )
+        active_items = [
+            (name, float(vals[0]), float(vals[1]), int(vals[2]) if len(vals) > 2 else 0)
+            for name, vals in points.items()
+            if not orig_names or name in orig_names
+        ]
+        groups: dict[tuple[float, float], list[tuple[str, float, float, int]]] = {}
+        for name, px, py, pnum in active_items:
+            key = (round(px, 2), round(py, 2))
+            groups.setdefault(key, []).append((name, px, py, pnum))
+
+        for _coord, group in groups.items():
+            if len(group) == 1:
+                name, px, py, pnum = group[0]
+                text_offset_x = max(field_width * 0.008, 0.4)
+                text_offset_y = max(field_height * 0.008, 0.4)
+                ax.text(
+                    px + text_offset_x,
+                    py + text_offset_y,
+                    str(pnum),
+                    color="black",
+                    fontsize=8,
+                    weight="bold",
+                    bbox={
+                        "facecolor": "white",
+                        "alpha": 0.8,
+                        "boxstyle": "round,pad=0.2",
+                    },
+                    zorder=10,
+                )
+            else:
+                for rank, (_name, px, py, pnum) in enumerate(group):
+                    # Multi-point cluster at same x,y (e.g. goal post base vs top, corner flags)
+                    # When near end lines, radiate outwards away from field center to avoid crossing area
+                    if px <= pitch_x0 + 1.0:
+                        # Near left boundary: radiate backwards (dx <= 0)
+                        dx = -(max(field_width * 0.022, 2.0) + rank * 1.5)
+                        dy = -2.0 if py < (pitch_y0 + pitch_h / 2) else 2.0
+                        if rank > 0:
+                            dy *= 1.8
+                    elif px >= (pitch_x0 + pitch_w - 1.0):
+                        # Near right boundary: radiate backwards (dx >= 0)
+                        dx = max(field_width * 0.022, 2.0) + rank * 1.5
+                        dy = -2.0 if py < (pitch_y0 + pitch_h / 2) else 2.0
+                        if rank > 0:
+                            dy *= 1.8
+                    else:
+                        angle = (rank * (360.0 / len(group)) + 30.0) % 360.0
+                        rad = math.radians(angle)
+                        dx = max(field_width * 0.022, 2.0) * math.cos(rad)
+                        dy = max(field_height * 0.022, 2.0) * math.sin(rad)
+
+                    rot = 0.0
+                    ax.plot(
+                        [px, px + dx],
+                        [py, py + dy],
+                        linestyle=":",
+                        linewidth=0.85,
+                        color="#444444",
+                        alpha=0.75,
+                        zorder=9,
+                    )
+                    ax.text(
+                        px + dx,
+                        py + dy,
+                        str(pnum),
+                        color="black",
+                        fontsize=7.5,
+                        weight="bold",
+                        rotation=rot,
+                        ha="center",
+                        va="center",
+                        bbox={
+                            "facecolor": "#FFF9C4" if rank > 0 else "#E0F7FA",
+                            "alpha": 0.9,
+                            "boxstyle": "round,pad=0.18",
+                        },
+                        zorder=10,
+                    )
 
     return fig, ax
 
@@ -1204,6 +1288,200 @@ def write_ref3d_export(
     return written
 
 
+def save_calibration_model_csv(
+    points: list[dict[str, Any]],
+    output_path: str | Path,
+    *,
+    field_width: float = 104.9,
+    field_height: float = 67.9,
+) -> Path:
+    """Export calibration keypoints to a model CSV file.
+
+    Columns produced: point_name, point_number, flip_idx, x, y, z, x_norm, y_norm.
+    Compatible with vailá models, DLT3D, getpixelvideo, and drawsportsfields.
+    """
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    xs = [float(p.get("x", 0.0)) for p in points] if points else [0.0]
+    ys = [float(p.get("y", 0.0)) for p in points] if points else [0.0]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    span_x = max_x - min_x if max_x > min_x else field_width
+    span_y = max_y - min_y if max_y > min_y else field_height
+
+    records: list[dict[str, Any]] = []
+    for idx, p in enumerate(points):
+        p_name = str(p.get("point_name", f"keypoint_{idx}"))
+        p_num = int(p.get("point_number", idx))
+        flip_idx = int(p.get("flip_idx", -1))
+        px = float(p.get("x", 0.0))
+        py = float(p.get("y", 0.0))
+        pz = float(p.get("z", 0.0))
+
+        if "x_norm" in p and not pd.isna(p["x_norm"]):
+            x_norm = float(p["x_norm"])
+        else:
+            x_norm = (px - min_x) / span_x if span_x > 0 else 0.0
+
+        if "y_norm" in p and not pd.isna(p["y_norm"]):
+            y_norm = float(p["y_norm"])
+        else:
+            y_norm = (py - min_y) / span_y if span_y > 0 else 0.0
+
+        records.append(
+            {
+                "point_name": p_name,
+                "point_number": p_num,
+                "flip_idx": flip_idx,
+                "x": round(px, 6),
+                "y": round(py, 6),
+                "z": round(pz, 6),
+                "x_norm": round(x_norm, 6),
+                "y_norm": round(y_norm, 6),
+            }
+        )
+
+    df = pd.DataFrame(records)
+    df.to_csv(out, index=False)
+    return out
+
+
+def save_calibration_model_c3d(
+    points: list[dict[str, Any]],
+    output_path: str | Path,
+    *,
+    conversion_factor: float = 1.0,
+    point_rate: float = 1.0,
+) -> Path:
+    """Export calibration keypoints to a C3D file.
+
+    Parameters:
+        points: List of point dictionaries with point_name, x, y, z (in meters).
+        output_path: Path to output .c3d file.
+        conversion_factor: Factor to multiply coordinates by (1.0 for meters, 1000.0 for mm).
+        point_rate: Frame rate for point data (default 1.0 fps for static calibration).
+
+    Returns:
+        Path to the saved C3D file.
+    """
+    import ezc3d
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    num_points = len(points)
+    points_data = np.zeros((4, max(num_points, 1), 1), dtype=np.float64)
+    marker_labels: list[str] = []
+
+    for i, pt in enumerate(points):
+        name = str(pt.get("point_name", f"pt_{i}"))
+        marker_labels.append(name)
+        px = float(pt.get("x", 0.0)) * conversion_factor
+        py = float(pt.get("y", 0.0)) * conversion_factor
+        pz = float(pt.get("z", 0.0)) * conversion_factor
+        points_data[0, i, 0] = px
+        points_data[1, i, 0] = py
+        points_data[2, i, 0] = pz
+        points_data[3, i, 0] = 1.0  # Homogeneous coordinate
+
+    if not marker_labels:
+        marker_labels = ["origin"]
+        points_data[3, 0, 0] = 1.0
+
+    c3d = ezc3d.c3d()
+    units_str = "mm" if conversion_factor == 1000.0 else "m"
+    c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
+    c3d["parameters"]["POINT"]["RATE"]["value"] = [float(point_rate)]
+    c3d["parameters"]["POINT"]["UNITS"]["value"] = [units_str]
+    c3d["parameters"]["POINT"]["FRAMES"]["value"] = [1]
+    c3d["data"]["points"] = points_data
+
+    c3d.write(str(out))
+    return out
+
+
+def preview_calibration_in_3d(
+    points: list[dict[str, Any]],
+    title: str = "Soccer Field Calibration Keypoints 3D",
+    parent: Any | None = None,
+) -> None:
+    """Launch a 3D visualization of the calibration keypoints in PyVista or Matplotlib."""
+    if not points:
+        if parent:
+            messagebox.showwarning(
+                "No Points", "No calibration points to visualize.", parent=parent
+            )
+        else:
+            print(">> No calibration points to visualize.")
+        return
+
+    labels = [str(p.get("point_name", f"pt_{i}")) for i, p in enumerate(points)]
+    coords = np.array(
+        [[float(p.get("x", 0.0)), float(p.get("y", 0.0)), float(p.get("z", 0.0))] for p in points]
+    )
+    pts_3d = coords.reshape(1, len(points), 3)
+
+    # Prefer PyVista if available, fallback to Matplotlib showc3d
+    try:
+        from vaila.viewc3d_pyvista import MokkaLikeViewer
+
+        print(f">> Opening {len(points)} calibration points in PyVista 3D viewer...")
+        MokkaLikeViewer.from_array(pts_3d, labels, frame_rate=1.0, title=title)
+        return
+    except Exception as e:
+        print(f">> PyVista viewer unavailable ({e}). Trying Matplotlib showc3d...")
+
+    try:
+        from vaila.showc3d import show_points_3d
+
+        print(f">> Opening {len(points)} calibration points in Matplotlib 3D viewer...")
+        show_points_3d(pts_3d, labels, title=title)
+    except Exception as e2:
+        if parent:
+            messagebox.showerror("Error", f"Failed to open 3D viewer: {e2}", parent=parent)
+        else:
+            print(f">> Failed to open 3D viewer: {e2}")
+
+
+def load_calibration_model_csv(csv_path: str | Path) -> list[dict[str, Any]]:
+    """Load calibration keypoints from a model CSV into a list of dictionaries."""
+    p = Path(csv_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"Model CSV file not found: {csv_path}")
+    df = pd.read_csv(p)
+    results: list[dict[str, Any]] = []
+    for idx, row in df.iterrows():
+        name = (
+            str(row["point_name"])
+            if "point_name" in row and not pd.isna(row["point_name"])
+            else f"p{idx}"
+        )
+        num = (
+            int(row["point_number"])
+            if "point_number" in row and not pd.isna(row["point_number"])
+            else idx
+        )
+        x = float(row["x"]) if "x" in row and not pd.isna(row["x"]) else 0.0
+        y = float(row["y"]) if "y" in row and not pd.isna(row["y"]) else 0.0
+        z = float(row["z"]) if "z" in row and not pd.isna(row["z"]) else 0.0
+        rec: dict[str, Any] = {
+            "point_name": name,
+            "point_number": num,
+            "x": x,
+            "y": y,
+            "z": z,
+        }
+        if "flip_idx" in row and not pd.isna(row["flip_idx"]):
+            rec["flip_idx"] = int(row["flip_idx"])
+        if "x_norm" in row and not pd.isna(row["x_norm"]):
+            rec["x_norm"] = float(row["x_norm"])
+        if "y_norm" in row and not pd.isna(row["y_norm"]):
+            rec["y_norm"] = float(row["y_norm"])
+        results.append(rec)
+    return results
+
+
 def _highlight_export_points_on_ax(
     ax: plt.Axes,
     selected: list[FieldControlPoint],
@@ -1241,47 +1519,15 @@ def _draw_fifa32_dataset_keypoints_overlay(
 ) -> None:
     """Overlay FIFA builder canonical 32 keypoints on the current soccer field.
 
-    Positions come from the loaded FIFA pitch geometry (``soccerfield_ref3d_fifa.csv``),
-    not from a Roboflow-proportion stretch, so markers sit on the drawn lines.
-    Index/order still match ``CANONICAL_KP_NAMES_32`` / getpixelvideo FIFA mode.
+    Positions come from the loaded FIFA pitch geometry (``soccerfield_ref3d_fifa.csv``
+    or ``soccerfield_kiki.csv``), not from a Roboflow-proportion stretch.
+    When 48 keypoints are present, coincident points sharing horizontal coordinates
+    (e.g. corner ground points vs corner flags, goal post bases vs tops) are
+    differentiated in orientation and position so all labels remain visible.
     """
     xy_list = _fifa32_dataset_xy_from_field_points(points)
     if xy_list is None or len(xy_list) != len(CANONICAL_KP_NAMES_32):
         return
-
-    for idx, ((x_field, y_field), kp_name) in enumerate(
-        zip(xy_list, CANONICAL_KP_NAMES_32, strict=True)
-    ):
-        ax.plot(
-            x_field,
-            y_field,
-            marker="o",
-            markersize=4.8,
-            markerfacecolor="#FFD100",
-            markeredgecolor="black",
-            markeredgewidth=0.8,
-            zorder=18,
-        )
-        ax.text(
-            x_field + 0.35,
-            y_field + 0.35,
-            str(idx),
-            fontsize=7.2,
-            color="black",
-            weight="bold",
-            bbox={"facecolor": "#fff7bf", "alpha": 0.9, "boxstyle": "round,pad=0.15"},
-            zorder=19,
-        )
-        # Small semantic helper near each label for fast manual labeling reference.
-        ax.text(
-            x_field + 0.35,
-            y_field - 0.55,
-            kp_name.replace("_", " "),
-            fontsize=5.5,
-            color="#222222",
-            alpha=0.9,
-            zorder=19,
-        )
 
     expanded_kps = (
         ("left_goal_bottom_post_base", 32),
@@ -1300,38 +1546,263 @@ def _draw_fifa32_dataset_keypoints_overlay(
         ("right_goal_net_top_ground", 45),
         ("right_corner_flag_top", 46),
         ("right_corner_flag_bottom", 47),
+        ("center_field", 48),
     )
-    has_expanded = any(name in points for name, _ in expanded_kps)
+    has_expanded = any(
+        name in points
+        or (name == "center_field" and ("center_spot" in points or "midfield_center" in points))
+        for name, _ in expanded_kps
+    )
+
+    for idx, ((x_field, y_field), _kp_name) in enumerate(
+        zip(xy_list, CANONICAL_KP_NAMES_32, strict=True)
+    ):
+        ax.plot(
+            x_field,
+            y_field,
+            marker="o",
+            markersize=4.8,
+            markerfacecolor="#FFD100",
+            markeredgecolor="black",
+            markeredgewidth=0.8,
+            zorder=18,
+        )
+
+        # Differentiate label position for corner points when corner flags exist
+        if has_expanded and idx == 0:  # top_left_corner
+            bx, by = x_field + 1.2, y_field - 1.2
+            ha, va = "left", "top"
+        elif has_expanded and idx == 5:  # bottom_left_corner
+            bx, by = x_field + 1.2, y_field + 1.2
+            ha, va = "left", "bottom"
+        elif has_expanded and idx == 24:  # top_right_corner
+            bx, by = x_field - 1.2, y_field - 1.2
+            ha, va = "right", "top"
+        elif has_expanded and idx == 29:  # bottom_right_corner
+            bx, by = x_field - 1.2, y_field + 1.2
+            ha, va = "right", "bottom"
+        else:
+            bx, by = x_field + 0.35, y_field + 0.35
+            ha, va = "left", "bottom"
+
+        ax.text(
+            bx,
+            by,
+            str(idx),
+            fontsize=7.5,
+            color="black",
+            weight="bold",
+            ha=ha,
+            va=va,
+            bbox={"facecolor": "#fff7bf", "alpha": 0.9, "boxstyle": "round,pad=0.15"},
+            zorder=19,
+        )
+
     if has_expanded:
         for kp_name, idx in expanded_kps:
-            if kp_name in points:
-                xf, yf = float(points[kp_name][0]), float(points[kp_name][1])
+            actual_name = kp_name
+            if actual_name not in points and idx == 48:
+                for alt in ("center_spot", "midfield_center", "kickoff_spot"):
+                    if alt in points:
+                        actual_name = alt
+                        break
+            if actual_name not in points:
+                continue
+            xf, yf = float(points[actual_name][0]), float(points[actual_name][1])
+            leader_line = True
+            leader_color = "#555555"
+            facecolor = "#c8f7ff"
+
+            # Position and orientation differentiation for 3D features
+            # All goal features (posts, net) are drawn backwards ("para trás"),
+            # outside the playing pitch and never crossing or entering the penalty/goal area.
+            if idx == 38:  # left_corner_flag_top (shares x, y with top_left_corner 0)
+                bx, by = xf - 1.8, yf + 1.8
+                ha, va = "right", "bottom"
+                lbl = "38"
+                marker = "^"
+                facecolor = "#FFE0B2"
+                leader_color = "#E65100"
+            elif idx == 39:  # left_corner_flag_bottom (shares with bottom_left_corner 5)
+                bx, by = xf - 1.8, yf - 1.8
+                ha, va = "right", "top"
+                lbl = "39"
+                marker = "v"
+                facecolor = "#FFE0B2"
+                leader_color = "#E65100"
+            elif idx == 46:  # right_corner_flag_top (shares with top_right_corner 24)
+                bx, by = xf + 1.8, yf + 1.8
+                ha, va = "left", "bottom"
+                lbl = "46"
+                marker = "^"
+                facecolor = "#FFE0B2"
+                leader_color = "#E65100"
+            elif idx == 47:  # right_corner_flag_bottom (shares with bottom_right_corner 29)
+                bx, by = xf + 1.8, yf - 1.8
+                ha, va = "left", "top"
+                lbl = "47"
+                marker = "v"
+                facecolor = "#FFE0B2"
+                leader_color = "#E65100"
+            elif idx == 32:  # left goal bottom post base (z=0)
+                # Drawn backwards (para trás) and outwards (down) away from area
+                bx, by = xf - 1.6, yf - 2.2
+                ha, va = "center", "top"
+                lbl = "32"
+                marker = "s"
+                facecolor = "#E0F7FA"
+                leader_color = "#00838F"
+            elif idx == 34:  # left goal bottom post top (z=2.44, shares x, y with 32)
+                # Drawn backwards further behind goal line and outwards (down)
+                bx, by = xf - 4.5, yf - 2.2
+                ha, va = "center", "top"
+                lbl = "34"
+                marker = "^"
+                facecolor = "#FFF9C4"
+                leader_color = "#F57F17"
+            elif idx == 33:  # left goal top post base (z=0)
+                # Drawn backwards (para trás) and outwards (up) away from area
+                bx, by = xf - 1.6, yf + 2.2
+                ha, va = "center", "bottom"
+                lbl = "33"
+                marker = "s"
+                facecolor = "#E0F7FA"
+                leader_color = "#00838F"
+            elif idx == 35:  # left goal top post top (z=2.44, shares x, y with 33)
+                # Drawn backwards further behind goal line and outwards (up)
+                bx, by = xf - 4.5, yf + 2.2
+                ha, va = "center", "bottom"
+                lbl = "35"
+                marker = "^"
+                facecolor = "#FFF9C4"
+                leader_color = "#F57F17"
+            elif idx == 36:  # left goal net bottom ground (fundo do gol)
+                # Straight behind net towards negative x
+                bx, by = xf - 2.5, yf
+                ha, va = "right", "center"
+                lbl = "36"
+                marker = "s"
+                facecolor = "#EDE7F6"
+                leader_color = "#6A1B9A"
+            elif idx == 37:  # left goal net top ground (fundo do gol)
+                # Straight behind net towards negative x
+                bx, by = xf - 2.5, yf
+                ha, va = "right", "center"
+                lbl = "37"
+                marker = "s"
+                facecolor = "#EDE7F6"
+                leader_color = "#6A1B9A"
+            elif idx == 40:  # right goal bottom post base (z=0)
+                # Drawn backwards (para trás) and outwards (down) away from area
+                bx, by = xf + 1.6, yf - 2.2
+                ha, va = "center", "top"
+                lbl = "40"
+                marker = "s"
+                facecolor = "#E0F7FA"
+                leader_color = "#00838F"
+            elif idx == 42:  # right goal bottom post top (z=2.44, shares x, y with 40)
+                # Drawn backwards further behind goal line and outwards (down)
+                bx, by = xf + 4.5, yf - 2.2
+                ha, va = "center", "top"
+                lbl = "42"
+                marker = "^"
+                facecolor = "#FFF9C4"
+                leader_color = "#F57F17"
+            elif idx == 41:  # right goal top post base (z=0)
+                # Drawn backwards (para trás) and outwards (up) away from area
+                bx, by = xf + 1.6, yf + 2.2
+                ha, va = "center", "bottom"
+                lbl = "41"
+                marker = "s"
+                facecolor = "#E0F7FA"
+                leader_color = "#00838F"
+            elif idx == 43:  # right goal top post top (z=2.44, shares x, y with 41)
+                # Drawn backwards further behind goal line and outwards (up)
+                bx, by = xf + 4.5, yf + 2.2
+                ha, va = "center", "bottom"
+                lbl = "43"
+                marker = "^"
+                facecolor = "#FFF9C4"
+                leader_color = "#F57F17"
+            elif idx == 44:  # right goal net bottom ground (fundo do gol)
+                # Straight behind net towards positive x
+                bx, by = xf + 2.5, yf
+                ha, va = "left", "center"
+                lbl = "44"
+                marker = "s"
+                facecolor = "#EDE7F6"
+                leader_color = "#6A1B9A"
+            elif idx == 45:  # right goal net top ground (fundo do gol)
+                # Straight behind net towards positive x
+                bx, by = xf + 2.5, yf
+                ha, va = "left", "center"
+                lbl = "45"
+                marker = "s"
+                facecolor = "#EDE7F6"
+                leader_color = "#6A1B9A"
+            elif idx == 48:  # center_field / center spot (ponto central do campo no circulo central)
+                bx, by = xf + 0.65, yf + 0.65
+                ha, va = "left", "bottom"
+                lbl = "48"
+                marker = "o"
+                facecolor = "#fff7bf"
+                leader_color = "#555555"
+            else:
+                bx, by = xf + 0.35, yf + 0.35
+                ha, va = "left", "bottom"
+                lbl = str(idx)
+                marker = "s"
+                leader_line = False
+
+            if leader_line:
                 ax.plot(
-                    xf,
-                    yf,
-                    marker="s",
-                    markersize=4.5,
-                    markerfacecolor="#00E5FF",
-                    markeredgecolor="black",
-                    markeredgewidth=0.8,
+                    [xf, bx],
+                    [yf, by],
+                    linestyle=":",
+                    linewidth=0.85,
+                    color=leader_color,
+                    alpha=0.8,
                     zorder=18,
                 )
-                ax.text(
-                    xf + 0.35,
-                    yf + 0.35,
-                    str(idx),
-                    fontsize=7.0,
-                    color="black",
-                    weight="bold",
-                    bbox={"facecolor": "#c8f7ff", "alpha": 0.9, "boxstyle": "round,pad=0.15"},
-                    zorder=19,
-                )
 
-    caption = (
-        "FIFA dataset keypoints: 0..47 (canonical order; 32 pitch + 16 3D goal/flag features)"
-        if has_expanded
-        else "FIFA dataset keypoints: 0..31 (canonical order; positions from FIFA pitch lines)"
+            ax.plot(
+                xf,
+                yf,
+                marker=marker,
+                markersize=4.8,
+                markerfacecolor="#00E5FF",
+                markeredgecolor="black",
+                markeredgewidth=0.8,
+                zorder=19,
+            )
+            ax.text(
+                bx,
+                by,
+                lbl,
+                fontsize=7.5,
+                color="black",
+                weight="bold",
+                rotation=0.0,
+                ha=ha,
+                va=va,
+                bbox={"facecolor": facecolor, "alpha": 0.92, "boxstyle": "round,pad=0.18"},
+                zorder=20,
+            )
+
+    has_point_48 = any(
+        idx == 48
+        and (
+            kp_name in points
+            or any(alt in points for alt in ("center_spot", "midfield_center", "kickoff_spot"))
+        )
+        for kp_name, idx in expanded_kps
     )
+    if has_point_48:
+        caption = "FIFA / Kiki dataset keypoints: 0..48 (canonical order; 32 pitch lines [0..31], 17 3D/pitch features [32..48])"
+    elif has_expanded:
+        caption = "FIFA / Kiki dataset keypoints: 0..47 (canonical order; 32 pitch lines [0..31], 16 3D features [32..47])"
+    else:
+        caption = "FIFA dataset keypoints: 0..31 (canonical order; positions from FIFA pitch lines)"
     ax.text(
         0.015,
         0.02,
@@ -1355,7 +1826,7 @@ def plot_field_fifa_dataset(
     fig, ax = plot_field(
         df,
         # Always hide model point_number labels (1..37 from ref CSV) in this
-        # dedicated view; we only want canonical dataset indices 0..31.
+        # dedicated view; we only want canonical dataset indices 0..31 / 0..47.
         show_reference_points=False,
         show_axis_values=show_axis_values,
         color_scheme=color_scheme,
@@ -1363,7 +1834,8 @@ def plot_field_fifa_dataset(
     points = {
         row["point_name"]: (row["x"], row["y"], row["point_number"]) for _, row in df.iterrows()
     }
-    _draw_fifa32_dataset_keypoints_overlay(ax, points)
+    if show_reference_points:
+        _draw_fifa32_dataset_keypoints_overlay(ax, points)
     return fig, ax
 
 
@@ -1514,24 +1986,77 @@ def _ref_label(
     *,
     show: bool = True,
 ):
-    """Draw numbered reference-point labels on *ax* when *show* is True."""
+    """Draw numbered reference-point labels on *ax* when *show* is True.
+
+    When multiple points share coincident horizontal coordinates, their labels
+    are assigned differentiated offsets and rotation angles so they remain legible.
+    """
     if not show:
         return
     ox = max(field_w * 0.005, 0.15)
     oy = max(field_h * 0.005, 0.15)
-    for _name, vals in points.items():
-        x, y = vals[0], vals[1]
-        num = vals[2] if len(vals) > 2 else ""
-        ax.text(
-            x + ox,
-            y + oy,
-            str(num),
-            color="black",
-            fontsize=8,
-            weight="bold",
-            bbox={"facecolor": "white", "alpha": 0.7, "boxstyle": "round", "pad": 0.2},
-            zorder=10,
-        )
+
+    groups: dict[tuple[float, float], list[tuple[str, Any]]] = {}
+    for name, vals in points.items():
+        key = (round(float(vals[0]), 2), round(float(vals[1]), 2))
+        groups.setdefault(key, []).append((name, vals))
+
+    for _coord, items in groups.items():
+        if len(items) == 1:
+            _name, vals = items[0]
+            x, y = vals[0], vals[1]
+            num = vals[2] if len(vals) > 2 else ""
+            ax.text(
+                x + ox,
+                y + oy,
+                str(num),
+                color="black",
+                fontsize=8,
+                weight="bold",
+                bbox={"facecolor": "white", "alpha": 0.7, "boxstyle": "round", "pad": 0.2},
+                zorder=10,
+            )
+        else:
+            for rank, (_name, vals) in enumerate(items):
+                x, y = vals[0], vals[1]
+                num = vals[2] if len(vals) > 2 else ""
+                if rank == 0:
+                    dx, dy = ox, oy
+                    rot = 0.0
+                    ha = "left"
+                elif rank == 1:
+                    dx, dy = -ox * 2.2, oy * 2.2
+                    rot = 35.0
+                    ha = "right"
+                elif rank == 2:
+                    dx, dy = ox * 2.2, -oy * 2.2
+                    rot = -35.0
+                    ha = "left"
+                else:
+                    angle = (rank * 60) % 360
+                    dx = ox * 2.5 * math.cos(math.radians(angle))
+                    dy = oy * 2.5 * math.sin(math.radians(angle))
+                    rot = float((rank * 30) % 90 - 45)
+                    ha = "center"
+
+                lbl = str(num)
+                ax.text(
+                    x + dx,
+                    y + dy,
+                    lbl,
+                    color="black",
+                    fontsize=7.5,
+                    weight="bold",
+                    rotation=rot,
+                    ha=ha,
+                    bbox={
+                        "facecolor": "#E1F5FE" if rank > 0 else "white",
+                        "alpha": 0.85,
+                        "boxstyle": "round",
+                        "pad": 0.15,
+                    },
+                    zorder=10 + rank,
+                )
 
 
 def _setup_axes(ax, min_x, max_x, min_y, max_y, margin, *, show_axis_values: bool):
@@ -2273,6 +2798,12 @@ SPORT_REGISTRY.update(
             title="FIFA Pitch + Dataset Keypoints 01..32",
             plot_fn=plot_field_fifa_dataset,
         ),
+        "kiki": SportDef(
+            label="FIFA 49 KP (Kiki Model)",
+            model_csv="soccerfield_kiki.csv",
+            title="Soccer Field 49 Keypoints (Kiki)",
+            plot_fn=plot_field_fifa_dataset,
+        ),
         "tennis": SportDef(
             label="Tennis Court Visualization",
             model_csv="tenniscourt_ref3d.csv",
@@ -2312,7 +2843,9 @@ def _detect_sport(csv_path: str, df: pd.DataFrame) -> str | None:
     base = Path(csv_path).stem.lower()
     names = set(df["point_name"].astype(str)) if "point_name" in df.columns else set()
 
-    # 1. Exact or specific FIFA model filename matching
+    # 1. Exact or specific FIFA / Kiki model filename matching
+    if "kiki" in base:
+        return "kiki"
     if "fifa_dataset" in base:
         return "fifa_dataset"
     if "fifa_center" in base:
@@ -2788,6 +3321,13 @@ def run_soccerfield(
     frame_markers = {}  # Dicionário para armazenar marcadores por frame: {frame: {marker_num: (x, y)}}
     manual_marker_artists = []  # Lista para armazenar objetos visuais dos marcadores
 
+    # Variables for interactive calibration keypoints
+    calib_keypoint_mode = [False]
+    calib_points: list[dict[str, Any]] = []
+    calib_marker_artists: list[Any] = []
+    calib_window: list[tk.Toplevel | None] = [None]
+    calib_listbox_widget: list[tk.Listbox | None] = [None]
+
     def load_field(custom_file=None):
         """Loads and displays the soccer field"""
         try:
@@ -2856,6 +3396,11 @@ def run_soccerfield(
 
             # Setup event handlers for manual marker mode
             setup_manual_marker_events(canvas)
+
+            # Setup event handler and sync for calibration keypoint editor
+            canvas.mpl_connect("button_press_event", _on_canvas_calib_click)
+            _sync_calib_points_from_df(df, force=(custom_file is not None))
+            _redraw_calib_artists(clear_base=False)
 
             # Re-draw REF3D selection highlights if any
             if export_selected_points[0]:
@@ -3319,6 +3864,8 @@ def run_soccerfield(
         manual_marker_mode[0] = not manual_marker_mode[0]
 
         if manual_marker_mode[0]:
+            if calib_keypoint_mode[0]:
+                toggle_calib_keypoint_mode()
             manual_marker_button.config(text="Disable Manual Markers")
             print("Manual marker mode enabled. Left-click to add, right-click to delete.")
             print("Hold Shift + left-click to create next marker number.")
@@ -3585,6 +4132,829 @@ def run_soccerfield(
             import traceback
 
             traceback.print_exc()
+
+    def _sync_calib_points_from_df(fdf: pd.DataFrame, force: bool = False) -> None:
+        """Populate active calibration keypoints from DataFrame if empty or forced."""
+        if not force and calib_points:
+            return
+        calib_points.clear()
+        for idx, row in fdf.iterrows():
+            pt_name = (
+                str(row["point_name"])
+                if "point_name" in row and not pd.isna(row["point_name"])
+                else f"p{idx}"
+            )
+            pt_num = (
+                int(row["point_number"])
+                if "point_number" in row and not pd.isna(row["point_number"])
+                else idx
+            )
+            px = float(row["x"]) if "x" in row and not pd.isna(row["x"]) else 0.0
+            py = float(row["y"]) if "y" in row and not pd.isna(row["y"]) else 0.0
+            pz = float(row["z"]) if "z" in row and not pd.isna(row["z"]) else 0.0
+            item: dict[str, Any] = {
+                "point_name": pt_name,
+                "point_number": pt_num,
+                "x": px,
+                "y": py,
+                "z": pz,
+            }
+            if "flip_idx" in row and not pd.isna(row["flip_idx"]):
+                item["flip_idx"] = int(row["flip_idx"])
+            if "x_norm" in row and not pd.isna(row["x_norm"]):
+                item["x_norm"] = float(row["x_norm"])
+            if "y_norm" in row and not pd.isna(row["y_norm"]):
+                item["y_norm"] = float(row["y_norm"])
+            calib_points.append(item)
+        _refresh_calib_editor_list()
+
+    def _refresh_calib_editor_list() -> None:
+        """Update the listbox inside the calibration editor window if open."""
+        if calib_listbox_widget[0] is not None and calib_listbox_widget[0].winfo_exists():
+            lb = calib_listbox_widget[0]
+            lb.delete(0, tk.END)
+            for pt in calib_points:
+                num = pt.get("point_number", 0)
+                nm = pt.get("point_name", "")
+                px = float(pt.get("x", 0.0))
+                py = float(pt.get("y", 0.0))
+                pz = float(pt.get("z", 0.0))
+                lb.insert(tk.END, f"#{num:2d}  {nm:<28}  X={px:7.3f}  Y={py:7.3f}  Z={pz:6.3f}")
+
+    def _redraw_calib_artists(clear_base: bool = False) -> None:
+        """Redraw calibration keypoints with clear labels (number + name) and de-overlapped badges."""
+        if current_ax[0] is None:
+            return
+        for art in calib_marker_artists:
+            with contextlib.suppress(Exception):
+                art.remove()
+        calib_marker_artists.clear()
+
+        base_names: set[str] = set()
+        if not clear_base and current_field_csv[0] and os.path.isfile(current_field_csv[0]):
+            try:
+                bdf = pd.read_csv(current_field_csv[0])
+                if "point_name" in bdf.columns:
+                    base_names = set(bdf["point_name"].dropna().astype(str))
+            except Exception:
+                pass
+
+        # Filter active points
+        rendered_pts = [
+            pt
+            for pt in calib_points
+            if clear_base or str(pt.get("point_name", "")) not in base_names
+        ]
+
+        # Group by coincident (x, y) to de-overlap
+        coords_groups: dict[tuple[float, float], list[dict[str, Any]]] = {}
+        for pt in rendered_pts:
+            px = round(float(pt.get("x", 0.0)), 2)
+            py = round(float(pt.get("y", 0.0)), 2)
+            coords_groups.setdefault((px, py), []).append(pt)
+
+        for (_cx, _cy), group in coords_groups.items():
+            for rank, pt in enumerate(group):
+                p_name = str(pt.get("point_name", ""))
+                px = float(pt.get("x", 0.0))
+                py = float(pt.get("y", 0.0))
+                pz = float(pt.get("z", 0.0))
+                pnum = pt.get("point_number", 0)
+
+                sc = current_ax[0].plot(
+                    px,
+                    py,
+                    marker="D",
+                    markersize=6.0,
+                    markerfacecolor="#FF3D00" if pz == 0 else "#FF9100",
+                    markeredgecolor="black",
+                    markeredgewidth=1.0,
+                    zorder=35,
+                )[0]
+
+                if len(group) == 1:
+                    dx, dy = 1.8, 1.4
+                    rot = 0.0
+                    ha, va = "left", "bottom"
+                else:
+                    # Radial displacement for multiple points at same coordinates
+                    if rank == 0:
+                        dx, dy = 2.4, -1.8
+                        rot = 0.0
+                        ha, va = "left", "top"
+                    elif rank == 1:
+                        dx, dy = 2.4, 1.8
+                        rot = 25.0
+                        ha, va = "left", "bottom"
+                    elif rank == 2:
+                        dx, dy = -2.4, -1.8
+                        rot = -25.0
+                        ha, va = "right", "top"
+                    else:
+                        dx, dy = -2.4, 1.8
+                        rot = 35.0
+                        ha, va = "right", "bottom"
+
+                # Dotted leader line
+                line = current_ax[0].plot(
+                    [px, px + dx],
+                    [py, py + dy],
+                    linestyle=":",
+                    linewidth=0.85,
+                    color="#D84315",
+                    alpha=0.75,
+                    zorder=35,
+                )[0]
+
+                lbl = f"#{pnum}: {p_name}"
+                if pz != 0:
+                    lbl += f" [z={pz:.2f}m]"
+
+                txt = current_ax[0].text(
+                    px + dx,
+                    py + dy,
+                    lbl,
+                    fontsize=7.5,
+                    color="black",
+                    weight="bold",
+                    rotation=rot,
+                    ha=ha,
+                    va=va,
+                    bbox={
+                        "facecolor": "#FFE082" if pz == 0 else "#FFF9C4",
+                        "alpha": 0.92,
+                        "boxstyle": "round,pad=0.18",
+                    },
+                    zorder=36,
+                )
+                calib_marker_artists.extend([sc, line, txt])
+
+        if current_canvas[0]:
+            current_canvas[0].draw_idle()
+
+    def _on_canvas_calib_click(event) -> None:
+        """Matplotlib button press event handler for calibration keypoints."""
+        if not calib_keypoint_mode[0] or current_ax[0] is None:
+            return
+        if event.inaxes != current_ax[0]:
+            return
+        if event.button != 1:  # Left click only
+            return
+        if event.xdata is None or event.ydata is None:
+            return
+        prompt_add_calib_keypoint(float(event.xdata), float(event.ydata))
+
+    def prompt_add_calib_keypoint(x_val: float, y_val: float) -> None:
+        """Prompt modal dialog to define name and 3D coordinates for a calibration keypoint."""
+        dialog = tk.Toplevel(root)
+        dialog.title("Define Calibration Keypoint")
+        dialog.geometry("440x360")
+        dialog.transient(root)
+        dialog.grab_set()
+
+        next_num = len(calib_points)
+        existing_nums = {p["point_number"] for p in calib_points if "point_number" in p}
+        while next_num in existing_nums:
+            next_num += 1
+
+        tk.Label(
+            dialog,
+            text=f"Define Calibration Keypoint (Click: X={x_val:.3f}, Y={y_val:.3f})",
+            font=("TkDefaultFont", 10, "bold"),
+        ).pack(pady=(10, 6))
+
+        form = Frame(dialog)
+        form.pack(fill=tk.X, padx=20, pady=4)
+
+        tk.Label(form, text="Point Name:").grid(row=0, column=0, sticky="w", pady=4)
+        name_var = tk.StringVar(value=f"calib_point_{next_num}")
+        name_entry = tk.Entry(form, textvariable=name_var, width=22)
+        name_entry.grid(row=0, column=1, sticky="w", pady=4)
+        name_entry.focus_set()
+        name_entry.select_range(0, tk.END)
+
+        tk.Label(form, text="Point Number:").grid(row=1, column=0, sticky="w", pady=4)
+        num_var = tk.IntVar(value=next_num)
+        num_entry = tk.Entry(form, textvariable=num_var, width=10)
+        num_entry.grid(row=1, column=1, sticky="w", pady=4)
+
+        tk.Label(form, text="X (meters):").grid(row=2, column=0, sticky="w", pady=4)
+        x_var = tk.DoubleVar(value=round(x_val, 3))
+        x_entry = tk.Entry(form, textvariable=x_var, width=14)
+        x_entry.grid(row=2, column=1, sticky="w", pady=4)
+
+        tk.Label(form, text="Y (meters):").grid(row=3, column=0, sticky="w", pady=4)
+        y_var = tk.DoubleVar(value=round(y_val, 3))
+        y_entry = tk.Entry(form, textvariable=y_var, width=14)
+        y_entry.grid(row=3, column=1, sticky="w", pady=4)
+
+        tk.Label(form, text="Z (height, m):").grid(row=4, column=0, sticky="w", pady=4)
+        z_var = tk.DoubleVar(value=0.0)
+        z_entry = tk.Entry(form, textvariable=z_var, width=14)
+        z_entry.grid(row=4, column=1, sticky="w", pady=4)
+
+        # Quick height presets
+        z_presets = Frame(form)
+        z_presets.grid(row=5, column=0, columnspan=2, sticky="w", pady=(2, 6))
+        tk.Label(z_presets, text="Quick Z:", font=("TkDefaultFont", 8, "italic")).pack(
+            side=tk.LEFT, padx=(0, 4)
+        )
+        tk.Button(
+            z_presets,
+            text="0.0m Ground",
+            font=("TkDefaultFont", 8),
+            command=lambda: z_var.set(0.0),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Button(
+            z_presets,
+            text="1.5m Flag",
+            font=("TkDefaultFont", 8),
+            command=lambda: z_var.set(1.5),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Button(
+            z_presets,
+            text="2.44m Crossbar",
+            font=("TkDefaultFont", 8),
+            command=lambda: z_var.set(2.44),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+
+        btn_box = Frame(dialog)
+        btn_box.pack(fill=tk.X, padx=20, pady=10)
+
+        def on_confirm():
+            try:
+                p_name = name_var.get().strip() or f"calib_point_{next_num}"
+                p_num = int(num_var.get())
+                p_x = float(x_var.get())
+                p_y = float(y_var.get())
+                p_z = float(z_var.get())
+            except ValueError as ve:
+                messagebox.showerror(
+                    "Invalid Input", f"Please check coordinate values: {ve}", parent=dialog
+                )
+                return
+
+            new_pt: dict[str, Any] = {
+                "point_name": p_name,
+                "point_number": p_num,
+                "x": p_x,
+                "y": p_y,
+                "z": p_z,
+            }
+            calib_points.append(new_pt)
+
+            _redraw_calib_artists(clear_base=False)
+            _refresh_calib_editor_list()
+
+            print(
+                f">> Added calibration keypoint '{p_name}' (#{p_num}) at ({p_x:.3f}, {p_y:.3f}, {p_z:.3f})"
+            )
+            dialog.destroy()
+
+        dialog.bind("<Return>", lambda _event: on_confirm())
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+
+        tk.Button(
+            btn_box,
+            text="Add Keypoint (Enter)",
+            command=on_confirm,
+            bg="#4CAF50",
+            fg="white",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=10,
+        ).pack(side=tk.LEFT)
+        tk.Button(btn_box, text="Cancel (Esc)", command=dialog.destroy, padx=10).pack(side=tk.RIGHT)
+
+    def open_calib_keypoint_editor():
+        """Open the calibration keypoint management and coordinate builder dialog."""
+        if calib_window[0] is not None and calib_window[0].winfo_exists():
+            calib_window[0].lift()
+            return
+
+        win = tk.Toplevel(root)
+        win.title("Calibration Keypoints Editor & Model Builder")
+        win.geometry("780x780")
+        win.transient(root)
+        calib_window[0] = win
+
+        def on_win_close():
+            calib_keypoint_mode[0] = False
+            calib_points_button.config(text="Calib Keypoints", bg="#00796B", fg="white")
+            win.destroy()
+            calib_window[0] = None
+
+        win.protocol("WM_DELETE_WINDOW", on_win_close)
+
+        tk.Label(
+            win,
+            text=(
+                "Calibration Keypoint Editor\n"
+                "Add 3D calibration keypoints (x, y, z) by clicking directly on the pitch,\n"
+                "or write coordinates directly in the form below to create or augment models."
+            ),
+            font=("TkDefaultFont", 10, "bold"),
+            justify=tk.LEFT,
+        ).pack(anchor="w", padx=12, pady=(10, 4))
+
+        mode_frame = Frame(win, relief=tk.GROOVE, bd=2)
+        mode_frame.pack(fill=tk.X, padx=12, pady=4)
+
+        mode_btn = tk.Button(
+            mode_frame,
+            text="Click Field to Add Point: ACTIVE"
+            if calib_keypoint_mode[0]
+            else "Click Field to Add Point: INACTIVE",
+            command=lambda: toggle_click_mode(),
+            bg="#2E7D32" if calib_keypoint_mode[0] else "#757575",
+            fg="white",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=10,
+            pady=4,
+        )
+        mode_btn.pack(side=tk.LEFT, padx=8, pady=6)
+
+        tk.Label(mode_frame, text="When ACTIVE, click on the pitch to capture coordinates.").pack(
+            side=tk.LEFT, padx=6
+        )
+
+        def toggle_click_mode():
+            calib_keypoint_mode[0] = not calib_keypoint_mode[0]
+            if calib_keypoint_mode[0]:
+                mode_btn.config(text="Click Field to Add Point: ACTIVE", bg="#2E7D32")
+                calib_points_button.config(text="Exit Calib Keypoints", bg="#E65100")
+            else:
+                mode_btn.config(text="Click Field to Add Point: INACTIVE", bg="#757575")
+                calib_points_button.config(text="Calib Keypoints", bg="#00796B")
+
+        # Direct Coordinates / Manual Entry Form Section
+        coords_frame = tk.LabelFrame(
+            win,
+            text="Direct Coordinates / Manual Entry",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=8,
+            pady=6,
+        )
+        coords_frame.pack(fill=tk.X, padx=12, pady=4)
+
+        form_grid = Frame(coords_frame)
+        form_grid.pack(fill=tk.X, pady=2)
+
+        def _get_next_num() -> int:
+            n = len(calib_points)
+            used = {p["point_number"] for p in calib_points if "point_number" in p}
+            while n in used:
+                n += 1
+            return n
+
+        init_num = _get_next_num()
+        edit_name_var = tk.StringVar(value=f"calib_point_{init_num}")
+        edit_num_var = tk.IntVar(value=init_num)
+        edit_x_var = tk.DoubleVar(value=0.0)
+        edit_y_var = tk.DoubleVar(value=0.0)
+        edit_z_var = tk.DoubleVar(value=0.0)
+
+        # Row 0: Name & Number
+        tk.Label(form_grid, text="Label Name:").grid(row=0, column=0, sticky="w", padx=4, pady=2)
+        entry_name = tk.Entry(form_grid, textvariable=edit_name_var, width=20)
+        entry_name.grid(row=0, column=1, sticky="w", padx=4, pady=2)
+
+        tk.Label(form_grid, text="Point #:").grid(row=0, column=2, sticky="w", padx=4, pady=2)
+        entry_num = tk.Entry(form_grid, textvariable=edit_num_var, width=8)
+        entry_num.grid(row=0, column=3, sticky="w", padx=4, pady=2)
+
+        # Row 1: X, Y, Z coordinates
+        tk.Label(form_grid, text="X (m):").grid(row=1, column=0, sticky="w", padx=4, pady=2)
+        entry_x = tk.Entry(form_grid, textvariable=edit_x_var, width=12)
+        entry_x.grid(row=1, column=1, sticky="w", padx=4, pady=2)
+
+        tk.Label(form_grid, text="Y (m):").grid(row=1, column=2, sticky="w", padx=4, pady=2)
+        entry_y = tk.Entry(form_grid, textvariable=edit_y_var, width=12)
+        entry_y.grid(row=1, column=3, sticky="w", padx=4, pady=2)
+
+        tk.Label(form_grid, text="Z (m):").grid(row=1, column=4, sticky="w", padx=4, pady=2)
+        entry_z = tk.Entry(form_grid, textvariable=edit_z_var, width=10)
+        entry_z.grid(row=1, column=5, sticky="w", padx=4, pady=2)
+
+        # Row 2: Coordinate presets
+        presets_row = Frame(coords_frame)
+        presets_row.pack(fill=tk.X, pady=(4, 2))
+        tk.Label(presets_row, text="Presets:", font=("TkDefaultFont", 8, "italic")).pack(
+            side=tk.LEFT, padx=(2, 4)
+        )
+        tk.Button(
+            presets_row,
+            text="Center (0,0)",
+            font=("TkDefaultFont", 8),
+            command=lambda: (edit_x_var.set(0.0), edit_y_var.set(0.0)),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Button(
+            presets_row,
+            text="Left Goal (-52.45, 0)",
+            font=("TkDefaultFont", 8),
+            command=lambda: (edit_x_var.set(-52.45), edit_y_var.set(0.0)),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Button(
+            presets_row,
+            text="Right Goal (52.45, 0)",
+            font=("TkDefaultFont", 8),
+            command=lambda: (edit_x_var.set(52.45), edit_y_var.set(0.0)),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Button(
+            presets_row,
+            text="Z=0 (Ground)",
+            font=("TkDefaultFont", 8),
+            command=lambda: edit_z_var.set(0.0),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Button(
+            presets_row,
+            text="Z=1.5 (Flag)",
+            font=("TkDefaultFont", 8),
+            command=lambda: edit_z_var.set(1.5),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Button(
+            presets_row,
+            text="Z=2.44 (Bar)",
+            font=("TkDefaultFont", 8),
+            command=lambda: edit_z_var.set(2.44),
+            padx=3,
+        ).pack(side=tk.LEFT, padx=2)
+
+        def add_from_coords_form():
+            try:
+                nm = edit_name_var.get().strip() or f"calib_point_{_get_next_num()}"
+                num = int(edit_num_var.get())
+                px = float(edit_x_var.get())
+                py = float(edit_y_var.get())
+                pz = float(edit_z_var.get())
+            except ValueError as ve:
+                messagebox.showerror(
+                    "Invalid Input", f"Please check input values: {ve}", parent=win
+                )
+                return
+
+            new_pt = {
+                "point_name": nm,
+                "point_number": num,
+                "x": px,
+                "y": py,
+                "z": pz,
+            }
+            calib_points.append(new_pt)
+            _redraw_calib_artists(clear_base=False)
+            _refresh_calib_editor_list()
+
+            # Advance to next available
+            next_n = _get_next_num()
+            edit_num_var.set(next_n)
+            edit_name_var.set(f"calib_point_{next_n}")
+            print(
+                f">> Added calibration keypoint '{nm}' (#{num}) from coordinates ({px:.3f}, {py:.3f}, {pz:.3f})"
+            )
+
+        def update_selected_from_form():
+            sel = listbox.curselection()
+            if not sel:
+                messagebox.showwarning(
+                    "Selection", "Select a keypoint from the list to update.", parent=win
+                )
+                return
+            idx = sel[0]
+            try:
+                nm = edit_name_var.get().strip()
+                num = int(edit_num_var.get())
+                px = float(edit_x_var.get())
+                py = float(edit_y_var.get())
+                pz = float(edit_z_var.get())
+            except ValueError as ve:
+                messagebox.showerror(
+                    "Invalid Input", f"Please check input values: {ve}", parent=win
+                )
+                return
+
+            calib_points[idx]["point_name"] = nm
+            calib_points[idx]["point_number"] = num
+            calib_points[idx]["x"] = px
+            calib_points[idx]["y"] = py
+            calib_points[idx]["z"] = pz
+            _redraw_calib_artists(clear_base=False)
+            _refresh_calib_editor_list()
+            print(
+                f">> Updated calibration keypoint #{num} ({nm}) to ({px:.3f}, {py:.3f}, {pz:.3f})"
+            )
+
+        def reset_form_defaults():
+            next_n = _get_next_num()
+            edit_num_var.set(next_n)
+            edit_name_var.set(f"calib_point_{next_n}")
+            edit_x_var.set(0.0)
+            edit_y_var.set(0.0)
+            edit_z_var.set(0.0)
+
+        # Form action buttons
+        form_actions = Frame(coords_frame)
+        form_actions.pack(fill=tk.X, pady=(6, 2))
+        tk.Button(
+            form_actions,
+            text="+ Add Keypoint (From Coords)",
+            command=add_from_coords_form,
+            bg="#2E7D32",
+            fg="white",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=8,
+            pady=3,
+        ).pack(side=tk.LEFT, padx=3)
+        tk.Button(
+            form_actions,
+            text="Update Selected",
+            command=update_selected_from_form,
+            bg="#1976D2",
+            fg="white",
+            padx=8,
+            pady=3,
+        ).pack(side=tk.LEFT, padx=3)
+        tk.Button(
+            form_actions,
+            text="Clear Form",
+            command=reset_form_defaults,
+            padx=8,
+            pady=3,
+        ).pack(side=tk.LEFT, padx=3)
+
+        # List Section
+        list_frame = tk.LabelFrame(
+            win,
+            text="Active Calibration Keypoints List",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=8,
+            pady=6,
+        )
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+
+        header_lbl = tk.Label(
+            list_frame,
+            text=" #NUM   LABEL NAME                     X (m)      Y (m)      Z (m)",
+            font=("TkFixedFont", 9, "bold"),
+            anchor="w",
+        )
+        header_lbl.pack(fill=tk.X, pady=(0, 2))
+
+        list_container = Frame(list_frame)
+        list_container.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(list_container)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        listbox = tk.Listbox(
+            list_container,
+            selectmode=tk.SINGLE,
+            yscrollcommand=scrollbar.set,
+            font=("TkFixedFont", 9),
+        )
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
+        calib_listbox_widget[0] = listbox
+
+        def on_listbox_select(_event):
+            sel = listbox.curselection()
+            if not sel or sel[0] >= len(calib_points):
+                return
+            pt = calib_points[sel[0]]
+            edit_name_var.set(str(pt.get("point_name", "")))
+            edit_num_var.set(int(pt.get("point_number", 0)))
+            edit_x_var.set(float(pt.get("x", 0.0)))
+            edit_y_var.set(float(pt.get("y", 0.0)))
+            edit_z_var.set(float(pt.get("z", 0.0)))
+
+        listbox.bind("<<ListboxSelect>>", on_listbox_select)
+
+        _refresh_calib_editor_list()
+
+        row1 = Frame(win)
+        row1.pack(fill=tk.X, padx=12, pady=4)
+
+        def delete_selected():
+            sel = listbox.curselection()
+            if not sel:
+                messagebox.showwarning("Selection", "Select a keypoint to delete.", parent=win)
+                return
+            idx = sel[0]
+            pt = calib_points.pop(idx)
+            _refresh_calib_editor_list()
+            _redraw_calib_artists()
+            reset_form_defaults()
+            print(
+                f">> Removed calibration keypoint #{pt.get('point_number')} ({pt.get('point_name')})"
+            )
+
+        tk.Button(
+            row1,
+            text="Delete Selected",
+            command=delete_selected,
+            bg="#C62828",
+            fg="white",
+            padx=8,
+            pady=3,
+        ).pack(side=tk.LEFT, padx=3)
+
+        def clear_from_scratch():
+            if not messagebox.askyesno(
+                "Create Model From Scratch",
+                "Clear all current reference points to create a new model from scratch?\n\n"
+                "The sports field lines will remain visible so you can click anywhere to define new keypoints.",
+                parent=win,
+            ):
+                return
+            calib_points.clear()
+            show_reference_points[0] = False
+            ref_points_button.config(text="Show Reference Points")
+            if current_field_csv[0]:
+                load_field(custom_file=current_field_csv[0])
+            _redraw_calib_artists(clear_base=True)
+            _refresh_calib_editor_list()
+            reset_form_defaults()
+            print(">> Cleared all reference points. Ready to define model from scratch.")
+
+        tk.Button(
+            row1,
+            text="Create From Scratch (Clear All)",
+            command=clear_from_scratch,
+            bg="#D84315",
+            fg="white",
+            padx=8,
+            pady=3,
+        ).pack(side=tk.LEFT, padx=3)
+
+        tk.Button(
+            row1,
+            text="Add with Modal Dialog...",
+            command=lambda: prompt_add_calib_keypoint(
+                float(edit_x_var.get()), float(edit_y_var.get())
+            ),
+            padx=8,
+            pady=3,
+        ).pack(side=tk.LEFT, padx=3)
+
+        row2 = Frame(win)
+        row2.pack(fill=tk.X, padx=12, pady=8)
+
+        def save_model():
+            if not calib_points:
+                messagebox.showwarning("Empty Model", "No calibration points to save.", parent=win)
+                return
+            default_fn = "soccerfield_new_model.csv"
+            if current_field_csv[0]:
+                default_fn = Path(current_field_csv[0]).stem + "_custom.csv"
+            save_path = filedialog.asksaveasfilename(
+                parent=win,
+                title="Save Calibration Model CSV",
+                initialfile=default_fn,
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            )
+            if not save_path:
+                return
+            try:
+                save_calibration_model_csv(calib_points, save_path)
+                messagebox.showinfo(
+                    "Saved",
+                    f"Calibration model saved with {len(calib_points)} points to:\n{save_path}",
+                    parent=win,
+                )
+                print(f">> Saved calibration model CSV: {save_path}")
+                current_field_csv[0] = save_path
+                load_field(custom_file=save_path)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save model CSV: {e}", parent=win)
+
+        def save_model_c3d():
+            if not calib_points:
+                messagebox.showwarning("Empty Model", "No calibration points to save.", parent=win)
+                return
+            default_fn = "soccerfield_new_model.c3d"
+            if current_field_csv[0]:
+                default_fn = Path(current_field_csv[0]).stem + "_custom.c3d"
+            save_path = filedialog.asksaveasfilename(
+                parent=win,
+                title="Save Calibration Model C3D",
+                initialfile=default_fn,
+                defaultextension=".c3d",
+                filetypes=[("C3D files", "*.c3d"), ("All files", "*.*")],
+            )
+            if not save_path:
+                return
+            try:
+                save_calibration_model_c3d(calib_points, save_path)
+                messagebox.showinfo(
+                    "Saved",
+                    f"Calibration model saved as C3D with {len(calib_points)} points to:\n{save_path}",
+                    parent=win,
+                )
+                print(f">> Saved calibration model C3D: {save_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save model C3D: {e}", parent=win)
+
+        def view_3d():
+            if not calib_points:
+                messagebox.showwarning("Empty Model", "No calibration points to view.", parent=win)
+                return
+            title = "Soccer Field Calibration Keypoints 3D"
+            if current_field_csv[0]:
+                title = f"Calibration 3D: {Path(current_field_csv[0]).name} ({len(calib_points)} points)"
+            preview_calibration_in_3d(calib_points, title=title, parent=win)
+
+        tk.Button(
+            row2,
+            text="Save Model CSV…",
+            command=save_model,
+            bg="#1565C0",
+            fg="white",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=8,
+            pady=4,
+        ).pack(side=tk.LEFT, padx=3)
+
+        tk.Button(
+            row2,
+            text="Save Model C3D…",
+            command=save_model_c3d,
+            bg="#00695C",
+            fg="white",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=8,
+            pady=4,
+        ).pack(side=tk.LEFT, padx=3)
+
+        tk.Button(
+            row2,
+            text="View in 3D…",
+            command=view_3d,
+            bg="#4527A0",
+            fg="white",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=8,
+            pady=4,
+        ).pack(side=tk.LEFT, padx=3)
+
+        def load_base_model():
+            csv_path = filedialog.askopenfilename(
+                parent=win,
+                title="Select Base Field Model CSV",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            )
+            if not csv_path:
+                return
+            try:
+                pts = load_calibration_model_csv(csv_path)
+                calib_points.clear()
+                calib_points.extend(pts)
+                load_field(custom_file=csv_path)
+                _refresh_calib_editor_list()
+                reset_form_defaults()
+                print(f">> Loaded base model with {len(pts)} points from {csv_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load model: {e}", parent=win)
+
+        tk.Button(
+            row2,
+            text="Load Base Model…",
+            command=load_base_model,
+            bg="white",
+            fg="black",
+            padx=8,
+            pady=4,
+        ).pack(side=tk.LEFT, padx=3)
+
+        tk.Button(
+            row2,
+            text="Close",
+            command=on_win_close,
+            padx=10,
+            pady=4,
+        ).pack(side=tk.RIGHT, padx=4)
+
+    def toggle_calib_keypoint_mode():
+        """Toggle calibration keypoint creation mode and open the management dialog."""
+        calib_keypoint_mode[0] = not calib_keypoint_mode[0]
+        if calib_keypoint_mode[0]:
+            if manual_marker_mode[0]:
+                toggle_manual_marker_mode()
+            calib_points_button.config(text="Exit Calib Keypoints", bg="#E65100", fg="white")
+            print(">> Calibration Keypoint mode ENABLED.")
+            print(">> Click anywhere on the field to define a calibration keypoint (x, y, z).")
+            open_calib_keypoint_editor()
+        else:
+            calib_points_button.config(text="Calib Keypoints", bg="#00796B", fg="white")
+            print(">> Calibration Keypoint mode DISABLED.")
+            if calib_window[0] and calib_window[0].winfo_exists():
+                calib_window[0].destroy()
+                calib_window[0] = None
 
     def open_soccerfield_help():
         """Open bundled HTML help in the default browser (no extra Tk window)."""
@@ -4241,6 +5611,18 @@ def run_soccerfield(
         pady=5,
     )
     manual_marker_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+    # Add calibration keypoints button
+    calib_points_button = Button(
+        button_frame,
+        text="Calib Keypoints",
+        command=toggle_calib_keypoint_mode,
+        bg="#00796B",
+        fg="white",
+        padx=10,
+        pady=5,
+    )
+    calib_points_button.pack(side=tk.LEFT, padx=5, pady=5)
 
     # Add Clear All button
     Button(

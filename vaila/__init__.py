@@ -49,7 +49,7 @@ from .readcsv import (
 from .readcsv_export import convert_csv_to_c3d, create_c3d_from_csv
 from .rearrange_data import rearrange_data_in_directory
 from .rotation import calcmatrot, createortbase, rotdata, rotmat2euler
-from .showc3d import show_c3d
+from .showc3d import show_c3d, show_points_3d
 from .vailaplot2d import run_plot_2d as plot_2d
 from .vailaplot3d import run_plot_3d as plot_3d
 from .videoprocessor import process_videos_gui

@@ -271,7 +271,7 @@ tests/**/processed_sam_*/
 tests/chessboard_calib/
 tests/viewc3d/**/_staging/
 
-# ai-memory local index (installmemories.md); .ai-memory.toml and .ai-memory/wiki stay tracked
+# ai-memory local index; .ai-memory.toml and .ai-memory/wiki stay tracked
 .ai-memory/*.db
 .ai-memory/*.db-wal
 .ai-memory/*.db-shm

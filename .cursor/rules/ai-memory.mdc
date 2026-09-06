@@ -19,5 +19,5 @@ for Cursor, root `mcp.json` for other MCP-compatible CLIs).
   `create_handoff`, so the next agent (regardless of harness) can pick up
   where this session left off.
 
-See `installmemories.md` at the repo root for the full setup plan and
-`.ai-memory.toml` for local index/wiki paths.
+See `bin/setup_ai_memory.sh` (or `bin/setup_ai_memory.ps1`) for setup details
+and `.ai-memory.toml` for local index/wiki paths.

@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.120
+**Version:** 0.3.122
 **Date:** 23 June 2026  
-**Updated:** 03 September 2026
+**Updated:** 06 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -310,6 +310,27 @@ uv run yolo pose train \
 - Both dataset layouts (`<dir>/{split}/{images,labels}` and `<dir>/{images,labels}/{split}`) are auto-detected when appending.
 - A small **example** TOML for tests lives under `tests/sport_fields/` (e.g. `fifa_template.toml`); copy the idea beside your own videos.
 
+### Quick Measure mode (Q key) — v0.3.122
+
+Kinovea-style quick on-image measurements, implemented in the companion module `vaila/quickmeasure.py` (see [quickmeasure.md](quickmeasure.md)) and wired into `getpixelvideo.py` as a thin integration layer.
+
+1. Press **Q** to toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active).
+2. Left-click the video to add a point; right-click to undo the last point; middle-click still pans as usual.
+3. Press **Enter** to open the classification submenu and choose **1** Distance, **2** Area, **3** Velocity, or **4** Acceleration for the current point set.
+4. Press **C** inside the submenu to load a calibration (an existing `.dlt2d` file, or a pixel-calibration CSV + `.ref2d` pair computed on the fly via `dlt2d.py`) so results are reported in real-world units instead of pixels.
+5. Press **Backspace** to clear all quick-measure points; **X** inside the submenu does the same.
+6. Press **Q** again to leave Quick Measure mode (**Esc** always means save-and-quit the whole tool, never just this mode).
+
+**Point-set convention** (fixed, not user-configurable, so results are reproducible from clicks alone):
+
+| Measurement | Uses |
+|-------------|------|
+| Distance / Velocity | Last 2 clicked points |
+| Area | All clicked points, in click order (shoelace polygon) |
+| Acceleration | Last 3 clicked points |
+
+Velocity/Acceleration require the points to be on different frames and use the video's own fps. Single-video sessions only support **DLT2D** (one image plane); stereo **DLT3D** triangulation from two synchronized videos remains a batch/CLI workflow via `rec3d_one_dlt3d.py`.
+
 ## Keyboard Commands
 
 ### Video Navigation
@@ -379,6 +400,7 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | **1**           | Decrease persistence frames                       |
 | **2**           | Increase persistence frames                      |
 | **3**           | Toggle full persistence                           |
+| **Q**           | Toggle Quick Measure mode (see below)             |
 
 ### File Operations (buttons and keys)
 

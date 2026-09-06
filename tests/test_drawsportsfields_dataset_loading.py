@@ -23,6 +23,7 @@ def test_detect_sport_all_fifa_and_soccer_variants() -> None:
         "soccerfield_ref3d_fifa.csv": "fifa",
         "soccerfield_ref3d_fifa_center.csv": "fifa_center",
         "soccerfield_ref3d_fifa_dataset.csv": "fifa_dataset",
+        "soccerfield_kiki.csv": "kiki",
         "tenniscourt_ref3d.csv": "tennis",
     }
     for filename, expected_sport in expectations.items():

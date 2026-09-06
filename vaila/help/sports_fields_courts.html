@@ -30,12 +30,39 @@
             <tr><th>Choice</th><th>Tool</th><th>Model file (<code>vaila/models/</code>)</th></tr>
             <tr><td>Soccer</td><td><code>drawsportsfields.run_drawsportsfields("soccer")</code></td><td><code>soccerfield_ref3d.csv</code> (full FIFA markings)</td></tr>
             <tr><td>FIFA Dataset (32 KP order)</td><td><code>drawsportsfields.run_drawsportsfields("fifa_dataset")</code></td><td><code>soccerfield_ref3d_fifa.csv</code> + overlay <code>01..32</code> canonical keypoints from <code>fifa_dataset_builder</code></td></tr>
+            <tr><td>FIFA 49 KP (Kiki Model)</td><td><code>drawsportsfields.run_drawsportsfields("kiki")</code></td><td><code>soccerfield_kiki.csv</code> (32 pitch + 16 3D features + center spot point 48)</td></tr>
             <tr><td>Tennis</td><td><code>drawsportsfields.run_drawsportsfields("tennis")</code></td><td><code>tenniscourt_ref3d.csv</code></td></tr>
             <tr><td>Basketball</td><td><code>drawsportsfields.run_drawsportsfields("basketball")</code></td><td><code>basketballcourt_ref3d.csv</code></td></tr>
             <tr><td>Volleyball</td><td><code>drawsportsfields.run_drawsportsfields("volleyball")</code></td><td><code>volleyball_ref3d.csv</code></td></tr>
             <tr><td>Futsal</td><td><code>drawsportsfields.run_drawsportsfields("futsal")</code></td><td><code>futsal_ref3d.csv</code></td></tr>
             <tr><td>Handball</td><td><code>drawsportsfields.run_drawsportsfields("handball")</code></td><td><code>handball_ref3d.csv</code></td></tr>
         </table>
+
+        <h2>FIFA 49 KP (Kiki Model) & De-overlapped Coincident Keypoints</h2>
+        <p>Use <code>--type kiki</code> (or load <code>vaila/models/soccerfield_kiki.csv</code>) to visualize all 49 keypoints (32 pitch line intersections, 16 3D features: corner flag tops at z=1.5 m, goal post tops at z=2.44 m, goal net ground points, plus the center spot point 48 at (0,0,0)).</p>
+        <p><strong>Center field spot (point 48):</strong> Explicitly marks the central point inside the center circle at (X=0, Y=0, Z=0), next in numerical order.</p>
+        <p><strong>Differentiated position & orientation:</strong> Points sharing coincident (x, y) ground coordinates (corner ground points <code>0, 5, 24, 29</code> vs corner flag tops <code>38, 39, 46, 47</code>, or goal post bases vs tops) are rendered with separated offsets, horizontal orientation, and dotted leader lines connecting badges to markers so that neither markers nor text labels collide.</p>
+        <p><strong>Goal post vs net separation:</strong> Goal post labels and net points are drawn backwards (&ldquo;para tr&aacute;s&rdquo;, behind the goal line) avoiding crossing or encroaching into the penalty area.</p>
+
+        <h2>Interactive Calibration Keypoint Editor</h2>
+        <p>Button <strong>Calib Keypoints</strong> (in the top toolbar):</p>
+        <ol>
+            <li><strong>Click-to-Add (Define Label Name):</strong> Left-click anywhere on the pitch to capture coordinates and immediately open the definition dialog with the Label Name pre-focused. Type the name, choose or type height z (with presets 0m Ground, 1.5m Flag, 2.44m Crossbar), and press <strong>Enter</strong> to create.</li>
+            <li><strong>Direct Coordinates / Manual Entry:</strong> A dedicated section in the Editor window allows typing coordinates directly (X, Y, Z, label name, point number) without clicking, with quick coordinate presets (Center, Left Goal, Right Goal, Ground, Flag, Bar) and instant <em>+ Add Keypoint (From Coords)</em>. Selecting any keypoint from the list populates the form for rapid editing and updates.</li>
+            <li><strong>Augment existing models:</strong> Add new custom reference points on top of any loaded model (e.g. benches, camera poles, corner flags).</li>
+            <li><strong>Create from scratch:</strong> Use <em>Create From Scratch (Clear All)</em> to hide reference points while keeping pitch markings visible, allowing you to build a calibration model from zero.</li>
+            <li><strong>Save Model CSV:</strong> Export the keypoints to CSV for direct use in DLT3D, REC3D, getpixelvideo, and <code>readcsv.py</code>.</li>
+            <li><strong>Save Model C3D:</strong> Export the keypoints directly to a standard <code>.c3d</code> file for inspection in 3D viewers.</li>
+            <li><strong>View in 3D:</strong> Instantly launch 3D visualization of the calibration keypoints in PyVista or Matplotlib to verify elevations, pitch alignment, and labels.</li>
+        </ol>
+
+        <h2>3D Environment Verification (showc3d, readcsv, viewc3d_pyvista)</h2>
+        <p>Soccer field calibration keypoints can be checked in full 3D spatial environments:</p>
+        <ul>
+            <li><strong><code>showc3d.py</code> (Matplotlib):</strong> Automatically adapts to soccer field scale (105x68m), renders regulation pitch boundary, halfway line, center circle, and 3D point labels with toggle support.</li>
+            <li><strong><code>viewc3d_pyvista.py</code> (PyVista):</strong> Renders pitch turf plane and white lines at ground level, auto-enables labels for calibration models, and provides interactive point picking.</li>
+            <li><strong><code>readcsv.py</code>:</strong> Recognizes calibration model CSV files directly, passing keypoint coordinates to your choice of 3D visualizer (PyVista, Open3D, or Matplotlib).</li>
+        </ul>
 
         <h2>FIFA Dataset labeling reference (new)</h2>
         <p>Use <code>--type fifa_dataset</code> when your goal is to label new broadcast
@@ -84,10 +111,11 @@
 
         <h2>CLI usage</h2>
         <pre><code>uv run vaila/drawsportsfields.py -t soccer
+uv run vaila/drawsportsfields.py -t kiki
 uv run vaila/drawsportsfields.py -t fifa_dataset
 uv run vaila/drawsportsfields.py -t tennis
 uv run vaila/drawsportsfields.py -t basketball
-uv run vaila/drawsportsfields.py --field path/to/custom.csv
+uv run vaila/drawsportsfields.py --field vaila/models/soccerfield_kiki.csv
 uv run vaila/drawsportsfields.py --markers data.csv --heatmap</code></pre>
 
         <h2>Further reading</h2>

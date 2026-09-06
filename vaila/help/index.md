@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 154 | **Categories:** 7 | **Generated on:** 05/09/2026 (v0.3.121)
+**Documented topics:** 155 | **Categories:** 7 | **Generated on:** 06/09/2026 (v0.3.122)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -112,7 +112,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **yolov26track** — This script performs object detection and tracking on video files using the YOLO model v26 (latest version), with integrated pose estimation capabilities. It...
   - [HTML](yolov26track.html) · [Markdown](yolov26track.md)
 
-## Processing (22)
+## Processing (23)
 
 - **data_processing** — Determines the number of header lines in a CSV file.
   - [HTML](data_processing.html) · [Markdown](data_processing.md)
@@ -138,9 +138,11 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](modifylabref.html) · [Markdown](modifylabref.md)
 - **monocular_dlt_align** — What problem this solves
   - [HTML](monocular_dlt_align.html) · [Markdown](monocular_dlt_align.md)
+- **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: click points on the video, then classify the current point set as Distance, Area, Veloc...
+  - [HTML](quickmeasure.html) · [Markdown](quickmeasure.md)
 - **readc3d_export** — This script processes .c3d files, extracting marker data, analog data, events, and points residuals, and saves them into CSV files. It also allows the option...
   - [HTML](readc3d_export.html) · [Markdown](readc3d_export.md)
-- **readcsv** — This script provides tools for reading CSV files and displaying their contents. It includes functions for: - Detecting the delimiter used in the file. - Dete...
+- **readcsv** — This script provides tools for reading CSV files and displaying their contents in 3D. It includes functions for: - Detecting the delimiter used in the file....
   - [HTML](readcsv.html) · [Markdown](readcsv.md)
 - **readcsv_export** — This script provides functionality to convert CSV files containing point and analog data into the C3D format, commonly used for motion capture data analysis....
   - [HTML](readcsv_export.html) · [Markdown](readcsv_export.md)
@@ -317,7 +319,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](blender_viz.html) · [Markdown](blender_viz.md)
 - **plotting** — This Python script provides tools for visualizing orthonormal bases in 3D using both matplotlib and plotly. It is particularly useful for visualizing biomech...
   - [HTML](plotting.html) · [Markdown](plotting.md)
-- **showc3d** — This script visualizes marker data from a C3D file using Matplotlib. Marker positions are converted from millimeters to meters. The user is prompted to selec...
+- **showc3d** — This script visualizes marker and calibration keypoint data from C3D files or direct numpy arrays using Matplotlib in 3D.
   - [HTML](showc3d.html) · [Markdown](showc3d.md)
 - **vailaplot2d** — vailá 2D plotting tool (Frame C → Plot 2D). Supports time scatter, angle-angle,
   - [HTML](vailaplot2d.html) · [Markdown](vailaplot2d.md)
@@ -325,8 +327,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](vailaplot3d.html) · [Markdown](vailaplot3d.md)
 - **viewc3d** — Advanced 3D viewer for C3D files with adaptive visualization for different scales.
   - [HTML](viewc3d.html) · [Markdown](viewc3d.md)
-- **viewc3d_pyvista** — VTK/PyVista C3D viewer with multi-file overlay (`-i` / key L), per-file colors, master timeline.
-  - [Markdown](viewc3d_pyvista.md)
+- **viewc3d_pyvista** — VTK-based 3D viewer for C3D and CSV marker data. Timeline, interactive marker picking (left-click to select), skeleton connections, trails, export (screensho...
+  - [HTML](viewc3d_pyvista.html) · [Markdown](viewc3d_pyvista.md)
 
 ## Guides (6)
 

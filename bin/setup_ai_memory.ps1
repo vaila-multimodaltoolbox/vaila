@@ -4,9 +4,9 @@
 # Installs and wires up https://github.com/akitaonrails/ai-memory as shared,
 # long-term memory for this repo (vaila-multimodaltoolbox/vaila), usable by
 # Claude Code, Cursor Agent, OpenAI Codex, OpenCode, Gemini CLI, and other
-# MCP-compatible harnesses. Mirrors the plan in installmemories.md; this is
-# the idempotent, repeatable Windows PowerShell version of those steps. For
-# Linux/macOS/WSL/Git Bash, use bin/setup_ai_memory.sh instead.
+# MCP-compatible harnesses. This is the idempotent, repeatable Windows
+# PowerShell bootstrap. For Linux/macOS/WSL/Git Bash, use
+# bin/setup_ai_memory.sh instead.
 #
 # Safe to re-run: every step checks current state before acting.
 # ============================================================================
@@ -157,8 +157,8 @@ for Cursor, root `mcp.json` for other MCP-compatible CLIs).
   `create_handoff`, so the next agent (regardless of harness) can pick up
   where this session left off.
 
-See `installmemories.md` at the repo root for the full setup plan and
-`.ai-memory.toml` for local index/wiki paths.
+See `bin/setup_ai_memory.ps1` (or `bin/setup_ai_memory.sh`) for setup details
+and `.ai-memory.toml` for local index/wiki paths.
 '@ | Set-Content -Path $CursorRule -Encoding utf8
 }
 
@@ -216,4 +216,4 @@ Write-Host ""
 Write-Host ">> Done. ai-memory should now be running at $DaemonUrl with the"
 Write-Host "   Markdown wiki initialized and MCP endpoints declared for this repo."
 Write-Host "   Persisting the daemon across reboots (e.g. a Scheduled Task or"
-Write-Host "   Windows service) is not done by this script; see installmemories.md."
+Write-Host "   Windows service) is not done by this script."

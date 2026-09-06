@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.121
+Version: 0.3.122
 Created: 06 February 2025
-Last Updated: 04 September 2026
+Last Updated: 06 September 2026
 
 To run:
   uv run vaila/viewc3d_pyvista.py -i path/to/file.c3d
@@ -256,14 +256,22 @@ def _load_c3d_arrays(path: str | Path) -> dict:
 
     points_data = np.transpose(points[:3, :, :], (2, 1, 0)).astype(np.float64)
 
-    max_coord = np.nanmax(np.abs(points_data))
-    if max_coord > 5000:
+    units = "m"
+    with contextlib.suppress(Exception):
+        raw_units = c["parameters"].get("POINT", {}).get("UNITS", {}).get("value", [])
+        u_str = str(raw_units[0] if isinstance(raw_units, list) else raw_units).strip().lower()
+        if "mm" in u_str:
+            units = "mm"
+        elif u_str in ("m", "meter", "meters"):
+            units = "m"
+
+    max_coord = float(np.nanmax(np.abs(points_data))) if points_data.size > 0 else 0.0
+    if units == "mm" or (units == "m" and max_coord > 500.0):
         units = "mm"
         points_data *= 0.001
-        print("Detected: Millimeters (converting to meters)")
+        print(f"Detected: Millimeters (converting to meters, max was {max_coord:.1f} mm)")
     else:
-        units = "m"
-        print("Detected: Meters")
+        print(f"Detected: Meters (max coord: {max_coord:.2f} m)")
 
     points_data = np.nan_to_num(points_data, nan=-999.0)
 
@@ -1444,6 +1452,15 @@ class MokkaLikeViewer:
             floor_size = span * 1.5
         else:
             center_x, center_y, floor_size = 0, 0, 10
+            dmin = np.array([-1.0, -1.0, 0.0])
+            dmax = np.array([1.0, 1.0, 1.0])
+            span = 2.0
+
+        is_field_scale = span > 20.0
+        if is_field_scale:
+            if self.n_frames == 1:
+                self._show_labels = True
+            self._point_size = max(self._point_size, 10.0)
 
         # Initial point cloud
         fp0 = self.points_data[0]
@@ -1463,6 +1480,9 @@ class MokkaLikeViewer:
         for lf in self.loaded_files_extra:
             self._ensure_extra_actor(lf, frame_idx=0)
 
+        if self._show_labels and len(valid_pts0) > 0:
+            self._draw_labels(valid_pts0, self._valid_indices)
+
         # Floor / grid
         self.plotter.show_grid(color="gray")
         floor = pv.Plane(
@@ -1474,6 +1494,45 @@ class MokkaLikeViewer:
         self._floor_actor = self.plotter.add_mesh(
             floor, color="gray", opacity=0.15, show_edges=True
         )
+
+        if is_field_scale and len(all_valid) > 0:
+            # Soccer field turf plane and boundary lines
+            field_w = (dmax[0] - dmin[0]) + 4.0
+            field_h = (dmax[1] - dmin[1]) + 4.0
+            pitch_plane = pv.Plane(
+                center=(center_x, center_y, -0.01),
+                direction=(0, 0, 1),
+                i_size=field_w,
+                j_size=field_h,
+            )
+            self.plotter.add_mesh(pitch_plane, color="#1b5e20", opacity=0.35, show_edges=False)
+
+            bx = [dmin[0], dmax[0], dmax[0], dmin[0], dmin[0]]
+            by = [dmin[1], dmin[1], dmax[1], dmax[1], dmin[1]]
+            bz = [0.005] * 5
+            poly_outline = pv.lines_from_points(np.column_stack([bx, by, bz]))
+            self.plotter.add_mesh(poly_outline, color="white", line_width=2.5)
+
+            # Halfway line
+            cx = (dmin[0] + dmax[0]) / 2.0
+            halfway_pts = np.array([[cx, dmin[1], 0.005], [cx, dmax[1], 0.005]])
+            self.plotter.add_mesh(pv.lines_from_points(halfway_pts), color="white", line_width=2.0)
+
+            # Center circle
+            circle_rad = (
+                min(9.15, (dmax[1] - dmin[1]) * 0.15)
+                if (dmax[1] - dmin[1]) > 20.0
+                else (dmax[1] - dmin[1]) * 0.15
+            )
+            theta = np.linspace(0, 2 * np.pi, 60)
+            circ_pts = np.column_stack(
+                [
+                    cx + circle_rad * np.cos(theta),
+                    center_y + circle_rad * np.sin(theta),
+                    np.full_like(theta, 0.005),
+                ]
+            )
+            self.plotter.add_mesh(pv.lines_from_points(circ_pts), color="white", line_width=1.8)
 
         # Axes widget
         self._axes_widget = self.plotter.add_axes(interactive=False)

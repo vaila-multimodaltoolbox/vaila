@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 04 September 2026
-Version: 0.3.121
+Update Date: 06 September 2026
+Version: 0.3.122
 
 Example of usage:
 uv run vaila.py
@@ -344,7 +344,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 04.Sep.2026 v0.3.121 (Python 3.12.14)
+    vailá - 06.Sep.2026 v0.3.122 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -463,7 +463,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 04.Sep.2026 v0.3.121 (Python 3.12.14)")
+        self.title("vailá - 06.Sep.2026 v0.3.122 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -3398,7 +3398,7 @@ class Vaila(tk.Tk):
         """
         dialog = Toplevel(self)
         dialog.title("Choose C3D viewer")
-        dialog.geometry("320x140")
+        dialog.geometry("340x180")
 
         tk.Label(dialog, text="Select which viewer to use:", pady=10).pack()
 
@@ -3410,7 +3410,9 @@ class Vaila(tk.Tk):
             try:
                 from vaila.cli_highlight import print_gui_cli_mirror
             except ImportError:
-                from cli_highlight import print_gui_cli_mirror
+                from cli_highlight import (  # ty: ignore[unresolved-import]
+                    print_gui_cli_mirror,
+                )
             print_gui_cli_mirror(
                 "vaila/viewc3d",
                 ["uv", "run", "vaila/viewc3d.py"],
@@ -3426,7 +3428,9 @@ class Vaila(tk.Tk):
             try:
                 from vaila.cli_highlight import print_gui_cli_mirror
             except ImportError:
-                from cli_highlight import print_gui_cli_mirror
+                from cli_highlight import (  # ty: ignore[unresolved-import]
+                    print_gui_cli_mirror,
+                )
             print_gui_cli_mirror(
                 "vaila/viewc3d_pyvista",
                 build_viewc3d_pyvista_cli(),
@@ -3434,8 +3438,28 @@ class Vaila(tk.Tk):
             )
             MokkaLikeViewer()
 
-        tk.Button(dialog, text="Open3D viewer", command=open_open3d).pack(pady=5)
-        tk.Button(dialog, text="PyVista viewer", command=open_pyvista).pack(pady=5)
+        def open_showc3d():
+            dialog.destroy()
+            from vaila.showc3d import show_c3d
+
+            print(">> vaila/showc3d: launcher CLI")
+            try:
+                from vaila.cli_highlight import print_gui_cli_mirror
+
+                print_gui_cli_mirror(
+                    "vaila/showc3d",
+                    ["uv", "run", "vaila/showc3d.py"],
+                    note="Equivalent CLI (Matplotlib C3D viewer):",
+                )
+            except ImportError:
+                pass
+            show_c3d()
+
+        tk.Button(dialog, text="Open3D viewer", command=open_open3d, width=24).pack(pady=3)
+        tk.Button(dialog, text="PyVista viewer", command=open_pyvista, width=24).pack(pady=3)
+        tk.Button(dialog, text="Matplotlib viewer (showc3d)", command=open_showc3d, width=24).pack(
+            pady=3
+        )
 
     # C_C_r1_c2
     def show_csv_file(self):
@@ -3512,6 +3536,10 @@ class Vaila(tk.Tk):
             (
                 "fifa_dataset",
                 "Soccer field (dataset ref, canonical keypoints 0..31 para labeling)",
+            ),
+            (
+                "kiki",
+                "Soccer field 48 KP (Kiki model: 32 pitch + 16 3D features)",
             ),
             ("tennis", "Tennis court (ITF 23.77 × 10.97 m)"),
             ("basketball", "Basketball (FIBA 28 × 15 m)"),

@@ -5,10 +5,9 @@
 # Installs and wires up https://github.com/akitaonrails/ai-memory as shared,
 # long-term memory for this repo (vaila-multimodaltoolbox/vaila), usable by
 # Claude Code, Cursor Agent, OpenAI Codex, OpenCode, Gemini CLI, and other
-# MCP-compatible harnesses. Mirrors the plan in installmemories.md; this
-# script is the idempotent, repeatable, cross-platform (Linux/macOS/WSL/Git
-# Bash) version of those steps. For native Windows PowerShell, use
-# bin/setup_ai_memory.ps1 instead.
+# MCP-compatible harnesses. This script is the idempotent, repeatable,
+# cross-platform (Linux/macOS/WSL/Git Bash) bootstrap. For native Windows
+# PowerShell, use bin/setup_ai_memory.ps1 instead.
 #
 # Safe to re-run: every step checks current state before acting.
 # ============================================================================
@@ -175,8 +174,8 @@ for Cursor, root `mcp.json` for other MCP-compatible CLIs).
   `create_handoff`, so the next agent (regardless of harness) can pick up
   where this session left off.
 
-See `installmemories.md` at the repo root for the full setup plan and
-`.ai-memory.toml` for local index/wiki paths.
+See `bin/setup_ai_memory.sh` (or `bin/setup_ai_memory.ps1`) for setup details
+and `.ai-memory.toml` for local index/wiki paths.
 EOF
 fi
 
@@ -225,6 +224,5 @@ echo ""
 echo ">> Done. ai-memory should now be running at ${DAEMON_URL} with the"
 echo "   Markdown wiki initialized and MCP endpoints declared for this repo."
 echo "   Persisting the daemon across reboots is OS-specific and NOT done by"
-echo "   this script; see the 'Persistent background service' notes in"
-echo "   installmemories.md (systemd --user unit on Linux, launchd agent on"
+echo "   this script (e.g. systemd --user unit on Linux, launchd agent on"
 echo "   macOS) if you want it to survive a logout/reboot."

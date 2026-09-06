@@ -4,10 +4,10 @@
 
 - **Category:** Visualization
 - **File:** `vaila/vailaplot2d.py`
-- **Version:** 0.3.121
+- **Version:** 0.3.122
 - **Author:** Prof. Paulo Santiago
 - **GUI:** yes | **CLI:** limited (helpers headless)
-- **Updated:** 04 September 2026
+- **Updated:** 06 September 2026
 
 ## Description
 

@@ -154,8 +154,8 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.120<br />
-        <strong>Updated:</strong> 03 September 2026<br />
+        <strong>Version:</strong> 0.3.122<br />
+        <strong>Updated:</strong> 06 September 2026<br />
         <strong>Date:</strong> 23 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
@@ -657,7 +657,34 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td><span class="key">3</span></td>
                 <td>Toggle full persistence</td>
               </tr>
+              <tr>
+                <td><span class="key">Q</span></td>
+                <td>Toggle Quick Measure mode (click points, then <span class="key">Enter</span> to classify as Distance/Area/Velocity/Acceleration — see <a href="quickmeasure.html">quickmeasure.html</a>)</td>
+              </tr>
             </table>
+
+            <h3>Quick Measure mode (Q key) &mdash; v0.3.122</h3>
+            <p>
+              Kinovea-style quick on-image measurements, implemented in the companion module
+              <code>vaila/quickmeasure.py</code> (see <a href="quickmeasure.html">quickmeasure.html</a>) and wired
+              into <code>getpixelvideo.py</code> as a thin integration layer.
+            </p>
+            <ol>
+              <li>Press <span class="key">Q</span> to toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active).</li>
+              <li>Left-click the video to add a point; right-click undoes the last point; middle-click still pans.</li>
+              <li>Press <span class="key">Enter</span> to open the classification submenu: <span class="key">1</span> Distance, <span class="key">2</span> Area, <span class="key">3</span> Velocity, <span class="key">4</span> Acceleration.</li>
+              <li>Press <span class="key">C</span> inside the submenu to load a calibration (an existing <code>.dlt2d</code> file, or a pixel-calibration CSV + <code>.ref2d</code> pair computed on the fly via <code>dlt2d.py</code>) for real-world units instead of pixels.</li>
+              <li>Press <span class="key">Backspace</span> to clear all quick-measure points (<span class="key">X</span> inside the submenu does the same).</li>
+              <li>Press <span class="key">Q</span> again to leave the mode (<span class="key">Esc</span> always means save-and-quit the whole tool, never just this mode).</li>
+            </ol>
+            <p>
+              Point-set convention (fixed, not user-configurable): Distance/Velocity use the
+              <strong>last 2</strong> clicked points; Area uses <strong>all</strong> points (shoelace polygon);
+              Acceleration uses the <strong>last 3</strong> points. Velocity/Acceleration require distinct frames
+              and use the video's own fps. Single-video sessions only support <strong>DLT2D</strong>; stereo
+              <strong>DLT3D</strong> from two synchronized videos remains a batch/CLI workflow via
+              <code>rec3d_one_dlt3d.py</code>.
+            </p>
           </div>
 
           <div class="control-section">

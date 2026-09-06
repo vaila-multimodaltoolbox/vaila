@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 03 September 2025
-Version: 0.0.4
+Update Date: 06 September 2026
+Version: 0.3.122
 
 Description:
     This script provides tools for reading CSV files and displaying their contents.
@@ -149,6 +149,15 @@ def show_csv_optimized(file_path=None, *, use_cache=True, turbo=False, fps=30, s
         from vaila.viewc3d import run_viewc3d_from_array
 
         run_viewc3d_from_array(points, selected_markers, fps, file_path)
+    elif viewer_choice == "matplotlib":
+        from vaila.showc3d import show_points_3d
+
+        show_points_3d(
+            points,
+            selected_markers,
+            fps=float(fps),
+            title=f"Vaila - CSV 3D Viewer | {os.path.basename(file_path)}",
+        )
     else:
         from vaila.viewc3d_pyvista import MokkaLikeViewer
 
@@ -251,7 +260,7 @@ def detect_delimiter(file_path):
                     file.seek(0)
                     sample = file.read(1024)
                     if sample:  # Check if sample is not empty
-                        dialect = csv.Sniffer().sniff(sample, delimiters=[delimiter])
+                        dialect = csv.Sniffer().sniff(sample, delimiters=delimiter)
                         if dialect.delimiter == delimiter:
                             scores.append(10)  # High score for csv.Sniffer detection
                 except Exception:
@@ -275,7 +284,9 @@ def detect_delimiter(file_path):
 
             # Return delimiter with highest score
             if delimiter_scores:
-                best_delimiter = max(delimiter_scores, key=delimiter_scores.get)
+                best_delimiter = max(
+                    list(delimiter_scores.keys()), key=lambda k: delimiter_scores.get(k, 0.0)
+                )
                 print(
                     f"Delimiter detected: '{best_delimiter}' (score: {delimiter_scores[best_delimiter]:.2f})"
                 )
@@ -368,6 +379,8 @@ def select_markers_csv(marker_labels):
     Button(btn_frame, text="Unselect All", command=unselect_all).pack(side="left", padx=5)
 
     Button(root, text="Select", command=root.quit).pack(pady=10)
+    # Pre-select all markers by default
+    listbox.select_set(0, tk.END)
     root.mainloop()
     selected_indices = listbox.curselection()
     root.destroy()
@@ -377,14 +390,14 @@ def select_markers_csv(marker_labels):
 
 ###############################################################################
 # Function: choose_visualizer
-# Dialog to choose between PyVista and Open3D 3D viewer for CSV data.
+# Dialog to choose between PyVista, Open3D, and Matplotlib 3D viewers for CSV data.
 ###############################################################################
 def choose_visualizer():
     """
-    Displays a dialog to choose the 3D viewer: PyVista or Open3D.
+    Displays a dialog to choose the 3D viewer: PyVista, Open3D, or Matplotlib.
 
     Returns:
-        str: "pyvista" or "open3d"
+        str: "pyvista", "open3d", or "matplotlib"
     """
     root = tk.Tk()
     root.title("Choose 3D Viewer")
@@ -400,8 +413,14 @@ def choose_visualizer():
         text="Visualize CSV markers with:",
         font=("", 11),
     ).pack(pady=(14, 10))
-    tk.Button(root, text="PyVista viewer", command=lambda: choose("pyvista"), width=22).pack(pady=4)
-    tk.Button(root, text="Open3D viewer", command=lambda: choose("open3d"), width=22).pack(pady=4)
+    tk.Button(root, text="PyVista viewer", command=lambda: choose("pyvista"), width=24).pack(pady=4)
+    tk.Button(root, text="Open3D viewer", command=lambda: choose("open3d"), width=24).pack(pady=4)
+    tk.Button(
+        root,
+        text="Matplotlib viewer (showc3d)",
+        command=lambda: choose("matplotlib"),
+        width=24,
+    ).pack(pady=4)
     root.update_idletasks()
     x = (root.winfo_screenwidth() - root.winfo_reqwidth()) // 2
     y = (root.winfo_screenheight() - root.winfo_reqheight()) // 2
@@ -588,6 +607,83 @@ def read_csv_generic(file_path):
     if df.empty:
         raise ValueError("The file is empty or could not be read.")
 
+    # Check for calibration model / reference points table format:
+    # Keypoint rows with individual columns for x, y, z (e.g. soccerfield_kiki.csv)
+    cols_lower = {str(c).strip().lower(): c for c in df.columns}
+    if "x" in cols_lower and "y" in cols_lower and "z" in cols_lower:
+        x_col = cols_lower["x"]
+        y_col = cols_lower["y"]
+        z_col = cols_lower["z"]
+
+        label_candidates = [
+            "point_name",
+            "label",
+            "keypoint",
+            "name",
+            "marker",
+            "marker_name",
+            "id",
+        ]
+        label_col = None
+        for cand in label_candidates:
+            if cand in cols_lower:
+                label_col = cols_lower[cand]
+                break
+
+        if label_col is None:
+            for col in df.columns:
+                if col not in (x_col, y_col, z_col) and not pd.api.types.is_numeric_dtype(df[col]):
+                    label_col = col
+                    break
+
+        if label_col is not None:
+            marker_names = [str(v).strip() for v in df[label_col].values]
+        else:
+            marker_names = [f"point_{i}" for i in range(len(df))]
+
+        # Ensure unique marker names
+        seen: dict[str, int] = {}
+        unique_marker_names: list[str] = []
+        for nm in marker_names:
+            if nm in seen:
+                seen[nm] += 1
+                unique_marker_names.append(f"{nm}_{seen[nm]}")
+            else:
+                seen[nm] = 0
+                unique_marker_names.append(nm)
+        marker_names = unique_marker_names
+
+        x_vals = pd.to_numeric(df[x_col], errors="coerce").fillna(0.0).to_numpy(dtype=np.float64)
+        y_vals = pd.to_numeric(df[y_col], errors="coerce").fillna(0.0).to_numpy(dtype=np.float64)
+        z_vals = pd.to_numeric(df[z_col], errors="coerce").fillna(0.0).to_numpy(dtype=np.float64)
+
+        max_val = max(
+            float(np.nanmax(np.abs(x_vals))),
+            float(np.nanmax(np.abs(y_vals))),
+            float(np.nanmax(np.abs(z_vals))),
+        )
+        if max_val > 500.0:
+            x_vals *= 0.001
+            y_vals *= 0.001
+            z_vals *= 0.001
+            print(
+                f">> Calibration Model CSV: converted from mm to meters (max was {max_val:.1f} mm)"
+            )
+        else:
+            print(f">> Calibration Model CSV: coordinates in meters (max {max_val:.2f} m)")
+
+        index_vector = pd.Series([0], name="Frame")
+        marker_data = {}
+        valid_markers = {}
+        for i, m_name in enumerate(marker_names):
+            marker_data[m_name] = np.array([[x_vals[i], y_vals[i], z_vals[i]]])
+            valid_markers[m_name] = [x_col, y_col, z_col]
+
+        print(
+            f">> Successfully identified calibration model CSV: {len(marker_names)} keypoints loaded."
+        )
+        return index_vector, marker_data, valid_markers, delimiter
+
     # The first column is generic (time/frames/index/etc.)
     index_vector = df.iloc[:, 0]
 
@@ -704,19 +800,19 @@ def read_csv_generic(file_path):
                             f"    Record {i}: X={coords[0]:.6f}, Y={coords[1]:.6f}, Z={coords[2]:.6f}"
                         )
 
-        elif user_units == "m":
-            print("No conversion needed - data is already in meters.")
+            elif user_units == "m":
+                print("No conversion needed - data is already in meters.")
 
-        elif user_units == "auto":
-            print("Using auto-detection for units...")
-            if detect_units(temp_points):
-                print("Auto-detection: Data appears to be in millimeters. Converting to meters...")
-                # Convert all marker data from millimeters to meters
-                for marker in marker_data:
-                    marker_data[marker] = marker_data[marker] * 0.001
-                print("Unit conversion completed: mm → m")
-            else:
-                print("Auto-detection: Data appears to be already in meters.")
+            elif user_units == "auto":
+                print("Using auto-detection for units...")
+                if detect_units(temp_points):
+                    print("Auto-detection: Data appears to be in millimeters. Converting to meters...")
+                    # Convert all marker data from millimeters to meters
+                    for marker in marker_data:
+                        marker_data[marker] = marker_data[marker] * 0.001
+                    print("Unit conversion completed: mm → m")
+                else:
+                    print("Auto-detection: Data appears to be already in meters.")
 
         # Check for and filter extreme outliers after unit conversion
         print("\nChecking for extreme outliers...")
@@ -853,6 +949,10 @@ def show_csv(file_path=None):
         from vaila.viewc3d import run_viewc3d_from_array
 
         run_viewc3d_from_array(points, selected_markers, 60.0, file_path)
+    elif viewer_choice == "matplotlib":
+        from vaila.showc3d import show_points_3d
+
+        show_points_3d(points, selected_markers, title=f"Vaila - CSV 3D Viewer | {file_name}")
     else:
         from vaila.viewc3d_pyvista import MokkaLikeViewer
 

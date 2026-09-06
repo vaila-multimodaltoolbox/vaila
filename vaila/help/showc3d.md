@@ -3,56 +3,53 @@
 ## 📋 Module Information
 
 - **Category:** Visualization
-- **File:** `vaila\showc3d.py`
-- **Lines:** 245
-- **Size:** 7994 characters
-
+- **File:** `vaila/showc3d.py`
+- **Version:** 0.3.122
 - **Author:** Prof. Paulo Roberto Pereira Santiago
+- **Updated:** 06/09/2026
 - **GUI Interface:** ✅ Yes
 
 ## 📖 Description
 
-
 Script: showc3d.py
 Author: Prof. Paulo Roberto Pereira Santiago
 Date: 29/07/2024
-Updated: 07/02/2025
+Updated: 06/09/2026
+Version: 0.3.122
 
 Description:
 ------------
-This script visualizes marker data from a C3D file using Matplotlib.
-Marker positions are converted from millimeters to meters.
-The user is prompted to select which markers to display.
-A Matplotlib 3D scatter plot is used to animate the data,
-complete with a slider to choose frames and a play/pause button.
-The FPS from the C3D file is used to ensure correct playback speed.
+This script visualizes marker and calibration keypoint data from C3D files
+or direct numpy arrays using Matplotlib in 3D.
+
+Features:
+- Automatic unit detection (meters vs millimeters).
+- Adapts spatial environment for soccer field / sports court scale
+  (pitch boundary lines, halfway line, center circle, ground plane).
+- 3D marker text labels with interactive toggle button.
+- Frame slider and Play/Pause animation for multi-frame MoCap,
+  with streamlined display for single-frame calibration models.
+- Standalone CLI execution, GUI invocation, and programmatic `show_points_3d()`.
 
 Usage:
 ------
-1. Ensure you have installed:
-   - ezc3d (pip install ezc3d)
-   - numpy
-   - matplotlib (pip install matplotlib)
-   - tkinter (usually included with Python)
-2. Run the script and select a C3D file and markers to display.
-3. Use the slider or Play/Pause button to control the animation.
-
+1. From GUI: Frame C → Tools → Choose C3D viewer → Matplotlib viewer (showc3d)
+2. Command line: `uv run vaila/showc3d.py [path/to/model.c3d]`
+3. Programmatic:
+   ```python
+   from vaila.showc3d import show_c3d, show_points_3d
+   show_c3d("soccerfield_kiki.c3d")
+   ```
 
 ## 🔧 Main Functions
 
-**Total functions found:** 11
-
-- `load_c3d_file`
-- `select_markers`
-- `draw_cartesian_axes`
-- `main`
-- `show_c3d`
-- `select_all`
-- `unselect_all`
-- `on_select`
-- `update_frame`
-- `timer_callback`
-- `play_pause`
+- `load_c3d_file` — Load marker data, header frame rate, and labels from C3D with unit detection.
+- `select_markers` — Tkinter dialog to select markers to display.
+- `draw_cartesian_axes` — Draw RGB Cartesian axes scaled to the dataset span.
+- `draw_soccer_field_features` — Draw pitch boundaries, halfway line, and center circle on Z=0.
+- `show_points_3d` — Core 3D scatter and animation viewer for marker and calibration data.
+- `main` — CLI entry point.
+- `show_c3d` — Convenience launcher alias.
 
 
 
