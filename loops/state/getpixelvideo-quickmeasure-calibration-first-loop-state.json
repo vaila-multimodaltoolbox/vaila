@@ -1,0 +1,53 @@
+{
+  "loop": "getpixelvideo-quickmeasure-calibration-first",
+  "spec": "loops/getpixelvideo-quickmeasure-calibration-first-loop.md",
+  "status": "success",
+  "baseline_branch": "newbootons",
+  "version": "0.3.124",
+  "date": "2026-09-06",
+  "turns_spent": 1,
+  "attempts": 1,
+  "calibration_contract_frozen": {
+    "line": {
+      "clicks": 2,
+      "typed": ["length"],
+      "model": "isotropic scale = real_length / pixel_distance",
+      "origin": "first click",
+      "axes": "+x right, +y up (image y inverted)"
+    },
+    "plane": {
+      "clicks": 4,
+      "click_order": "origin, width direction, opposite corner, last corner",
+      "typed": ["width", "height"],
+      "model": "8-parameter DLT2D homography via dlt2d.dlt2d(F=real, L=pixel), applied with rec2d_one_dlt2d.rec2d()"
+    },
+    "skip": "session stays in px; QuickMeasureSession.calibration_skipped = True"
+  },
+  "goal_items": {
+    "1_calibration_first_toggle": "done — quickmeasure.needs_calibration() gates _toggle_quick_measure_mode(); _start_quickmeasure_calibration() prompts mode + unit, clicks build CalibrationDraft, _finish_quickmeasure_calibration() asks the real measure(s)",
+    "2_free_measuring_after": "done — calibration clicks routed before measure clicks in the MOUSEBUTTONDOWN handler; status bar reports calibrated coordinates per click",
+    "3_csv_outputs": "done — QuickMeasureSession.save_session() writes processed_quickmeasure_<TS>/ with points, calibration and results CSVs (S in the submenu)",
+    "4_measure_from_saved_csv": "done — session_from_points_csv/measure_from_points_csv + python -m vaila.quickmeasure CLI",
+    "5_file_calibration_and_pixels_preserved": "done — submenu C still loads .dlt2d / pixel+ref2d; option 0 keeps pixels",
+    "6_metadata_synced": "done — version 0.3.124 in vaila.py, getpixelvideo.py, quickmeasure.py, help/{quickmeasure,getpixelvideo,index}.{md,html}; version-history entries added"
+  },
+  "evidence": {
+    "unit_tests": "uv run pytest tests/test_quickmeasure.py -q -> 42 passed",
+    "lint_type": "ruff check + ruff format --check + ty check on vaila/quickmeasure.py, vaila/getpixelvideo.py, tests/test_quickmeasure.py -> All checks passed",
+    "cli": "uv run python -m vaila.quickmeasure --points-csv tests/fixtures/quickmeasure/points_calibrated.csv --measure distance -> 'Distance: 5.0000 m'; --measure velocity --fps 10 -> 'Velocity: 5.0000 m/s'",
+    "gui_smoke_line": "SDL_VIDEODRIVER=dummy headless run of play_video_with_controls with injected events: Q -> mode/unit prompts -> 2 calibration clicks (200 px) -> typed 2 m -> scale 0.01 m/px; measure clicks 150->450 px produced x_real 0.0 and 3.0 m, distance result 3.0 m; CLI recomputed 3.0000 m from the saved points CSV",
+    "gui_smoke_plane": "same harness with mode 2: 4 clicks around a 200x100 px rectangle typed as 2 x 1 m produced DLT2D params [100, 0, 150, 0, 100, 300, 0, 0] (u = 100X + 150, v = 100Y + 300) and a 3.0 m distance",
+    "full_suite": "uv run pytest tests/ --deselect tests/test_dlt_rec_integration.py -> 1322 tests, 5 failures, 44 skipped"
+  },
+  "preexisting_failures_not_caused_by_this_loop": {
+    "tests/test_dlt_rec_integration.py": "5 errors — fixture tests/Animal_Open_Field/openfield_example1.csv is not in the repo",
+    "tests/test_skeleton_templates.py::test_rec3d_one_dlt3d_cli_with_skeleton_templates": "5 failures — reproduced with vaila.py/getpixelvideo.py/quickmeasure.py stashed"
+  },
+  "lessons": [
+    "The pygame click flow IS testable headlessly: SDL_VIDEODRIVER=dummy plus pygame.event.post from a worker thread drives both the main loop and the blocking show_input_dialog / submenu loops in order.",
+    "show_input_dialog appends typed characters to initial_text, so a scripted mode change needs an explicit BACKSPACE before the new digit.",
+    "Extracting the calibration-first rule into quickmeasure.needs_calibration() turned a GUI-only behaviour into a level-1 assertion; the inline closure version was not directly testable.",
+    "uv run ruff check vaila/ --fix touches unrelated modules (fifa_skeletal_pipeline, transcribe_pdfs, tugturn, vaila_lensdistortvideo); scope ruff to the changed files or revert the rest."
+  ],
+  "human_approval_pending": ["git commit / git push (not performed)"]
+}

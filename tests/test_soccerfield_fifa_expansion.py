@@ -98,6 +98,16 @@ def test_getpixelvideo_pitch_guide_loads_all_48_points() -> None:
     assert "soccerfield_ref3d_fifa_dataset.csv" in src
 
 
+def test_getpixelvideo_guide_prefers_soccerfield_kiki() -> None:
+    """Guide path (prefer_fifa_dataset=False) must load soccerfield_kiki.csv."""
+    pts, src, flips = gpv.load_pitch_guide_points(prefer_fifa_dataset=False)
+    assert "soccerfield_kiki.csv" in src
+    assert len(pts) == 49
+    assert len(flips) == 49
+    assert pts[0]["point_name"] == "top_left_corner"
+    assert pts[48]["point_name"] == "center_field"
+
+
 def test_getpixelvideo_roundtrip_and_continue_marking(tmp_path: Path) -> None:
     """Test save and reload with 48 keypoints allows continuing marking."""
     total_frames = 2
