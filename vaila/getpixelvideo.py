@@ -7,7 +7,7 @@ Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
 Update: 06 September 2026
-Version: 0.3.122
+Version: 0.3.124
 Python Version: 3.12.14
 
 Description:
@@ -30,7 +30,22 @@ FIFA mode (``--fifa`` / ``--fifa-dataset DIR`` / **Template:FIFA** toolbar butto
 
 Pitch Guide (``G`` or button):
   **Visual only** — field overlay + optional reference image (``V`` toggles).
+  Soccer-field Guide loads ``vaila/models/soccerfield_kiki.csv`` (49 pts) so you
+  can walk and mark those named points; FIFA-dataset labeling still uses
+  ``soccerfield_ref3d_fifa_dataset.csv`` when ``prefer_fifa_dataset=True``.
   Same left/right click, TAB, and **Ctrl+G** (Go KP) behaviour as with the guide off.
+  **QMeas** toolbar button toggles Quick Measure (same as hotkey ``Q``).
+
+Quick Measure (``Q`` or **QMeas**, Kinovea-style, see ``vaila/quickmeasure.py``):
+  **Calibration is the first step.** Choose *Line* (2 clicks on a segment of
+  known length + typed length) or *Plane* (4 clicks around a known rectangle +
+  typed width/height, solved as a DLT2D homography), or skip to stay in pixels.
+  After that, click freely to measure; ``Enter`` classifies Distance/Area/
+  Velocity/Acceleration and ``S`` in the submenu writes
+  ``processed_quickmeasure_<timestamp>/`` with the points (pixel **and**
+  real-world coordinates), calibration and result CSVs. Those CSVs can be
+  re-measured without the video via
+  ``uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure distance``.
 
 Pose / ML:
   **F9** exports a YOLO-pose layout (``data.yaml``, train/val/test, may write
@@ -1676,22 +1691,29 @@ def pygame_file_dialog(
 def load_pitch_guide_points(
     prefer_fifa_dataset: bool = False,
 ) -> tuple[list[dict], str, list[int]]:
-    """Load FIFA pitch-guide points from models/ directory.
+    """Load soccerfield pitch-guide points from models/ directory.
+
+    When ``prefer_fifa_dataset`` is False (Guide mode), prefer
+    ``soccerfield_kiki.csv`` so users can walk/mark the kiki landmark set.
+    When True (FIFA labeling/dataset path), prefer
+    ``soccerfield_ref3d_fifa_dataset.csv``.
 
     Returns (points, source_path, flip_indices).
     """
     import pandas as _pd
 
-    fifa_dataset_csv = Path(__file__).parent / "models" / "soccerfield_ref3d_fifa_dataset.csv"
+    models_dir = Path(__file__).parent / "models"
+    kiki_csv = models_dir / "soccerfield_kiki.csv"
+    fifa_dataset_csv = models_dir / "soccerfield_ref3d_fifa_dataset.csv"
     legacy_candidates = [
-        Path(__file__).parent / "models" / "soccerfield_ref3d_fifa_center.csv",
-        Path(__file__).parent / "models" / "soccerfield_ref3d_fifa.csv",
-        Path(__file__).parent / "models" / "soccerfield_ref3d.csv",
+        models_dir / "soccerfield_ref3d_fifa_center.csv",
+        models_dir / "soccerfield_ref3d_fifa.csv",
+        models_dir / "soccerfield_ref3d.csv",
     ]
     if prefer_fifa_dataset:
-        candidates = [fifa_dataset_csv, *legacy_candidates]
+        candidates = [fifa_dataset_csv, kiki_csv, *legacy_candidates]
     else:
-        candidates = [*legacy_candidates, fifa_dataset_csv]
+        candidates = [kiki_csv, *legacy_candidates, fifa_dataset_csv]
 
     for _p in candidates:
         if _p.exists():
@@ -1893,6 +1915,11 @@ def play_video_with_controls(
     # it always picks up the video's own `fps`.
     quick_measure_mode = False
     quickmeasure_session: quickmeasure.QuickMeasureSession | None = None
+    # Calibration-first (Kinovea-style): entering Quick Measure without a
+    # calibration starts by collecting calibration clicks, then asks for the
+    # real-world measurement(s). Free measuring only starts after that.
+    quick_measure_calibrating = False
+    quickmeasure_draft: quickmeasure.CalibrationDraft | None = None
 
     # -----------------------------------------------------------------------
     # Pitch Guide (visual only): field overlay + reference image. Same clicks
@@ -2102,17 +2129,85 @@ def play_video_with_controls(
         return surface
 
     def _load_pitch_guide_points(prefer_fifa_dataset: bool = False) -> tuple[list[dict], str]:
-        """Load FIFA pitch-guide point names from the closest soccerfield_ref3d CSV.
+        """Load pitch-guide points from models/ (kiki by default; FIFA dataset when asked).
 
-        When ``prefer_fifa_dataset`` is True, the loader prefers the FIFA-dataset
-        layout CSV (``soccerfield_ref3d_fifa_dataset.csv``) which has 32 keypoints
-        starting at ``point_number = 0`` (``top_left_corner``) and matches the
-        layout of ``<dataset_root>/unified``.
+        When ``prefer_fifa_dataset`` is False, prefer ``soccerfield_kiki.csv``.
+        When True, prefer ``soccerfield_ref3d_fifa_dataset.csv`` for FIFA labeling.
         """
         nonlocal pitch_guide_flip_idx
         pts, src, flips = load_pitch_guide_points(prefer_fifa_dataset=prefer_fifa_dataset)
         pitch_guide_flip_idx = flips
         return pts, src
+
+    def _start_quickmeasure_calibration() -> str:
+        """Ask which Kinovea-style calibration to build, then start collecting
+        its clicks. Returns the status line to display.
+        """
+        nonlocal quick_measure_calibrating, quickmeasure_draft, quickmeasure_session
+        answer = show_input_dialog(
+            "CALIBRATION FIRST — 1=Line (2 clicks + length)  "
+            "2=Plane (4 clicks + width/height)  0=Skip (pixels only)",
+            "1",
+        )
+        if answer is None:
+            return "Quick Measure: calibration cancelled (still uncalibrated — pixels)."
+        choice = str(answer).strip().lower()
+        if choice in ("0", "skip", "px", "pixel", "pixels"):
+            if quickmeasure_session is not None:
+                quickmeasure_session.calibration_skipped = True
+            return "Quick Measure: calibration skipped — measurements stay in PIXELS."
+        mode = "plane" if choice in ("2", "plane") else "line"
+        unit_answer = show_input_dialog("Real-world unit for the calibration (e.g. m, cm)", "m")
+        unit = (unit_answer or "m").strip() or "m"
+        quickmeasure_draft = quickmeasure.CalibrationDraft(mode=mode, unit_label=unit)
+        quick_measure_calibrating = True
+        return quickmeasure_draft.instructions()
+
+    def _finish_quickmeasure_calibration() -> str:
+        """Prompt for the real measurement(s) and apply the calibration."""
+        nonlocal quick_measure_calibrating, quickmeasure_draft, quickmeasure_session
+        if quickmeasure_draft is None or quickmeasure_session is None:
+            quick_measure_calibrating = False
+            return "Quick Measure: no calibration in progress."
+        calib, message = quickmeasure.finish_calibration_draft(
+            quickmeasure_draft, show_input_dialog
+        )
+        if calib is None:
+            # Keep the clicks so the user can retry the measurement entry.
+            return message
+        quickmeasure_session.calibration = calib
+        quick_measure_calibrating = False
+        quickmeasure_draft = None
+        return f"{message} — now click freely to measure."
+
+    def _toggle_quick_measure_mode() -> str:
+        """Toggle Quick Measure (same behaviour as hotkey Q / QMeas button).
+
+        Calibration is the FIRST step: turning the mode on without a
+        calibration opens the calibration prompt before any free measuring.
+        """
+        nonlocal quick_measure_mode, quickmeasure_session
+        nonlocal quick_measure_calibrating, quickmeasure_draft
+        nonlocal labeling_mode, one_line_mode, auto_marking_mode, sequential_mode, pitch_guide_mode
+        quick_measure_mode = not quick_measure_mode
+        if quick_measure_mode:
+            labeling_mode = False
+            one_line_mode = False
+            auto_marking_mode = False
+            sequential_mode = False
+            pitch_guide_mode = False
+            if quickmeasure_session is None:
+                quickmeasure_session = quickmeasure.QuickMeasureSession(fps=fps)
+            if quickmeasure.needs_calibration(quickmeasure_session):
+                return _start_quickmeasure_calibration()
+            unit = quickmeasure_session.unit_label
+            return (
+                f"QUICK MEASURE ON ({unit}) — click points; "
+                "Enter: menu/classify, S in menu: save CSV, right-click: undo"
+            )
+        quick_measure_calibrating = False
+        quickmeasure_draft = None
+        return "Quick Measure mode OFF"
 
     def _pitch_guide_status_message(prefix: str = "") -> str:
         """Status line for Pitch Guide (visual only — follows selected marker)."""
@@ -3939,6 +4034,7 @@ def play_video_with_controls(
         auto_button_width = 70
         click_pass_button_width = 70
         labeling_button_width = 70
+        measure_button_width = 64  # QMeas — same as hotkey Q
         guide_button_width = 74  # Guide button (field / skeleton overlay)
         guide_toggle_size = 12
         tracking_csv_button_width = 120
@@ -3953,10 +4049,11 @@ def play_video_with_controls(
             + auto_button_width
             + click_pass_button_width
             + labeling_button_width
+            + measure_button_width
             + guide_button_width
             + 5
             + guide_toggle_size
-            + (button_gap * 7)
+            + (button_gap * 8)
         )
         show_tracking_indicator_size = 12
         total_bottom_width = (
@@ -4088,6 +4185,19 @@ def play_video_with_controls(
         control_surface.blit(
             labeling_text, labeling_text.get_rect(center=labeling_button_rect.center)
         )
+
+        # 7b. Quick Measure button (same as hotkey Q) — visible next to Labeling/Guide
+        measure_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_top,
+            measure_button_width,
+            button_height,
+        )
+        current_x += measure_button_width + button_gap
+        measure_color = (200, 90, 40) if quick_measure_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, measure_color, measure_button_rect)
+        measure_text = font.render("QMeas", True, (255, 255, 255))
+        control_surface.blit(measure_text, measure_text.get_rect(center=measure_button_rect.center))
 
         # 8. Guide button + on/off toggle (tiny square).
         guide_button_rect = pygame.Rect(
@@ -4273,6 +4383,7 @@ def play_video_with_controls(
             auto_button_rect,  # Add auto button to return
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
+            measure_button_rect,  # Quick Measure (same as Q)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
             tracking_csv_button_rect,  # Add tracking CSV button to return
@@ -7833,6 +7944,12 @@ def play_video_with_controls(
                 screen, quickmeasure_session, zoom_level, crop_x, crop_y, font
             )
 
+        # Calibration-first overlay: clicked calibration points + next step.
+        if quick_measure_mode and quick_measure_calibrating and quickmeasure_draft is not None:
+            quickmeasure.draw_calibration_overlay(
+                screen, quickmeasure_draft, zoom_level, crop_x, crop_y, font
+            )
+
         _mx_scr, _my_scr = pygame.mouse.get_pos()
         if _my_scr < window_height:
             _vxf = (_mx_scr + crop_x) / zoom_level
@@ -7854,6 +7971,7 @@ def play_video_with_controls(
             auto_button_rect,  # Add auto button to return
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
+            measure_button_rect,  # Quick Measure (same as Q)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
             tracking_csv_button_rect,  # Add tracking CSV button to return
@@ -8071,21 +8189,23 @@ def play_video_with_controls(
                             pitch_guide_mode = False
                             save_message_text = "Guide not available in Template: Free"
                         elif template_mode == "fifa":
+                            # Guide always prefers soccerfield_kiki.csv (visual walk/mark).
                             pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
-                                prefer_fifa_dataset=pitch_guide_fifa_mode
+                                prefer_fifa_dataset=False
                             )
                             labeling_mode = False
                             one_line_mode = False
                             auto_marking_mode = False
                             sequential_mode = False
                             click_pass_mode = False
+                            quick_measure_mode = False
                             if pitch_guide_points:
                                 pitch_guide_mode = True
                                 save_message_text = _pitch_guide_status_message("GUIDE ON: ")
                             else:
                                 pitch_guide_mode = False
                                 save_message_text = (
-                                    "Guide (FIFA field): no field CSV found in models/"
+                                    "Guide (soccerfield): no field CSV found in models/"
                                 )
                         elif template_mode == "mediapipe":
                             pitch_guide_mode = True
@@ -8175,31 +8295,29 @@ def play_video_with_controls(
                     showing_save_message = True
                     save_message_timer = 30
                 elif event.key == pygame.K_q:
-                    quick_measure_mode = not quick_measure_mode
-                    if quick_measure_mode:
-                        # Click semantics differ from every other mode; keep it exclusive.
-                        labeling_mode = False
-                        one_line_mode = False
-                        auto_marking_mode = False
-                        sequential_mode = False
-                        pitch_guide_mode = False
-                        if quickmeasure_session is None:
-                            quickmeasure_session = quickmeasure.QuickMeasureSession(fps=fps)
-                        save_message_text = (
-                            "QUICK MEASURE mode ON — click points; "
-                            "Enter: classify, Backspace: clear, right-click: undo"
-                        )
-                    else:
-                        save_message_text = "Quick Measure mode OFF"
+                    save_message_text = _toggle_quick_measure_mode()
                     showing_save_message = True
                     save_message_timer = 90
+                elif (
+                    event.key == pygame.K_RETURN
+                    and quick_measure_mode
+                    and quick_measure_calibrating
+                ):
+                    save_message_text = _finish_quickmeasure_calibration()
+                    showing_save_message = True
+                    save_message_timer = 120
                 elif (
                     event.key == pygame.K_RETURN
                     and quick_measure_mode
                     and quickmeasure_session is not None
                 ):
                     save_message_text = quickmeasure.show_quickmeasure_menu(
-                        screen, quickmeasure_session, window_width, window_height
+                        screen,
+                        quickmeasure_session,
+                        window_width,
+                        window_height,
+                        save_dir=os.path.dirname(video_path) or os.getcwd(),
+                        save_stem=os.path.basename(video_path or "quickmeasure"),
                     )
                     showing_save_message = True
                     save_message_timer = 150
@@ -8948,11 +9066,16 @@ def play_video_with_controls(
                             auto_marking_mode = False
                             sequential_mode = False
                             pitch_guide_mode = False
+                            quick_measure_mode = False
                             save_message_text = (
                                 "LABELING MODE: Click and DRAG to draw boxes. Press Z to undo."
                             )
                         else:
                             save_message_text = "Labeling mode disabled"
+                        showing_save_message = True
+                        save_message_timer = 90
+                    elif measure_button_rect.collidepoint(x, rel_y):
+                        save_message_text = _toggle_quick_measure_mode()
                         showing_save_message = True
                         save_message_timer = 90
                     elif guide_toggle_rect.collidepoint(x, rel_y) or guide_button_rect.collidepoint(
@@ -8972,16 +9095,16 @@ def play_video_with_controls(
                                     pitch_guide_mode = False
                                     save_message_text = "Guide not available in Template: Free"
                                 elif template_mode == "fifa":
+                                    # Guide always prefers soccerfield_kiki.csv (visual walk/mark).
                                     pitch_guide_points, pitch_guide_source = (
-                                        _load_pitch_guide_points(
-                                            prefer_fifa_dataset=pitch_guide_fifa_mode
-                                        )
+                                        _load_pitch_guide_points(prefer_fifa_dataset=False)
                                     )
                                     labeling_mode = False
                                     one_line_mode = False
                                     auto_marking_mode = False
                                     sequential_mode = False
                                     click_pass_mode = False
+                                    quick_measure_mode = False
                                     if pitch_guide_points:
                                         pitch_guide_mode = True
                                         save_message_text = _pitch_guide_status_message(
@@ -8989,7 +9112,7 @@ def play_video_with_controls(
                                         )
                                     else:
                                         save_message_text = (
-                                            "Guide (FIFA field): no field CSV found in models/"
+                                            "Guide (soccerfield): no field CSV found in models/"
                                         )
                                         pitch_guide_mode = False
                                 elif template_mode == "mediapipe":
@@ -9104,14 +9227,47 @@ def play_video_with_controls(
                     video_x = (x + crop_x) / zoom_level
                     video_y = (y + crop_y) / zoom_level
 
-                    if quick_measure_mode and quickmeasure_session is not None:
+                    if (
+                        quick_measure_mode
+                        and quick_measure_calibrating
+                        and quickmeasure_draft is not None
+                    ):
+                        # Calibration-first: these clicks build the calibration,
+                        # not a measurement.
+                        if event.button == 1:
+                            try:
+                                quickmeasure_draft.add_point(video_x, video_y)
+                            except quickmeasure.QuickMeasureError as exc:
+                                save_message_text = f"Calibration: {exc}"
+                            else:
+                                if quickmeasure_draft.is_complete:
+                                    save_message_text = _finish_quickmeasure_calibration()
+                                else:
+                                    save_message_text = quickmeasure_draft.instructions()
+                            showing_save_message = True
+                            save_message_timer = 90
+                        elif event.button == 3:  # Right click: undo calibration point
+                            if quickmeasure_draft.undo_last():
+                                save_message_text = quickmeasure_draft.instructions()
+                            else:
+                                save_message_text = "Calibration: no points to remove"
+                            showing_save_message = True
+                            save_message_timer = 60
+                        elif event.button == 2:  # Middle click: still allow panning
+                            scrolling = True
+                            pygame.mouse.get_rel()
+                    elif quick_measure_mode and quickmeasure_session is not None:
                         if event.button == 1:  # Left click: add a measure point
                             n_pts = quickmeasure_session.add_point(frame_count, video_x, video_y)
+                            x_real, y_real = quickmeasure_session.points_dataframe().iloc[-1][
+                                ["x_real", "y_real"]
+                            ]
                             save_message_text = (
-                                f"Quick Measure: point {n_pts} added (frame {frame_count + 1})"
+                                f"Quick Measure: point {n_pts} @ frame {frame_count + 1} = "
+                                f"({x_real:.3f}, {y_real:.3f}) {quickmeasure_session.unit_label}"
                             )
                             showing_save_message = True
-                            save_message_timer = 25
+                            save_message_timer = 30
                         elif event.button == 3:  # Right click: undo last point
                             if quickmeasure_session.undo_last():
                                 save_message_text = "Quick Measure: last point removed"

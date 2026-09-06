@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 155 | **Categories:** 7 | **Generated on:** 06/09/2026 (v0.3.122)
+**Documented topics:** 155 | **Categories:** 7 | **Generated on:** 06/09/2026 (v0.3.124)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -138,7 +138,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](modifylabref.html) · [Markdown](modifylabref.md)
 - **monocular_dlt_align** — What problem this solves
   - [HTML](monocular_dlt_align.html) · [Markdown](monocular_dlt_align.md)
-- **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: click points on the video, then classify the current point set as Distance, Area, Veloc...
+- **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: calibrate first (clicks + typed real length or width/height), then click points and classify the set as Distance, Area, Veloc...
   - [HTML](quickmeasure.html) · [Markdown](quickmeasure.md)
 - **readc3d_export** — This script processes .c3d files, extracting marker data, analog data, events, and points residuals, and saves them into CSV files. It also allows the option...
   - [HTML](readc3d_export.html) · [Markdown](readc3d_export.md)

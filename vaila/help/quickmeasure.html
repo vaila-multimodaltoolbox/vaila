@@ -30,14 +30,24 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/quickmeasure.py</p>
-            <p><strong>Version:</strong> 0.3.122</p>
+            <p><strong>Version:</strong> 0.3.124</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
-            <p><strong>GUI:</strong> Yes (embedded in getpixelvideo.py) &nbsp; <strong>CLI:</strong> No</p>
+            <p><strong>GUI:</strong> Yes (embedded in getpixelvideo.py) &nbsp; <strong>CLI:</strong> Yes (<code>python -m vaila.quickmeasure</code>)</p>
         </div>
 
         <h2>Description</h2>
-        <p>Kinovea-style quick on-image measurement engine for <code>getpixelvideo.py</code>: click points on the video, then classify the current point set as <strong>Distance</strong>, <strong>Area</strong>, <strong>Velocity</strong>, or <strong>Acceleration</strong>. This module owns all quick-measurement <em>state</em>, <em>math</em>, and (for the pygame-based pieces) the <em>modal submenu + overlay rendering</em> — it does <strong>not</strong> reimplement calibration math, and <code>getpixelvideo.py</code> only owns the integration glue (a mode-toggle key, one click handler, one draw call, one help-text block), so the already-large host file stays a thin integration layer.</p>
-        <p>Calibration reuses the existing DLT2D pipeline exactly the way it already works elsewhere in vailá:</p>
+        <p>Kinovea-style quick on-image measurement engine for <code>getpixelvideo.py</code>: <strong>calibrate first</strong>, then click points on the video and classify the current point set as <strong>Distance</strong>, <strong>Area</strong>, <strong>Velocity</strong>, or <strong>Acceleration</strong>. This module owns all quick-measurement <em>state</em>, <em>math</em>, and (for the pygame-based pieces) the <em>modal submenu + overlay rendering</em> — it does <strong>not</strong> reimplement calibration math, and <code>getpixelvideo.py</code> only owns the integration glue (a mode-toggle key, one click handler, one draw call, one help-text block), so the already-large host file stays a thin integration layer.</p>
+
+        <h2>Calibration first (v0.3.124)</h2>
+        <p>Pressing <code>Q</code> or the <strong>QMeas</strong> button on an uncalibrated session starts with calibration, built from clicks alone — no file picking:</p>
+        <table>
+            <tr><th>Mode</th><th>Clicks</th><th>You then type</th><th>Model</th></tr>
+            <tr><td><strong>Line</strong> (<code>1</code>)</td><td>2 clicks on a segment of known length</td><td>the real length</td><td>Isotropic scale <code>real / pixel</code>; origin at the first click, <code>+x</code> right, <code>+y</code> up. Valid for a plane parallel to the sensor.</td></tr>
+            <tr><td><strong>Plane</strong> (<code>2</code>)</td><td>4 clicks around a known rectangle (click 1 = origin, click 2 = width direction)</td><td>width and height</td><td>8-parameter DLT2D homography — perspective corrected.</td></tr>
+            <tr><td><strong>Skip</strong> (<code>0</code>)</td><td>—</td><td>—</td><td>Session stays in pixels (<code>px</code>).</td></tr>
+        </table>
+        <p>The unit label (<code>m</code>, <code>cm</code>, …) is typed in the same prompt sequence and is written into every CSV row. While calibrating, the clicked calibration points are drawn in cyan with a banner telling you what to click next; right-click undoes the last calibration click.</p>
+        <p>Loading an existing calibration from files still works (<code>C</code> in the submenu). Calibration reuses the existing DLT2D pipeline exactly the way it already works elsewhere in vailá:</p>
         <ul>
             <li><strong>dlt2d.py</strong> (<code>dlt2d()</code>, <code>process_files()</code>) computes the 8 DLT2D coefficients from a pixel-calibration CSV + a <code>.ref2d</code> real-world reference file.</li>
             <li><strong>rec2d_one_dlt2d.py</strong>'s <code>rec2d()</code> applies those fixed coefficients to convert a clicked pixel to real-world coordinates.</li>
@@ -63,22 +73,39 @@
         <h2>Usage from getpixelvideo.py</h2>
         <table>
             <tr><th>Key</th><th>Action</th></tr>
-            <tr><td><code>Q</code></td><td>Toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active)</td></tr>
-            <tr><td>Left-click</td><td>Add a point</td></tr>
+            <tr><td><code>Q</code> / <strong>QMeas</strong> button</td><td>Toggle Quick Measure mode — starts with the calibration prompt when the session is not calibrated yet</td></tr>
+            <tr><td>Left-click</td><td>Add a calibration point (while calibrating) or a measure point (after)</td></tr>
             <tr><td>Right-click</td><td>Undo the last point</td></tr>
             <tr><td>Middle-click</td><td>Pan (unchanged)</td></tr>
-            <tr><td><code>Enter</code></td><td>Open the classification submenu (<code>1</code> Distance, <code>2</code> Area, <code>3</code> Velocity, <code>4</code> Acceleration, <code>C</code> load calibration, <code>X</code> clear points, <code>Esc</code> close menu)</td></tr>
+            <tr><td><code>Enter</code></td><td>While calibrating: (re)open the real-measurement prompt. After: open the classification submenu (<code>1</code> Distance, <code>2</code> Area, <code>3</code> Velocity, <code>4</code> Acceleration, <code>S</code> save CSVs, <code>C</code> load calibration from file, <code>X</code> clear points, <code>Esc</code> close menu)</td></tr>
             <tr><td><code>Backspace</code></td><td>Clear all quick-measure points</td></tr>
         </table>
         <p><code>Esc</code> in the main tool always means save-and-quit the whole application; it is never repurposed to exit Quick Measure mode — press <code>Q</code> again instead.</p>
 
+        <h2>Saved CSVs and recomputation</h2>
+        <p><code>S</code> in the submenu writes a timestamped <code>processed_quickmeasure_YYYYMMDD_HHMMSS/</code> folder next to the video:</p>
+        <table>
+            <tr><th>File</th><th>Columns</th></tr>
+            <tr><td><code>&lt;stem&gt;_quickmeasure_points.csv</code></td><td><code>point_id, frame, x_px, y_px, x_real, y_real, unit, calibration_kind</code></td></tr>
+            <tr><td><code>&lt;stem&gt;_quickmeasure_calibration.csv</code></td><td>calibration mode, unit, typed measures, calibration clicks (pixel + real), DLT2D parameters</td></tr>
+            <tr><td><code>&lt;stem&gt;_quickmeasure_results.csv</code></td><td><code>result_id, type, value, unit, n_points, frames, point_ids, fps</code></td></tr>
+        </table>
+        <p>Because each point carries its calibrated real-world coordinates, every measurement can be recomputed from the saved file alone — without the video:</p>
+        <pre><code>uv run python -m vaila.quickmeasure --points-csv processed_quickmeasure_*/clip_quickmeasure_points.csv --measure distance
+uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure velocity --fps 240
+uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure area --point-ids 1,2,3,4 --out results.csv</code></pre>
+
         <h2>Main functions / classes</h2>
         <table>
             <tr><th>Name</th><th>Description</th></tr>
-            <tr><td><code>QuickMeasureCalibration</code></td><td>Holds 8 DLT2D coefficients; <code>pixel_to_real()</code>; <code>from_dlt2d_file()</code>; <code>from_calibration_points()</code>.</td></tr>
-            <tr><td><code>QuickMeasureSession</code></td><td>Click-session state (fps, calibration, points); <code>add_point</code>, <code>undo_last</code>, <code>clear</code>, <code>measure_distance</code>, <code>measure_area</code>, <code>measure_velocity</code>, <code>measure_acceleration</code>, <code>measure(kind)</code>.</td></tr>
+            <tr><td><code>QuickMeasureCalibration</code></td><td>Scale or DLT2D calibration; <code>pixel_to_real()</code>, <code>describe()</code>; <code>from_line_clicks()</code>, <code>from_plane_clicks()</code>, <code>from_point_correspondences()</code>, <code>from_dlt2d_file()</code>, <code>from_calibration_points()</code>.</td></tr>
+            <tr><td><code>CalibrationDraft</code></td><td>Calibration-first state machine: <code>required_points</code>, <code>required_measures</code>, <code>add_point</code>, <code>undo_last</code>, <code>instructions()</code>, <code>build(measures)</code>.</td></tr>
+            <tr><td><code>QuickMeasureSession</code></td><td>Click-session state (fps, calibration, points, results); <code>add_point</code>, <code>undo_last</code>, <code>clear</code>, <code>measure(kind)</code>, <code>points_dataframe</code>, <code>calibration_dataframe</code>, <code>results_dataframe</code>, <code>save_session</code>.</td></tr>
+            <tr><td><code>finish_calibration_draft</code></td><td>Prompts for the real measurement(s) through an injected <code>ask_text</code> callback and builds the calibration.</td></tr>
+            <tr><td><code>session_from_points_csv</code> / <code>measure_from_points_csv</code></td><td>Rebuild a session and recompute a measurement from a saved points CSV.</td></tr>
+            <tr><td><code>main</code></td><td>CLI entry point (<code>python -m vaila.quickmeasure</code>).</td></tr>
             <tr><td><code>format_result</code></td><td>One-line human-readable string for a measurement result dict.</td></tr>
-            <tr><td><code>draw_quickmeasure_overlay</code></td><td>Draws clicked points + connecting lines on the pygame screen.</td></tr>
+            <tr><td><code>draw_quickmeasure_overlay</code> / <code>draw_calibration_overlay</code></td><td>Draw measure points (magenta) and calibration points + instruction banner (cyan).</td></tr>
             <tr><td><code>show_quickmeasure_menu</code></td><td>Blocking modal submenu (own pygame event loop, mirrors <code>show_help_dialog</code>'s pattern).</td></tr>
         </table>
 

@@ -146,6 +146,58 @@
       .toc a:hover {
         text-decoration: underline;
       }
+
+      details.hotkeys-quick {
+        background: #eef6fc;
+        border: 1px solid #3498db;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin: 12px 0 20px;
+      }
+
+      details.hotkeys-quick > summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: #1a5276;
+        list-style: none;
+        user-select: none;
+      }
+
+      details.hotkeys-quick > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      details.hotkeys-quick > summary::before {
+        content: "▶ ";
+        color: #3498db;
+      }
+
+      details.hotkeys-quick[open] > summary::before {
+        content: "▼ ";
+      }
+
+      details.hotkeys-quick .hotkeys-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      details.hotkeys-quick h4 {
+        margin: 0 0 6px;
+        color: #2980b9;
+        font-size: 0.95rem;
+      }
+
+      details.hotkeys-quick table {
+        margin: 0;
+        font-size: 0.92rem;
+      }
+
+      details.hotkeys-quick td:first-child {
+        white-space: nowrap;
+        width: 1%;
+      }
     </style>
   </head>
 
@@ -154,7 +206,7 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.122<br />
+        <strong>Version:</strong> 0.3.124<br />
         <strong>Updated:</strong> 06 September 2026<br />
         <strong>Date:</strong> 23 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
@@ -193,6 +245,7 @@
           <li><a href="#installation">2. Installation &amp; Requirements</a></li>
           <li><a href="#usage">3. Basic Usage</a></li>
           <li><a href="#controls">4. Controls &amp; Interface</a></li>
+          <li><a href="#hotkeys-quick">4a. All short keys / hotkeys (click)</a></li>
           <li><a href="#formats">5. Supported File Formats</a></li>
           <li><a href="#modes">6. Marker Modes</a></li>
           <li><a href="#pitch-guide">6b. Guide Mode (Soccer Field / Pose Skeleton)</a></li>
@@ -394,6 +447,77 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
       <section id="controls">
         <h2>4. Controls &amp; Interface</h2>
 
+        <details class="hotkeys-quick" id="hotkeys-quick">
+          <summary>All short keys / hotkeys — click to expand (quick reference)</summary>
+          <p style="margin: 8px 0 0; font-size: 0.92rem;">
+            Compact listing only. Full explanations stay in the tables below and in
+            <a href="quickmeasure.html">quickmeasure.html</a>.
+            Toolbar: <strong>QMeas</strong> = same as <span class="key">Q</span>.
+            Guide (soccerfield) uses <code>soccerfield_kiki.csv</code>.
+          </p>
+          <div class="hotkeys-grid">
+            <div>
+              <h4>Navigation</h4>
+              <table>
+                <tr><td><span class="key">Space</span></td><td>Play / Pause</td></tr>
+                <tr><td><span class="key">←</span> <span class="key">→</span></td><td>Prev / next frame</td></tr>
+                <tr><td><span class="key">↑</span> <span class="key">↓</span></td><td>±60 frames</td></tr>
+                <tr><td><span class="key">Shift+←/→</span></td><td>Prev / next marked frame</td></tr>
+                <tr><td><span class="key">[</span> <span class="key">]</span></td><td>Playback speed</td></tr>
+              </table>
+            </div>
+            <div>
+              <h4>Zoom &amp; pan</h4>
+              <table>
+                <tr><td><span class="key">+</span> <span class="key">-</span></td><td>Zoom in / out</td></tr>
+                <tr><td><span class="key">Wheel</span></td><td>Zoom</td></tr>
+                <tr><td><span class="key">Middle-click</span></td><td>Pan</td></tr>
+              </table>
+            </div>
+            <div>
+              <h4>Markers</h4>
+              <table>
+                <tr><td><span class="key">L-Click</span></td><td>Add / update selected slot</td></tr>
+                <tr><td><span class="key">R-Click</span></td><td>Delete selected / undo</td></tr>
+                <tr><td><span class="key">Tab</span></td><td>Next keypoint slot</td></tr>
+                <tr><td><span class="key">Ctrl+G</span></td><td>Go KP</td></tr>
+                <tr><td><span class="key">A</span></td><td>Add empty marker</td></tr>
+                <tr><td><span class="key">R</span> / <span class="key">D</span></td><td>Remove selected in frame</td></tr>
+                <tr><td><span class="key">Delete</span></td><td>Delete selected</td></tr>
+              </table>
+            </div>
+            <div>
+              <h4>Modes</h4>
+              <table>
+                <tr><td><span class="key">Q</span> / <strong>QMeas</strong></td><td>Quick Measure</td></tr>
+                <tr><td><span class="key">Enter</span></td><td>Classify measure (in Q mode)</td></tr>
+                <tr><td><span class="key">Backspace</span></td><td>Clear measure points</td></tr>
+                <tr><td><span class="key">G</span> / Guide</td><td>Pitch / pose guide</td></tr>
+                <tr><td><span class="key">V</span></td><td>Toggle guide map</td></tr>
+                <tr><td><span class="key">L</span></td><td>Labeling mode</td></tr>
+                <tr><td><span class="key">C</span></td><td>1-line mode</td></tr>
+                <tr><td><span class="key">M</span></td><td>Auto-marking</td></tr>
+                <tr><td><span class="key">S</span> / <span class="key">O</span></td><td>Sequential</td></tr>
+                <tr><td><span class="key">K</span></td><td>FIFA TOML / template</td></tr>
+                <tr><td><span class="key">J</span></td><td>Pose helpers</td></tr>
+                <tr><td><span class="key">1</span>–<span class="key">3</span></td><td>Persistence</td></tr>
+                <tr><td><span class="key">W</span></td><td>Swap dialog</td></tr>
+              </table>
+            </div>
+            <div>
+              <h4>ML / file</h4>
+              <table>
+                <tr><td><span class="key">F5</span>–<span class="key">F9</span></td><td>Labeling / dataset / pose export</td></tr>
+                <tr><td><span class="key">Ctrl+E</span></td><td>Save ML</td></tr>
+                <tr><td><span class="key">F8</span></td><td>Open another video</td></tr>
+                <tr><td><span class="key">H</span></td><td>In-app help</td></tr>
+                <tr><td><span class="key">?</span></td><td>HTML help in browser</td></tr>
+                <tr><td><span class="key">Esc</span></td><td>Save and exit</td></tr>
+              </table>
+            </div>
+          </div>
+        </details>
+
         <div class="controls-grid">
           <div class="control-section">
             <h3>Video Navigation</h3>
@@ -553,7 +677,17 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td>
                   Toggle Guide overlay (depends on Template): FIFA field guide or pose skeleton guide (MediaPipe/YOLO).
                   <code>V</code> (or right-click Guide) toggles the upper-right guide map.
-                  Loads <code>soccerfield_ref3d_fifa.csv</code> automatically.
+                  Soccer-field Guide loads <code>soccerfield_kiki.csv</code> (49 landmarks).
+                </td>
+              </tr>
+              <tr>
+                <td><span class="key">QMeas</span> button / <span class="key">Q</span></td>
+                <td>
+                  Toggle Quick Measure mode (same action). <strong>Calibration first</strong>
+                  (click points + type the real length or width/height), then free measuring;
+                  <span class="key">Enter</span> classifies and <span class="key">S</span> saves the
+                  calibrated points/results CSVs — see
+                  <a href="quickmeasure.html">quickmeasure.html</a>.
                 </td>
               </tr>
               <tr>
@@ -659,24 +793,32 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">Q</span></td>
-                <td>Toggle Quick Measure mode (click points, then <span class="key">Enter</span> to classify as Distance/Area/Velocity/Acceleration — see <a href="quickmeasure.html">quickmeasure.html</a>)</td>
+                <td>Toggle Quick Measure mode (calibration first, then click points and press <span class="key">Enter</span> to classify as Distance/Area/Velocity/Acceleration — see <a href="quickmeasure.html">quickmeasure.html</a>)</td>
               </tr>
             </table>
 
-            <h3>Quick Measure mode (Q key) &mdash; v0.3.122</h3>
+            <h3>Quick Measure mode (Q key / QMeas button) &mdash; v0.3.124</h3>
             <p>
               Kinovea-style quick on-image measurements, implemented in the companion module
               <code>vaila/quickmeasure.py</code> (see <a href="quickmeasure.html">quickmeasure.html</a>) and wired
               into <code>getpixelvideo.py</code> as a thin integration layer.
             </p>
             <ol>
-              <li>Press <span class="key">Q</span> to toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active).</li>
-              <li>Left-click the video to add a point; right-click undoes the last point; middle-click still pans.</li>
+              <li>Press <span class="key">Q</span> or click the toolbar <strong>QMeas</strong> button to toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active).</li>
+              <li><strong>Calibration comes first.</strong> On an uncalibrated session the prompt asks for the calibration type: <span class="key">1</span> Line (2 clicks on a segment of known length), <span class="key">2</span> Plane (4 clicks around a known rectangle), <span class="key">0</span> Skip (keep pixels). Then type the real-world unit (default <code>m</code>).</li>
+              <li>Click the calibration points on the image — a cyan banner tells you what to click next and right-click undoes the last one. After the last click, type the real <strong>length</strong> (line) or <strong>width</strong> and <strong>height</strong> (plane); <span class="key">Enter</span> reopens that prompt if you cancelled it.</li>
+              <li>Once the calibration is accepted, click freely to measure: each left-click adds a point and the status bar shows its calibrated coordinates; right-click undoes the last point; middle-click still pans.</li>
               <li>Press <span class="key">Enter</span> to open the classification submenu: <span class="key">1</span> Distance, <span class="key">2</span> Area, <span class="key">3</span> Velocity, <span class="key">4</span> Acceleration.</li>
-              <li>Press <span class="key">C</span> inside the submenu to load a calibration (an existing <code>.dlt2d</code> file, or a pixel-calibration CSV + <code>.ref2d</code> pair computed on the fly via <code>dlt2d.py</code>) for real-world units instead of pixels.</li>
+              <li>Press <span class="key">S</span> inside the submenu to save <code>processed_quickmeasure_&lt;timestamp&gt;/</code> next to the video: points CSV (pixel <strong>and</strong> real-world coordinates per point), calibration CSV, results CSV. The terminal prints the equivalent <code>uv run python -m vaila.quickmeasure --points-csv ... --measure distance</code> command, which recomputes any measurement from that saved file alone.</li>
+              <li>Press <span class="key">C</span> inside the submenu to load a calibration from files instead (an existing <code>.dlt2d</code> file, or a pixel-calibration CSV + <code>.ref2d</code> pair computed on the fly via <code>dlt2d.py</code>).</li>
               <li>Press <span class="key">Backspace</span> to clear all quick-measure points (<span class="key">X</span> inside the submenu does the same).</li>
               <li>Press <span class="key">Q</span> again to leave the mode (<span class="key">Esc</span> always means save-and-quit the whole tool, never just this mode).</li>
             </ol>
+            <table>
+              <tr><th>Calibration mode</th><th>Clicks</th><th>Typed measures</th><th>Model</th></tr>
+              <tr><td>Line</td><td>2</td><td>length</td><td>Isotropic scale; origin at the first click, <code>+x</code> right, <code>+y</code> up. Assumes the measured plane is parallel to the sensor.</td></tr>
+              <tr><td>Plane</td><td>4 (origin, width direction, opposite corner, last corner)</td><td>width, height</td><td>8-parameter DLT2D homography — corrects perspective.</td></tr>
+            </table>
             <p>
               Point-set convention (fixed, not user-configurable): Distance/Velocity use the
               <strong>last 2</strong> clicked points; Area uses <strong>all</strong> points (shoelace polygon);
@@ -885,10 +1027,13 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
         <h2>6b. Guide Mode (Soccer Field / Pose Skeleton)</h2>
         <p>
           <strong>Guide Mode</strong> is a visual-only overlay to help you place keypoints.
-          YOLO-pose training dataset from soccer field keypoints. It loads the field
-          reference CSV (<code>soccerfield_ref3d_fifa.csv</code> or the standard
-          <code>soccerfield_ref3d.csv</code>) and walks you through each point one
-          by one, so you never have to guess which marker to place next.
+          For Template:FIFA / soccerfield, it loads
+          <code>vaila/models/soccerfield_kiki.csv</code> (49 landmarks, including
+          goal posts, nets, corner flags, and <code>center_field</code>) so you can
+          walk and mark those named points on the video. FIFA-dataset labeling
+          (<code>prefer_fifa_dataset</code>) still uses
+          <code>soccerfield_ref3d_fifa_dataset.csv</code> (48 points). MediaPipe/YOLO
+          templates show a pose skeleton guide instead.
         </p>
 
         <div class="feature-box">
@@ -934,6 +1079,7 @@ uv run vaila/getpixelvideo.py -f video2.mp4 --dataset vaila_dataset_YYYYMMDD/<br
 
         <h3>Field reference files:</h3>
         <ul>
+          <li><code>vaila/models/soccerfield_kiki.csv</code> — <strong>default Guide</strong> reference (49 pts, FIFA-style centre origin + goals/flags/<code>center_field</code>).</li>
           <li><code>vaila/models/soccerfield_ref3d_fifa.csv</code> — FIFA Skeletal Tracking origin (0,0,0 = centre). 37 points. <em>Legacy / 1-based numbering.</em></li>
           <li><code>vaila/models/soccerfield_ref3d.csv</code> — standard vailá layout (origin = bottom-left corner). 37 points. <em>Fallback.</em></li>
           <li><code>vaila/models/soccerfield_ref3d_fifa_dataset.csv</code> — <strong>NEW (v0.6.0):</strong> 32 keypoints, <code>idx 0 = top_left_corner</code>, with <code>flip_idx</code>. Matches <code>&lt;dataset_root&gt;/unified/keypoints_reference_drawsportsfields.csv</code> and is used by FIFA Labeling Mode.</li>
@@ -1435,6 +1581,14 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.3.124 (06 September 2026)</h3>
+        <ul>
+          <li><strong>Quick Measure calibration first (Kinovea-style):</strong> <code>Q</code> / <strong>QMeas</strong> now starts with calibration built from clicks — <em>Line</em> (2 clicks + typed length) or <em>Plane</em> (4 clicks around a known rectangle + typed width/height, solved as a DLT2D homography) — then free measuring. Points are saved to <code>processed_quickmeasure_&lt;timestamp&gt;/</code> with pixel <strong>and</strong> real-world coordinates, alongside calibration and result CSVs, and <code>python -m vaila.quickmeasure --points-csv ... --measure distance</code> recomputes any measurement from that file alone.</li>
+          <li><strong>QMeas toolbar button:</strong> same toggle as hotkey <code>Q</code> for Quick Measure.</li>
+          <li><strong>Soccerfield Guide:</strong> loads <code>soccerfield_kiki.csv</code> (49 landmarks) by default.</li>
+          <li><strong>HTML hotkeys submenu:</strong> clickable <code>#hotkeys-quick</code> cheat sheet; long-form controls tables unchanged.</li>
+        </ul>
 
         <h3>Version 0.3.62 (24 June 2026)</h3>
         <ul>

@@ -1,0 +1,17 @@
+{
+  "loop": "getpixelvideo-qm-guide-hotkeys",
+  "status": "success",
+  "defaults": {
+    "guide_csv": "soccerfield_kiki.csv",
+    "fifa_dataset_csv": "soccerfield_ref3d_fifa_dataset.csv",
+    "option": "A"
+  },
+  "evidence": {
+    "pytest": "22 passed (test_soccerfield_fifa_expansion + kiki + media_classify)",
+    "ruff": "clean",
+    "ty": "All checks passed",
+    "rg": "QMeas + soccerfield_kiki + hotkeys-quick present"
+  },
+  "version": "0.3.123",
+  "updated": "2026-09-06"
+}
