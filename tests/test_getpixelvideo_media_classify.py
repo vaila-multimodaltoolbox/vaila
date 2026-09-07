@@ -5,8 +5,44 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from vaila import getpixelvideo as gpv
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("30", 30.0),
+        ("29.97", 29.97),
+        ("60000/1001", 60000 / 1001),
+        (" 240 / 1 ", 240.0),
+    ],
+)
+def test_parse_fps_hz_accepts_decimal_and_fraction(raw_value: str, expected: float) -> None:
+    assert gpv._parse_fps_hz(raw_value) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("raw_value", ["", "0", "-30", "1/0", "1/2/3", "nan", "inf"])
+def test_parse_fps_hz_rejects_invalid_frequency(raw_value: str) -> None:
+    with pytest.raises(ValueError):
+        gpv._parse_fps_hz(raw_value)
+
+
+def test_manual_fps_is_wired_to_i_key_and_toolbar_button() -> None:
+    source = Path(gpv.__file__).read_text(encoding="utf-8")
+    assert "elif event.key == pygame.K_i:" in source
+    assert "fps_button_rect.collidepoint" in source
+    assert source.count("_prompt_manual_fps()") >= 2
+    assert 'f"FPS {fps:.4g} Hz"' in source
+
+
+def test_mode_controls_help_uses_full_grid_width() -> None:
+    help_path = Path(gpv.__file__).with_name("help") / "getpixelvideo.html"
+    html = help_path.read_text(encoding="utf-8")
+    assert '<div class="control-section mode-controls">' in html
+    assert ".control-section.mode-controls {" in html
+    assert "grid-column: 1 / -1;" in html
 
 
 def test_classify_media_path_video_file(tmp_path: Path) -> None:

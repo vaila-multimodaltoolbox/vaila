@@ -93,3 +93,24 @@ def test_normalize_rejects_too_few_points(tmp_path: Path) -> None:
     tiny = tmp_path / "tiny.ref3d"
     tiny.write_text("0.0,0.0,0.0\n1.0,0.0,0.0\n", encoding="utf-8")
     assert normalize_ref3d_to_format1(str(tiny)) is None
+
+
+def test_headed_long_format4_point_xyz(tmp_path: Path) -> None:
+    """User mode2: headed ``point,x,y,z`` (0-based ids shift to p1..)."""
+    headed = tmp_path / "mode2.ref3d"
+    headed.write_text(
+        "point,x,y,z\n"
+        "0,0.0,0.0,0.0\n"
+        "1,1.0,0.0,0.0\n"
+        "2,1.0,1.0,0.0\n"
+        "3,0.0,1.0,0.0\n"
+        "4,0.5,0.5,1.0\n"
+        "5,0.5,0.5,0.5\n",
+        encoding="utf-8",
+    )
+    assert detect_ref3d_format(str(headed)) == 4
+    df = normalize_ref3d_to_format1(str(headed), min_points=4)
+    assert df is not None
+    assert float(df.iloc[0]["p1_x"]) == pytest.approx(0.0)
+    assert float(df.iloc[0]["p2_x"]) == pytest.approx(1.0)
+    assert "p6_z" in df.columns

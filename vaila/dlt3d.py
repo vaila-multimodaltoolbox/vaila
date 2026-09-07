@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Roberto Pereira Santiago
-Version: 0.3.120
+Version: 0.3.127
 Create: 24 February, 2025
-Last Updated: 03 September 2026
+Last Updated: 07 September 2026
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -20,8 +20,8 @@ Description:
 
     New Features:
       - Generates a REF3D template (with _x, _y, _z columns) from the pixel file.
-      - Auto-detects REF3D layout (format 1 wide CSV, format 2 xyz rows, format 3 indexed xyz rows)
-        and normalizes internally to format 1 before DLT3D.
+      - Auto-detects REF3D layout (format 1 wide CSV, format 2 xyz rows, format 3 indexed xyz rows,
+        format 4 headed long ``point,x,y,z`` / ``x,y,z``) and normalizes internally to format 1 before DLT3D.
       - Validates that the REF3D file contains the three axes for each point.
       - Updated calculation of DLT parameters (11 parameters) using least squares.
       - Graphical file selection using Tkinter.
@@ -104,12 +104,26 @@ def _build_format1_from_point_rows(rows: list[tuple[int, float, float, float]]) 
     return pd.DataFrame(data)
 
 
+def _headed_long_xyz_columns(columns) -> tuple[str | None, str, str, str] | None:
+    """Return ``(index_col_or_None, x, y, z)`` when *columns* look like headed long XYZ."""
+    lowered = {str(c).strip().lower(): str(c) for c in columns}
+    if not {"x", "y", "z"}.issubset(lowered):
+        return None
+    index_col = None
+    for candidate in ("point", "index", "id", "p", "n"):
+        if candidate in lowered:
+            index_col = lowered[candidate]
+            break
+    return index_col, lowered["x"], lowered["y"], lowered["z"]
+
+
 def detect_ref3d_format(file_path: str) -> int | None:
     """
     Detect REF3D file layout.
 
     Returns 1 (wide CSV with header), 2 (xyz rows, no header), 3 (index + xyz rows),
-    or None when the file cannot be classified.
+    4 (headed long ``point,x,y,z`` or ``x,y,z``), or None when the file cannot be
+    classified.
     """
     path = os.path.abspath(file_path)
     if not os.path.isfile(path):
@@ -123,6 +137,14 @@ def detect_ref3d_format(file_path: str) -> int | None:
     lowered = first_line.lower()
     if lowered.startswith("frame,") or ",p1_x," in lowered or lowered.endswith(",p1_x"):
         return 1
+
+    # Headed long format before the no-header numeric probes: a ``point,x,y,z``
+    # header would otherwise look like a broken format-3 (non-numeric first cell).
+    headed = pd.read_csv(path)
+    if _is_format1_dataframe(headed):
+        return 1
+    if _headed_long_xyz_columns(headed.columns) is not None and not headed.empty:
+        return 4
 
     raw = pd.read_csv(path, header=None)
     if raw.empty:
@@ -143,20 +165,20 @@ def detect_ref3d_format(file_path: str) -> int | None:
         ):
             return 3
 
-    # Last chance: header row without the literal substring checks above.
-    headed = pd.read_csv(path)
-    if _is_format1_dataframe(headed):
-        return 1
     return None
 
 
-def normalize_ref3d_to_format1(file_path: str) -> pd.DataFrame | None:
+def normalize_ref3d_to_format1(file_path: str, *, min_points: int = 6) -> pd.DataFrame | None:
     """
     Load any supported REF3D variant and return the canonical format-1 DataFrame.
 
     Format 1: ``frame,p1_x,p1_y,p1_z,...`` (wide, optional multi-row per frame).
     Format 2: one ``x,y,z`` triplet per row, no header; row order defines p1..pN.
     Format 3: one ``index,x,y,z`` row per point, no header; index column defines pN.
+    Format 4: headed long ``point,x,y,z`` (or ``x,y,z``); 0-based point ids are
+    shifted to 1-based so they align with getpixelvideo ``p1..pN`` CSVs.
+
+    ``min_points`` defaults to 6 (DLT3D). Pass 4 for planar DLT2D / Quick Measure.
     """
     fmt = detect_ref3d_format(file_path)
     if fmt is None:
@@ -164,22 +186,56 @@ def normalize_ref3d_to_format1(file_path: str) -> pd.DataFrame | None:
 
     if fmt == 1:
         df = pd.read_csv(file_path)
-        return _validate_format1_dataframe(df)
+        validated = _validate_format1_dataframe(df)
+        if validated is None:
+            return None
+        n_pts = len(_point_numbers_from_columns(validated.columns))
+        return validated if n_pts >= min_points else None
 
-    raw = pd.read_csv(file_path, header=None)
     rows: list[tuple[int, float, float, float]] = []
-    if fmt == 2:
-        for row_idx in range(len(raw)):
-            row = raw.iloc[row_idx]
-            x, y, z = (float(row[0]), float(row[1]), float(row[2]))
-            rows.append((row_idx + 1, x, y, z))
+    if fmt == 4:
+        headed = pd.read_csv(file_path)
+        mapping = _headed_long_xyz_columns(headed.columns)
+        if mapping is None:
+            return None
+        index_col, x_col, y_col, z_col = mapping
+        if index_col is None:
+            for row_idx in range(len(headed)):
+                row = headed.iloc[row_idx]
+                rows.append(
+                    (
+                        row_idx + 1,
+                        float(row[x_col]),
+                        float(row[y_col]),
+                        float(row[z_col]),
+                    )
+                )
+        else:
+            raw_ids = [int(v) for v in headed[index_col].tolist()]
+            offset = 1 if raw_ids and min(raw_ids) == 0 else 0
+            for _, row in headed.iterrows():
+                rows.append(
+                    (
+                        int(row[index_col]) + offset,
+                        float(row[x_col]),
+                        float(row[y_col]),
+                        float(row[z_col]),
+                    )
+                )
     else:
-        for _, row in raw.iterrows():
-            idx = int(row[0])
-            x, y, z = (float(row[1]), float(row[2]), float(row[3]))
-            rows.append((idx, x, y, z))
+        raw = pd.read_csv(file_path, header=None)
+        if fmt == 2:
+            for row_idx in range(len(raw)):
+                row = raw.iloc[row_idx]
+                x, y, z = (float(row[0]), float(row[1]), float(row[2]))
+                rows.append((row_idx + 1, x, y, z))
+        else:
+            for _, row in raw.iterrows():
+                idx = int(row[0])
+                x, y, z = (float(row[1]), float(row[2]), float(row[3]))
+                rows.append((idx, x, y, z))
 
-    if len(rows) < 6:
+    if len(rows) < min_points:
         return None
     return _validate_format1_dataframe(_build_format1_from_point_rows(rows))
 

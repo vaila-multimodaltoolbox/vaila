@@ -6,7 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/quickmeasure.py` |
-| **Version** | 0.3.124 |
+| **Version** | 0.3.127 |
+| **Updated** | 07 September 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes (embedded in `getpixelvideo.py`) |
 | **CLI** | Yes (`python -m vaila.quickmeasure --points-csv ...`) |
@@ -15,26 +16,42 @@
 
 ## Description
 
-Kinovea-style quick on-image measurement engine for `getpixelvideo.py`: **calibrate first**, then click points on the video and classify the current point set as **Distance**, **Area**, **Velocity**, or **Acceleration**. This module owns all quick-measurement *state*, *math*, and (for the pygame-based pieces) the *modal submenu + overlay rendering* — it does **not** reimplement calibration math, and `getpixelvideo.py` only owns the integration glue (a mode-toggle key, one click handler, one draw call, one help-text block), so the already-large host file stays a thin integration layer.
+Kinovea-style quick on-image measurement engine for `getpixelvideo.py`: **calibrate first**, then click points on the video and classify the current point set as **Distance**, **Area**, **Angle**, **Velocity**, or **Acceleration**. This module owns all quick-measurement *state*, *math*, and (for the pygame-based pieces) the *modal submenu + overlay rendering* — it does **not** reimplement calibration math, and `getpixelvideo.py` only owns the integration glue (a mode-toggle key, one click handler, one draw call, one help-text block), so the already-large host file stays a thin integration layer.
 
-## Calibration first (v0.3.124)
+## Calibration first (v0.3.127)
 
-Pressing **Q** or the **QMeas** button on an uncalibrated session starts with calibration, built from clicks alone — no file picking:
+Pressing **Q** or the **QMeas** button on an uncalibrated session starts with calibration:
 
-| Mode | Clicks | You then type | Model |
-|------|--------|---------------|-------|
-| **Line** (`1`) | 2 clicks on a segment of known length | the real length | Isotropic scale `real / pixel`; origin at the first click, `+x` right, `+y` up. Valid for a plane parallel to the sensor. |
-| **Plane** (`2`) | 4 clicks around a known rectangle (click 1 = origin, click 2 = width direction) | width and height | 8-parameter DLT2D homography — perspective corrected. |
-| **Skip** (`0`) | — | — | Session stays in pixels (`px`). |
+| Mode | Input | Model |
+|------|--------|-------|
+| **Line** (`1`) | 2 clicks + typed length | Isotropic scale; origin at first click. |
+| **Plane** (`2`) | 4 clicks + typed width/height | 8-parameter DLT2D homography. |
+| **REF3D** (`3`) | `.ref3d` (mode1 wide / mode2 `point,x,y,z` / mode3 bare `x,y,z`) + drop axis (`z`→XY, `y`→XZ, `x`→YZ) + pixel CSV **or** guided clicks with scheme overlay | Planar DLT2D via `rec2d` (duplicate collapsed points are deduped). |
+| **Skip** (`0`) | — | Stay in pixels (`px`). |
 
-The unit label (`m`, `cm`, …) is typed in the same prompt sequence and is written into every CSV row. While calibrating, the clicked calibration points are drawn in cyan with a banner telling you what to click next; right-click undoes the last calibration click.
+### Live measure modes (digit keys after Q)
 
-Loading an existing calibration from files still works (`C` in the submenu). Calibration reuses the existing DLT2D pipeline exactly the way it already works elsewhere in vailá:
+Once calibrated (or skipped), press a digit on the **video** window — not only in the Enter menu:
 
-- **`dlt2d.py`** (`dlt2d()`, `process_files()`) computes the 8 DLT2D coefficients from a pixel-calibration CSV + a `.ref2d` real-world reference file.
-- **`rec2d_one_dlt2d.py`**'s `rec2d()` applies those fixed coefficients to convert a clicked pixel to real-world coordinates.
+| Key | Mode | Clicks | On-image |
+|-----|------|--------|----------|
+| **1** | distance | 2 (auto) | Line + length for each pair |
+| **2** | area | ≥3, then **Enter** | Polygon + area |
+| **3** | angle | 3 (auto, vertex in the middle) | Rays + degrees |
+| **4** | velocity | 2 on **different frames** | FPS auto-detected; override with `I` or **FPS … Hz** |
+| **5** | acceleration | 3 on distinct frames | Uses the same automatic/manual FPS |
+| **6–0** | reserved | — | — |
 
-Single-video sessions can only ever be calibrated with **DLT2D** — one image plane is 2D by construction. Stereo **DLT3D** triangulation (two synchronized cameras/videos, `rec3d_multicam()` from `rec3d.py`) is intentionally out of scope for this module's live single-video click session; it remains a batch/CLI workflow via `rec3d_one_dlt3d.py`.
+Each completed set is stored with `result_frame` and pixel geometry. The first calibration/result save creates one `processed_quickmeasure_<timestamp>/` next to the video. Every later **S** save in that video session updates the same directory, so all measurements remain together. It contains the combined results CSV, per-type files (`…_results_distance.csv`, …), and `quickmeasure_report.html`.
+
+While calibrating from REF3D without a CSV, a scheme panel highlights the next world point to click on the image. Menu **R** / **C** can also load REF3D / REF2D / `.dlt2d` later.
+
+Calibration reuses:
+
+- **`dlt2d.py`** / **`dlt3d.normalize_ref3d_to_format1`** for REF3D modes
+- **`rec2d_one_dlt2d.py`** `rec2d()` for pixel→real
+
+Single-video sessions stay **DLT2D**. Stereo **DLT3D** remains a batch/CLI workflow via `rec3d_one_dlt3d.py`.
 
 ---
 
@@ -46,6 +63,7 @@ Fixed and documented, not user-configurable, so a result is reproducible from th
 |-------------|------|
 | Distance | Last 2 clicked points |
 | Area | All clicked points, in click order (shoelace polygon) |
+| Angle | 3 points (vertex in the middle) or 4 points (two lines) |
 | Velocity | Last 2 clicked points (needs fps + 2 distinct frames) |
 | Acceleration | Last 3 clicked points (needs fps + 3 distinct frames) |
 
@@ -73,13 +91,18 @@ Fixed and documented, not user-configurable, so a result is reproducible from th
 
 ## Saved CSVs and recomputation
 
-`S` in the submenu writes a timestamped `processed_quickmeasure_YYYYMMDD_HHMMSS/` folder next to the video:
+`S` in the submenu updates the session's single timestamped `processed_quickmeasure_YYYYMMDD_HHMMSS/` folder next to the video. Open `quickmeasure_report.html` in any browser for a didactic summary of the current results, measurement definitions and formulas, units, file purposes, and CSV column meanings.
 
 | File | Columns |
 |------|---------|
 | `<stem>_quickmeasure_points.csv` | `point_id, frame, x_px, y_px, x_real, y_real, unit, calibration_kind` |
 | `<stem>_quickmeasure_calibration.csv` | calibration mode, unit, typed measures, calibration clicks (pixel + real), DLT2D parameters |
-| `<stem>_quickmeasure_results.csv` | `result_id, type, value, unit, n_points, frames, point_ids, fps` |
+| `<stem>_quickmeasure_results.csv` | Matrix layout: one result per row; scalar metadata plus repeated `point_N_id, point_N_frame, point_N_x_px, point_N_y_px, point_N_x_real, point_N_y_real` columns. |
+| `<stem>_quickmeasure_results_<type>.csv` | Same matrix columns and width as the combined file, filtered to one measurement type. |
+| `quickmeasure_report.html` | Browser-readable live report explaining all results, measurements, metrics, files, units, and columns. |
+| `README_quickmeasure.txt` | Compact file list and recomputation command. |
+
+The result CSVs never pack several frames, IDs, or coordinates into one cell. There are no space-delimited lists or `x,y` strings: each scalar occupies its own matrix cell. The number of `point_N_*` groups equals the largest point set in that saved session; shorter measurements leave the extra numeric cells empty.
 
 Because each point carries its calibrated real-world coordinates, every measurement can be recomputed from the saved file alone — without the video:
 
