@@ -121,6 +121,20 @@
         border-radius: 5px;
       }
 
+      .control-section.mode-controls {
+        grid-column: 1 / -1;
+        width: auto;
+      }
+
+      .control-section.mode-controls table {
+        table-layout: auto;
+      }
+
+      .control-section.mode-controls td:first-child {
+        width: 12rem;
+        white-space: nowrap;
+      }
+
       .toc {
         background-color: #f8f9fa;
         padding: 20px;
@@ -206,8 +220,8 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.124<br />
-        <strong>Updated:</strong> 06 September 2026<br />
+        <strong>Version:</strong> 0.3.127<br />
+        <strong>Updated:</strong> 07 September 2026<br />
         <strong>Date:</strong> 23 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
@@ -685,10 +699,14 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td>
                   Toggle Quick Measure mode (same action). <strong>Calibration first</strong>
                   (click points + type the real length or width/height), then free measuring;
-                  <span class="key">Enter</span> classifies and <span class="key">S</span> saves the
-                  calibrated points/results CSVs — see
+                  <span class="key">Enter</span> classifies and <span class="key">S</span> updates
+                  one session directory containing all CSVs and a didactic HTML report — see
                   <a href="quickmeasure.html">quickmeasure.html</a>.
                 </td>
+              </tr>
+              <tr>
+                <td><span class="key">FPS … Hz</span> button / <span class="key">I</span></td>
+                <td>Override the automatically detected video FPS with a positive frequency in Hz (decimal or fraction such as <code>60000/1001</code>).</td>
               </tr>
               <tr>
                 <td><span class="key">FIFA KP button</span></td>
@@ -716,7 +734,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
             <p>Current speed is shown in the top-right corner of the window. Speed resets to 1× when you reopen a video.</p>
           </div>
 
-          <div class="control-section">
+          <div class="control-section mode-controls">
             <h3>Mode Controls</h3>
             <table>
               <tr>
@@ -730,6 +748,10 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               <tr>
                 <td><span class="key">P</span></td>
                 <td>Toggle Persistence mode</td>
+              </tr>
+              <tr>
+                <td><span class="key">I</span> / <span class="key">FPS … Hz</span> button</td>
+                <td>Set video FPS manually in Hz. The value updates timestamps and Quick Measure velocity/acceleration; <span class="key">P</span> remains reserved for Persistence.</td>
               </tr>
               <tr>
                 <td><span class="key">L</span></td>
@@ -797,7 +819,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
             </table>
 
-            <h3>Quick Measure mode (Q key / QMeas button) &mdash; v0.3.124</h3>
+            <h3>Quick Measure mode (Q key / QMeas button) &mdash; v0.3.127</h3>
             <p>
               Kinovea-style quick on-image measurements, implemented in the companion module
               <code>vaila/quickmeasure.py</code> (see <a href="quickmeasure.html">quickmeasure.html</a>) and wired
@@ -807,9 +829,9 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               <li>Press <span class="key">Q</span> or click the toolbar <strong>QMeas</strong> button to toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active).</li>
               <li><strong>Calibration comes first.</strong> On an uncalibrated session the prompt asks for the calibration type: <span class="key">1</span> Line (2 clicks on a segment of known length), <span class="key">2</span> Plane (4 clicks around a known rectangle), <span class="key">0</span> Skip (keep pixels). Then type the real-world unit (default <code>m</code>).</li>
               <li>Click the calibration points on the image — a cyan banner tells you what to click next and right-click undoes the last one. After the last click, type the real <strong>length</strong> (line) or <strong>width</strong> and <strong>height</strong> (plane); <span class="key">Enter</span> reopens that prompt if you cancelled it.</li>
-              <li>Once the calibration is accepted, click freely to measure: each left-click adds a point and the status bar shows its calibrated coordinates; right-click undoes the last point; middle-click still pans.</li>
-              <li>Press <span class="key">Enter</span> to open the classification submenu: <span class="key">1</span> Distance, <span class="key">2</span> Area, <span class="key">3</span> Velocity, <span class="key">4</span> Acceleration.</li>
-              <li>Press <span class="key">S</span> inside the submenu to save <code>processed_quickmeasure_&lt;timestamp&gt;/</code> next to the video: points CSV (pixel <strong>and</strong> real-world coordinates per point), calibration CSV, results CSV. The terminal prints the equivalent <code>uv run python -m vaila.quickmeasure --points-csv ... --measure distance</code> command, which recomputes any measurement from that saved file alone.</li>
+              <li>Once the calibration is accepted, click freely to measure: each left-click adds a point and the status bar shows its calibrated coordinates; right-click undoes the last point; middle-click still pans. Video FPS is detected automatically; press <span class="key">I</span> or click <span class="key">FPS … Hz</span> to override it manually for velocity and acceleration.</li>
+              <li>Press <span class="key">Enter</span> to close an Area polygon or open the save/calibration submenu. Live types are <span class="key">1</span> Distance, <span class="key">2</span> Area, <span class="key">3</span> Angle, <span class="key">4</span> Velocity, and <span class="key">5</span> Acceleration.</li>
+              <li>The first calibration/result save creates one <code>processed_quickmeasure_&lt;timestamp&gt;/</code> next to the video. Press <span class="key">S</span> inside the submenu to update that same directory with all points, calibration, combined + per-type result CSVs, and <code>quickmeasure_report.html</code>. Result CSVs are rectangular matrices: one measurement per row and separate <code>point_N_*</code> columns for every frame, ID, pixel coordinate, and calibrated coordinate—never space-delimited lists in one cell. Open the report in a browser for a clear column dictionary. The terminal prints the equivalent <code>uv run python -m vaila.quickmeasure --points-csv ... --measure distance</code> command.</li>
               <li>Press <span class="key">C</span> inside the submenu to load a calibration from files instead (an existing <code>.dlt2d</code> file, or a pixel-calibration CSV + <code>.ref2d</code> pair computed on the fly via <code>dlt2d.py</code>).</li>
               <li>Press <span class="key">Backspace</span> to clear all quick-measure points (<span class="key">X</span> inside the submenu does the same).</li>
               <li>Press <span class="key">Q</span> again to leave the mode (<span class="key">Esc</span> always means save-and-quit the whole tool, never just this mode).</li>
@@ -1581,6 +1603,13 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.3.127 (07 September 2026)</h3>
+        <ul>
+          <li><strong>Manual video FPS:</strong> automatic metadata detection remains the default; <span class="key">I</span> and the new <span class="key">FPS … Hz</span> toolbar button open the same override dialog. Decimal and fractional frequencies are accepted and synchronized with Quick Measure velocity/acceleration.</li>
+          <li><strong>Full-width Mode Controls:</strong> this help card now spans the complete controls grid for readable key/action descriptions.</li>
+          <li><strong>Matrix-friendly Quick Measure results:</strong> each result occupies one row, with each point ID, frame, pixel coordinate, and calibrated coordinate in a separate <code>point_N_*</code> column. Packed space/comma fields were removed.</li>
+        </ul>
 
         <h3>Version 0.3.124 (06 September 2026)</h3>
         <ul>

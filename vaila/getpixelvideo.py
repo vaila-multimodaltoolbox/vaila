@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 22 July 2025
-Update: 06 September 2026
-Version: 0.3.124
+Update: 07 September 2026
+Version: 0.3.127
 Python Version: 3.12.14
 
 Description:
@@ -37,14 +37,17 @@ Pitch Guide (``G`` or button):
   **QMeas** toolbar button toggles Quick Measure (same as hotkey ``Q``).
 
 Quick Measure (``Q`` or **QMeas**, Kinovea-style, see ``vaila/quickmeasure.py``):
-  **Calibration is the first step.** Choose *Line* (2 clicks on a segment of
-  known length + typed length) or *Plane* (4 clicks around a known rectangle +
-  typed width/height, solved as a DLT2D homography), or skip to stay in pixels.
-  After that, click freely to measure; ``Enter`` classifies Distance/Area/
-  Velocity/Acceleration and ``S`` in the submenu writes
-  ``processed_quickmeasure_<timestamp>/`` with the points (pixel **and**
-  real-world coordinates), calibration and result CSVs. Those CSVs can be
-  re-measured without the video via
+  **Calibration is the first step.** Choose *Line* (2 clicks + length), *Plane*
+  (4 clicks + width/height → DLT2D), *REF3D* (``.ref3d`` modes 1–3, drop X/Y/Z
+  for planar ``rec2d``, load pixel CSV or guided clicks with scheme overlay),
+  or skip to stay in pixels. After that, digit keys select live measure modes:
+  ``1`` distance, ``2`` area, ``3`` angle, ``4`` velocity, ``5`` acceleration
+  (``6``–``0`` reserved); each completed set is drawn on the image with its
+  value. ``Enter`` closes an area polygon or opens the save/calib menu. The first
+  save creates one ``processed_quickmeasure_<timestamp>/`` for the session and
+  later saves update its CSVs and didactic HTML report. Velocity/accel need FPS:
+  metadata supplies it automatically; ``I`` or the **FPS … Hz** button overrides it.
+  Recompute via
   ``uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure distance``.
 
 Pose / ML:
@@ -208,8 +211,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.120"
-GETPIXELVIDEO_UPDATE_DATE = "03 September 2026"
+GETPIXELVIDEO_VERSION = "0.3.127"
+GETPIXELVIDEO_UPDATE_DATE = "07 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -614,6 +617,27 @@ def get_precise_video_metadata(video_path):
             "avg_frame_rate": None,
             "rotation": 0,
         }
+
+
+def _parse_fps_hz(raw_value: str) -> float:
+    """Parse a positive FPS frequency in Hz from decimal or fraction text."""
+    text = str(raw_value).strip()
+    if not text:
+        raise ValueError("FPS cannot be empty.")
+    if "/" in text:
+        parts = text.split("/")
+        if len(parts) != 2:
+            raise ValueError("Use one fraction such as 60000/1001.")
+        numerator = float(parts[0].strip())
+        denominator = float(parts[1].strip())
+        if denominator == 0:
+            raise ValueError("FPS fraction denominator cannot be zero.")
+        value = numerator / denominator
+    else:
+        value = float(text)
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("FPS must be a positive finite frequency in Hz.")
+    return value
 
 
 def check_and_rotate_frame(frame, metadata):
@@ -1919,7 +1943,9 @@ def play_video_with_controls(
     # calibration starts by collecting calibration clicks, then asks for the
     # real-world measurement(s). Free measuring only starts after that.
     quick_measure_calibrating = False
-    quickmeasure_draft: quickmeasure.CalibrationDraft | None = None
+    quickmeasure_draft: (
+        quickmeasure.CalibrationDraft | quickmeasure.Ref3dCalibrationDraft | None
+    ) = None
 
     # -----------------------------------------------------------------------
     # Pitch Guide (visual only): field overlay + reference image. Same clicks
@@ -2146,7 +2172,9 @@ def play_video_with_controls(
         nonlocal quick_measure_calibrating, quickmeasure_draft, quickmeasure_session
         answer = show_input_dialog(
             "CALIBRATION FIRST — 1=Line (2 clicks + length)  "
-            "2=Plane (4 clicks + width/height)  0=Skip (pixels only)",
+            "2=Plane (4 clicks + width/height)  "
+            "3=REF3D file (mode1/2/3 + plane drop)  "
+            "0=Skip (pixels only)",
             "1",
         )
         if answer is None:
@@ -2156,9 +2184,35 @@ def play_video_with_controls(
             if quickmeasure_session is not None:
                 quickmeasure_session.calibration_skipped = True
             return "Quick Measure: calibration skipped — measurements stay in PIXELS."
-        mode = "plane" if choice in ("2", "plane") else "line"
+
         unit_answer = show_input_dialog("Real-world unit for the calibration (e.g. m, cm)", "m")
         unit = (unit_answer or "m").strip() or "m"
+
+        if choice in ("3", "ref3d", "ref", "r"):
+            result, msg = quickmeasure.ask_ref3d_calibration_files(
+                video_path=video_path, unit_label=unit
+            )
+            if isinstance(result, quickmeasure.QuickMeasureCalibration):
+                if quickmeasure_session is not None:
+                    quickmeasure_session.calibration = result
+                # Auto-save calibration next to the video so measures can reuse it.
+                try:
+                    if quickmeasure_session is not None:
+                        paths = quickmeasure_session.save_session(
+                            os.path.dirname(video_path) or os.getcwd(),
+                            stem=os.path.basename(video_path or "quickmeasure"),
+                        )
+                        print(f">> vaila/quickmeasure: calibration saved in {paths['dir']}")
+                except quickmeasure.QuickMeasureError:
+                    pass
+                return f"{msg} — now click freely to measure."
+            if isinstance(result, quickmeasure.Ref3dCalibrationDraft):
+                quickmeasure_draft = result
+                quick_measure_calibrating = True
+                return msg
+            return msg
+
+        mode = "plane" if choice in ("2", "plane") else "line"
         quickmeasure_draft = quickmeasure.CalibrationDraft(mode=mode, unit_label=unit)
         quick_measure_calibrating = True
         return quickmeasure_draft.instructions()
@@ -2169,15 +2223,26 @@ def play_video_with_controls(
         if quickmeasure_draft is None or quickmeasure_session is None:
             quick_measure_calibrating = False
             return "Quick Measure: no calibration in progress."
-        calib, message = quickmeasure.finish_calibration_draft(
-            quickmeasure_draft, show_input_dialog
-        )
+        if isinstance(quickmeasure_draft, quickmeasure.Ref3dCalibrationDraft):
+            calib, message = quickmeasure.finish_ref3d_calibration_draft(quickmeasure_draft)
+        else:
+            calib, message = quickmeasure.finish_calibration_draft(
+                quickmeasure_draft, show_input_dialog
+            )
         if calib is None:
             # Keep the clicks so the user can retry the measurement entry.
             return message
         quickmeasure_session.calibration = calib
         quick_measure_calibrating = False
         quickmeasure_draft = None
+        try:
+            paths = quickmeasure_session.save_session(
+                os.path.dirname(video_path) or os.getcwd(),
+                stem=os.path.basename(video_path or "quickmeasure"),
+            )
+            print(f">> vaila/quickmeasure: calibration saved in {paths['dir']}")
+        except quickmeasure.QuickMeasureError:
+            pass
         return f"{message} — now click freely to measure."
 
     def _toggle_quick_measure_mode() -> str:
@@ -2201,13 +2266,55 @@ def play_video_with_controls(
             if quickmeasure.needs_calibration(quickmeasure_session):
                 return _start_quickmeasure_calibration()
             unit = quickmeasure_session.unit_label
+            # Keep session FPS in sync with the video (I key can change it).
+            quickmeasure_session.fps = fps
             return (
-                f"QUICK MEASURE ON ({unit}) — click points; "
-                "Enter: menu/classify, S in menu: save CSV, right-click: undo"
+                f"QUICK MEASURE ON ({unit}) — 1=dist 2=area 3=angle 4=vel 5=accel; "
+                "click to measure; Enter: area close / menu; S in menu: save"
             )
         quick_measure_calibrating = False
         quickmeasure_draft = None
         return "Quick Measure mode OFF"
+
+    def _prompt_manual_fps() -> str:
+        """Set video FPS in Hz from the I key or toolbar button."""
+        nonlocal fps, screen, quickmeasure_session
+        pygame.display.quit()
+        from tkinter import Tk, messagebox, simpledialog
+
+        root_fps = Tk()
+        root_fps.withdraw()
+        status = f"FPS unchanged: {fps:.6f} Hz"
+        try:
+            raw_value = simpledialog.askstring(
+                "Set Video FPS (Hz)",
+                (
+                    f"Detected/current FPS: {fps:.6f} Hz\n"
+                    "Enter a positive decimal or fraction (example: 60000/1001):"
+                ),
+                initialvalue=f"{fps:.6f}",
+                parent=root_fps,
+            )
+            if raw_value is not None:
+                try:
+                    fps = _parse_fps_hz(raw_value)
+                except ValueError as exc:
+                    messagebox.showerror("Invalid FPS", str(exc), parent=root_fps)
+                    status = f"Invalid FPS: {exc}"
+                else:
+                    if quickmeasure_session is not None:
+                        quickmeasure_session.fps = fps
+                    status = f"Video FPS set manually to {fps:.6f} Hz"
+                    print(f">> vaila/getpixelvideo: {status}")
+                    messagebox.showinfo("FPS Updated", status, parent=root_fps)
+        finally:
+            root_fps.destroy()
+            screen = pygame.display.set_mode(
+                (window_width, window_height + control_panel_height), pygame.RESIZABLE
+            )
+            pygame.display.set_caption(GETPIXELVIDEO_WINDOW_TITLE)
+            pygame.display.flip()
+        return status
 
     def _pitch_guide_status_message(prefix: str = "") -> str:
         """Status line for Pitch Guide (visual only — follows selected marker)."""
@@ -4035,6 +4142,7 @@ def play_video_with_controls(
         click_pass_button_width = 70
         labeling_button_width = 70
         measure_button_width = 64  # QMeas — same as hotkey Q
+        fps_button_width = 88  # Manual video frequency (same as hotkey I)
         guide_button_width = 74  # Guide button (field / skeleton overlay)
         guide_toggle_size = 12
         tracking_csv_button_width = 120
@@ -4050,10 +4158,11 @@ def play_video_with_controls(
             + click_pass_button_width
             + labeling_button_width
             + measure_button_width
+            + fps_button_width
             + guide_button_width
             + 5
             + guide_toggle_size
-            + (button_gap * 8)
+            + (button_gap * 9)
         )
         show_tracking_indicator_size = 12
         total_bottom_width = (
@@ -4198,6 +4307,18 @@ def play_video_with_controls(
         pygame.draw.rect(control_surface, measure_color, measure_button_rect)
         measure_text = font.render("QMeas", True, (255, 255, 255))
         control_surface.blit(measure_text, measure_text.get_rect(center=measure_button_rect.center))
+
+        # 7c. Manual FPS button (same dialog as hotkey I); caption shows current Hz.
+        fps_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_top,
+            fps_button_width,
+            button_height,
+        )
+        current_x += fps_button_width + button_gap
+        pygame.draw.rect(control_surface, (45, 110, 155), fps_button_rect)
+        fps_text = _top_btn_font.render(f"FPS {fps:.4g} Hz", True, (255, 255, 255))
+        control_surface.blit(fps_text, fps_text.get_rect(center=fps_button_rect.center))
 
         # 8. Guide button + on/off toggle (tiny square).
         guide_button_rect = pygame.Rect(
@@ -4384,6 +4505,7 @@ def play_video_with_controls(
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             measure_button_rect,  # Quick Measure (same as Q)
+            fps_button_rect,  # Manual video FPS in Hz (same as I)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
             tracking_csv_button_rect,  # Add tracking CSV button to return
@@ -4824,9 +4946,11 @@ def play_video_with_controls(
             "",
             "=== QUICK MEASURE (Kinovea-style) ===",
             "- Q: Toggle Quick Measure mode (exclusive with other click modes)",
+            "- I or FPS ... Hz button: override auto-detected video FPS",
             "  - Left click: add a point   - Right click: undo last point",
             "  - Backspace: clear all points",
-            "  - Enter: open Distance/Area/Velocity/Acceleration menu",
+            "  - Enter: close Area or open the save/calibration menu",
+            "  - 1 Distance, 2 Area, 3 Angle, 4 Velocity, 5 Acceleration",
             "    (menu also loads a DLT2D calibration for real-world units)",
             "",
             "=== LABELING MODE (Bounding Boxes) ===",
@@ -7939,7 +8063,12 @@ def play_video_with_controls(
 
         # Draw Quick Measure clicked points (persists even after the mode is
         # toggled off, so the last measurement stays visible on screen).
-        if quickmeasure_session is not None and quickmeasure_session.points:
+        if quickmeasure_session is not None and (
+            quickmeasure_session.results
+            or quickmeasure_session.draft_points
+            or quickmeasure_session.active_mode is not None
+            or quickmeasure_session.points
+        ):
             quickmeasure.draw_quickmeasure_overlay(
                 screen, quickmeasure_session, zoom_level, crop_x, crop_y, font
             )
@@ -7972,6 +8101,7 @@ def play_video_with_controls(
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             measure_button_rect,  # Quick Measure (same as Q)
+            fps_button_rect,  # Manual video FPS in Hz (same as I)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
             tracking_csv_button_rect,  # Add tracking CSV button to return
@@ -8299,6 +8429,63 @@ def play_video_with_controls(
                     showing_save_message = True
                     save_message_timer = 90
                 elif (
+                    quick_measure_mode
+                    and not quick_measure_calibrating
+                    and quickmeasure_session is not None
+                    and event.key
+                    in (
+                        pygame.K_0,
+                        pygame.K_1,
+                        pygame.K_2,
+                        pygame.K_3,
+                        pygame.K_4,
+                        pygame.K_5,
+                        pygame.K_6,
+                        pygame.K_7,
+                        pygame.K_8,
+                        pygame.K_9,
+                        pygame.K_KP0,
+                        pygame.K_KP1,
+                        pygame.K_KP2,
+                        pygame.K_KP3,
+                        pygame.K_KP4,
+                        pygame.K_KP5,
+                        pygame.K_KP6,
+                        pygame.K_KP7,
+                        pygame.K_KP8,
+                        pygame.K_KP9,
+                    )
+                ):
+                    key_map = {
+                        pygame.K_0: "0",
+                        pygame.K_1: "1",
+                        pygame.K_2: "2",
+                        pygame.K_3: "3",
+                        pygame.K_4: "4",
+                        pygame.K_5: "5",
+                        pygame.K_6: "6",
+                        pygame.K_7: "7",
+                        pygame.K_8: "8",
+                        pygame.K_9: "9",
+                        pygame.K_KP0: "0",
+                        pygame.K_KP1: "1",
+                        pygame.K_KP2: "2",
+                        pygame.K_KP3: "3",
+                        pygame.K_KP4: "4",
+                        pygame.K_KP5: "5",
+                        pygame.K_KP6: "6",
+                        pygame.K_KP7: "7",
+                        pygame.K_KP8: "8",
+                        pygame.K_KP9: "9",
+                    }
+                    quickmeasure_session.fps = fps
+                    try:
+                        save_message_text = quickmeasure_session.set_live_mode(key_map[event.key])
+                    except quickmeasure.QuickMeasureError as exc:
+                        save_message_text = f"QMeas: {exc}"
+                    showing_save_message = True
+                    save_message_timer = 90
+                elif (
                     event.key == pygame.K_RETURN
                     and quick_measure_mode
                     and quick_measure_calibrating
@@ -8306,6 +8493,22 @@ def play_video_with_controls(
                     save_message_text = _finish_quickmeasure_calibration()
                     showing_save_message = True
                     save_message_timer = 120
+                elif (
+                    event.key == pygame.K_RETURN
+                    and quick_measure_mode
+                    and quickmeasure_session is not None
+                    and quickmeasure_session.active_mode == "area"
+                    and quickmeasure_session.draft_points
+                ):
+                    quickmeasure_session.fps = fps
+                    try:
+                        save_message_text, _done = quickmeasure_session.finalize_live_area(
+                            frame_count
+                        )
+                    except quickmeasure.QuickMeasureError as exc:
+                        save_message_text = f"QMeas: {exc}"
+                    showing_save_message = True
+                    save_message_timer = 90
                 elif (
                     event.key == pygame.K_RETURN
                     and quick_measure_mode
@@ -8319,6 +8522,11 @@ def play_video_with_controls(
                         save_dir=os.path.dirname(video_path) or os.getcwd(),
                         save_stem=os.path.basename(video_path or "quickmeasure"),
                     )
+                    if quickmeasure_session.pending_ref3d_draft is not None:
+                        quickmeasure_draft = quickmeasure_session.pending_ref3d_draft
+                        quickmeasure_session.pending_ref3d_draft = None
+                        quick_measure_calibrating = True
+                        save_message_text = quickmeasure_draft.instructions()
                     showing_save_message = True
                     save_message_timer = 150
                 elif (
@@ -8327,7 +8535,8 @@ def play_video_with_controls(
                     and quickmeasure_session is not None
                 ):
                     quickmeasure_session.clear()
-                    save_message_text = "Quick Measure: points cleared"
+                    quickmeasure_session.clear_results()
+                    save_message_text = "Quick Measure: points and results cleared"
                     showing_save_message = True
                     save_message_timer = 30
                 elif event.key == pygame.K_d:
@@ -8643,21 +8852,22 @@ def play_video_with_controls(
                     save_message_timer = 30
 
                 # Adjust persistence frames with '1', '2', and '3' keys
-                elif event.key == pygame.K_1:  # Decrease persistence frames
+                # (disabled while Quick Measure owns digit keys 1–0 as live modes).
+                elif event.key == pygame.K_1 and not quick_measure_mode:  # Decrease persistence
                     if persistence_enabled:
                         persistence_frames = max(1, persistence_frames - 1)
                         save_message_text = f"Persistence: {persistence_frames} frames"
                         showing_save_message = True
                         save_message_timer = 30
 
-                elif event.key == pygame.K_2:  # Increase persistence frames
+                elif event.key == pygame.K_2 and not quick_measure_mode:  # Increase persistence
                     if persistence_enabled:
                         persistence_frames += 1  # Sem limite máximo
                         save_message_text = f"Persistence: {persistence_frames} frames"
                         showing_save_message = True
                         save_message_timer = 30
 
-                elif event.key == pygame.K_3:  # Alternar entre três modos
+                elif event.key == pygame.K_3 and not quick_measure_mode:  # Alternar persistência
                     if not persistence_enabled:
                         # Modo 1: Ativar com persistência completa
                         persistence_enabled = True
@@ -8679,56 +8889,11 @@ def play_video_with_controls(
                 elif event.key == pygame.K_h:
                     show_help_dialog()
 
-                # Input manual FPS
-                elif event.key == pygame.K_i or event.key == pygame.K_p:
-                    # Temporarily close pygame display to show tkinter dialog
-                    pygame.display.quit()
-                    from tkinter import Tk, messagebox, simpledialog
-
-                    root_fps = Tk()
-                    root_fps.withdraw()
-                    new_fps_str = simpledialog.askstring(
-                        "Input FPS",
-                        f"Enter new FPS value (current: {fps:.6f}):\n(You can enter a float or a fraction like 60000/1001)",
-                        initialvalue=str(fps),
-                    )
-                    root_fps.destroy()
-                    # Reinitialize pygame display
-                    screen = pygame.display.set_mode(
-                        (window_width, window_height + control_panel_height), pygame.RESIZABLE
-                    )
-                    pygame.display.set_caption(GETPIXELVIDEO_WINDOW_TITLE)
-                    if new_fps_str:
-                        try:
-                            val = None
-                            if "/" in new_fps_str:
-                                num, den = map(int, new_fps_str.split("/"))
-                                if den != 0:
-                                    val = float(num) / den
-                                    fps_num, fps_den = num, den
-                            else:
-                                val = float(new_fps_str)
-                                fps_num, fps_den = int(val * 1000), 1000
-
-                            if val is not None and val > 0:
-                                fps = val
-                                print(f"FPS updated to: {fps:.6f} ({fps_num}/{fps_den})")
-
-                                # Spawn temporary root for messagebox to ensure it closes properly on Linux
-                                msg_root = Tk()
-                                msg_root.withdraw()
-                                messagebox.showinfo(
-                                    "FPS Updated",
-                                    f"FPS set to {fps:.6f} ({fps_num}/{fps_den})",
-                                    parent=msg_root,
-                                )
-                                msg_root.destroy()
-
-                            else:
-                                print("Invalid FPS value entered.")
-                        except ValueError:
-                            print("Invalid FPS format entered.")
-                    pygame.display.flip()
+                # Define video frequency manually (Hz); P remains persistence only.
+                elif event.key == pygame.K_i:
+                    save_message_text = _prompt_manual_fps()
+                    showing_save_message = True
+                    save_message_timer = 120
 
                 # Adicionar novo marcador
                 elif event.key == pygame.K_a:
@@ -9078,6 +9243,10 @@ def play_video_with_controls(
                         save_message_text = _toggle_quick_measure_mode()
                         showing_save_message = True
                         save_message_timer = 90
+                    elif fps_button_rect.collidepoint(x, rel_y):
+                        save_message_text = _prompt_manual_fps()
+                        showing_save_message = True
+                        save_message_timer = 120
                     elif guide_toggle_rect.collidepoint(x, rel_y) or guide_button_rect.collidepoint(
                         x, rel_y
                     ):
@@ -9257,24 +9426,41 @@ def play_video_with_controls(
                             scrolling = True
                             pygame.mouse.get_rel()
                     elif quick_measure_mode and quickmeasure_session is not None:
-                        if event.button == 1:  # Left click: add a measure point
-                            n_pts = quickmeasure_session.add_point(frame_count, video_x, video_y)
-                            x_real, y_real = quickmeasure_session.points_dataframe().iloc[-1][
-                                ["x_real", "y_real"]
-                            ]
-                            save_message_text = (
-                                f"Quick Measure: point {n_pts} @ frame {frame_count + 1} = "
-                                f"({x_real:.3f}, {y_real:.3f}) {quickmeasure_session.unit_label}"
-                            )
+                        quickmeasure_session.fps = fps
+                        if event.button == 1:  # Left click: live-mode or free point
+                            if quickmeasure_session.active_mode is not None:
+                                try:
+                                    save_message_text, _done = quickmeasure_session.add_live_point(
+                                        frame_count, video_x, video_y
+                                    )
+                                except quickmeasure.QuickMeasureError as exc:
+                                    save_message_text = f"QMeas: {exc}"
+                            else:
+                                n_pts = quickmeasure_session.add_point(
+                                    frame_count, video_x, video_y
+                                )
+                                x_real, y_real = quickmeasure_session.points_dataframe().iloc[-1][
+                                    ["x_real", "y_real"]
+                                ]
+                                save_message_text = (
+                                    f"Quick Measure: point {n_pts} @ frame {frame_count + 1} = "
+                                    f"({x_real:.3f}, {y_real:.3f}) "
+                                    f"{quickmeasure_session.unit_label} "
+                                    f"— press 1–5 to choose a measure mode"
+                                )
                             showing_save_message = True
-                            save_message_timer = 30
-                        elif event.button == 3:  # Right click: undo last point
+                            save_message_timer = 60
+                        elif event.button == 3:  # Right click: undo draft / last point
                             if quickmeasure_session.undo_last():
-                                save_message_text = "Quick Measure: last point removed"
+                                save_message_text = (
+                                    quickmeasure_session.live_mode_status()
+                                    if quickmeasure_session.active_mode
+                                    else "Quick Measure: last point removed"
+                                )
                             else:
                                 save_message_text = "Quick Measure: no points to remove"
                             showing_save_message = True
-                            save_message_timer = 25
+                            save_message_timer = 45
                         elif event.button == 2:  # Middle click: still allow panning
                             scrolling = True
                             pygame.mouse.get_rel()

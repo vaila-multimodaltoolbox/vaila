@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.124
+**Version:** 0.3.127
 **Date:** 23 June 2026  
-**Updated:** 06 September 2026
+**Updated:** 07 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -33,7 +33,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
   - **MediaPipe:** pose skeleton guide (33)
   - **YOLO:** pose skeleton guide (COCO-17)
   Marking behaviour is the same as with the guide off (TAB, **Ctrl+G** / Go KP, left/right click).
-- **Quick Measure (`Q` / toolbar `QMeas`):** calibration first (click points + type the real length or width/height), then free measuring; Enter classifies Distance/Area/Velocity/Acceleration and `S` saves the calibrated points/results CSVs (see `quickmeasure` help).
+- **Quick Measure (`Q` / toolbar `QMeas`):** calibration first (Line / Plane / REF3D mode1–3 with plane drop + CSV or guided clicks), then free measuring; Enter classifies Distance/Area/Angle/Velocity/Acceleration and `S` saves the calibrated points/results CSVs (see `quickmeasure` help).
 - **Zoom & Navigation:** Full zoom capabilities with frame-by-frame navigation
 - **Persistence Mode:** View marker trails across multiple frames
 - **Auto-detection:** Automatically detect CSV format or manual selection
@@ -311,26 +311,24 @@ uv run yolo pose train \
 - Both dataset layouts (`<dir>/{split}/{images,labels}` and `<dir>/{images,labels}/{split}`) are auto-detected when appending.
 - A small **example** TOML for tests lives under `tests/sport_fields/` (e.g. `fifa_template.toml`); copy the idea beside your own videos.
 
-### Quick Measure mode (Q key / QMeas button) — v0.3.124
+### Quick Measure mode (Q key / QMeas button) — v0.3.127
 
 Kinovea-style quick on-image measurements, implemented in the companion module `vaila/quickmeasure.py` (see [quickmeasure.md](quickmeasure.md)) and wired into `getpixelvideo.py` as a thin integration layer.
 
 1. Press **Q** or click toolbar **QMeas** to toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active).
-2. **Calibration comes first.** On an uncalibrated session the prompt asks for the calibration type: **1** Line (2 clicks on a segment of known length), **2** Plane (4 clicks around a known rectangle), or **0** Skip (keep pixels). Then type the real-world unit (default `m`).
-3. Click the calibration points on the image — a cyan banner tells you what to click next, right-click undoes the last one. When the last point is clicked, type the real **length** (line) or **width** and **height** (plane). Press **Enter** to reopen that prompt if you cancelled it.
-4. After the calibration is accepted, click freely to measure: each left-click adds a point and the status bar shows its calibrated coordinates; right-click undoes the last point; middle-click still pans.
-5. Press **Enter** to open the classification submenu and choose **1** Distance, **2** Area, **3** Velocity, or **4** Acceleration for the current point set.
-6. Press **S** inside the submenu to save `processed_quickmeasure_<timestamp>/` next to the video with the points CSV (pixel **and** real-world coordinates per point), the calibration CSV, and the results CSV. The terminal prints the equivalent `>> uv run python -m vaila.quickmeasure --points-csv ... --measure distance` command, which recomputes any measurement from that saved file alone.
-7. Press **C** inside the submenu to load a calibration from files instead (an existing `.dlt2d` file, or a pixel-calibration CSV + `.ref2d` pair computed on the fly via `dlt2d.py`).
-8. Press **Backspace** to clear all quick-measure points; **X** inside the submenu does the same.
-9. Press **Q** again to leave Quick Measure mode (**Esc** always means save-and-quit the whole tool, never just this mode).
+2. **Calibration comes first.** Choose **1** Line, **2** Plane, **3** REF3D (`.ref3d` mode1/2/3 + drop X/Y/Z + pixel CSV or guided clicks with scheme overlay), or **0** Skip (pixels). Then type the unit (default `m`).
+3. **Live measure modes (digit keys on the video):** **1** distance (2 clicks), **2** area (≥3 clicks + Enter), **3** angle (3 clicks), **4** velocity (2 frames, needs FPS), **5** acceleration (3 frames, needs FPS), **6–0** reserved. Each completed set draws its value on the image.
+4. FPS is detected automatically. Override it when needed with **I** or the **FPS … Hz** toolbar button; enter a positive decimal or fraction such as `60000/1001`. The manual value is used by velocity/acceleration. Right-click undoes the last draft point.
+5. **Enter** closes an area polygon, or opens the submenu (**S** save, **C**/**R** calibration, **X** clear).
+6. The first calibration/result save creates one `processed_quickmeasure_<timestamp>/` next to the video. **S** updates that same session directory with all points, calibration, `.dlt2d`, optional dropped-plane `.ref2d`, combined + per-type results CSVs, `README_quickmeasure.txt`, and a didactic `quickmeasure_report.html`; it also prints the equivalent CLI. Results are rectangular matrices: one measurement per row and separate `point_N_*` columns for every frame, ID, pixel coordinate, and calibrated coordinate—never space-delimited lists in a cell.
 
-**Calibration models** (same as Kinovea's "calibrate measure"):
+**Calibration models:**
 
-| Mode | Clicks | Typed measures | Notes |
-|------|--------|----------------|-------|
-| Line | 2 | length | Isotropic scale; origin at the first click, `+x` right, `+y` up. Assumes the measured plane is parallel to the sensor. |
-| Plane | 4 (origin, width direction, opposite corner, last corner) | width, height | 8-parameter DLT2D homography — corrects perspective. |
+| Mode | Input | Notes |
+|------|--------|-------|
+| Line | 2 clicks + length | Isotropic scale; origin at first click. |
+| Plane | 4 clicks + width/height | DLT2D homography. |
+| REF3D | `.ref3d` + drop axis + CSV or guide | Planar DLT2D via `rec2d`; duplicates after axis drop are deduped. |
 
 **Point-set convention** (fixed, not user-configurable, so results are reproducible from clicks alone):
 
@@ -338,6 +336,7 @@ Kinovea-style quick on-image measurements, implemented in the companion module `
 |-------------|------|
 | Distance / Velocity | Last 2 clicked points |
 | Area | All clicked points, in click order (shoelace polygon) |
+| Angle | 3 points (vertex middle) or 4 points (two lines) |
 | Acceleration | Last 3 clicked points |
 
 Velocity/Acceleration require the points to be on different frames and use the video's own fps. Single-video sessions only support **DLT2D** (one image plane); stereo **DLT3D** triangulation from two synchronized videos remains a batch/CLI workflow via `rec3d_one_dlt3d.py`.
@@ -400,6 +399,7 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | **C**           | Toggle "1 Line" mode                              |
 | **O** or **S**  | Toggle Sequential mode (Normal mode only)        |
 | **P**           | Toggle Persistence mode                           |
+| **I** / **FPS … Hz** button | Set video FPS manually in Hz (decimal or fraction); updates timestamps and Quick Measure time-based metrics |
 | **L**           | Toggle Labeling mode (Bounding Boxes)             |
 | **G**           | Toggle Guide (**visual** overlay for template; `V` toggles map) |
 | **FIFA** / **K** | Load or create **FIFA TOML** beside the video (`n_keypoints`, `start`, `base`) |
@@ -625,6 +625,12 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.3.127 (07 September 2026)
+
+- **Manual video FPS:** automatic metadata detection remains the default; **I** and the new **FPS … Hz** toolbar button open the same manual override dialog. Decimal and fractional frequencies are accepted, and the result is synchronized with Quick Measure velocity/acceleration.
+- **Full-width Mode Controls:** the HTML help card now spans the complete controls grid for readable key/action descriptions.
+- **Matrix-friendly Quick Measure results:** each result occupies one row, with each point ID, frame, pixel coordinate, and calibrated coordinate in a separate `point_N_*` column. Packed space/comma fields were removed.
 
 ### Version 0.3.124 (06 September 2026)
 

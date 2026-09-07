@@ -23,11 +23,13 @@ import pytest
 
 from vaila.quickmeasure import (
     CALIBRATION_CLICKS,
+    LIVE_MODE_KEYS,
     MEASURE_TYPES,
     CalibrationDraft,
     QuickMeasureCalibration,
     QuickMeasureError,
     QuickMeasureSession,
+    Ref3dCalibrationDraft,
     finish_calibration_draft,
     format_result,
     main,
@@ -204,7 +206,7 @@ def test_session_measure_unknown_kind_raises():
     session.add_point(0, 1, 1)
     with pytest.raises(QuickMeasureError):
         session.measure("banana")
-    assert set(MEASURE_TYPES) == {"distance", "area", "velocity", "acceleration"}
+    assert set(MEASURE_TYPES) == {"distance", "area", "angle", "velocity", "acceleration"}
 
 
 # ---------------------------------------------------------------------------
@@ -432,6 +434,42 @@ def test_save_session_writes_points_calibration_and_results(tmp_path):
     results_df = pd.read_csv(paths["results"])
     assert results_df.loc[0, "type"] == "distance"
     assert results_df.loc[0, "value"] == pytest.approx(3.0)
+    assert os.path.isfile(paths["report"])
+    with open(paths["report"], encoding="utf-8") as handle:
+        report = handle.read()
+    assert "What each measurement means" in report
+    assert "Results CSV column dictionary" in report
+    assert "point_N_id" in report
+    assert "No list, coordinate pair, or space-delimited sequence" in report
+    assert "Distance" in report
+
+
+def test_save_session_reuses_one_directory_and_refreshes_report(tmp_path):
+    session = QuickMeasureSession(fps=10.0)
+    session.calibration_skipped = True
+    session.add_point(0, 0, 0)
+    session.add_point(0, 3, 4)
+    session.measure("distance")
+
+    first = session.save_session(str(tmp_path), stem="clip.mp4")
+    session.add_point(0, 0, 0)
+    session.add_point(10, 0, 20)
+    session.measure("velocity")
+    second = session.save_session(str(tmp_path), stem="clip.mp4")
+
+    assert second["dir"] == first["dir"]
+    assert len(list(tmp_path.glob("processed_quickmeasure_*"))) == 1
+    results = pd.read_csv(second["results"])
+    assert results["type"].tolist() == ["distance", "velocity"]
+    velocity = results.loc[results["type"] == "velocity"].iloc[0]
+    assert velocity["elapsed_time_s"] == pytest.approx(1.0)
+    assert velocity["point_1_frame"] == 0
+    assert velocity["point_2_frame"] == 10
+    with open(second["report"], encoding="utf-8") as handle:
+        report = handle.read()
+    assert "Completed results:</strong> 2" in report
+    assert "Velocity" in report
+    assert "distance / ((frame2-frame1)/fps)" in report
 
 
 def test_save_session_refuses_empty_session(tmp_path):
@@ -560,6 +598,223 @@ def test_getpixelvideo_toggle_is_calibration_first():
     assert "_start_quickmeasure_calibration()" in toggle_body
     # Calibration clicks must be routed before measure clicks.
     assert "quick_measure_calibrating" in source
+    assert "quickmeasure_draft.add_point(video_x, video_y)" in source
+    assert "quickmeasure_session.add_live_point" in source
     assert source.index("quickmeasure_draft.add_point(video_x, video_y)") < source.index(
-        "quickmeasure_session.add_point(frame_count, video_x, video_y)"
+        "quickmeasure_session.add_live_point"
     )
+    assert "3=REF3D" in source or "REF3D file" in source
+    assert "set_live_mode" in source
+    assert "add_live_point" in source
+
+
+def test_session_angle_three_points_right_angle():
+    session = QuickMeasureSession()
+    session.add_point(0, 1, 0)
+    session.add_point(0, 0, 0)
+    session.add_point(0, 0, 1)
+    result = session.measure("angle")
+    assert result["unit"] == "deg"
+    assert math.isclose(result["value"], 90.0, abs_tol=1e-6)
+    assert result["n_points"] == 3
+
+
+def test_session_angle_four_points_two_lines():
+    session = QuickMeasureSession()
+    # Horizontal then vertical → 90 deg.
+    session.add_point(0, 0, 0)
+    session.add_point(0, 2, 0)
+    session.add_point(0, 0, 0)
+    session.add_point(0, 0, 3)
+    result = session.measure("angle")
+    assert math.isclose(result["value"], 90.0, abs_tol=1e-6)
+    assert result["n_points"] == 4
+
+
+def test_ref3d_modes_detected_and_mode2_matches_mode3():
+    from vaila.dlt3d import detect_ref3d_format, normalize_ref3d_to_format1
+
+    assert detect_ref3d_format(_fixture("ref3d_mode1.ref3d")) == 1
+    assert detect_ref3d_format(_fixture("ref3d_mode2.ref3d")) == 4
+    assert detect_ref3d_format(_fixture("ref3d_mode3.ref3d")) == 2
+    df2 = normalize_ref3d_to_format1(_fixture("ref3d_mode2.ref3d"))
+    df3 = normalize_ref3d_to_format1(_fixture("ref3d_mode3.ref3d"))
+    assert df2 is not None and df3 is not None
+    pd.testing.assert_frame_equal(df2, df3)
+
+
+def test_calibration_from_ref3d_and_pixel_csv_drop_x():
+    calib = QuickMeasureCalibration.from_ref3d_and_pixel_csv(
+        _fixture("ref3d_mode1.ref3d"),
+        _fixture("c1_cod_markers_1_line.csv"),
+        drop_axis="x",
+    )
+    assert calib.kind == "ref3d"
+    assert calib.drop_axis == "x"
+    assert calib.dlt_params is not None
+    assert len(calib.kept_point_indices) >= 4
+    # p1 world (0,0,0.07) → YZ (0, 0.07); reconstructed from its pixel should be close.
+    pix = pd.read_csv(_fixture("c1_cod_markers_1_line.csv")).iloc[0]
+    y, z = calib.pixel_to_real(float(pix["p1_x"]), float(pix["p1_y"]))
+    assert math.isclose(y, 0.0, abs_tol=0.15)
+    assert math.isclose(z, 0.07, abs_tol=0.25)
+
+
+def test_ref3d_calibration_draft_guide_build():
+    draft = Ref3dCalibrationDraft.from_ref3d_file(_fixture("ref3d_mode1.ref3d"), drop_axis="x")
+    assert draft.required_points >= 4
+    assert not draft.is_complete
+    pix = pd.read_csv(_fixture("c1_cod_markers_1_line.csv")).iloc[0]
+    for label in draft.kept_labels:
+        draft.add_point(float(pix[f"p{label}_x"]), float(pix[f"p{label}_y"]))
+    assert draft.is_complete
+    calib = draft.build()
+    assert calib.kind == "ref3d"
+    assert calib.drop_axis == "x"
+
+
+def test_ref3d_save_session_writes_dlt2d_and_ref2d(tmp_path):
+    calib = QuickMeasureCalibration.from_ref3d_and_pixel_csv(
+        _fixture("ref3d_mode1.ref3d"),
+        _fixture("c1_cod_markers_1_line.csv"),
+        drop_axis="x",
+    )
+    session = QuickMeasureSession(fps=30.0, calibration=calib)
+    session.add_point(0, 100, 100)
+    session.add_point(0, 200, 100)
+    session.measure("distance")
+    paths = session.save_session(str(tmp_path), stem="c1_cod.mp4")
+    assert os.path.isfile(paths["dlt2d"])
+    assert os.path.isfile(paths["ref2d"])
+    assert os.path.isfile(paths["ref3d_meta"])
+    assert os.path.isfile(paths["readme"])
+    assert os.path.isfile(paths["results"])
+
+
+def test_live_mode_keys_mapping():
+    assert LIVE_MODE_KEYS == {
+        "1": "distance",
+        "2": "area",
+        "3": "angle",
+        "4": "velocity",
+        "5": "acceleration",
+    }
+
+
+def test_live_mode_distance_auto_finalizes_and_labels_geometry():
+    session = QuickMeasureSession()
+    msg = session.set_live_mode("1")
+    assert "distance" in msg
+    status, done = session.add_live_point(0, 0, 0)
+    assert done is None
+    assert "1/2" in status
+    status, done = session.add_live_point(0, 3, 4)
+    assert done is not None
+    assert done["type"] == "distance"
+    assert math.isclose(done["value"], 5.0, abs_tol=1e-9)
+    assert done["pixels"] == [(0.0, 0.0), (3.0, 4.0)]
+    assert done["result_frame"] == 0
+    assert len(session.draft_points) == 0
+    # Second pair accumulates another result.
+    session.add_live_point(0, 10, 10)
+    _, done2 = session.add_live_point(0, 10, 20)
+    assert done2 is not None
+    assert len(session.results) == 2
+
+
+def test_live_mode_area_needs_enter():
+    session = QuickMeasureSession()
+    session.set_live_mode("2")
+    session.add_live_point(0, 0, 0)
+    session.add_live_point(0, 4, 0)
+    session.add_live_point(0, 4, 3)
+    assert len(session.results) == 0
+    msg, done = session.finalize_live_area(0)
+    assert done is not None
+    assert math.isclose(done["value"], 6.0, abs_tol=1e-9)  # triangle 4*3/2
+    assert "Area" in msg or "area" in msg.lower() or "6" in msg
+
+
+def test_live_mode_velocity_requires_fps_and_two_frames():
+    session = QuickMeasureSession()
+    with pytest.raises(QuickMeasureError, match="FPS"):
+        session.set_live_mode("4")
+    session.fps = 10.0
+    session.set_live_mode("4")
+    session.add_live_point(0, 0, 0)
+    with pytest.raises(QuickMeasureError, match="different frames"):
+        session.add_live_point(0, 3, 4)
+    session.draft_points.clear()
+    session.add_live_point(0, 0, 0)
+    _, done = session.add_live_point(10, 3, 4)
+    assert done is not None
+    assert math.isclose(done["value"], 5.0, abs_tol=1e-9)
+    assert done["unit"] == "px/s"
+
+
+def test_live_mode_reserved_key():
+    session = QuickMeasureSession()
+    msg = session.set_live_mode("9")
+    assert "reserved" in msg.lower()
+    assert session.active_mode is None
+
+
+def test_live_mode_save_writes_per_type_results(tmp_path):
+    session = QuickMeasureSession(fps=30.0)
+    session.set_live_mode("1")
+    session.add_live_point(5, 0, 0)
+    session.add_live_point(5, 3, 4)
+    session.set_live_mode("3")
+    session.add_live_point(5, 1, 0)
+    session.add_live_point(5, 0, 0)
+    session.add_live_point(5, 0, 1)
+    paths = session.save_session(str(tmp_path), stem="clip.mp4")
+    assert os.path.isfile(paths["results"])
+    assert os.path.isfile(paths["results_distance"])
+    assert os.path.isfile(paths["results_angle"])
+    df = pd.read_csv(paths["results"])
+    assert "result_frame" in df.columns
+    assert set(df["type"]) == {"distance", "angle"}
+    assert {"frames", "point_ids", "pixels", "reals"}.isdisjoint(df.columns)
+    assert {
+        "point_1_id",
+        "point_1_frame",
+        "point_1_x_px",
+        "point_1_y_px",
+        "point_1_x_real",
+        "point_1_y_real",
+        "point_3_id",
+    }.issubset(df.columns)
+    distance_df = pd.read_csv(paths["results_distance"])
+    angle_df = pd.read_csv(paths["results_angle"])
+    assert distance_df.columns.tolist() == df.columns.tolist()
+    assert angle_df.columns.tolist() == df.columns.tolist()
+    matrix_columns = [
+        column
+        for column in df.columns
+        if column.startswith("point_")
+        or column in {"result_id", "value", "n_points", "result_frame", "fps", "elapsed_time_s"}
+    ]
+    assert all(pd.api.types.is_numeric_dtype(df[column]) for column in matrix_columns)
+    assert pd.isna(distance_df.loc[0, "point_3_id"])
+    with open(paths["results"], encoding="utf-8") as handle:
+        csv_text = handle.read()
+    assert '"' not in csv_text
+    assert "0.000,0.000" not in csv_text
+
+
+def test_results_dataframe_expands_area_vertices_as_scalar_columns():
+    session = QuickMeasureSession()
+    for x, y in [(0, 0), (4, 0), (5, 2), (2, 5), (0, 3)]:
+        session.add_point(7, x, y)
+    session.measure("area")
+
+    df = session.results_dataframe()
+
+    assert len(df) == 1
+    assert "point_5_frame" in df.columns
+    assert df.loc[0, "point_5_x_px"] == pytest.approx(0.0)
+    assert df.loc[0, "point_5_y_px"] == pytest.approx(3.0)
+    assert df.loc[0, "point_5_x_real"] == pytest.approx(0.0)
+    assert df.loc[0, "point_5_y_real"] == pytest.approx(3.0)
+    assert all(not isinstance(value, (list, tuple)) for value in df.iloc[0])

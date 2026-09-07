@@ -8,51 +8,36 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.124
+Version: 0.3.127
 Created: 06 September 2026
-Last Updated: 06 September 2026
+Last Updated: 07 September 2026
 ================================================================================
 Description:
     Kinovea-style quick on-image measurements for `getpixelvideo.py`:
-    calibrate first by clicking on the image and typing the real-world
-    measurement, then click points freely and classify the current point set
-    as Distance, Area, Velocity, or Acceleration.
+    calibrate first, then pick a live measure mode with digit keys ``1``–``0``
+    and click on the video. Each completed set is drawn on the image with its
+    value (distance / area / angle / velocity / …) and stored for CSV export.
+
+    After ``Q`` turns Quick Measure on (and calibration is done):
+      ``1`` distance   — 2 clicks → line + length label (repeat for more pairs)
+      ``2`` area       — ≥3 clicks, ``Enter`` closes the polygon → area label
+      ``3`` angle      — 3 clicks (vertex in the middle) → angle label
+      ``4`` velocity   — 2 clicks on different frames (needs FPS)
+      ``5`` acceleration — 3 clicks on distinct frames (needs FPS)
+      ``6``–``0``      — reserved
 
     Calibration-first flow (mirrors Kinovea's "calibrate measure"):
       - ``line``  — 2 clicks on a segment of known length + the typed length.
-                    Isotropic scale, origin at the first click, +x right,
-                    +y up (image y inverted). Valid for a plane parallel to
-                    the sensor.
-      - ``plane`` — 4 clicks around a rectangle of known width/height +
-                    the typed width and height. Solves the 8-parameter DLT2D
-                    homography, so perspective is corrected.
-    Both are built from clicks alone (`CalibrationDraft`), no file picking.
-    Loading an existing ``.dlt2d`` (or pixel CSV + ``.ref2d``) still works.
+      - ``plane`` — 4 clicks around a rectangle of known width/height.
+      - ``ref3d`` — load a ``.ref3d`` (modes 1–3 / dlt3d formats 1–4), drop one
+                    world axis for planar ``rec2d``, then pixel CSV or guide clicks.
 
-    Every clicked point can be saved to CSV with pixel AND calibrated
-    real-world coordinates; `measure_from_points_csv()` (and the
-    ``python -m vaila.quickmeasure`` CLI) recompute Distance/Area/Velocity/
-    Acceleration from that saved file alone, without the video.
-
-    This module owns all quick-measurement STATE and MATH (and, for the
-    pygame-based UI pieces, the modal submenu + overlay rendering). It does
-    NOT reimplement calibration math — DLT2D parameters are computed by
-    reusing `dlt2d.py` (`dlt2d()`, `process_files()`) exactly the way
-    `dlt2d.py`'s own CLI does, and pixel->real-world conversion reuses
-    `rec2d_one_dlt2d.py`'s `rec2d()`. `getpixelvideo.py` only owns the
-    integration glue (state var, hotkeys, one click handler, one draw call).
-
-    Single-video sessions can only ever be calibrated with DLT2D (one image
-    plane = 2D). Stereo DLT3D triangulation (`rec3d_multicam()` from
-    `rec3d.py`) requires two synchronized cameras/videos and is intentionally
-    out of scope for this module's live single-video click session; it stays
-    a batch/CLI workflow via `rec3d_one_dlt3d.py`.
-
-Point-set convention (documented, not configurable, so results are
-reproducible from clicks alone):
-    - Distance / Velocity: use the LAST 2 clicked points.
-    - Area: use ALL clicked points, in click order (shoelace polygon).
-    - Acceleration: use the LAST 3 clicked points.
+    The first save in a session creates ``processed_quickmeasure_<timestamp>/``;
+    calibration autosaves and later ``S`` saves update that same directory.
+    It contains CSV data plus a didactic ``quickmeasure_report.html`` explaining
+    every measurement, metric, result, and exported column. Results use a
+    matrix-friendly layout: one result per row and scalar ``point_N_*`` columns,
+    never packed coordinate/list strings. Velocity/acceleration require video FPS.
 
 Units:
     - Uncalibrated session: pixel units ("px", "px/s", "px/s^2").
@@ -78,6 +63,7 @@ License:
 
 from __future__ import annotations
 
+import html
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -89,14 +75,37 @@ import pandas as pd
 try:
     from .dlt2d import dlt2d as dlt2d_solve
     from .dlt2d import process_files as dlt2d_process_files
+    from .dlt3d import detect_ref3d_format, normalize_ref3d_to_format1
     from .rec2d_one_dlt2d import rec2d
 except ImportError:
     from dlt2d import dlt2d as dlt2d_solve  # ty: ignore[unresolved-import]
     from dlt2d import process_files as dlt2d_process_files  # ty: ignore[unresolved-import]
+    from dlt3d import (  # ty: ignore[unresolved-import]
+        detect_ref3d_format,
+        normalize_ref3d_to_format1,
+    )
     from rec2d_one_dlt2d import rec2d  # ty: ignore[unresolved-import]
 
 
-MEASURE_TYPES: tuple[str, ...] = ("distance", "area", "velocity", "acceleration")
+MEASURE_TYPES: tuple[str, ...] = ("distance", "area", "angle", "velocity", "acceleration")
+
+# Digit keys after ``Q`` select the live measure mode (see LIVE_MODE_KEYS).
+LIVE_MODE_KEYS: dict[str, str] = {
+    "1": "distance",
+    "2": "area",
+    "3": "angle",
+    "4": "velocity",
+    "5": "acceleration",
+}
+# Auto-finalize after this many draft clicks. ``None`` means press Enter (area).
+LIVE_MODE_AUTO_POINTS: dict[str, int | None] = {
+    "distance": 2,
+    "area": None,
+    "angle": 3,
+    "velocity": 2,
+    "acceleration": 3,
+}
+LIVE_MODE_NEEDS_FPS: frozenset[str] = frozenset({"velocity", "acceleration"})
 
 # Click-based calibration modes and how many image clicks each one needs.
 CALIBRATION_MODES: tuple[str, ...] = ("line", "plane")
@@ -107,6 +116,14 @@ CALIBRATION_MEASURES: dict[str, tuple[str, ...]] = {
     "plane": ("width", "height"),
 }
 
+# Plane used for single-camera DLT2D from a 3D REF3D: drop one world axis.
+PLANE_DROP_AXES: tuple[str, ...] = ("z", "y", "x")
+PLANE_KEEP_AXES: dict[str, tuple[str, str]] = {
+    "z": ("x", "y"),  # XY plane (floor / top-down)
+    "y": ("x", "z"),  # XZ plane
+    "x": ("y", "z"),  # YZ plane
+}
+
 
 class QuickMeasureError(ValueError):
     """Raised for invalid/insufficient quick-measurement input.
@@ -114,6 +131,156 @@ class QuickMeasureError(ValueError):
     A plain ValueError subclass so callers that already catch ValueError
     keep working, while UI code can special-case this type if it wants to.
     """
+
+
+def _point_numbers_from_columns(columns) -> list[int]:
+    numbers: set[int] = set()
+    for col in columns:
+        if isinstance(col, str) and col.startswith("p") and "_" in col:
+            head = col.split("_", 1)[0][1:]
+            if head.isdigit():
+                numbers.add(int(head))
+    return sorted(numbers)
+
+
+def load_ref3d_format1(ref3d_file: str, *, min_points: int = 4) -> tuple[pd.DataFrame, int]:
+    """Load a ``.ref3d`` (modes 1–3 / dlt3d formats 1–4) as format-1 + detect code."""
+    if not os.path.isfile(ref3d_file):
+        raise QuickMeasureError(f"REF3D file not found: {ref3d_file}")
+    fmt = detect_ref3d_format(ref3d_file)
+    if fmt is None:
+        raise QuickMeasureError(
+            f"Unrecognized REF3D layout (need mode1 wide, mode2 point/x/y/z, "
+            f"or mode3 bare x,y,z): {ref3d_file}"
+        )
+    df = normalize_ref3d_to_format1(ref3d_file, min_points=min_points)
+    if df is None or df.empty:
+        raise QuickMeasureError(
+            f"REF3D file could not be normalized (need >= {min_points} points): {ref3d_file}"
+        )
+    return df, int(fmt)
+
+
+def ref3d_points_xyz(ref_df: pd.DataFrame) -> list[tuple[int, float, float, float]]:
+    """Ordered ``(p_index, x, y, z)`` tuples from a format-1 REF3D DataFrame."""
+    row = ref_df.iloc[0]
+    points: list[tuple[int, float, float, float]] = []
+    for idx in _point_numbers_from_columns(ref_df.columns):
+        points.append(
+            (
+                idx,
+                float(row[f"p{idx}_x"]),
+                float(row[f"p{idx}_y"]),
+                float(row[f"p{idx}_z"]),
+            )
+        )
+    return points
+
+
+def drop_axis_to_plane(
+    points_xyz: Sequence[Sequence[float]],
+    drop_axis: str = "z",
+    *,
+    dedupe: bool = True,
+) -> tuple[list[tuple[float, float]], list[int], int]:
+    """Project 3D REF points to 2D by dropping one axis.
+
+    Returns ``(uv_points, kept_source_indices, n_duplicates_skipped)``.
+    When ``dedupe`` is True, later points that collapse onto an earlier (u,v)
+    are skipped — required for COD-style cages where posts share two axes.
+    """
+    axis = str(drop_axis).strip().lower()
+    if axis not in PLANE_KEEP_AXES:
+        raise QuickMeasureError(f"drop_axis must be one of {PLANE_DROP_AXES}, got {drop_axis!r}")
+    keep = PLANE_KEEP_AXES[axis]
+    axis_to_i = {"x": 0, "y": 1, "z": 2}
+    i0, i1 = axis_to_i[keep[0]], axis_to_i[keep[1]]
+    uv: list[tuple[float, float]] = []
+    kept: list[int] = []
+    seen: set[tuple[float, float]] = set()
+    skipped = 0
+    for src_i, pt in enumerate(points_xyz):
+        if len(pt) < 3:
+            raise QuickMeasureError("Each REF3D point needs x,y,z.")
+        u, v = float(pt[i0]), float(pt[i1])
+        key = (round(u, 9), round(v, 9))
+        if dedupe and key in seen:
+            skipped += 1
+            continue
+        seen.add(key)
+        uv.append((u, v))
+        kept.append(src_i)
+    if len(uv) < 4:
+        raise QuickMeasureError(
+            f"After dropping {axis.upper()} only {len(uv)} unique planar points remain "
+            f"(need >= 4). Try another drop axis or a planar subset of the REF3D."
+        )
+    return uv, kept, skipped
+
+
+def ref3d_to_ref2d_dataframe(
+    ref_df: pd.DataFrame, drop_axis: str = "z", *, dedupe: bool = True
+) -> tuple[pd.DataFrame, list[int], int]:
+    """Build a one-row REF2D-like DataFrame from format-1 REF3D by dropping an axis."""
+    xyz = ref3d_points_xyz(ref_df)
+    uv, kept_idx, skipped = drop_axis_to_plane(
+        [(p[1], p[2], p[3]) for p in xyz], drop_axis, dedupe=dedupe
+    )
+    data: dict[str, list[float | int]] = {"frame": [0]}
+    for out_i, src_i in enumerate(kept_idx, start=1):
+        p_index = xyz[src_i][0]
+        # Keep original pN labels so pixel CSVs from getpixelvideo still match.
+        data[f"p{p_index}_x"] = [uv[out_i - 1][0]]
+        data[f"p{p_index}_y"] = [uv[out_i - 1][1]]
+    return pd.DataFrame(data), [xyz[i][0] for i in kept_idx], skipped
+
+
+def read_pixel_calibration_points(
+    pixel_file: str,
+) -> list[tuple[int, float, float]]:
+    """Read first-frame ``(p_index, x_px, y_px)`` from a getpixelvideo markers CSV."""
+    if not os.path.isfile(pixel_file):
+        raise QuickMeasureError(f"Calibration pixel file not found: {pixel_file}")
+    df = pd.read_csv(pixel_file)
+    if df.empty:
+        raise QuickMeasureError(f"Calibration pixel file is empty: {pixel_file}")
+    row = df.iloc[0]
+    points: list[tuple[int, float, float]] = []
+    for idx in _point_numbers_from_columns(df.columns):
+        x = row.get(f"p{idx}_x")
+        y = row.get(f"p{idx}_y")
+        if pd.isna(x) or pd.isna(y):
+            continue
+        points.append((idx, float(x), float(y)))
+    if len(points) < 4:
+        raise QuickMeasureError(
+            f"Pixel calibration CSV needs >= 4 valid points, found {len(points)}."
+        )
+    return points
+
+
+def suggest_pixel_csv_for_ref3d(ref3d_file: str, video_path: str | None = None) -> str | None:
+    """Guess a sibling getpixelvideo markers CSV near the REF3D / video."""
+    candidates: list[str] = []
+    ref_dir = os.path.dirname(os.path.abspath(ref3d_file))
+    if video_path:
+        stem = os.path.splitext(os.path.basename(video_path))[0]
+        video_dir = os.path.dirname(os.path.abspath(video_path))
+        for name in (
+            f"{stem}_markers_1_line.csv",
+            f"{stem}_markers.csv",
+            f"{stem}.csv",
+        ):
+            candidates.append(os.path.join(video_dir, name))
+            candidates.append(os.path.join(ref_dir, name))
+    for name in sorted(os.listdir(ref_dir)):
+        lower = name.lower()
+        if lower.endswith(".csv") and ("marker" in lower or "pixel" in lower or "calib" in lower):
+            candidates.append(os.path.join(ref_dir, name))
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 @dataclass
@@ -145,6 +312,12 @@ class QuickMeasureCalibration:
     calibration_pixels: list[tuple[float, float]] = field(default_factory=list)
     calibration_real: list[tuple[float, float]] = field(default_factory=list)
     real_measures: dict[str, float] = field(default_factory=dict)
+    # REF3D → planar DLT2D provenance.
+    drop_axis: str | None = None
+    ref3d_format: int | None = None
+    ref3d_path: str = ""
+    pixel_csv_path: str = ""
+    kept_point_indices: list[int] = field(default_factory=list)
 
     def pixel_to_real(self, x: float, y: float) -> tuple[float, float]:
         if self.kind == "line":
@@ -170,6 +343,15 @@ class QuickMeasureCalibration:
             width = self.real_measures.get("width", float("nan"))
             height = self.real_measures.get("height", float("nan"))
             return f"Plane calibration: {width:g} x {height:g} {self.unit_label} (DLT2D homography)"
+        if self.kind == "ref3d":
+            keep = PLANE_KEEP_AXES.get(self.drop_axis or "z", ("x", "y"))
+            plane = "".join(a.upper() for a in keep)
+            n = len(self.kept_point_indices) or len(self.calibration_real)
+            return (
+                f"REF3D→{plane} DLT2D ({self.unit_label}, drop "
+                f"{(self.drop_axis or '?').upper()}, {n} pts) "
+                f"from {os.path.basename(self.ref3d_path or self.source)}"
+            )
         return f"DLT2D calibration ({self.unit_label}) from {os.path.basename(self.source)}"
 
     @classmethod
@@ -331,6 +513,75 @@ class QuickMeasureCalibration:
             )
         return cls(dlt_params=params, unit_label=unit_label, source=pixel_file)
 
+    @classmethod
+    def from_ref3d_point_pairs(
+        cls,
+        pixel_points: Sequence[Sequence[float]],
+        real_points_2d: Sequence[Sequence[float]],
+        *,
+        unit_label: str = "m",
+        drop_axis: str = "z",
+        ref3d_path: str = "",
+        ref3d_format: int | None = None,
+        pixel_csv_path: str = "",
+        kept_point_indices: Sequence[int] | None = None,
+    ) -> QuickMeasureCalibration:
+        """Solve DLT2D from pixel/real pairs already projected to a plane."""
+        calib = cls.from_point_correspondences(pixel_points, real_points_2d, unit_label=unit_label)
+        calib.kind = "ref3d"
+        calib.drop_axis = str(drop_axis).strip().lower()
+        calib.ref3d_path = ref3d_path
+        calib.ref3d_format = ref3d_format
+        calib.pixel_csv_path = pixel_csv_path
+        calib.source = ref3d_path or calib.source
+        calib.kept_point_indices = [int(i) for i in (kept_point_indices or [])]
+        return calib
+
+    @classmethod
+    def from_ref3d_and_pixel_csv(
+        cls,
+        ref3d_file: str,
+        pixel_file: str,
+        drop_axis: str = "z",
+        unit_label: str = "m",
+        *,
+        dedupe: bool = True,
+    ) -> QuickMeasureCalibration:
+        """Load ``.ref3d`` (any mode), drop one axis, pair with pixel CSV → DLT2D."""
+        ref_df, fmt = load_ref3d_format1(ref3d_file, min_points=4)
+        ref2d_df, kept_labels, skipped = ref3d_to_ref2d_dataframe(
+            ref_df, drop_axis=drop_axis, dedupe=dedupe
+        )
+        pixel_pts = read_pixel_calibration_points(pixel_file)
+        pixel_by_label = {idx: (x, y) for idx, x, y in pixel_pts}
+        real_by_label: dict[int, tuple[float, float]] = {}
+        row = ref2d_df.iloc[0]
+        for label in kept_labels:
+            if f"p{label}_x" in ref2d_df.columns:
+                real_by_label[label] = (float(row[f"p{label}_x"]), float(row[f"p{label}_y"]))
+        common = sorted(set(pixel_by_label) & set(real_by_label))
+        if len(common) < 4:
+            raise QuickMeasureError(
+                f"REF3D/pixel CSV share only {len(common)} labeled points after "
+                f"dropping {drop_axis.upper()} (need >= 4). "
+                f"Pixel labels={sorted(pixel_by_label)}; REF labels={sorted(real_by_label)}."
+            )
+        pixels = [pixel_by_label[i] for i in common]
+        reals = [real_by_label[i] for i in common]
+        calib = cls.from_ref3d_point_pairs(
+            pixels,
+            reals,
+            unit_label=unit_label,
+            drop_axis=drop_axis,
+            ref3d_path=ref3d_file,
+            ref3d_format=fmt,
+            pixel_csv_path=pixel_file,
+            kept_point_indices=common,
+        )
+        if skipped:
+            calib.real_measures["duplicates_skipped"] = float(skipped)
+        return calib
+
 
 @dataclass
 class CalibrationDraft:
@@ -423,6 +674,130 @@ class CalibrationDraft:
 
 
 @dataclass
+class Ref3dCalibrationDraft:
+    """Guided click calibration against a loaded ``.ref3d`` (no pixel CSV yet).
+
+    The scheme overlay highlights the next world point; the user clicks its
+    image location until every kept planar point has a pixel correspondence.
+    """
+
+    ref3d_path: str
+    drop_axis: str = "z"
+    unit_label: str = "m"
+    ref3d_format: int | None = None
+    points_xyz: list[tuple[int, float, float, float]] = field(default_factory=list)
+    kept_labels: list[int] = field(default_factory=list)
+    real_uv: list[tuple[float, float]] = field(default_factory=list)
+    pixel_points: list[tuple[float, float]] = field(default_factory=list)
+    duplicates_skipped: int = 0
+
+    @classmethod
+    def from_ref3d_file(
+        cls,
+        ref3d_file: str,
+        drop_axis: str = "z",
+        unit_label: str = "m",
+        *,
+        dedupe: bool = True,
+    ) -> Ref3dCalibrationDraft:
+        ref_df, fmt = load_ref3d_format1(ref3d_file, min_points=4)
+        xyz = ref3d_points_xyz(ref_df)
+        uv, kept_src, skipped = drop_axis_to_plane(
+            [(p[1], p[2], p[3]) for p in xyz], drop_axis, dedupe=dedupe
+        )
+        kept_labels = [xyz[i][0] for i in kept_src]
+        return cls(
+            ref3d_path=ref3d_file,
+            drop_axis=str(drop_axis).strip().lower(),
+            unit_label=unit_label,
+            ref3d_format=fmt,
+            points_xyz=xyz,
+            kept_labels=kept_labels,
+            real_uv=uv,
+            duplicates_skipped=skipped,
+        )
+
+    @property
+    def required_points(self) -> int:
+        return len(self.real_uv)
+
+    @property
+    def is_complete(self) -> bool:
+        return len(self.pixel_points) >= self.required_points
+
+    @property
+    def remaining(self) -> int:
+        return max(0, self.required_points - len(self.pixel_points))
+
+    @property
+    def next_label(self) -> int | None:
+        idx = len(self.pixel_points)
+        if idx >= len(self.kept_labels):
+            return None
+        return self.kept_labels[idx]
+
+    @property
+    def next_xyz(self) -> tuple[float, float, float] | None:
+        label = self.next_label
+        if label is None:
+            return None
+        for p_idx, x, y, z in self.points_xyz:
+            if p_idx == label:
+                return (x, y, z)
+        return None
+
+    def add_point(self, x: float, y: float) -> int:
+        if self.is_complete:
+            raise QuickMeasureError(
+                f"REF3D calibration already has its {self.required_points} image clicks."
+            )
+        self.pixel_points.append((float(x), float(y)))
+        return len(self.pixel_points)
+
+    def undo_last(self) -> bool:
+        if self.pixel_points:
+            self.pixel_points.pop()
+            return True
+        return False
+
+    def instructions(self) -> str:
+        keep = PLANE_KEEP_AXES[self.drop_axis]
+        plane = "".join(a.upper() for a in keep)
+        if self.is_complete:
+            return (
+                f"CALIBRATION (ref3d→{plane}): all {self.required_points} points clicked — "
+                "press Enter to solve DLT2D."
+            )
+        label = self.next_label
+        xyz = self.next_xyz
+        xyz_txt = f"({xyz[0]:g}, {xyz[1]:g}, {xyz[2]:g})" if xyz is not None else "?"
+        return (
+            f"CALIBRATION (ref3d→{plane}) {len(self.pixel_points) + 1}/"
+            f"{self.required_points}: click image location of p{label} "
+            f"world {xyz_txt} (right-click undo)"
+        )
+
+    def build(self) -> QuickMeasureCalibration:
+        if not self.is_complete:
+            raise QuickMeasureError(
+                f"REF3D guide needs {self.remaining} more click(s) "
+                f"({len(self.pixel_points)}/{self.required_points})."
+            )
+        calib = QuickMeasureCalibration.from_ref3d_point_pairs(
+            self.pixel_points,
+            self.real_uv,
+            unit_label=self.unit_label,
+            drop_axis=self.drop_axis,
+            ref3d_path=self.ref3d_path,
+            ref3d_format=self.ref3d_format,
+            kept_point_indices=self.kept_labels,
+        )
+        if self.duplicates_skipped:
+            calib.real_measures["duplicates_skipped"] = float(self.duplicates_skipped)
+        return calib
+
+
+@dataclass
 class QuickMeasurePoint:
     frame: int
     x: float
@@ -432,9 +807,9 @@ class QuickMeasurePoint:
 @dataclass
 class QuickMeasureSession:
     """Click-session state for one video. `getpixelvideo.py` calls
-    `add_point()` on left-click and `measure()` from its submenu; all
-    geometry/kinematics math lives here so the host file stays a thin
-    integration layer.
+    `set_live_mode()` / `add_live_point()` for digit-key modes, or
+    `add_point()` + `measure()` from the submenu; all geometry/kinematics
+    math lives here so the host file stays a thin integration layer.
     """
 
     fps: float | None = None
@@ -446,6 +821,15 @@ class QuickMeasureSession:
     unit_override: str | None = None
     # True once the user explicitly declined the calibration-first prompt.
     calibration_skipped: bool = False
+    # Set when menu ``R`` starts a guided REF3D click calibration; host picks it up.
+    pending_ref3d_draft: Ref3dCalibrationDraft | None = None
+    # Live digit-key mode (``1``–``5``): in-progress clicks + active type.
+    active_mode: str | None = None
+    draft_points: list[QuickMeasurePoint] = field(default_factory=list)
+    # Created once on the first calibration/result save. Every later save from
+    # this video session updates the same export instead of minting another
+    # timestamped directory.
+    export_dir: str | None = field(default=None, init=False, repr=False)
 
     @property
     def unit_label(self) -> str:
@@ -462,6 +846,9 @@ class QuickMeasureSession:
         return len(self.points)
 
     def undo_last(self) -> bool:
+        if self.draft_points:
+            self.draft_points.pop()
+            return True
         if self.points:
             self.points.pop()
             return True
@@ -469,6 +856,108 @@ class QuickMeasureSession:
 
     def clear(self) -> None:
         self.points.clear()
+        self.draft_points.clear()
+
+    def clear_results(self) -> None:
+        self.results.clear()
+
+    def live_mode_status(self) -> str:
+        if self.active_mode is None:
+            return (
+                "QMeas: press 1=distance 2=area 3=angle 4=velocity 5=accel "
+                "(6–0 reserved) then click"
+            )
+        n = len(self.draft_points)
+        auto = LIVE_MODE_AUTO_POINTS.get(self.active_mode)
+        if self.active_mode == "area":
+            return (
+                f"MODE area: {n} vertex(es) — click more, Enter closes polygon "
+                f"(≥3), right-click undo"
+            )
+        if auto is None:
+            return f"MODE {self.active_mode}: {n} point(s)"
+        return f"MODE {self.active_mode}: {n}/{auto} point(s) (right-click undo)"
+
+    def set_live_mode(self, key: str) -> str:
+        """Select live measure mode from digit key ``0``–``9``. Clears draft."""
+        digit = str(key).strip()
+        if digit not in "0123456789":
+            raise QuickMeasureError(f"Live mode key must be 0–9, got {key!r}")
+        if digit not in LIVE_MODE_KEYS:
+            self.active_mode = None
+            self.draft_points.clear()
+            return f"Key {digit}: reserved (no measure mode yet). Use 1–5."
+        mode = LIVE_MODE_KEYS[digit]
+        if mode in LIVE_MODE_NEEDS_FPS:
+            self._require_fps()
+        self.active_mode = mode
+        self.draft_points.clear()
+        return self.live_mode_status()
+
+    def add_live_point(self, frame: int, x: float, y: float) -> tuple[str, dict | None]:
+        """Add a click in the active live mode; auto-finalize when enough points.
+
+        Returns ``(status_message, completed_result_or_None)``.
+        """
+        if self.active_mode is None:
+            raise QuickMeasureError(
+                "No live measure mode — press 1–5 first (distance/area/angle/velocity/accel)."
+            )
+        mode = self.active_mode
+        if mode in LIVE_MODE_NEEDS_FPS:
+            self._require_fps()
+        self.draft_points.append(QuickMeasurePoint(int(frame), float(x), float(y)))
+        auto = LIVE_MODE_AUTO_POINTS.get(mode)
+        if auto is not None and len(self.draft_points) >= auto:
+            result = self._finalize_draft(result_frame=int(frame))
+            return format_result(result), result
+        return self.live_mode_status(), None
+
+    def finalize_live_area(self, result_frame: int) -> tuple[str, dict | None]:
+        """Close the area polygon (Enter while in area mode)."""
+        if self.active_mode != "area":
+            return "Enter closes the polygon only in area mode (press 2).", None
+        if len(self.draft_points) < 3:
+            return (
+                f"Area needs ≥3 vertices, have {len(self.draft_points)} — keep clicking.",
+                None,
+            )
+        result = self._finalize_draft(result_frame=int(result_frame))
+        return format_result(result), result
+
+    def _finalize_draft(self, result_frame: int) -> dict:
+        if self.active_mode is None:
+            raise QuickMeasureError("No active live measure mode.")
+        mode = self.active_mode
+        draft = list(self.draft_points)
+        if not draft:
+            raise QuickMeasureError("No draft points to finalize.")
+        # Append draft into the session point list, then measure from those pts.
+        start_id = len(self.points) + 1
+        self.points.extend(draft)
+        saved = self.points
+        # Temporarily expose only the draft as the measure point set.
+        self.points = draft
+        try:
+            result = self._compute_measure(mode)
+        finally:
+            self.points = saved
+        n_used = int(result["n_points"])
+        used = draft[-n_used:] if n_used else draft
+        result = {
+            **result,
+            "frames": [p.frame for p in used],
+            "point_ids": list(range(start_id, start_id + len(used))),
+            "fps": self.fps,
+            "calibration": self.calibration.kind if self.calibration else "none",
+            "result_frame": int(result_frame),
+            "pixels": [(p.x, p.y) for p in used],
+            "reals": [self._to_units(p) for p in used],
+            "mode_key": next((k for k, v in LIVE_MODE_KEYS.items() if v == mode), ""),
+        }
+        self.results.append(result)
+        self.draft_points.clear()
+        return result
 
     def _to_units(self, p: QuickMeasurePoint) -> tuple[float, float]:
         if self.unit_override:
@@ -480,7 +969,9 @@ class QuickMeasureSession:
 
     def _require_fps(self) -> float:
         if not self.fps or self.fps <= 0:
-            raise QuickMeasureError("Velocity/Acceleration require a valid fps (frame rate).")
+            raise QuickMeasureError(
+                "Velocity/Acceleration need video FPS — press I to set FPS, then retry."
+            )
         return float(self.fps)
 
     def measure_distance(self) -> dict:
@@ -552,11 +1043,40 @@ class QuickMeasureSession:
             "n_points": 3,
         }
 
-    def measure(self, kind: str) -> dict:
+    def measure_angle(self) -> dict:
+        """Angle in degrees.
+
+        - 3 points: angle at the middle point (p[-2] is the vertex).
+        - 4+ points: angle between line(p[-4],p[-3]) and line(p[-2],p[-1]).
+        """
+        if len(self.points) < 3:
+            raise QuickMeasureError(
+                "Angle needs 3 points (vertex in the middle) or 4 points (two lines)."
+            )
+        if len(self.points) == 3:
+            a, b, c = (self._to_units(p) for p in self.points[-3:])
+            v1 = np.array([a[0] - b[0], a[1] - b[1]], dtype=float)
+            v2 = np.array([c[0] - b[0], c[1] - b[1]], dtype=float)
+            n_points = 3
+        else:
+            p1, p2, p3, p4 = (self._to_units(p) for p in self.points[-4:])
+            v1 = np.array([p2[0] - p1[0], p2[1] - p1[1]], dtype=float)
+            v2 = np.array([p4[0] - p3[0], p4[1] - p3[1]], dtype=float)
+            n_points = 4
+        n1 = float(np.linalg.norm(v1))
+        n2 = float(np.linalg.norm(v2))
+        if n1 <= 0 or n2 <= 0:
+            raise QuickMeasureError("Angle needs two non-zero length segments.")
+        cos_a = float(np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0))
+        value = float(np.degrees(np.arccos(cos_a)))
+        return {"type": "angle", "value": value, "unit": "deg", "n_points": n_points}
+
+    def _compute_measure(self, kind: str) -> dict:
         kind = kind.strip().lower()
         dispatch = {
             "distance": self.measure_distance,
             "area": self.measure_area,
+            "angle": self.measure_angle,
             "velocity": self.measure_velocity,
             "acceleration": self.measure_acceleration,
         }
@@ -564,7 +1084,10 @@ class QuickMeasureSession:
             raise QuickMeasureError(
                 f"Unknown measurement type: {kind!r} (expected one of {MEASURE_TYPES})"
             )
-        result = dispatch[kind]()
+        return dispatch[kind]()
+
+    def measure(self, kind: str) -> dict:
+        result = self._compute_measure(kind)
         n_used = int(result["n_points"])
         used = self.points[-n_used:] if n_used else []
         first_id = len(self.points) - n_used + 1
@@ -574,6 +1097,9 @@ class QuickMeasureSession:
             "point_ids": list(range(first_id, first_id + n_used)),
             "fps": self.fps,
             "calibration": self.calibration.kind if self.calibration else "none",
+            "result_frame": used[-1].frame if used else None,
+            "pixels": [(p.x, p.y) for p in used],
+            "reals": [self._to_units(p) for p in used],
         }
         self.results.append(result)
         return result
@@ -661,33 +1187,281 @@ class QuickMeasureSession:
             rows.append(base)
         return pd.DataFrame(rows, columns=pd.Index(columns))
 
-    def results_dataframe(self) -> pd.DataFrame:
-        columns = ["result_id", "type", "value", "unit", "n_points", "frames", "point_ids", "fps"]
+    def results_dataframe(self, max_points: int | None = None) -> pd.DataFrame:
+        """Return one result per row with every source value in its own column.
+
+        Point groups expand as ``point_1_*``, ``point_2_*``, etc. This avoids
+        embedding lists, comma pairs, or space-delimited values inside CSV
+        cells and keeps exports directly usable as rectangular data tables.
+        """
+        observed_points = max(
+            (
+                max(
+                    int(result.get("n_points") or 0),
+                    len(result.get("frames") or []),
+                    len(result.get("point_ids") or []),
+                    len(result.get("pixels") or []),
+                    len(result.get("reals") or []),
+                )
+                for result in self.results
+            ),
+            default=0,
+        )
+        matrix_points = max(observed_points, int(max_points or 0))
+        columns = [
+            "result_id",
+            "type",
+            "value",
+            "unit",
+            "n_points",
+            "result_frame",
+            "fps",
+            "mode_key",
+            "calibration",
+            "elapsed_time_s",
+        ]
+        point_fields = ("id", "frame", "x_px", "y_px", "x_real", "y_real")
+        columns.extend(
+            f"point_{point_index}_{field_name}"
+            for point_index in range(1, matrix_points + 1)
+            for field_name in point_fields
+        )
         rows = []
         for i, r in enumerate(self.results, start=1):
-            rows.append(
-                {
-                    "result_id": i,
-                    "type": r.get("type"),
-                    "value": r.get("value"),
-                    "unit": r.get("unit"),
-                    "n_points": r.get("n_points"),
-                    "frames": " ".join(str(f) for f in r.get("frames", [])),
-                    "point_ids": " ".join(str(p) for p in r.get("point_ids", [])),
-                    "fps": r.get("fps"),
-                }
-            )
+            frames = list(r.get("frames") or [])
+            point_ids = list(r.get("point_ids") or [])
+            pixels = list(r.get("pixels") or [])
+            reals = list(r.get("reals") or [])
+            row = {
+                "result_id": i,
+                "type": r.get("type"),
+                "value": r.get("value"),
+                "unit": r.get("unit"),
+                "n_points": r.get("n_points"),
+                "result_frame": r.get("result_frame"),
+                "fps": r.get("fps"),
+                "mode_key": r.get("mode_key", ""),
+                "calibration": r.get("calibration", "none"),
+                "elapsed_time_s": r.get("dt"),
+            }
+            for point_index in range(matrix_points):
+                prefix = f"point_{point_index + 1}"
+                pixel = pixels[point_index] if point_index < len(pixels) else (None, None)
+                real = reals[point_index] if point_index < len(reals) else (None, None)
+                row[f"{prefix}_id"] = (
+                    point_ids[point_index] if point_index < len(point_ids) else None
+                )
+                row[f"{prefix}_frame"] = frames[point_index] if point_index < len(frames) else None
+                row[f"{prefix}_x_px"] = pixel[0]
+                row[f"{prefix}_y_px"] = pixel[1]
+                row[f"{prefix}_x_real"] = real[0]
+                row[f"{prefix}_y_real"] = real[1]
+            rows.append(row)
         return pd.DataFrame(rows, columns=pd.Index(columns))
 
+    def _resolve_export_dir(self, output_dir: str) -> str:
+        """Create this session's export directory once, then keep reusing it."""
+        if self.export_dir is not None:
+            os.makedirs(self.export_dir, exist_ok=True)
+            return self.export_dir
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base = os.path.join(output_dir, f"processed_quickmeasure_{timestamp}")
+        candidate = base
+        suffix = 2
+        while os.path.exists(candidate):
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        os.makedirs(candidate)
+        self.export_dir = candidate
+        return candidate
+
+    def _write_html_report(
+        self,
+        report_path: str,
+        safe_stem: str,
+        paths: dict[str, str],
+    ) -> None:
+        """Write a standalone, human-readable guide to this session's export."""
+
+        def esc(value: object) -> str:
+            return html.escape(str(value), quote=True)
+
+        measurement_rows = [
+            (
+                "Distance",
+                "1",
+                "2 points",
+                "Straight-line length between the points.",
+                "sqrt((x2-x1)^2 + (y2-y1)^2)",
+                self.unit_label,
+            ),
+            (
+                "Area",
+                "2",
+                "3 or more polygon vertices; Enter closes",
+                "Area enclosed by the clicked polygon.",
+                "Shoelace polygon formula",
+                f"{self.unit_label}^2",
+            ),
+            (
+                "Angle",
+                "3",
+                "3 points; middle point is the vertex",
+                "Smaller angle between the two rays.",
+                "arccos of normalized vector dot product",
+                "degrees (deg)",
+            ),
+            (
+                "Velocity",
+                "4",
+                "2 points on different frames",
+                "Displacement magnitude divided by elapsed time.",
+                "distance / ((frame2-frame1)/fps)",
+                f"{self.unit_label}/s",
+            ),
+            (
+                "Acceleration",
+                "5",
+                "3 points on distinct frames",
+                "Change in segment speed divided by average elapsed time.",
+                "(velocity2-velocity1) / average(dt1,dt2)",
+                f"{self.unit_label}/s^2",
+            ),
+        ]
+        file_descriptions = {
+            "points": "Every clicked point in image pixels and calibrated coordinates.",
+            "calibration": "Calibration mode, known dimensions, clicked references, and parameters.",
+            "dlt2d": "Eight DLT2D coefficients used for pixel-to-plane reconstruction.",
+            "ref2d": "Planar reference coordinates produced from the selected REF3D plane.",
+            "ref3d_meta": "REF3D source, format, dropped axis, retained points, and units.",
+            "results": "All completed measurements as one rectangular row per result.",
+            "results_distance": "Distance results only.",
+            "results_area": "Area results only.",
+            "results_angle": "Angle results only.",
+            "results_velocity": "Velocity results only.",
+            "results_acceleration": "Acceleration results only.",
+            "report": "This guide and live summary of the export.",
+            "readme": "Compact plain-text file list and recomputation command.",
+        }
+        result_columns = [
+            ("result_id", "Sequential result number in this session."),
+            ("type", "distance, area, angle, velocity, or acceleration."),
+            ("value", "Computed numeric metric."),
+            ("unit", "Unit attached to value; calibrated unit, pixels, degrees, or rate."),
+            ("n_points", "Number of points used by this result."),
+            ("result_frame", "Frame where the completed result is drawn."),
+            ("fps", "Video frames per second used for time-based metrics."),
+            ("mode_key", "Quick Measure digit key that selected this type."),
+            ("calibration", "Calibration model used by this result."),
+            ("elapsed_time_s", "Elapsed seconds for velocity; blank for other result types."),
+            ("point_N_id", "Source point identifier N."),
+            ("point_N_frame", "Source video frame for point N."),
+            ("point_N_x_px / point_N_y_px", "Separate image coordinates for point N."),
+            (
+                "point_N_x_real / point_N_y_real",
+                "Separate calibrated plane coordinates for point N.",
+            ),
+        ]
+        point_columns = [
+            ("point_id", "Sequential clicked-point identifier."),
+            ("frame", "Zero-based video frame containing the click."),
+            ("x_px / y_px", "Horizontal / vertical image coordinate in pixels."),
+            ("x_real / y_real", "Coordinates after calibration; equal to pixels if uncalibrated."),
+            ("unit", "Coordinate unit."),
+            ("calibration_kind", "none, line, plane, ref2d, dlt2d, or ref3d."),
+        ]
+
+        def table(headers: Sequence[str], rows: Sequence[Sequence[object]]) -> str:
+            head = "".join(f"<th>{esc(item)}</th>" for item in headers)
+            body = "".join(
+                "<tr>" + "".join(f"<td>{esc(item)}</td>" for item in row) + "</tr>" for row in rows
+            )
+            return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+        file_rows = [
+            (role, os.path.basename(path), file_descriptions.get(role, "Session export file."))
+            for role, path in paths.items()
+            if role != "dir"
+        ]
+        result_rows = [
+            (
+                index,
+                result.get("type", ""),
+                f"{float(result.get('value', float('nan'))):.6g}",
+                result.get("unit", ""),
+                result.get("result_frame", ""),
+                ", ".join(str(frame) for frame in result.get("frames", [])),
+                ", ".join(str(point_id) for point_id in result.get("point_ids", [])),
+            )
+            for index, result in enumerate(self.results, start=1)
+        ]
+        calibration = self.calibration.describe() if self.calibration else "None; pixel units"
+        results_section = (
+            table(
+                ("ID", "Type", "Value", "Unit", "Result frame", "Source frames", "Point IDs"),
+                result_rows,
+            )
+            if result_rows
+            else '<p class="notice">No completed measurement yet. This report will update on the next save.</p>'
+        )
+        generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        document = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quick Measure report — {esc(safe_stem)}</title>
+<style>
+body{{font-family:Arial,sans-serif;line-height:1.55;color:#17202a;background:#f4f6f7;margin:0}}
+main{{max-width:1100px;margin:24px auto;background:#fff;padding:28px;border-radius:10px}}
+h1,h2{{color:#154360}} h2{{margin-top:30px;border-bottom:2px solid #d6eaf8;padding-bottom:5px}}
+table{{border-collapse:collapse;width:100%;margin:12px 0;display:block;overflow-x:auto}}
+th,td{{border:1px solid #ccd1d1;padding:8px 10px;text-align:left;vertical-align:top}}
+th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:4px}}
+.summary,.notice{{background:#eaf2f8;padding:12px 16px;border-left:5px solid #2e86c1}}
+.warning{{background:#fef9e7;padding:12px 16px;border-left:5px solid #f1c40f}}
+</style>
+</head>
+<body><main>
+<h1><i>vailá</i> Quick Measure report</h1>
+<p>This page documents the data in this directory. It is regenerated whenever the session is saved.</p>
+<div class="summary">
+<strong>Video/data stem:</strong> {esc(safe_stem)}<br>
+<strong>Generated:</strong> {esc(generated)}<br>
+<strong>Calibration:</strong> {esc(calibration)}<br>
+<strong>Coordinate unit:</strong> {esc(self.unit_label)} &nbsp;
+<strong>FPS:</strong> {esc(self.fps if self.fps is not None else "not set")}<br>
+<strong>Saved points:</strong> {len(self.points)} &nbsp;
+<strong>Completed results:</strong> {len(self.results)}
+</div>
+<h2>Results from this session</h2>
+{results_section}
+<h2>What each measurement means</h2>
+{table(("Measurement", "Key", "Required input", "Meaning", "Calculation", "Output unit"), measurement_rows)}
+<div class="warning"><strong>Interpretation:</strong> Pixel values are image measurements, not physical measurements. Physical distance, area, velocity, and acceleration require a valid calibration. Velocity and acceleration also require the correct video FPS.</div>
+<h2>Files in this directory</h2>
+{table(("Role", "File", "Purpose"), file_rows)}
+<h2>Results CSV column dictionary</h2>
+{table(("Column", "Meaning"), result_columns)}
+<p>Matrix layout: one completed measurement per row and one scalar per cell. Point columns repeat from <code>point_1_*</code> through the largest point set in the session. No list, coordinate pair, or space-delimited sequence is stored inside one CSV cell.</p>
+<h2>Points CSV column dictionary</h2>
+{table(("Column", "Meaning"), point_columns)}
+<h2>Calibration data</h2>
+<p>The calibration CSV records the known real dimensions, clicked image/reference points, scale, origin, and DLT parameters when applicable. REF3D exports may also include a planar <code>.ref2d</code>, DLT coefficients, and source metadata.</p>
+<h2>Recompute without the video</h2>
+<p>Because the points file stores both image and calibrated coordinates, metrics can be recomputed later:</p>
+<p><code>uv run python -m vaila.quickmeasure --points-csv {esc(os.path.basename(paths["points"]))} --measure distance</code></p>
+</main></body></html>
+"""
+        with open(report_path, "w", encoding="utf-8") as handle:
+            handle.write(document)
+
     def save_session(self, output_dir: str, stem: str = "quickmeasure") -> dict[str, str]:
-        """Write the point, calibration and result CSVs into a timestamped
-        folder under ``output_dir``. Returns the written paths by role.
-        """
+        """Write or refresh this session's files in one timestamped directory."""
         if not self.points and not self.results and self.calibration is None:
             raise QuickMeasureError("Nothing to save — no calibration, points or results yet.")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_dir = os.path.join(output_dir, f"processed_quickmeasure_{timestamp}")
-        os.makedirs(run_dir, exist_ok=True)
+        run_dir = self._resolve_export_dir(output_dir)
         safe_stem = os.path.splitext(os.path.basename(stem))[0] or "quickmeasure"
 
         paths: dict[str, str] = {"dir": run_dir}
@@ -699,11 +1473,83 @@ class QuickMeasureSession:
             calib_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure_calibration.csv")
             self.calibration_dataframe().to_csv(calib_path, index=False)
             paths["calibration"] = calib_path
+            if self.calibration.dlt_params is not None:
+                dlt_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure.dlt2d")
+                params = np.asarray(self.calibration.dlt_params, dtype=float).tolist()
+                pd.DataFrame(
+                    [{"frame": 1, **{f"dlt_param_{i + 1}": v for i, v in enumerate(params)}}]
+                ).to_csv(dlt_path, index=False)
+                paths["dlt2d"] = dlt_path
+            if self.calibration.kind == "ref3d" and self.calibration.calibration_real:
+                keep = PLANE_KEEP_AXES.get(self.calibration.drop_axis or "z", ("x", "y"))
+                ref2d_path = os.path.join(
+                    run_dir,
+                    f"{safe_stem}_quickmeasure_drop{(self.calibration.drop_axis or 'z').upper()}.ref2d",
+                )
+                data: dict[str, list[float | int]] = {"frame": [0]}
+                labels = self.calibration.kept_point_indices or list(
+                    range(1, len(self.calibration.calibration_real) + 1)
+                )
+                for label, (u, v) in zip(labels, self.calibration.calibration_real, strict=False):
+                    data[f"p{label}_x"] = [u]
+                    data[f"p{label}_y"] = [v]
+                pd.DataFrame(data).to_csv(ref2d_path, index=False)
+                paths["ref2d"] = ref2d_path
+                meta_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure_ref3d_meta.csv")
+                pd.DataFrame(
+                    [
+                        {
+                            "ref3d_path": self.calibration.ref3d_path,
+                            "ref3d_format": self.calibration.ref3d_format,
+                            "drop_axis": self.calibration.drop_axis,
+                            "kept_axes": "".join(keep),
+                            "pixel_csv_path": self.calibration.pixel_csv_path,
+                            "kept_point_indices": " ".join(str(i) for i in labels),
+                            "unit": self.calibration.unit_label,
+                        }
+                    ]
+                ).to_csv(meta_path, index=False)
+                paths["ref3d_meta"] = meta_path
 
         if self.results:
             results_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure_results.csv")
-            self.results_dataframe().to_csv(results_path, index=False)
+            matrix_points = max(int(result.get("n_points") or 0) for result in self.results)
+            self.results_dataframe(max_points=matrix_points).to_csv(results_path, index=False)
             paths["results"] = results_path
+            # One CSV per measure type that has data.
+            by_type: dict[str, list[dict]] = {}
+            for r in self.results:
+                by_type.setdefault(str(r.get("type")), []).append(r)
+            for kind, items in by_type.items():
+                type_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure_results_{kind}.csv")
+                # Reuse dataframe builder via a temporary session slice.
+                tmp = QuickMeasureSession(fps=self.fps, calibration=self.calibration)
+                tmp.results = items
+                tmp.results_dataframe(max_points=matrix_points).to_csv(type_path, index=False)
+                paths[f"results_{kind}"] = type_path
+
+        report = os.path.join(run_dir, "quickmeasure_report.html")
+        readme = os.path.join(run_dir, "README_quickmeasure.txt")
+        paths["report"] = report
+        paths["readme"] = readme
+        self._write_html_report(report, safe_stem, paths)
+        with open(readme, "w", encoding="utf-8") as handle:
+            handle.write("vailá Quick Measure export\n")
+            handle.write(f"stem: {safe_stem}\n")
+            handle.write(f"unit: {self.unit_label}\n")
+            if self.calibration is not None:
+                handle.write(f"calibration: {self.calibration.describe()}\n")
+            handle.write(
+                "results_schema: one result per row; point_N_* scalar columns; no packed lists\n"
+            )
+            handle.write("files:\n")
+            for role, path in paths.items():
+                if role != "dir":
+                    handle.write(f"  - {role}: {os.path.basename(path)}\n")
+            handle.write(
+                "\nRecompute: uv run python -m vaila.quickmeasure "
+                f"--points-csv {os.path.basename(points_path)} --measure distance\n"
+            )
         return paths
 
 
@@ -849,31 +1695,61 @@ def main(argv: Sequence[str] | None = None) -> int:
 def draw_quickmeasure_overlay(
     screen, session: QuickMeasureSession, zoom_level, crop_x, crop_y, font
 ):
-    """Draw clicked quick-measure points + connecting lines on `screen` (in
-    video pixel -> screen coordinate space, same convention `getpixelvideo.py`
-    uses for markers/boxes). No-op when there are no points.
-    """
-    if not session.points:
-        return
+    """Draw completed measurements (with value labels) + in-progress draft."""
     import pygame
 
-    color = (255, 0, 255)  # Magenta: visually distinct from marker/bbox colors.
-    screen_pts = []
-    for p in session.points:
-        sx = int((p.x * zoom_level) - crop_x)
-        sy = int((p.y * zoom_level) - crop_y)
-        screen_pts.append((sx, sy))
+    def _to_screen(x: float, y: float) -> tuple[int, int]:
+        return int((x * zoom_level) - crop_x), int((y * zoom_level) - crop_y)
 
-    if len(screen_pts) >= 2:
-        pygame.draw.lines(screen, color, False, screen_pts, 1)
-    for i, (sx, sy) in enumerate(screen_pts):
-        pygame.draw.circle(screen, color, (sx, sy), 4, 1)
-        label_surface = font.render(str(i + 1), True, color)
-        screen.blit(label_surface, (sx + 6, sy - 14))
+    color_done = (255, 0, 255)
+    color_draft = (255, 180, 0)
+    color_label = (255, 255, 0)
+
+    for r in session.results:
+        pixels = r.get("pixels") or []
+        if not pixels:
+            continue
+        screen_pts = [_to_screen(px, py) for px, py in pixels]
+        rtype = str(r.get("type", ""))
+        if rtype == "area" and len(screen_pts) >= 3:
+            pygame.draw.polygon(screen, color_done, screen_pts, 1)
+        elif len(screen_pts) >= 2:
+            pygame.draw.lines(screen, color_done, False, screen_pts, 2)
+        for sx, sy in screen_pts:
+            pygame.draw.circle(screen, color_done, (sx, sy), 4, 1)
+        # Label near the geometric mid / vertex.
+        if rtype == "angle" and len(screen_pts) >= 3:
+            lx, ly = screen_pts[1] if len(screen_pts) == 3 else screen_pts[0]
+        elif screen_pts:
+            lx = sum(p[0] for p in screen_pts) // len(screen_pts)
+            ly = sum(p[1] for p in screen_pts) // len(screen_pts)
+        else:
+            continue
+        label = f"{r.get('value', float('nan')):.3f} {r.get('unit', '')}"
+        screen.blit(font.render(label, True, color_label), (lx + 8, ly - 18))
+
+    # In-progress draft for the active live mode.
+    if session.draft_points:
+        draft_pts = [_to_screen(p.x, p.y) for p in session.draft_points]
+        if len(draft_pts) >= 2:
+            closed = session.active_mode == "area" and len(draft_pts) >= 3
+            pygame.draw.lines(screen, color_draft, closed, draft_pts, 1)
+        for i, (sx, sy) in enumerate(draft_pts):
+            pygame.draw.circle(screen, color_draft, (sx, sy), 5, 2)
+            screen.blit(font.render(str(i + 1), True, color_draft), (sx + 6, sy - 14))
+
+    # Mode banner.
+    banner_txt = session.live_mode_status()
+    banner = font.render(banner_txt, True, (0, 0, 0))
+    pad = 6
+    box = pygame.Surface((banner.get_width() + 2 * pad, banner.get_height() + 2 * pad))
+    box.fill((255, 180, 0) if session.active_mode else (200, 200, 200))
+    box.blit(banner, (pad, pad))
+    screen.blit(box, (10, screen.get_height() - box.get_height() - 10))
 
 
 def draw_calibration_overlay(
-    screen, draft: CalibrationDraft, zoom_level, crop_x, crop_y, font
+    screen, draft: CalibrationDraft | Ref3dCalibrationDraft, zoom_level, crop_x, crop_y, font
 ) -> None:
     """Draw the calibration clicks collected so far plus the next-step
     instruction banner. Called every frame while calibration is pending.
@@ -882,14 +1758,23 @@ def draw_calibration_overlay(
 
     color = (0, 255, 255)  # Cyan: distinct from magenta measure points.
     screen_pts = []
-    for px, py in draft.points:
+    points = draft.pixel_points if isinstance(draft, Ref3dCalibrationDraft) else draft.points
+    for px, py in points:
         screen_pts.append((int((px * zoom_level) - crop_x), int((py * zoom_level) - crop_y)))
     if len(screen_pts) >= 2:
-        closed = draft.mode == "plane" and draft.is_complete
+        closed = isinstance(draft, CalibrationDraft) and draft.mode == "plane" and draft.is_complete
         pygame.draw.lines(screen, color, closed, screen_pts, 2)
     for i, (sx, sy) in enumerate(screen_pts):
         pygame.draw.circle(screen, color, (sx, sy), 6, 2)
-        screen.blit(font.render(f"C{i + 1}", True, color), (sx + 8, sy - 16))
+        label = (
+            f"p{draft.kept_labels[i]}"
+            if isinstance(draft, Ref3dCalibrationDraft) and i < len(draft.kept_labels)
+            else f"C{i + 1}"
+        )
+        screen.blit(font.render(label, True, color), (sx + 8, sy - 16))
+
+    if isinstance(draft, Ref3dCalibrationDraft):
+        draw_ref3d_scheme_panel(screen, draft, font)
 
     banner = font.render(draft.instructions(), True, (0, 0, 0))
     pad = 6
@@ -897,6 +1782,53 @@ def draw_calibration_overlay(
     box.fill(color)
     box.blit(banner, (pad, pad))
     screen.blit(box, (10, 10))
+
+
+def draw_ref3d_scheme_panel(
+    screen, draft: Ref3dCalibrationDraft, font, *, margin: int = 12
+) -> None:
+    """Draw a small orthographic scheme of the REF3D points (kept plane axes)."""
+    import pygame
+
+    keep = PLANE_KEEP_AXES[draft.drop_axis]
+    axis_i = {"x": 1, "y": 2, "z": 3}  # offset into (label,x,y,z)
+    pts = []
+    for label in draft.kept_labels:
+        for p in draft.points_xyz:
+            if p[0] == label:
+                pts.append((label, float(p[axis_i[keep[0]]]), float(p[axis_i[keep[1]]])))
+                break
+    if not pts:
+        return
+
+    us = [p[1] for p in pts]
+    vs = [p[2] for p in pts]
+    u_min, u_max = min(us), max(us)
+    v_min, v_max = min(vs), max(vs)
+    span_u = max(u_max - u_min, 1e-9)
+    span_v = max(v_max - v_min, 1e-9)
+
+    panel_w, panel_h = 220, 180
+    screen_w, screen_h = screen.get_size()
+    ox = screen_w - panel_w - margin
+    oy = margin
+    panel = pygame.Surface((panel_w, panel_h))
+    panel.fill((20, 20, 30))
+    pygame.draw.rect(panel, (0, 255, 255), panel.get_rect(), 1)
+    title = font.render(f"REF3D scheme ({''.join(a.upper() for a in keep)})", True, (0, 255, 255))
+    panel.blit(title, (8, 6))
+
+    plot_x0, plot_y0 = 24, 28
+    plot_w, plot_h = panel_w - 40, panel_h - 48
+    next_label = draft.next_label
+    for label, u, v in pts:
+        sx = plot_x0 + int((u - u_min) / span_u * plot_w)
+        # Screen y grows down; keep world +v upward on the panel.
+        sy = plot_y0 + plot_h - int((v - v_min) / span_v * plot_h)
+        color = (255, 255, 0) if label == next_label else (180, 220, 255)
+        pygame.draw.circle(panel, color, (sx, sy), 5 if label == next_label else 3)
+        panel.blit(font.render(str(label), True, color), (sx + 6, sy - 8))
+    screen.blit(panel, (ox, oy))
 
 
 def finish_calibration_draft(
@@ -929,26 +1861,71 @@ def finish_calibration_draft(
     return calib, calib.describe()
 
 
-def _ask_calibration_via_dialog() -> tuple[QuickMeasureCalibration | None, str]:
-    """Tkinter file-picker flow to load a DLT2D calibration: either an
-    existing `.dlt2d` coefficients file, or a pixel-calibration CSV +
-    `.ref2d` reference pair (computed on the fly via `dlt2d.py`). Runs its
-    own short-lived Tk root, same pattern as the rest of `getpixelvideo.py`'s
-    Tk-based pickers.
-    """
+def finish_ref3d_calibration_draft(
+    draft: Ref3dCalibrationDraft,
+) -> tuple[QuickMeasureCalibration | None, str]:
+    """Solve DLT2D once every guided REF3D image click is collected."""
+    if not draft.is_complete:
+        return None, draft.instructions()
+    try:
+        calib = draft.build()
+    except QuickMeasureError as exc:
+        return None, f"Calibration error: {exc}"
+    return calib, calib.describe()
+
+
+def _ask_drop_axis_via_dialog(parent=None) -> str | None:
+    """Ask which world axis to drop for planar DLT2D. Returns ``x``/``y``/``z`` or None."""
+    import tkinter as tk
+    from tkinter import simpledialog
+
+    root = parent
+    owns_root = False
+    if root is None:
+        root = tk.Tk()
+        root.withdraw()
+        owns_root = True
+    try:
+        answer = simpledialog.askstring(
+            "Quick Measure — REF3D plane",
+            "Drop which world axis for rec2d / DLT2D?\n"
+            "  z = keep XY (floor / top-down)\n"
+            "  y = keep XZ\n"
+            "  x = keep YZ\n"
+            "Default: z",
+            initialvalue="z",
+            parent=root,
+        )
+    finally:
+        if owns_root:
+            root.destroy()
+    if answer is None:
+        return None
+    axis = str(answer).strip().lower()
+    if axis not in PLANE_DROP_AXES:
+        return None
+    return axis
+
+
+def _ask_calibration_via_dialog(
+    video_path: str | None = None,
+) -> tuple[QuickMeasureCalibration | None, str]:
+    """Tkinter file-picker flow for DLT2D / REF2D / REF3D calibration."""
     import tkinter as tk
     from tkinter import filedialog, messagebox
 
     root = tk.Tk()
     root.withdraw()
     try:
-        use_existing = messagebox.askyesno(
+        choice = messagebox.askyesnocancel(
             "Quick Measure — Calibration",
-            "Load an existing .dlt2d coefficients file?\n\n"
-            "Yes: pick a .dlt2d file (from dlt2d.py).\n"
-            "No: pick a pixel calibration CSV + a .ref2d file instead.",
+            "Yes: load an existing .dlt2d coefficients file.\n"
+            "No: load pixel CSV + reference (.ref2d or .ref3d).\n"
+            "Cancel: abort.",
         )
-        if use_existing:
+        if choice is None:
+            return None, "Calibration cancelled."
+        if choice:
             dlt2d_file = filedialog.askopenfilename(
                 title="Select .dlt2d coefficients file",
                 filetypes=[("DLT2D files", "*.dlt2d"), ("CSV files", "*.csv")],
@@ -959,21 +1936,96 @@ def _ask_calibration_via_dialog() -> tuple[QuickMeasureCalibration | None, str]:
             return calib, f"Calibration loaded: {os.path.basename(dlt2d_file)}"
 
         pixel_file = filedialog.askopenfilename(
-            title="Select PIXEL calibration CSV",
+            title="Select PIXEL calibration CSV (getpixelvideo markers)",
             filetypes=[("CSV files", "*.csv")],
         )
         if not pixel_file:
             return None, "Calibration cancelled."
         ref_file = filedialog.askopenfilename(
-            title="Select REF2D real-world coordinates file",
-            filetypes=[("REF2D files", "*.ref2d"), ("CSV files", "*.csv")],
+            title="Select REF2D or REF3D real-world coordinates",
+            filetypes=[
+                ("REF3D / REF2D", "*.ref3d *.ref2d"),
+                ("REF3D files", "*.ref3d"),
+                ("REF2D files", "*.ref2d"),
+                ("CSV files", "*.csv"),
+            ],
         )
         if not ref_file:
             return None, "Calibration cancelled."
+
+        lower = ref_file.lower()
+        if lower.endswith(".ref3d"):
+            drop = _ask_drop_axis_via_dialog(parent=root)
+            if drop is None:
+                return None, "Calibration cancelled."
+            calib = QuickMeasureCalibration.from_ref3d_and_pixel_csv(
+                ref_file, pixel_file, drop_axis=drop, unit_label="m"
+            )
+            return calib, calib.describe()
+
         calib = QuickMeasureCalibration.from_calibration_points(pixel_file, ref_file)
         return calib, f"Calibration computed from: {os.path.basename(pixel_file)}"
     except QuickMeasureError as e:
         messagebox.showerror("Quick Measure — Calibration error", str(e))
+        return None, f"Calibration error: {e}"
+    finally:
+        root.destroy()
+
+
+def ask_ref3d_calibration_files(
+    video_path: str | None = None,
+    unit_label: str = "m",
+) -> tuple[QuickMeasureCalibration | Ref3dCalibrationDraft | None, str]:
+    """Pick a ``.ref3d``, choose drop axis, then load pixel CSV or return a guide draft.
+
+    Returns either a ready ``QuickMeasureCalibration`` (CSV found/chosen) or a
+    ``Ref3dCalibrationDraft`` the host must fill by guided clicks.
+    """
+    import tkinter as tk
+    from tkinter import filedialog, messagebox
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        ref_file = filedialog.askopenfilename(
+            title="Select REF3D file (mode1 / mode2 / mode3)",
+            filetypes=[("REF3D files", "*.ref3d"), ("CSV files", "*.csv"), ("All", "*.*")],
+        )
+        if not ref_file:
+            return None, "REF3D calibration cancelled."
+        drop = _ask_drop_axis_via_dialog(parent=root)
+        if drop is None:
+            return None, "REF3D calibration cancelled."
+
+        suggested = suggest_pixel_csv_for_ref3d(ref_file, video_path)
+        use_csv = messagebox.askyesno(
+            "Quick Measure — pixel coordinates",
+            "Load a getpixelvideo pixel CSV for these REF3D points?\n\n"
+            f"Suggested: {os.path.basename(suggested) if suggested else '(none found)'}\n\n"
+            "Yes: pick / confirm the CSV and solve DLT2D now.\n"
+            "No: guide — click each REF3D point on the video (scheme shown).",
+        )
+        if use_csv:
+            initial = suggested or ""
+            pixel_file = filedialog.askopenfilename(
+                title="Select PIXEL calibration CSV",
+                initialdir=os.path.dirname(initial) if initial else None,
+                initialfile=os.path.basename(initial) if initial else None,
+                filetypes=[("CSV files", "*.csv")],
+            )
+            if not pixel_file:
+                return None, "REF3D calibration cancelled."
+            calib = QuickMeasureCalibration.from_ref3d_and_pixel_csv(
+                ref_file, pixel_file, drop_axis=drop, unit_label=unit_label
+            )
+            return calib, calib.describe()
+
+        draft = Ref3dCalibrationDraft.from_ref3d_file(
+            ref_file, drop_axis=drop, unit_label=unit_label
+        )
+        return draft, draft.instructions()
+    except QuickMeasureError as e:
+        messagebox.showerror("Quick Measure — REF3D error", str(e))
         return None, f"Calibration error: {e}"
     finally:
         root.destroy()
@@ -1004,19 +2056,23 @@ def show_quickmeasure_menu(
         else "no calibration — values are in pixels"
     )
     lines = [
-        "QUICK MEASURE — classify current points",
+        "QUICK MEASURE — save / calibrate / classify",
         "",
-        f"Points clicked: {n}   Unit: {session.unit_label}",
+        f"Points: {n}   Results: {len(session.results)}   Unit: {session.unit_label}",
+        f"Live mode: {session.active_mode or '(press 1-5 on video)'}   FPS: {session.fps}",
         f"Calibration: {calib_line}",
         "",
-        "1: Distance     (last 2 points)",
-        "2: Area         (all points, polygon)",
-        "3: Velocity     (last 2 points, needs fps + 2 frames)",
-        "4: Acceleration (last 3 points, needs fps + 3 frames)",
+        "On the VIDEO (after Q):",
+        "  1 distance  2 area  3 angle  4 velocity  5 accel",
+        "  6-0 reserved — value drawn on-image per completed set",
+        "  Enter closes area polygon; velocity/accel need FPS (I)",
         "",
+        "In this menu:",
+        "1-5: classify current free points (legacy)",
         "S: Save points / calibration / results CSV",
-        "C: Load DLT2D calibration from file...",
-        "X: Clear all points",
+        "C: Load DLT2D / REF2D / REF3D calibration...",
+        "R: Load REF3D calibration (plane drop + CSV or guide)",
+        "X: Clear all points (+ draft)",
         "",
         "Esc: Close menu",
     ]
@@ -1057,19 +2113,42 @@ def show_quickmeasure_menu(
                         result_message = f"Error: {e}"
                 elif event.key in (pygame.K_3, pygame.K_KP3):
                     try:
-                        result_message = format_result(session.measure("velocity"))
+                        result_message = format_result(session.measure("angle"))
                     except QuickMeasureError as e:
                         result_message = f"Error: {e}"
                 elif event.key in (pygame.K_4, pygame.K_KP4):
+                    try:
+                        result_message = format_result(session.measure("velocity"))
+                    except QuickMeasureError as e:
+                        result_message = f"Error: {e}"
+                elif event.key in (pygame.K_5, pygame.K_KP5):
                     try:
                         result_message = format_result(session.measure("acceleration"))
                     except QuickMeasureError as e:
                         result_message = f"Error: {e}"
                 elif event.key == pygame.K_c:
-                    calib, msg = _ask_calibration_via_dialog()
+                    video_guess = (
+                        os.path.join(save_dir, save_stem) if save_dir and save_stem else None
+                    )
+                    calib, msg = _ask_calibration_via_dialog(video_guess)
                     if calib is not None:
                         session.calibration = calib
                     result_message = msg
+                elif event.key == pygame.K_r:
+                    video_guess = (
+                        os.path.join(save_dir, save_stem) if save_dir and save_stem else None
+                    )
+                    result, msg = ask_ref3d_calibration_files(video_guess)
+                    if isinstance(result, QuickMeasureCalibration):
+                        session.calibration = result
+                        result_message = msg
+                    elif isinstance(result, Ref3dCalibrationDraft):
+                        session.pending_ref3d_draft = result
+                        result_message = (
+                            f"REF3D guide ready — close menu (Esc) then click points. {msg}"
+                        )
+                    else:
+                        result_message = msg
                 elif event.key == pygame.K_s:
                     try:
                         paths = session.save_session(save_dir or os.getcwd(), save_stem)
@@ -1087,7 +2166,9 @@ def show_quickmeasure_menu(
                         result_message = f"Error: {e}"
                 elif event.key == pygame.K_x:
                     session.clear()
-                    result_message = "Points cleared."
+                    session.clear_results()
+                    session.active_mode = None
+                    result_message = "Points, draft and results cleared."
 
     return result_message or "Quick Measure menu closed (no measurement taken)."
 
