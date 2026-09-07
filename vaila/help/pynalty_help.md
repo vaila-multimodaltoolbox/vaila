@@ -2,74 +2,92 @@
 
 ## Introduction
 
-**Pynalty** is a specialized video analysis tool designed to calculate penalty kick statistics, specifically the ball's velocity and distance traveled. Integrated into the **vailá** toolbox, it provides a user-friendly interface to mark critical moments (kick and goal) and positions to automatically compute results based on goal calibration.
+*Pynalty* analyses penalty kicks from video for coaches and keepers: flight
+speed and placement, goalkeeper reaction and dive, reach/time-to-ball
+saveability, optional MediaPipe pose in athlete crops, and self-contained HTML
+reports (EN/PT) plus CSV rows for a session database.
 
-**Version:** 0.3.120  
-**Date:** 03 September 2026  
-**Project:** vailá - Multimodal Toolbox
+**Version:** 0.3.129  
+**Date:** 07 September 2026  
+**Project:** *vailá* - Multimodal Toolbox
 
 ## Key Features
 
-- **Video-Based Analysis:** Analyze penalty kicks directly from video files.
-- **State-Based Workflow:** Guided step-by-step process (Kick Frame -> Goal Frame -> Calibration).
-- **Automatic Calculation:** Computes distance, velocity (m/s and km/h) using DLT 2D reconstruction.
-- **Data Export:** Save complete results package including **TOML** (for reloading), **CSV** (for Excel/Analysis), **HTML report**, and **snapshot images**.
-- **Interactive GUI:** Zoom, pan, frame slider, and visual markers.
-- **Help Overlay:** Press **H** for quick reference.
+- **7-step didactic wizard** — welcome overlay, left step panel (why/how/readback), progress, zoom toward cursor.
+- **DLT2D goal calibration** — pixels → metres on the goal plane; configurable goal size and penalty distance.
+- **Ball path** — manual marks and/or YOLO auto-detect (`A`); interpolated gaps; pixel + modelled 3D CSVs; HTML canvas animation.
+- **Athlete boxes + pose** — drag Kicker/GK boxes, MediaPipe on crop-upscale (`P`); pose CSVs and kinematics.
+- **Anthropometrics** — GK stature / arm span / standing reach (`B`) drive the reach envelope and save verdict.
+- **Reports** — `report.html` / `report_pt.html`, tidy `results.csv`, wide `pynalty_summary.csv`, appendable `pynalty_database.csv`.
 
-## Workflow
+## Workflow (wizard)
 
-1.  **Launch Pynalty**:
-    - **GUI mode:** click "Pynalty" inside the **Soccer Tools** launcher in the *vailá* main window (Frame B), or run `uv run vaila/pynalty.py` with no flags to open a file-picker dialog.
-    - **CLI mode:** `uv run vaila/pynalty.py -i video.mp4 -o output_dir -c config.toml` skips the file dialog and preloads the output directory / TOML config; the interactive marking window still opens. Pass `--gui` to force the file dialog even when `-i` is given.
-2.  **Load Video**: Select the video file containing the penalty kick (skipped in CLI mode when `-i` is given).
-3.  **Select Kick Frame**: Use arrows/slider to find the moment the kicker hits the ball. Press **ENTER**.
-4.  **Mark Ball (Kick)**: Click on the center of the ball.
-5.  **Mark Goalkeeper (Kick)**: Click on the center of the Goalkeeper at the kick moment.
-6.  **Select GK Move Frame**: Navigate to the frame where the Goalkeeper STARTS moving (reaction/anticipation). Press **ENTER**.
-7.  **Select Goal Frame**: Navigate to the moment the ball crosses the goal line (or is saved). Press **ENTER**.
-8.  **Mark Ball (Goal)**: Click on the center of the ball at the goal line.
-9.  **Mark Goalkeeper (Goal)**: Click on the center of the Goalkeeper at the goal moment.
-10. **Calibration**: Click the 4 corners of the goal in the specified order (displayed on screen):
-    1.  **Bottom-Left** (Poste Esquerdo Inferior) / (Trave Esquerda Baixo)
-    2.  **Top-Left** (Poste Esquerdo Superior) / (Trave Esquerda Cima)
-    3.  **Top-Right** (Poste Direito Superior) / (Trave Direita Cima)
-    4.  **Bottom-Right** (Poste Direito Inferior) / (Trave Direita Baixo)
-11. **Results**: View distance, velocity, and GK response time statistics.
+1. **Keeper starts moving** — scrub, then ENTER or click to lock the frame.
+2. **Ball contact** — click BALL centre (frame locks automatically), then KEEPER centre.
+3. **Ball at goal line** — click BALL, then KEEPER, then **G**=goal / **D**=save / **M**=miss / **W**=woodwork.
+4. **Goal calibration** — four corners in order.
+5. **Ball path (optional)** — `A` YOLO or click; skip with Step >.
+6. **Pose boxes (optional)** — drag boxes + `P`; skip with Step >.
+7. **Body measures (optional)** — `B`, or skip to use default GK stature **1.88 m**.
+
+`Step >` only advances when the current **required** step is finished. Optional steps never block save.
+
+## Launch
+
+- **GUI:** Frame B → **Pynalty**, or `uv run vaila/pynalty.py` (file picker).
+- **CLI marking:** `uv run vaila/pynalty.py -i video.mp4 -o out_dir -c data.toml`
+- **Headless regenerate:** add `--report-only` (requires `-c`).
+- **Extras:** `--database`, `--no-wizard`, `--auto-ball`, `--pose`, `--penalty-distance`, `--goal-width`, `--goal-height`, `--lang en|pt|both`
+
+Every GUI/CLI run prints a copy-paste **Equivalent CLI** line (`>>` prefix).
 
 ## Controls
 
-### Navigation
-| Key | Action |
-|-----|--------|
-| **SPACE** | Play / Pause Video |
-| **Left / Right Arrows** | Previous / Next Frame |
-| **Up / Down Arrows** | +/- 10 Frames |
-| **Mouse Wheel** | Zoom In / Out |
-| **+ / -** | Zoom In / Out |
-| **Middle Click + Drag** | Pan Image |
-| **Slider (Bottom)** | Drag to seek frames |
+| Key / action | Effect |
+| --- | --- |
+| Left / Right | Prev / next frame |
+| Space | Play / pause |
+| Mouse wheel | Zoom toward cursor |
+| Drag | Pan |
+| ENTER | Confirm step / open body dialog on step 7 |
+| A | Auto-detect ball (YOLO) |
+| P | Run MediaPipe pose in boxes |
+| B | Anthropometrics dialog |
+| S / L / H | Save / Load TOML / Help |
+| Buttons | Step navigation and the same actions |
 
-### Actions
-| Key | Action |
-|-----|--------|
-| **ENTER** | Confirm Frame Selection (Kick/GK/Goal) |
-| **Left Click** | Mark Ball / GK / Calibration Point |
-| **Right Click** | Undo Last Mark / Go Back Step |
-| **S** | Save All Results (TOML + CSV + HTML + Snapshots) |
-| **L** | Load Analysis from TOML |
-| **F** | Change Video FPS (Manual Override) |
-| **H** | Toggle Help Overlay |
+## Outputs
 
-## Saving and Loading
+Written under `<video_stem>_results/` (or `-o`):
 
-- **S Key:** Saves all results in a complete package:
-  - **TOML file:** Contains marked points and state (use **L** to reload and resume work later)
-  - **CSV file:** Contains final calculated statistics (Velocity, Distance, Coordinates) and raw points for reporting
-  - **HTML report:** Visual report with metrics and snapshots
-  - **Snapshot images:** PNG images of key events (GK Move, Kick, Goal, Calibration)
+| File | Role |
+| --- | --- |
+| `data.toml` | Reloadable marks + geometry + anthro |
+| `results.csv` | Tidy per-variable table |
+| `pynalty_summary.csv` | One wide row for the penalty |
+| `pynalty_database.csv` | Session DB (`--database` or beside output); keyed by video + kick frame |
+| `report.html` / `report_pt.html` | Self-contained coaching reports |
+| `ball_path_pixel.csv` / `ball_path_3d.csv` | Measured path + gravity flight model |
+| `pose_kicker_pixel.csv` / `pose_gk_pixel.csv` | Pose landmarks when step 6 ran |
+| `snapshot_*.png` | Event stills |
 
-## Troubleshooting
+## Modules
 
-- **Wrong Velocity?** Ensure the goal calibration points are clicked in the correct order (Bottom-Left -> Top-Left -> Top-Right -> Bottom-Right). The system assumes standard goal dimensions (7.32m x 2.44m).
-- **Video not loading?** Ensure `opencv-python` is installed and the video format is supported.
+| Module | Responsibility |
+| --- | --- |
+| `vaila/pynalty.py` | Pygame wizard + CLI |
+| `vaila/pynalty_analysis.py` | DLT, flight, zones, reach, metrics |
+| `vaila/pynalty_vision.py` | YOLO ball, MediaPipe pose, overlays |
+| `vaila/pynalty_report.py` | HTML + CSV writers |
+
+## Notes
+
+- Goal-plane DLT is exact only on the goal mouth; full-flight speeds in the report use the fitted 3D model, not raw pixel deltas.
+- Reach analysis needs step 7 anthropometrics; without them the verdict stays “not assessed”.
+- YOLO / MediaPipe are optional: mark by hand if those stacks are missing.
+
+## Support
+
+- Help index: `vaila/help/index.html`
+- Button doc: `docs/vaila_buttons/pynalty.md`
+- Issues: https://github.com/vaila-multimodaltoolbox/vaila/issues

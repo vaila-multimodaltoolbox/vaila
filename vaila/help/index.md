@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 155 | **Categories:** 7 | **Generated on:** 07/09/2026 (v0.3.127)
+**Documented topics:** 155 | **Categories:** 7 | **Generated on:** 07/09/2026 (v0.3.128)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -40,7 +40,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](mocap_analysis.html) · [Markdown](mocap_analysis.md)
 - **mp_facemesh_help** — Welcome to the Face Mesh Analysis module. This tool performs batch processing of videos for 2D face mesh detection using MediaPipe's FaceMesh model. It proce...
   - [HTML](mp_facemesh_help.html) · [Markdown](mp_facemesh_help.md)
-- **pynalty_help** — Pynalty is a specialized video analysis tool designed to calculate penalty kick statistics, specifically the ball's velocity and distance traveled. Integrate...
+- **pynalty_help** — Penalty analysis with didactic wizard, ball path, GK reach/time, EN/PT HTML reports and database CSV.
   - [HTML](pynalty_help.html) · [Markdown](pynalty_help.md)
 - **run_vector_coding** — Time normalize data to n_points.
   - [HTML](run_vector_coding.html) · [Markdown](run_vector_coding.md)
