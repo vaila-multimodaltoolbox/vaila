@@ -19,7 +19,7 @@
       <h1>interp_smooth_split</h1>
       <p>
         <i>vailá</i> CSV/C3D gap-fill / smooth / optional resample tool.
-        Version <strong>0.3.115</strong> · Updated <strong>26 August 2026</strong>.
+        Version <strong>0.3.130</strong> · Updated <strong>08 September 2026</strong>.
         Shared core: <code>vaila/interp_smooth_core.py</code> (GUI ↔ CLI parity).
         C3D uses the same bridge as Edit CSV/C3D (<code>c3d_markers_to_dataframe</code> →
         process → <code>auto_create_c3d_from_csv</code>).
@@ -36,6 +36,12 @@ C3D  → marker CSV → same pipeline → C3D (labels, RATE, UNITS, residuals, a
         <tr><td>Time Column Sample Rate Override</td><td>Rebuild Time only; does <strong>not</strong> replace Butterworth fs</td></tr>
         <tr><td>Original / Final rate</td><td>Optional final resampling</td></tr>
       </table>
+      <p>
+        Sampling-rate fields accept decimals such as <code>59.94005994</code> and ratios
+        such as <code>60000/1001</code> or <code>60.000 / 1.001</code>. Ratios are
+        validated safely and converted to a positive finite value. In TOML, quote them:
+        <code>fs = "60000/1001"</code>.
+      </p>
       <p>Columns named <code>Time</code>/<code>t</code>/<code>tempo</code> and
       <code>frame</code>/<code>frames</code>/<code>frame_index</code> are index axes, never signals:
       they are excluded from gap filling, smoothing and resampling interpolation regardless of
@@ -50,12 +56,12 @@ C3D  → marker CSV → same pipeline → C3D (labels, RATE, UNITS, residuals, a
       <pre>uv run vaila/interp_smooth_split.py -i ./data
 
 uv run vaila/interp_smooth_split.py -i ./data --smooth-method butterworth \
-    --fs 100 --cutoff 10 --filter-order 4
+    --fs 60000/1001 --cutoff 10 --filter-order 4
 
 uv run vaila/interp_smooth_split.py -i ./data --smooth-method savgol \
     --window-length 7 --polyorder 3
 
-uv run vaila/interp_smooth_split.py -i ./data --time-column-rate 240
+uv run vaila/interp_smooth_split.py -i ./data --time-column-rate 60000/1001
 
 uv run vaila/interp_smooth_split.py -i ./data --resample \
     --original-rate 100 --final-rate 50

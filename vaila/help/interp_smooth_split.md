@@ -4,10 +4,10 @@
 
 - **Category:** Processing
 - **File:** `vaila/interp_smooth_split.py` (+ shared core `vaila/interp_smooth_core.py`)
-- **Version:** 0.3.115
+- **Version:** 0.3.130
 - **Author:** Paulo R. P. Santiago
 - **GUI:** yes | **CLI:** yes
-- **Updated:** 26 August 2026
+- **Updated:** 08 September 2026
 
 ## Description
 
@@ -64,6 +64,11 @@ silently clamped.
 
 Hz means samples per second; FPS means frames per second. Both describe sampling rate
 for this tool.
+
+Sampling-rate fields accept decimal values (`59.94005994`) and ratios
+(`60000/1001` or `60.000 / 1.001`). Ratios are validated without evaluating arbitrary
+expressions and converted internally to a positive finite float. Fractional rates use at
+least nine decimal places when a rebuilt `Time` column is saved.
 
 ### Derivatives
 
@@ -125,14 +130,14 @@ uv run vaila/interp_smooth_split.py -i ./data
 
 # Butterworth
 uv run vaila/interp_smooth_split.py -i ./data --smooth-method butterworth \
-    --fs 100 --cutoff 10 --filter-order 4
+    --fs 60000/1001 --cutoff 10 --filter-order 4
 
 # Savitzky-Golay
 uv run vaila/interp_smooth_split.py -i ./data --smooth-method savgol \
     --window-length 7 --polyorder 3
 
 # Time-column rebuild (not Butterworth fs)
-uv run vaila/interp_smooth_split.py -i ./data --time-column-rate 240
+uv run vaila/interp_smooth_split.py -i ./data --time-column-rate 60000/1001
 
 # Downsample
 uv run vaila/interp_smooth_split.py -i ./data --resample \
@@ -152,6 +157,9 @@ uv run vaila/interp_smooth_split.py -i ./data -c ./smooth_config.toml --cutoff 8
 
 Sections: `[interpolation]`, `[smoothing]`, `[padding]`, `[split]`, `[time_column]`,
 `[resample]` (`enabled`, `original_rate`, `final_rate`, `antialias`, `antialias_cutoff`).
+Write ratios as quoted TOML strings, for example `fs = "60000/1001"` or
+`original_rate = "60.000 / 1.001"`. Saved output configurations contain the resolved
+decimal value.
 
 ---
 

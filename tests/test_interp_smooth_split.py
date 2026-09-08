@@ -26,7 +26,7 @@ from vaila.interp_smooth_core import (
     validate_butterworth_params,
     validate_time_axis,
 )
-from vaila.interp_smooth_split import generate_report, process_file
+from vaila.interp_smooth_split import arima_smooth, generate_report, parse_rate_hz, process_file
 from vaila.interp_smooth_split import savgol_smooth as mod_savgol
 
 
@@ -35,6 +35,30 @@ def _synth(fs=100.0, seconds=2.0):
     clean = np.sin(2 * np.pi * 2.0 * t)
     noise = 0.15 * np.sin(2 * np.pi * 30.0 * t)
     return t, clean + noise, clean
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (59.94005994005994, 59.94005994005994),
+        ("59.94005994005994", 59.94005994005994),
+        ("60000/1001", 60000 / 1001),
+        ("60.000 / 1.001", 60.000 / 1.001),
+    ],
+)
+def test_parse_rate_hz_accepts_decimal_and_ratio(raw, expected):
+    assert parse_rate_hz(raw) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("raw", ["", "abc", "1/0", "1/2/3", "-60", "nan", "inf"])
+def test_parse_rate_hz_rejects_invalid_values(raw):
+    with pytest.raises(ValueError):
+        parse_rate_hz(raw)
+
+
+def test_parse_rate_hz_allows_unset_zero():
+    assert parse_rate_hz("", allow_unset=True) is None
+    assert parse_rate_hz(0, allow_unset=True) is None
 
 
 def test_savgol_smooth_defined_and_runs():
@@ -50,6 +74,15 @@ def test_lowess_smooth_runs():
     _, signal, _ = _synth(seconds=1.0)
     out = lowess_smooth(signal, frac=0.3, it=1)
     assert out.shape == signal.shape
+
+
+def test_arima_smooth_uses_current_statsmodels_fit_api():
+    rng = np.random.default_rng(42)
+    signal = np.cumsum(rng.normal(size=80))
+    out = arima_smooth(signal, order=(1, 0, 0))
+    assert out.shape == signal.shape
+    assert np.isfinite(out).all()
+    assert not np.array_equal(out, signal)
 
 
 def test_butterworth_rejects_cutoff_at_or_above_nyquist():
@@ -498,6 +531,93 @@ def test_toml_round_trip_includes_resample(tmp_path):
     assert loaded["sample_rate"] == 240.0
 
 
+def test_toml_load_accepts_quoted_fractional_rates(tmp_path):
+    from vaila.interp_smooth_split import load_smooth_config_for_analysis
+
+    path = tmp_path / "fractional.toml"
+    path.write_text(
+        """
+[interpolation]
+method = "none"
+max_gap = 0
+[smoothing]
+method = "butterworth"
+fs = "60000/1001"
+cutoff = 10.0
+order = 4
+[time_column]
+sample_rate = "60.000 / 1.001"
+[resample]
+enabled = true
+original_rate = "60000/1001"
+final_rate = "30000/1001"
+""",
+        encoding="utf-8",
+    )
+
+    loaded = load_smooth_config_for_analysis(str(path))
+    assert loaded["smooth_params"]["fs"] == pytest.approx(60000 / 1001)
+    assert loaded["sample_rate"] == pytest.approx(60.000 / 1.001)
+    assert loaded["original_rate"] == pytest.approx(60000 / 1001)
+    assert loaded["final_rate"] == pytest.approx(30000 / 1001)
+
+
+def test_toml_save_normalizes_fractional_rates_to_numbers(tmp_path):
+    import toml
+
+    from vaila.interp_smooth_split import save_smooth_config_toml
+
+    path = tmp_path / "normalized.toml"
+    save_smooth_config_toml(
+        {
+            "interp_method": "none",
+            "smooth_method": "butterworth",
+            "smooth_params": {"fs": "60000/1001", "cutoff": 10.0, "order": 4},
+            "padding": 0.0,
+            "max_gap": 0,
+            "do_split": False,
+            "sample_rate": "60.000 / 1.001",
+            "resample": True,
+            "original_rate": "60000/1001",
+            "final_rate": "30000/1001",
+        },
+        str(path),
+    )
+
+    saved = toml.load(path)
+    assert saved["smoothing"]["fs"] == pytest.approx(60000 / 1001)
+    assert saved["time_column"]["sample_rate"] == pytest.approx(60.000 / 1.001)
+    assert saved["resample"]["original_rate"] == pytest.approx(60000 / 1001)
+    assert saved["resample"]["final_rate"] == pytest.approx(30000 / 1001)
+
+
+def test_process_file_rebuilds_time_with_fractional_rate(tmp_path):
+    rate = parse_rate_hz("60000/1001")
+    df = pd.DataFrame({"Time": [0.0, 0.1, 0.2, 0.3], "x": [1.0, 2.0, 3.0, 4.0]})
+    src = tmp_path / "fractional.csv"
+    df.to_csv(src, index=False)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+
+    info = process_file(
+        str(src),
+        str(out_dir),
+        {
+            "interp_method": "none",
+            "smooth_method": "none",
+            "smooth_params": {},
+            "padding": 0.0,
+            "max_gap": 0,
+            "do_split": False,
+            "sample_rate": rate,
+        },
+    )
+
+    assert info and not info.get("error")
+    out = pd.read_csv(info["output_path"])
+    np.testing.assert_allclose(out["Time"], np.arange(len(out)) / rate)
+
+
 def test_cli_flag_overrides_toml(tmp_path):
     import subprocess
     import sys
@@ -540,6 +660,8 @@ def test_cli_flag_overrides_toml(tmp_path):
             "5",
             "--polyorder",
             "2",
+            "--time-column-rate",
+            "60000/1001",
         ],
         cwd="/home/preto/data/vaila",
         capture_output=True,
@@ -549,3 +671,8 @@ def test_cli_flag_overrides_toml(tmp_path):
     assert proc.returncode == 0, proc.stderr
     outs = list(out.glob("*_savgol.csv"))
     assert outs, "CLI --smooth-method should override TOML none"
+    processed = pd.read_csv(outs[0])
+    expected_rate = 60000 / 1001
+    np.testing.assert_allclose(
+        processed["Time"], np.arange(len(processed), dtype=float) / expected_rate
+    )

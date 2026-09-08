@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 26 August 2026
-Version: 0.3.115
+Update Date: 08 September 2026
+Version: 0.3.130
 Python Version: 3.12.14
 
 Description:
@@ -98,6 +98,7 @@ For more details, visit: https://www.gnu.org/licenses/lgpl-3.0.html
 
 import contextlib
 import datetime
+import math
 import os
 import sys
 import tkinter as tk
@@ -137,7 +138,7 @@ try:
     )
 except ImportError:
     try:
-        from filter_utils import butter_filter
+        from filter_utils import butter_filter  # ty: ignore[unresolved-import]
         from interp_smooth_core import (  # ty: ignore[unresolved-import]
             align_signals_for_comparison,
             apply_smoothing_1d,
@@ -165,9 +166,49 @@ except ImportError:
 
         raise
 
-# Explicit re-exports (GUI/CLI callers and tests import these from this module)
-savgol_smooth = savgol_smooth
-lowess_smooth = lowess_smooth
+
+def parse_rate_hz(value, *, field_name="sampling rate", allow_unset=False):
+    """Parse a positive Hz/FPS value, including ratios such as ``60000/1001``."""
+    if value is None:
+        if allow_unset:
+            return None
+        raise ValueError(f"{field_name} is required")
+
+    raw = str(value).strip()
+    if not raw:
+        if allow_unset:
+            return None
+        raise ValueError(f"{field_name} is required")
+
+    try:
+        if "/" in raw:
+            if raw.count("/") != 1:
+                raise ValueError
+            numerator_raw, denominator_raw = (part.strip() for part in raw.split("/", 1))
+            if not numerator_raw or not denominator_raw:
+                raise ValueError
+            numerator = float(numerator_raw)
+            denominator = float(denominator_raw)
+            if not math.isfinite(numerator) or not math.isfinite(denominator):
+                raise ValueError
+            if denominator == 0:
+                raise ValueError(f"{field_name} denominator cannot be zero")
+            rate = numerator / denominator
+        else:
+            rate = float(raw)
+    except ValueError as exc:
+        if str(exc).endswith("denominator cannot be zero"):
+            raise
+        raise ValueError(
+            f"{field_name} must be a positive decimal or ratio such as 60000/1001"
+        ) from exc
+
+    if allow_unset and rate == 0:
+        return None
+    if not math.isfinite(rate) or rate <= 0:
+        raise ValueError(f"{field_name} must be greater than zero")
+    return rate
+
 
 # =============================================================================
 # ROBUST SPIKE REMOVAL AND NAN HANDLING FUNCTIONS
@@ -199,7 +240,9 @@ try:
     @njit(parallel=True)
     def _calc_medians_parallel(window_size, arr, medians):
         """Calculate rolling medians using Numba parallel JIT."""
-        for i in prange(window_size, len(arr) - window_size, 1):
+        for i in prange(  # ty: ignore[not-iterable]
+            window_size, len(arr) - window_size, 1
+        ):
             id0 = i - window_size
             id1 = i + window_size
             median = np.median(arr[id0:id1])
@@ -209,7 +252,9 @@ try:
     def _calc_medians_std_parallel(window_size, arr, medians, medians_diff):
         """Calculate rolling MAD (scaled to σ) using Numba parallel JIT."""
         k = 1.4826  # Scale factor to convert MAD to σ estimate
-        for i in prange(window_size, len(arr) - window_size, 1):
+        for i in prange(  # ty: ignore[not-iterable]
+            window_size, len(arr) - window_size, 1
+        ):
             id0 = i - window_size
             id1 = i + window_size
             x = arr[id0:id1]
@@ -493,6 +538,7 @@ def save_config_to_toml(config, filepath):
         f.write("# IMPORTANT: Keep the format exactly as shown!\n")
         f.write("# - true/false must be lowercase\n")
         f.write("# - Numbers can have decimals (3.0) or not (30)\n")
+        f.write('# - Fractional rates use quoted ratios, e.g. "60000/1001"\n')
         f.write('# - Text must be in quotes ("linear")\n')
         f.write("#\n")
         f.write("# Each section below controls a part of the processing.\n")
@@ -545,7 +591,7 @@ def save_config_to_toml(config, filepath):
         f.write("mode = 1             # 1 = simple, 2 = advanced\n")
         f.write("# Butterworth:\n")
         f.write("cutoff = 4.0        # Cutoff frequency in Hz (e.g. 4.0, 10.0)\n")
-        f.write("fs = 30.0           # Sampling frequency (video FPS, e.g. 30.0, 100.0)\n")
+        f.write('fs = 30.0           # Sampling frequency; decimal or quoted "60000/1001"\n')
         f.write("# Splines:\n")
         f.write("smoothing_factor = 1.0   # 0 = no smoothing, 1 = moderate, 10+ = strong\n")
         f.write("# ARIMA:\n")
@@ -578,7 +624,7 @@ def save_config_to_toml(config, filepath):
             "# If the first column is 'Time', enter the sample rate (Hz) to recalculate time values.\n"
         )
         f.write("# Leave empty or set to 0 to use original time values from the file.\n")
-        f.write("# Example: 2000.0 for 2000 Hz, 10000.0 for 10000 Hz\n")
+        f.write('# Examples: 2000.0 or "60000/1001" for fractional FPS\n')
         f.write("sample_rate = 0.0  # Set to 0 to use original time values\n\n")
     print(f"Configuration saved in: {filepath}")
 
@@ -620,22 +666,35 @@ def save_smooth_config_toml(config_result, filepath):
         "method": config_result.get("interp_method", "linear"),
         "max_gap": config_result.get("max_gap", 60),
     }
+    smooth_params = dict(config_result.get("smooth_params", {}))
+    if "fs" in smooth_params:
+        smooth_params["fs"] = parse_rate_hz(smooth_params["fs"], field_name="Butterworth fs")
     smooth = {
         "method": config_result.get("smooth_method", "none"),
-        **config_result.get("smooth_params", {}),
+        **smooth_params,
     }
     padding = {"percent": config_result.get("padding", 10.0)}
     split = {"enabled": config_result.get("do_split", False)}
-    sr = config_result.get("sample_rate")
-    time_col = {"sample_rate": float(sr) if sr is not None and sr > 0 else 0.0}
+    sr = parse_rate_hz(
+        config_result.get("sample_rate"),
+        field_name="Time column sample rate",
+        allow_unset=True,
+    )
+    original_rate = parse_rate_hz(
+        config_result.get("original_rate"),
+        field_name="original sampling rate",
+        allow_unset=True,
+    )
+    final_rate = parse_rate_hz(
+        config_result.get("final_rate"),
+        field_name="final sampling rate",
+        allow_unset=True,
+    )
+    time_col = {"sample_rate": sr or 0.0}
     resample = {
         "enabled": bool(config_result.get("resample", False)),
-        "original_rate": float(config_result["original_rate"])
-        if config_result.get("original_rate")
-        else 0.0,
-        "final_rate": float(config_result["final_rate"])
-        if config_result.get("final_rate")
-        else 0.0,
+        "original_rate": original_rate or 0.0,
+        "final_rate": final_rate or 0.0,
         "antialias": bool(config_result.get("antialias", True)),
         "antialias_cutoff": float(config_result["antialias_cutoff"])
         if config_result.get("antialias_cutoff")
@@ -669,20 +728,13 @@ def load_smooth_config_for_analysis(filepath):
     time_col = data.get("time_column", {})
     resample = data.get("resample", {})
     smooth_params = {k: v for k, v in smoothing.items() if k != "method"}
-    sample_rate = time_col.get("sample_rate") or 0.0
-    try:
-        sample_rate = float(sample_rate)
-        if sample_rate <= 0:
-            sample_rate = None
-    except (TypeError, ValueError):
-        sample_rate = None
-
-    def _pos(val):
-        try:
-            v = float(val)
-            return v if v > 0 else None
-        except (TypeError, ValueError):
-            return None
+    if "fs" in smooth_params:
+        smooth_params["fs"] = parse_rate_hz(smooth_params["fs"], field_name="Butterworth fs")
+    sample_rate = parse_rate_hz(
+        time_col.get("sample_rate"),
+        field_name="Time column sample rate",
+        allow_unset=True,
+    )
 
     return {
         "interp_method": interp.get("method", "linear"),
@@ -694,10 +746,22 @@ def load_smooth_config_for_analysis(filepath):
         "do_split": bool(split.get("enabled", False)),
         "sample_rate": sample_rate,
         "resample": bool(resample.get("enabled", False)),
-        "original_rate": _pos(resample.get("original_rate")),
-        "final_rate": _pos(resample.get("final_rate")),
+        "original_rate": parse_rate_hz(
+            resample.get("original_rate"),
+            field_name="original sampling rate",
+            allow_unset=True,
+        ),
+        "final_rate": parse_rate_hz(
+            resample.get("final_rate"),
+            field_name="final sampling rate",
+            allow_unset=True,
+        ),
         "antialias": bool(resample.get("antialias", True)),
-        "antialias_cutoff": _pos(resample.get("antialias_cutoff")),
+        "antialias_cutoff": parse_rate_hz(
+            resample.get("antialias_cutoff"),
+            field_name="anti-alias cutoff",
+            allow_unset=True,
+        ),
     }
 
 
@@ -968,7 +1032,10 @@ class InterpolationConfigDialog:
         tk.Label(f5, text="Sampling Freq (fs, Hz / FPS):").pack(anchor="w")
         tk.Entry(f5, textvariable=self.butter_fs).pack(fill="x", pady=(0, 2))
         tk.Label(
-            f5, text="Tip: fps of the video or capture freq", fg="gray", font=("Arial", 9)
+            f5,
+            text="Tip: video FPS or capture frequency; accepts 60000/1001",
+            fg="gray",
+            font=("Arial", 9),
         ).pack(anchor="w", pady=(0, 8))
         tk.Label(f5, text="Filter Order:").pack(anchor="w")
         tk.Entry(f5, textvariable=self.butter_order).pack(fill="x", pady=(0, 2))
@@ -1035,7 +1102,8 @@ class InterpolationConfigDialog:
             text=(
                 "Enter the acquisition/video sampling rate only when the Time column "
                 "needs to be recalculated. Leave empty to preserve the original Time values. "
-                "This does not replace Butterworth fs."
+                "This does not replace Butterworth fs. Decimals and ratios are accepted "
+                "(e.g. 60000/1001)."
             ),
             wraplength=360,
             justify="left",
@@ -1054,9 +1122,13 @@ class InterpolationConfigDialog:
         tk.Checkbutton(
             self.tab_general, text="Enable final resampling", variable=self.resample_var
         ).pack(anchor="w")
-        tk.Label(self.tab_general, text="Original Sampling Rate (Hz / FPS):").pack(anchor="w")
+        tk.Label(self.tab_general, text="Original Sampling Rate (Hz / FPS, e.g. 60000/1001):").pack(
+            anchor="w"
+        )
         tk.Entry(self.tab_general, textvariable=self.original_rate_var).pack(fill="x", pady=2)
-        tk.Label(self.tab_general, text="Final Sampling Rate (Hz / FPS):").pack(anchor="w")
+        tk.Label(self.tab_general, text="Final Sampling Rate (Hz / FPS, e.g. 30000/1001):").pack(
+            anchor="w"
+        )
         tk.Entry(self.tab_general, textvariable=self.final_rate_var).pack(fill="x", pady=2)
         tk.Checkbutton(
             self.tab_general,
@@ -1180,7 +1252,11 @@ class InterpolationConfigDialog:
         info = validate_time_axis(time_vals) if time_vals is not None else None
         rate, source, warns = estimate_sampling_rate(
             time_vals,
-            configured_rate=float(self.butter_fs.get()) if self.butter_fs.get().strip() else None,
+            configured_rate=parse_rate_hz(
+                self.butter_fs.get(),
+                field_name="Butterworth fs",
+                allow_unset=True,
+            ),
         )
         if rate is None or rate <= 0:
             self.recommend_label = getattr(self, "recommend_label", None)
@@ -1414,7 +1490,7 @@ class InterpolationConfigDialog:
 
         try:
             if int(self.smooth_method_var.get()) == 5:
-                fs = float(self.butter_fs.get())
+                fs = parse_rate_hz(self.butter_fs.get(), field_name="Butterworth fs")
                 cutoff = float(self.butter_cutoff.get())
                 order = int(self.butter_order.get())
                 errors = validate_butterworth_params(fs, cutoff, order)
@@ -1459,7 +1535,7 @@ class InterpolationConfigDialog:
         elif smooth_method == 5:
             smooth_params = {
                 "cutoff": float(self.butter_cutoff.get()),
-                "fs": float(self.butter_fs.get()),
+                "fs": parse_rate_hz(self.butter_fs.get(), field_name="Butterworth fs"),
                 "order": int(self.butter_order.get()),
             }
         elif smooth_method == 6:
@@ -1481,13 +1557,11 @@ class InterpolationConfigDialog:
         interp_params = {}
 
         sr_val = self.sample_rate.get().strip()
-        sr = float(sr_val) if sr_val else None
+        sr = parse_rate_hz(sr_val, field_name="Time column sample rate", allow_unset=True)
 
-        def _optional_float(var):
+        def _optional_rate(var, field_name):
             raw = var.get().strip() if hasattr(var, "get") else ""
-            if not raw:
-                return None
-            return float(raw)
+            return parse_rate_hz(raw, field_name=field_name, allow_unset=True)
 
         return {
             "padding": float(self.padding_var.get()),
@@ -1499,10 +1573,10 @@ class InterpolationConfigDialog:
             "do_split": self.split_var.get(),
             "sample_rate": sr,
             "resample": bool(self.resample_var.get()) if hasattr(self, "resample_var") else False,
-            "original_rate": _optional_float(self.original_rate_var)
+            "original_rate": _optional_rate(self.original_rate_var, "original sampling rate")
             if hasattr(self, "original_rate_var")
             else None,
-            "final_rate": _optional_float(self.final_rate_var)
+            "final_rate": _optional_rate(self.final_rate_var, "final sampling rate")
             if hasattr(self, "final_rate_var")
             else None,
             "antialias": bool(self.antialias_var.get()) if hasattr(self, "antialias_var") else True,
@@ -1581,7 +1655,9 @@ class InterpolationConfigDialog:
 
         if smoothing.get("method") == "butterworth":
             self.butter_cutoff.set(str(smoothing.get("cutoff", 10.0)))
-            self.butter_fs.set(str(smoothing.get("fs", 100.0)))
+            self.butter_fs.set(
+                str(parse_rate_hz(smoothing.get("fs", 100.0), field_name="Butterworth fs"))
+            )
             self.butter_order.set(str(smoothing.get("order", 4)))
         elif smoothing.get("method") == "savgol":
             self.savgol_window.set(str(smoothing.get("window_length", 7)))
@@ -1590,15 +1666,27 @@ class InterpolationConfigDialog:
         self.padding_var.set(str(config.get("padding", {}).get("percent", 10.0)))
         self.split_var.set(config.get("split", {}).get("enabled", False))
 
-        sr = config.get("time_column", {}).get("sample_rate", 0.0)
-        if sr > 0:
+        sr = parse_rate_hz(
+            config.get("time_column", {}).get("sample_rate"),
+            field_name="Time column sample rate",
+            allow_unset=True,
+        )
+        if sr is not None:
             self.sample_rate.set(str(sr))
 
         resample = config.get("resample", {})
         if hasattr(self, "resample_var"):
             self.resample_var.set(bool(resample.get("enabled", False)))
-            orig = resample.get("original_rate", 0.0) or 0.0
-            final = resample.get("final_rate", 0.0) or 0.0
+            orig = parse_rate_hz(
+                resample.get("original_rate"),
+                field_name="original sampling rate",
+                allow_unset=True,
+            )
+            final = parse_rate_hz(
+                resample.get("final_rate"),
+                field_name="final sampling rate",
+                allow_unset=True,
+            )
             self.original_rate_var.set(str(orig) if orig else "")
             self.final_rate_var.set(str(final) if final else "")
             self.antialias_var.set(bool(resample.get("antialias", True)))
@@ -2033,7 +2121,7 @@ def arima_smooth(data, order=(1, 0, 0)):
                 return data
 
             model = ARIMA(valid_data, order=order)
-            result = model.fit(disp=False)  # Suppress output
+            result = model.fit()
 
             # Create output array
             output = data.copy()
@@ -2062,7 +2150,7 @@ def arima_smooth(data, order=(1, 0, 0)):
                     continue
 
                 model = ARIMA(valid_data, order=order)
-                result = model.fit(disp=False)  # Suppress output
+                result = model.fit()
 
                 smoothed[:, j] = col_data.copy()
                 smoothed[valid_mask, j] = result.fittedvalues
@@ -2405,7 +2493,7 @@ def process_file(file_path, dest_dir, config):
                     data = df[col].values.copy().astype(float)
 
                     # For Skip mode, temporarily fill NaNs before smoothing
-                    if preserve_nans and np.any(np.isnan(data)):
+                    if preserve_nans and original_nan_mask is not None and np.any(np.isnan(data)):
                         data_for_smoothing = (
                             pd.Series(data)
                             .interpolate(method="linear", limit_direction="both")
@@ -2615,11 +2703,11 @@ def process_file(file_path, dest_dir, config):
                     from .readc3d_export import get_time_precision
                 except ImportError:
                     try:
-                        from readc3d_export import get_time_precision
+                        from readc3d_export import (  # ty: ignore[unresolved-import]
+                            get_time_precision,
+                        )
                     except ImportError:
                         # Fallback: define function locally
-                        import math
-
                         def get_time_precision(freq):
                             if freq <= 1000:
                                 return 3
@@ -2629,6 +2717,8 @@ def process_file(file_path, dest_dir, config):
                                 return decimal_places
 
                 time_precision = get_time_precision(sample_rate)
+                if not math.isclose(sample_rate, round(sample_rate), abs_tol=1e-12):
+                    time_precision = max(time_precision, 9)
                 print(f"Time column will be formatted with {time_precision} decimal places")
             else:
                 # Try to detect precision from original time values
@@ -3378,14 +3468,14 @@ Examples:
 
   # Butterworth (fs = acquisition rate; cutoff must be < fs/2):
   uv run vaila/interp_smooth_split.py -i ./data --smooth-method butterworth \\
-      --fs 100 --cutoff 10 --filter-order 4
+      --fs 60000/1001 --cutoff 10 --filter-order 4
 
   # Savitzky-Golay:
   uv run vaila/interp_smooth_split.py -i ./data --smooth-method savgol \\
       --window-length 7 --polyorder 3
 
   # Time-column rebuild (does NOT replace Butterworth fs):
-  uv run vaila/interp_smooth_split.py -i ./data --time-column-rate 240
+  uv run vaila/interp_smooth_split.py -i ./data --time-column-rate 60000/1001
 
   # Downsample 100 → 50 Hz with explicit anti-alias:
   uv run vaila/interp_smooth_split.py -i ./data --resample \\
@@ -3439,7 +3529,11 @@ Examples:
     parser.add_argument("--frac", type=float)
     parser.add_argument("--iterations", type=int)
     parser.add_argument("--cutoff", type=float)
-    parser.add_argument("--fs", type=float, help="Butterworth sampling frequency (Hz / FPS)")
+    parser.add_argument(
+        "--fs",
+        type=lambda value: parse_rate_hz(value, field_name="Butterworth fs"),
+        help="Butterworth sampling frequency; decimal or ratio (e.g. 60000/1001)",
+    )
     parser.add_argument("--filter-order", type=int)
     parser.add_argument("--smoothing-factor", type=float)
     parser.add_argument("--arima-p", type=int)
@@ -3452,12 +3546,18 @@ Examples:
     parser.add_argument("--split", action="store_true")
     parser.add_argument(
         "--time-column-rate",
-        type=float,
-        help="Rebuild Time as frame/rate; does not replace Butterworth fs",
+        type=lambda value: parse_rate_hz(value, field_name="Time column sample rate"),
+        help="Rebuild Time as frame/rate; decimal or ratio; does not replace Butterworth fs",
     )
     parser.add_argument("--resample", action="store_true")
-    parser.add_argument("--original-rate", type=float)
-    parser.add_argument("--final-rate", type=float)
+    parser.add_argument(
+        "--original-rate",
+        type=lambda value: parse_rate_hz(value, field_name="original sampling rate"),
+    )
+    parser.add_argument(
+        "--final-rate",
+        type=lambda value: parse_rate_hz(value, field_name="final sampling rate"),
+    )
     parser.add_argument("--no-antialias", action="store_true")
     parser.add_argument("--antialias-cutoff", type=float)
     args = parser.parse_args()
