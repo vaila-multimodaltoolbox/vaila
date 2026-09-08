@@ -1,15 +1,207 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<title>Pynalty Help — vailá</title>
-<style>
-body{font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;line-height:1.45;color:#1a1a1a}
-h1,h2{color:#1b4332} code,pre{background:#f4f6f5;padding:.15rem .35rem;border-radius:4px}
-pre{padding:1rem;overflow:auto} table{border-collapse:collapse;width:100%;margin:1rem 0}
-th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left} th{background:#e8f0ec}
-.meta{color:#555;font-size:.95rem}
-</style>
-</head>
-<body>
-<h1>User Guide - Pynalty Analysis Tool</h1><br/><h2>Introduction</h2><br/><p><i>Pynalty</i> analyses penalty kicks from video for coaches and keepers: flight</p><p>speed and placement, goalkeeper reaction and dive, reach/time-to-ball</p><p>saveability, optional MediaPipe pose in athlete crops, and self-contained HTML</p><p>reports (EN/PT) plus CSV rows for a session database.</p><br/><p><i>*Version:</i>* 0.3.128  </p><p><i>*Date:</i>* 07 September 2026  </p><p><i>*Project:</i><i> </i>vailá* - Multimodal Toolbox</p><br/><h2>Key Features</h2><br/><ul><li><i>*7-step didactic wizard</i>* — welcome overlay, left step panel (why/how/readback), progress, zoom toward cursor.</li><li><i>*DLT2D goal calibration</i>* — pixels → metres on the goal plane; configurable goal size and penalty distance.</li><li><i>*Ball path</i>* — manual marks and/or YOLO auto-detect (<code>A</code>); interpolated gaps; pixel + modelled 3D CSVs; HTML canvas animation.</li><li><i>*Athlete boxes + pose</i>* — drag Kicker/GK boxes, MediaPipe on crop-upscale (<code>P</code>); pose CSVs and kinematics.</li><li><i>*Anthropometrics</i>* — GK stature / arm span / standing reach (<code>B</code>) drive the reach envelope and save verdict.</li><li><i>*Reports</i>* — <code>report.html</code> / <code>report_pt.html</code>, tidy <code>results.csv</code>, wide <code>pynalty_summary.csv</code>, appendable <code>pynalty_database.csv</code>.</li></ul><br/><h2>Workflow (wizard)</h2><br/><p>1. <i>*Goalkeeper starts moving</i>* — first clear dive/prepare motion (<code>ENTER</code>).</p><p>2. <i>*Ball contact</i>* — frame + click Ball centre + Keeper centre.</p><p>3. <i>*Ball at goal line</i>* — frame + Ball + Keeper.</p><p>4. <i>*Goal calibration</i>* — four corners: bottom-left, top-left, top-right, bottom-right.</p><p>5. <i>*Ball path</i>* — <code>A</code> for YOLO, or click per frame; right-click removes a point.</p><p>6. <i>*Bounding boxes</i>* — drag Kicker then GK; <code>P</code> runs pose over the kick–goal window.</p><p>7. <i>*Anthropometrics</i><i> — <code>B</code> / <code>ENTER</code> to enter body measures; then </i><i>Save (<code>S</code>)</i>*.</p><br/><h2>Launch</h2><br/><ul><li><i>*GUI:</i><i> Frame B → </i><i>Pynalty</i>*, or <code>uv run vaila/pynalty.py</code> (file picker).</li><li><i>*CLI marking:</i>* <code>uv run vaila/pynalty.py -i video.mp4 -o out_dir -c data.toml</code></li><li><i>*Headless regenerate:</i>* add <code>--report-only</code> (requires <code>-c</code>).</li><li><i>*Extras:</i>* <code>--database</code>, <code>--no-wizard</code>, <code>--auto-ball</code>, <code>--pose</code>, <code>--penalty-distance</code>, <code>--goal-width</code>, <code>--goal-height</code>, <code>--lang en|pt|both</code></li></ul><br/><p>Every GUI/CLI run prints a copy-paste <i>*Equivalent CLI</i>* line (<code>&gt;&gt;</code> prefix).</p><br/><h2>Controls</h2><br/><table><tr><th>Key / action</th><th>Effect</th></tr><tr><td>Left / Right</td><td>Prev / next frame</td></tr><tr><td>Space</td><td>Play / pause</td></tr><tr><td>Mouse wheel</td><td>Zoom toward cursor</td></tr><tr><td>Drag</td><td>Pan</td></tr><tr><td>ENTER</td><td>Confirm step / open body dialog on step 7</td></tr><tr><td>A</td><td>Auto-detect ball (YOLO)</td></tr><tr><td>P</td><td>Run MediaPipe pose in boxes</td></tr><tr><td>B</td><td>Anthropometrics dialog</td></tr><tr><td>S / L / H</td><td>Save / Load TOML / Help</td></tr><tr><td>Buttons</td><td>Step navigation and the same actions</td></tr></table><br/><h2>Outputs</h2><br/><p>Written under <code>&lt;video_stem&gt;_results/</code> (or <code>-o</code>):</p><br/><table><tr><th>File</th><th>Role</th></tr><tr><td>`data.toml`</td><td>Reloadable marks + geometry + anthro</td></tr><tr><td>`results.csv`</td><td>Tidy per-variable table</td></tr><tr><td>`pynalty_summary.csv`</td><td>One wide row for the penalty</td></tr><tr><td>`pynalty_database.csv`</td><td>Session DB (`--database` or beside output); keyed by video + kick frame</td></tr><tr><td>`report.html` / `report_pt.html`</td><td>Self-contained coaching reports</td></tr><tr><td>`ball_path_pixel.csv` / `ball_path_3d.csv`</td><td>Measured path + gravity flight model</td></tr><tr><td>`pose_kicker_pixel.csv` / `pose_gk_pixel.csv`</td><td>Pose landmarks when step 6 ran</td></tr><tr><td>`snapshot_*.png`</td><td>Event stills</td></tr></table><br/><h2>Modules</h2><br/><table><tr><th>Module</th><th>Responsibility</th></tr><tr><td>`vaila/pynalty.py`</td><td>Pygame wizard + CLI</td></tr><tr><td>`vaila/pynalty_analysis.py`</td><td>DLT, flight, zones, reach, metrics</td></tr><tr><td>`vaila/pynalty_vision.py`</td><td>YOLO ball, MediaPipe pose, overlays</td></tr><tr><td>`vaila/pynalty_report.py`</td><td>HTML + CSV writers</td></tr></table><br/><h2>Notes</h2><br/><ul><li>Goal-plane DLT is exact only on the goal mouth; full-flight speeds in the report use the fitted 3D model, not raw pixel deltas.</li><li>Reach analysis needs step 7 anthropometrics; without them the verdict stays “not assessed”.</li><li>YOLO / MediaPipe are optional: mark by hand if those stacks are missing.</li></ul><br/><h2>Support</h2><br/><ul><li>Help index: <code>vaila/help/index.html</code></li><li>Button doc: <code>docs/vaila_buttons/pynalty.md</code></li><li>Issues: https://github.com/vaila-multimodaltoolbox/vaila/issues</li></ul><p class="meta">Generated for <i>vailá</i> Pynalty · Version 0.3.128 · Updated 07 September 2026</p></body></html>
+<!doctype html>
+<html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pynalty — PT / EN</title><style>body{max-width:960px;margin:2rem auto;padding:0 1rem;font:17px/1.6 system-ui;color:#20252b}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:.5rem;text-align:left}pre{overflow:auto;background:#f0f3f5;padding:1rem}a{color:#1665a0}</style></head><body><h1>Pynalty — guia / guide</h1>
+<p><strong>Version:</strong> 0.3.129</p>
+<p><strong>Updated:</strong> 08 September 2026</p>
+<p><strong>Projeto / Project:</strong> vailá Multimodal Toolbox</p>
+<h2>Português</h2>
+<p>Pynalty analisa o chute e a reação do goleiro a partir de vídeo. A interface
+começa em português; o botão <strong>PT / EN</strong> ou <strong>F2</strong> troca o idioma durante a
+sessão sem perder marcações. <code>--lang</code> controla somente os relatórios.</p>
+<h3>Fluxo guiado</h3>
+<ol start="0">
+<li><strong>Confirmar o FPS.</strong> Ao abrir a janela, uma caixa mostra o FPS detectado
+automaticamente no vídeo (mesma detecção precisa via ffprobe usada em
+<code>numberframes.py</code>, com respaldo em OpenCV). Pressione <strong>Enter</strong> para aceitar
+ou digite o valor correto antes de calibrar — é essa taxa que converte
+frames em tempo e velocidade em todo o restante da análise. Pode ser
+ajustada depois a qualquer momento com <strong>F</strong>.</li>
+<li><strong>Calibrar.</strong> Escolha um frame com o gol visível e pressione <strong>Enter</strong>.
+O vídeo fica parado. Clique nos cantos, conforme aparecem na imagem:
+<strong>1 inferior esquerdo → 2 superior esquerdo → 3 superior direito →
+4 inferior direito</strong>. O esquema destaca o próximo canto. O botão direito
+desfaz. Confira a prévia e clique em <strong>Confirmar e salvar</strong>.</li>
+<li><strong>Confirmar os três frames</strong>, nesta ordem: primeiro movimento claro de
+preparação/mergulho do goleiro; contato do pé com a bola; bola na linha do
+gol. Navegue com as setas ou a linha do tempo e pressione <strong>Enter</strong> em
+cada evento. Enter pausa e avança; cliques na imagem não marcam nada.
+A chegada deve ser posterior ao chute. O goleiro pode começar antes dele.</li>
+<li><strong>Marcar os pontos.</strong> O vídeo retorna ao frame do chute: clique no centro
+da bola, depois no centro do goleiro. Ele avança ao frame da chegada e
+solicita os mesmos dois pontos. A navegação temporal fica travada; zoom e
+deslocamento da imagem continuam disponíveis. <strong>Editar frame / E</strong> volta
+à escolha temporal. Alterar o frame elimina seus pontos e os resultados,
+trajetória e pose dependentes. <strong>Voltar</strong> permite revisar etapas anteriores.</li>
+<li><strong>Resultado.</strong> Escolha <strong>Gol / Defesa / Fora / Trave</strong>, ou <strong>G / D / M / W</strong>.</li>
+<li><strong>Opcionais.</strong> Trajetória: <strong>A</strong> para YOLO ou cliques manuais por frame.
+Pose: arraste a caixa do cobrador, depois do goleiro, e use <strong>P</strong> para
+MediaPipe. Medidas corporais: <strong>B</strong>. Cada fase oferece <strong>Pular / Continuar</strong>;
+sem medidas, os cálculos usam valores padrão (estatura do goleiro: 1,88 m).</li>
+<li><strong>Revisão.</strong> Confira os frames, avisos e medidas, e clique em
+<strong>Salvar resultados</strong>. A interface permanece na revisão após salvar.</li>
+</ol>
+<h3>Calibração reutilizável</h3>
+<p>O módulo procura <code>pynalty_calibration.toml</code> na pasta do vídeo. Se encontrar,
+mostra os quatro cantos sobre o vídeo: <strong>Usar calibração / Enter</strong> confirma,
+<strong>Refazer calibração / C</strong> inicia outra. Confira <strong>enquadramento, zoom e
+posição da câmera</strong> antes de reutilizar. A mesma resolução não garante que a
+câmera permaneceu na mesma posição. O frame de origem é apenas referência;
+não se torna um evento do vídeo atual.</p>
+<p>O TOML guarda <code>format_version = 1</code>, <code>width</code>, <code>height</code>, quatro <code>points</code> em
+pixels na ordem acima, <code>geometry</code> (largura, altura, distância do pênalti e
+raio da bola em metros), <code>source_video</code> e <code>source_frame</code> (índice a partir de
+zero). São exigidos resolução compatível, pontos finitos dentro da imagem,
+quadrilátero convexo e transformação DLT calculável. Um arquivo incompatível
+leva à nova calibração com uma explicação na tela.</p>
+<p><strong>C</strong> permite recalibrar durante a sessão. Os cliques ficam em uma cópia
+provisória; <strong>Cancelar / Esc</strong> mantém a calibração anterior. Confirmar salva a
+substituição e recalcula as medidas, preservando os eventos. A calibração é
+salva independentemente dos resultados. Se a gravação falhar, ela permanece
+na sessão e um diálogo oferece outro destino.</p>
+<p>Precedência: <strong><code>--calibration</code> explícita → calibração da sessão → descoberta
+na pasta</strong>. Sessões atuais e legadas, inclusive listas sem <code>key</code>, continuam
+aceitas e retomam a primeira fase incompleta. <code>--report-only</code> exige <code>-i</code> e
+<code>-c</code>, não abre diálogos e não procura calibração automaticamente.</p>
+<h3>Controles</h3>
+<table>
+<thead>
+<tr>
+  <th>Controle</th>
+  <th>Ação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>← / →; ↑ / ↓</td>
+  <td>±1; ±10 frames</td>
+</tr>
+<tr>
+  <td>Espaço; Home / End</td>
+  <td>Reproduzir/pausar; primeiro/último frame</td>
+</tr>
+<tr>
+  <td>Linha do tempo</td>
+  <td>Navegar; exibe os três eventos confirmados</td>
+</tr>
+<tr>
+  <td>Roda / + / −</td>
+  <td>Zoom</td>
+</tr>
+<tr>
+  <td>Arrastar com botão do meio; 0</td>
+  <td>Mover imagem; ajustar à janela</td>
+</tr>
+<tr>
+  <td>Clique esquerdo / direito</td>
+  <td>Próximo ponto / desfazer último ponto</td>
+</tr>
+<tr>
+  <td>Enter</td>
+  <td>Confirmar a ação indicada na tela</td>
+</tr>
+<tr>
+  <td>Tab / Shift+Tab</td>
+  <td>Avançar / voltar</td>
+</tr>
+<tr>
+  <td>C / E</td>
+  <td>Recalibrar / editar frame dos pontos</td>
+</tr>
+<tr>
+  <td>G / D / M / W</td>
+  <td>Gol / defesa / fora / trave na fase de resultado</td>
+</tr>
+<tr>
+  <td>A / P / B</td>
+  <td>Trajetória / pose / medidas, nas respectivas fases</td>
+</tr>
+<tr>
+  <td>S / L / H</td>
+  <td>Salvar na revisão / carregar sessão / ajuda</td>
+</tr>
+<tr>
+  <td>F / F2</td>
+  <td>Ajustar fps / trocar PT–EN</td>
+</tr>
+<tr>
+  <td>Esc</td>
+  <td>Cancelar recalibração ou sair</td>
+</tr>
+</tbody>
+</table>
+<h2>English</h2>
+<p>Pynalty analyses shot kinematics and goalkeeper reaction from video. The
+interface defaults to Portuguese. <strong>PT / EN</strong> or <strong>F2</strong> changes the interface
+language without losing marks; <code>--lang</code> selects report languages separately.</p>
+<h3>Guided workflow</h3>
+<ol start="0">
+<li><strong>Confirm FPS.</strong> When the window opens, a box shows the video's
+auto-detected FPS (same precise ffprobe-based detection as
+<code>numberframes.py</code>, with an OpenCV fallback). Press <strong>Enter</strong> to accept it,
+or type the correct value before calibrating — this rate converts frames
+into time and velocity throughout the rest of the analysis. It can still be
+changed anytime afterwards with <strong>F</strong>.</li>
+<li><strong>Calibrate.</strong> Choose a frame with the goal visible and press <strong>Enter</strong> to
+pause. Click <strong>bottom left → top left → top right → bottom right</strong>, as
+seen in the image. The numbered diagram highlights the next corner.
+Right click undoes. Check the preview, then <strong>Confirm and save</strong>.</li>
+<li><strong>Confirm all three frames</strong>: first clear keeper preparation/dive movement;
+foot–ball contact; ball reaching the goal line. Navigate and press <strong>Enter</strong>
+for each. Enter pauses and advances; image clicks do nothing in this phase.
+Arrival must follow contact; keeper movement may precede contact.</li>
+<li><strong>Click key-frame points.</strong> The video returns to contact: click ball centre,
+then keeper centre. It advances to arrival and asks for both points again.
+Time navigation is locked, while zoom and pan remain available.
+<strong>Edit frame / E</strong> returns to frame selection. Changing a frame clears its
+old points and dependent results, trajectory and pose. <strong>Back</strong> revisits
+earlier phases.</li>
+<li><strong>Outcome.</strong> Choose <strong>Goal / Save / Miss / Woodwork</strong>, or <strong>G / D / M / W</strong>.</li>
+<li><strong>Optional steps.</strong> Trajectory: <strong>A</strong> runs YOLO, or click the ball frame by
+frame. Pose: drag kicker then keeper boxes and press <strong>P</strong> for MediaPipe.
+Body measurements: <strong>B</strong>. Each step has <strong>Skip / Continue</strong>. Skipped body
+measures use defaults (keeper stature 1.88 m).</li>
+<li><strong>Review and save.</strong> Check frames, warnings and measures, then <strong>Save
+results</strong>. Saving leaves the interface at review.</li>
+</ol>
+<h3>Reusable calibration</h3>
+<p>The app looks for <code>pynalty_calibration.toml</code> beside the video and previews its
+corners. <strong>Use calibration / Enter</strong> accepts; <strong>Recalibrate / C</strong> starts over.
+Check framing, zoom and camera position: matching resolution alone does not
+establish matching camera geometry. The source frame is provenance only,
+never a new event frame.</p>
+<p>The versioned TOML stores source resolution, four finite in-image pixel
+corners in the specified order, goal geometry in metres and source video/frame
+(zero-based). Validation requires matching resolution, a convex quadrilateral
+and a computable DLT transform. Invalid files lead to fresh calibration with
+an explanation.</p>
+<p><strong>C</strong> starts a temporary replacement during the session. <strong>Cancel / Esc</strong>
+retains the previous calibration. Confirming replaces it and recomputes
+results while preserving events. Calibration saves independently of the
+results package. Write failures retain it in memory and offer another path.</p>
+<p>Precedence: <strong>explicit <code>--calibration</code> → saved session calibration → directory
+discovery</strong>. Current and legacy sessions, including unkeyed event lists in
+the original order, resume at the first incomplete phase. <code>--report-only</code>
+requires <code>-i</code> and <code>-c</code>, opens no dialogs and performs no automatic discovery.</p>
+<p>Controls: arrows ±1/±10 frames; Space play/pause; Home/End first/last; timeline
+navigation; wheel or +/− zoom; middle drag pan; 0 fit; left/right click
+mark/undo; Enter confirm; Tab/Shift+Tab next/back; C recalibrate; E edit frame;
+A/P/B optional trajectory/pose/body; S save at review; L load; H help; F fps;
+F2 language; Esc cancel recalibration or quit.</p>
+<h2>GUI / CLI</h2>
+<p>GUI: <strong>Frame B → Pynalty</strong>. Every launch prints a copyable equivalent command
+with the <code>&gt;&gt;</code> prefix.</p>
+<pre><code class="language-bash">uv run vaila/pynalty.py -i video.mp4 --ui-lang pt
+uv run vaila/pynalty.py -i next_video.mp4 --calibration /path/pynalty_calibration.toml --ui-lang en
+uv run vaila/pynalty.py -i video.mp4 -c data.toml -o out_dir --report-only --lang both
+</code></pre>
+<p>Other existing options: <code>--database</code>, <code>--auto-ball</code>, <code>--pose</code>, <code>--no-wizard</code>
+(compatibility), <code>--penalty-distance</code>, <code>--goal-width</code>, <code>--goal-height</code>.</p>
+<h2>Saídas / Outputs</h2>
+<p>Saved under <code>&lt;video_stem&gt;_results/</code> (under <code>-o</code> when supplied): <code>data.toml</code>,
+<code>results.csv</code>, <code>pynalty_summary.csv</code>, <code>pynalty_database.csv</code>, English/Portuguese
+HTML reports, event snapshots, ball-path CSVs/videos and pose CSVs/overlays
+when available. The reusable calibration TOML is separate.</p>
+<p>DLT describes the goal plane; full-flight speed uses the existing model,
+not raw pixel displacement. / A DLT descreve o plano do gol; a velocidade
+de voo usa o modelo existente, não diferenças brutas de pixels.</p>
+<p><a href="index.html">Help index</a> · <a href="../../docs/vaila_buttons/pynalty.md">Button documentation</a></p>
+</body></html>

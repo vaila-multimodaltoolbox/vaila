@@ -1,93 +1,184 @@
-# User Guide - Pynalty Analysis Tool
+# Pynalty — guia / guide
 
-## Introduction
+**Version:** 0.3.129
 
-*Pynalty* analyses penalty kicks from video for coaches and keepers: flight
-speed and placement, goalkeeper reaction and dive, reach/time-to-ball
-saveability, optional MediaPipe pose in athlete crops, and self-contained HTML
-reports (EN/PT) plus CSV rows for a session database.
+**Updated:** 08 September 2026
 
-**Version:** 0.3.129  
-**Date:** 07 September 2026  
-**Project:** *vailá* - Multimodal Toolbox
+**Projeto / Project:** vailá Multimodal Toolbox
 
-## Key Features
+## Português
 
-- **7-step didactic wizard** — welcome overlay, left step panel (why/how/readback), progress, zoom toward cursor.
-- **DLT2D goal calibration** — pixels → metres on the goal plane; configurable goal size and penalty distance.
-- **Ball path** — manual marks and/or YOLO auto-detect (`A`); interpolated gaps; pixel + modelled 3D CSVs; HTML canvas animation.
-- **Athlete boxes + pose** — drag Kicker/GK boxes, MediaPipe on crop-upscale (`P`); pose CSVs and kinematics.
-- **Anthropometrics** — GK stature / arm span / standing reach (`B`) drive the reach envelope and save verdict.
-- **Reports** — `report.html` / `report_pt.html`, tidy `results.csv`, wide `pynalty_summary.csv`, appendable `pynalty_database.csv`.
+Pynalty analisa o chute e a reação do goleiro a partir de vídeo. A interface
+começa em português; o botão **PT / EN** ou **F2** troca o idioma durante a
+sessão sem perder marcações. `--lang` controla somente os relatórios.
 
-## Workflow (wizard)
+### Fluxo guiado
 
-1. **Keeper starts moving** — scrub, then ENTER or click to lock the frame.
-2. **Ball contact** — click BALL centre (frame locks automatically), then KEEPER centre.
-3. **Ball at goal line** — click BALL, then KEEPER, then **G**=goal / **D**=save / **M**=miss / **W**=woodwork.
-4. **Goal calibration** — four corners in order.
-5. **Ball path (optional)** — `A` YOLO or click; skip with Step >.
-6. **Pose boxes (optional)** — drag boxes + `P`; skip with Step >.
-7. **Body measures (optional)** — `B`, or skip to use default GK stature **1.88 m**.
+0. **Confirmar o FPS.** Ao abrir a janela, uma caixa mostra o FPS detectado
+   automaticamente no vídeo (mesma detecção precisa via ffprobe usada em
+   `numberframes.py`, com respaldo em OpenCV). Pressione **Enter** para aceitar
+   ou digite o valor correto antes de calibrar — é essa taxa que converte
+   frames em tempo e velocidade em todo o restante da análise. Pode ser
+   ajustada depois a qualquer momento com **F**.
+1. **Calibrar.** Escolha um frame com o gol visível e pressione **Enter**.
+   O vídeo fica parado. Clique nos cantos, conforme aparecem na imagem:
+   **1 inferior esquerdo → 2 superior esquerdo → 3 superior direito →
+   4 inferior direito**. O esquema destaca o próximo canto. O botão direito
+   desfaz. Confira a prévia e clique em **Confirmar e salvar**.
+2. **Confirmar os três frames**, nesta ordem: primeiro movimento claro de
+   preparação/mergulho do goleiro; contato do pé com a bola; bola na linha do
+   gol. Navegue com as setas ou a linha do tempo e pressione **Enter** em
+   cada evento. Enter pausa e avança; cliques na imagem não marcam nada.
+   A chegada deve ser posterior ao chute. O goleiro pode começar antes dele.
+3. **Marcar os pontos.** O vídeo retorna ao frame do chute: clique no centro
+   da bola, depois no centro do goleiro. Ele avança ao frame da chegada e
+   solicita os mesmos dois pontos. A navegação temporal fica travada; zoom e
+   deslocamento da imagem continuam disponíveis. **Editar frame / E** volta
+   à escolha temporal. Alterar o frame elimina seus pontos e os resultados,
+   trajetória e pose dependentes. **Voltar** permite revisar etapas anteriores.
+4. **Resultado.** Escolha **Gol / Defesa / Fora / Trave**, ou **G / D / M / W**.
+5. **Opcionais.** Trajetória: **A** para YOLO ou cliques manuais por frame.
+   Pose: arraste a caixa do cobrador, depois do goleiro, e use **P** para
+   MediaPipe. Medidas corporais: **B**. Cada fase oferece **Pular / Continuar**;
+   sem medidas, os cálculos usam valores padrão (estatura do goleiro: 1,88 m).
+6. **Revisão.** Confira os frames, avisos e medidas, e clique em
+   **Salvar resultados**. A interface permanece na revisão após salvar.
 
-`Step >` only advances when the current **required** step is finished. Optional steps never block save.
+### Calibração reutilizável
 
-## Launch
+O módulo procura `pynalty_calibration.toml` na pasta do vídeo. Se encontrar,
+mostra os quatro cantos sobre o vídeo: **Usar calibração / Enter** confirma,
+**Refazer calibração / C** inicia outra. Confira **enquadramento, zoom e
+posição da câmera** antes de reutilizar. A mesma resolução não garante que a
+câmera permaneceu na mesma posição. O frame de origem é apenas referência;
+não se torna um evento do vídeo atual.
 
-- **GUI:** Frame B → **Pynalty**, or `uv run vaila/pynalty.py` (file picker).
-- **CLI marking:** `uv run vaila/pynalty.py -i video.mp4 -o out_dir -c data.toml`
-- **Headless regenerate:** add `--report-only` (requires `-c`).
-- **Extras:** `--database`, `--no-wizard`, `--auto-ball`, `--pose`, `--penalty-distance`, `--goal-width`, `--goal-height`, `--lang en|pt|both`
+O TOML guarda `format_version = 1`, `width`, `height`, quatro `points` em
+pixels na ordem acima, `geometry` (largura, altura, distância do pênalti e
+raio da bola em metros), `source_video` e `source_frame` (índice a partir de
+zero). São exigidos resolução compatível, pontos finitos dentro da imagem,
+quadrilátero convexo e transformação DLT calculável. Um arquivo incompatível
+leva à nova calibração com uma explicação na tela.
 
-Every GUI/CLI run prints a copy-paste **Equivalent CLI** line (`>>` prefix).
+**C** permite recalibrar durante a sessão. Os cliques ficam em uma cópia
+provisória; **Cancelar / Esc** mantém a calibração anterior. Confirmar salva a
+substituição e recalcula as medidas, preservando os eventos. A calibração é
+salva independentemente dos resultados. Se a gravação falhar, ela permanece
+na sessão e um diálogo oferece outro destino.
 
-## Controls
+Precedência: **`--calibration` explícita → calibração da sessão → descoberta
+na pasta**. Sessões atuais e legadas, inclusive listas sem `key`, continuam
+aceitas e retomam a primeira fase incompleta. `--report-only` exige `-i` e
+`-c`, não abre diálogos e não procura calibração automaticamente.
 
-| Key / action | Effect |
+### Controles
+
+| Controle | Ação |
 | --- | --- |
-| Left / Right | Prev / next frame |
-| Space | Play / pause |
-| Mouse wheel | Zoom toward cursor |
-| Drag | Pan |
-| ENTER | Confirm step / open body dialog on step 7 |
-| A | Auto-detect ball (YOLO) |
-| P | Run MediaPipe pose in boxes |
-| B | Anthropometrics dialog |
-| S / L / H | Save / Load TOML / Help |
-| Buttons | Step navigation and the same actions |
+| ← / →; ↑ / ↓ | ±1; ±10 frames |
+| Espaço; Home / End | Reproduzir/pausar; primeiro/último frame |
+| Linha do tempo | Navegar; exibe os três eventos confirmados |
+| Roda / + / − | Zoom |
+| Arrastar com botão do meio; 0 | Mover imagem; ajustar à janela |
+| Clique esquerdo / direito | Próximo ponto / desfazer último ponto |
+| Enter | Confirmar a ação indicada na tela |
+| Tab / Shift+Tab | Avançar / voltar |
+| C / E | Recalibrar / editar frame dos pontos |
+| G / D / M / W | Gol / defesa / fora / trave na fase de resultado |
+| A / P / B | Trajetória / pose / medidas, nas respectivas fases |
+| S / L / H | Salvar na revisão / carregar sessão / ajuda |
+| F / F2 | Ajustar fps / trocar PT–EN |
+| Esc | Cancelar recalibração ou sair |
 
-## Outputs
+## English
 
-Written under `<video_stem>_results/` (or `-o`):
+Pynalty analyses shot kinematics and goalkeeper reaction from video. The
+interface defaults to Portuguese. **PT / EN** or **F2** changes the interface
+language without losing marks; `--lang` selects report languages separately.
 
-| File | Role |
-| --- | --- |
-| `data.toml` | Reloadable marks + geometry + anthro |
-| `results.csv` | Tidy per-variable table |
-| `pynalty_summary.csv` | One wide row for the penalty |
-| `pynalty_database.csv` | Session DB (`--database` or beside output); keyed by video + kick frame |
-| `report.html` / `report_pt.html` | Self-contained coaching reports |
-| `ball_path_pixel.csv` / `ball_path_3d.csv` | Measured path + gravity flight model |
-| `pose_kicker_pixel.csv` / `pose_gk_pixel.csv` | Pose landmarks when step 6 ran |
-| `snapshot_*.png` | Event stills |
+### Guided workflow
 
-## Modules
+0. **Confirm FPS.** When the window opens, a box shows the video's
+   auto-detected FPS (same precise ffprobe-based detection as
+   `numberframes.py`, with an OpenCV fallback). Press **Enter** to accept it,
+   or type the correct value before calibrating — this rate converts frames
+   into time and velocity throughout the rest of the analysis. It can still be
+   changed anytime afterwards with **F**.
+1. **Calibrate.** Choose a frame with the goal visible and press **Enter** to
+   pause. Click **bottom left → top left → top right → bottom right**, as
+   seen in the image. The numbered diagram highlights the next corner.
+   Right click undoes. Check the preview, then **Confirm and save**.
+2. **Confirm all three frames**: first clear keeper preparation/dive movement;
+   foot–ball contact; ball reaching the goal line. Navigate and press **Enter**
+   for each. Enter pauses and advances; image clicks do nothing in this phase.
+   Arrival must follow contact; keeper movement may precede contact.
+3. **Click key-frame points.** The video returns to contact: click ball centre,
+   then keeper centre. It advances to arrival and asks for both points again.
+   Time navigation is locked, while zoom and pan remain available.
+   **Edit frame / E** returns to frame selection. Changing a frame clears its
+   old points and dependent results, trajectory and pose. **Back** revisits
+   earlier phases.
+4. **Outcome.** Choose **Goal / Save / Miss / Woodwork**, or **G / D / M / W**.
+5. **Optional steps.** Trajectory: **A** runs YOLO, or click the ball frame by
+   frame. Pose: drag kicker then keeper boxes and press **P** for MediaPipe.
+   Body measurements: **B**. Each step has **Skip / Continue**. Skipped body
+   measures use defaults (keeper stature 1.88 m).
+6. **Review and save.** Check frames, warnings and measures, then **Save
+   results**. Saving leaves the interface at review.
 
-| Module | Responsibility |
-| --- | --- |
-| `vaila/pynalty.py` | Pygame wizard + CLI |
-| `vaila/pynalty_analysis.py` | DLT, flight, zones, reach, metrics |
-| `vaila/pynalty_vision.py` | YOLO ball, MediaPipe pose, overlays |
-| `vaila/pynalty_report.py` | HTML + CSV writers |
+### Reusable calibration
 
-## Notes
+The app looks for `pynalty_calibration.toml` beside the video and previews its
+corners. **Use calibration / Enter** accepts; **Recalibrate / C** starts over.
+Check framing, zoom and camera position: matching resolution alone does not
+establish matching camera geometry. The source frame is provenance only,
+never a new event frame.
 
-- Goal-plane DLT is exact only on the goal mouth; full-flight speeds in the report use the fitted 3D model, not raw pixel deltas.
-- Reach analysis needs step 7 anthropometrics; without them the verdict stays “not assessed”.
-- YOLO / MediaPipe are optional: mark by hand if those stacks are missing.
+The versioned TOML stores source resolution, four finite in-image pixel
+corners in the specified order, goal geometry in metres and source video/frame
+(zero-based). Validation requires matching resolution, a convex quadrilateral
+and a computable DLT transform. Invalid files lead to fresh calibration with
+an explanation.
 
-## Support
+**C** starts a temporary replacement during the session. **Cancel / Esc**
+retains the previous calibration. Confirming replaces it and recomputes
+results while preserving events. Calibration saves independently of the
+results package. Write failures retain it in memory and offer another path.
 
-- Help index: `vaila/help/index.html`
-- Button doc: `docs/vaila_buttons/pynalty.md`
-- Issues: https://github.com/vaila-multimodaltoolbox/vaila/issues
+Precedence: **explicit `--calibration` → saved session calibration → directory
+discovery**. Current and legacy sessions, including unkeyed event lists in
+the original order, resume at the first incomplete phase. `--report-only`
+requires `-i` and `-c`, opens no dialogs and performs no automatic discovery.
+
+Controls: arrows ±1/±10 frames; Space play/pause; Home/End first/last; timeline
+navigation; wheel or +/− zoom; middle drag pan; 0 fit; left/right click
+mark/undo; Enter confirm; Tab/Shift+Tab next/back; C recalibrate; E edit frame;
+A/P/B optional trajectory/pose/body; S save at review; L load; H help; F fps;
+F2 language; Esc cancel recalibration or quit.
+
+## GUI / CLI
+
+GUI: **Frame B → Pynalty**. Every launch prints a copyable equivalent command
+with the `>>` prefix.
+
+```bash
+uv run vaila/pynalty.py -i video.mp4 --ui-lang pt
+uv run vaila/pynalty.py -i next_video.mp4 --calibration /path/pynalty_calibration.toml --ui-lang en
+uv run vaila/pynalty.py -i video.mp4 -c data.toml -o out_dir --report-only --lang both
+```
+
+Other existing options: `--database`, `--auto-ball`, `--pose`, `--no-wizard`
+(compatibility), `--penalty-distance`, `--goal-width`, `--goal-height`.
+
+## Saídas / Outputs
+
+Saved under `<video_stem>_results/` (under `-o` when supplied): `data.toml`,
+`results.csv`, `pynalty_summary.csv`, `pynalty_database.csv`, English/Portuguese
+HTML reports, event snapshots, ball-path CSVs/videos and pose CSVs/overlays
+when available. The reusable calibration TOML is separate.
+
+DLT describes the goal plane; full-flight speed uses the existing model,
+not raw pixel displacement. / A DLT descreve o plano do gol; a velocidade
+de voo usa o modelo existente, não diferenças brutas de pixels.
+
+[Help index](index.html) · [Button documentation](../../docs/vaila_buttons/pynalty.md)
