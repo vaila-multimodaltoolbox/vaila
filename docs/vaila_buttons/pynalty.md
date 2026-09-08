@@ -9,6 +9,8 @@ chegada), marque bola/goleiro nos frames pausados, escolha o resultado e
 avance pelos opcionais até **Salvar resultados**. O botão **PT / EN** troca
 o idioma durante a sessão. **C** refaz a calibração; **E** edita um frame;
 **F** ajusta o FPS a qualquer momento.
+O player usa leitura sequencial durante a reprodução; clique ou arraste a
+timeline para pausar e navegar pelo progresso e pelos três eventos.
 
 **EN:** On open, confirm the auto-detected FPS (same ffprobe-based detection
 as `numberframes.py`) — required for velocity and time. Calibrate the goal,
@@ -17,6 +19,8 @@ and arrival frames, select the outcome and skip or complete optional
 trajectory, pose and body measures before saving at review. **PT / EN**
 changes interface language; **C** recalibrates; **E** edits a frame; **F**
 adjusts FPS anytime.
+Playback uses sequential decoding; click or drag the timeline to pause and
+seek through progress and the three event markers.
 
 `pynalty_calibration.toml` beside the video is previewed for reuse. Confirm
 matching framing/zoom/camera position. Explicit calibration takes priority
@@ -41,4 +45,4 @@ Scientific calculations remain in `pynalty_analysis.py`, vision in
 
 [Full bilingual help](../../vaila/help/pynalty_help.md)
 
-Version: 0.3.129 · Updated: 08 September 2026 · AGPLv3.0
+Version: 0.3.130 · Updated: 08 September 2026 · AGPLv3.0

@@ -1,7 +1,7 @@
 """Guided Pynalty workflow and reusable calibration regression tests.
 
 Update Date: 08 September 2026
-Version: 0.3.129
+Version: 0.3.130
 """
 
 import copy
@@ -441,3 +441,60 @@ def test_run_confirms_fps_before_entering_marking_loop(tmp_path, monkeypatch):
     monkeypatch.setattr(pygame.event, "get", lambda: [SimpleNamespace(type=pygame.QUIT)])
     session.run()
     assert calls == [True]
+
+
+class _SequentialCapture:
+    def __init__(self, position=1):
+        self.position = position
+        self.set_calls = []
+
+    def get(self, prop):
+        assert prop == cv2.CAP_PROP_POS_FRAMES
+        return self.position
+
+    def set(self, prop, value):
+        assert prop == cv2.CAP_PROP_POS_FRAMES
+        self.position = int(value)
+        self.set_calls.append(int(value))
+        return True
+
+    def read(self):
+        frame = np.zeros((2, 3, 3), dtype=np.uint8)
+        self.position += 1
+        return True, frame
+
+
+def test_playback_reads_sequentially_without_seek(app):
+    app.cap = _SequentialCapture(position=1)
+    app.current_frame_idx = 0
+    app.playing = True
+
+    assert app.advance_playback()
+
+    assert app.current_frame_idx == 1
+    assert app.cap.set_calls == []
+    assert app.frame_img.get_size() == (3, 2)
+
+
+def test_playback_repairs_capture_position_only_when_needed(app):
+    app.cap = _SequentialCapture(position=40)
+    app.current_frame_idx = 7
+    app.playing = True
+
+    assert app.advance_playback()
+
+    assert app.current_frame_idx == 8
+    assert app.cap.set_calls == [8]
+
+
+def test_timeline_drag_pauses_before_seeking(app, monkeypatch):
+    app.screen = SimpleNamespace(get_size=lambda: (900, 650))
+    app.playing = True
+    sought = []
+    monkeypatch.setattr(app, "_slider_seek", sought.append)
+
+    app._handle_mousedown(SimpleNamespace(pos=(450, 650 - pynalty.BOTTOM_H + 20), button=1))
+
+    assert not app.playing
+    assert app.start_drag_slider
+    assert sought == [450]

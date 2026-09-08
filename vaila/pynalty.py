@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 19 December 2025
 Update Date: 08 September 2026
-Version: 0.3.129
+Version: 0.3.130
 
 Description:
 Guided analysis of a penalty kick from a single broadcast or handheld camera.
@@ -782,13 +782,41 @@ class PynaltyApp:
 
     def update_frame(self):
         if not self.cap:
-            return
+            return False
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.current_frame_idx)
         ret, frame = self.cap.read()
         if not ret:
-            return
+            return False
+        self._set_frame_image(frame)
+        return True
+
+    def _set_frame_image(self, frame: np.ndarray) -> None:
+        """Convert one decoded OpenCV frame into the current pygame image."""
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         self.frame_img = pygame.image.frombuffer(frame.tobytes(), frame.shape[1::-1], "RGB")
+
+    def advance_playback(self) -> bool:
+        """Decode the next frame sequentially, avoiding a costly seek per frame."""
+        if not self.cap or self.current_frame_idx >= self.total_frames - 1:
+            self.playing = False
+            return False
+
+        expected_frame = self.current_frame_idx + 1
+        capture_position = int(round(self.cap.get(cv2.CAP_PROP_POS_FRAMES)))
+        if capture_position != expected_frame:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, expected_frame)
+
+        ret, frame = self.cap.read()
+        if not ret:
+            self.playing = False
+            return False
+
+        decoded_frame = int(round(self.cap.get(cv2.CAP_PROP_POS_FRAMES))) - 1
+        self.current_frame_idx = int(
+            np.clip(decoded_frame, expected_frame, max(expected_frame, self.total_frames - 1))
+        )
+        self._set_frame_image(frame)
+        return True
 
     def seek(self, frame_idx: int, *, force: bool = False):
         if self.navigation_locked and not force:
@@ -1059,7 +1087,8 @@ class PynaltyApp:
         if self.frame_img:
             w = max(1, int(self.frame_img.get_width() * self.zoom))
             h = max(1, int(self.frame_img.get_height() * self.zoom))
-            scaled = pygame.transform.smoothscale(self.frame_img, (w, h))
+            scaler = pygame.transform.scale if self.playing else pygame.transform.smoothscale
+            scaled = scaler(self.frame_img, (w, h))
             self.screen.set_clip(area)
             self.screen.blit(scaled, (self.offset_x, self.offset_y))
             self.screen.set_clip(None)
@@ -1279,11 +1308,42 @@ class PynaltyApp:
         pygame.draw.line(self.screen, PANEL_LINE, (0, top), (w, top), 1)
 
         margin = 20
-        slider_w = w - margin * 2
-        slider_y = top + 18
+        timeline_w = w - margin * 2
+        event_y = top + 10
+        event_h = 7
+        slider_y = top + 27
+        slider_h = 10
+        progress_ratio = self.current_frame_idx / max(1, self.total_frames - 1)
+
+        # Event timeline: confirmed keeper movement, kick and goal-line arrival.
         pygame.draw.rect(
-            self.screen, (60, 70, 82), (margin, slider_y, slider_w, 6), border_radius=3
+            self.screen,
+            (45, 52, 61),
+            (margin, event_y, timeline_w, event_h),
+            border_radius=3,
         )
+        playhead = margin + int(progress_ratio * timeline_w)
+        pygame.draw.line(
+            self.screen,
+            (235, 205, 70),
+            (playhead, event_y - 2),
+            (playhead, event_y + event_h + 2),
+            1,
+        )
+
+        pygame.draw.rect(
+            self.screen,
+            (60, 70, 82),
+            (margin, slider_y, timeline_w, slider_h),
+            border_radius=5,
+        )
+        if playhead > margin:
+            pygame.draw.rect(
+                self.screen,
+                (55, 135, 190),
+                (margin, slider_y, playhead - margin, slider_h),
+                border_radius=5,
+            )
 
         if self.total_frames > 1:
             for evt, color in (
@@ -1292,16 +1352,18 @@ class PynaltyApp:
                 (self.step("goal"), RED),
             ):
                 if evt.frame_idx != -1:
-                    x = margin + int(evt.frame_idx / (self.total_frames - 1) * slider_w)
-                    pygame.draw.rect(self.screen, color, (x - 1, slider_y - 6, 3, 18))
-            handle = margin + int(self.current_frame_idx / max(1, self.total_frames - 1) * slider_w)
-            pygame.draw.circle(self.screen, WHITE, (handle, slider_y + 3), 8)
+                    x = margin + int(evt.frame_idx / (self.total_frames - 1) * timeline_w)
+                    pygame.draw.rect(self.screen, color, (x - 2, event_y - 2, 4, event_h + 4))
+            pygame.draw.circle(self.screen, WHITE, (playhead, slider_y + slider_h // 2), 8)
 
+        elapsed = self.current_frame_idx / max(self.fps, 1.0)
+        duration = max(0, self.total_frames - 1) / max(self.fps, 1.0)
         info = (
             f"Frame {self.current_frame_idx}/{max(0, self.total_frames - 1)}  |  "
-            f"{self.fps:.2f} fps  |  zoom {self.zoom:.2f}x"
+            f"{elapsed:.2f}/{duration:.2f} s  |  {self.fps:.2f} fps  |  "
+            f"zoom {self.zoom:.2f}x"
         )
-        self.screen.blit(self.font_small.render(info, True, GRAY), (margin, slider_y + 16))
+        self.screen.blit(self.font_small.render(info, True, GRAY), (margin, slider_y + 15))
 
         specs = [
             ("prev", self.tr("Voltar", "Back")),
@@ -2574,6 +2636,7 @@ class PynaltyApp:
 
         if event.button == 1:
             if slider_zone.collidepoint(mx, my) and not self.navigation_locked:
+                self.playing = False
                 self.start_drag_slider = True
                 self._slider_seek(mx)
             elif self.content_rect().collidepoint(mx, my):
@@ -2664,12 +2727,11 @@ class PynaltyApp:
                         self.offset_y += my - self.last_mouse_pos[1]
                         self.last_mouse_pos = (mx, my)
 
-            if self.playing and self.current_frame_idx < self.total_frames - 1:
-                self.seek(self.current_frame_idx + 1)
-                pygame.time.delay(int(1000 / max(1.0, self.fps)))
+            if self.playing:
+                self.advance_playback()
 
             self.draw_content()
-            clock.tick(60)
+            clock.tick(max(1.0, self.fps) if self.playing else 60)
 
         pygame.quit()
         if self.cap:

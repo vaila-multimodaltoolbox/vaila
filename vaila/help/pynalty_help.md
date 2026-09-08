@@ -1,6 +1,6 @@
 # Pynalty — guia / guide
 
-**Version:** 0.3.129
+**Version:** 0.3.130
 
 **Updated:** 08 September 2026
 
@@ -77,7 +77,7 @@ aceitas e retomam a primeira fase incompleta. `--report-only` exige `-i` e
 | --- | --- |
 | ← / →; ↑ / ↓ | ±1; ±10 frames |
 | Espaço; Home / End | Reproduzir/pausar; primeiro/último frame |
-| Linha do tempo | Navegar; exibe os três eventos confirmados |
+| Linha do tempo | Clique/arraste para navegar e pausar; exibe progresso e os três eventos confirmados |
 | Roda / + / − | Zoom |
 | Arrastar com botão do meio; 0 | Mover imagem; ajustar à janela |
 | Clique esquerdo / direito | Próximo ponto / desfazer último ponto |
@@ -150,8 +150,9 @@ discovery**. Current and legacy sessions, including unkeyed event lists in
 the original order, resume at the first incomplete phase. `--report-only`
 requires `-i` and `-c`, opens no dialogs and performs no automatic discovery.
 
-Controls: arrows ±1/±10 frames; Space play/pause; Home/End first/last; timeline
-navigation; wheel or +/− zoom; middle drag pan; 0 fit; left/right click
+Controls: arrows ±1/±10 frames; Space play/pause; Home/End first/last; click/drag
+the progress and event timeline to seek and pause; wheel or +/− zoom; middle drag pan;
+0 fit; left/right click
 mark/undo; Enter confirm; Tab/Shift+Tab next/back; C recalibrate; E edit frame;
 A/P/B optional trajectory/pose/body; S save at review; L load; H help; F fps;
 F2 language; Esc cancel recalibration or quit.
