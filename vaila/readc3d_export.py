@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 25 September 2024
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 09 September 2026
+Version: 0.3.131
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -1081,20 +1081,21 @@ def get_point_labels(point_params):
     return labels
 
 
-def importc3d(dat):
+def importc3d(dat, verbose: bool = False):
     """
     Import C3D file data and parameters.
     """
-    # Print the directory and name of the script being executed
-    print(f"Running script: {Path(__file__).name}")
-    print(f"Script directory: {Path(__file__).parent}")
-    print("Running C3D to CSV conversion")
-    print("================================================")
+    if verbose:
+        print(f"Running script: {Path(__file__).name}")
+        print(f"Script directory: {Path(__file__).parent}")
+        print("Running C3D to CSV conversion")
+        print("================================================")
     # Load the C3D file with force platform data extraction
     datac3d = c3d(dat, extract_forceplat_data=True)
-    print(f"\nProcessing file: {dat}")
-    print("================================================")
-    print(f"Number of markers = {datac3d['parameters']['POINT']['USED']['value'][0]}")
+    if verbose:
+        print(f"\nProcessing file: {dat}")
+        print("================================================")
+        print(f"Number of markers = {datac3d['parameters']['POINT']['USED']['value'][0]}")
 
     point_data = datac3d["data"]["points"]
     points_residuals = datac3d["data"]["meta_points"]["residuals"]
@@ -1122,11 +1123,12 @@ def importc3d(dat):
 
     # Print summary information
     num_analog_channels = datac3d["parameters"]["ANALOG"]["USED"]["value"][0]
-    print(f"Number of marker labels = {len(marker_labels)}")
-    print(f"Number of analog channels = {num_analog_channels}")
-    print(f"Number of force platforms = {num_platforms}")
-    print(f"Marker frequency = {marker_freq} Hz")
-    print(f"Analog frequency = {analog_freq} Hz")
+    if verbose:
+        print(f"Number of marker labels = {len(marker_labels)}")
+        print(f"Number of analog channels = {num_analog_channels}")
+        print(f"Number of force platforms = {num_platforms}")
+        print(f"Marker frequency = {marker_freq} Hz")
+        print(f"Analog frequency = {analog_freq} Hz")
 
     return (
         markers,
@@ -1141,7 +1143,7 @@ def importc3d(dat):
     )
 
 
-def c3d_markers_to_dataframe(path):
+def c3d_markers_to_dataframe(path, verbose: bool = False):
     """
     Headless C3D -> CSV marker DataFrame, no Tk/dialogs, safe to call from any process.
 
@@ -1154,6 +1156,7 @@ def c3d_markers_to_dataframe(path):
 
     Args:
         path: Path to the .c3d file.
+        verbose: If True, prints C3D marker counts and frequency info.
 
     Returns:
         (markers_df, meta) where `markers_df` has columns `Time, LABEL_X,
@@ -1172,7 +1175,7 @@ def c3d_markers_to_dataframe(path):
         analog_units,
         analog_freq,
         datac3d,
-    ) = importc3d(str(path))
+    ) = importc3d(str(path), verbose=verbose)
 
     marker_columns = [f"{label}_{axis}" for label in marker_labels for axis in ("X", "Y", "Z")]
     if markers.size > 0:
@@ -2212,6 +2215,14 @@ def open_menu():
     actions = ttk.LabelFrame(root, text="Actions")
     actions.pack(fill=tk.X, padx=20, pady=10)
 
+    def run_metadata_editor():
+        root.destroy()
+        try:
+            from .c3d_metadata import run_c3d_metadata_gui
+        except ImportError:
+            from c3d_metadata import run_c3d_metadata_gui  # ty: ignore[unresolved-import]
+        run_c3d_metadata_gui()
+
     ttk.Button(actions, text="Batch Convert (Directory)", command=run_batch).pack(
         fill=tk.X, padx=10, pady=6
     )
@@ -2219,6 +2230,9 @@ def open_menu():
         fill=tk.X, padx=10, pady=6
     )
     ttk.Button(actions, text="Inspect C3D File", command=run_inspect, style="Accent.TButton").pack(
+        fill=tk.X, padx=10, pady=6
+    )
+    ttk.Button(actions, text="C3D Metadata (Edit/Create)", command=run_metadata_editor).pack(
         fill=tk.X, padx=10, pady=6
     )
 

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 24 August 2026
-Version: 0.3.112
+Update Date: 09 September 2026
+Version: 0.3.131
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -150,7 +150,7 @@ def save_dataframe_with_precision(df, file_path, column_precision):
             else:
                 # Format with specific decimal places
                 formatted_data[col] = formatted_data[col].apply(
-                    lambda x: f"{x:.{precision}f}" if pd.notna(x) else ""
+                    lambda x, p=precision: f"{x:.{p}f}" if pd.notna(x) else ""
                 )
 
         # Save the formatted data
@@ -416,6 +416,9 @@ class ColumnReorderGUI(tk.Tk):
         self.directory_path = directory_path
         self.rearranged_path = os.path.join(directory_path, "data_rearranged")
         self.history = []
+        self.saved = False
+        self.has_unsaved_changes = False
+        self.original_input_dir: str | None = None
 
         # Verificar o tamanho do arquivo antes de carregar
         if self.file_names == ["Empty"]:
@@ -434,6 +437,10 @@ class ColumnReorderGUI(tk.Tk):
                 self.setup_large_file_gui(full_path)
             else:
                 self.setup_normal_gui(full_path)
+
+        # Configure menu and close protocol
+        self.setup_menu()
+        self.protocol("WM_DELETE_WINDOW", self.on_window_close)
 
         # Configure the window
         self.title(f"Reorder CSV Columns - {self.file_names[0]}")
@@ -524,7 +531,7 @@ class ColumnReorderGUI(tk.Tk):
         instructions_text = (
             "Click to select a Column and press Enter to reorder. Select and press 'd' to delete.\n"
             "Press 'm' to manually select range. Press 'l' to edit rows. Press Ctrl+S to save. "
-            "Press Ctrl+Z to undo.\nPress Esc to save and exit."
+            "Press Ctrl+Z to undo.\nMenu bar available above with all options. Press Esc to close."
         )
         if is_large_file:
             instructions_text += "\nLarge File Mode: Changes will be applied to the entire file."
@@ -532,9 +539,18 @@ class ColumnReorderGUI(tk.Tk):
         self.instructions = tk.Label(scrollable_frame, text=instructions_text, font=("default", 10))
         self.instructions.grid(row=1, column=0, columnspan=3, pady=10, sticky="n")
 
+        # Status label for feedback on saves and changes
+        self.status_label = tk.Label(
+            scrollable_frame,
+            text="Ready. Use Ctrl+S or File menu to save.",
+            font=("default", 9, "italic"),
+            fg="gray",
+        )
+        self.status_label.grid(row=2, column=0, columnspan=3, pady=(0, 5), sticky="n")
+
         # Rest of the GUI configuration remains the same
         self.header_frame = tk.Frame(scrollable_frame)
-        self.header_frame.grid(row=2, column=0, columnspan=2, pady=10, padx=10, sticky="nsew")
+        self.header_frame.grid(row=3, column=0, columnspan=2, pady=10, padx=10, sticky="nsew")
 
         # Labels for number and name
         self.number_label = tk.Label(self.header_frame, text="Number", font=("default", 12, "bold"))
@@ -630,9 +646,166 @@ class ColumnReorderGUI(tk.Tk):
 
         advanced_section = add_section("Advanced")
         add_button(advanced_section, "Custom Math Operation", self.custom_math_operation)
+        add_button(advanced_section, "C3D Metadata (Edit/Create)", self.open_c3d_metadata)
 
         # Configure bindings
         self.setup_bindings()
+
+    def setup_menu(self):
+        """Build top menu bar with File, Edit, Tools, and Help cascades."""
+        menubar = tk.Menu(self)
+        self.config(menu=menubar)
+
+        # File menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(
+            label="Save (Ctrl+S)", command=self.save_intermediate, accelerator="Ctrl+S"
+        )
+        file_menu.add_command(label="Save and Exit", command=self.save_and_exit)
+        file_menu.add_separator()
+        file_menu.add_command(
+            label="Close without Saving", command=self.close_without_saving, accelerator="Esc"
+        )
+
+        # Edit menu
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Edit", menu=edit_menu)
+        edit_menu.add_command(
+            label="Undo (Ctrl+Z)", command=lambda: self.undo(None), accelerator="Ctrl+Z"
+        )
+        edit_menu.add_command(
+            label="Reorder / Swap Column",
+            command=lambda: self.swap_columns(None),
+            accelerator="Enter",
+        )
+        edit_menu.add_command(
+            label="Delete Column(s)", command=lambda: self.delete_columns(None), accelerator="d"
+        )
+        edit_menu.add_command(
+            label="Manual Range Select",
+            command=lambda: self.manual_selection(None),
+            accelerator="m",
+        )
+        edit_menu.add_command(
+            label="Edit Rows", command=lambda: self.edit_rows(None), accelerator="l"
+        )
+        edit_menu.add_separator()
+        edit_menu.add_command(label="Reset Index Col 0", command=self.reset_index_column_0)
+
+        # Tools menu
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+        tools_menu.add_command(label="Convert Units", command=self.convert_units)
+        tools_menu.add_command(label="Modify Lab Ref System", command=self.modify_labref)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Merge CSV", command=self.merge_csv)
+        tools_menu.add_command(label="Stack/Append CSV", command=self.stack_csv)
+        tools_menu.add_command(label="Save 2nd Half CSV", command=self.save_second_half)
+        tools_menu.add_separator()
+        tools_menu.add_command(
+            label="Convert YOLO Tracker to vailá",
+            command=lambda: batch_convert_yolo_tracker(self.directory_path),
+        )
+        tools_menu.add_command(
+            label="Convert MediaPipe to vailá",
+            command=lambda: batch_convert_mediapipe(self.directory_path),
+        )
+        tools_menu.add_command(
+            label="Convert Kinovea to vailá",
+            command=lambda: batch_convert_kinovea(self.directory_path),
+        )
+        tools_menu.add_command(
+            label="Convert DLC to vailá", command=lambda: batch_convert_dlc(self.directory_path)
+        )
+        tools_menu.add_command(
+            label="Convert Dvideo to vailá",
+            command=lambda: batch_convert_dvideo(self.directory_path),
+        )
+        tools_menu.add_command(label="Standardize Header", command=standardize_header)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Custom Math Operation", command=self.custom_math_operation)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="C3D Metadata (Edit/Create)", command=self.open_c3d_metadata)
+
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="Keyboard Shortcuts", command=self.show_shortcuts_help)
+
+    def open_c3d_metadata(self):
+        """Open C3D Metadata Editor & Creator dialog."""
+        try:
+            from vaila.c3d_metadata import C3DMetadataGUI
+        except ImportError:
+            from c3d_metadata import C3DMetadataGUI  # ty: ignore[unresolved-import]
+
+        c3d_candidate = None
+        search_dirs = []
+        orig_dir = getattr(self, "original_input_dir", None)
+        if orig_dir and os.path.isdir(orig_dir):
+            search_dirs.append(orig_dir)
+
+        if self.directory_path and os.path.isdir(self.directory_path):
+            search_dirs.append(self.directory_path)
+            parent_dir = os.path.dirname(self.directory_path)
+            if os.path.isdir(parent_dir):
+                search_dirs.append(parent_dir)
+
+        for s_dir in search_dirs:
+            c3ds = [
+                os.path.join(s_dir, f)
+                for f in os.listdir(s_dir)
+                if f.lower().endswith(".c3d") and not f.startswith(".")
+            ]
+            if c3ds:
+                c3d_candidate = sorted(c3ds)[0]
+                break
+
+        C3DMetadataGUI(self, initial_file=c3d_candidate)
+
+    def show_shortcuts_help(self):
+        msg = (
+            "Keyboard Shortcuts in Column Editor:\n\n"
+            "• Enter: Swap / move selected column position\n"
+            "• d: Delete selected column\n"
+            "• m: Manually select range of columns\n"
+            "• l: Edit rows\n"
+            "• Ctrl+S: Save intermediate files to data_rearranged/\n"
+            "• Ctrl+Z: Undo last column reorder / delete\n"
+            "• Esc: Close window (prompts if unsaved changes exist)\n"
+        )
+        messagebox.showinfo("Keyboard Shortcuts", msg)
+
+    def on_escape(self, event=None):
+        self.on_window_close()
+
+    def on_window_close(self):
+        if self.has_unsaved_changes and not self.saved:
+            resp = messagebox.askyesnocancel(
+                "Unsaved Changes",
+                "You have unsaved changes.\n\n"
+                "Do you want to save before closing?\n\n"
+                "• Yes: Save and Exit\n"
+                "• No: Discard changes and Exit\n"
+                "• Cancel: Stay in Editor",
+            )
+            if resp is True:
+                self.save_and_exit()
+            elif resp is False:
+                self.destroy()
+            # If None (Cancel), do nothing
+        else:
+            self.destroy()
+
+    def close_without_saving(self):
+        if self.has_unsaved_changes and not self.saved:
+            if messagebox.askyesno(
+                "Discard Changes", "Discard unsaved changes and close without saving?"
+            ):
+                self.destroy()
+        else:
+            self.destroy()
 
     def setup_bindings(self):
         """Configure all keyboard shortcuts"""
@@ -642,7 +815,7 @@ class ColumnReorderGUI(tk.Tk):
         self.bind("l", self.edit_rows)
         self.bind("<Control-s>", self.save_intermediate)
         self.bind("<Control-z>", self.undo)
-        self.bind("<Escape>", self.save_and_exit)
+        self.bind("<Escape>", self.on_escape)
 
     def update_listbox(self):
         self.header_listbox.delete(0, tk.END)
@@ -661,7 +834,10 @@ class ColumnReorderGUI(tk.Tk):
         self.shape_label.config(text=f"Shape: {shape}")
 
     def save_state(self):
+        self.has_unsaved_changes = True
         self.history.append(self.current_order.copy())
+        if hasattr(self, "status_label"):
+            self.status_label.config(text="Unsaved changes (press Ctrl+S to save)", fg="#d9534f")
 
     def undo(self, event):
         if self.history:
@@ -896,6 +1072,13 @@ class ColumnReorderGUI(tk.Tk):
                     "",
                     dict.fromkeys(range(len(self.current_order)), max_decimal_places),
                 )
+            self.saved = True
+            self.has_unsaved_changes = False
+            if hasattr(self, "status_label"):
+                self.status_label.config(
+                    text=f"Saved to data_rearranged/ at {datetime.now().strftime('%H:%M:%S')}",
+                    fg="#5cb85c",
+                )
             messagebox.showinfo(
                 "Success",
                 f"Intermediate save completed. Files are saved in {self.rearranged_path} with a timestamp.",
@@ -930,6 +1113,8 @@ class ColumnReorderGUI(tk.Tk):
                     "_final",
                     dict.fromkeys(range(len(self.current_order)), max_decimal_places),
                 )
+            self.saved = True
+            self.has_unsaved_changes = False
             messagebox.showinfo(
                 "Success",
                 f"Reordering completed for all files. Final files are saved in {self.rearranged_path} with '_final' in the name.",
@@ -1240,7 +1425,7 @@ class ColumnReorderGUI(tk.Tk):
                     self.custom_frame.grid()  # Show custom input
                 else:
                     self.custom_frame.grid_remove()  # Hide custom input
-        except:
+        except Exception:
             pass
 
     def apply_modify(self, modify_window):
@@ -1866,7 +2051,7 @@ def convert_yolo_tracker_to_pixel_format(
         if is_long_format:
             print("Detected LONG format (e.g. YOLO track per-ID csv)")
             tracker_ids = sorted(
-                pd.read_csv(tracker_file, usecols=["Tracker ID"])
+                pd.read_csv(tracker_file, usecols=["Tracker ID"])  # ty: ignore[no-matching-overload]
                 .dropna()["Tracker ID"]
                 .unique()
                 .astype(int)
@@ -2027,7 +2212,7 @@ def batch_convert_yolo_tracker(directory_path=None, point=None, chunk_size=None)
             point_dialog.wait_window()
 
             point = point_var.get()
-        except:
+        except Exception:
             point = "center"
 
     # Ask for chunk size if not provided via CLI
@@ -2046,7 +2231,7 @@ def batch_convert_yolo_tracker(directory_path=None, point=None, chunk_size=None)
             )
             if chunk_size is None:
                 chunk_size = 5000
-        except:
+        except Exception:
             chunk_size = 5000
 
     converted_files = []

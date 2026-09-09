@@ -34,8 +34,6 @@ import argparse
 import contextlib
 import html
 import json
-import math
-import os
 import webbrowser
 from dataclasses import asdict, dataclass
 from datetime import datetime

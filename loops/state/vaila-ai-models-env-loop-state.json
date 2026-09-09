@@ -1,0 +1,64 @@
+{
+  "loop": "vaila-ai-models-env-loop",
+  "status": "success",
+  "updated": "2026-09-09",
+  "vaila_version": "0.3.131",
+  "vaila_update_date": "09 September 2026",
+  "note": "Audited vail\u00e1 application version/date, NVIDIA GPU hardware discovery via nvidia-smi with PyTorch CUDA resilience, Hugging Face Hub token/whoami status, and full AI tracking models inventory (SAM3, SAM-3D-DINOv3, Sapiens2, MediaPipe, YOLO, Re-ID).",
+  "governing_check_baseline": {
+    "pytest": "12 passed in tests/test_vaila_env.py, 46 passed across recent suites",
+    "ruff": "clean on touched files (vaila_env.py, test_vaila_env.py)",
+    "ty": "clean on touched files"
+  },
+  "targets": [
+    {
+      "id": "vaila-version-header",
+      "accepted": true,
+      "evidence": "get_vaila_info returns v0.3.131, 09 September 2026, git branch, commit hash"
+    },
+    {
+      "id": "hardware-gpu-resilience",
+      "accepted": true,
+      "evidence": "get_hardware_info queries nvidia-smi (NVIDIA GeForce RTX 4090, 24564 MiB, Driver 595.84) even when torch.cuda encounters libcusparseLt error"
+    },
+    {
+      "id": "huggingface-hub-inspection",
+      "accepted": true,
+      "evidence": "get_huggingface_info detects v1.30.0, token active, authenticated user paulosantiago, cache dir"
+    },
+    {
+      "id": "ai-models-inventory",
+      "accepted": true,
+      "evidence": "get_ai_models_status scans vaila/models/ for SAM3, SAM-3D-DINOv3, Sapiens2 0.4B/1B/5B & DETR, MediaPipe tasks, YOLO weights & TRT engines, Re-ID"
+    },
+    {
+      "id": "cli-formatting",
+      "accepted": true,
+      "evidence": "format_env_summary formats complete tables with file sizes and ready status, displayed via vaila_env.py and vaila.py --env-info"
+    },
+    {
+      "id": "gui-multi-tab-dialog",
+      "accepted": true,
+      "evidence": "VailaEnvGUI enhanced with 3 Notebook tabs (Packages & System, AI Models & HF, Terminal & IPython Guide) and Copy Full Report action"
+    },
+    {
+      "id": "regression-tests-docs",
+      "accepted": true,
+      "evidence": "12/12 unit tests passing, ruff/ty clean, vaila_env.md/html updated, help index regenerated"
+    }
+  ],
+  "accepted_changes": [
+    "vaila/vaila_env.py",
+    "tests/test_vaila_env.py",
+    "vaila/help/vaila_env.md",
+    "vaila/help/vaila_env.html",
+    "vaila/help/index.md",
+    "vaila/help/index.html",
+    "loops/vaila-ai-models-env-loop.md",
+    "loops/state/vaila-ai-models-env-loop-state.json"
+  ],
+  "lessons": [
+    "On workstation machines with driver/library mismatches (e.g. libcusparseLt.so.0), PyTorch cuda.is_available() raises ImportError while nvidia-smi reports healthy physical GPU; querying both provides full resilience.",
+    "Hugging Face Hub whoami() must be guarded against offline / missing credentials so diagnosis never hangs."
+  ]
+}

@@ -1,11 +1,12 @@
-import os
 import json
+import os
 import tempfile
 from pathlib import Path
-import pandas as pd
-import pytest
 
-from vaila.getpixelvideo import parse_contours_json, do_export_bbox_coords
+import pandas as pd
+
+from vaila.getpixelvideo import do_export_bbox_coords, parse_contours_json
+
 
 def test_parse_contours_json():
     # Create mock contours json payload

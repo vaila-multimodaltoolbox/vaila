@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 08 September 2026
-Version: 0.3.130
+Update Date: 09 September 2026
+Version: 0.3.131
 
 Example of usage:
 uv run vaila.py
@@ -162,6 +162,18 @@ def _write_vaila_shell_launcher(project_root: Path) -> Path:
         if activate.is_file():
             activate_ps = str(activate).replace("'", "''")
             lines.append(f"& '{activate_ps}'")
+            lines.append(
+                "Write-Host '==================================================' -ForegroundColor Green"
+            )
+            lines.append(
+                "Write-Host 'vailá virtual environment active (.venv)' -ForegroundColor Green"
+            )
+            lines.append(
+                "Write-Host 'To start interactive calculations, run: ipython' -ForegroundColor Cyan"
+            )
+            lines.append(
+                "Write-Host '==================================================' -ForegroundColor Green"
+            )
         else:
             lines.append("Write-Host 'No .venv found. Run: uv sync'")
         fd, path = tempfile.mkstemp(suffix=".ps1", text=True)
@@ -177,6 +189,10 @@ def _write_vaila_shell_launcher(project_root: Path) -> Path:
     ]
     if activate.is_file():
         lines.append("source .venv/bin/activate")
+        lines.append("echo '=================================================='")
+        lines.append("echo 'vailá virtual environment active (.venv)'")
+        lines.append("echo 'To start interactive calculations, run: ipython'")
+        lines.append("echo '=================================================='")
     else:
         lines.append('echo "No .venv found. Run: uv sync"')
     lines.append('exec "${SHELL:-bash}"')
@@ -344,7 +360,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 08.Sep.2026 v0.3.130 (Python 3.12.14)
+    vailá - 09.Sep.2026 v0.3.131 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -403,7 +419,7 @@ B6_r7_c4 - vailá          B6_r7_c5 - vailá
 -> C_A: Data Files
 C_A_r1_c1 - Edit CSV/C3D  C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
 C_A_r2_c1 - DLT/REC 2D-3D (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
-C_A_r2_c2 - vailá         C_A_r2_c3 - vailá
+C_A_r2_c2 - C3D Metadata  C_A_r2_c3 - vailá
 C_A_r3_c1 - vailá         C_A_r3_c2 - vailá          C_A_r3_c3 - vailá
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - Sapiens2 3D Kinematics  C_A_r4_c3 - vailá
 C_A_r5_c1 - vailá         C_A_r5_c2 - vailá          C_A_r5_c3 - vailá
@@ -463,7 +479,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 08.Sep.2026 v0.3.130 (Python 3.12.14)")
+        self.title("vailá - 09.Sep.2026 v0.3.131 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -1333,11 +1349,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_A_r2_c2 - Data Files: vailá (placeholder; Rec2D 1DLT moved into DLT/REC 2D-3D)
+        # C_A_r2_c2 - Data Files: C3D Metadata (inspect, edit, create)
         vaila_c_a_r2_c2 = tk.Button(
             tools_col1,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="C3D Metadata",
+            command=self.edit_c3d_metadata,
             width=button_width,
         )
 
@@ -2865,6 +2881,21 @@ class Vaila(tk.Tk):
         )
         button_csv_to_c3d.pack(side="right", padx=20, pady=20)
 
+        # Button for C3D Metadata Editor & Creator
+        def launch_c3d_metadata():
+            window.destroy()
+            from vaila.c3d_metadata import run_c3d_metadata_gui
+
+            run_c3d_metadata_gui()
+
+        button_metadata = Button(
+            window,
+            text="C3D Metadata (Edit/Create)",
+            command=launch_c3d_metadata,
+            bg="#e8f5e9",
+        )
+        button_metadata.pack(side="bottom", fill="x", padx=20, pady=(0, 10))
+
         # Button for Inspect C3D
         def launch_inspect():
             window.destroy()
@@ -2873,7 +2904,13 @@ class Vaila(tk.Tk):
             inspect_c3d_gui(self)
 
         button_inspect = Button(window, text="Inspect C3D", command=launch_inspect, bg="#e1f5fe")
-        button_inspect.pack(side="bottom", padx=20, pady=20)
+        button_inspect.pack(side="bottom", padx=20, pady=(10, 5))
+
+    def edit_c3d_metadata(self):
+        """Runs the C3D Metadata Editor & Creator module."""
+        from vaila.c3d_metadata import run_c3d_metadata_gui
+
+        run_c3d_metadata_gui()
 
     # C_A_r1_c3
     def gapfill_split(self):
@@ -3621,7 +3658,7 @@ class Vaila(tk.Tk):
         try:
             from vaila.gputest import show_gpu_diagnostics_dialog
         except ImportError:
-            from gputest import show_gpu_diagnostics_dialog  # type: ignore[no-redef]
+            from gputest import show_gpu_diagnostics_dialog  # ty: ignore[unresolved-import]
 
         show_gpu_diagnostics_dialog(parent=self)
 
@@ -3835,19 +3872,10 @@ class Vaila(tk.Tk):
         )
 
     def open_terminal_shell(self):
-        """Open the system terminal with the vailá project dir and .venv active."""
-        project_root = _vaila_project_root()
-        script_path = _write_vaila_shell_launcher(project_root)
-        if _launch_system_terminal(script_path):
-            return
-        messagebox.showinfo(
-            "vailá - imagination!",
-            "Could not detect a terminal emulator.\n\n"
-            f"Open a terminal manually, then run:\n\n"
-            f"  cd {project_root}\n"
-            f"  source .venv/bin/activate   # Linux/macOS\n"
-            f"  .\\.venv\\Scripts\\Activate.ps1  # Windows PowerShell",
-        )
+        """Open the vailá imagination & environment inspector dialog, terminal, and ipython guide."""
+        from vaila.vaila_env import run_vaila_env_gui
+
+        run_vaila_env_gui(self)
 
     def quit_app(self):
         """Quits the Multimodal Toolbox application.
@@ -4418,17 +4446,47 @@ if __name__ == "__main__":
         help="Terminal menu (same buttons as the GUI)",
     )
     parser.add_argument(
+        "--env-info",
+        "--env",
+        action="store_true",
+        help="Print system and environment info, package versions, and .venv activation instructions",
+    )
+    parser.add_argument(
+        "--metadata",
+        "--c3d-metadata",
+        action="store_true",
+        help="Inspect or edit C3D metadata via CLI or GUI (forwards remaining arguments)",
+    )
+    parser.add_argument(
         "action",
         nargs="?",
         help="Optional action code for one-shot CLI launch (e.g. A_r1_c1, B1_r1_c4)",
     )
+    if "--env-info" in sys.argv or "--env" in sys.argv:
+        try:
+            from vaila.vaila_env import format_env_summary
+        except ImportError:
+            from vaila_env import format_env_summary  # ty: ignore[unresolved-import]
+
+        print(format_env_summary())
+        sys.exit(0)
+
+    if "--metadata" in sys.argv or "--c3d-metadata" in sys.argv:
+        try:
+            from vaila.c3d_metadata import main as c3d_meta_main
+        except ImportError:
+            from c3d_metadata import main as c3d_meta_main  # ty: ignore[unresolved-import]
+
+        sub_args = [a for a in sys.argv[1:] if a not in ("--metadata", "--c3d-metadata")]
+        sys.exit(c3d_meta_main(sub_args))
+
     cli_args = parser.parse_args()
 
     if cli_args.cli or cli_args.action:
         try:
             from vaila.vaila_cli_menu import run_cli_menu
         except ImportError:
-            from vaila_cli_menu import run_cli_menu  # type: ignore[no-redef]
+            from vaila_cli_menu import run_cli_menu  # ty: ignore[unresolved-import]
 
         cli_app = Vaila(gui=False)
         run_cli_menu(cli_app, initial_code=cli_args.action)

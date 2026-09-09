@@ -40,35 +40,49 @@
     <div class="container">
       <h1>extractpng.py — Video ↔ PNG</h1>
       <p>
-        <strong>Version:</strong> 0.3.114<br />
-        <strong>Updated:</strong> 25 August 2026<br />
+        <strong>Version:</strong> 0.3.131<br />
+        <strong>Updated:</strong> 09 September 2026<br />
         <strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago
       </p>
       <p>
-        Part of <i>vailá</i>. Extract PNG frames from videos, build videos from
-        PNG sequences, or grab selected frames. One simple Tkinter window; full
-        CLI for headless use.
+        Part of <i>vailá</i>. High-performance video-to-PNG extraction and PNG-to-video creation accelerated by 
+        NVIDIA GPU hardware (NVDEC decoding &amp; NVENC encoding via FFmpeg CUDA) with automatic CPU software fallback.
       </p>
+      <h2>Key Optimizations &amp; Features</h2>
+      <ul>
+        <li><strong>NVIDIA GPU Decoding (<code>--hwaccel auto|cuda|cpu</code>):</strong> Auto-detects NVIDIA GPUs (e.g. RTX 4090) and decodes streams directly on hardware with NVDEC via <code>-hwaccel cuda</code>.</li>
+        <li><strong>Fast Lossless PNG Extraction (<code>-c / --compression 0-9</code>):</strong> Defaults to fast level 1 with <code>-pred none</code>, speeding up extraction ~3x while maintaining bit-for-bit lossless pixel parity.</li>
+        <li><strong>Redundant Rescaler Bypass:</strong> Skips unnecessary CPU Lanczos/bicubic resampling when target dimensions match native video.</li>
+        <li><strong>Parallel Multi-Video Batching (<code>-j / --workers</code>):</strong> Multi-threaded video extraction using <code>ThreadPoolExecutor</code> to saturate NVDEC and CPU cores.</li>
+        <li><strong>NVIDIA NVENC Video Creation:</strong> Fast encoding of PNG sequences to MP4 via <code>h264_nvenc</code> and <code>hevc_nvenc</code>.</li>
+      </ul>
       <h2>GUI</h2>
-      <p>Frame C → <strong>Video↔PNG</strong>, or:</p>
+      <p>Frame C → <strong>Video and Image</strong> → <strong>C_B_r1_c1 - Video&lt;--&gt;PNG</strong>, or:</p>
       <pre>uv run vaila/extractpng.py</pre>
       <ol>
-        <li>Choose mode: Video → PNG / PNG → Video / Select frames</li>
-        <li>Browse input (output optional)</li>
-        <li>Set options, then <strong>Run</strong></li>
+        <li>Check the detected GPU hardware acceleration badge.</li>
+        <li>Choose mode: <strong>Video → PNG</strong> / <strong>PNG → Video</strong> / <strong>Select frames</strong>.</li>
+        <li>Browse input (output optional).</li>
+        <li>Select acceleration mode, compression speed, and parallel workers.</li>
+        <li>Click <strong>Run</strong> (prints copy-paste CLI mirror).</li>
       </ol>
       <h2>CLI</h2>
-      <pre>uv run vaila/extractpng.py extract -i /path/to/videos
-uv run vaila/extractpng.py create -i /path/to/png_dirs --fps 30 --codec 264
-uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7</pre>
+      <pre># Fast GPU extraction with auto-detected CUDA and level 1 compression:
+uv run vaila/extractpng.py extract -i /path/to/videos
+
+# Explicit GPU acceleration with 4 parallel workers:
+uv run vaila/extractpng.py extract -i /path/to/videos -o /path/to/out --hwaccel cuda --compression 1 --workers 4
+
+# Create video using GPU NVENC hardware encoder:
+uv run vaila/extractpng.py create -i /path/to/png_dirs --fps 30 --codec 264_nvenc --hwaccel cuda
+
+# Grab select frames with GPU acceleration:
+uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7 --hwaccel cuda</pre>
       <h2>Notes</h2>
       <ul>
-        <li>
-          FFmpeg <code>-hwaccel auto</code> is placed <em>before</em>
-          <code>-i</code> (input option). No forced <code>hevc_cuvid</code>;
-          software decode is the fallback.
-        </li>
-        <li>Default PNG pattern: <code>%09d.png</code></li>
+        <li>FFmpeg <code>-hwaccel cuda</code> is placed <em>before</em> <code>-i</code> (input option).</li>
+        <li>Default PNG pattern: <code>%09d.png</code>.</li>
+        <li>Batch extraction generates <code>video_info.txt</code> in each directory detailing FPS and GPU profile.</li>
       </ul>
     </div>
   </body>

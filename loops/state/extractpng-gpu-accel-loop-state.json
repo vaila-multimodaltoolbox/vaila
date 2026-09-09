@@ -1,0 +1,65 @@
+{
+  "loop": "extractpng-gpu-accel-loop",
+  "status": "success",
+  "updated": "2026-09-09",
+  "vaila_version": "0.3.131",
+  "vaila_update_date": "09 September 2026",
+  "note": "Accelerated Video <-> PNG extraction with NVIDIA GPU NVDEC hardware decoding (-hwaccel cuda), level 1 lossless PNG compression (-pred none), multi-video parallel thread pool, and NVENC video creation.",
+  "governing_check_baseline": {
+    "pytest": "17 passed in tests/test_extractpng.py",
+    "ruff": "clean on vaila/extractpng.py and tests/test_extractpng.py",
+    "ty": "clean on vaila/extractpng.py and tests/test_extractpng.py"
+  },
+  "targets": [
+    {
+      "id": "hardware-gpu-nvdec-detection",
+      "accepted": true,
+      "evidence": "get_cuda_status() detects RTX 4090 and FFmpeg hwaccel cuda / h264_nvenc support."
+    },
+    {
+      "id": "lossless-png-compression-opt",
+      "accepted": true,
+      "evidence": "-compression_level 1 with -pred none provides lossless parity while dropping extraction from 10.22s to 3.88s (2.6x faster)."
+    },
+    {
+      "id": "redundant-rescaler-bypass",
+      "accepted": true,
+      "evidence": "Bypasses CPU Lanczos scale filter when native video resolution matches target resolution."
+    },
+    {
+      "id": "parallel-multivideo-batching",
+      "accepted": true,
+      "evidence": "ThreadPoolExecutor processes multi-video batches concurrently, dropping 3-video runtime from 33.16s to 9.80s (3.4x faster, 188.6 fps)."
+    },
+    {
+      "id": "nvenc-hardware-encoding",
+      "accepted": true,
+      "evidence": "PNG to MP4 supports h264_nvenc and hevc_nvenc with seamless CPU fallback."
+    },
+    {
+      "id": "gui-hardware-badge-cli-mirror",
+      "accepted": true,
+      "evidence": "ExtractPngApp displays green hardware badge, CLI mirror banner, and full hardware settings."
+    },
+    {
+      "id": "cli-options-and-tests",
+      "accepted": true,
+      "evidence": "17/17 tests passing, CLI args --hwaccel, -c/--compression, -j/--workers implemented and verified."
+    }
+  ],
+  "accepted_changes": [
+    "vaila/extractpng.py",
+    "tests/test_extractpng.py",
+    "vaila/help/extractpng.md",
+    "vaila/help/extractpng.html",
+    "vaila/help/index.md",
+    "vaila/help/index.html",
+    "loops/extractpng-gpu-accel-loop.md",
+    "loops/state/extractpng-gpu-accel-loop-state.json"
+  ],
+  "lessons": [
+    "FFmpeg PNG encoding is CPU-bound on libavcodec zlib; level 6 is 2.7x slower than level 1 for only ~4.9% file size reduction.",
+    "FFmpeg -hwaccel cuda is an input option that must precede -i; cuvid decoders can fail if forced explicitly on unsupported pixel formats, so -hwaccel cuda auto-negotiation is the most robust.",
+    "Running multiple video extractions in parallel via ThreadPoolExecutor effectively saturates both GPU NVDEC engines and multi-core CPUs."
+  ]
+}

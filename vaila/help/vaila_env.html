@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá - Environment, Dependencies &amp; AI Models Inspector</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; color: #222; }
+    .container { max-width: 980px; margin: auto; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
+    h1 { color: #24384d; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+    h2 { color: #34495e; margin-top: 28px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+    code { background: #eef1f5; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f4f6f8; border: 1px solid #dce1e6; padding: 14px; overflow-x: auto; }
+    .info { background: #eef6fb; border-left: 4px solid #3498db; padding: 12px 15px; }
+    .ok { background: #edf8f0; border: 1px solid #a9d7b2; padding: 12px 15px; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+  </style>
+</head>
+<body><div class="container">
+  <h1>Environment, Dependencies &amp; AI Models Inspector (<code>vaila_env.py</code>)</h1>
+  <div class="info">
+    <strong>Category:</strong> Environment &amp; Tools &nbsp;|&nbsp;
+    <strong>Version:</strong> 0.3.131 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-09-09<br>
+    <strong>GUI:</strong> Bottom Toolbar → <strong>imagination!</strong> (or Help menu)<br>
+    <strong>CLI:</strong> Yes (<code>uv run vaila/vaila_env.py</code> or <code>uv run vaila.py --env-info</code>)
+  </div>
+
+  <h2>Purpose</h2>
+  <p>The <code>vaila_env.py</code> module provides a comprehensive diagnostic, dependency audit, and workflow assistant:</p>
+  <ul>
+    <li><strong>vailá Version &amp; Git Status:</strong> Displays global version (<code>v0.3.131</code>), update date (<code>09 September 2026</code>), git branch, commit hash, and repository status.</li>
+    <li><strong>Hardware GPU Discovery &amp; PyTorch CUDA:</strong> Direct <code>nvidia-smi</code> query detects physical NVIDIA GPUs (e.g. RTX 4090, 24 GB VRAM, driver version) even when PyTorch encounters library issues, while also validating the PyTorch CUDA runtime.</li>
+    <li><strong>Hugging Face Hub Integration:</strong> Audits <code>huggingface_hub</code> package version, token configuration, authenticated username (<code>whoami()</code>), and local model cache directory.</li>
+    <li><strong>AI Tracking Models &amp; Checkpoints Inventory:</strong> Scans local weights in <code>vaila/models/</code>:
+      <ul>
+        <li><strong>Meta SAM 3:</strong> <code>sam3/sam3.pt</code>, <code>model.safetensors</code>, <code>config.json</code></li>
+        <li><strong>Meta SAM-3D-DINOv3:</strong> <code>sam-3d-dinov3/model.ckpt</code>, <code>model_config.yaml</code> (FIFA Skeletal Tracking Light)</li>
+        <li><strong>Meta Sapiens2:</strong> Pose checkpoints (<code>0.4B</code>, <code>1B</code>, <code>5B</code>) and DETR detector weights (<code>detr-resnet-101-dc5</code>)</li>
+        <li><strong>Google MediaPipe:</strong> Pose heavy/lite tasks, face mesh, hand tracking, athlete face cropper, and selfie segmenters</li>
+        <li><strong>Ultralytics YOLO:</strong> Pose checkpoints (<code>yolo26*-pose.pt</code>), detection/segmentation weights (<code>yolo26*.pt</code>, <code>best.pt</code>), exported ONNX models, and TensorRT engines</li>
+        <li><strong>Re-ID &amp; Kinematics:</strong> OSNet models (<code>osnet_x0_25_msmt17.pt/.onnx</code>) and gait models</li>
+      </ul>
+    </li>
+    <li><strong>Core Dependencies:</strong> Audits 17 core libraries (including <code>ezc3d</code>, <code>c3d</code>, <code>numpy</code>, <code>pandas</code>, <code>scipy</code>, <code>matplotlib</code>, <code>torch</code>, <code>ultralytics</code>, <code>cv2</code>, <code>mediapipe</code>, <code>huggingface_hub</code>, <code>open3d</code>, <code>pyvista</code>, <code>dask</code>, <code>rich</code>, <code>tqdm</code>).</li>
+    <li><strong>Virtual Environment Detection:</strong> Automatically identifies whether the Python session is running inside <code>.venv</code>, locates the virtual environment root directory, and provides copyable activation commands for Linux, macOS, Windows PowerShell, and Windows CMD.</li>
+    <li><strong>IPython Quickstart &amp; Cheatsheet:</strong> Details how to launch interactive IPython sessions inside <code>.venv</code> for custom biomechanical calculations, matrix manipulations, and ad-hoc scripting.</li>
+    <li><strong>Direct Terminal Launcher:</strong> A single click in the GUI opens a new terminal window on the current operating system with the <code>.venv</code> pre-activated or launches IPython directly.</li>
+  </ul>
+
+  <h2>GUI</h2>
+  <p>Click the <strong>imagination!</strong> button on the bottom of the main <code>vaila.py</code> window:</p>
+  <ul>
+    <li><strong>Tab 1: Installed Packages &amp; System:</strong> Package versions table with C3D status, OS, Python executable, and GPU hardware.</li>
+    <li><strong>Tab 2: AI Models &amp; Hugging Face:</strong> Hugging Face authentication card and structured inventory of downloaded AI tracking checkpoints with sizes and status.</li>
+    <li><strong>Tab 3: Terminal &amp; IPython Guide:</strong> Monospace guide with copyable terminal commands and interactive C3D snippets.</li>
+    <li><strong>Action Buttons:</strong> Copy Activation Command, Copy Full Report, Open Terminal (.venv), Launch IPython in Terminal.</li>
+  </ul>
+
+  <h2>CLI Usage</h2>
+  <pre><code># Print complete environment, GPU, Hugging Face, and AI models report
+uv run vaila/vaila_env.py
+uv run vaila.py --env-info</code></pre>
+
+  <div class="footer">vailá — Versatile Anarcho Integrated Liberation Ánalysis</div>
+</div></body>
+</html>
+

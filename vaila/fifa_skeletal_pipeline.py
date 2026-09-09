@@ -173,8 +173,9 @@ class FifaSam3dBodyModel:
     """Wraps ``SAM3DBodyEstimator`` + Body25 keypoint selection (70 → 25)."""
 
     def __init__(self, device: str = "cuda") -> None:
-        from sam_3d_body import SAM3DBodyEstimator  # ty: ignore[unresolved-import]
         from sam_3d_body.build_models import load_sam_3d_body  # ty: ignore[unresolved-import]
+
+        from sam_3d_body import SAM3DBodyEstimator  # ty: ignore[unresolved-import]
 
         ckpt = Path(os.environ.get("SAM3D_CHECKPOINT", "")).expanduser()
         mhr = Path(os.environ.get("SAM3D_MHR", "")).expanduser()

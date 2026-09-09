@@ -144,8 +144,8 @@ References:
 import argparse
 import json
 import os
-import tempfile
 import subprocess
+import tempfile
 import time
 import tkinter as tk
 from datetime import datetime

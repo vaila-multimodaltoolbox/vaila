@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 155 | **Categories:** 7 | **Generated on:** 08/09/2026 (v0.3.130)
+**Documented topics:** 157 | **Categories:** 7 | **Generated on:** 09/09/2026 (v0.3.131)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -40,7 +40,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](mocap_analysis.html) · [Markdown](mocap_analysis.md)
 - **mp_facemesh_help** — Welcome to the Face Mesh Analysis module. This tool performs batch processing of videos for 2D face mesh detection using MediaPipe's FaceMesh model. It proce...
   - [HTML](mp_facemesh_help.html) · [Markdown](mp_facemesh_help.md)
-- **pynalty_help** — Penalty analysis with didactic wizard, ball path, GK reach/time, EN/PT HTML reports and database CSV.
+- **pynalty_help** — Projeto / Project: vailá Multimodal Toolbox
   - [HTML](pynalty_help.html) · [Markdown](pynalty_help.md)
 - **run_vector_coding** — Time normalize data to n_points.
   - [HTML](run_vector_coding.html) · [Markdown](run_vector_coding.md)
@@ -138,7 +138,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](modifylabref.html) · [Markdown](modifylabref.md)
 - **monocular_dlt_align** — What problem this solves
   - [HTML](monocular_dlt_align.html) · [Markdown](monocular_dlt_align.md)
-- **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: calibrate first (clicks + typed real length or width/height), then click points and classify the set as Distance, Area, Veloc...
+- **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: calibrate first, then click points on the video and classify the current point set as D...
   - [HTML](quickmeasure.html) · [Markdown](quickmeasure.md)
 - **readc3d_export** — This script processes .c3d files, extracting marker data, analog data, events, and points residuals, and saves them into CSV files. It also allows the option...
   - [HTML](readc3d_export.html) · [Markdown](readc3d_export.md)
@@ -161,12 +161,14 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **reid_markers** — Marker Re-identification Tool - reid_markers.py
   - [HTML](reid_markers.html) · [Markdown](reid_markers.md)
 
-## Tools (54)
+## Tools (56)
 
 - **batchcut** — Batch Video Cutting Script with GPU Acceleration
   - [HTML](batchcut.html) · [Markdown](batchcut.md)
 - **brainstorm** — brainstorm.py is a Tkinter workspace for creative text workflows inside vailá. It records or loads audio, transcribes speech, edits text prompts, generates m...
   - [HTML](brainstorm.html) · [Markdown](brainstorm.md)
+- **c3d_metadata** — GUI: Frame C → Data Files → C3D Metadata (C_A_r2_c2), also accessible from the C3D <--> CSV (C_A_r1_c2) menu dialog
+  - [HTML](c3d_metadata.html) · [Markdown](c3d_metadata.md)
 - **codec_benchmark** — Systematically benchmarks H.264, H.265 (HEVC), and H.266 (VVC) codecs on a dataset of videos.
   - [HTML](codec_benchmark.html) · [Markdown](codec_benchmark.md)
 - **compress_videos_h264** — Compresses videos in a specified directory to H.264 (AVC) format using FFmpeg.
@@ -191,7 +193,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](edit_csv_c3d.html) · [Markdown](edit_csv_c3d.md)
 - **ellipse** — The module includes:
   - [HTML](ellipse.html) · [Markdown](ellipse.md)
-- **extractpng** — vailá Video ↔ PNG tool: extract PNG frames from videos, build videos from PNG
+- **extractpng** — vailá Video ↔ PNG tool: high-performance video-to-PNG extraction and PNG-to-video creation accelerated by NVIDIA GPU hardware (NVDEC decoding & NVENC encodin...
   - [HTML](extractpng.html) · [Markdown](extractpng.md)
 - **filemanager** — GUI toolkit for file operations (copy, move, remove, import/export, rename, tree, find, transfer). Provides terminal feedback for each action and supports pa...
   - [HTML](filemanager.html) · [Markdown](filemanager.md)
@@ -259,6 +261,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](vaila_datdistort.html) · [Markdown](vaila_datdistort.md)
 - **vaila_distortvideo_gui** — This script processes videos applying lens distortion correction based on
   - [HTML](vaila_distortvideo_gui.html) · [Markdown](vaila_distortvideo_gui.md)
+- **vaila_env** — GUI: Bottom Toolbar → imagination! (or Help menu)
+  - [HTML](vaila_env.html) · [Markdown](vaila_env.md)
 - **vaila_iaudiovid** — Video Audio Processing Tool - vaila_iaudiovid.py
   - [HTML](vaila_iaudiovid.html) · [Markdown](vaila_iaudiovid.md)
 - **vaila_lensdistortvideo** — Camera Calibration Parameters and Their Meanings

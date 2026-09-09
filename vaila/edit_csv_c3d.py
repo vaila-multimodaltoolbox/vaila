@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 August 2026
-Update Date: 24 August 2026
-Version: 0.3.111
+Update Date: 09 September 2026
+Version: 0.3.131
 
 Description:
 Edit CSV/C3D (Frame C button `C_A_r1_c1`). Opens a directory that holds
@@ -49,6 +49,7 @@ Notes:
 """
 
 import argparse
+import contextlib
 import glob
 import os
 import shutil
@@ -244,12 +245,27 @@ def run_edit_csv_c3d(
     # mainloop()/destroy() lifecycle; the picker root above is already gone
     # by the time this runs, so this is the only live Tk root at this point.
     app = ColumnReorderGUI(original_headers, staged_names, staging_dir)
+    app.original_input_dir = input_dir
     app.mainloop()
 
-    written = _finalize_from_staging(entries, staging_dir, output_dir)
-    print(f"Edit CSV/C3D: wrote {len(written)} file(s) to {output_dir}")
-    for path in written:
-        print(f"  - {path}")
+    # Check whether user saved changes (either marked saved or wrote into data_rearranged)
+    rearranged_dir = os.path.join(staging_dir, "data_rearranged")
+    has_edits = getattr(app, "saved", False) or (
+        os.path.isdir(rearranged_dir) and bool(os.listdir(rearranged_dir))
+    )
+
+    if has_edits:
+        written = _finalize_from_staging(entries, staging_dir, output_dir)
+        print(f"Edit CSV/C3D: wrote {len(written)} file(s) to {output_dir}")
+        for path in written:
+            print(f"  - {path}")
+    else:
+        print("Edit CSV/C3D: closed without saving. No files written.")
+        if os.path.isdir(staging_dir):
+            shutil.rmtree(staging_dir, ignore_errors=True)
+        if os.path.isdir(output_dir) and not os.listdir(output_dir):
+            with contextlib.suppress(OSError):
+                os.rmdir(output_dir)
 
 
 def main() -> None:

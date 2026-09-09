@@ -6,7 +6,7 @@ import re
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console, Group
 from rich.panel import Panel
@@ -15,10 +15,10 @@ from rich.text import Text
 from vaila.vaila_cli_hints import CliRunHint, get_cli_hint
 
 if TYPE_CHECKING:
-    from vaila import Vaila
+    from vaila import Vaila  # ty: ignore[unresolved-import]
 
-__version__ = "0.3.120"
-__updated__ = "03 September 2026"
+__version__ = "0.3.131"
+__updated__ = "09 September 2026"
 
 _ROW_RE = re.compile(r"_r(\d+)_")
 _COL_RE = re.compile(r"_c(\d+)$")
@@ -33,7 +33,7 @@ class VailaMenuEntry:
     handler: str  # Vaila method name or external:* key
 
 
-_EXTERNAL_HANDLERS: dict[str, Callable[[], None]] = {
+_EXTERNAL_HANDLERS: dict[str, Callable[[], Any]] = {
     "external:mne_overview": lambda: webbrowser.open(
         "https://mne.tools/dev/auto_tutorials/intro/10_overview.html"
     ),
@@ -104,7 +104,7 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     VailaMenuEntry("C_A_r1_c2", "C_A", "Data Files", "C3D <--> CSV", "convert_c3d_csv"),
     VailaMenuEntry("C_A_r1_c3", "C_A", "Data Files", "Smooth & Filter", "gapfill_split"),
     VailaMenuEntry("C_A_r2_c1", "C_A", "Data Files", "DLT/REC 2D-3D", "dlt_rec_toolkit"),
-    VailaMenuEntry("C_A_r2_c2", "C_A", "Data Files", "vailá", "show_vaila_message"),
+    VailaMenuEntry("C_A_r2_c2", "C_A", "Data Files", "C3D Metadata", "edit_c3d_metadata"),
     VailaMenuEntry("C_A_r2_c3", "C_A", "Data Files", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_A_r3_c1", "C_A", "Data Files", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_A_r3_c2", "C_A", "Data Files", "vailá", "show_vaila_message"),

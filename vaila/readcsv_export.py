@@ -3,9 +3,9 @@
 readcsv_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Version: 0.3.114
+Version: 0.3.131
 Created: 25 September 2024
-Last Updated: 25 August 2026
+Last Updated: 09 September 2026
 Python Version: 3.12.14
 
 Description:
@@ -722,6 +722,7 @@ def auto_create_c3d_from_csv(
     conversion_factor=1,
     sort_markers=False,
     point_units=None,
+    verbose: bool = False,
 ):
     """
     Create a C3D file from the given points DataFrame and automatically
@@ -737,21 +738,25 @@ def auto_create_c3d_from_csv(
         sort_markers (bool): Whether to sort marker labels alphabetically.
         point_units (str, optional): POINT:UNITS string (e.g. "m", "mm"). If None,
             uses "mm" when conversion_factor==1000 else "m".
+        verbose (bool): Whether to print debug information during creation.
 
     Raises:
         Exception: If there is an error writing the C3D file.
     """
-    print("Creating C3D from CSV (auto mode)...")
+    if verbose:
+        print("Creating C3D from CSV (auto mode)...")
 
     try:
         c3d = ezc3d.c3d()
-        print("Initialized empty C3D object.")
+        if verbose:
+            print("Initialized empty C3D object.")
     except Exception as e:
         raise Exception(f"Failed to initialize C3D object: {e}")
 
     try:
         points_df = validate_and_filter_columns(points_df)
-        print("Filtered and sanitized columns for points:", points_df.columns.tolist())
+        if verbose:
+            print("Filtered and sanitized columns for points:", points_df.columns.tolist())
     except Exception as e:
         raise Exception(f"Failed to validate and filter columns: {e}")
 
@@ -759,7 +764,8 @@ def auto_create_c3d_from_csv(
         marker_labels = [col.rsplit("_", 1)[0] for col in points_df.columns[1::3]]
         if sort_markers:
             marker_labels.sort()
-        print("Marker labels for C3D:", marker_labels)
+        if verbose:
+            print("Marker labels for C3D:", marker_labels)
 
         if not marker_labels:
             raise Exception(
@@ -779,7 +785,8 @@ def auto_create_c3d_from_csv(
 
     num_markers = len(marker_labels)
     num_frames = len(points_df)
-    print(f"Number of markers: {num_markers}, Number of frames: {num_frames}")
+    if verbose:
+        print(f"Number of markers: {num_markers}, Number of frames: {num_frames}")
 
     if num_frames == 0:
         raise Exception("CSV file contains no data rows")
@@ -794,7 +801,8 @@ def auto_create_c3d_from_csv(
         # coordinates with a valid residual instead would park every occluded
         # marker on the world origin, which viewers draw as a real marker.
         residuals_data = np.zeros((1, num_markers, num_frames))
-        print("Initialized points data array with shape:", points_data.shape)
+        if verbose:
+            print("Initialized points data array with shape:", points_data.shape)
     except Exception as e:
         raise Exception(f"Failed to initialize points data array: {e}")
 
@@ -820,10 +828,11 @@ def auto_create_c3d_from_csv(
 
             invalid = np.isnan(x_data) | np.isnan(y_data) | np.isnan(z_data)
             if np.any(invalid):
-                print(
-                    f"Info: {int(invalid.sum())} occluded sample(s) in marker {label}, "
-                    "flagged invalid in C3D (residual = -1)"
-                )
+                if verbose:
+                    print(
+                        f"Info: {int(invalid.sum())} occluded sample(s) in marker {label}, "
+                        "flagged invalid in C3D (residual = -1)"
+                    )
                 x_data = np.nan_to_num(x_data, nan=0.0)
                 y_data = np.nan_to_num(y_data, nan=0.0)
                 z_data = np.nan_to_num(z_data, nan=0.0)
@@ -841,7 +850,8 @@ def auto_create_c3d_from_csv(
 
     try:
         c3d["data"]["points"] = points_data
-        print("Points data assigned to C3D successfully.")
+        if verbose:
+            print("Points data assigned to C3D successfully.")
     except Exception as e:
         raise Exception(f"Failed to assign points data to C3D: {e}")
 
@@ -849,25 +859,29 @@ def auto_create_c3d_from_csv(
     if np.any(residuals_data < 0):
         try:
             c3d["data"]["meta_points"]["residuals"] = residuals_data
-            print(
-                f"Flagged {int((residuals_data < 0).sum())} occluded marker-samples "
-                "as invalid (residual = -1)."
-            )
+            if verbose:
+                print(
+                    f"Flagged {int((residuals_data < 0).sum())} occluded marker-samples "
+                    "as invalid (residual = -1)."
+                )
         except Exception as e:
-            print(f"Warning: Could not set invalid-point residuals: {e}")
+            if verbose:
+                print(f"Warning: Could not set invalid-point residuals: {e}")
 
     # POINT:FRAMES (total frame count) for reader/tool compatibility
     try:
         c3d["parameters"]["POINT"]["FRAMES"]["value"] = [num_frames]
     except Exception as e:
-        print(f"Warning: Could not set POINT:FRAMES: {e}")
+        if verbose:
+            print(f"Warning: Could not set POINT:FRAMES: {e}")
 
     # Handle analog data if provided
     if analog_df is not None:
         try:
             analog_labels = list(analog_df.columns[1:])
             num_analog = len(analog_labels)
-            print(f"Processing {num_analog} analog channels")
+            if verbose:
+                print(f"Processing {num_analog} analog channels")
 
             if num_analog > 0:
                 c3d["parameters"]["ANALOG"]["LABELS"]["value"] = analog_labels
@@ -881,9 +895,10 @@ def auto_create_c3d_from_csv(
                         analog_values = analog_df[label].values
                         # Handle NaN values in analog data
                         if np.any(np.isnan(analog_values)):
-                            print(
-                                f"Warning: NaN values found in analog channel {label}, replacing with 0"
-                            )
+                            if verbose:
+                                print(
+                                    f"Warning: NaN values found in analog channel {label}, replacing with 0"
+                                )
                             analog_values = np.nan_to_num(analog_values, nan=0.0)
                         analog_data[0, i, :] = analog_values
                     except KeyError as e:
@@ -892,19 +907,23 @@ def auto_create_c3d_from_csv(
                         raise Exception(f"Error processing analog data for channel '{label}': {e}")
 
                 c3d["data"]["analogs"] = analog_data
-                print(f"Analog data assigned to C3D successfully. Shape: {analog_data.shape}")
+                if verbose:
+                    print(f"Analog data assigned to C3D successfully. Shape: {analog_data.shape}")
             else:
-                print("No analog channels found, skipping analog data")
+                if verbose:
+                    print("No analog channels found, skipping analog data")
 
         except Exception as e:
-            print(f"Warning: Failed to process analog data: {e}")
-            print("Continuing without analog data...")
+            if verbose:
+                print(f"Warning: Failed to process analog data: {e}")
+                print("Continuing without analog data...")
 
     try:
         # Convert Path object to string for ezc3d compatibility
         output_path_str = str(output_path)
         c3d.write(output_path_str)
-        print(f"C3D file saved successfully to {output_path_str}")
+        if verbose:
+            print(f"C3D file saved successfully to {output_path_str}")
     except Exception as e:
         raise Exception(f"Failed to save C3D file to {output_path}: {e}")
 

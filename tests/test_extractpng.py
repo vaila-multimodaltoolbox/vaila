@@ -81,3 +81,112 @@ def test_build_cli_argv_extract() -> None:
 
 def test_help_exits_zero() -> None:
     assert ep.main(["--help"]) == 0
+
+
+def test_get_cuda_status() -> None:
+    status = ep.get_cuda_status()
+    assert "has_nvidia" in status
+    assert "device_name" in status
+    assert "ffmpeg_cuda" in status
+    assert "ffmpeg_nvenc" in status
+    assert status["recommended_hwaccel"] in ("cuda", "auto")
+
+
+def test_build_extract_png_command_cuda_and_fast_compression() -> None:
+    cmd = ep.build_extract_png_command(
+        "/data/clip.mp4",
+        "/out/%09d.png",
+        width=1920,
+        height=1080,
+        orig_width=1920,
+        orig_height=1080,
+        hwaccel="cuda",
+        compression_level=1,
+    )
+    assert "-hwaccel" in cmd
+    assert cmd[cmd.index("-hwaccel") + 1] == "cuda"
+    assert cmd.index("-hwaccel") < cmd.index("-i")
+    # Redundant scaling skipped when dimensions match native video
+    assert "-vf" not in cmd
+    assert "-compression_level" in cmd
+    assert cmd[cmd.index("-compression_level") + 1] == "1"
+    assert "-pred" in cmd
+    assert cmd[cmd.index("-pred") + 1] == "none"
+
+
+def test_build_extract_png_command_with_rescaling() -> None:
+    cmd = ep.build_extract_png_command(
+        "/data/clip.mp4",
+        "/out/%09d.png",
+        width=1280,
+        height=720,
+        orig_width=1920,
+        orig_height=1080,
+        hwaccel="cuda",
+        compression_level=6,
+    )
+    assert "-vf" in cmd
+    assert "scale=1280:720:flags=lanczos" in cmd[cmd.index("-vf") + 1]
+    assert cmd[cmd.index("-compression_level") + 1] == "6"
+
+
+def test_build_select_frame_command_cuda() -> None:
+    cmd = ep.build_select_frame_command("v.mp4", 12, "out/frame_012.png", hwaccel="cuda")
+    assert "-hwaccel" in cmd
+    assert cmd[cmd.index("-hwaccel") + 1] == "cuda"
+    assert cmd.index("-hwaccel") < cmd.index("-i")
+
+
+def test_build_png_to_video_nvenc() -> None:
+    cmd_h264 = ep.build_png_to_video_command(
+        "d/%09d.png", "out.mp4", fps=30.0, codec="264", hwaccel="cuda"
+    )
+    assert "h264_nvenc" in cmd_h264
+
+    cmd_hevc = ep.build_png_to_video_command(
+        "d/%09d.png", "out.mp4", fps=30.0, codec="265", hwaccel="cuda"
+    )
+    assert "hevc_nvenc" in cmd_hevc
+
+
+def test_build_cli_argv_options() -> None:
+    argv = ep.build_cli_argv(
+        "extract",
+        input_path="/videos",
+        output_path="/out",
+        hwaccel="cuda",
+        compression=1,
+        workers=3,
+    )
+    assert "--hwaccel" in argv
+    assert "cuda" in argv
+    assert "--workers" in argv
+    assert "3" in argv
+
+
+def test_extractpng_cli_argparser() -> None:
+    parser = ep.build_arg_parser()
+    args = parser.parse_args(
+        ["extract", "-i", "/videos", "--hwaccel", "cuda", "-c", "1", "-j", "4"]
+    )
+    assert args.command == "extract"
+    assert args.hwaccel == "cuda"
+    assert args.compression == 1
+    assert args.workers == 4
+
+
+def test_extractpng_gui_builds() -> None:
+    import tkinter as tk
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError:
+        pytest.skip("No display available for Tkinter GUI test")
+
+    try:
+        app = ep.ExtractPngApp(root)
+        assert "NVIDIA GPU" in app.root.title() or "Video ↔ PNG" in app.root.title()
+        app.root.destroy()
+    finally:
+        root.destroy()

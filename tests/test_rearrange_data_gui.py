@@ -57,9 +57,7 @@ def test_column_reorder_gui_groups_buttons_into_labelframes(tmp_path) -> None:
     try:
         widgets = list(_walk(dlg))
 
-        section_titles = {
-            str(w.cget("text")) for w in widgets if w.winfo_class() == "TLabelframe"
-        }
+        section_titles = {str(w.cget("text")) for w in widgets if w.winfo_class() == "TLabelframe"}
         missing_sections = set(EXPECTED_SECTIONS) - section_titles
         assert not missing_sections, f"missing button sections: {missing_sections}"
 
@@ -75,5 +73,31 @@ def test_column_reorder_gui_groups_buttons_into_labelframes(tmp_path) -> None:
                 assert w.master in labelframes, (
                     f"button {w.cget('text')!r} is not parented under a LabelFrame section"
                 )
+    finally:
+        dlg.destroy()
+
+
+def test_column_reorder_gui_c3d_metadata_integration(tmp_path) -> None:
+    tkinter = pytest.importorskip("tkinter")
+    try:
+        probe = tkinter.Tk()
+        probe.destroy()
+    except tkinter.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+
+    from vaila.rearrange_data import ColumnReorderGUI
+
+    dlg = ColumnReorderGUI(
+        original_headers=["Column1", "Column2"],
+        file_names=["Empty"],
+        directory_path=str(tmp_path),
+    )
+    dlg.withdraw()
+    try:
+        assert hasattr(dlg, "open_c3d_metadata")
+
+        widgets = list(_walk(dlg))
+        button_texts = {str(w.cget("text")) for w in widgets if w.winfo_class() == "TButton"}
+        assert "C3D Metadata (Edit/Create)" in button_texts
     finally:
         dlg.destroy()

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vailá - C3D Metadata Editor &amp; Creator</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 36px; line-height: 1.6; background: #f5f5f5; color: #222; }
+    .container { max-width: 980px; margin: auto; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 2px 10px #0002; }
+    h1 { color: #24384d; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+    h2 { color: #34495e; margin-top: 28px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+    code { background: #eef1f5; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f4f6f8; border: 1px solid #dce1e6; padding: 14px; overflow-x: auto; }
+    .info { background: #eef6fb; border-left: 4px solid #3498db; padding: 12px 15px; }
+    .ok { background: #edf8f0; border: 1px solid #a9d7b2; padding: 12px 15px; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
+  </style>
+</head>
+<body><div class="container">
+  <h1>C3D Metadata Editor &amp; Creator (<code>c3d_metadata.py</code>)</h1>
+  <div class="info">
+    <strong>Category:</strong> Data Files &nbsp;|&nbsp;
+    <strong>Version:</strong> 0.3.131 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-09-09<br>
+    <strong>GUI:</strong> Frame C → Data Files → <strong>C3D Metadata</strong> (<code>C_A_r2_c2</code>)<br>
+    <strong>CLI:</strong> Yes (<code>uv run vaila/c3d_metadata.py</code> or <code>uv run vaila.py --metadata</code>)
+  </div>
+
+  <h2>Purpose</h2>
+  <p>C3D is the biomechanics standard binary format for motion capture marker coordinates and synchronized analog signals (force plates, EMG).
+  The <code>c3d_metadata.py</code> module provides an end-to-end tool to:</p>
+  <ul>
+    <li><strong>Inspect C3D Metadata:</strong> View manufacturer details, point frame rate (FPS), point coordinates units, marker count, frame count, analog channels, analog sampling rate, subframe ratio, force platforms, and events.</li>
+    <li><strong>Edit Existing C3D Files:</strong> Modify point frequency, coordinates units (with automatic coordinate scaling between <code>mm</code> and <code>m</code>), analog sampling rates, manufacturer name, and software tag.</li>
+    <li><strong>Synchronize Analog Invariants:</strong> Automatically maintains <code>ANALOG:RATE = POINT:RATE * subframe_ratio</code>, preventing frame count mismatch errors when saving.</li>
+    <li><strong>Sanitize Character Encoding:</strong> Cleans Latin-1 / non-ASCII units (such as <code>mm/s²</code>) to UTF-8 before passing to C++ <code>ezc3d</code> SWIG bindings, preventing write crashes.</li>
+    <li><strong>Create New C3D Template Files:</strong> Generate clean, valid C3D files with user-defined frames, markers, analog channels, and sample rates.</li>
+  </ul>
+
+  <h2>GUI</h2>
+  <p>Click <strong>C3D Metadata</strong> in Frame C (<code>C_A_r2_c2</code>) or select <strong>C3D Metadata (Edit/Create)</strong> inside the <strong>C3D &lt;--&gt; CSV</strong> dialog.</p>
+
+  <h2>CLI Usage</h2>
+  <pre><code># Launch GUI
+uv run vaila/c3d_metadata.py
+uv run vaila.py --metadata
+
+# Inspect metadata headlessly
+uv run vaila/c3d_metadata.py --show /path/to/trial.c3d
+
+# Modify C3D parameters
+uv run vaila/c3d_metadata.py -i input.c3d -o output.c3d --fps 120.0 --point-units m --scale-coords --manufacturer "Qualisys"
+
+# Create a new template C3D file
+uv run vaila/c3d_metadata.py --create -o template.c3d --fps 100 --frames 200 --markers 10 --analogs 8</code></pre>
+
+  <div class="footer">vailá — Versatile Anarcho Integrated Liberation Ánalysis</div>
+</div></body>
+</html>
