@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><i>vailá</i> — Install &amp; Run Guide</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <main>
+    <h1><i>vailá</i> — Install &amp; Run Guide</h1>
+    <p class="tagline">
+      Detailed, platform-by-platform install and troubleshooting for Linux,
+      Windows, and macOS. For the quick one-liners and GUI/CLI overview, see
+      <a href="../README.md">README</a>.
+    </p>
+
+    <nav class="quick-jump">
+      Quick jump:
+      <a href="#linux">Linux</a>
+      <a href="#windows">Windows</a>
+      <a href="#macos">macOS</a>
+    </nav>
+
+    <div class="section" id="linux">
+      <h2>Linux</h2>
+      <h3>One-line install</h3>
+      <pre><code>wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh | bash</code></pre>
+      <h3>Clone-first install (recommended)</h3>
+      <pre><code>git clone https://github.com/vaila-multimodaltoolbox/vaila.git
+cd vaila
+bash install_vaila_linux.sh</code></pre>
+      <h3>What <code>install_vaila_linux.sh</code> does</h3>
+      <ol>
+        <li>Installs system dependencies via <code>apt</code>; self-installs <code>uv</code> if missing.</li>
+        <li>Pins Python <code>3.12.14</code>.</li>
+        <li>Detects an NVIDIA GPU and prompts for optional extras (<code>gpu</code>, <code>sam</code>, <code>sapiens</code>, <code>fifa</code>).</li>
+        <li>Copies the matching template (<code>pyproject_linux_cuda12.toml</code> or <code>pyproject_universal_cpu.toml</code>) over <code>pyproject.toml</code> <strong>before</strong> creating the virtual environment.</li>
+        <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic; verifies CUDA wheels and the Sapiens2 editable install when selected.</li>
+        <li>Adds a desktop entry and SSH-transfer setup for the File Manager.</li>
+      </ol>
+      <h3>GPU vs CPU-only</h3>
+      <p>NVIDIA CUDA 12.8 + TensorRT is used automatically when a compatible GPU is
+      detected; otherwise CPU-only. See README's Cross-Platform support note for the
+      full matrix (SAM 3 video needs CUDA — no CPU/MPS path).</p>
+      <h3>Troubleshooting</h3>
+      <ul class="tight">
+        <li><strong>Permission denied (publickey)</strong> during Git LFS / clone / update check: your <code>origin</code> remote is SSH-based; re-clone with HTTPS instead, or add a GitHub SSH key.</li>
+        <li>If <code>uv sync</code> fails partway through an extra, re-run the install script — it re-applies the template and retries idempotently.</li>
+      </ul>
+    </div>
+
+    <div class="section" id="windows">
+      <h2>Windows</h2>
+      <h3>One-line install (PowerShell)</h3>
+      <pre><code>[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_win.ps1 | iex</code></pre>
+      <h3>Clone-first install (recommended)</h3>
+      <pre><code>git clone https://github.com/vaila-multimodaltoolbox/vaila.git
+cd vaila
+powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1</code></pre>
+      <p><strong>SSH clone on Windows:</strong> if checkout fails on a Git LFS asset
+      with <code>Permission denied (publickey)</code>, clone with HTTPS (above)
+      instead of an SSH remote.</p>
+      <h3>What <code>install_vaila_win.ps1</code> does</h3>
+      <ol>
+        <li>Self-installs <code>uv</code> (winget or official installer) if missing.</li>
+        <li>Pins Python <code>3.12.14</code>.</li>
+        <li>Detects an NVIDIA GPU and prompts for optional extras (<code>gpu</code>, <code>sam</code>, <code>sapiens</code>, <code>fifa</code>).</li>
+        <li>Copies the matching template (<code>pyproject_win_cuda12.toml</code> or <code>pyproject_universal_cpu.toml</code>) over <code>pyproject.toml</code> <strong>before</strong> <code>uv venv</code>/<code>uv sync</code>.</li>
+        <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic.</li>
+        <li>Adds PowerShell/batch launchers, Desktop and Start Menu shortcuts, and a Windows Terminal profile.</li>
+      </ol>
+      <h3>GPU vs CPU-only</h3>
+      <p>NVIDIA CUDA 12.1 + TensorRT is used automatically when detected; otherwise
+      CPU-only. See README's Windows section for the Local/Portable vs profile-install
+      path choice.</p>
+      <h3>Troubleshooting</h3>
+      <ul class="tight">
+        <li><strong>"Running scripts is disabled":</strong> run <code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code> first, or use the <code>-ExecutionPolicy Bypass -File</code> form shown above.</li>
+        <li><strong>Permission denied (publickey)</strong> when checking for updates: your git <code>origin</code> remote is SSH-based; re-clone with HTTPS or configure a GitHub SSH key.</li>
+      </ul>
+    </div>
+
+    <div class="section" id="macos">
+      <h2>macOS</h2>
+      <h3>One-line install</h3>
+      <pre><code>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"</code></pre>
+      <h3>Clone-first install (recommended)</h3>
+      <pre><code>git clone https://github.com/vaila-multimodaltoolbox/vaila.git
+cd vaila
+bash install_vaila_mac.sh</code></pre>
+      <h3>What <code>install_vaila_mac.sh</code> does</h3>
+      <ol>
+        <li>Installs system dependencies via Homebrew; self-installs <code>uv</code> if missing.</li>
+        <li>Pins Python <code>3.12.14</code>.</li>
+        <li>Prompts for optional extras (<code>gpu</code>/<code>sam</code>/<code>sapiens</code>/<code>fifa</code> as applicable to Apple hardware).</li>
+        <li>Copies <code>pyproject_macos.toml</code> (Metal/MPS) over <code>pyproject.toml</code> <strong>before</strong> creating the virtual environment.</li>
+        <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic.</li>
+        <li>Builds a full <code>.app</code> bundle (with icon conversion) for Applications/Launchpad.</li>
+      </ol>
+      <h3>GPU vs CPU-only</h3>
+      <p>Apple Silicon uses Metal/MPS automatically via the general PyTorch stack;
+      Intel Macs fall back to CPU-only. <a href="../vaila/help/vaila_sam.md">SAM 3
+      video</a> requires NVIDIA CUDA at runtime and has no MPS/CPU path — not usable
+      on macOS.</p>
+      <h3>Troubleshooting</h3>
+      <ul class="tight">
+        <li><strong>Homebrew missing:</strong> install it from <a href="https://brew.sh">brew.sh</a> first, then re-run the script.</li>
+        <li><strong>"App can't be opened because it is from an unidentified developer":</strong> right-click the <code>.app</code> in Applications and choose <strong>Open</strong> once to bypass Gatekeeper for an unsigned local build.</li>
+      </ul>
+    </div>
+
+    <div class="hero-card" id="running">
+      <h2>Running <i>vailá</i> after install</h2>
+      <p><strong>GUI:</strong> <code>uv run vaila.py</code></p>
+      <p><strong>CLI:</strong> see README's <em>Running <i>vailá</i> — GUI and CLI</em> section for per-module CLI invocation.</p>
+      <p class="secondary-links">
+        Updating / uninstalling: don't duplicate those steps here — see README's
+        <em>Staying up to date</em> note and <em>Uninstallation Instructions</em>
+        section, which stay the single source of truth.
+      </p>
+    </div>
+
+    <p>
+      See also: <a href="../README.md#installation-and-setup">Root README — Installation and Setup</a> ·
+      <a href="../AGENTS.md">AGENTS.md</a> ·
+      <a href="huggingface_setup.md">Hugging Face setup</a> ·
+      <a href="help.html">Help Index</a>
+    </p>
+
+    <footer>© 2026 <i>vailá</i> — <a href="help.html">Back to Help Index</a></footer>
+  </main>
+</body>
+
+</html>

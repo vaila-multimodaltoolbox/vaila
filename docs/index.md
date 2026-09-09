@@ -1,4 +1,4 @@
-# *vailá*
+# _vailá_
 
 **Versatile Anarcho Integrated Liberation Ánalysis** — open-source Python 3.12 toolbox for multimodal biomechanical and movement analysis (IMU, MoCap, markerless 2D/3D, EMG, force plates, GNSS/GPS, and more), with a Tkinter-based desktop GUI.
 
@@ -8,7 +8,7 @@
 
 Every module/tool help page (HTML + Markdown) is listed in one place:
 
-### [**Open *vailá* Help Index →**](../vaila/help/index.html)
+### [**Open _vailá_ Help Index →**](../vaila/help/index.html)
 
 > Same path on disk: `vaila/help/index.html` · Markdown: [`vaila/help/index.md`](../vaila/help/index.md)
 
@@ -30,6 +30,8 @@ uv run python bin/generate_help_index.py
 
 Optional stacks (CUDA/GPU templates, extras): root [`README.md`](../README.md) and [`AGENTS.md`](../AGENTS.md).
 
+> Note: `404.html`, `assets/`, `api/`, `sitemap.xml`, and the root `mkdocs.yml` are leftovers from an earlier, currently-unused MkDocs Material site build. The maintained docs are the hand-authored pages: this file, `help.md`, `help.html`, `install.md`, `install.html`, and `vaila_buttons/`.
+
 ### Quick run (after install)
 
 ```bash
@@ -38,6 +40,7 @@ uv run vaila.py
 
 ### Guides (optional deep dives)
 
+- [Install & run guide (Linux/Windows/macOS)](install.md)
 - [FIFA Skeletal Tracking Light workflow](fifa_workflow.md)
 - [vaila-ElasticKick (VEK)](vek.md)
 - [DLT 3D reconstruction and mesh alignment](dlt_reconstruction_and_mesh_alignment.md)
@@ -72,7 +75,7 @@ Licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0). See th
 
 Documentação HTML/Markdown por ferramenta: [`vaila/help/index.html`](../vaila/help/index.html).
 
-### O que é o *vailá*
+### O que é o _vailá_
 
 Caixa de ferramentas multimodal em Python 3.12 para análise do movimento e biomecânica, com interface desktop em Tkinter, integrando IMU, MoCap, rastreamento markerless 2D/3D, EMG, plataformas de força, GNSS/GPS e outros fluxos de dados.
 
@@ -88,6 +91,7 @@ uv run vaila.py
 
 ### Guias
 
+- [Instalação e execução](install.md)
 - [Workflow FIFA](fifa_workflow.md)
 - [VEK](vek.md)
 - [DLT 3D e alinhamento de mesh](dlt_reconstruction_and_mesh_alignment.md)
@@ -99,4 +103,4 @@ Ver seções em inglês acima (`CONTRIBUTING.md`, AGPL-3.0, BibTeX).
 
 ---
 
-© 2026 *vailá* — documentation entry: `docs/help.html`
+© 2026 _vailá_ — documentation entry: `docs/help.html`

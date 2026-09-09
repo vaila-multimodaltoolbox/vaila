@@ -1,4 +1,4 @@
-# *vailá*
+# _vailá_
 
 **Versatile Anarcho Integrated Liberation Ánalysis** — open-source Python 3.12 toolbox for multimodal biomechanical and movement analysis (IMU, MoCap, markerless 2D/3D, EMG, force plates, GNSS/GPS, and more), with a Tkinter-based desktop GUI.
 
@@ -8,7 +8,7 @@
 
 Every module/tool help page (HTML + Markdown) is listed in one place:
 
-### [**Open *vailá* Help Index →**](../vaila/help/index.html)
+### [**Open _vailá_ Help Index →**](../vaila/help/index.html)
 
 > Same path on disk: `vaila/help/index.html` · Markdown: [`vaila/help/index.md`](../vaila/help/index.md)
 
@@ -36,6 +36,7 @@ uv run vaila.py
 
 ### Guides (optional deep dives)
 
+- [Install & run guide (Linux/Windows/macOS)](install.md)
 - [FIFA Skeletal Tracking Light workflow](fifa_workflow.md)
 - [vaila-ElasticKick (VEK)](vek.md)
 - [DLT 3D reconstruction and mesh alignment](dlt_reconstruction_and_mesh_alignment.md)
@@ -51,7 +52,7 @@ See [`CONTRIBUTING.md`](../CONTRIBUTING.md), AGPL-3.0 `LICENSE`, and the BibTeX 
 
 ## Português — visão geral do projeto
 
-### [**Abrir índice de ajuda do *vailá* →**](../vaila/help/index.html)
+### [**Abrir índice de ajuda do _vailá_ →**](../vaila/help/index.html)
 
 Caixa de ferramentas multimodal em Python 3.12 para análise do movimento e biomecânica (Tkinter), com Frames A/B/C para arquivos, análise e ferramentas.
 
@@ -59,8 +60,8 @@ Caixa de ferramentas multimodal em Python 3.12 para análise do movimento e biom
 uv run vaila.py
 ```
 
-Guias: [FIFA](fifa_workflow.md) · [VEK](vek.md) · [DLT](dlt_reconstruction_and_mesh_alignment.md) · [botões](vaila_buttons/README.md).
+Guias: [instalação](install.md) · [FIFA](fifa_workflow.md) · [VEK](vek.md) · [DLT](dlt_reconstruction_and_mesh_alignment.md) · [botões](vaila_buttons/README.md).
 
 ---
 
-© 2026 *vailá* — documentation entry: `docs/help.html`
+© 2026 _vailá_ — documentation entry: `docs/help.html`

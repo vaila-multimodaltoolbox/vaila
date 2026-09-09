@@ -285,6 +285,8 @@ vaila
 
 ## Installation and Setup
 
+For a more detailed, platform-by-platform walkthrough (including troubleshooting), see **[docs/install.md](docs/install.md)** (also available as **[docs/install.html](docs/install.html)**).
+
 ### ⚡ Engine: Powered by _uv_
 
 _vailá_ uses **[uv](https://github.com/astral-sh/uv)**, an extremely fast Python package installer and resolver, written in Rust. **uv is the single, official installation method for all platforms** (Windows, Linux, macOS).
@@ -847,6 +849,7 @@ Every module and script in vailá — description, GUI button location, required
 - **[Project Documentation](docs/index.md)** - Overview and module documentation
 - **[Hugging Face setup (per PC)](docs/huggingface_setup.md)** - Gated SAM / SAM 3D / Sapiens2 login + download
 - **[Help Guide](docs/help.md)** - User guide and installation instructions
+- **[Install & Run Guide](docs/install.md)** - Detailed Linux/Windows/macOS install, GPU template selection, and troubleshooting
 - **[GUI Button Documentation](docs/vaila_buttons/README.md)** - Complete documentation for all GUI buttons
 
 ---
@@ -912,7 +915,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current package line in the checked-in tree: **`0.3.122`**, matching the GUI/CLI banners in `vaila.py`.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Current package line in the checked-in tree: **`0.3.122`**. This can differ from the **GUI/CLI banner** in `vaila.py` (currently **`0.3.130`**) — the banner is bumped on every script change per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

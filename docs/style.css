@@ -1,55 +1,117 @@
+/* Shared stylesheet for hand-authored docs/*.html pages.
+   Palette matches docs/help.html's inline styles so install.html and
+   help.html read as one family. Not used by docs/404.html or docs/assets/
+   (those belong to a separate, unused MkDocs Material build). */
+
 body {
-    font-family: Arial, sans-serif;
-    background-color: #f8f9fa;
-    margin: 0;
-    padding: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  line-height: 1.6;
+  color: #1a1a1a;
+  background: #f0f2f5;
 }
 
-.container {
-    max-width: 800px;
-    margin: auto;
-    padding: 17px;
-    background-color: #fff;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
 }
 
-h1, h2, h3 {
-    color: #343a40;
+h1,
+h2,
+h3 {
+  color: #1e3a5f;
 }
 
-p {
-    font-size: 1rem;
-    line-height: 1.5;
-    color: #495057;
+h1 {
+  font-size: 1.75rem;
+  margin-bottom: 0.35em;
 }
 
-code {
-    background-color: #e9ecef;
-    padding: 2px 4px;
-    border-radius: 4px;
+.tagline {
+  font-size: 1.05rem;
+  color: #444;
+  margin-top: 0;
+}
+
+nav.quick-jump {
+  margin: 10px 0 22px;
+  font-size: 0.95rem;
+}
+
+nav.quick-jump a {
+  color: #1e3a5f;
+  margin-right: 12px;
+}
+
+.hero-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 22px 24px;
+  margin: 22px 0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #dde3ea;
+}
+
+.hero-card h2 {
+  margin-top: 0;
+  font-size: 1.15rem;
+  color: #1e3a5f;
+}
+
+.primary-link {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 12px 20px;
+  background: #1e3a5f;
+  color: #fff !important;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: bold;
+}
+
+.primary-link:hover {
+  background: #2c5282;
+}
+
+.secondary-links {
+  margin-top: 14px;
+  font-size: 0.95rem;
+}
+
+.secondary-links a {
+  color: #1e3a5f;
 }
 
 pre {
-    background-color: #e9ecef;
-    padding: 10px;
-    border-radius: 4px;
-    overflow: auto;
+  background: #f4f4f4;
+  padding: 12px 14px;
+  overflow: auto;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
 }
 
-.img-fluid {
-    max-width: 100%;
-    height: auto;
+code {
+  background: #eee;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
-.logo-img {
-    max-width: 100px; /* Reduzi o tamanho máximo do logo */
-    margin: 0 auto;
+.section {
+  margin-bottom: 28px;
+  background: #fff;
+  padding: 20px 22px;
+  border-radius: 8px;
+  border: 1px solid #e5e5e5;
 }
 
-.center-img {
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
-    max-width: 200px; /* Reduzi o tamanho máximo da imagem central */
+ul.tight li {
+  margin-bottom: 0.35em;
+}
+
+footer {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 28px;
 }
