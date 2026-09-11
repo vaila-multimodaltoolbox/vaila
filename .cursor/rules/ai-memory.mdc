@@ -12,12 +12,16 @@ OpenAI Codex, OpenCode, Gemini CLI). The daemon runs locally at
 for Cursor, root `mcp.json` for other MCP-compatible CLIs).
 
 - **At the start of a session**: check `ai-memory` via MCP tools
-  (`search_memory`, `get_handoff`) for prior context, unresolved edge cases,
-  and architectural decisions relevant to the current task.
-- **Before exiting or concluding a major task**: summarize unresolved edge
-  cases, architectural decisions, and hardware/environment dependencies using
-  `create_handoff`, so the next agent (regardless of harness) can pick up
-  where this session left off.
+  (`memory_query`, `memory_handoff_accept` / SessionStart handoff block) for
+  prior context, unresolved edge cases, and architectural decisions.
+- **Before exiting or concluding a major task**: summarize with
+  `memory_handoff_begin` (`shared: true` when the next operator/harness should
+  pick it up), so Claude / `agent` / Codex / `agy` share the same baton.
+- **Cursor Agent CLI** is launched with `agent`, not `ai-memory run agent`
+  (Cursor is not an `ai-memory run` harness). Wire via
+  `install-mcp --client cursor` + `install-hooks --agent cursor`.
+- **Antigravity (`agy`)**: after the final turn run
+  `ai-memory finalize-session --agent antigravity-cli` so the handoff is closed.
 
 See `bin/setup_ai_memory.sh` (or `bin/setup_ai_memory.ps1`) for setup details
 and `.ai-memory.toml` for local index/wiki paths.

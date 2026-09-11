@@ -1,3 +1,8 @@
+---
+name: sam3-video
+description: Use when working on SAM 3 video segmentation, vaila_sam.py, checkpoint handling, or GPU memory issues.
+---
+
 # SAM 3 Video Segmentation (vailá)
 
 Use when the user works on **SAM 3 video segmentation**, text-prompt masks, `vaila_sam.py` (non-FIFA mode), or troubleshoots SAM 3 checkpoint/VRAM/BFloat16 issues.

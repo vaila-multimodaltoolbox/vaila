@@ -6,7 +6,7 @@
 - **File:** `vaila\merge_multivideos.py`
 - **Lines:** 2172
 - **Size:** 89274 characters
-- **Version:** updated: 0.2.0
+- **Version:** updated: 0.3.136
 - **Author:** Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -22,8 +22,8 @@ Please see AUTHORS for contributors.
 Licensed under GNU Lesser General Public License v3.0
 
 Created: 25 February 2025
-Update: 13 March 2025
-Version updated: 0.2.0
+Update: 11 September 2026
+Version updated: 0.3.136
 
 Description:
 This script allows users to merge multiple video files into a single video in a specified order.

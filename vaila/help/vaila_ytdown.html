@@ -1,125 +1,21 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>vailá - vaila_ytdown</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            line-height: 1.6;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-        h2 { color: #34495e; margin-top: 30px; }
-        .module-info { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .functions { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }
-        .docstring { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
-        .errorr { background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 15px 0; }
-        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
-        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 0.9em; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>vailá - vaila_ytdown</h1>
-
-        <div class="module-info">
-            <h3>📋 Module Information</h3>
-            <p><strong>Category:</strong> Tools</p>
-            <p><strong>File:</strong> vaila/vaila_ytdown.py</p>
-            <p><strong>Version:</strong> 0.3.108</p>
-            <p><strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago</p>
-            <p><strong>GUI Interface:</strong> ✅ Yes</p>
-            <p><strong>This page</strong> can be opened from the GUI with the <strong>? Help</strong> button.</p>
-        </div>
-
-        <div class="docstring">
-            <h3>How to run</h3>
-            <p>The script can be used via <strong>GUI</strong> (default) or <strong>CLI</strong> (command line).</p>
-            <h4>GUI (default)</h4>
-            <pre>uv run python vaila/vaila_ytdown.py</pre>
-            <ol>
-                <li>Set <strong>Save Location</strong> (Browse…).</li>
-                <li>Choose <strong>Video (highest FPS)</strong> or <strong>Audio Only (MP3)</strong>.</li>
-                <li><strong>Direct:</strong> Paste URLs in the text box and click <strong>DOWNLOAD FROM TEXT BOX</strong>.</li>
-                <li><strong>Batch:</strong> Click <strong>LOAD FROM FILE...</strong> and select a .txt file (one URL per line).</li>
-                <li>Confirm; progress appears in the log. Use <strong>? Help</strong> in the window for more.</li>
-            </ol>
-            <h4>CLI (command line)</h4>
-            <pre># Single URL (video)
-uv run python vaila/vaila_ytdown.py -u "https://www.youtube.com/watch?v=..."
-
-# Single URL (audio only, MP3)
-uv run python vaila/vaila_ytdown.py -u "https://www.youtube.com/watch?v=..." -a
-
-# Batch from file (video)
-uv run python vaila/vaila_ytdown.py -f urls.txt -o ~/Videos
-
-# Batch from file (audio only)
-uv run python vaila/vaila_ytdown.py -f urls.txt -a -o ~/Music
-
-# Force CLI (no GUI)
-uv run python vaila/vaila_ytdown.py --no-gui -u "https://..."
-
-# Show all options
-uv run python vaila/vaila_ytdown.py -h</pre>
-            <p>Full reference: <a href="vaila_ytdown.md">vaila_ytdown.md</a>.</p>
-        </div>
-
-        <div class="docstring">
-            <h3>📖 Description</h3>
-            <pre>
-================================================================================
-YouTube High Quality Downloader - vaila_ytdown.py
-================================================================================
-Author: Prof. Dr. Paulo R. P. Santiago
-Date: March 2025
-Version: 0.3.38
-
-Description:
-------------
-This script downloads videos from YouTube in the highest quality possible,
-prioritizing highest resolution and framerate (FPS).
-
-Key Features:
-- Downloads videos in highest resolution available (up to 8K)
-- Prioritizes streams with higher FPS (60fps when available)
-- Automatically selects best video and audio quality
-- Shows detailed video information including resolution and FPS
-- Downloads with progress tracking
-- Batch download support for playlists
-- Uses yt-dlp (yt-dlp[default] / yt-dlp-ejs) with Deno or Node.js when available
-- Avoids HTTP 403 mid-download by enabling YouTube EJS JS runtimes
-
-Requirements:
-- yt-dlp via uv sync (yt-dlp[default]); keep updated
-- Deno (recommended) or Node.js ≥22 on PATH — https://github.com/yt-dlp/yt-dlp/wiki/EJS
-- ffmpeg (must be installed on your system and in PATH)
-=======================================================================...</pre>
-        </div>
-
-        <div class="functions">
-            <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 16</p>
-            <ul><li><code>detect_js_runtimes</code></li><li><code>build_ytdlp_base_opts</code></li><li><code>read_urls_from_file</code></li><li><code>run_ytdown</code></li><li><code>get_video_info</code></li><li><code>download_video</code></li><li><code>download_audio</code></li><li><code>download_playlist</code></li><li><code>download_from_file</code></li><li><code>process_direct_urls</code></li><li><code>start_batch_download</code></li><li><code>get_download_mode</code></li><li><code>browse_dir</code></li><li><code>load_url_file</code></li><li><code>cleanup_resources</code></li></ul>
-        </div>
-
-        <div class="footer">
-            <p>📅 Updated 2026-08-20</p>
-            <p>🔗 Part of <i>vailá</i> - Multimodal Toolbox</p>
-            <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
-        </div>
-    </div>
-</body>
-</html>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Downloader - vailá</title><style>body{font:17px/1.6 system-ui,sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;color:#182638;background:#fafbfc}pre{padding:1rem;background:#eaf0f5;overflow:auto}a{color:#0656a7}a:focus{outline:3px solid #1d73b8}li{margin:.5rem 0}</style><nav><a href="index.html">Help index</a></nav><main><h1>YouTube Downloader</h1>
+<p><strong>Version:</strong> 0.3.137  <br><strong>Updated:</strong> 2026-09-11</p>
+<p>Download video as MP4 or audio as MP3 from one editable list. Open <strong>Video and Image → YouTube Downloader</strong> or run the module without CLI inputs.</p>
+<h2>GUI</h2>
+<ol><li>Paste URLs, one per line, or choose <strong>Load TXT…</strong>. Loading only fills the editable list; it never starts downloads. Blank lines and lines beginning with # are ignored. Review the count; <strong>Clear</strong> empties the list.</li><li>Choose a destination and <strong>Video (MP4)</strong> or <strong>Audio (MP3)</strong>.</li><li>Click <strong>Download</strong>, or press <strong>Ctrl+Enter</strong>. Inputs lock until the run finishes, preventing duplicate runs.</li><li>Follow the current item, transfer progress, processing/conversion and success/failure counts. Unknown transfer sizes use an indeterminate bar.</li><li><strong>Cancel</strong> or Escape requests cooperative cancellation. A progress callback can interrupt transfer; extraction and ffmpeg processing may need to finish first. Pending cancellation is shown explicitly. New items are not started and completed files are retained.</li><li><strong>Open folder</strong> opens the latest output directory. <strong>Help</strong> opens local help. Both remain accessible while working. <strong>Show details</strong> expands the log; <strong>Diagnostic details</strong> enables --debug.</li><li>Closing during work requests cancellation and waits safely. The window is resizable; Tab navigates fields and buttons.</li></ol>
+<p>Workers send queued events consumed by Tk after(). Downloads never pump the GUI with root.update() or update widgets from a worker.</p>
+<h2>Quality and requirements</h2>
+<ul><li><strong>MP4:</strong> preserves bestvideo+bestaudio/best, merges video/audio and converts to MP4. yt-dlp chooses the best available quality. This does not promise the highest FPS independently of other quality attributes.</li><li><strong>MP3:</strong> preserves bestaudio/best and FFmpegExtractAudio at 192 kbps.</li><li><strong>ffmpeg</strong> must be on PATH for both outputs. There is no embedded-ffmpeg fallback. The final expected .mp4/.mp3 file is checked after post-processing; changing an extension never counts as conversion.</li><li>Existing yt-dlp retry, JavaScript runtime detection (Deno/Node/QuickJS) and EJS fallback settings are retained. No new dependencies.</li><li>Each input is an individual video URL; playlist expansion is not offered.</li></ul>
+<p>A completed transfer can still be merging or converting. Success is counted only after all post-processing and final-file verification.</p>
+<h2>CLI</h2>
+<pre><code>python -m vaila.vaila_ytdown --url &quot;https://www.youtube.com/watch?v=VIDEO_ID&quot; --output &quot;/data/my videos&quot; --no-gui
+python -m vaila.vaila_ytdown --file &quot;/data/my URLs.txt&quot; --output &quot;/data/my videos&quot; --no-gui
+python -m vaila.vaila_ytdown --file &quot;/data/my URLs.txt&quot; --output &quot;/data/my audio&quot; --audio-only --no-gui --debug
+python -m vaila.vaila_ytdown --no-gui --audio-only --output &quot;/data/my audio&quot;</code></pre>
+<p>Short options remain: -u, -f, -o, -a. --url and --file are mutually exclusive; either selects CLI mode without a display. --no-gui without input prompts for one URL and respects --audio-only. Ctrl+C interrupts CLI execution.</p>
+<p>Exit codes: 0 all succeeded; 1 failure including partial failures; 2 invalid arguments; 130 cancellation without other failures. Failed items do not prevent subsequent batch items from being attempted.</p>
+<h2>Outputs and reproducibility</h2>
+<ul><li>Single video: vaila_ytdownload_TIMESTAMP/TITLE.mp4 and video_info.txt with title, channel, source URL, downloaded dimensions/FPS, duration and available formats.</li><li>Single audio: vaila_ytaudio_TIMESTAMP/TITLE.mp3.</li><li>Batch video: vaila_batch_TIMESTAMP/001/vaila_ytdownload_TIMESTAMP/001_TITLE.mp4, then 002, etc.</li><li>Batch audio: vaila_audio_TIMESTAMP/001/vaila_ytaudio_TIMESTAMP/001_TITLE.mp3.</li><li>A numerical suffix prevents runs started in the same second from reusing an output directory.</li><li>download_log.txt records progress, successful paths, failures and summary. Batch logs live at the batch root; single-run logs live beside the final media.</li><li>Multiple edited GUI URLs and CLI TXT runs save the exact list as urls.txt in the run directory. The equivalent command references that list; single-URL commands use --url. Destination, audio choice and diagnostics are included with native shell quoting.</li><li>urls.txt is a replay input, not a sanitized log: treat it as private if it contains private links. Terminal and diagnostic logs redact credentials.</li><li>Interrupted transfers or failed post-processing may leave partial files. Completed outputs are preserved. Inspect the summary before retrying.</li></ul>
+<h2>Diagnosis</h2>
+<p>Messages with <strong>&gt;&gt; vaila/vaila_ytdown:</strong> are always immediate, even when details are collapsed. Technical yt-dlp messages and tracebacks require --debug; secrets are redacted. Project /debug uses simulated downloads; external downloads are not automatic diagnostic steps.</p>
+<p>GUI and CLI share YTDownloader.download_urls. The download_video, download_audio, callbacks and compatibility download_from_file entry points remain. Detailed counts are returned by download_urls and stored in last_result. Shared worker/feedback support is in task_feedback.py.</p></main></html>

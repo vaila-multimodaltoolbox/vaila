@@ -1,50 +1,17 @@
-# load_vicon_csv_split_batch
+# VICON CSV Split Batch Processor
 
-## 📋 Module Information
+**Version:** 0.3.137
+**Updated:** 2026-09-11
 
-- **Category:** Tools
-- **File:** `vaila\load_vicon_csv_split_batch.py`
-- **Lines:** 219
-- **Size:** 8327 characters
-- **Version:** 1.1
-- **Author:** Prof. Dr. Paulo R. P. Santiago
-- **GUI Interface:** ✅ Yes
+Split first-level VICON Nexus CSV files into device CSVs. The existing converter cleans and merges headers, adds the source file creation Timestamp and preserves device data.
 
-## 📖 Description
+Use **Frame A → Import** for explicit parameters, preview and background execution. Other formats are unavailable. See [File Manager](filemanager.md) for cancellation, diagnostics and output safety.
 
+~~~bash
+python -m vaila.filemanager import-vicon --source "/data/VICON CSV" --destination "/data/output" --dry-run
+python -m vaila.filemanager import-vicon --source "/data/VICON CSV" --destination "/data/output" --debug
+~~~
 
-================================================================================
-VICON CSV Split Batch Processor
-================================================================================
-Author: Prof. Dr. Paulo R. P. Santiago
-Date: 2024-09-20
-Version: 1.1
+Outputs: vicon_csv_split_TIMESTAMP/STEM_splitdevice/STEM_devN.csv. Only first-level .csv sources are converted. No devices or any parser-error block means failure; inspect partial files. The File Manager never reuses an existing output directory.
 
-Description:
-------------
-This Python script processes CSV files generated from the VICON Nexus system and splits the data into separate files by device. It processes only the CSV files in the specified directory (first level, without entering subdirectories) and exports them into a user-specified output folder. The header information is cleaned and sanitized, and the files are saved with additional timestamp information for traceability.
-
-Main Features:
---------------
-1. **Batch Processing**: The script automatically finds and processes all CSV files in the specified directory (without subdirectories).
-2. **Header Merging and Cleaning**: It merges multiple header rows, replaces problematic characters, and sanitizes unit symb...
-
-## 🔧 Main Functions
-
-**Total functions found:** 6
-
-- `clean_header`
-- `merge_headers`
-- `get_file_creation_datetime`
-- `read_csv_devs`
-- `select_directory`
-- `process_csv_files_first_level`
-
-
-
-
----
-
-📅 **Generated automatically on:** 15/10/2025 08:04:44
-🔗 **Part of vailá - Multimodal Toolbox**
-🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+The original standalone directory chooser remains available through python -m vaila.load_vicon_csv_split_batch. Tkinter is imported only when opening that chooser, so read_csv_devs can run without Tk or a display. Prefer the File Manager CLI for explicit arguments and reliable batch failure status.

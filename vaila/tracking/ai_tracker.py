@@ -9,7 +9,7 @@ infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
 Author: Prof. Dr. Paulo R. P. Santiago
 Update Date: 11 September 2026
-Version: 0.3.135
+Version: 0.3.137
 """
 
 from __future__ import annotations
@@ -39,6 +39,17 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
 
+_MAX_EXEMPLAR_TEMPLATES = 30
+_MAX_TRAINING_FEATS = 200
+_MAX_GAP_SEED_ANCHORS = 40
+_VELOCITY_EMA = 0.35
+_LOST_STREAK_STOP = 8
+
+
+def _default_resnet50_local_path() -> Path:
+    """Candidate path for a user-provided ResNet50 checkpoint under vaila/models/."""
+    return Path(__file__).resolve().parents[1] / "models" / "resnet50_imagenet.pth"
+
 
 @dataclass
 class TemplateMatchResult:
@@ -50,6 +61,7 @@ class TemplateMatchResult:
     location: tuple[float, float]  # Refined sub-pixel (x, y) coordinates
     raw_location: tuple[int, int]  # Discrete integer peak (x, y)
     template_updated: bool = False  # Whether the tracking template was updated this frame
+    accepted: bool = True  # False when below similarity_threshold (do not advance lock)
 
 
 @dataclass
@@ -66,11 +78,13 @@ class AITrackerParameters:
     use_deep_features: bool = True  # ResNet50 semantic embedding verification
     deep_weight: float = 0.30  # Weight for deep feature score: (1 - α) * ncc + α * deep
     tracking_shape: str = "point"  # Shape mode: "point" (default), "circle", "box" (or "rectangle")
+    deep_weights_path: str = ""  # Optional local ResNet50 .pth/.pt; empty = auto-resolve
 
     def to_toml(self, toml_path: str | Path) -> None:
         """Serialize tracking parameters to a TOML file."""
         path = Path(toml_path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        weights_line = f'deep_weights_path = "{self.deep_weights_path}"\n'
         content = (
             "# vailá AI Tracking Configuration\n"
             "# Generated automatically by getpixelvideo.py\n\n"
@@ -87,6 +101,7 @@ class AITrackerParameters:
             f"use_deep_features = {str(bool(self.use_deep_features)).lower()}\n"
             f"deep_weight = {float(self.deep_weight):.4f}\n"
             f'tracking_shape = "{self.tracking_shape}"\n'
+            f"{weights_line}"
         )
         path.write_text(content, encoding="utf-8")
 
@@ -116,6 +131,7 @@ class AITrackerParameters:
             shape = "point"
         if shape == "rectangle":
             shape = "box"
+        weights_path = str(track_cfg.get("deep_weights_path", "") or "")
 
         return cls(
             search_window=(sw_w, sw_h),
@@ -128,6 +144,7 @@ class AITrackerParameters:
             use_deep_features=deep,
             deep_weight=d_wt,
             tracking_shape=shape,
+            deep_weights_path=weights_path,
         )
 
 
@@ -189,6 +206,39 @@ def refine_location_parabola(
     return float(x0 + dx), float(y0 + dy)
 
 
+def extract_region_stats_feature(patch: np.ndarray, shape: str = "point") -> np.ndarray:
+    """Compact region descriptor (mean/std/hist + effective area) for circle/box cues."""
+    if patch.size == 0:
+        return np.zeros(40, dtype=np.float32)
+
+    gray = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY) if patch.ndim == 3 else patch
+    h, w = gray.shape[:2]
+    mask = np.ones((h, w), dtype=np.uint8) * 255
+    if shape == "circle":
+        mask = np.zeros((h, w), dtype=np.uint8)
+        cv2.circle(mask, (w // 2, h // 2), min(w, h) // 2, 255, -1)
+
+    masked = gray[mask > 0]
+    if masked.size == 0:
+        return np.zeros(40, dtype=np.float32)
+
+    mean_v = float(np.mean(masked))
+    std_v = float(np.std(masked))
+    area_frac = float(masked.size) / float(max(1, h * w))
+    hist = cv2.calcHist([gray], [0], mask, [32], [0, 256]).flatten().astype(np.float32)
+    hist_sum = float(hist.sum())
+    if hist_sum > 1e-7:
+        hist /= hist_sum
+    feat = np.concatenate(
+        [np.array([mean_v / 255.0, std_v / 255.0, area_frac], dtype=np.float32), hist[:37]]
+    )
+    feat = np.pad(feat, (0, 40 - feat.size)) if feat.size < 40 else feat[:40]
+    norm = float(np.linalg.norm(feat))
+    if norm > 1e-7:
+        feat = feat / norm
+    return feat.astype(np.float32)
+
+
 class DeepFeatureExtractor:
     """Pre-trained CNN (ResNet50) feature extractor with cosine similarity verification.
 
@@ -196,13 +246,18 @@ class DeepFeatureExtractor:
     (or CPU) to verify target identity across dynamic athletic movements.
     """
 
-    _instance: DeepFeatureExtractor | None = None
+    _instances: dict[str, DeepFeatureExtractor] = {}
 
-    def __init__(self, use_cuda: bool = True) -> None:
+    def __init__(
+        self,
+        use_cuda: bool = True,
+        weights_path: str | Path | None = None,
+    ) -> None:
         self.enabled = False
         self.device = "cpu"
         self.model: Any = None
         self.transform: Any = None
+        self.weights_path = str(weights_path) if weights_path else ""
 
         if not TORCH_AVAILABLE:
             return
@@ -213,8 +268,20 @@ class DeepFeatureExtractor:
             else:
                 self.device = "cpu"
 
-            weights = tv_models.ResNet50_Weights.DEFAULT
-            model = tv_models.resnet50(weights=weights)
+            resolved = self._resolve_weights_path(weights_path)
+            model = tv_models.resnet50(weights=None)
+            if resolved is not None:
+                state = torch.load(resolved, map_location="cpu", weights_only=True)
+                if isinstance(state, dict) and "state_dict" in state:
+                    state = state["state_dict"]
+                # Torchvision DEFAULT checkpoint keys may include "fc.*" — load then strip head
+                missing_unexpected = model.load_state_dict(state, strict=False)
+                _ = missing_unexpected
+                print(f">> DeepFeatureExtractor: loaded weights from {resolved}")
+            else:
+                weights = tv_models.ResNet50_Weights.DEFAULT
+                model = tv_models.resnet50(weights=weights)
+
             # Remove classification head to output 2048-dim feature vector
             model.fc = torch.nn.Identity()
             model.eval()
@@ -237,12 +304,31 @@ class DeepFeatureExtractor:
             print(f"DeepFeatureExtractor warning: Could not initialize ResNet50 ({err}).")
             self.enabled = False
 
+    @staticmethod
+    def _resolve_weights_path(weights_path: str | Path | None) -> Path | None:
+        candidates: list[Path] = []
+        if weights_path:
+            candidates.append(Path(weights_path))
+        candidates.append(_default_resnet50_local_path())
+        for cand in candidates:
+            if cand.is_file():
+                return cand
+        return None
+
     @classmethod
-    def get_shared(cls) -> DeepFeatureExtractor:
-        """Get or initialize singleton feature extractor."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+    def get_shared(
+        cls,
+        weights_path: str | Path | None = None,
+    ) -> DeepFeatureExtractor:
+        """Get or initialize a feature extractor keyed by weights path."""
+        key = str(weights_path) if weights_path else "__default__"
+        local = _default_resnet50_local_path()
+        if key == "__default__" and local.is_file():
+            key = str(local)
+            weights_path = local
+        if key not in cls._instances:
+            cls._instances[key] = cls(weights_path=weights_path)
+        return cls._instances[key]
 
     def extract_embedding(self, patch_bgr: np.ndarray) -> np.ndarray | None:
         """Extract L2-normalized 2048-dim feature vector from BGR image patch."""
@@ -282,11 +368,12 @@ class AITracker:
 
     Features:
     - Normalized Cross-Correlation (cv2.TM_CCOEFF_NORMED)
-    - 2D Gaussian spatial motion prior to eliminate teleports and distractor jumps
+    - 2D Gaussian spatial motion prior with velocity prediction
     - Elliptical mask to discard rectangular background corners
     - Parabolic sub-pixel peak refinement
     - Adaptive running template blending (exponential moving average)
     - ResNet50 visual feature cosine similarity to reject distractors
+    - Online ridge discriminator that survives manual corrections
     """
 
     def __init__(self, parameters: AITrackerParameters | None = None) -> None:
@@ -296,6 +383,8 @@ class AITracker:
         self.anchor_template: np.ndarray | None = None
         self.anchor_embedding: np.ndarray | None = None
         self.last_point: tuple[float, float] | None = None
+        self.velocity: tuple[float, float] = (0.0, 0.0)
+        self._lost_streak: int = 0
 
         # Online Appearance Model / Multi-Anchor Retraining
         self.anchors: list[dict[str, Any]] = []
@@ -306,7 +395,9 @@ class AITracker:
         self.discriminator_b: float = 0.0
 
         if self.params.use_deep_features:
-            self.extractor = DeepFeatureExtractor.get_shared()
+            self.extractor = DeepFeatureExtractor.get_shared(
+                weights_path=self.params.deep_weights_path or None
+            )
         else:
             self.extractor = None
 
@@ -327,6 +418,19 @@ class AITracker:
         radius = min(width, height) // 2
         cv2.circle(mask, center, radius, 255, -1)
         return mask
+
+    def _apply_shape_mask(self) -> None:
+        """Refresh self.mask from current block_window and tracking_shape."""
+        bw, bh = self.params.block_window
+        shape_mode = getattr(self.params, "tracking_shape", "point").lower()
+        if shape_mode in ("circle",):
+            self.mask = self._create_circular_mask(bw, bh)
+        elif shape_mode in ("box", "rectangle"):
+            self.mask = None
+        elif self.params.use_mask:
+            self.mask = self._create_elliptical_mask(bw, bh)
+        else:
+            self.mask = None
 
     @staticmethod
     def compute_shape_centroid(
@@ -428,16 +532,18 @@ class AITracker:
         return cropped
 
     @staticmethod
-    def extract_patch_feature(patch: np.ndarray) -> np.ndarray:
-        """Extract a fast, L2-normalized 768-dim color patch descriptor (<0.05 ms)."""
+    def extract_patch_feature(patch: np.ndarray, shape: str = "point") -> np.ndarray:
+        """Fast L2-normalized appearance descriptor (color grid + region stats)."""
         if patch.size == 0:
-            return np.zeros(768, dtype=np.float32)
+            return np.zeros(808, dtype=np.float32)
         p_small = cv2.resize(patch, (16, 16)).astype(np.float32)
-        feat = p_small.reshape(-1)
+        color_feat = p_small.reshape(-1)
+        region = extract_region_stats_feature(patch, shape=shape)
+        feat = np.concatenate([color_feat, region])
         norm = float(np.linalg.norm(feat))
         if norm > 1e-7:
             feat = feat / norm
-        return feat
+        return feat.astype(np.float32)
 
     def add_anchor(
         self,
@@ -448,17 +554,20 @@ class AITracker:
         """Add a keyframe anchor point, extract positive & negative exemplar patches, and stage samples."""
         bw, bh = self.params.block_window
         h_img, w_img = frame.shape[:2]
+        shape_mode = getattr(self.params, "tracking_shape", "point").lower()
 
         pos_patch = self.extract_patch(frame, point, (bw, bh))
         if pos_patch.size == 0:
             return
 
         self.anchors.append({"frame": frame_idx, "point": point, "patch": pos_patch})
+        if len(self.anchors) > _MAX_EXEMPLAR_TEMPLATES:
+            self.anchors = self.anchors[-_MAX_EXEMPLAR_TEMPLATES:]
         self.exemplar_templates.append(pos_patch)
-        if len(self.exemplar_templates) > 10:
+        if len(self.exemplar_templates) > _MAX_EXEMPLAR_TEMPLATES:
             self.exemplar_templates.pop(0)
 
-        pos_feat = self.extract_patch_feature(pos_patch)
+        pos_feat = self.extract_patch_feature(pos_patch, shape=shape_mode)
         self.training_feats.append(pos_feat)
         self.training_labels.append(1.0)
 
@@ -478,13 +587,13 @@ class AITracker:
             if 0 <= nx < w_img and 0 <= ny < h_img:
                 neg_patch = self.extract_patch(frame, (nx, ny), (bw, bh))
                 if neg_patch.size > 0:
-                    neg_feat = self.extract_patch_feature(neg_patch)
+                    neg_feat = self.extract_patch_feature(neg_patch, shape=shape_mode)
                     self.training_feats.append(neg_feat)
                     self.training_labels.append(-1.0)
 
-        if len(self.training_feats) > 100:
-            self.training_feats = self.training_feats[-100:]
-            self.training_labels = self.training_labels[-100:]
+        if len(self.training_feats) > _MAX_TRAINING_FEATS:
+            self.training_feats = self.training_feats[-_MAX_TRAINING_FEATS:]
+            self.training_labels = self.training_labels[-_MAX_TRAINING_FEATS:]
 
     def retrain_online_model(self) -> float:
         """Retrain the online appearance discriminator using regularized dual Ridge regression (<1 ms).
@@ -515,39 +624,77 @@ class AITracker:
         """Score candidate patch with the online retrained discriminator in [0.0, 1.0]."""
         if self.discriminator_w is None or patch.size == 0:
             return 1.0
-        feat = self.extract_patch_feature(patch)
+        shape_mode = getattr(self.params, "tracking_shape", "point").lower()
+        feat = self.extract_patch_feature(patch, shape=shape_mode)
+        if feat.shape[0] != self.discriminator_w.shape[0]:
+            return 1.0
         raw_val = float(np.dot(self.discriminator_w, feat) + self.discriminator_b)
         return float(1.0 / (1.0 + np.exp(-np.clip(raw_val, -10.0, 10.0))))
+
+    def seed_anchors_from_known(
+        self,
+        get_frame: Callable[[int], np.ndarray | None],
+        known_points: dict[int, tuple[float, float]],
+        max_anchors: int = _MAX_GAP_SEED_ANCHORS,
+    ) -> int:
+        """Seed online model from a subsample of known keyframes (batch gap init)."""
+        if not known_points:
+            return 0
+        frames = sorted(known_points.keys())
+        if len(frames) > max_anchors:
+            idx = np.linspace(0, len(frames) - 1, max_anchors).astype(int)
+            frames = [frames[i] for i in idx]
+        count = 0
+        for f_idx in frames:
+            frm = get_frame(f_idx)
+            if frm is None:
+                continue
+            self.add_anchor(frm, known_points[f_idx], f_idx)
+            count += 1
+        if count > 0:
+            self.retrain_online_model()
+        return count
 
     def set_reference(
         self,
         frame: np.ndarray,
         point: tuple[float, float],
         frame_idx: int = 0,
+        *,
+        reset_online: bool = True,
     ) -> None:
-        """Set reference template and deep feature embedding at the given keyframe point."""
+        """Set reference template and deep feature embedding at the given keyframe point.
+
+        Parameters
+        ----------
+        reset_online : bool
+            When True (default), clear the online appearance model and reseed from this
+            point. When False, keep existing anchors/discriminator and only refresh the
+            running template + embedding (manual corrections / soft re-anchor).
+        """
         bw, bh = self.params.block_window
         self.template = self.extract_patch(frame, point, (bw, bh))
         self.anchor_template = self.template.copy()
+        if self.last_point is not None and not reset_online:
+            dx = point[0] - self.last_point[0]
+            dy = point[1] - self.last_point[1]
+            self.velocity = (
+                (1.0 - _VELOCITY_EMA) * self.velocity[0] + _VELOCITY_EMA * dx,
+                (1.0 - _VELOCITY_EMA) * self.velocity[1] + _VELOCITY_EMA * dy,
+            )
+        elif reset_online:
+            self.velocity = (0.0, 0.0)
         self.last_point = point
+        self._lost_streak = 0
+        self._apply_shape_mask()
 
-        shape_mode = getattr(self.params, "tracking_shape", "point").lower()
-        if shape_mode in ("circle",):
-            self.mask = self._create_circular_mask(bw, bh)
-        elif shape_mode in ("box", "rectangle"):
-            self.mask = None
-        elif self.params.use_mask:
-            self.mask = self._create_elliptical_mask(bw, bh)
-        else:
-            self.mask = None
-
-        # Reset online appearance model and seed with this primary anchor
-        self.anchors.clear()
-        self.exemplar_templates.clear()
-        self.training_feats.clear()
-        self.training_labels.clear()
-        self.discriminator_w = None
-        self.discriminator_b = 0.0
+        if reset_online:
+            self.anchors.clear()
+            self.exemplar_templates.clear()
+            self.training_feats.clear()
+            self.training_labels.clear()
+            self.discriminator_w = None
+            self.discriminator_b = 0.0
 
         self.add_anchor(frame, point, frame_idx)
         self.retrain_online_model()
@@ -555,13 +702,24 @@ class AITracker:
         # Handle deep feature extractor
         if self.params.use_deep_features:
             if self.extractor is None:
-                self.extractor = DeepFeatureExtractor.get_shared()
+                self.extractor = DeepFeatureExtractor.get_shared(
+                    weights_path=self.params.deep_weights_path or None
+                )
             if self.extractor and self.extractor.enabled:
                 self.anchor_embedding = self.extractor.extract_embedding(self.anchor_template)
             else:
                 self.anchor_embedding = None
         else:
             self.anchor_embedding = None
+
+    def update_from_correction(
+        self,
+        frame: np.ndarray,
+        point: tuple[float, float],
+        frame_idx: int = -1,
+    ) -> None:
+        """Apply a manual correction without wiping online learning."""
+        self.set_reference(frame, point, frame_idx=frame_idx, reset_online=False)
 
     def track_frame(
         self,
@@ -574,6 +732,7 @@ class AITracker:
         -------
         TemplateMatchResult
             Detailed matching result including refined sub-pixel coordinates and confidence.
+            ``accepted`` is False when combined score is below ``similarity_threshold``.
         """
         if self.template is None:
             raise RuntimeError("Tracker has no reference template. Call set_reference first.")
@@ -582,9 +741,12 @@ class AITracker:
         sw, sh = self.params.search_window
         bw, bh = self.params.block_window
 
-        lx, ly = int(round(last_point[0])), int(round(last_point[1]))
+        # Predict center from velocity prior (helps vertical lift / periodic motion)
+        pred_x = float(last_point[0] + self.velocity[0])
+        pred_y = float(last_point[1] + self.velocity[1])
+        lx, ly = int(round(pred_x)), int(round(pred_y))
 
-        # Search window bounding box
+        # Search window bounding box centered on prediction
         sx1 = lx - sw // 2
         sy1 = ly - sh // 2
         sx2 = sx1 + sw
@@ -598,14 +760,15 @@ class AITracker:
 
         roi = frame[crop_sy1:crop_sy2, crop_sx1:crop_sx2]
         if roi.shape[0] < bh or roi.shape[1] < bw:
-            # Cannot match inside smaller ROI than template
+            self._lost_streak += 1
             return TemplateMatchResult(
                 similarity=0.0,
                 ncc_score=0.0,
                 deep_score=0.0,
                 location=last_point,
-                raw_location=(lx, ly),
+                raw_location=(int(round(last_point[0])), int(round(last_point[1]))),
                 template_updated=False,
+                accepted=False,
             )
 
         # Match template using NCC (cv2.TM_CCOEFF_NORMED)
@@ -626,18 +789,19 @@ class AITracker:
         if np.isnan(smap).any() or np.isinf(smap).any():
             smap = np.nan_to_num(smap, nan=-1.0, posinf=1.0, neginf=-1.0)
 
-        # 2D Gaussian Spatial Motion Prior: penalize non-physical displacement jumps
+        # 2D Gaussian Spatial Motion Prior around predicted position
         center_map_x = lx - crop_sx1 - bw // 2
         center_map_y = ly - crop_sy1 - bh // 2
         sh_map, sw_map = smap.shape[:2]
         yy, xx = np.mgrid[:sh_map, :sw_map]
         dist2 = (xx - center_map_x) ** 2 + (yy - center_map_y) ** 2
-        spatial_sigma = float(self.params.spatial_sigma)
-        spatial_prior = np.exp(-dist2 / (2.0 * spatial_sigma**2))
+        speed = float(np.hypot(self.velocity[0], self.velocity[1]))
+        spatial_sigma = float(self.params.spatial_sigma) + 0.5 * speed
+        spatial_prior = np.exp(-dist2 / (2.0 * max(1.0, spatial_sigma) ** 2))
 
-        # Weight positive correlation scores by distance from previous position
+        # Weight positive correlation scores by distance from predicted position
         weighted_smap = np.maximum(0.0, smap) * spatial_prior
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(weighted_smap)
+        _min_val, _max_val, _min_loc, max_loc = cv2.minMaxLoc(weighted_smap)
         ncc_score = float(smap[max_loc[1], max_loc[0]])
 
         # Refine sub-pixel location with parabolic fit
@@ -656,13 +820,20 @@ class AITracker:
             cx_c, cy_c = self.compute_shape_centroid(cand_patch, shape_mode, bw, bh)
             cand_x = float(crop_sx1 + ref_x + cx_c)
             cand_y = float(crop_sy1 + ref_y + cy_c)
+            cand_patch = self.extract_patch(frame, (cand_x, cand_y), (bw, bh))
 
         # Deep Feature Cosine Similarity Verification
         deep_score = None
         if self.params.use_deep_features:
             if self.extractor is None:
-                self.extractor = DeepFeatureExtractor.get_shared()
-            if self.anchor_embedding is None and self.anchor_template is not None and self.extractor.enabled:
+                self.extractor = DeepFeatureExtractor.get_shared(
+                    weights_path=self.params.deep_weights_path or None
+                )
+            if (
+                self.anchor_embedding is None
+                and self.anchor_template is not None
+                and self.extractor.enabled
+            ):
                 self.anchor_embedding = self.extractor.extract_embedding(self.anchor_template)
             if self.extractor and self.extractor.enabled and self.anchor_embedding is not None:
                 cand_emb = self.extractor.extract_embedding(cand_patch)
@@ -670,9 +841,7 @@ class AITracker:
 
         # Online Retrained Appearance Model Verification
         disc_score = (
-            self.score_patch_discriminator(cand_patch)
-            if self.discriminator_w is not None
-            else None
+            self.score_patch_discriminator(cand_patch) if self.discriminator_w is not None else None
         )
 
         # Score fusion
@@ -694,12 +863,29 @@ class AITracker:
             else:
                 combined_score = norm_ncc
 
-        # Adaptive Running Template Blending:
-        # When NCC match is confident (>= 0.70), blend running appearance to adapt
-        # gracefully to rotation and deformation without drifting
+        accepted = float(combined_score) >= float(self.params.similarity_threshold)
         template_updated = False
+        raw_loc = (
+            int(crop_sx1 + max_loc[0] + bw // 2),
+            int(crop_sy1 + max_loc[1] + bh // 2),
+        )
+
+        if not accepted:
+            self._lost_streak += 1
+            return TemplateMatchResult(
+                similarity=float(combined_score),
+                ncc_score=ncc_score,
+                deep_score=deep_score,
+                location=last_point,
+                raw_location=raw_loc,
+                template_updated=False,
+                accepted=False,
+            )
+
+        self._lost_streak = 0
         final_loc = (cand_x, cand_y)
 
+        # Adaptive Running Template Blending only on confident accepted matches
         if ncc_score >= self.params.template_update_threshold:
             new_patch = cand_patch
             if new_patch.shape == self.template.shape:
@@ -712,22 +898,60 @@ class AITracker:
                 ).astype(np.uint8)
                 template_updated = True
 
+        # Update velocity EMA from accepted displacement
+        dx = final_loc[0] - last_point[0]
+        dy = final_loc[1] - last_point[1]
+        self.velocity = (
+            (1.0 - _VELOCITY_EMA) * self.velocity[0] + _VELOCITY_EMA * dx,
+            (1.0 - _VELOCITY_EMA) * self.velocity[1] + _VELOCITY_EMA * dy,
+        )
         self.last_point = final_loc
         return TemplateMatchResult(
             similarity=float(combined_score),
             ncc_score=ncc_score,
             deep_score=deep_score,
             location=final_loc,
-            raw_location=(
-                int(crop_sx1 + max_loc[0] + bw // 2),
-                int(crop_sy1 + max_loc[1] + bh // 2),
-            ),
+            raw_location=raw_loc,
             template_updated=template_updated,
+            accepted=True,
         )
 
 
 # Backward-compatible alias
 KinoveaTracker = AITracker
+
+
+def _track_segment(
+    tracker: AITracker,
+    get_frame: Callable[[int], np.ndarray | None],
+    start_pt: tuple[float, float],
+    frame_range: range,
+    progress_callback: Callable[[int, int, str], bool] | None,
+    total_frames: int,
+    msg_prefix: str,
+) -> tuple[dict[int, tuple[float, float]], dict[int, float]]:
+    """Track along frame_range; freeze position on rejected matches; stop after lost streak."""
+    pts: dict[int, tuple[float, float]] = {}
+    scores: dict[int, float] = {}
+    curr_pt = start_pt
+    for f in frame_range:
+        if progress_callback and not progress_callback(
+            f, total_frames, f"{msg_prefix} frame {f + 1}..."
+        ):
+            break
+        frm = get_frame(f)
+        if frm is None:
+            break
+        res = tracker.track_frame(frm, curr_pt)
+        scores[f] = res.similarity
+        if res.accepted:
+            pts[f] = res.location
+            curr_pt = res.location
+        else:
+            # Keep last good lock but do not invent a new peak; leave NaN for interp later
+            if tracker._lost_streak >= _LOST_STREAK_STOP:
+                break
+    return pts, scores
 
 
 def infill_and_smooth(
@@ -809,49 +1033,58 @@ def infill_and_smooth(
             return frame
         return None
 
+    def _init_tracker_at(
+        f_idx: int,
+        seed_known: dict[int, tuple[float, float]] | None = None,
+    ) -> AITracker | None:
+        frm = get_frame(f_idx)
+        if frm is None:
+            return None
+        trk = AITracker(params)
+        trk.set_reference(frm, known_points[f_idx], frame_idx=f_idx, reset_online=True)
+        if seed_known:
+            # Re-add other anchors without wiping primary template (reset already done)
+            other = {k: v for k, v in seed_known.items() if k != f_idx}
+            if other:
+                trk.seed_anchors_from_known(get_frame, other)
+        return trk
+
     # Determine gaps to fill
     # Single anchor case: track forward to end and backward to start
     if len(sorted_frames) == 1:
         f0 = sorted_frames[0]
         fetch_frames(0, total_frames - 1)
-        ref_frame = get_frame(f0)
-        if ref_frame is None:
+        tracker = _init_tracker_at(f0)
+        if tracker is None:
             raise RuntimeError(f"Failed to read anchor frame {f0}")
 
-        tracker = AITracker(params)
-        tracker.set_reference(ref_frame, known_points[f0])
+        fwd_pts, fwd_scores = _track_segment(
+            tracker,
+            get_frame,
+            known_points[f0],
+            range(f0 + 1, total_frames),
+            progress_callback,
+            total_frames,
+            "Tracking forward",
+        )
+        for f, pt in fwd_pts.items():
+            raw_positions[f] = pt
+            confidences[f] = fwd_scores.get(f, 0.0)
 
-        # Track forward: f0 + 1 ... total_frames - 1
-        curr_pt = known_points[f0]
-        for f in range(f0 + 1, total_frames):
-            if progress_callback and not progress_callback(
-                f, total_frames, f"Tracking forward frame {f + 1}/{total_frames}..."
-            ):
-                break
-            frm = get_frame(f)
-            if frm is None:
-                break
-            res = tracker.track_frame(frm, curr_pt)
-            raw_positions[f] = res.location
-            confidences[f] = res.similarity
-            curr_pt = res.location
-
-        # Track backward: f0 - 1 ... 0
-        tracker_bwd = AITracker(params)
-        tracker_bwd.set_reference(ref_frame, known_points[f0])
-        curr_pt = known_points[f0]
-        for f in range(f0 - 1, -1, -1):
-            if progress_callback and not progress_callback(
-                total_frames - f, total_frames, f"Tracking backward frame {f + 1}/{total_frames}..."
-            ):
-                break
-            frm = get_frame(f)
-            if frm is None:
-                break
-            res = tracker_bwd.track_frame(frm, curr_pt)
-            raw_positions[f] = res.location
-            confidences[f] = res.similarity
-            curr_pt = res.location
+        tracker_bwd = _init_tracker_at(f0)
+        if tracker_bwd is not None:
+            bwd_pts, bwd_scores = _track_segment(
+                tracker_bwd,
+                get_frame,
+                known_points[f0],
+                range(f0 - 1, -1, -1),
+                progress_callback,
+                total_frames,
+                "Tracking backward",
+            )
+            for f, pt in bwd_pts.items():
+                raw_positions[f] = pt
+                confidences[f] = bwd_scores.get(f, 0.0)
 
     else:
         # Multiple anchors: identify gaps between keyframe segments
@@ -866,58 +1099,63 @@ def infill_and_smooth(
             # Prefetch gap frames sequentially in one quick pass
             fetch_frames(f_start, f_end)
 
-            # Forward tracker starting at f_start
-            frm_start = get_frame(f_start)
-            if frm_start is None:
-                continue
-            trk_fwd = AITracker(params)
-            trk_fwd.set_reference(frm_start, known_points[f_start])
+            # Seed with all known anchors up to and including gap endpoints
+            seed_slice = {
+                f: known_points[f] for f in sorted_frames if f_start <= f <= f_end or f <= f_start
+            }
 
+            trk_fwd = _init_tracker_at(f_start, seed_known=seed_slice)
             fwd_pts: dict[int, tuple[float, float]] = {}
             fwd_scores: dict[int, float] = {}
-            curr_fwd = known_points[f_start]
-            for f in range(f_start + 1, f_end):
-                if progress_callback and not progress_callback(
-                    f, total_frames, f"Tracking gap {f_start}→{f_end}: forward frame {f + 1}..."
-                ):
-                    break
-                frm = get_frame(f)
-                if frm is None:
-                    break
-                res_f = trk_fwd.track_frame(frm, curr_fwd)
-                fwd_pts[f] = res_f.location
-                fwd_scores[f] = res_f.similarity
-                curr_fwd = res_f.location
+            if trk_fwd is not None:
+                # Bootstrap velocity from next known if available
+                if f_end - f_start > 1:
+                    dx = (known_points[f_end][0] - known_points[f_start][0]) / float(
+                        f_end - f_start
+                    )
+                    dy = (known_points[f_end][1] - known_points[f_start][1]) / float(
+                        f_end - f_start
+                    )
+                    trk_fwd.velocity = (dx, dy)
+                fwd_pts, fwd_scores = _track_segment(
+                    trk_fwd,
+                    get_frame,
+                    known_points[f_start],
+                    range(f_start + 1, f_end),
+                    progress_callback,
+                    total_frames,
+                    f"Tracking gap {f_start}→{f_end}: forward",
+                )
 
-            # Backward tracker starting at f_end
-            frm_end = get_frame(f_end)
-            if frm_end is None:
-                continue
-            trk_bwd = AITracker(params)
-            trk_bwd.set_reference(frm_end, known_points[f_end])
-
+            trk_bwd = _init_tracker_at(f_end, seed_known=seed_slice)
             bwd_pts: dict[int, tuple[float, float]] = {}
             bwd_scores: dict[int, float] = {}
-            curr_bwd = known_points[f_end]
-            for f in range(f_end - 1, f_start, -1):
-                if progress_callback and not progress_callback(
-                    f, total_frames, f"Tracking gap {f_start}→{f_end}: backward frame {f + 1}..."
-                ):
-                    break
-                frm = get_frame(f)
-                if frm is None:
-                    break
-                res_b = trk_bwd.track_frame(frm, curr_bwd)
-                bwd_pts[f] = res_b.location
-                bwd_scores[f] = res_b.similarity
-                curr_bwd = res_b.location
+            if trk_bwd is not None:
+                if f_end - f_start > 1:
+                    dx = (known_points[f_start][0] - known_points[f_end][0]) / float(
+                        f_end - f_start
+                    )
+                    dy = (known_points[f_start][1] - known_points[f_end][1]) / float(
+                        f_end - f_start
+                    )
+                    trk_bwd.velocity = (dx, dy)
+                bwd_pts, bwd_scores = _track_segment(
+                    trk_bwd,
+                    get_frame,
+                    known_points[f_end],
+                    range(f_end - 1, f_start, -1),
+                    progress_callback,
+                    total_frames,
+                    f"Tracking gap {f_start}→{f_end}: backward",
+                )
 
             # Fuse forward and backward tracks in the gap with distance & squared confidence weighting
             for f in range(f_start + 1, f_end):
                 p_f = fwd_pts.get(f)
                 p_b = bwd_pts.get(f)
-                s_f = fwd_scores.get(f, 0.5)
-                s_b = bwd_scores.get(f, 0.5)
+                s_f = fwd_scores.get(f, 0.0)
+                s_b = bwd_scores.get(f, 0.0)
+                thr = float(params.similarity_threshold)
 
                 if p_f is not None and p_b is not None:
                     # Temporal distance weights: 1.0 at f_start -> 0.0 at f_end
@@ -935,12 +1173,13 @@ def infill_and_smooth(
                     fused_y = w_f * p_f[1] + w_b * p_b[1]
                     raw_positions[f] = (fused_x, fused_y)
                     confidences[f] = w_f * s_f + w_b * s_b
-                elif p_f is not None:
+                elif p_f is not None and s_f >= thr:
                     raw_positions[f] = p_f
                     confidences[f] = s_f
-                elif p_b is not None:
+                elif p_b is not None and s_b >= thr:
                     raw_positions[f] = p_b
                     confidences[f] = s_b
+                # else: leave NaN → linear interp between anchors
 
             # Evict frames older than f_start from cache to bound RAM usage
             old_keys = [k for k in list(frame_cache.keys()) if k < f_start]
@@ -951,47 +1190,41 @@ def infill_and_smooth(
         first_f = sorted_frames[0]
         if first_f > 0:
             fetch_frames(0, first_f)
-            frm_first = get_frame(first_f)
-            if frm_first is not None:
-                trk_head = AITracker(params)
-                trk_head.set_reference(frm_first, known_points[first_f])
-                curr_pt = known_points[first_f]
-                for f in range(first_f - 1, -1, -1):
-                    if progress_callback and not progress_callback(
-                        f, total_frames, f"Tracking head frame {f + 1}..."
-                    ):
-                        break
-                    frm = get_frame(f)
-                    if frm is None:
-                        break
-                    res = trk_head.track_frame(frm, curr_pt)
-                    raw_positions[f] = res.location
-                    confidences[f] = res.similarity
-                    curr_pt = res.location
+            trk_head = _init_tracker_at(first_f, seed_known=known_points)
+            if trk_head is not None:
+                head_pts, head_scores = _track_segment(
+                    trk_head,
+                    get_frame,
+                    known_points[first_f],
+                    range(first_f - 1, -1, -1),
+                    progress_callback,
+                    total_frames,
+                    "Tracking head",
+                )
+                for f, pt in head_pts.items():
+                    raw_positions[f] = pt
+                    confidences[f] = head_scores.get(f, 0.0)
 
         # 3. Track forward after the last anchor (sorted_frames[-1] + 1 ... total_frames - 1)
         last_f = sorted_frames[-1]
         if last_f < total_frames - 1:
             fetch_frames(last_f, total_frames - 1)
-            frm_last = get_frame(last_f)
-            if frm_last is not None:
-                trk_tail = AITracker(params)
-                trk_tail.set_reference(frm_last, known_points[last_f])
-                curr_pt = known_points[last_f]
-                for f in range(last_f + 1, total_frames):
-                    if progress_callback and not progress_callback(
-                        f, total_frames, f"Tracking tail frame {f + 1}..."
-                    ):
-                        break
-                    frm = get_frame(f)
-                    if frm is None:
-                        break
-                    res = trk_tail.track_frame(frm, curr_pt)
-                    raw_positions[f] = res.location
-                    confidences[f] = res.similarity
-                    curr_pt = res.location
+            trk_tail = _init_tracker_at(last_f, seed_known=known_points)
+            if trk_tail is not None:
+                tail_pts, tail_scores = _track_segment(
+                    trk_tail,
+                    get_frame,
+                    known_points[last_f],
+                    range(last_f + 1, total_frames),
+                    progress_callback,
+                    total_frames,
+                    "Tracking tail",
+                )
+                for f, pt in tail_pts.items():
+                    raw_positions[f] = pt
+                    confidences[f] = tail_scores.get(f, 0.0)
 
-    # Interpolate any lingering NaNs if frames couldn't be decoded
+    # Interpolate any lingering NaNs if frames couldn't be decoded or tracking lost
     valid_mask = ~np.isnan(raw_positions[:, 0])
     if not np.all(valid_mask):
         valid_indices = np.where(valid_mask)[0]

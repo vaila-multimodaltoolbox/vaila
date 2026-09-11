@@ -44,7 +44,10 @@ def test_subspace_rts_tracker_wired_to_t_key_and_toolbar_button() -> None:
     assert "track_deep_button_rect.collidepoint" in source
     assert "track_cfg_button_rect.collidepoint" in source
     assert "_handle_track_ai_toml_dialog()" in source
-    assert '"Track AI"' in source or '"Track RTS"' in source
+    assert '"AI Track"' in source or '"Track AI"' in source or '"Track RTS"' in source
+    assert "nav_jump_frames" in source
+    assert "track_shape_dragging" in source
+    assert "update_from_correction" in source
     assert "run_subspace_rts_tracking()" in source
     assert "KinoveaTracker" in source or "BidirectionalSubspaceTracker" in source
     assert "RTSSmoother" in source or "infill_and_smooth" in source
@@ -232,11 +235,12 @@ def test_track_ai_toml_parameters_save_load_reset(tmp_path: Path) -> None:
 
 
 def test_click_pass_and_track_ai_armed_initialization() -> None:
-    """Verify that click_pass_mode is uncoupled from live_tracker and that Track AI supports ARMED state."""
+    """Verify that click_pass_mode is uncoupled from live_tracker and that AI Track supports ARMED state."""
     source = Path(gpv.__file__).read_text(encoding="utf-8")
 
-    # 1. Verify Track AI arms cleanly without deactivating when no anchor point exists
-    assert "Track AI m{target_marker} [ARMED]" in source
+    # 1. Verify AI Track arms cleanly without deactivating when no anchor point exists
+    assert "Track AI m{target_marker} [ARMED]" in source or "AI Track" in source
+    assert "[ARMED]" in source
 
     # 2. Verify initial click initializes the live tracker from ARMED state
     assert "if track_ai_active and frame is not None:" in source
@@ -250,8 +254,10 @@ def test_click_pass_and_track_ai_armed_initialization() -> None:
     assert "frame_count = min(frame_count + 1, total_frames - 1)" in source
     assert "paused = True" in source
 
-    # 4. Verify Track AI button displays ARMED state
-    assert "m{target_m}: ARMED" in source
+    # 4. Verify AI Track button displays arm/on/off badge (colour-blind accessible)
+    assert 'state_badge = "arm"' in source
+    assert 'state_badge = "on"' in source
+    assert 'state_badge = "off"' in source
 
 
 def test_toolbar_responsive_layout_and_resize() -> None:

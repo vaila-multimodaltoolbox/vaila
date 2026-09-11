@@ -10,7 +10,7 @@ Validates:
 
 Author: Prof. Dr. Paulo R. P. Santiago
 Update Date: 11 September 2026
-Version: 0.3.135
+Version: 0.3.137
 """
 
 from __future__ import annotations
@@ -138,10 +138,45 @@ def test_ai_template_update_policy() -> None:
     img_black = np.zeros_like(img1)
     res_poor = tracker.track_frame(img_black, (75.0, 75.0))
     assert res_poor.similarity < 0.45
+    assert getattr(res_poor, "accepted", True) is False
     assert not res_poor.template_updated, (
         "Template should NEVER update on tracking failure / occlusion"
     )
     assert np.array_equal(tracker.template, tpl_before_occlusion)
+
+
+def test_update_from_correction_keeps_online_anchors() -> None:
+    """Manual corrections must not wipe previously learned anchors."""
+    img1 = _render_synthetic_marker((150, 150), (75.0, 75.0), seed=2)
+    img2 = _render_synthetic_marker((150, 150), (80.0, 78.0), seed=3)
+    params = AITrackerParameters(
+        search_window=(80, 80),
+        block_window=(30, 30),
+        use_deep_features=False,
+    )
+    tracker = AITracker(params)
+    tracker.set_reference(img1, (75.0, 75.0), frame_idx=0, reset_online=True)
+    n0 = len(tracker.anchors)
+    tracker.update_from_correction(img2, (80.0, 78.0), frame_idx=5)
+    assert len(tracker.anchors) >= n0 + 1
+    assert tracker.discriminator_w is not None
+
+
+def test_track_frame_rejects_below_threshold() -> None:
+    """Low-confidence matches must return accepted=False and keep last_point."""
+    img1 = _render_synthetic_marker((120, 120), (60.0, 60.0), seed=7)
+    params = AITrackerParameters(
+        search_window=(60, 60),
+        block_window=(24, 24),
+        similarity_threshold=0.95,
+        use_deep_features=False,
+    )
+    tracker = AITracker(params)
+    tracker.set_reference(img1, (60.0, 60.0))
+    img_noise = np.random.default_rng(0).integers(0, 255, img1.shape, dtype=np.uint8)
+    res = tracker.track_frame(img_noise, (60.0, 60.0))
+    assert res.accepted is False
+    assert res.location == (60.0, 60.0)
 
 
 # Backward compatibility alias
@@ -369,7 +404,7 @@ def test_ai_tracker_online_discriminator() -> None:
     # Retrain online model
     tracker.retrain_online_model()
     assert tracker.discriminator_w is not None
-    assert tracker.discriminator_w.shape == (768,)
+    assert tracker.discriminator_w.shape == (808,)
 
     # Score positive patch vs background patch
     pos_patch = frame2[81 - 18 : 81 + 18, 82 - 18 : 82 + 18]

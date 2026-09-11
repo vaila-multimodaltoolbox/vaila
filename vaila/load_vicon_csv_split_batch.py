@@ -4,7 +4,8 @@ VICON CSV Split Batch Processor
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 2024-09-20
-Version: 1.1
+Update Date: 11 September 2026
+Version: 0.3.137
 
 Description:
 ------------
@@ -49,7 +50,6 @@ import os
 import re
 from datetime import datetime
 from io import StringIO
-from tkinter import Tk, filedialog
 
 import pandas as pd
 
@@ -146,6 +146,8 @@ def read_csv_devs(filepath, output_dir):
 
 def select_directory():
     """Prompt the user to select a source and output directory."""
+    from tkinter import Tk, filedialog
+
     root = Tk()
     root.withdraw()  # Hide the root window
     root.tk.call("wm", "attributes", ".", "-topmost", "1")  # Keep window on top

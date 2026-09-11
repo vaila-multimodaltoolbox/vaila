@@ -1,3 +1,8 @@
+---
+name: fifa-skeletal-tracking
+description: Use when working on the FIFA Skeletal Tracking Light 2026 pipeline, monocular broadcast pose estimation, or vaila_sam.py FIFA commands.
+---
+
 # FIFA Skeletal Tracking Light (vailá)
 
 Use when the user works on **FIFA Skeletal Tracking Light 2026**, monocular broadcast pose estimation, `vaila_sam.py fifa`, or `fifa_skeletal_pipeline.py`.

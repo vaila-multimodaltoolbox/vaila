@@ -1,91 +1,93 @@
-# File Manager Buttons & Hybrid SSH Transfer GUI-Terminal Integration
+---
+name: filemanager-tkinter-and-ssh-transfer
+description: Use when maintaining vailá File Manager Frame A buttons, previewed local operations, CLI parity, or interactive SSH transfer with status-file completion.
+---
 
-This skill documents the patterns and fixes for maintaining cross-platform compatibility, process safety, and proper interactive behavior for the File Manager utilities (Rename, Import, Export, Copy, Move, Remove, Tree, Find, and SSH Transfer).
+# File Manager: previewed ops, CLI, and SSH transfer
+
+Architecture since **v0.3.137** (11 September 2026). Parameter collection is separate from execution. GUI and CLI share the same plan/execute path.
+
+## Modules
+
+| File | Role |
+|------|------|
+| `vaila/filemanager.py` | `build_plan` / `execute_plan`, CLI (`python -m vaila.filemanager`), thin wrappers |
+| `vaila/filemanager_gui.py` | Tkinter: fields → Preview → Apply; Transfer opens a terminal |
+| `vaila/task_feedback.py` | `>> vaila/filemanager:` messages, `WorkerTask` queue, redaction |
+| `vaila.py` Frame A | Lazy wrappers → `copy_file`, `move_file`, …, `transfer_file` → `show_action` |
+
+Help: `vaila/help/filemanager.md` (+ `.html`). Button notes: `docs/vaila_buttons/*-file.md`. Diagnose failures with `/debug` → `.agents/skills/debug/SKILL.md`.
 
 ## vailá maintenance rule (version/date)
 
-When you edit `vaila/filemanager.py` or any `*.py` in this repo, also update:
+When editing these modules (or any `*.py`), also update:
 
-- Edited script header **Update Date** (today) + **Version** (global, from `vaila.py` header/banner)
-- Root `README.md` line `Last updated: YYYY-MM-DD`
-- Help docs: matching `vaila/help/<module>.md` + `.html`, plus `vaila/help/index.md` + `.html` (“Generated on”)
-- Installers / `vaila.py` if change impacts install/run UX
+- Script header **Update Date** + **Version** (global from `vaila.py` banner)
+- Root `README.md` `Last updated: YYYY-MM-DD`
+- Help: `vaila/help/filemanager.{md,html}`, `vaila/help/index.{md,html}`
+- Installers / `vaila.py` if install/run UX changes
 
-Reference checklist: `AGENTS.md` (“Mandatory: Update metadata on any script change”).
+See `AGENTS.md` checklist.
 
----
+## Flow
 
-## Technical Challenges & Standard Patterns
-
-### 1. The Duplicate Root Window Bug (`tk.Tk()` vs `tk.Toplevel`)
-**Issue**: Creating a new root window using `tk.Tk()` and calling `mainloop()` in a lazily-imported module when the main `vaila.py` GUI is already running causes thread/state conflicts in Tcl/Tk. This leads to hangs, focus issues, or Segmentation Faults.
-**Solution**: Implement the hybrid/dual window management pattern. Detect if a root window already exists in the process, and if so, spawn a transient modal `Toplevel` dialog and block using `wait_window()`. If no root exists (standalone execution), fall back to `tk.Tk()` and `mainloop()`.
-
-```python
-# Get existing root window
-parent_root = None
-if hasattr(tk, "_default_root") and tk._default_root is not None:
-    parent_root = tk._default_root
-
-# Create the window
-if parent_root:
-    dialog = tk.Toplevel(parent_root)
-    dialog.transient(parent_root)
-    dialog.grab_set()  # Make it modal
-else:
-    dialog = tk.Tk()
-
-# ... construct widgets packed into dialog ...
-
-# Block execution until closed
-if parent_root:
-    parent_root.wait_window(dialog)
-else:
-    dialog.mainloop()
 ```
-*Applied to: `copy_file()`, `move_file()`, and `import_file()` inside `vaila/filemanager.py`.*
-
-### 2. Tcl/Tk Segmentation Fault on Function Return (Exit Code 139)
-**Issue**: When a function creating a non-blocking `Toplevel` dialog returns, Python garbage-collects all local variables in its scope (including `StringVar` instances). The `StringVar.__del__` hook unregisters Tcl variables. However, the UI widgets (like `tk.Entry` fields) are still visible on-screen and bound to those Tcl variables. In the next idle cycle, the Tcl/Tk event loop attempts to render the entry fields, encounters a NULL pointer reference to the deleted Tcl variables, and triggers a Segmentation Fault (exit code 139).
-**Solution**:
-- Block execution using `parent_root.wait_window(dialog)`. This keeps the local call stack frame active, preventing variables from going out of scope while the window is open.
-- Explicitly bind `StringVar` and widget references to the `Toplevel` window object as attributes to ensure their lifecycle matches the window.
-
-```python
-# Prevent garbage collection of variables by binding them to the window object
-dialog.local_dir_var = local_dir_var
-dialog.remote_host_var = remote_host_var
-# ...
+Frame A / CLI args
+    → FileManagerGUI or argparse
+    → build_plan(action, source, …)   # fixed Target list + identity stamps
+    → preview (dry-run / GUI Preview) # no silent changes
+    → execute_plan(plan)              # worker thread in GUI; refuse stale/changed targets
+    → Feedback summary + exit code
 ```
 
-### 3. SSH Password Prompt & Terminal Integration
-**Issue**: Commands like `rsync` and `scp` require a real interactive terminal (TTY) to prompt for and read the SSH password. They cannot receive password input programmatically through GUI text boxes easily without introducing insecure dependencies like raw password entry boxes (which are prohibited or unsafe).
-**Solution**: Use a hybrid GUI-Terminal design:
-1. Build a clean Tkinter `Toplevel` dialog to collect all parameter variables (paths, username, host, port).
-2. Validate user inputs in Python (e.g. verify local paths exist).
-3. Generate a temporary executable bash script containing the pre-assembled `rsync` or `scp` command.
-4. Launch the script in a new terminal emulator window (`gnome-terminal`, `konsole`, `xfce4-terminal`, or `xterm` on Linux; `Terminal.app` on macOS; `cmd` on Windows) and auto-close the GUI dialog. The user only needs to type their password in the terminal.
+Invariants:
 
-```python
-# Launch script in a terminal window (Linux example)
-terminals = [
-    ("gnome-terminal", ["--", "bash", script_path]),
-    ("konsole", ["-e", "bash", script_path]),
-    ("xfce4-terminal", ["-e", f"bash {script_path}"]),
-    ("x-terminal-emulator", ["-e", f"bash {script_path}"]),
-    ("xterm", ["-hold", "-e", "bash", script_path]),
-]
-for tname, targs in terminals:
-    if shutil.which(tname):
-        subprocess.Popen([tname, *targs])
-        break
-```
+- Preview locks the target list; files added after preview are not selected.
+- No silent overwrite; collisions are partial failures.
+- Destination inside source skips previous `vaila_*` output trees and the active log file.
+- Removal is permanent; CLI needs `--yes` (GUI confirms the fixed list).
+- Workers must not touch Tk widgets; GUI drains `WorkerTask` via `after()`.
+- One busy task per window; Cancel cooperates between files.
 
-### 4. Whitespace Trimming on Inputs
-**Issue**: Copy-pasting paths or usernames frequently introduces trailing whitespace (e.g. `/mnt/disco2tb1/Downloads   `), causing `rsync`/`scp` to fail with "No such file or directory" or "Permission denied".
-**Solution**: Trim whitespace on all collected paths and parameters.
-- In Python: `.strip()` on string variables.
-- In Shell Scripts: use `xargs` to trim leading/trailing spaces.
+## GUI vs CLI
+
+- **Rename button** → `normalize_names()` → action `normalize` (accents/spaces cleanup).
+- **Literal rename** → CLI/action `rename` (`--text` / `--replacement`).
+- **Import** → `import-vicon` only; other formats marked unavailable (no fake success).
+- GUI prints a safely quoted equivalent CLI (`command_text`); removal prints default to `--dry-run`.
+- Subcommands: `copy`, `move`, `remove`, `rename`, `normalize`, `find`, `tree`, `export`, `import-vicon`, `transfer`.
+- Local mutating ops support `--dry-run`. Optional `--debug` and `--log-file` (keep log outside selected removal targets).
+
 ```bash
-LOCAL_DIR=$(echo "$LOCAL_DIR" | xargs)
+uv run python -m vaila.filemanager copy --help
+uv run python -m vaila.filemanager remove --source /data/tmp --pattern .tmp --removal-type ext --dry-run
+uv run python -m vaila.filemanager transfer --local "/data/my files" --host server --user analyst --remote /data
 ```
+
+## Tkinter window ownership
+
+Still use hybrid roots: if `tk._default_root` exists, open `Toplevel` + `wait_window()`; else `Tk()` + `mainloop()`. Implemented in `filemanager_gui.show_action`. Do not create a second `Tk()` under the main vailá process.
+
+Keep StringVars / widgets alive for the window lifetime (bind to the window or class attrs). Returning from a non-blocking dialog while Entries still reference GC’d `StringVar`s caused segfault 139 historically.
+
+## SSH Transfer
+
+rsync/scp need a real TTY for passwords. Pattern:
+
+1. GUI collects local/host/user/port/remote/mode.
+2. Writes a temp script that runs `python -m vaila.filemanager transfer … --status-file PATH`.
+3. Launches an external terminal (`gnome-terminal`, etc.).
+4. Status line: **Terminal opened - waiting for transfer result** ≠ completed.
+5. When `--status-file` appears with an exit code, GUI shows success or `failed (exit N)`.
+
+Do not treat “terminal launched” as transfer success. Never auto-run real transfers from `/debug`.
+
+## Tests
+
+```bash
+uv run pytest tests/test_filemanager_operations.py tests/test_filetools_downloader.py -v
+```
+
+Coverage includes collisions, nested destination, stale targets after preview, cancel, VICON import, headless CLI, transfer argv safety + status-file, GUI/CLI equivalence, Frame A dispatch to `show_action`, and simulated Transfer success/failure (no real SSH).
+
+GUI smoke needs a display; set `VAILA_GUI_ARTIFACTS=/tmp/…` for window PNGs.

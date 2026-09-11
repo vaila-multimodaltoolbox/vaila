@@ -8,8 +8,8 @@ Please see AUTHORS for contributors.
 Licensed under GNU Lesser General Public License v3.0
 
 Created: 25 February 2025
-Update: 13 March 2025
-Version updated: 0.2.0
+Update: 11 September 2026
+Version updated: 0.3.136
 
 Description:
 This script allows users to merge multiple video files into a single video in a specified order.
@@ -645,9 +645,6 @@ class VideoMergeApp:
             elif mode == "frame_accurate":
                 print("DEBUG: Using frame-accurate mode")
                 self.do_frame_accurate_merge(output_video_path, output_subdir)
-            elif mode == "fast":
-                print("DEBUG: Using fast mode")
-                self.do_fast_merge(output_video_path, output_subdir)
             else:
                 print(f"DEBUG: Unknown mode: '{mode}', using default (frame-accurate)")
                 self.do_frame_accurate_merge(output_video_path, output_subdir)
@@ -1929,10 +1926,6 @@ class VideoMergeApp:
                 "precise",
                 "Precise Mode (Reencodes all videos - Best quality, consistent FPS)",
             ),
-            (
-                "fast",
-                "Fast Mode (Direct concat - Faster but may have issues with different videos)",
-            ),
         ]
 
         # Create a style for selected button
@@ -1979,7 +1972,6 @@ class VideoMergeApp:
         mode_names = {
             "frame_accurate": "Frame Accurate Mode",
             "precise": "Precise Mode",
-            "fast": "Fast Mode",
         }
         mode_display_name = mode_names.get(mode, "Unknown Mode")
         self.mode_label.config(text=f"Selected: {mode_display_name}")

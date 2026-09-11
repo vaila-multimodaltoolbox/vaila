@@ -397,4 +397,4 @@ official `cameras/*.npz`.
 
 ### Slash Commands (`.claude/commands/`)
 
-Specs, common shortcuts like `/check`, `/new-module`.
+Specs, common shortcuts like `/check`, `/new-module`, `/debug` (safe File Manager / downloader diagnosis — `.agents/skills/debug/SKILL.md`).

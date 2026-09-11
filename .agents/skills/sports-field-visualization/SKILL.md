@@ -1,3 +1,8 @@
+---
+name: sports-field-visualization
+description: Use when maintaining sports field visualization or Tkinter GUI and standalone CLI integration with Matplotlib.
+---
+
 # Sports Field Visualization & GUI-CLI Integration
 
 This skill documents the patterns and fixes for maintaining cross-platform compatibility between Tkinter GUIs and standalone CLI tools using Matplotlib, specifically focusing on the `drawsportsfields.py` and `markerless_3d_analysis.py` modules.

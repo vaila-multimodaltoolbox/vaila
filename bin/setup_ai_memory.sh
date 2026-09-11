@@ -113,27 +113,48 @@ fi
 # ------------------------------------------------- [3/4] harness configs
 echo ">> [3/4] Multi-agent harness configuration"
 
-echo ">>   Registering ai-memory MCP server + hooks with Claude Code..."
-# ai-memory ships its own client-aware writers for this — no need to shell
-# out to `claude mcp add`. install-mcp --apply edits ~/.claude.json in
-# place (name defaults to "ai-memory", timestamped backup written first);
-# install-hooks --apply wires the lifecycle hooks the same way. Flag is
-# `--agent`, not `--harness`.
-ai-memory install-mcp --client claude-code --apply \
-  || echo ">>   (note) install-mcp --client claude-code reported an issue; check manually."
-
 # `cargo install` only builds the binary — it doesn't copy the repo's
 # hooks/ scripts anywhere ai-memory looks by default (/usr/local/share/...
 # etc.), so install-hooks can't find them unless pointed at the checkout.
+# Keep the path on ONE line when pasting manually — shell line-wrap glyphs
+# like │ break --hooks-dir and yield "hooks directory │/cursor does not exist".
 AI_MEMORY_HOOKS_DIR="$(find "${HOME}/.cargo/git/checkouts" -maxdepth 3 -type d \
   -path '*/ai-memory-*/*/hooks' 2>/dev/null | head -n1)"
-if [[ -n "${AI_MEMORY_HOOKS_DIR}" ]]; then
-  ai-memory install-hooks --agent claude-code --apply --hooks-dir "${AI_MEMORY_HOOKS_DIR}" \
-    || echo ">>   (note) install-hooks --agent claude-code reported an issue; check manually."
-else
-  echo ">>   (note) couldn't find ai-memory's hooks/ dir under ~/.cargo/git/checkouts;"
-  echo "        re-run: ai-memory install-hooks --agent claude-code --apply --hooks-dir <path-to-hooks>"
-fi
+
+# Cross-harness memory: same daemon + same project wiki. Handoffs created by
+# one agent's SessionEnd (or memory_handoff_begin shared=true) are consumed by
+# the next agent's SessionStart — Claude ↔ Cursor Agent (`agent`) ↔ Codex ↔
+# Antigravity (`agy`). Cursor is NOT an `ai-memory run` harness; launch with
+# `agent` after MCP/hooks are wired.
+#
+# install-mcp --client <…>  |  install-hooks --agent <…>
+# Flag for hooks is `--agent`, not `--harness`.
+wire_harness() {
+  local mcp_client="$1"
+  local hook_agent="$2"
+  echo ">>   Wiring MCP client=${mcp_client} hooks-agent=${hook_agent}..."
+  ai-memory install-mcp --client "${mcp_client}" --apply \
+    || echo ">>   (note) install-mcp --client ${mcp_client} reported an issue; check manually."
+  if [[ -n "${AI_MEMORY_HOOKS_DIR}" ]]; then
+    ai-memory install-hooks --agent "${hook_agent}" --apply --hooks-dir "${AI_MEMORY_HOOKS_DIR}" \
+      || echo ">>   (note) install-hooks --agent ${hook_agent} reported an issue; check manually."
+  else
+    echo ">>   (note) couldn't find ai-memory's hooks/ dir under ~/.cargo/git/checkouts;"
+    echo "        re-run: ai-memory install-hooks --agent ${hook_agent} --apply --hooks-dir <path-to-hooks>"
+  fi
+}
+
+wire_harness claude-code claude-code
+wire_harness cursor cursor
+wire_harness codex codex
+wire_harness antigravity-cli antigravity-cli
+
+echo ">>   Notes:"
+echo "      - Cursor Agent CLI: cd <repo> && agent --approve-mcps   (NOT: ai-memory run agent)"
+echo "      - Claude Code:      ai-memory run claude   OR   claude"
+echo "      - Codex:            ai-memory run codex    OR   codex  (trust hooks once in TUI)"
+echo "      - Antigravity:      ai-memory run antigravity OR agy"
+echo "      - After final agy turn: ai-memory finalize-session --agent antigravity-cli"
 
 mkdir -p "${REPO_ROOT}/.cursor"
 if [[ ! -f "${REPO_ROOT}/.cursor/mcp.json" ]]; then
@@ -150,9 +171,9 @@ EOF
 fi
 
 mkdir -p "${REPO_ROOT}/.cursor/rules"
-if [[ ! -f "${REPO_ROOT}/.cursor/rules/ai-memory.mdc" ]]; then
-  echo ">>   Writing .cursor/rules/ai-memory.mdc"
-  cat > "${REPO_ROOT}/.cursor/rules/ai-memory.mdc" <<'EOF'
+# Always refresh the rule so tool names / cross-harness notes stay current.
+echo ">>   Writing .cursor/rules/ai-memory.mdc"
+cat > "${REPO_ROOT}/.cursor/rules/ai-memory.mdc" <<'EOF'
 ---
 description: ai-memory cross-agent shared memory integration
 alwaysApply: true
@@ -167,17 +188,20 @@ OpenAI Codex, OpenCode, Gemini CLI). The daemon runs locally at
 for Cursor, root `mcp.json` for other MCP-compatible CLIs).
 
 - **At the start of a session**: check `ai-memory` via MCP tools
-  (`search_memory`, `get_handoff`) for prior context, unresolved edge cases,
-  and architectural decisions relevant to the current task.
-- **Before exiting or concluding a major task**: summarize unresolved edge
-  cases, architectural decisions, and hardware/environment dependencies using
-  `create_handoff`, so the next agent (regardless of harness) can pick up
-  where this session left off.
+  (`memory_query`, `memory_handoff_accept` / SessionStart handoff block) for
+  prior context, unresolved edge cases, and architectural decisions.
+- **Before exiting or concluding a major task**: summarize with
+  `memory_handoff_begin` (`shared: true` when the next operator/harness should
+  pick it up), so Claude / `agent` / Codex / `agy` share the same baton.
+- **Cursor Agent CLI** is launched with `agent`, not `ai-memory run agent`
+  (Cursor is not an `ai-memory run` harness). Wire via
+  `install-mcp --client cursor` + `install-hooks --agent cursor`.
+- **Antigravity (`agy`)**: after the final turn run
+  `ai-memory finalize-session --agent antigravity-cli` so the handoff is closed.
 
 See `bin/setup_ai_memory.sh` (or `bin/setup_ai_memory.ps1`) for setup details
 and `.ai-memory.toml` for local index/wiki paths.
 EOF
-fi
 
 if [[ ! -f "${REPO_ROOT}/mcp.json" ]]; then
   echo ">>   Writing root mcp.json (generic MCP discovery for Codex/OpenCode/Gemini CLI)"
@@ -193,9 +217,7 @@ if [[ ! -f "${REPO_ROOT}/mcp.json" ]]; then
 EOF
 fi
 
-# There is no single "generic" --agent value — every other harness (codex,
-# gemini-cli, open-code, ...) needs its own install-hooks/install-mcp call.
-# install-instructions covers them agent-agnostically instead: it drops an
+# install-instructions covers remaining agents agent-agnostically: drops an
 # idempotent, marker-delimited usage snippet + managed Agent Skills into the
 # project itself, readable by any harness regardless of native hook support.
 echo ">>   Previewing agent-agnostic ai-memory usage instructions..."

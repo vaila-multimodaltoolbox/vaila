@@ -186,7 +186,7 @@ Key shared modules:
 - `filtering.py` / `filter_utils.py` — Butterworth, FIR filter implementations
 - `common_utils.py` — Header detection, data reshaping for CSV files
 - `dialogsuser.py` / `dialogsuser_cluster.py` — Reusable Tkinter input dialogs for sample rate, file type
-- `filemanager.py` — All file management operations (rename, copy, move, transfer via SSH)
+- `filemanager.py` / `filemanager_gui.py` — Previewed GUI/CLI file ops + SSH transfer; diagnose with `/debug` (`.agents/skills/debug/SKILL.md`, `.claude/commands/debug.md`)
 - `hardware_manager.py` — GPU/CPU detection, TensorRT auto-export for YOLO models
 - `interp_smooth_split.py` — Interpolation, smoothing, splitting pipeline (GUI + CLI); configured via `smooth_config.toml`
 

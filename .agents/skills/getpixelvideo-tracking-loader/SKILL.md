@@ -1,3 +1,8 @@
+---
+name: getpixelvideo-tracking-loader
+description: Use when importing SAM3 or YOLO tracking CSV files into getpixelvideo, including bbox-to-marker anchor conversion.
+---
+
 # getpixelvideo Smart Tracking-CSV Loader (vailá)
 
 Use when the user works on **`vaila/getpixelvideo.py` Load Tracking CSV**,

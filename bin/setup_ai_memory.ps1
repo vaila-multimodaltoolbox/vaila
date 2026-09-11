@@ -94,25 +94,39 @@ if ($gitignoreText -notmatch [regex]::Escape('.ai-memory/*.db')) {
 # --- [3/4] harness configs -----------------------------------------------------
 Write-Host ">> [3/4] Multi-agent harness configuration"
 
-Write-Host ">>   Registering ai-memory MCP server + hooks with Claude Code..."
-# ai-memory ships its own client-aware writers for this — no need to shell
-# out to `claude mcp add`. install-mcp --apply edits %USERPROFILE%\.claude.json
-# in place (name defaults to "ai-memory", timestamped backup written first);
-# install-hooks --apply wires the lifecycle hooks the same way. Flag is
-# `--agent`, not `--harness`.
-try { ai-memory install-mcp --client claude-code --apply } catch { Write-Warning "install-mcp --client claude-code reported an issue; check manually." }
-
 # `cargo install` only builds the binary — it doesn't copy the repo's
 # hooks/ scripts anywhere ai-memory looks by default, so install-hooks
 # can't find them unless pointed at the checkout.
 $HooksDir = Get-ChildItem -Path (Join-Path $env:USERPROFILE ".cargo\git\checkouts") -Recurse -Directory -Filter "hooks" -ErrorAction SilentlyContinue |
   Where-Object { $_.FullName -match "ai-memory-" } | Select-Object -First 1 -ExpandProperty FullName
-if ($HooksDir) {
-  try { ai-memory install-hooks --agent claude-code --apply --hooks-dir $HooksDir } catch { Write-Warning "install-hooks --agent claude-code reported an issue; check manually." }
-} else {
-  Write-Host ">>   (note) couldn't find ai-memory's hooks\ dir under %USERPROFILE%\.cargo\git\checkouts;"
-  Write-Host "        re-run: ai-memory install-hooks --agent claude-code --apply --hooks-dir <path-to-hooks>"
+
+# Cross-harness memory: same daemon + same project wiki. Handoffs from one
+# agent's SessionEnd (or memory_handoff_begin shared=true) are consumed by the
+# next agent's SessionStart — Claude <-> Cursor Agent (`agent`) <-> Codex <->
+# Antigravity (`agy`). Cursor is NOT an `ai-memory run` harness.
+function Wire-Harness {
+  param([string]$McpClient, [string]$HookAgent)
+  Write-Host ">>   Wiring MCP client=$McpClient hooks-agent=$HookAgent..."
+  try { ai-memory install-mcp --client $McpClient --apply } catch { Write-Warning "install-mcp --client $McpClient reported an issue; check manually." }
+  if ($HooksDir) {
+    try { ai-memory install-hooks --agent $HookAgent --apply --hooks-dir $HooksDir } catch { Write-Warning "install-hooks --agent $HookAgent reported an issue; check manually." }
+  } else {
+    Write-Host ">>   (note) couldn't find ai-memory's hooks\ dir under %USERPROFILE%\.cargo\git\checkouts;"
+    Write-Host "        re-run: ai-memory install-hooks --agent $HookAgent --apply --hooks-dir <path-to-hooks>"
+  }
 }
+
+Wire-Harness -McpClient claude-code -HookAgent claude-code
+Wire-Harness -McpClient cursor -HookAgent cursor
+Wire-Harness -McpClient codex -HookAgent codex
+Wire-Harness -McpClient antigravity-cli -HookAgent antigravity-cli
+
+Write-Host ">>   Notes:"
+Write-Host "      - Cursor Agent CLI: cd <repo>; agent --approve-mcps   (NOT: ai-memory run agent)"
+Write-Host "      - Claude Code:      ai-memory run claude   OR   claude"
+Write-Host "      - Codex:            ai-memory run codex    OR   codex  (trust hooks once in TUI)"
+Write-Host "      - Antigravity:      ai-memory run antigravity OR agy"
+Write-Host "      - After final agy turn: ai-memory finalize-session --agent antigravity-cli"
 
 $CursorDir = Join-Path $RepoRoot ".cursor"
 New-Item -ItemType Directory -Force -Path $CursorDir | Out-Null
@@ -133,9 +147,8 @@ if (-not (Test-Path $CursorMcp)) {
 $CursorRulesDir = Join-Path $CursorDir "rules"
 New-Item -ItemType Directory -Force -Path $CursorRulesDir | Out-Null
 $CursorRule = Join-Path $CursorRulesDir "ai-memory.mdc"
-if (-not (Test-Path $CursorRule)) {
-  Write-Host ">>   Writing .cursor\rules\ai-memory.mdc"
-  @'
+Write-Host ">>   Writing .cursor\rules\ai-memory.mdc"
+@'
 ---
 description: ai-memory cross-agent shared memory integration
 alwaysApply: true
@@ -150,17 +163,20 @@ OpenAI Codex, OpenCode, Gemini CLI). The daemon runs locally at
 for Cursor, root `mcp.json` for other MCP-compatible CLIs).
 
 - **At the start of a session**: check `ai-memory` via MCP tools
-  (`search_memory`, `get_handoff`) for prior context, unresolved edge cases,
-  and architectural decisions relevant to the current task.
-- **Before exiting or concluding a major task**: summarize unresolved edge
-  cases, architectural decisions, and hardware/environment dependencies using
-  `create_handoff`, so the next agent (regardless of harness) can pick up
-  where this session left off.
+  (`memory_query`, `memory_handoff_accept` / SessionStart handoff block) for
+  prior context, unresolved edge cases, and architectural decisions.
+- **Before exiting or concluding a major task**: summarize with
+  `memory_handoff_begin` (`shared: true` when the next operator/harness should
+  pick it up), so Claude / `agent` / Codex / `agy` share the same baton.
+- **Cursor Agent CLI** is launched with `agent`, not `ai-memory run agent`
+  (Cursor is not an `ai-memory run` harness). Wire via
+  `install-mcp --client cursor` + `install-hooks --agent cursor`.
+- **Antigravity (`agy`)**: after the final turn run
+  `ai-memory finalize-session --agent antigravity-cli` so the handoff is closed.
 
 See `bin/setup_ai_memory.ps1` (or `bin/setup_ai_memory.sh`) for setup details
 and `.ai-memory.toml` for local index/wiki paths.
 '@ | Set-Content -Path $CursorRule -Encoding utf8
-}
 
 $RootMcp = Join-Path $RepoRoot "mcp.json"
 if (-not (Test-Path $RootMcp)) {
@@ -177,15 +193,8 @@ if (-not (Test-Path $RootMcp)) {
 "@ | Set-Content -Path $RootMcp -Encoding utf8
 }
 
-# There is no single "generic" --agent value — every other harness (codex,
-# gemini-cli, open-code, ...) needs its own install-hooks/install-mcp call.
-# install-instructions covers them agent-agnostically instead: it drops an
-# idempotent, marker-delimited usage snippet + managed Agent Skills into the
-# project itself, readable by any harness regardless of native hook support.
-# --print only: by default this command MUTATES CLAUDE.md/AGENTS.md (both
-# exist in this repo, so it writes to both) by inserting the snippet. That's
-# a real edit to two curated, hand-maintained docs — preview it and apply by
-# hand (drop --print) after reviewing the diff.
+# install-instructions covers remaining agents agent-agnostically.
+# --print only: by default this command MUTATES CLAUDE.md/AGENTS.md.
 Write-Host ">>   Previewing agent-agnostic ai-memory usage instructions..."
 Push-Location $RepoRoot
 try {

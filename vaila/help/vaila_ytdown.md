@@ -1,142 +1,59 @@
-# vaila_ytdown
+# YouTube Downloader
 
-## 📋 Module Information
+**Version:** 0.3.137
+**Updated:** 2026-09-11
 
-- **Category:** Tools
-- **File:** `vaila/vaila_ytdown.py`
-- **Version:** 0.3.108
-- **Author:** Prof. Dr. Paulo R. P. Santiago
-- **GUI Interface:** ✅ Yes
-- **HTML Help:** [vaila_ytdown.html](vaila_ytdown.html) (open in browser or use **? Help** in the GUI)
+Download video as MP4 or audio as MP3 from one editable list. Open **Video and Image → YouTube Downloader** or run the module without CLI inputs.
 
----
+## GUI
 
-## How to run
+1. Paste URLs, one per line, or choose **Load TXT…**. Loading only fills the editable list; it never starts downloads. Blank lines and lines beginning with # are ignored. Review the count; **Clear** empties the list.
+2. Choose a destination and **Video (MP4)** or **Audio (MP3)**.
+3. Click **Download**, or press **Ctrl+Enter**. Inputs lock until the run finishes, preventing duplicate runs.
+4. Follow the current item, transfer progress, processing/conversion and success/failure counts. Unknown transfer sizes use an indeterminate bar.
+5. **Cancel** or Escape requests cooperative cancellation. A progress callback can interrupt transfer; extraction and ffmpeg processing may need to finish first. Pending cancellation is shown explicitly. New items are not started and completed files are retained.
+6. **Open folder** opens the latest output directory. **Help** opens local help. Both remain accessible while working. **Show details** expands the log; **Diagnostic details** enables --debug.
+7. Closing during work requests cancellation and waits safely. The window is resizable; Tab navigates fields and buttons.
 
-The script can be used via **GUI** (default) or **CLI** (command line).
+Workers send queued events consumed by Tk after(). Downloads never pump the GUI with root.update() or update widgets from a worker.
 
-### GUI (default)
+## Quality and requirements
 
-```bash
-uv run python vaila/vaila_ytdown.py
-```
+- **MP4:** preserves bestvideo+bestaudio/best, merges video/audio and converts to MP4. yt-dlp chooses the best available quality. This does not promise the highest FPS independently of other quality attributes.
+- **MP3:** preserves bestaudio/best and FFmpegExtractAudio at 192 kbps.
+- **ffmpeg** must be on PATH for both outputs. There is no embedded-ffmpeg fallback. The final expected .mp4/.mp3 file is checked after post-processing; changing an extension never counts as conversion.
+- Existing yt-dlp retry, JavaScript runtime detection (Deno/Node/QuickJS) and EJS fallback settings are retained. No new dependencies.
+- Each input is an individual video URL; playlist expansion is not offered.
 
-1. Set **Save Location** (Browse…).
-2. Choose **Video (highest FPS)** or **Audio Only (MP3)**.
-3. **Direct:** paste URLs in the text box and click **DOWNLOAD FROM TEXT BOX**.
-4. **Batch:** click **LOAD FROM FILE...** and select a `.txt` file with one URL per line.
-5. Confirm; progress appears in the log. Use **? Help** in the window for more.
+A completed transfer can still be merging or converting. Success is counted only after all post-processing and final-file verification.
 
-### CLI (command line)
+## CLI
 
-```bash
-# Single URL (video, best quality)
-uv run python vaila/vaila_ytdown.py -u "https://www.youtube.com/watch?v=..."
+~~~bash
+python -m vaila.vaila_ytdown --url "https://www.youtube.com/watch?v=VIDEO_ID" --output "/data/my videos" --no-gui
+python -m vaila.vaila_ytdown --file "/data/my URLs.txt" --output "/data/my videos" --no-gui
+python -m vaila.vaila_ytdown --file "/data/my URLs.txt" --output "/data/my audio" --audio-only --no-gui --debug
+python -m vaila.vaila_ytdown --no-gui --audio-only --output "/data/my audio"
+~~~
 
-# Single URL (audio only, MP3)
-uv run python vaila/vaila_ytdown.py -u "https://www.youtube.com/watch?v=..." -a
+Short options remain: -u, -f, -o, -a. --url and --file are mutually exclusive; either selects CLI mode without a display. --no-gui without input prompts for one URL and respects --audio-only. Ctrl+C interrupts CLI execution.
 
-# Batch from file (video)
-uv run python vaila/vaila_ytdown.py -f urls.txt -o ~/Videos
+Exit codes: 0 all succeeded; 1 failure including partial failures; 2 invalid arguments; 130 cancellation without other failures. Failed items do not prevent subsequent batch items from being attempted.
 
-# Batch from file (audio only)
-uv run python vaila/vaila_ytdown.py -f urls.txt -a -o ~/Music
+## Outputs and reproducibility
 
-# Force CLI (no GUI)
-uv run python vaila/vaila_ytdown.py --no-gui -u "https://..."
+- Single video: vaila_ytdownload_TIMESTAMP/TITLE.mp4 and video_info.txt with title, channel, source URL, downloaded dimensions/FPS, duration and available formats.
+- Single audio: vaila_ytaudio_TIMESTAMP/TITLE.mp3.
+- Batch video: vaila_batch_TIMESTAMP/001/vaila_ytdownload_TIMESTAMP/001_TITLE.mp4, then 002, etc.
+- Batch audio: vaila_audio_TIMESTAMP/001/vaila_ytaudio_TIMESTAMP/001_TITLE.mp3.
+- A numerical suffix prevents runs started in the same second from reusing an output directory.
+- download_log.txt records progress, successful paths, failures and summary. Batch logs live at the batch root; single-run logs live beside the final media.
+- Multiple edited GUI URLs and CLI TXT runs save the exact list as urls.txt in the run directory. The equivalent command references that list; single-URL commands use --url. Destination, audio choice and diagnostics are included with native shell quoting.
+- urls.txt is a replay input, not a sanitized log: treat it as private if it contains private links. Terminal and diagnostic logs redact credentials.
+- Interrupted transfers or failed post-processing may leave partial files. Completed outputs are preserved. Inspect the summary before retrying.
 
-# Show all options
-uv run python vaila/vaila_ytdown.py -h
-```
+## Diagnosis
 
----
+Messages with **>> vaila/vaila_ytdown:** are always immediate, even when details are collapsed. Technical yt-dlp messages and tracebacks require --debug; secrets are redacted. Project /debug uses simulated downloads; external downloads are not automatic diagnostic steps.
 
-## 📖 Description
-
-YouTube High Quality Downloader for the vailá toolbox. Downloads videos in the highest quality possible, prioritizing resolution and framerate (FPS), or audio only as MP3.
-
-### Key Features
-
-- Downloads in highest resolution available (up to 8K)
-- Prioritizes higher FPS (e.g. 60 fps when available)
-- Automatically selects best video + audio quality
-- Shows detailed video info (resolution, FPS)
-- Progress tracking and batch download from URL files
-- **Direct URL input** for quick downloads
-- Audio-only mode: MP3 from YouTube URLs
-- Uses **yt-dlp** (`yt-dlp[default]`, includes `yt-dlp-ejs`) for YouTube JS challenges
-- Auto-detects **Deno** / **Node.js** / QuickJS on `PATH` to avoid HTTP 403 mid-download
-
-### Requirements
-
-- **yt-dlp:** `uv sync` (dependency `yt-dlp[default]`) — keep updated (`uv lock --upgrade-package yt-dlp`)
-- **JavaScript runtime (recommended):** [Deno](https://deno.land/) or Node.js ≥22 on `PATH` — see [yt-dlp EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS)
-- **ffmpeg:** must be installed and in PATH (for merging video/audio)
-
----
-
-## 🖥️ Usage
-
-### GUI mode (default)
-
-```bash
-python -m vaila.vaila_ytdown
-# or
-uv run python vaila/vaila_ytdown.py
-```
-
-1. **Configuration**:
-   - Set **Save Location** (Browse...).
-   - Select **Download Type**: "Video (highest FPS)" or "Audio Only (MP3)".
-2. **Download Methods**:
-   - **Direct Input**: Paste URLs into the text box and click **DOWNLOAD FROM TEXT BOX**.
-   - **File Batch**: Click **LOAD FROM FILE...** and choose a `.txt` file with one YouTube URL per line.
-3. Confirm the action; downloads run with progress in the log.
-
-Use **? Help** in the window to open the full HTML documentation in your browser.
-
-### CLI mode
-
-```bash
-# Single URL (video, best quality)
-python -m vaila.vaila_ytdown -u "https://www.youtube.com/watch?v=..."
-
-# Single URL (audio only, MP3)
-python -m vaila.vaila_ytdown -u "https://www.youtube.com/watch?v=..." -a
-
-# File with URLs (video)
-python -m vaila.vaila_ytdown -f urls.txt -o ~/Videos
-
-# File with URLs (audio only)
-python -m vaila.vaila_ytdown -f urls.txt -a -o ~/Music
-
-# Force CLI (no GUI)
-python -m vaila.vaila_ytdown --no-gui -u "https://..."
-```
-
-### URL file format
-
-- One YouTube URL per line.
-- Empty lines and lines starting with `#` are ignored.
-
----
-
-## 🔧 Main Functions
-
-- `read_urls_from_file` — Read URLs from a text file
-- `detect_js_runtimes` / `build_ytdlp_base_opts` — YouTube EJS / JS runtime yt-dlp options
-- `run_ytdown` — Main entry point (CLI + GUI)
-- `get_video_info` — Get video metadata and formats
-- `download_video` — Download video (best quality)
-- `download_audio` — Download audio only (MP3)
-- `download_playlist` — Download full playlist
-- `download_from_file` — Batch download from URL file
-- `browse_dir` — GUI: choose output directory
-- `load_url_file` — GUI: load URL file and start batch
-- `cleanup_resources` — GUI: cleanup after batch
-
----
-
-📅 **Updated:** 2026-08-20  
-🔗 **Part of _vailá_ - Multimodal Toolbox**  
-🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)
+GUI and CLI share YTDownloader.download_urls. The download_video, download_audio, callbacks and compatibility download_from_file entry points remain. Detailed counts are returned by download_urls and stored in last_result. Shared worker/feedback support is in task_feedback.py.

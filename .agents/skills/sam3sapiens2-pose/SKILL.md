@@ -1,3 +1,8 @@
+---
+name: sam3sapiens2-pose
+description: Use when working on the SAM3 plus Sapiens2 pose estimation pipeline, batch GPU processing, or VRAM and throughput issues.
+---
+
 # SAM3-Guided Sapiens2 Pose Pipeline (vailá)
 
 Use when working on **SAM3 + Sapiens2 pose estimation**, running batch CLI video pipelines (`vaila/sam3sapiens2.py`), tuning batch sizes for NVIDIA GPUs (RTX 4090 / 3090 / 5050), configuring headless GPU mode via `gpumode`, or diagnosing VRAM/throughput bottlenecks.

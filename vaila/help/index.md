@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 157 | **Categories:** 7 | **Generated on:** 11/09/2026 (v0.3.135)
+**Documented topics:** 157 | **Categories:** 7 | **Generated on:** 11/09/2026 (v0.3.137)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -195,7 +195,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](ellipse.html) · [Markdown](ellipse.md)
 - **extractpng** — vailá Video ↔ PNG tool: high-performance video-to-PNG extraction and PNG-to-video creation accelerated by NVIDIA GPU hardware (NVDEC decoding & NVENC encodin...
   - [HTML](extractpng.html) · [Markdown](extractpng.md)
-- **filemanager** — GUI toolkit for file operations (copy, move, remove, import/export, rename, tree, find, transfer). Provides terminal feedback for each action and supports pa...
+- **filemanager** — Previewed GUI/CLI file operations, VICON import, safe local outputs and interactive SSH transfer with explicit completion status.
   - [HTML](filemanager.html) · [Markdown](filemanager.md)
 - **fixnoise** — This script is designed to batch process CSV files, applying a noise filter (fixnoise) interactively.
   - [HTML](fixnoise.html) · [Markdown](fixnoise.md)
@@ -271,7 +271,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](vaila_stroboscopic.html) · [Markdown](vaila_stroboscopic.md)
 - **vaila_upscaler** — 🔗 Part of vailá - Multimodal Toolbox
   - [HTML](vaila_upscaler.html) · [Markdown](vaila_upscaler.md)
-- **vaila_ytdown** — YouTube High Quality Downloader for the vailá toolbox. Downloads videos in the highest quality possible, prioritizing resolution and framerate (FPS), or audi...
+- **vaila_ytdown** — Review URLs, choose MP4/MP3 and download through a shared GUI/CLI batch with progress, safe cancellation and diagnostic logs.
   - [HTML](vaila_ytdown.html) · [Markdown](vaila_ytdown.md)
 - **videoprocessor** — This script allows users to process and edit video files, enabling batch processing of videos. Users can choose between two main operations: 1. Merging a vid...
   - [HTML](videoprocessor.html) · [Markdown](videoprocessor.md)

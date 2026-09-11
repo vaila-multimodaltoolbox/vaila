@@ -220,13 +220,20 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.135<br />
+        <strong>Version:</strong> 0.3.137<br />
         <strong>Updated:</strong> 11 September 2026<br />
         <strong>Date:</strong> 23 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
-        <strong>Track AI (NCC + Spatial Prior + Online Discriminator &amp; ResNet50 &amp; RTS Smoother):</strong> Drift-resistant kinematic tracking via Normalized Cross-Correlation, 2D Gaussian spatial motion prior (&sigma; = 22 px), adaptive running template EMA blending, fast online closed-form appearance learning (&lt;1 ms on user anchors), and selectable ResNet-50 deep visual verification. Features dynamic marker indicator (<code>Track AI m0: ON</code> / <code>OFF</code>), multi-shape centroid tracking (<code>Shp:Pt</code> / <code>Shp:Cir</code> / <code>Shp:Box</code>), accelerated playback skip tracking, independent <code>Deep: ON</code> / <code>OFF</code> CPU-speed toggle, <code>Cfg</code> TOML parameter management, and full-video bidirectional RTS zero-phase smoothing (&Delta;&phi; = 0) on Shift+Click / Shift+T exporting <code>*_ai_track_m{idx}.csv</code>.<br />
+        <strong>AI Track (NCC + Spatial Prior + Online Discriminator &amp; ResNet50 &amp; RTS Smoother):</strong>
+        Drift-resistant kinematic tracking via Normalized Cross-Correlation, velocity-aware Gaussian prior,
+        adaptive EMA template blending, online ridge learning that survives manual corrections, low-confidence
+        rejection, and optional ResNet-50 deep verification (local <code>deep_weights_path</code> or
+        <code>vaila/models/resnet50_imagenet.pth</code>). Button label <code>AI Track</code> with green
+        <code>on</code> / red <code>off</code> / amber <code>arm</code> badge. Cir/Box: drag to set size,
+        marker at centroid. Hold arrows for continuous nav; Up/Down step = <code>nav_jump</code> (Cfg, default 60).
+        Shift+T batch + RTS exports <code>*_ai_track_m{idx}.csv</code>.<br />
         <strong>BBox→Coords Export:</strong> Convert tracking bounding boxes / contours to 5 coordinate CSV files (center, bottom, top, left, right) in standard vailá format via GUI button or <code>--export-bbox-coords</code> CLI.<br />
         <strong>Highlights:</strong>
         <strong>Template Marker Mode</strong> — toolbar cycles keypoint templates:
