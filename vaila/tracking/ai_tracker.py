@@ -8,8 +8,8 @@ distractor rejection, and occlusion recovery. Integrates bidirectional keyframe
 infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 10 September 2026
-Version: 0.3.134
+Update Date: 11 September 2026
+Version: 0.3.135
 """
 
 from __future__ import annotations
@@ -65,6 +65,7 @@ class AITrackerParameters:
     use_mask: bool = True  # Elliptical mask to discount rectangular corners
     use_deep_features: bool = True  # ResNet50 semantic embedding verification
     deep_weight: float = 0.30  # Weight for deep feature score: (1 - α) * ncc + α * deep
+    tracking_shape: str = "point"  # Shape mode: "point" (default), "circle", "box" (or "rectangle")
 
     def to_toml(self, toml_path: str | Path) -> None:
         """Serialize tracking parameters to a TOML file."""
@@ -85,6 +86,7 @@ class AITrackerParameters:
             f"use_mask = {str(bool(self.use_mask)).lower()}\n"
             f"use_deep_features = {str(bool(self.use_deep_features)).lower()}\n"
             f"deep_weight = {float(self.deep_weight):.4f}\n"
+            f'tracking_shape = "{self.tracking_shape}"\n'
         )
         path.write_text(content, encoding="utf-8")
 
@@ -109,6 +111,11 @@ class AITrackerParameters:
         mask = bool(track_cfg.get("use_mask", True))
         deep = bool(track_cfg.get("use_deep_features", False))
         d_wt = float(track_cfg.get("deep_weight", 0.25))
+        shape = str(track_cfg.get("tracking_shape", "point")).lower()
+        if shape not in ("point", "circle", "box", "rectangle"):
+            shape = "point"
+        if shape == "rectangle":
+            shape = "box"
 
         return cls(
             search_window=(sw_w, sw_h),
@@ -120,6 +127,7 @@ class AITrackerParameters:
             use_mask=mask,
             use_deep_features=deep,
             deep_weight=d_wt,
+            tracking_shape=shape,
         )
 
 
@@ -302,6 +310,8 @@ class AITracker:
         else:
             self.extractor = None
 
+        self._error_reported: bool = False
+
     def _create_elliptical_mask(self, width: int, height: int) -> np.ndarray:
         """Generate a binary elliptical mask matching circular marker boundaries."""
         mask = np.zeros((height, width), dtype=np.uint8)
@@ -309,6 +319,74 @@ class AITracker:
         axes = (width // 2, height // 2)
         cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
         return mask
+
+    def _create_circular_mask(self, width: int, height: int) -> np.ndarray:
+        """Generate a binary circular mask of maximum inscribed radius."""
+        mask = np.zeros((height, width), dtype=np.uint8)
+        center = (width // 2, height // 2)
+        radius = min(width, height) // 2
+        cv2.circle(mask, center, radius, 255, -1)
+        return mask
+
+    @staticmethod
+    def compute_shape_centroid(
+        patch: np.ndarray,
+        shape: str,
+        bw: int,
+        bh: int,
+    ) -> tuple[float, float]:
+        """Compute the 2D feature centroid (center of mass) inside the candidate patch.
+
+        Parameters
+        ----------
+        patch : np.ndarray
+            Cropped image patch (BGR or grayscale).
+        shape : str
+            Shape mode: "circle" or "box" / "rectangle".
+        bw : int
+            Patch width.
+        bh : int
+            Patch height.
+
+        Returns
+        -------
+        tuple[float, float]
+            Sub-pixel coordinates of the centroid relative to patch top-left.
+        """
+        if patch.size == 0:
+            return bw / 2.0, bh / 2.0
+
+        gray = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY) if patch.ndim == 3 else patch
+        h, w = gray.shape[:2]
+        if shape == "circle":
+            r = min(w, h) // 2
+            cx_center, cy_center = w / 2.0, h / 2.0
+            yy, xx = np.ogrid[:h, :w]
+            circ_mask = ((xx - cx_center + 0.5) ** 2 + (yy - cy_center + 0.5) ** 2) <= (r**2)
+            inside_vals = gray[circ_mask]
+            if inside_vals.size == 0:
+                return bw / 2.0, bh / 2.0
+            w_min = float(np.min(inside_vals))
+            w_max = float(np.max(inside_vals))
+        else:  # "box" or "rectangle"
+            circ_mask = np.ones((h, w), dtype=bool)
+            w_min = float(np.min(gray))
+            w_max = float(np.max(gray))
+
+        if w_max - w_min > 12.0:
+            weights = gray.astype(np.float32)
+            saliency = (weights - w_min) / (w_max - w_min)
+            if shape == "circle":
+                saliency *= circ_mask
+            moments = cv2.moments(saliency.astype(np.float32))
+            if moments["m00"] > 1e-4:
+                cx_res = float(moments["m10"] / moments["m00"])
+                cy_res = float(moments["m01"] / moments["m00"])
+                cx_res = max(1.0, min(float(w - 2), cx_res))
+                cy_res = max(1.0, min(float(h - 2), cy_res))
+                return cx_res, cy_res
+
+        return bw / 2.0, bh / 2.0
 
     def extract_patch(
         self,
@@ -453,7 +531,12 @@ class AITracker:
         self.anchor_template = self.template.copy()
         self.last_point = point
 
-        if self.params.use_mask:
+        shape_mode = getattr(self.params, "tracking_shape", "point").lower()
+        if shape_mode in ("circle",):
+            self.mask = self._create_circular_mask(bw, bh)
+        elif shape_mode in ("box", "rectangle"):
+            self.mask = None
+        elif self.params.use_mask:
             self.mask = self._create_elliptical_mask(bw, bh)
         else:
             self.mask = None
@@ -566,6 +649,13 @@ class AITracker:
 
         # Extract candidate patch for visual / discriminator evaluation
         cand_patch = self.extract_patch(frame, (cand_x, cand_y), (bw, bh))
+
+        # Shape-aware centroid refinement: compute feature centroid for circle or box
+        shape_mode = getattr(self.params, "tracking_shape", "point").lower()
+        if shape_mode in ("circle", "box", "rectangle") and cand_patch.size > 0:
+            cx_c, cy_c = self.compute_shape_centroid(cand_patch, shape_mode, bw, bh)
+            cand_x = float(crop_sx1 + ref_x + cx_c)
+            cand_y = float(crop_sy1 + ref_y + cy_c)
 
         # Deep Feature Cosine Similarity Verification
         deep_score = None

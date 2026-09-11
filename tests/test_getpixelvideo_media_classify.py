@@ -288,4 +288,34 @@ def test_toolbar_responsive_layout_and_resize() -> None:
     assert "min_initial_w = min(860, max(640, screen_width - 80))" in source
 
 
+def test_track_ai_spam_suppression_and_shape_wiring() -> None:
+    """Verify terminal spam removal, accelerated playback sequential tracking, and shape button wiring."""
+    source = Path(gpv.__file__).read_text(encoding="utf-8")
+
+    # 1. Spam suppression: verify verbose retrain print was removed
+    assert "Online discriminator retrained in" not in source
+
+    # 2. Accelerated playback skip tracking
+    assert "if track_ai_active and live_tracker is not None:" in source
+    assert "_perform_live_ai_tracking(sub_f, frame)" in source
+    assert "max_allowed_gap = max(15, int(playback_speed) * 2 + 2)" in source
+
+    # 3. Shape selection toolbar button and cycling
+    assert "track_shape_button_rect" in source
+    assert 'shape_label = shape_cap if is_compact else f"Shp:{shape_cap}"' in source
+    assert 'track_ai_shape = "circle"' in source
+    assert 'track_ai_shape = "box"' in source
+    assert 'track_ai_shape = "point"' in source
+    assert "Track AI Shape selector" in source
+
+    # 4. Shape selection modal in TOML dialog
+    assert "1=Pt, 2=Cir, 3=Box" in source
+    assert 'tracking_shape = "' in source
+
+    # 5. Canvas overlay visual shapes
+    assert "pygame.draw.circle(screen, (0, 220, 255)" in source
+    assert "pygame.draw.rect(screen, (0, 220, 255)" in source
+
+
+
 

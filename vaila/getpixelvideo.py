@@ -1920,6 +1920,7 @@ def play_video_with_controls(
     live_track_target_marker: int = 0
     live_track_last_frame: int = -1
     track_ai_use_deep: bool = False
+    track_ai_shape: str = "point"  # "point" (default), "circle", "box"
     track_ai_params: Any = None
 
     # Bounding box labeling mode variables (preserved when switching video via F8)
@@ -3960,7 +3961,7 @@ def play_video_with_controls(
 
     def _handle_track_ai_toml_dialog() -> None:
         """Modal dialog rendered natively in Pygame to Save, Load, or Reset Track AI parameters."""
-        nonlocal track_ai_params, track_ai_use_deep, live_tracker
+        nonlocal track_ai_params, track_ai_use_deep, track_ai_shape, live_tracker
         nonlocal save_message_text, showing_save_message, save_message_timer
         try:
             from vaila.tracking import AITrackerParameters
@@ -3969,6 +3970,7 @@ def play_video_with_controls(
                 track_ai_params = AITrackerParameters(
                     use_deep_features=track_ai_use_deep,
                     deep_weight=0.25 if track_ai_use_deep else 0.0,
+                    tracking_shape=track_ai_shape,
                 )
 
             total_h = window_height + control_panel_height
@@ -4008,6 +4010,7 @@ def play_video_with_controls(
                 out_file = os.path.join(init_dir, f"{base_v}_track_ai.toml")
                 track_ai_params.use_deep_features = track_ai_use_deep
                 track_ai_params.deep_weight = 0.25 if track_ai_use_deep else 0.0
+                track_ai_params.tracking_shape = track_ai_shape
                 track_ai_params.to_toml(out_file)
                 print(f">> Track AI: Parameters saved to {out_file}")
                 save_message_text = f"Track AI: Saved {os.path.basename(out_file)}"
@@ -4015,7 +4018,7 @@ def play_video_with_controls(
                 save_message_timer = 90
 
             def _do_load_action() -> None:
-                nonlocal track_ai_params, track_ai_use_deep, live_tracker
+                nonlocal track_ai_params, track_ai_use_deep, track_ai_shape, live_tracker
                 nonlocal save_message_text, showing_save_message, save_message_timer
                 init_dir = os.path.dirname(video_path) if video_path else os.getcwd()
                 in_file = pygame_file_dialog(
@@ -4026,6 +4029,7 @@ def play_video_with_controls(
                 if in_file and os.path.isfile(in_file):
                     track_ai_params = AITrackerParameters.from_toml(in_file)
                     track_ai_use_deep = track_ai_params.use_deep_features
+                    track_ai_shape = getattr(track_ai_params, "tracking_shape", "point")
                     if live_tracker is not None:
                         live_tracker.params = track_ai_params
                     print(f">> Track AI: Parameters loaded from {in_file}")
@@ -4034,7 +4038,7 @@ def play_video_with_controls(
                     save_message_timer = 90
 
             def _do_reset_action() -> None:
-                nonlocal track_ai_params, track_ai_use_deep, live_tracker
+                nonlocal track_ai_params, track_ai_use_deep, track_ai_shape, live_tracker
                 nonlocal save_message_text, showing_save_message, save_message_timer
                 track_ai_params = AITrackerParameters(
                     search_window=(140, 140),
@@ -4046,8 +4050,10 @@ def play_video_with_controls(
                     use_mask=True,
                     use_deep_features=False,
                     deep_weight=0.0,
+                    tracking_shape="point",
                 )
                 track_ai_use_deep = False
+                track_ai_shape = "point"
                 if live_tracker is not None:
                     live_tracker.params = track_ai_params
                 print(">> Track AI: Parameters reset to fast CPU defaults (NCC + Spatial Prior)")
@@ -4102,7 +4108,12 @@ def play_video_with_controls(
                     else "Deep OFF (Fast CPU NCC+Prior, ~500 FPS)"
                 )
                 deep_col = (60, 220, 130) if track_ai_use_deep else (150, 190, 240)
-                t_mode = font_sub.render(f"Features: {deep_lbl}", True, deep_col)
+                sh_name = track_ai_shape.capitalize()
+                t_mode = font_sub.render(
+                    f"Features: {deep_lbl}  |  Shape: {sh_name} (1=Pt, 2=Cir, 3=Box)",
+                    True,
+                    deep_col,
+                )
                 screen.blit(t_mode, (dx + 26, dy + 81))
                 t_sw = font_hint.render(
                     f"Search: {track_ai_params.search_window} | Block: {track_ai_params.block_window} | SimThr: {track_ai_params.similarity_threshold}",
@@ -4169,7 +4180,7 @@ def play_video_with_controls(
                 )
 
                 t_hint = font_hint.render(
-                    "Hotkeys: S = Save  |  L = Load  |  R = Reset  |  ESC = Close",
+                    "Hotkeys: S = Save  |  L = Load  |  R = Reset  |  1/2/3 = Shape  |  ESC = Close",
                     True,
                     (130, 140, 160),
                 )
@@ -4197,9 +4208,34 @@ def play_video_with_controls(
                         elif event.key == pygame.K_r:
                             _do_reset_action()
                             dialog_open = False
+                        elif event.key == pygame.K_1:
+                            track_ai_shape = "point"
+                            track_ai_params.tracking_shape = "point"
+                            if live_tracker is not None and hasattr(live_tracker, "params"):
+                                live_tracker.params.tracking_shape = "point"
+                        elif event.key == pygame.K_2:
+                            track_ai_shape = "circle"
+                            track_ai_params.tracking_shape = "circle"
+                            if live_tracker is not None and hasattr(live_tracker, "params"):
+                                live_tracker.params.tracking_shape = "circle"
+                        elif event.key == pygame.K_3:
+                            track_ai_shape = "box"
+                            track_ai_params.tracking_shape = "box"
+                            if live_tracker is not None and hasattr(live_tracker, "params"):
+                                live_tracker.params.tracking_shape = "box"
                     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                         if rect_close.collidepoint(event.pos):
                             dialog_open = False
+                        elif pill_rect.collidepoint(event.pos):
+                            if track_ai_shape == "point":
+                                track_ai_shape = "circle"
+                            elif track_ai_shape == "circle":
+                                track_ai_shape = "box"
+                            else:
+                                track_ai_shape = "point"
+                            track_ai_params.tracking_shape = track_ai_shape
+                            if live_tracker is not None and hasattr(live_tracker, "params"):
+                                live_tracker.params.tracking_shape = track_ai_shape
                         elif rect_save.collidepoint(event.pos):
                             _do_save_action()
                             dialog_open = False
@@ -4332,6 +4368,7 @@ def play_video_with_controls(
                 )
             params.use_deep_features = track_ai_use_deep
             params.deep_weight = 0.25 if track_ai_use_deep else 0.0
+            params.tracking_shape = track_ai_shape
             tracker = AITracker(parameters=params)
 
             # Read anchor frame image
@@ -4470,8 +4507,9 @@ def play_video_with_controls(
                         pass
                 return
 
-        # Advance forward from previous tracked position (e.g. 1-5 frames ahead)
-        if 0 < (curr_frame_idx - live_track_last_frame) <= 5 and live_track_last_frame >= 0:
+        # Advance forward from previous tracked position (dynamic gap based on playback speed)
+        max_allowed_gap = max(15, int(playback_speed) * 2 + 2)
+        if 0 < (curr_frame_idx - live_track_last_frame) <= max_allowed_gap and live_track_last_frame >= 0:
             prev_pt = None
             if live_track_last_frame in coordinates and target_m < len(coordinates[live_track_last_frame]):
                 coord = coordinates[live_track_last_frame][target_m]
@@ -4495,8 +4533,11 @@ def play_video_with_controls(
                     ):
                         deleted_positions[curr_frame_idx].remove(target_m)
                     live_track_last_frame = curr_frame_idx
+                    live_tracker._error_reported = False
                 except Exception as ex_tr:
-                    print(f"Track AI live tracking error at frame {curr_frame_idx}: {ex_tr}")
+                    if not getattr(live_tracker, "_error_reported", False):
+                        print(f">> Track AI live tracking notice at frame {curr_frame_idx + 1}: {ex_tr}")
+                        live_tracker._error_reported = True
 
 
     def _apply_template_mode(mode: str) -> None:
@@ -4600,7 +4641,8 @@ def play_video_with_controls(
                 parts.append("Seq")
             if track_ai_active:
                 arm_str = ":ARM" if live_tracker is None else ""
-                parts.append(f"TrackAI[m{live_track_target_marker}{arm_str}]")
+                sh_str = f":{track_ai_shape[:3].capitalize()}"
+                parts.append(f"TrackAI[m{live_track_target_marker}{arm_str}{sh_str}]")
             if pitch_guide_mode:
                 parts.append("Guide")
                 parts.append("map" if pitch_guide_show_reference else "map-off")
@@ -4887,6 +4929,7 @@ def play_video_with_controls(
         bbox_coords_button_width = 88 if is_compact else 100
         track_rts_button_width = 96 if is_compact else 112
         track_deep_button_width = 66 if is_compact else 76
+        track_shape_button_width = 44 if is_compact else 52
         track_cfg_button_width = 30 if is_compact else 36
         dataset_button_width = 52 if is_compact else 58
         export_video_button_width = 80 if is_compact else 92
@@ -4921,6 +4964,8 @@ def play_video_with_controls(
             + track_rts_button_width
             + button_gap
             + track_deep_button_width
+            + button_gap
+            + track_shape_button_width
             + button_gap
             + track_cfg_button_width
             + button_gap
@@ -5222,6 +5267,26 @@ def play_video_with_controls(
             deep_text, deep_text.get_rect(center=track_deep_button_rect.center)
         )
 
+        # 4b. Track AI Shape selector button (Point, Circle, Box)
+        track_shape_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_bottom,
+            track_shape_button_width,
+            button_height,
+        )
+        current_x += track_shape_button_width + button_gap
+        shape_cap = (
+            "Pt"
+            if track_ai_shape == "point"
+            else ("Cir" if track_ai_shape == "circle" else "Box")
+        )
+        shape_label = shape_cap if is_compact else f"Shp:{shape_cap}"
+        pygame.draw.rect(control_surface, (55, 65, 80), track_shape_button_rect)
+        shape_text = btn_font.render(shape_label, True, (255, 255, 255))
+        control_surface.blit(
+            shape_text, shape_text.get_rect(center=track_shape_button_rect.center)
+        )
+
         # 5. Track AI Configuration button (TOML save/load)
         track_cfg_button_rect = pygame.Rect(
             current_x,
@@ -5324,6 +5389,7 @@ def play_video_with_controls(
             bbox_coords_button_rect,  # Add BBox to Coords button to return
             track_rts_button_rect,  # Add Track RTS button to return
             track_deep_button_rect,  # Track AI Deep NN (ResNet50) toggle
+            track_shape_button_rect,  # Track AI Shape selector (Point/Circle/Box)
             track_cfg_button_rect,  # Track AI TOML configuration dialog
             export_video_button_rect,  # Add export video button to return
             save_dataset_button_rect,  # Export PNG ML dataset + all_labels
@@ -8462,14 +8528,23 @@ def play_video_with_controls(
             # Accumulate fractional frames for smooth slow playback is tricky in simple loop
             # Simple integer logic:
             if playback_speed >= 1.0:
-                # Setup skip
                 skip = int(playback_speed)
-                for _ in range(skip):
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                if ret:
-                    frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+                if track_ai_active and live_tracker is not None:
+                    # Sequential frame-by-frame tracking during accelerated burst
+                    for _ in range(skip):
+                        ret, frame = cap.read()
+                        if not ret or frame is None:
+                            break
+                        sub_f = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+                        _perform_live_ai_tracking(sub_f, frame)
+                        frame_count = sub_f
+                else:
+                    for _ in range(skip):
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+                    if ret:
+                        frame_count = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
             else:
                 # Slow motion: skip READING new frames based on speed
                 # E.g. 0.5X -> read every 2nd loop
@@ -8771,6 +8846,27 @@ def play_video_with_controls(
                         screen, (255, 165, 0), (screen_x, screen_y), 7
                     )  # Orange highlight
 
+                # Shape-aware outline when AI tracking is active on this marker
+                if track_ai_active and i == live_track_target_marker:
+                    bw, bh = (
+                        track_ai_params.block_window
+                        if track_ai_params is not None
+                        else (36, 36)
+                    )
+                    if track_ai_shape == "circle":
+                        r_shape = max(5, int((min(bw, bh) // 2) * zoom_level))
+                        pygame.draw.circle(screen, (0, 220, 255), (screen_x, screen_y), r_shape, 1)
+                    elif track_ai_shape in ("box", "rectangle"):
+                        bw_shape = max(6, int(bw * zoom_level))
+                        bh_shape = max(6, int(bh * zoom_level))
+                        shape_box = pygame.Rect(
+                            screen_x - bw_shape // 2,
+                            screen_y - bh_shape // 2,
+                            bw_shape,
+                            bh_shape,
+                        )
+                        pygame.draw.rect(screen, (0, 220, 255), shape_box, 1)
+
                 pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
                 if template_mode != "free":
                     display_idx = int(fifa_start_keypoint) + i + int(fifa_index_base)
@@ -8890,6 +8986,7 @@ def play_video_with_controls(
             bbox_coords_button_rect,  # Add BBox to Coords button to return
             track_rts_button_rect,  # Add Track RTS button to return
             track_deep_button_rect,  # Track AI Deep NN (ResNet50) toggle
+            track_shape_button_rect,  # Track AI Shape selector (Point/Circle/Box)
             track_cfg_button_rect,  # Track AI TOML configuration dialog
             export_video_button_rect,  # Add export video button to return
             save_dataset_button_rect,  # Export PNG ML dataset + all_labels
@@ -10117,6 +10214,20 @@ def play_video_with_controls(
                         showing_save_message = True
                         save_message_timer = 60
                         print(f">> Track AI Deep NN (ResNet50): {state_str}")
+                    elif track_shape_button_rect.collidepoint(x, rel_y):
+                        if track_ai_shape == "point":
+                            track_ai_shape = "circle"
+                        elif track_ai_shape == "circle":
+                            track_ai_shape = "box"
+                        else:
+                            track_ai_shape = "point"
+                        if track_ai_params is not None:
+                            track_ai_params.tracking_shape = track_ai_shape
+                        if live_tracker is not None and hasattr(live_tracker, "params"):
+                            live_tracker.params.tracking_shape = track_ai_shape
+                        save_message_text = f"Track AI Shape: {track_ai_shape.capitalize()}"
+                        showing_save_message = True
+                        save_message_timer = 60
                     elif track_cfg_button_rect.collidepoint(x, rel_y):
                         _handle_track_ai_toml_dialog()
                     elif show_tracking_indicator_rect.collidepoint(x, rel_y):
@@ -10377,6 +10488,7 @@ def play_video_with_controls(
                                             )
                                         params.use_deep_features = track_ai_use_deep
                                         params.deep_weight = 0.25 if track_ai_use_deep else 0.0
+                                        params.tracking_shape = track_ai_shape
                                         tracker = AITracker(parameters=params)
                                         tracker.set_reference(frame, (video_x, video_y))
                                         tracker.add_anchor(frame, (video_x, video_y), frame_count)
@@ -10401,10 +10513,6 @@ def play_video_with_controls(
                                         live_tracker.set_reference(frame, (video_x, video_y))
                                         live_track_last_frame = frame_count
                                         n_anch = len(getattr(live_tracker, "anchors", []))
-                                        print(
-                                            f">> Track AI: Added anchor at f{frame_count + 1} for m{placed_marker_idx} "
-                                            f"({n_anch} anchor(s) active). Online discriminator retrained in <1ms."
-                                        )
                                         save_message_text = (
                                             f"Track AI: Added anchor @ f{frame_count + 1} (m{placed_marker_idx}, {n_anch} anchors)"
                                         )
@@ -10442,10 +10550,17 @@ def play_video_with_controls(
                             elif selected_marker_idx >= len(markers_in_frame):
                                 selected_marker_idx = len(markers_in_frame) - 1
                         else:
-                            if not coordinates[frame_count]:
+                            coords = coordinates
+                            if isinstance(coords, dict):
+                                cur_list = coords.get(frame_count)
+                                if isinstance(cur_list, list) and cur_list:
+                                    n_markers = len(cur_list)
+                                    if selected_marker_idx >= n_markers:
+                                        selected_marker_idx = n_markers - 1
+                                else:
+                                    selected_marker_idx = -1
+                            else:
                                 selected_marker_idx = -1
-                            elif selected_marker_idx >= len(coordinates[frame_count]):
-                                selected_marker_idx = len(coordinates[frame_count]) - 1
 
                     elif event.button == 2:  # Middle click for panning
                         scrolling = True

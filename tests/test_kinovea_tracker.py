@@ -9,8 +9,8 @@ Validates:
 5. Real-data test on JJ_Kabuto video with sparse keyframe anchors.
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 10 September 2026
-Version: 0.3.134
+Update Date: 11 September 2026
+Version: 0.3.135
 """
 
 from __future__ import annotations
@@ -408,3 +408,55 @@ def test_ai_tracker_toml_save_load(tmp_path: os.PathLike) -> None:
     assert abs(loaded.similarity_threshold - 0.55) < 1e-5
     assert loaded.use_deep_features is True
     assert abs(loaded.deep_weight - 0.35) < 1e-5
+
+
+def test_ai_tracker_tracking_shape_parameters_and_centroid(tmp_path: os.PathLike) -> None:
+    """Validate shape-aware centroid tracking (point, circle, box) and TOML serialization."""
+    from pathlib import Path
+
+    # 1. Serialization of tracking_shape
+    p = AITrackerParameters(tracking_shape="circle")
+    toml_file = Path(tmp_path) / "shape_cfg.toml"
+    p.to_toml(str(toml_file))
+    assert 'tracking_shape = "circle"' in toml_file.read_text(encoding="utf-8")
+
+    loaded = AITrackerParameters.from_toml(str(toml_file))
+    assert loaded.tracking_shape == "circle"
+
+    p_box = AITrackerParameters(tracking_shape="box")
+    toml_box = Path(tmp_path) / "box_cfg.toml"
+    p_box.to_toml(str(toml_box))
+    assert 'tracking_shape = "box"' in toml_box.read_text(encoding="utf-8")
+    assert AITrackerParameters.from_toml(str(toml_box)).tracking_shape == "box"
+
+    # 2. Centroid of point returns geometric center
+    assert AITracker.compute_shape_centroid(np.zeros((36, 36, 3), dtype=np.uint8), "point", 36, 36) == (18.0, 18.0)
+
+    # 3. Centroid of synthetic circle (bright circle centered at (22, 14) in 36x36 patch)
+    circle_patch = np.zeros((36, 36), dtype=np.uint8)
+    cv2.circle(circle_patch, (22, 14), 6, 255, -1)
+    c_x, c_y = AITracker.compute_shape_centroid(circle_patch, "circle", 36, 36)
+    assert abs(c_x - 22.0) < 1.0
+    assert abs(c_y - 14.0) < 1.0
+
+    # 4. Centroid of synthetic rectangle (bright box centered at (12, 24) in 36x36 patch)
+    box_patch = np.zeros((36, 36), dtype=np.uint8)
+    cv2.rectangle(box_patch, (8, 20), (16, 28), 255, -1)
+    b_x, b_y = AITracker.compute_shape_centroid(box_patch, "box", 36, 36)
+    assert abs(b_x - 12.0) < 1.0
+    assert abs(b_y - 24.0) < 1.0
+
+    # 5. Zero contrast / flat patch safely falls back to center without divide by zero
+    flat_patch = np.full((36, 36), 128, dtype=np.uint8)
+    f_x, f_y = AITracker.compute_shape_centroid(flat_patch, "circle", 36, 36)
+    assert (f_x, f_y) == (18.0, 18.0)
+
+    # 6. Tracker integration with circle and box shape
+    tracker = AITracker(parameters=AITrackerParameters(tracking_shape="circle", use_deep_features=False))
+    frame1 = _render_synthetic_marker((120, 120), (60.0, 60.0))
+    tracker.set_reference(frame1, (60.0, 60.0))
+    frame2 = _render_synthetic_marker((120, 120), (62.0, 61.0))
+    res = tracker.track_frame(frame2, (60.0, 60.0))
+    assert res.location is not None
+    assert abs(res.location[0] - 62.0) < 2.0
+    assert abs(res.location[1] - 61.0) < 2.0
