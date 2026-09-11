@@ -1,23 +1,23 @@
 # CLAUDE.md
 
-Guidance for **AI Assistants** (Claude Code, Antigravity, Cursor, Windsurf, etc.) when working with the **vailá** repository.
+Guide for **AI Assistants** (Claude Code, Antigravity, Cursor, Windsurf, etc.) working with **vailá** repo.
 
-> See also: [AGENTS.md](./AGENTS.md) — shared rules for all AI agents.
+> See also: [AGENTS.md](./AGENTS.md) — shared rules, all AI agents.
 
 ## Project Overview
 
-**vailá** (Versatile Anarcho Integrated Liberation Ánalysis) — open-source Python 3.12 multimodal toolbox for biomechanical data analysis. Integrates IMU, motion capture, markerless tracking (MediaPipe, YOLO), force plates, EMG, GNSS/GPS through a Tkinter-based GUI.
+**vailá** (Versatile Anarcho Integrated Liberation Ánalysis) — open-source Python 3.12 multimodal toolbox, biomechanical data analysis. Integrates IMU, motion capture, markerless tracking (MediaPipe, YOLO), force plates, EMG, GNSS/GPS via Tkinter GUI.
 
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
 - **Python:** strictly `>=3.12,<3.13`
 - **License:** AGPLv3
-- **Build backend:** `hatchling` managed via [`uv`](https://docs.astral.sh/uv/)
+- **Build backend:** `hatchling` via [`uv`](https://docs.astral.sh/uv/)
 
 ---
 
 ## Astral Toolchain
 
-The project uses the full [Astral](https://astral.sh) Rust-based toolchain:
+Project uses full [Astral](https://astral.sh) Rust toolchain:
 
 | Tool                                   | Purpose                                                    | Replaces                        |
 | -------------------------------------- | ---------------------------------------------------------- | ------------------------------- |
@@ -25,7 +25,7 @@ The project uses the full [Astral](https://astral.sh) Rust-based toolchain:
 | [`ruff`](https://docs.astral.sh/ruff/) | Linter + formatter                                         | flake8, black, isort, pyupgrade |
 | [`ty`](https://docs.astral.sh/ty/)     | Static type checker (beta, Rust, 10-100x faster than mypy) | mypy, Pyright                   |
 
-> **Never use** bare `pip install`, `black`, `isort`, `flake8`, or `mypy` — always use the Astral equivalents via `uv run`.
+> **Never use** bare `pip install`, `black`, `isort`, `flake8`, `mypy` — always Astral equivalents via `uv run`.
 
 ---
 
@@ -152,7 +152,7 @@ include = ["vaila", "tests"]
 exclude = ["vaila/_generated"]
 ```
 
-> `ty` is in **beta** — not a drop-in replacement for mypy/Pyright; different design choices and defaults. Use alongside ruff, not instead of it.
+> `ty` beta — not drop-in mypy/Pyright replacement; different design/defaults. Use alongside ruff, not instead.
 
 ---
 
@@ -169,24 +169,24 @@ uv run pytest tests/ -v           # run tests
 
 ## Mandatory: Update metadata on any script change
 
-Whenever you edit **any** Python script (`*.py`) in this repo, also update metadata so users see consistent **date/version** across app, docs, and help.
+Edit any Python script (`*.py`) in repo → also update metadata so users see consistent **date/version** across app, docs, help.
 
 ### Checklist
 
 - **Edited script header**: update top module docstring/header:
   - **Update Date**: today
   - **Version**: **global vailá version** (same as `vaila.py` header/banner)
-- **Main entry point**: if change impacts GUI/CLI banner, update `vaila.py` header and any banner strings.
-- **Install scripts**: if install/run UX impacted, review/update:
+- **Main entry point**: change impacts GUI/CLI banner → update `vaila.py` header + banner strings.
+- **Install scripts**: install/run UX impacted → review/update:
   - `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`, `install-hooks.sh`
 - **Repo README**: update root `README.md` line `Last updated: YYYY-MM-DD` to today.
 - **Help docs**:
-  - main index `vaila/help/index.md` + `vaila/help/index.html` (“Generated on”)
+  - main index `vaila/help/index.md` + `vaila/help/index.html` ("Generated on")
   - changed module help `vaila/help/<module>.md` + `vaila/help/<module>.html` (Version + Updated)
 
 ### Writing convention: how to style "vailá"
 
-Write the project name **lowercase and italicized** in prose — `*vailá*` in Markdown, `<i>vailá</i>` in HTML — matching root `README.md`'s canonical `# _vailá_ - Multimodal Toolbox` title and body usage (`_vailá_`). Never bold it (`**vailá**` / `<strong>vailá</strong>`) and never capitalize it ("Vailá"/"VAILA") in prose. An audit on 2026-08-04 found `vaila/help/*.md`/`*.html` overwhelmingly plain/unstyled (106/148 `.md`, ~135/148 `.html`) with only a handful bolded (9/148 each) or already italicized (3–4/148 each) — i.e. no consistent prior norm; italic-lowercase is the standard going forward. Apply it when touching a help page for another reason; a dedicated repo-wide sweep has not been done.
+Write project name **lowercase, italicized** in prose — `*vailá*` Markdown, `<i>vailá</i>` HTML — matches root `README.md` canonical `# _vailá_ - Multimodal Toolbox` title, body usage (`_vailá_`). Never bold (`**vailá**` / `<strong>vailá</strong>`), never capitalize ("Vailá"/"VAILA") in prose. Audit 2026-08-04 found `vaila/help/*.md`/`*.html` overwhelmingly plain/unstyled (106/148 `.md`, ~135/148 `.html`), handful bolded (9/148 each) or already italicized (3–4/148 each) — no consistent prior norm; italic-lowercase standard going forward. Apply when touching help page for other reason; repo-wide sweep not done yet.
 
 ---
 
@@ -194,7 +194,7 @@ Write the project name **lowercase and italicized** in prose — `*vailá*` in M
 
 ### Entry Point & GUI (`vaila.py`)
 
-`vaila.py` defines `Vaila(tk.Tk)`, organized into three frames:
+`vaila.py` defines `Vaila(tk.Tk)`, three frames:
 
 | Frame       | Purpose                                                                             |
 | ----------- | ----------------------------------------------------------------------------------- |
@@ -202,14 +202,14 @@ Write the project name **lowercase and italicized** in prose — `*vailá*` in M
 | **Frame B** | Multimodal Analysis — IMU, MoCap, Markerless 2D/3D, EMG, Force Plate, GNSS          |
 | **Frame C** | Tools — CSV editing, C3D conversion, DLT reconstruction, video/image, visualization |
 
-**Lazy imports** are used in all handler methods to avoid loading the full dependency graph at startup.
+**Lazy imports** used in all handler methods, avoid loading full dependency graph at startup.
 
 Two dispatch patterns:
 
-1. **Direct import + call** — runs in the same process
+1. **Direct import + call** — same process
 2. **Subprocess via `run_vaila_module()`** — separate process (avoids Tkinter conflicts)
 
-**Button grid** (row/col ids match the code, e.g. `B1_r1_c4`; run `uv run vaila.py` to see it live):
+**Button grid** (row/col ids match code, e.g. `B1_r1_c4`; run `uv run vaila.py` to see live):
 
 | Area | Buttons |
 | --- | --- |
@@ -225,13 +225,13 @@ Two dispatch patterns:
 | Frame C-B (Video/Image) | Video↔PNG · Crop Face · Draw Box · Compress Video · Make Sync file · GetPixelCoord · Metadata info · Merge/Split · Distort · Cut · Resize · YT Downloader · Insert Audio · rm Dup PNG |
 | Frame C-C (Visualization) | Show C3D/CSV 3D · Plot 2D/3D · Draw Sports · Stroboscopic |
 
-Full ASCII map with descriptions: `README.md` § *vailá Structure and Interface*; per-button docs: `docs/vaila_buttons/`.
+Full ASCII map + descriptions: `README.md` § *vailá Structure and Interface*; per-button docs: `docs/vaila_buttons/`.
 
 ### Package Structure (`vaila/`)
 
 ~100 self-contained analysis modules. Each module:
 
-- Has a `run_*()` or `analyze_*()` entry point called from the GUI
+- Has `run_*()` or `analyze_*()` entry point called from GUI
 - Uses Tkinter `filedialog` for user input prompts
 - Reads CSV/C3D via `pandas` / `numpy` / `ezc3d`
 - Writes results (CSV + PNG plots) to timestamped output subdirectories
@@ -240,19 +240,19 @@ Full ASCII map with descriptions: `README.md` § *vailá Structure and Interface
 
 | Module                                      | Role                                                      |
 | ------------------------------------------- | --------------------------------------------------------- |
-| `data_processing.py`                        | CSV/C3D reading with auto-header detection                |
-| `filtering.py` / `filter_utils.py`          | Butterworth and FIR filter implementations                |
-| `common_utils.py`                           | Header detection and data reshaping                       |
+| `data_processing.py`                        | CSV/C3D reading, auto-header detection                |
+| `filtering.py` / `filter_utils.py`          | Butterworth, FIR filter implementations                |
+| `common_utils.py`                           | Header detection, data reshaping                     |
 | `dialogsuser.py` / `dialogsuser_cluster.py` | Reusable Tkinter input dialogs                            |
 | `filemanager.py`                            | File management (rename, copy, move, SSH transfer)        |
-| `hardware_manager.py`                       | GPU/CPU detection, TensorRT export — **do not duplicate**. First run per model builds a VRAM-sized `.engine` (2–5 min, cached); Windows/Linux engines coexist in the same folder on dual-boot. |
+| `hardware_manager.py`                       | GPU/CPU detection, TensorRT export — **do not duplicate**. First run per model builds VRAM-sized `.engine` (2–5 min, cached); Windows/Linux engines coexist same folder on dual-boot. |
 | `interp_smooth_split.py`                    | Interpolation, smoothing, splitting (GUI + CLI)           |
 
 ---
 
 ## Platform-Specific Configuration
 
-Copy the correct template to `pyproject.toml` **before** running `uv python pin` / `uv venv`:
+Copy correct template to `pyproject.toml` **before** running `uv python pin` / `uv venv`:
 
 | Template                       | Target                          |
 | ------------------------------ | ------------------------------- |
@@ -261,9 +261,9 @@ Copy the correct template to `pyproject.toml` **before** running `uv python pin`
 | `pyproject_macos.toml`         | macOS Apple Silicon (Metal/MPS) |
 | `pyproject_universal_cpu.toml` | CPU-only fallback               |
 
-Install scripts handle this automatically: `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`.
+Install scripts handle automatically: `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`.
 
-> The currently-active template can drift from what other docs claim (it's a plain file copy, not a symlink). Before assuming CPU-vs-CUDA, check directly: `diff pyproject.toml pyproject_universal_cpu.toml` (empty output = CPU is active; otherwise diff against the CUDA/macOS templates to identify which one matches).
+> Active template can drift from what other docs claim (plain file copy, not symlink). Before assuming CPU-vs-CUDA, check directly: `diff pyproject.toml pyproject_universal_cpu.toml` (empty output = CPU active; else diff against CUDA/macOS templates to identify match).
 
 ---
 
@@ -271,7 +271,7 @@ Install scripts handle this automatically: `install_vaila_linux.sh`, `install_va
 
 ### Mandatory dual-import pattern
 
-Every module must support both package import and standalone execution:
+Every module must support package import AND standalone execution:
 
 ```python
 try:
@@ -285,7 +285,7 @@ except ImportError:
 ### Rules
 
 - **GUI framework:** Tkinter only — never introduce Qt, wx, Dear PyGui, etc.
-- **Scientific variable names** (X, Y, Z, F, R, T, etc.) are valid — suppressed via ruff `N806`/`N803`
+- **Scientific variable names** (X, Y, Z, F, R, T, etc.) valid — suppressed via ruff `N806`/`N803`
 - **Output dirs:** always timestamped → `processed_<type>_YYYYMMDD_HHMMSS/`
 - **No hard-coded absolute paths**
 - **No files ≥20 MiB** (git hook enforced)
@@ -302,20 +302,20 @@ uv run pytest tests/test_dlt_rec.py -v               # DLT/Rec math
 uv run pytest tests/test_dlt_rec_integration.py -v   # DLT/Rec pipeline
 ```
 
-Sample data lives in `tests/vaila_and_jump/` (CSV + TOML).
+Sample data: `tests/vaila_and_jump/` (CSV + TOML).
 
 ---
 
 ## Common Task Recipes
 
-### Add a new analysis module
+### Add new analysis module
 
-1. Create `vaila/my_module.py` with `run_my_module()` as entry point
-2. Apply dual-import pattern at the top
-3. Use helpers from `dialogsuser.py` for user prompts
-4. Write results to a timestamped output dir
-5. Wire button in `vaila.py` with lazy import
-6. Lint and type-check: `uv run ruff check vaila/my_module.py --fix && uv run ty check vaila/my_module.py`
+1. Create `vaila/my_module.py`, `run_my_module()` entry point
+2. Apply dual-import pattern at top
+3. Use helpers from `dialogsuser.py` for prompts
+4. Write results to timestamped output dir
+5. Wire button in `vaila.py`, lazy import
+6. Lint + type-check: `uv run ruff check vaila/my_module.py --fix && uv run ty check vaila/my_module.py`
 7. Add unit test in `tests/`
 
 ### Fix all lint + type issues in one shot
@@ -324,7 +324,7 @@ Sample data lives in `tests/vaila_and_jump/` (CSV + TOML).
 uv run ruff check vaila/ --fix && uv run ruff format vaila/ && uv run ty check vaila/
 ```
 
-### Run a module standalone via CLI
+### Run module standalone via CLI
 
 ```bash
 uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
@@ -334,22 +334,22 @@ uv run vaila/interp_smooth_split.py -i /path/to/csv_dir -c smooth_config.toml
 
 ## Security
 
-Open-source under **AGPL-3.0** — never commit API keys, tokens, or local credential files. See **[SECURITY.md](SECURITY.md)** and **[CONTRIBUTING.md](CONTRIBUTING.md)**. Use `.env` locally (gitignored); see `.env.example` for a safe template.
+Open-source under **AGPL-3.0** — never commit API keys, tokens, local credential files. See **[SECURITY.md](SECURITY.md)**, **[CONTRIBUTING.md](CONTRIBUTING.md)**. Use `.env` locally (gitignored); see `.env.example` for safe template.
 
 ---
 
 ## Agents and skills
 
-Step-by-step workflows and specialized agent roles are stored in the `.claude/` directory. This structure is intended to be used by any AI assistant (Claude Code, Antigravity, Cursor, etc.).
+Step-by-step workflows, specialized agent roles stored in `.claude/` dir. Meant for any AI assistant (Claude Code, Antigravity, Cursor, etc.).
 
 
 ### Recent GUI Notes
 
-Detailed per-change notes (what/why/gotchas/validation) for every recent module addition and GUI reorg — Crop Face, Smart Load Tracking CSV, SAM3/Sapiens2/DINOv3 pipelines, DLT/REC family, Markerless 2D/3D chooser reorgs, Geometric ReID v2, GUI→CLI mirror, rec3d Blender export fixes, joint-angle extraction, monocular↔DLT alignment, Sapiens2 3D Pose — moved to **[docs/claude-session-notes-archive.md](docs/claude-session-notes-archive.md)** to keep this file under the char budget. Skim it before touching any of those modules; append new entries there, not here.
+Detailed per-change notes (what/why/gotchas/validation) for every recent module addition, GUI reorg — Crop Face, Smart Load Tracking CSV, SAM3/Sapiens2/DINOv3 pipelines, DLT/REC family, Markerless 2D/3D chooser reorgs, Geometric ReID v2, GUI→CLI mirror, rec3d Blender export fixes, joint-angle extraction, monocular↔DLT alignment, Sapiens2 3D Pose — moved to **[docs/claude-session-notes-archive.md](docs/claude-session-notes-archive.md)**, keeps this file under char budget. Skim before touching those modules; append new entries there, not here.
 
 ### Specialized Agents (`.claude/agents/`)
 
-Role cards for domain experts. Use these when the task fits their specific domain:
+Role cards, domain experts. Use when task fits their domain:
 
 - [biomechanics-analyst.md](.claude/agents/biomechanics-analyst.md)
 - [gui-developer.md](.claude/agents/gui-developer.md)
@@ -358,22 +358,22 @@ Role cards for domain experts. Use these when the task fits their specific domai
 
 ### Technical Skills (`.claude/skills/`)
 
-Reusable "how-to" guides for complex workflows:
+Reusable how-to guides, complex workflows:
 
 - **vailá Core**: [create a new analysis module](.claude/skills/create-analysis-module.md), [port a MATLAB algorithm](.claude/skills/port-matlab-algorithm.md), [getpixelvideo-tracking-loader](.claude/skills/getpixelvideo-tracking-loader/SKILL.md) — smart Load Tracking CSV (SAM3 / YOLO auto-detect + bbox → marker anchor prompt), [yolo-fb-gui-cli](.claude/skills/yolo-fb-gui-cli/SKILL.md) — **YOLO + FB** chooser + GUI→CLI terminal mirror (Cursor CLI resume).
 - **Sports AI**:
   - [sam3-video](.claude/skills/sam3-video/SKILL.md) — SAM 3 text-prompt video segmentation, GUI help button, prompt presets, **Cross-Chunk Tracklet Linking (v0.3.54)**.
   - [fifa-skeletal-tracking](.claude/skills/fifa-skeletal-tracking/SKILL.md) — FIFA 2026 pipeline (`fifa bootstrap` / `prepare` / `boxes` / `preprocess` / `baseline` / **`dlt-export`** / `pack`), `vaila/fifa_to_dlt.py` (per-frame DLT for **`rec2d.py`/`rec3d.py`** vs fixed-cam **`rec2d_one_dlt2d.py`**), vendored `fifa_starter_lib`, gated SAM 3D Body setup, soccer-field DLT2D calibration.
-  - [soccer-field-keypoints-yolo](.claude/skills/soccer-field-keypoints-yolo/SKILL.md) — Ultralytics YOLO **pitch** pose (32 kp), external merged `unified/` tree, `yolo pose train`; see **`docs/fifa_workflow.md` §4.5** and `vaila/help/soccerfield_keypoints_ai.md`.
+  - [soccer-field-keypoints-yolo](.claude/skills/soccer-field-keypoints-yolo/SKILL.md) — Ultralytics YOLO **pitch** pose (32 kp), external merged `unified/` tree, `yolo pose train`; see **`docs/fifa_workflow.md` §4.5**, `vaila/help/soccerfield_keypoints_ai.md`.
 - **Reports**: [xlsx](.claude/skills/xlsx/SKILL.md) (Excel), [pdf](.claude/skills/pdf/SKILL.md), [pptx](.claude/skills/pptx/SKILL.md) (PowerPoint).
 - **Automation**: [mcp-builder](.claude/skills/mcp-builder/SKILL.md) (Model Context Protocol), [webapp-testing](.claude/skills/webapp-testing/SKILL.md).
 - **Visualization**: [web-artifacts-builder](.claude/skills/web-artifacts-builder/SKILL.md).
 
 ### FIFA Skeletal Tracking Light 2026
 
-vailá ships a complete pipeline for the
+vailá ships complete pipeline for
 [FIFA Skeletal Tracking Light 2026](https://inside.fifa.com/innovation/innovation-programme/skeletal-tracking)
-challenge. The one-line setup is:
+challenge. One-line setup:
 
 ```bash
 bash bin/setup_fifa_sam3d.sh              # clone sam_3d_body + gated HF weights
@@ -388,13 +388,13 @@ uv run vaila/vaila_sam.py fifa dlt-export --cameras-dir data/cameras --output-di
 uv run vaila/vaila_sam.py fifa pack       --submission-full outputs/submission_full.npz --data-root data/ --output-dir outputs/ --split val
 ```
 
-Companion tool `vaila/soccerfield_calib.py` (button **Soccer-Field Calib** in
-Frame C of `vaila.py`) fits a DLT2D homography from 29 FIFA keypoints and can
-emit `cameras/<stem>_homography.npz` as a fallback when a sequence has no
+Companion tool `vaila/soccerfield_calib.py` (button **Soccer-Field Calib**,
+Frame C of `vaila.py`) fits DLT2D homography from 29 FIFA keypoints, can
+emit `cameras/<stem>_homography.npz` as fallback when sequence has no
 official `cameras/*.npz`.
 
-**External unified pitch dataset (YOLO retrain):** `vaila.fifa_dataset_builder` writes `unified/data.yaml` under a user-chosen root **outside** git. After QA on `check_all_labels/`, use `vaila.fifa_check_labels_dedupe` and `vaila.fifa_dataset_train_readiness` to align `unified/`, then `yolo pose train data=/ABS/.../unified/data.yaml`. Full recipe: **`docs/fifa_workflow.md` §4.5**.
+**External unified pitch dataset (YOLO retrain):** `vaila.fifa_dataset_builder` writes `unified/data.yaml` under user-chosen root **outside** git. After QA on `check_all_labels/`, use `vaila.fifa_check_labels_dedupe`, `vaila.fifa_dataset_train_readiness` to align `unified/`, then `yolo pose train data=/ABS/.../unified/data.yaml`. Full recipe: **`docs/fifa_workflow.md` §4.5**.
 
 ### Slash Commands (`.claude/commands/`)
 
-Specs for common shortcuts like `/check` or `/new-module`.
+Specs, common shortcuts like `/check`, `/new-module`.

@@ -4,14 +4,21 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.127
+**Version:** 0.3.135
 **Date:** 23 June 2026  
-**Updated:** 07 September 2026
+**Updated:** 11 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
 ## Key Features
 
+- **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & ResNet50) & RTS Smoother (`Track AI` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior ($\sigma = 22$ px) to prevent distractor jumps, and adaptive running template EMA blending augmented by a fast online appearance model (dual regularized ridge regression retrained in $<1$ ms on user clicks) and optional Deep Visual Feature embeddings (PyTorch ResNet50 / CUDA) for semantic verification and occlusion recovery. Features:
+  - **Dynamic Marker Indicator:** Button reflects active target marker (`Track AI m0: ON` / `OFF`) for intuitive single-marker tracking during live Space playback.
+  - **Online Learning from Anchors:** Every user placement or click across keyframes serves as ground truth, instantly retraining the online discriminator in closed-form ($<1$ ms on CPU).
+  - **Multi-Shape Centroid Tracking (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Toolbar button toggles between point (peak), circle (contrast moment/center of mass within inscribed circle), and box (contrast moment within rectangle). Coordinates saved strictly as standard sub-pixel `(x, y)` centroids in CSVs with matching visual shape overlays.
+  - **Accelerated Playback Adaptive Tracking:** Full frame-by-frame sequential tracking during high-speed playback (`[` / `]`), eliminating gaps and tracking freezes.
+  - **TOML Configuration (`Cfg` button / Ctrl+T / Right-Click):** Modal dialog to save and load tracker parameters (including `tracking_shape`) to/from `.toml` configuration presets or restore defaults.
+  - **Full Batch Tracking & RTS Smoothing:** Shift+Click / Shift+T runs bidirectional forward-backward gap infilling with Rauch-Tung-Striebel (RTS) zero-phase smoothing ($\Delta \phi = 0$), auto-exporting kinematics (`*_ai_track_m{idx}.csv`).
 - **BBox to Coordinates Export:** Convert loaded tracking bounding boxes or SAM3 contours (`sam_contours.json`) into 5 distinct coordinates CSV files (corresponding to `center`, `bottom`, `top`, `left`, and `right` anchors) in the standard vailá format (`frame,p0_x,p0_y,...`). Available via the GUI **BBox→Coords** button or CLI option `--export-bbox-coords PATH`.
 
 - **Template Marker Mode:** Choose fixed keypoint templates in the toolbar:
