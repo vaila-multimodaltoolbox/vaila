@@ -1,0 +1,61 @@
+{
+  "loop": "bidirectional-subspace-tracker-loop",
+  "status": "success",
+  "updated": "2026-09-10",
+  "vaila_version": "0.3.131",
+  "vaila_update_date": "10 September 2026",
+  "note": "Implemented Bidirectional Linear Subspace Appearance Tracking with SVD Eigen-templates, Huber ICLK solver via IRLS, and Continuous White Noise Acceleration RTS zero-phase smoother in vaila/tracking, integrated into getpixelvideo.py.",
+  "governing_check_baseline": {
+    "pytest": "8 passed in tests/test_subspace_tracker.py, 48 passed across getpixelvideo suites",
+    "ruff": "clean on vaila/tracking, tests/test_subspace_tracker.py, vaila/getpixelvideo.py",
+    "ty": "clean on vaila/tracking and tests/test_subspace_tracker.py"
+  },
+  "targets": [
+    {
+      "id": "svd-appearance-subspace",
+      "accepted": true,
+      "evidence": "calibrate() decomposes 30 anchor patches via thin SVD into mean template t_bar and eigenbasis U_d meeting 95% energy threshold."
+    },
+    {
+      "id": "robust-iclk-huber-solver",
+      "accepted": true,
+      "evidence": "align_patch() solves A z = r0 with dynamic Huber thresholding (delta = 1.345 * MAD), achieving sub-pixel convergence (<0.005 px) and rejecting outlier noise."
+    },
+    {
+      "id": "rts-smoother-zero-phase",
+      "accepted": true,
+      "evidence": "RTSSmoother executes forward Kalman filtering under CWNA 6D model and backward RTS smoothing, validated to have peak cross-correlation at lag = 0 (Delta phi = 0)."
+    },
+    {
+      "id": "getpixelvideo-gui-integration",
+      "accepted": true,
+      "evidence": "Added Track RTS button and hotkey T in getpixelvideo.py with anchor validation, live notification banner, coordinates population, and *_subspace_track_m{idx}.csv export."
+    },
+    {
+      "id": "automated-test-suite",
+      "accepted": true,
+      "evidence": "8 unit/benchmark tests in test_subspace_tracker.py verify sub-pixel accuracy, zero phase, occlusion robustness, and end-to-end trajectory recovery."
+    }
+  ],
+  "accepted_changes": [
+    "vaila/tracking/__init__.py",
+    "vaila/tracking/rts_smoother.py",
+    "vaila/tracking/subspace_tracker.py",
+    "tests/test_subspace_tracker.py",
+    "tests/test_getpixelvideo_media_classify.py",
+    "vaila/getpixelvideo.py",
+    "vaila/help/getpixelvideo.md",
+    "vaila/help/getpixelvideo.html",
+    "vaila/help/index.md",
+    "vaila/help/index.html",
+    "README.md",
+    "loops/bidirectional-subspace-tracker-loop.md",
+    "loops/state/bidirectional-subspace-tracker-loop-state.json"
+  ],
+  "lessons": [
+    "OpenCV getRectSubPix requires float32 or uint8 input arrays; float64 arrays cause (-210:Unsupported format) error.",
+    "In Inverse Compositional Lucas-Kanade, the warp update on the image is p <- p - dp (subtracting dp, not adding dp).",
+    "cv2.Sobel with ksize=3 sums to 8 across the kernel, requiring scale=1.0/8.0 to yield exact physical derivatives in intensity per pixel.",
+    "Continuous white noise acceleration (CWNA) with backward RTS smoothing guarantees zero phase delay (Delta phi = 0), avoiding peak timing shifts in biomechanical velocities."
+  ]
+}
