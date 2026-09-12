@@ -40,7 +40,9 @@ param(
     [switch]$NonInteractive,
     [switch]$Yes,
     [switch]$NoLock,
-    [switch]$NoSync
+    [switch]$NoSync,
+    [switch]$SkipWorktree,
+    [switch]$NoSkipWorktree
 )
 
 $ErrorActionPreference = 'Stop'
@@ -231,5 +233,18 @@ if (-not $NoSync) {
         Write-Host "  uv sync $tail"
     } else {
         Write-Host '  uv sync'
+    }
+}
+
+# ---------- git skip-worktree handling ----------
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    if ($SkipWorktree) {
+        git update-index --skip-worktree pyproject.toml uv.lock 2>$null
+        Write-Host "Marked pyproject.toml and uv.lock as skip-worktree in Git." -ForegroundColor Green
+    } elseif ($NoSkipWorktree -or ($Target -eq 'cpu')) {
+        git update-index --no-skip-worktree pyproject.toml uv.lock 2>$null
+        if ($NoSkipWorktree) {
+            Write-Host "Restored normal git tracking for pyproject.toml and uv.lock." -ForegroundColor Green
+        }
     }
 }

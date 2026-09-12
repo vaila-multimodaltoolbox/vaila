@@ -35,9 +35,21 @@ Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--extras=a,b,c`, `--non-i
 | Windows CUDA 12.1 | `pwsh bin/use_pyproject_win_cuda.ps1` | same |
 | macOS (Metal) | `bash bin/use_pyproject_macos_metal.sh` | `uv sync` |
 
-**Back to portable CPU** (e.g. same clone on laptop): `bash bin/use_pyproject_universal_cpu.sh` (Linux/macOS) or `pwsh bin/use_pyproject_universal_cpu.ps1` (Windows), then `uv sync`.
-
 Each switch runs `uv lock`, rewrites `uv.lock` for that hardware matrix. Default lock in git targets **CPU**; CUDA users regenerate locally after switch.
+
+**Recommended multi-machine sync (avoiding Git conflicts across Linux / macOS / Windows):**
+Whenever switching between workstations, use the automated sync runner to pull changes and auto-adapt the local environment without merge conflicts:
+
+```bash
+# Linux / macOS / WSL
+bash bin/sync_repo.sh                          # pulls cleanly + auto-detects hardware + uv sync
+bash bin/sync_repo.sh --skip-worktree          # also hides pyproject.toml & uv.lock from git status
+
+# Windows PowerShell
+pwsh bin/sync_repo.ps1
+```
+
+The checked-in `pyproject.toml` and `uv.lock` on GitHub must **always** be the portable CPU PyTorch version (`pyproject_universal_cpu.toml`). A Git pre-commit hook (installed via `bash install-hooks.sh`) blocks committing hardware-specific (CUDA) `pyproject.toml` files to prevent cross-machine breakage.
 
 SAM 3 video (`vaila_sam.py`) needs **NVIDIA CUDA** at runtime (`torch.cuda.is_available()`), even with `sam` extra installed. **No** CPU-only or **macOS Metal/MPS** path here; `--frame-by-frame` only lowers **VRAM on CUDA**, not CPU fallback. Without CUDA, use other vailá modules (e.g. Markerless 2D / YOLO) or CUDA workstation/cloud GPU. Checkpoint auto-detect supports both `vaila/models/sam3/` and repo-root `models/sam3/`.
 

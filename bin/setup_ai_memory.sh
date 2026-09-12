@@ -6,19 +6,17 @@
 # long-term memory for this repo (vaila-multimodaltoolbox/vaila), usable by
 # Claude Code, Cursor Agent, OpenAI Codex, OpenCode, Gemini CLI, and other
 # MCP-compatible harnesses. This script is the idempotent, repeatable,
-# cross-platform (Linux/macOS/WSL/Git Bash) bootstrap. For native Windows
-# PowerShell, use bin/setup_ai_memory.ps1 instead.
+# cross-platform (Linux/macOS/WSL) bootstrap. On native Windows (including
+# Git Bash), use bin/setup_ai_memory.ps1 instead.
 #
 # Safe to re-run: every step checks current state before acting.
 # ============================================================================
-set -euo pipefail
+set -Eeuo pipefail
 
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   echo ">> ERROR: do not run this script with sudo / as root." >&2
-  echo "   It installs into YOUR \$HOME (~/.cargo, ~/.bashrc) and expects your" >&2
-  echo "   own rustup toolchain there. Under sudo, \$HOME becomes /root, so it" >&2
-  echo "   silently picks up root's (often older, distro) cargo instead —" >&2
-  echo "   e.g. missing the 'edition2024' feature. Re-run as your normal user:" >&2
+  echo "   It installs into YOUR \$HOME (~/Applications or ~/.local) and" >&2
+  echo "   configures user-level agent clients. Re-run as your normal user:" >&2
   echo "     bin/setup_ai_memory.sh" >&2
   exit 1
 fi
@@ -28,6 +26,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 DAEMON_HOST="127.0.0.1"
 DAEMON_PORT="49374"
 DAEMON_URL="http://${DAEMON_HOST}:${DAEMON_PORT}"
+INSTALL_TMP_DIR=""
 
 OS_NAME="$(uname -s)"
 case "${OS_NAME}" in
@@ -36,11 +35,32 @@ case "${OS_NAME}" in
   *)       PLATFORM="other" ;;
 esac
 
+case "$(uname -m)" in
+  arm64|aarch64) RELEASE_ARCH="aarch64" ;;
+  x86_64|amd64) RELEASE_ARCH="x86_64" ;;
+  *) RELEASE_ARCH="unsupported" ;;
+esac
+
+if [[ "${PLATFORM}" == "macos" ]]; then
+  AI_MEMORY_INSTALL_DIR="${HOME}/Applications/ai-memory"
+else
+  AI_MEMORY_INSTALL_DIR="${HOME}/.local/opt/ai-memory"
+fi
+
+cleanup() {
+  if [[ -n "${INSTALL_TMP_DIR}" && -d "${INSTALL_TMP_DIR}" ]]; then
+    rm -rf -- "${INSTALL_TMP_DIR}"
+  fi
+}
+
+trap cleanup EXIT
+trap 'echo ">> ERROR: ai-memory setup failed at line ${LINENO}." >&2' ERR
+
 echo ">> vaila — ai-memory setup (${PLATFORM}, repo root: ${REPO_ROOT})"
 
 # ---------------------------------------------------------- shell rc for PATH
-# Used only if we need to export ~/.cargo/bin ourselves (rustup's own
-# installer usually does this already via ~/.cargo/env).
+# The release binary is exposed through ~/.local/bin so every harness can
+# resolve the same stable command after setup.
 shell_rc() {
   case "$(basename "${SHELL:-bash}")" in
     zsh)  echo "${HOME}/.zshrc" ;;
@@ -49,59 +69,107 @@ shell_rc() {
   esac
 }
 
-ensure_cargo_bin_on_path() {
+ensure_local_bin_on_path() {
   local rc; rc="$(shell_rc)"
-  if ! grep -q '\.cargo/bin' "${rc}" 2>/dev/null; then
-    echo ">>   Adding ~/.cargo/bin to PATH in ${rc}"
-    { echo ''; echo '# ai-memory / rustup (added by bin/setup_ai_memory.sh)'; \
-      echo 'export PATH="$HOME/.cargo/bin:$PATH"'; } >> "${rc}"
+  mkdir -p "${HOME}/.local/bin"
+  if ! grep -q '\.local/bin' "${rc}" 2>/dev/null; then
+    echo ">>   Adding ~/.local/bin to PATH in ${rc}"
+    { echo ''; echo '# ai-memory (added by bin/setup_ai_memory.sh)'; \
+      echo 'export PATH="$HOME/.local/bin:$PATH"'; } >> "${rc}"
   fi
-  export PATH="${HOME}/.cargo/bin:${PATH}"
+  export PATH="${HOME}/.local/bin:${PATH}"
 }
 
-# ------------------------------------------------- [1/4] binary + daemon
-echo ">> [1/4] Binary installation and service verification"
+install_release_binary() {
+  local archive_name archive_url checksum_name command_name
 
-if ! command -v cargo >/dev/null 2>&1; then
-  echo ">>   cargo not found; installing Rust toolchain via rustup..."
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  # shellcheck disable=SC1090
-  source "${HOME}/.cargo/env"
-fi
-ensure_cargo_bin_on_path
+  if [[ "${PLATFORM}" == "other" || "${RELEASE_ARCH}" == "unsupported" ]]; then
+    echo ">> ERROR: no ai-memory release is published for ${OS_NAME}/$(uname -m)." >&2
+    echo ">>        Follow the upstream source-build instructions instead." >&2
+    return 1
+  fi
+
+  for command_name in curl tar; do
+    if ! command -v "${command_name}" >/dev/null 2>&1; then
+      echo ">> ERROR: required command not found: ${command_name}" >&2
+      return 1
+    fi
+  done
+
+  archive_name="ai-memory-${PLATFORM}-${RELEASE_ARCH}.tar.gz"
+  checksum_name="${archive_name}.sha256"
+  archive_url="https://github.com/akitaonrails/ai-memory/releases/latest/download/${archive_name}"
+  INSTALL_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vaila-ai-memory.XXXXXX")"
+
+  echo ">>   Downloading the latest native release (${PLATFORM}/${RELEASE_ARCH})..."
+  curl -fsSL --retry 3 "${archive_url}" -o "${INSTALL_TMP_DIR}/${archive_name}"
+  curl -fsSL --retry 3 "${archive_url}.sha256" -o "${INSTALL_TMP_DIR}/${checksum_name}"
+
+  echo ">>   Verifying the published SHA-256 checksum..."
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "${INSTALL_TMP_DIR}" && sha256sum -c "${checksum_name}")
+  elif command -v shasum >/dev/null 2>&1; then
+    (cd "${INSTALL_TMP_DIR}" && shasum -a 256 -c "${checksum_name}")
+  else
+    echo ">> ERROR: sha256sum or shasum is required to verify the download." >&2
+    return 1
+  fi
+
+  mkdir -p "${AI_MEMORY_INSTALL_DIR}"
+  tar -xzf "${INSTALL_TMP_DIR}/${archive_name}" -C "${AI_MEMORY_INSTALL_DIR}"
+  if [[ ! -x "${AI_MEMORY_INSTALL_DIR}/ai-memory" ]]; then
+    echo ">> ERROR: release did not contain an executable ai-memory binary." >&2
+    return 1
+  fi
+
+  ln -sfn "${AI_MEMORY_INSTALL_DIR}/ai-memory" "${HOME}/.local/bin/ai-memory"
+  AI_MEMORY_BIN="${AI_MEMORY_INSTALL_DIR}/ai-memory"
+}
+
+# --------------------------------------------------------- [1/4] native binary
+echo ">> [1/4] Native binary installation"
+
+ensure_local_bin_on_path
 
 if command -v ai-memory >/dev/null 2>&1; then
-  echo ">>   ai-memory already installed: $(command -v ai-memory)"
+  AI_MEMORY_BIN="$(command -v ai-memory)"
+  echo ">>   ai-memory already installed: ${AI_MEMORY_BIN}"
 else
-  echo ">>   Installing ai-memory via cargo install --git ..."
-  # Workspace repo has multiple binaries (cli/eval/importer); pin the CLI
-  # package explicitly, which is what produces the `ai-memory` binary.
-  cargo install --git https://github.com/akitaonrails/ai-memory.git ai-memory-cli
+  install_release_binary
+  echo ">>   Installed ai-memory: ${AI_MEMORY_BIN}"
+fi
+"${AI_MEMORY_BIN}" --version
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo ">> ERROR: curl is required for the local-service readiness check." >&2
+  exit 1
 fi
 
-# ai-memory 2.0.3 has no `/healthz` route and no `serve --daemon` flag — the
-# server has a real MCP endpoint at `/mcp` instead (GET there returns 405,
-# not 200, since MCP is POST-only; that 405 is itself proof the port is up).
-# `curl` without `-f` exits 0 on any HTTP response, only failing on a refused
-# connection, which is exactly the "is something listening" check we want.
+# ------------------------------------------- [2/4] data init + local service
+echo ">> [2/4] Data initialization and local service verification"
+# `init` only lays out the data directory (no --project flag); ai-memory
+# scopes projects per-cwd automatically (basename strategy) via its hooks.
+(cd "${REPO_ROOT}" && "${AI_MEMORY_BIN}" init)
+
+# The MCP endpoint is POST-only, so GET normally returns 405. `curl` without
+# `-f` succeeds on any HTTP response and fails on a refused connection, which
+# makes it a reliable readiness probe without depending on a `/healthz` route.
 if curl -sS -m 3 -o /dev/null "${DAEMON_URL}/mcp" 2>/dev/null; then
   echo ">>   ai-memory daemon already responding at ${DAEMON_URL}"
 else
   echo ">>   Starting ai-memory daemon (background)..."
-  nohup ai-memory serve --transport http --bind "${DAEMON_HOST}:${DAEMON_PORT}" --enable-web \
+  nohup "${AI_MEMORY_BIN}" serve --transport http --bind "${DAEMON_HOST}:${DAEMON_PORT}" --enable-web \
     > "${REPO_ROOT}/.ai-memory-daemon.log" 2>&1 < /dev/null &
   disown
   sleep 2
-  curl -sS -m 5 -o /dev/null "${DAEMON_URL}/mcp" 2>/dev/null \
-    && echo ">>   Daemon is up." \
-    || echo ">>   (warning) Daemon did not respond yet; check 'ai-memory status' or ${REPO_ROOT}/.ai-memory-daemon.log manually."
+  if curl -sS -m 5 -o /dev/null "${DAEMON_URL}/mcp" 2>/dev/null; then
+    echo ">>   Daemon is up."
+  else
+    echo ">> ERROR: daemon did not respond at ${DAEMON_URL}." >&2
+    echo ">>        See ${REPO_ROOT}/.ai-memory-daemon.log for details." >&2
+    exit 1
+  fi
 fi
-
-# ------------------------------------------------- [2/4] workspace init
-echo ">> [2/4] Repository workspace initialization"
-# `init` only lays out the data directory (no --project flag); ai-memory
-# scopes projects per-cwd automatically (basename strategy) via its hooks.
-(cd "${REPO_ROOT}" && ai-memory init)
 
 GITIGNORE="${REPO_ROOT}/.gitignore"
 if ! grep -q '^\.ai-memory/\*\.db$' "${GITIGNORE}" 2>/dev/null; then
@@ -113,14 +181,6 @@ fi
 # ------------------------------------------------- [3/4] harness configs
 echo ">> [3/4] Multi-agent harness configuration"
 
-# `cargo install` only builds the binary — it doesn't copy the repo's
-# hooks/ scripts anywhere ai-memory looks by default (/usr/local/share/...
-# etc.), so install-hooks can't find them unless pointed at the checkout.
-# Keep the path on ONE line when pasting manually — shell line-wrap glyphs
-# like │ break --hooks-dir and yield "hooks directory │/cursor does not exist".
-AI_MEMORY_HOOKS_DIR="$(find "${HOME}/.cargo/git/checkouts" -maxdepth 3 -type d \
-  -path '*/ai-memory-*/*/hooks' 2>/dev/null | head -n1)"
-
 # Cross-harness memory: same daemon + same project wiki. Handoffs created by
 # one agent's SessionEnd (or memory_handoff_begin shared=true) are consumed by
 # the next agent's SessionStart — Claude ↔ Cursor Agent (`agent`) ↔ Codex ↔
@@ -129,18 +189,21 @@ AI_MEMORY_HOOKS_DIR="$(find "${HOME}/.cargo/git/checkouts" -maxdepth 3 -type d \
 #
 # install-mcp --client <…>  |  install-hooks --agent <…>
 # Flag for hooks is `--agent`, not `--harness`.
+AI_MEMORY_HOOKS_DIR="$(find "${HOME}/.cargo/git/checkouts" -maxdepth 3 -type d \
+  -path '*/ai-memory-*/*/hooks' 2>/dev/null | head -n1)"
+
 wire_harness() {
   local mcp_client="$1"
   local hook_agent="$2"
   echo ">>   Wiring MCP client=${mcp_client} hooks-agent=${hook_agent}..."
-  ai-memory install-mcp --client "${mcp_client}" --apply \
+  "${AI_MEMORY_BIN}" install-mcp --client "${mcp_client}" --apply \
     || echo ">>   (note) install-mcp --client ${mcp_client} reported an issue; check manually."
   if [[ -n "${AI_MEMORY_HOOKS_DIR}" ]]; then
-    ai-memory install-hooks --agent "${hook_agent}" --apply --hooks-dir "${AI_MEMORY_HOOKS_DIR}" \
+    "${AI_MEMORY_BIN}" install-hooks --agent "${hook_agent}" --apply --hooks-dir "${AI_MEMORY_HOOKS_DIR}" \
       || echo ">>   (note) install-hooks --agent ${hook_agent} reported an issue; check manually."
   else
-    echo ">>   (note) couldn't find ai-memory's hooks/ dir under ~/.cargo/git/checkouts;"
-    echo "        re-run: ai-memory install-hooks --agent ${hook_agent} --apply --hooks-dir <path-to-hooks>"
+    "${AI_MEMORY_BIN}" install-hooks --agent "${hook_agent}" --apply \
+      || echo ">>   (note) install-hooks --agent ${hook_agent} reported an issue; check manually."
   fi
 }
 
@@ -226,7 +289,7 @@ echo ">>   Previewing agent-agnostic ai-memory usage instructions..."
 # delimited snippet. That's a real edit to two curated, hand-maintained
 # docs — preview it and apply by hand (drop --print) after reviewing the
 # diff, rather than have a bootstrap script silently rewrite them.
-(cd "${REPO_ROOT}" && ai-memory install-instructions --print) \
+(cd "${REPO_ROOT}" && "${AI_MEMORY_BIN}" install-instructions --print) \
   || echo ">>   (note) install-instructions --print reported an issue; check manually."
 echo ">>   (review the snippet above; re-run 'ai-memory install-instructions' without --print to apply)"
 
@@ -235,12 +298,12 @@ echo ">> [4/4] Verification and sanity check"
 # No `ingest` subcommand exists in this CLI — the wiki fills organically via
 # lifecycle hooks during real sessions, or via `bootstrap` (needs an LLM
 # provider configured). Sanity-check with commands that always work instead.
-(cd "${REPO_ROOT}" && ai-memory status 2>&1 | sed 's/^/>>   /') || true
+(cd "${REPO_ROOT}" && "${AI_MEMORY_BIN}" status 2>&1 | sed 's/^/>>   /') || true
 # A 404 "project 'vaila' not found" here is expected on a brand-new install:
 # the project is created lazily by the first captured session (via the
 # hooks above), not by `init`. Re-run this search after your next real
 # Claude Code session in this repo.
-(cd "${REPO_ROOT}" && ai-memory search "vaila" 2>&1 | sed 's/^/>>   /') || true
+(cd "${REPO_ROOT}" && "${AI_MEMORY_BIN}" search "vaila" 2>&1 | sed 's/^/>>   /') || true
 
 echo ""
 echo ">> Done. ai-memory should now be running at ${DAEMON_URL} with the"

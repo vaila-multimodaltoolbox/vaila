@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.3.137 (see `vaila.py`). **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-11
+**Last updated:** 2026-09-12
 
 File Manager now shares previewed operations between GUI and CLI; YouTube Downloader uses one reviewed URL list with MP4/MP3 selection, progress and cooperative cancellation. See [File Manager help](vaila/help/filemanager.md), [Downloader help](vaila/help/vaila_ytdown.md) and the project [/debug skill](.agents/skills/debug/SKILL.md).
 
@@ -261,7 +261,7 @@ vaila
 ├── pyproject.toml                # Active manifest (default: universal CPU; Hatchling + uv)
 ├── pyproject_*.toml              # Platform templates (Linux/Windows CUDA, macOS, CPU)
 ├── uv.lock                       # Locked deps (re-run uv lock after template switch)
-├── bin/                          # setup_pyproject.sh/.ps1 (unified) + legacy use_pyproject_*.sh/.ps1 shims
+├── bin/                          # setup_pyproject.sh/.ps1, sync_repo.sh/.ps1, use_pyproject_*.sh/.ps1 shims
 ├── install_vaila_linux.sh        # Linux installer (uv-only)
 ├── install_vaila_mac.sh          # macOS installer (uv-only)
 ├── install_vaila_win.ps1         # Windows installer (uv-only)
@@ -423,13 +423,13 @@ The script will:
 
 **Note:** Default install location is **Local/Portable** (the current repo directory). Choose option **[2]** for a profile/system install: as **Administrator** → `C:\Program Files\vaila`; as a **Standard User** → `~\vaila`.
 
-**Git pull after install:** portable installs into a clone keep the committed `uv.lock` (CPU) so `git pull` works. If you chose CUDA/Metal, `pyproject.toml` / `uv.lock` become local overrides — restore before pulling:
+**Git pull / multi-machine sync:** portable installs into a clone keep the committed `uv.lock` (CPU) on Git so `git pull` works. Use the automated sync runner to pull changes and auto-adapt the local environment cleanly without merge conflicts:
 
-```bash
-git restore uv.lock pyproject.toml
-git pull
-# then re-apply: bash bin/setup_pyproject.sh   # or pwsh bin/setup_pyproject.ps1
+```powershell
+pwsh bin/sync_repo.ps1
 ```
+
+Or manually restore before pulling: `git restore uv.lock pyproject.toml && git pull && pwsh bin/setup_pyproject.ps1`.
 
 ### 3. **What the Script Does**
 
@@ -544,13 +544,13 @@ The script will:
 
 **Note:** Default install location is **Local/Portable** (the current repo directory). Choose option **[2]** for user profile install (`~/vaila`).
 
-**Git pull after install:** portable installs into a clone keep the committed `uv.lock` (CPU) so `git pull` works. If you chose CUDA, `pyproject.toml` / `uv.lock` become local overrides — restore before pulling:
+**Git pull / multi-machine sync:** portable installs into a clone keep the committed `uv.lock` (CPU) on Git so `git pull` works. Use the automated sync runner to pull changes and auto-adapt the local environment cleanly without merge conflicts:
 
 ```bash
-git restore uv.lock pyproject.toml
-git pull
-# then re-apply: bash bin/setup_pyproject.sh
+bash bin/sync_repo.sh
 ```
+
+Or manually restore before pulling: `git restore uv.lock pyproject.toml && git pull && bash bin/setup_pyproject.sh`.
 
 ### 3. **What the Script Does**
 

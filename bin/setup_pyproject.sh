@@ -21,6 +21,8 @@
 #   --yes, -y          Accept all suggested defaults (interactive but no prompts)
 #   --no-lock          Skip `uv lock`
 #   --no-sync          Skip `uv sync`
+#   --skip-worktree    Hide pyproject.toml & uv.lock from git status via git update-index --skip-worktree
+#   --no-skip-worktree Restore normal git tracking for pyproject.toml & uv.lock
 #   --help, -h         Show this help and exit
 
 set -euo pipefail
@@ -35,10 +37,11 @@ NON_INTERACTIVE=0
 ACCEPT_DEFAULTS=0
 RUN_LOCK=1
 RUN_SYNC=1
+SKIP_WORKTREE=0
 
 # ---------- args ----------
 print_help() {
-    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do
@@ -49,6 +52,8 @@ for arg in "$@"; do
         -y|--yes)          ACCEPT_DEFAULTS=1 ;;
         --no-lock)         RUN_LOCK=0 ;;
         --no-sync)         RUN_SYNC=0 ;;
+        --skip-worktree)   SKIP_WORKTREE=1 ;;
+        --no-skip-worktree) SKIP_WORKTREE=2 ;;
         -h|--help)         print_help; exit 0 ;;
         *)
             echo "error: unknown argument: $arg" >&2
@@ -338,5 +343,18 @@ else
         say "  uv sync $(echo "$EXTRAS" | sed 's/[^ ][^ ]*/--extra &/g')"
     else
         say "  uv sync"
+    fi
+fi
+
+# ---------- git skip-worktree handling ----------
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ "$SKIP_WORKTREE" == 1 ]]; then
+        git update-index --skip-worktree pyproject.toml uv.lock 2>/dev/null || true
+        ok "Marked pyproject.toml and uv.lock as skip-worktree (hidden from git status)."
+    elif [[ "$SKIP_WORKTREE" == 2 || "$TARGET" == "cpu" ]]; then
+        git update-index --no-skip-worktree pyproject.toml uv.lock 2>/dev/null || true
+        if [[ "$SKIP_WORKTREE" == 2 ]]; then
+            ok "Restored normal git tracking for pyproject.toml and uv.lock."
+        fi
     fi
 fi

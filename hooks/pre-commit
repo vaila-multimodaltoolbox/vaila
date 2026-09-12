@@ -15,3 +15,21 @@ while IFS= read -r file; do
     fi
   fi
 done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+# Guard against committing hardware-specific (CUDA/GPU) pyproject.toml to Git
+if git diff --cached --name-only | grep -q '^pyproject\.toml$'; then
+  staged_content=$(git show :pyproject.toml 2>/dev/null || cat pyproject.toml)
+  if echo "$staged_content" | grep -qE 'pytorch-cu12|pytorch-cu11|pytorch-cu13|name = "pytorch-cu'; then
+    echo "==========================================================================" >&2
+    echo "ERROR: Attempted to commit a hardware-specific pyproject.toml (CUDA / GPU)!" >&2
+    echo "The version committed to git must ALWAYS match pyproject_universal_cpu.toml." >&2
+    echo "" >&2
+    echo "To fix:" >&2
+    echo "  1. If you want to commit your code without your local GPU template:" >&2
+    echo "       git restore --staged pyproject.toml uv.lock" >&2
+    echo "  2. Or revert pyproject.toml to portable CPU before committing:" >&2
+    echo "       bash bin/setup_pyproject.sh --target=cpu --yes" >&2
+    echo "==========================================================================" >&2
+    exit 1
+  fi
+fi
