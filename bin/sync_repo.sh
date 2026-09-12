@@ -76,6 +76,19 @@ git pull --rebase
 
 # 4. Re-apply hardware setup for this machine
 info "Applying hardware configuration for current machine..."
-bash "$ROOT/bin/setup_pyproject.sh" "$@"
+SETUP_ARGS=()
+HAS_YES=0
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes) HAS_YES=1; SETUP_ARGS+=("$arg") ;;
+        *) SETUP_ARGS+=("$arg") ;;
+    esac
+done
+
+if [[ "$HAS_YES" == 0 ]]; then
+    SETUP_ARGS+=("--yes")
+fi
+
+bash "$ROOT/bin/setup_pyproject.sh" "${SETUP_ARGS[@]}"
 
 ok "Repository successfully synchronized and environment is up to date!"
