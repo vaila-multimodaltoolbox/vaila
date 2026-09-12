@@ -44,11 +44,92 @@ _MAX_TRAINING_FEATS = 200
 _MAX_GAP_SEED_ANCHORS = 40
 _VELOCITY_EMA = 0.35
 _LOST_STREAK_STOP = 8
+_ACCEL_EMA = 0.30  # Acceleration-magnitude smoothing (diagnostic only; set_reference()'s
+# manual-correction velocity bootstrap uses it. The per-frame trajectory gate below no
+# longer does -- it uses the Kalman filter's own covariance instead.)
+
+# --- Kalman filter (constant-velocity model) for trajectory-plausibility gating ---
+# State x = [px, py, vx, vy]. Replaces the earlier ad hoc EMA-velocity prediction +
+# additive-pixel-distance gate with genuine predict/update covariance propagation and
+# Mahalanobis-distance outlier rejection (see AITracker.track_frame()). P widens on its
+# own through process noise Q during a real acceleration/blur/background-flip event
+# (the reported failure mode), instead of a fixed or linearly-scaled pixel threshold --
+# and tightens back down once tracking stabilizes.
+_KF_Q_POS = 4.0  # process noise variance injected into position each frame (px^2)
+_KF_Q_VEL = 12.0  # process noise variance injected into velocity each frame (px^2/frame^2)
+_KF_R_POS = 4.0  # measurement noise variance assumed for an accepted appearance match (px^2)
+_KF_P_INIT = 1000.0  # initial state covariance (diagonal) after a fresh anchor: "velocity unknown"
+_KF_MAHALANOBIS_GATE = 9.21  # chi-square, 2 DOF, 99% confidence -- outlier rejection threshold
+_FEATURE_DIM = 808  # extract_patch_feature() output length (768 color-grid + 40 region-stats)
+_CHECKPOINT_BLEND_MAX_N = 4000.0  # Cap prior-session weight so a fresh session can still adapt
 
 
 def _default_resnet50_local_path() -> Path:
     """Candidate path for a user-provided ResNet50 checkpoint under vaila/models/."""
     return Path(__file__).resolve().parents[1] / "models" / "resnet50_imagenet.pth"
+
+
+def _ai_tracker_resnet50_local_path() -> Path:
+    """Primary candidate path for ResNet50 checkpoint under vaila/models/ai_tracker/."""
+    return Path(__file__).resolve().parents[1] / "models" / "ai_tracker" / "resnet50_imagenet.pth"
+
+
+def _default_checkpoint_dir() -> Path:
+    """Directory for persisted online-discriminator checkpoints (cross-session transfer learning)."""
+    return Path(__file__).resolve().parents[1] / "models" / "ai_tracker"
+
+
+def get_available_resnet50_checkpoints() -> list[Path]:
+    """Scan and return all detected ResNet50 weight checkpoints (.pth / .pt).
+
+    Searches in:
+      1. vaila/models/ai_tracker/
+      2. vaila/models/
+      3. Torch hub cache (~/.cache/torch/hub/checkpoints/)
+    """
+    found: list[Path] = []
+    seen: set[str] = set()
+
+    def _add_if_valid(p: Path) -> None:
+        try:
+            resolved = p.resolve()
+            k = str(resolved)
+            if resolved.is_file() and k not in seen and resolved.stat().st_size > 10_000_000:
+                seen.add(k)
+                found.append(resolved)
+        except OSError:
+            pass
+
+    # 1. Models ai_tracker directory
+    ai_dir = _default_checkpoint_dir()
+    if ai_dir.is_dir():
+        for cand in sorted(ai_dir.glob("*resnet50*.pth")) + sorted(ai_dir.glob("*resnet50*.pt")):
+            _add_if_valid(cand)
+
+    # 2. General models directory
+    models_dir = Path(__file__).resolve().parents[1] / "models"
+    if models_dir.is_dir():
+        for cand in sorted(models_dir.glob("*resnet50*.pth")) + sorted(models_dir.glob("*resnet50*.pt")):
+            _add_if_valid(cand)
+
+    # 3. Torch hub checkpoint cache
+    torch_hub = Path.home() / ".cache" / "torch" / "hub" / "checkpoints"
+    if torch_hub.is_dir():
+        for cand in sorted(torch_hub.glob("*resnet50*.pth")) + sorted(torch_hub.glob("*resnet50*.pt")):
+            _add_if_valid(cand)
+
+    return found
+
+
+def default_checkpoint_path(name: str = "default") -> Path:
+    """Path to the on-disk discriminator checkpoint for the given tracker profile name.
+
+    Called by getpixelvideo.py on AI Track ON (load_checkpoint) and OFF (save_checkpoint)
+    so the online-learned appearance model persists and incrementally improves across
+    sessions instead of rebuilding from scratch every time the tool opens.
+    """
+    safe_name = "".join(c if (c.isalnum() or c in "-_") else "_" for c in name) or "default"
+    return _default_checkpoint_dir() / f"discriminator_{safe_name}.npz"
 
 
 @dataclass
@@ -309,10 +390,19 @@ class DeepFeatureExtractor:
         candidates: list[Path] = []
         if weights_path:
             candidates.append(Path(weights_path))
+        # 1. Primary path under vaila/models/ai_tracker/
+        candidates.append(_ai_tracker_resnet50_local_path())
+        # 2. Path directly under vaila/models/
         candidates.append(_default_resnet50_local_path())
+        # 3. Any detected weights from scan
+        for extra in get_available_resnet50_checkpoints():
+            candidates.append(extra)
         for cand in candidates:
-            if cand.is_file():
-                return cand
+            try:
+                if cand.is_file() and cand.stat().st_size > 10_000_000:
+                    return cand.resolve()
+            except OSError:
+                pass
         return None
 
     @classmethod
@@ -321,13 +411,11 @@ class DeepFeatureExtractor:
         weights_path: str | Path | None = None,
     ) -> DeepFeatureExtractor:
         """Get or initialize a feature extractor keyed by weights path."""
-        key = str(weights_path) if weights_path else "__default__"
-        local = _default_resnet50_local_path()
-        if key == "__default__" and local.is_file():
-            key = str(local)
-            weights_path = local
+        resolved = cls._resolve_weights_path(weights_path)
+        key = str(resolved) if resolved is not None else (str(weights_path) if weights_path else "__default__")
+        actual_path = resolved if resolved is not None else weights_path
         if key not in cls._instances:
-            cls._instances[key] = cls(weights_path=weights_path)
+            cls._instances[key] = cls(weights_path=actual_path)
         return cls._instances[key]
 
     def extract_embedding(self, patch_bgr: np.ndarray) -> np.ndarray | None:
@@ -383,7 +471,14 @@ class AITracker:
         self.anchor_template: np.ndarray | None = None
         self.anchor_embedding: np.ndarray | None = None
         self.last_point: tuple[float, float] | None = None
-        self.velocity: tuple[float, float] = (0.0, 0.0)
+        self.acceleration: tuple[float, float] = (0.0, 0.0)
+        # Kalman filter (constant-velocity model) state/covariance -- see module-level
+        # comment above _KF_Q_POS for design rationale. `self.velocity` is a thin
+        # property view over `self._kf_x[2:4]` so existing call sites (gap-seed
+        # velocity bootstrap in infill_and_smooth, prediction, spatial-prior sigma)
+        # keep working unchanged.
+        self._kf_x: np.ndarray = np.zeros(4, dtype=np.float64)
+        self._kf_P: np.ndarray = np.eye(4, dtype=np.float64) * _KF_P_INIT
         self._lost_streak: int = 0
 
         # Online Appearance Model / Multi-Anchor Retraining
@@ -394,6 +489,17 @@ class AITracker:
         self.discriminator_w: np.ndarray | None = None
         self.discriminator_b: float = 0.0
 
+        # Cross-session checkpoint (transfer learning): weights loaded from disk, kept
+        # separate from the live session weights above so retrain_online_model() can
+        # blend them by sample-count instead of overwriting prior knowledge.
+        self._checkpoint_w: np.ndarray | None = None
+        self._checkpoint_b: float = 0.0
+        self._checkpoint_n: float = 0.0
+        # Cumulative sample-count "confidence" behind the current discriminator_w/_b
+        # (session samples plus, once blended, the checkpoint's own prior count).
+        # This is what gets persisted by save_checkpoint() for the next session.
+        self._live_n_samples: float = 0.0
+
         if self.params.use_deep_features:
             self.extractor = DeepFeatureExtractor.get_shared(
                 weights_path=self.params.deep_weights_path or None
@@ -402,6 +508,16 @@ class AITracker:
             self.extractor = None
 
         self._error_reported: bool = False
+
+    @property
+    def velocity(self) -> tuple[float, float]:
+        """Current Kalman-filtered velocity estimate (px/frame), view over `_kf_x[2:4]`."""
+        return (float(self._kf_x[2]), float(self._kf_x[3]))
+
+    @velocity.setter
+    def velocity(self, value: tuple[float, float]) -> None:
+        self._kf_x[2] = float(value[0])
+        self._kf_x[3] = float(value[1])
 
     def _create_elliptical_mask(self, width: int, height: int) -> np.ndarray:
         """Generate a binary elliptical mask matching circular marker boundaries."""
@@ -615,10 +731,75 @@ class AITracker:
         reg_lambda = 0.05
         K = X @ X.T + reg_lambda * np.eye(N, dtype=np.float32)
         alpha = np.linalg.solve(K, y)
-        self.discriminator_w = X.T @ alpha
-        self.discriminator_b = float(np.mean(y - X @ self.discriminator_w))
+        w_session = X.T @ alpha
+        b_session = float(np.mean(y - X @ w_session))
+
+        # Transfer learning: blend this session's freshly-trained weights with a
+        # loaded checkpoint (if any) by sample-count, so a returning session refines
+        # the discriminator instead of rebuilding it from scratch every time it opens.
+        if self._checkpoint_w is not None and self._checkpoint_w.shape == w_session.shape:
+            n_session = float(N)
+            n_checkpoint = min(float(self._checkpoint_n), _CHECKPOINT_BLEND_MAX_N)
+            total_n = n_session + n_checkpoint
+            self.discriminator_w = (
+                n_session * w_session + n_checkpoint * self._checkpoint_w
+            ) / total_n
+            self.discriminator_b = (
+                n_session * b_session + n_checkpoint * self._checkpoint_b
+            ) / total_n
+            self._live_n_samples = total_n
+        else:
+            self.discriminator_w = w_session
+            self.discriminator_b = b_session
+            self._live_n_samples = float(N)
+
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return elapsed_ms
+
+    def load_checkpoint(self, path: str | Path) -> bool:
+        """Load a persisted discriminator checkpoint for transfer learning.
+
+        Returns True on success, False if the file is missing, unreadable, or has an
+        incompatible feature dimension (silently ignored — tracking still works from
+        scratch, just without the head start).
+        """
+        p = Path(path)
+        if not p.is_file():
+            return False
+        try:
+            data = np.load(p, allow_pickle=False)
+            w = np.asarray(data["w"], dtype=np.float32)
+            if w.shape != (_FEATURE_DIM,):
+                return False
+            self._checkpoint_w = w
+            self._checkpoint_b = float(data["b"])
+            self._checkpoint_n = float(data["n_samples"])
+        except Exception:
+            return False
+        return True
+
+    def save_checkpoint(self, path: str | Path) -> bool:
+        """Persist the current discriminator (weights + cumulative sample count).
+
+        Returns True on success, False if there is no trained discriminator yet or the
+        write failed (best-effort — never raises).
+        """
+        if self.discriminator_w is None or self.discriminator_w.shape != (_FEATURE_DIM,):
+            return False
+        p = Path(path)
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            n_samples = self._live_n_samples if self._live_n_samples > 0 else 1.0
+            np.savez(
+                p,
+                w=self.discriminator_w.astype(np.float32),
+                b=np.float32(self.discriminator_b),
+                n_samples=np.float32(n_samples),
+                feat_dim=np.int32(_FEATURE_DIM),
+            )
+        except Exception:
+            return False
+        return True
 
     def score_patch_discriminator(self, patch: np.ndarray) -> float:
         """Score candidate patch with the online retrained discriminator in [0.0, 1.0]."""
@@ -678,12 +859,26 @@ class AITracker:
         if self.last_point is not None and not reset_online:
             dx = point[0] - self.last_point[0]
             dy = point[1] - self.last_point[1]
-            self.velocity = (
-                (1.0 - _VELOCITY_EMA) * self.velocity[0] + _VELOCITY_EMA * dx,
-                (1.0 - _VELOCITY_EMA) * self.velocity[1] + _VELOCITY_EMA * dy,
+            new_vx = (1.0 - _VELOCITY_EMA) * self.velocity[0] + _VELOCITY_EMA * dx
+            new_vy = (1.0 - _VELOCITY_EMA) * self.velocity[1] + _VELOCITY_EMA * dy
+            self.acceleration = (
+                (1.0 - _ACCEL_EMA) * self.acceleration[0]
+                + _ACCEL_EMA * (new_vx - self.velocity[0]),
+                (1.0 - _ACCEL_EMA) * self.acceleration[1]
+                + _ACCEL_EMA * (new_vy - self.velocity[1]),
             )
+            self.velocity = (new_vx, new_vy)
         elif reset_online:
             self.velocity = (0.0, 0.0)
+            self.acceleration = (0.0, 0.0)
+            self._kf_P = np.eye(4, dtype=np.float64) * _KF_P_INIT
+        # A manual anchor/correction is exact ground truth: resync the Kalman position
+        # state and shrink its position covariance to the measurement-noise floor, but
+        # keep the velocity covariance (don't forget the filter's confidence on every
+        # re-anchor) unless this was a full reset, handled above.
+        self._kf_x[0], self._kf_x[1] = point
+        self._kf_P[0, 0] = self._kf_P[1, 1] = _KF_R_POS
+        self._kf_P[0, 1] = self._kf_P[1, 0] = 0.0
         self.last_point = point
         self._lost_streak = 0
         self._apply_shape_mask()
@@ -741,9 +936,24 @@ class AITracker:
         sw, sh = self.params.search_window
         bw, bh = self.params.block_window
 
-        # Predict center from velocity prior (helps vertical lift / periodic motion)
-        pred_x = float(last_point[0] + self.velocity[0])
-        pred_y = float(last_point[1] + self.velocity[1])
+        # Kalman predict (constant-velocity model). `last_point` is authoritative (the
+        # previous frame's accepted location, or a manual anchor via set_reference) --
+        # resync the filter's position state to it before propagating one frame ahead,
+        # so any external re-anchor never leaves the filter's belief stale.
+        self._kf_x[0], self._kf_x[1] = last_point
+        kf_f = np.array(
+            [
+                [1.0, 0.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+        kf_q = np.diag([_KF_Q_POS, _KF_Q_POS, _KF_Q_VEL, _KF_Q_VEL])
+        kf_x_pred = kf_f @ self._kf_x
+        kf_p_pred = kf_f @ self._kf_P @ kf_f.T + kf_q
+        pred_x = float(kf_x_pred[0])
+        pred_y = float(kf_x_pred[1])
         lx, ly = int(round(pred_x)), int(round(pred_y))
 
         # Search window bounding box centered on prediction
@@ -760,6 +970,10 @@ class AITracker:
 
         roi = frame[crop_sy1:crop_sy2, crop_sx1:crop_sx2]
         if roi.shape[0] < bh or roi.shape[1] < bw:
+            # No measurement this frame: propagate-only (predicted state becomes the new
+            # belief, uncertainty keeps growing under Q).
+            self._kf_x = kf_x_pred
+            self._kf_P = kf_p_pred
             self._lost_streak += 1
             return TemplateMatchResult(
                 similarity=0.0,
@@ -864,6 +1078,29 @@ class AITracker:
                 combined_score = norm_ncc
 
         accepted = float(combined_score) >= float(self.params.similarity_threshold)
+
+        # Trajectory-plausibility gate: genuine Kalman-filter innovation covariance +
+        # Mahalanobis-distance outlier rejection. A candidate can pass the soft
+        # similarity score yet still land far from where the covariance-propagated
+        # prediction says the target should be — this is exactly how drift happens
+        # during acceleration + motion blur + background-polarity-flip (a spurious
+        # high-scoring patch on the far side of the flip hijacks the match). Reject such
+        # jumps even though the raw score passed; freeze at last_point like any other
+        # rejection. Unlike a fixed/additive pixel threshold, the gate widens on its own
+        # during a real acceleration event (P grows through process noise Q every frame
+        # a measurement is rejected) and tightens back down once tracking stabilizes.
+        kf_h = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]])
+        kf_r = np.eye(2) * _KF_R_POS
+        innovation = np.array([cand_x - pred_x, cand_y - pred_y])
+        kf_s = kf_h @ kf_p_pred @ kf_h.T + kf_r
+        try:
+            kf_s_inv = np.linalg.inv(kf_s)
+            mahalanobis_sq = float(innovation @ kf_s_inv @ innovation)
+        except np.linalg.LinAlgError:
+            mahalanobis_sq = 0.0
+        if accepted and mahalanobis_sq > _KF_MAHALANOBIS_GATE:
+            accepted = False
+
         template_updated = False
         raw_loc = (
             int(crop_sx1 + max_loc[0] + bw // 2),
@@ -871,6 +1108,12 @@ class AITracker:
         )
 
         if not accepted:
+            # No measurement update: propagate-only, so uncertainty keeps growing under
+            # Q and next frame's gate widens automatically -- exactly the behavior
+            # needed to ride out an acceleration/blur event without drifting onto a
+            # spurious match.
+            self._kf_x = kf_x_pred
+            self._kf_P = kf_p_pred
             self._lost_streak += 1
             return TemplateMatchResult(
                 similarity=float(combined_score),
@@ -898,12 +1141,24 @@ class AITracker:
                 ).astype(np.uint8)
                 template_updated = True
 
-        # Update velocity EMA from accepted displacement
-        dx = final_loc[0] - last_point[0]
-        dy = final_loc[1] - last_point[1]
-        self.velocity = (
-            (1.0 - _VELOCITY_EMA) * self.velocity[0] + _VELOCITY_EMA * dx,
-            (1.0 - _VELOCITY_EMA) * self.velocity[1] + _VELOCITY_EMA * dy,
+        # Kalman update. Position is still reported as the raw appearance-matched
+        # `final_loc` (cand_x, cand_y) -- an accepted match is, by construction, the
+        # most trustworthy appearance evidence available, and blending it toward the
+        # prediction would only soften the sub-pixel accuracy the NCC/deep/discriminator
+        # fusion already achieved. The Kalman gain/update instead governs what the
+        # filter *believes* (velocity + covariance) going into next frame's predict --
+        # `_kf_x`/`_kf_P` are resynced in position at the top of the next call anyway,
+        # so only the velocity posterior and the shrunk covariance carry forward.
+        old_vx, old_vy = self.velocity
+        kf_gain = kf_p_pred @ kf_h.T @ kf_s_inv
+        kf_x_upd = kf_x_pred + kf_gain @ innovation
+        kf_p_upd = (np.eye(4) - kf_gain @ kf_h) @ kf_p_pred
+        self._kf_x = kf_x_upd
+        self._kf_P = kf_p_upd
+        new_vx, new_vy = self.velocity
+        self.acceleration = (
+            (1.0 - _ACCEL_EMA) * self.acceleration[0] + _ACCEL_EMA * (new_vx - old_vx),
+            (1.0 - _ACCEL_EMA) * self.acceleration[1] + _ACCEL_EMA * (new_vy - old_vy),
         )
         self.last_point = final_loc
         return TemplateMatchResult(

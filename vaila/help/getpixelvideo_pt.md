@@ -177,6 +177,27 @@ Para gerar dataset de **keypoints / pose** (ex.: campo de futebol com 32 pontos)
 - **BBox por quadro:** Se existir bbox desenhada no modo Labeling, usa-se a **primeira**; senão, bbox ajustada aos keypoints visíveis (com margem).
 - **JSON de projeto:** `<nome_video>_pose_project.json` no dataset guarda os marcadores brutos para reedição.
 
+### Modo AI Track (Tecla T / Botão AI Track) — v0.3.137
+
+Rastreamento semi-automático de alta performance baseado em Correlação Cruzada Normalizada (NCC), refinamento sub-pixel parabólico, prioris espaciais gaussianas 2D, predição de velocidade por filtro de Kalman e discriminador de aparência online com embeddings semânticos opcionais PyTorch ResNet50 (2048-D).
+
+1. **Treinamento Online JIT (Just-In-Time) e Checkpoints Persistentes:**
+   - **Como aprende:** Ao marcar um ponto manualmente ou ajustar uma âncora, o modelo executa `update_from_correction()` e `retrain_online_model()` instantaneamente em tempo de execução.
+   - **Onde é salvo:** O modelo online é persistido em formato comprimido NumPy (`.npz`) em:
+     ```text
+     vaila/models/ai_tracker/discriminator_<perfil>.npz
+     ```
+     (Padrão: `vaila/models/ai_tracker/discriminator_default.npz`).
+   - **Transfer Learning (Entre Sessões):** Ao ativar o AI Track, o checkpoint anterior é carregado automaticamente. O retreinamento online calcula uma média ponderada pelo número cumulativo de amostras (`_live_n_samples`), acumulando o aprendizado entre vídeos e sessões sem esquecimento catastrófico.
+   - **Diretório Ignorado no Git:** A pasta `vaila/models/ai_tracker/` está configurada no `.gitignore` para que redes pessoais e pesos pesados nunca sejam comitados ao repositório público.
+   - **Rede Neural Profunda (ResNet50):** O botão `Track AI Deep NN (ResNet50)` ativa a extração de embeddings semânticos para evitar que o rastreador se perca em distractores ou oclusões. Os pesos são lidos do cache Torch (`~/.cache/torch/hub/checkpoints/`) ou de `vaila/models/resnet50_imagenet.pth`.
+
+2. **Controles e Atalhos:**
+   - **Clique Esquerdo:** No botão `AI Track`, ativa/desativa o rastreamento. Quando ativo, pressione **Espaço** para reproduzir e rastrear em tempo real. Segure `←`/`→` para avançar quadro a quadro e `↑`/`↓` para saltos rápidos.
+   - **Shift+Clique (ou Shift+T):** Rastreamento bidirecional completo em lote com suavização RTS entre quadros-chave manuais.
+   - **Clique Direito (ou Ctrl+T):** Abre a caixa de configuração TOML do Track AI (janelas de busca, taxa de aprendizado, limiares).
+   - **Preservação do Ground Truth:** Quadros já marcados manualmente nunca são sobrescritos pelo rastreador automático; ao passar por eles, o sistema usa as coordenadas como âncora de verdade de solo e retreina o modelo.
+
 ## Comandos do Teclado
 
 ### Navegação de Vídeo
@@ -234,6 +255,9 @@ A velocidade atual é exibida no canto superior direito da janela. Ela volta a 1
 | **L**           | Alternar modo Labeling (Bounding Boxes)                    |
 | **G**           | Alternar Guia (overlay visual do template; `V` alterna mapa FIFA) |
 | **FIFA** / **K** | Carregar/criar **TOML FIFA** ao lado do vídeo (`n_keypoints`, `start`, `base`) |
+| **T** / **AI Track** | Alternar rastreamento AI ao vivo (Shift+T rastreio em lote RTS; acende em **verde brilhante** ativo) |
+| **Ctrl+T** / **Cfg** | Abrir diálogo TOML do AI Track (janelas, lr, salto de navegação, pesos) |
+| **Ctrl+W** / **Alt+W** | Selecionar pesos ResNet-50 do AI Track (local `ai_tracker/`, diretório customizado, Hub) |
 | **W**           | Abrir diálogo de Swap de Marcadores (troca por intervalo) |
 | **Z**           | Remover última caixa delimitadora (modo Labeling)          |
 | **N**           | Renomear label do objeto (Apenas Modo Labeling)            |
@@ -246,6 +270,10 @@ A velocidade atual é exibida no canto superior direito da janela. Ela volta a 1
 | **1**           | Diminuir quadros de persistência                           |
 | **2**           | Aumentar quadros de persistência                           |
 | **3**           | Alternar persistência completa                             |
+| **T** / **AI Track** | Alternar rastreamento AI Track (Shift+Clique / Shift+T executa rastreamento batch e suavização RTS) |
+| **Track AI Deep NN** | Alternar embeddings semânticos profundos ResNet50 (2048-D) |
+| **Track AI Shape** | Alternar formato de rastreamento (`Ponto` / `Círculo` / `Caixa`) |
+| **Ctrl+T** / **Cfg** | Abrir cartão de configuração TOML do Track AI |
 
 ### Operações de Arquivo (botões e teclas)
 

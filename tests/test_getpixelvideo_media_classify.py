@@ -192,7 +192,11 @@ def test_generic_csv_load_does_not_activate_fifa_mode(tmp_path: Path) -> None:
     # 2. Verify that no neighbor FIFA TOML is resolved for generic file
     # (Testing the logic used in reload_coordinates)
     code_obj = gpv.play_video_with_controls.__code__
-    assert "_resolve_neighbor_fifa_toml" in code_obj.co_varnames or "_resolve_neighbor_fifa_toml" in code_obj.co_names or True is True
+    assert (
+        "_resolve_neighbor_fifa_toml" in code_obj.co_varnames
+        or "_resolve_neighbor_fifa_toml" in code_obj.co_names
+        or True is True
+    )
 
 
 def test_track_ai_toml_parameters_save_load_reset(tmp_path: Path) -> None:
@@ -239,8 +243,8 @@ def test_click_pass_and_track_ai_armed_initialization() -> None:
     source = Path(gpv.__file__).read_text(encoding="utf-8")
 
     # 1. Verify AI Track arms cleanly without deactivating when no anchor point exists
-    assert "Track AI m{target_marker} [ARMED]" in source or "AI Track" in source
-    assert "[ARMED]" in source
+    assert "AI Track" in source
+    assert "click video to set anchor for marker" in source
 
     # 2. Verify initial click initializes the live tracker from ARMED state
     assert "if track_ai_active and frame is not None:" in source
@@ -254,10 +258,18 @@ def test_click_pass_and_track_ai_armed_initialization() -> None:
     assert "frame_count = min(frame_count + 1, total_frames - 1)" in source
     assert "paused = True" in source
 
-    # 4. Verify AI Track button displays arm/on/off badge (colour-blind accessible)
-    assert 'state_badge = "arm"' in source
-    assert 'state_badge = "on"' in source
-    assert 'state_badge = "off"' in source
+    # 4. Verify AI Track button is color-only state (no "armed"/"m0" text on the button
+    # itself -- amber=armed, green=on, red=off), per explicit user request to drop the
+    # text badge and keep green-when-on.
+    assert "AI Track button (short label, color-only state" in source
+    assert "btn_color = (200, 130, 20) if live_tracker is None else (30, 175, 75)" in source
+    assert "btn_color = (175, 45, 45)  # Red (off)" in source
+
+    # 5. Verify the ARMED-wait and ON status messages (on-screen overlay + console) also
+    # dropped the literal "armed"/"mN" tokens, per explicit user request -- not just the
+    # button widget itself.
+    assert "[ARMED]" not in source
+    assert 'f"Track AI m{target_marker}' not in source
 
 
 def test_toolbar_responsive_layout_and_resize() -> None:
@@ -277,8 +289,12 @@ def test_toolbar_responsive_layout_and_resize() -> None:
     assert "button_gap = 4 if is_compact else 6" in source
 
     # 4. Verify Save and Load distinct color coding
-    assert "pygame.draw.rect(control_surface, (35, 135, 65), save_button_rect)" in source  # Emerald green
-    assert "pygame.draw.rect(control_surface, (60, 95, 130), load_button_rect)" in source  # Steel blue
+    assert (
+        "pygame.draw.rect(control_surface, (35, 135, 65), save_button_rect)" in source
+    )  # Emerald green
+    assert (
+        "pygame.draw.rect(control_surface, (60, 95, 130), load_button_rect)" in source
+    )  # Steel blue
 
     # 5. Verify Help & ? moved to top row next to Guide
     assert "help_button_rect = pygame.Rect(" in source
@@ -321,7 +337,3 @@ def test_track_ai_spam_suppression_and_shape_wiring() -> None:
     # 5. Canvas overlay visual shapes
     assert "pygame.draw.circle(screen, (0, 220, 255)" in source
     assert "pygame.draw.rect(screen, (0, 220, 255)" in source
-
-
-
-

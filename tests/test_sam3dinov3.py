@@ -155,6 +155,33 @@ def test_side_color_helper_maps_prefixes_to_palette():
     assert _side_color_bgr("right_elbow") == _rgb_to_bgr(COLOR_RIGHT_RGB)
 
 
+def test_mhr70_pn_indices_map_left_right_body_landmarks():
+    """C3D / *_mhr70_rec3d.csv use pN = 1-based index into MHR70_NAMES.
+
+    Guard against accidental left/right renumbering that would make mono or
+    DLT C3D look mirrored relative to the green/orange overlay.
+    """
+    assert COLOR_LEFT_RGB == (0, 255, 0)
+    assert COLOR_RIGHT_RGB == (255, 128, 0)
+    assert MHR70_NAMES[0] == "nose"  # p1
+    assert MHR70_NAMES[5] == "left-shoulder"  # p6
+    assert MHR70_NAMES[6] == "right-shoulder"  # p7
+    assert MHR70_NAMES[7] == "left-elbow"  # p8
+    assert MHR70_NAMES[8] == "right-elbow"  # p9
+    assert MHR70_NAMES[9] == "left-hip"  # p10
+    assert MHR70_NAMES[10] == "right-hip"  # p11
+    assert MHR70_NAMES[11] == "left-knee"  # p12
+    assert MHR70_NAMES[12] == "right-knee"  # p13
+    assert MHR70_NAMES[13] == "left-ankle"  # p14
+    assert MHR70_NAMES[14] == "right-ankle"  # p15
+    assert MHR70_NAMES[69] == "neck"  # p70
+    left_idx = {i + 1 for i, n in enumerate(MHR70_NAMES) if n.startswith("left-")}
+    right_idx = {i + 1 for i, n in enumerate(MHR70_NAMES) if n.startswith("right-")}
+    assert left_idx.isdisjoint(right_idx)
+    assert {6, 8, 10, 12, 14}.issubset(left_idx)
+    assert {7, 9, 11, 13, 15}.issubset(right_idx)
+
+
 def test_draw_pose_overlay_colors_left_and_right_differently():
     """Regression test: the live overlay video used one solid color per
     person for the whole skeleton (monochromatic, no left/right cue). It

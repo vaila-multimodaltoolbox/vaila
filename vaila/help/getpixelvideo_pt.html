@@ -451,6 +451,26 @@
                             <td><span class="key">3</span></td>
                             <td>Alternar persistência completa</td>
                         </tr>
+                        <tr>
+                            <td><span class="key">T</span> / <span class="key">AI Track</span></td>
+                            <td>Alternar rastreamento ao vivo AI Track (acende em <strong>verde brilhante</strong> quando ativo/armado; vermelho quando desligado; Shift+Clique / Shift+T executa rastreamento batch RTS)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Track AI Deep NN</span></td>
+                            <td>Alternar embeddings semânticos profundos ResNet50 (2048-D)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span></td>
+                            <td>Selecionar/alternar pesos da ResNet-50 (.pth/.pt) de <code>vaila/models/ai_tracker/</code>, navegador de arquivos em qualquer diretório ou padrão do Torch Hub</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Track AI Shape</span></td>
+                            <td>Alternar formato de rastreamento (Ponto / Círculo / Caixa)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">Ctrl+T</span> / <span class="key">Cfg</span></td>
+                            <td>Abrir cartão de configuração TOML do Track AI (inclui botão <strong>Pesos (W)</strong>)</td>
+                        </tr>
                     </table>
                 </div>
 
@@ -471,11 +491,11 @@
                         </tr>
                         <tr>
                             <td><span class="key">H</span></td>
-                            <td>Mostrar diálogo de ajuda</td>
+                            <td>Mostrar diálogo interativo de ajuda na tela (com botão direto e atalho <span class="key">F1</span> / <span class="key">?</span> para abrir a documentação completa no navegador)</td>
                         </tr>
                         <tr>
-                            <td><span class="key">?</span></td>
-                            <td>Abrir <strong>documentação HTML</strong> no navegador (<code>vaila/help/getpixelvideo.html</code>)</td>
+                            <td><span class="key">F1</span> / <span class="key">?</span></td>
+                            <td>Abrir <strong>documentação HTML completa</strong> diretamente no navegador (<code>vaila/help/getpixelvideo.html</code>)</td>
                         </tr>
                         <tr>
                             <td><span class="key">F5</span></td>
@@ -632,6 +652,31 @@
                 <li><strong>Corrigir:</strong> B ou Backspace volta um ponto sem apagar o marcador já salvo.</li>
                 <li><strong>Exportar:</strong> F9 gera dataset YOLO-pose com <code>kpt_shape</code>, <code>kpt_names</code> e <code>keypoints.json</code>.</li>
                 <li><strong>TOML FIFA:</strong> Tecla <strong>K</strong> (ou botão FIFA) carrega/cria o TOML ao lado do vídeo (<code>n_keypoints</code>, <code>start</code>, <code>base</code>).</li>
+            </ul>
+
+            <h3>Modo AI Track &amp; Aprendizado Online JIT (v0.3.137)</h3>
+            <p>
+                Rastreamento semi-automático de alta precisão combinando <strong>Correlação Cruzada Normalizada (NCC)</strong>,
+                refinamento sub-pixel parabólico, prioris espaciais gaussianas 2D, predição de velocidade por filtro de Kalman,
+                e discriminador linear online com suporte opcional a <strong>PyTorch ResNet50 deep embeddings</strong> (2048-D).
+            </p>
+            <ul>
+                <li><strong>Treinamento JIT Online:</strong> Cada marcador inserido ou corrigido manualmente aciona <code>update_from_correction()</code> e <code>retrain_online_model()</code>, adaptando a rede online em tempo de execução.</li>
+                <li><strong>Onde os modelos são salvos:</strong> Os checkpoints são gravados como arquivos <code>.npz</code> em:
+                    <div class="code">vaila/models/ai_tracker/discriminator_&lt;perfil&gt;.npz</div>
+                    (Padrão: <code>vaila/models/ai_tracker/discriminator_default.npz</code>).
+                </li>
+                <li><strong>Transfer Learning entre Sessões:</strong> Ao ligar o AI Track, o checkpoint anterior é carregado automaticamente. O retreinamento online faz uma média ponderada pelo número de amostras (<code>_live_n_samples</code>), permitindo que a rede evolua continuamente e se torne cada vez melhor sem perda de conhecimento prévio.</li>
+                <li><strong>Diretório Ignorado no Git:</strong> A pasta <code>vaila/models/ai_tracker/</code> está no <code>.gitignore</code>, assegurando que modelos pessoais e pesos pesados fiquem restritos ao ambiente local do usuário.</li>
+                <li><strong>Rede Neural Profunda (ResNet50) e Carregamento de Pesos:</strong> O botão <code>Track AI Deep NN (ResNet50)</code> ativa a extração de embeddings profundos semânticos (2048-D). Os pesos podem ser carregados de três formas:
+                    <ul>
+                        <li><strong>Detecção Automática Local:</strong> Detecta automaticamente arquivos <code>.pth</code> ou <code>.pt</code> em <code>vaila/models/ai_tracker/resnet50_imagenet.pth</code> (ou outros salvos nesta pasta).</li>
+                        <li><strong>Diretório Escolhido pelo Usuário (Qualquer Caminho):</strong> Use o atalho de teclado <span class="key">Ctrl+W</span> (ou <span class="key">Alt+W</span>) na tela de vídeo, ou clique no botão <span class="key">Pesos (W)</span> dentro do cartão de configuração (<span class="key">Ctrl+T</span>). Um navegador gráfico de arquivos é aberto permitindo selecionar pesos personalizados em qualquer pasta ou disco.</li>
+                        <li><strong>Fallback Padrão (Torch Hub):</strong> Se nenhum peso local for selecionado, utiliza os pesos oficiais pré-treinados do Torch Hub em cache (<code>~/.cache/torch/hub/checkpoints/</code>).</li>
+                    </ul>
+                </li>
+                <li><strong>Controles e Indicador Visual:</strong> Tecla <span class="key">T</span> ou botão <strong>AI Track</strong> liga/desliga (o botão acende imediatamente em <strong>verde brilhante</strong> quando ativo ou armado; vermelho quando inativo); <span class="key">Espaço</span> reproduz rastreando; <span class="key">Shift+Clique</span> ou <span class="key">Shift+T</span> executa rastreamento batch RTS bidirecional; botão direito (ou <span class="key">Ctrl+T</span>) abre a configuração TOML com ajuste de hiperparâmetros e botão de pesos.</li>
+                <li><strong>Preservação de Ground Truth:</strong> Frames com coordenadas manuais existentes nunca são sobrescritos pelo rastreador automático.</li>
             </ul>
         </section>
 

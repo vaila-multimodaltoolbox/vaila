@@ -195,7 +195,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](ellipse.html) · [Markdown](ellipse.md)
 - **extractpng** — vailá Video ↔ PNG tool: high-performance video-to-PNG extraction and PNG-to-video creation accelerated by NVIDIA GPU hardware (NVDEC decoding & NVENC encodin...
   - [HTML](extractpng.html) · [Markdown](extractpng.md)
-- **filemanager** — Previewed GUI/CLI file operations, VICON import, safe local outputs and interactive SSH transfer with explicit completion status.
+- **filemanager** — Manage local files from Frame A or the command line. GUI and CLI use the same target selection and operations. Terminal messages always use >> vaila/filemana...
   - [HTML](filemanager.html) · [Markdown](filemanager.md)
 - **fixnoise** — This script is designed to batch process CSV files, applying a noise filter (fixnoise) interactively.
   - [HTML](fixnoise.html) · [Markdown](fixnoise.md)
@@ -215,7 +215,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](join2dataset.html) · [Markdown](join2dataset.md)
 - **linear_interpolation_split** — This script provides functionality to either fill missing data in CSV files using linear interpolation or split data into a separate CSV file. It is intended...
   - [HTML](linear_interpolation_split.html) · [Markdown](linear_interpolation_split.md)
-- **load_vicon_csv_split_batch** — This Python script processes CSV files generated from the VICON Nexus system and splits the data into separate files by device. It processes only the CSV fil...
+- **load_vicon_csv_split_batch** — Split first-level VICON Nexus CSV files into device CSVs. The existing converter cleans and merges headers, adds the source file creation Timestamp and prese...
   - [HTML](load_vicon_csv_split_batch.html) · [Markdown](load_vicon_csv_split_batch.md)
 - **merge_multivideos** — Licensed under GNU Lesser General Public License v3.0
   - [HTML](merge_multivideos.html) · [Markdown](merge_multivideos.md)
@@ -271,7 +271,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](vaila_stroboscopic.html) · [Markdown](vaila_stroboscopic.md)
 - **vaila_upscaler** — 🔗 Part of vailá - Multimodal Toolbox
   - [HTML](vaila_upscaler.html) · [Markdown](vaila_upscaler.md)
-- **vaila_ytdown** — Review URLs, choose MP4/MP3 and download through a shared GUI/CLI batch with progress, safe cancellation and diagnostic logs.
+- **vaila_ytdown** — Download video as MP4 or audio as MP3 from one editable list. Open Video and Image → YouTube Downloader or run the module without CLI inputs.
   - [HTML](vaila_ytdown.html) · [Markdown](vaila_ytdown.md)
 - **videoprocessor** — This script allows users to process and edit video files, enabling batch processing of videos. Users can choose between two main operations: 1. Merging a vid...
   - [HTML](videoprocessor.html) · [Markdown](videoprocessor.md)

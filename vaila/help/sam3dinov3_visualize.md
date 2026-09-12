@@ -1,7 +1,7 @@
 # SAM3+DINOv3 3D — Visualize selected ID
 
-**Version:** 0.3.106
-**Updated:** 2026-08-16
+**Version:** 0.3.137
+**Updated:** 2026-09-11
 
 This CPU-only tool rerenders an existing `processed_sam3dinov3_*` (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights, so it is safe to run right after a GPU inference run to isolate one person, and does not repeat GPU allocation.
 
@@ -12,10 +12,34 @@ It draws the selected person's SAM contour, bounding box, ID, and reprojected MH
 The selected-ID overlay matches the SAM3+DINOv3 look:
 
 1. **SAM3 contour** — semi-transparent silhouette fill (anti-aliased edge, alpha 0.45) + outline, bbox
-2. **MHR70 skeleton** — 2D reprojection (`keypoints_2d_px`) drawn with `sam3dinov3.skeleton_edges`, colored by joint side using the `left-`/`right-` name prefix: **left = green**, **right = orange**, **center/spine = blue**. An edge only takes a side color when both its endpoints share that side; mixed edges (e.g. neck→shoulder) fall back to the center color.
+2. **MHR70 skeleton** — 2D reprojection (`keypoints_2d_px`) drawn with `sam3dinov3.skeleton_edges`, colored by joint side using the `left-`/`right-` name prefix (see table below). An edge only takes a side color when both its endpoints share that side; mixed edges (e.g. neck→shoulder) fall back to the center color.
 3. **`ID nn  z=… m`** label — depth taken from `cam_t_m[2]`
 
 Identity is never reassigned: `person_id == sam_obj_id`, exactly as in the source run.
+
+### Left / right colors and C3D `pN` numbers
+
+Palette (RGB) from `sam3dinov3.COLOR_*_RGB` — same live overlay and this rerenderer:
+
+| Side | Color | RGB |
+| --- | --- | --- |
+| **Left** (`left-*`) | green | `(0, 255, 0)` |
+| **Right** (`right-*`) | orange | `(255, 128, 0)` |
+| Center / spine (`nose`, `neck`, …) | blue | `(51, 153, 255)` |
+
+C3D / `*_mhr70_rec3d.csv` markers are **`p1`…`p70`** (1-based index into `MHR70_NAMES`). C3D `POINT:LABELS` usually stay as `pN` (no `left_`/`right_` string); use this map (or load `vaila/skeletons/sam3dinov3_mhr70.json`):
+
+| Side | Key `pN` (body) |
+| --- | --- |
+| Left | `p2` eye, `p4` ear, `p6` shoulder, `p8` elbow, `p10` hip, `p12` knee, `p14` ankle, `p16–p18` foot, `p43–p63` hand/wrist, `p64` olecranon, `p66` cubital fossa, `p68` acromion |
+| Right | `p3` eye, `p5` ear, `p7` shoulder, `p9` elbow, `p11` hip, `p13` knee, `p15` ankle, `p19–p21` foot, `p22–p42` hand/wrist, `p65` olecranon, `p67` cubital fossa, `p69` acromion |
+| Center | `p1` nose, `p70` neck |
+
+Full order: `vaila/sam3dinov3.py` → `MHR70_NAMES` (`p1=nose` … `p70=neck`).
+
+### Monocular 3D without DLT3D (not a left/right swap)
+
+`*_mhr70_rec3d.csv` / mesh export without `--dlt3d` stay in the **camera frame** (OpenCV: +X right, **+Y down**, +Z forward). Shape and anatomical labels match the 2D overlay (green = anatomical left). Opening that camera-frame CSV/mesh in a Y-up / Z-up viewer without `monocular_dlt_align` looks upside-down; a naive axis fix (bare Y/Z column swap, or 180° about Z) is a **reflection** and can *look* left/right mirrored even though labels are correct. Prefer `monocular_dlt_align` (or `sapiens2_3d --dlt3d`) for lab-frame C3D/BVH, and the BVH path that uses `(x, y, z) → (x, z, −y)` (det +1) for Blender.
 
 ## Mesh export for Blender (v0.3.96)
 

@@ -3,15 +3,25 @@
 <head><meta charset="utf-8"><title>SAM3+DINOv3 3D — Visualize selected ID</title></head>
 <body>
 <h1>SAM3+DINOv3 3D — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.3.106 &nbsp; <strong>Updated:</strong> 2026-08-16</p>
+<p><strong>Version:</strong> 0.3.137 &nbsp; <strong>Updated:</strong> 2026-09-11</p>
 <p>This CPU-only tool rerenders an existing <code>processed_sam3dinov3_*</code> (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights. Select one person, draw its SAM contour, bounding box, ID and reprojected MHR70 skeleton, and write filtered keypoint/camera/contour/predictions artifacts plus an overlay video (and a filtered per-frame mesh, when the source run has <code>meshes/</code>).</p>
 <h2>Overlay style (v0.3.96)</h2>
 <ol>
   <li><strong>SAM3 contour</strong> — semi-transparent silhouette fill (anti-aliased edge, alpha 0.45) + outline, bbox</li>
-  <li><strong>MHR70 skeleton</strong> — 2D reprojection (<code>keypoints_2d_px</code>) drawn with <code>sam3dinov3.skeleton_edges</code>, colored by joint side from the <code>left-</code>/<code>right-</code> name prefix: <strong>left = green</strong>, <strong>right = orange</strong>, <strong>center/spine = blue</strong>. An edge only takes a side color when both endpoints share that side; mixed edges fall back to the center color.</li>
+  <li><strong>MHR70 skeleton</strong> — 2D reprojection (<code>keypoints_2d_px</code>) drawn with <code>sam3dinov3.skeleton_edges</code>, colored by joint side from the <code>left-</code>/<code>right-</code> name prefix (see table below). An edge only takes a side color when both endpoints share that side; mixed edges fall back to the center color.</li>
   <li><strong><code>ID nn  z=… m</code></strong> label — depth taken from <code>cam_t_m[2]</code></li>
 </ol>
 <p>Identity is never reassigned: <code>person_id == sam_obj_id</code>, exactly as in the source run.</p>
+<h3>Left / right colors and C3D <code>pN</code> numbers</h3>
+<p>Palette (RGB) from <code>sam3dinov3.COLOR_*_RGB</code>:</p>
+<table>
+<tr><th>Side</th><th>Color</th><th>RGB</th></tr>
+<tr><td><strong>Left</strong> (<code>left-*</code>)</td><td>green</td><td><code>(0, 255, 0)</code></td></tr>
+<tr><td><strong>Right</strong> (<code>right-*</code>)</td><td>orange</td><td><code>(255, 128, 0)</code></td></tr>
+<tr><td>Center / spine</td><td>blue</td><td><code>(51, 153, 255)</code></td></tr>
+</table>
+<p>C3D / <code>*_mhr70_rec3d.csv</code> markers are <code>p1</code>…<code>p70</code> (1-based into <code>MHR70_NAMES</code>). Typical body landmarks: left <code>p6</code> shoulder / <code>p8</code> elbow / <code>p10</code> hip / <code>p12</code> knee / <code>p14</code> ankle; right <code>p7</code> / <code>p9</code> / <code>p11</code> / <code>p13</code> / <code>p15</code>; center <code>p1</code> nose, <code>p70</code> neck. Full list: <code>vaila/skeletons/sam3dinov3_mhr70.json</code>.</p>
+<p><strong>Monocular without DLT3D:</strong> camera-frame OpenCV axes (+Y down). Anatomical left/right labels match the overlay; upside-down viewing or a bare Y/Z swap can <em>look</em> mirrored — use <code>monocular_dlt_align</code> / BVH <code>(x,z,−y)</code> for lab/Blender.</p>
 <h2>Mesh export for Blender (v0.3.96)</h2>
 <p>When the source <code>sam3dinov3.py</code> run used <code>--save-mesh</code>, this tool can export the selected person's per-frame body mesh (MHR vertices + shared faces, with <code>cam_t</code> translation applied) as a sequence Blender can play back as an animation:</p>
 <pre>uv run python -u vaila/sam3dinov3_visualize.py \

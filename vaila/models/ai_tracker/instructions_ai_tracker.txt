@@ -1,0 +1,4 @@
+# AI Tracker Discriminator Checkpoints & Weights
+This directory stores local online-discriminator checkpoints (*.npz) and trained weights for the AI Tracker in getpixelvideo.py.
+Checkpoints are incrementally updated across sessions (JIT learning / transfer learning) and are kept local to the user/machine.
+Do not commit large weights or user-specific .npz models to git.

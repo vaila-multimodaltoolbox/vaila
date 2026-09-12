@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 24 August 2026
-Version: 0.3.112
+Update Date: 11 September 2026
+Version: 0.3.137
 
 Description:
     CPU-only rerenderer for an existing SAM3+DINOv3 3D (SAM 3D Body) run. It
@@ -881,7 +881,11 @@ def visualize_selected_id(
         "identity_authority=SAM3 obj_id (person_id == sam_obj_id)\n"
         "coordinate_units=full-frame pixels for 2D; metres for 3D; frame_index=zero-based\n"
         "The root contains filtered artifacts. source_artifacts/ preserves the original run.\n"
-        "Overlay style: SAM3 contour fill/outline + left/right/center MHR70 skeleton + depth label.\n"
+        "Overlay style: SAM3 contour fill/outline + MHR70 skeleton "
+        "(left=green RGB 0,255,0; right=orange RGB 255,128,0; center=blue) + depth label.\n"
+        "C3D/rec3d pN map (1-based MHR70): p6/p8/p10/p12/p14=left shoulder/elbow/hip/knee/ankle; "
+        "p7/p9/p11/p13/p15=right; p1=nose; p70=neck. Camera-frame mono (+Y down) is not L/R swapped — "
+        "use monocular_dlt_align for lab C3D; bare Y/Z swap mirrors in Blender.\n"
         f"{video_path.stem}_sam3dinov3_joint_angles.csv: local (parent-relative) joint angles for the\n"
         "127-joint MHR rig -- Euler XYZ degrees + scalar-first (w,x,y,z) quaternion, from the\n"
         "model's own regressed rotations (present only for runs made after this feature was\n"

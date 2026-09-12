@@ -50,6 +50,9 @@ vaila/models/sapiens2/*
 vaila/models/trackers/*
 !vaila/models/trackers/*.txt
 
+vaila/models/ai_tracker/*
+!vaila/models/ai_tracker/*.txt
+
 # SAM GPU smoke sample (often >20 MiB; see tests/SAM/README.md)
 tests/SAM/*.mp4
 tests/sport_fields/*.mp4

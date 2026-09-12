@@ -12,12 +12,12 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 ## Key Features
 
-- **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & ResNet50) & RTS Smoother (`AI Track` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior (with velocity prediction) to prevent distractor jumps, adaptive running template EMA blending, online appearance model that **keeps learning across manual corrections** (no wipe on re-anchor), low-confidence rejection, and optional Deep Visual Feature embeddings (PyTorch ResNet50 / CUDA; optional local weights via `deep_weights_path` or `vaila/models/resnet50_imagenet.pth`). Features:
-  - **Accessible button:** Short label `AI Track` with green **on** / red **off** / amber **arm** badge (text + colour).
+- **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & ResNet50) & RTS Smoother (`AI Track` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior (with velocity prediction) to prevent distractor jumps, adaptive running template EMA blending, online appearance model that **keeps learning across manual corrections** (no wipe on re-anchor), low-confidence rejection, and optional Deep Visual Feature embeddings (PyTorch ResNet50 / CUDA; local weights via `vaila/models/ai_tracker/resnet50_imagenet.pth`, custom path, or Torch hub cache). Features:
+  - **Accessible button:** Short label `AI Track` illuminates in **bright green** immediately when enabled (armed/tracking) and red when off.
   - **Online Learning from Anchors:** Every user placement retrains the discriminator without clearing prior anchors.
   - **Multi-Shape Centroid Tracking (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Point click, or **drag** on Cir/Box to set patch size; marker is placed at the region centroid. Region stats (mean/std/hist/area) feed the online model.
   - **Keyboard nav:** Hold ←/→ for continuous ±1 frame; hold ↑/↓ for ±`nav_jump` (default 60, editable in **Cfg**).
-  - **TOML Configuration (`Cfg` / Ctrl+T):** Save/load params including `tracking_shape`, `deep_weights_path`, and `[navigation] nav_jump_frames`.
+  - **TOML Configuration (`Cfg` / Ctrl+T) & Weights (`Ctrl+W` / `Weights (W)` in Cfg):** Save/load params including `tracking_shape`, `deep_weights_path`, and `[navigation] nav_jump_frames`. Switch ResNet-50 models on the fly between local models, custom file selection, and Torch Hub.
   - **Full Batch Tracking & RTS Smoothing:** Shift+Click / Shift+T runs bidirectional gap infilling with multi-anchor seeding + RTS smoothing.
 - **BBox to Coordinates Export:** Convert loaded tracking bounding boxes or SAM3 contours (`sam_contours.json`) into 5 distinct coordinates CSV files (corresponding to `center`, `bottom`, `top`, `left`, and `right` anchors) in the standard vailá format (`frame,p0_x,p0_y,...`). Available via the GUI **BBox→Coords** button or CLI option `--export-bbox-coords PATH`.
 
@@ -318,6 +318,30 @@ uv run yolo pose train \
 - Both dataset layouts (`<dir>/{split}/{images,labels}` and `<dir>/{images,labels}/{split}`) are auto-detected when appending.
 - A small **example** TOML for tests lives under `tests/sport_fields/` (e.g. `fifa_template.toml`); copy the idea beside your own videos.
 
+### AI Track Mode (T key / AI Track button) — v0.3.137
+
+Semi-automatic point tracking powered by Normalized Cross-Correlation (NCC), sub-pixel parabolic peak refinement, 2D Gaussian motion priors, Kalman-filter velocity prediction, and an online appearance discriminator with optional ResNet50 deep visual embeddings.
+
+1. **JIT Online Learning & Multi-Session Checkpoint Persistence:**
+   - **How it learns:** Each time you place a marker, adjust an anchor, or correct a drifted position, `update_from_correction()` and `retrain_online_model()` update the appearance model on-the-fly (Just-In-Time training).
+   - **Where the model is saved:** Checkpoints are stored as compressed NumPy archives (`.npz`) in:
+     ```text
+     vaila/models/ai_tracker/discriminator_<profile>.npz
+     ```
+     (Default checkpoint: `vaila/models/ai_tracker/discriminator_default.npz`).
+
+   - **Transfer Learning (Cross-Session):** When opening `getpixelvideo.py` and enabling AI Track, the prior checkpoint is loaded automatically. Online retraining computes a sample-count-weighted average between prior knowledge and new session frames (`_live_n_samples`), accumulating learning without catastrophic forgetting.
+   - **Local & Git-Ignored:** The directory `vaila/models/ai_tracker/` is configured in `.gitignore` so personal model checkpoints and large neural weights remain strictly on the user's machine and are never pushed to Git.
+   - **Deep NN Features (ResNet50):** The `Track AI Deep NN (ResNet50)` toggle extracts 2048-dimensional semantic embeddings to distinguish targets from distractors during fast pan or occlusions. Weights can be selected dynamically via `Ctrl+W` or the `Weights (W)` button in the `Cfg` dialog, cycling between local checkpoints (`vaila/models/ai_tracker/resnet50_imagenet.pth`), any chosen directory via file dialog, or PyTorch Hub pretrained defaults.
+
+2. **Controls & Interactions:**
+   - **Left-Click:** On the `AI Track` button, toggles live tracking ON/OFF. The button immediately turns **bright green** when active. When ON, press **Space** to play and track live, or use hold-to-repeat arrow keys (`←`/`→` for single frames, `↑`/`↓` for jump steps).
+   - **Shift+Click (or Shift+T):** Runs full batch RTS tracking and bidirectional gap infilling between manual keyframes.
+   - **Right-Click (Cfg / Ctrl+T):** Opens the Track AI configuration dialog to adjust search windows, patch size, shape (`point`, `circle`, `box`), learning rate, jump step size, and select ResNet50 weights (`Weights (W)`).
+   - **ResNet50 Selection (`Ctrl+W` / `Alt+W`):** Direct shortcut to select or cycle ResNet50 weights without losing current session state.
+   - **Shape Toggle (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Switches region feature extraction (mean, std, histogram, area fraction) for circle/box tracking.
+   - **Manual Ground-Truth Preservation:** AI Track never overwrites frames that already have user-placed coordinates; passing over an existing marked frame treats it as a ground-truth anchor and retrains the model.
+
 ### Quick Measure mode (Q key / QMeas button) — v0.3.127
 
 Kinovea-style quick on-image measurements, implemented in the companion module `vaila/quickmeasure.py` (see [quickmeasure.md](quickmeasure.md)) and wired into `getpixelvideo.py` as a thin integration layer.
@@ -423,6 +447,11 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | **2**           | Increase persistence frames                      |
 | **3**           | Toggle full persistence                           |
 | **Q** / **QMeas** | Toggle Quick Measure mode — calibration first, then free measuring (toolbar button = same as Q) |
+| **T** / **AI Track** | Toggle live AI tracking (Shift+Click / Shift+T runs batch tracking & RTS smoothing) |
+| **Track AI Deep NN** | Toggle ResNet50 semantic embedding verification (extracts 2048-D features) |
+| **Ctrl+W** / **Alt+W** | Select or cycle Track AI ResNet-50 weights (local `ai_tracker/`, custom dir, Hub) |
+| **Track AI Shape** | Cycle tracking shape (`Point` / `Circle` / `Box`) with region descriptor |
+| **Track AI Cfg** / **Ctrl+T** | Open AI Track TOML configuration card (windows, sigma, lr, jump frames, weights) |
 
 ### File Operations (buttons and keys)
 

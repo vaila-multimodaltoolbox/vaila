@@ -163,7 +163,6 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import Tk, filedialog, messagebox, simpledialog
 
-import ezc3d
 import numpy as np
 import pandas as pd
 from rich import print
@@ -185,6 +184,7 @@ try:
         generate_blender_companion_script,
         load_pixel_csv_positional,
         rec3d_multicam,
+        resolve_marker_labels,
         save_rec3d_as_bvh,
     )
 except ImportError:
@@ -204,65 +204,9 @@ except ImportError:
         generate_blender_companion_script,
         load_pixel_csv_positional,
         rec3d_multicam,
+        resolve_marker_labels,
         save_rec3d_as_bvh,
     )
-
-
-def save_rec3d_as_c3d(rec3d_df, output_dir, default_filename, point_rate=100, conversion_factor=1):
-    """
-    Converts the 3D reconstruction DataFrame to a C3D file and saves it.
-
-    Args:
-        rec3d_df (pd.DataFrame): DataFrame with results (columns "frame", "p1_x", "p1_y", "p1_z", ..., "p25_x", "p25_y", "p25_z").
-        output_dir (str): Directory where the file will be saved.
-        default_filename (str): Default name for the C3D file.
-        point_rate (int): Point sampling rate (Hz).
-        conversion_factor (float): Conversion factor for coordinates (if necessary).
-    """
-    from tkinter import filedialog, messagebox
-
-    num_frames = rec3d_df.shape[0]
-    # Define the markers based on the actual columns
-    x_columns = [col for col in rec3d_df.columns if col.endswith("_x") and col.startswith("p")]
-    num_markers = len(x_columns)
-    marker_labels = [f"p{i}" for i in range(1, num_markers + 1)]
-
-    # Initialize point matrix with shape (4, num_markers, num_frames)
-    points_data = np.zeros((4, num_markers, num_frames))
-    for i, marker in enumerate(marker_labels):
-        try:
-            points_data[0, i, :] = rec3d_df[f"{marker}_x"].values * conversion_factor
-            points_data[1, i, :] = rec3d_df[f"{marker}_y"].values * conversion_factor
-            points_data[2, i, :] = rec3d_df[f"{marker}_z"].values * conversion_factor
-        except KeyError as e:
-            messagebox.showerror("Error", f"Missing data for marker {marker}: {e}")
-            return
-    points_data[3, :, :] = 1  # Homogeneous coordinate
-
-    c3d = ezc3d.c3d()
-    # Use existing POINT structure in ezc3d (preserves __METADATA__ for write())
-    units_str = "mm" if conversion_factor == 1000 else "m"
-    c3d["parameters"]["POINT"]["LABELS"]["value"] = marker_labels
-    c3d["parameters"]["POINT"]["RATE"]["value"] = [point_rate]
-    c3d["parameters"]["POINT"]["UNITS"]["value"] = [units_str]
-    c3d["parameters"]["POINT"]["FRAMES"]["value"] = [num_frames]
-    c3d["data"]["points"] = points_data
-
-    output_c3d = filedialog.asksaveasfilename(
-        title="Save C3D file",
-        initialdir=output_dir,
-        initialfile=default_filename,
-        defaultextension=".c3d",
-        filetypes=[("C3D files", "*.c3d")],
-    )
-    if output_c3d:
-        try:
-            c3d.write(output_c3d)
-            messagebox.showinfo("Success", f"C3D file saved at:\n{output_c3d}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Error saving C3D file: {e}")
-    else:
-        messagebox.showwarning("Warning", "C3D save operation cancelled.")
 
 
 def _load_wide_xyz_csv(file_path):
@@ -364,6 +308,24 @@ def find_markers_csv_in_dir(mesh_source_dir):
             f"using {matches[0].name}[/yellow]"
         )
     return matches[0]
+
+
+def find_labels_csv_in_dir(mesh_source_dir):
+    """
+    Locate a marker-labels sidecar (`*_mhr70_labels.csv`, `*_sapiens_labels.csv`,
+    or a plain `*_labels.csv`) inside a run directory, for
+    resolve_marker_labels()'s auto-pickup — same directory already used by
+    find_markers_csv_in_dir() for the pixel source.
+
+    Returns:
+        Path | None: the labels CSV path, or None if not found.
+    """
+    mesh_source_dir = Path(mesh_source_dir)
+    for pattern in ("*_mhr70_labels.csv", "*_sapiens_labels.csv", "*_labels.csv"):
+        matches = sorted(mesh_source_dir.glob(pattern))
+        if matches:
+            return matches[0]
+    return None
 
 
 def _write_mesh_import_readme(mesh_dir, export_fmt, swap_yz, n_frames):
@@ -787,6 +749,7 @@ def run_reconstruction(
     skeleton_json_path=None,
     mesh_source_dirs=None,
     export_mesh="none",
+    marker_labels=None,
 ):
     """
     Run 3D reconstruction from DLT3D and pixel CSV paths. Used by both GUI and CLI.
@@ -799,6 +762,11 @@ def run_reconstruction(
         gui: if True use messagebox for errors/success; if False use print only
         swap_yz: if True, swap Y and Z axes in BVH export (for Blender)
         skeleton_json_path: optional path to JSON file defining skeleton connections
+        marker_labels: list[str] | None — semantic marker names (e.g. from
+            resolve_marker_labels()), one per marker in pixel-file column
+            order. When given, the C3D and a `<file_base>_labels.csv` sidecar
+            use these instead of generic p1, p2, .... None keeps today's
+            behavior (p1, p2, ...).
 
     Returns:
         (new_dir, file_base) on success, None on failure.
@@ -919,18 +887,40 @@ def run_reconstruction(
     rec3d_df.to_csv(file_3d_path, index=False, float_format="%.6f")
     rec3d_df.to_csv(file_csv_path, index=False, float_format="%.6f")
 
+    # Resolve pN -> semantic label (nose, left_knee, ...) for the C3D and the
+    # labels sidecar. marker_labels is None (or the wrong length) in the
+    # unlabeled case, which falls back to today's p1, p2, ... behavior.
+    labels_map = {}
+    if marker_labels:
+        if len(marker_labels) == num_markers:
+            labels_map = {f"p{i}": marker_labels[i - 1] for i in range(1, num_markers + 1)}
+        else:
+            print(
+                f"[yellow]Warning: marker_labels has {len(marker_labels)} name(s), "
+                f"expected {num_markers}; using p1..p{num_markers}[/yellow]"
+            )
+
     rec3d_df_for_c3d = rec3d_df.copy()
     new_columns = []
     for col in rec3d_df_for_c3d.columns:
         if col.lower() != "frame":
             parts = col.split("_")
             if len(parts) == 2:
-                new_columns.append(parts[0] + "_" + parts[1].upper())
+                prefix = labels_map.get(parts[0], parts[0])
+                new_columns.append(prefix + "_" + parts[1].upper())
             else:
                 new_columns.append(col)
         else:
             new_columns.append(col)
     rec3d_df_for_c3d.columns = new_columns
+
+    labels_csv_path = os.path.join(new_dir, f"{file_base}_labels.csv")
+    pd.DataFrame(
+        {
+            "column": [f"p{i}" for i in range(1, num_markers + 1)],
+            "label": [labels_map.get(f"p{i}", f"p{i}") for i in range(1, num_markers + 1)],
+        }
+    ).to_csv(labels_csv_path, index=False)
 
     m_conversion = 1
     mm_conversion = 1000
@@ -1275,6 +1265,41 @@ def run_rec3d_one_dlt3d():
                     else "ply"
                 )
 
+    # Optional: semantic marker names for the .c3d and labels sidecar, instead
+    # of generic p1, p2, .... Defaults to auto-pickup from mesh_source_dirs
+    # (a *_mhr70_labels.csv / *_sapiens_labels.csv sidecar) when available;
+    # otherwise ask for an explicit file.
+    marker_names_file = None
+    auto_label_dirs = mesh_source_dirs
+    has_auto_labels = bool(
+        auto_label_dirs and any(find_labels_csv_in_dir(d) for d in auto_label_dirs)
+    )
+    if not has_auto_labels:
+        want_marker_names = messagebox.askyesno(
+            "Marker Names (optional)",
+            "Provide a marker-names file (text, one name/line, or CSV with a "
+            "'label' column) for the .c3d and labels sidecar?\n\n"
+            "No = keep generic p1, p2, ... labels.",
+        )
+        if want_marker_names:
+            marker_names_file = filedialog.askopenfilename(
+                title="Select marker names file",
+                filetypes=[("Text/CSV", "*.txt *.csv"), ("All files", "*.*")],
+            )
+            marker_names_file = marker_names_file or None
+
+    marker_labels = None
+    try:
+        first_pixel_df = pd.read_csv(pixel_files[0])
+        n_markers_guess = (first_pixel_df.shape[1] - 1) // 2
+        marker_labels = resolve_marker_labels(
+            n_markers_guess,
+            marker_names_file=marker_names_file,
+            mesh_source_dirs=auto_label_dirs,
+        )
+    except Exception as e:
+        print(f"[yellow]Warning: could not resolve marker labels: {e}[/yellow]")
+
     # Configuration summary
     print("Configuration complete:")
     print(f"  - DLT3D files: {len(dlt_files)} cameras")
@@ -1312,6 +1337,7 @@ def run_rec3d_one_dlt3d():
         skeleton_json_path=skeleton_json_path,
         mesh_source_dirs=mesh_source_dirs,
         export_mesh=export_mesh,
+        marker_labels=marker_labels,
     )
 
     # Repeat the equivalent CLI command LAST, after all the processing output,
@@ -1428,6 +1454,17 @@ See also: vaila/help/rec3d_one_dlt3d.md
         default="none",
         help="Export an aligned per-frame mesh sequence for Blender (requires --mesh-source-dir)",
     )
+    parser.add_argument(
+        "--marker-names-file",
+        metavar="FILE",
+        dest="marker_names_file",
+        help=(
+            "Optional text (one name/line) or CSV ('label' column) file with semantic "
+            "marker names, one per marker, used for the .c3d and labels sidecar instead "
+            "of p1, p2, .... If omitted, auto-picked up from a *_mhr70_labels.csv / "
+            "*_sapiens_labels.csv / *_labels.csv sidecar in --mesh-source-dir, if any."
+        ),
+    )
     args = parser.parse_args()
 
     have_pixel_source = args.pixels or args.mesh_source_dir
@@ -1481,6 +1518,23 @@ See also: vaila/help/rec3d_one_dlt3d.md
         )
         sys.exit(1)
 
+    # Resolve semantic marker labels: explicit --marker-names-file, else
+    # sidecar auto-pickup from --mesh-source-dir, else p1, p2, ... fallback
+    # (handled by resolve_marker_labels itself). Peek at the first pixel
+    # file's column count to size the request; a mismatch just falls back
+    # inside run_reconstruction's own length check, never crashes.
+    marker_labels = None
+    try:
+        first_pixel_df = pd.read_csv(pixel_files[0])
+        n_markers_guess = (first_pixel_df.shape[1] - 1) // 2
+        marker_labels = resolve_marker_labels(
+            n_markers_guess,
+            marker_names_file=args.marker_names_file,
+            mesh_source_dirs=args.mesh_source_dir,
+        )
+    except Exception as e:
+        print(f"[yellow]Warning: could not resolve marker labels: {e}[/yellow]")
+
     result = run_reconstruction(
         args.dlt3d,
         pixel_files,
@@ -1491,6 +1545,7 @@ See also: vaila/help/rec3d_one_dlt3d.md
         skeleton_json_path=args.skeleton,
         mesh_source_dirs=args.mesh_source_dir,
         export_mesh=args.export_mesh,
+        marker_labels=marker_labels,
     )
     if result is None:
         sys.exit(1)

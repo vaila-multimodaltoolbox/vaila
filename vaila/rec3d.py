@@ -149,6 +149,82 @@ def find_common_frames(frame_arrays):
     return np.array(sorted(common), dtype=np.int64)
 
 
+def _read_marker_names_file(path):
+    """Read marker names from a text file (one per line) or a CSV.
+
+    For CSV: uses the "label" column if present, else the second column
+    (matches the "column,label" sidecar convention used by
+    write_mhr70_labels_csv / the "<file_base>_labels.csv" outputs), else the
+    first column. Returns None (never raises) if the file can't be read.
+    """
+    try:
+        if str(path).lower().endswith(".csv"):
+            df = pd.read_csv(path)
+            if "label" in df.columns:
+                return [str(v) for v in df["label"].tolist()]
+            if df.shape[1] >= 2:
+                return [str(v) for v in df.iloc[:, 1].tolist()]
+            return [str(v) for v in df.iloc[:, 0].tolist()]
+        with open(path, encoding="utf-8") as fh:
+            return [line.strip() for line in fh if line.strip()]
+    except Exception as e:
+        print(f"[yellow]Warning: could not read marker names file {path}: {e}[/yellow]")
+        return None
+
+
+def resolve_marker_labels(n_markers, marker_names_file=None, mesh_source_dirs=None):
+    """Resolve n_markers marker labels for the C3D/labels-sidecar outputs.
+
+    Priority, highest first:
+      1. marker_names_file -- explicit user-supplied text (one name per line)
+         or CSV ("label" column, or "column,label" sidecar convention).
+      2. Auto-pickup from mesh_source_dirs -- looks for a "*_mhr70_labels.csv",
+         "*_sapiens_labels.csv" or "*_labels.csv" sidecar next to the pixel
+         source and uses its names.
+      3. Fallback: "p1", "p2", ... "pN" (today's behavior, unchanged).
+
+    A mismatched name count (wrong length) is a warning, not a fatal error --
+    it falls back to the next option (and ultimately to pN) rather than
+    crash the reconstruction.
+
+    Shared, unchanged, by rec3d.py and rec3d_one_dlt3d.py.
+    """
+    fallback = [f"p{i}" for i in range(1, n_markers + 1)]
+
+    if marker_names_file:
+        names = _read_marker_names_file(marker_names_file)
+        if names is not None:
+            if len(names) == n_markers:
+                return names
+            print(
+                f"[yellow]Warning: marker names file {marker_names_file} has "
+                f"{len(names)} name(s), expected {n_markers}; "
+                f"falling back to p1..p{n_markers}[/yellow]"
+            )
+
+    if mesh_source_dirs:
+        for source_dir in mesh_source_dirs:
+            try:
+                candidates = []
+                for pattern in ("*_mhr70_labels.csv", "*_sapiens_labels.csv", "*_labels.csv"):
+                    candidates.extend(sorted(Path(source_dir).glob(pattern)))
+                for sidecar in candidates:
+                    names = _read_marker_names_file(sidecar)
+                    if names is None:
+                        continue
+                    if len(names) == n_markers:
+                        return names
+                    print(
+                        f"[yellow]Warning: label sidecar {sidecar} has "
+                        f"{len(names)} name(s), expected {n_markers}; "
+                        f"ignoring it[/yellow]"
+                    )
+            except Exception as e:
+                print(f"[yellow]Warning: error scanning {source_dir} for label sidecars: {e}[/yellow]")
+
+    return fallback
+
+
 def _write_rec3d_output(rec_coords_df, out_path):
     """Write frame as integer, coordinates as float with 6-decimal precision."""
     df_to_save = rec_coords_df.copy()

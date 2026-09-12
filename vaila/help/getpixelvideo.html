@@ -229,9 +229,9 @@
         <strong>AI Track (NCC + Spatial Prior + Online Discriminator &amp; ResNet50 &amp; RTS Smoother):</strong>
         Drift-resistant kinematic tracking via Normalized Cross-Correlation, velocity-aware Gaussian prior,
         adaptive EMA template blending, online ridge learning that survives manual corrections, low-confidence
-        rejection, and optional ResNet-50 deep verification (local <code>deep_weights_path</code> or
-        <code>vaila/models/resnet50_imagenet.pth</code>). Button label <code>AI Track</code> with green
-        <code>on</code> / red <code>off</code> / amber <code>arm</code> badge. Cir/Box: drag to set size,
+        rejection, and optional ResNet-50 deep verification (local <code>vaila/models/ai_tracker/resnet50_imagenet.pth</code>,
+        custom path via <span class="key">Ctrl+W</span> / <span class="key">Weights (W)</span> in Cfg, or Torch Hub cache). Button label <code>AI Track</code> with immediate bright green
+        <code>active</code> badge and red <code>off</code>. Cir/Box: drag to set size,
         marker at centroid. Hold arrows for continuous nav; Up/Down step = <code>nav_jump</code> (Cfg, default 60).
         Shift+T batch + RTS exports <code>*_ai_track_m{idx}.csv</code>.<br />
         <strong>BBox→Coords Export:</strong> Convert tracking bounding boxes / contours to 5 coordinate CSV files (center, bottom, top, left, right) in standard vailá format via GUI button or <code>--export-bbox-coords</code> CLI.<br />
@@ -272,6 +272,7 @@
           <li><a href="#modes">6. Marker Modes</a></li>
           <li><a href="#pitch-guide">6b. Guide Mode (Soccer Field / Pose Skeleton)</a></li>
           <li><a href="#fifa-labeling">6c. FIFA Labeling Mode (Expand FIFA Dataset)</a></li>
+          <li><a href="#ai-track-mode">6d. AI Track Mode &amp; JIT Online Learning</a></li>
           <li><a href="#visualization">7. Data Visualization</a></li>
           <li><a href="#saving">8. Saving Options</a></li>
           <li><a href="#advanced">9. Advanced Features</a></li>
@@ -825,6 +826,34 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td><span class="key">Q</span></td>
                 <td>Toggle Quick Measure mode (calibration first, then click points and press <span class="key">Enter</span> to classify as Distance/Area/Velocity/Acceleration — see <a href="quickmeasure.html">quickmeasure.html</a>)</td>
               </tr>
+              <tr>
+                <td><span class="key">T</span> / <span class="key">AI Track</span></td>
+                <td>Toggle live AI tracking ON/OFF. When active, <span class="key">Space</span> tracks live across frames. Hold <span class="key">←/→</span> for single frames, <span class="key">↑/↓</span> for jump steps. <span class="key">Shift+Click</span> or <span class="key">Shift+T</span> runs full batch RTS tracking &amp; gap infilling.</td>
+              </tr>
+              <tr>
+                <td><span class="key">Track AI Deep NN</span></td>
+                <td>Toggle ResNet50 deep semantic feature extractor (2048-D) for distractor-resilient tracking during fast movements.</td>
+              </tr>
+              <tr>
+                <td><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span></td>
+                <td>Select or cycle ResNet-50 weights (.pth/.pt) from <code>vaila/models/ai_tracker/</code>, custom directory file browser, or Torch Hub default.</td>
+              </tr>
+              <tr>
+                <td><span class="key">Track AI Shape</span></td>
+                <td>Cycle tracking shape (<span class="key">Point</span> / <span class="key">Circle</span> / <span class="key">Box</span>) to adapt region features (mean, std, histogram, area).</td>
+              </tr>
+              <tr>
+                <td><span class="key">Ctrl+T</span> / Right-Click AI Track</td>
+                <td>Open Track AI TOML configuration card to adjust search windows, template learning rate, jump step size, and select weights with <span class="key">Weights (W)</span>.</td>
+              </tr>
+              <tr>
+                <td><span class="key">H</span></td>
+                <td>Open interactive scrollable quick-reference help card on video overlay.</td>
+              </tr>
+              <tr>
+                <td><span class="key">F1</span> / <span class="key">?</span></td>
+                <td>Open complete HTML documentation in default web browser.</td>
+              </tr>
             </table>
 
             <h3>Quick Measure mode (Q key / QMeas button) &mdash; v0.3.127</h3>
@@ -1219,6 +1248,66 @@ uv run yolo pose train \<br/>
             <li>If <code>vaila/models/soccerfield_ref3d_fifa_dataset.csv</code> is missing, FIFA Mode is auto-disabled and a status message is shown.</li>
             <li>The legacy 37-kp guide (<span class="key">G</span> key) remains available for non-dataset projects.</li>
           </ul>
+        </div>
+      </section>
+
+      <section id="ai-track-mode">
+        <h2>6d. AI Track Mode &amp; JIT Online Learning (v0.3.137)</h2>
+        <p>
+          The <strong>AI Track</strong> tool provides high-speed semi-automatic point and region tracking.
+          It combines <strong>Normalized Cross-Correlation (NCC)</strong> with sub-pixel parabolic peak refinement,
+          <strong>2D Gaussian spatial motion priors</strong>, <strong>Kalman filter velocity prediction</strong>,
+          and a fast online-retrained linear appearance discriminator with optional <strong>PyTorch ResNet50 deep semantic embeddings</strong> (2048-D).
+        </p>
+
+        <h3>1. JIT (Just-In-Time) Online Learning &amp; Transfer Learning Checkpoints</h3>
+        <ul>
+          <li>
+            <strong>Incremental JIT Adaptation:</strong> Every time you click or place a marker manually, or navigate past an already-marked frame,
+            the tracker ingests the patch as a positive sample (with background patches as negative samples) and runs
+            <code>update_from_correction()</code> and <code>retrain_online_model()</code>. The appearance model continually adapts to lighting, blur, and deformation.
+          </li>
+          <li>
+            <strong>Where Checkpoints are Saved:</strong> Checkpoints are persisted locally as compressed NumPy archives (<code>.npz</code>) under:
+            <div class="code">vaila/models/ai_tracker/discriminator_&lt;profile&gt;.npz</div>
+            (The default profile file is <code>vaila/models/ai_tracker/discriminator_default.npz</code>).
+          </li>
+          <li>
+            <strong>Cross-Session Continuity:</strong> When AI Track is toggled ON, it automatically calls <code>load_checkpoint()</code>.
+            When new session frames are processed, retraining uses a <strong>sample-count-weighted average</strong>
+            <code>(n_session * w_session + n_checkpoint * w_checkpoint) / (n_session + n_checkpoint)</code>.
+            Prior knowledge is preserved and incrementally refined without catastrophic forgetting or rebuilding from scratch.
+          </li>
+          <li>
+            <strong>Git-Ignored Local Models:</strong> Following the project guidelines, <code>vaila/models/ai_tracker/*</code>
+            is strictly git-ignored (only <code>instructions_ai_tracker.txt</code> is tracked). Personal checkpoints, user-trained discriminators,
+            and large neural weights stay on your local machine and never bloat git commits.
+          </li>
+          <li>
+            <strong>Deep Neural Network (ResNet50):</strong> Clicking <span class="key">Track AI Deep NN</span> toggles the deep feature extractor.
+            Weights can be dynamically configured:
+            <ul>
+              <li><strong>Local model:</strong> Automatically detected at <code>vaila/models/ai_tracker/resnet50_imagenet.pth</code>.</li>
+              <li><strong>Custom directory:</strong> Press <span class="key">Ctrl+W</span> (or <span class="key">Alt+W</span>) on the video window, or click <span class="key">Weights (W)</span> in the <span class="key">Ctrl+T</span> configuration card, to open a file browser and load any custom <code>.pth</code> or <code>.pt</code> weights file from any folder on your system.</li>
+              <li><strong>Torch Hub:</strong> Falls back seamlessly to PyTorch Hub cached weights (<code>~/.cache/torch/hub/checkpoints/</code>) if no local file is selected.</li>
+            </ul>
+          </li>
+        </ul>
+
+        <h3>2. Controls &amp; Shortcuts</h3>
+        <ul>
+          <li><span class="key">T</span> or <strong>AI Track button:</strong> Toggle live tracking. Illuminates immediately in <strong>bright green</strong> when armed or tracking; red when off.</li>
+          <li><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span>: Quick shortcut to select or cycle ResNet-50 deep feature weights (.pth / .pt) from <code>vaila/models/ai_tracker/</code>, custom directory, or Hub.</li>
+          <li><span class="key">Space:</span> Play video and track the active marker in real time.</li>
+          <li><strong>Hold <span class="key">←/→</span>:</strong> Step frame-by-frame and update the tracker continuously.</li>
+          <li><strong>Hold <span class="key">↑/↓</span>:</strong> Jump by <code>nav_jump_frames</code> (default 60 frames).</li>
+          <li><span class="key">Shift+Click</span> or <span class="key">Shift+T</span>: Full batch RTS bidirectional tracking and gap infilling between manually marked keyframes.</li>
+          <li><strong>Right-Click (or <span class="key">Ctrl+T</span>):</strong> Open the Track AI TOML Configuration Card to adjust search window size, similarity thresholds, spatial sigma, template learning rate, shape modes, and choose weights via <span class="key">Weights (W)</span>.</li>
+          <li><span class="key">Shp:Pt / Shp:Cir / Shp:Box</span> button: Cycle tracking shape between point, circle, and bounding box with customized region descriptors (intensity mean, standard deviation, normalized histogram, and area fraction).</li>
+        </ul>
+
+        <div class="note">
+          <strong>Ground-Truth Protection:</strong> Frames with manually placed coordinates are never overwritten during tracking. When playback or tracking encounters an existing coordinate, it treats it as ground truth, updates the tracker reference, and triggers online retraining.
         </div>
       </section>
 
