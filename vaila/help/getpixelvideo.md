@@ -4,7 +4,7 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.139
+**Version:** 0.3.140
 **Date:** 23 June 2026  
 **Updated:** 13 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
@@ -17,7 +17,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
   - **Online Learning from Anchors:** Every user placement retrains the discriminator without clearing prior anchors.
   - **Multi-Shape Centroid Tracking (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Point click, or **drag** on Cir/Box to set patch size; marker is placed at the region centroid. Region stats (mean/std/hist/area) feed the online model.
   - **Keyboard nav:** Hold ←/→ for continuous ±1 frame; hold ↑/↓ for ±`nav_jump` (default 60, editable in **Cfg**).
-  - **TOML Configuration (`Cfg` / Ctrl+T) & Weights (`Ctrl+W` / `Weights (W)` in Cfg):** Save/load params including `tracking_shape`, `deep_weights_path`, and `[navigation] nav_jump_frames`. Switch ResNet-50 models on the fly between local models, custom file selection, and Torch Hub.
+  - **TOML Configuration (`Cfg` / Ctrl+T) & Weights (`Ctrl+W` / `Weights (W)` in Cfg):** Save/load params including `tracking_shape`, `deep_weights_path`, `resnet_variant` (backbone: `resnet50`/`resnet152`/`mobilenet_v3_small`/`efficientnet_b0` — editable directly in the profile TOML, no local checkpoint required), and `[navigation] nav_jump_frames`. Switch backbone models on the fly between local checkpoints, custom file selection, and Torch Hub.
   - **Full Batch Tracking & RTS Smoothing:** Shift+Click / Shift+T runs bidirectional gap infilling with multi-anchor seeding + RTS smoothing.
 - **BBox to Coordinates Export:** Convert loaded tracking bounding boxes or SAM3 contours (`sam_contours.json`) into 5 distinct coordinates CSV files (corresponding to `center`, `bottom`, `top`, `left`, and `right` anchors) in the standard vailá format (`frame,p0_x,p0_y,...`). Available via the GUI **BBox→Coords** button or CLI option `--export-bbox-coords PATH`.
 
@@ -338,8 +338,8 @@ Semi-automatic point tracking powered by Normalized Cross-Correlation (NCC), sub
 2. **Controls & Interactions:**
    - **Left-Click:** On the `AI Track` button, toggles live tracking ON/OFF. The button immediately turns **bright green** when active. When ON, press **Space** to play and track live, or use hold-to-repeat arrow keys (`←`/`→` for single frames, `↑`/`↓` for jump steps).
    - **Shift+Click (or Shift+T):** Runs full batch RTS tracking and bidirectional gap infilling between manual keyframes.
-   - **Right-Click (Cfg / Ctrl+T):** Opens the Track AI configuration dialog to adjust search windows, patch size, shape (`point`, `circle`, `box`), learning rate, jump step size, and select ResNet50/ResNet152 weights (`Weights (W)`).
-   - **ResNet Selection (`Ctrl+W` / `Alt+W`):** Direct shortcut to select or cycle ResNet50/ResNet152 weights without losing current session state.
+   - **Right-Click (Cfg / Ctrl+T):** Opens the Track AI configuration dialog to adjust search windows, patch size, shape (`point`, `circle`, `box`), learning rate, jump step size, and select backbone weights (`Weights (W)`).
+   - **Backbone Selection (`Ctrl+W` / `Alt+W`):** Direct shortcut to select or cycle ResNet50/ResNet152/MobileNetV3-Small/EfficientNet-B0 weights without losing current session state; or set `resnet_variant` directly in the Cfg profile TOML.
    - **Shape Toggle (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Switches region feature extraction (mean, std, histogram, area fraction) for circle/box tracking.
    - **Manual Ground-Truth Preservation:** AI Track never overwrites frames that already have user-placed coordinates; passing over an existing marked frame treats it as a ground-truth anchor and retrains the model.
 
@@ -390,7 +390,7 @@ Velocity/Acceleration require the points to be on different frames and use the v
 | **↓**           | Rewind (when paused)         |
 | **Drag bottom scrub slider** | Jump to specific frame |
 | **SHIFT+→** / **SHIFT+←** | Jump to next/previous frame that has visible markers (wraps) |
-| **Marker timeline strip** (above scrub bar) | **Click** or **drag**: jump to that position; **green** = spans containing marked frames; **gold** line = current frame; inside a column with markers, snaps to one of those frames (middle of group), otherwise same proportional mapping as the slider |
+| **Marker timeline strip** (above scrub bar) | **Click** or **drag**: jump to that position; **green** = spans where the **currently selected marker** (TAB) has a coordinate; **blue** = spans where a **different** marker slot has one, so a second/third tracked marker's coverage stays visible instead of hiding behind the first slot's green fill; **gold** line = current frame; inside a column with markers, snaps to one of those frames (middle of group), otherwise same proportional mapping as the slider. Switching the selected marker (**TAB**/**SHIFT+TAB**) recolors the strip for that slot; the right-hand `M<n>:X · other:Y` counter shows the selected marker's own frame count vs. the rest |
 
 ### Zoom & Pan
 
@@ -449,8 +449,8 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | **3**           | Toggle full persistence                           |
 | **Q** / **QMeas** | Toggle Quick Measure mode — calibration first, then free measuring (toolbar button = same as Q) |
 | **T** / **AI Track** | Toggle live AI tracking (Shift+Click / Shift+T runs batch tracking & RTS smoothing) |
-| **Track AI Deep NN** | Toggle ResNet50 semantic embedding verification (extracts 2048-D features) |
-| **Ctrl+W** / **Alt+W** | Select or cycle Track AI ResNet-50 weights (local `ai_tracker/`, custom dir, Hub) |
+| **Track AI Deep NN** | Toggle backbone semantic embedding verification (extracts 2048-D/576-D/1280-D features) |
+| **Ctrl+W** / **Alt+W** | Select or cycle Track AI backbone weights: ResNet50/152, MobileNetV3-Small, EfficientNet-B0 (local `ai_tracker/`, custom dir, Hub) |
 | **Track AI Shape** | Cycle tracking shape (`Point` / `Circle` / `Box`) with region descriptor |
 | **Track AI Cfg** / **Ctrl+T** | Open AI Track TOML configuration card (windows, sigma, lr, jump frames, weights) |
 
@@ -662,6 +662,11 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.3.140 (13 September 2026)
+
+- **Marker timeline strip now per-marker.** Green fill = frames where the *currently selected* marker slot has a coordinate; blue = frames where a *different* marker slot has one. Previously the strip only tracked "any marker present", so a second/third tracked marker's frames stayed invisible behind the first marker's green fill. Switching marker (`TAB`/`SHIFT+TAB`) recolors the strip for the newly selected slot; the counter reads `M<n>:X · other:Y` when multiple markers have coverage.
+- **In-app help (`H` key) updated:** documents all four selectable AI Track backbones (`Ctrl+W`/`Alt+W`, or `resnet_variant` set directly in the Cfg profile TOML) and the new per-marker timeline coloring — previously only mentioned ResNet-50.
 
 ### Version 0.3.139 (13 September 2026)
 
