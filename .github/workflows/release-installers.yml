@@ -55,15 +55,14 @@ jobs:
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          # Prefer GUI banner version; fall back to pyproject.toml
+          # Prefer GUI banner version; fall back to pyproject.toml [project].version
           VERSION="$(grep -E '^Version:' vaila.py | head -1 | awk '{print $2}' | tr -d '\r')"
           if [ -z "$VERSION" ]; then
-            VERSION="$(python3 - <<'PY'
-import tomllib
-from pathlib import Path
-print(tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"])
-PY
-)"
+            VERSION="$(grep -E '^version *= *"' pyproject.toml | head -1 | sed -E 's/^version *= *"([^"]+)".*/\1/')"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "Could not resolve package version" >&2
+            exit 1
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved tag=${TAG} version=${VERSION}"
