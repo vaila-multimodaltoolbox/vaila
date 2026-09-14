@@ -433,6 +433,7 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | Key             | Action                                            |
 | --------------- | ------------------------------------------------- |
 | **C**           | Toggle "1 Line" mode                              |
+| **M** / **MousePlay** | Toggle Mouse-Play tracking — marks at mouse cursor continuously during video playback |
 | **O** or **S**  | Toggle Sequential mode (Normal mode only)        |
 | **P**           | Toggle Persistence mode                           |
 | **I** / **FPS … Hz** button | Set video FPS manually in Hz (decimal or fraction); updates timestamps and Quick Measure time-based metrics |
