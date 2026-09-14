@@ -5251,9 +5251,9 @@ def play_video_with_controls(
         info_x += swap_range_button_rect.width + 10
 
         if auto_marking_mode:
-            auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
-            control_surface.blit(auto_indicator, (info_x, info_row_y))
-            info_x += auto_indicator.get_width() + 25
+            mouse_play_indicator = font.render("MOUSE-PLAY ON", True, (255, 255, 0))
+            control_surface.blit(mouse_play_indicator, (info_x, info_row_y))
+            info_x += mouse_play_indicator.get_width() + 25
 
         marked_hint_x = window_width - marked_cnt_txt.get_width() - slider_margin_right
         control_surface.blit(marked_cnt_txt, (marked_hint_x, info_row_y))
@@ -5347,7 +5347,8 @@ def play_video_with_controls(
         template_button_width = 135 if is_compact else 155  # Tpl: Free/FIFA/MediaPipe/YOLO
         marker_mode_button_width = 95 if is_compact else 108  # Mode: Mark / Seq / 1-line
         persist_button_width = 54 if is_compact else 62
-        auto_button_width = 46 if is_compact else 52
+        mouse_play_button_width = 50 if is_compact else 70
+        auto_button_width = mouse_play_button_width
         click_pass_button_width = 58 if is_compact else 66
         labeling_button_width = 58 if is_compact else 66
         measure_button_width = 50 if is_compact else 58  # QMeas — same as hotkey Q
@@ -5373,7 +5374,7 @@ def play_video_with_controls(
             template_button_width
             + marker_mode_button_width
             + persist_button_width
-            + auto_button_width
+            + mouse_play_button_width
             + click_pass_button_width
             + labeling_button_width
             + measure_button_width
