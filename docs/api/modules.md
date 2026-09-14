@@ -80,8 +80,7 @@ This page provides a comprehensive reference of all modules available in the vai
 ## Machine Learning Tools
 
 ### YOLO Integration
-- **`yolov11track`**: YOLOv11-based object tracking
-- **`yolov12track`**: YOLOv12-based object tracking
+- **`yolov26track`**: YOLOv26-based object tracking
 - **`yolotrain`**: YOLO model training interface
 
 ### ML Walkway
@@ -110,26 +109,20 @@ This page provides a comprehensive reference of all modules available in the vai
 - **`markerless2d_mpyolo`**: MediaPipe + YOLO integration for pose estimation
 - **`mphands`**: Hand pose estimation and analysis
 - **`mpangles`**: Angle calculation from pose landmarks
-- **`stabilogram_analysis`**: Postural stability analysis
 
 ## Utility Modules
 
 ### Core Utilities
 - **`vaila_manifest`**: Core vailá functionality and manifest
-- **`common_utils`**: Common utility functions
-- **`utils`**: General utility functions
 - **`data_processing`**: Data processing utilities
 
 ### Dialogs and UI
 - **`dialogsuser`**: User interface dialog components
 - **`dialogsuser_cluster`**: Cluster-specific dialog components
-- **`native_file_dialog`**: Native file dialog integration
 
 ### External Integrations
 - **`vaila_ytdown`**: YouTube video downloading tools
 - **`vaila_iaudiovid`**: Audio-video insertion tools
-- **`rm_duplicateframes`**: Duplicate frame removal
-- **`vaila_upscaler`**: Video upscaling tools
 
 ## Module Categories Summary
 

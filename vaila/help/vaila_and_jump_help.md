@@ -3,6 +3,22 @@
 This guide explains how to use the Vertical Jump Analysis tool in vailá. It covers inputs, workflow, outputs, and core equations. The instructions below are in English to standardize project documentation.
 
 ### Overview
+
+MediaPipe CMJ and Team Batch now add **CMJ Performance Profile — PODS**. Review
+onset, downward velocity peak, bottom, selected takeoff and landing before using
+TTTO, mRSI, momentum or braking/propulsive force estimates. Force and power are
+**markerless estimates, not force-platform measurements**; failed metrics are NaN,
+and 30/60 FPS or short phases receive a temporal-resolution warning.
+Legacy `takeoff_frame` (CoM baseline crossing) and `propulsion_time_s` remain unchanged;
+mRSI uses new `time_to_takeoff_s`. Frame CSV adds `cmj_phase` and explicit force/power
+aliases. Individual HTML adds four PODS groups and a shared-event diagnostic figure;
+Team Batch adds descriptive PODS metrics and charts without normative thresholds.
+
+The generated `[jump_phase]` template includes robust onset velocity/displacement,
+noise multiplier, persistence, minimum phase duration and takeoff-agreement settings.
+CLI `-c` supplies both context and phases. See the [complete configuration, variable
+and event tables, QC and validation limitations](../../docs/cmj_pods.md).
+
 - Three modes:
   - Time-of-Flight: estimate jump height from flight time
   - Jump-Height: use measured jump height directly
@@ -133,7 +149,8 @@ captured at 240) — that quarters the measured *g* and halves every velocity.
 - Prefer normalized CSV for simplicity; pixel CSV is supported via scaling to meters
 - Units: meters (m), seconds (s), Watts (W), Joules (J)
 
-Version: 0.3.117  
-Updated: 27 August 2026  
+Version: 0.3.141
+
+Updated: 14 September 2026
 Author: Prof. Paulo R. P. Santiago  
 License: GPL-3.0

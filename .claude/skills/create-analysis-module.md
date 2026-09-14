@@ -26,8 +26,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from vaila.common_utils import get_vaila_dir
-
 
 # ── Public entry point (called from vaila.py button) ──────────────────────────
 

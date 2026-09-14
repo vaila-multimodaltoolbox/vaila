@@ -196,7 +196,7 @@ Key shared modules:
 
 - `data_processing.py` — CSV/C3D reading, auto-header detection
 - `filtering.py` / `filter_utils.py` — Butterworth, FIR filter implementations
-- `common_utils.py` — Header detection, data reshaping for CSV files
+- `readcsv.py` — Header detection (`headersidx`), data reshaping (`reshapedata`), CSV file dialogs
 - `dialogsuser.py` / `dialogsuser_cluster.py` — Reusable Tkinter input dialogs for sample rate, file type
 - `filemanager.py` / `filemanager_gui.py` — Previewed GUI/CLI file ops + SSH transfer; diagnose with `/debug` (`.agents/skills/debug/SKILL.md`, `.claude/commands/debug.md`)
 - `hardware_manager.py` — GPU/CPU detection, TensorRT auto-export for YOLO models

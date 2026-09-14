@@ -735,7 +735,7 @@ uv run vaila/markerless2d_analysis_v2.py
 
 ### Compatible Modules
 
-1. **3D Reconstruction** (`markerless3d_analysis_v2.py`)
+1. **3D Reconstruction** (`markerless_3d_analysis.py`)
    - Input: Pixel coordinates CSV
    - Process: DLT calibration, triangulation
    - Output: 3D pose coordinates

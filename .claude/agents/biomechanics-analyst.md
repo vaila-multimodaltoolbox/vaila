@@ -41,7 +41,7 @@ Reference: Author et al. (Year). Journal. DOI
 """
 import numpy as np
 import pandas as pd
-from vaila.common_utils import get_file_path
+from vaila.readcsv import select_file
 
 def compute_my_metric(data: np.ndarray, freq_hz: float) -> np.ndarray:
     """
@@ -68,7 +68,7 @@ def compute_my_metric(data: np.ndarray, freq_hz: float) -> np.ndarray:
 
 def run_my_analysis():
     """Entry point called from vaila.py GUI button."""
-    file_path = get_file_path()
+    file_path = select_file()
     if not file_path:
         return
     # load, process, save, plot

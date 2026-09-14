@@ -49,13 +49,22 @@
             <p><strong>File:</strong> vaila\vaila_and_jump.py</p>
             <p><strong>Lines:</strong> 7311</p>
             <p><strong>Size:</strong> ~150000 characters</p>
-            <p><strong>Version:</strong> 0.3.117</p>
+            <p><strong>Version:</strong> 0.3.141</p>
             <p><strong>Author:</strong> Prof. Paulo R. P. Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
-            <p><strong>Last Update:</strong> 27 August 2026</p>
+            <p><strong>Last Update:</strong> 14 September 2026</p>
         </div>
 
         <div class="docstring">
+            <h3>CMJ Performance Profile — PODS</h3>
+            <p>MediaPipe and Team Batch add Person (mass), Outcome (height, sourced velocity/momentum, mRSI),
+            Driver (estimated braking/bottom/propulsive force and power), and Strategy (time to takeoff, depth, phases).
+            <strong>Markerless force and power estimates are not force-platform measurements.</strong></p>
+            <p>The scalar CSV includes events, sources and QC; calibrated CSV adds <code>cmj_phase</code> and force/power aliases.
+            The <code>*_cmj_pods_*.png</code> diagnostic and HTML share the same events.
+            Historical <code>takeoff_frame</code> is a CoM baseline crossing;
+            <code>propulsion_time_s</code> remains historical and is never the mRSI denominator.</p>
+            <p><a href="../../docs/cmj_pods.md">Complete variable dictionary, event definitions, QC and validation limits</a>.</p>
             <h3>📖 Description</h3>
             <p>This script processes jump data from multiple .csv files in a specified directory, performing biomechanical calculations based on either the time of flight or the jump height. The results are saved in a new output directory with a timestamp for each processed file.</p>
             
@@ -232,7 +241,13 @@ baseline_start_frame = 10
 baseline_end_frame = 20
 phase_smoothing_window_s = 0.06
 baseline_tolerance_m = 0.02
-anchor_events_to_com_peak = true</pre>
+anchor_events_to_com_peak = true
+movement_onset_velocity_threshold_m_s = 0.05
+movement_onset_displacement_threshold_m = 0.005
+movement_onset_noise_multiplier = 3.0
+movement_onset_min_duration_s = 0.03
+phase_min_duration_s = 0.03
+takeoff_agreement_tolerance_s = 0.04</pre>
             <p>Keep <code>anchor_events_to_com_peak = true</code> for CMJ data so propulsion and ascent events cannot be placed after maximum CoM height.</p>
         </div>
 
@@ -291,7 +306,7 @@ anchor_events_to_com_peak = true</pre>
         </div>
 
         <div class="footer">
-            <p>📅 <strong>Last Updated:</strong> 27 August 2026</p>
+            <p>📅 <strong>Last Updated:</strong> 14 September 2026</p>
             <p>🔗 <strong>Part of vailá - Multimodal Toolbox</strong></p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

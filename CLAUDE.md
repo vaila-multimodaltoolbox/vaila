@@ -242,7 +242,7 @@ Full ASCII map + descriptions: `README.md` § *vailá Structure and Interface*; 
 | ------------------------------------------- | --------------------------------------------------------- |
 | `data_processing.py`                        | CSV/C3D reading, auto-header detection                |
 | `filtering.py` / `filter_utils.py`          | Butterworth, FIR filter implementations                |
-| `common_utils.py`                           | Header detection, data reshaping                     |
+| `readcsv.py`                                 | Header detection (`headersidx`), data reshaping (`reshapedata`), file dialogs |
 | `dialogsuser.py` / `dialogsuser_cluster.py` | Reusable Tkinter input dialogs                            |
 | `filemanager.py`                            | File management (rename, copy, move, SSH transfer)        |
 | `hardware_manager.py`                       | GPU/CPU detection, TensorRT export — **do not duplicate**. First run per model builds VRAM-sized `.engine` (2–5 min, cached); Windows/Linux engines coexist same folder on dual-boot. |

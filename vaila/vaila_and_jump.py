@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 Oct 2024
-Update Date: 27 August 2026
-Version: 0.3.117
+Update Date: 14 September 2026
+Version: 0.3.141
 Python Version: 3.12.14
 
 Description:
@@ -172,6 +172,25 @@ import numpy as np
 import pandas as pd
 from rich import print
 from scipy.signal import butter, filtfilt
+
+try:
+    from .cmj_pods import (
+        PODS_DEFAULTS,
+        PODS_TEAM_METRICS,
+        calculate_pods,
+        event_rows_html,
+        plot_pods_diagnostic,
+        pods_report_html,
+    )
+except ImportError:  # standalone script
+    from cmj_pods import (  # ty: ignore[unresolved-import]
+        PODS_DEFAULTS,
+        PODS_TEAM_METRICS,
+        calculate_pods,
+        event_rows_html,
+        plot_pods_diagnostic,
+        pods_report_html,
+    )
 
 try:  # Python 3.11+
     import tomllib as _toml_reader
@@ -399,6 +418,8 @@ def _save_jump_context_template(dest: Path, ctx: dict[str, float]) -> None:
         "baseline_tolerance_m = 0.02\n"
         "anchor_events_to_com_peak = true\n"
     )
+    content += "# PODS onset: persistent downward filtered CoM; baseline must be quiet.\n"
+    content += "".join(f"{key} = {value}\n" for key, value in PODS_DEFAULTS.items())
     dest.write_text(content, encoding="utf-8")
 
 
@@ -633,7 +654,7 @@ def _parse_config_bool(value: object, default: bool) -> bool:
 
 def _jump_phase_options_from_cfg(cfg: dict | None) -> dict[str, float | bool]:
     """Load optional robust CMJ phase-detection settings."""
-    opts = dict(_DEFAULT_JUMP_PHASE_OPTIONS)
+    opts = {**_DEFAULT_JUMP_PHASE_OPTIONS, **PODS_DEFAULTS}
     if not isinstance(cfg, dict):
         return opts
 
@@ -661,15 +682,26 @@ def _jump_phase_options_from_cfg(cfg: dict | None) -> dict[str, float | bool]:
             elif key == "baseline_tolerance_m":
                 opts[key] = max(0.001, parsed)
 
+    for key in PODS_DEFAULTS:
+        if key in cfg:
+            parsed = _parse_locale_float(cfg[key])
+            if not math.isfinite(parsed) or parsed <= 0:
+                raise ValueError(f"[jump_phase] {key} must be finite and positive")
+            opts[key] = parsed
+
     if float(opts["baseline_end_frame"]) <= float(opts["baseline_start_frame"]):
         opts["baseline_start_frame"] = _DEFAULT_JUMP_PHASE_OPTIONS["baseline_start_frame"]
         opts["baseline_end_frame"] = _DEFAULT_JUMP_PHASE_OPTIONS["baseline_end_frame"]
     return opts
 
 
-def _load_jump_phase_options_from_toml(base_dir: Path | None = None) -> dict[str, float | bool]:
+def _load_jump_phase_options_from_toml(
+    base_dir: Path | None = None, *, config_file: Path | None = None
+) -> dict[str, float | bool]:
     """Try to load optional [jump_phase] settings, with robust defaults otherwise."""
     search_paths = []
+    if config_file is not None:
+        search_paths.append(Path(config_file))
     if base_dir is not None:
         search_paths.append(Path(base_dir) / "vaila_and_jump_config.toml")
     search_paths.extend(
@@ -690,9 +722,9 @@ def _load_jump_phase_options_from_toml(base_dir: Path | None = None) -> dict[str
                         data = _toml_reader.load(f)
                 cfg = data.get("jump_phase", {})
                 return _jump_phase_options_from_cfg(cfg)
-            except Exception:
-                pass
-    return dict(_DEFAULT_JUMP_PHASE_OPTIONS)
+            except Exception as exc:
+                raise ValueError(f"Invalid jump-phase configuration in {p}: {exc}") from exc
+    return _jump_phase_options_from_cfg(None)
 
 
 def _robust_baseline_value(
@@ -3611,6 +3643,8 @@ def _height_qc_report_html(results: dict) -> str:
 def _phase_frame_rows_html(results: dict) -> str:
     """Rows for the phase table, each labelled with the event definition used."""
     fps = _as_float_or_none(results.get("fps")) or 0.0
+    if "takeoff_frame_selected" in results:
+        return event_rows_html(results, fps)
     rows = [
         (
             "Countermovement bottom",
@@ -3872,6 +3906,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
             </p>
         </div>
 
+        {pods_report_html(results) if "mrsi_qc_status" in results else ""}
         {_gravity_qc_report_html(results)}
         {_height_methods_report_html(results)}
         {_height_qc_report_html(results)}
@@ -4124,6 +4159,11 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
     # Add images to the report. Captions explain what each figure shows; the bare
     # file name told the reader nothing.
     plot_captions = {
+        "cmj_pods": (
+            "CMJ Performance Profile — phase diagnostic",
+            "Shared CSV/HTML events on filtered CoM, velocity and estimated force/power. "
+            "Shaded phases are half-open intervals; inspect PODS QC before using kinetic values.",
+        ),
         "freefall_check": (
             "Free-fall calibration check",
             "Measured CoM during flight against an ideal 9.81 m/s&sup2; parabola. A visible "
@@ -4239,7 +4279,7 @@ def generate_html_report(data, results, plot_files, output_dir, base_name):
     return report_path
 
 
-def process_mediapipe_data(input_file, output_dir):
+def process_mediapipe_data(input_file, output_dir, *, phase_options=None):
     """
     Process MediaPipe data and generate visualizations and report.
 
@@ -4268,7 +4308,8 @@ def process_mediapipe_data(input_file, output_dir):
         mass = ctx["mass_kg"]
         fps = ctx["fps"]
         shank_length_real = ctx["shank_length_m"]
-        phase_options = _load_jump_phase_options_from_toml(base_dir=data_folder)
+        if phase_options is None:
+            phase_options = _load_jump_phase_options_from_toml(base_dir=data_folder)
         baseline_rectify_start = bool(phase_options["baseline_rectify_start"])
         baseline_start_frame = int(phase_options["baseline_start_frame"])
         baseline_end_frame = int(phase_options["baseline_end_frame"])
@@ -4561,6 +4602,13 @@ def process_mediapipe_data(input_file, output_dir):
             time_max_power = 0
             power_takeoff = 0
 
+        # PODS extends the legacy pipeline after both raw takeoff candidates exist.
+        # Keep one canonical dictionary for plots, scalar export and the event table.
+        pods_events, pods_metrics, pods_frames = calculate_pods(
+            data, jump_phase_results, mass, fps, phase_options
+        )
+        data = pd.concat([data, pods_frames], axis=1)
+
         # Calculate energies. Use QC-recommended height when CoM height is implausible.
         raw_jump_height = _as_float_or_none(jump_phase_results.get("height_cg_method_m")) or 0
         jump_height = _as_float_or_none(jump_phase_results.get("height_qc_recommended_m"))
@@ -4718,6 +4766,7 @@ def process_mediapipe_data(input_file, output_dir):
         }
         results.update(height_qc_results)
         results.update(gravity_results)
+        results.update(pods_metrics)
         for key in (
             "height_com_above_standing_m",
             "height_com_takeoff_ref_m",
@@ -4843,7 +4892,11 @@ def process_mediapipe_data(input_file, output_dir):
         }
 
         # Generate plots
-        plot_files = []
+        plot_files = [
+            plot_pods_diagnostic(
+                data, pods_events, fps, Path(output_dir) / f"{base_name}_cmj_pods_{timestamp}.png"
+            )
+        ]
 
         # 1. Generate diagnostic plot
         diagnostic_plot = generate_normalized_diagnostic_plot(
@@ -4939,7 +4992,7 @@ def process_mediapipe_data(input_file, output_dir):
             if col in data.columns and col not in final_cols:
                 final_cols.append(col)
 
-        calibrated_data = data[final_cols].copy()
+        calibrated_data = data[list(dict.fromkeys(final_cols))].copy()
         output_calibrated_file = os.path.join(output_dir, f"{base_name}_calibrated_{timestamp}.csv")
         calibrated_data.to_csv(output_calibrated_file, index=False, float_format="%.6f")
         print(f"Calibrated data saved: {output_calibrated_file}")
@@ -5070,6 +5123,11 @@ def process_mediapipe_data(input_file, output_dir):
             print(f"  Height QC correction: {jump_phase_results.get('height_qc_note')}")
         print(f"  Flight time: {jump_phase_results.get('flight_time_s', 0):.3f} s")
         print(f"  Max power: {max_power:.1f} W")
+        print(
+            f">> vaila/jump: PODS phases={pods_metrics['cmj_phase_qc_status']}, "
+            f"takeoff={pods_metrics['takeoff_source']}, mRSI={pods_metrics['mrsi_AU']:.3f} "
+            f"({pods_metrics['mrsi_qc_status']}), kinetics={pods_metrics['kinetic_metrics_qc_status']}"
+        )
 
         return True
 
@@ -5118,6 +5176,7 @@ _VAILA_OUTPUT_DIR_PREFIXES = (
 
 # Metrics highlighted in the team report (column -> human label)
 _TEAM_METRICS = {
+    **PODS_TEAM_METRICS,
     "height_qc_recommended_m": "Recommended jump height [m]",
     "height_cg_method_m": "Jump height (CG raw) [m]",
     "flight_time_s": "Flight time [s]",
@@ -5325,7 +5384,7 @@ def _series_zscore(series: pd.Series) -> pd.Series:
     mean = values.mean(skipna=True)
     std = values.std(skipna=True, ddof=0)
     if pd.isna(std) or std == 0:
-        return pd.Series(0.0, index=series.index)
+        return pd.Series(0.0, index=series.index).where(values.notna())
     return (values - mean) / std
 
 
@@ -5341,6 +5400,10 @@ def _team_quality_table(df: pd.DataFrame) -> pd.DataFrame:
         if metric in table.columns:
             table[z_col] = _series_zscore(table[metric])
             score_parts.append(table[z_col])
+    # PODS descriptors do not enter the legacy composite or imply higher is better.
+    for metric in PODS_TEAM_METRICS:
+        if metric in table:
+            table[f"{metric}_zscore"] = _series_zscore(table[metric])
     if score_parts:
         table["jump_composite_zscore"] = pd.concat(score_parts, axis=1).mean(axis=1)
     else:
@@ -5393,6 +5456,7 @@ def _team_zscore_html_table(quality_df: pd.DataFrame) -> str:
         ("jump_composite_zscore", "Composite Z"),
         ("team_qc_flag", "QC"),
     ]
+    cols += [(f"{key}_zscore", f"{label} Z") for key, label in PODS_TEAM_METRICS.items()]
     cols = [(c, label) for c, label in cols if c in quality_df.columns]
     html = '<table class="zscore-table"><thead><tr><th>#</th>'
     html += "".join(f"<th>{label}</th>" for _, label in cols)
@@ -5411,6 +5475,8 @@ def _team_zscore_html_table(quality_df: pd.DataFrame) -> str:
             val = row.get(col)
             if col.endswith("_zscore"):
                 bg, fg = z_color(val)
+                if col in {f"{key}_zscore" for key in PODS_TEAM_METRICS}:
+                    bg, fg = "#eef3f8", "#111111"
                 text = "" if pd.isna(val) else f"{float(val):+.2f}"
                 html += f'<td style="background:{bg};color:{fg};font-weight:700;">{text}</td>'
             elif isinstance(val, (int, float)) and pd.notna(val):
@@ -5565,6 +5631,11 @@ def generate_team_report(team_rows: list[dict], output_dir: Path, timestamp: str
     plots_dir = output_dir / "team_plots"
     plots_dir.mkdir(exist_ok=True)
     plot_specs = [
+        *[
+            (key, label)
+            for key, label in PODS_TEAM_METRICS.items()
+            if key != "jump_momentum_selected_kg_m_s"
+        ],
         ("height_qc_recommended_m", "Recommended jump height [m]"),
         ("height_cg_method_m", "Jump height (CG raw) [m]"),
         ("max_power_W_per_kg", "Peak power [W/kg]"),
@@ -5718,6 +5789,12 @@ def _write_team_html(
   {_team_overview_table_html(df)}
 
   <h2>Team Summary</h2>
+  <h2>CMJ Performance Profile — PODS (team)</h2>
+  <p>Descriptive within-team comparisons only. Larger strategy or force values are not universally better.
+  Markerless force and power estimates are not force-platform measurements. No study-specific strength
+  categories or normative cutoffs are applied. Invalid new metrics remain unavailable.</p>
+  {df[[c for c in ["athlete", "trial", "mass_kg", "height_qc_recommended_m", *PODS_TEAM_METRICS, "cmj_phase_qc_status", "kinetic_metrics_qc_status"] if c in df.columns]].to_html(index=False, na_rep="N/A", float_format=lambda x: f"{x:.3f}")}
+  <h2>Descriptive Statistics</h2>
   {summary_table}
 
   <h2>Performance Charts</h2>
@@ -5727,6 +5804,7 @@ def _write_team_html(
   {_team_zscore_html_table(quality_df)}
 
   <h2>Rankings</h2>
+  <div>{ranking_html("mrsi_AU", "mRSI [AU]")}</div>
   <div class="cols">
     <div>{ranking_html("height_qc_recommended_m", "Recommended jump height [m]")}</div>
     <div>{ranking_html("max_power_W_per_kg", "Peak power [W/kg]")}</div>
@@ -7215,7 +7293,12 @@ def _run_cli_mediapipe(args):
     base_name = os.path.splitext(os.path.basename(args.input))[0]
     per_file_dir = os.path.join(output_dir, base_name)
     os.makedirs(per_file_dir, exist_ok=True)
-    ok = process_mediapipe_data(args.input, per_file_dir)
+    try:
+        phase_options = _load_jump_phase_options_from_toml(config_file=Path(args.config))
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
+    ok = process_mediapipe_data(args.input, per_file_dir, phase_options=phase_options)
     return 0 if ok else 1
 
 

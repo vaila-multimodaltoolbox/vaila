@@ -64,7 +64,6 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
     "markerless_3d_analysis": CliRunHint(
         (
             "uv run vaila/markerless_3d_analysis.py",
-            "uv run vaila/markerless3d_analysis_v2.py",
             "uv run python -u vaila/sam3dinov3.py",
             "uv run python -u vaila/sam3dinov3_visualize.py",
             "uv run python -u vaila/sapiens2_3d.py",
@@ -201,7 +200,7 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
         ("uv run vaila/viewc3d.py", "uv run vaila/viewc3d_pyvista.py"),
         "C3D viewer — Open3D or PyVista.",
     ),
-    "show_csv_file": CliRunHint(("uv run vaila/vpython_c3d.py",), "CSV 3D viewer GUI."),
+    "show_csv_file": CliRunHint(("uv run vaila/readcsv.py",), "CSV file viewer GUI."),
     "animation_blender": CliRunHint(
         ("uv run python -m vaila.blender_viz -i RUN_DIR",),
         "Open a rec3d run in Blender (BVH + mesh + bones + scene rate, all set up).",
