@@ -9818,7 +9818,7 @@ def play_video_with_controls(
             help_button_rect,
             persist_button_rect,
             load_button_rect,
-            auto_button_rect,  # Add auto button to return
+            mouse_play_button_rect,  # MousePlay tracking button (M key)
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             measure_button_rect,  # Quick Measure (same as Q)
@@ -9847,6 +9847,7 @@ def play_video_with_controls(
             slider_width,
             slider_height,
         ) = draw_controls()
+        auto_button_rect = mouse_play_button_rect
 
         # Show save message if needed
         if showing_save_message:
@@ -10161,11 +10162,13 @@ def play_video_with_controls(
                     auto_marking_mode = not auto_marking_mode
                     if auto_marking_mode:
                         pitch_guide_mode = False
-                    save_message_text = (
-                        f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
-                    )
+                        save_message_text = (
+                            "MousePlay tracking ON: press Space to play & track with mouse"
+                        )
+                    else:
+                        save_message_text = "MousePlay tracking disabled"
                     showing_save_message = True
-                    save_message_timer = 30
+                    save_message_timer = 45
                 elif event.key == pygame.K_q:
                     save_message_text = _toggle_quick_measure_mode()
                     showing_save_message = True
