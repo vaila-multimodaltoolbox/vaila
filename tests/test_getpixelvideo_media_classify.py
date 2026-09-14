@@ -337,3 +337,30 @@ def test_track_ai_spam_suppression_and_shape_wiring() -> None:
     # 5. Canvas overlay visual shapes
     assert "pygame.draw.circle(screen, (0, 220, 255)" in source
     assert "pygame.draw.rect(screen, (0, 220, 255)" in source
+
+
+def test_mouse_play_tracking_button_and_hotkey_wiring() -> None:
+    """Verify MousePlay toolbar button (replacing confusing 'Auto'), hotkey M, and UI indicators."""
+    source = Path(gpv.__file__).read_text(encoding="utf-8")
+
+    # 1. Button rect and label definition
+    assert "mouse_play_button_rect = pygame.Rect(" in source
+    assert 'mouse_play_label = "MPlay" if is_compact else "MousePlay"' in source
+    assert "mouse_play_button_width = 50 if is_compact else 70" in source
+
+    # 2. Status bar and parts indicator
+    assert 'mouse_play_indicator = font.render("MOUSE-PLAY ON", True, (255, 255, 0))' in source
+    assert 'parts.append("MousePlay")' in source
+
+    # 3. Toast instructions on toggle (button click and hotkey M)
+    assert "MousePlay tracking ON: press Space to play & track with mouse" in source
+    assert "MousePlay tracking disabled" in source
+
+    # 4. Click handling and hotkey M wiring
+    assert "mouse_play_button_rect.collidepoint(x, rel_y):" in source
+    assert "elif event.key == pygame.K_m:" in source
+
+    # 5. In-app help dialog entry
+    assert '"M  /  \'MousePlay\' button"' in source
+    assert "Toggle Mouse-Play tracking (marks at mouse cursor during video playback)" in source
+

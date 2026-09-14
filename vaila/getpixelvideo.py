@@ -5348,7 +5348,6 @@ def play_video_with_controls(
         marker_mode_button_width = 95 if is_compact else 108  # Mode: Mark / Seq / 1-line
         persist_button_width = 54 if is_compact else 62
         mouse_play_button_width = 50 if is_compact else 70
-        auto_button_width = mouse_play_button_width
         click_pass_button_width = 58 if is_compact else 66
         labeling_button_width = 58 if is_compact else 66
         measure_button_width = 50 if is_compact else 58  # QMeas — same as hotkey Q
@@ -5487,7 +5486,6 @@ def play_video_with_controls(
             mouse_play_button_width,
             button_height,
         )
-        auto_button_rect = mouse_play_button_rect
         current_x += mouse_play_button_width + button_gap
 
         mouse_play_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
