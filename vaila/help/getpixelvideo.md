@@ -4,15 +4,15 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.137
+**Version:** 0.3.139
 **Date:** 23 June 2026  
-**Updated:** 11 September 2026
+**Updated:** 13 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
 ## Key Features
 
-- **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & ResNet50) & RTS Smoother (`AI Track` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior (with velocity prediction) to prevent distractor jumps, adaptive running template EMA blending, online appearance model that **keeps learning across manual corrections** (no wipe on re-anchor), low-confidence rejection, and optional Deep Visual Feature embeddings (PyTorch ResNet50 / CUDA; local weights via `vaila/models/ai_tracker/resnet50_imagenet.pth`, custom path, or Torch hub cache). Features:
+- **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & multi-backbone deep features) & RTS Smoother (`AI Track` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior (with velocity prediction) to prevent distractor jumps, adaptive running template EMA blending, online appearance model that **keeps learning across manual corrections** (no wipe on re-anchor), low-confidence rejection, and optional Deep Visual Feature embeddings (PyTorch ResNet50, default, or opt-in ResNet152 / MobileNetV3-Small / EfficientNet-B0 / CUDA; local weights via `vaila/models/ai_tracker/resnet50_imagenet.pth`, `resnet152_imagenet.pth`, `mobilenet_v3_small_imagenet.pth`, or `efficientnet_b0_imagenet.pth`, custom path, or Torch hub cache — this is the sole canonical local weights directory). When enabled, the frozen *primary* backbone's embedding is also concatenated into the online discriminator's feature vector, so it participates in every per-click retrain without ever being backpropagated through. An optional, **off-by-default cascade fallback** (`fallback_variant` in the TOML profile, e.g. `efficientnet_b0`) re-scores a low-confidence frame with a second backbone and adopts it only if it scores higher — never affects the discriminator's feature width, only per-frame verification. Features:
   - **Accessible button:** Short label `AI Track` illuminates in **bright green** immediately when enabled (armed/tracking) and red when off.
   - **Online Learning from Anchors:** Every user placement retrains the discriminator without clearing prior anchors.
   - **Multi-Shape Centroid Tracking (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Point click, or **drag** on Cir/Box to set patch size; marker is placed at the region centroid. Region stats (mean/std/hist/area) feed the online model.
@@ -318,9 +318,9 @@ uv run yolo pose train \
 - Both dataset layouts (`<dir>/{split}/{images,labels}` and `<dir>/{images,labels}/{split}`) are auto-detected when appending.
 - A small **example** TOML for tests lives under `tests/sport_fields/` (e.g. `fifa_template.toml`); copy the idea beside your own videos.
 
-### AI Track Mode (T key / AI Track button) — v0.3.137
+### AI Track Mode (T key / AI Track button) — v0.3.139
 
-Semi-automatic point tracking powered by Normalized Cross-Correlation (NCC), sub-pixel parabolic peak refinement, 2D Gaussian motion priors, Kalman-filter velocity prediction, and an online appearance discriminator with optional ResNet50 deep visual embeddings.
+Semi-automatic point tracking powered by Normalized Cross-Correlation (NCC), sub-pixel parabolic peak refinement, 2D Gaussian motion priors, Kalman-filter velocity prediction, and an online appearance discriminator with optional ResNet50/ResNet152/MobileNetV3-Small/EfficientNet-B0 deep visual embeddings and an opt-in confidence-based fallback cascade between two of them.
 
 1. **JIT Online Learning & Multi-Session Checkpoint Persistence:**
    - **How it learns:** Each time you place a marker, adjust an anchor, or correct a drifted position, `update_from_correction()` and `retrain_online_model()` update the appearance model on-the-fly (Just-In-Time training).
@@ -331,14 +331,15 @@ Semi-automatic point tracking powered by Normalized Cross-Correlation (NCC), sub
      (Default checkpoint: `vaila/models/ai_tracker/discriminator_default.npz`).
 
    - **Transfer Learning (Cross-Session):** When opening `getpixelvideo.py` and enabling AI Track, the prior checkpoint is loaded automatically. Online retraining computes a sample-count-weighted average between prior knowledge and new session frames (`_live_n_samples`), accumulating learning without catastrophic forgetting.
-   - **Local & Git-Ignored:** The directory `vaila/models/ai_tracker/` is configured in `.gitignore` so personal model checkpoints and large neural weights remain strictly on the user's machine and are never pushed to Git.
-   - **Deep NN Features (ResNet50):** The `Track AI Deep NN (ResNet50)` toggle extracts 2048-dimensional semantic embeddings to distinguish targets from distractors during fast pan or occlusions. Weights can be selected dynamically via `Ctrl+W` or the `Weights (W)` button in the `Cfg` dialog, cycling between local checkpoints (`vaila/models/ai_tracker/resnet50_imagenet.pth`), any chosen directory via file dialog, or PyTorch Hub pretrained defaults.
+   - **Local & Git-Ignored:** The directory `vaila/models/ai_tracker/` is configured in `.gitignore` so personal model checkpoints and large neural weights remain strictly on the user's machine and are never pushed to Git. It is also the **sole canonical local weights directory** — there is no fallback scan of a general `vaila/models/` location.
+   - **Deep NN Features (ResNet50, default, or opt-in ResNet152 / MobileNetV3-Small / EfficientNet-B0):** The `Track AI Deep NN` toggle extracts semantic embeddings (2048-d ResNet50/ResNet152, 576-d MobileNetV3-Small, 1280-d EfficientNet-B0) to distinguish targets from distractors during fast pan or occlusions, and (when enabled) concatenates the *primary* variant's embedding into the retrained online discriminator's feature vector (808-d → 808+feature_dim). Weights can be selected dynamically via `Ctrl+W` or the `Weights (W)` button in the `Cfg` dialog, cycling between local checkpoints (`vaila/models/ai_tracker/resnet50_imagenet.pth` / `resnet152_imagenet.pth` / `mobilenet_v3_small_imagenet.pth` / `efficientnet_b0_imagenet.pth`), any chosen directory via file dialog, or PyTorch Hub pretrained defaults — the variant is inferred automatically from the chosen filename. ResNet152 is deeper/slower (~3x FLOPs) with a modest accuracy gain; MobileNetV3-Small and EfficientNet-B0 are lighter, CPU-friendly alternatives. ResNet50 stays the default for interactive per-frame tracking.
+   - **Opt-in cascade fallback (`fallback_variant` / `fallback_threshold`, TOML-only):** disabled by default (`fallback_variant=""`). When set to a second backbone name in the profile TOML, any frame whose combined score falls below `fallback_threshold` (default `0.48`) is re-scored with that second backbone using the same NCC/discriminator fusion, and the higher-scoring result wins. Adds one extra embedding extraction only on already-low-confidence frames; the discriminator's feature width is unaffected regardless of which backbone wins a given frame. No dedicated GUI widget yet — edit the AI Track profile TOML directly to enable it.
 
 2. **Controls & Interactions:**
    - **Left-Click:** On the `AI Track` button, toggles live tracking ON/OFF. The button immediately turns **bright green** when active. When ON, press **Space** to play and track live, or use hold-to-repeat arrow keys (`←`/`→` for single frames, `↑`/`↓` for jump steps).
    - **Shift+Click (or Shift+T):** Runs full batch RTS tracking and bidirectional gap infilling between manual keyframes.
-   - **Right-Click (Cfg / Ctrl+T):** Opens the Track AI configuration dialog to adjust search windows, patch size, shape (`point`, `circle`, `box`), learning rate, jump step size, and select ResNet50 weights (`Weights (W)`).
-   - **ResNet50 Selection (`Ctrl+W` / `Alt+W`):** Direct shortcut to select or cycle ResNet50 weights without losing current session state.
+   - **Right-Click (Cfg / Ctrl+T):** Opens the Track AI configuration dialog to adjust search windows, patch size, shape (`point`, `circle`, `box`), learning rate, jump step size, and select ResNet50/ResNet152 weights (`Weights (W)`).
+   - **ResNet Selection (`Ctrl+W` / `Alt+W`):** Direct shortcut to select or cycle ResNet50/ResNet152 weights without losing current session state.
    - **Shape Toggle (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Switches region feature extraction (mean, std, histogram, area fraction) for circle/box tracking.
    - **Manual Ground-Truth Preservation:** AI Track never overwrites frames that already have user-placed coordinates; passing over an existing marked frame treats it as a ground-truth anchor and retrains the model.
 
@@ -661,6 +662,11 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.3.139 (13 September 2026)
+
+- **AI Track: multi-backbone cascade.** `resnet_variant` now also accepts `mobilenet_v3_small` and `efficientnet_b0` (lighter, CPU-friendly alternatives to ResNet50/ResNet152), discovered via the same local-checkpoint filename convention and cycled by the `Weights (W)` button. Default primary backbone stays `resnet50` — no behavior change for existing profiles.
+- **Opt-in confidence-based fallback:** new TOML-only `fallback_variant`/`fallback_threshold` fields on the AI Track profile. When `fallback_variant` names a second backbone, frames scoring below `fallback_threshold` are re-scored with it and the higher-scoring result is adopted. Disabled by default (`fallback_variant=""`); only the *primary* backbone's embedding ever feeds the online discriminator, so enabling a fallback never changes checkpoint compatibility.
 
 ### Version 0.3.127 (07 September 2026)
 

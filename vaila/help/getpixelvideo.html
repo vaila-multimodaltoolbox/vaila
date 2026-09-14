@@ -220,16 +220,17 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.137<br />
-        <strong>Updated:</strong> 11 September 2026<br />
+        <strong>Version:</strong> 0.3.139<br />
+        <strong>Updated:</strong> 13 September 2026<br />
         <strong>Date:</strong> 23 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> vailá - Multimodal Toolbox<br />
-        <strong>AI Track (NCC + Spatial Prior + Online Discriminator &amp; ResNet50 &amp; RTS Smoother):</strong>
+        <strong>AI Track (NCC + Spatial Prior + Online Discriminator &amp; ResNet50/ResNet152 &amp; RTS Smoother):</strong>
         Drift-resistant kinematic tracking via Normalized Cross-Correlation, velocity-aware Gaussian prior,
         adaptive EMA template blending, online ridge learning that survives manual corrections, low-confidence
-        rejection, and optional ResNet-50 deep verification (local <code>vaila/models/ai_tracker/resnet50_imagenet.pth</code>,
+        rejection, and optional ResNet-50/ResNet-152 deep verification -- also optionally fused into the retrained
+        online discriminator's feature vector -- (local <code>vaila/models/ai_tracker/</code>,
         custom path via <span class="key">Ctrl+W</span> / <span class="key">Weights (W)</span> in Cfg, or Torch Hub cache). Button label <code>AI Track</code> with immediate bright green
         <code>active</code> badge and red <code>off</code>. Cir/Box: drag to set size,
         marker at centroid. Hold arrows for continuous nav; Up/Down step = <code>nav_jump</code> (Cfg, default 60).
@@ -832,11 +833,11 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">Track AI Deep NN</span></td>
-                <td>Toggle ResNet50 deep semantic feature extractor (2048-D) for distractor-resilient tracking during fast movements.</td>
+                <td>Toggle ResNet50/ResNet152 deep semantic feature extractor (2048-D) for distractor-resilient tracking during fast movements.</td>
               </tr>
               <tr>
                 <td><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span></td>
-                <td>Select or cycle ResNet-50 weights (.pth/.pt) from <code>vaila/models/ai_tracker/</code>, custom directory file browser, or Torch Hub default.</td>
+                <td>Select or cycle ResNet-50/ResNet-152 weights (.pth/.pt) from <code>vaila/models/ai_tracker/</code>, custom directory file browser, or Torch Hub default.</td>
               </tr>
               <tr>
                 <td><span class="key">Track AI Shape</span></td>
@@ -1252,12 +1253,12 @@ uv run yolo pose train \<br/>
       </section>
 
       <section id="ai-track-mode">
-        <h2>6d. AI Track Mode &amp; JIT Online Learning (v0.3.137)</h2>
+        <h2>6d. AI Track Mode &amp; JIT Online Learning (v0.3.139)</h2>
         <p>
           The <strong>AI Track</strong> tool provides high-speed semi-automatic point and region tracking.
           It combines <strong>Normalized Cross-Correlation (NCC)</strong> with sub-pixel parabolic peak refinement,
           <strong>2D Gaussian spatial motion priors</strong>, <strong>Kalman filter velocity prediction</strong>,
-          and a fast online-retrained linear appearance discriminator with optional <strong>PyTorch ResNet50 deep semantic embeddings</strong> (2048-D).
+          and a fast online-retrained linear appearance discriminator with optional <strong>PyTorch ResNet50/ResNet152/MobileNetV3-Small/EfficientNet-B0 deep semantic embeddings</strong> (2048-D / 2048-D / 576-D / 1280-D), whose <em>primary</em> variant can also be fused directly into the discriminator's retrained feature vector. An opt-in, off-by-default <strong>confidence-based fallback cascade</strong> can re-score low-confidence frames with a second backbone.
         </p>
 
         <h3>1. JIT (Just-In-Time) Online Learning &amp; Transfer Learning Checkpoints</h3>
@@ -1282,22 +1283,31 @@ uv run yolo pose train \<br/>
             <strong>Git-Ignored Local Models:</strong> Following the project guidelines, <code>vaila/models/ai_tracker/*</code>
             is strictly git-ignored (only <code>instructions_ai_tracker.txt</code> is tracked). Personal checkpoints, user-trained discriminators,
             and large neural weights stay on your local machine and never bloat git commits.
+            <code>vaila/models/ai_tracker/</code> is the sole canonical local weights directory -- there is no
+            fallback scan of <code>vaila/models/</code> directly.
           </li>
           <li>
-            <strong>Deep Neural Network (ResNet50):</strong> Clicking <span class="key">Track AI Deep NN</span> toggles the deep feature extractor.
-            Weights can be dynamically configured:
+            <strong>Deep Neural Network (ResNet50/ResNet152/MobileNetV3-Small/EfficientNet-B0):</strong> Clicking <span class="key">Track AI Deep NN</span> toggles the deep feature extractor.
+            ResNet50 is the default variant (faster, ~3x fewer FLOPs than ResNet152); ResNet152 is an opt-in, deeper/slower variant
+            with modestly better ImageNet accuracy; MobileNetV3-Small and EfficientNet-B0 are lighter, CPU-friendly alternatives. When enabled, the frozen <em>primary</em> variant's embedding is also concatenated
+            into the online discriminator's classical 808-D feature vector (808 -&gt; 808+feature_dim), so it participates in every
+            per-click retrain without ever backpropagating through the CNN itself. Weights can be dynamically configured:
             <ul>
-              <li><strong>Local model:</strong> Automatically detected at <code>vaila/models/ai_tracker/resnet50_imagenet.pth</code>.</li>
+              <li><strong>Local model:</strong> Automatically detected at <code>vaila/models/ai_tracker/resnet50_imagenet.pth</code>, <code>resnet152_imagenet.pth</code>,
+              <code>mobilenet_v3_small_imagenet.pth</code>, or <code>efficientnet_b0_imagenet.pth</code> -- the variant is inferred from the selected filename.</li>
               <li><strong>Custom directory:</strong> Press <span class="key">Ctrl+W</span> (or <span class="key">Alt+W</span>) on the video window, or click <span class="key">Weights (W)</span> in the <span class="key">Ctrl+T</span> configuration card, to open a file browser and load any custom <code>.pth</code> or <code>.pt</code> weights file from any folder on your system.</li>
               <li><strong>Torch Hub:</strong> Falls back seamlessly to PyTorch Hub cached weights (<code>~/.cache/torch/hub/checkpoints/</code>) if no local file is selected.</li>
             </ul>
+          </li>
+          <li>
+            <strong>Opt-in cascade fallback (<code>fallback_variant</code> / <code>fallback_threshold</code>, TOML-only):</strong> disabled by default (<code>fallback_variant=""</code>). Set a second backbone name in the profile TOML and any frame scoring below <code>fallback_threshold</code> (default <code>0.48</code>) is re-scored with it using the same NCC/discriminator fusion; the higher-scoring result wins. Discriminator feature width is unaffected regardless of which backbone wins a given frame. No dedicated GUI widget yet -- edit the AI Track profile TOML directly.
           </li>
         </ul>
 
         <h3>2. Controls &amp; Shortcuts</h3>
         <ul>
           <li><span class="key">T</span> or <strong>AI Track button:</strong> Toggle live tracking. Illuminates immediately in <strong>bright green</strong> when armed or tracking; red when off.</li>
-          <li><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span>: Quick shortcut to select or cycle ResNet-50 deep feature weights (.pth / .pt) from <code>vaila/models/ai_tracker/</code>, custom directory, or Hub.</li>
+          <li><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span>: Quick shortcut to select or cycle ResNet-50/ResNet-152 deep feature weights (.pth / .pt) from <code>vaila/models/ai_tracker/</code>, custom directory, or Hub.</li>
           <li><span class="key">Space:</span> Play video and track the active marker in real time.</li>
           <li><strong>Hold <span class="key">←/→</span>:</strong> Step frame-by-frame and update the tracker continuously.</li>
           <li><strong>Hold <span class="key">↑/↓</span>:</strong> Jump by <code>nav_jump_frames</code> (default 60 frames).</li>
@@ -1700,6 +1710,12 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.3.139 (13 September 2026)</h3>
+        <ul>
+          <li><strong>AI Track: multi-backbone cascade.</strong> <code>resnet_variant</code> now also accepts <code>mobilenet_v3_small</code> and <code>efficientnet_b0</code> (lighter, CPU-friendly alternatives to ResNet50/ResNet152), discovered via the same local-checkpoint filename convention and cycled by the <span class="key">Weights (W)</span> button. Default primary backbone stays <code>resnet50</code> -- no behavior change for existing profiles.</li>
+          <li><strong>Opt-in confidence-based fallback:</strong> new TOML-only <code>fallback_variant</code>/<code>fallback_threshold</code> fields on the AI Track profile. When <code>fallback_variant</code> names a second backbone, frames scoring below <code>fallback_threshold</code> are re-scored with it and the higher-scoring result is adopted. Disabled by default (<code>fallback_variant=""</code>); only the <em>primary</em> backbone's embedding ever feeds the online discriminator, so enabling a fallback never changes checkpoint compatibility.</li>
+        </ul>
 
         <h3>Version 0.3.127 (07 September 2026)</h3>
         <ul>

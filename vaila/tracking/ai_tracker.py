@@ -3,13 +3,14 @@ vailá AI Kinematic Tracker (Normalized Cross-Correlation + Deep Feature Verific
 
 Implements robust kinematic tracking with 2D Gaussian spatial motion priors,
 elliptical masking, parabolic sub-pixel peak refinement, adaptive running template blending,
-and Deep Visual Feature embeddings (PyTorch ResNet50 / CUDA) for semantic verification,
-distractor rejection, and occlusion recovery. Integrates bidirectional keyframe
-infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
+and Deep Visual Feature embeddings (PyTorch ResNet50/ResNet152 / CUDA) for semantic
+verification, distractor rejection, and occlusion recovery -- optionally also fused
+into the retrained online discriminator's feature vector. Integrates bidirectional
+keyframe infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 11 September 2026
-Version: 0.3.137
+Update Date: 13 September 2026
+Version: 0.3.139
 """
 
 from __future__ import annotations
@@ -64,14 +65,41 @@ _FEATURE_DIM = 808  # extract_patch_feature() output length (768 color-grid + 40
 _CHECKPOINT_BLEND_MAX_N = 4000.0  # Cap prior-session weight so a fresh session can still adapt
 
 
-def _default_resnet50_local_path() -> Path:
-    """Candidate path for a user-provided ResNet50 checkpoint under vaila/models/."""
-    return Path(__file__).resolve().parents[1] / "models" / "resnet50_imagenet.pth"
+_BACKBONE_VARIANTS = ("resnet50", "resnet152", "mobilenet_v3_small", "efficientnet_b0")
+# Backward-compatible alias (pre-cascade name).
+_RESNET_VARIANTS = _BACKBONE_VARIANTS
+
+# torchvision replaces the classification head at a different attribute per family.
+_BACKBONE_HEAD_ATTR = {
+    "resnet50": "fc",
+    "resnet152": "fc",
+    "mobilenet_v3_small": "classifier",
+    "efficientnet_b0": "classifier",
+}
+# Pooled-embedding width per backbone (post head-removal). ResNet variants share 2048-d;
+# the lightweight CPU backbones are narrower (fewer FLOPs, faster forward pass).
+_BACKBONE_FEATURE_DIM = {
+    "resnet50": 2048,
+    "resnet152": 2048,
+    "mobilenet_v3_small": 576,
+    "efficientnet_b0": 1280,
+}
+# Local-checkpoint-file sanity floor: rejects empty/corrupt stray files, not an exact
+# per-variant size check. Must stay below the smallest legitimate backbone checkpoint
+# (MobileNetV3-Small ImageNet weights are ~9.8 MB).
+_BACKBONE_MIN_FILE_BYTES = 1_000_000
 
 
-def _ai_tracker_resnet50_local_path() -> Path:
-    """Primary candidate path for ResNet50 checkpoint under vaila/models/ai_tracker/."""
-    return Path(__file__).resolve().parents[1] / "models" / "ai_tracker" / "resnet50_imagenet.pth"
+def _ai_tracker_resnet_local_path(variant: str = "resnet50") -> Path:
+    """Canonical local checkpoint path for a backbone variant, under vaila/models/ai_tracker/.
+
+    This is the ONLY local directory scanned for weights -- vaila/models/ai_tracker/ is
+    the sole canonical location (see instructions_ai_tracker.txt). A legacy fallback to
+    the general vaila/models/ directory used to exist here and has been removed.
+    """
+    if variant not in _BACKBONE_VARIANTS:
+        variant = "resnet50"
+    return Path(__file__).resolve().parents[1] / "models" / "ai_tracker" / f"{variant}_imagenet.pth"
 
 
 def _default_checkpoint_dir() -> Path:
@@ -79,14 +107,18 @@ def _default_checkpoint_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "models" / "ai_tracker"
 
 
-def get_available_resnet50_checkpoints() -> list[Path]:
-    """Scan and return all detected ResNet50 weight checkpoints (.pth / .pt).
+def get_available_resnet_checkpoints(variant: str = "resnet50") -> list[Path]:
+    """Scan and return all detected backbone weight checkpoints (.pth / .pt) for `variant`.
+
+    `variant` is any of `_BACKBONE_VARIANTS` (ResNet50/152, MobileNetV3-Small,
+    EfficientNet-B0) -- name kept for backward compatibility with earlier callers/tests.
 
     Searches in:
-      1. vaila/models/ai_tracker/
-      2. vaila/models/
-      3. Torch hub cache (~/.cache/torch/hub/checkpoints/)
+      1. vaila/models/ai_tracker/ (sole canonical local directory)
+      2. Torch hub cache (~/.cache/torch/hub/checkpoints/)
     """
+    if variant not in _BACKBONE_VARIANTS:
+        variant = "resnet50"
     found: list[Path] = []
     seen: set[str] = set()
 
@@ -94,31 +126,43 @@ def get_available_resnet50_checkpoints() -> list[Path]:
         try:
             resolved = p.resolve()
             k = str(resolved)
-            if resolved.is_file() and k not in seen and resolved.stat().st_size > 10_000_000:
+            if (
+                resolved.is_file()
+                and k not in seen
+                and resolved.stat().st_size > _BACKBONE_MIN_FILE_BYTES
+            ):
                 seen.add(k)
                 found.append(resolved)
         except OSError:
             pass
 
-    # 1. Models ai_tracker directory
+    # 1. Models ai_tracker directory (canonical)
     ai_dir = _default_checkpoint_dir()
     if ai_dir.is_dir():
-        for cand in sorted(ai_dir.glob("*resnet50*.pth")) + sorted(ai_dir.glob("*resnet50*.pt")):
+        for cand in sorted(ai_dir.glob(f"*{variant}*.pth")) + sorted(
+            ai_dir.glob(f"*{variant}*.pt")
+        ):
             _add_if_valid(cand)
 
-    # 2. General models directory
-    models_dir = Path(__file__).resolve().parents[1] / "models"
-    if models_dir.is_dir():
-        for cand in sorted(models_dir.glob("*resnet50*.pth")) + sorted(models_dir.glob("*resnet50*.pt")):
-            _add_if_valid(cand)
-
-    # 3. Torch hub checkpoint cache
+    # 2. Torch hub checkpoint cache
     torch_hub = Path.home() / ".cache" / "torch" / "hub" / "checkpoints"
     if torch_hub.is_dir():
-        for cand in sorted(torch_hub.glob("*resnet50*.pth")) + sorted(torch_hub.glob("*resnet50*.pt")):
+        for cand in sorted(torch_hub.glob(f"*{variant}*.pth")) + sorted(
+            torch_hub.glob(f"*{variant}*.pt")
+        ):
             _add_if_valid(cand)
 
     return found
+
+
+def get_available_resnet50_checkpoints() -> list[Path]:
+    """Backward-compatible alias for get_available_resnet_checkpoints("resnet50")."""
+    return get_available_resnet_checkpoints("resnet50")
+
+
+def _ai_tracker_resnet50_local_path() -> Path:
+    """Backward-compatible alias for _ai_tracker_resnet_local_path("resnet50")."""
+    return _ai_tracker_resnet_local_path("resnet50")
 
 
 def default_checkpoint_path(name: str = "default") -> Path:
@@ -143,6 +187,7 @@ class TemplateMatchResult:
     raw_location: tuple[int, int]  # Discrete integer peak (x, y)
     template_updated: bool = False  # Whether the tracking template was updated this frame
     accepted: bool = True  # False when below similarity_threshold (do not advance lock)
+    active_variant: str = ""  # Backbone that produced this frame's deep_score (primary or fallback)
 
 
 @dataclass
@@ -159,7 +204,21 @@ class AITrackerParameters:
     use_deep_features: bool = True  # ResNet50 semantic embedding verification
     deep_weight: float = 0.30  # Weight for deep feature score: (1 - α) * ncc + α * deep
     tracking_shape: str = "point"  # Shape mode: "point" (default), "circle", "box" (or "rectangle")
-    deep_weights_path: str = ""  # Optional local ResNet50 .pth/.pt; empty = auto-resolve
+    deep_weights_path: str = ""  # Optional local backbone .pth/.pt; empty = auto-resolve
+    resnet_variant: str = (
+        "resnet50"  # primary backbone: any of _BACKBONE_VARIANTS (default resnet50)
+    )
+    fallback_variant: str = ""  # "" = cascade disabled (default); else a second _BACKBONE_VARIANTS
+    # entry re-scored on low-confidence frames (see AITracker.track_frame()).
+    fallback_threshold: float = 0.48  # combined_score below this triggers the fallback re-score
+
+    def __post_init__(self) -> None:
+        if self.resnet_variant not in _BACKBONE_VARIANTS:
+            self.resnet_variant = "resnet50"
+        if self.fallback_variant and self.fallback_variant not in _BACKBONE_VARIANTS:
+            # Invalid fallback disables the cascade rather than silently substituting a
+            # default -- turning cascading on was not what was asked for.
+            self.fallback_variant = ""
 
     def to_toml(self, toml_path: str | Path) -> None:
         """Serialize tracking parameters to a TOML file."""
@@ -182,6 +241,9 @@ class AITrackerParameters:
             f"use_deep_features = {str(bool(self.use_deep_features)).lower()}\n"
             f"deep_weight = {float(self.deep_weight):.4f}\n"
             f'tracking_shape = "{self.tracking_shape}"\n'
+            f'resnet_variant = "{self.resnet_variant}"\n'
+            f'fallback_variant = "{self.fallback_variant}"\n'
+            f"fallback_threshold = {float(self.fallback_threshold):.4f}\n"
             f"{weights_line}"
         )
         path.write_text(content, encoding="utf-8")
@@ -213,6 +275,9 @@ class AITrackerParameters:
         if shape == "rectangle":
             shape = "box"
         weights_path = str(track_cfg.get("deep_weights_path", "") or "")
+        resnet_variant = str(track_cfg.get("resnet_variant", "resnet50") or "resnet50")
+        fallback_variant = str(track_cfg.get("fallback_variant", "") or "")
+        fallback_threshold = float(track_cfg.get("fallback_threshold", 0.48))
 
         return cls(
             search_window=(sw_w, sw_h),
@@ -226,6 +291,9 @@ class AITrackerParameters:
             deep_weight=d_wt,
             tracking_shape=shape,
             deep_weights_path=weights_path,
+            resnet_variant=resnet_variant,
+            fallback_variant=fallback_variant,
+            fallback_threshold=fallback_threshold,
         )
 
 
@@ -321,24 +389,33 @@ def extract_region_stats_feature(patch: np.ndarray, shape: str = "point") -> np.
 
 
 class DeepFeatureExtractor:
-    """Pre-trained CNN (ResNet50) feature extractor with cosine similarity verification.
+    """Pre-trained CNN (ResNet50/152, MobileNetV3-Small, or EfficientNet-B0) feature
+    extractor with cosine similarity.
 
-    Extracts L2-normalized 2048-dimensional visual semantic embeddings on GPU/CUDA
-    (or CPU) to verify target identity across dynamic athletic movements.
+    Extracts an L2-normalized visual semantic embedding on GPU/CUDA (or CPU) to verify
+    target identity across dynamic athletic movements. Embedding width depends on the
+    active variant (`self.feature_dim`, see `_BACKBONE_FEATURE_DIM`): 2048-d for the
+    ResNet variants, 576-d for MobileNetV3-Small, 1280-d for EfficientNet-B0 -- callers
+    that mix variants (e.g. AITracker's primary/fallback cascade) must not assume a
+    fixed width.
     """
 
     _instances: dict[str, DeepFeatureExtractor] = {}
+    _threads_configured = False
 
     def __init__(
         self,
         use_cuda: bool = True,
         weights_path: str | Path | None = None,
+        variant: str = "resnet50",
     ) -> None:
         self.enabled = False
         self.device = "cpu"
         self.model: Any = None
         self.transform: Any = None
+        self.feature_dim = 0
         self.weights_path = str(weights_path) if weights_path else ""
+        self.variant = variant if variant in _BACKBONE_VARIANTS else "resnet50"
 
         if not TORCH_AVAILABLE:
             return
@@ -348,23 +425,35 @@ class DeepFeatureExtractor:
                 self.device = "cuda"
             else:
                 self.device = "cpu"
+                if not DeepFeatureExtractor._threads_configured:
+                    # Avoid oversubscribing CPU threads across the lightweight
+                    # cascade backbones; set once per process, not per instance.
+                    torch.set_num_threads(min(4, torch.get_num_threads()))
+                    DeepFeatureExtractor._threads_configured = True
 
-            resolved = self._resolve_weights_path(weights_path)
-            model = tv_models.resnet50(weights=None)
+            resolved = self._resolve_weights_path(weights_path, self.variant)
+            model = tv_models.get_model(self.variant, weights=None)
             if resolved is not None:
                 state = torch.load(resolved, map_location="cpu", weights_only=True)
                 if isinstance(state, dict) and "state_dict" in state:
                     state = state["state_dict"]
-                # Torchvision DEFAULT checkpoint keys may include "fc.*" — load then strip head
+                # Torchvision DEFAULT checkpoint keys may include the head's own
+                # weights (e.g. "fc.*"/"classifier.*") — load then strip the head below.
                 missing_unexpected = model.load_state_dict(state, strict=False)
                 _ = missing_unexpected
-                print(f">> DeepFeatureExtractor: loaded weights from {resolved}")
+                print(f">> DeepFeatureExtractor: loaded {self.variant} weights from {resolved}")
             else:
-                weights = tv_models.ResNet50_Weights.DEFAULT
-                model = tv_models.resnet50(weights=weights)
+                # DEFAULT is a real enum member on every torchvision weights class, but
+                # get_model_weights()'s generic return type (type[WeightsEnum]) hides it
+                # from the static checker -- see torchvision.models._api.
+                weights = tv_models.get_model_weights(self.variant).DEFAULT  # ty: ignore[unresolved-attribute]
+                model = tv_models.get_model(self.variant, weights=weights)
 
-            # Remove classification head to output 2048-dim feature vector
-            model.fc = torch.nn.Identity()
+            # Remove the classification head to output the pooled feature vector.
+            # Head attribute differs by family: "fc" for ResNet, "classifier" for
+            # MobileNetV3/EfficientNet.
+            setattr(model, _BACKBONE_HEAD_ATTR[self.variant], torch.nn.Identity())
+            self.feature_dim = _BACKBONE_FEATURE_DIM[self.variant]
             model.eval()
             model.to(self.device)
 
@@ -372,6 +461,10 @@ class DeepFeatureExtractor:
             self.transform = tv_transforms.Compose(
                 [
                     tv_transforms.ToPILImage(),
+                    # Deliberate deviation from the official hub recipe's
+                    # Resize(256)+CenterCrop(224): tracked patches are already small,
+                    # near-square crops around the target, so a direct square resize
+                    # keeps all edge content instead of cropping useful pixels away.
                     tv_transforms.Resize((224, 224)),
                     tv_transforms.ToTensor(),
                     tv_transforms.Normalize(
@@ -382,24 +475,24 @@ class DeepFeatureExtractor:
             )
             self.enabled = True
         except Exception as err:
-            print(f"DeepFeatureExtractor warning: Could not initialize ResNet50 ({err}).")
+            print(f"DeepFeatureExtractor warning: Could not initialize {self.variant} ({err}).")
             self.enabled = False
 
     @staticmethod
-    def _resolve_weights_path(weights_path: str | Path | None) -> Path | None:
+    def _resolve_weights_path(
+        weights_path: str | Path | None, variant: str = "resnet50"
+    ) -> Path | None:
         candidates: list[Path] = []
         if weights_path:
             candidates.append(Path(weights_path))
-        # 1. Primary path under vaila/models/ai_tracker/
-        candidates.append(_ai_tracker_resnet50_local_path())
-        # 2. Path directly under vaila/models/
-        candidates.append(_default_resnet50_local_path())
-        # 3. Any detected weights from scan
-        for extra in get_available_resnet50_checkpoints():
+        # 1. Canonical path under vaila/models/ai_tracker/ (sole local directory)
+        candidates.append(_ai_tracker_resnet_local_path(variant))
+        # 2. Any detected weights from scan (ai_tracker/ + torch hub cache)
+        for extra in get_available_resnet_checkpoints(variant):
             candidates.append(extra)
         for cand in candidates:
             try:
-                if cand.is_file() and cand.stat().st_size > 10_000_000:
+                if cand.is_file() and cand.stat().st_size > _BACKBONE_MIN_FILE_BYTES:
                     return cand.resolve()
             except OSError:
                 pass
@@ -409,17 +502,24 @@ class DeepFeatureExtractor:
     def get_shared(
         cls,
         weights_path: str | Path | None = None,
+        variant: str = "resnet50",
     ) -> DeepFeatureExtractor:
-        """Get or initialize a feature extractor keyed by weights path."""
-        resolved = cls._resolve_weights_path(weights_path)
-        key = str(resolved) if resolved is not None else (str(weights_path) if weights_path else "__default__")
+        """Get or initialize a feature extractor keyed by (variant, weights path)."""
+        variant = variant if variant in _BACKBONE_VARIANTS else "resnet50"
+        resolved = cls._resolve_weights_path(weights_path, variant)
+        path_key = (
+            str(resolved)
+            if resolved is not None
+            else (str(weights_path) if weights_path else "__default__")
+        )
+        key = f"{variant}:{path_key}"
         actual_path = resolved if resolved is not None else weights_path
         if key not in cls._instances:
-            cls._instances[key] = cls(weights_path=actual_path)
+            cls._instances[key] = cls(weights_path=actual_path, variant=variant)
         return cls._instances[key]
 
     def extract_embedding(self, patch_bgr: np.ndarray) -> np.ndarray | None:
-        """Extract L2-normalized 2048-dim feature vector from BGR image patch."""
+        """Extract L2-normalized feature vector (width = self.feature_dim) from a BGR patch."""
         if not self.enabled or self.model is None or patch_bgr.size == 0:
             return None
 
@@ -470,6 +570,11 @@ class AITracker:
         self.mask: np.ndarray | None = None
         self.anchor_template: np.ndarray | None = None
         self.anchor_embedding: np.ndarray | None = None
+        # Opt-in cascade fallback backbone (Part 4): only built by set_reference() when
+        # params.fallback_variant is truthy. Never feeds the discriminator -- see
+        # effective_feature_dim()/_discriminator_feature().
+        self.extractor_fallback: DeepFeatureExtractor | None = None
+        self.anchor_embedding_fallback: np.ndarray | None = None
         self.last_point: tuple[float, float] | None = None
         self.acceleration: tuple[float, float] = (0.0, 0.0)
         # Kalman filter (constant-velocity model) state/covariance -- see module-level
@@ -502,7 +607,8 @@ class AITracker:
 
         if self.params.use_deep_features:
             self.extractor = DeepFeatureExtractor.get_shared(
-                weights_path=self.params.deep_weights_path or None
+                weights_path=self.params.deep_weights_path or None,
+                variant=self.params.resnet_variant,
             )
         else:
             self.extractor = None
@@ -661,6 +767,36 @@ class AITracker:
             feat = feat / norm
         return feat.astype(np.float32)
 
+    def effective_feature_dim(self) -> int:
+        """Discriminator feature length: 808 classical, or 808 + primary extractor's
+        feature_dim (2048 for ResNet, 576 MobileNetV3-Small, 1280 EfficientNet-B0) when
+        deep features are on. Only the PRIMARY extractor ever feeds the discriminator --
+        a configured fallback_variant (see track_frame()) never changes this value, so
+        checkpoint compatibility stays independent of which backbone wins a given frame.
+        """
+        if self.params.use_deep_features and self.extractor is not None and self.extractor.enabled:
+            return _FEATURE_DIM + self.extractor.feature_dim
+        return _FEATURE_DIM
+
+    def _discriminator_feature(self, patch: np.ndarray, shape_mode: str) -> np.ndarray:
+        """Classical 808-d appearance feature, optionally concatenated with the frozen
+        primary-backbone embedding so the (retrained) discriminator benefits from deep
+        semantic features without ever backpropagating through the CNN itself.
+        """
+        base = self.extract_patch_feature(patch, shape=shape_mode)
+        if not (
+            self.params.use_deep_features and self.extractor is not None and self.extractor.enabled
+        ):
+            return base
+        deep_dim = self.extractor.feature_dim
+        try:
+            deep = self.extractor.extract_embedding(patch)
+            if deep is None or deep.shape[0] != deep_dim:
+                deep = np.zeros(deep_dim, dtype=np.float32)
+        except Exception:
+            deep = np.zeros(deep_dim, dtype=np.float32)
+        return np.concatenate([base, deep.astype(np.float32)])
+
     def add_anchor(
         self,
         frame: np.ndarray,
@@ -683,7 +819,7 @@ class AITracker:
         if len(self.exemplar_templates) > _MAX_EXEMPLAR_TEMPLATES:
             self.exemplar_templates.pop(0)
 
-        pos_feat = self.extract_patch_feature(pos_patch, shape=shape_mode)
+        pos_feat = self._discriminator_feature(pos_patch, shape_mode)
         self.training_feats.append(pos_feat)
         self.training_labels.append(1.0)
 
@@ -703,7 +839,7 @@ class AITracker:
             if 0 <= nx < w_img and 0 <= ny < h_img:
                 neg_patch = self.extract_patch(frame, (nx, ny), (bw, bh))
                 if neg_patch.size > 0:
-                    neg_feat = self.extract_patch_feature(neg_patch, shape=shape_mode)
+                    neg_feat = self._discriminator_feature(neg_patch, shape_mode)
                     self.training_feats.append(neg_feat)
                     self.training_labels.append(-1.0)
 
@@ -712,7 +848,7 @@ class AITracker:
             self.training_labels = self.training_labels[-_MAX_TRAINING_FEATS:]
 
     def retrain_online_model(self) -> float:
-        """Retrain the online appearance discriminator using regularized dual Ridge regression (<1 ms).
+        """Retrain the online appearance discriminator using regularized dual Ridge regression (<5 ms).
 
         Returns
         -------
@@ -769,7 +905,7 @@ class AITracker:
         try:
             data = np.load(p, allow_pickle=False)
             w = np.asarray(data["w"], dtype=np.float32)
-            if w.shape != (_FEATURE_DIM,):
+            if w.shape != (self.effective_feature_dim(),):
                 return False
             self._checkpoint_w = w
             self._checkpoint_b = float(data["b"])
@@ -784,7 +920,9 @@ class AITracker:
         Returns True on success, False if there is no trained discriminator yet or the
         write failed (best-effort — never raises).
         """
-        if self.discriminator_w is None or self.discriminator_w.shape != (_FEATURE_DIM,):
+        if self.discriminator_w is None or self.discriminator_w.shape != (
+            self.effective_feature_dim(),
+        ):
             return False
         p = Path(path)
         try:
@@ -795,7 +933,7 @@ class AITracker:
                 w=self.discriminator_w.astype(np.float32),
                 b=np.float32(self.discriminator_b),
                 n_samples=np.float32(n_samples),
-                feat_dim=np.int32(_FEATURE_DIM),
+                feat_dim=np.int32(self.effective_feature_dim()),
             )
         except Exception:
             return False
@@ -806,7 +944,7 @@ class AITracker:
         if self.discriminator_w is None or patch.size == 0:
             return 1.0
         shape_mode = getattr(self.params, "tracking_shape", "point").lower()
-        feat = self.extract_patch_feature(patch, shape=shape_mode)
+        feat = self._discriminator_feature(patch, shape_mode)
         if feat.shape[0] != self.discriminator_w.shape[0]:
             return 1.0
         raw_val = float(np.dot(self.discriminator_w, feat) + self.discriminator_b)
@@ -898,14 +1036,38 @@ class AITracker:
         if self.params.use_deep_features:
             if self.extractor is None:
                 self.extractor = DeepFeatureExtractor.get_shared(
-                    weights_path=self.params.deep_weights_path or None
+                    weights_path=self.params.deep_weights_path or None,
+                    variant=self.params.resnet_variant,
                 )
             if self.extractor and self.extractor.enabled:
                 self.anchor_embedding = self.extractor.extract_embedding(self.anchor_template)
             else:
                 self.anchor_embedding = None
+
+            # Fallback (cascade) extractor: opt-in, only built when configured. Used
+            # solely for per-frame verification re-scoring in track_frame() -- never
+            # feeds _discriminator_feature()/effective_feature_dim().
+            if self.params.fallback_variant:
+                if (
+                    self.extractor_fallback is None
+                    or self.extractor_fallback.variant != self.params.fallback_variant
+                ):
+                    self.extractor_fallback = DeepFeatureExtractor.get_shared(
+                        variant=self.params.fallback_variant
+                    )
+                if self.extractor_fallback and self.extractor_fallback.enabled:
+                    self.anchor_embedding_fallback = self.extractor_fallback.extract_embedding(
+                        self.anchor_template
+                    )
+                else:
+                    self.anchor_embedding_fallback = None
+            else:
+                self.extractor_fallback = None
+                self.anchor_embedding_fallback = None
         else:
             self.anchor_embedding = None
+            self.extractor_fallback = None
+            self.anchor_embedding_fallback = None
 
     def update_from_correction(
         self,
@@ -1041,7 +1203,8 @@ class AITracker:
         if self.params.use_deep_features:
             if self.extractor is None:
                 self.extractor = DeepFeatureExtractor.get_shared(
-                    weights_path=self.params.deep_weights_path or None
+                    weights_path=self.params.deep_weights_path or None,
+                    variant=self.params.resnet_variant,
                 )
             if (
                 self.anchor_embedding is None
@@ -1076,6 +1239,37 @@ class AITracker:
                 combined_score = 0.85 * norm_ncc + 0.15 * disc_score
             else:
                 combined_score = norm_ncc
+
+        # Opt-in cascade fallback (Part 4): only when a second backbone is configured
+        # and the primary-backbone score is low. Re-scores with the SAME NCC/discriminator
+        # fusion formula, using the fallback embedding only for this frame's verification --
+        # never feeds _discriminator_feature()/effective_feature_dim() (primary-only, by design).
+        active_variant = self.params.resnet_variant
+        if (
+            self.extractor_fallback is not None
+            and self.extractor_fallback.enabled
+            and self.anchor_embedding_fallback is not None
+            and deep_score is not None
+            and combined_score < self.params.fallback_threshold
+        ):
+            cand_emb_fb = self.extractor_fallback.extract_embedding(cand_patch)
+            deep_score_fb = self.extractor_fallback.cosine_similarity(
+                self.anchor_embedding_fallback, cand_emb_fb
+            )
+            norm_deep_fb = max(0.0, (deep_score_fb + 1.0) / 2.0)
+            alpha = self.params.deep_weight
+            if disc_score is not None:
+                combined_score_fb = (
+                    (1.0 - alpha) * 0.85 * norm_ncc
+                    + alpha * norm_deep_fb
+                    + (1.0 - alpha) * 0.15 * disc_score
+                )
+            else:
+                combined_score_fb = (1.0 - alpha) * norm_ncc + alpha * norm_deep_fb
+            if combined_score_fb > combined_score:
+                combined_score = combined_score_fb
+                deep_score = deep_score_fb
+                active_variant = self.params.fallback_variant
 
         accepted = float(combined_score) >= float(self.params.similarity_threshold)
 
@@ -1123,6 +1317,7 @@ class AITracker:
                 raw_location=raw_loc,
                 template_updated=False,
                 accepted=False,
+                active_variant=active_variant,
             )
 
         self._lost_streak = 0
@@ -1169,6 +1364,7 @@ class AITracker:
             raw_location=raw_loc,
             template_updated=template_updated,
             accepted=True,
+            active_variant=active_variant,
         )
 
 

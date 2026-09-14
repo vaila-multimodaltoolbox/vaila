@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 11 September 2026
-Version: 0.3.137
+Update: 13 September 2026
+Version: 0.3.139
 Python Version: 3.12.14
 
 Description:
@@ -25,8 +25,9 @@ AI Track & JIT Online Learning (toolbar AI Track button / T key):
     ``vaila/models/ai_tracker/discriminator_<profile>.npz`` (default: discriminator_default.npz).
     Subsequent sessions load and incrementally update the checkpoint via sample-count
     weighted averaging (transfer learning), preventing catastrophic forgetting.
-  - Deep NN Features: optional ResNet50 semantic embedding (2048-D) via PyTorch/CUDA
-    (weights at ``vaila/models/resnet50_imagenet.pth`` or Torch hub cache).
+  - Deep NN Features: optional ResNet50/ResNet152 semantic embedding (2048-D) via
+    PyTorch/CUDA (weights at ``vaila/models/ai_tracker/`` or Torch hub cache), also
+    optionally concatenated into the retrained online discriminator's feature vector.
   - Shape & Batch: point/circle/box region features, Shift+T batch RTS smoothing.
   - Ground Truth Preservation: existing manual coordinates are never overwritten.
 
@@ -3990,13 +3991,19 @@ def play_video_with_controls(
     run_ai_batch_tracking = run_subspace_rts_tracking
 
     def select_track_ai_weights() -> None:
-        """Cycle or select ResNet-50 deep feature weights (.pth/.pt) for Track AI."""
+        """Cycle or select backbone deep feature weights (.pth/.pt) for Track AI.
+
+        Cycles discovered local checkpoints for all four selectable backbones
+        (resnet50, resnet152, mobilenet_v3_small, efficientnet_b0); the variant is
+        inferred from the chosen filename (no extra GUI widget -- fallback_variant
+        cascade stays TOML/params-only).
+        """
         nonlocal track_ai_params, track_ai_use_deep, live_tracker
         nonlocal save_message_text, showing_save_message, save_message_timer
         from vaila.tracking import (
             AITrackerParameters,
             DeepFeatureExtractor,
-            get_available_resnet50_checkpoints,
+            get_available_resnet_checkpoints,
         )
 
         if track_ai_params is None:
@@ -4006,7 +4013,14 @@ def play_video_with_controls(
                 tracking_shape=track_ai_shape,
             )
 
-        ckpts = get_available_resnet50_checkpoints()
+        # Cycle through all four variants' discovered checkpoints in one list -- the
+        # variant is inferred from the chosen filename below (no extra GUI widget).
+        ckpts = (
+            get_available_resnet_checkpoints("resnet50")
+            + get_available_resnet_checkpoints("resnet152")
+            + get_available_resnet_checkpoints("mobilenet_v3_small")
+            + get_available_resnet_checkpoints("efficientnet_b0")
+        )
         curr_w = getattr(track_ai_params, "deep_weights_path", "") or ""
 
         # If user triggers Weights, cycle through options:
@@ -4022,11 +4036,7 @@ def play_video_with_controls(
             if idx + 1 < len(ckpts):
                 chosen_path = str(ckpts[idx + 1])
             else:
-                init_d = (
-                    os.path.dirname(video_path)
-                    if video_path
-                    else str(ckpts[0].parent)
-                )
+                init_d = os.path.dirname(video_path) if video_path else str(ckpts[0].parent)
                 custom = pygame_file_dialog(
                     initial_dir=init_d,
                     file_extensions=[".pth", ".pt"],
@@ -4046,25 +4056,40 @@ def play_video_with_controls(
             )
             chosen_path = custom if (custom and os.path.isfile(custom)) else ""
 
+        # Infer the variant from the chosen filename; default resnet50 (also covers
+        # the "Default Torch Hub" case where chosen_path is empty).
+        _fname_lower = os.path.basename(chosen_path).lower()
+        if "resnet152" in _fname_lower:
+            inferred_variant = "resnet152"
+        elif "mobilenet_v3_small" in _fname_lower:
+            inferred_variant = "mobilenet_v3_small"
+        elif "efficientnet_b0" in _fname_lower:
+            inferred_variant = "efficientnet_b0"
+        else:
+            inferred_variant = "resnet50"
+
         track_ai_params.deep_weights_path = chosen_path
         track_ai_params.use_deep_features = True
         track_ai_use_deep = True
         track_ai_params.deep_weight = 0.25
+        track_ai_params.resnet_variant = inferred_variant
 
         if live_tracker is not None:
             live_tracker.params = track_ai_params
             try:
                 live_tracker.extractor = DeepFeatureExtractor.get_shared(
-                    weights_path=chosen_path or None
+                    weights_path=chosen_path or None, variant=inferred_variant
                 )
             except Exception as e_ext:
                 print(f">> Track AI weights update warning: {e_ext}")
 
         tag = os.path.basename(chosen_path) if chosen_path else "Default Torch Hub"
-        save_message_text = f"AI Track: ResNet-50 weights -> {tag}"
+        save_message_text = f"AI Track: {inferred_variant} weights -> {tag}"
         showing_save_message = True
         save_message_timer = 100
-        print(f">> AI Track: ResNet-50 weights configured -> {chosen_path or 'Default Torch Hub'}")
+        print(
+            f">> AI Track: {inferred_variant} weights configured -> {chosen_path or 'Default Torch Hub'}"
+        )
 
     def _handle_track_ai_toml_dialog() -> None:
         """Modal dialog rendered natively in Pygame to Save, Load, or Reset Track AI parameters."""
@@ -4105,12 +4130,8 @@ def play_video_with_controls(
 
             rect_save = pygame.Rect(btn_start_x, btn_y, btn_w, btn_h)
             rect_load = pygame.Rect(btn_start_x + btn_w + btn_spacing, btn_y, btn_w, btn_h)
-            rect_weights = pygame.Rect(
-                btn_start_x + 2 * (btn_w + btn_spacing), btn_y, btn_w, btn_h
-            )
-            rect_reset = pygame.Rect(
-                btn_start_x + 3 * (btn_w + btn_spacing), btn_y, btn_w, btn_h
-            )
+            rect_weights = pygame.Rect(btn_start_x + 2 * (btn_w + btn_spacing), btn_y, btn_w, btn_h)
+            rect_reset = pygame.Rect(btn_start_x + 3 * (btn_w + btn_spacing), btn_y, btn_w, btn_h)
             rect_close = pygame.Rect(dx + dialog_w - 28, dy + 8, 20, 20)
             rect_jump_down = pygame.Rect(dx + 26, dy + 124, 36, 24)
             rect_jump_up = pygame.Rect(dx + 68, dy + 124, 36, 24)
@@ -4542,10 +4563,14 @@ def play_video_with_controls(
             track_ai_active = True
             live_tracker = None
             live_track_target_marker = target_marker
-            save_message_text = f"Track AI [ON]: click video to anchor m{target_marker}. (Ctrl+W: ResNet50 weights)"
+            save_message_text = (
+                f"Track AI [ON]: click video to anchor m{target_marker}. (Ctrl+W: ResNet50 weights)"
+            )
             showing_save_message = True
             save_message_timer = 200
-            print(f">> Track AI [ON]: waiting for click to set anchor, marker {target_marker}. Press Ctrl+W to configure ResNet50 weights.")
+            print(
+                f">> Track AI [ON]: waiting for click to set anchor, marker {target_marker}. Press Ctrl+W to configure ResNet50 weights."
+            )
             return
 
         try:
@@ -6356,10 +6381,17 @@ def play_video_with_controls(
             mpos = pygame.mouse.get_pos()
             btn_hover = btn_open_html_rect.collidepoint(mpos)
             pygame.draw.rect(
-                overlay, (45, 115, 180) if btn_hover else (32, 75, 120), btn_open_html_rect, border_radius=4
+                overlay,
+                (45, 115, 180) if btn_hover else (32, 75, 120),
+                btn_open_html_rect,
+                border_radius=4,
             )
             pygame.draw.rect(
-                overlay, (70, 160, 235) if btn_hover else (50, 105, 165), btn_open_html_rect, width=1, border_radius=4
+                overlay,
+                (70, 160, 235) if btn_hover else (50, 105, 165),
+                btn_open_html_rect,
+                width=1,
+                border_radius=4,
             )
             t_open_html = font_bar.render("📖 Open HTML Help (F1 / ?)", True, (255, 255, 255))
             overlay.blit(
@@ -6392,6 +6424,7 @@ def play_video_with_controls(
 
             def _open_html_help_doc() -> None:
                 import webbrowser
+
                 html_path = os.path.abspath(
                     os.path.join(os.path.dirname(__file__), "help", "getpixelvideo.html")
                 )
@@ -10302,7 +10335,9 @@ def play_video_with_controls(
                     save_message_timer = 30
 
                 # Track AI ResNet-50 Weights Hotkey (Ctrl+W or Alt+W)
-                elif event.key == pygame.K_w and (pygame.key.get_mods() & (pygame.KMOD_CTRL | pygame.KMOD_ALT)):
+                elif event.key == pygame.K_w and (
+                    pygame.key.get_mods() & (pygame.KMOD_CTRL | pygame.KMOD_ALT)
+                ):
                     select_track_ai_weights()
 
                 # Swap Hotkey (W) and Load Config (Shift+W)
@@ -10979,8 +11014,12 @@ def play_video_with_controls(
                                         params.use_deep_features = track_ai_use_deep
                                         params.deep_weight = 0.25 if track_ai_use_deep else 0.0
                                         params.tracking_shape = track_ai_shape
-                                        if track_ai_params is not None and getattr(track_ai_params, "deep_weights_path", ""):
-                                            params.deep_weights_path = track_ai_params.deep_weights_path
+                                        if track_ai_params is not None and getattr(
+                                            track_ai_params, "deep_weights_path", ""
+                                        ):
+                                            params.deep_weights_path = (
+                                                track_ai_params.deep_weights_path
+                                            )
                                         tracker = AITracker(parameters=params)
                                         try:
                                             from vaila.tracking import (
@@ -11161,7 +11200,9 @@ def play_video_with_controls(
                                 params.use_deep_features = track_ai_use_deep
                                 params.deep_weight = 0.25 if track_ai_use_deep else 0.0
                                 params.tracking_shape = track_ai_shape
-                                if track_ai_params is not None and getattr(track_ai_params, "deep_weights_path", ""):
+                                if track_ai_params is not None and getattr(
+                                    track_ai_params, "deep_weights_path", ""
+                                ):
                                     params.deep_weights_path = track_ai_params.deep_weights_path
                                 if live_tracker is None:
                                     tracker = AITracker(parameters=params)
