@@ -1,4 +1,11 @@
 # AI Tracker Discriminator Checkpoints & Weights
-This directory stores local online-discriminator checkpoints (*.npz) and trained weights for the AI Tracker in getpixelvideo.py.
-Checkpoints are incrementally updated across sessions (JIT learning / transfer learning) and are kept local to the user/machine.
+This directory is the sole canonical local location for the AI Tracker (getpixelvideo.py):
+online-discriminator checkpoints (*.npz) and backbone weights (resnet50_imagenet.pth, and
+optionally resnet152_imagenet.pth, mobilenet_v3_small_imagenet.pth, efficientnet_b0_imagenet.pth).
+There is no other fallback directory under vaila/models/.
+Checkpoints are incrementally updated across sessions (JIT learning / transfer learning) and are
+kept local to the user/machine. resnet152_imagenet.pth, mobilenet_v3_small_imagenet.pth, and
+efficientnet_b0_imagenet.pth are all optional (opt-in variants, selectable as primary_variant/
+resnet_variant or as the cascade fallback_variant); resnet50_imagenet.pth (or the Torch hub
+cache) is used by default.
 Do not commit large weights or user-specific .npz models to git.
