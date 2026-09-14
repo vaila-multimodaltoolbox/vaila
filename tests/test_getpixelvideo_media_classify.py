@@ -258,12 +258,10 @@ def test_click_pass_and_track_ai_armed_initialization() -> None:
     assert "frame_count = min(frame_count + 1, total_frames - 1)" in source
     assert "paused = True" in source
 
-    # 4. Verify AI Track button is color-only state (no "armed"/"m0" text on the button
-    # itself -- amber=armed, green=on, red=off), per explicit user request to drop the
-    # text badge and keep green-when-on.
-    assert "AI Track button (short label, color-only state" in source
-    assert "btn_color = (200, 130, 20) if live_tracker is None else (30, 175, 75)" in source
-    assert "btn_color = (175, 45, 45)  # Red (off)" in source
+    # 4. Verify AI Track button is color-only state (green=on, red=off),
+    # per explicit user request to drop the text badge and keep green-when-on.
+    assert "AI Track button" in source
+    assert "btn_color = (30, 175, 75) if track_ai_active else (175, 45, 45)" in source
 
     # 5. Verify the ARMED-wait and ON status messages (on-screen overlay + console) also
     # dropped the literal "armed"/"mN" tokens, per explicit user request -- not just the
