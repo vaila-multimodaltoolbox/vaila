@@ -1,8 +1,13 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.3.140 (see `vaila.py`). **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.3.142 (see `vaila.py`). **Package version:** see `[project].version` in `pyproject.toml`. **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-13
+**Last updated:** 2026-09-14
+
+Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
+momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.
+These markerless estimates are not force-platform measurements. See the
+[complete metric/event dictionary and validation notes](docs/cmj_pods.md).
 
 File Manager now shares previewed operations between GUI and CLI; YouTube Downloader uses one reviewed URL list with MP4/MP3 selection, progress and cooperative cancellation. See [File Manager help](vaila/help/filemanager.md), [Downloader help](vaila/help/vaila_ytdown.md) and the project [/debug skill](.agents/skills/debug/SKILL.md).
 
@@ -162,7 +167,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 13.Sep.2026 v0.3.140 (Python 3.12.14)
+vailá - 14.Sep.2026 v0.3.141 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |

@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 13 September 2026
-Version: 0.3.140
+Update: 14 September 2026
+Version: 0.3.143
 Python Version: 3.12.14
 
 Description:
@@ -145,6 +145,8 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import urllib.request
 from contextlib import redirect_stderr, suppress
 from pathlib import Path
@@ -742,6 +744,46 @@ def _flush_save_message(screen: pygame.Surface | None, text: str) -> None:
         pygame.event.pump()
     except Exception:
         pass
+
+
+def _run_blocking_with_loading_banner(screen, message, work_fn):
+    """Run ``work_fn`` (no-arg callable) off the main thread while this thread
+    keeps pumping pygame events and repainting a "Loading..." banner.
+
+    AI Track's first-time deep-feature backbone construction (torch model
+    build, local checkpoint load, or a fresh Torch Hub download on first use
+    of a given variant) can take anywhere from a couple seconds to over a
+    minute. Calling it directly inside a pygame click handler blocks the
+    event loop for that whole time; the window manager then shows an "App
+    Not Responding / Wait / Force Quit" dialog even though nothing is
+    actually hung -- it's just busy and never pumped an event. Running the
+    call on a background thread while this loop keeps draining
+    ``pygame.event.get()`` and repainting keeps the OS satisfied that the
+    app is alive.
+
+    Returns ``(result, error)``; exactly one of the two is ``None``.
+    """
+    outcome: dict[str, Any] = {}
+
+    def _target() -> None:
+        try:
+            outcome["result"] = work_fn()
+        except Exception as exc:  # noqa: BLE001 - surfaced to caller, not swallowed
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    clock = pygame.time.Clock()
+    start_t = time.time()
+    dots = 0
+    while thread.is_alive():
+        pygame.event.get()  # drain input queue so clicks/keys don't pile up
+        dots = (dots + 1) % 4
+        elapsed = time.time() - start_t
+        _flush_save_message(screen, f"{message}{'.' * dots} ({elapsed:.0f}s)")
+        clock.tick(15)
+    thread.join()
+    return outcome.get("result"), outcome.get("error")
 
 
 def get_color_for_id(marker_id):
@@ -1907,6 +1949,9 @@ def play_video_with_controls(
 
     # Add marker navigation variables
     selected_marker_idx = 0  # Começar sempre com o marker 1 selecionado
+    marker_selection_locked = (
+        False  # 'B' / Lock button: pin selected marker (TAB, deletes, AI Track target)
+    )
 
     # Variables for the "1 line" mode (one-line marker mode)
     one_line_mode = False
@@ -4063,12 +4108,20 @@ def play_video_with_controls(
 
         if live_tracker is not None:
             live_tracker.params = track_ai_params
-            try:
-                live_tracker.extractor = DeepFeatureExtractor.get_shared(
+            # Switching backbone can trigger a fresh, blocking Torch Hub download or
+            # model build; keep the event loop pumping (see toggle_track_ai) instead
+            # of freezing the window for however long that takes.
+            _extractor, _ext_err = _run_blocking_with_loading_banner(
+                screen,
+                f"Loading {inferred_variant} weights",
+                lambda: DeepFeatureExtractor.get_shared(
                     weights_path=chosen_path or None, variant=inferred_variant
-                )
-            except Exception as e_ext:
-                print(f">> Track AI weights update warning: {e_ext}")
+                ),
+            )
+            if _ext_err is not None:
+                print(f">> Track AI weights update warning: {_ext_err}")
+            else:
+                live_tracker.extractor = _extractor
 
         tag = os.path.basename(chosen_path) if chosen_path else "Default Torch Hub"
         save_message_text = f"AI Track: {inferred_variant} weights -> {tag}"
@@ -4452,7 +4505,7 @@ def play_video_with_controls(
     def toggle_track_ai(explicit_state: bool | None = None) -> None:
         """Toggle live AI tracking mode ON/OFF with stateful UI feedback."""
         nonlocal track_ai_active, live_tracker, live_track_target_marker, live_track_last_frame
-        nonlocal selected_marker_idx, frame_count, last_valid_frame
+        nonlocal selected_marker_idx, marker_selection_locked, frame_count, last_valid_frame
         nonlocal showing_save_message, save_message_text, save_message_timer
 
         new_state = (not track_ai_active) if explicit_state is None else bool(explicit_state)
@@ -4471,6 +4524,12 @@ def play_video_with_controls(
                     pass
             track_ai_active = False
             live_tracker = None
+            # Auto-lock (set when Track AI turns ON) only makes sense while
+            # tracking runs. Release it here so TAB / click / Goto / next
+            # "block" (batch RTS) can target any marker, not just the one
+            # that was locked (was stuck permanently on marker 0/whatever
+            # was tracked first, since only B/Lock-button cleared it before).
+            marker_selection_locked = False
             save_message_text = "Track AI [OFF]"
             showing_save_message = True
             save_message_timer = 60
@@ -4498,6 +4557,11 @@ def play_video_with_controls(
         target_marker = selected_marker_idx if selected_marker_idx >= 0 else 0
         selected_marker_idx = target_marker
         live_track_target_marker = target_marker
+        # Pin the tracked marker so TAB / accidental selection changes cannot
+        # retarget the live tracker mid-run (unlock with B or Lock button).
+        if not marker_selection_locked:
+            marker_selection_locked = True
+            print(f">> AI Track: auto-locked marker {target_marker} (press B to unlock)")
 
         # Scan for anchor: check current frame first, then look backwards, then forwards
         anchor_pt: tuple[float, float] | None = None
@@ -4606,40 +4670,55 @@ def play_video_with_controls(
             if anchor_img is None:
                 raise RuntimeError("No frame available to initialize tracker reference.")
 
-            tracker.set_reference(anchor_img, anchor_pt)
+            # Backbone build/download + up-to-hundreds-of-frames anchor seeding can take
+            # seconds to over a minute. Run it off the main thread so this thread keeps
+            # pumping pygame events and repainting a loading banner -- otherwise the OS
+            # flags the window as "Not Responding" even though nothing is actually hung.
+            def _init_reference_and_seed_anchors() -> int:
+                nonlocal frame_count, last_valid_frame
+                tracker.set_reference(anchor_img, anchor_pt)
 
-            # Also seed any other known anchor points across the video into the online model!
-            extra_anchors_count = 0
-            if coordinates is not None:
-                for f_idx in sorted(coordinates.keys()):
-                    if f_idx != anchor_frame and target_marker < len(coordinates[f_idx]):
-                        pt_k = coordinates[f_idx][target_marker]
-                        if (
-                            pt_k is not None
-                            and pt_k[0] is not None
-                            and pt_k[1] is not None
-                            and target_marker not in deleted_positions.get(f_idx, set())
-                        ):
-                            if f_idx == frame_count and last_valid_frame is not None:
-                                f_img = last_valid_frame
-                            else:
-                                if hasattr(cap, "set"):
-                                    cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
-                                    _ret_k, f_img = cap.read()
+                # Also seed any other known anchor points across the video into the online model!
+                extra_count = 0
+                if coordinates is not None:
+                    for f_idx in sorted(coordinates.keys()):
+                        if f_idx != anchor_frame and target_marker < len(coordinates[f_idx]):
+                            pt_k = coordinates[f_idx][target_marker]
+                            if (
+                                pt_k is not None
+                                and pt_k[0] is not None
+                                and pt_k[1] is not None
+                                and target_marker not in deleted_positions.get(f_idx, set())
+                            ):
+                                if f_idx == frame_count and last_valid_frame is not None:
+                                    f_img = last_valid_frame
                                 else:
-                                    f_img = None
-                            if f_img is not None:
-                                tracker.add_anchor(f_img, (float(pt_k[0]), float(pt_k[1])), f_idx)
-                                extra_anchors_count += 1
+                                    if hasattr(cap, "set"):
+                                        cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
+                                        _ret_k, f_img = cap.read()
+                                    else:
+                                        f_img = None
+                                if f_img is not None:
+                                    tracker.add_anchor(
+                                        f_img, (float(pt_k[0]), float(pt_k[1])), f_idx
+                                    )
+                                    extra_count += 1
 
-            if extra_anchors_count > 0:
-                tracker.retrain_online_model()
-                # Restore cap position to anchor_frame
-                if hasattr(cap, "set"):
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, anchor_frame)
-                    _ret_res, anchor_img_res = cap.read()
-                    if _ret_res and anchor_img_res is not None:
-                        last_valid_frame = anchor_img_res.copy()
+                if extra_count > 0:
+                    tracker.retrain_online_model()
+                    # Restore cap position to anchor_frame
+                    if hasattr(cap, "set"):
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, anchor_frame)
+                        _ret_res, anchor_img_res = cap.read()
+                        if _ret_res and anchor_img_res is not None:
+                            last_valid_frame = anchor_img_res.copy()
+                return extra_count
+
+            extra_anchors_count, _init_err = _run_blocking_with_loading_banner(
+                screen, "Initializing Track AI (backbone/anchors)", _init_reference_and_seed_anchors
+            )
+            if _init_err is not None:
+                raise _init_err
 
             live_tracker = tracker
             live_track_last_frame = anchor_frame
@@ -4677,7 +4756,11 @@ def play_video_with_controls(
             live_tracker, \
             live_track_target_marker, \
             live_track_last_frame
-        nonlocal selected_marker_idx, track_ai_use_deep, track_ai_lost_streak
+        nonlocal \
+            selected_marker_idx, \
+            track_ai_use_deep, \
+            track_ai_lost_streak, \
+            marker_selection_locked
         nonlocal showing_save_message, save_message_text, save_message_timer
         if (
             not track_ai_active
@@ -4694,8 +4777,13 @@ def play_video_with_controls(
 
         target_m = live_track_target_marker
 
+        # Selection lock pins AI Track to the original target marker. Without this,
+        # TAB / accidental selection changes retarget the live tracker mid-run.
+        if marker_selection_locked:
+            if selected_marker_idx != target_m:
+                selected_marker_idx = target_m
         # If user explicitly switched to another marker that has a point on current frame
-        if (
+        elif (
             selected_marker_idx >= 0
             and selected_marker_idx != target_m
             and curr_frame_idx in coordinates
@@ -4927,7 +5015,7 @@ def play_video_with_controls(
             if persistence_enabled:
                 parts.append(f"Persist×{persistence_frames}")
             if auto_marking_mode:
-                parts.append("Auto")
+                parts.append("MousePlay")
             if click_pass_mode:
                 parts.append("ClickPass")
             return " · ".join(parts)
@@ -5008,7 +5096,10 @@ def play_video_with_controls(
                 marker_idx = selected_marker_idx if selected_marker_idx >= 0 else 0
                 marker_total_display = max(0, total_markers - 1)
             marker_info = font.render(
-                f"Marker: {marker_idx}/{marker_total_display}", True, (255, 255, 255)
+                f"Marker: {marker_idx}/{marker_total_display}"
+                + (" [LOCKED]" if marker_selection_locked else ""),
+                True,
+                (255, 200, 60) if marker_selection_locked else (255, 255, 255),
             )
 
         if not one_line_mode and selected_marker_idx >= 0 and len(mf_other) > 0:
@@ -5095,6 +5186,30 @@ def play_video_with_controls(
         control_surface.blit(goto_text, goto_text.get_rect(center=goto_marker_button_rect.center))
         info_x += goto_marker_button_rect.width + 10
 
+        # Lock / pin selected marker (B key) — HIGH VISIBILITY control
+        lock_btn_h = max(go_kp_h + 4, 22)
+        if marker_selection_locked:
+            lock_label = f"LOCKED M{selected_marker_idx} (B)"
+            lock_btn_w = max(118, font.size(lock_label)[0] + 16)
+            lock_bg = (255, 150, 0)
+            lock_border = (255, 255, 255)
+        else:
+            lock_label = "Lock (B)"
+            lock_btn_w = max(78, font.size(lock_label)[0] + 16)
+            lock_bg = (30, 120, 210)
+            lock_border = (120, 200, 255)
+        lock_marker_button_rect = pygame.Rect(
+            info_x,
+            info_row_y + (primary_row_h - lock_btn_h) // 2,
+            lock_btn_w,
+            lock_btn_h,
+        )
+        pygame.draw.rect(control_surface, lock_bg, lock_marker_button_rect, border_radius=3)
+        pygame.draw.rect(control_surface, lock_border, lock_marker_button_rect, 2, border_radius=3)
+        lock_text = font.render(lock_label, True, (255, 255, 255))
+        control_surface.blit(lock_text, lock_text.get_rect(center=lock_marker_button_rect.center))
+        info_x += lock_marker_button_rect.width + 10
+
         delete_range_button_rect = pygame.Rect(
             info_x,
             info_row_y + (primary_row_h - go_kp_h) // 2,
@@ -5107,6 +5222,20 @@ def play_video_with_controls(
             delete_range_text, delete_range_text.get_rect(center=delete_range_button_rect.center)
         )
         info_x += delete_range_button_rect.width + 10
+
+        # Gap Fill — Kalman/RTS or linear fill of interior marker gaps
+        gap_fill_button_rect = pygame.Rect(
+            info_x,
+            info_row_y + (primary_row_h - go_kp_h) // 2,
+            78,
+            go_kp_h,
+        )
+        pygame.draw.rect(control_surface, (50, 130, 90), gap_fill_button_rect)
+        gap_fill_text = font.render("Gap Fill", True, (255, 255, 255))
+        control_surface.blit(
+            gap_fill_text, gap_fill_text.get_rect(center=gap_fill_button_rect.center)
+        )
+        info_x += gap_fill_button_rect.width + 10
 
         swap_range_button_rect = pygame.Rect(
             info_x,
@@ -5122,9 +5251,9 @@ def play_video_with_controls(
         info_x += swap_range_button_rect.width + 10
 
         if auto_marking_mode:
-            auto_indicator = font.render("AUTO-MARKING ON", True, (255, 255, 0))
-            control_surface.blit(auto_indicator, (info_x, info_row_y))
-            info_x += auto_indicator.get_width() + 25
+            mouse_play_indicator = font.render("MOUSE-PLAY ON", True, (255, 255, 0))
+            control_surface.blit(mouse_play_indicator, (info_x, info_row_y))
+            info_x += mouse_play_indicator.get_width() + 25
 
         marked_hint_x = window_width - marked_cnt_txt.get_width() - slider_margin_right
         control_surface.blit(marked_cnt_txt, (marked_hint_x, info_row_y))
@@ -5218,7 +5347,7 @@ def play_video_with_controls(
         template_button_width = 135 if is_compact else 155  # Tpl: Free/FIFA/MediaPipe/YOLO
         marker_mode_button_width = 95 if is_compact else 108  # Mode: Mark / Seq / 1-line
         persist_button_width = 54 if is_compact else 62
-        auto_button_width = 46 if is_compact else 52
+        mouse_play_button_width = 50 if is_compact else 70
         click_pass_button_width = 58 if is_compact else 66
         labeling_button_width = 58 if is_compact else 66
         measure_button_width = 50 if is_compact else 58  # QMeas — same as hotkey Q
@@ -5244,7 +5373,7 @@ def play_video_with_controls(
             template_button_width
             + marker_mode_button_width
             + persist_button_width
-            + auto_button_width
+            + mouse_play_button_width
             + click_pass_button_width
             + labeling_button_width
             + measure_button_width
@@ -5350,19 +5479,22 @@ def play_video_with_controls(
         persist_text = _top_btn_font.render(persist_label, True, (255, 255, 255))
         control_surface.blit(persist_text, persist_text.get_rect(center=persist_button_rect.center))
 
-        # 4. Auto-marking mode button
-        auto_button_rect = pygame.Rect(
+        # 4. Mouse-Play tracking mode button (marks at mouse cursor during video playback)
+        mouse_play_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
-            auto_button_width,
+            mouse_play_button_width,
             button_height,
         )
-        current_x += auto_button_width + button_gap
+        current_x += mouse_play_button_width + button_gap
 
-        auto_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
-        pygame.draw.rect(control_surface, auto_color, auto_button_rect)
-        auto_text = _top_btn_font.render("Auto", True, (255, 255, 255))
-        control_surface.blit(auto_text, auto_text.get_rect(center=auto_button_rect.center))
+        mouse_play_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, mouse_play_color, mouse_play_button_rect)
+        mouse_play_label = "MPlay" if is_compact else "MousePlay"
+        mouse_play_text = _top_btn_font.render(mouse_play_label, True, (255, 255, 255))
+        control_surface.blit(
+            mouse_play_text, mouse_play_text.get_rect(center=mouse_play_button_rect.center)
+        )
 
         # 5. ClickPass mode button
         click_pass_button_rect = pygame.Rect(
@@ -5662,7 +5794,7 @@ def play_video_with_controls(
             help_button_rect,
             persist_button_rect,
             load_button_rect,
-            auto_button_rect,  # Add auto button to return
+            mouse_play_button_rect,  # MousePlay tracking button (M key)
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             measure_button_rect,  # Quick Measure (same as Q)
@@ -5681,7 +5813,9 @@ def play_video_with_controls(
             help_web_button_rect,  # Add help web button to return
             dataset_button_rect,  # Load dataset folder (multi-video)
             goto_marker_button_rect,  # Jump to marker index
+            lock_marker_button_rect,  # Lock/pin selected marker (B key)
             delete_range_button_rect,  # Delete one marker/keypoint across a frame range
+            gap_fill_button_rect,  # Kalman/RTS or linear gap fill for marker
             swap_range_button_rect,  # Swap marker/keypoint pairs across a frame range
             marker_timeline_rect,
             slider_margin_left,
@@ -6017,6 +6151,8 @@ def play_video_with_controls(
     def _goto_marker_dialog() -> tuple[bool, str]:
         """Prompt marker number/index and jump selection."""
         nonlocal selected_marker_idx
+        if marker_selection_locked:
+            return False, f"Marker {selected_marker_idx} is LOCKED — press B or Lock to unlock"
         if one_line_mode:
             return False, "Go marker is available in normal keypoint mode."
         frame_coords: list[object] = (
@@ -6113,6 +6249,19 @@ def play_video_with_controls(
             ("Swap Range button", "Swap paired marker lists / ranges across a frame span", "item"),
             ("A", "Add new empty marker slot to dataset", "item"),
             ("R", "Remove selected marker slot from current frame", "item"),
+            (
+                "B  /  Lock button",
+                "Lock/unlock selected marker — pins TAB, Go KP, R-delete selection, "
+                "sequential advance, and AI Track target to that slot "
+                "(blue Lock (B) / amber LOCKED Mn (B); cyan ring on marker)",
+                "item",
+            ),
+            (
+                "Gap Fill button",
+                "Fill interior gaps on a marker with Kalman/RTS prediction "
+                "(or linear interp); same family as interp_smooth_split / AI Track RTS",
+                "item",
+            ),
             ("", "", "blank"),
             ("=== MARKER MODES & TEMPLATES ===", "", "header"),
             (
@@ -6137,8 +6286,8 @@ def play_video_with_controls(
                 "item",
             ),
             (
-                "M  /  'Auto' button",
-                "Toggle Auto-marking mode (marks at mouse cursor during play)",
+                "M  /  'MousePlay' button",
+                "Toggle Mouse-Play tracking (marks at mouse cursor during video playback)",
                 "item",
             ),
             (
@@ -6963,6 +7112,183 @@ def play_video_with_controls(
             f"Deleted markers {marker_label} in frames {start_frame + 1}-{end_frame + 1} "
             f"({had_coordinates} coordinate rows hidden)."
         )
+
+    def _show_gap_fill_form() -> dict[str, str] | None:
+        """Pygame form for Kalman/RTS or linear Gap Fill on one marker."""
+        marker_range = _marker_display_range_for_delete()
+        if marker_range is None:
+            return None
+
+        current_w, current_h = pygame.display.get_surface().get_size()
+        font = pygame.font.SysFont("verdana", 14)
+        title_font = pygame.font.SysFont("verdana", 16, bold=True)
+        small_font = pygame.font.SysFont("verdana", 12)
+
+        marker_low, marker_high = marker_range
+        if selected_marker_idx >= 0:
+            if template_mode != "free" and not one_line_mode:
+                default_marker = (
+                    int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
+                )
+            else:
+                default_marker = selected_marker_idx
+        else:
+            default_marker = marker_low
+        default_marker = max(marker_low, min(default_marker, marker_high))
+
+        inputs = {
+            "Start Frame": "1",
+            "End Frame": str(total_frames),
+            "Marker Number": str(default_marker),
+            "Method (kalman/linear)": "kalman",
+            "Max Gap Frames": "60",
+        }
+        order = [
+            "Start Frame",
+            "End Frame",
+            "Marker Number",
+            "Method (kalman/linear)",
+            "Max Gap Frames",
+        ]
+        active_idx = 0
+
+        dialog_w = 540
+        dialog_h = 370
+        dx = max(10, (current_w - dialog_w) // 2)
+        dy = max(10, (current_h - dialog_h) // 2)
+        field_x = dx + 230
+        field_w = 170
+        field_h = 28
+        row_gap = 40
+        first_y = dy + 78
+        submit_rect = pygame.Rect(dx + 150, dy + dialog_h - 54, 100, 34)
+        cancel_rect = pygame.Rect(dx + 270, dy + dialog_h - 54, 100, 34)
+
+        clock = pygame.time.Clock()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return None
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return None
+                    if event.key == pygame.K_RETURN:
+                        return dict(inputs)
+                    if event.key == pygame.K_TAB:
+                        step = -1 if (pygame.key.get_mods() & pygame.KMOD_SHIFT) else 1
+                        active_idx = (active_idx + step) % len(order)
+                    elif event.key == pygame.K_BACKSPACE:
+                        key = order[active_idx]
+                        inputs[key] = inputs[key][:-1]
+                    elif event.unicode and event.unicode.isprintable():
+                        key = order[active_idx]
+                        inputs[key] += event.unicode
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mx, my = event.pos
+                    if submit_rect.collidepoint(mx, my):
+                        return dict(inputs)
+                    if cancel_rect.collidepoint(mx, my):
+                        return None
+                    for i, _name in enumerate(order):
+                        rect = pygame.Rect(field_x, first_y + i * row_gap, field_w, field_h)
+                        if rect.collidepoint(mx, my):
+                            active_idx = i
+
+            overlay = pygame.Surface((current_w, current_h), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 160))
+            screen.blit(overlay, (0, 0))
+            card = pygame.Rect(dx, dy, dialog_w, dialog_h)
+            pygame.draw.rect(screen, (36, 42, 52), card, border_radius=8)
+            pygame.draw.rect(screen, (80, 180, 120), card, 2, border_radius=8)
+            screen.blit(
+                title_font.render("Gap Fill — interpolate marker gaps", True, (255, 255, 255)),
+                (dx + 18, dy + 14),
+            )
+            screen.blit(
+                small_font.render(
+                    "Fills interior gaps only (between anchors). Kalman/RTS = prediction.",
+                    True,
+                    (180, 200, 180),
+                ),
+                (dx + 18, dy + 42),
+            )
+            for i, name in enumerate(order):
+                y = first_y + i * row_gap
+                screen.blit(font.render(name, True, (220, 220, 220)), (dx + 18, y + 4))
+                rect = pygame.Rect(field_x, y, field_w, field_h)
+                pygame.draw.rect(screen, (55, 60, 70), rect, border_radius=3)
+                border = (120, 220, 160) if i == active_idx else (90, 95, 105)
+                pygame.draw.rect(screen, border, rect, 2, border_radius=3)
+                screen.blit(
+                    font.render(inputs[name], True, (255, 255, 255)), (rect.x + 8, rect.y + 4)
+                )
+            pygame.draw.rect(screen, (50, 140, 90), submit_rect, border_radius=4)
+            pygame.draw.rect(screen, (120, 60, 60), cancel_rect, border_radius=4)
+            screen.blit(
+                font.render("Fill", True, (255, 255, 255)),
+                font.render("Fill", True, (255, 255, 255)).get_rect(center=submit_rect.center),
+            )
+            screen.blit(
+                font.render("Cancel", True, (255, 255, 255)),
+                font.render("Cancel", True, (255, 255, 255)).get_rect(center=cancel_rect.center),
+            )
+            pygame.display.flip()
+            clock.tick(30)
+
+    def _gap_fill_marker_dialog() -> tuple[bool, str]:
+        """Run Gap Fill (Kalman/RTS or linear) on a marker over a frame range."""
+        if labeling_mode:
+            return False, "Exit Labeling mode first; Gap Fill edits keypoint markers."
+        if one_line_mode:
+            return False, "Gap Fill is for normal marker slots (exit 1-line mode)."
+        if not isinstance(coordinates, dict):
+            return False, "Marker data is not available."
+        if total_frames <= 0:
+            return False, "No frames available."
+        if _max_marker_index_for_delete() < 0:
+            return False, "No markers available for Gap Fill."
+
+        values = _show_gap_fill_form()
+        if values is None:
+            return False, "Gap Fill cancelled."
+
+        try:
+            start_frame = int(values["Start Frame"]) - 1
+            end_frame = int(values["End Frame"]) - 1
+            marker_display = int(str(values["Marker Number"]).strip())
+            method_raw = str(values["Method (kalman/linear)"]).strip().lower() or "kalman"
+            max_gap = int(str(values["Max Gap Frames"]).strip() or "60")
+        except (KeyError, TypeError, ValueError):
+            return False, "Invalid Gap Fill input."
+
+        if start_frame > end_frame:
+            start_frame, end_frame = end_frame, start_frame
+        start_frame = max(0, min(start_frame, total_frames - 1))
+        end_frame = max(0, min(end_frame, total_frames - 1))
+
+        marker_range = _marker_display_range_for_delete()
+        if marker_range is None:
+            return False, "No marker range available."
+        marker_low, marker_high = marker_range
+        if not (marker_low <= marker_display <= marker_high):
+            return False, f"Marker out of range ({marker_low}..{marker_high})."
+        marker_idx = _marker_display_to_internal_for_delete(marker_display)
+
+        method = "linear" if method_raw.startswith("lin") else "kalman_rts"
+
+        make_backup()
+        n_filled, msg = gap_fill_marker_coordinates(
+            coordinates,
+            deleted_positions,
+            marker_idx=marker_idx,
+            total_frames=total_frames,
+            fps=float(fps) if fps else 60.0,
+            method=method,
+            max_gap=max(0, max_gap),
+            start_frame=start_frame,
+            end_frame=end_frame,
+        )
+        return n_filled > 0, msg
 
     def _show_swap_marker_range_form() -> dict[str, str] | None:
         """Pygame form for swapping paired marker/keypoint IDs over frame range."""
@@ -8517,8 +8843,9 @@ def play_video_with_controls(
                         )
                         showing_save_message = True
                         save_message_timer = 60
-                        # Move selection backwards for quick repeated deletes.
-                        selected_marker_idx = max(0, selected_marker_idx - 1)
+                        if not marker_selection_locked:
+                            # Move selection backwards for quick repeated deletes.
+                            selected_marker_idx = max(0, selected_marker_idx - 1)
                         break
             else:
                 save_message_text = "No marker selected to remove"
@@ -8532,8 +8859,9 @@ def play_video_with_controls(
                     save_message_text = f"Removed marker {selected_marker_idx} in the current frame"
                     showing_save_message = True
                     save_message_timer = 60
-                    # Move selection backwards for quick repeated deletes.
-                    selected_marker_idx = max(0, selected_marker_idx - 1)
+                    if not marker_selection_locked:
+                        # Move selection backwards for quick repeated deletes.
+                        selected_marker_idx = max(0, selected_marker_idx - 1)
                 else:
                     save_message_text = "Marker does not exist in this frame"
                     showing_save_message = True
@@ -9309,6 +9637,8 @@ def play_video_with_controls(
                         pygame.draw.circle(
                             screen, (255, 165, 0), (screen_x, screen_y), 7
                         )  # Orange highlight
+                        if marker_selection_locked:
+                            pygame.draw.circle(screen, (40, 200, 255), (screen_x, screen_y), 11, 3)
 
                     pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
                     if template_mode != "free":
@@ -9334,6 +9664,10 @@ def play_video_with_controls(
                     pygame.draw.circle(
                         screen, (255, 165, 0), (screen_x, screen_y), 7
                     )  # Orange highlight
+                    if marker_selection_locked:
+                        # Thick cyan ring so Lock (B) state is obvious on the video
+                        pygame.draw.circle(screen, (40, 200, 255), (screen_x, screen_y), 11, 3)
+                        pygame.draw.circle(screen, (255, 255, 255), (screen_x, screen_y), 14, 1)
 
                 # Shape-aware outline when AI tracking is active on this marker
                 if track_ai_active and i == live_track_target_marker:
@@ -9482,7 +9816,7 @@ def play_video_with_controls(
             help_button_rect,
             persist_button_rect,
             load_button_rect,
-            auto_button_rect,  # Add auto button to return
+            mouse_play_button_rect,  # MousePlay tracking button (M key)
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             measure_button_rect,  # Quick Measure (same as Q)
@@ -9501,7 +9835,9 @@ def play_video_with_controls(
             help_web_button_rect,  # Add help web button to return
             dataset_button_rect,  # Load dataset folder (multi-video)
             goto_marker_button_rect,  # Jump to marker index
+            lock_marker_button_rect,  # Lock/pin selected marker (B key)
             delete_range_button_rect,  # Delete one marker/keypoint across a frame range
+            gap_fill_button_rect,  # Kalman/RTS or linear gap fill for marker
             swap_range_button_rect,  # Swap marker/keypoint pairs across a frame range
             marker_timeline_rect,
             slider_x,
@@ -9823,11 +10159,13 @@ def play_video_with_controls(
                     auto_marking_mode = not auto_marking_mode
                     if auto_marking_mode:
                         pitch_guide_mode = False
-                    save_message_text = (
-                        f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
-                    )
+                        save_message_text = (
+                            "MousePlay tracking ON: press Space to play & track with mouse"
+                        )
+                    else:
+                        save_message_text = "MousePlay tracking disabled"
                     showing_save_message = True
-                    save_message_timer = 30
+                    save_message_timer = 45
                 elif event.key == pygame.K_q:
                     save_message_text = _toggle_quick_measure_mode()
                     showing_save_message = True
@@ -10069,6 +10407,13 @@ def play_video_with_controls(
                     showing_save_message = True
                     save_message_timer = 180 if ok_cfg else 90
                 elif event.key == pygame.K_TAB:
+                    if marker_selection_locked:
+                        save_message_text = (
+                            f"Marker {selected_marker_idx} LOCKED — unlock with B or Lock button"
+                        )
+                        showing_save_message = True
+                        save_message_timer = 45
+                        continue
                     if pitch_guide_fifa_mode and fifa_fixed_keypoints:
                         # Internal slot indices are always 0..(N-1). TOML start_keypoint/base_index
                         # only affect numbering in the CSV header and the UI display.
@@ -10253,6 +10598,18 @@ def play_video_with_controls(
                                     # Wrap around to first marker
                                     all_markers = visible_markers + deleted_markers_in_frame
                                     selected_marker_idx = min(all_markers) if all_markers else 0
+
+                elif event.key == pygame.K_b:
+                    # Lock/unlock the selected marker so it stays fixed
+                    # (TAB, Go KP, R deletes, sequential advance, AI Track target).
+                    marker_selection_locked = not marker_selection_locked
+                    save_message_text = (
+                        f"Marker {selected_marker_idx} LOCKED (TAB / Go KP / AI Track pinned)"
+                        if marker_selection_locked
+                        else "Marker selection unlocked"
+                    )
+                    showing_save_message = True
+                    save_message_timer = 60
 
                 # Add persistence toggle with 'p' key
                 elif event.key == pygame.K_p:
@@ -10649,14 +11006,17 @@ def play_video_with_controls(
                         )
                         showing_save_message = True
                         save_message_timer = 30
-                    elif auto_button_rect.collidepoint(x, rel_y):
+                    elif mouse_play_button_rect.collidepoint(x, rel_y):
                         if not one_line_mode:  # Only toggle if not in one-line mode
                             auto_marking_mode = not auto_marking_mode
-                            save_message_text = (
-                                f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
-                            )
+                            if auto_marking_mode:
+                                save_message_text = (
+                                    "MousePlay tracking ON: press Space to play & track with mouse"
+                                )
+                            else:
+                                save_message_text = "MousePlay tracking disabled"
                             showing_save_message = True
-                            save_message_timer = 30
+                            save_message_timer = 45
                     elif click_pass_button_rect.collidepoint(x, rel_y):
                         if not one_line_mode:
                             click_pass_mode = not click_pass_mode
@@ -10758,6 +11118,28 @@ def play_video_with_controls(
                         if live_tracker is not None and hasattr(live_tracker, "params"):
                             live_tracker.params.use_deep_features = track_ai_use_deep
                             live_tracker.params.deep_weight = 0.25 if track_ai_use_deep else 0.0
+                            if track_ai_use_deep and live_tracker.extractor is None:
+                                # Pre-warm the backbone now (thread + loading banner) so
+                                # the NEXT track_frame() during live playback doesn't
+                                # lazily block the event loop mid-frame (same "App Not
+                                # Responding" symptom as toggle_track_ai/weight switch).
+                                from vaila.tracking import DeepFeatureExtractor
+
+                                _deep_weights_path = live_tracker.params.deep_weights_path or None
+                                _deep_variant = live_tracker.params.resnet_variant
+                                live_tracker.extractor, _deep_err = (
+                                    _run_blocking_with_loading_banner(
+                                        screen,
+                                        f"Loading {_deep_variant} weights",
+                                        lambda wp=_deep_weights_path, v=_deep_variant: (
+                                            DeepFeatureExtractor.get_shared(
+                                                weights_path=wp, variant=v
+                                            )
+                                        ),
+                                    )
+                                )
+                                if _deep_err is not None:
+                                    print(f">> Track AI Deep NN warmup warning: {_deep_err}")
                         state_str = "[ON]" if track_ai_use_deep else "[OFF]"
                         save_message_text = f"Track AI Deep NN (ResNet50): {state_str}"
                         showing_save_message = True
@@ -10801,11 +11183,25 @@ def play_video_with_controls(
                         save_message_text = msg_go
                         showing_save_message = True
                         save_message_timer = 60 if ok_go else 45
+                    elif lock_marker_button_rect.collidepoint(x, rel_y):
+                        marker_selection_locked = not marker_selection_locked
+                        save_message_text = (
+                            f"Marker {selected_marker_idx} LOCKED (TAB / Go KP / AI Track pinned)"
+                            if marker_selection_locked
+                            else "Marker selection unlocked"
+                        )
+                        showing_save_message = True
+                        save_message_timer = 60
                     elif delete_range_button_rect.collidepoint(x, rel_y):
                         ok_del, msg_del = _delete_marker_range_dialog()
                         save_message_text = msg_del
                         showing_save_message = True
                         save_message_timer = 90 if ok_del else 60
+                    elif gap_fill_button_rect.collidepoint(x, rel_y):
+                        ok_gap, msg_gap = _gap_fill_marker_dialog()
+                        save_message_text = msg_gap
+                        showing_save_message = True
+                        save_message_timer = 120 if ok_gap else 75
                     elif swap_range_button_rect.collidepoint(x, rel_y):
                         ok_swap, msg_swap = _swap_marker_range_dialog()
                         save_message_text = msg_swap
@@ -10976,9 +11372,12 @@ def play_video_with_controls(
                                     deleted_positions[frame_count].discard(target_idx)
                                     placed_marker_idx = target_idx
 
-                                    selected_marker_idx = target_idx + 1
-                                    if selected_marker_idx >= n_fixed:
-                                        selected_marker_idx = 0
+                                    if not marker_selection_locked:
+                                        selected_marker_idx = target_idx + 1
+                                        if selected_marker_idx >= n_fixed:
+                                            selected_marker_idx = 0
+                                    else:
+                                        selected_marker_idx = target_idx
                                 else:
                                     # Generic sequential (non-fixed): keep legacy behaviour.
                                     if selected_marker_idx >= 0:
@@ -10993,11 +11392,14 @@ def play_video_with_controls(
                                             )
                                         else:
                                             slot_empty = True
-                                        target_idx = (
-                                            selected_marker_idx
-                                            if slot_empty
-                                            else selected_marker_idx + 1
-                                        )
+                                        if marker_selection_locked:
+                                            target_idx = selected_marker_idx
+                                        else:
+                                            target_idx = (
+                                                selected_marker_idx
+                                                if slot_empty
+                                                else selected_marker_idx + 1
+                                            )
                                     else:
                                         target_idx = len(coordinates[frame_count])
 
@@ -12688,6 +13090,159 @@ def do_export_bbox_coords(input_file_path, video_file_path=None):
         exported_files.append(str(output_path))
 
     return exported_files
+
+
+def _interior_gap_segments(
+    valid_mask: np.ndarray,
+    *,
+    start: int,
+    end: int,
+    max_gap: int,
+) -> list[tuple[int, int]]:
+    """Return inclusive (gap_start, gap_end) interior gaps within [start, end].
+
+    Only gaps that sit between two valid anchors and whose length is <= max_gap
+    (or unlimited when max_gap <= 0) are returned.
+    """
+    n = len(valid_mask)
+    lo = max(0, int(start))
+    hi = min(n - 1, int(end))
+    if hi < lo:
+        return []
+    segments: list[tuple[int, int]] = []
+    i = lo
+    while i <= hi:
+        if valid_mask[i]:
+            i += 1
+            continue
+        gap_start = i
+        while i <= hi and not valid_mask[i]:
+            i += 1
+        gap_end = i - 1
+        has_left = gap_start - 1 >= 0 and bool(valid_mask[gap_start - 1])
+        has_right = gap_end + 1 < n and bool(valid_mask[gap_end + 1])
+        gap_len = gap_end - gap_start + 1
+        if has_left and has_right and (max_gap <= 0 or gap_len <= max_gap):
+            segments.append((gap_start, gap_end))
+    return segments
+
+
+def gap_fill_marker_coordinates(
+    coordinates: dict[int, list[Any]],
+    deleted_positions: dict[int, set[int]],
+    *,
+    marker_idx: int,
+    total_frames: int,
+    fps: float = 60.0,
+    method: str = "kalman_rts",
+    max_gap: int = 60,
+    start_frame: int = 0,
+    end_frame: int | None = None,
+) -> tuple[int, str]:
+    """Fill interior gaps for one marker slot via Kalman/RTS or linear interpolation.
+
+    Existing visible coordinates are never overwritten. Deleted/missing frames inside
+    an interior gap (between two anchors) are filled and cleared from
+    ``deleted_positions``. Uses ``RTSSmoother`` for ``kalman_rts`` (same family as
+    AI Track batch / ``interp_smooth_split`` Kalman path) or pandas linear fill.
+
+    Returns
+    -------
+    (n_filled, message)
+    """
+    if marker_idx < 0:
+        return 0, "No marker selected for Gap Fill."
+    if total_frames <= 0:
+        return 0, "No frames available for Gap Fill."
+
+    end = (total_frames - 1) if end_frame is None else int(end_frame)
+    start = max(0, int(start_frame))
+    end = max(0, min(int(end), total_frames - 1))
+    if start > end:
+        start, end = end, start
+
+    measurements = np.full((total_frames, 2), np.nan, dtype=np.float64)
+    valid_mask = np.zeros(total_frames, dtype=bool)
+    for f_idx in range(total_frames):
+        row = coordinates.get(f_idx, [])
+        if marker_idx >= len(row):
+            continue
+        if marker_idx in deleted_positions.get(f_idx, set()):
+            continue
+        pt = row[marker_idx]
+        if pt is None:
+            continue
+        try:
+            x, y = pt[0], pt[1]
+        except (TypeError, IndexError, ValueError):
+            continue
+        if x is None or y is None:
+            continue
+        measurements[f_idx, 0] = float(x)
+        measurements[f_idx, 1] = float(y)
+        valid_mask[f_idx] = True
+
+    if int(valid_mask.sum()) < 2:
+        return 0, "Gap Fill needs at least 2 anchors on this marker."
+
+    segments = _interior_gap_segments(valid_mask, start=start, end=end, max_gap=int(max_gap))
+    if not segments:
+        return 0, (
+            f"No interior gaps ≤{max_gap} frames for marker {marker_idx} "
+            f"in frames {start + 1}-{end + 1}."
+        )
+
+    method_key = (method or "kalman_rts").strip().lower()
+    filled_xy = measurements.copy()
+
+    if method_key in {"kalman_rts", "kalman", "rts"}:
+        try:
+            from vaila.tracking import RTSSmoother
+        except ImportError:
+            from tracking import RTSSmoother  # ty: ignore[unresolved-import]
+
+        fps_safe = float(fps) if fps and fps > 0 else 60.0
+        smoother = RTSSmoother(fps=fps_safe, sigma_a=50.0, sigma_manual=0.5)
+        is_anchor = valid_mask.copy()
+        smoothed_states, _ = smoother.smooth(measurements, is_anchor=is_anchor)
+        filled_xy = smoothed_states[:, 0:2].copy()
+    elif method_key in {"linear", "interp", "interpolation"}:
+        try:
+            from vaila.interp_smooth_core import apply_interpolation_1d
+        except ImportError:
+            from interp_smooth_core import (  # ty: ignore[unresolved-import]
+                apply_interpolation_1d,
+            )
+
+        # Unlimited interior fill here; segment filter already enforces max_gap.
+        filled_xy[:, 0] = apply_interpolation_1d(measurements[:, 0], "linear", max_gap=0)
+        filled_xy[:, 1] = apply_interpolation_1d(measurements[:, 1], "linear", max_gap=0)
+    else:
+        return 0, f"Unknown Gap Fill method: {method}"
+
+    n_filled = 0
+    for gap_start, gap_end in segments:
+        for f_idx in range(gap_start, gap_end + 1):
+            if valid_mask[f_idx]:
+                continue
+            x_f = float(filled_xy[f_idx, 0])
+            y_f = float(filled_xy[f_idx, 1])
+            if not np.isfinite(x_f) or not np.isfinite(y_f):
+                continue
+            row = coordinates.setdefault(f_idx, [])
+            while len(row) <= marker_idx:
+                row.append((None, None))
+            row[marker_idx] = (x_f, y_f)
+            deleted_positions.setdefault(f_idx, set()).discard(marker_idx)
+            n_filled += 1
+
+    if n_filled == 0:
+        return 0, f"Gap Fill produced no new points for marker {marker_idx}."
+    method_label = "Kalman/RTS" if method_key in {"kalman_rts", "kalman", "rts"} else "linear"
+    return n_filled, (
+        f"Gap Fill ({method_label}): marker {marker_idx} — filled {n_filled} frame(s) "
+        f"across {len(segments)} gap(s) (max_gap={max_gap})."
+    )
 
 
 def frames_with_marker_index(

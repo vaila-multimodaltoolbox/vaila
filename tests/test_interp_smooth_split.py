@@ -676,3 +676,39 @@ def test_cli_flag_overrides_toml(tmp_path):
     np.testing.assert_allclose(
         processed["Time"], np.arange(len(processed), dtype=float) / expected_rate
     )
+
+
+def test_process_file_kalman_interp_with_butterworth(tmp_path):
+    """Ensure Kalman gap filling does not return NaNs when followed by Butterworth."""
+    n = 100
+    t = np.arange(n)
+    signal = 10.0 + np.sin(2 * np.pi * t / 25.0) * 5.0
+    # Introduce a gap of 10 frames in middle and 5 frames at the end
+    signal[30:40] = np.nan
+    signal[95:100] = np.nan
+
+    df = pd.DataFrame({"frame": t, "x": signal})
+    src_file = tmp_path / "test_kalman.csv"
+    df.to_csv(src_file, index=False)
+
+    dest_dir = tmp_path / "out"
+    dest_dir.mkdir()
+
+    config = {
+        "interp_method": "kalman",
+        "max_gap": 20,
+        "smooth_method": "butterworth",
+        "smooth_params": {"fs": 60.0, "cutoff": 7.5, "order": 4},
+        "padding": 10.0,
+        "sample_rate": 60.0,
+        "do_split": False,
+    }
+
+    result = process_file(str(src_file), str(dest_dir), config)
+    assert result is not None
+
+    out_files = list(dest_dir.glob("*_butterworth.csv"))
+    assert len(out_files) == 1
+    res_df = pd.read_csv(out_files[0])
+    assert len(res_df) == n
+    assert not res_df["x"].isna().any(), "Kalman interpolation + Butterworth should not leave NaNs"

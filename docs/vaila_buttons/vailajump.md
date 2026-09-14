@@ -1,59 +1,54 @@
-# Select YOLO tracker version to use: - Button B_r3_c3
+# Vertical Jump — Frame B, B3_r3_c3
 
-## Overview
+Version: 0.3.141 · Updated: 14 September 2026
 
-**Button Position:** B_r3_c3  
-**Method Name:** `vailajump`  
-**Button Text:** Select YOLO tracker version to use:
+The **Vertical Jump** button calls `Vaila.vailajump()` and opens
+`vaila.vaila_and_jump.vaila_and_jump()`.
 
-## Description
+Choose an input directory and one of four modes:
 
-Runs the VailaJump module.
+1. Time of Flight: CSV with mass and flight time, optional contact time.
+2. Jump Height: CSV with mass and measured height, optional contact time.
+3. MediaPipe: landmark CSV plus mass, capture FPS and measured shank length.
+4. Team Batch: a parent directory of athlete folders, each with CSVs and its own
+   `vaila_and_jump_config.toml`.
 
-        This function runs the VailaJump module, which can be used to analyze VailaJump
-        data from CSV files. It processes the VailaJump data to extract relevant
-        metrics such as acceleration, speed, and distance. The module will then
-        generate CSV files with the processed results and plots of the VailaJump
-        signals.
+MediaPipe and Team Batch produce **CMJ Performance Profile — PODS**:
+Person (mass), Outcome (height, explicitly sourced velocity/momentum, mRSI),
+Driver (estimated braking/bottom/propulsive force and power), and Strategy
+(time to takeoff, countermovement depth, phase durations).
 
-        The user will be prompted to select the directory containing the VailaJump CSV
-        files and input the sampling rate and start and end indices for analysis.
+**Markerless force and power estimates are not force-platform measurements.**
+Read the phase/kinetic QC, then compare event lines with the recorded movement.
+Missing or invalid new metrics remain unavailable. No normative strength groups,
+fatigue or injury diagnosis is inferred from the PODS profile.
 
-## Usage
+## CLI
 
-1. Click the **Select YOLO tracker version to use:** button in the vailá GUI
-2. Follow the prompts in the dialog windows
-3. Select input files/directories as requested
-4. Configure parameters if needed
-5. Review the output files
+```sh
+python -m vaila.vaila_and_jump -i "athlete/jump.csv" -c "athlete/config.toml" -o "results"
+python -m vaila.vaila_and_jump -i "team athletes" --batch -o "team results"
+python -m vaila.vaila_and_jump -i "flight-time CSVs" -d 1 -o "results"
+```
 
-## Related Scripts
+Mode 3 uses `[jump_context]` and `[jump_phase]` from the exact `-c` file.
+Configure a quiet standing baseline before the countermovement. Use capture FPS
+for slow-motion video. The generated template documents onset persistence/noise,
+minimum phase duration and takeoff agreement.
 
-This button launches one or more Python scripts from the `vaila/` directory. For detailed script documentation, see:
-- `vaila/help/` - Script-specific help files
+## Results and compatibility
 
-## Integration
+Existing output names remain: scalar `*_jump_results_*.csv`, frame-wise
+`*_calibrated_*.csv`, plots and HTML. MediaPipe adds a four-panel
+`*_cmj_pods_*.png`, scalar PODS metrics/QC and frame `cmj_phase`/estimated kinetics
+aliases. Team Batch adds descriptive statistics, PODS charts and z-scores.
 
-This button integrates with other vailá modules:
-- Check related buttons in the same frame/section
-- Output files can be used as input for other modules
+Legacy `takeoff_frame` means the upward CoM standing-height crossing, not foot-off.
+Legacy `propulsion_time_s` ends there and is never used for mRSI.
+New `time_to_takeoff_s` runs from persistent movement onset to selected takeoff.
+Flight-time height uses `g*T*T/8`; height-derived velocity uses `sqrt(2*g*h)`.
+Potential energy at apex equals the height-derived kinetic energy at takeoff:
+the current code does not sum them as independent energies.
 
-## Troubleshooting
-
-### Common Issues
-
-- **Module not found**: Ensure all dependencies are installed
-- **File not found**: Check that input files exist in the specified directory
-- **Permission errors**: Ensure write permissions for output directory
-
-### Getting Help
-
-- Check the script-specific help in `vaila/help/`
-- Review the main documentation in `docs/`
-- Open an issue on GitHub if problems persist
-
----
-
-**Last Updated:** November 2025  
-**Part of vailá - Multimodal Toolbox**  
-**License:** AGPLv3.0
+See [module help](../../vaila/help/vaila_and_jump.md) and the
+[complete PODS variable/event dictionary, QC and validation limitations](../cmj_pods.md).

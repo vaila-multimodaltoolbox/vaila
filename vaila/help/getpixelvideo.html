@@ -220,8 +220,8 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.140<br />
-        <strong>Updated:</strong> 13 September 2026<br />
+        <strong>Version:</strong> 0.3.143<br />
+        <strong>Updated:</strong> 14 September 2026<br />
         <strong>Date:</strong> 23 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
@@ -509,6 +509,8 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <tr><td><span class="key">A</span></td><td>Add empty marker</td></tr>
                 <tr><td><span class="key">R</span> / <span class="key">D</span></td><td>Remove selected in frame</td></tr>
                 <tr><td><span class="key">Delete</span></td><td>Delete selected</td></tr>
+                <tr><td><span class="key">B</span> / <strong>Lock (B)</strong></td><td>Lock/unlock selected marker (high-visibility; cyan ring when locked)</td></tr>
+                <tr><td><strong>Gap Fill</strong></td><td>Kalman/RTS or linear fill of interior marker gaps</td></tr>
               </table>
             </div>
             <div>
@@ -521,7 +523,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <tr><td><span class="key">V</span></td><td>Toggle guide map</td></tr>
                 <tr><td><span class="key">L</span></td><td>Labeling mode</td></tr>
                 <tr><td><span class="key">C</span></td><td>1-line mode</td></tr>
-                <tr><td><span class="key">M</span></td><td>Auto-marking</td></tr>
+                <tr><td><span class="key">M</span> / <strong>MousePlay</strong></td><td>Mouse-Play tracking (marks cursor during play)</td></tr>
                 <tr><td><span class="key">S</span> / <span class="key">O</span></td><td>Sequential</td></tr>
                 <tr><td><span class="key">K</span></td><td>FIFA TOML / template</td></tr>
                 <tr><td><span class="key">J</span></td><td>Pose helpers</td></tr>
@@ -656,6 +658,14 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               <tr>
                 <td><span class="key">D</span></td>
                 <td>Remove <strong>selected</strong> marker in current frame (same as <strong>R</strong> and right click)</td>
+              </tr>
+              <tr>
+                <td><span class="key">B</span> / <strong>Lock (B)</strong></td>
+                <td>Lock/unlock selected marker — blue <strong>Lock (B)</strong> / amber <strong>LOCKED Mn (B)</strong>; cyan ring on the point while locked. Blocks <strong>TAB</strong> / Go KP / sequential advance; <strong>R</strong> keeps the same id; <strong>AI Track</strong> stays pinned. Auto-locks when AI Track turns ON.</td>
+              </tr>
+              <tr>
+                <td><strong>Gap Fill</strong></td>
+                <td>Fill interior gaps on one marker with Kalman/RTS prediction (default) or linear interpolation. Dialog: frame range, marker, method, max gap. Same family as <code>interp_smooth_split</code> / AI Track RTS. Existing anchors are never overwritten.</td>
               </tr>
               <tr>
                 <td><span class="key">L</span></td>
@@ -1713,6 +1723,34 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.3.143 (14 September 2026) &mdash; Marker lock auto-release on Track AI OFF</h3>
+        <ul>
+          <li><strong>Fixed: batch "block" (Shift+T / Shift-click Track AI) always targeted marker 0 after any prior live AI Track session.</strong> Turning <strong>AI Track</strong> ON auto-locks the target marker (since 0.3.141); turning it OFF never released that lock, so <code>selected_marker_idx</code> stayed pinned to whichever marker was tracked first (usually marker 0) — TAB, <strong>Go KP</strong>, and clicking another marker were all silently blocked ("LOCKED — unlock with B or Lock button"), and every subsequent batch/RTS run kept re-targeting that same stuck marker no matter which one the user selected. Track AI OFF now clears the auto-lock automatically, so the next block runs on whichever marker is actually selected. Manual locking (<span class="key">B</span> key / <strong>Lock</strong> button) is unaffected — it still pins deliberately until you unlock it yourself.</li>
+        </ul>
+
+        <h3>Version 0.3.142 (14 September 2026) &mdash; Evident Lock + Gap Fill</h3>
+        <ul>
+          <li><strong>Lock (B) is high-visibility:</strong> blue <strong>Lock (B)</strong> when unlocked, amber <strong>LOCKED Mn (B)</strong> when locked, with a cyan ring on the selected marker in the video.</li>
+          <li><strong>New Gap Fill button</strong> (next to Del Range): fills interior marker gaps with <strong>Kalman/RTS</strong> (default) or <strong>linear</strong> interpolation — reuses <code>RTSSmoother</code> / the same prediction family as AI Track batch and <code>interp_smooth_split</code>. Existing anchors are never overwritten; <code>max_gap</code> skips huge holes.</li>
+        </ul>
+
+        <h3>Version 0.3.141 (14 September 2026) &mdash; Marker Lock button + AI Track pin</h3>
+        <ul>
+          <li><strong>Discoverable <strong>Lock</strong> button</strong> next to <strong>Go KP</strong> (same as <span class="key">B</span> key). Pins the selected marker so edits and tracking stay on one slot.</li>
+          <li><strong>Stronger lock:</strong> while locked, <span class="key">TAB</span> / <span class="key">SHIFT+TAB</span>, Go KP / <span class="key">Ctrl+G</span>, and sequential-mode advance no longer change selection; <strong>AI Track</strong> will not retarget another marker mid-run.</li>
+          <li><strong>AI Track auto-lock:</strong> enabling live AI Track locks the target marker automatically (unlock with <span class="key">B</span> or <strong>Lock</strong>). Status line shows <code>Marker: N [LOCKED]</code> in amber.</li>
+        </ul>
+
+        <h3>Version 0.3.140 (14 September 2026) &mdash; AI Track responsiveness fix</h3>
+        <ul>
+          <li><strong>AI Track buttons no longer trigger the OS "App Not Responding" dialog.</strong> Activating Track AI, switching backbone weights (<span class="key">Ctrl+W</span> / <span class="key">Alt+W</span>), or turning on Deep NN mid-session can build a torch model and, on first use of a variant, download its pretrained weights -- this can take a few seconds up to over a minute. That work now runs on a background thread while the window keeps pumping events and shows an animated "Loading..." status banner, so the window manager sees the app as alive the whole time instead of flagging it as frozen. Tracking behavior is unchanged -- same init logic, just no longer blocking the event loop while it runs.</li>
+        </ul>
+
+        <h3>Version 0.3.140 (14 September 2026)</h3>
+        <ul>
+          <li><strong>New <span class="key">B</span> key: lock/unlock the selected marker.</strong> Fixes a frame-by-frame cleanup annoyance: deleting a marker with <span class="key">R</span> always moved the selection back one slot (e.g. deleting marker id 1 left marker id 0 selected), so stepping to the next frame and pressing <span class="key">R</span> again deleted the wrong marker instead of continuing to clean up the same id. With the selection locked (<span class="key">B</span>), <span class="key">R</span> still deletes the marker in the current frame but leaves the selection untouched, so repeated frame-step + <span class="key">R</span> keeps removing the <em>same</em> marker id across consecutive frames until unlocked.</li>
+        </ul>
 
         <h3>Version 0.3.140 (13 September 2026)</h3>
         <ul>

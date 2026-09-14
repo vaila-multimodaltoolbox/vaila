@@ -6,12 +6,27 @@
 - **File:** `vaila\vaila_and_jump.py`
 - **Lines:** 7311
 - **Size:** ~150000 characters
-- **Version:** 0.3.117
+- **Version:** 0.3.141
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
-- **Last Update:** 27 August 2026
+- **Last Update:** 14 September 2026
 
 ## 📖 Description
+
+### CMJ Performance Profile — PODS
+
+MediaPipe and Team Batch now report Person (mass), Outcome (recommended height,
+explicitly sourced velocity/momentum, mRSI), Driver (estimated braking/bottom/propulsive
+force and power) and Strategy (onset-to-takeoff time, depth and phase durations).
+**Markerless force/power estimates are not force-platform measurements.**
+The calibrated CSV gains `cmj_phase` and `*_est_*` force/power aliases; the scalar
+CSV gains phase events, sources and QC. A `*_cmj_pods_*.png` diagnostic uses the same
+events as the HTML/CSV. Team summaries, charts and z-scores include the new metrics.
+
+Read the [complete variable dictionary, event definitions, configuration and
+validation limits](../../docs/cmj_pods.md). Historical `takeoff_frame` is the CoM
+standing-height crossing. Historical `propulsion_time_s` is preserved and is never
+used for mRSI; use `time_to_takeoff_s` and check `mrsi_qc_status`.
 
 This script processes jump data from multiple .csv files in a specified directory, performing biomechanical calculations based on either the time of flight or the jump height. The results are saved in a new output directory with a timestamp for each processed file.
 
@@ -262,6 +277,12 @@ baseline_end_frame = 20
 phase_smoothing_window_s = 0.06
 baseline_tolerance_m = 0.02
 anchor_events_to_com_peak = true
+movement_onset_velocity_threshold_m_s = 0.05
+movement_onset_displacement_threshold_m = 0.005
+movement_onset_noise_multiplier = 3.0
+movement_onset_min_duration_s = 0.03
+phase_min_duration_s = 0.03
+takeoff_agreement_tolerance_s = 0.04
 ```
 
 Keep `anchor_events_to_com_peak = true` for CMJ data so propulsion and ascent events cannot be placed after maximum CoM height.
@@ -333,6 +354,6 @@ This script is licensed under the GNU General Public License v3.0.
 
 ---
 
-📅 **Last Updated:** 27 August 2026
+📅 **Last Updated:** 14 September 2026
 🔗 **Part of vailá - Multimodal Toolbox**  
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

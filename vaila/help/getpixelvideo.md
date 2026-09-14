@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.140
+**Version:** 0.3.143
 **Date:** 23 June 2026  
-**Updated:** 13 September 2026
+**Updated:** 14 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -14,6 +14,8 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 - **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & multi-backbone deep features) & RTS Smoother (`AI Track` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior (with velocity prediction) to prevent distractor jumps, adaptive running template EMA blending, online appearance model that **keeps learning across manual corrections** (no wipe on re-anchor), low-confidence rejection, and optional Deep Visual Feature embeddings (PyTorch ResNet50, default, or opt-in ResNet152 / MobileNetV3-Small / EfficientNet-B0 / CUDA; local weights via `vaila/models/ai_tracker/resnet50_imagenet.pth`, `resnet152_imagenet.pth`, `mobilenet_v3_small_imagenet.pth`, or `efficientnet_b0_imagenet.pth`, custom path, or Torch hub cache — this is the sole canonical local weights directory). When enabled, the frozen *primary* backbone's embedding is also concatenated into the online discriminator's feature vector, so it participates in every per-click retrain without ever being backpropagated through. An optional, **off-by-default cascade fallback** (`fallback_variant` in the TOML profile, e.g. `efficientnet_b0`) re-scores a low-confidence frame with a second backbone and adopts it only if it scores higher — never affects the discriminator's feature width, only per-frame verification. Features:
   - **Accessible button:** Short label `AI Track` illuminates in **bright green** immediately when enabled (armed/tracking) and red when off.
+  - **Marker Lock (`Lock (B)` button / `B`):** High-visibility blue **Lock (B)** / amber **LOCKED Mn (B)** next to **Go KP**. Pins the selected marker so TAB, Go KP, sequential advance, and R-delete cannot switch away. Locked markers also show a cyan ring on the video. Turning **AI Track** ON auto-locks the target marker.
+  - **Gap Fill button:** Next to **Del Range** — fills *interior* gaps (between anchors) on one marker with **Kalman/RTS** prediction (default; same RTS family as AI Track batch / `interp_smooth_split`) or **linear** interpolation. Optional max-gap limit; never overwrites existing anchors.
   - **Online Learning from Anchors:** Every user placement retrains the discriminator without clearing prior anchors.
   - **Multi-Shape Centroid Tracking (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Point click, or **drag** on Cir/Box to set patch size; marker is placed at the region centroid. Region stats (mean/std/hist/area) feed the online model.
   - **Keyboard nav:** Hold ←/→ for continuous ±1 frame; hold ↑/↓ for ±`nav_jump` (default 60, editable in **Cfg**).
@@ -336,8 +338,8 @@ Semi-automatic point tracking powered by Normalized Cross-Correlation (NCC), sub
    - **Opt-in cascade fallback (`fallback_variant` / `fallback_threshold`, TOML-only):** disabled by default (`fallback_variant=""`). When set to a second backbone name in the profile TOML, any frame whose combined score falls below `fallback_threshold` (default `0.48`) is re-scored with that second backbone using the same NCC/discriminator fusion, and the higher-scoring result wins. Adds one extra embedding extraction only on already-low-confidence frames; the discriminator's feature width is unaffected regardless of which backbone wins a given frame. No dedicated GUI widget yet — edit the AI Track profile TOML directly to enable it.
 
 2. **Controls & Interactions:**
-   - **Left-Click:** On the `AI Track` button, toggles live tracking ON/OFF. The button immediately turns **bright green** when active. When ON, press **Space** to play and track live, or use hold-to-repeat arrow keys (`←`/`→` for single frames, `↑`/`↓` for jump steps).
-   - **Shift+Click (or Shift+T):** Runs full batch RTS tracking and bidirectional gap infilling between manual keyframes.
+   - **Left-Click:** On the `AI Track` button, toggles live tracking ON/OFF. The button immediately turns **bright green** when active. Enabling AI Track **auto-locks** the selected marker (amber **Lock** / `B`); unlock when you want to retarget. When ON, press **Space** to play and track live, or use hold-to-repeat arrow keys (`←`/`→` for single frames, `↑`/`↓` for jump steps).
+   - **Lock / B:** Pin the marker under edit so TAB and the tracker cannot jump to another id while you correct tracking.
    - **Right-Click (Cfg / Ctrl+T):** Opens the Track AI configuration dialog to adjust search windows, patch size, shape (`point`, `circle`, `box`), learning rate, jump step size, and select backbone weights (`Weights (W)`).
    - **Backbone Selection (`Ctrl+W` / `Alt+W`):** Direct shortcut to select or cycle ResNet50/ResNet152/MobileNetV3-Small/EfficientNet-B0 weights without losing current session state — missing backbones auto-download from Torch Hub, no local file required beforehand; or set `resnet_variant` directly in the Cfg profile TOML.
    - **Shape Toggle (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Switches region feature extraction (mean, std, histogram, area fraction) for circle/box tracking.
@@ -414,6 +416,8 @@ Velocity/Acceleration require the points to be on different frames and use the v
 | **A**           | Add new empty marker to file     |
 | **R**           | Remove **selected** marker in current frame (same as right click) |
 | **D**           | Remove **selected** marker in current frame (same as **R** and right click) |
+| **B** / **Lock (B)** | Lock/unlock selected marker — blue **Lock (B)** / amber **LOCKED Mn (B)**; cyan ring on the point while locked. Blocks TAB / Go KP / sequential advance; **R** keeps the same id; **AI Track** stays pinned. Auto-locks when AI Track turns ON. |
+| **Gap Fill**    | Fill interior gaps on one marker (Kalman/RTS prediction or linear). Dialog: frame range, marker, method, max gap. Same family as `interp_smooth_split` / AI Track RTS. |
 
 ### Playback Speed
 
@@ -429,6 +433,7 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | Key             | Action                                            |
 | --------------- | ------------------------------------------------- |
 | **C**           | Toggle "1 Line" mode                              |
+| **M** / **MousePlay** | Toggle Mouse-Play tracking — marks at mouse cursor continuously during video playback |
 | **O** or **S**  | Toggle Sequential mode (Normal mode only)        |
 | **P**           | Toggle Persistence mode                           |
 | **I** / **FPS … Hz** button | Set video FPS manually in Hz (decimal or fraction); updates timestamps and Quick Measure time-based metrics |
@@ -662,6 +667,29 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.3.143 (14 September 2026) — Marker lock auto-release on Track AI OFF
+
+- **Fixed: batch "block" (Shift+T / Shift-click Track AI) always targeted marker 0 after any prior live AI Track session.** Turning **AI Track** ON auto-locks the target marker (since 0.3.141); turning it OFF never released that lock, so `selected_marker_idx` stayed pinned to whichever marker was tracked first (usually marker 0) — TAB, **Go KP**, and clicking another marker were all silently blocked ("LOCKED — unlock with B or Lock button"), and every subsequent batch/RTS run kept re-targeting that same stuck marker no matter which one the user selected. Track AI OFF now clears the auto-lock automatically, so the next block runs on whichever marker is actually selected. Manual locking (**B** key / **Lock** button) is unaffected — it still pins deliberately until you unlock it yourself.
+
+### Version 0.3.142 (14 September 2026) — Evident Lock + Gap Fill
+
+- **Lock (B) is high-visibility:** blue **Lock (B)** when unlocked, amber **LOCKED Mn (B)** when locked, with a cyan ring on the selected marker in the video.
+- **New Gap Fill button** (next to Del Range): fills interior marker gaps with **Kalman/RTS** (default) or **linear** interpolation — reuses `RTSSmoother` / the same prediction family as AI Track batch and `interp_smooth_split`. Existing anchors are never overwritten; `max_gap` skips huge holes.
+
+### Version 0.3.141 (14 September 2026) — Marker Lock button + AI Track pin
+
+- **Discoverable `Lock` button** next to **Go KP** (same as **B** key). Pins the selected marker so edits and tracking stay on one slot.
+- **Stronger lock:** while locked, **TAB** / **SHIFT+TAB**, **Go KP** / **Ctrl+G**, and sequential-mode advance no longer change selection; **AI Track** will not retarget another marker mid-run.
+- **AI Track auto-lock:** enabling live AI Track locks the target marker automatically (unlock with **B** or **Lock**). Status line shows `Marker: N [LOCKED]` in amber.
+
+### Version 0.3.140 (14 September 2026) — AI Track responsiveness fix
+
+- **AI Track buttons no longer trigger the OS "App Not Responding" dialog.** Activating Track AI, switching backbone weights (Ctrl+W / Alt+W), or turning on Deep NN mid-session can build a torch model and, on first use of a variant, download its pretrained weights — this can take a few seconds up to over a minute. That work now runs on a background thread while the window keeps pumping events and shows an animated "Loading..." status banner, so the window manager sees the app as alive the whole time instead of flagging it as frozen. Nothing about tracking behavior changed — same init logic, just no longer blocking the event loop while it runs.
+
+### Version 0.3.140 (14 September 2026)
+
+- **New `B` key: lock/unlock the selected marker.** Fixes a frame-by-frame cleanup annoyance: deleting a marker with **R** always moved the selection back one slot (e.g. deleting marker id 1 left marker id 0 selected), so stepping to the next frame and pressing **R** again deleted the wrong marker instead of continuing to clean up the same id. With the selection locked (**B**), **R** still deletes the marker in the current frame but leaves `selected_marker_idx` untouched, so repeated frame-step + **R** keeps removing the *same* marker id across consecutive frames until unlocked.
 
 ### Version 0.3.140 (13 September 2026)
 

@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 14 October 2024
-Update Date: 08 September 2026
-Version: 0.3.130
+Update Date: 14 September 2026
+Version: 0.3.142
 Python Version: 3.12.14
 
 Description:
@@ -22,6 +22,18 @@ C3D support (v0.3.115): each ``.c3d`` is staged to marker CSV via
 ``c3d_markers_to_dataframe``, processed by the shared pipeline, then written
 back with ``auto_create_c3d_from_csv`` (labels, POINT RATE/UNITS, residuals,
 analogs when present) — the same bridge used by ``edit_csv_c3d``.
+
+Notes:
+------
+- Missing values can be filled using:
+  - Linear interpolation: suitable for continuous, predictable data.
+  - Kalman filter: suitable for noisy data or tracking applications.
+  - Savitzky-Golay filter: smooths data using polynomial fitting.
+  - Nearest value fill: replaces missing values with the nearest valid data point.
+- The script automatically detects headers and numeric columns.
+- The output directory and filenames are timestamped to avoid overwriting.
+- Logging functionality tracks processing details, including the number of
+  missing values filled and processing time.
 
 Key Features:
 -------------
@@ -106,6 +118,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
+import numpy.ma as ma
 import pandas as pd
 import toml
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -1970,16 +1983,38 @@ def kalman_smooth(data, n_iter=5, mode=1):
 
     n_features = data.shape[1]
 
+    import numpy.ma as ma
+
     try:
         if mode == 1:  # 1D mode
             # Process each column independently
             filtered_data = np.empty_like(data)
             for j in range(n_features):
+                col_data = data[:, j : j + 1]
+                masked_col = ma.masked_invalid(col_data)
+
+                # Robust initial state mean
+                valid_indices = np.where(~np.isnan(col_data[:, 0]))[0]
+                if len(valid_indices) > 0:
+                    first_idx = valid_indices[0]
+                    first_val = float(col_data[first_idx, 0])
+                    init_vel = (
+                        float(
+                            (col_data[valid_indices[1], 0] - first_val)
+                            / (valid_indices[1] - first_idx)
+                        )
+                        if len(valid_indices) > 1
+                        else 0.0
+                    )
+                    init_mean = np.array([first_val, init_vel])
+                else:
+                    init_mean = np.zeros(2)
+
                 # Initialize Kalman filter for 1D state (position and velocity)
                 kf = KalmanFilter(
                     transition_matrices=np.array([[1, 1], [0, 1]]),
                     observation_matrices=np.array([[1, 0]]),
-                    initial_state_mean=np.zeros(2),
+                    initial_state_mean=init_mean,
                     initial_state_covariance=np.eye(2),
                     transition_covariance=np.eye(2) * 0.1,
                     observation_covariance=np.array([[0.1]]),
@@ -1988,10 +2023,15 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 )
 
                 # Apply EM algorithm and smoothing
-                smoothed_state_means, _ = kf.em(data[:, j : j + 1], n_iter=n_iter).smooth(
-                    data[:, j : j + 1]
+                smoothed_state_means, _ = kf.em(masked_col, n_iter=n_iter).smooth(masked_col)
+                # Blend with original data where valid, use smoothed in gaps
+                col_orig = data[:, j]
+                nan_mask = np.isnan(col_orig)
+                blended = alpha * smoothed_state_means[:, 0] + (1 - alpha) * np.nan_to_num(
+                    col_orig, nan=smoothed_state_means[:, 0]
                 )
-                filtered_data[:, j] = alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
+                blended[nan_mask] = smoothed_state_means[nan_mask, 0]
+                filtered_data[:, j] = blended
 
         else:  # mode == 2
             # Process x,y pairs together
@@ -2000,6 +2040,20 @@ def kalman_smooth(data, n_iter=5, mode=1):
 
             filtered_data = np.empty_like(data)
             for j in range(0, n_features, 2):
+                # Prepare observations for the x,y pair
+                observations = np.column_stack([data[:, j], data[:, j + 1]])
+                masked_obs = ma.masked_invalid(observations)
+
+                # Find first valid observation
+                valid_rows = np.where(~np.isnan(observations).any(axis=1))[0]
+                if len(valid_rows) > 0:
+                    first_r = valid_rows[0]
+                    init_x = float(observations[first_r, 0])
+                    init_y = float(observations[first_r, 1])
+                else:
+                    init_x = 0.0
+                    init_y = 0.0
+
                 # Initialize Kalman filter for 2D state (x,y positions and velocities)
                 # State vector: [x, y, vx, vy, ax, ay]
                 # Transition matrix models constant acceleration motion
@@ -2022,8 +2076,8 @@ def kalman_smooth(data, n_iter=5, mode=1):
                 # Initialize state mean with first observation and zero velocities/accelerations
                 initial_state_mean = np.array(
                     [
-                        data[0, j],  # initial x
-                        data[0, j + 1],  # initial y
+                        init_x,  # initial x
+                        init_y,  # initial y
                         0,  # initial vx
                         0,  # initial vy
                         0,  # initial ax
@@ -2072,17 +2126,19 @@ def kalman_smooth(data, n_iter=5, mode=1):
                     n_dim_state=6,
                 )
 
-                # Prepare observations for the x,y pair
-                observations = np.column_stack([data[:, j], data[:, j + 1]])
-
                 # Apply EM algorithm and smoothing
-                smoothed_state_means, _ = kf.em(observations, n_iter=n_iter).smooth(observations)
+                smoothed_state_means, _ = kf.em(masked_obs, n_iter=n_iter).smooth(masked_obs)
 
                 # Extract x,y positions from smoothed state means
-                filtered_data[:, j] = alpha * smoothed_state_means[:, 0] + (1 - alpha) * data[:, j]
-                filtered_data[:, j + 1] = (
-                    alpha * smoothed_state_means[:, 1] + (1 - alpha) * data[:, j + 1]
-                )
+                for offset in range(2):
+                    col_idx = j + offset
+                    c_orig = data[:, col_idx]
+                    nan_m = np.isnan(c_orig)
+                    b = alpha * smoothed_state_means[:, offset] + (1 - alpha) * np.nan_to_num(
+                        c_orig, nan=smoothed_state_means[:, offset]
+                    )
+                    b[nan_m] = smoothed_state_means[nan_m, offset]
+                    filtered_data[:, col_idx] = b
 
         return filtered_data
 
@@ -2308,13 +2364,14 @@ def process_file(file_path, dest_dir, config):
                 pad_before = pd.DataFrame({first_col: range(min_frame - pad_len, min_frame)})
                 pad_after = pd.DataFrame({first_col: range(max_frame + 1, max_frame + pad_len + 1)})
 
-            # Fill padding with edge values for other columns
+            # Fill padding with edge values for other columns (use valid observations)
             for col in df.columns:
                 if col != first_col:
-                    # Use the value of the first record for initial padding
-                    pad_before[col] = df[col].iloc[0]
-                    # Use the value of the last record for final padding
-                    pad_after[col] = df[col].iloc[-1]
+                    valid_vals = df[col].dropna()
+                    first_val = valid_vals.iloc[0] if not valid_vals.empty else 0.0
+                    last_val = valid_vals.iloc[-1] if not valid_vals.empty else 0.0
+                    pad_before[col] = first_val
+                    pad_after[col] = last_val
 
             # Concatenate with padding
             df = pd.concat([pad_before, df, pad_after]).reset_index(drop=True)
@@ -2388,9 +2445,41 @@ def process_file(file_path, dest_dir, config):
                             method="cubic", limit_direction="both"
                         )
                     elif config["interp_method"] == "kalman":
-                        # For Kalman, we need to handle the entire column
-                        # We'll apply it after this block
-                        pass
+                        try:
+                            data_arr = interpolated.to_numpy(dtype=float)
+                            masked_data = ma.masked_invalid(data_arr.reshape(-1, 1))
+                            valid_indices = np.where(~np.isnan(data_arr))[0]
+                            if len(valid_indices) > 0:
+                                first_val = float(data_arr[valid_indices[0]])
+                                init_vel = (
+                                    float(
+                                        (data_arr[valid_indices[1]] - first_val)
+                                        / (valid_indices[1] - valid_indices[0])
+                                    )
+                                    if len(valid_indices) > 1
+                                    else 0.0
+                                )
+                                init_mean = np.array([first_val, init_vel])
+                            else:
+                                init_mean = np.zeros(2)
+
+                            kf = KalmanFilter(
+                                transition_matrices=np.array([[1, 1], [0, 1]]),
+                                observation_matrices=np.array([[1, 0]]),
+                                initial_state_mean=init_mean,
+                                initial_state_covariance=np.eye(2),
+                                transition_covariance=np.eye(2) * 0.1,
+                                observation_covariance=np.array([[0.1]]),
+                                n_dim_obs=1,
+                                n_dim_state=2,
+                            )
+                            if len(valid_indices) > 0:
+                                kf = kf.em(masked_data, n_iter=5)
+                                smoothed_state_means, _ = kf.smooth(masked_data)
+                                kalman_out = smoothed_state_means[:, 0]
+                                interpolated = pd.Series(kalman_out, index=df.index)
+                        except Exception as e:
+                            print(f"Error applying Kalman filter: {str(e)}")
 
                     # Restore NaN values for gaps larger than max_gap
                     for start, end in zip(gap_starts, gap_ends, strict=False):
@@ -2398,40 +2487,6 @@ def process_file(file_path, dest_dir, config):
 
                     # Update the column with interpolated values
                     df[col] = interpolated
-
-                    # Apply Kalman filter if selected
-                    if config["interp_method"] == "kalman":
-                        # Apply Kalman filter to the entire column
-                        # This is a simplified approach - in practice, you might want
-                        # to apply it only to specific regions
-                        try:
-                            kf = KalmanFilter(
-                                transition_matrices=np.array([[1, 1], [0, 1]]),
-                                observation_matrices=np.array([[1, 0]]),
-                                initial_state_mean=np.zeros(2),
-                                initial_state_covariance=np.eye(2),
-                                transition_covariance=np.eye(2) * 0.1,
-                                observation_covariance=np.array([[0.1]]),
-                                n_dim_obs=1,
-                                n_dim_state=2,
-                            )
-
-                            # Get non-NaN values for training
-                            valid_data = np.array(df[col].dropna().values).reshape(-1, 1)
-                            if len(valid_data) > 0:
-                                # Train the filter
-                                kf = kf.em(valid_data, n_iter=5)
-
-                                # Apply smoothing
-                                # Convert to numpy array and handle NaN values
-                                data = df[col].to_numpy()
-                                # Reshape for Kalman filter
-                                data_reshaped = data.reshape(-1, 1)
-                                # Apply smoothing
-                                smoothed_state_means, _ = kf.smooth(data_reshaped)
-                                df[col] = smoothed_state_means[:, 0]
-                        except Exception as e:
-                            print(f"Error applying Kalman filter: {str(e)}")
                 else:  # No gap size limit
                     if config["interp_method"] in ["linear", "hampel"]:
                         # Hampel uses linear interpolation after spike removal
@@ -2443,30 +2498,36 @@ def process_file(file_path, dest_dir, config):
                         df[col] = df[col].interpolate(method="cubic", limit_direction="both")
                     elif config["interp_method"] == "kalman":
                         try:
+                            data_arr = df[col].to_numpy(dtype=float)
+                            masked_data = ma.masked_invalid(data_arr.reshape(-1, 1))
+                            valid_indices = np.where(~np.isnan(data_arr))[0]
+                            if len(valid_indices) > 0:
+                                first_val = float(data_arr[valid_indices[0]])
+                                init_vel = (
+                                    float(
+                                        (data_arr[valid_indices[1]] - first_val)
+                                        / (valid_indices[1] - valid_indices[0])
+                                    )
+                                    if len(valid_indices) > 1
+                                    else 0.0
+                                )
+                                init_mean = np.array([first_val, init_vel])
+                            else:
+                                init_mean = np.zeros(2)
+
                             kf = KalmanFilter(
                                 transition_matrices=np.array([[1, 1], [0, 1]]),
                                 observation_matrices=np.array([[1, 0]]),
-                                initial_state_mean=np.zeros(2),
+                                initial_state_mean=init_mean,
                                 initial_state_covariance=np.eye(2),
                                 transition_covariance=np.eye(2) * 0.1,
                                 observation_covariance=np.array([[0.1]]),
                                 n_dim_obs=1,
                                 n_dim_state=2,
                             )
-
-                            # Get non-NaN values for training
-                            valid_data = np.array(df[col].dropna().values).reshape(-1, 1)
-                            if len(valid_data) > 0:
-                                # Train the filter
-                                kf = kf.em(valid_data, n_iter=5)
-
-                                # Apply smoothing
-                                # Convert to numpy array and handle NaN values
-                                data = df[col].to_numpy()
-                                # Reshape for Kalman filter
-                                data_reshaped = data.reshape(-1, 1)
-                                # Apply smoothing
-                                smoothed_state_means, _ = kf.smooth(data_reshaped)
+                            if len(valid_indices) > 0:
+                                kf = kf.em(masked_data, n_iter=5)
+                                smoothed_state_means, _ = kf.smooth(masked_data)
                                 df[col] = smoothed_state_means[:, 0]
                         except Exception as e:
                             print(f"Error applying Kalman filter: {str(e)}")
@@ -2478,22 +2539,22 @@ def process_file(file_path, dest_dir, config):
         if config["smooth_method"] != "none":
             print("\nSTEP 2: Applying smoothing to each column")
 
-            # Check if we need to preserve NaNs (Skip interpolation mode)
-            preserve_nans = config["interp_method"] == "skip"
-            if preserve_nans:
+            # Check if we need to preserve NaNs (Skip interpolation mode or residual un-interpolated gaps)
+            is_skip_mode = config["interp_method"] == "skip"
+            if is_skip_mode:
                 print("Note: Skip mode - NaN positions will be preserved after smoothing")
 
             for col in numeric_cols:
                 print(f"\nSmoothing column: {col}")
 
-                # Save original NaN mask for Skip mode
-                original_nan_mask = df[col].isna().copy() if preserve_nans else None
+                # Save original NaN mask to restore later if in skip mode or large gaps
+                nan_mask_before_smooth = df[col].isna().copy()
 
                 try:
                     data = df[col].values.copy().astype(float)
 
-                    # For Skip mode, temporarily fill NaNs before smoothing
-                    if preserve_nans and original_nan_mask is not None and np.any(np.isnan(data)):
+                    # If data still has NaNs, temporarily fill before smoothing so filters don't fail
+                    if nan_mask_before_smooth.any():
                         data_for_smoothing = (
                             pd.Series(data)
                             .interpolate(method="linear", limit_direction="both")
@@ -2502,7 +2563,7 @@ def process_file(file_path, dest_dir, config):
                             .values
                         )
                         print(
-                            f"Temporarily interpolated {original_nan_mask.sum()} NaN values for smoothing"
+                            f"Temporarily filled {nan_mask_before_smooth.sum()} NaN values for smoothing"
                         )
                     else:
                         data_for_smoothing = data
@@ -2539,15 +2600,15 @@ def process_file(file_path, dest_dir, config):
 
                     # Apply the smoothed result
                     if smoothed_result is not None:
-                        # Restore NaN positions for Skip mode
-                        if (
-                            preserve_nans
-                            and original_nan_mask is not None
-                            and original_nan_mask.any()
-                        ):
+                        # Restore NaN positions if Skip mode or if gaps exceeded max_gap
+                        if is_skip_mode and nan_mask_before_smooth.any():
                             smoothed_result = np.asarray(smoothed_result).astype(float)
-                            smoothed_result[original_nan_mask.values] = np.nan
-                            print(f"Restored {original_nan_mask.sum()} NaN positions")
+                            smoothed_result[nan_mask_before_smooth.values] = np.nan
+                            print(f"Restored {nan_mask_before_smooth.sum()} NaN positions")
+                        elif not is_skip_mode and nan_mask_before_smooth.any():
+                            # Restore only large gaps that exceeded max_gap
+                            smoothed_result = np.asarray(smoothed_result).astype(float)
+                            smoothed_result[nan_mask_before_smooth.values] = np.nan
 
                         df[col] = smoothed_result
 

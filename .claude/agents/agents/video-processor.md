@@ -28,7 +28,7 @@ vaila/extractpng.py          — video → PNG frames
 vaila/compress_videos_h264.py — H.264 compression
 vaila/compress_videos_h265.py — H.265 compression
 vaila/markerless2d_mpyolo.py  — MediaPipe + YOLO 2D
-vaila/markerless3d_analysis_v2.py — 3D markerless
+vaila/markerless_3d_analysis.py — 3D markerless
 vaila/yolov26track.py         — YOLOv26 track + pose + CLI `track` subcommand
 vaila/vaila_sam.py            — SAM 3 video (Frame B → YOLO + FB)
 vaila/vaila_sapiens.py        — Sapiens2 308-kp pose (CUDA)
@@ -64,4 +64,4 @@ def compress_video(input_path: Path, output_path: Path, crf: int = 23):
 - CUDA-enabled builds use TensorRT `.engine` files (auto-generated on first run)
 - Engine files are OS-specific — don't share between Windows/Linux
 - Always fall back to CPU if GPU is unavailable
-- Check `vaila/common_utils.py` for the `HardwareManager` pattern
+- Check `vaila/hardware_manager.py` for the `HardwareManager` pattern

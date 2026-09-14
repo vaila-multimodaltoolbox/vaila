@@ -98,6 +98,19 @@ shank_length_m = 0.40</pre>
     <pre>python vaila_and_jump.py -i path/to/file.csv -c path/to/vaila_and_jump_config.toml -o path/to/output/ -d 3</pre>
     <p>Example (Time of Flight batch, mode 1): <code>-i &lt;dir&gt; -o &lt;out&gt; -d 1</code>. Example (Jump Height batch, mode 2): <code>-i &lt;dir&gt; -o &lt;out&gt; -d 2</code>.</p>
 
+    <h3>CMJ Performance Profile — PODS</h3>
+    <p>MediaPipe and Team Batch add explicit onset-to-takeoff timing, mRSI, sourced momentum,
+    braking/propulsive estimates and phase QC. Person, Outcome, Driver and Strategy tables
+    accompany a four-panel <code>*_cmj_pods_*.png</code> diagnostic. CSV adds scalar events/QC,
+    <code>cmj_phase</code> and explicit force/power aliases; Team Batch adds descriptive charts and z-scores.</p>
+    <p><strong>Markerless force and power estimates are not force-platform measurements.</strong>
+    Invalid metrics remain unavailable; low FPS and short phases are flagged.
+    Historical <code>propulsion_time_s</code> and CoM-crossing <code>takeoff_frame</code> are preserved;
+    mRSI uses new <code>time_to_takeoff_s</code>.</p>
+    <p>The generated <code>[jump_phase]</code> template documents onset velocity/displacement,
+    noise, persistence, minimum phase duration and takeoff agreement. CLI <code>-c</code>
+    loads phases and context from the same file. See the
+    <a href="../../docs/cmj_pods.md">complete configuration, variable/event dictionary and validation limits</a>.</p>
     <h3>Outputs</h3>
     <ul>
       <li>CSV: <code>&lt;name&gt;_jump_results_&lt;timestamp&gt;.csv</code> (scalars; mode 3)</li>
@@ -258,7 +271,7 @@ shank_length_m = 0.40</pre>
   </section>
 
   <div class="foot">
-    Version: 0.3.117 — Updated: 27 August 2026 — Author: Prof. Paulo R. P. Santiago — License: GPL-3.0
+    Version: 0.3.141 — Updated: 14 September 2026 — Author: Prof. Paulo R. P. Santiago — License: GPL-3.0
   </div>
 </body>
 </html>

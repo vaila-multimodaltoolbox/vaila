@@ -1,0 +1,208 @@
+# Build multi-OS installers on GitHub-hosted runners (macOS + Windows VMs)
+# and attach them to the GitHub Release for the pushed tag.
+#
+# Triggers:
+#   - push of tags matching rp* or v* (e.g. rp14Sep2026, v0.3.142)
+#   - workflow_dispatch (rebuild assets for an existing tag)
+#
+# Pattern matches prior manual releases that uploaded:
+#   vaila_installer.dmg  (macOS)
+#   vaila_installer.exe  (Windows)
+# Linux continues to use install_vaila_linux.sh (no binary installer historically).
+
+name: Release installers
+
+on:
+  push:
+    tags:
+      - "rp*"
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to build installers for (e.g. rp14Sep2026)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-installers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve tag and package version
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          # Prefer GUI banner version; fall back to pyproject.toml [project].version
+          VERSION="$(grep -E '^Version:' vaila.py | head -1 | awk '{print $2}' | tr -d '\r')"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(grep -E '^version *= *"' pyproject.toml | head -1 | sed -E 's/^version *= *"([^"]+)".*/\1/')"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "Could not resolve package version" >&2
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag=${TAG} version=${VERSION}"
+
+  build-macos:
+    needs: resolve
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Build DMG installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x create_dmg_installer.sh install_vaila_mac.sh
+          # Finder AppleScript customization may warn on CI; script still produces a usable DMG.
+          bash ./create_dmg_installer.sh
+          test -f vaila_installer.dmg
+          ls -lh vaila_installer.dmg
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaila-installer-dmg
+          path: vaila_installer.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            throw "ISCC.exe not found after Inno Setup install"
+          }
+
+      - name: Stamp installer version
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.resolve.outputs.version }}"
+          $iss = "vaila_installer.iss"
+          (Get-Content $iss) -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$ver`"" |
+            Set-Content $iss -Encoding ASCII
+          Select-String -Path $iss -Pattern 'MyAppVersion' | Select-Object -First 2
+
+      - name: Build EXE installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" .\vaila_installer.iss
+          if (-not (Test-Path .\vaila_installer.exe)) {
+            throw "vaila_installer.exe was not produced"
+          }
+          Get-Item .\vaila_installer.exe | Format-List Name, Length, FullName
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaila-installer-exe
+          path: vaila_installer.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    needs: [resolve, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for release notes helpers)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Download installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Stage release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp dist/vaila-installer-dmg/vaila_installer.dmg release-assets/
+          cp dist/vaila-installer-exe/vaila_installer.exe release-assets/
+          ls -lh release-assets/
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES="$(mktemp)"
+          cat > "$NOTES" <<EOF
+          ## ${TAG} — v${VERSION}
+
+          **Package version (banner):** v${VERSION}
+          **Release codename / tag:** ${TAG}
+          **Python:** 3.12.x
+
+          ### Multi-OS installers (built on GitHub-hosted runners)
+          - **macOS:** \`vaila_installer.dmg\` (macos-latest)
+          - **Windows:** \`vaila_installer.exe\` (windows-latest)
+          - **Linux:** use \`bash install_vaila_linux.sh\` (no binary installer in this release line)
+
+          ### Bootstrap alternatives
+          - \`bash bin/setup_pyproject.sh\` / \`pwsh bin/setup_pyproject.ps1\`
+
+          Source for this milestone: tag \`${TAG}\`.
+          EOF
+
+          # Flatten leading indentation from heredoc
+          sed -i 's/^          //' "$NOTES"
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Updating existing release $TAG"
+            gh release upload "$TAG" release-assets/vaila_installer.dmg release-assets/vaila_installer.exe \
+              --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$NOTES" --title "${TAG} — v${VERSION}"
+          else
+            echo "Creating release $TAG"
+            gh release create "$TAG" \
+              release-assets/vaila_installer.dmg \
+              release-assets/vaila_installer.exe \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "${TAG} — v${VERSION}" \
+              --notes-file "$NOTES"
+          fi
+
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY"

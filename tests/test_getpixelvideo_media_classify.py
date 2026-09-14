@@ -244,7 +244,7 @@ def test_click_pass_and_track_ai_armed_initialization() -> None:
 
     # 1. Verify AI Track arms cleanly without deactivating when no anchor point exists
     assert "AI Track" in source
-    assert "click video to set anchor for marker" in source
+    assert "click video to anchor m" in source or "waiting for click to set anchor" in source
 
     # 2. Verify initial click initializes the live tracker from ARMED state
     assert "if track_ai_active and frame is not None:" in source
@@ -258,12 +258,10 @@ def test_click_pass_and_track_ai_armed_initialization() -> None:
     assert "frame_count = min(frame_count + 1, total_frames - 1)" in source
     assert "paused = True" in source
 
-    # 4. Verify AI Track button is color-only state (no "armed"/"m0" text on the button
-    # itself -- amber=armed, green=on, red=off), per explicit user request to drop the
-    # text badge and keep green-when-on.
-    assert "AI Track button (short label, color-only state" in source
-    assert "btn_color = (200, 130, 20) if live_tracker is None else (30, 175, 75)" in source
-    assert "btn_color = (175, 45, 45)  # Red (off)" in source
+    # 4. Verify AI Track button is color-only state (green=on, red=off),
+    # per explicit user request to drop the text badge and keep green-when-on.
+    assert "AI Track button" in source
+    assert "btn_color = (30, 175, 75) if track_ai_active else (175, 45, 45)" in source
 
     # 5. Verify the ARMED-wait and ON status messages (on-screen overlay + console) also
     # dropped the literal "armed"/"mN" tokens, per explicit user request -- not just the
@@ -337,3 +335,30 @@ def test_track_ai_spam_suppression_and_shape_wiring() -> None:
     # 5. Canvas overlay visual shapes
     assert "pygame.draw.circle(screen, (0, 220, 255)" in source
     assert "pygame.draw.rect(screen, (0, 220, 255)" in source
+
+
+def test_mouse_play_tracking_button_and_hotkey_wiring() -> None:
+    """Verify MousePlay toolbar button (replacing confusing 'Auto'), hotkey M, and UI indicators."""
+    source = Path(gpv.__file__).read_text(encoding="utf-8")
+
+    # 1. Button rect and label definition
+    assert "mouse_play_button_rect = pygame.Rect(" in source
+    assert 'mouse_play_label = "MPlay" if is_compact else "MousePlay"' in source
+    assert "mouse_play_button_width = 50 if is_compact else 70" in source
+
+    # 2. Status bar and parts indicator
+    assert 'mouse_play_indicator = font.render("MOUSE-PLAY ON", True, (255, 255, 0))' in source
+    assert 'parts.append("MousePlay")' in source
+
+    # 3. Toast instructions on toggle (button click and hotkey M)
+    assert "MousePlay tracking ON: press Space to play & track with mouse" in source
+    assert "MousePlay tracking disabled" in source
+
+    # 4. Click handling and hotkey M wiring
+    assert "mouse_play_button_rect.collidepoint(x, rel_y):" in source
+    assert "elif event.key == pygame.K_m:" in source
+
+    # 5. In-app help dialog entry
+    assert '"M  /  \'MousePlay\' button"' in source
+    assert "Toggle Mouse-Play tracking (marks at mouse cursor during video playback)" in source
+
