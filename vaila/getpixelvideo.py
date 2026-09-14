@@ -7,7 +7,7 @@ Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
 Update: 13 September 2026
-Version: 0.3.139
+Version: 0.3.140
 Python Version: 3.12.14
 
 Description:
@@ -4899,9 +4899,13 @@ def play_video_with_controls(
     def draw_controls():
         """
         Draw the control area on a separate surface.
-        The frame slider is drawn across the bottom; above it a thin **marker timeline**
-        (green = frames with visible keypoints, gold line = current frame).  The strip is
-        clickable / draggable to jump frames (snaps to markers inside the column when possible).
+        The frame slider is drawn across the bottom; above it a thin **marker timeline**,
+        colored per the currently SELECTED marker slot: green = frames where the selected
+        marker has a coordinate, blue = frames where a DIFFERENT marker slot has one (so a
+        second/third tracked marker never stays invisible behind the first slot's green
+        fill), gold line = current frame. Switching marker (TAB) recolors the strip for the
+        newly selected slot. The strip is clickable / draggable to jump frames (snaps to
+        markers inside the column when possible).
         Top button row includes **Template** (FIFA/MediaPipe/YOLO; right-click = TOML like ``K`` when FIFA),
         **Mode** (Mark / Sequential / 1-line), **Persist**, **Auto**, **ClickPass**,
         **Labeling**, **Guide** (field or skeleton overlay).
@@ -4969,6 +4973,21 @@ def play_video_with_controls(
             deleted_markers=deleted_markers,
             total_frames=total_frames,
         )
+        # Per-marker view: isolate the SELECTED marker slot's own coverage so a second
+        # (or third, ...) marker slot doesn't stay invisible behind the first slot's
+        # green fill. `mf_other` (any marker minus selected) gets its own dimmer color
+        # below so other markers' progress is still visible, just visually secondary.
+        if not one_line_mode and selected_marker_idx >= 0:
+            mf_selected = frames_with_marker_index(
+                coordinates=coordinates,
+                deleted_positions=deleted_positions,
+                marker_idx=selected_marker_idx,
+                total_frames=total_frames,
+            )
+        else:
+            mf_selected = mf_timeline
+        mf_selected_set = set(mf_selected)
+        mf_other = [f for f in mf_timeline if f not in mf_selected_set]
 
         # --- Status surfaces (layout stacked upward from heat strip) ---
         display_total = (
@@ -5005,8 +5024,15 @@ def play_video_with_controls(
                 f"Marker: {marker_idx}/{marker_total_display}", True, (255, 255, 255)
             )
 
+        if not one_line_mode and selected_marker_idx >= 0 and len(mf_other) > 0:
+            marked_cnt_label = (
+                f"M{selected_marker_idx}:{len(mf_selected)} · other:{len(mf_other)}"
+                " · click strip · Shift+←/→"
+            )
+        else:
+            marked_cnt_label = f"Marked:{len(mf_timeline)} · click strip · Shift+←/→"
         marked_cnt_txt = font.render(
-            f"Marked:{len(mf_timeline)} · click strip · Shift+←/→",
+            marked_cnt_label,
             True,
             (150, 210, 165),
         )
@@ -5153,9 +5179,17 @@ def play_video_with_controls(
                 f0 = int(px * denom_frames / slider_width)
                 f1 = int((px + 1) * denom_frames / slider_width)
                 f1 = max(f0 + 1, min(f1, denom_frames))
-                lo = bisect.bisect_left(mf_timeline, f0)
-                marked_here = lo < len(mf_timeline) and mf_timeline[lo] < f1
-                col = (35, 175, 115) if marked_here else (58, 58, 58)
+                lo_sel = bisect.bisect_left(mf_selected, f0)
+                selected_here = lo_sel < len(mf_selected) and mf_selected[lo_sel] < f1
+                if selected_here:
+                    # Selected marker slot present at this frame column.
+                    col = (35, 175, 115)
+                else:
+                    lo_oth = bisect.bisect_left(mf_other, f0)
+                    other_here = lo_oth < len(mf_other) and mf_other[lo_oth] < f1
+                    # A different marker slot is present here -- still visible, but
+                    # visually secondary so it never masquerades as the selected one.
+                    col = (70, 110, 165) if other_here else (58, 58, 58)
                 pygame.draw.line(
                     control_surface,
                     col,
@@ -6152,7 +6186,14 @@ def play_video_with_controls(
             ),
             (
                 "Ctrl+W  /  Alt+W",
-                "Select ResNet-50 weights (.pth/.pt) from ai_tracker/, custom dir, or Hub",
+                "Cycle backbone weights (.pth/.pt): ResNet50/152, MobileNetV3-Small,"
+                " EfficientNet-B0, custom dir, or Hub -- variant inferred from filename",
+                "item",
+            ),
+            (
+                "  resnet_variant (TOML)",
+                "Or set directly in the Cfg profile TOML -- no local file required"
+                " (auto-downloads from Torch Hub)",
                 "item",
             ),
             (
@@ -6172,7 +6213,7 @@ def play_video_with_controls(
             ),
             (
                 "'Deep: ON' / 'OFF' button",
-                "Toggle ResNet-50 deep features (Default OFF = pure CPU ~500 FPS)",
+                "Toggle deep-backbone features (Default OFF = pure CPU ~500 FPS)",
                 "item",
             ),
             (
@@ -6189,7 +6230,13 @@ def play_video_with_controls(
             ("=== MARKER TIMELINE STRIP ===", "", "header"),
             (
                 "Timeline Strip (above slider)",
-                "Green = frames with markers; Gold line = current frame position",
+                "Green = SELECTED marker's frames; Blue = other markers' frames;"
+                " Gold line = current frame",
+                "item",
+            ),
+            (
+                "  Switch marker (TAB)",
+                "Recolors the strip for the newly selected marker slot",
                 "item",
             ),
             (
@@ -12654,6 +12701,44 @@ def do_export_bbox_coords(input_file_path, video_file_path=None):
         exported_files.append(str(output_path))
 
     return exported_files
+
+
+def frames_with_marker_index(
+    *,
+    coordinates: dict[int, list[Any]] | None,
+    deleted_positions: dict[int, set[int]] | None,
+    marker_idx: int,
+    total_frames: int,
+) -> list[int]:
+    """Return sorted frame indices where marker SLOT `marker_idx` has a visible coordinate.
+
+    Unlike `sorted_frames_with_visible_markers` (any marker slot), this isolates a
+    single slot so the timeline strip can be colored per-marker: with several markers
+    tracked, slot 0 filling a frame no longer visually masks whether slot 1, 2, ... is
+    also present there. Only meaningful for indexed marker slots (normal/sequential
+    mode) -- one-line mode has no persistent per-frame marker identity, so callers
+    should fall back to `sorted_frames_with_visible_markers` there.
+    """
+    if coordinates is None or marker_idx < 0:
+        return []
+    del_pos = deleted_positions or {}
+    out: list[int] = []
+    for f_idx in range(max(0, total_frames)):
+        pts = coordinates.get(f_idx)
+        if not pts or marker_idx >= len(pts):
+            continue
+        if marker_idx in del_pos.get(f_idx, set()):
+            continue
+        p = pts[marker_idx]
+        if p is None:
+            continue
+        try:
+            x, y = p[0], p[1]
+        except (TypeError, ValueError, IndexError):
+            continue
+        if x is not None and y is not None:
+            out.append(f_idx)
+    return out
 
 
 def sorted_frames_with_visible_markers(
