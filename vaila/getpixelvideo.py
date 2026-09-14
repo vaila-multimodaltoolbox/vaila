@@ -9845,7 +9845,6 @@ def play_video_with_controls(
             slider_width,
             slider_height,
         ) = draw_controls()
-        auto_button_rect = mouse_play_button_rect
 
         # Show save message if needed
         if showing_save_message:

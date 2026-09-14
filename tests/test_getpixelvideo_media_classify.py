@@ -244,7 +244,7 @@ def test_click_pass_and_track_ai_armed_initialization() -> None:
 
     # 1. Verify AI Track arms cleanly without deactivating when no anchor point exists
     assert "AI Track" in source
-    assert "click video to set anchor for marker" in source
+    assert "click video to anchor m" in source or "waiting for click to set anchor" in source
 
     # 2. Verify initial click initializes the live tracker from ARMED state
     assert "if track_ai_active and frame is not None:" in source
