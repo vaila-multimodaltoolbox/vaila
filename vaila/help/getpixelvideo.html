@@ -840,7 +840,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span></td>
-                <td>Select or cycle backbone weights (.pth/.pt) -- ResNet-50, ResNet-152, MobileNetV3-Small, EfficientNet-B0 -- from <code>vaila/models/ai_tracker/</code>, custom directory file browser, or Torch Hub default. Backbone also directly editable via <code>resnet_variant</code> in TOML.</td>
+                <td>Cycle backbone: ResNet-50 &rarr; ResNet-152 &rarr; MobileNetV3-Small &rarr; EfficientNet-B0 &rarr; custom file browser &rarr; repeat. A backbone with a local checkpoint in <code>vaila/models/ai_tracker/</code> loads it; one with none is still reachable and <strong>auto-downloads</strong> from Torch Hub on first use -- no need to pre-download every variant. Backbone also directly editable via <code>resnet_variant</code> in TOML.</td>
               </tr>
               <tr>
                 <td><span class="key">Track AI Shape</span></td>
@@ -1718,6 +1718,7 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
         <ul>
           <li><strong>Per-marker timeline strip.</strong> With more than one marker tracked, the strip above the scrub slider now colors <strong>green</strong> for frames where the currently <strong>selected</strong> marker (<span class="key">TAB</span>/<span class="key">SHIFT+TAB</span>) is filled and <strong>blue</strong> for frames where a <em>different</em> marker is filled -- previously any filled marker painted the whole strip green, hiding whether the second marker had any coverage. Recolors live on marker switch; the marked-count label also splits into <code>M&lt;n&gt;:X &middot; other:Y</code> when more than one marker has data.</li>
           <li><strong>In-app help (<span class="key">H</span>) updated.</strong> The help overlay now documents all four selectable backbones (ResNet-50/ResNet-152/MobileNetV3-Small/EfficientNet-B0), the <code>resnet_variant</code> TOML field, and the new green/blue timeline-strip semantics.</li>
+          <li><strong><span class="key">Ctrl+W</span>/<span class="key">Alt+W</span> now cycles every backbone, not just ones already downloaded.</strong> Previously, cycling only visited local checkpoint files in <code>vaila/models/ai_tracker/</code> -- on a machine with only <code>resnet50_imagenet.pth</code> present, the button could never reach ResNet-152/MobileNetV3-Small/EfficientNet-B0 (it silently fell back to <code>resnet50</code>). Each of the four backbones now gets one cycle stop even with no local file: selecting one with nothing downloaded yet loads it via Torch Hub's default pretrained weights automatically (first use only; cached afterward). Order: ResNet-50 &rarr; ResNet-152 &rarr; MobileNetV3-Small &rarr; EfficientNet-B0 &rarr; custom file browser &rarr; repeat.</li>
         </ul>
 
         <h3>Version 0.3.139 (13 September 2026)</h3>

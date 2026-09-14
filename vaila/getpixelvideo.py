@@ -3993,10 +3993,14 @@ def play_video_with_controls(
     def select_track_ai_weights() -> None:
         """Cycle or select backbone deep feature weights (.pth/.pt) for Track AI.
 
-        Cycles discovered local checkpoints for all four selectable backbones
-        (resnet50, resnet152, mobilenet_v3_small, efficientnet_b0); the variant is
-        inferred from the chosen filename (no extra GUI widget -- fallback_variant
-        cascade stays TOML/params-only).
+        Cycles through all four selectable backbones (resnet50, resnet152,
+        mobilenet_v3_small, efficientnet_b0), not just the ones with a local
+        checkpoint file already on disk: a variant with no local checkpoint gets
+        one "Torch Hub default" cycle entry that auto-downloads its pretrained
+        weights on first use (via `torchvision.models.get_model_weights`), so a
+        machine with only resnet50_imagenet.pth downloaded can still reach every
+        other backbone from this one button/hotkey. Past the last entry, opens a
+        file browser for a fully custom .pth/.pt (variant inferred from filename).
         """
         nonlocal track_ai_params, track_ai_use_deep, live_tracker
         nonlocal save_message_text, showing_save_message, save_message_timer
@@ -4013,60 +4017,43 @@ def play_video_with_controls(
                 tracking_shape=track_ai_shape,
             )
 
-        # Cycle through all four variants' discovered checkpoints in one list -- the
-        # variant is inferred from the chosen filename below (no extra GUI widget).
-        ckpts = (
-            get_available_resnet_checkpoints("resnet50")
-            + get_available_resnet_checkpoints("resnet152")
-            + get_available_resnet_checkpoints("mobilenet_v3_small")
-            + get_available_resnet_checkpoints("efficientnet_b0")
-        )
-        curr_w = getattr(track_ai_params, "deep_weights_path", "") or ""
+        def _infer_variant_from_filename(path: str) -> str:
+            name = os.path.basename(path).lower()
+            if "resnet152" in name:
+                return "resnet152"
+            if "mobilenet_v3_small" in name:
+                return "mobilenet_v3_small"
+            if "efficientnet_b0" in name:
+                return "efficientnet_b0"
+            return "resnet50"
 
-        # If user triggers Weights, cycle through options:
-        # 1. Local discovered ckpts (e.g. vaila/models/ai_tracker/resnet50_imagenet.pth)
-        # 2. Open file browser to choose custom .pth/.pt
-        # 3. Default PyTorch / Hub pretrained
-        chosen_path: str = ""
-        total_h = window_height + control_panel_height
-        if ckpts and not curr_w:
-            chosen_path = str(ckpts[0])
-        elif ckpts and curr_w and any(str(c) == curr_w for c in ckpts):
-            idx = next(i for i, c in enumerate(ckpts) if str(c) == curr_w)
-            if idx + 1 < len(ckpts):
-                chosen_path = str(ckpts[idx + 1])
+        # One cycle entry per discovered local checkpoint; one "Torch Hub default"
+        # entry (empty path) for any variant with none found locally yet.
+        _variants = ("resnet50", "resnet152", "mobilenet_v3_small", "efficientnet_b0")
+        entries: list[tuple[str, str]] = []
+        for _variant in _variants:
+            _local = get_available_resnet_checkpoints(_variant)
+            if _local:
+                entries.extend((_variant, str(p)) for p in _local)
             else:
-                init_d = os.path.dirname(video_path) if video_path else str(ckpts[0].parent)
-                custom = pygame_file_dialog(
-                    initial_dir=init_d,
-                    file_extensions=[".pth", ".pt"],
-                    restore_size=(window_width, total_h),
-                )
-                chosen_path = custom if (custom and os.path.isfile(custom)) else ""
+                entries.append((_variant, ""))
+
+        curr_w = getattr(track_ai_params, "deep_weights_path", "") or ""
+        curr_v = getattr(track_ai_params, "resnet_variant", "resnet50") or "resnet50"
+        total_h = window_height + control_panel_height
+
+        cur_idx = entries.index((curr_v, curr_w)) if (curr_v, curr_w) in entries else -1
+        if cur_idx + 1 < len(entries):
+            inferred_variant, chosen_path = entries[cur_idx + 1]
         else:
-            init_d = (
-                os.path.dirname(video_path)
-                if video_path
-                else (str(ckpts[0].parent) if ckpts else os.getcwd())
-            )
+            init_d = os.path.dirname(video_path) if video_path else os.getcwd()
             custom = pygame_file_dialog(
                 initial_dir=init_d,
                 file_extensions=[".pth", ".pt"],
                 restore_size=(window_width, total_h),
             )
             chosen_path = custom if (custom and os.path.isfile(custom)) else ""
-
-        # Infer the variant from the chosen filename; default resnet50 (also covers
-        # the "Default Torch Hub" case where chosen_path is empty).
-        _fname_lower = os.path.basename(chosen_path).lower()
-        if "resnet152" in _fname_lower:
-            inferred_variant = "resnet152"
-        elif "mobilenet_v3_small" in _fname_lower:
-            inferred_variant = "mobilenet_v3_small"
-        elif "efficientnet_b0" in _fname_lower:
-            inferred_variant = "efficientnet_b0"
-        else:
-            inferred_variant = "resnet50"
+            inferred_variant = _infer_variant_from_filename(chosen_path)
 
         track_ai_params.deep_weights_path = chosen_path
         track_ai_params.use_deep_features = True
@@ -4564,12 +4551,12 @@ def play_video_with_controls(
             live_tracker = None
             live_track_target_marker = target_marker
             save_message_text = (
-                f"Track AI [ON]: click video to anchor m{target_marker}. (Ctrl+W: ResNet50 weights)"
+                f"Track AI [ON]: click video to anchor m{target_marker}. (Ctrl+W: backbone weights)"
             )
             showing_save_message = True
             save_message_timer = 200
             print(
-                f">> Track AI [ON]: waiting for click to set anchor, marker {target_marker}. Press Ctrl+W to configure ResNet50 weights."
+                f">> Track AI [ON]: waiting for click to set anchor, marker {target_marker}. Press Ctrl+W to cycle backbone weights."
             )
             return
 
@@ -6186,8 +6173,8 @@ def play_video_with_controls(
             ),
             (
                 "Ctrl+W  /  Alt+W",
-                "Cycle backbone weights (.pth/.pt): ResNet50/152, MobileNetV3-Small,"
-                " EfficientNet-B0, custom dir, or Hub -- variant inferred from filename",
+                "Cycle backbone: ResNet50 -> ResNet152 -> MobileNetV3-Small ->"
+                " EfficientNet-B0 -> custom file -> repeat; missing ones auto-download",
                 "item",
             ),
             (
@@ -10381,7 +10368,7 @@ def play_video_with_controls(
                     showing_save_message = True
                     save_message_timer = 30
 
-                # Track AI ResNet-50 Weights Hotkey (Ctrl+W or Alt+W)
+                # Track AI Backbone Weights Hotkey (Ctrl+W or Alt+W)
                 elif event.key == pygame.K_w and (
                     pygame.key.get_mods() & (pygame.KMOD_CTRL | pygame.KMOD_ALT)
                 ):
