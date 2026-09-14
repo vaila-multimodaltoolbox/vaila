@@ -5480,19 +5480,23 @@ def play_video_with_controls(
         persist_text = _top_btn_font.render(persist_label, True, (255, 255, 255))
         control_surface.blit(persist_text, persist_text.get_rect(center=persist_button_rect.center))
 
-        # 4. Auto-marking mode button
-        auto_button_rect = pygame.Rect(
+        # 4. Mouse-Play tracking mode button (marks at mouse cursor during video playback)
+        mouse_play_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
-            auto_button_width,
+            mouse_play_button_width,
             button_height,
         )
-        current_x += auto_button_width + button_gap
+        auto_button_rect = mouse_play_button_rect
+        current_x += mouse_play_button_width + button_gap
 
-        auto_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
-        pygame.draw.rect(control_surface, auto_color, auto_button_rect)
-        auto_text = _top_btn_font.render("Auto", True, (255, 255, 255))
-        control_surface.blit(auto_text, auto_text.get_rect(center=auto_button_rect.center))
+        mouse_play_color = (150, 50, 150) if auto_marking_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, mouse_play_color, mouse_play_button_rect)
+        mouse_play_label = "MPlay" if is_compact else "MousePlay"
+        mouse_play_text = _top_btn_font.render(mouse_play_label, True, (255, 255, 255))
+        control_surface.blit(
+            mouse_play_text, mouse_play_text.get_rect(center=mouse_play_button_rect.center)
+        )
 
         # 5. ClickPass mode button
         click_pass_button_rect = pygame.Rect(
@@ -5792,7 +5796,7 @@ def play_video_with_controls(
             help_button_rect,
             persist_button_rect,
             load_button_rect,
-            auto_button_rect,  # Add auto button to return
+            mouse_play_button_rect,  # MousePlay tracking button (M key)
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
             measure_button_rect,  # Quick Measure (same as Q)
@@ -6284,8 +6288,8 @@ def play_video_with_controls(
                 "item",
             ),
             (
-                "M  /  'Auto' button",
-                "Toggle Auto-marking mode (marks at mouse cursor during play)",
+                "M  /  'MousePlay' button",
+                "Toggle Mouse-Play tracking (marks at mouse cursor during video playback)",
                 "item",
             ),
             (
