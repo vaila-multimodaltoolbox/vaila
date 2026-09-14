@@ -11009,14 +11009,17 @@ def play_video_with_controls(
                         )
                         showing_save_message = True
                         save_message_timer = 30
-                    elif auto_button_rect.collidepoint(x, rel_y):
+                    elif mouse_play_button_rect.collidepoint(x, rel_y):
                         if not one_line_mode:  # Only toggle if not in one-line mode
                             auto_marking_mode = not auto_marking_mode
-                            save_message_text = (
-                                f"Auto-marking {'enabled' if auto_marking_mode else 'disabled'}"
-                            )
+                            if auto_marking_mode:
+                                save_message_text = (
+                                    "MousePlay tracking ON: press Space to play & track with mouse"
+                                )
+                            else:
+                                save_message_text = "MousePlay tracking disabled"
                             showing_save_message = True
-                            save_message_timer = 30
+                            save_message_timer = 45
                     elif click_pass_button_rect.collidepoint(x, rel_y):
                         if not one_line_mode:
                             click_pass_mode = not click_pass_mode
