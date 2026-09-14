@@ -1,6 +1,6 @@
 # Markerless CMJ Performance Profile — PODS
 
-Version: 0.3.141 · Updated: 14 September 2026
+Version: 0.4.0 · Updated: 14 September 2026
 
 ## Architecture and scope
 
@@ -278,7 +278,7 @@ Implementation files:
 - `README.md`
 
 All edited/new Python headers and module help match the existing global banner
-version 0.3.141, dated 14 September 2026. No installer or dependency changes are
+version 0.4.0, dated 14 September 2026. No installer or dependency changes are
 needed. Concurrent pre-existing GetPixelVideo/main-window changes are outside this
 extension.
 

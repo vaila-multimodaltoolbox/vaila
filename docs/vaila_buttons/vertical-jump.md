@@ -1,6 +1,6 @@
 # Vertical Jump — Frame B, B3_r3_c3
 
-Version: 0.3.141 · Updated: 14 September 2026
+Version: 0.4.0 · Updated: 14 September 2026
 
 The **Vertical Jump** button calls `Vaila.vailajump()` and opens
 `vaila.vaila_and_jump.vaila_and_jump()`.

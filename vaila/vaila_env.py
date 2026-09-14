@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 September 2026
-Update Date: 09 September 2026
-Version: 0.3.131
+Update Date: 14 September 2026
+Version: 0.4.0
 
 Description:
 Environment, dependencies, and AI tracking models inspector for vailá.
@@ -60,8 +60,8 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 # Global application version and update date (matching vaila.py)
-VAILA_VERSION = "0.3.131"
-VAILA_UPDATE_DATE = "09 September 2026"
+VAILA_VERSION = "0.4.0"
+VAILA_UPDATE_DATE = "14 September 2026"
 
 # Key packages tracked in vailá
 CORE_PACKAGES: list[tuple[str, str]] = [
