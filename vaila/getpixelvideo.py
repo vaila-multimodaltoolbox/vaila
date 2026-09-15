@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 14 September 2026
-Version: 0.3.143
+Update: 15 September 2026
+Version: 0.4.2
 Python Version: 3.12.14
 
 Description:
@@ -114,7 +114,14 @@ Key bindings (see in-app **H** help for full list):
   F9                    Export YOLO-pose dataset from markers
   Shift+← / Shift+→     Jump prev/next frame that has markers
   Marker timeline strip Click or drag (above scrub bar) to jump
-  Marker toolbar       Template (FIFA/MediaPipe/YOLO; right-click TOML when FIFA); Mode (Mark/Seq/1-line)
+  Marker toolbar       Template (FIFA/MediaPipe/YOLO; TOML via ``K`` when FIFA); Mode (Mark/Seq/1-line)
+  Ctrl+I / EditMode    Toggle VISUAL (safe browse) ↔ INSERT (edit markers)
+  Ctrl+Z               Undo last marker edit (INSERT only)
+  Restore button       Revert markers to session open / last successful Save
+
+New in 0.4.2:
+  VISUAL mode (default on open) blocks marker edits; INSERT enables normal marking.
+  Ctrl+Z undoes discrete marker edits; Restore jumps to last Save (or open).
 
 New in 0.3.65:
   YOLO dataset exports (detect + pose) now default to a **temporal** split
@@ -228,10 +235,129 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.3.137"
-GETPIXELVIDEO_UPDATE_DATE = "11 September 2026"
+GETPIXELVIDEO_VERSION = "0.4.2"
+GETPIXELVIDEO_UPDATE_DATE = "15 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
+
+# In-memory undo depth for INSERT-mode marker edits (Ctrl+Z).
+MARKER_UNDO_STACK_MAX = 50
+
+
+def clone_marker_editor_state(
+    *,
+    coordinates: dict[int, list] | None,
+    deleted_positions: dict[int, set[int]] | None,
+    one_line_markers: list,
+    deleted_markers: set[int],
+    bboxes: dict,
+    selected_marker_idx: int,
+) -> dict[str, Any]:
+    """Deep-copy marker editor state for undo / restore checkpoints."""
+    coords_copy: dict[int, list] = {}
+    if isinstance(coordinates, dict):
+        for frame_idx, pts in coordinates.items():
+            coords_copy[int(frame_idx)] = [tuple(p) if p is not None else (None, None) for p in pts]
+    deleted_copy: dict[int, set[int]] = {}
+    if isinstance(deleted_positions, dict):
+        for frame_idx, idxs in deleted_positions.items():
+            deleted_copy[int(frame_idx)] = set(idxs)
+    bboxes_copy: dict[int, list] = {}
+    if isinstance(bboxes, dict):
+        for frame_idx, boxes in bboxes.items():
+            bboxes_copy[int(frame_idx)] = [dict(box) for box in boxes]
+    return {
+        "coordinates": coords_copy,
+        "deleted_positions": deleted_copy,
+        "one_line_markers": [tuple(m) for m in one_line_markers],
+        "deleted_markers": set(deleted_markers),
+        "bboxes": bboxes_copy,
+        "selected_marker_idx": int(selected_marker_idx),
+    }
+
+
+def push_marker_undo(stack: list[dict[str, Any]], state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Append ``state`` to undo stack, trimming to ``MARKER_UNDO_STACK_MAX``."""
+    stack.append(state)
+    if len(stack) > MARKER_UNDO_STACK_MAX:
+        del stack[: len(stack) - MARKER_UNDO_STACK_MAX]
+    return stack
+
+
+def pop_marker_undo(stack: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Pop and return the last undo state, or None if empty."""
+    if not stack:
+        return None
+    return stack.pop()
+
+
+def compute_letterbox_pads(
+    zoomed_width: int, zoomed_height: int, window_width: int, window_height: int
+) -> tuple[int, int]:
+    """Return (pad_x, pad_y) to center zoomed media inside the video viewport."""
+    pad_x = max(0, (int(window_width) - int(zoomed_width)) // 2)
+    pad_y = max(0, (int(window_height) - int(zoomed_height)) // 2)
+    return pad_x, pad_y
+
+
+def marked_count_hud_pos(
+    window_width: int,
+    text_width: int,
+    text_height: int,
+    *,
+    margin_right: int = 10,
+    cluster_y_top: int = 4,
+    button_height: int = 20,
+    clear_left_of: int | None = None,
+) -> tuple[int, int]:
+    """Top-right control-panel coords for the green ``M0:… · other:…`` strip hint.
+
+    Prefer the empty margin right of the centered toolbar. When that margin is too
+    narrow, still right-align but never sit left of ``clear_left_of`` (toolbar edge),
+    so Go KP / Lock / Help stay uncovered.
+    """
+    x = int(window_width) - int(text_width) - int(margin_right)
+    if clear_left_of is not None:
+        x = max(x, int(clear_left_of) + 8)
+    y = int(cluster_y_top) + max(0, (int(button_height) - int(text_height)) // 2)
+    return x, y
+
+
+def screen_to_video_coords(
+    sx: float,
+    sy: float,
+    *,
+    zoom_level: float,
+    crop_x: float,
+    crop_y: float,
+    pad_x: float = 0,
+    pad_y: float = 0,
+) -> tuple[float, float]:
+    """Map screen (viewport) pixels to video/frame coordinates."""
+    z = float(zoom_level) if zoom_level else 1.0
+    return (
+        (float(sx) - float(pad_x) + float(crop_x)) / z,
+        (float(sy) - float(pad_y) + float(crop_y)) / z,
+    )
+
+
+def video_to_screen_coords(
+    vx: float,
+    vy: float,
+    *,
+    zoom_level: float,
+    crop_x: float,
+    crop_y: float,
+    pad_x: float = 0,
+    pad_y: float = 0,
+) -> tuple[int, int]:
+    """Map video/frame coordinates to integer screen (viewport) pixels."""
+    z = float(zoom_level) if zoom_level else 1.0
+    return (
+        int(float(vx) * z - float(crop_x) + float(pad_x)),
+        int(float(vy) * z - float(crop_y) + float(pad_y)),
+    )
+
 
 # Numpad keys are not contiguous in pygame/SDL; map explicitly for input dialogs.
 _PYGAME_KP_DIGIT: dict[int, str] = {
@@ -1760,11 +1886,12 @@ def pygame_file_dialog(
 
         pygame.time.Clock().tick(60)
 
-    # Restore original window size
+    # Restore original window size and product caption (dialog sets "Select File").
     if restore_size:
         pygame.display.set_mode(restore_size, pygame.RESIZABLE)
     elif old_size:
         pygame.display.set_mode(old_size, pygame.RESIZABLE)
+    pygame.display.set_caption(GETPIXELVIDEO_WINDOW_TITLE)
 
     return selected_file
 
@@ -1930,6 +2057,7 @@ def play_video_with_controls(
     fit_zoom_h = window_height / max(1, int(original_height))
     zoom_level = min(1.0, fit_zoom_w, fit_zoom_h)
     offset_x, offset_y = 0, 0
+    pad_x, pad_y = 0, 0  # letterbox; recomputed each frame from zoomed size
     # Honour selected PNG / CLI start index (not always frame 0).
     _init_f = max(0, int(initial_frame or 0))
     if total_frames:
@@ -1965,6 +2093,12 @@ def play_video_with_controls(
     # For regular mode, we'll track deleted positions
     deleted_positions = {i: set() for i in range(total_frames)}
 
+    # VISUAL (safe browse, default) vs INSERT (edit markers). Ctrl+I / EditMode button.
+    # Helpers + initial restore snapshot are wired after bboxes / HUD banners exist.
+    editor_mode = "visual"  # "visual" | "insert"
+    undo_stack: list[dict[str, Any]] = []
+    restore_snapshot: dict[str, Any] | None = None
+
     # Add persistence variables
     persistence_enabled = False
     persistence_frames = 10  # Default: show points from 10 previous frames
@@ -1984,6 +2118,10 @@ def play_video_with_controls(
     track_ai_shape: str = "point"  # "point" (default), "circle", "box"
     track_ai_params: Any = None
     track_ai_lost_streak: int = 0
+    # Frames already holding a manually-placed point for the live-tracked marker
+    # at the moment AI Track was armed -- live tracking must never overwrite
+    # these (mirrors run_ai_batch_tracking's known_points protection).
+    live_track_protected_frames: set[int] = set()
     # Shape drag (circle/box): define block_window size with mouse drag
     track_shape_dragging: bool = False
     track_shape_drag_origin: tuple[float, float] | None = None
@@ -4502,11 +4640,43 @@ def play_video_with_controls(
         except Exception as ex_dlg:
             print(f">> AI Track TOML dialog error: {ex_dlg}")
 
+    def toggle_track_ai_deep(explicit_state: bool | None = None) -> None:
+        """Toggle Deep NN features used by AI Track (checkbox beside AI Track, to its right)."""
+        nonlocal track_ai_use_deep, live_tracker
+        nonlocal showing_save_message, save_message_text, save_message_timer
+
+        new_state = (not track_ai_use_deep) if explicit_state is None else bool(explicit_state)
+        track_ai_use_deep = new_state
+        if live_tracker is not None and hasattr(live_tracker, "params"):
+            live_tracker.params.use_deep_features = track_ai_use_deep
+            live_tracker.params.deep_weight = 0.25 if track_ai_use_deep else 0.0
+            if track_ai_use_deep and live_tracker.extractor is None:
+                # Pre-warm backbone so the next track_frame() does not block mid-play.
+                from vaila.tracking import DeepFeatureExtractor
+
+                _deep_weights_path = live_tracker.params.deep_weights_path or None
+                _deep_variant = live_tracker.params.resnet_variant
+                live_tracker.extractor, _deep_err = _run_blocking_with_loading_banner(
+                    screen,
+                    f"Loading {_deep_variant} weights",
+                    lambda wp=_deep_weights_path, v=_deep_variant: DeepFeatureExtractor.get_shared(
+                        weights_path=wp, variant=v
+                    ),
+                )
+                if _deep_err is not None:
+                    print(f">> Track AI Deep NN warmup warning: {_deep_err}")
+        state_str = "ON" if track_ai_use_deep else "OFF"
+        save_message_text = f"AI Track Deep checkbox: {state_str}"
+        showing_save_message = True
+        save_message_timer = 60
+        print(f">> AI Track Deep checkbox: {state_str}")
+
     def toggle_track_ai(explicit_state: bool | None = None) -> None:
         """Toggle live AI tracking mode ON/OFF with stateful UI feedback."""
         nonlocal track_ai_active, live_tracker, live_track_target_marker, live_track_last_frame
         nonlocal selected_marker_idx, marker_selection_locked, frame_count, last_valid_frame
         nonlocal showing_save_message, save_message_text, save_message_timer
+        nonlocal live_track_protected_frames
 
         new_state = (not track_ai_active) if explicit_state is None else bool(explicit_state)
 
@@ -4524,12 +4694,9 @@ def play_video_with_controls(
                     pass
             track_ai_active = False
             live_tracker = None
-            # Auto-lock (set when Track AI turns ON) only makes sense while
-            # tracking runs. Release it here so TAB / click / Goto / next
-            # "block" (batch RTS) can target any marker, not just the one
-            # that was locked (was stuck permanently on marker 0/whatever
-            # was tracked first, since only B/Lock-button cleared it before).
-            marker_selection_locked = False
+            # Keep marker_selection_locked as-is. Unlock only via B key or Lock
+            # button — turning Track AI OFF must not clear a deliberate (or
+            # auto-on) lock.
             save_message_text = "Track AI [OFF]"
             showing_save_message = True
             save_message_timer = 60
@@ -4614,15 +4781,29 @@ def play_video_with_controls(
             track_ai_active = True
             live_tracker = None
             live_track_target_marker = target_marker
-            save_message_text = (
-                f"Track AI [ON]: click video to anchor m{target_marker}. (Ctrl+W: backbone weights)"
-            )
+            save_message_text = "Track AI [ON]: click video to anchor. (Ctrl+W: backbone weights)"
             showing_save_message = True
             save_message_timer = 200
             print(
                 f">> Track AI [ON]: waiting for click to set anchor, marker {target_marker}. Press Ctrl+W to cycle backbone weights."
             )
             return
+
+        # Snapshot frames already manually measured for this marker -- live
+        # tracking must skip these instead of overwriting them (mirrors
+        # run_ai_batch_tracking's known_points protection for the batch path).
+        live_track_protected_frames = set()
+        if coordinates is not None:
+            for f_idx, pts in coordinates.items():
+                if target_marker < len(pts):
+                    pt_p = pts[target_marker]
+                    if (
+                        pt_p is not None
+                        and pt_p[0] is not None
+                        and pt_p[1] is not None
+                        and target_marker not in deleted_positions.get(f_idx, set())
+                    ):
+                        live_track_protected_frames.add(f_idx)
 
         try:
             from vaila.tracking import AITracker, AITrackerParameters
@@ -4762,6 +4943,9 @@ def play_video_with_controls(
             track_ai_lost_streak, \
             marker_selection_locked
         nonlocal showing_save_message, save_message_text, save_message_timer
+        nonlocal live_track_protected_frames
+        if not _can_edit_markers():
+            return
         if (
             not track_ai_active
             or live_tracker is None
@@ -4868,6 +5052,52 @@ def play_video_with_controls(
                 try:
                     res = live_tracker.track_frame(curr_frame_img, prev_pt)
                     accepted = getattr(res, "accepted", True)
+                    if accepted and live_track_protected_frames:
+                        # Trajectory plausibility vs. a manually-measured frame
+                        # ahead: reject a candidate that strays far off the
+                        # straight-line path toward known ground truth instead
+                        # of letting it run to a lateral false match through
+                        # the unmeasured gap leading up to it.
+                        lookahead_limit = curr_frame_idx + 60
+                        anchor_ahead = min(
+                            (
+                                f
+                                for f in live_track_protected_frames
+                                if curr_frame_idx < f <= lookahead_limit
+                            ),
+                            default=None,
+                        )
+                        if anchor_ahead is not None:
+                            pts_ahead = coordinates.get(anchor_ahead, [])
+                            if (
+                                target_m < len(pts_ahead)
+                                and pts_ahead[target_m][0] is not None
+                                and pts_ahead[target_m][1] is not None
+                                and target_m not in deleted_positions.get(anchor_ahead, set())
+                            ):
+                                ax, ay = (
+                                    float(pts_ahead[target_m][0]),
+                                    float(pts_ahead[target_m][1]),
+                                )
+                                span = anchor_ahead - live_track_last_frame
+                                frac = (
+                                    (curr_frame_idx - live_track_last_frame) / span
+                                    if span > 0
+                                    else 1.0
+                                )
+                                exp_x = prev_pt[0] + (ax - prev_pt[0]) * frac
+                                exp_y = prev_pt[1] + (ay - prev_pt[1]) * frac
+                                dev = (
+                                    (res.location[0] - exp_x) ** 2 + (res.location[1] - exp_y) ** 2
+                                ) ** 0.5
+                                search_w = getattr(
+                                    getattr(live_tracker, "params", None),
+                                    "search_window",
+                                    (140, 140),
+                                )
+                                max_dev = max(search_w) * 0.9
+                                if dev > max_dev:
+                                    accepted = False
                     if not accepted:
                         track_ai_lost_streak += 1
                         if track_ai_lost_streak == 8:
@@ -4980,8 +5210,9 @@ def play_video_with_controls(
         second/third tracked marker never stays invisible behind the first slot's green
         fill), gold line = current frame. Switching marker (TAB) recolors the strip for the
         newly selected slot. The strip is clickable / draggable to jump frames (snaps to
-        markers inside the column when possible).
-        Top button row includes **Template** (FIFA/MediaPipe/YOLO; right-click = TOML like ``K`` when FIFA),
+        markers inside the column when possible). Green ``M<n>:X · other:Y · click strip``
+        count sits in the **top-right** of the control panel (not on the bottom info row).
+        Top button row includes **Template** (FIFA/MediaPipe/YOLO; press ``K`` for TOML when FIFA),
         **Mode** (Mark / Sequential / 1-line), **Persist**, **Auto**, **ClickPass**,
         **Labeling**, **Guide** (field or skeleton overlay).
         """
@@ -4998,7 +5229,10 @@ def play_video_with_controls(
 
         def _modes_summary_text() -> str:
             core = "Label" if labeling_mode else ("1-line" if one_line_mode else "Markers")
-            parts: list[str] = [core]
+            parts: list[str] = [
+                "INSERT" if editor_mode == "insert" else "VISUAL",
+                core,
+            ]
             if sequential_mode:
                 parts.append("Seq")
             if track_ai_active:
@@ -5250,13 +5484,24 @@ def play_video_with_controls(
         )
         info_x += swap_range_button_rect.width + 10
 
+        # Geo Homog — standalone planar homography tracker (vaila/planar_geometry_tracker.py)
+        geom_tracker_button_rect = pygame.Rect(
+            info_x,
+            info_row_y + (primary_row_h - go_kp_h) // 2,
+            88,
+            go_kp_h,
+        )
+        pygame.draw.rect(control_surface, (35, 125, 160), geom_tracker_button_rect)
+        geom_tracker_text = font.render("Geo Homog", True, (255, 255, 255))
+        control_surface.blit(
+            geom_tracker_text, geom_tracker_text.get_rect(center=geom_tracker_button_rect.center)
+        )
+        info_x += geom_tracker_button_rect.width + 10
+
         if auto_marking_mode:
             mouse_play_indicator = font.render("MOUSE-PLAY ON", True, (255, 255, 0))
             control_surface.blit(mouse_play_indicator, (info_x, info_row_y))
             info_x += mouse_play_indicator.get_width() + 25
-
-        marked_hint_x = window_width - marked_cnt_txt.get_width() - slider_margin_right
-        control_surface.blit(marked_cnt_txt, (marked_hint_x, info_row_y))
 
         _global_info_x = info_x
 
@@ -5361,7 +5606,10 @@ def play_video_with_controls(
         show_tracking_indicator_size = 10 if is_compact else 12
         bbox_coords_button_width = 88 if is_compact else 100
         track_rts_button_width = 96 if is_compact else 112
-        track_deep_button_width = 66 if is_compact else 76
+        # Deep option: checkbox + label glued to the right of AI Track (not a standalone button).
+        track_deep_check_size = 12 if is_compact else 14
+        track_deep_label_w = 30 if is_compact else 36
+        track_deep_group_width = track_deep_check_size + 4 + track_deep_label_w
         track_shape_button_width = 44 if is_compact else 52
         track_cfg_button_width = 30 if is_compact else 36
         dataset_button_width = 52 if is_compact else 58
@@ -5395,8 +5643,8 @@ def play_video_with_controls(
             + bbox_coords_button_width
             + button_gap
             + track_rts_button_width
-            + button_gap
-            + track_deep_button_width
+            + 4
+            + track_deep_group_width
             + button_gap
             + track_shape_button_width
             + button_gap
@@ -5413,15 +5661,15 @@ def play_video_with_controls(
             + save_dataset_button_width
         )
 
-        # Right-align with safe left margin clamp (never overflow right when window is resized)
-        row_start_top = max(10, window_width - 10 - total_top_width)
-        row_start_bottom = max(10, window_width - 10 - total_bottom_width)
+        # Center both command rows horizontally (clamp to left margin if row is wider than window).
+        row_start_top = max(10, (window_width - total_top_width) // 2)
+        row_start_bottom = max(10, (window_width - total_bottom_width) // 2)
 
         # Helper to advance x position
         current_x = row_start_top
         _top_btn_font = pygame.font.SysFont("verdana", 10 if is_compact else 11)
 
-        # 1. Template Marker Mode: left-click cycles templates; right-click = TOML (K) when FIFA.
+        # 1. Template Marker Mode: left-click cycles templates; press K for TOML when FIFA.
         template_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -5659,14 +5907,14 @@ def play_video_with_controls(
             bbox_coords_text, bbox_coords_text.get_rect(center=bbox_coords_button_rect.center)
         )
 
-        # 3. AI Track button (short label, color-only state: green ON / amber ARM / red OFF)
+        # 3. AI Track button, then Deep checkbox to its right — didactic grouping.
         track_rts_button_rect = pygame.Rect(
             current_x,
             cluster_y_bottom,
             track_rts_button_width,
             button_height,
         )
-        current_x += track_rts_button_width + button_gap
+        current_x += track_rts_button_width + 4
         track_ai_label = "AI" if is_compact else "AI Track"
         # Bright green immediately when armed or tracking, red when off
         btn_color = (30, 175, 75) if track_ai_active else (175, 45, 45)
@@ -5676,19 +5924,48 @@ def play_video_with_controls(
             track_rts_text, track_rts_text.get_rect(center=track_rts_button_rect.center)
         )
 
-        # 4. Track AI Deep Feature toggle button
+        # Hit target covers checkbox + "Deep" label (option for AI Track).
         track_deep_button_rect = pygame.Rect(
             current_x,
             cluster_y_bottom,
-            track_deep_button_width,
+            track_deep_group_width,
             button_height,
         )
-        current_x += track_deep_button_width + button_gap
-        deep_color = (30, 150, 80) if track_ai_use_deep else (65, 65, 75)
-        pygame.draw.rect(control_surface, deep_color, track_deep_button_rect)
-        deep_label = "Deep: ON" if track_ai_use_deep else "Deep: OFF"
-        deep_text = btn_font.render(deep_label, True, (255, 255, 255))
-        control_surface.blit(deep_text, deep_text.get_rect(center=track_deep_button_rect.center))
+        _deep_box = pygame.Rect(
+            current_x,
+            cluster_y_bottom + (button_height - track_deep_check_size) // 2,
+            track_deep_check_size,
+            track_deep_check_size,
+        )
+        _deep_fill = (30, 150, 80) if track_ai_use_deep else (40, 40, 48)
+        _deep_border = (220, 220, 230) if track_ai_use_deep else (140, 140, 150)
+        pygame.draw.rect(control_surface, _deep_fill, _deep_box, border_radius=2)
+        pygame.draw.rect(control_surface, _deep_border, _deep_box, 1, border_radius=2)
+        if track_ai_use_deep:
+            # Simple check mark inside the box
+            _cx, _cy = _deep_box.center
+            pygame.draw.lines(
+                control_surface,
+                (255, 255, 255),
+                False,
+                [
+                    (_cx - 3, _cy),
+                    (_cx - 1, _cy + 3),
+                    (_cx + 4, _cy - 3),
+                ],
+                2,
+            )
+        _deep_lbl = btn_font.render(
+            "Deep", True, (230, 230, 235) if track_ai_use_deep else (170, 170, 180)
+        )
+        control_surface.blit(
+            _deep_lbl,
+            (
+                _deep_box.right + 4,
+                cluster_y_bottom + (button_height - _deep_lbl.get_height()) // 2,
+            ),
+        )
+        current_x += track_deep_group_width + button_gap
 
         # 4b. Track AI Shape selector button (Point, Circle, Box)
         track_shape_button_rect = pygame.Rect(
@@ -5785,6 +6062,22 @@ def play_video_with_controls(
             control_surface.blit(class_info, (_global_info_x, info_row_y))
             _global_info_x += class_info.get_width() + 25
 
+        # Green M0/other strip hint: top-right margin of the control panel (not info row).
+        _toolbar_right = max(
+            row_start_top + total_top_width,
+            row_start_bottom + total_bottom_width,
+        )
+        marked_hint_x, marked_hint_y = marked_count_hud_pos(
+            window_width,
+            marked_cnt_txt.get_width(),
+            marked_cnt_txt.get_height(),
+            margin_right=slider_margin_right,
+            cluster_y_top=cluster_y_top,
+            button_height=button_height,
+            clear_left_of=_toolbar_right,
+        )
+        control_surface.blit(marked_cnt_txt, (marked_hint_x, marked_hint_y))
+
         marker_timeline_rect = pygame.Rect(slider_margin_left, heat_y, slider_width, heat_h)
         screen.blit(control_surface, (0, window_height))
         return (
@@ -5804,8 +6097,8 @@ def play_video_with_controls(
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             bbox_coords_button_rect,  # Add BBox to Coords button to return
-            track_rts_button_rect,  # Add Track RTS button to return
-            track_deep_button_rect,  # Track AI Deep NN (ResNet50) toggle
+            track_rts_button_rect,  # AI Track on/off
+            track_deep_button_rect,  # Deep checkbox (option for AI Track)
             track_shape_button_rect,  # Track AI Shape selector (Point/Circle/Box)
             track_cfg_button_rect,  # Track AI TOML configuration dialog
             export_video_button_rect,  # Add export video button to return
@@ -5817,6 +6110,7 @@ def play_video_with_controls(
             delete_range_button_rect,  # Delete one marker/keypoint across a frame range
             gap_fill_button_rect,  # Kalman/RTS or linear gap fill for marker
             swap_range_button_rect,  # Swap marker/keypoint pairs across a frame range
+            geom_tracker_button_rect,  # Geo Homog: standalone planar homography tracker
             marker_timeline_rect,
             slider_margin_left,
             slider_y,
@@ -5925,7 +6219,7 @@ def play_video_with_controls(
         toml_default_base_index = 0
         text = (
             "# FIFA template config for getpixelvideo.py\n"
-            "# Load this file with Template button right-click (when Template:FIFA) or key K.\n\n"
+            "# Load this file with key K (when Template:FIFA) or via the FIFA TOML flow.\n\n"
             "[fifa_template]\n"
             f"n_keypoints = {int(fifa_fixed_keypoints if fifa_fixed_keypoints else 32)}\n"
             f"start_keypoint = {int(toml_default_start_keypoint)}\n"
@@ -6317,7 +6611,7 @@ def play_video_with_controls(
             ),
             (
                 "  AI Track button color",
-                "Green = active (tracking/armed), Red = off",
+                "Green = active, Red = off",
                 "item",
             ),
             (
@@ -6348,18 +6642,13 @@ def play_video_with_controls(
                 "item",
             ),
             (
-                "'Deep: ON' / 'OFF' button",
-                "Toggle deep-backbone features (Default OFF = pure CPU ~500 FPS)",
+                "Deep checkbox (right of AI Track)",
+                "Optional deep-backbone features for AI Track (OFF = NCC/CPU; ON = ResNet etc.)",
                 "item",
             ),
             (
                 "'Cfg' button  /  Ctrl+T",
                 "Save/load tracking TOML + nav_jump; weights selection with 'Weights (W)'",
-                "item",
-            ),
-            (
-                "Right-Click on AI Track",
-                "Quick shortcut to open the TOML configuration dialog",
                 "item",
             ),
             ("", "", "blank"),
@@ -7023,6 +7312,8 @@ def play_video_with_controls(
 
     def _delete_marker_range_dialog() -> tuple[bool, str]:
         """Delete one marker/keypoint slot over an inclusive user-selected frame range."""
+        if not _can_edit_markers():
+            return False, "VISUAL — Ctrl+I to edit"
         if labeling_mode:
             return False, "Exit Labeling mode first; Del Range edits keypoint markers."
         if total_frames <= 0:
@@ -7066,6 +7357,7 @@ def play_video_with_controls(
             marker_indices.append(marker_idx)
 
         make_backup()
+        _push_undo()
         changed = 0
         had_coordinates = 0
         marker_index_set = set(marker_indices)
@@ -7237,6 +7529,8 @@ def play_video_with_controls(
 
     def _gap_fill_marker_dialog() -> tuple[bool, str]:
         """Run Gap Fill (Kalman/RTS or linear) on a marker over a frame range."""
+        if not _can_edit_markers():
+            return False, "VISUAL — Ctrl+I to edit"
         if labeling_mode:
             return False, "Exit Labeling mode first; Gap Fill edits keypoint markers."
         if one_line_mode:
@@ -7277,6 +7571,7 @@ def play_video_with_controls(
         method = "linear" if method_raw.startswith("lin") else "kalman_rts"
 
         make_backup()
+        _push_undo()
         n_filled, msg = gap_fill_marker_coordinates(
             coordinates,
             deleted_positions,
@@ -7439,6 +7734,8 @@ def play_video_with_controls(
 
     def _swap_marker_range_dialog() -> tuple[bool, str]:
         """Swap paired marker/keypoint slots over an inclusive frame range."""
+        if not _can_edit_markers():
+            return False, "VISUAL — Ctrl+I to edit"
         if labeling_mode:
             return False, "Exit Labeling mode first; Swap Range edits keypoint markers."
         if one_line_mode:
@@ -7503,6 +7800,7 @@ def play_video_with_controls(
             pairs_idx.append((a_idx, b_idx))
 
         make_backup()
+        _push_undo()
         swap_count = 0
         for f_num in range(start_frame, end_frame + 1):
             row = coordinates.get(f_num, [])
@@ -7533,6 +7831,65 @@ def play_video_with_controls(
             f"Swapped {pairs_label} in frames {start_frame + 1}-{end_frame + 1} "
             f"({swap_count} frame-pair swaps)."
         )
+
+    def _run_geometric_tracker_action() -> tuple[bool, str]:
+        """Save current markers, then run the standalone planar homography
+        tracker (``vaila/planar_geometry_tracker.py``) against them via
+        subprocess. Non-destructive: writes only to a new ``*_geom_out``
+        directory next to the video, never touches the live marker state."""
+        if total_frames <= 0:
+            return False, "No frames available."
+        if not isinstance(coordinates, dict):
+            return False, "Marker data is not available."
+
+        _flush_save_message(screen, "Saving markers for Geo Homog...")
+        output_file = save_coordinates(
+            video_path,
+            coordinates,
+            total_frames,
+            deleted_positions,
+            is_sequential=sequential_mode,
+            fixed_keypoints_count=(fifa_fixed_keypoints if template_mode != "free" else None),
+            keypoint_start_idx=(fifa_start_keypoint if template_mode != "free" else 0),
+            keypoint_index_base=(fifa_index_base if template_mode != "free" else 0),
+            coord_format=coord_format,
+            coord_decimals=coord_decimals,
+        )
+
+        base_dir = os.path.dirname(video_path)
+        base_stem = os.path.splitext(os.path.basename(video_path))[0]
+        toml_path = os.path.join(base_dir, f"{base_stem}_geometry.toml")
+        if not os.path.exists(toml_path):
+            # No custom profile next to the video -- fall back to the shipped
+            # default (EVA tatame mat) target-geometry profile.
+            toml_path = os.path.join(
+                os.path.dirname(__file__), "models", "planar_targets", "tatame_1x1m.toml"
+            )
+        output_dir = os.path.join(base_dir, f"{base_stem}_geom_out")
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "vaila.planar_geometry_tracker",
+            "--config",
+            toml_path,
+            "--measurements-csv",
+            output_file,
+            "--video-path",
+            video_path,
+            "--output-dir",
+            output_dir,
+        ]
+        print(">> vaila/getpixelvideo: Geo Homog -- equivalent CLI:")
+        print(f">>   {' '.join(cmd)}")
+        _flush_save_message(screen, "Calculating Planar Geometry & Homography...")
+        try:
+            subprocess.run(cmd, check=True)
+        except Exception as exc:
+            print(f">> vaila/getpixelvideo: Geo Homog error: {exc}")
+            return False, f"Geometry Tracker error: {exc}"
+        print(f">> vaila/getpixelvideo: Geo Homog DONE. Results in: {output_dir}")
+        return True, f"Geo Homog completed. Results in: {os.path.basename(output_dir)}"
 
     def _deprecated_show_swap_dialog(current_frame, total_fr):
         """
@@ -7613,6 +7970,8 @@ def play_video_with_controls(
                     return None
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button != 1:
+                        continue
                     mx, my = event.pos
                     # Check fields
                     for i, _ in enumerate(order):
@@ -8367,6 +8726,16 @@ def play_video_with_controls(
                     return None
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # Scroll wheel buttons (legacy pygame 1.x style)
+                    if event.button == 4:  # scroll up
+                        scroll_offset = max(0, scroll_offset - 3)
+                        continue
+                    if event.button == 5:  # scroll down
+                        scroll_offset = min(max_scroll, scroll_offset + 3)
+                        continue
+                    # Path bar / file list: left-click only
+                    if event.button != 1:
+                        continue
                     # Click on path bar?
                     if bar_rect.collidepoint(event.pos):
                         input_active = True
@@ -8391,12 +8760,6 @@ def play_video_with_controls(
                                 # Select file → return it
                                 result_path = full
                                 browsing = False
-
-                    # Scroll wheel
-                    if event.button == 4:  # scroll up
-                        scroll_offset = max(0, scroll_offset - 3)
-                    elif event.button == 5:  # scroll down
-                        scroll_offset = min(max_scroll, scroll_offset + 3)
 
                 elif event.type == pygame.MOUSEWHEEL:
                     scroll_offset = max(0, min(max_scroll, scroll_offset - event.y * 3))
@@ -8769,6 +9132,11 @@ def play_video_with_controls(
             save_message_timer, \
             save_message_text
 
+        if not _require_insert():
+            return
+
+        _push_undo()
+
         if one_line_mode:
             # In one-line mode, find the largest visible marker index
             visible_markers = []
@@ -8831,6 +9199,9 @@ def play_video_with_controls(
             showing_save_message, \
             save_message_timer, \
             save_message_text
+        if not _require_insert():
+            return
+        _push_undo()
         if one_line_mode:
             if selected_marker_idx >= 0:
                 # Find and remove the selected marker only in the current frame
@@ -9326,6 +9697,98 @@ def play_video_with_controls(
     save_message_timer = 0
     save_message_text = ""
 
+    def _clone_marker_state() -> dict[str, Any]:
+        return clone_marker_editor_state(
+            coordinates=coordinates,
+            deleted_positions=deleted_positions,
+            one_line_markers=one_line_markers,
+            deleted_markers=deleted_markers,
+            bboxes=bboxes,
+            selected_marker_idx=selected_marker_idx,
+        )
+
+    def _apply_marker_state(state: dict[str, Any]) -> None:
+        nonlocal coordinates, deleted_positions, one_line_markers, deleted_markers
+        nonlocal bboxes, selected_marker_idx
+        coordinates = {
+            int(k): [tuple(p) if p is not None else (None, None) for p in v]
+            for k, v in state.get("coordinates", {}).items()
+        }
+        deleted_positions = {
+            int(k): set(v) for k, v in state.get("deleted_positions", {}).items()
+        }
+        one_line_markers = [tuple(m) for m in state.get("one_line_markers", [])]
+        deleted_markers = set(state.get("deleted_markers", set()))
+        bboxes = {
+            int(k): [dict(box) for box in v] for k, v in state.get("bboxes", {}).items()
+        }
+        selected_marker_idx = int(state.get("selected_marker_idx", 0))
+
+    def _refresh_restore_snapshot() -> None:
+        nonlocal restore_snapshot
+        restore_snapshot = _clone_marker_state()
+
+    def _push_undo() -> None:
+        push_marker_undo(undo_stack, _clone_marker_state())
+
+    def _can_edit_markers() -> bool:
+        return editor_mode == "insert"
+
+    def _require_insert() -> bool:
+        """Return True if INSERT; else show banner and return False."""
+        nonlocal showing_save_message, save_message_text, save_message_timer
+        if editor_mode == "insert":
+            return True
+        save_message_text = "VISUAL — Ctrl+I to edit"
+        showing_save_message = True
+        save_message_timer = 45
+        return False
+
+    def _toggle_editor_mode() -> None:
+        nonlocal editor_mode, showing_save_message, save_message_text, save_message_timer
+        editor_mode = "insert" if editor_mode == "visual" else "visual"
+        save_message_text = (
+            "INSERT — markers editable (Ctrl+Z undo)"
+            if editor_mode == "insert"
+            else "VISUAL — browse only (Ctrl+I to edit)"
+        )
+        showing_save_message = True
+        save_message_timer = 60
+
+    def _undo_last_marker_edit() -> None:
+        nonlocal showing_save_message, save_message_text, save_message_timer
+        if editor_mode != "insert":
+            save_message_text = "VISUAL — Ctrl+I to edit"
+            showing_save_message = True
+            save_message_timer = 45
+            return
+        prev = pop_marker_undo(undo_stack)
+        if prev is None:
+            save_message_text = "Nothing to undo"
+            showing_save_message = True
+            save_message_timer = 45
+            return
+        _apply_marker_state(prev)
+        save_message_text = "Undo"
+        showing_save_message = True
+        save_message_timer = 30
+
+    def _restore_marker_checkpoint() -> None:
+        nonlocal undo_stack, showing_save_message, save_message_text, save_message_timer
+        if restore_snapshot is None:
+            save_message_text = "No restore checkpoint"
+            showing_save_message = True
+            save_message_timer = 45
+            return
+        _apply_marker_state(restore_snapshot)
+        undo_stack.clear()
+        save_message_text = "Restored to last Save (or open)"
+        showing_save_message = True
+        save_message_timer = 60
+
+    # Session-open restore checkpoint (refreshed after successful Save).
+    _refresh_restore_snapshot()
+
     last_valid_frame = None
     slow_mo_accumulator = 0.0
     hover_pixel_xy: tuple[float, float] | None = None
@@ -9334,6 +9797,8 @@ def play_video_with_controls(
         if current_dataset_dir and not auto_load_project_done:
             auto_load_project_done = True
             load_labeling_project()
+            _refresh_restore_snapshot()
+            undo_stack.clear()
 
         if paused:
             # When paused, we'll use the set method to position exactly on the frame
@@ -9447,6 +9912,9 @@ def play_video_with_controls(
         zoomed_frame = cv2.resize(frame, (zoomed_width, zoomed_height))
         crop_x = int(max(0, min(zoomed_width - window_width, offset_x)))
         crop_y = int(max(0, min(zoomed_height - window_height, offset_y)))
+        pad_x, pad_y = compute_letterbox_pads(
+            zoomed_width, zoomed_height, window_width, window_height
+        )
         cropped_frame = zoomed_frame[
             crop_y : crop_y + window_height, crop_x : crop_x + window_width
         ]
@@ -9457,7 +9925,8 @@ def play_video_with_controls(
         frame_surface = pygame.surfarray.make_surface(
             cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB).swapaxes(0, 1)
         )
-        screen.blit(frame_surface, (0, 0))
+        # Center letterboxed media so markers can be placed outside on all sides.
+        screen.blit(frame_surface, (pad_x, pad_y))
 
         # Pose skeleton guide overlay (MediaPipe/YOLO) — translucent lines + dots.
         if (
@@ -9487,10 +9956,24 @@ def play_video_with_controls(
                 x2, y2 = p2
                 if x1 is None or y1 is None or x2 is None or y2 is None:
                     continue
-                sx1 = int((x1 * zoom_level) - crop_x)
-                sy1 = int((y1 * zoom_level) - crop_y)
-                sx2 = int((x2 * zoom_level) - crop_x)
-                sy2 = int((y2 * zoom_level) - crop_y)
+                sx1, sy1 = video_to_screen_coords(
+                    x1,
+                    y1,
+                    zoom_level=zoom_level,
+                    crop_x=crop_x,
+                    crop_y=crop_y,
+                    pad_x=pad_x,
+                    pad_y=pad_y,
+                )
+                sx2, sy2 = video_to_screen_coords(
+                    x2,
+                    y2,
+                    zoom_level=zoom_level,
+                    crop_x=crop_x,
+                    crop_y=crop_y,
+                    pad_x=pad_x,
+                    pad_y=pad_y,
+                )
                 pygame.draw.line(overlay, line_color, (sx1, sy1), (sx2, sy2), 3)
             for idx, p in enumerate(pts):
                 if idx in deleted_now:
@@ -9500,8 +9983,15 @@ def play_video_with_controls(
                 x, y = p
                 if x is None or y is None:
                     continue
-                sx = int((x * zoom_level) - crop_x)
-                sy = int((y * zoom_level) - crop_y)
+                sx, sy = video_to_screen_coords(
+                    x,
+                    y,
+                    zoom_level=zoom_level,
+                    crop_x=crop_x,
+                    crop_y=crop_y,
+                    pad_x=pad_x,
+                    pad_y=pad_y,
+                )
                 pygame.draw.circle(overlay, dot_color, (sx, sy), 4)
             screen.blit(overlay, (0, 0))
 
@@ -9565,10 +10055,24 @@ def play_video_with_controls(
                     if prev_x is None or prev_y is None or curr_x is None or curr_y is None:
                         continue
 
-                    prev_screen_x = int((prev_x * zoom_level) - crop_x)
-                    prev_screen_y = int((prev_y * zoom_level) - crop_y)
-                    curr_screen_x = int((curr_x * zoom_level) - crop_x)
-                    curr_screen_y = int((curr_y * zoom_level) - crop_y)
+                    prev_screen_x, prev_screen_y = video_to_screen_coords(
+                        prev_x,
+                        prev_y,
+                        zoom_level=zoom_level,
+                        crop_x=crop_x,
+                        crop_y=crop_y,
+                        pad_x=pad_x,
+                        pad_y=pad_y,
+                    )
+                    curr_screen_x, curr_screen_y = video_to_screen_coords(
+                        curr_x,
+                        curr_y,
+                        zoom_level=zoom_level,
+                        crop_x=crop_x,
+                        crop_y=crop_y,
+                        pad_x=pad_x,
+                        pad_y=pad_y,
+                    )
 
                     # Create a temporary surface for the semi-transparent line
                     # Make it large enough to contain the line with padding
@@ -9614,8 +10118,15 @@ def play_video_with_controls(
                 if (
                     last_frame < frame_count and last_x is not None and last_y is not None
                 ):  # Don't draw current frame again and check for None
-                    last_screen_x = int((last_x * zoom_level) - crop_x)
-                    last_screen_y = int((last_y * zoom_level) - crop_y)
+                    last_screen_x, last_screen_y = video_to_screen_coords(
+                        last_x,
+                        last_y,
+                        zoom_level=zoom_level,
+                        crop_x=crop_x,
+                        crop_y=crop_y,
+                        pad_x=pad_x,
+                        pad_y=pad_y,
+                    )
 
                     # Draw a small circle for the most recent position
                     pygame.draw.circle(screen, color, (last_screen_x, last_screen_y), 2)
@@ -9629,18 +10140,27 @@ def play_video_with_controls(
                     if x is None or y is None:
                         continue
 
-                    screen_x = int((x * zoom_level) - crop_x)
-                    screen_y = int((y * zoom_level) - crop_y)
+                    screen_x, screen_y = video_to_screen_coords(
+                        x,
+                        y,
+                        zoom_level=zoom_level,
+                        crop_x=crop_x,
+                        crop_y=crop_y,
+                        pad_x=pad_x,
+                        pad_y=pad_y,
+                    )
 
                     # Highlight selected marker only in one_line_mode
+                    # Outline-only rings (no filled disc) so the click pixel stays visible.
                     if idx == selected_marker_idx:
                         pygame.draw.circle(
-                            screen, (255, 165, 0), (screen_x, screen_y), 7
-                        )  # Orange highlight
+                            screen, (255, 165, 0), (screen_x, screen_y), 5, 1
+                        )  # Orange ring
                         if marker_selection_locked:
-                            pygame.draw.circle(screen, (40, 200, 255), (screen_x, screen_y), 11, 3)
+                            pygame.draw.circle(screen, (40, 200, 255), (screen_x, screen_y), 7, 2)
 
-                    pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
+                    _core_r = 2 if idx == selected_marker_idx else 3
+                    pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), _core_r)
                     if template_mode != "free":
                         display_idx = int(fifa_start_keypoint) + idx + int(fifa_index_base)
                     else:
@@ -9655,19 +10175,26 @@ def play_video_with_controls(
                 if x is None or y is None:
                     continue
 
-                screen_x = int((x * zoom_level) - crop_x)
-                screen_y = int((y * zoom_level) - crop_y)
+                screen_x, screen_y = video_to_screen_coords(
+                    x,
+                    y,
+                    zoom_level=zoom_level,
+                    crop_x=crop_x,
+                    crop_y=crop_y,
+                    pad_x=pad_x,
+                    pad_y=pad_y,
+                )
 
-                # Adicionar destaque para o marcador selecionado
+                # Selected marker: thin outline rings only (no filled disc) so the
+                # underlying pixel stays visible while still marking the active slot.
                 if i == selected_marker_idx:
-                    # Desenhar círculo laranja mais amplo como destaque
                     pygame.draw.circle(
-                        screen, (255, 165, 0), (screen_x, screen_y), 7
-                    )  # Orange highlight
+                        screen, (255, 165, 0), (screen_x, screen_y), 5, 1
+                    )  # Orange ring
                     if marker_selection_locked:
-                        # Thick cyan ring so Lock (B) state is obvious on the video
-                        pygame.draw.circle(screen, (40, 200, 255), (screen_x, screen_y), 11, 3)
-                        pygame.draw.circle(screen, (255, 255, 255), (screen_x, screen_y), 14, 1)
+                        # Compact cyan ring so Lock (B) is visible without covering detail
+                        pygame.draw.circle(screen, (40, 200, 255), (screen_x, screen_y), 7, 2)
+                        pygame.draw.circle(screen, (255, 255, 255), (screen_x, screen_y), 9, 1)
 
                 # Shape-aware outline when AI tracking is active on this marker
                 if track_ai_active and i == live_track_target_marker:
@@ -9688,7 +10215,10 @@ def play_video_with_controls(
                         )
                         pygame.draw.rect(screen, (0, 220, 255), shape_box, 1)
 
-                pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), 3)
+                # Inactive markers stay r=3; active slot uses a tighter core so the
+                # click target (and image under it) remains readable.
+                _core_r = 2 if i == selected_marker_idx else 3
+                pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), _core_r)
                 if template_mode != "free":
                     display_idx = int(fifa_start_keypoint) + i + int(fifa_index_base)
                 else:
@@ -9704,8 +10234,15 @@ def play_video_with_controls(
         ):
             ox, oy = track_shape_drag_origin
             cx, cy = track_shape_drag_current
-            sox = int((ox * zoom_level) - crop_x)
-            soy = int((oy * zoom_level) - crop_y)
+            sox, soy = video_to_screen_coords(
+                ox,
+                oy,
+                zoom_level=zoom_level,
+                crop_x=crop_x,
+                crop_y=crop_y,
+                pad_x=pad_x,
+                pad_y=pad_y,
+            )
             if track_ai_shape == "circle":
                 r_px = max(4, int(np.hypot(cx - ox, cy - oy) * zoom_level))
                 pygame.draw.circle(screen, (0, 255, 180), (sox, soy), r_px, 2)
@@ -9722,10 +10259,24 @@ def play_video_with_controls(
             boxes = tracking_data[frame_count]
             for box in boxes:
                 # Convert video coordinates to screen coordinates (account for zoom/offset)
-                screen_x1 = int((box["x1"] * zoom_level) - crop_x)
-                screen_y1 = int((box["y1"] * zoom_level) - crop_y)
-                screen_x2 = int((box["x2"] * zoom_level) - crop_x)
-                screen_y2 = int((box["y2"] * zoom_level) - crop_y)
+                screen_x1, screen_y1 = video_to_screen_coords(
+                    box["x1"],
+                    box["y1"],
+                    zoom_level=zoom_level,
+                    crop_x=crop_x,
+                    crop_y=crop_y,
+                    pad_x=pad_x,
+                    pad_y=pad_y,
+                )
+                screen_x2, screen_y2 = video_to_screen_coords(
+                    box["x2"],
+                    box["y2"],
+                    zoom_level=zoom_level,
+                    crop_x=crop_x,
+                    crop_y=crop_y,
+                    pad_x=pad_x,
+                    pad_y=pad_y,
+                )
 
                 # Only draw if box is visible on screen
                 if (
@@ -9767,8 +10318,15 @@ def play_video_with_controls(
             if frame_count in bboxes:
                 for bbox in bboxes[frame_count]:
                     # Convert video coordinates to screen coordinates (account for zoom/offset)
-                    screen_x = int((bbox["x"] * zoom_level) - crop_x)
-                    screen_y = int((bbox["y"] * zoom_level) - crop_y)
+                    screen_x, screen_y = video_to_screen_coords(
+                        bbox["x"],
+                        bbox["y"],
+                        zoom_level=zoom_level,
+                        crop_x=crop_x,
+                        crop_y=crop_y,
+                        pad_x=pad_x,
+                        pad_y=pad_y,
+                    )
                     screen_w = int(bbox["w"] * zoom_level)
                     screen_h = int(bbox["h"] * zoom_level)
                     # Draw rectangle outline (red color)
@@ -9789,19 +10347,40 @@ def play_video_with_controls(
             or quickmeasure_session.points
         ):
             quickmeasure.draw_quickmeasure_overlay(
-                screen, quickmeasure_session, zoom_level, crop_x, crop_y, font
+                screen,
+                quickmeasure_session,
+                zoom_level,
+                crop_x,
+                crop_y,
+                font,
+                pad_x=pad_x,
+                pad_y=pad_y,
             )
 
         # Calibration-first overlay: clicked calibration points + next step.
         if quick_measure_mode and quick_measure_calibrating and quickmeasure_draft is not None:
             quickmeasure.draw_calibration_overlay(
-                screen, quickmeasure_draft, zoom_level, crop_x, crop_y, font
+                screen,
+                quickmeasure_draft,
+                zoom_level,
+                crop_x,
+                crop_y,
+                font,
+                pad_x=pad_x,
+                pad_y=pad_y,
             )
 
         _mx_scr, _my_scr = pygame.mouse.get_pos()
         if _my_scr < window_height:
-            _vxf = (_mx_scr + crop_x) / zoom_level
-            _vyf = (_my_scr + crop_y) / zoom_level
+            _vxf, _vyf = screen_to_video_coords(
+                _mx_scr,
+                _my_scr,
+                zoom_level=zoom_level,
+                crop_x=crop_x,
+                crop_y=crop_y,
+                pad_x=pad_x,
+                pad_y=pad_y,
+            )
             hover_pixel_xy = (
                 max(0.0, min(float(original_width - 1), float(_vxf))),
                 max(0.0, min(float(original_height - 1), float(_vyf))),
@@ -9826,8 +10405,8 @@ def play_video_with_controls(
             tracking_csv_button_rect,  # Add tracking CSV button to return
             show_tracking_indicator_rect,  # Add tracking indicator to return
             bbox_coords_button_rect,  # Add BBox to Coords button to return
-            track_rts_button_rect,  # Add Track RTS button to return
-            track_deep_button_rect,  # Track AI Deep NN (ResNet50) toggle
+            track_rts_button_rect,  # AI Track on/off
+            track_deep_button_rect,  # Deep checkbox (option for AI Track)
             track_shape_button_rect,  # Track AI Shape selector (Point/Circle/Box)
             track_cfg_button_rect,  # Track AI TOML configuration dialog
             export_video_button_rect,  # Add export video button to return
@@ -9839,6 +10418,7 @@ def play_video_with_controls(
             delete_range_button_rect,  # Delete one marker/keypoint across a frame range
             gap_fill_button_rect,  # Kalman/RTS or linear gap fill for marker
             swap_range_button_rect,  # Swap marker/keypoint pairs across a frame range
+            geom_tracker_button_rect,  # Geo Homog: standalone planar homography tracker
             marker_timeline_rect,
             slider_x,
             slider_y,
@@ -9927,26 +10507,6 @@ def play_video_with_controls(
             if _reference_surface is not None and _rw > 0:
                 screen.blit(_reference_surface, (window_width - _rw - 10, 10))
 
-        # Version HUD (upper-right of video client area; always on top of overlays).
-        _vh_sz = 11
-        _vh_font_it = pygame.font.SysFont("verdana", _vh_sz, italic=True)
-        _vh_font_rm = pygame.font.SysFont("verdana", _vh_sz)
-        _vh_rgb = (238, 238, 245)
-        _vh_mark = _vh_font_it.render(VAILA_MARK, True, _vh_rgb)
-        _vh_rest = _vh_font_rm.render(f" getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}", True, _vh_rgb)
-        _vh_pad_x, _vh_pad_y = 8, 5
-        _vh_tw = _vh_mark.get_width() + _vh_rest.get_width()
-        _vh_th = max(_vh_mark.get_height(), _vh_rest.get_height())
-        _vh_bg = pygame.Surface((_vh_tw + _vh_pad_x * 2, _vh_th + _vh_pad_y + 3))
-        _vh_bg.set_alpha(200)
-        _vh_bg.fill((18, 18, 26))
-        _vh_x = window_width - _vh_bg.get_width() - 8
-        _vh_y = 8
-        screen.blit(_vh_bg, (_vh_x, _vh_y))
-        _vh_ty = _vh_y + 3
-        screen.blit(_vh_mark, (_vh_x + _vh_pad_x, _vh_ty))
-        screen.blit(_vh_rest, (_vh_x + _vh_pad_x + _vh_mark.get_width(), _vh_ty))
-
         pygame.display.flip()
 
         # Auto-marking logic - mark points automatically during playback
@@ -9954,8 +10514,15 @@ def play_video_with_controls(
             mouse_x, mouse_y = pygame.mouse.get_pos()
             if mouse_y < window_height:  # Only mark if mouse is in video area
                 # Convert screen coordinates to video coordinates
-                video_x = (mouse_x + crop_x) / zoom_level
-                video_y = (mouse_y + crop_y) / zoom_level
+                video_x, video_y = screen_to_video_coords(
+                    mouse_x,
+                    mouse_y,
+                    zoom_level=zoom_level,
+                    crop_x=crop_x,
+                    crop_y=crop_y,
+                    pad_x=pad_x,
+                    pad_y=pad_y,
+                )
 
                 # Mark the point at the selected marker index
                 if selected_marker_idx >= 0:
@@ -10847,7 +11414,11 @@ def play_video_with_controls(
                     _nav_hold_key = None
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
-                if y >= window_height:
+                # Toolbar / control panel: primary (left) button only — ignore
+                # middle, right, and extra buttons so they cannot fire UI actions.
+                if y >= window_height and event.button != 1:
+                    pass
+                elif y >= window_height:
                     # Clique na área de controles
                     rel_y = y - window_height
                     if load_button_rect.collidepoint(x, rel_y):
@@ -10860,19 +11431,7 @@ def play_video_with_controls(
                             )
                             showing_save_message = True
                             save_message_timer = 90
-                        elif event.button == 3:
-                            if template_mode == "fifa":
-                                ok_cfg, cfg_msg = configure_fifa_from_toml()
-                                save_message_text = cfg_msg
-                                showing_save_message = True
-                                save_message_timer = 180 if ok_cfg else 90
-                            else:
-                                save_message_text = (
-                                    "Right-click config only available for Template:FIFA (TOML)."
-                                )
-                                showing_save_message = True
-                                save_message_timer = 75
-                        elif event.button == 1:
+                        else:
                             _cycle_template_mode()
                             _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
                             if template_mode == "free":
@@ -10880,7 +11439,7 @@ def play_video_with_controls(
                             elif template_mode == "fifa":
                                 save_message_text = (
                                     f"Template: {_tpl} — 32 kp, idx 0; Pitch Guide on. "
-                                    "TOML: right-click or K"
+                                    "TOML: press K"
                                 )
                             else:
                                 _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
@@ -10894,7 +11453,7 @@ def play_video_with_controls(
                             )
                             showing_save_message = True
                             save_message_timer = 90
-                        elif event.button == 1:
+                        else:
                             if one_line_mode:
                                 one_line_mode = False
                                 sequential_mode = False
@@ -11052,51 +11611,41 @@ def play_video_with_controls(
                     elif guide_toggle_rect.collidepoint(x, rel_y) or guide_button_rect.collidepoint(
                         x, rel_y
                     ):
-                        if event.button == 3 and template_mode != "free":
-                            pitch_guide_show_reference = not pitch_guide_show_reference
-                            save_message_text = (
-                                f"Guide map {'enabled' if pitch_guide_show_reference else 'hidden'}"
-                            )
-                            showing_save_message = True
-                            save_message_timer = 60
-                        elif event.button == 1:
-                            want = not pitch_guide_mode
-                            if want:
-                                if template_mode == "free":
-                                    pitch_guide_mode = False
-                                    save_message_text = "Guide not available in Template: Free"
-                                elif template_mode == "fifa":
-                                    # Guide always prefers soccerfield_kiki.csv (visual walk/mark).
-                                    pitch_guide_points, pitch_guide_source = (
-                                        _load_pitch_guide_points(prefer_fifa_dataset=False)
-                                    )
-                                    labeling_mode = False
-                                    one_line_mode = False
-                                    auto_marking_mode = False
-                                    sequential_mode = False
-                                    click_pass_mode = False
-                                    quick_measure_mode = False
-                                    if pitch_guide_points:
-                                        pitch_guide_mode = True
-                                        save_message_text = _pitch_guide_status_message(
-                                            "GUIDE ON: "
-                                        )
-                                    else:
-                                        save_message_text = (
-                                            "Guide (soccerfield): no field CSV found in models/"
-                                        )
-                                        pitch_guide_mode = False
-                                elif template_mode == "mediapipe":
-                                    pitch_guide_mode = True
-                                    save_message_text = "GUIDE ON: MediaPipe Pose skeleton"
-                                else:
-                                    pitch_guide_mode = True
-                                    save_message_text = "GUIDE ON: YOLO Pose (COCO-17) skeleton"
-                            else:
+                        want = not pitch_guide_mode
+                        if want:
+                            if template_mode == "free":
                                 pitch_guide_mode = False
-                                save_message_text = "Guide disabled"
-                            showing_save_message = True
-                            save_message_timer = 120
+                                save_message_text = "Guide not available in Template: Free"
+                            elif template_mode == "fifa":
+                                # Guide always prefers soccerfield_kiki.csv (visual walk/mark).
+                                pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
+                                    prefer_fifa_dataset=False
+                                )
+                                labeling_mode = False
+                                one_line_mode = False
+                                auto_marking_mode = False
+                                sequential_mode = False
+                                click_pass_mode = False
+                                quick_measure_mode = False
+                                if pitch_guide_points:
+                                    pitch_guide_mode = True
+                                    save_message_text = _pitch_guide_status_message("GUIDE ON: ")
+                                else:
+                                    save_message_text = (
+                                        "Guide (soccerfield): no field CSV found in models/"
+                                    )
+                                    pitch_guide_mode = False
+                            elif template_mode == "mediapipe":
+                                pitch_guide_mode = True
+                                save_message_text = "GUIDE ON: MediaPipe Pose skeleton"
+                            else:
+                                pitch_guide_mode = True
+                                save_message_text = "GUIDE ON: YOLO Pose (COCO-17) skeleton"
+                        else:
+                            pitch_guide_mode = False
+                            save_message_text = "Guide disabled"
+                        showing_save_message = True
+                        save_message_timer = 120
                     elif tracking_csv_button_rect.collidepoint(x, rel_y):
                         # Load tracking CSV
                         load_tracking_csv()
@@ -11104,47 +11653,15 @@ def play_video_with_controls(
                         # Convert bbox/contour to coords CSVs
                         load_bbox_and_export_coords()
                     elif track_rts_button_rect.collidepoint(x, rel_y):
-                        if event.button == 3:  # Right click opens TOML configuration dialog
-                            _handle_track_ai_toml_dialog()
-                        elif event.button == 1:
-                            # Track AI: toggle live tracking (or Shift+Click for full batch RTS)
-                            _mods_click = pygame.key.get_mods()
-                            if _mods_click & pygame.KMOD_SHIFT:
-                                run_ai_batch_tracking()
-                            else:
-                                toggle_track_ai()
+                        # Track AI: toggle live tracking (or Shift+Click for full batch RTS).
+                        # TOML config: use Cfg button or Ctrl+T (not right-click).
+                        _mods_click = pygame.key.get_mods()
+                        if _mods_click & pygame.KMOD_SHIFT:
+                            run_ai_batch_tracking()
+                        else:
+                            toggle_track_ai()
                     elif track_deep_button_rect.collidepoint(x, rel_y):
-                        track_ai_use_deep = not track_ai_use_deep
-                        if live_tracker is not None and hasattr(live_tracker, "params"):
-                            live_tracker.params.use_deep_features = track_ai_use_deep
-                            live_tracker.params.deep_weight = 0.25 if track_ai_use_deep else 0.0
-                            if track_ai_use_deep and live_tracker.extractor is None:
-                                # Pre-warm the backbone now (thread + loading banner) so
-                                # the NEXT track_frame() during live playback doesn't
-                                # lazily block the event loop mid-frame (same "App Not
-                                # Responding" symptom as toggle_track_ai/weight switch).
-                                from vaila.tracking import DeepFeatureExtractor
-
-                                _deep_weights_path = live_tracker.params.deep_weights_path or None
-                                _deep_variant = live_tracker.params.resnet_variant
-                                live_tracker.extractor, _deep_err = (
-                                    _run_blocking_with_loading_banner(
-                                        screen,
-                                        f"Loading {_deep_variant} weights",
-                                        lambda wp=_deep_weights_path, v=_deep_variant: (
-                                            DeepFeatureExtractor.get_shared(
-                                                weights_path=wp, variant=v
-                                            )
-                                        ),
-                                    )
-                                )
-                                if _deep_err is not None:
-                                    print(f">> Track AI Deep NN warmup warning: {_deep_err}")
-                        state_str = "[ON]" if track_ai_use_deep else "[OFF]"
-                        save_message_text = f"Track AI Deep NN (ResNet50): {state_str}"
-                        showing_save_message = True
-                        save_message_timer = 60
-                        print(f">> Track AI Deep NN (ResNet50): {state_str}")
+                        toggle_track_ai_deep()
                     elif track_shape_button_rect.collidepoint(x, rel_y):
                         if track_ai_shape == "point":
                             track_ai_shape = "circle"
@@ -11207,6 +11724,11 @@ def play_video_with_controls(
                         save_message_text = msg_swap
                         showing_save_message = True
                         save_message_timer = 120 if ok_swap else 70
+                    elif geom_tracker_button_rect.collidepoint(x, rel_y):
+                        ok_geom, msg_geom = _run_geometric_tracker_action()
+                        save_message_text = msg_geom
+                        showing_save_message = True
+                        save_message_timer = 150 if ok_geom else 90
                     elif marker_timeline_rect.collidepoint(x, rel_y):
                         dragging_marker_timeline = True
                         paused = True
@@ -11262,8 +11784,15 @@ def play_video_with_controls(
                         paused = True
                 else:
                     # Clique na área do vídeo
-                    video_x = (x + crop_x) / zoom_level
-                    video_y = (y + crop_y) / zoom_level
+                    video_x, video_y = screen_to_video_coords(
+                        x,
+                        y,
+                        zoom_level=zoom_level,
+                        crop_x=crop_x,
+                        crop_y=crop_y,
+                        pad_x=pad_x,
+                        pad_y=pad_y,
+                    )
 
                     if (
                         quick_measure_mode
@@ -11512,8 +12041,15 @@ def play_video_with_controls(
                             # Feature: ClickPass logic (advances frame on any marker placement)
                             if click_pass_mode:
                                 # Visual Feedback: Redraw placed marker dot before advancing
-                                screen_cx = int(video_x * zoom_level - crop_x)
-                                screen_cy = int(video_y * zoom_level - crop_y)
+                                screen_cx, screen_cy = video_to_screen_coords(
+                                    video_x,
+                                    video_y,
+                                    zoom_level=zoom_level,
+                                    crop_x=crop_x,
+                                    crop_y=crop_y,
+                                    pad_x=pad_x,
+                                    pad_y=pad_y,
+                                )
 
                                 pygame.draw.circle(screen, (0, 255, 0), (screen_cx, screen_cy), 5)
                                 pygame.display.flip()
@@ -11563,8 +12099,15 @@ def play_video_with_controls(
                     if track_shape_dragging and track_shape_drag_origin is not None:
                         x, y = event.pos
                         if y < window_height and frame is not None:
-                            video_x = (x + crop_x) / zoom_level
-                            video_y = (y + crop_y) / zoom_level
+                            video_x, video_y = screen_to_video_coords(
+                                x,
+                                y,
+                                zoom_level=zoom_level,
+                                crop_x=crop_x,
+                                crop_y=crop_y,
+                                pad_x=pad_x,
+                                pad_y=pad_y,
+                            )
                             track_shape_drag_current = (float(video_x), float(video_y))
                             ox, oy = track_shape_drag_origin
                             cx, cy = track_shape_drag_current
@@ -11682,8 +12225,15 @@ def play_video_with_controls(
                     elif labeling_mode and drawing_box and box_start_pos is not None:
                         x, y = event.pos
                         if y < window_height:  # Only if released in video area
-                            video_x = (x + crop_x) / zoom_level
-                            video_y = (y + crop_y) / zoom_level
+                            video_x, video_y = screen_to_video_coords(
+                                x,
+                                y,
+                                zoom_level=zoom_level,
+                                crop_x=crop_x,
+                                crop_y=crop_y,
+                                pad_x=pad_x,
+                                pad_y=pad_y,
+                            )
 
                             # Calculate box coordinates
                             x1, y1 = box_start_pos
@@ -11731,15 +12281,29 @@ def play_video_with_controls(
                 elif track_shape_dragging and track_shape_drag_origin is not None:
                     x, y = event.pos
                     if y < window_height:
-                        video_x = (x + crop_x) / zoom_level
-                        video_y = (y + crop_y) / zoom_level
+                        video_x, video_y = screen_to_video_coords(
+                            x,
+                            y,
+                            zoom_level=zoom_level,
+                            crop_x=crop_x,
+                            crop_y=crop_y,
+                            pad_x=pad_x,
+                            pad_y=pad_y,
+                        )
                         track_shape_drag_current = (float(video_x), float(video_y))
                 elif labeling_mode and drawing_box and box_start_pos is not None:
                     # Update preview box while dragging
                     x, y = event.pos
                     if y < window_height:  # Only if mouse is in video area
-                        video_x = (x + crop_x) / zoom_level
-                        video_y = (y + crop_y) / zoom_level
+                        video_x, video_y = screen_to_video_coords(
+                            x,
+                            y,
+                            zoom_level=zoom_level,
+                            crop_x=crop_x,
+                            crop_y=crop_y,
+                            pad_x=pad_x,
+                            pad_y=pad_y,
+                        )
 
                         # Calculate box coordinates
                         x1, y1 = box_start_pos
@@ -11752,8 +12316,15 @@ def play_video_with_controls(
                         box_h = abs(y2 - y1)
 
                         # Convert to screen coordinates for preview
-                        screen_x = int((box_x * zoom_level) - crop_x)
-                        screen_y = int((box_y * zoom_level) - crop_y)
+                        screen_x, screen_y = video_to_screen_coords(
+                            box_x,
+                            box_y,
+                            zoom_level=zoom_level,
+                            crop_x=crop_x,
+                            crop_y=crop_y,
+                            pad_x=pad_x,
+                            pad_y=pad_y,
+                        )
                         screen_w = int(box_w * zoom_level)
                         screen_h = int(box_h * zoom_level)
 
@@ -11810,17 +12381,24 @@ def play_video_with_controls(
                 # Adjust offsets to keep view centered on mouse if possible
                 mx, my = pygame.mouse.get_pos()
                 if my < window_height:  # Only if in video area
-                    # Center zoom on mouse cursor
-                    target_vx = (mx + offset_x) / old_zoom
-                    target_vy = (my + offset_y) / old_zoom
+                    # Center zoom on mouse cursor (account for letterbox pads)
+                    old_zw = int(original_width * old_zoom)
+                    old_zh = int(original_height * old_zoom)
+                    old_pad_x, old_pad_y = compute_letterbox_pads(
+                        old_zw, old_zh, window_width, window_height
+                    )
+                    target_vx = (mx - old_pad_x + offset_x) / old_zoom
+                    target_vy = (my - old_pad_y + offset_y) / old_zoom
 
-                    offset_x = (target_vx * zoom_level) - mx
-                    offset_y = (target_vy * zoom_level) - my
-
-                    # Clamp offsets
                     zoomed_width = original_width * zoom_level
                     zoomed_height = original_height * zoom_level
+                    new_pad_x, new_pad_y = compute_letterbox_pads(
+                        int(zoomed_width), int(zoomed_height), window_width, window_height
+                    )
+                    offset_x = (target_vx * zoom_level) - (mx - new_pad_x)
+                    offset_y = (target_vy * zoom_level) - (my - new_pad_y)
 
+                    # Clamp offsets
                     if zoomed_width > window_width:
                         offset_x = max(0, min(zoomed_width - window_width, offset_x))
                     else:

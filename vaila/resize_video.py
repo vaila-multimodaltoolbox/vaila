@@ -10,9 +10,9 @@ This script provides tools for improving pose detection in videos:
 
 Version:
 --------
-0.4.1
+0.4.0
 Create: 27 April 2025
-update: 26 May 2025
+update: 14 September 2026
 
 Author:
 -------
@@ -30,11 +30,15 @@ Dependencies:
 - pandas (for coordinates conversion)
 """
 
+import argparse
 import json
 import os
+import queue
+import shlex
 import threading
 import tkinter as tk
 from datetime import datetime
+from pathlib import Path
 from tkinter import Button, Frame, Label, StringVar, filedialog, messagebox
 
 import cv2
@@ -67,6 +71,11 @@ def get_video_info(video_path):
     except Exception as e:
         print(f"Error getting video info: {e}")
         raise e
+
+
+def _codec_dimension(value):
+    """Return a positive even dimension accepted consistently by MP4 codecs."""
+    return max(2, int(value) + (int(value) % 2))
 
 
 def resize_with_opencv(input_file, output_file, scale_factor, roi=None, progress_callback=None):
@@ -111,8 +120,13 @@ def resize_with_opencv(input_file, output_file, scale_factor, roi=None, progress
         if roi:
             # If ROI is provided, use it
             x, y, w, h = roi
-            new_width = int(w * scale_factor)
-            new_height = int(h * scale_factor)
+            x = max(0, min(int(x), width - 1))
+            y = max(0, min(int(y), height - 1))
+            w = max(1, min(int(w), width - x))
+            h = max(1, min(int(h), height - y))
+            roi = (x, y, w, h)
+            new_width = _codec_dimension(w * scale_factor)
+            new_height = _codec_dimension(h * scale_factor)
             message = f"Cropping to {w}x{h} and resizing to {new_width}x{new_height}"
 
             # Add crop info to metadata
@@ -120,8 +134,8 @@ def resize_with_opencv(input_file, output_file, scale_factor, roi=None, progress
             metadata["crop_applied"] = True
         else:
             # Full frame resize
-            new_width = int(width * scale_factor)
-            new_height = int(height * scale_factor)
+            new_width = _codec_dimension(width * scale_factor)
+            new_height = _codec_dimension(height * scale_factor)
             message = f"Resizing from {width}x{height} to {new_width}x{new_height}"
             metadata["crop_applied"] = False
 
@@ -148,11 +162,6 @@ def resize_with_opencv(input_file, output_file, scale_factor, roi=None, progress
             if roi:
                 x, y, w, h = roi
                 # Ensure ROI is within frame boundaries
-                x = max(0, min(x, width - 1))
-                y = max(0, min(y, height - 1))
-                w = min(w, width - x)
-                h = min(h, height - y)
-
                 # Crop the frame
                 frame = frame[y : y + h, x : x + w]
 
@@ -634,11 +643,117 @@ def validate_scale_factor(value, status_var):
         return False
 
 
-def batch_resize_videos():
-    """Function to batch process multiple videos"""
-    root = tk.Tk()
+VIDEO_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
+
+
+def format_resize_cli_command(input_path, output_dir, scale_factor, roi=None, recursive=False):
+    """Format the headless command corresponding to a GUI resize operation."""
+    command = [
+        "python",
+        "-m",
+        "vaila.resize_video",
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_dir),
+        "--scale",
+        str(scale_factor),
+    ]
+    if roi is not None:
+        command.extend(["--roi", *(str(value) for value in roi)])
+    if recursive:
+        command.append("--recursive")
+    return shlex.join(command)
+
+
+def iter_video_files(input_path, recursive=False):
+    """Return supported videos from a file or directory in stable order."""
+    path = Path(input_path).expanduser()
+    if path.is_file():
+        return [path] if path.suffix.lower() in VIDEO_EXTENSIONS else []
+    if not path.is_dir():
+        return []
+    iterator = path.rglob("*") if recursive else path.iterdir()
+    return sorted(
+        (item for item in iterator if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS),
+        key=lambda item: str(item).lower(),
+    )
+
+
+def run_resize_cli(input_path, output_dir, scale_factor=1, roi=None, recursive=False):
+    """Resize one video or all supported videos in a directory without Tkinter."""
+    try:
+        scale = int(scale_factor)
+    except (TypeError, ValueError):
+        print("Error: scale factor must be a positive integer")
+        return 1
+    if scale < 1:
+        print("Error: scale factor must be a positive integer")
+        return 1
+
+    videos = iter_video_files(input_path, recursive=recursive)
+    if not videos:
+        print(f"Error: no supported videos found in {input_path}")
+        return 1
+
+    destination = Path(output_dir).expanduser()
+    destination.mkdir(parents=True, exist_ok=True)
+    if roi is not None:
+        try:
+            normalized_roi = tuple(int(value) for value in roi)
+        except (TypeError, ValueError):
+            print("Error: ROI must contain integer x y width height")
+            return 1
+        if len(normalized_roi) != 4:
+            print("Error: ROI must contain x y width height")
+            return 1
+    else:
+        normalized_roi = None
+
+    print(
+        f"Processing {len(videos)} video(s) with scale {scale}x"
+        + (f" and ROI {normalized_roi}" if normalized_roi else "")
+    )
+    failures = 0
+    for index, source in enumerate(videos, 1):
+        if normalized_roi:
+            x, y, width, height = normalized_roi
+            filename = f"{source.stem}_crop_{x}_{y}_{width}_{height}_{scale}x{source.suffix}"
+        else:
+            filename = f"{source.stem}_{scale}x{source.suffix}"
+        target = destination / filename
+        print(f"[{index}/{len(videos)}] {source} -> {target}")
+        metadata = resize_with_opencv(
+            str(source), str(target), scale, normalized_roi, lambda message: print(f"  {message}")
+        )
+        if metadata is None:
+            failures += 1
+    if failures:
+        print(f"Completed with {failures} failure(s)")
+        return 1
+    print(f"Completed successfully: {len(videos)} video(s)")
+    return 0
+
+
+def batch_resize_videos(parent=None):
+    """Open the resizer GUI, embedded in vailá when ``parent`` is supplied."""
+    owns_root = parent is None
+    root = tk.Tk() if owns_root else tk.Toplevel(parent)
     root.title("Batch Video Processor")
-    root.geometry("550x420")
+    root.geometry("600x500")
+    if parent is not None:
+        root.transient(parent)
+        root.lift()
+        root.focus_force()
+        root.grab_set()
+        root.attributes("-topmost", True)
+        root.after_idle(lambda: root.attributes("-topmost", False))
+
+        def close_embedded_window():
+            root.grab_release()
+            root.destroy()
+
+        root.protocol("WM_DELETE_WINDOW", close_embedded_window)
 
     # Variables to store paths and settings
     input_dir_var = StringVar(value="No directory selected")
@@ -699,19 +814,21 @@ converting MediaPipe coordinates back to the original video dimensions."""
     buttons_frame = Frame(root, padx=20, pady=10)
     buttons_frame.pack(fill=tk.X)
 
+    def run_full_resize():
+        scale = validate_scale_factor(scale_entry.get(), status_var) or 2
+        print(
+            ">> Equivalent CLI:",
+            format_resize_cli_command(input_dir_var.get(), output_dir_var.get(), scale),
+        )
+        start_batch_processing(
+            input_dir_var.get(), output_dir_var.get(), scale, False, status_var, root
+        )
+
     # Process button for full resize
     Button(
         buttons_frame,
         text="Full Resize",
-        command=lambda: start_batch_processing(
-            input_dir_var.get(),
-            output_dir_var.get(),
-            validate_scale_factor(scale_entry.get(), status_var)
-            or 2,  # Validar e usar 2 como fallback
-            False,  # No ROI
-            status_var,
-            root,
-        ),
+        command=run_full_resize,
         font=("Arial", 11, "bold"),
         width=20,
         height=2,
@@ -724,12 +841,29 @@ converting MediaPipe coordinates back to the original video dimensions."""
         command=lambda: crop_and_resize_single(
             input_dir_var.get(),
             output_dir_var.get(),
-            int(scale_entry.get()),  # Usar valor da caixa de texto
+            validate_scale_factor(scale_entry.get(), status_var) or 1,
             status_var,
             root,
         ),
         font=("Arial", 11, "bold"),
         width=20,
+        height=2,
+    ).pack(pady=5)
+
+    # Select one reference ROI and optionally apply it to every input video.
+    Button(
+        buttons_frame,
+        text="Batch Crop (same ROI)",
+        command=lambda: crop_and_resize_single(
+            input_dir_var.get(),
+            output_dir_var.get(),
+            validate_scale_factor(scale_entry.get(), status_var) or 1,
+            status_var,
+            root,
+            ask_batch=True,
+        ),
+        font=("Arial", 11, "bold"),
+        width=25,
         height=2,
     ).pack(pady=5)
 
@@ -983,7 +1117,9 @@ converting MediaPipe coordinates back to the original video dimensions."""
             thread.daemon = True
             thread.start()
 
-    def crop_and_resize_single(input_dir, output_dir, scale_factor, status_var, root):
+    def crop_and_resize_single(
+        input_dir, output_dir, scale_factor, status_var, root, *, ask_batch=False
+    ):
         """Handle crop and resize operation for a single video"""
         if input_dir == "No directory selected" or not os.path.exists(input_dir):
             messagebox.showerror("Error", "Please select a valid input directory")
@@ -1016,6 +1152,28 @@ converting MediaPipe coordinates back to the original video dimensions."""
             status_var.set("ROI selection canceled")
             return
 
+        apply_to_all = ask_batch or messagebox.askyesno(
+            "Apply ROI to all videos?",
+            "Use this same ROI and scale factor for every video in the input directory?\n\n"
+            "Choose No to process only the selected video.",
+            parent=root,
+        )
+        print(
+            ">> Equivalent CLI:",
+            format_resize_cli_command(input_dir, output_dir, scale_factor, roi),
+        )
+        if apply_to_all:
+            start_batch_processing(
+                input_dir,
+                output_dir,
+                scale_factor,
+                False,
+                status_var,
+                root,
+                roi=roi,
+            )
+            return
+
         # Create timestamp directory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         batch_output_dir = os.path.join(output_dir, f"cropped_resized_{timestamp}")
@@ -1028,7 +1186,9 @@ converting MediaPipe coordinates back to the original video dimensions."""
         output_filename = f"{name}_crop_{x}_{y}_{w}_{h}_{scale_factor}x{ext}"
         output_path = os.path.join(batch_output_dir, output_filename)
 
-        # Progress window
+        # Progress window. Worker threads must only process video; Tk widgets and
+        # Tk variables are owned by the main thread. Calling Text.insert/update
+        # from the worker was the source of intermittent Linux/X11 SIGSEGV (139).
         progress_window = tk.Toplevel(root)
         progress_window.title("Processing Video")
         progress_window.geometry("600x300")
@@ -1036,11 +1196,38 @@ converting MediaPipe coordinates back to the original video dimensions."""
         progress_text = tk.Text(progress_window, height=15, width=70)
         progress_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Function to update progress text
+        progress_queue = queue.Queue()
+
         def update_progress(message):
-            progress_text.insert(tk.END, message + "\n")
-            progress_text.see(tk.END)
-            progress_window.update()
+            progress_queue.put(("progress", str(message)))
+
+        def drain_progress_queue():
+            try:
+                while True:
+                    kind, message = progress_queue.get_nowait()
+                    if kind == "progress":
+                        progress_text.insert(tk.END, message + "\n")
+                        progress_text.see(tk.END)
+                    elif kind == "status":
+                        status_var.set(message)
+                    elif kind == "close":
+                        add_close_button()
+            except queue.Empty:
+                pass
+            if progress_window.winfo_exists():
+                root.after(50, drain_progress_queue)
+
+        def set_status(message):
+            progress_queue.put(("status", str(message)))
+
+        def add_close_button():
+            if progress_window.winfo_exists():
+                Button(progress_window, text="Close", command=progress_window.destroy).pack(pady=10)
+
+        def request_close():
+            progress_queue.put(("close", ""))
+
+        drain_progress_queue()
 
         # Start processing in a thread
         def process_thread():
@@ -1049,7 +1236,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 update_progress(f"ROI: x={x}, y={y}, width={w}, height={h}")
                 update_progress(f"Scale: {scale_factor}x")
 
-                status_var.set("Processing video with ROI...")
+                set_status("Processing video with ROI...")
 
                 # Process the video
                 metadata = resize_with_opencv(
@@ -1064,25 +1251,27 @@ converting MediaPipe coordinates back to the original video dimensions."""
                     update_progress("\nTo convert MediaPipe coordinates back to original video:")
                     update_progress("Click 'Convert MediaPipe Coordinates' button after processing")
 
-                    status_var.set("Crop and resize completed successfully")
+                    set_status("Crop and resize completed successfully")
                 else:
                     update_progress("Failed to process video")
-                    status_var.set("Failed to process video")
+                    set_status("Failed to process video")
 
-                # Add close button
-                Button(progress_window, text="Close", command=progress_window.destroy).pack(pady=10)
+                request_close()
 
             except Exception as e:
                 error_msg = f"Error: {str(e)}"
                 update_progress(error_msg)
-                status_var.set(error_msg)
+                set_status(error_msg)
+                request_close()
 
         # Start thread
         thread = threading.Thread(target=process_thread)
         thread.daemon = True
         thread.start()
 
-    def start_batch_processing(input_dir, output_dir, scale_factor, use_roi, status_var, root):
+    def start_batch_processing(
+        input_dir, output_dir, scale_factor, use_roi, status_var, root, *, roi=None
+    ):
         """Start batch processing videos"""
         if input_dir == "No directory selected" or not os.path.exists(input_dir):
             messagebox.showerror("Error", "Please select a valid input directory")
@@ -1100,36 +1289,49 @@ converting MediaPipe coordinates back to the original video dimensions."""
         progress_text = tk.Text(progress_window, height=20, width=70)
         progress_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Function to update progress text
+        progress_queue = queue.Queue()
+
         def update_progress(message):
-            progress_text.insert(tk.END, message + "\n")
-            progress_text.see(tk.END)
-            progress_window.update()
+            progress_queue.put(("progress", str(message)))
+
+        def drain_progress_queue():
+            try:
+                while True:
+                    kind, message = progress_queue.get_nowait()
+                    if kind == "progress":
+                        progress_text.insert(tk.END, message + "\n")
+                        progress_text.see(tk.END)
+                    elif kind == "status":
+                        status_var.set(message)
+                    elif kind == "close":
+                        add_close_button()
+            except queue.Empty:
+                pass
+            if progress_window.winfo_exists():
+                root.after(50, drain_progress_queue)
+
+        def set_status(message):
+            progress_queue.put(("status", str(message)))
+
+        def add_close_button():
+            if progress_window.winfo_exists():
+                Button(progress_window, text="Close", command=progress_window.destroy).pack(pady=10)
+
+        def request_close():
+            progress_queue.put(("close", ""))
+
+        drain_progress_queue()
 
         # Start processing in a new thread
         def process_thread():
             try:
                 # Create timestamp directory
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                batch_output_dir = os.path.join(output_dir, f"resized_videos_{timestamp}")
+                output_prefix = "cropped_resized" if roi else "resized_videos"
+                batch_output_dir = os.path.join(output_dir, f"{output_prefix}_{timestamp}")
                 os.makedirs(batch_output_dir, exist_ok=True)
 
-                # Find video files
-                video_extensions = (
-                    ".mp4",
-                    ".avi",
-                    ".mov",
-                    ".mkv",
-                    ".MP4",
-                    ".AVI",
-                    ".MOV",
-                    ".MKV",
-                )
-                video_files = [
-                    os.path.join(input_dir, f)
-                    for f in os.listdir(input_dir)
-                    if os.path.isfile(os.path.join(input_dir, f)) and f.endswith(video_extensions)
-                ]
+                video_files = [str(path) for path in iter_video_files(input_dir)]
 
                 if not video_files:
                     update_progress("No video files found in the selected directory.")
@@ -1138,14 +1340,20 @@ converting MediaPipe coordinates back to the original video dimensions."""
                 update_progress(
                     f"Found {len(video_files)} videos to process with {scale_factor}x scaling"
                 )
-                status_var.set(f"Processing {len(video_files)} videos...")
+                set_status(f"Processing {len(video_files)} videos...")
 
                 # Process each video
                 for i, video_file in enumerate(video_files, 1):
                     try:
                         input_filename = os.path.basename(video_file)
                         name, ext = os.path.splitext(input_filename)
-                        output_filename = f"{name}_{scale_factor}x{ext}"
+                        if roi:
+                            rx, ry, rw, rh = roi
+                            output_filename = (
+                                f"{name}_crop_{rx}_{ry}_{rw}_{rh}_{scale_factor}x{ext}"
+                            )
+                        else:
+                            output_filename = f"{name}_{scale_factor}x{ext}"
                         output_path = os.path.join(batch_output_dir, output_filename)
 
                         update_progress(f"\n[{i}/{len(video_files)}] Processing: {input_filename}")
@@ -1155,7 +1363,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
                             video_file,
                             output_path,
                             scale_factor,
-                            None,  # No ROI in batch mode
+                            roi,
                             lambda msg: update_progress(f"  {msg}"),
                         )
 
@@ -1172,31 +1380,67 @@ converting MediaPipe coordinates back to the original video dimensions."""
                         update_progress(f"  Error processing {video_file}: {str(e)}")
 
                 update_progress("\nBatch processing complete!")
-                status_var.set("Processing complete!")
+                set_status("Processing complete!")
 
-                # Add close button
-                Button(progress_window, text="Close", command=progress_window.destroy).pack(pady=10)
+                request_close()
 
             except Exception as e:
                 update_progress(f"Error in batch processing: {str(e)}")
-                status_var.set(f"Error: {str(e)}")
+                set_status(f"Error: {str(e)}")
+                request_close()
 
         # Start processing thread
         thread = threading.Thread(target=process_thread)
         thread.daemon = True
         thread.start()
 
-    root.mainloop()
+    if owns_root:
+        root.mainloop()
 
 
-def run_resize_video():
+def run_resize_video(parent=None):
     """Main function to run the video resizer application"""
     print(f"Running script: {os.path.basename(__file__)}")
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
 
     # Start batch processing
-    batch_resize_videos()
+    batch_resize_videos(parent=parent)
+
+
+def main(argv=None):
+    """Command-line entry point; omit ``--input`` to open the GUI."""
+    parser = argparse.ArgumentParser(
+        description="Resize or crop one video, or batch process a directory of videos."
+    )
+    parser.add_argument("-i", "--input", help="video file or directory containing videos")
+    parser.add_argument("-o", "--output", help="output directory")
+    parser.add_argument("--scale", type=int, default=1, help="integer scale factor (default: 1)")
+    parser.add_argument(
+        "--roi",
+        nargs=4,
+        type=int,
+        metavar=("X", "Y", "WIDTH", "HEIGHT"),
+        help="crop rectangle in source pixels; applies to every input video",
+    )
+    parser.add_argument(
+        "--recursive", action="store_true", help="search input subdirectories recursively"
+    )
+    args = parser.parse_args(argv)
+    if args.input:
+        if not args.output:
+            parser.error("--output is required when --input is used")
+        return run_resize_cli(
+            args.input,
+            args.output,
+            scale_factor=args.scale,
+            roi=args.roi,
+            recursive=args.recursive,
+        )
+    if args.output or args.roi or args.recursive or args.scale != 1:
+        parser.error("--input is required for command-line processing")
+    run_resize_video()
+    return 0
 
 
 if __name__ == "__main__":
-    run_resize_video()
+    raise SystemExit(main())

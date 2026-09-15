@@ -1,7 +1,7 @@
 """Public vailá entry points, imported only when requested.
 
-Version: 0.4.0
-Update Date: 14 September 2026
+Version: 0.4.2
+Update Date: 15 September 2026
 """
 
 from importlib import import_module

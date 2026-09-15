@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 14 September 2026
-Version: 0.4.0
+Update Date: 15 September 2026
+Version: 0.4.2
 
 Example of usage:
 uv run vaila.py
@@ -359,7 +359,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 14.Sep.2026 v0.4.0 (Python 3.12.14)
+    vailá - 15.Sep.2026 v0.4.2 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -420,12 +420,12 @@ C_A_r1_c1 - Edit CSV/C3D  C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
 C_A_r2_c1 - DLT/REC 2D-3D (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
 C_A_r2_c2 - C3D Metadata  C_A_r2_c3 - vailá
 C_A_r3_c1 - vailá         C_A_r3_c2 - vailá          C_A_r3_c3 - vailá
-C_A_r4_c1 - ReID Marker   C_A_r4_c2 - Sapiens2 3D Kinematics  C_A_r4_c3 - vailá
+C_A_r4_c1 - ReID Marker   C_A_r4_c2 - Sapiens2_3D  C_A_r4_c3 - vailá
 C_A_r5_c1 - vailá         C_A_r5_c2 - vailá          C_A_r5_c3 - vailá
 
 -> C_B: Video and Image
 C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Crop Face      C_B_r1_c3 - Draw Box
-C_B_r2_c1 - Compress Video C_B_r2_c2 - vailá         C_B_r2_c3 - Make Sync file
+C_B_r2_c1 - Compress Video C_B_r2_c2 - Video Stabilizer C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
 C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
@@ -478,7 +478,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 14.Sep.2026 v0.4.0 (Python 3.12.14)")
+        self.title("vailá - 15.Sep.2026 v0.4.2 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -1397,10 +1397,10 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_A_r4_c2 - Data Files: Sapiens2 3D Kinematics
+        # C_A_r4_c2 - Data Files: Sapiens2_3D (joint kinematics from REC3D C3D)
         sapiens3d_kinematics_btn = tk.Button(
             tools_col1,
-            text="Sapiens2 3D Kinematics",
+            text="Sapiens2_3D",
             command=self.run_sapiens3d_kinematics,
             width=button_width,
         )
@@ -1486,11 +1486,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_B_r2_c2 - Video: vailá
+        # C_B_r2_c2 - Video: fixed-scene stabilization
         vaila_btn_compress = tk.Button(
             tools_col2,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Video Stabilizer",
+            command=self.video_stabilizer,
             width=button_width,
         )
 
@@ -3132,6 +3132,17 @@ class Vaila(tk.Tk):
         # (same dispatch pattern as getpixelvideo).
         run_vaila_module("vaila.cutvideo", "vaila/cutvideo.py")
 
+    def video_stabilizer(self):
+        """Open one persistent child window for fixed-scene stabilization."""
+        from vaila.video_stabilizer import run_video_stabilizer_gui
+
+        app = getattr(self, "_video_stabilizer_app", None)
+        if app is not None and app.root.winfo_exists():
+            app.root.lift()
+            app.root.focus_set()
+        else:
+            self._video_stabilizer_app = run_video_stabilizer_gui(parent=self)
+
     def resize_video(self):
         """Runs the video resizing module.
 
@@ -3142,7 +3153,7 @@ class Vaila(tk.Tk):
         """
         from vaila import resize_video
 
-        resize_video.run_resize_video()
+        resize_video.run_resize_video(parent=self)
 
     # C_B_r5_c1
     def ytdownloader(self):

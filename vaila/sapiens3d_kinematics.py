@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 24 August 2026
-Update Date: 24 August 2026
-Version: 0.3.113
+Update Date: 14 September 2026
+Version: 0.4.0
 
 Description:
     Functional markerless 3D lower-limb kinematics from a Sapiens2 REC3D C3D
@@ -100,7 +100,7 @@ Description:
     ``rotmat_to_quat_wxyz``.
 
 Usage:
-    GUI:  uv run vaila.py -> Tools -> Data Files -> "Sapiens2 3D Kinematics"
+    GUI:  uv run vaila.py -> Tools -> Data Files -> "Sapiens2_3D"
     CLI:  uv run vaila/sapiens3d_kinematics.py -i path/to/rec3d.c3d [options]
 """
 

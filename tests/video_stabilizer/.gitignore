@@ -1,0 +1,4 @@
+# Generated regression videos/reports; keep source annotations tracked.
+stabilizer_results/
+*.mp4
+

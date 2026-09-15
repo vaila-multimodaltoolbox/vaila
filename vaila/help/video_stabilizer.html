@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>vailá — Video Stabilizer</title>
+<style>
+body{font:16px/1.6 system-ui,sans-serif;color:#222;background:#f5f6f7;margin:0}
+main{max-width:1000px;margin:24px auto;background:white;padding:32px}
+h1{border-bottom:2px solid #333}table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #ccc;padding:8px;text-align:left}th{background:#eee}
+pre{background:#eee;padding:16px;overflow:auto}code{background:#eee;padding:2px}
+.info{padding:16px;background:#e9eef3}a{color:#0757a0}
+</style>
+</head>
+<body><main>
+<h1>Video Stabilizer</h1>
+<p class="info"><strong>Category:</strong> Tools → Video and Image<br>
+<strong>Version:</strong> 0.4.2 · <strong>Updated:</strong> 15 September 2026<br>
+<strong>Author:</strong> Paulo R. P. Santiago<br>
+<strong>GUI:</strong> C_B_r2_c2, between Compress Video and Make Sync file<br>
+<strong>CLI:</strong> <code>uv run vaila/video_stabilizer.py</code> (from repo root) or <code>python -m vaila.video_stabilizer</code></p>
+<p>Stabilize a video using physically fixed pixel markers from getpixelvideo.
+<strong>Metric coordinates are optional for visual stabilization.</strong>
+The default similarity transform preserves shape with translation, rotation
+and uniform scale. A planar homography is valid for the calibrated plane and
+is not used as the default whole-frame video warp.</p>
+<h2>GUI workflow</h2>
+<ol><li>Open Video and Image → Video Stabilizer.</li>
+<li>Select the video and its wide marker CSV. Choose an empty output directory,
+or leave it blank for a timestamped directory beside the video.</li>
+<li>Enter static marker IDs and optional priority anchors. For the tatame,
+use static markers <code>0-10</code> and anchors <code>8,9,10</code>.</li>
+<li>Use visual without a TOML; hybrid adds metric floor diagnostics. Click
+Stabilize (Ctrl+Enter). The equivalent CLI is printed with quoted paths.</li>
+<li>Open report to inspect per-marker motion before/after.</li></ol>
+<h3>visual vs hybrid vs floor-lock, in plain terms</h3>
+<p>All three modes stabilize the video the same way: fit a shape-preserving
+transform (similarity or affine) from your <code>--stabilization-markers</code>
+pixel positions and warp every frame so the scene stops shaking/panning/zooming.
+The difference is only about <strong>extra metric (real-world) diagnostics</strong>:</p>
+<ul>
+<li><strong>visual</strong> (default) — pixel-only, no TOML needed. Use this if you
+just want a steady video and don't care about real-world distances. Right
+choice for most users.</li>
+<li><strong>hybrid</strong> — the exact same visual stabilization as visual,
+<strong>plus</strong> an independent floor homography (pixel ↔ real-world meters,
+from <code>--geometry-config</code>'s TOML and <code>--metric-markers</code>) fit per
+frame, purely for diagnostics. Writes two extra files,
+<code>floor_homographies.npz</code> and <code>floor_diagnostics.csv</code>, so you can
+check floor-fit quality (RMSE, condition number) or convert floor-plane
+pixels to meters later. The stabilized video itself looks the same as
+visual with the same model/canvas/stabilization-markers. Requires a TOML
+with real-world positions for your metric markers (the tatame example's
+<code>vaila/models/planar_targets/tatame_1x1m.toml</code> defines the mat's known
+0.96&nbsp;m module) and <code>--metric-markers</code> naming which CSV marker IDs
+correspond to those known points.</li>
+<li><strong>floor-lock</strong> — warps each frame with the relative floor
+homography itself, so the floor plane stays pixel-exact across frames.
+Deliberately distorts anything not on the floor plane (people, walls,
+columns). Only use it for planar measurement work where you accept that
+tradeoff.</li>
+</ul>
+<p>No calibrated TOML for your scene, or don't need metric floor diagnostics?
+Use visual — simpler, fewer inputs. hybrid only makes sense once you have a
+geometry TOML for that specific camera setup (see
+<a href="planar_geometry_tracker.html">planar_geometry_tracker</a> for how to
+build one).</p>
+<p>The resizable child window stays above its parent. A single worker handles
+encoding; Tk receives progress through a queue. Cancel or closing requests a
+stop at a safe frame boundary. Audio mux finishes its current step first.
+Completed files remain available; retry into a new/empty directory after
+cancellation. Help and Open report launch local HTML in your browser.</p>
+<h2>Tatame example</h2>
+<p>The supplied portrait tatame clip has 331 frames and audio. Markers p0–p7
+are fixed floor points on a 0.96 m interlocked module; p8–p10 are pixel-only
+upper-background anchors. They do not need world coordinates.</p>
+<pre>uv run vaila/video_stabilizer.py \
+  --video tests/video_stabilizer/tatame.mp4 \
+  --markers tests/video_stabilizer/tatame_markers.csv \
+  --stabilization-markers 0-10 --anchor-markers 8,9,10 \
+  --mode visual --model similarity --canvas union
+
+uv run vaila/video_stabilizer.py \
+  --video tests/video_stabilizer/tatame.mp4 \
+  --markers tests/video_stabilizer/tatame_markers.csv \
+  --geometry-config vaila/models/planar_targets/tatame_1x1m.toml \
+  --metric-markers 0-7 --stabilization-markers 0-10 --anchor-markers 8,9,10 \
+  --mode hybrid --model similarity --canvas union</pre>
+<p>Both commands run from the repo root. <code>python -m vaila.video_stabilizer ...</code>
+(same flags) works identically for package-module invocation.</p>
+<p>For this specific clip, empirically, <code>--model affine</code> roughly halves the
+stabilization residual RMS versus the default <code>similarity</code> (about 8.6 px to
+4.0 px "all" RMS) — the tatame camera has some non-rigid scale/shear drift.
+Try <code>--model affine</code> first on this footage; <code>similarity</code> remains the
+recommended default for arbitrary videos. <code>--estimator ransac</code> performed
+markedly worse here (about 20.6 px RMS) given the sparse/occluded marker set —
+keep the default <code>robust-lsq</code>.</p>
+<h2>CLI options</h2>
+<table><tr><th>Option</th><th>Default / behavior</th></tr>
+<tr><td>--video, --markers</td><td>Required for CLI. Input video and wide frame,pN_x,pN_y CSV.</td></tr>
+<tr><td>--output-dir</td><td>New vaila_stabilized_timestamp beside video. If a chosen directory already has files, CLI/GUI runs auto-suffix _v2, _v3, ... instead of overwriting.</td></tr>
+<tr><td>--mode</td><td>visual (default), hybrid, floor-lock. Last two require geometry.</td></tr>
+<tr><td>--model</td><td>similarity (default), affine (explicit shear/anisotropic research alternative).</td></tr>
+<tr><td>--estimator</td><td>robust-lsq (weighted Huber fit), ransac (explicit rejection alternative).</td></tr>
+<tr><td>--stabilization-markers</td><td>all; also 0-10 or 0-7,10,12-14. Noncontiguous IDs supported.</td></tr>
+<tr><td>--anchor-markers, --anchor-weight</td><td>Optional reliable static subset; weight multiplier defaults to 2.0.</td></tr>
+<tr><td>--metric-markers, --geometry-config</td><td>Known floor points only; intersection of selected IDs, CSV and TOML.</td></tr>
+<tr><td>--reference</td><td>auto (real central frame), first (frame 0), frame:N (zero-based).</td></tr>
+<tr><td>--smooth</td><td>savgol (up to 7 frames), none, lowpass (zero-phase, up to 6 Hz).</td></tr>
+<tr><td>--canvas</td><td>union (all warped corners), original (source extent), crop (fixed rectangle inside common area).</td></tr>
+<tr><td>--border</td><td>black. No filling, auto-zoom or moving canvas.</td></tr>
+<tr><td>--debug-overlay</td><td>Separate source/stabilized diagnostic video with IDs, residuals and reference targets.</td></tr>
+<tr><td>--no-audio</td><td>Explicitly disable audio preservation.</td></tr></table>
+<p>No arguments opens the GUI; --help prints usage. Success returns 0; failures
+and cancellation return nonzero. The compatibility launcher
+<code>python -m vaila.vaila_ground_stabilizer</code> uses the same implementation
+and translates legacy --estimator global and --reference-frame N. Use
+--output-dir instead of the prototype's --output.</p>
+<h3>Flags, one at a time (plain language)</h3>
+<ul>
+<li><strong>--video</strong> — path to the shaky source video.</li>
+<li><strong>--markers</strong> — the wide CSV from getpixelvideo: one row per
+frame, columns pN_x/pN_y per marker ID N. The fixed points the algorithm
+tracks to figure out how the camera moved.</li>
+<li><strong>--output-dir</strong> — where results go. Leave blank to
+auto-create a fresh timestamped folder next to the video
+(vaila_stabilized_&lt;timestamp&gt;) — the safe default. If a path you pass
+yourself already has files in it (e.g. rerunning with the same
+--output-dir), the CLI and GUI automatically pick &lt;dir&gt;_v2,
+&lt;dir&gt;_v3, ... instead of overwriting — no need to pick a fresh empty
+folder by hand. (Programmatic callers of run_video_stabilizer() directly
+still get the strict original behavior: FileExistsError if the directory
+isn't empty — pointing --output-dir at the same folder as
+--video/--markers is still a bad idea either way.)</li>
+<li><strong>--mode</strong> — visual, hybrid, or floor-lock; see the
+comparison above.</li>
+<li><strong>--model</strong> — the shape of transform fit per frame.
+similarity (default) only allows translation + rotation + uniform zoom, so
+proportions stay true. affine also allows shear and different
+horizontal/vertical scale — more flexible, but can subtly distort shapes;
+use only if similarity residuals look poor for your footage.</li>
+<li><strong>--estimator</strong> — how the per-frame transform is fit.
+robust-lsq (default) uses every marker but down-weights ones that look
+noisy/inconsistent that frame. ransac instead discards correspondences it
+judges outliers entirely — more aggressive, and empirically worse when
+markers are sparse/occluded (see the tatame finding above).</li>
+<li><strong>--stabilization-markers</strong> — which marker IDs to use for the
+visual fit. all (default), or a list/range like 0-7,10,12-14.</li>
+<li><strong>--anchor-markers</strong> — a subset you trust more, given extra
+weight (--anchor-weight, default 2.0) in the fit. Optional.</li>
+<li><strong>--metric-markers</strong> — only used in hybrid/floor-lock: marker
+IDs that also have known real-world coordinates in --geometry-config's
+TOML, used for the floor homography fit. Ignored in visual mode.</li>
+<li><strong>--geometry-config</strong> — TOML describing real-world (metric)
+positions for a subset of markers on a flat plane. Required for
+hybrid/floor-lock; optional in visual (diagnostics only, no effect on the
+stabilized video).</li>
+<li><strong>--reference</strong> — which frame's marker positions become the
+fixed target every other frame is warped toward. auto (default) picks a
+real frame with good visibility/spread near the temporal middle; first
+forces frame 0; frame:N picks an exact index.</li>
+<li><strong>--smooth</strong> — light temporal smoothing of fitted transform
+parameters before warping. savgol (default), lowpass, or none. Usually a
+small effect; try none only if smoothing seems to lag fast motion.</li>
+<li><strong>--canvas</strong> — output frame size. union (default) grows the
+canvas to fit every warped frame's corners so nothing crops; original keeps
+the source's exact size (may crop warped edges); crop picks a fixed
+centered rectangle guaranteed to stay inside every frame (no black
+borders, smaller field of view).</li>
+<li><strong>--border</strong> — border fill for empty canvas area. Always
+black currently; no auto-zoom or content-aware fill.</li>
+<li><strong>--debug-overlay</strong> — also render a side-by-side diagnostic
+video with marker IDs, reference targets, and residuals.</li>
+<li><strong>--no-audio</strong> — skip copying the source audio track.</li>
+</ul>
+<h2>Geometry and gaps</h2>
+<p>Every usable frame maps directly to one fixed real reference, preventing
+chained drift. Auto reference prioritizes anchor visibility, marker count,
+spatial spread and proximity to the temporal median configuration; it never
+invents averaged reference coordinates. Dense marker clusters receive less
+aggregate weight; priority anchors receive extra weight.</p>
+<p>Similarity needs two non-coincident correspondences; affine needs three
+non-collinear points. Missing coordinates and sparse rows are supported without
+shortening the video. Gaps interpolate translation, unwrapped rotation and
+log-scale; leading/trailing gaps propagate the nearest valid transform. Each
+fallback is logged. Frame IDs must be unique nonnegative integers within the
+source timeline.</p>
+<p>Hybrid fits independent RANSAC world-XY→pixel floor homographies. p8–p10 are
+never floor controls unless explicitly declared in both geometry and metric
+selection. Missing floor fits are marked unavailable/NaN. Floor imputation is
+not performed. Projected coordinates are never clamped.</p>
+<p><strong>Floor-lock is planar-only:</strong> it deliberately warps with relative
+floor homographies and can distort people, walls and columns. Missing fits use
+nearest-fit propagation. It is unsmoothed and never auto-selected.</p>
+<h2>Outputs</h2>
+<table><tr><th>File</th><th>Contents</th></tr>
+<tr><td>stem_stabilized.mp4</td><td>Production video, source frame order/FPS/orientation, fixed canvas, source audio when present.</td></tr>
+<tr><td>stabilization_transforms.csv</td><td>Per-frame reference, method, marker counts, raw/final parameters, exact final 3×3 matrix, residuals and fallback flags.</td></tr>
+<tr><td>stabilized_markers.csv</td><td>All original marker IDs transformed by the exact video matrix; NaNs preserved.</td></tr>
+<tr><td>stabilization_diagnostics.csv</td><td>Per-marker and all/anchor/floor RMS and median displacement before/after.</td></tr>
+<tr><td>stabilization_report.html</td><td>Tables, SVG comparison, canvas, direct/fallback percentages, scale/rotation, border fraction and audio status.</td></tr>
+<tr><td>stabilization_summary.json</td><td>Machine-readable run settings and summary.</td></tr>
+<tr><td>floor_homographies.npz</td><td>With geometry: H, frame_ids, metric_ids; unavailable fits are NaN.</td></tr>
+<tr><td>floor_diagnostics.csv</td><td>With geometry: correspondence/inlier counts, RMSE, condition, degeneracy and method.</td></tr>
+<tr><td>debug_overlay.mp4</td><td>Optional separate diagnostic video.</td></tr></table>
+<p>Final matrices and tx/ty include the constant canvas translation; raw
+parameters do not. Similarity matrices have last row [0,0,1]. Imputed counts
+are zero. Floor-lock scalar similarity parameters are not applicable: use the
+full matrix. Affine matrices additionally encode shear/anisotropic scale.
+Reference-absent marker displacement is unavailable. Border estimates use
+geometry, not dark image pixels.</p>
+<h2>Interpretation and media</h2>
+<p>Parallax between fixed points at different depths can remain under one
+shape-preserving transform. Judge visual stability by background and total
+marker displacement, not floor homography RMSE alone. Existing FFmpeg/ffprobe
+and OpenCV dependencies are used. Audio is copied, with AAC fallback if needed,
+aligned to the video start. Audio preservation failure is reported; silent
+input is valid. Effective average FPS is used for variable-frame-rate inputs;
+individual variable timestamps are not reproduced. Codec FPS rounding can occur.</p>
+<p><a href="video_stabilizer.md">Full Markdown help</a> ·
+<a href="planar_geometry_tracker.html">Planar geometry and metric reconstruction</a> ·
+<a href="index.html">Help index</a></p>
+</main></body></html>

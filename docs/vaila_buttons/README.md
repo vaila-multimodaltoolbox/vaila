@@ -61,6 +61,7 @@ Each button in the vailá GUI has its own documentation file:
 | C_B_r1_c1 | Video <--> PNG | `extract_png_from_videos` | [extract-png.md](extract-png.md) |
 | C_B_r1_c3 | Draw Box | `draw_box` | [draw-box.md](draw-box.md) |
 | C_B_r2_c1 | Compress Video | `compress_videos_gui` | [compress-video.md](compress-video.md) |
+| C_B_r2_c2 | Video Stabilizer | `video_stabilizer` | [video-stabilizer.md](video-stabilizer.md) |
 | C_B_r2_c3 | Make Sync file | `sync_videos` | [sync-videos.md](sync-videos.md) |
 | C_B_r3_c1 | Get Pixel Coord | `getpixelvideo` | [getpixelvideo.md](getpixelvideo.md) |
 | C_B_r3_c2 | Metadata info | `count_frames_in_videos` | [metadata-info.md](metadata-info.md) |

@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.127
+Version: 0.4.0
 Created: 06 September 2026
-Last Updated: 07 September 2026
+Last Updated: 14 September 2026
 ================================================================================
 Description:
     Kinovea-style quick on-image measurements for `getpixelvideo.py`:
@@ -1693,13 +1693,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def draw_quickmeasure_overlay(
-    screen, session: QuickMeasureSession, zoom_level, crop_x, crop_y, font
+    screen, session: QuickMeasureSession, zoom_level, crop_x, crop_y, font, pad_x=0, pad_y=0
 ):
     """Draw completed measurements (with value labels) + in-progress draft."""
     import pygame
 
     def _to_screen(x: float, y: float) -> tuple[int, int]:
-        return int((x * zoom_level) - crop_x), int((y * zoom_level) - crop_y)
+        return int((x * zoom_level) - crop_x + pad_x), int((y * zoom_level) - crop_y + pad_y)
 
     color_done = (255, 0, 255)
     color_draft = (255, 180, 0)
@@ -1749,7 +1749,14 @@ def draw_quickmeasure_overlay(
 
 
 def draw_calibration_overlay(
-    screen, draft: CalibrationDraft | Ref3dCalibrationDraft, zoom_level, crop_x, crop_y, font
+    screen,
+    draft: CalibrationDraft | Ref3dCalibrationDraft,
+    zoom_level,
+    crop_x,
+    crop_y,
+    font,
+    pad_x=0,
+    pad_y=0,
 ) -> None:
     """Draw the calibration clicks collected so far plus the next-step
     instruction banner. Called every frame while calibration is pending.
@@ -1760,7 +1767,9 @@ def draw_calibration_overlay(
     screen_pts = []
     points = draft.pixel_points if isinstance(draft, Ref3dCalibrationDraft) else draft.points
     for px, py in points:
-        screen_pts.append((int((px * zoom_level) - crop_x), int((py * zoom_level) - crop_y)))
+        screen_pts.append(
+            (int((px * zoom_level) - crop_x + pad_x), int((py * zoom_level) - crop_y + pad_y))
+        )
     if len(screen_pts) >= 2:
         closed = isinstance(draft, CalibrationDraft) and draft.mode == "plane" and draft.is_complete
         pygame.draw.lines(screen, color, closed, screen_pts, 2)

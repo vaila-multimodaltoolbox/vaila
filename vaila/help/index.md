@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 132 | **Categories:** 7 | **Generated on:** 14/09/2026 (v0.4.0)
+**Documented topics:** 134 | **Categories:** 7 | **Generated on:** 15/09/2026 (v0.4.2)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -108,7 +108,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **yolov26track** — This script performs object detection and tracking on video files using the YOLO model v26 (latest version), with integrated pose estimation capabilities. It...
   - [HTML](yolov26track.html) · [Markdown](yolov26track.md)
 
-## Processing (23)
+## Processing (24)
 
 - **data_processing** — Determines the number of header lines in a CSV file.
   - [HTML](data_processing.html) · [Markdown](data_processing.md)
@@ -134,6 +134,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](modifylabref.html) · [Markdown](modifylabref.md)
 - **monocular_dlt_align** — What problem this solves
   - [HTML](monocular_dlt_align.html) · [Markdown](monocular_dlt_align.md)
+- **planar_geometry_tracker** — For a stabilized video from fixed pixel markers, use [Video Stabilizer](video_stabilizer.md).
+  - [HTML](planar_geometry_tracker.html) · [Markdown](planar_geometry_tracker.md)
 - **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: calibrate first, then click points on the video and classify the current point set as D...
   - [HTML](quickmeasure.html) · [Markdown](quickmeasure.md)
 - **readc3d_export** — This script processes .c3d files, extracting marker data, analog data, events, and points residuals, and saves them into CSV files. It also allows the option...
@@ -157,7 +159,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **reid_markers** — Marker Re-identification Tool - reid_markers.py
   - [HTML](reid_markers.html) · [Markdown](reid_markers.md)
 
-## Tools (42)
+## Tools (43)
 
 - **brainstorm** — brainstorm.py is a Tkinter workspace for creative text workflows inside vailá. It records or loads audio, transcribes speech, edits text prompts, generates m...
   - [HTML](brainstorm.html) · [Markdown](brainstorm.md)
@@ -211,7 +213,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](resize_video.html) · [Markdown](resize_video.md)
 - **rotation** — This Python script provides a comprehensive set of tools for performing 3D rotation and transformation operations using numpy and scipy. It includes methods...
   - [HTML](rotation.html) · [Markdown](rotation.md)
-- **sapiens3d_kinematics** — GUI: Frame C → Data Files → Sapiens2 3D Kinematics (C_A_r4_c2)
+- **sapiens3d_kinematics** — GUI: Frame C → Data Files → Sapiens2_3D (C_A_r4_c2)
   - [HTML](sapiens3d_kinematics.html) · [Markdown](sapiens3d_kinematics.md)
 - **scout_vaila** — Integrated GUI to annotate sports events on a virtual soccer field and generate quick analyses (e.g., heatmaps). Inspired by manual scouting tools and design...
   - [HTML](scout_vaila.html) · [Markdown](scout_vaila.md)
@@ -241,6 +243,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](vaila_stroboscopic.html) · [Markdown](vaila_stroboscopic.md)
 - **vaila_ytdown** — Download video as MP4 or audio as MP3 from one editable list. Open Video and Image → YouTube Downloader or run the module without CLI inputs.
   - [HTML](vaila_ytdown.html) · [Markdown](vaila_ytdown.md)
+- **video_stabilizer** — Stabilize a video from physically fixed scene markers exported by getpixelvideo.
+  - [HTML](video_stabilizer.html) · [Markdown](video_stabilizer.md)
 - **videoprocessor** — This script allows users to process and edit video files, enabling batch processing of videos. Users can choose between two main operations: 1. Merging a vid...
   - [HTML](videoprocessor.html) · [Markdown](videoprocessor.md)
 

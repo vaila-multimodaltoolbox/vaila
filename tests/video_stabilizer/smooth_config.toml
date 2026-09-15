@@ -1,0 +1,25 @@
+[interpolation]
+method = "skip"
+max_gap = 60
+
+[smoothing]
+method = "butterworth"
+cutoff = 9.0
+fs = 60.0
+order = 4
+
+[padding]
+percent = 10.0
+
+[split]
+enabled = false
+
+[time_column]
+sample_rate = 0.0
+
+[resample]
+enabled = false
+original_rate = 0.0
+final_rate = 0.0
+antialias = true
+antialias_cutoff = 0.0

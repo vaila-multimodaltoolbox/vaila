@@ -3,9 +3,9 @@
 ## Module information
 
 - **Category:** Data Files
-- **Version:** 0.3.113
-- **Updated:** 2026-08-24
-- **GUI:** Frame C → Data Files → **Sapiens2 3D Kinematics** (`C_A_r4_c2`)
+- **Version:** 0.4.0
+- **Updated:** 2026-09-14
+- **GUI:** Frame C → Data Files → **Sapiens2_3D** (`C_A_r4_c2`)
 - **CLI:** Yes
 
 ## Purpose
@@ -158,7 +158,7 @@ written as separate CSVs.
 
 ## GUI
 
-Click **Sapiens2 3D Kinematics**, browse to a Sapiens2 REC3D `.c3d` file,
+Click **Sapiens2_3D**, browse to a Sapiens2 REC3D `.c3d` file,
 optionally a `--keypoint-map` JSON, set the Butterworth cutoff (default 6 Hz;
 0 disables filtering) and an optional neutral-frame range, then **Run**. The
 equivalent CLI command is printed to the terminal before the run starts.

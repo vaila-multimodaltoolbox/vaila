@@ -4,9 +4,9 @@
 
 - **Category:** Analysis
 - **File:** `vaila/markerless_2d_analysis.py`
-- **Lines:** 4259
-- **Version:** 0.3.122
-- **Updated:** 06 September 2026
+- **Lines:** 6152
+- **Version:** 0.4.0
+- **Updated:** 14 September 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -288,6 +288,7 @@ rich>=13.0.0
 
 ## 📝 Version History
 
+- **v0.4.0** (14 September 2026): Fixed unstable pose at the start of a clip when both `image_bootstrap_first_frame` and padding were enabled. VIDEO-mode's temporally-tracked result (warmed up by the reverse-bounce padding) is now preferred whenever it detects a pose; the stateless per-frame IMAGE-mode detection is used only as a rescue for frames where VIDEO-mode finds nothing. Previously IMAGE-mode always won inside the `image_bootstrap_num_frames` window even when VIDEO-mode already had a good, smooth detection — causing visibly jittery landmarks for the first N frames that only settled once the window ended and VIDEO-only tracking took over.
 - **v0.7.3** (January 2026): 
   - Added Polygon ROI selection for free-form regions
   - Improved BBox ROI selection with resizable window

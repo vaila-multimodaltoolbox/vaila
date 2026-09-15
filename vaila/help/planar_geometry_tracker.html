@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - planar_geometry_tracker</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #333; margin-top: 20px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; color: #212529; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        pre { background: #e9ecef; padding: 14px; border-radius: 6px; overflow-x: auto; color: #212529; border: 1px solid #dee2e6; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - planar_geometry_tracker</h1>
+
+        <div class="module-info">
+            <h3>Module information</h3>
+            <p><strong>Category:</strong> Processing</p>
+            <p><strong>File:</strong> vaila/planar_geometry_tracker.py</p>
+            <p><strong>Version:</strong> 0.4.1</p>
+            <p><strong>Updated:</strong> 15 September 2026</p>
+            <p>For a stabilized video, use <a href="video_stabilizer.html">Video Stabilizer</a>.
+            Its default similarity warp preserves shape; pixel-only background anchors need no metric coordinates.</p>
+            <p><strong>Author:</strong> Paulo R. P. Santiago</p>
+            <p><strong>GUI:</strong> Yes (<strong>Geo Homog</strong> button in <code>getpixelvideo.py</code>) &nbsp; <strong>CLI:</strong> Yes (<code>python -m vaila.planar_geometry_tracker</code>)</p>
+        </div>
+
+        <h2>Description</h2>
+        <p>Standalone planar-geometry homography tracker/extrapolator/gap-filler. Takes a 2D pixel-space
+        marker CSV exported by <code>getpixelvideo.py</code> and a metric target-geometry profile
+        (TOML &mdash; EVA tatame mat, soccer pitch, court, &hellip;) and, for every frame, fits the planar
+        homography that maps the metric target plane onto image pixels. With that per-frame homography
+        it:</p>
+        <ul>
+            <li><strong>imputes</strong> markers that are missing/occluded on a frame but whose position on
+            the metric target plane is known (every other visible marker still pins down the plane);</li>
+            <li><strong>extrapolates</strong> points that have left the camera field of view, without
+            clamping to the frame boundary &mdash; the projected pixel coordinate can fall outside
+            <code>[0, width) x [0, height)</code>, which is expected and by design (a point 2&nbsp;m past the
+            sideline should project 2&nbsp;m past the sideline in pixel space, not snap to the edge);</li>
+            <li><strong>projects a wireframe</strong> of the target geometry (perimeter/interior lines,
+            circles, arcs) into image space for every frame, for visual QA and for building an
+            "extended canvas" diagnostic video larger than the source frame so off-frame projections stay
+            visible.</li>
+        </ul>
+        <p>Each frame's homography is fit independently with
+        <code>cv2.findHomography(..., cv2.RANSAC, ransac_thresh)</code> from whatever markers are visible
+        and non-collinear on that frame (minimum 4 non-collinear points). When fewer than 4 usable points
+        are available on a frame, the module falls back to <code>cv2.estimateAffinePartial2D</code>
+        propagated from the nearest frame that did have a full homography, so a brief marker dropout does
+        not stop tracking.</p>
+        <p>This is a different tool from <a href="dlt2d.html">dlt2d</a> /
+        <a href="rec2d_one_dlt2d.html">rec2d_one_dlt2d</a>: those do a one-time least-squares DLT2D
+        calibration fit from an exact point set (no outlier rejection, no per-frame refit).
+        <code>planar_geometry_tracker.py</code> refits a robust RANSAC homography every frame from noisy,
+        partial, changing correspondences &mdash; the right tool when the visible marker set varies frame to
+        frame (occlusion, markers leaving/entering the FOV) rather than staying fixed for one calibration
+        shot.</p>
+
+        <h2>Usage</h2>
+        <h3>From the GUI</h3>
+        <p>In <code>getpixelvideo.py</code>, click <strong>Geo Homog</strong> (next to <strong>Gap
+        Fill</strong>). Current annotations are saved first, then you are prompted to choose a target
+        geometry TOML profile (see below); the module runs as a subprocess against the just-saved CSV and
+        the video currently loaded, and success/failure is reported in the save toast. The equivalent
+        <code>&gt;&gt;</code> CLI command is printed to the console before the subprocess launches.</p>
+
+        <h3>From the CLI</h3>
+        <pre>uv run python -m vaila.planar_geometry_tracker \
+  --config vaila/models/planar_targets/tatame_1x1m.toml \
+  --measurements-csv path/to/markers.csv \
+  --video-path path/to/video.mp4 \
+  --output-dir ./vaila_tracker_output \
+  --extended-canvas</pre>
+
+        <h3>CLI arguments</h3>
+        <table>
+            <tr><th>Flag</th><th>Required</th><th>Default</th><th>Meaning</th></tr>
+            <tr><td><code>--config</code></td><td>Yes</td><td>&mdash;</td><td>Path to the target-geometry TOML profile.</td></tr>
+            <tr><td><code>--measurements-csv</code></td><td>Yes</td><td>&mdash;</td><td>Marker CSV from <code>getpixelvideo.py</code>. Wide format (<code>frame,p0_x,p0_y,p1_x,p1_y,...</code>, what <code>getpixelvideo.py</code> actually writes) or long format (<code>frame,point_id,u,v</code>).</td></tr>
+            <tr><td><code>--video-path</code></td><td>No</td><td><code>None</code></td><td>Source video, for pixel-dimension reference and (with <code>--debug-viz</code>) the overlay render.</td></tr>
+            <tr><td><code>--output-dir</code></td><td>No</td><td><code>./vaila_tracker_output</code></td><td>Output directory (created if missing) &mdash; caller controls the path so it can point straight back at the GUI's session folder.</td></tr>
+            <tr><td><code>--ransac-thresh</code></td><td>No</td><td><code>3.0</code></td><td>RANSAC reprojection-error threshold (pixels) passed to <code>cv2.findHomography</code>.</td></tr>
+            <tr><td><code>--canvas-scale</code></td><td>No</td><td><code>1.8</code></td><td>Extended-canvas size multiplier relative to the source frame, when <code>--extended-canvas</code> is set.</td></tr>
+            <tr><td><code>--extended-canvas</code></td><td>No</td><td>off</td><td>Render the oversized-canvas diagnostic video so extrapolated (off-frame) projections stay visible instead of being clipped.</td></tr>
+            <tr><td><code>--debug-viz</code></td><td>No</td><td>off</td><td>Write a debug overlay video with the projected wireframe drawn over the source frames. Requires <code>--video-path</code>.</td></tr>
+        </table>
+
+        <h2>Target-geometry TOML profile</h2>
+        <p>A profile describes a rigid planar target in real-world metric units. Two are shipped in
+        <code>vaila/models/planar_targets/</code>:</p>
+        <ul>
+            <li><code>tatame_1x1m.toml</code> &mdash; an 8-point EVA tatame mat (4 corners + 4 edge
+            midpoints), perimeter + edge lines only.</li>
+            <li><code>soccerfield_broadcast.toml</code> &mdash; a full 105&nbsp;x&nbsp;68&nbsp;m FIFA pitch
+            with corner flags, halfway line, both penalty boxes, and the center circle + both penalty arcs
+            via <code>[[circles]]</code>/<code>[[arcs]]</code>.</li>
+        </ul>
+
+        <h3>Schema</h3>
+        <pre>[target]
+name = "tatame_eva_1x1m"
+description = "Interlocking martial arts EVA mat (0.96m modular interlocked pitch)"
+type = "polygon"
+
+[points]
+0 = { name = "corner_sw", x = 0.000, y = 0.000, z = 0.0 }
+1 = { name = "mid_s",     x = 0.480, y = 0.000, z = 0.0 }
+# ... one entry per marker, numbered to match the CSV's p{N}_x/p{N}_y columns
+
+[topology]
+perimeter = [0, 1, 2, 3, 4, 5, 6, 7]   # optional, closed outline for the wireframe
+lines = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [4, 5], [5, 6], [6, 7], [7, 0]
+]                                       # index pairs, each drawn as a segment
+
+# Optional, repeatable -- circular/arc features (e.g. a center circle, a penalty arc)
+[[circles]]
+name = "center_circle"
+center_point = 6        # index into [points]
+radius = 9.15            # metres
+samples = 64              # polyline vertex count for the projected circle
+
+[[arcs]]
+name = "left_penalty_arc"
+center_point = 11
+radius = 9.15
+angle_start_deg = -53.0
+angle_end_deg = 53.0
+samples = 32</pre>
+        <ul>
+            <li><code>[points]</code> entries are keyed by the same integer index used in the marker CSV's
+            <code>p{N}_x</code>/<code>p{N}_y</code> columns (or <code>point_id</code> in long-format CSVs)
+            &mdash; the point count and numbering in the TOML must match what was digitized in
+            <code>getpixelvideo.py</code>.</li>
+            <li><code>[topology].perimeter</code> is optional (used to close the outline); <code>lines</code>
+            is the general index-pair list drawn for every frame's wireframe.</li>
+            <li><code>[[circles]]</code>/<code>[[arcs]]</code> are optional array-of-tables; each is
+            parametrized in the metric target plane and projected through that frame's homography, so a true
+            circle on the ground renders as the correct ellipse in image space.</li>
+        </ul>
+
+        <h2>Outputs</h2>
+        <p>Written to <code>--output-dir</code>:</p>
+        <table>
+            <tr><th>File</th><th>Contents</th></tr>
+            <tr><td><code>&lt;stem&gt;_imputed.csv</code></td><td>Wide-format marker CSV (same <code>p{N}_x</code>/<code>p{N}_y</code> column convention <code>getpixelvideo.py</code> writes and reads) with occluded/missing markers filled in and out-of-FOV markers extrapolated &mdash; loads straight back into <code>getpixelvideo.py</code> via its Load button.</td></tr>
+            <tr><td><code>dense_projected_points_long.csv</code></td><td>Long-format per-frame projection of every target-geometry point (not just measured markers), including the dense circle/arc sample points.</td></tr>
+            <tr><td><code>homographies.npz</code></td><td>Per-frame 3x3 homography matrices (and affine-fallback frames flagged), for downstream reuse without refitting.</td></tr>
+            <tr><td><code>target_calibration.ref3d</code></td><td>Metric target-geometry reference in the repo's existing <code>.ref3d</code> convention (see <code>drawsportsfields.py</code>), readable by <code>dlt3d.py</code>, <code>quickmeasure.py</code>, <code>sapiens2_3d.py</code>.</td></tr>
+            <tr><td><code>debug_projected_wireframe.mp4</code></td><td>Only with <code>--debug-viz</code>: source video with the projected wireframe overlay drawn per frame.</td></tr>
+        </table>
+
+        <h2>See also</h2>
+        <table>
+            <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><a href="getpixelvideo.html">getpixelvideo</a></td><td>Marker digitizing tool that produces the input CSV and hosts the <strong>Geo Homog</strong> button.</td></tr>
+            <tr><td><a href="dlt2d.html">dlt2d</a> / <a href="rec2d_one_dlt2d.html">rec2d_one_dlt2d</a></td><td>One-time DLT2D calibration fit &mdash; a different use case (fixed exact point set, no per-frame RANSAC refit).</td></tr>
+        </table>
+
+        <div class="footer">
+            <p>Part of <strong>vailá</strong> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

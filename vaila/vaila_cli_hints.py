@@ -1,11 +1,15 @@
-"""CLI run hints for vailá menu entries (headless ``--cli`` mode)."""
+"""CLI run hints for vailá menu entries (headless ``--cli`` mode).
+
+Version: 0.4.1
+Update Date: 15 September 2026
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.4.0"
-__updated__ = "14 September 2026"
+__version__ = "0.4.1"
+__updated__ = "15 September 2026"
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +149,7 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
             "uv run python -m vaila.sapiens3d_kinematics --help",
             "uv run python -m vaila.sapiens3d_kinematics -i /path/to/rec3d_sapiens.c3d",
         ),
-        "Sapiens2 3D Kinematics — joint rotation matrices, quaternions, and Cardan angles from REC3D C3D.",
+        "Sapiens2_3D — joint rotation matrices, quaternions, and Cardan angles from REC3D C3D.",
     ),
     # Frame C_B
     "extract_png_from_videos": CliRunHint(
@@ -172,6 +176,10 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
             "uv run vaila/compress_videos_h266.py",
         ),
         "Video compression — pick codec script or use GUI chooser.",
+    ),
+    "video_stabilizer": CliRunHint(
+        ("uv run python -m vaila.video_stabilizer --help",),
+        "Fixed-scene stabilization: --video VIDEO --markers CSV; metric geometry is optional.",
     ),
     "sync_videos": CliRunHint(("uv run vaila/syncvid.py",), "Multi-camera sync file GUI."),
     "getpixelvideo": CliRunHint(

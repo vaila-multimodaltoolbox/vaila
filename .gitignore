@@ -59,6 +59,7 @@ tests/sport_fields/*.mp4
 # Ignore mp4 in Train_yolo directory
 tests/Train_yolo/*.mp4
 tests/syncvid/*.mp4
+tests/video_stabilizer/*.mp4
 
 # General temporary files
 .DS_Store
@@ -68,6 +69,8 @@ tests/syncvid/*.mp4
 *.backup
 *.tmp
 *.temp
+.vaila_markers_history/
+**/.vaila_markers_history/
 
 # Ignore .app directories (macOS application bundles)
 *.app

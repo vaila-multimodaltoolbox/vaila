@@ -9,8 +9,8 @@ into the retrained online discriminator's feature vector. Integrates bidirection
 keyframe infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 13 September 2026
-Version: 0.3.139
+Update Date: 14 September 2026
+Version: 0.4.1
 """
 
 from __future__ import annotations
@@ -61,6 +61,14 @@ _KF_Q_VEL = 12.0  # process noise variance injected into velocity each frame (px
 _KF_R_POS = 4.0  # measurement noise variance assumed for an accepted appearance match (px^2)
 _KF_P_INIT = 1000.0  # initial state covariance (diagonal) after a fresh anchor: "velocity unknown"
 _KF_MAHALANOBIS_GATE = 9.21  # chi-square, 2 DOF, 99% confidence -- outlier rejection threshold
+# Global scene-change distrust (mean abs diff of downsampled grayscale prev-vs-current
+# frame, normalized [0, 1]). A large background/appearance flip (e.g. white->black)
+# degrades what the NCC/deep/discriminator score is actually measuring, so a spurious
+# nearby patch can score just above similarity_threshold and still pass the Mahalanobis
+# gate. Only a marginal accept (score close to threshold) during a high scene-change
+# frame is treated as a rejection -- a confidently-scored match is never second-guessed.
+_SCENE_CHANGE_GATE = 0.35  # score above this = "large global scene change" this frame
+_SCENE_CHANGE_MARGIN = 0.08  # combined_score within this margin of threshold = "marginal"
 _FEATURE_DIM = 808  # extract_patch_feature() output length (768 color-grid + 40 region-stats)
 _CHECKPOINT_BLEND_MAX_N = 4000.0  # Cap prior-session weight so a fresh session can still adapt
 
@@ -585,6 +593,10 @@ class AITracker:
         self._kf_x: np.ndarray = np.zeros(4, dtype=np.float64)
         self._kf_P: np.ndarray = np.eye(4, dtype=np.float64) * _KF_P_INIT
         self._lost_streak: int = 0
+        # Downsampled grayscale of the previous track_frame() call, used only to score
+        # global scene change (see _SCENE_CHANGE_GATE) -- reset on set_reference so a
+        # fresh anchor never compares against a stale/unrelated frame.
+        self._prev_gray_small: np.ndarray | None = None
 
         # Online Appearance Model / Multi-Anchor Retraining
         self.anchors: list[dict[str, Any]] = []
@@ -994,6 +1006,10 @@ class AITracker:
         bw, bh = self.params.block_window
         self.template = self.extract_patch(frame, point, (bw, bh))
         self.anchor_template = self.template.copy()
+        # A (re-)anchor frame isn't guaranteed adjacent in time to the next track_frame()
+        # call -- discard any stale scene-change baseline rather than comparing across a
+        # jump cut.
+        self._prev_gray_small = None
         if self.last_point is not None and not reset_online:
             dx = point[0] - self.last_point[0]
             dy = point[1] - self.last_point[1]
@@ -1097,6 +1113,21 @@ class AITracker:
         h_img, w_img = frame.shape[:2]
         sw, sh = self.params.search_window
         bw, bh = self.params.block_window
+
+        # Global scene-change score: mean abs diff of downsampled grayscale prev-vs-
+        # current frame, normalized [0, 1]. Cheap (64x64), and only ever used to
+        # distrust a marginal accept below (see _SCENE_CHANGE_GATE) -- never rejects a
+        # confident match. Update the baseline before any early return so it always
+        # reflects the immediately-preceding frame on the next call.
+        gray_small = cv2.resize(
+            cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame,
+            (64, 64),
+            interpolation=cv2.INTER_AREA,
+        ).astype(np.float32)
+        scene_change_score = 0.0
+        if self._prev_gray_small is not None:
+            scene_change_score = float(np.mean(np.abs(gray_small - self._prev_gray_small)) / 255.0)
+        self._prev_gray_small = gray_small
 
         # Kalman predict (constant-velocity model). `last_point` is authoritative (the
         # previous frame's accepted location, or a manual anchor via set_reference) --
@@ -1293,6 +1324,20 @@ class AITracker:
         except np.linalg.LinAlgError:
             mahalanobis_sq = 0.0
         if accepted and mahalanobis_sq > _KF_MAHALANOBIS_GATE:
+            accepted = False
+
+        # Scene-change distrust: a marginal accept (score only just above threshold)
+        # during a large global scene change (e.g. background polarity flip) is the
+        # signature of a spurious patch on the far side of the flip scoring just high
+        # enough to pass while still landing inside the (possibly already-widened)
+        # Kalman gate. Only downgrade a marginal accept -- a confidently-scored match
+        # (well above threshold) is never second-guessed by this gate.
+        if (
+            accepted
+            and scene_change_score > _SCENE_CHANGE_GATE
+            and float(combined_score)
+            < float(self.params.similarity_threshold) + _SCENE_CHANGE_MARGIN
+        ):
             accepted = False
 
         template_updated = False

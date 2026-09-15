@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 06 September 2026
-Version: 0.3.122
+Update Date: 14 September 2026
+Version: 0.4.0
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -1283,17 +1283,17 @@ def save_config_to_toml(config, filepath):
             f.write("#                           # true = detect fresh each frame (slower)\n")
 
             f.write(
-                f"image_bootstrap_first_frame = {str(mp.get('image_bootstrap_first_frame', True)).lower()}   # Frame 0: RunningMode.IMAGE detect (true/false)\n"
+                f"image_bootstrap_first_frame = {str(mp.get('image_bootstrap_first_frame', True)).lower()}   # IMAGE-mode rescue when VIDEO tracker has no pose yet (true/false)\n"
             )
             f.write(
-                "#                           # true = strong first-frame pose (recommended for CSV/overlay)\n"
+                "#                           # true = fallback detection for frames VIDEO mode misses (recommended)\n"
             )
             f.write(
                 "#                           # false = VIDEO mode only (legacy; may warm up slowly)\n"
             )
 
             f.write(
-                f"image_bootstrap_num_frames = {int(mp.get('image_bootstrap_num_frames', 45))}   # IMAGE-mode refine for first N frames (0 = off)\n"
+                f"image_bootstrap_num_frames = {int(mp.get('image_bootstrap_num_frames', 45))}   # IMAGE-mode rescue window, first N frames (0 = off)\n"
             )
             f.write(
                 "#                           # 30–60 typical; trim clips may need more until tracker locks\n"
@@ -2001,7 +2001,7 @@ class ConfidenceInputDialog(simpledialog.Dialog):
         _pr = len(pad_params)
         self._create_entry_row(
             pad_frame,
-            "IMAGE refine first N frames (0 = off):",
+            "IMAGE rescue first N frames (0 = off):",
             "image_bootstrap_num_frames_entry",
             "45",
             _pr,
@@ -4940,8 +4940,9 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
             output_segmentation_masks=pose_landmarker_wants_segmentation(pose_config),
         )
         print(
-            f"[POSE] IMAGE refine window: first {image_bootstrap_n} frames "
-            "(second landmarker freed after — keeps VRAM for MediaPipe)"
+            f"[POSE] IMAGE rescue window: first {image_bootstrap_n} frames "
+            "(used only when VIDEO-mode tracker has no pose yet; "
+            "second landmarker freed after — keeps VRAM for MediaPipe)"
         )
 
     # Setup Video Writer for annotated output via FFmpeg pipe
@@ -5296,17 +5297,26 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
                     is_mps_gpu=is_mps_gpu,
                     return_extras=True,
                 )
-                if landmarks_image is not None:
-                    landmarks, world_xyzv, seg_mask = (
-                        landmarks_image,
-                        world_image,
-                        mask_image,
-                    )
-                else:
+                # Prefer VIDEO-mode: it carries MediaPipe's internal temporal
+                # tracker plus the reverse-bounce padding warm-up (if enabled),
+                # so once it detects a pose it is smoother/more consistent than
+                # the stateless per-frame IMAGE-mode detection. IMAGE-mode is a
+                # rescue for frames where VIDEO-mode's tracker has nothing yet
+                # (e.g. no padding, or the first frame it acquires a pose) —
+                # unconditionally preferring it instead visibly degraded the
+                # `image_bootstrap_num_frames` window (jittery start, pose only
+                # stabilizing once VIDEO-only kicks in past that window).
+                if landmarks_video is not None:
                     landmarks, world_xyzv, seg_mask = (
                         landmarks_video,
                         world_video,
                         mask_video,
+                    )
+                else:
+                    landmarks, world_xyzv, seg_mask = (
+                        landmarks_image,
+                        world_image,
+                        mask_image,
                     )
             else:
                 landmarks, world_xyzv, seg_mask = process_frame_with_tasks_api(

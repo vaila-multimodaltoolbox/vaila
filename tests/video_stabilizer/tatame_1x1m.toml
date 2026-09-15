@@ -1,0 +1,21 @@
+[target]
+name = "tatame_eva_1x1m"
+description = "Interlocking martial arts EVA mat (0.96m modular interlocked pitch)"
+type = "polygon"
+
+[points]
+0 = { name = "corner_sw", x = 0.000, y = 0.000, z = 0.0 }
+1 = { name = "mid_s",     x = 0.480, y = 0.000, z = 0.0 }
+2 = { name = "corner_se", x = 0.960, y = 0.000, z = 0.0 }
+3 = { name = "mid_e",     x = 0.960, y = 0.480, z = 0.0 }
+4 = { name = "corner_ne", x = 0.960, y = 0.960, z = 0.0 }
+5 = { name = "mid_n",     x = 0.480, y = 0.960, z = 0.0 }
+6 = { name = "corner_nw", x = 0.000, y = 0.960, z = 0.0 }
+7 = { name = "mid_w",     x = 0.000, y = 0.480, z = 0.0 }
+
+[topology]
+perimeter = [0, 1, 2, 3, 4, 5, 6, 7]
+lines = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [4, 5], [5, 6], [6, 7], [7, 0]
+]

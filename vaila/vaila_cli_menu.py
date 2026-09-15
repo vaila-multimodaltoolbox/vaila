@@ -1,4 +1,8 @@
-"""Terminal menu for vailá — compact grid + ``/`` search + CLI run hints."""
+"""Terminal menu for vailá — compact grid + ``/`` search + CLI run hints.
+
+Version: 0.4.1
+Update Date: 15 September 2026
+"""
 
 from __future__ import annotations
 
@@ -17,8 +21,8 @@ from vaila.vaila_cli_hints import CliRunHint, get_cli_hint
 if TYPE_CHECKING:
     from vaila import Vaila  # ty: ignore[unresolved-import]
 
-__version__ = "0.4.0"
-__updated__ = "14 September 2026"
+__version__ = "0.4.1"
+__updated__ = "15 September 2026"
 
 _ROW_RE = re.compile(r"_r(\d+)_")
 _COL_RE = re.compile(r"_c(\d+)$")
@@ -114,7 +118,7 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
         "C_A_r4_c2",
         "C_A",
         "Data Files",
-        "Sapiens2 3D Kinematics",
+        "Sapiens2_3D",
         "run_sapiens3d_kinematics",
     ),
     VailaMenuEntry("C_A_r4_c3", "C_A", "Data Files", "vailá", "show_vaila_message"),
@@ -128,7 +132,7 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     VailaMenuEntry("C_B_r1_c2", "C_B", "Video and Image", "Crop Face", "crop_faces_atletas"),
     VailaMenuEntry("C_B_r1_c3", "C_B", "Video and Image", "Draw Box", "draw_box"),
     VailaMenuEntry("C_B_r2_c1", "C_B", "Video and Image", "Compress Video", "compress_videos_gui"),
-    VailaMenuEntry("C_B_r2_c2", "C_B", "Video and Image", "vailá", "show_vaila_message"),
+    VailaMenuEntry("C_B_r2_c2", "C_B", "Video and Image", "Video Stabilizer", "video_stabilizer"),
     VailaMenuEntry("C_B_r2_c3", "C_B", "Video and Image", "Make Sync file", "sync_videos"),
     VailaMenuEntry("C_B_r3_c1", "C_B", "Video and Image", "GetPixelCoord", "getpixelvideo"),
     VailaMenuEntry(

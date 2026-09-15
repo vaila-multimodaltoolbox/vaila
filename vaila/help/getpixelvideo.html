@@ -220,8 +220,8 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.3.143<br />
-        <strong>Updated:</strong> 14 September 2026<br />
+        <strong>Version:</strong> 0.4.1<br />
+        <strong>Updated:</strong> 15 September 2026<br />
         <strong>Date:</strong> 23 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
@@ -233,15 +233,16 @@
         (selectable backbone, or <code>resnet_variant</code> in TOML) -- also optionally fused into the retrained
         online discriminator's feature vector -- (local <code>vaila/models/ai_tracker/</code>,
         custom path via <span class="key">Ctrl+W</span> / <span class="key">Weights (W)</span> in Cfg, or Torch Hub cache). Button label <code>AI Track</code> with immediate bright green
-        <code>active</code> badge and red <code>off</code>. Cir/Box: drag to set size,
+        <code>active</code> badge and red <code>off</code>; optional <strong>Deep</strong> checkbox sits to the right of <code>AI Track</code>. Cir/Box: drag to set size,
         marker at centroid. Hold arrows for continuous nav; Up/Down step = <code>nav_jump</code> (Cfg, default 60).
         Shift+T batch + RTS exports <code>*_ai_track_m{idx}.csv</code>.<br />
         <strong>BBox→Coords Export:</strong> Convert tracking bounding boxes / contours to 5 coordinate CSV files (center, bottom, top, left, right) in standard vailá format via GUI button or <code>--export-bbox-coords</code> CLI.<br />
+        <strong>Geo Homog:</strong> Toolbar button that launches the standalone <code>vaila/planar_geometry_tracker.py</code> module on the current marker CSV against a metric target-geometry TOML profile (EVA tatame mat, soccer pitch) — per-frame planar homography via RANSAC, occluded-marker imputation, unclipped FOV extrapolation, wireframe projection. See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.<br />
         <strong>Highlights:</strong>
         <strong>Template Marker Mode</strong> — toolbar cycles keypoint templates:
         <strong>FIFA Soccer-Field</strong> (32 pitch KPs, <code>idx 0 = top_left_corner</code>),
         <strong>MediaPipe Pose</strong> (33), <strong>YOLO Pose</strong> (COCO-17).<br/>
-        <strong>FIFA TOML</strong> — load via <code>K</code> or right-click Template button when Template:FIFA.
+        <strong>FIFA TOML</strong> — load via <code>K</code> when Template:FIFA.
         Sets <code>n_keypoints</code> (default <strong>32</strong>),
         <code>start_keypoint</code>, and <code>base_index</code>. Sparse integer CSV;
         <strong>F9</strong> appends to a FIFA-style <code>unified/</code> tree when
@@ -297,6 +298,12 @@
           <h3>Key Features:</h3>
           <ul>
             <li>
+              <strong>Centered letterbox viewport:</strong> Fitted media is centered in the
+              window so markers can be placed in the black margins on all sides (including left/top).
+              Version/date appear only in the OS window title
+              (<code>vailá getpixelvideo — Update: … Version: …</code>), not overlaid on the video.
+            </li>
+            <li>
               <strong>Multi-format Support:</strong> Load and visualize
               MediaPipe, YOLO tracking, vailá standard formats, and markerless 2D named-landmark CSVs (<code>frame_index,nose_x,nose_y,nose_z,...</code>)
             </li>
@@ -315,6 +322,14 @@
             <li>
               <strong>Swap Range:</strong> Swap paired marker/keypoint lists across
               an inclusive frame range; first marker line maps pairwise to the second (<code>26,28</code> with <code>27,29</code>, or <code>1:10</code> with <code>11:20</code>)
+            </li>
+            <li>
+              <strong>Geo Homog (planar homography tracker):</strong> Standalone launch of
+              <code>vaila/planar_geometry_tracker.py</code> — resolves a per-frame planar homography from the
+              current markers against a metric target-geometry TOML profile (EVA tatame mat, soccer pitch),
+              imputes occluded markers, extrapolates points beyond the camera FOV, and writes an imputed CSV,
+              dense wireframe projection, <code>.npz</code> homographies, and a <code>.ref3d</code>. See
+              <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.
             </li>
             <li>
               <strong>Zoom &amp; Navigation:</strong> Full zoom capabilities with
@@ -584,7 +599,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                   Green = frames with the <strong>selected</strong> marker (TAB/SHIFT+TAB switches
                   and recolors live); blue = frames where an <strong>other</strong> marker is
                   filled; gold line = current frame. Snaps to a marked frame in that column when
-                  possible.</td
+                  possible. Top-right counter: <code>M&lt;n&gt;:X · other:Y</code>.</td
                 >
               </tr>
             </table>
@@ -661,11 +676,15 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">B</span> / <strong>Lock (B)</strong></td>
-                <td>Lock/unlock selected marker — blue <strong>Lock (B)</strong> / amber <strong>LOCKED Mn (B)</strong>; cyan ring on the point while locked. Blocks <strong>TAB</strong> / Go KP / sequential advance; <strong>R</strong> keeps the same id; <strong>AI Track</strong> stays pinned. Auto-locks when AI Track turns ON.</td>
+                <td>Lock/unlock selected marker — blue <strong>Lock (B)</strong> / amber <strong>LOCKED Mn (B)</strong>; cyan ring on the point while locked. Blocks <strong>TAB</strong> / Go KP / sequential advance; <strong>R</strong> keeps the same id; <strong>AI Track</strong> stays pinned. Auto-locks when AI Track turns ON; Track AI / Deep OFF do <strong>not</strong> unlock.</td>
               </tr>
               <tr>
                 <td><strong>Gap Fill</strong></td>
                 <td>Fill interior gaps on one marker with Kalman/RTS prediction (default) or linear interpolation. Dialog: frame range, marker, method, max gap. Same family as <code>interp_smooth_split</code> / AI Track RTS. Existing anchors are never overwritten.</td>
+              </tr>
+              <tr>
+                <td><strong>Geo Homog</strong></td>
+                <td>Runs the standalone <code>vaila/planar_geometry_tracker.py</code> module on the current marker CSV against a target-geometry TOML profile: per-frame planar homography (<code>cv2.findHomography</code> + RANSAC), occluded-marker imputation, unclipped FOV extrapolation, wireframe projection. Saves annotations first, then launches as a subprocess and reports success/failure in the save toast; prints the equivalent <code>&gt;&gt;</code> CLI command. See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.</td>
               </tr>
               <tr>
                 <td><span class="key">L</span></td>
@@ -713,7 +732,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td><span class="key">Guide button</span></td>
                 <td>
                   Toggle Guide overlay (depends on Template): FIFA field guide or pose skeleton guide (MediaPipe/YOLO).
-                  <code>V</code> (or right-click Guide) toggles the upper-right guide map.
+                  <code>V</code> toggles the upper-right guide map.
                   Soccer-field Guide loads <code>soccerfield_kiki.csv</code> (49 landmarks).
                 </td>
               </tr>
@@ -845,8 +864,8 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td>Toggle live AI tracking ON/OFF. When active, <span class="key">Space</span> tracks live across frames. Hold <span class="key">←/→</span> for single frames, <span class="key">↑/↓</span> for jump steps. <span class="key">Shift+Click</span> or <span class="key">Shift+T</span> runs full batch RTS tracking &amp; gap infilling.</td>
               </tr>
               <tr>
-                <td><span class="key">Track AI Deep NN</span></td>
-                <td>Toggle deep semantic feature extractor (ResNet-50/ResNet-152: 2048-D, MobileNetV3-Small: 576-D, EfficientNet-B0: 1280-D) for distractor-resilient tracking during fast movements.</td>
+                <td><span class="key">Deep</span> checkbox (right of AI Track)</td>
+                <td>Optional deep semantic features for AI Track (ResNet-50/152, MobileNetV3-Small, EfficientNet-B0). Not a standalone tracker — leave unchecked for NCC/CPU-only.</td>
               </tr>
               <tr>
                 <td><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span></td>
@@ -857,7 +876,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
                 <td>Cycle tracking shape (<span class="key">Point</span> / <span class="key">Circle</span> / <span class="key">Box</span>) to adapt region features (mean, std, histogram, area).</td>
               </tr>
               <tr>
-                <td><span class="key">Ctrl+T</span> / Right-Click AI Track</td>
+                <td><span class="key">Ctrl+T</span> / <span class="key">Cfg</span></td>
                 <td>Open Track AI TOML configuration card to adjust search windows, template learning rate, jump step size, and select weights with <span class="key">Weights (W)</span>.</td>
               </tr>
               <tr>
@@ -1300,7 +1319,7 @@ uv run yolo pose train \<br/>
             fallback scan of <code>vaila/models/</code> directly.
           </li>
           <li>
-            <strong>Deep Neural Network (ResNet50/ResNet152/MobileNetV3-Small/EfficientNet-B0):</strong> Clicking <span class="key">Track AI Deep NN</span> toggles the deep feature extractor.
+            <strong>Deep Neural Network (ResNet50/ResNet152/MobileNetV3-Small/EfficientNet-B0):</strong> The <strong>Deep</strong> checkbox to the right of <span class="key">AI Track</span> toggles the deep feature extractor (not a standalone mode).
             ResNet50 is the default variant (faster, ~3x fewer FLOPs than ResNet152); ResNet152 is an opt-in, deeper/slower variant
             with modestly better ImageNet accuracy; MobileNetV3-Small and EfficientNet-B0 are lighter, CPU-friendly alternatives. When enabled, the frozen <em>primary</em> variant's embedding is also concatenated
             into the online discriminator's classical 808-D feature vector (808 -&gt; 808+feature_dim), so it participates in every
@@ -1315,17 +1334,40 @@ uv run yolo pose train \<br/>
           <li>
             <strong>Opt-in cascade fallback (<code>fallback_variant</code> / <code>fallback_threshold</code>, TOML-only):</strong> disabled by default (<code>fallback_variant=""</code>). Set a second backbone name in the profile TOML and any frame scoring below <code>fallback_threshold</code> (default <code>0.48</code>) is re-scored with it using the same NCC/discriminator fusion; the higher-scoring result wins. Discriminator feature width is unaffected regardless of which backbone wins a given frame. No dedicated GUI widget yet -- edit the AI Track profile TOML directly.
           </li>
+          <li>
+            <strong>Manual Ground-Truth Preservation:</strong> AI Track never overwrites frames that already have
+            user-placed coordinates; passing over an existing marked frame treats it as a ground-truth anchor and
+            retrains the model.
+          </li>
+          <li>
+            <strong>Trajectory-plausibility guard ahead of manually-measured frames:</strong> while live-tracking
+            toward a frame the user already measured for the same marker, each new candidate is checked against
+            the straight-line path from the last tracked point to that upcoming manual anchor; a candidate that
+            strays too far off that path (the lateral-false-match failure mode, e.g. fast acceleration + motion
+            blur) is rejected instead of accepted -- it does not overwrite the manual anchor and does not run off
+            toward a spurious match. Eight consecutive rejections trigger the existing
+            <code>"AI Track lost — click marker to re-anchor"</code> pause.
+          </li>
+          <li>
+            <strong>Scene-change distrust:</strong> a large global appearance shift between consecutive frames
+            (e.g. background polarity flip, white&harr;black) that would otherwise let a spuriously-scored
+            candidate slip through a still-marginal match is detected; when the accept is only marginally above the
+            similarity threshold (not a confident match), the frame is rejected rather than accepted -- losing
+            track safely and prompting re-anchor instead of a confident wrong accept. Confidently-scored matches
+            are never second-guessed by this check.
+          </li>
         </ul>
 
         <h3>2. Controls &amp; Shortcuts</h3>
         <ul>
           <li><span class="key">T</span> or <strong>AI Track button:</strong> Toggle live tracking. Illuminates immediately in <strong>bright green</strong> when armed or tracking; red when off.</li>
+          <li><strong>Deep checkbox</strong> (right of AI Track): optional deep-backbone features for the same tracker (not a standalone mode).</li>
           <li><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span>: Quick shortcut to select or cycle deep feature weights (.pth / .pt) for any of the four backbones (ResNet-50, ResNet-152, MobileNetV3-Small, EfficientNet-B0) from <code>vaila/models/ai_tracker/</code>, custom directory, or Hub.</li>
           <li><span class="key">Space:</span> Play video and track the active marker in real time.</li>
           <li><strong>Hold <span class="key">←/→</span>:</strong> Step frame-by-frame and update the tracker continuously.</li>
           <li><strong>Hold <span class="key">↑/↓</span>:</strong> Jump by <code>nav_jump_frames</code> (default 60 frames).</li>
           <li><span class="key">Shift+Click</span> or <span class="key">Shift+T</span>: Full batch RTS bidirectional tracking and gap infilling between manually marked keyframes.</li>
-          <li><strong>Right-Click (or <span class="key">Ctrl+T</span>):</strong> Open the Track AI TOML Configuration Card to adjust search window size, similarity thresholds, spatial sigma, template learning rate, shape modes, and choose weights via <span class="key">Weights (W)</span>.</li>
+          <li><span class="key">Cfg</span> / <span class="key">Ctrl+T</span>: Open the Track AI TOML Configuration Card to adjust search window size, similarity thresholds, spatial sigma, template learning rate, shape modes, and choose weights via <span class="key">Weights (W)</span>.</li>
           <li><span class="key">Shp:Pt / Shp:Cir / Shp:Box</span> button: Cycle tracking shape between point, circle, and bounding box with customized region descriptors (intensity mean, standard deviation, normalized histogram, and area fraction).</li>
         </ul>
 
@@ -1409,7 +1451,8 @@ uv run yolo pose train \<br/>
           <li><strong>Markers:</strong> Green circles for each point</li>
           <li><strong>Numbers:</strong> Marker IDs displayed next to points</li>
           <li>
-            <strong>Selection:</strong> Orange highlight for selected marker
+            <strong>Selection:</strong> Compact orange outline ring for selected
+            marker (no filled disc); tighter green core so the click pixel stays visible
           </li>
         </ul>
       </section>
@@ -1723,6 +1766,27 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.4.1 (15 September 2026) &mdash; Compact active marker + Geo Homog / AI Track</h3>
+        <ul>
+          <li><strong>Smaller active marker overlay:</strong> selected slot uses a thin orange outline and a tighter green core instead of a filled orange disc; Lock cyan/white rings shrunk so the click pixel stays visible.</li>
+          <li><strong>New Geo Homog button</strong> (toolbar): launches the standalone <code>vaila/planar_geometry_tracker.py</code> module on the current marker CSV against a chosen target-geometry TOML profile — planar homography per frame (RANSAC), occluded-marker imputation, unclipped FOV extrapolation, wireframe projection. See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.</li>
+          <li><strong>AI Track: trajectory-plausibility guard ahead of manually-measured frames.</strong> Live tracking toward a frame already measured manually for the same marker now checks each new candidate against the straight-line path to that upcoming anchor and rejects one that strays too far off it — fixes the lateral-false-match failure mode (fast acceleration + motion blur + a large background change) that could previously run tracking off-target through an unmeasured gap.</li>
+          <li><strong>AI Track (<code>ai_tracker.py</code>): scene-change distrust.</strong> A large global appearance shift between frames (e.g. background polarity flip) no longer lets a marginally-scored candidate slip through; only a confidently-scored match is trusted during such a shift. Confident matches on ordinary frames are unaffected.</li>
+          <li>Status toast on AI Track ON no longer names the marker index (<code>m{n}</code>); the on-screen legend no longer says "(tracking/armed)" — button color (green = active, red = off) already conveyed the state.</li>
+        </ul>
+
+        <h3>Version 0.4.0 (14 September 2026) &mdash; Window title + centered letterbox</h3>
+        <ul>
+          <li>Synced window-title build stamp with global <i>vailá</i> <code>0.4.0</code> (was stale <code>0.3.137</code>).</li>
+          <li>Restored window caption after the pygame file dialog (no longer stuck on <code>Select File</code>).</li>
+          <li>Letterbox-centers fitted media so markers can be placed outside the frame on the left/top as well as right/bottom.</li>
+          <li>Removed the Version HUD overlay inside the video area; version/date live only in the window title.</li>
+          <li>Toolbar / control-panel buttons respond only to left-click (primary tap); middle/right no longer fire UI actions (FIFA TOML via <code>K</code>, Guide map via <code>V</code>, Track AI Cfg via <code>Cfg</code> / Ctrl+T).</li>
+          <li>Marker <strong>Lock</strong> is no longer cleared when AI Track or Deep turns OFF — unlock only with <span class="key">B</span> or the <strong>Lock</strong> button (reverts the 0.3.143 auto-release on Track AI OFF).</li>
+          <li><strong>Deep</strong> is no longer a standalone <code>Deep: ON/OFF</code> button; it is a checkbox glued to the right of <strong>AI Track</strong>.</li>
+          <li>Green <code>M&lt;n&gt;:X · other:Y · click strip</code> count moved from the bottom info row (over Go KP / Lock / …) to the <strong>top-right</strong> of the control panel.</li>
+        </ul>
 
         <h3>Version 0.3.143 (14 September 2026) &mdash; Marker lock auto-release on Track AI OFF</h3>
         <ul>

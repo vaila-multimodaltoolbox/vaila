@@ -38,14 +38,33 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
             <p><strong>File:</strong> vaila\resize_video.py</p>
-            <p><strong>Lines:</strong> 1293</p>
-            <p><strong>Size:</strong> 46650 characters</p>
-            <p><strong>Version:</strong> --------</p>
+            <p><strong>Lines:</strong> 1390+</p>
+            <p><strong>Size:</strong> updated with CLI and batch workflow</p>
+            <p><strong>Version:</strong> 0.4.0</p>
             <p><strong>Author:</strong> -------</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
 
-        
+        <h2>GUI workflow and crop-only crash fix</h2>
+        <p><strong>Crop and Resize</strong> now keeps Tkinter widget updates on the GUI
+        thread. Encoding remains in a worker and progress is delivered through a queue
+        and <code>after()</code>, preventing the Linux/X11 segmentation fault (exit code 139)
+        that could occur after confirming an ROI. ROI coordinates are clamped to the
+        source dimensions before encoding; output dimensions are rounded up to even
+        pixels for codec compatibility. Scale factor <code>1</code> is valid for a
+        crop-only output, and the metadata JSON records the exact crop.</p>
+        <p>The resizer is opened as a modal child of the main vailá window, keeping it
+        in front without creating a second Tk root. <strong>Batch Crop (same ROI)</strong>
+        applies one selected region to every supported video in the input directory.</p>
+
+        <h2>CLI workflow</h2>
+        <p>The command line works without a display. A file processes one video; a
+        directory processes all <code>.mp4</code>, <code>.avi</code>, <code>.mov</code>
+        and <code>.mkv</code> files. It returns code 1 when no videos are found or an
+        item fails.</p>
+        <pre>python -m vaila.resize_video --input ./videos --output ./resized --scale 2
+python -m vaila.resize_video --input ./videos --output ./cropped --scale 1 --roi 120 40 640 480
+python -m vaila.resize_video -i ./videos -o ./resized --scale 2 --recursive</pre>
 
         <div class="docstring">
             <h3>📖 Description</h3>
@@ -61,9 +80,9 @@ This script provides tools for improving pose detection in videos:
 
 Version:
 --------
-0.4.1
+0.4.0
 Create: 27 April 2025
-update: 26 May 2025
+update: 14 September 2026
 
 Author:
 -------
@@ -84,12 +103,12 @@ Dependencies:
 
         <div class="functions">
             <h3>🔧 Main Functions</h3>
-            <p><strong>Total functions found:</strong> 20</p>
-            <ul><li><code>get_video_info</code></li><li><code>resize_with_opencv</code></li><li><code>convert_coordinates</code></li><li><code>convert_coordinates_by_format</code></li><li><code>convert_mediapipe_coordinates</code></li><li><code>validate_scale_factor</code></li><li><code>batch_resize_videos</code></li><li><code>run_resize_video</code></li><li><code>select_roi</code></li><li><code>select_input_dir</code></li><li><code>select_output_dir</code></li><li><code>revert_coordinates_gui</code></li><li><code>crop_and_resize_single</code></li><li><code>start_batch_processing</code></li><li><code>mouse_callback</code></li><li><code>set_format_and_highlight</code></li><li><code>update_progress</code></li><li><code>select_metadata_file</code></li><li><code>select_pixel_csv_file</code></li><li><code>select_output_csv_file</code></li></ul>
+            <p><strong>Total functions found:</strong> 22+</p>
+            <ul><li><code>get_video_info</code></li><li><code>resize_with_opencv</code></li><li><code>convert_coordinates</code></li><li><code>convert_coordinates_by_format</code></li><li><code>convert_mediapipe_coordinates</code></li><li><code>validate_scale_factor</code></li><li><code>iter_video_files</code></li><li><code>format_resize_cli_command</code></li><li><code>run_resize_cli</code></li><li><code>batch_resize_videos</code></li><li><code>run_resize_video</code></li><li><code>main</code></li><li><code>select_roi</code></li><li><code>select_input_dir</code></li><li><code>select_output_dir</code></li><li><code>revert_coordinates_gui</code></li><li><code>crop_and_resize_single</code></li><li><code>start_batch_processing</code></li><li><code>mouse_callback</code></li><li><code>set_format_and_highlight</code></li><li><code>update_progress</code></li><li><code>select_metadata_file</code></li><li><code>select_pixel_csv_file</code></li><li><code>select_output_csv_file</code></li></ul>
         </div>
 
         <div class="footer">
-            <p>📅 Generated automatically on: 15/10/2025 08:04:44</p>
+            <p>📅 Updated: 14/09/2026</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

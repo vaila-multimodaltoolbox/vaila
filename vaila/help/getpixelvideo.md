@@ -4,17 +4,19 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.3.143
+**Version:** 0.4.1
 **Date:** 23 June 2026  
-**Updated:** 14 September 2026
+**Updated:** 15 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
 ## Key Features
 
+- **Centered letterbox viewport:** When the fitted video is smaller than the window (common for portrait clips), the frame is centered so you can mark points in the black margins on *all* sides — left and top included, not only right/bottom. Version/date appear only in the OS window title (`vailá getpixelvideo — Update: … Version: …`), not overlaid on the video.
+
 - **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & multi-backbone deep features) & RTS Smoother (`AI Track` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior (with velocity prediction) to prevent distractor jumps, adaptive running template EMA blending, online appearance model that **keeps learning across manual corrections** (no wipe on re-anchor), low-confidence rejection, and optional Deep Visual Feature embeddings (PyTorch ResNet50, default, or opt-in ResNet152 / MobileNetV3-Small / EfficientNet-B0 / CUDA; local weights via `vaila/models/ai_tracker/resnet50_imagenet.pth`, `resnet152_imagenet.pth`, `mobilenet_v3_small_imagenet.pth`, or `efficientnet_b0_imagenet.pth`, custom path, or Torch hub cache — this is the sole canonical local weights directory). When enabled, the frozen *primary* backbone's embedding is also concatenated into the online discriminator's feature vector, so it participates in every per-click retrain without ever being backpropagated through. An optional, **off-by-default cascade fallback** (`fallback_variant` in the TOML profile, e.g. `efficientnet_b0`) re-scores a low-confidence frame with a second backbone and adopts it only if it scores higher — never affects the discriminator's feature width, only per-frame verification. Features:
-  - **Accessible button:** Short label `AI Track` illuminates in **bright green** immediately when enabled (armed/tracking) and red when off.
-  - **Marker Lock (`Lock (B)` button / `B`):** High-visibility blue **Lock (B)** / amber **LOCKED Mn (B)** next to **Go KP**. Pins the selected marker so TAB, Go KP, sequential advance, and R-delete cannot switch away. Locked markers also show a cyan ring on the video. Turning **AI Track** ON auto-locks the target marker.
+  - **Accessible button:** Short label `AI Track` illuminates in **bright green** immediately when enabled (armed/tracking) and red when off. Optional **Deep** checkbox sits to the right of `AI Track` (deep features are an option of the tracker, not a separate mode).
+  - **Marker Lock (`Lock (B)` button / `B`):** High-visibility blue **Lock (B)** / amber **LOCKED Mn (B)** next to **Go KP**. Pins the selected marker so TAB, Go KP, sequential advance, and R-delete cannot switch away. Locked markers also show a cyan ring on the video. Turning **AI Track** ON auto-locks the target marker; turning AI Track or Deep **OFF does not unlock** — only **B** or the **Lock** button unlocks.
   - **Gap Fill button:** Next to **Del Range** — fills *interior* gaps (between anchors) on one marker with **Kalman/RTS** prediction (default; same RTS family as AI Track batch / `interp_smooth_split`) or **linear** interpolation. Optional max-gap limit; never overwrites existing anchors.
   - **Online Learning from Anchors:** Every user placement retrains the discriminator without clearing prior anchors.
   - **Multi-Shape Centroid Tracking (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Point click, or **drag** on Cir/Box to set patch size; marker is placed at the region centroid. Region stats (mean/std/hist/area) feed the online model.
@@ -22,9 +24,10 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
   - **TOML Configuration (`Cfg` / Ctrl+T) & Weights (`Ctrl+W` / `Weights (W)` in Cfg):** Save/load params including `tracking_shape`, `deep_weights_path`, `resnet_variant` (backbone: `resnet50`/`resnet152`/`mobilenet_v3_small`/`efficientnet_b0` — editable directly in the profile TOML, no local checkpoint required), and `[navigation] nav_jump_frames`. Switch backbone models on the fly between local checkpoints, custom file selection, and Torch Hub.
   - **Full Batch Tracking & RTS Smoothing:** Shift+Click / Shift+T runs bidirectional gap infilling with multi-anchor seeding + RTS smoothing.
 - **BBox to Coordinates Export:** Convert loaded tracking bounding boxes or SAM3 contours (`sam_contours.json`) into 5 distinct coordinates CSV files (corresponding to `center`, `bottom`, `top`, `left`, and `right` anchors) in the standard vailá format (`frame,p0_x,p0_y,...`). Available via the GUI **BBox→Coords** button or CLI option `--export-bbox-coords PATH`.
+- **Geo Homog (planar homography tracker):** Standalone launch of `vaila/planar_geometry_tracker.py` — resolves a per-frame planar homography from the current markers against a metric target-geometry TOML profile (EVA tatame mat, soccer pitch), imputes occluded markers, extrapolates points beyond the camera FOV, and writes an imputed CSV, dense wireframe projection, `.npz` homographies, and a `.ref3d`. See [planar_geometry_tracker.md](planar_geometry_tracker.md).
 
 - **Template Marker Mode:** Choose fixed keypoint templates in the toolbar:
-  - **FIFA Soccer-Field:** 32 pitch keypoints (`idx 0 = top_left_corner`) + TOML config (right-click or `K`)
+  - **FIFA Soccer-Field:** 32 pitch keypoints (`idx 0 = top_left_corner`) + TOML config (`K`)
   - **MediaPipe Pose:** 33 pose landmarks
   - **YOLO Pose:** COCO-17 keypoints
 - **Multi-format Support:** Load and visualize MediaPipe, YOLO tracking, vailá standard formats, and markerless 2D named-landmark CSVs (`frame_index,nose_x,nose_y,nose_z,...`)
@@ -338,12 +341,15 @@ Semi-automatic point tracking powered by Normalized Cross-Correlation (NCC), sub
    - **Opt-in cascade fallback (`fallback_variant` / `fallback_threshold`, TOML-only):** disabled by default (`fallback_variant=""`). When set to a second backbone name in the profile TOML, any frame whose combined score falls below `fallback_threshold` (default `0.48`) is re-scored with that second backbone using the same NCC/discriminator fusion, and the higher-scoring result wins. Adds one extra embedding extraction only on already-low-confidence frames; the discriminator's feature width is unaffected regardless of which backbone wins a given frame. No dedicated GUI widget yet — edit the AI Track profile TOML directly to enable it.
 
 2. **Controls & Interactions:**
-   - **Left-Click:** On the `AI Track` button, toggles live tracking ON/OFF. The button immediately turns **bright green** when active. Enabling AI Track **auto-locks** the selected marker (amber **Lock** / `B`); unlock when you want to retarget. When ON, press **Space** to play and track live, or use hold-to-repeat arrow keys (`←`/`→` for single frames, `↑`/`↓` for jump steps).
+   - **Left-Click:** On the `AI Track` button, toggles live tracking ON/OFF. The button immediately turns **bright green** when active. Enabling AI Track **auto-locks** the selected marker (amber **Lock** / `B`); unlock only with **B** or **Lock** (turning Track AI or Deep OFF does **not** unlock). When ON, press **Space** to play and track live, or use hold-to-repeat arrow keys (`←`/`→` for single frames, `↑`/`↓` for jump steps).
+   - **Deep checkbox (right of AI Track):** Optional deep-backbone features for the same AI Track engine. Not a standalone tracker — check to use ResNet/etc.; leave unchecked for NCC/CPU-only.
    - **Lock / B:** Pin the marker under edit so TAB and the tracker cannot jump to another id while you correct tracking.
-   - **Right-Click (Cfg / Ctrl+T):** Opens the Track AI configuration dialog to adjust search windows, patch size, shape (`point`, `circle`, `box`), learning rate, jump step size, and select backbone weights (`Weights (W)`).
+   - **Cfg / Ctrl+T:** Opens the Track AI configuration dialog to adjust search windows, patch size, shape (`point`, `circle`, `box`), learning rate, jump step size, and select backbone weights (`Weights (W)`). Toolbar buttons respond only to left-click / primary tap.
    - **Backbone Selection (`Ctrl+W` / `Alt+W`):** Direct shortcut to select or cycle ResNet50/ResNet152/MobileNetV3-Small/EfficientNet-B0 weights without losing current session state — missing backbones auto-download from Torch Hub, no local file required beforehand; or set `resnet_variant` directly in the Cfg profile TOML.
    - **Shape Toggle (`Shp:Pt` / `Shp:Cir` / `Shp:Box`):** Switches region feature extraction (mean, std, histogram, area fraction) for circle/box tracking.
    - **Manual Ground-Truth Preservation:** AI Track never overwrites frames that already have user-placed coordinates; passing over an existing marked frame treats it as a ground-truth anchor and retrains the model.
+   - **Trajectory-plausibility guard ahead of manually-measured frames:** while live-tracking toward a frame the user already measured for the same marker, each new candidate is checked against the straight-line path from the last tracked point to that upcoming manual anchor; a candidate that strays too far off that path (the lateral-false-match failure mode, e.g. fast acceleration + motion blur) is rejected instead of accepted, same as any other low-confidence frame — it does not overwrite the manual anchor and does not run off toward a spurious match. Eight consecutive rejections trigger the existing "AI Track lost — click marker to re-anchor" pause.
+   - **Scene-change distrust:** a large global appearance shift between consecutive frames (e.g. background polarity flip, white↔black) that would otherwise let a spuriously-scored candidate slip through a still-marginal match is detected and, when the accept is only marginally above the similarity threshold (not a confident match), the frame is rejected rather than accepted — losing track safely and prompting re-anchor instead of a confident wrong accept. Confidently-scored matches are never second-guessed by this check.
 
 ### Quick Measure mode (Q key / QMeas button) — v0.3.127
 
@@ -392,7 +398,7 @@ Velocity/Acceleration require the points to be on different frames and use the v
 | **↓**           | Rewind (when paused)         |
 | **Drag bottom scrub slider** | Jump to specific frame |
 | **SHIFT+→** / **SHIFT+←** | Jump to next/previous frame that has visible markers (wraps) |
-| **Marker timeline strip** (above scrub bar) | **Click** or **drag**: jump to that position; **green** = spans where the **currently selected marker** (TAB) has a coordinate; **blue** = spans where a **different** marker slot has one, so a second/third tracked marker's coverage stays visible instead of hiding behind the first slot's green fill; **gold** line = current frame; inside a column with markers, snaps to one of those frames (middle of group), otherwise same proportional mapping as the slider. Switching the selected marker (**TAB**/**SHIFT+TAB**) recolors the strip for that slot; the right-hand `M<n>:X · other:Y` counter shows the selected marker's own frame count vs. the rest |
+| **Marker timeline strip** (above scrub bar) | **Click** or **drag**: jump to that position; **green** = spans where the **currently selected marker** (TAB) has a coordinate; **blue** = spans where a **different** marker slot has one, so a second/third tracked marker's coverage stays visible instead of hiding behind the first slot's green fill; **gold** line = current frame; inside a column with markers, snaps to one of those frames (middle of group), otherwise same proportional mapping as the slider. Switching the selected marker (**TAB**/**SHIFT+TAB**) recolors the strip for that slot; the top-right `M<n>:X · other:Y` counter shows the selected marker's own frame count vs. the rest |
 
 ### Zoom & Pan
 
@@ -416,8 +422,9 @@ Velocity/Acceleration require the points to be on different frames and use the v
 | **A**           | Add new empty marker to file     |
 | **R**           | Remove **selected** marker in current frame (same as right click) |
 | **D**           | Remove **selected** marker in current frame (same as **R** and right click) |
-| **B** / **Lock (B)** | Lock/unlock selected marker — blue **Lock (B)** / amber **LOCKED Mn (B)**; cyan ring on the point while locked. Blocks TAB / Go KP / sequential advance; **R** keeps the same id; **AI Track** stays pinned. Auto-locks when AI Track turns ON. |
+| **B** / **Lock (B)** | Lock/unlock selected marker — blue **Lock (B)** / amber **LOCKED Mn (B)**; cyan ring on the point while locked. Blocks TAB / Go KP / sequential advance; **R** keeps the same id; **AI Track** stays pinned. Auto-locks when AI Track turns ON; Track AI / Deep OFF do **not** unlock. |
 | **Gap Fill**    | Fill interior gaps on one marker (Kalman/RTS prediction or linear). Dialog: frame range, marker, method, max gap. Same family as `interp_smooth_split` / AI Track RTS. |
+| **Geo Homog**   | Runs the standalone `vaila/planar_geometry_tracker.py` module on the current marker CSV against a target-geometry TOML profile (EVA tatame mat, soccer pitch, …): fits a per-frame planar homography (`cv2.findHomography` + RANSAC), imputes occluded markers, extrapolates points past the camera FOV, projects the wireframe. Saves the current annotations first, then launches the module as a subprocess and reports success/failure in the save toast; prints the equivalent `>>` CLI command. See [planar_geometry_tracker.md](planar_geometry_tracker.md). |
 
 ### Playback Speed
 
@@ -498,7 +505,7 @@ Standard point marker visualization:
 
 - **Markers:** Green circles for each point
 - **Numbers:** Marker IDs displayed next to points
-- **Selection:** Orange highlight for selected marker
+- **Selection:** Compact orange outline ring for selected marker (no filled disc); tighter green core so the click pixel stays visible
 
 ## Persistence Mode
 
@@ -667,6 +674,25 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.1 (15 September 2026) — Compact active marker + Geo Homog / AI Track
+
+- **Smaller active marker overlay:** selected slot uses a thin orange outline (r≈5) and a tighter green core (r=2) instead of a filled orange disc (r=7); Lock cyan/white rings shrunk (≈7/9 vs 11/14) so the click pixel and nearby image detail stay visible.
+- **New Geo Homog button** (toolbar): launches the standalone `vaila/planar_geometry_tracker.py` module on the current marker CSV against a chosen target-geometry TOML profile — planar homography per frame (RANSAC), occluded-marker imputation, unclipped FOV extrapolation, wireframe projection. See [planar_geometry_tracker.md](planar_geometry_tracker.md).
+- **AI Track: trajectory-plausibility guard ahead of manually-measured frames.** Live tracking toward a frame already measured manually for the same marker now checks each new candidate against the straight-line path to that upcoming anchor and rejects one that strays too far off it — fixes the lateral-false-match failure mode (fast acceleration + motion blur + a large background change) that could previously run tracking off-target through an unmeasured gap.
+- **AI Track (`ai_tracker.py`): scene-change distrust.** A large global appearance shift between frames (e.g. background polarity flip) no longer lets a marginally-scored candidate slip through; only a confidently-scored match is trusted during such a shift. Confident matches on ordinary frames are unaffected.
+- Status toast on AI Track ON no longer names the marker index (`m{n}`); the on-screen legend no longer says "(tracking/armed)" — button color (green = active, red = off) already conveyed the state.
+
+### Version 0.4.0 (14 September 2026) — Window title + centered letterbox
+
+- Synced window-title build stamp with global *vailá* `0.4.0` (was stale `0.3.137`).
+- Restored window caption after the pygame file dialog (no longer stuck on `Select File`).
+- Letterbox-centers fitted media so markers can be placed outside the frame on the left/top as well as right/bottom.
+- Removed the Version HUD overlay inside the video area; version/date live only in the window title.
+- Toolbar / control-panel buttons respond only to left-click (primary tap); middle/right no longer fire UI actions (FIFA TOML via `K`, Guide map via `V`, Track AI Cfg via `Cfg` / Ctrl+T).
+- Marker **Lock** is no longer cleared when AI Track or Deep turns OFF — unlock only with **B** or the **Lock** button (reverts the 0.3.143 auto-release on Track AI OFF).
+- **Deep** is no longer a standalone `Deep: ON/OFF` button; it is a checkbox glued to the right of **AI Track**.
+- Green `M<n>:X · other:Y · click strip` count moved from the bottom info row (over Go KP / Lock / …) to the **top-right** of the control panel.
 
 ### Version 0.3.143 (14 September 2026) — Marker lock auto-release on Track AI OFF
 
