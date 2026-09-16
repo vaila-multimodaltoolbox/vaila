@@ -203,6 +203,10 @@ Use the **`xcam_*` columns** for inter-person distances and depth; the wide
 
 ## Related modules
 
+- [video_stabilizer](video_stabilizer.md) — handheld video stabilization to remove camera ego-motion jitter before 3D pose estimation
+- [planar_geometry_tracker](planar_geometry_tracker.md) — metric floor plane target calibration (tatame, soccer pitch)
+- [monocular_dlt_align](monocular_dlt_align.md) — aligns monocular 3D joints and camera translation into the world coordinate frame
+- [`tests/video_stabilizer/README_stabilizer.md`](../../tests/video_stabilizer/README_stabilizer.md) — complete end-to-end tutorial covering stabilization, planar geometry, and 3D capture
 - [sam3sapiens2](sam3sapiens2.md) — same SAM3 front-end, 2D 308-keypoint pose
 - [sapiens2_3d](sapiens2_3d.md) — this pipeline's bbox tightened by Sapiens2 keypoints before the same SAM 3D Body call
 - [vaila_sam](vaila_sam.md) — SAM 3 video segmentation on its own

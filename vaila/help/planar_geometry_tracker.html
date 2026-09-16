@@ -31,7 +31,7 @@
             <p><strong>Category:</strong> Tools → Video and Image (<strong>Planar Geo</strong>); also via getpixelvideo</p>
             <p><strong>File:</strong> vaila/planar_geometry_tracker.py</p>
             <p><strong>Version:</strong> 0.4.3</p>
-            <p><strong>Updated:</strong> 15 September 2026</p>
+            <p><strong>Updated:</strong> 16 September 2026</p>
             <p>For a stabilized video, use <a href="video_stabilizer.html">Video Stabilizer</a>.
             Its default similarity warp preserves shape; pixel-only background anchors need no metric coordinates.</p>
             <p><strong>Author:</strong> Paulo R. P. Santiago</p>
@@ -173,8 +173,11 @@ samples = 32</pre>
         <h2>See also</h2>
         <table>
             <tr><th>Module</th><th>Role</th></tr>
+            <tr><td><a href="video_stabilizer.html">video_stabilizer</a></td><td>Source of stabilized video and <code>stabilized_markers.csv</code> for camera ego-motion removal.</td></tr>
+            <tr><td><a href="sam3dinov3.html">sam3dinov3</a></td><td>Monocular markerless 3D pose and mesh extraction from stabilized video.</td></tr>
             <tr><td><a href="getpixelvideo.html">getpixelvideo</a></td><td>Marker digitizing tool that produces the input CSV and hosts the <strong>Geo Homog</strong> button.</td></tr>
             <tr><td><a href="dlt2d.html">dlt2d</a> / <a href="rec2d_one_dlt2d.html">rec2d_one_dlt2d</a></td><td>One-time DLT2D calibration fit &mdash; a different use case (fixed exact point set, no per-frame RANSAC refit).</td></tr>
+            <tr><td><a href="../../tests/video_stabilizer/README_stabilizer.md">README_stabilizer.md</a></td><td>Complete end-to-end tutorial covering stabilization, planar geometry, and 3D capture.</td></tr>
         </table>
 
         <div class="footer">

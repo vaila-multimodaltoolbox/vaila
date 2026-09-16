@@ -7,7 +7,7 @@
 | **Category** | Tools → Video and Image (**Planar Geo**); also Processing via getpixelvideo |
 | **File** | `vaila/planar_geometry_tracker.py` |
 | **Version** | 0.4.3 |
-| **Updated** | 15 September 2026 |
+| **Updated** | 16 September 2026 |
 | **Author** | Paulo R. P. Santiago |
 | **GUI** | Yes — Frame C → **Video and Image → Planar Geo**, and **Geo Homog** in `getpixelvideo.py` |
 | **CLI** | Yes — `python -m vaila.planar_geometry_tracker --config ... --measurements-csv ...` |
@@ -175,8 +175,8 @@ Written to `--output-dir`:
 
 ## See also
 
-- [getpixelvideo.md](getpixelvideo.md) — marker digitizing tool that produces
-  the input CSV and hosts the **Geo Homog** button.
-- [dlt2d.md](dlt2d.md) / [rec2d_one_dlt2d.md](rec2d_one_dlt2d.md) — one-time
-  DLT2D calibration fit, a different use case (fixed exact point set, no
-  per-frame RANSAC refit).
+- [video_stabilizer.md](video_stabilizer.md) — source of stabilized videos and `stabilized_markers.csv` for camera ego-motion removal.
+- [sam3dinov3.md](sam3dinov3.md) — markerless 3D pose and mesh extraction from stabilized footage.
+- [getpixelvideo.md](getpixelvideo.md) — marker digitizing tool that produces the input CSV and hosts the **Geo Homog** button.
+- [dlt2d.md](dlt2d.md) / [rec2d_one_dlt2d.md](rec2d_one_dlt2d.md) — one-time DLT2D calibration fit.
+- [`tests/video_stabilizer/README_stabilizer.md`](../../tests/video_stabilizer/README_stabilizer.md) — complete end-to-end tutorial covering stabilization, planar geometry, and 3D capture.

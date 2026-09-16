@@ -2,7 +2,7 @@
 
 **Category:** Tools → Video and Image
 **Version:** 0.4.3
-**Updated:** 15 September 2026
+**Updated:** 16 September 2026
 **Author:** Paulo R. P. Santiago
 **GUI:** Yes — Video Stabilizer, between Compress Video and Make Sync file
 **CLI:** `uv run vaila/video_stabilizer.py` (from repo root) or `python -m vaila.video_stabilizer`
@@ -286,5 +286,14 @@ FFmpeg/ffprobe and OpenCV are existing vailá dependencies. Variable-frame-rate
 sources are represented at their effective average FPS; individual variable
 timestamps are not reproduced. Encoded FPS may differ by at most codec rounding.
 
-See [planar_geometry_tracker](planar_geometry_tracker.md) for metric plane
-projection and extrapolation; use its REF3D/DLT outputs for metric reconstruction.
+## Downstream Multimodal AI Workflow
+
+Video stabilization is the foundational first stage of the vailá multimodal field-calibration and 3D capture pipeline:
+
+1. **Stage 1: Video Stabilization (`video_stabilizer.py`)** — produces `<stem>_stabilized.mp4` and `stabilized_markers.csv`.
+2. **Stage 2: Planar Target Geometry Calibration (`planar_geometry_tracker.py`)** — uses `stabilized_markers.csv` and a target TOML (e.g. `tatame_1x1m.toml`) to fit per-frame DLT2D, impute occluded points while preserving square shape and collinearity, and output `geometry_animation.html` and `debug_projected_wireframe.mp4`.
+3. **Stage 3: Markerless 3D Mesh & Keypoints (`sam3dinov3.py`)** — processes `<stem>_stabilized.mp4` through SAM 3 identity tracking and SAM 3D Body (DINOv3 backbone) to regress metric MHR70 3D joints and 36k-face human meshes (`meshes/*.npz`). Stabilizing the video first eliminates camera ego-motion jitter from silhouettes and joint angles.
+4. **Stage 4: World Calibration Alignment (`monocular_dlt_align.py`)** — aligns camera-relative 3D pose onto the calibrated floor coordinate system (meters).
+
+For the complete end-to-end tutorial with reproducible benchmarks and installation instructions, see **[`tests/video_stabilizer/README_stabilizer.md`](../../tests/video_stabilizer/README_stabilizer.md)**.
+See also [planar_geometry_tracker](planar_geometry_tracker.md) and [sam3dinov3](sam3dinov3.md).
