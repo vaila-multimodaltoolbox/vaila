@@ -10,7 +10,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.4.3
 Created: 14 September 2026
-Last Updated: 15 September 2026
+Last Updated: 16 September 2026
 ================================================================================
 Description:
     Standalone planar-geometry tracker / gap-filler / extrapolator.
@@ -886,6 +886,7 @@ def _topology_fill_missing(
     topo: TopologyIndex,
     *,
     use_image_midpoints: bool = False,
+    temporal_priors: dict[int, tuple[float, float]] | None = None,
 ) -> dict[int, tuple[float, float]]:
     """Bootstrap missing pixels via line intersections (and optional midpoints).
 
@@ -949,8 +950,40 @@ def _topology_fill_missing(
                 line_pts[0][0], line_pts[0][1], line_pts[1][0], line_pts[1][1]
             )
             if hit is not None and np.isfinite(hit[0]) and np.isfinite(hit[1]):
-                resolved[vid] = hit
-                changed = True
+                t_prior = (
+                    np.array(temporal_priors[vid], dtype=np.float64)
+                    if temporal_priors and vid in temporal_priors
+                    else None
+                )
+                if t_prior is not None:
+                    if float(np.linalg.norm(hit - t_prior)) <= 12.0:
+                        resolved[vid] = (float(hit[0]), float(hit[1]))
+                        changed = True
+                    else:
+                        proj_pt = project_point_onto_line(t_prior, line_pts[0][0], line_pts[0][1])
+                        resolved[vid] = (float(proj_pt[0]), float(proj_pt[1]))
+                        changed = True
+                else:
+                    resolved[vid] = hit
+                    changed = True
+
+    if temporal_priors:
+        for vid in list(_still_missing()):
+            if vid in temporal_priors:
+                t_prior = np.array(temporal_priors[vid], dtype=np.float64)
+                edges = topo.vertex_incident.get(vid, [])
+                proj_done = False
+                for edge in edges:
+                    pair = _two_known_pixels_on_edge(edge, resolved, topo)
+                    if pair is None:
+                        pair = _two_known_pixels_on_world_line(edge[0], edge[1], geometry, resolved)
+                    if pair is not None:
+                        proj_pt = project_point_onto_line(t_prior, pair[0], pair[1])
+                        resolved[vid] = (float(proj_pt[0]), float(proj_pt[1]))
+                        proj_done = True
+                        break
+                if not proj_done:
+                    resolved[vid] = (float(t_prior[0]), float(t_prior[1]))
 
     if use_image_midpoints:
         for mid_id, (a_id, b_id) in topo.metric_midpoints.items():
@@ -999,7 +1032,9 @@ def resolve_frame_pixels(
                 method = "temporal_gap"
 
     # 2. Topology intersections for missing corners
-    topo_filled = _topology_fill_missing(geometry, resolved, topo, use_image_midpoints=False)
+    topo_filled = _topology_fill_missing(
+        geometry, resolved, topo, use_image_midpoints=False, temporal_priors=temporal_guess
+    )
     for pid, uv in topo_filled.items():
         if pid not in resolved:
             resolved[pid] = uv
@@ -1064,7 +1099,7 @@ def _is_direct_dlt_reliable(
     dlt: NDArray[np.float64],
     topo: TopologyIndex | None = None,
     *,
-    max_rmse: float = 16.0,
+    max_rmse: float = 25.0,
 ) -> bool:
     """Verify DLT homography is well-conditioned and adequately covers the target."""
     h = dlt_params_to_homography(dlt)
@@ -1149,6 +1184,7 @@ def resolve_all_frames(
     if not frames_sorted:
         raise ValueError("No measurement frames to resolve.")
     world = {pid: geometry.world_xy(pid) for pid in geometry.sorted_ids}
+    temporal_fills = build_temporal_gap_fills(geometry, measurements)
 
     # Pass 1: Direct DLT on clean measured observations (+ topology intersections)
     direct_dlts: dict[int, NDArray[np.float64]] = {}
@@ -1156,12 +1192,14 @@ def resolve_all_frames(
     candidate_dlts: dict[int, NDArray[np.float64]] = {}
     for frame in frames_sorted:
         obs = measurements.get(frame, {})
-        topo_filled = _topology_fill_missing(geometry, obs, topo, use_image_midpoints=False)
+        topo_filled = _topology_fill_missing(
+            geometry, obs, topo, use_image_midpoints=False, temporal_priors=temporal_fills.get(frame)
+        )
         topo_resolved_by_frame[frame] = topo_filled
         dlt = fit_dlt2d_visible(geometry, topo_filled)
         if dlt is not None:
             candidate_dlts[frame] = dlt
-            if _is_direct_dlt_reliable(geometry, topo_filled, dlt, topo):
+            if _is_direct_dlt_reliable(geometry, topo_filled, dlt, topo, max_rmse=25.0):
                 direct_dlts[frame] = dlt
 
     if not direct_dlts and candidate_dlts:
@@ -1224,7 +1262,9 @@ def resolve_all_frames(
             methods[frame] = m
         else:
             # Complete absence of direct DLT: fallback to single-frame resolve
-            resolved_f, dlt_f, m_f = resolve_frame_pixels(geometry, obs, topo=topo)
+            resolved_f, dlt_f, m_f = resolve_frame_pixels(
+                geometry, obs, topo=topo, temporal_guess=temporal_fills.get(frame)
+            )
             all_dlts[frame] = dlt_f
             methods[frame] = m_f
 
@@ -1239,6 +1279,14 @@ def resolve_all_frames(
         # Always lock original measured observations
         for p, uv in obs.items():
             resolved[p] = uv
+
+        # Enforce line collinearity for any imputed (non-measured) points
+        for p in geometry.sorted_ids:
+            if p not in obs and p in resolved:
+                pt_p = _enforce_line_collinearity(
+                    geometry, p, np.array(resolved[p], dtype=np.float64), resolved, topo
+                )
+                resolved[p] = (float(pt_p[0]), float(pt_p[1]))
 
         dlt = all_dlts.get(frame)
         if dlt is not None:
@@ -1836,9 +1884,7 @@ def render_debug_video(
             frame_rows = rows_by_frame.get(frame_idx, [])
             if frame_idx in solved and frame_rows:
                 h_canvas = t_canvas @ solved[frame_idx].homography
-                frame_resolved = {r.point_id: (r.u, r.v) for r in frame_rows}
-                _draw_wireframe_from_pixels(canvas, geometry, frame_resolved, t_canvas)
-                _draw_circles_arcs(canvas, geometry, h_canvas)
+                _draw_wireframe(canvas, geometry, h_canvas)
                 for r in frame_rows:
                     pt_canvas = project_points(t_canvas, np.array([[r.u, r.v]]))[0]
                     center = (int(round(pt_canvas[0])), int(round(pt_canvas[1])))
