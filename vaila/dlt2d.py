@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.93
+Version: 0.4.3
 Created: November 26, 2024
-Last Updated: 01 August 2026
+Last Updated: 15 September 2026
 ================================================================================
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 2D coordinate transformations.
@@ -27,6 +27,8 @@ New Features:
     - Detailed logging of DLT parameter calculation for each frame.
     - User-friendly graphical interface for file selection using Tkinter.
     - Integration with the Rich library for enhanced console output.
+    - Support for multi-line and single-line REF2D files with robust frame matching.
+    - Numerically stable least-squares solver (lstsq).
 
 Note on point matching:
     Unlike rec2d.py/rec3d.py (where a single pixel file's marker columns are
@@ -35,8 +37,8 @@ Note on point matching:
     LABEL prefix before the underscore (e.g. "p3" in "p3_x"/"p3_y"). This lets
     a REF2D file define more calibration points than a given pixel file
     actually tracks; only the common points are used. If the pixel and REF2D
-    frame counts differ (and REF2D has more than 1 row), no DLT parameters are
-    computed and a clear message is printed instead of raising an exception.
+    frame counts differ (and REF2D has more than 1 row), common frames are
+    matched by frame number.
 
 Usage:
     1. Run the script to start the Direct Linear Transformation (DLT) process.
@@ -95,13 +97,13 @@ License:
 """
 
 import argparse
+import contextlib
 import csv
 import os
 from tkinter import Tk, filedialog, messagebox
 
 import numpy as np
 import pandas as pd
-from numpy.linalg import inv
 from rich import print
 
 
@@ -145,7 +147,7 @@ def dlt2d(F, L):
         B[2 * i + 1, 3:6] = [F[i, 0], F[i, 1], 1]
         B[2 * i + 1, 6:8] = [-F[i, 0] * L[i, 1], -F[i, 1] * L[i, 1]]
 
-    A = inv(B.T @ B) @ B.T @ C
+    A, residuals, rank, s = np.linalg.lstsq(B, C, rcond=None)
     return np.asarray(A).flatten()
 
 
@@ -190,6 +192,14 @@ def filter_and_shape_coordinates(coords):
     return np.array(filtered_coords), valid_pairs
 
 
+def _find_frame_column(df: pd.DataFrame) -> str:
+    """Return the frame column name (case-insensitive) or fallback to first column."""
+    for col in df.columns:
+        if str(col).strip().lower() == "frame":
+            return col
+    return df.columns[0]
+
+
 def process_files(pixel_file, real_file):
     """
     Process the coordinate files to calculate the DLT parameters.
@@ -207,6 +217,9 @@ def process_files(pixel_file, real_file):
     # Read the full dataframes
     pixel_df = pd.read_csv(pixel_file)
     real_df = pd.read_csv(real_file)
+
+    pix_frame_col = _find_frame_column(pixel_df)
+    ref_frame_col = _find_frame_column(real_df)
 
     # Find points present in both files (e.g., p1, p2)
     pixel_points = {col.split("_")[0] for col in pixel_df.columns if "_" in col}
@@ -228,31 +241,37 @@ def process_files(pixel_file, real_file):
 
     # Check if we're using a single reference row for all frames
     single_ref_mode = len(real_df) == 1
+    ref_by_frame = {}
     if single_ref_mode:
         print("Single reference mode: Using the same reference coordinates for all frames")
-        # Store the single reference row for repeated use
         ref_row = real_df.iloc[0]
-    elif len(real_df) != len(pixel_df):
+    else:
+        for _, r in real_df.iterrows():
+            with contextlib.suppress(ValueError, TypeError):
+                ref_by_frame[int(r[ref_frame_col])] = r
         print(
-            f"Warning: Pixel file has {len(pixel_df)} frames but reference file has {len(real_df)} frames."
+            f"Multi-reference mode: Loaded reference coordinates for {len(ref_by_frame)} frame(s)"
         )
-        print(
-            "Files should have either the same number of frames or reference file should have exactly 1 frame."
-        )
-        return []
 
     dlt_params = []
 
     # Process each frame from the pixel file
     for i in range(len(pixel_df)):
-        frame = pixel_df.iloc[i]["frame"]
-        # print(f"Processing frame {frame}...") # reduced noise for integration tests
-
-        # Get pixel coordinates for this frame
         pixel_row = pixel_df.iloc[i]
+        frame_raw = pixel_row[pix_frame_col]
+        try:
+            frame = int(frame_raw)
+        except (ValueError, TypeError):
+            frame = i
 
-        # Get reference coordinates - either from the same row or from the single reference row
-        real_row = ref_row if single_ref_mode else real_df.iloc[i]
+        if single_ref_mode:
+            real_row = ref_row
+        else:
+            real_row = ref_by_frame.get(frame)
+            if real_row is None:
+                print(f"  Frame {frame}: Not found in reference file; skipping.")
+                dlt_params.append((frame, [np.nan] * 8))
+                continue
 
         # Filter coordinates to keep only complete pairs
         L_coords = []
@@ -278,8 +297,6 @@ def process_files(pixel_file, real_file):
             ):
                 L_coords.append([px_x, px_y])
                 F_coords.append([real_x, real_y])
-            # else:
-            #     print(f"  Skipping point {p} for frame {frame}")
 
         # Convert to numpy arrays
         L = np.array(L_coords)
@@ -324,7 +341,7 @@ def save_dlt_parameters(output_file, dlt_params, show_gui=True):
         try:
             import tkinter as tk
 
-            if tk._default_root is not None:
+            if getattr(tk, "_default_root", None) is not None:
                 messagebox.showinfo("Success", f"DLT parameters saved to {output_file}")
         except Exception:
             pass

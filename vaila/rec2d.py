@@ -10,13 +10,14 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.94
+Version: 0.4.3
 Created: August 9, 2024
-Last Updated: 01 August 2026
+Last Updated: 15 September 2026
 
 Description:
     Optimized batch processing of 2D coordinates reconstruction using corresponding
-    DLT2D parameters for each frame.
+    DLT2D parameters for each frame (or a single fixed set of parameters if the
+    DLT file has 1 row).
     Processes multiple CSV files containing pixel coordinates and reconstructs them
     to 2D real-world coordinates.
     Pixel CSV column LABELS are not inspected — only column ORDER matters:
@@ -36,6 +37,8 @@ Description:
     - Output saves both `.2d` and `.csv`
     - `Frame` saved as integer (no float formatting)
     - Coordinate columns saved as float with %.6f precision
+    - Per-marker occlusion handling (NaN in one marker does not drop the whole frame)
+    - Automatic fallback for single-row DLT2D files
     - CLI / headless mode support via argparse
 """
 
@@ -61,14 +64,19 @@ def rec2d(A, cc2d):
         np.ndarray of shape (N, 2) with reconstructed 2D coordinates.
     """
     nlin = cc2d.shape[0]
-    H = np.zeros((nlin, 2))
+    H = np.full((nlin, 2), np.nan, dtype=np.float64)
     for k in range(nlin):
         x = cc2d[k, 0]
         y = cc2d[k, 1]
+        if np.isnan(x) or np.isnan(y):
+            continue
         coeff = np.array([[A[0] - x * A[6], A[1] - x * A[7]], [A[3] - y * A[6], A[4] - y * A[7]]])
         rhs = np.array([[x - A[2]], [y - A[5]]])
-        G1 = np.linalg.solve(coeff, rhs)
-        H[k, :] = G1.flatten()
+        try:
+            G1 = np.linalg.solve(coeff, rhs)
+            H[k, :] = G1.flatten()
+        except np.linalg.LinAlgError:
+            pass
     return H
 
 
@@ -90,6 +98,11 @@ def process_files_in_directory(
     dlt_params = dlt_params_df.to_numpy()
     frames = dlt_params[:, 0]
     dlt_params = dlt_params[:, 1:]
+    single_dlt_mode = len(dlt_params) == 1
+    if single_dlt_mode:
+        print(
+            "[yellow]Single DLT2D parameter row: applying fixed calibration to all frames.[/yellow]"
+        )
 
     csv_files = sorted([f for f in os.listdir(input_directory) if f.endswith(".csv")])
 
@@ -128,17 +141,20 @@ def process_files_in_directory(
 
         rec_coords_array[:, 0] = pixel_coords_df.iloc[:, 0].to_numpy()
 
-        for i, row in pixel_coords_df.iterrows():
+        for row_idx, (_, row) in enumerate(pixel_coords_df.iterrows()):
             frame_num = int(row.iloc[0])
-            if frame_num in frames:
+            if single_dlt_mode:
+                A = dlt_params[0]
+            elif frame_num in frames:
                 A_index = np.where(frames == frame_num)[0][0]
                 A = dlt_params[A_index]
-                if not np.isnan(A).any():
-                    pixel_coords = row.iloc[1:].to_numpy().reshape(-1, 2)
-                    if np.isnan(pixel_coords).any():
-                        continue
-                    rec2d_coords = rec2d(A, pixel_coords)
-                    rec_coords_array[i, 1:] = rec2d_coords.flatten()
+            else:
+                continue
+
+            if not np.isnan(A).any():
+                pixel_coords = row.iloc[1:].to_numpy().reshape(-1, 2)
+                rec2d_coords = rec2d(A, pixel_coords)
+                rec_coords_array[row_idx, 1:] = rec2d_coords.flatten()
 
         original_columns = list(pixel_coords_df.columns)
         rec_coords_df = pd.DataFrame(rec_coords_array, columns=original_columns)  # ty: ignore[invalid-argument-type]

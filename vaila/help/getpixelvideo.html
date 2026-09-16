@@ -220,12 +220,12 @@
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.4.1<br />
+        <strong>Version:</strong> 0.4.3<br />
+        <strong>Date:</strong> 22 July 2025<br />
         <strong>Updated:</strong> 15 September 2026<br />
-        <strong>Date:</strong> 23 June 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
-        <strong>Project:</strong> vailá - Multimodal Toolbox<br />
+        <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />
         <strong>AI Track (NCC + Spatial Prior + Online Discriminator &amp; 4-Backbone Deep Features &amp; RTS Smoother):</strong>
         Drift-resistant kinematic tracking via Normalized Cross-Correlation, velocity-aware Gaussian prior,
         adaptive EMA template blending, online ridge learning that survives manual corrections, low-confidence
@@ -237,7 +237,12 @@
         marker at centroid. Hold arrows for continuous nav; Up/Down step = <code>nav_jump</code> (Cfg, default 60).
         Shift+T batch + RTS exports <code>*_ai_track_m{idx}.csv</code>.<br />
         <strong>BBox→Coords Export:</strong> Convert tracking bounding boxes / contours to 5 coordinate CSV files (center, bottom, top, left, right) in standard vailá format via GUI button or <code>--export-bbox-coords</code> CLI.<br />
-        <strong>Geo Homog:</strong> Toolbar button that launches the standalone <code>vaila/planar_geometry_tracker.py</code> module on the current marker CSV against a metric target-geometry TOML profile (EVA tatame mat, soccer pitch) — per-frame planar homography via RANSAC, occluded-marker imputation, unclipped FOV extrapolation, wireframe projection. See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.<br />
+        <strong>Geo Homog:</strong> Interactive wizard (TOML + <code>marker:geom</code> map / rectangle + W×H).
+        Session edit pause, then per-frame DLT2D full-geometry reprojection
+        (measured markers calibrate only). Reloads imputed markers, live wireframe
+        (<strong>Shift+G</strong>), optional save to new <code>*_geom_dlt_markers.csv</code>,
+        <code>debug_projected_wireframe.mp4</code>, and <code>geometry_animation.html</code>.
+        See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.<br />
         <strong>Highlights:</strong>
         <strong>Template Marker Mode</strong> — toolbar cycles keypoint templates:
         <strong>FIFA Soccer-Field</strong> (32 pitch KPs, <code>idx 0 = top_left_corner</code>),
@@ -298,6 +303,15 @@
           <h3>Key Features:</h3>
           <ul>
             <li>
+              <strong>VISUAL / INSERT editor modes (v0.4.2):</strong> Opens in
+              <strong>VISUAL</strong> (safe browse — no marker edits).
+              <span class="key">Ctrl+I</span> or the <strong>VISUAL/INSERT</strong> toolbar button
+              switches to <strong>INSERT</strong> for normal marking.
+              <span class="key">Ctrl+Z</span> undoes discrete marker edits (INSERT).
+              <strong>Restore</strong> reverts to session open or the last successful
+              <strong>Save</strong>; discarded when you quit.
+            </li>
+            <li>
               <strong>Centered letterbox viewport:</strong> Fitted media is centered in the
               window so markers can be placed in the black margins on all sides (including left/top).
               Version/date appear only in the OS window title
@@ -324,12 +338,13 @@
               an inclusive frame range; first marker line maps pairwise to the second (<code>26,28</code> with <code>27,29</code>, or <code>1:10</code> with <code>11:20</code>)
             </li>
             <li>
-              <strong>Geo Homog (planar homography tracker):</strong> Standalone launch of
-              <code>vaila/planar_geometry_tracker.py</code> — resolves a per-frame planar homography from the
-              current markers against a metric target-geometry TOML profile (EVA tatame mat, soccer pitch),
-              imputes occluded markers, extrapolates points beyond the camera FOV, and writes an imputed CSV,
-              dense wireframe projection, <code>.npz</code> homographies, and a <code>.ref3d</code>. See
-              <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.
+              <strong>Geo Homog (planar homography tracker):</strong> Interactive wizard
+              (TOML / rectangle), session edit pause, then topology + per-frame DLT2D
+              (measured pixels locked). Reloads imputed markers, live wireframe from
+              resolved coords (<strong>Shift+G</strong>), optional save to
+              <code>*_markers.csv</code>, and <code>debug_projected_wireframe.mp4</code>.
+              See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.
+              Also available as Frame C → <strong>Video and Image → Planar Geo</strong>.
             </li>
             <li>
               <strong>Zoom &amp; Navigation:</strong> Full zoom capabilities with
@@ -517,12 +532,16 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
             <div>
               <h4>Markers</h4>
               <table>
-                <tr><td><span class="key">L-Click</span></td><td>Add / update selected slot</td></tr>
+                <tr><td><span class="key">Ctrl+I</span> / VISUAL·INSERT</td><td>Toggle VISUAL ↔ INSERT</td></tr>
+                <tr><td><span class="key">Ctrl+Z</span></td><td>Undo last marker edit (INSERT)</td></tr>
+                <tr><td><strong>Restore</strong></td><td>Revert to open / last Save</td></tr>
+                <tr><td><span class="key">L-Click</span></td><td>Add / update selected slot (INSERT)</td></tr>
                 <tr><td><span class="key">R-Click</span></td><td>Delete selected / undo</td></tr>
                 <tr><td><span class="key">Tab</span></td><td>Next keypoint slot</td></tr>
                 <tr><td><span class="key">Ctrl+G</span></td><td>Go KP</td></tr>
                 <tr><td><span class="key">A</span></td><td>Add empty marker</td></tr>
-                <tr><td><span class="key">R</span> / <span class="key">D</span></td><td>Remove selected in frame</td></tr>
+                <tr><td><span class="key">R</span></td><td>Remove selected in frame</td></tr>
+                <tr><td><span class="key">D</span></td><td>Delete ALL markers on current frame</td></tr>
                 <tr><td><span class="key">Delete</span></td><td>Delete selected</td></tr>
                 <tr><td><span class="key">B</span> / <strong>Lock (B)</strong></td><td>Lock/unlock selected marker (high-visibility; cyan ring when locked)</td></tr>
                 <tr><td><strong>Gap Fill</strong></td><td>Kalman/RTS or linear fill of interior marker gaps</td></tr>
@@ -684,7 +703,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><strong>Geo Homog</strong></td>
-                <td>Runs the standalone <code>vaila/planar_geometry_tracker.py</code> module on the current marker CSV against a target-geometry TOML profile: per-frame planar homography (<code>cv2.findHomography</code> + RANSAC), occluded-marker imputation, unclipped FOV extrapolation, wireframe projection. Saves annotations first, then launches as a subprocess and reports success/failure in the save toast; prints the equivalent <code>&gt;&gt;</code> CLI command. See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.</td>
+                <td>Interactive wizard then per-frame DLT2D full-geometry reprojection. Mode <strong>1</strong> = TOML + <code>marker:geom</code> map; mode <strong>2</strong> = 4 corners + W/H. Edit pause for session files; live wireframe (<strong>Shift+G</strong>); optional save to new <code>*_geom_dlt_markers.csv</code>; <code>debug_projected_wireframe.mp4</code> + <code>geometry_animation.html</code>. See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.</td>
               </tr>
               <tr>
                 <td><span class="key">L</span></td>
@@ -802,6 +821,10 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               <tr>
                 <td><span class="key">G</span></td>
                 <td>Toggle Guide (<strong>visual</strong> overlay for template; <code>V</code> toggles map)</td>
+              </tr>
+              <tr>
+                <td><span class="key">Shift+G</span></td>
+                <td>Toggle Geo Homog wireframe overlay (after a Geo Homog run)</td>
               </tr>
               <tr>
                 <td><span class="key">FIFA</span> / <span class="key">K</span></td>
@@ -1766,6 +1789,21 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.4.3 (15 September 2026) &mdash; Geo Homog wizard + topology/DLT impute</h3>
+        <ul>
+          <li><strong>Geo Homog prompts:</strong> TOML profile or rectangle; session edit pause before run.</li>
+          <li><strong>Imputation:</strong> measured pixels locked; topology midpoints / line intersections, then per-frame DLT2D on visible points only.</li>
+          <li><strong>Always writes</strong> <code>debug_projected_wireframe.mp4</code>; live overlay from resolved coords (<strong>Shift+G</strong>); optional save to <code>*_markers.csv</code>.</li>
+        </ul>
+
+        <h3>Version 0.4.2 (15 September 2026) &mdash; VISUAL / INSERT + Undo / Restore</h3>
+        <ul>
+          <li><strong>VISUAL mode (default on open):</strong> browse, Load, Save, navigate — marker clicks and edit keys are blocked with a toast (<code>VISUAL — Ctrl+I to edit</code>).</li>
+          <li><strong>INSERT mode:</strong> <span class="key">Ctrl+I</span> or the amber/green <strong>VISUAL/INSERT</strong> toolbar button enables normal marking.</li>
+          <li><strong>Ctrl+Z:</strong> in-memory undo stack (depth 50) for discrete marker/bbox edits.</li>
+          <li><strong>Restore:</strong> reverts to session-open snapshot, refreshed after each successful Save; discarded when the app quits.</li>
+        </ul>
 
         <h3>Version 0.4.1 (15 September 2026) &mdash; Compact active marker + Geo Homog / AI Track</h3>
         <ul>

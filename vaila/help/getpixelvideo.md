@@ -4,13 +4,15 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.1
-**Date:** 23 June 2026  
+**Version:** 0.4.3
+**Date:** 22 July 2025  
 **Updated:** 15 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
 ## Key Features
+
+- **VISUAL / INSERT editor modes (v0.4.2):** Opens in **VISUAL** (safe browse — no marker edits). **Ctrl+I** or the **VISUAL/INSERT** toolbar button switches to **INSERT** for normal marking. **Ctrl+Z** undoes discrete marker edits (INSERT). **Restore** reverts to session open or the last successful **Save**; discarded when you quit.
 
 - **Centered letterbox viewport:** When the fitted video is smaller than the window (common for portrait clips), the frame is centered so you can mark points in the black margins on *all* sides — left and top included, not only right/bottom. Version/date appear only in the OS window title (`vailá getpixelvideo — Update: … Version: …`), not overlaid on the video.
 
@@ -24,7 +26,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
   - **TOML Configuration (`Cfg` / Ctrl+T) & Weights (`Ctrl+W` / `Weights (W)` in Cfg):** Save/load params including `tracking_shape`, `deep_weights_path`, `resnet_variant` (backbone: `resnet50`/`resnet152`/`mobilenet_v3_small`/`efficientnet_b0` — editable directly in the profile TOML, no local checkpoint required), and `[navigation] nav_jump_frames`. Switch backbone models on the fly between local checkpoints, custom file selection, and Torch Hub.
   - **Full Batch Tracking & RTS Smoothing:** Shift+Click / Shift+T runs bidirectional gap infilling with multi-anchor seeding + RTS smoothing.
 - **BBox to Coordinates Export:** Convert loaded tracking bounding boxes or SAM3 contours (`sam_contours.json`) into 5 distinct coordinates CSV files (corresponding to `center`, `bottom`, `top`, `left`, and `right` anchors) in the standard vailá format (`frame,p0_x,p0_y,...`). Available via the GUI **BBox→Coords** button or CLI option `--export-bbox-coords PATH`.
-- **Geo Homog (planar homography tracker):** Standalone launch of `vaila/planar_geometry_tracker.py` — resolves a per-frame planar homography from the current markers against a metric target-geometry TOML profile (EVA tatame mat, soccer pitch), imputes occluded markers, extrapolates points beyond the camera FOV, and writes an imputed CSV, dense wireframe projection, `.npz` homographies, and a `.ref3d`. See [planar_geometry_tracker.md](planar_geometry_tracker.md).
+- **Geo Homog (planar homography tracker):** Interactive wizard (TOML profile + marker→geom map + optional W×H, or 4-corner rectangle + dimensions). Writes session files, **pauses so you can edit** TOML/CSV (use **imagination!** terminal), then runs per-frame DLT2D and **reprojects the full metric TOML geometry** (measured markers calibrate only). Reloads imputed markers, draws live wireframe (**Shift+G**), optional save to new `*_geom_dlt_markers.csv`, `debug_projected_wireframe.mp4`, and `geometry_animation.html`. Same module is also available as Frame C → **Video and Image → Planar Geo**. See [planar_geometry_tracker.md](planar_geometry_tracker.md).
 
 - **Template Marker Mode:** Choose fixed keypoint templates in the toolbar:
   - **FIFA Soccer-Field:** 32 pitch keypoints (`idx 0 = top_left_corner`) + TOML config (`K`)
@@ -413,18 +415,21 @@ Velocity/Acceleration require the points to be on different frames and use the v
 
 | Key             | Action                           |
 | --------------- | -------------------------------- |
-| **Left Click**  | Add/update marker at **selected** slot |
+| **Ctrl+I** / **VISUAL·INSERT** | Toggle VISUAL (safe browse, default) ↔ INSERT (edit markers) |
+| **Ctrl+Z**      | Undo last marker/bbox edit (INSERT only) |
+| **Restore**     | Revert to session open or last successful Save |
+| **Left Click**  | Add/update marker at **selected** slot (INSERT) |
 | **Right Click** | Remove **selected** marker in current frame (then select previous) |
 | **TAB**         | Next marker in current frame     |
 | **SHIFT+TAB**   | Previous marker in current frame |
 | **Ctrl+G**      | Go KP — jump to a keypoint index by number |
 | **DELETE**      | Delete selected marker           |
-| **A**           | Add new empty marker to file     |
+| **A**           | Add new empty marker to file (INSERT) |
 | **R**           | Remove **selected** marker in current frame (same as right click) |
-| **D**           | Remove **selected** marker in current frame (same as **R** and right click) |
+| **D**           | Delete **ALL** markers on the **current frame** (INSERT) |
 | **B** / **Lock (B)** | Lock/unlock selected marker — blue **Lock (B)** / amber **LOCKED Mn (B)**; cyan ring on the point while locked. Blocks TAB / Go KP / sequential advance; **R** keeps the same id; **AI Track** stays pinned. Auto-locks when AI Track turns ON; Track AI / Deep OFF do **not** unlock. |
 | **Gap Fill**    | Fill interior gaps on one marker (Kalman/RTS prediction or linear). Dialog: frame range, marker, method, max gap. Same family as `interp_smooth_split` / AI Track RTS. |
-| **Geo Homog**   | Runs the standalone `vaila/planar_geometry_tracker.py` module on the current marker CSV against a target-geometry TOML profile (EVA tatame mat, soccer pitch, …): fits a per-frame planar homography (`cv2.findHomography` + RANSAC), imputes occluded markers, extrapolates points past the camera FOV, projects the wireframe. Saves the current annotations first, then launches the module as a subprocess and reports success/failure in the save toast; prints the equivalent `>>` CLI command. See [planar_geometry_tracker.md](planar_geometry_tracker.md). |
+| **Geo Homog**   | Interactive wizard then runs `vaila/planar_geometry_tracker.py`. Mode **1** = TOML + `marker:geom` map + optional `W,H`; mode **2** = 4 corners + width/height. **Edit pause** for session TOML/CSV, then per-frame DLT2D full-geometry reprojection. Reloads imputed points, live wireframe (**Shift+G**), optional save to new `*_geom_dlt_markers.csv`, `debug_projected_wireframe.mp4`, and `geometry_animation.html`. See [planar_geometry_tracker.md](planar_geometry_tracker.md). |
 
 ### Playback Speed
 
@@ -446,6 +451,7 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | **I** / **FPS … Hz** button | Set video FPS manually in Hz (decimal or fraction); updates timestamps and Quick Measure time-based metrics |
 | **L**           | Toggle Labeling mode (Bounding Boxes)             |
 | **G**           | Toggle Guide (**visual** overlay for template; `V` toggles map) |
+| **Shift+G**     | Toggle Geo Homog wireframe overlay (after a Geo Homog run) |
 | **FIFA** / **K** | Load or create **FIFA TOML** beside the video (`n_keypoints`, `start`, `base`) |
 | **Z**           | Remove last bounding box (Labeling mode)          |
 | **N**           | Rename object label (Labeling Mode Only)          |
@@ -674,6 +680,19 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.3 (15 September 2026) — Geo Homog wizard + topology/DLT impute
+
+- **Geo Homog prompts:** mode TOML profile (tatame / soccer / browse + marker→geom map + optional W×H resize) or generic rectangle (4 corner IDs + width/height). Session files go to `processed_geom_<timestamp>/` with an **edit pause** before the tracker runs.
+- **Imputation:** measured pixels locked; missing points from topology midpoints / line intersections, then per-frame DLT2D on visible points only (no RANSAC/PCHIP rewrite of existing markers).
+- **Always writes** `debug_projected_wireframe.mp4` from the GUI (`--debug-viz`); live overlay from resolved marker pixels (**Shift+G**); optional save to `*_markers.csv`.
+
+### Version 0.4.2 (15 September 2026) — VISUAL / INSERT + Undo / Restore
+
+- **VISUAL** (default on open): browse, Load, Save, navigate — marker clicks and edit keys blocked (`VISUAL — Ctrl+I to edit`).
+- **INSERT**: `Ctrl+I` or the **VISUAL/INSERT** toolbar button enables normal marking.
+- **Ctrl+Z**: in-memory undo stack (depth 50) for discrete marker/bbox edits.
+- **Restore**: revert to session-open snapshot, refreshed after each successful Save; discarded on quit.
 
 ### Version 0.4.1 (15 September 2026) — Compact active marker + Geo Homog / AI Track
 

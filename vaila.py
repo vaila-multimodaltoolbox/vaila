@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 15 September 2026
-Version: 0.4.2
+Version: 0.4.3
 
 Example of usage:
 uv run vaila.py
@@ -359,7 +359,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 15.Sep.2026 v0.4.2 (Python 3.12.14)
+    vailá - 15.Sep.2026 v0.4.3 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -389,7 +389,7 @@ B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
 B1_r1_c3 - Motion Capture Full Body
 B1_r1_c4 - Markerless 2D (coringa: Standard/Advanced/YOLOv26, Yolo+Markerless_MP,
             YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID],
-            Markerless Hands, MP Angles, Face Mesh, Markerless Live)
+            Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live)
 B1_r1_c5 - Markerless 3D (coringa: SAM3+DINOv3 3D [+Visualize ID])
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
@@ -424,7 +424,7 @@ C_A_r4_c1 - ReID Marker   C_A_r4_c2 - Sapiens2_3D  C_A_r4_c3 - vailá
 C_A_r5_c1 - vailá         C_A_r5_c2 - vailá          C_A_r5_c3 - vailá
 
 -> C_B: Video and Image
-C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Crop Face      C_B_r1_c3 - Draw Box
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Planar Geo     C_B_r1_c3 - Draw Box
 C_B_r2_c1 - Compress Video C_B_r2_c2 - Video Stabilizer C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
@@ -478,7 +478,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 15.Sep.2026 v0.4.2 (Python 3.12.14)")
+        self.title("vailá - 15.Sep.2026 v0.4.3 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -1465,11 +1465,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_B_r1_c2 - Video: Crop Face
-        crop_face_btn = tk.Button(
+        # C_B_r1_c2 - Video: Planar Geo (also available via getpixelvideo Geo Homog)
+        planar_geo_btn = tk.Button(
             tools_col2,
-            text="Crop Face",
-            command=self.crop_faces_atletas,
+            text="Planar Geo",
+            command=self.planar_geometry_tracker,
             width=button_width,
         )
 
@@ -1575,7 +1575,7 @@ class Vaila(tk.Tk):
 
         # Packing Video buttons
         extract_png_btn.grid(row=0, column=0, padx=2, pady=2)
-        crop_face_btn.grid(row=0, column=1, padx=2, pady=2)
+        planar_geo_btn.grid(row=0, column=1, padx=2, pady=2)
         draw_box_btn.grid(row=0, column=2, padx=2, pady=2)
         compress_videos_gui_btn.grid(row=1, column=0, padx=2, pady=2)
         vaila_btn_compress.grid(row=1, column=1, padx=2, pady=2)
@@ -2016,7 +2016,7 @@ class Vaila(tk.Tk):
         (SAM3+DINOv3) live under Markerless 3D instead.
         """
         dialog, place_button, place_section = self._build_grid_chooser_dialog(
-            "Markerless 2D — Select Tool", width=680, height=560
+            "Markerless 2D — Select Tool", width=680, height=600
         )
 
         # Ensure Ultralytics never downloads into repo root.
@@ -2182,6 +2182,13 @@ class Vaila(tk.Tk):
             _print_chooser_launch("Markerless 2D", "Face Mesh", "uv run vaila/mp_facemesh.py")
             self.face_mesh_analysis()
 
+        def use_crop_face():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D", "Crop Face", "uv run python vaila/crop_faces_atletas.py"
+            )
+            self.crop_faces_atletas()
+
         def use_markerless_live():
             dialog.destroy()
             _print_chooser_launch(
@@ -2212,6 +2219,7 @@ class Vaila(tk.Tk):
         place_button("Markerless Hands", use_markerless_hands)
         place_button("MP Angles", use_mp_angles)
         place_button("Face Mesh", use_face_mesh)
+        place_button("Crop Face", use_crop_face)
         place_button("Markerless Live", use_markerless_live)
 
     # B_r1_c5
@@ -2868,12 +2876,21 @@ class Vaila(tk.Tk):
 
         run_extractpng_gui(parent=self)
 
-    # C_B_r1_c2
     def crop_faces_atletas(self):
-        """Runs the athlete face crop module."""
+        """Runs the athlete face crop module (Markerless 2D → Crop Face)."""
         from vaila import crop_faces_atletas
 
         crop_faces_atletas.run_crop_faces_atletas_gui(parent=self)
+
+    # C_B_r1_c2
+    def planar_geometry_tracker(self):
+        """Open planar-geometry tracker (Video and Image → Planar Geo).
+
+        Also available inside getpixelvideo as the **Geo Homog** toolbar button.
+        """
+        from vaila.planar_geometry_tracker import run_planar_geometry_tracker_gui
+
+        run_planar_geometry_tracker_gui(parent=self)
 
     # C_B_r1_c3
     def draw_box(self):

@@ -1,10 +1,10 @@
 # Crop Faces Atletas - Crop Face
 
 - **Script:** `crop_faces_atletas.py`
-- **Category:** Tools / Video and Image
+- **Category:** Multimodal Analysis / Markerless 2D
 - **Creator:** Abel Gonçalves Chinaglia
-- **Version:** 0.3.46
-- **Updated:** 01 June 2026
+- **Version:** 0.4.3
+- **Updated:** 15 September 2026
 - **Python:** 3.12
 
 ## Overview
@@ -15,11 +15,13 @@ The file name stem is used as the athlete name. By default, the name is drawn in
 
 ## GUI Workflow
 
-In the main vailá GUI, open:
+In the main *vailá* GUI, open:
 
-**Tools -> Video and Image -> Crop Face**
+**Frame B → Markerless 2D → Crop Face**
 
-The module follows the same directory-selection pattern used by other vailá tools:
+(Previously under Tools → Video and Image; relocated to sit with other face / markerless 2D tools.)
+
+The module follows the same directory-selection pattern used by other *vailá* tools:
 
 1. Select the input directory containing athlete photos.
 2. Select the output directory for the cropped face images.

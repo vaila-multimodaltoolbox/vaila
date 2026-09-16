@@ -4,12 +4,12 @@
 
 | Field | Value |
 | --- | --- |
-| **Category** | Processing |
+| **Category** | Tools → Video and Image (**Planar Geo**); also Processing via getpixelvideo |
 | **File** | `vaila/planar_geometry_tracker.py` |
-| **Version** | 0.4.1 |
+| **Version** | 0.4.3 |
 | **Updated** | 15 September 2026 |
 | **Author** | Paulo R. P. Santiago |
-| **GUI** | Yes — **Geo Homog** button in `getpixelvideo.py` |
+| **GUI** | Yes — Frame C → **Video and Image → Planar Geo**, and **Geo Homog** in `getpixelvideo.py` |
 | **CLI** | Yes — `python -m vaila.planar_geometry_tracker --config ... --measurements-csv ...` |
 
 ---
@@ -20,50 +20,63 @@ For a stabilized video from fixed pixel markers, use [Video Stabilizer](video_st
 Its default similarity warp preserves shape; planar fits remain a separate metric
 diagnostic layer. Background markers do not need metric coordinates.
 
-Standalone planar-geometry homography tracker/extrapolator/gap-filler. Takes a
-2D pixel-space marker CSV exported by `getpixelvideo.py` and a metric
-target-geometry profile (TOML — EVA tatame mat, soccer pitch, court, …) and,
-for every frame, fits the planar homography that maps the metric target plane
-onto image pixels. With that per-frame homography it:
+Standalone planar-geometry gap-filler / extrapolator. Takes a 2D pixel-space
+marker CSV from `getpixelvideo.py` and a metric target-geometry TOML (EVA
+tatame, soccer pitch, …). For every frame it:
 
-- **imputes** markers that are missing/occluded on a frame but whose position
-  on the metric target plane is known (i.e. every other visible marker still
-  pins down the plane);
-- **extrapolates** points that have left the camera field of view, without
-  clamping to the frame boundary — the projected pixel coordinate can fall
-  outside `[0, width) x [0, height)`, which is expected and by design (a
-  point 2 m past the sideline should project 2 m past the sideline in pixel
-  space, not snap to the edge);
-- **projects a wireframe** of the target geometry (perimeter/interior lines,
-  circles, arcs) into image space for every frame, for visual QA and for
-  building an "extended canvas" diagnostic video larger than the source
-  frame so off-frame projections stay visible.
+1. **Fits per-frame DLT2D** on *visible measured* world↔pixel pairs
+   (`dlt2d.py`). Digitized markers are calibration observations only.
+2. **Reprojects the full metric geometry** through that DLT so the output
+   square/rectangle stays projectively consistent (collinear world edges →
+   collinear image edges; e.g. 0.96 m tatame).
+3. **Topology bootstrap** — if fewer than 4 measured points, fill gaps via
+   midpoints / line intersections, then refit DLT when possible.
+4. **Temporal DLT fallback** — when a frame cannot be calibrated, reuses the
+   previous frame's DLT parameters.
 
-Each frame's homography is fit independently with `cv2.findHomography(...,
-cv2.RANSAC, ransac_thresh)` from whatever markers are visible and
-non-collinear on that frame (minimum 4 non-collinear points). When fewer than
-4 usable points are available on a frame, the module falls back to
-`cv2.estimateAffinePartial2D` propagated from the nearest frame that did have
-a full homography, so a brief marker dropout does not stop tracking.
-
-This is a different tool from `dlt2d.py`/`rec2d_one_dlt2d.py`: those do a
-one-time least-squares DLT2D calibration fit from an exact point set (no
-outlier rejection, no per-frame refit). `planar_geometry_tracker.py` refits a
-robust RANSAC homography every frame from noisy, partial, changing
-correspondences — the right tool when the visible marker set varies frame to
-frame (occlusion, markers leaving/entering the FOV) rather than staying fixed
-for one calibration shot.
+Output is always a **new** `*_imputed.csv` (input measurements are never
+overwritten). Optional `geometry_animation.html` shows pixel + world (rec2d)
+geometry frame by frame. Extrapolated coordinates are never clamped to the
+frame boundary.
 
 ## Usage
 
 ### From the GUI
 
-In `getpixelvideo.py`, click **Geo Homog** (next to **Gap Fill**). Current
-annotations are saved first, then you are prompted to choose a target
-geometry TOML profile (see below); the module runs as a subprocess against
-the just-saved CSV and the video currently loaded, and success/failure is
-reported in the save toast. The equivalent `>>` CLI command is printed to the
-console before the subprocess launches.
+**Main vailá:** Frame C → **Video and Image → Planar Geo**. Pick the marker
+CSV, target-geometry TOML, optional reference video, and output directory
+(Cancel on output = auto `processed_planar_geom_<timestamp>/` next to the CSV).
+With a video selected, `--debug-viz` is enabled automatically.
+
+**Inside getpixelvideo:** click **Geo Homog** (next to **Gap Fill**). Current
+annotations are saved first, then a wizard asks:
+
+1. **Mode** — `1` = shipped/custom TOML profile, or `2` = generic rectangle
+   (4 corner marker IDs + width/height in metres).
+2. **TOML path** (mode 1) — `1=tatame_1x1m`, `2=soccerfield_broadcast`, or
+   `3=browse…`.
+3. **Marker → geometry map** (mode 1) — pairs `marker_id:geom_id`
+   (e.g. `0:0,1:1,2:2,3:3`); need ≥4 pairs. Optional `W,H` resize of the
+   profile bounding box.
+4. **Rectangle** (mode 2) — four CSV marker indices in order SW, SE, NE, NW,
+   then `width,height` metres.
+5. **Edit pause** — session files are written to `processed_geom_<timestamp>/`;
+   edit the TOML/CSV in a terminal (**imagination!** / `uv` venv) if needed,
+   then press Enter to run.
+6. **Optional save** — after success, choose whether to write DLT geometry
+   markers to a **new** `<stem>_geom_dlt_markers.csv` (never overwrites the
+   original `*_markers.csv`).
+
+The getpixelvideo path runs with `--debug-viz` always on. On success,
+*getpixelvideo* reloads the imputed CSV, enables a live wireframe overlay
+drawn from resolved marker pixels (**Shift+G** toggles), writes
+`debug_projected_wireframe.mp4`, and `geometry_animation.html`.
+
+No-args CLI also opens the Planar Geo file-dialog GUI:
+
+```bash
+uv run python -m vaila.planar_geometry_tracker
+```
 
 ### From the CLI
 
@@ -153,9 +166,10 @@ Written to `--output-dir`:
 
 | File | Contents |
 | --- | --- |
-| `<stem>_imputed.csv` | Wide-format marker CSV (same `p{N}_x`/`p{N}_y` column convention `getpixelvideo.py` writes and reads) with occluded/missing markers filled in and out-of-FOV markers extrapolated — loads straight back into `getpixelvideo.py` via its Load button. |
-| `dense_projected_points_long.csv` | Long-format per-frame projection of every target-geometry point (not just measured markers), including the dense circle/arc sample points. |
-| `homographies.npz` | Per-frame 3x3 homography matrices (and affine-fallback frames flagged), for downstream reuse without refitting. |
+| `<stem>_imputed.csv` | Wide-format marker CSV with **full DLT reprojection** of the TOML geometry (same `p{N}_x`/`p{N}_y` convention). New file — never overwrites the input. |
+| `dense_projected_points_long.csv` | Long-format per-frame projection; `is_measured` + `reproj_error_px` are diagnostic vs. the digitized observations. |
+| `homographies.npz` | Per-frame 3x3 homography matrices (DLT→H), for downstream reuse without refitting. |
+| `geometry_animation.html` | Interactive slider: pixel wireframe + world (rec2d) vs TOML ideal. |
 | `target_calibration.ref3d` | Metric target-geometry reference in the repo's existing `.ref3d` convention (see `drawsportsfields.py`), readable by `dlt3d.py`, `quickmeasure.py`, `sapiens2_3d.py`. |
 | `debug_projected_wireframe.mp4` | Only with `--debug-viz`: source video with the projected wireframe overlay drawn per frame. |
 

@@ -1,6 +1,6 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.4.2 (see `vaila.py`). **Package version:** 0.4.2 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.4.3 (see `vaila.py`). **Package version:** 0.4.2 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
 **Last updated:** 2026-09-15
 
@@ -167,7 +167,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 15.Sep.2026 v0.4.2 (Python 3.12.14)
+vailá - 15.Sep.2026 v0.4.3 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -197,7 +197,7 @@ B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
 B1_r1_c3 - Motion Capture Full Body
 B1_r1_c4 - Markerless 2D (coringa: Standard/Advanced/YOLOv26, Yolo+Markerless_MP,
             YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID],
-            Markerless Hands, MP Angles, Face Mesh, Markerless Live)
+            Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live)
 B1_r1_c5 - Markerless 3D (coringa: SAM3+DINOv3 3D [+Visualize ID])
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
@@ -232,7 +232,7 @@ C_A_r4_c1 - ReID Marker   C_A_r4_c2 - Sapiens2_3D  C_A_r4_c3 - vailá
 C_A_r5_c1 - vailá         C_A_r5_c2 - vailá          C_A_r5_c3 - vailá
 
 -> C_B: Video and Image
-C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Crop Face      C_B_r1_c3 - Draw Box
+C_B_r1_c1 - Video<-->PNG  C_B_r1_c2 - Planar Geo     C_B_r1_c3 - Draw Box
 C_B_r2_c1 - Compress Video C_B_r2_c2 - Video Stabilizer C_B_r2_c3 - Make Sync file
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
@@ -364,7 +364,7 @@ For more information about uv, visit: [https://github.com/astral-sh/uv](https://
 
 ### Optional AI modules (SAM 3, Sapiens2, SAM3+Sapiens2, SAM3+DINOv3 3D, Crop Face, FIFA…)
 
-Several GUI tools (Frame B → **Markerless 2D** / **Markerless 3D**, Frame C → **Crop Face**, and the FIFA Skeletal Tracking Light stack) need an extra `uv sync --extra <name>` and, for some, a one-time gated-weights download or vendored-repo clone. Each one has its **own help page** with the exact extra name, install/setup commands, CUDA requirements, CLI usage, and outputs — start from the **Script Help Index**:
+Several GUI tools (Frame B → **Markerless 2D** / **Markerless 3D**, including **Crop Face** under Markerless 2D, and the FIFA Skeletal Tracking Light stack) need an extra `uv sync --extra <name>` and, for some, a one-time gated-weights download or vendored-repo clone. Each one has its **own help page** with the exact extra name, install/setup commands, CUDA requirements, CLI usage, and outputs — start from the **Script Help Index**:
 
 - **[Script Help Index (HTML)](vaila/help/index.html)** · **[Script Help Index (Markdown)](vaila/help/index.md)**
 

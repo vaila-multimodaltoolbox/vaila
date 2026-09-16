@@ -278,9 +278,9 @@ def test_toolbar_responsive_layout_and_resize() -> None:
     assert "row_start_bottom = max(window_width // 2" not in source
     assert "row_start_top = max(window_width // 2" not in source
 
-    # 2. Verify clean right-alignment with 10px margins
-    assert "row_start_top = max(10, window_width - 10 - total_top_width)" in source
-    assert "row_start_bottom = max(10, window_width - 10 - total_bottom_width)" in source
+    # 2. Verify centered rows with 10px left clamp (no half-width start)
+    assert "row_start_top = max(10, (window_width - total_top_width) // 2)" in source
+    assert "row_start_bottom = max(10, (window_width - total_bottom_width) // 2)" in source
 
     # 3. Verify responsive compact threshold (< 960 px)
     assert "is_compact = window_width < 960" in source
@@ -297,6 +297,16 @@ def test_toolbar_responsive_layout_and_resize() -> None:
     # 5. Verify Help & ? moved to top row next to Guide
     assert "help_button_rect = pygame.Rect(" in source
     assert "help_web_button_rect = pygame.Rect(" in source
+
+    # 5b. VISUAL/INSERT sits on top row immediately left of Tpl
+    assert "# 1. Editor mode:" in source
+    assert "# 2. Template Marker Mode:" in source
+    assert source.index("# 1. Editor mode:") < source.index("# 2. Template Marker Mode:")
+    assert "editor_mode_button_width\n            + template_button_width" in source
+    assert (
+        "+ editor_mode_button_width\n            + button_gap\n            + button_width  # Load"
+        not in source
+    )
 
     # 6. Verify minimum dimension clamping on VIDEORESIZE
     assert "min_gui_w = min(800, max(480, screen_width - 40))" in source
@@ -359,6 +369,5 @@ def test_mouse_play_tracking_button_and_hotkey_wiring() -> None:
     assert "elif event.key == pygame.K_m:" in source
 
     # 5. In-app help dialog entry
-    assert '"M  /  \'MousePlay\' button"' in source
+    assert "\"M  /  'MousePlay' button\"" in source
     assert "Toggle Mouse-Play tracking (marks at mouse cursor during video playback)" in source
-

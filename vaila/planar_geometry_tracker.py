@@ -8,36 +8,39 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.4.1
+Version: 0.4.3
 Created: 14 September 2026
 Last Updated: 15 September 2026
 ================================================================================
 Description:
-    Standalone planar-geometry homography tracker, extrapolator, and gap-filler.
+    Standalone planar-geometry tracker / gap-filler / extrapolator.
 
-    Given a 2D pixel-space marker CSV produced by ``getpixelvideo.py`` and a
-    metric target-geometry profile (TOML: EVA tatame mat, soccer pitch, court,
-    etc.), this module fits a per-frame planar homography H_t between the
-    metric target plane (Z = 0) and image space, using ``cv2.findHomography``
-    + RANSAC when >= 4 non-collinear correspondences are available in a frame,
-    and an inter-frame affine fallback (``cv2.estimateAffinePartial2D``)
-    chained onto the nearest keyframe's homography otherwise. Every target
-    landmark is then projected through H_t for every frame -- occluded points
-    are imputed, and points beyond the camera field of view are extrapolated
-    without clamping (raw negative / out-of-canvas pixel coordinates are kept
-    so off-screen geometry stays correct).
+    Given a 2D pixel-space marker CSV from ``getpixelvideo.py`` and a metric
+    target-geometry TOML (EVA tatame, soccer pitch, …), each frame:
 
-    Also projects metric circles/arcs (e.g. a center circle, penalty arcs)
-    into image space as projective wireframes, and can render a diagnostic
-    "extended canvas" video showing the full projected geometry, including
-    the parts that fall outside the original camera frame.
+    1. **Locks measured pixels** — digitized markers are never overwritten.
+    2. **Topology fill** — missing midpoints / corners from line intersections
+       and midpoints on ``[topology].lines``.
+    3. **Temporal gap-fill** — linear interpolation between measured anchors
+       for still-missing markers (avoids DLT slam-to-interior jumps).
+    4. **DLT only for leftovers** — per-frame DLT2D projects remaining gaps;
+       never replaces measured / topology / gap-fill points.
 
-    100% standalone: never mutates ``getpixelvideo.py``'s runtime state. The
-    GUI wires a "Geo Homog" button that shells out to this module via
-    ``subprocess`` (see ``run_geometric_tracker_action`` there), matching the
-    project's GUI-launches-CLI convention.
+    Imputed wide CSV is always a *new* file (``*_imputed.csv``); the input
+    measurements CSV is never overwritten. Optional HTML shows pixel +
+    world (rec2d) geometry frame by frame.
+
+    Session helpers for the Geo Homog wizard: rectangle TOML, scale profile
+    bounding box, remap marker CSV columns, write session TOML.
+
+    100% standalone: never mutates ``getpixelvideo.py`` runtime state. The
+    getpixelvideo "Geo Homog" button shells out via subprocess. A dedicated
+    **Planar Geo** button also lives under Frame C → Video and Image.
 
 Usage:
+    # GUI (Video and Image → Planar Geo, or no CLI args)
+    uv run python -m vaila.planar_geometry_tracker
+
     uv run python -m vaila.planar_geometry_tracker \\
         --config vaila/models/planar_targets/tatame_1x1m.toml \\
         --measurements-csv path/to/markers.csv \\
@@ -65,6 +68,7 @@ import argparse
 import sys
 import tomllib
 from dataclasses import dataclass, field
+from datetime import datetime
 from itertools import combinations
 from pathlib import Path
 from typing import Any
@@ -72,6 +76,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
+
+try:
+    from .cli_highlight import print_gui_cli_mirror
+except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
 
 # ------------------------------------------------------------------------- #
 # Geometry configuration model
@@ -188,6 +197,282 @@ def load_target_geometry(config_path: str | Path) -> TargetGeometry:
     )
 
 
+def geometry_bounding_box(geometry: TargetGeometry) -> tuple[float, float, float, float]:
+    """Return ``(min_x, min_y, max_x, max_y)`` of the target control points."""
+    xs = [p.x for p in geometry.points.values()]
+    ys = [p.y for p in geometry.points.values()]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def make_rectangle_geometry(
+    width: float,
+    height: float,
+    *,
+    name: str = "rectangle",
+    description: str = "Axis-aligned rectangle on Z=0",
+) -> TargetGeometry:
+    """Build a 4-corner rectangle (SW, SE, NE, NW) with perimeter topology."""
+    if width <= 0 or height <= 0:
+        raise ValueError(f"Rectangle width/height must be positive, got {width} x {height}")
+    corners = {
+        0: TargetPoint(0, "corner_sw", 0.0, 0.0, 0.0),
+        1: TargetPoint(1, "corner_se", float(width), 0.0, 0.0),
+        2: TargetPoint(2, "corner_ne", float(width), float(height), 0.0),
+        3: TargetPoint(3, "corner_nw", 0.0, float(height), 0.0),
+    }
+    return TargetGeometry(
+        name=name,
+        description=description,
+        target_type="polygon",
+        points=corners,
+        perimeter=[0, 1, 2, 3],
+        lines=[(0, 1), (1, 2), (2, 3), (3, 0)],
+    )
+
+
+def scale_target_geometry(
+    geometry: TargetGeometry,
+    new_width: float,
+    new_height: float,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+) -> TargetGeometry:
+    """Uniformly scale a profile's bounding box to ``new_width`` × ``new_height``.
+
+    Origin (min_x, min_y) is preserved; relative layout of points/circles/arcs
+    is kept. Circles/arcs radii scale by the mean of the two axis scales.
+    """
+    if new_width <= 0 or new_height <= 0:
+        raise ValueError(f"Scale width/height must be positive, got {new_width} x {new_height}")
+    min_x, min_y, max_x, max_y = geometry_bounding_box(geometry)
+    old_w = max_x - min_x
+    old_h = max_y - min_y
+    if old_w <= 1e-12 or old_h <= 1e-12:
+        raise ValueError("Cannot scale a degenerate geometry bounding box")
+    sx = new_width / old_w
+    sy = new_height / old_h
+    s_r = 0.5 * (sx + sy)
+
+    points = {
+        pid: TargetPoint(
+            point_id=pid,
+            name=p.name,
+            x=min_x + (p.x - min_x) * sx,
+            y=min_y + (p.y - min_y) * sy,
+            z=p.z,
+        )
+        for pid, p in geometry.points.items()
+    }
+    circles = [
+        TargetCircle(
+            name=c.name,
+            center_point=c.center_point,
+            radius=c.radius * s_r,
+            samples=c.samples,
+        )
+        for c in geometry.circles
+    ]
+    arcs = [
+        TargetArc(
+            name=a.name,
+            center_point=a.center_point,
+            radius=a.radius * s_r,
+            angle_start_deg=a.angle_start_deg,
+            angle_end_deg=a.angle_end_deg,
+            samples=a.samples,
+        )
+        for a in geometry.arcs
+    ]
+    return TargetGeometry(
+        name=name if name is not None else geometry.name,
+        description=(
+            description
+            if description is not None
+            else f"{geometry.description} (scaled to {new_width:g}x{new_height:g})"
+        ),
+        target_type=geometry.target_type,
+        points=points,
+        perimeter=list(geometry.perimeter),
+        lines=list(geometry.lines),
+        circles=circles,
+        arcs=arcs,
+    )
+
+
+def write_target_geometry_toml(geometry: TargetGeometry, path: str | Path) -> Path:
+    """Serialize a :class:`TargetGeometry` to a TOML profile on disk."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines_out: list[str] = [
+        "[target]",
+        f'name = "{geometry.name}"',
+        f'description = "{geometry.description}"',
+        f'type = "{geometry.target_type}"',
+        "",
+        "[points]",
+    ]
+    for pid in geometry.sorted_ids:
+        p = geometry.points[pid]
+        lines_out.append(
+            f'{pid} = {{ name = "{p.name}", x = {p.x:.6f}, y = {p.y:.6f}, z = {p.z:.6f} }}'
+        )
+    lines_out.append("")
+    lines_out.append("[topology]")
+    if geometry.perimeter:
+        peri = ", ".join(str(i) for i in geometry.perimeter)
+        lines_out.append(f"perimeter = [{peri}]")
+    if geometry.lines:
+        pairs = ", ".join(f"[{a}, {b}]" for a, b in geometry.lines)
+        lines_out.append(f"lines = [{pairs}]")
+    for circle in geometry.circles:
+        lines_out.extend(
+            [
+                "",
+                "[[circles]]",
+                f'name = "{circle.name}"',
+                f"center_point = {circle.center_point}",
+                f"radius = {circle.radius:.6f}",
+                f"samples = {circle.samples}",
+            ]
+        )
+    for arc in geometry.arcs:
+        lines_out.extend(
+            [
+                "",
+                "[[arcs]]",
+                f'name = "{arc.name}"',
+                f"center_point = {arc.center_point}",
+                f"radius = {arc.radius:.6f}",
+                f"angle_start_deg = {arc.angle_start_deg:.6f}",
+                f"angle_end_deg = {arc.angle_end_deg:.6f}",
+                f"samples = {arc.samples}",
+            ]
+        )
+    path.write_text("\n".join(lines_out) + "\n", encoding="utf-8")
+    return path
+
+
+def write_rectangle_toml(
+    path: str | Path,
+    width: float,
+    height: float,
+    *,
+    name: str = "rectangle",
+) -> TargetGeometry:
+    """Write a 4-corner rectangle profile and return the parsed geometry."""
+    geometry = make_rectangle_geometry(width, height, name=name)
+    write_target_geometry_toml(geometry, path)
+    return geometry
+
+
+def parse_marker_geom_mapping(text: str) -> dict[int, int]:
+    """Parse ``marker_id:geom_id`` pairs from ``0:0,1:2,3:4`` (or whitespace)."""
+    mapping: dict[int, int] = {}
+    cleaned = text.strip()
+    if not cleaned:
+        return mapping
+    for part in cleaned.replace(";", ",").split(","):
+        token = part.strip()
+        if not token:
+            continue
+        if ":" not in token:
+            raise ValueError(f"Mapping entry must be marker:geom, got {token!r}")
+        left, right = token.split(":", 1)
+        mapping[int(left.strip())] = int(right.strip())
+    return mapping
+
+
+def default_identity_mapping(geometry: TargetGeometry, marker_ids: set[int]) -> dict[int, int]:
+    """Identity map for geometry point ids that also exist as marker slots."""
+    return {pid: pid for pid in geometry.sorted_ids if pid in marker_ids}
+
+
+def remap_measurements_csv(
+    src_csv: str | Path,
+    mapping: dict[int, int],
+    dst_csv: str | Path,
+) -> Path:
+    """Copy mapped marker columns into ``p{geom_id}_x/y`` on a new wide CSV.
+
+    ``mapping`` keys are source marker column indices; values are destination
+    geometry point ids (must match the session TOML ``[points]`` keys).
+    """
+    if len(mapping) < 4:
+        raise ValueError(f"Need at least 4 mapped marker pairs, got {len(mapping)}")
+    src_csv = Path(src_csv)
+    dst_csv = Path(dst_csv)
+    df = pd.read_csv(src_csv)
+    if "frame" not in df.columns:
+        raise ValueError(f"Source measurements CSV lacks 'frame' column: {src_csv}")
+
+    geom_ids = sorted(set(mapping.values()))
+    out: dict[str, Any] = {"frame": df["frame"].to_numpy()}
+    for marker_id, geom_id in mapping.items():
+        sx, sy = f"p{marker_id}_x", f"p{marker_id}_y"
+        dx, dy = f"p{geom_id}_x", f"p{geom_id}_y"
+        if sx not in df.columns or sy not in df.columns:
+            raise ValueError(f"Source CSV missing marker columns {sx}/{sy}")
+        out[dx] = df[sx].to_numpy()
+        out[dy] = df[sy].to_numpy()
+
+    # Stable column order: frame, then ascending geom ids.
+    ordered_cols = ["frame"]
+    for gid in geom_ids:
+        ordered_cols.extend([f"p{gid}_x", f"p{gid}_y"])
+    out_df = pd.DataFrame({c: out[c] for c in ordered_cols})
+    dst_csv.parent.mkdir(parents=True, exist_ok=True)
+    out_df.to_csv(dst_csv, index=False)
+    return dst_csv
+
+
+def load_homographies_npz(npz_path: str | Path) -> dict[int, NDArray[np.float64]]:
+    """Load ``homographies.npz`` into ``{frame_id: 3x3 H}``."""
+    data = np.load(Path(npz_path))
+    frame_ids = np.asarray(data["frame_ids"]).astype(np.int64)
+    h_stack = np.asarray(data["H"], dtype=np.float64)
+    return {int(fid): h_stack[i] for i, fid in enumerate(frame_ids)}
+
+
+def project_wireframe_segments(
+    geometry: TargetGeometry,
+    homography: NDArray[np.float64],
+) -> list[list[tuple[float, float]]]:
+    """Project topology lines/circles/arcs through H (legacy overlay helper)."""
+    segments: list[list[tuple[float, float]]] = []
+    for a, b in geometry.lines:
+        pts = project_points(homography, np.array([geometry.world_xy(a), geometry.world_xy(b)]))
+        segments.append(
+            [(float(pts[0, 0]), float(pts[0, 1])), (float(pts[1, 0]), float(pts[1, 1]))]
+        )
+    for circle in geometry.circles:
+        world = sample_circle_world(circle, geometry)
+        pts = project_points(homography, world)
+        segments.append([(float(x), float(y)) for x, y in pts])
+    for arc in geometry.arcs:
+        world = sample_arc_world(arc, geometry)
+        pts = project_points(homography, world)
+        segments.append([(float(x), float(y)) for x, y in pts])
+    return segments
+
+
+def wireframe_segments_from_pixels(
+    geometry: TargetGeometry,
+    resolved: dict[int, tuple[float, float]],
+) -> list[list[tuple[float, float]]]:
+    """Build wireframe polylines from resolved pixel coordinates (preferred)."""
+    segments: list[list[tuple[float, float]]] = []
+    for a, b in geometry.lines:
+        if a not in resolved or b not in resolved:
+            continue
+        ua, va = resolved[a]
+        ub, vb = resolved[b]
+        if not (np.isfinite(ua) and np.isfinite(va) and np.isfinite(ub) and np.isfinite(vb)):
+            continue
+        segments.append([(float(ua), float(va)), (float(ub), float(vb))])
+    return segments
+
+
 # ------------------------------------------------------------------------- #
 # Measurements CSV ingestion (wide primary; long also supported)
 # ------------------------------------------------------------------------- #
@@ -289,7 +574,473 @@ def has_non_collinear_quad(
 
 
 # ------------------------------------------------------------------------- #
-# Steps 2-3: Per-frame homography solve, affine fallback, PCHIP regularization
+# Topology index (midpoints, collinear sets, vertex incident edges)
+# ------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class TopologyIndex:
+    """Precomputed metric topology helpers for image-space imputation."""
+
+    # mid_id -> (endpoint_a, endpoint_b) when mid is world-midpoint of AB
+    metric_midpoints: dict[int, tuple[int, int]]
+    # topology edge (a,b) -> all point ids collinear on that world segment
+    line_point_sets: dict[tuple[int, int], list[int]]
+    # vertex_id -> list of (other_endpoint_on_incident_edge,)
+    # used with line_point_sets to find two image lines to intersect
+    vertex_incident: dict[int, list[tuple[int, int]]]
+
+
+def _point_on_segment_param(
+    p: NDArray[np.float64], a: NDArray[np.float64], b: NDArray[np.float64], tol: float = 1e-6
+) -> float | None:
+    """Return t in [0,1] if p lies on segment AB in world space, else None."""
+    ab = b - a
+    length2 = float(ab @ ab)
+    if length2 < tol * tol:
+        return None
+    t = float((p - a) @ ab) / length2
+    if t < -tol or t > 1.0 + tol:
+        return None
+    closest = a + t * ab
+    if float(np.linalg.norm(p - closest)) > tol:
+        return None
+    return float(np.clip(t, 0.0, 1.0))
+
+
+def build_topology_index(geometry: TargetGeometry, *, mid_tol: float = 1e-4) -> TopologyIndex:
+    """Derive midpoint / collinear / incidence tables from metric points + lines."""
+    world = {pid: geometry.world_xy(pid) for pid in geometry.sorted_ids}
+    metric_midpoints: dict[int, tuple[int, int]] = {}
+    line_point_sets: dict[tuple[int, int], list[int]] = {}
+    vertex_incident: dict[int, list[tuple[int, int]]] = {pid: [] for pid in geometry.sorted_ids}
+
+    for a, b in geometry.lines:
+        key = (a, b)
+        pts_on: list[tuple[float, int]] = [(0.0, a), (1.0, b)]
+        wa, wb = world[a], world[b]
+        for pid, wp in world.items():
+            if pid in (a, b):
+                continue
+            t = _point_on_segment_param(wp, wa, wb)
+            if t is None:
+                continue
+            pts_on.append((t, pid))
+            # Exact midpoint?
+            mid = 0.5 * (wa + wb)
+            if float(np.linalg.norm(wp - mid)) <= mid_tol:
+                metric_midpoints[pid] = (a, b)
+
+        pts_on.sort(key=lambda item: item[0])
+        line_point_sets[key] = [pid for _, pid in pts_on]
+        vertex_incident.setdefault(a, []).append((a, b))
+        vertex_incident.setdefault(b, []).append((a, b))
+
+    # Also detect midpoints between any pair of topology endpoints (not only
+    # direct line endpoints) — e.g. north mid between NE and NW corners when
+    # topology lists [4,5] and [5,6] separately.
+    endpoint_ids = sorted({i for pair in geometry.lines for i in pair})
+    for a, b in combinations(endpoint_ids, 2):
+        wa, wb = world[a], world[b]
+        mid = 0.5 * (wa + wb)
+        for pid, wp in world.items():
+            if pid in (a, b):
+                continue
+            if float(np.linalg.norm(wp - mid)) <= mid_tol and pid not in metric_midpoints:
+                metric_midpoints[pid] = (a, b)
+
+    return TopologyIndex(
+        metric_midpoints=metric_midpoints,
+        line_point_sets=line_point_sets,
+        vertex_incident=vertex_incident,
+    )
+
+
+def line_intersection_2d(
+    p1: NDArray[np.float64],
+    p2: NDArray[np.float64],
+    p3: NDArray[np.float64],
+    p4: NDArray[np.float64],
+) -> tuple[float, float] | None:
+    """Intersection of infinite lines p1–p2 and p3–p4, or None if parallel."""
+    x1, y1 = float(p1[0]), float(p1[1])
+    x2, y2 = float(p2[0]), float(p2[1])
+    x3, y3 = float(p3[0]), float(p3[1])
+    x4, y4 = float(p4[0]), float(p4[1])
+    den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    if abs(den) < 1e-12:
+        return None
+    px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den
+    py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den
+    return px, py
+
+
+def _import_dlt2d():
+    try:
+        from .dlt2d import dlt2d as dlt2d_solve
+    except ImportError:
+        from dlt2d import dlt2d as dlt2d_solve  # ty: ignore[unresolved-import]
+    return dlt2d_solve
+
+
+def _import_rec2d():
+    try:
+        from .rec2d_one_dlt2d import rec2d as rec2d_apply
+    except ImportError:
+        from rec2d_one_dlt2d import rec2d as rec2d_apply  # ty: ignore[unresolved-import]
+    return rec2d_apply
+
+
+def dlt_params_to_homography(params: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Convert 8 DLT2D coefficients (world→pixel) into a 3×3 homography.
+
+    DLT maps (X,Y) → (u,v) via::
+
+        u = (L1 X + L2 Y + L3) / (L7 X + L8 Y + 1)
+        v = (L4 X + L5 Y + L6) / (L7 X + L8 Y + 1)
+
+    which is the projective matrix [[L1,L2,L3],[L4,L5,L6],[L7,L8,1]].
+    """
+    p = np.asarray(params, dtype=np.float64).ravel()
+    if p.size != 8:
+        raise ValueError(f"Expected 8 DLT params, got {p.size}")
+    return np.array(
+        [[p[0], p[1], p[2]], [p[3], p[4], p[5]], [p[6], p[7], 1.0]],
+        dtype=np.float64,
+    )
+
+
+def fit_dlt2d_visible(
+    geometry: TargetGeometry,
+    obs: dict[int, tuple[float, float]],
+) -> NDArray[np.float64] | None:
+    """Fit DLT2D from currently resolved/measured visible points (≥4 non-collinear)."""
+    world_points = {pid: geometry.world_xy(pid) for pid in geometry.sorted_ids}
+    valid_ids = [pid for pid in obs if pid in world_points]
+    if len(valid_ids) < 4 or not has_non_collinear_quad(valid_ids, world_points):
+        return None
+    reals = np.array([world_points[i] for i in valid_ids], dtype=np.float64)
+    pixels = np.array([obs[i] for i in valid_ids], dtype=np.float64)
+    try:
+        params = np.asarray(_import_dlt2d()(reals, pixels), dtype=np.float64).ravel()
+    except Exception:
+        return None
+    if params.size != 8 or not np.isfinite(params).all():
+        return None
+    return params
+
+
+def project_world_via_dlt(
+    params: NDArray[np.float64], world_xy: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """Project Nx2 world points through DLT2D params (world→pixel via rec2d)."""
+    # rec2d expects A = DLT params and cc2d = pixel coords for the *inverse*
+    # (pixel→world). For world→pixel we use the homography form.
+    h = dlt_params_to_homography(params)
+    return project_points(h, world_xy)
+
+
+def _two_known_pixels_on_world_line(
+    line_a: int,
+    line_b: int,
+    geometry: TargetGeometry,
+    resolved: dict[int, tuple[float, float]],
+    *,
+    tol: float = 1e-4,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]] | None:
+    """Return two resolved pixels whose world points lie on the infinite line AB."""
+    wa = geometry.world_xy(line_a)
+    wb = geometry.world_xy(line_b)
+    known: list[int] = []
+    for pid, uv in resolved.items():
+        if pid not in geometry.points:
+            continue
+        if not (np.isfinite(uv[0]) and np.isfinite(uv[1])):
+            continue
+        t = _point_on_segment_param(geometry.world_xy(pid), wa, wb, tol=tol)
+        # Also accept points on the infinite line (t outside [0,1])
+        if t is not None:
+            known.append(pid)
+            continue
+        # Infinite-line collinearity check
+        ab = wb - wa
+        ap = geometry.world_xy(pid) - wa
+        cross = abs(ab[0] * ap[1] - ab[1] * ap[0])
+        if float(np.linalg.norm(ab)) > 1e-12 and cross / float(np.linalg.norm(ab)) <= tol:
+            known.append(pid)
+    if len(known) < 2:
+        return None
+    p0 = np.array(resolved[known[0]], dtype=np.float64)
+    p1 = np.array(resolved[known[1]], dtype=np.float64)
+    if float(np.linalg.norm(p0 - p1)) < 1e-9:
+        return None
+    return p0, p1
+
+
+def _two_known_pixels_on_edge(
+    edge: tuple[int, int],
+    resolved: dict[int, tuple[float, float]],
+    topo: TopologyIndex,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]] | None:
+    """Return two distinct known pixel points that lie on a topology edge."""
+    known = [pid for pid in topo.line_point_sets.get(edge, list(edge)) if pid in resolved]
+    if len(known) < 2:
+        known = [pid for pid in edge if pid in resolved]
+    if len(known) < 2:
+        return None
+    p_a = np.array(resolved[known[0]], dtype=np.float64)
+    p_b = np.array(resolved[known[1]], dtype=np.float64)
+    if float(np.linalg.norm(p_a - p_b)) < 1e-9:
+        return None
+    return p_a, p_b
+
+
+def build_temporal_gap_fills(
+    geometry: TargetGeometry,
+    measurements: dict[int, dict[int, tuple[float, float]]],
+) -> dict[int, dict[int, tuple[float, float]]]:
+    """Temporal priors for missing markers (ideal for stabilized floor targets).
+
+    For each geometry point:
+
+    * **Interior gaps** — linear interpolation between measured anchors.
+    * **Before first / after last** — constant hold of the nearest anchor
+      (shape stays put when a marker is occluded on a stabilized video).
+    """
+    geom_ids = set(geometry.sorted_ids)
+    frames_sorted = sorted(measurements)
+    fills: dict[int, dict[int, tuple[float, float]]] = {f: {} for f in frames_sorted}
+    if not frames_sorted:
+        return fills
+
+    for pid in geometry.sorted_ids:
+        anchors: list[tuple[int, tuple[float, float]]] = []
+        for frame in frames_sorted:
+            obs = measurements.get(frame, {})
+            if pid in obs and pid in geom_ids:
+                anchors.append((frame, obs[pid]))
+        if not anchors:
+            continue
+
+        f_first, p_first = anchors[0]
+        f_last, p_last = anchors[-1]
+        for frame in frames_sorted:
+            if frame < f_first:
+                fills.setdefault(frame, {})[pid] = p_first
+            elif frame > f_last:
+                fills.setdefault(frame, {})[pid] = p_last
+
+        for i in range(len(anchors) - 1):
+            fa, pa = anchors[i]
+            fb, pb = anchors[i + 1]
+            if fb <= fa + 1:
+                continue
+            span = float(fb - fa)
+            for frame in range(fa + 1, fb):
+                if pid in measurements.get(frame, {}):
+                    continue
+                t = (frame - fa) / span
+                fills.setdefault(frame, {})[pid] = (
+                    float((1.0 - t) * pa[0] + t * pb[0]),
+                    float((1.0 - t) * pa[1] + t * pb[1]),
+                )
+    return fills
+
+
+def project_point_onto_line(
+    pt: NDArray[np.float64],
+    p_a: NDArray[np.float64],
+    p_b: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Orthogonally project 2D point pt onto the infinite line through p_a and p_b."""
+    v = p_b - p_a
+    l2 = float(v @ v)
+    if l2 < 1e-12:
+        return pt
+    t = float((pt - p_a) @ v) / l2
+    return p_a + t * v
+
+
+def _enforce_line_collinearity(
+    geometry: TargetGeometry,
+    pid: int,
+    pt: NDArray[np.float64],
+    resolved: dict[int, tuple[float, float]],
+    topo: TopologyIndex,
+) -> NDArray[np.float64]:
+    """Ensure pt is collinear with known resolved points on its incident lines."""
+    edges = topo.vertex_incident.get(pid, [])
+    for edge in edges:
+        pair = _two_known_pixels_on_edge(edge, resolved, topo)
+        if pair is None:
+            pair = _two_known_pixels_on_world_line(edge[0], edge[1], geometry, resolved)
+        if pair is not None:
+            pt = project_point_onto_line(pt, pair[0], pair[1])
+            break
+    return pt
+
+
+def _topology_fill_missing(
+    geometry: TargetGeometry,
+    seed: dict[int, tuple[float, float]],
+    topo: TopologyIndex,
+    *,
+    use_image_midpoints: bool = False,
+) -> dict[int, tuple[float, float]]:
+    """Bootstrap missing pixels via line intersections (and optional midpoints).
+
+    Image-space midpoints are **off** under perspective (world midpoint ≠
+    midpoint of image endpoints). Prefer temporal priors or DLT for mids;
+    keep line–line intersections (projectively valid).
+    """
+    resolved: dict[int, tuple[float, float]] = dict(seed)
+    world = {pid: geometry.world_xy(pid) for pid in geometry.sorted_ids}
+
+    def _still_missing() -> list[int]:
+        return [pid for pid in geometry.sorted_ids if pid not in resolved]
+
+    if use_image_midpoints:
+        for mid_id, (a_id, b_id) in topo.metric_midpoints.items():
+            if mid_id in resolved:
+                continue
+            if a_id in resolved and b_id in resolved:
+                ua, va = resolved[a_id]
+                ub, vb = resolved[b_id]
+                resolved[mid_id] = (0.5 * (ua + ub), 0.5 * (va + vb))
+
+    for (a, b), pids in topo.line_point_sets.items():
+        if a not in resolved or b not in resolved:
+            continue
+        wa, wb = world[a], world[b]
+        pa = np.array(resolved[a], dtype=np.float64)
+        pb = np.array(resolved[b], dtype=np.float64)
+        ab_len2 = float((wb - wa) @ (wb - wa))
+        if ab_len2 < 1e-12:
+            continue
+        for pid in pids:
+            if pid in resolved or pid in (a, b):
+                continue
+            if not use_image_midpoints:
+                continue
+            t = float((world[pid] - wa) @ (wb - wa)) / ab_len2
+            pix = pa + t * (pb - pa)
+            resolved[pid] = (float(pix[0]), float(pix[1]))
+
+    # Iterate line-intersection solves until convergence
+    changed = True
+    while changed:
+        changed = False
+        for vid in list(_still_missing()):
+            edges = topo.vertex_incident.get(vid, [])
+            if len(edges) < 2:
+                continue
+            line_pts: list[tuple[NDArray[np.float64], NDArray[np.float64]]] = []
+            for edge in edges:
+                pair = _two_known_pixels_on_edge(edge, resolved, topo)
+                if pair is None:
+                    pair = _two_known_pixels_on_world_line(edge[0], edge[1], geometry, resolved)
+                if pair is not None:
+                    line_pts.append(pair)
+                if len(line_pts) >= 2:
+                    break
+            if len(line_pts) < 2:
+                continue
+            hit = line_intersection_2d(
+                line_pts[0][0], line_pts[0][1], line_pts[1][0], line_pts[1][1]
+            )
+            if hit is not None and np.isfinite(hit[0]) and np.isfinite(hit[1]):
+                resolved[vid] = hit
+                changed = True
+
+    if use_image_midpoints:
+        for mid_id, (a_id, b_id) in topo.metric_midpoints.items():
+            if mid_id in resolved:
+                continue
+            if a_id in resolved and b_id in resolved:
+                ua, va = resolved[a_id]
+                ub, vb = resolved[b_id]
+                resolved[mid_id] = (0.5 * (ua + ub), 0.5 * (va + vb))
+
+    return resolved
+
+
+def resolve_frame_pixels(
+    geometry: TargetGeometry,
+    obs: dict[int, tuple[float, float]],
+    *,
+    topo: TopologyIndex | None = None,
+    prev_dlt: NDArray[np.float64] | None = None,
+    temporal_guess: dict[int, tuple[float, float]] | None = None,
+) -> tuple[dict[int, tuple[float, float]], NDArray[np.float64] | None, str]:
+    """Resolve target points for a single frame.
+
+    Priority:
+    1. **Locked measurements** — digitized markers are preserved exactly.
+    2. **Topology intersections** for missing corners via line–line crossing.
+    3. **Direct DLT2D** on measured + topology-resolved points (>=4 non-collinear).
+    4. **DLT projection** with line collinearity enforcement for remaining points.
+    5. **Fallback to prev_dlt** if available.
+
+    Returns ``(resolved_pixels, dlt_params_or_None, method)``.
+    """
+    topo = topo or build_topology_index(geometry)
+    geom_ids = set(geometry.sorted_ids)
+    obs = {pid: uv for pid, uv in obs.items() if pid in geom_ids}
+    world = {pid: geometry.world_xy(pid) for pid in geometry.sorted_ids}
+
+    resolved: dict[int, tuple[float, float]] = dict(obs)
+    method = "measured_only"
+
+    # 1. If explicit temporal_guess was passed, honor it
+    if temporal_guess:
+        for pid, uv in temporal_guess.items():
+            if pid in geom_ids and pid not in resolved:
+                resolved[pid] = uv
+                method = "temporal_gap"
+
+    # 2. Topology intersections for missing corners
+    topo_filled = _topology_fill_missing(geometry, resolved, topo, use_image_midpoints=False)
+    for pid, uv in topo_filled.items():
+        if pid not in resolved:
+            resolved[pid] = uv
+            if method == "measured_only":
+                method = "topology"
+
+    # 3. Direct DLT on measured + topology-resolved points
+    dlt_params = fit_dlt2d_visible(geometry, resolved)
+    if dlt_params is not None:
+        still_missing = [pid for pid in geometry.sorted_ids if pid not in resolved]
+        if still_missing:
+            world_miss = np.array([world[pid] for pid in still_missing], dtype=np.float64)
+            projected = project_world_via_dlt(dlt_params, world_miss)
+            for i, pid in enumerate(still_missing):
+                pt_proj = _enforce_line_collinearity(geometry, pid, projected[i], resolved, topo)
+                resolved[pid] = (float(pt_proj[0]), float(pt_proj[1]))
+        return resolved, dlt_params, "dlt" if method == "measured_only" else method
+
+    # 4. Fallback to prev_dlt if available
+    if prev_dlt is not None:
+        dlt_params = prev_dlt
+        dlt_label = "temporal_dlt"
+    else:
+        dlt_label = "dlt"
+
+    still_missing = [pid for pid in geometry.sorted_ids if pid not in resolved]
+    if dlt_params is not None and still_missing:
+        world_miss = np.array([world[pid] for pid in still_missing], dtype=np.float64)
+        projected = project_world_via_dlt(dlt_params, world_miss)
+        for i, pid in enumerate(still_missing):
+            pt_proj = _enforce_line_collinearity(geometry, pid, projected[i], resolved, topo)
+            resolved[pid] = (float(pt_proj[0]), float(pt_proj[1]))
+        method = dlt_label if method == "measured_only" else method
+    elif dlt_params is not None and method == "measured_only":
+        method = "dlt"
+
+    return resolved, dlt_params, method
+
+
+# ------------------------------------------------------------------------- #
+# Steps 2-3: Per-frame DLT / topology solve (+ legacy RANSAC helpers)
 # ------------------------------------------------------------------------- #
 
 
@@ -297,7 +1048,7 @@ def has_non_collinear_quad(
 class FrameHomography:
     frame: int
     homography: NDArray[np.float64]
-    method: str  # "ransac" | "affine" | "translation" | "propagated" | "spline"
+    method: str  # "dlt" | "topology" | "temporal_gap" | "temporal_dlt" | ...
     n_correspondences: int
 
 
@@ -307,109 +1058,245 @@ def _normalize_h(homography: NDArray[np.float64]) -> NDArray[np.float64]:
     return homography
 
 
+def _is_direct_dlt_reliable(
+    geometry: TargetGeometry,
+    resolved: dict[int, tuple[float, float]],
+    dlt: NDArray[np.float64],
+    topo: TopologyIndex | None = None,
+    *,
+    max_rmse: float = 16.0,
+) -> bool:
+    """Verify DLT homography is well-conditioned and adequately covers the target."""
+    h = dlt_params_to_homography(dlt)
+    # 1. Positive projective depth for all target world points
+    for pid in geometry.sorted_ids:
+        wx, wy = geometry.world_xy(pid)
+        w_prime = float(h[2, 0] * wx + h[2, 1] * wy + h[2, 2])
+        if w_prime <= 0.05:
+            return False
+
+    # 2. Reprojection RMSE on resolved target points
+    target_pts = [p for p in resolved if p in geometry.points]
+    if len(target_pts) < 4:
+        return False
+    reals = np.array([geometry.world_xy(p) for p in target_pts], dtype=np.float64)
+    pixs = np.array([resolved[p] for p in target_pts], dtype=np.float64)
+    projs = project_world_via_dlt(dlt, reals)
+    rmse = float(np.sqrt(np.mean(np.sum((pixs - projs) ** 2, axis=1))))
+    if rmse > max_rmse:
+        return False
+
+    # 3. Geometric coverage: perimeter corners or sides
+    if topo is not None:
+        corners = [p for p in geometry.perimeter if p not in topo.metric_midpoints]
+    else:
+        corners = list(geometry.perimeter)
+
+    if len(corners) >= 4:
+        c_resolved = [c for c in corners if c in resolved]
+        if len(c_resolved) >= 3:
+            return True
+        # If only 2 corners, check that perimeter sides have at least 2 points
+        n_c = len(corners)
+        all_sides_ok = True
+        for i in range(n_c):
+            c1 = corners[i]
+            c2 = corners[(i + 1) % n_c]
+            pts_on_side = [p for p in resolved if p in (c1, c2)]
+            if topo is not None:
+                for mid, (ma, mb) in topo.metric_midpoints.items():
+                    if {ma, mb} == {c1, c2} and mid in resolved:
+                        pts_on_side.append(mid)
+            if len(pts_on_side) < 2:
+                all_sides_ok = False
+                break
+        return all_sides_ok
+
+    # Fallback for arbitrary point sets: at least 3 quadrants covered
+    world = {pid: geometry.world_xy(pid) for pid in geometry.sorted_ids}
+    cx = 0.5 * (min(w[0] for w in world.values()) + max(w[0] for w in world.values()))
+    cy = 0.5 * (min(w[1] for w in world.values()) + max(w[1] for w in world.values()))
+    quads = set()
+    for p in target_pts:
+        wx, wy = world[p]
+        qx = 1 if wx >= cx else 0
+        qy = 1 if wy >= cy else 0
+        quads.add((qx, qy))
+    return len(quads) >= 3
+
+
+def resolve_all_frames(
+    geometry: TargetGeometry,
+    measurements: dict[int, dict[int, tuple[float, float]]],
+) -> tuple[dict[int, dict[int, tuple[float, float]]], dict[int, FrameHomography]]:
+    """Resolve every frame: pure measured locked, projective DLT gap-fill.
+
+    Multi-pass projective tracking:
+    1. Direct DLT2D fitted on measured + topology-resolved corner intersections.
+    2. Occlusion gaps smoothly interpolate DLT homographies between boundary
+       frames and align translations against any visible markers.
+    3. Missing markers are reprojected from the physical target geometry
+       via the per-frame homography and clamped to collinear incident lines.
+
+    Returns ``(resolved_by_frame, solved_homographies)``.
+    """
+    topo = build_topology_index(geometry)
+    geom_ids = set(geometry.sorted_ids)
+    measurements = {
+        f: {p: uv for p, uv in obs.items() if p in geom_ids} for f, obs in measurements.items()
+    }
+    frames_sorted = sorted(measurements)
+    if not frames_sorted:
+        raise ValueError("No measurement frames to resolve.")
+    world = {pid: geometry.world_xy(pid) for pid in geometry.sorted_ids}
+
+    # Pass 1: Direct DLT on clean measured observations (+ topology intersections)
+    direct_dlts: dict[int, NDArray[np.float64]] = {}
+    topo_resolved_by_frame: dict[int, dict[int, tuple[float, float]]] = {}
+    candidate_dlts: dict[int, NDArray[np.float64]] = {}
+    for frame in frames_sorted:
+        obs = measurements.get(frame, {})
+        topo_filled = _topology_fill_missing(geometry, obs, topo, use_image_midpoints=False)
+        topo_resolved_by_frame[frame] = topo_filled
+        dlt = fit_dlt2d_visible(geometry, topo_filled)
+        if dlt is not None:
+            candidate_dlts[frame] = dlt
+            if _is_direct_dlt_reliable(geometry, topo_filled, dlt, topo):
+                direct_dlts[frame] = dlt
+
+    if not direct_dlts and candidate_dlts:
+        direct_dlts = dict(candidate_dlts)
+
+    valid_frames = sorted(direct_dlts)
+    all_dlts: dict[int, NDArray[np.float64] | None] = {}
+    methods: dict[int, str] = {}
+
+    # Pass 2: Fill gaps by homography interpolation / propagation + visible alignment
+    for frame in frames_sorted:
+        obs = measurements.get(frame, {})
+        topo_obs = topo_resolved_by_frame.get(frame, obs)
+        if frame in direct_dlts:
+            all_dlts[frame] = direct_dlts[frame]
+            methods[frame] = "dlt"
+        elif valid_frames:
+            left = [v for v in valid_frames if v < frame]
+            right = [v for v in valid_frames if v > frame]
+            vis = [p for p in topo_obs if p in geom_ids]
+            if left and right:
+                f0, f1 = left[-1], right[0]
+                alpha = float(frame - f0) / float(f1 - f0)
+                dlt_cur = (1.0 - alpha) * direct_dlts[f0] + alpha * direct_dlts[f1]
+                m = "interpolated_dlt"
+            elif left:
+                dlt_cur = direct_dlts[left[-1]].copy()
+                m = "propagated_dlt"
+            else:
+                dlt_cur = direct_dlts[right[0]].copy()
+                m = "propagated_dlt"
+
+            if vis:
+                proj_vis = project_world_via_dlt(
+                    dlt_cur, np.array([world[p] for p in vis], dtype=np.float64)
+                )
+                obs_vis = np.array([topo_obs[p] for p in vis], dtype=np.float64)
+                shift = np.mean(obs_vis - proj_vis, axis=0)
+                H = dlt_params_to_homography(dlt_cur)
+                T = np.eye(3, dtype=np.float64)
+                T[0, 2] = float(shift[0])
+                T[1, 2] = float(shift[1])
+                H_shifted = T @ H
+                H_norm = H_shifted / H_shifted[2, 2]
+                dlt_cur = np.array(
+                    [
+                        H_norm[0, 0],
+                        H_norm[0, 1],
+                        H_norm[0, 2],
+                        H_norm[1, 0],
+                        H_norm[1, 1],
+                        H_norm[1, 2],
+                        H_norm[2, 0],
+                        H_norm[2, 1],
+                    ],
+                    dtype=np.float64,
+                )
+                m += "_aligned"
+            all_dlts[frame] = dlt_cur
+            methods[frame] = m
+        else:
+            # Complete absence of direct DLT: fallback to single-frame resolve
+            resolved_f, dlt_f, m_f = resolve_frame_pixels(geometry, obs, topo=topo)
+            all_dlts[frame] = dlt_f
+            methods[frame] = m_f
+
+    # Pass 3: Assemble resolved pixels (measured locked, missing projected) & FrameHomography
+    resolved_by_frame: dict[int, dict[int, tuple[float, float]]] = {}
+    solved: dict[int, FrameHomography] = {}
+
+    for frame in frames_sorted:
+        obs = measurements.get(frame, {})
+        topo_filled = topo_resolved_by_frame.get(frame, {})
+        resolved = dict(topo_filled)
+        # Always lock original measured observations
+        for p, uv in obs.items():
+            resolved[p] = uv
+
+        dlt = all_dlts.get(frame)
+        if dlt is not None:
+            h = _normalize_h(dlt_params_to_homography(dlt))
+            still_missing = [p for p in geometry.sorted_ids if p not in resolved]
+            if still_missing:
+                world_miss = np.array([world[p] for p in still_missing], dtype=np.float64)
+                projected = project_world_via_dlt(dlt, world_miss)
+                for i, p in enumerate(still_missing):
+                    pt_proj = _enforce_line_collinearity(geometry, p, projected[i], resolved, topo)
+                    resolved[p] = (float(pt_proj[0]), float(pt_proj[1]))
+        else:
+            h = np.eye(3, dtype=np.float64)
+
+        resolved_by_frame[frame] = resolved
+        solved[frame] = FrameHomography(
+            frame=frame,
+            homography=h,
+            method=methods[frame],
+            n_correspondences=len(obs),
+        )
+
+    if not any(
+        s.method.startswith("dlt")
+        or s.method
+        in (
+            "dlt",
+            "interpolated_dlt",
+            "propagated_dlt",
+            "topology",
+            "temporal_dlt",
+            "ransac",
+        )
+        for s in solved.values()
+    ):
+        any_full = any(len(r) >= 4 for r in resolved_by_frame.values())
+        if not any_full:
+            raise ValueError(
+                "No frame yielded enough correspondences or topology to resolve the geometry."
+            )
+
+    return resolved_by_frame, solved
+
+
+
 def solve_frame_homographies(
     geometry: TargetGeometry,
     measurements: dict[int, dict[int, tuple[float, float]]],
-    ransac_thresh: float,
+    ransac_thresh: float = 3.0,  # kept for API compat; unused in DLT path
 ) -> dict[int, FrameHomography]:
-    """Solve H_t per frame: RANSAC homography when possible, else inter-frame
-    affine chained onto the nearest keyframe, else propagate the previous H.
+    """Per-frame DLT2D (+ topology) solve. No PCHIP smoothing.
+
+    ``ransac_thresh`` is accepted for backward compatibility with callers /
+    CLI but the primary path uses least-squares DLT2D on visible points.
     """
-    world_points = {pid: geometry.world_xy(pid) for pid in geometry.sorted_ids}
-    frames_sorted = sorted(measurements)
-
-    solved: dict[int, FrameHomography] = {}
-    keyframes: list[int] = []  # frames with a directly-RANSAC-estimated H
-
-    for frame in frames_sorted:
-        obs = measurements[frame]
-        valid_ids = [pid for pid in obs if pid in world_points]
-        if len(valid_ids) >= 4 and has_non_collinear_quad(valid_ids, world_points):
-            world_pts = np.array([world_points[i] for i in valid_ids], dtype=np.float64)
-            pixel_pts = np.array([obs[i] for i in valid_ids], dtype=np.float64)
-            homography, _inliers = cv2_find_homography(world_pts, pixel_pts, ransac_thresh)
-            if homography is not None:
-                solved[frame] = FrameHomography(
-                    frame=frame,
-                    homography=_normalize_h(homography),
-                    method="ransac",
-                    n_correspondences=len(valid_ids),
-                )
-                keyframes.append(frame)
-
-    # Second pass: affine fallback / propagation for every remaining frame,
-    # walking in ascending frame order so "nearest keyframe" prefers the
-    # closest already-solved frame (keyframe or fallback-solved) behind it.
-    for frame in frames_sorted:
-        if frame in solved:
-            continue
-        obs = measurements[frame]
-        ref_frame = _nearest_solved_frame(frame, solved)
-        if ref_frame is None:
-            continue  # filled in the backward-propagation pass below
-        ref = solved[ref_frame]
-        common_ids = [pid for pid in obs if pid in world_points]
-        # points visible in both this frame and the reference frame's own
-        # measured set (not just any target point) -- true "mutually visible"
-        ref_obs = measurements.get(ref_frame, {})
-        common_ids = [pid for pid in common_ids if pid in ref_obs]
-
-        if len(common_ids) >= 3:
-            ref_pts = np.array([ref_obs[i] for i in common_ids], dtype=np.float64)
-            curr_pts = np.array([obs[i] for i in common_ids], dtype=np.float64)
-            transform, _inl = cv2_estimate_affine_partial(ref_pts, curr_pts)
-            if transform is not None:
-                t_t = np.eye(3, dtype=np.float64)
-                t_t[:2, :] = transform
-                solved[frame] = FrameHomography(
-                    frame=frame,
-                    homography=_normalize_h(t_t @ ref.homography),
-                    method="affine",
-                    n_correspondences=len(common_ids),
-                )
-                continue
-        if len(common_ids) in (1, 2):
-            ref_pts = np.array([ref_obs[i] for i in common_ids], dtype=np.float64)
-            curr_pts = np.array([obs[i] for i in common_ids], dtype=np.float64)
-            delta = np.mean(curr_pts - ref_pts, axis=0)
-            t_t = np.eye(3, dtype=np.float64)
-            t_t[0, 2] = delta[0]
-            t_t[1, 2] = delta[1]
-            solved[frame] = FrameHomography(
-                frame=frame,
-                homography=_normalize_h(t_t @ ref.homography),
-                method="translation",
-                n_correspondences=len(common_ids),
-            )
-            continue
-        # 0 common points: propagate the reference homography unchanged.
-        solved[frame] = FrameHomography(
-            frame=frame,
-            homography=ref.homography.copy(),
-            method="propagated",
-            n_correspondences=0,
-        )
-
-    if not solved:
-        raise ValueError(
-            "No frame yielded >= 4 non-collinear correspondences; cannot solve any homography."
-        )
-
-    # Propagate the earliest solved homography backwards to any leading
-    # frames that had zero correspondences at all (per spec §8: "smoothly
-    # propagate the first estimated homography backwards").
-    first_solved_frame = min(solved)
-    for frame in frames_sorted:
-        if frame >= first_solved_frame:
-            break
-        solved[frame] = FrameHomography(
-            frame=frame,
-            homography=solved[first_solved_frame].homography.copy(),
-            method="propagated",
-            n_correspondences=0,
-        )
-
-    return _pchip_regularize(solved, frames_sorted)
+    del ransac_thresh  # unused — DLT path does not RANSAC
+    _resolved, solved = resolve_all_frames(geometry, measurements)
+    return solved
 
 
 def _nearest_solved_frame(frame: int, solved: dict[int, FrameHomography]) -> int | None:
@@ -422,58 +1309,6 @@ def _nearest_solved_frame(frame: int, solved: dict[int, FrameHomography]) -> int
     if candidates:
         return min(candidates)
     return None
-
-
-def _pchip_regularize(
-    solved: dict[int, FrameHomography], frames_sorted: list[int]
-) -> dict[int, FrameHomography]:
-    """Global spline (PCHIP) regularization of the H_t sequence.
-
-    RANSAC-solved keyframes are treated as trusted anchors; every homography
-    element (H is normalized so H[2,2] = 1, leaving 8 free DOF) is smoothed
-    across the full frame range with a monotone piecewise-cubic Hermite
-    interpolant anchored at those trusted frames. This removes small
-    frame-to-frame jitter from the affine-fallback/propagated frames without
-    overshooting (PCHIP has no Gibbs-style ringing), while leaving frames
-    that already have a directly RANSAC-estimated homography untouched.
-    """
-    from scipy.interpolate import PchipInterpolator
-
-    trusted_frames = sorted(f for f, fh in solved.items() if fh.method == "ransac")
-    if len(trusted_frames) < 2:
-        return solved  # not enough anchors to regularize against
-
-    trusted_x = np.array(trusted_frames, dtype=np.float64)
-
-    # Stack the 8 free homography DOF (row-major, skipping H[2,2] == 1) per
-    # trusted frame, interpolate each channel independently.
-    dof_idx = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1)]
-    trusted_vals = np.array(
-        [[solved[f].homography[r, c] for (r, c) in dof_idx] for f in trusted_frames],
-        dtype=np.float64,
-    )
-    interpolators = [
-        PchipInterpolator(trusted_x, trusted_vals[:, k], extrapolate=False)
-        for k in range(len(dof_idx))
-    ]
-    lo, hi = trusted_frames[0], trusted_frames[-1]
-
-    out: dict[int, FrameHomography] = dict(solved)
-    for frame in frames_sorted:
-        fh = solved[frame]
-        if fh.method == "ransac" or frame < lo or frame > hi:
-            continue
-        vals = [float(interp(frame)) for interp in interpolators]
-        h_smoothed = np.eye(3, dtype=np.float64)
-        for (r, c), v in zip(dof_idx, vals, strict=True):
-            h_smoothed[r, c] = v
-        out[frame] = FrameHomography(
-            frame=frame,
-            homography=h_smoothed,
-            method="spline",
-            n_correspondences=fh.n_correspondences,
-        )
-    return out
 
 
 def cv2_find_homography(
@@ -499,7 +1334,7 @@ def cv2_estimate_affine_partial(
 
 
 # ------------------------------------------------------------------------- #
-# Step 3 (projection) + Step 4 (circles/arcs)
+# Projection helpers (circles/arcs + H @ world)
 # ------------------------------------------------------------------------- #
 
 
@@ -554,38 +1389,60 @@ def build_dense_table(
     measurements: dict[int, dict[int, tuple[float, float]]],
     solved: dict[int, FrameHomography],
     frame_size: tuple[int, int] | None,
+    *,
+    resolved_by_frame: dict[int, dict[int, tuple[float, float]]] | None = None,
 ) -> list[DenseRow]:
+    """Build long diagnostic rows from geometry-consistent resolved pixels.
+
+    ``u``/``v`` always come from the resolved (DLT-reprojected) geometry.
+    ``is_measured`` flags which points had an observation; ``reproj_error_px``
+    is |measured − resolved| for those points.
+    """
     rows: list[DenseRow] = []
     point_ids = geometry.sorted_ids
-    world_xy = np.array([geometry.world_xy(pid) for pid in point_ids], dtype=np.float64)
     w_bound, h_bound = frame_size if frame_size is not None else (None, None)
 
     for frame in sorted(solved):
         fh = solved[frame]
-        projected = project_points(fh.homography, world_xy)
         obs = measurements.get(frame, {})
+        resolved = resolved_by_frame.get(frame, {}) if resolved_by_frame is not None else {}
+        if not resolved:
+            # Legacy fallback: project all world points through H
+            world_xy = np.array([geometry.world_xy(pid) for pid in point_ids], dtype=np.float64)
+            projected = project_points(fh.homography, world_xy)
+            resolved = {
+                pid: (float(projected[i, 0]), float(projected[i, 1]))
+                for i, pid in enumerate(point_ids)
+            }
 
         frame_errors: list[float] = []
         per_point: list[DenseRow] = []
-        for idx, pid in enumerate(point_ids):
-            u_proj, v_proj = projected[idx]
+        for pid in point_ids:
             measured = obs.get(pid)
+            u_res, v_res = resolved.get(pid, (float("nan"), float("nan")))
+            u_out, v_out = float(u_res), float(v_res)
             if measured is not None:
                 u_meas, v_meas = measured
-                err = float(np.hypot(u_meas - u_proj, v_meas - v_proj))
-                frame_errors.append(err)
-                u_out, v_out = u_meas, v_meas
+                if np.isfinite(u_res) and np.isfinite(v_res):
+                    err = float(np.hypot(u_meas - u_res, v_meas - v_res))
+                    frame_errors.append(err)
+                    reproj_error = err
+                else:
+                    reproj_error = float("nan")
                 is_measured = True
-                reproj_error = err
             else:
-                u_out, v_out = float(u_proj), float(v_proj)
                 is_measured = False
                 reproj_error = float("nan")
 
             if w_bound is None or h_bound is None:
                 in_fov = True
             else:
-                in_fov = bool(0 <= u_out <= w_bound and 0 <= v_out <= h_bound)
+                in_fov = bool(
+                    np.isfinite(u_out)
+                    and np.isfinite(v_out)
+                    and 0 <= u_out <= w_bound
+                    and 0 <= v_out <= h_bound
+                )
 
             per_point.append(
                 DenseRow(
@@ -597,7 +1454,7 @@ def build_dense_table(
                     is_measured=is_measured,
                     in_fov=in_fov,
                     reproj_error_px=reproj_error,
-                    frame_rmse_px=float("nan"),  # filled below
+                    frame_rmse_px=float("nan"),
                 )
             )
 
@@ -633,12 +1490,192 @@ def dense_rows_to_wide_csv(rows: list[DenseRow], point_ids: list[int]) -> pd.Dat
 # ------------------------------------------------------------------------- #
 
 
+def write_geometry_animation_html(
+    output_path: Path,
+    geometry: TargetGeometry,
+    resolved_by_frame: dict[int, dict[int, tuple[float, float]]],
+    solved: dict[int, FrameHomography],
+    *,
+    title: str = "Planar geometry (pixel + world)",
+) -> Path:
+    """Write a self-contained HTML slider: pixel wireframe + rec2d world."""
+    import json
+
+    rec2d_apply = _import_rec2d()
+    frames_payload: list[dict[str, object]] = []
+    lines = [[int(a), int(b)] for a, b in geometry.lines]
+    ideal_world = {
+        str(pid): [float(geometry.world_xy(pid)[0]), float(geometry.world_xy(pid)[1])]
+        for pid in geometry.sorted_ids
+    }
+
+    for frame in sorted(resolved_by_frame):
+        pix = resolved_by_frame[frame]
+        pix_out = {
+            str(pid): [float(pix[pid][0]), float(pix[pid][1])]
+            for pid in geometry.sorted_ids
+            if pid in pix
+        }
+        world_rec: dict[str, list[float]] = {}
+        fh = solved.get(frame)
+        if fh is not None and pix_out:
+            try:
+                # H maps world→pixel; invert via DLT params for rec2d (pixel→world)
+                h = fh.homography
+                params = np.array(
+                    [h[0, 0], h[0, 1], h[0, 2], h[1, 0], h[1, 1], h[1, 2], h[2, 0], h[2, 1]],
+                    dtype=np.float64,
+                )
+                ids = [int(k) for k in pix_out]
+                cc = np.array([pix_out[str(i)] for i in ids], dtype=np.float64)
+                wr = np.asarray(rec2d_apply(params, cc), dtype=np.float64)
+                world_rec = {str(i): [float(wr[j, 0]), float(wr[j, 1])] for j, i in enumerate(ids)}
+            except Exception:
+                world_rec = {}
+        frames_payload.append({"frame": int(frame), "pixel": pix_out, "world": world_rec})
+
+    data = {
+        "title": title,
+        "lines": lines,
+        "ideal_world": ideal_world,
+        "frames": frames_payload,
+    }
+    payload = json.dumps(data, separators=(",", ":"))
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+body {{ font-family: system-ui, sans-serif; margin: 16px; background: #111; color: #eee; }}
+.row {{ display: flex; gap: 16px; flex-wrap: wrap; }}
+canvas {{ background: #1a1a1a; border: 1px solid #444; }}
+#meta {{ margin: 8px 0; font-size: 14px; }}
+input[type=range] {{ width: min(640px, 100%); }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div id="meta"></div>
+<input id="slider" type="range" min="0" max="0" value="0"/>
+<div class="row">
+  <div><h3>Pixel</h3><canvas id="pix" width="600" height="600"></canvas></div>
+  <div><h3>World (rec2d) vs TOML</h3><canvas id="world" width="600" height="600"></canvas></div>
+</div>
+<script>
+const DATA = {payload};
+const slider = document.getElementById('slider');
+const meta = document.getElementById('meta');
+const pixC = document.getElementById('pix');
+const worldC = document.getElementById('world');
+slider.max = Math.max(0, DATA.frames.length - 1);
+
+function bounds(pts) {{
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for (const p of Object.values(pts)) {{
+    if (!p) continue;
+    minX=Math.min(minX,p[0]); minY=Math.min(minY,p[1]);
+    maxX=Math.max(maxX,p[0]); maxY=Math.max(maxY,p[1]);
+  }}
+  if (!isFinite(minX)) return {{minX:0,minY:0,maxX:1,maxY:1,spanX:1,spanY:1,cx:0.5,cy:0.5}};
+  const spanX = Math.max(1e-6, maxX - minX);
+  const spanY = Math.max(1e-6, maxY - minY);
+  return {{minX, minY, maxX, maxY, spanX, spanY, cx: 0.5 * (minX + maxX), cy: 0.5 * (minY + maxY)}};
+}}
+
+function bounds_all(dictList) {{
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for (const pts of dictList) {{
+    if (!pts) continue;
+    for (const p of Object.values(pts)) {{
+      if (!p) continue;
+      minX=Math.min(minX,p[0]); minY=Math.min(minY,p[1]);
+      maxX=Math.max(maxX,p[0]); maxY=Math.max(maxY,p[1]);
+    }}
+  }}
+  if (!isFinite(minX)) return {{minX:0,minY:0,maxX:1,maxY:1,spanX:1,spanY:1,cx:0.5,cy:0.5}};
+  const spanX = Math.max(1e-6, maxX - minX);
+  const spanY = Math.max(1e-6, maxY - minY);
+  return {{minX, minY, maxX, maxY, spanX, spanY, cx: 0.5 * (minX + maxX), cy: 0.5 * (minY + maxY)}};
+}}
+
+const pixBounds = bounds_all(DATA.frames.map(f => f.pixel));
+const worldBounds = bounds(DATA.ideal_world);
+
+function mapPt(p, b, w, h, flipY) {{
+  const pad = 40;
+  const availW = Math.max(10, w - 2 * pad);
+  const availH = Math.max(10, h - 2 * pad);
+  const scale = Math.min(availW / b.spanX, availH / b.spanY);
+  const x = w * 0.5 + (p[0] - b.cx) * scale;
+  const y = flipY ? (h * 0.5 - (p[1] - b.cy) * scale) : (h * 0.5 + (p[1] - b.cy) * scale);
+  return [x, y];
+}}
+
+function draw(canvas, pts, lines, ideal, flipY, b) {{
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle = '#666'; ctx.setLineDash([4,4]);
+  if (ideal) {{
+    for (const [a,c] of lines) {{
+      const pa = ideal[String(a)], pc = ideal[String(c)];
+      if (!pa||!pc) continue;
+      const A=mapPt(pa,b,w,h,flipY), C=mapPt(pc,b,w,h,flipY);
+      ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(C[0],C[1]); ctx.stroke();
+    }}
+  }}
+  ctx.setLineDash([]); ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 2;
+  for (const [a,c] of lines) {{
+    const pa = pts[String(a)], pc = pts[String(c)];
+    if (!pa||!pc) continue;
+    const A=mapPt(pa,b,w,h,flipY), C=mapPt(pc,b,w,h,flipY);
+    ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(C[0],C[1]); ctx.stroke();
+  }}
+  ctx.fillStyle = '#ffca28';
+  for (const [id,p] of Object.entries(pts)) {{
+    const P=mapPt(p,b,w,h,flipY);
+    ctx.beginPath(); ctx.arc(P[0],P[1],4,0,Math.PI*2); ctx.fill();
+    ctx.fillText('p'+id, P[0]+6, P[1]-6);
+  }}
+}}
+
+function render(i) {{
+  const fr = DATA.frames[i];
+  if (!fr) return;
+  const maxIdx = Math.max(0, DATA.frames.length - 1);
+  meta.textContent = 'Frame: ' + fr.frame + ' (' + fr.frame + '/' + maxIdx + ')  •  Total: ' + DATA.frames.length + ' frames';
+  draw(pixC, fr.pixel, DATA.lines, null, false, pixBounds);
+  draw(worldC, fr.world, DATA.lines, DATA.ideal_world, true, worldBounds);
+}}
+slider.addEventListener('input', () => render(+slider.value));
+window.addEventListener('keydown', (e) => {{
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {{
+    slider.value = Math.max(0, +slider.value - 1);
+    render(+slider.value);
+  }} else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {{
+    slider.value = Math.min(DATA.frames.length - 1, +slider.value + 1);
+    render(+slider.value);
+  }}
+}});
+render(0);
+</script>
+</body>
+</html>
+"""
+    output_path = Path(output_path)
+    output_path.write_text(html, encoding="utf-8")
+    return output_path
+
+
 def write_outputs(
     output_dir: Path,
     stem: str,
     geometry: TargetGeometry,
     rows: list[DenseRow],
     solved: dict[int, FrameHomography],
+    *,
+    resolved_by_frame: dict[int, dict[int, tuple[float, float]]] | None = None,
 ) -> dict[str, Path]:
     # Geometry parsing/projection is also used by headless video stabilization.
     # Load the GUI-facing sports-field export layer only when exporting REF3D.
@@ -719,6 +1756,17 @@ def write_outputs(
     written["ref3d"] = ref3d_path
     written["ref3d_map"] = map_path
 
+    if resolved_by_frame is not None:
+        html_path = output_dir / "geometry_animation.html"
+        write_geometry_animation_html(
+            html_path,
+            geometry,
+            resolved_by_frame,
+            solved,
+            title=f"{stem} — planar geometry",
+        )
+        written["animation_html"] = html_path
+
     return written
 
 
@@ -785,10 +1833,13 @@ def render_debug_video(
             else:
                 canvas[:, :] = frame_img
 
-            if frame_idx in solved:
+            frame_rows = rows_by_frame.get(frame_idx, [])
+            if frame_idx in solved and frame_rows:
                 h_canvas = t_canvas @ solved[frame_idx].homography
-                _draw_wireframe(canvas, geometry, h_canvas)
-                for r in rows_by_frame.get(frame_idx, []):
+                frame_resolved = {r.point_id: (r.u, r.v) for r in frame_rows}
+                _draw_wireframe_from_pixels(canvas, geometry, frame_resolved, t_canvas)
+                _draw_circles_arcs(canvas, geometry, h_canvas)
+                for r in frame_rows:
                     pt_canvas = project_points(t_canvas, np.array([[r.u, r.v]]))[0]
                     center = (int(round(pt_canvas[0])), int(round(pt_canvas[1])))
                     if r.is_measured:
@@ -805,16 +1856,28 @@ def render_debug_video(
         writer.release()
 
 
-def _draw_wireframe(
-    canvas: NDArray[np.uint8], geometry: TargetGeometry, homography: NDArray[np.float64]
+def _draw_wireframe_from_pixels(
+    canvas: NDArray[np.uint8],
+    geometry: TargetGeometry,
+    resolved: dict[int, tuple[float, float]],
+    t_canvas: NDArray[np.float64],
 ) -> None:
+    """Draw topology edges by connecting resolved pixel coordinates."""
     import cv2
 
     for a, b in geometry.lines:
-        pts = project_points(homography, np.array([geometry.world_xy(a), geometry.world_xy(b)]))
-        p1 = tuple(int(round(v)) for v in pts[0])
-        p2 = tuple(int(round(v)) for v in pts[1])
+        if a not in resolved or b not in resolved:
+            continue
+        pts = project_points(t_canvas, np.array([resolved[a], resolved[b]], dtype=np.float64))
+        p1 = (int(round(pts[0, 0])), int(round(pts[0, 1])))
+        p2 = (int(round(pts[1, 0])), int(round(pts[1, 1])))
         cv2.line(canvas, p1, p2, _COLOR_WIREFRAME, 1, cv2.LINE_AA)
+
+
+def _draw_circles_arcs(
+    canvas: NDArray[np.uint8], geometry: TargetGeometry, homography: NDArray[np.float64]
+) -> None:
+    import cv2
 
     for circle in geometry.circles:
         world = sample_circle_world(circle, geometry)
@@ -827,6 +1890,20 @@ def _draw_wireframe(
         pts = project_points(homography, world)
         poly = pts.astype(np.int32).reshape(-1, 1, 2)
         cv2.polylines(canvas, [poly], False, _COLOR_WIREFRAME, 1, cv2.LINE_AA)
+
+
+def _draw_wireframe(
+    canvas: NDArray[np.uint8], geometry: TargetGeometry, homography: NDArray[np.float64]
+) -> None:
+    """Legacy: project topology through H (kept for callers / circles)."""
+    import cv2
+
+    for a, b in geometry.lines:
+        pts = project_points(homography, np.array([geometry.world_xy(a), geometry.world_xy(b)]))
+        p1 = tuple(int(round(v)) for v in pts[0])
+        p2 = tuple(int(round(v)) for v in pts[1])
+        cv2.line(canvas, p1, p2, _COLOR_WIREFRAME, 1, cv2.LINE_AA)
+    _draw_circles_arcs(canvas, geometry, homography)
 
 
 def _draw_triangle(
@@ -887,14 +1964,36 @@ def run_planar_geometry_tracker(
     extended_canvas: bool = False,
     debug_viz: bool = False,
 ) -> dict[str, Path]:
+    del ransac_thresh  # retained for CLI/API compat; primary path is DLT2D
+    output_dir = Path(output_dir)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_parent = Path(measurements_csv).resolve().parent
+    vid_parent = Path(video_path).resolve().parent if video_path else None
+    if output_dir.resolve() in (csv_parent, vid_parent):
+        output_dir = output_dir / f"processed_planar_geom_{stamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     geometry = load_target_geometry(config_path)
     measurements = load_measurements_csv(measurements_csv)
-    solved = solve_frame_homographies(geometry, measurements, ransac_thresh)
+    resolved_by_frame, solved = resolve_all_frames(geometry, measurements)
     frame_size = probe_video_frame_size(video_path)
-    rows = build_dense_table(geometry, measurements, solved, frame_size)
+    rows = build_dense_table(
+        geometry,
+        measurements,
+        solved,
+        frame_size,
+        resolved_by_frame=resolved_by_frame,
+    )
 
     stem = Path(measurements_csv).stem
-    written = write_outputs(output_dir, stem, geometry, rows, solved)
+    written = write_outputs(
+        output_dir,
+        stem,
+        geometry,
+        rows,
+        solved,
+        resolved_by_frame=resolved_by_frame,
+    )
 
     if debug_viz and video_path is not None:
         debug_path = output_dir / "debug_projected_wireframe.mp4"
@@ -912,6 +2011,120 @@ def run_planar_geometry_tracker(
         print(">> --debug-viz requested but no --video-path given; skipping video render.")
 
     return written
+
+
+# ------------------------------------------------------------------------- #
+# GUI entry point (Frame C → Video and Image → Planar Geo)
+# ------------------------------------------------------------------------- #
+
+
+def _default_planar_targets_dir() -> Path:
+    return Path(__file__).resolve().parent / "models" / "planar_targets"
+
+
+def run_planar_geometry_tracker_gui(parent: Any | None = None) -> None:
+    """Tkinter file-dialog flow for the standalone planar-geometry tracker.
+
+    Prompts for measurements CSV, target-geometry TOML, optional video, and an
+    output directory (defaults to a timestamped folder next to the CSV). Also
+    reachable from getpixelvideo's **Geo Homog** toolbar button (wizard path).
+    """
+    import tkinter as tk
+    from tkinter import filedialog, messagebox
+
+    owns_root = parent is None
+    root = tk.Tk() if owns_root else tk.Toplevel(parent)
+    root.withdraw()
+    if parent is not None:
+        root.transient(parent)
+
+    try:
+        csv_path = filedialog.askopenfilename(
+            parent=root,
+            title="Select marker measurements CSV (getpixelvideo)",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not csv_path:
+            return
+        measurements_csv = Path(csv_path)
+
+        initial_dir = _default_planar_targets_dir()
+        if not initial_dir.is_dir():
+            initial_dir = measurements_csv.parent
+        config_path_str = filedialog.askopenfilename(
+            parent=root,
+            title="Select target-geometry TOML",
+            initialdir=str(initial_dir),
+            filetypes=[("TOML files", "*.toml"), ("All files", "*.*")],
+        )
+        if not config_path_str:
+            return
+        config_path = Path(config_path_str)
+
+        video_path_str = filedialog.askopenfilename(
+            parent=root,
+            title="Optional reference video (Cancel to skip)",
+            filetypes=[
+                ("Video files", "*.mp4 *.avi *.mov *.mkv *.MP4 *.AVI *.MOV *.MKV"),
+                ("All files", "*.*"),
+            ],
+        )
+        video_path = Path(video_path_str) if video_path_str else None
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_out = measurements_csv.parent / f"processed_planar_geom_{stamp}"
+        output_dir_str = filedialog.askdirectory(
+            parent=root,
+            title="Select output directory (Cancel = auto timestamped)",
+            initialdir=str(measurements_csv.parent),
+        )
+        if not output_dir_str:
+            output_dir = default_out
+        else:
+            chosen = Path(output_dir_str)
+            if chosen.resolve() == measurements_csv.parent.resolve() or not chosen.name.startswith("processed_"):
+                output_dir = chosen / f"processed_planar_geom_{stamp}"
+            else:
+                output_dir = chosen
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        cli_cmd = [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "vaila.planar_geometry_tracker",
+            "--config",
+            str(config_path),
+            "--measurements-csv",
+            str(measurements_csv),
+            "--output-dir",
+            str(output_dir),
+        ]
+        if video_path is not None:
+            cli_cmd.extend(["--video-path", str(video_path), "--debug-viz"])
+        print_gui_cli_mirror("vaila/planar_geometry_tracker", cli_cmd)
+
+        try:
+            written = run_planar_geometry_tracker(
+                config_path,
+                measurements_csv,
+                output_dir,
+                video_path=video_path,
+                debug_viz=video_path is not None,
+            )
+        except Exception as exc:  # noqa: BLE001 - surface to user, keep GUI alive
+            messagebox.showerror("Planar Geo", f"Run failed:\n{exc}", parent=root)
+            return
+
+        lines = [f"{key}: {path}" for key, path in written.items()]
+        messagebox.showinfo(
+            "Planar Geo",
+            "Finished.\n\n" + "\n".join(lines),
+            parent=root,
+        )
+    finally:
+        root.destroy()
 
 
 # ------------------------------------------------------------------------- #
@@ -966,6 +2179,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv:
+        run_planar_geometry_tracker_gui()
+        return 0
+
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

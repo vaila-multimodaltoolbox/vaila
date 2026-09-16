@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Roberto Pereira Santiago
-Version: 0.3.127
+Version: 0.4.3
 Create: 24 February, 2025
-Last Updated: 07 September 2026
+Last Updated: 15 September 2026
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -24,6 +24,7 @@ Description:
         format 4 headed long ``point,x,y,z`` / ``x,y,z``) and normalizes internally to format 1 before DLT3D.
       - Validates that the REF3D file contains the three axes for each point.
       - Updated calculation of DLT parameters (11 parameters) using least squares.
+      - Case-insensitive frame column detection.
       - Graphical file selection using Tkinter.
       - Improved console output.
 
@@ -67,9 +68,18 @@ def _point_numbers_from_columns(columns) -> set[int]:
     return numbers
 
 
+def _find_frame_column(df: pd.DataFrame) -> str:
+    """Return the frame column name (case-insensitive) or fallback to first column."""
+    for col in df.columns:
+        if str(col).strip().lower() == "frame":
+            return col
+    return df.columns[0]
+
+
 def _is_format1_dataframe(df: pd.DataFrame) -> bool:
     """True when *df* already uses the wide format-1 header (frame, p1_x, …)."""
-    if "frame" not in df.columns:
+    has_frame = any(str(c).strip().lower() == "frame" for c in df.columns)
+    if not has_frame:
         return False
     return bool(_point_numbers_from_columns(df.columns))
 
@@ -338,6 +348,9 @@ def process_files(pixel_file, ref3d_file):
     dlt_params_all = {}
     skipped_frames = []
 
+    pix_frame_col = _find_frame_column(pixel_df)
+    ref_frame_col = _find_frame_column(ref_df)
+
     # If the REF3D file consists of only one row, use it for all frames:
     if len(ref_df) == 1:
         ref_line = ref_df.iloc[0]
@@ -350,7 +363,11 @@ def process_files(pixel_file, ref3d_file):
             for i in ref_valid_points
         }
         for _, row in pixel_df.iterrows():
-            frame = row["frame"]
+            frame_raw = row[pix_frame_col]
+            try:
+                frame = int(frame_raw)
+            except (ValueError, TypeError):
+                frame = 0
             frame_points = [i for i in ref_valid_points if _point_has_axes(row, i, ("_x", "_y"))]
             if len(frame_points) < 6:
                 skipped_frames.append((frame, len(frame_points)))
@@ -362,8 +379,12 @@ def process_files(pixel_file, ref3d_file):
     else:
         # If REF3D contains multiple rows, match the frame numbers
         for _, row in pixel_df.iterrows():
-            frame = row["frame"]
-            ref_line = ref_df[ref_df["frame"] == frame]
+            frame_raw = row[pix_frame_col]
+            try:
+                frame = int(frame_raw)
+            except (ValueError, TypeError):
+                continue
+            ref_line = ref_df[ref_df[ref_frame_col] == frame]
             if ref_line.empty:
                 print(f"Frame {frame} not found in REF3D file.")
                 continue
@@ -416,7 +437,7 @@ def save_dlt_parameters(output_file, dlt_params, show_gui=True):
         try:
             import tkinter as tk
 
-            if tk._default_root is not None:
+            if getattr(tk, "_default_root", None) is not None:
                 messagebox.showinfo("Success", f"DLT3d file saved successfully: {output_file}")
         except Exception:
             pass

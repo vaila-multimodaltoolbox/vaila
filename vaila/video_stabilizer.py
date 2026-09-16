@@ -1,6 +1,6 @@
 """Fixed-scene video stabilization from getpixelvideo marker coordinates.
 
-Version: 0.4.2
+Version: 0.4.3
 Update Date: 15 September 2026
 Author: Paulo R. P. Santiago
 License: AGPL-3.0-or-later
@@ -19,6 +19,7 @@ Run without arguments for the Tkinter GUI.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import math
@@ -82,6 +83,9 @@ except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
 
 
+VERSION = "0.4.3"
+
+
 @dataclass
 class MarkerTable:
     frames: np.ndarray
@@ -141,11 +145,13 @@ def load_marker_csv(path, frame_count=None):
 
 
 def _useful(points, model="similarity"):
-    minimum = 3 if model == "affine" else 2
+    minimum = 4 if model == "homography" else 3 if model == "affine" else 2
     if len(points) < minimum or not np.isfinite(points).all():
         return False
     centered = points - points.mean(axis=0)
-    return np.linalg.matrix_rank(centered, tol=1e-7) >= (2 if model == "affine" else 1)
+    return np.linalg.matrix_rank(centered, tol=1e-7) >= (
+        2 if model in ("affine", "homography") else 1
+    )
 
 
 def choose_reference_frame(
@@ -231,6 +237,8 @@ def spatial_weights(points, width, height):
 def estimate_transform(src, dst, weights, model="similarity", estimator="robust-lsq"):
     if not _useful(src, model) or not _useful(dst, model):
         return None
+    if model == "homography":
+        return fit_weighted_homography(src, dst, weights, estimator)
     if estimator == "ransac":
         solver = cv2.estimateAffinePartial2D if model == "similarity" else cv2.estimateAffine2D
         matrix, mask = solver(src, dst, method=cv2.RANSAC, ransacReprojThreshold=4.0)
@@ -258,12 +266,14 @@ def matrix_to_params(matrix, model="similarity"):
     scale = math.hypot(a, b)
     theta = math.atan2(b, a)
     params = [matrix[0, 2], matrix[1, 2], theta, math.log(scale)]
-    if model == "affine":
+    if model in ("affine", "homography"):
         rotation = np.array(
             [[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]]
         )
         triangular = rotation.T @ matrix[:2, :2]
         params.extend([math.log(triangular[1, 1]), triangular[0, 1]])
+    if model == "homography":
+        params.extend([matrix[2, 0], matrix[2, 1]])
     return np.array(params)
 
 
@@ -272,11 +282,13 @@ def params_to_matrix(params, model="similarity"):
     c, s = math.cos(theta), math.sin(theta)
     rotation = np.array([[c, -s], [s, c]])
     linear = np.eye(2) * math.exp(log_scale)
-    if model == "affine":
+    if model in ("affine", "homography"):
         linear = np.array([[math.exp(log_scale), params[5]], [0, math.exp(params[4])]])
     matrix = np.eye(3)
     matrix[:2, :2] = rotation @ linear
     matrix[:2, 2] = (tx, ty)
+    if model == "homography":
+        matrix[2, :2] = params[6:8]
     return matrix
 
 
@@ -423,6 +435,53 @@ def _dlt_homography(src, dst, weights=None):
     if not np.isfinite(matrix).all() or abs(matrix[2, 2]) < 1e-12:
         return None
     return matrix / matrix[2, 2]
+
+
+def fit_weighted_homography(src, dst, weights=None, estimator="robust-lsq", threshold=4.0):
+    """Fit an 8-DOF projective transform with weighted DLT and robust refinement.
+
+    The affine block, translation and projective row are later smoothed as
+    separate continuous parameters. This is a practical temporal
+    parameterization, not a physically independent camera decomposition.
+    """
+    src, dst = np.asarray(src, dtype=np.float64), np.asarray(dst, dtype=np.float64)
+    if not _useful(src, "homography") or not _useful(dst, "homography"):
+        return None
+    weights = np.ones(len(src)) if weights is None else np.asarray(weights, dtype=np.float64)
+    if not np.isfinite(weights).all() or np.any(weights <= 0):
+        raise ValueError("Correspondence weights must be positive and finite.")
+    if estimator == "ransac":
+        matrix, inliers = cv2_find_homography(src, dst, threshold)
+        if matrix is None or inliers is None:
+            return None
+        keep = np.asarray(inliers).ravel().astype(bool)
+        matrix = _dlt_homography(src[keep], dst[keep], weights[keep])
+    else:
+        matrix = _dlt_homography(src, dst, weights)
+        for _ in range(30):
+            if matrix is None:
+                break
+            residual = np.linalg.norm(project_points(matrix, src) - dst, axis=1)
+            median = float(np.median(residual))
+            cutoff = max(
+                2.0,
+                median + 2.5 * 1.4826 * float(np.median(np.abs(residual - median))),
+            )
+            robust = np.minimum(1.0, cutoff / np.maximum(residual, 1e-12))
+            updated = _dlt_homography(src, dst, weights * robust)
+            if updated is None or np.allclose(updated, matrix, atol=1e-10, rtol=1e-10):
+                break
+            matrix = updated
+    if matrix is None or not np.isfinite(matrix).all() or abs(matrix[2, 2]) < 1e-12:
+        return None
+    matrix = matrix / matrix[2, 2]
+    if np.linalg.det(matrix[:2, :2]) <= 1e-10:
+        return None
+    residual = np.linalg.norm(project_points(matrix, src) - dst, axis=1)
+    span = float(np.linalg.norm(np.ptp(np.vstack([src, dst]), axis=0)))
+    if not np.isfinite(residual).all() or float(residual.max()) > max(1000.0, 10.0 * span):
+        return None
+    return matrix
 
 
 def fit_floor_homography(src, dst, estimator="robust-all", threshold=3.0):
@@ -711,6 +770,7 @@ def motion_diagnostics(
     metric_ids,
     reference_positions=None,
     direct_transformed=None,
+    frame_height=None,
 ):
     """Displacement against the canonical targets, split by solver stage.
 
@@ -736,6 +796,24 @@ def motion_diagnostics(
     rows = []
     groups = [(f"p{i}", [i]) for i in table.ids]
     groups += [("all", stabilization_ids), ("anchors", anchor_ids), ("floor", metric_ids)]
+    if frame_height is not None:
+        selected = set(stabilization_ids)
+        canonical_y = canonical[:, 1]
+        thirds = (
+            ("region_top", 0.0, frame_height / 3.0, False),
+            ("region_middle", frame_height / 3.0, 2.0 * frame_height / 3.0, False),
+            ("region_bottom", 2.0 * frame_height / 3.0, float(frame_height), True),
+        )
+        for name, lower, upper, include_upper in thirds:
+            region_ids = [
+                pid
+                for col, pid in enumerate(table.ids)
+                if pid in selected
+                and np.isfinite(canonical_y[col])
+                and lower <= canonical_y[col]
+                and (canonical_y[col] <= upper if include_upper else canonical_y[col] < upper)
+            ]
+            groups.append((name, region_ids))
     for name, ids in groups:
         cols = [table.ids.index(i) for i in ids]
         b, a = before[:, cols].ravel(), after[:, cols].ravel()
@@ -816,11 +894,15 @@ def encode_frames_h264(path, size, fps, frame_source, callback=None):
         process = subprocess.Popen(
             command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
         )
+        stdin = process.stdin
+        if stdin is None:
+            process.kill()
+            raise RuntimeError("FFmpeg encoder did not expose its input pipe.")
         broken = False
         try:
             for frame in frame_source():
                 try:
-                    process.stdin.write(np.ascontiguousarray(frame, dtype=np.uint8).tobytes())
+                    stdin.write(np.ascontiguousarray(frame, dtype=np.uint8).tobytes())
                 except (BrokenPipeError, OSError):
                     broken = True
                     break
@@ -829,7 +911,8 @@ def encode_frames_h264(path, size, fps, frame_source, callback=None):
             process.communicate()
             raise
         try:
-            process.stdin.close()
+            stdin.close()
+            process.stdin = None
         except (BrokenPipeError, OSError):
             broken = True
         stderr = process.communicate()[1]
@@ -1005,11 +1088,11 @@ def _write_report(path, summary, diagnostics):
     note = summary.get("planar_residual_note")
     caveats = (
         "<h2>Limitations</h2><ul>"
-        "<li>One global similarity cannot remove true multi-depth parallax from camera translation.</li>"
+        "<li>One global 2D warp cannot remove true multi-depth parallax from camera translation.</li>"
         "<li>The metric floor homography is exact only on the floor plane; it is never the default whole-frame visual warp.</li>"
         "<li>Black borders are genuinely uncaptured image area and are never filled with invented content.</li>"
         "<li>Variable-frame-rate sources are rendered at the average FPS; see <code>timestamp_mode</code>.</li>"
-        "<li>Lens distortion is not corrected in v0.4.2; only diagnosed.</li>"
+        f"<li>Lens distortion is not corrected in v{VERSION}; only diagnosed.</li>"
         "</ul>"
     )
     if note:
@@ -1048,13 +1131,14 @@ def run_video_stabilizer(
     border="black",
     hybrid_imputed_weight=0.25,
     floor_estimator="robust-all",
+    render_video=True,
     progress_callback=None,
     cancel_event=None,
 ) -> dict[str, Path]:
     """Estimate first, then render every source frame on a fixed canvas into fresh outputs."""
     for name, value, choices in (
         ("mode", mode, ("visual", "hybrid", "floor-lock")),
-        ("model", model, ("similarity", "affine")),
+        ("model", model, ("similarity", "affine", "homography")),
         ("estimator", estimator, ("robust-lsq", "ransac")),
         ("smooth", smooth, ("none", "savgol", "lowpass")),
         ("canvas", canvas, ("union", "original", "crop")),
@@ -1090,6 +1174,8 @@ def run_video_stabilizer(
     )
     if model == "affine":
         log("Affine research mode allows shear and independent axis scales.", progress_callback)
+    elif model == "homography":
+        log("Homography mode allows a full 8-DOF projective visual warp.", progress_callback)
     metric_ids, floor_matrices, floor_df = [], None, None
     if geometry_config:
         geometry = load_target_geometry(geometry_config)
@@ -1210,7 +1296,24 @@ def run_video_stabilizer(
     output_dir = (
         Path(output_dir).expanduser().resolve()
         if output_dir
-        else video_path.parent / ("vaila_stabilized_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
+        else video_path.parent
+        / (
+            "vaila_stabilized_"
+            + _method_slug(
+                mode=mode,
+                model=model,
+                estimator=estimator,
+                smooth=smooth,
+                reference=reference,
+                stabilization_markers=stabilization_markers,
+                anchor_markers=anchor_markers,
+                anchor_weight=anchor_weight,
+                hybrid_imputed_weight=hybrid_imputed_weight,
+                floor_estimator=floor_estimator,
+            )
+            + "_"
+            + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        )
     )
     if output_dir.exists() and any(output_dir.iterdir()):
         raise FileExistsError(
@@ -1218,7 +1321,6 @@ def run_video_stabilizer(
         )
     output_dir.mkdir(parents=True, exist_ok=True)
     outputs = {
-        "video": output_dir / f"{video_path.stem}_stabilized.mp4",
         "transforms": output_dir / "stabilization_transforms.csv",
         "markers": output_dir / "stabilized_markers.csv",
         "diagnostics": output_dir / "stabilization_diagnostics.csv",
@@ -1242,6 +1344,7 @@ def run_video_stabilizer(
         metric_ids,
         reference_positions=canonical,
         direct_transformed=direct_transformed,
+        frame_height=height,
     )
     target = project_points(translation, canonical)
     residual = np.sum((transformed - target) ** 2, axis=2)
@@ -1282,7 +1385,7 @@ def run_video_stabilizer(
         for i in range(3):
             for j in range(3):
                 row[f"output_matrix_{i}{j}"] = final[frame, i, j]
-        if model == "affine":
+        if model in ("affine", "homography"):
             row.update(
                 direct_scale_y=np.exp(direct_params[frame, 4]),
                 direct_shear=direct_params[frame, 5],
@@ -1292,6 +1395,17 @@ def run_video_stabilizer(
                 smoothed_shear=final_params[frame, 5],
                 reanchored_scale_y=np.exp(reanchored_params[frame, 4]),
                 reanchored_shear=reanchored_params[frame, 5],
+            )
+        if model == "homography":
+            row.update(
+                direct_perspective_x=direct_params[frame, 6],
+                direct_perspective_y=direct_params[frame, 7],
+                filled_perspective_x=raw[frame, 6],
+                filled_perspective_y=raw[frame, 7],
+                smoothed_perspective_x=final_params[frame, 6],
+                smoothed_perspective_y=final_params[frame, 7],
+                reanchored_perspective_x=reanchored_params[frame, 6],
+                reanchored_perspective_y=reanchored_params[frame, 7],
             )
         rows.append(row)
     transforms_df = pd.DataFrame(rows)
@@ -1319,88 +1433,104 @@ def run_video_stabilizer(
     for i in range(3):
         for j in range(3):
             transforms_df[f"matrix_{i}{j}"] = transforms_df[f"output_matrix_{i}{j}"]
-    log(f"Rendering {n} frames on one {out_w}x{out_h} canvas", progress_callback)
     border_fractions = []
-    with tempfile.TemporaryDirectory(prefix=".render_", dir=output_dir) as temporary:
-        silent = Path(temporary) / "silent.mp4"
-        capture = cv2.VideoCapture(str(video_path))
-        writer = cv2.VideoWriter(str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, (out_w, out_h))
-        debug_writer = None
-        try:
-            if not writer.isOpened() or not capture.isOpened():
-                raise RuntimeError("Could not open video decoder/encoder.")
-            if debug_overlay:
-                outputs["overlay"] = output_dir / "debug_overlay.mp4"
-                debug_writer = cv2.VideoWriter(
-                    str(outputs["overlay"]),
-                    cv2.VideoWriter_fourcc(*"mp4v"),
-                    fps,
-                    (2 * out_w, out_h),
-                )
-                if not debug_writer.isOpened():
-                    raise RuntimeError("Could not open debug overlay writer.")
-            for frame_id in table.frames:
-                _check_cancel(cancel_event)
-                ok, frame = capture.read()
-                if not ok:
-                    raise RuntimeError(
-                        f"Video ended early at frame {frame_id}; expected {n} frames."
+    audio_status = "not rendered"
+    if render_video:
+        outputs["video"] = output_dir / f"{video_path.stem}_stabilized.mp4"
+        log(f"Rendering {n} frames on one {out_w}x{out_h} canvas", progress_callback)
+        with tempfile.TemporaryDirectory(prefix=".render_", dir=output_dir) as temporary:
+            silent = Path(temporary) / "silent.mp4"
+            capture = cv2.VideoCapture(str(video_path))
+            writer = cv2.VideoWriter(
+                str(silent), cv2.VideoWriter_fourcc(*"mp4v"), fps, (out_w, out_h)
+            )
+            debug_writer = None
+            try:
+                if not writer.isOpened() or not capture.isOpened():
+                    raise RuntimeError("Could not open video decoder/encoder.")
+                if debug_overlay:
+                    outputs["overlay"] = output_dir / "debug_overlay.mp4"
+                    debug_writer = cv2.VideoWriter(
+                        str(outputs["overlay"]),
+                        cv2.VideoWriter_fourcc(*"mp4v"),
+                        fps,
+                        (2 * out_w, out_h),
                     )
-                if frame.shape[:2] != (height, width):
-                    raise RuntimeError(
-                        "Decoded orientation differs from metadata; marker coordinates must use displayed video orientation."
-                    )
-                if mode == "floor-lock":
-                    stable = cv2.warpPerspective(
-                        frame, final[frame_id], (out_w, out_h), flags=cv2.INTER_CUBIC
-                    )
-                else:
-                    stable = cv2.warpAffine(
-                        frame, final[frame_id, :2], (out_w, out_h), flags=cv2.INTER_CUBIC
-                    )
-                writer.write(stable)
-                # Geometric border estimate; dark image content is not mistaken for borders.
-                polygon = project_points(
-                    final[frame_id],
-                    np.array([[0, 0], [width, 0], [width, height], [0, height]], dtype=float),
-                ).astype(np.float32)
-                area, _ = cv2.intersectConvexConvex(
-                    polygon, np.array([[0, 0], [out_w, 0], [out_w, out_h], [0, out_h]], np.float32)
-                )
-                border_fractions.append(max(0.0, 1 - area / (out_w * out_h)))
-                if debug_writer is not None:
-                    rmse = (
-                        float(floor_df.iloc[frame_id].floor_rmse_px)
-                        if floor_df is not None
-                        else np.nan
-                    )
-                    debug_writer.write(
-                        _overlay(
-                            stable.copy(),
-                            frame,
-                            table,
-                            frame_id,
-                            final[frame_id],
-                            target,
-                            methods[frame_id],
-                            rmse,
+                    if not debug_writer.isOpened():
+                        raise RuntimeError("Could not open debug overlay writer.")
+                for frame_id in table.frames:
+                    _check_cancel(cancel_event)
+                    ok, frame = capture.read()
+                    if not ok:
+                        raise RuntimeError(
+                            f"Video ended early at frame {frame_id}; expected {n} frames."
                         )
+                    if frame.shape[:2] != (height, width):
+                        raise RuntimeError(
+                            "Decoded orientation differs from metadata; marker coordinates must use displayed video orientation."
+                        )
+                    if mode == "floor-lock" or model == "homography":
+                        stable = cv2.warpPerspective(
+                            frame,
+                            final[frame_id],
+                            (out_w, out_h),
+                            flags=cv2.INTER_CUBIC,
+                            borderMode=cv2.BORDER_CONSTANT,
+                            borderValue=(0, 0, 0),
+                        )
+                    else:
+                        stable = cv2.warpAffine(
+                            frame,
+                            final[frame_id, :2],
+                            (out_w, out_h),
+                            flags=cv2.INTER_CUBIC,
+                            borderMode=cv2.BORDER_CONSTANT,
+                            borderValue=(0, 0, 0),
+                        )
+                    writer.write(stable)
+                    # Geometric border estimate; dark image content is not mistaken for borders.
+                    polygon = project_points(
+                        final[frame_id],
+                        np.array([[0, 0], [width, 0], [width, height], [0, height]], dtype=float),
+                    ).astype(np.float32)
+                    area, _ = cv2.intersectConvexConvex(
+                        polygon,
+                        np.array([[0, 0], [out_w, 0], [out_w, out_h], [0, out_h]], np.float32),
                     )
-                if frame_id % 25 == 0 or frame_id == n - 1:
-                    log(f"Encoded {frame_id + 1}/{n} frames", progress_callback)
-            if capture.read()[0]:
-                raise RuntimeError(
-                    "Video contains more frames than metadata; refusing a truncated output."
-                )
-        finally:
-            capture.release()
-            writer.release()
-            if debug_writer is not None:
-                debug_writer.release()
-        _check_cancel(cancel_event)
-        audio_status = _finish_video(
-            silent, video_path, outputs["video"], metadata, preserve_audio, progress_callback
-        )
+                    border_fractions.append(max(0.0, 1 - area / (out_w * out_h)))
+                    if debug_writer is not None:
+                        rmse = (
+                            float(floor_df.iloc[frame_id].floor_rmse_px)
+                            if floor_df is not None
+                            else np.nan
+                        )
+                        debug_writer.write(
+                            _overlay(
+                                stable.copy(),
+                                frame,
+                                table,
+                                frame_id,
+                                final[frame_id],
+                                target,
+                                methods[frame_id],
+                                rmse,
+                            )
+                        )
+                    if frame_id % 25 == 0 or frame_id == n - 1:
+                        log(f"Encoded {frame_id + 1}/{n} frames", progress_callback)
+                if capture.read()[0]:
+                    raise RuntimeError(
+                        "Video contains more frames than metadata; refusing a truncated output."
+                    )
+            finally:
+                capture.release()
+                writer.release()
+                if debug_writer is not None:
+                    debug_writer.release()
+            _check_cancel(cancel_event)
+            audio_status = _finish_video(
+                silent, video_path, outputs["video"], metadata, preserve_audio, progress_callback
+            )
     transforms_df.to_csv(outputs["transforms"], index=False)
     wide.to_csv(outputs["markers"], index=False)
     diagnostics.to_csv(outputs["diagnostics"], index=False)
@@ -1415,7 +1545,7 @@ def run_video_stabilizer(
         )
         floor_df.to_csv(outputs["floor_diagnostics"], index=False)
     summary = {
-        "version": "0.4.1",
+        "version": VERSION,
         "video": str(video_path),
         "markers": str(markers_csv),
         "mode": mode,
@@ -1434,13 +1564,34 @@ def run_video_stabilizer(
         "interpolated_percent": 100 * sum("direct" not in m for m in methods) / n,
         "max_scale_deviation": float(
             np.max(
-                abs(np.exp(final_params[:, 3:5] if model == "affine" else final_params[:, 3:4]) - 1)
+                abs(
+                    np.exp(
+                        final_params[:, 3:5]
+                        if model in ("affine", "homography")
+                        else final_params[:, 3:4]
+                    )
+                    - 1
+                )
             )
         ),
         "max_rotation_deg": float(np.max(abs(np.degrees(final_params[:, 2])))),
-        "mean_black_border_fraction": float(np.mean(border_fractions)),
+        "mean_black_border_fraction": (
+            float(np.mean(border_fractions)) if border_fractions else float("nan")
+        ),
         "audio": audio_status,
     }
+    region_rows = diagnostics[diagnostics.marker.str.startswith("region_")]
+    for region in ("top", "middle", "bottom"):
+        item = region_rows[region_rows.marker.eq(f"region_{region}")].iloc[0]
+        summary[f"rms_after_region_{region}_px"] = float(item.rms_after_px)
+    finite_regions = region_rows[np.isfinite(region_rows.rms_after_px)]
+    if len(finite_regions) == 3:
+        worst = finite_regions.loc[finite_regions.rms_after_px.idxmax()]
+        summary["worst_region"] = str(worst.marker).removeprefix("region_")
+        summary["rms_after_worst_region_px"] = float(worst.rms_after_px)
+    else:
+        summary["worst_region"] = "unavailable"
+        summary["rms_after_worst_region_px"] = float("nan")
     if mode == "floor-lock":
         summary.update(
             model="homography (floor-only)",
@@ -1452,7 +1603,14 @@ def run_video_stabilizer(
     _write_report(outputs["report"], summary, diagnostics)
     outputs["summary"] = output_dir / "stabilization_summary.json"
     outputs["summary"].write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    for group in ("all", "anchors", "floor"):
+    for group in (
+        "all",
+        "anchors",
+        "floor",
+        "region_top",
+        "region_middle",
+        "region_bottom",
+    ):
         item = diagnostics[diagnostics.marker.eq(group)].iloc[0]
         log(
             f"{group}: RMS {item.rms_before_px:.3f} -> {item.rms_after_px:.3f} px",
@@ -1470,30 +1628,84 @@ def build_parser():
     parser.add_argument("--markers", type=Path)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--mode", choices=("visual", "hybrid", "floor-lock"), default="visual")
-    parser.add_argument("--model", choices=("similarity", "affine"), default="similarity")
+    parser.add_argument(
+        "--model", choices=("similarity", "affine", "homography"), default="similarity"
+    )
     parser.add_argument("--estimator", choices=("robust-lsq", "ransac"), default="robust-lsq")
     parser.add_argument("--stabilization-markers", default="all")
     parser.add_argument("--anchor-markers")
     parser.add_argument("--anchor-weight", type=float, default=2.0)
+    parser.add_argument("--hybrid-imputed-weight", type=float, default=0.25)
     parser.add_argument("--metric-markers")
     parser.add_argument("--geometry-config", type=Path)
+    parser.add_argument("--floor-estimator", choices=("robust-all", "ransac"), default="robust-all")
     parser.add_argument("--reference", default="auto", help="auto, first or frame:N (zero-based)")
     parser.add_argument("--smooth", choices=("none", "savgol", "lowpass"), default="savgol")
     parser.add_argument("--canvas", choices=("union", "original", "crop"), default="union")
     parser.add_argument("--border", choices=("black",), default="black")
     parser.add_argument("--debug-overlay", action="store_true")
     parser.add_argument("--no-audio", action="store_true")
+    parser.add_argument("--sweep", action="store_true", help="Rank a grid of stabilization methods")
+    parser.add_argument("--sweep-grid", type=Path, help="TOML overrides for the sweep axes")
+    parser.add_argument(
+        "--sweep-render-top", default="5", metavar="N|all", help="Render the best N sweep runs"
+    )
     return parser
 
 
-def _next_available_output_dir(output_dir):
-    """Bump a non-empty existing output dir to `<dir>_v2`, `_v3`, ... instead of failing.
+def _method_slug(
+    *,
+    mode="visual",
+    model="similarity",
+    estimator="robust-lsq",
+    smooth="savgol",
+    reference="auto",
+    stabilization_markers="all",
+    anchor_markers=None,
+    anchor_weight=2.0,
+    hybrid_imputed_weight=0.25,
+    floor_estimator="robust-all",
+    **_ignored,
+):
+    """Return a deterministic filesystem-safe label for one stabilization method."""
+
+    def compact(value):
+        if isinstance(value, (int, float)):
+            return f"{float(value):g}".replace(".", "p")
+        return str(value).lower().replace("frame:", "")
+
+    if mode == "floor-lock":
+        return re.sub(r"[^a-z0-9-]+", "-", f"floor-lock-{floor_estimator}").strip("-")
+    estimator_name = {"robust-lsq": "rlsq", "ransac": "ransac"}.get(estimator, estimator)
+    parts = [
+        mode,
+        model,
+        estimator_name,
+        smooth,
+        f"ref{compact(reference)}",
+        f"mk{compact(stabilization_markers)}",
+    ]
+    if anchor_markers:
+        parts.append(f"anc{compact(anchor_markers)}w{compact(anchor_weight)}")
+    if mode == "hybrid":
+        parts.append(f"hiw{compact(hybrid_imputed_weight)}")
+        parts.append(f"floor{compact(floor_estimator)}")
+    slug = re.sub(r"[^a-z0-9-]+", "-", "-".join(parts)).strip("-")
+    if len(slug) > 160:
+        digest = hashlib.sha1(slug.encode("utf-8"), usedforsecurity=False).hexdigest()[:10]
+        slug = f"{slug[:149].rstrip('-')}-{digest}"
+    return slug
+
+
+def _next_available_output_dir(output_dir, slug):
+    """Choose `<dir>_<slug>`, then `_v2`, `_v3`, ... without overwriting.
 
     CLI/GUI entry points call this before `run_video_stabilizer` so reruns with the
     same --output-dir don't require the user to pick a fresh empty folder each time.
     Direct callers of `run_video_stabilizer` keep the strict FileExistsError contract.
     """
-    candidate = Path(output_dir).expanduser()
+    requested = Path(output_dir).expanduser()
+    candidate = requested.parent / f"{requested.name}_{slug}"
     if not candidate.exists() or not any(candidate.iterdir()):
         return str(candidate)
     version = 2
@@ -1506,11 +1718,24 @@ def _next_available_output_dir(output_dir):
 
 def _run_args(args, **kwargs):
     options = vars(args).copy()
+    if options.pop("sweep", False):
+        if __package__:
+            from .video_stabilizer_sweep import run_stabilizer_sweep
+        else:
+            from video_stabilizer_sweep import (  # ty: ignore[unresolved-import]
+                run_stabilizer_sweep,
+            )
+
+        return run_stabilizer_sweep(args, **kwargs)
+    options.pop("sweep_grid", None)
+    options.pop("sweep_render_top", None)
     options["video_path"] = options.pop("video")
     options["markers_csv"] = options.pop("markers")
     options["preserve_audio"] = not options.pop("no_audio")
     if options.get("output_dir"):
-        options["output_dir"] = _next_available_output_dir(options["output_dir"])
+        options["output_dir"] = _next_available_output_dir(
+            options["output_dir"], _method_slug(**options)
+        )
     return run_video_stabilizer(**options, **kwargs)
 
 
@@ -1556,7 +1781,7 @@ class StabilizerGUI:
             (
                 ("video", "Video"),
                 ("markers", "Marker CSV"),
-                ("output-dir", "Output directory (empty)"),
+                ("output-dir", "Output base directory (optional)"),
                 ("geometry-config", "Geometry TOML (optional)"),
             ),
             1,
@@ -1585,7 +1810,7 @@ class StabilizerGUI:
         options.pack(fill="x")
         fields = [
             ("mode", "Mode", "visual", ("visual", "hybrid", "floor-lock")),
-            ("model", "Model", "similarity", ("similarity", "affine")),
+            ("model", "Model", "similarity", ("similarity", "affine", "homography")),
             ("estimator", "Estimator", "robust-lsq", ("robust-lsq", "ransac")),
             ("reference", "Reference", "auto", None),
             ("smooth", "Smoothing", "savgol", ("none", "savgol", "lowpass")),
@@ -1593,7 +1818,10 @@ class StabilizerGUI:
             ("stabilization-markers", "Static markers", "all", None),
             ("anchor-markers", "Priority anchors", "", None),
             ("anchor-weight", "Anchor weight", "2.0", None),
+            ("hybrid-imputed-weight", "Hybrid imputed weight", "0.25", None),
             ("metric-markers", "Metric markers", "", None),
+            ("floor-estimator", "Floor estimator", "robust-all", ("robust-all", "ransac")),
+            ("sweep-render-top", "Sweep render top", "5", None),
         ]
         for index, (key, label, value, choices) in enumerate(fields):
             row, col = divmod(index, 2)
@@ -1623,10 +1851,12 @@ class StabilizerGUI:
         actions.pack(fill="x")
         self.run_button = ttk.Button(actions, text="Stabilize", command=self.start)
         self.run_button.pack(side="left")
+        self.sweep_button = ttk.Button(actions, text="Sweep all methods", command=self.start_sweep)
+        self.sweep_button.pack(side="left", padx=8)
         self.cancel_button = ttk.Button(
             actions, text="Cancel", command=self.request_cancel, state="disabled"
         )
-        self.cancel_button.pack(side="left", padx=8)
+        self.cancel_button.pack(side="left")
         ttk.Button(actions, text="Help", command=self.open_help).pack(side="right")
         self.report_button = ttk.Button(
             actions, text="Open report", command=self.open_report, state="disabled"
@@ -1642,6 +1872,12 @@ class StabilizerGUI:
         self.root.after(75, self.drain)
 
     def start(self):
+        self._start(sweep=False)
+
+    def start_sweep(self):
+        self._start(sweep=True)
+
+    def _start(self, sweep=False):
         if self.worker is not None and self.worker.is_alive():
             return
         argv = []
@@ -1652,6 +1888,8 @@ class StabilizerGUI:
                     argv.append("--" + key)
             elif value.strip():
                 argv.extend(["--" + key, value.strip()])
+        if sweep:
+            argv.append("--sweep")
         try:
             args = build_parser().parse_args(argv)
             if not args.video or not args.markers:
@@ -1664,9 +1902,11 @@ class StabilizerGUI:
         )
         self.cancel.clear()
         self.run_button.configure(state="disabled")
+        if hasattr(self, "sweep_button"):
+            self.sweep_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self.report_button.configure(state="disabled")
-        self.status.set("Estimating transforms...")
+        self.status.set("Running method sweep..." if sweep else "Estimating transforms...")
 
         def work():
             try:
@@ -1707,6 +1947,8 @@ class StabilizerGUI:
                         self.status.set(value)
                 else:
                     self.run_button.configure(state="normal")
+                    if hasattr(self, "sweep_button"):
+                        self.sweep_button.configure(state="normal")
                     self.cancel_button.configure(state="disabled")
                     if kind == "done":
                         self.outputs = value

@@ -1,6 +1,6 @@
 """CLI run hints for vailá menu entries (headless ``--cli`` mode).
 
-Version: 0.4.1
+Version: 0.4.3
 Update Date: 15 September 2026
 """
 
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.4.1"
+__version__ = "0.4.3"
 __updated__ = "15 September 2026"
 
 
@@ -178,8 +178,11 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
         "Video compression — pick codec script or use GUI chooser.",
     ),
     "video_stabilizer": CliRunHint(
-        ("uv run python -m vaila.video_stabilizer --help",),
-        "Fixed-scene stabilization: --video VIDEO --markers CSV; metric geometry is optional.",
+        (
+            "uv run python -m vaila.video_stabilizer --help",
+            "uv run python -m vaila.video_stabilizer --video VIDEO --markers CSV --sweep",
+        ),
+        "Fixed-scene stabilization or ranked method sweep; metric geometry is optional.",
     ),
     "sync_videos": CliRunHint(("uv run vaila/syncvid.py",), "Multi-camera sync file GUI."),
     "getpixelvideo": CliRunHint(

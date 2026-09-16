@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 134 | **Categories:** 7 | **Generated on:** 15/09/2026 (v0.4.2)
+**Documented topics:** 134 | **Categories:** 7 | **Generated on:** 15/09/2026 (v0.4.3)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -134,7 +134,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](modifylabref.html) · [Markdown](modifylabref.md)
 - **monocular_dlt_align** — What problem this solves
   - [HTML](monocular_dlt_align.html) · [Markdown](monocular_dlt_align.md)
-- **planar_geometry_tracker** — For a stabilized video from fixed pixel markers, use [Video Stabilizer](video_stabilizer.md).
+- **planar_geometry_tracker** — Frame C → Video and Image → **Planar Geo**; also **Geo Homog** in getpixelvideo. For stabilized video from fixed pixel markers, see [Video Stabilizer](video_stabilizer.md).
   - [HTML](planar_geometry_tracker.html) · [Markdown](planar_geometry_tracker.md)
 - **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: calibrate first, then click points on the video and classify the current point set as D...
   - [HTML](quickmeasure.html) · [Markdown](quickmeasure.md)
@@ -173,7 +173,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](compress_videos_h266.html) · [Markdown](compress_videos_h266.md)
 - **cop_calculate** — This script allows users to select six (6) headers for force plate data analysis.
   - [HTML](cop_calculate.html) · [Markdown](cop_calculate.md)
-- **crop_faces_atletas** — crop_faces_atletas.py batch-processes athlete photos and creates square face crops suitable for 5 x 5 cm outputs at 300 DPI. It uses MediaPipe Face Detector...
+- **crop_faces_atletas** — Frame B → Markerless 2D → **Crop Face**. Batch athlete photo square crops (5×5 cm @ 300 DPI) via MediaPipe Face Detector.
   - [HTML](crop_faces_atletas.html) · [Markdown](crop_faces_atletas.md)
 - **cutvideo** — Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with in...
   - [HTML](cutvideo.html) · [Markdown](cutvideo.md)

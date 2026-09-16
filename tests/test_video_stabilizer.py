@@ -1,6 +1,6 @@
 """Fixed-scene stabilization regression tests (no external downloads).
 
-Version: 0.4.1
+Version: 0.4.3
 Update Date: 15 September 2026
 """
 
@@ -115,11 +115,27 @@ def test_unwrap_interpolation_and_endpoint_propagation(smooth):
         vs.regularize_transforms([None, None], 60)
 
 
-@pytest.mark.parametrize("model", ["similarity", "affine"])
+@pytest.mark.parametrize("model", ["similarity", "affine", "homography"])
 def test_parameter_roundtrip(model):
-    params = [10, 20, 0.7, np.log(1.2)] + ([np.log(0.8), 0.2] if model == "affine" else [])
+    params = [10, 20, 0.7, np.log(1.2)]
+    if model in ("affine", "homography"):
+        params += [np.log(0.8), 0.2]
+    if model == "homography":
+        params += [0.0003, -0.0002]
     matrix = vs.params_to_matrix(params, model)
     np.testing.assert_allclose(vs.matrix_to_params(matrix, model), params, atol=1e-10)
+
+
+def test_weighted_homography_recovers_projective_transform():
+    src = np.array([[0, 0], [200, 0], [220, 180], [0, 160], [80, 70], [150, 120]], float)
+    truth = vs.params_to_matrix(
+        [12, -8, 0.04, np.log(1.02), np.log(0.97), 0.03, 0.0004, -0.0002],
+        "homography",
+    )
+    dst = vs.project_points(truth, src)
+    for estimator in ("robust-lsq", "ransac"):
+        fitted = vs.fit_weighted_homography(src, dst, np.ones(len(src)), estimator)
+        np.testing.assert_allclose(fitted, truth, atol=1e-8)
 
 
 def test_union_contains_every_transformed_corner_and_crop_is_inside():
@@ -248,7 +264,11 @@ def test_pipeline_outputs_timeline_audio_and_metric_separation(tmp_path, mode):
             transforms[["matrix_20", "matrix_21", "matrix_22"]], np.tile([0, 0, 1], (20, 1))
         )
     metrics = pd.read_csv(output["diagnostics"]).set_index("marker")
+    assert {"region_top", "region_middle", "region_bottom"}.issubset(metrics.index)
     assert metrics.loc["anchors", "rms_after_px"] < metrics.loc["anchors", "rms_before_px"] * 0.05
+    summary = json.loads(output["summary"].read_text())
+    assert summary["worst_region"] in {"top", "middle", "bottom"}
+    assert np.isfinite(summary["rms_after_worst_region_px"])
     if mode != "visual":
         floor = np.load(output["floor_homographies"])
         assert floor["metric_ids"].tolist() == list(range(8))
@@ -290,7 +310,8 @@ def test_cli_headless_and_quoted_command(tmp_path):
         shlex.split(command), env=env, capture_output=True, text=True, timeout=40
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert (tmp_path / "CLI output/stabilization_report.html").is_file()
+    cli_output = tmp_path / f"CLI output_{vs._method_slug()}"
+    assert (cli_output / "stabilization_report.html").is_file()
     result = subprocess.run(
         [sys.executable, "-m", "vaila.video_stabilizer", "--video", str(source)],
         env=env,
@@ -301,7 +322,10 @@ def test_cli_headless_and_quoted_command(tmp_path):
 
 
 def test_no_display_dependency_in_import():
-    script = "import sys; import vaila.video_stabilizer; assert 'tkinter' not in sys.modules"
+    script = (
+        "import sys; import vaila.video_stabilizer; import vaila.video_stabilizer_sweep; "
+        "assert 'tkinter' not in sys.modules"
+    )
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
@@ -323,6 +347,7 @@ def test_cancel_before_render_has_no_output(tmp_path):
         ("affine", "robust-lsq", "crop"),
         ("similarity", "ransac", "original"),
         ("affine", "ransac", "union"),
+        ("homography", "robust-lsq", "union"),
     ],
 )
 def test_explicit_alternatives(tmp_path, model, estimator, canvas):
@@ -333,6 +358,83 @@ def test_explicit_alternatives(tmp_path, model, estimator, canvas):
     assert out["video"].is_file()
     data = pd.read_csv(out["transforms"])
     assert np.isfinite(data.matrix_00).all()
+
+
+def test_two_phase_sweep_ranks_and_renders_tiny_grid(tmp_path, monkeypatch):
+    source, csv = _sample(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    grid = tmp_path / "sweep.toml"
+    grid.write_text(
+        """[sweep]
+modes = ["visual"]
+models = ["similarity", "homography"]
+estimators = ["robust-lsq"]
+smooth = ["none"]
+references = ["auto"]
+stabilization_markers = ["all"]
+anchors = ["none", "99@2.0"]
+hybrid_imputed_weights = [0.25]
+floor_estimators = ["robust-all"]
+""",
+        encoding="utf-8",
+    )
+    args = vs.build_parser().parse_args(
+        [
+            "--video",
+            str(source),
+            "--markers",
+            str(csv),
+            "--output-dir",
+            "sweep output",
+            "--sweep",
+            "--sweep-grid",
+            str(grid),
+            "--sweep-render-top",
+            "all",
+            "--no-audio",
+        ]
+    )
+    outputs = vs._run_args(args)
+    ranking = pd.read_csv(outputs["ranking"])
+    assert len(ranking) == 4
+    successful = ranking[ranking.status.eq("ok")]
+    failed = ranking[ranking.status.eq("error")]
+    assert len(successful) == len(failed) == 2
+    assert successful.rms_after_worst_region_px.is_monotonic_increasing
+    assert sorted(successful["rank"].astype(int)) == [1, 2]
+    assert failed["triage_report"].isna().all()
+    assert len(list(outputs["videos"].glob("*.mp4"))) == 2
+    assert not list((outputs["output_dir"] / "triage").rglob("*.mp4"))
+    assert outputs["montage"].is_file()
+    assert outputs["report"].is_file()
+
+
+@pytest.mark.skipif(
+    os.environ.get("VAILA_STABILIZER_SWEEP") != "1",
+    reason="Opt-in real fixture sweep: VAILA_STABILIZER_SWEEP=1",
+)
+def test_real_tatame_sweep_acceptance():
+    fixture = ROOT / "tests/video_stabilizer"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "vaila.video_stabilizer",
+            "--video",
+            str(fixture / "tatame.mp4"),
+            "--markers",
+            str(fixture / "tatame_markers.csv"),
+            "--geometry-config",
+            str(GEOMETRY),
+            "--metric-markers",
+            "0-7",
+            "--sweep",
+            "--no-audio",
+        ],
+        cwd=ROOT,
+        timeout=1800,
+    )
+    assert result.returncode == 0
 
 
 def test_real_tatame_visual_and_hybrid_regression():

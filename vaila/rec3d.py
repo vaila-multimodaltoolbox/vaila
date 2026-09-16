@@ -10,15 +10,14 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.117
+Version: 0.4.3
 Created: August 03, 2025
-Last Updated: 26 August 2026
+Last Updated: 15 September 2026
 
 Description:
     Batch 3D reconstruction using per-frame Direct Linear Transformation (DLT3D)
     parameters — i.e. a DLT "matrix" that can change frame by frame (moving or
-    re-calibrated cameras), as opposed to rec3d_one_dlt3d.py which uses one
-    fixed set of DLT3D parameters per camera for the whole clip.
+    re-calibrated cameras), or fixed single-row parameters applied across all frames.
 
     For each camera you provide:
       - One DLT3D parameter file with ONE ROW PER FRAME (frame, 11 coefficients).
@@ -220,7 +219,9 @@ def resolve_marker_labels(n_markers, marker_names_file=None, mesh_source_dirs=No
                         f"ignoring it[/yellow]"
                     )
             except Exception as e:
-                print(f"[yellow]Warning: error scanning {source_dir} for label sidecars: {e}[/yellow]")
+                print(
+                    f"[yellow]Warning: error scanning {source_dir} for label sidecars: {e}[/yellow]"
+                )
 
     return fallback
 
@@ -1031,10 +1032,18 @@ def process_files_in_directory(
     # Per-camera DLT3D frames + parameters (positional: col 0 = frame, rest = 11 coeffs)
     dlt_frames_list = []
     dlt_values_list = []
-    for df in dlt_params_dfs:
+    dlt_single_mode = []
+    for cam_i, df in enumerate(dlt_params_dfs):
         arr = df.to_numpy(dtype=np.float64)
         dlt_frames_list.append(arr[:, 0])
         dlt_values_list.append(arr[:, 1:])
+        is_single = len(arr) == 1
+        dlt_single_mode.append(is_single)
+        if is_single:
+            print(
+                f"[yellow]Camera {cam_i + 1} has single DLT3D row: "
+                "applying fixed calibration to all frames.[/yellow]"
+            )
 
     csv_files = sorted([f for f in os.listdir(input_directory) if f.endswith(".csv")])
 
@@ -1103,7 +1112,7 @@ def process_files_in_directory(
         dlt_params_for_frame = []
         frame_ok = True
         for cam_idx in range(num_cameras):
-            dlt_row = dlt_frame_to_row[cam_idx].get(frame_int)
+            dlt_row = 0 if dlt_single_mode[cam_idx] else dlt_frame_to_row[cam_idx].get(frame_int)
             if dlt_row is None:
                 frame_ok = False
                 break

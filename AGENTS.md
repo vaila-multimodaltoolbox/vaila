@@ -278,10 +278,11 @@ Full details: see `.claude/skills/sports-field-visualization/SKILL.md`.
 
 **Module:** `vaila/crop_faces_atletas.py` — athlete face photo cropper by
 Abel Gonçalves Chinaglia. Now follows project GUI pattern: select input
-photo dir first, then output dir. Wired to **Frame C -> Video
-and Image -> C_B_r1_c2 - Crop Face**. Help files at
-`vaila/help/crop_faces_atletas.md` and `.html`; `README.md` and
-`vaila/help/index.*` list new button.
+photo dir first, then output dir. Originally wired to **Frame C -> Video
+and Image -> C_B_r1_c2 - Crop Face**; as of v0.4.3 lives under
+**Frame B → Markerless 2D → Crop Face** (slot C_B_r1_c2 is **Planar Geo**).
+Help files at `vaila/help/crop_faces_atletas.md` and `.html`; `README.md` and
+`vaila/help/index.*` list the button.
 
 **Model path:** MediaPipe detector downloaded first use into
 Git-ignored `vaila/models/crop_face/face_detector.task`; provision explicitly

@@ -7,7 +7,7 @@ Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
 Update: 15 September 2026
-Version: 0.4.2
+Version: 0.4.3
 Python Version: 3.12.14
 
 Description:
@@ -2188,6 +2188,13 @@ def play_video_with_controls(
     fifa_index_base = 0
     if pitch_guide_fifa_mode:
         current_label = "football_pitch"
+
+    # Geo Homog live wireframe overlay (after planar_geometry_tracker run).
+    # Toggle with Shift+G (plain G is Pitch Guide).
+    geom_overlay_enabled = False
+    geom_overlay_geometry = None  # TargetGeometry | None
+    geom_overlay_H: dict[int, Any] = {}  # frame_idx -> 3x3 ndarray
+    geom_overlay_debug_video = ""
 
     # Template Marker Mode
     # - "free": variable-length markers (no fixed slots)
@@ -5612,13 +5619,16 @@ def play_video_with_controls(
         track_deep_group_width = track_deep_check_size + 4 + track_deep_label_w
         track_shape_button_width = 44 if is_compact else 52
         track_cfg_button_width = 30 if is_compact else 36
+        editor_mode_button_width = 58 if is_compact else 70  # VISUAL / INSERT
+        restore_button_width = 54 if is_compact else 62
         dataset_button_width = 52 if is_compact else 58
         export_video_button_width = 80 if is_compact else 92
         save_dataset_button_width = 72 if is_compact else 84
 
-        # Top row: Annotation/marker modes + Help buttons
+        # Top row: VISUAL/INSERT + Template + annotation modes + Help
         total_top_width = (
-            template_button_width
+            editor_mode_button_width
+            + template_button_width
             + marker_mode_button_width
             + persist_button_width
             + mouse_play_button_width
@@ -5631,7 +5641,7 @@ def play_video_with_controls(
             + guide_toggle_size
             + help_button_width
             + help_web_button_width
-            + (button_gap * 10)
+            + (button_gap * 11)
         )
 
         # Bottom row: Tracking, File I/O (Load/Save), Dataset and Export buttons
@@ -5654,6 +5664,8 @@ def play_video_with_controls(
             + button_gap
             + button_width  # Save
             + button_gap
+            + restore_button_width
+            + button_gap
             + dataset_button_width
             + button_gap
             + export_video_button_width
@@ -5669,7 +5681,25 @@ def play_video_with_controls(
         current_x = row_start_top
         _top_btn_font = pygame.font.SysFont("verdana", 10 if is_compact else 11)
 
-        # 1. Template Marker Mode: left-click cycles templates; press K for TOML when FIFA.
+        # 1. Editor mode: VISUAL (safe) ↔ INSERT (edit) — Ctrl+I; left of Tpl.
+        editor_mode_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_top,
+            editor_mode_button_width,
+            button_height,
+        )
+        current_x += editor_mode_button_width + button_gap
+        if editor_mode == "insert":
+            _edit_color = (35, 145, 75)
+            _edit_cap = "INSERT"
+        else:
+            _edit_color = (180, 120, 40)
+            _edit_cap = "VISUAL"
+        pygame.draw.rect(control_surface, _edit_color, editor_mode_button_rect)
+        _edit_txt = _top_btn_font.render(_edit_cap, True, (255, 255, 255))
+        control_surface.blit(_edit_txt, _edit_txt.get_rect(center=editor_mode_button_rect.center))
+
+        # 2. Template Marker Mode: left-click cycles templates; press K for TOML when FIFA.
         template_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -5686,7 +5716,7 @@ def play_video_with_controls(
         _tpl_txt = _top_btn_font.render(_tpl_cap, True, (255, 255, 255))
         control_surface.blit(_tpl_txt, _tpl_txt.get_rect(center=template_button_rect.center))
 
-        # 2. Marker mode: Markers → Sequential → 1-line.
+        # 3. Marker mode: Markers → Sequential → 1-line.
         marker_mode_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -6014,6 +6044,18 @@ def play_video_with_controls(
         save_text = btn_font.render("Save", True, (255, 255, 255))
         control_surface.blit(save_text, save_text.get_rect(center=save_button_rect.center))
 
+        # 7b. Restore — revert to session open / last successful Save
+        restore_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_bottom,
+            restore_button_width,
+            button_height,
+        )
+        current_x += restore_button_width + button_gap
+        pygame.draw.rect(control_surface, (120, 70, 70), restore_button_rect)
+        restore_text = btn_font.render("Restore", True, (255, 255, 255))
+        control_surface.blit(restore_text, restore_text.get_rect(center=restore_button_rect.center))
+
         # 8. Dataset button (Load dataset folder; next Save appends - multi-video)
         dataset_button_rect = pygame.Rect(
             current_x,
@@ -6101,6 +6143,8 @@ def play_video_with_controls(
             track_deep_button_rect,  # Deep checkbox (option for AI Track)
             track_shape_button_rect,  # Track AI Shape selector (Point/Circle/Box)
             track_cfg_button_rect,  # Track AI TOML configuration dialog
+            editor_mode_button_rect,  # VISUAL / INSERT (Ctrl+I)
+            restore_button_rect,  # Restore to last Save / open
             export_video_button_rect,  # Add export video button to return
             save_dataset_button_rect,  # Export PNG ML dataset + all_labels
             help_web_button_rect,  # Add help web button to return
@@ -6522,27 +6566,42 @@ def play_video_with_controls(
             ("", "", "blank"),
             ("=== MARKER PLACEMENT & EDITING ===", "", "header"),
             (
+                "VISUAL / INSERT button  /  Ctrl+I",
+                "Toggle safe browse (VISUAL, default) vs edit markers (INSERT)",
+                "item",
+            ),
+            (
+                "Ctrl + Z",
+                "Undo last marker/bbox edit (INSERT only; stack depth 50)",
+                "item",
+            ),
+            (
+                "Restore button",
+                "Revert markers to session open or last successful Save; cleared on quit",
+                "item",
+            ),
+            (
                 "Left Click (on video)",
-                "Place or update selected marker at clicked pixel position",
+                "Place or update selected marker at clicked pixel position (INSERT)",
                 "item",
             ),
             (
                 "Right Click (on video)",
-                "Remove selected marker (or last marker on current frame)",
+                "Remove selected marker (or last marker on current frame) (INSERT)",
                 "item",
             ),
             ("TAB  /  Shift + TAB", "Select next / previous marker slot on current frame", "item"),
             ("Ctrl + G  /  'Go KP'", "Open jump-to-keypoint dialog by number", "item"),
             ("Delete  /  Backspace", "Delete selected marker on current frame", "item"),
-            ("D", "Delete ALL markers on current frame", "item"),
+            ("D", "Delete ALL markers on current frame (INSERT)", "item"),
             (
                 "Del Range button",
                 "Delete marker N, list N,M,K, or range A:B across a frame span",
                 "item",
             ),
             ("Swap Range button", "Swap paired marker lists / ranges across a frame span", "item"),
-            ("A", "Add new empty marker slot to dataset", "item"),
-            ("R", "Remove selected marker slot from current frame", "item"),
+            ("A", "Add new empty marker slot to dataset (INSERT)", "item"),
+            ("R", "Remove selected marker slot from current frame (INSERT)", "item"),
             (
                 "B  /  Lock button",
                 "Lock/unlock selected marker — pins TAB, Go KP, R-delete selection, "
@@ -6595,6 +6654,18 @@ def play_video_with_controls(
                 "item",
             ),
             ("V (when Guide ON)", "Toggle reference pitch map in upper-right corner", "item"),
+            (
+                "Shift+G",
+                "Toggle Geo Homog wireframe overlay (after a Geo Homog run)",
+                "item",
+            ),
+            (
+                "Geo Homog button",
+                "Wizard: TOML profile or rectangle + W/H; maps markers; fits "
+                "per-frame homography; reloads imputed points; draws wireframe; "
+                "writes debug_projected_wireframe.mp4",
+                "item",
+            ),
             (
                 "P  /  'Persist' button",
                 "Toggle persistence overlay (shows markers from previous frames)",
@@ -7833,14 +7904,49 @@ def play_video_with_controls(
         )
 
     def _run_geometric_tracker_action() -> tuple[bool, str]:
-        """Save current markers, then run the standalone planar homography
-        tracker (``vaila/planar_geometry_tracker.py``) against them via
-        subprocess. Non-destructive: writes only to a new ``*_geom_out``
-        directory next to the video, never touches the live marker state."""
+        """Wizard: ask TOML|rectangle + mapping/dims, run planar tracker with
+        ``--debug-viz``, reload imputed markers, enable live wireframe overlay."""
+        nonlocal coordinates, labels
+        nonlocal geom_overlay_enabled, geom_overlay_geometry, geom_overlay_H
+        nonlocal geom_overlay_debug_video
+
         if total_frames <= 0:
             return False, "No frames available."
         if not isinstance(coordinates, dict):
             return False, "Marker data is not available."
+
+        try:
+            from vaila.planar_geometry_tracker import (
+                default_identity_mapping,
+                geometry_bounding_box,
+                load_homographies_npz,
+                load_target_geometry,
+                parse_marker_geom_mapping,
+                remap_measurements_csv,
+                scale_target_geometry,
+                write_rectangle_toml,
+                write_target_geometry_toml,
+            )
+        except ImportError:
+            from planar_geometry_tracker import (  # type: ignore[no-redef]
+                default_identity_mapping,
+                geometry_bounding_box,
+                load_homographies_npz,
+                load_target_geometry,
+                parse_marker_geom_mapping,
+                remap_measurements_csv,
+                scale_target_geometry,
+                write_rectangle_toml,
+                write_target_geometry_toml,
+            )
+
+        mode_raw = show_input_dialog(
+            "Geo Homog: 1=TOML profile  2=Rectangle (4 corners + W/H)",
+            "1",
+        )
+        if mode_raw is None:
+            return False, "Geo Homog cancelled."
+        mode = (mode_raw.strip() or "1")[0]
 
         _flush_save_message(screen, "Saving markers for Geo Homog...")
         output_file = save_coordinates(
@@ -7857,28 +7963,190 @@ def play_video_with_controls(
         )
 
         base_dir = os.path.dirname(video_path)
-        base_stem = os.path.splitext(os.path.basename(video_path))[0]
-        toml_path = os.path.join(base_dir, f"{base_stem}_geometry.toml")
-        if not os.path.exists(toml_path):
-            # No custom profile next to the video -- fall back to the shipped
-            # default (EVA tatame mat) target-geometry profile.
-            toml_path = os.path.join(
-                os.path.dirname(__file__), "models", "planar_targets", "tatame_1x1m.toml"
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = os.path.join(base_dir, f"processed_geom_{stamp}")
+        os.makedirs(output_dir, exist_ok=True)
+        session_toml = os.path.join(output_dir, "session_geometry.toml")
+        session_csv = os.path.join(output_dir, "session_measurements.csv")
+        targets_dir = os.path.join(os.path.dirname(__file__), "models", "planar_targets")
+
+        try:
+            src_df = pd.read_csv(output_file)
+            marker_ids = set(_vaila_pitch_p_indices_from_columns(src_df.columns))
+        except Exception as exc:
+            return False, f"Could not read saved markers CSV: {exc}"
+        if len(marker_ids) < 4:
+            return False, "Need at least 4 markers with coordinates for Geo Homog."
+
+        mapping: dict[int, int] = {}
+        geometry = None
+
+        if mode == "2":
+            ids_raw = show_input_dialog(
+                "4 marker IDs SW,SE,NE,NW (CSV pN indices)",
+                "0,1,2,3",
             )
-        output_dir = os.path.join(base_dir, f"{base_stem}_geom_out")
+            if ids_raw is None:
+                return False, "Geo Homog cancelled."
+            try:
+                parts = [int(p.strip()) for p in ids_raw.replace(";", ",").split(",") if p.strip()]
+                if len(parts) != 4:
+                    raise ValueError("need exactly 4 IDs")
+                for mid in parts:
+                    if mid not in marker_ids:
+                        raise ValueError(f"marker {mid} not in saved CSV columns")
+            except ValueError as exc:
+                return False, f"Invalid marker IDs: {exc}"
+
+            wh_raw = show_input_dialog("Rectangle width,height (meters)", "1.0,1.0")
+            if wh_raw is None:
+                return False, "Geo Homog cancelled."
+            try:
+                wh_parts = [
+                    float(p.strip()) for p in wh_raw.replace(";", ",").split(",") if p.strip()
+                ]
+                if len(wh_parts) != 2:
+                    raise ValueError("need width,height")
+                width_m, height_m = wh_parts
+                if width_m <= 0 or height_m <= 0:
+                    raise ValueError("width/height must be positive")
+            except ValueError as exc:
+                return False, f"Invalid dimensions: {exc}"
+
+            geometry = write_rectangle_toml(session_toml, width_m, height_m)
+            mapping = {parts[i]: i for i in range(4)}
+        else:
+            profile_raw = show_input_dialog(
+                "Profile: 1=tatame_1x1m  2=soccerfield_broadcast  3=browse",
+                "1",
+            )
+            if profile_raw is None:
+                return False, "Geo Homog cancelled."
+            profile_choice = (profile_raw.strip() or "1")[0]
+            if profile_choice == "2":
+                toml_path = os.path.join(targets_dir, "soccerfield_broadcast.toml")
+            elif profile_choice == "3":
+                toml_path = pygame_file_dialog(
+                    initial_dir=targets_dir,
+                    file_extensions=[".toml"],
+                    restore_screen=screen,
+                )
+                if not toml_path:
+                    try:
+                        from tkinter import Tk, filedialog
+
+                        root = Tk()
+                        root.withdraw()
+                        toml_path = filedialog.askopenfilename(
+                            title="Select target-geometry TOML",
+                            initialdir=targets_dir,
+                            filetypes=[("TOML", "*.toml"), ("All", "*.*")],
+                        )
+                        root.destroy()
+                    except Exception:
+                        toml_path = ""
+                if not toml_path:
+                    return False, "Geo Homog cancelled (no TOML)."
+            else:
+                toml_path = os.path.join(targets_dir, "tatame_1x1m.toml")
+
+            try:
+                geometry = load_target_geometry(toml_path)
+            except Exception as exc:
+                return False, f"Failed to load TOML: {exc}"
+
+            print(">> vaila/getpixelvideo: Geo Homog geometry points:")
+            for pid in geometry.sorted_ids:
+                pt = geometry.points[pid]
+                print(f">>   geom {pid}: {pt.name}  ({pt.x:g}, {pt.y:g})")
+
+            default_map = default_identity_mapping(geometry, marker_ids)
+            if len(default_map) >= 4:
+                default_str = ",".join(f"{m}:{g}" for m, g in sorted(default_map.items()))
+            else:
+                m_sorted = sorted(marker_ids)[:4]
+                g_sorted = geometry.sorted_ids[:4]
+                default_str = ",".join(f"{m}:{g}" for m, g in zip(m_sorted, g_sorted, strict=True))
+
+            map_raw = show_input_dialog(
+                "Map marker:geom pairs (>=4), e.g. 0:0,1:1,2:2,3:3",
+                default_str,
+            )
+            if map_raw is None:
+                return False, "Geo Homog cancelled."
+            try:
+                mapping = parse_marker_geom_mapping(map_raw if map_raw.strip() else default_str)
+                if len(mapping) < 4:
+                    raise ValueError("need at least 4 pairs")
+                for mid, gid in mapping.items():
+                    if mid not in marker_ids:
+                        raise ValueError(f"marker {mid} missing in CSV")
+                    if gid not in geometry.points:
+                        raise ValueError(f"geom id {gid} not in profile")
+            except ValueError as exc:
+                return False, f"Invalid mapping: {exc}"
+
+            min_x, min_y, max_x, max_y = geometry_bounding_box(geometry)
+            old_w = max_x - min_x
+            old_h = max_y - min_y
+            scale_raw = show_input_dialog(
+                f"Optional resize W,H meters (Enter keeps {old_w:g}x{old_h:g})",
+                "",
+            )
+            if scale_raw is None:
+                return False, "Geo Homog cancelled."
+            if scale_raw.strip():
+                try:
+                    wh_parts = [
+                        float(p.strip())
+                        for p in scale_raw.replace(";", ",").split(",")
+                        if p.strip()
+                    ]
+                    if len(wh_parts) != 2:
+                        raise ValueError("need width,height")
+                    new_w, new_h = wh_parts
+                    geometry = scale_target_geometry(geometry, new_w, new_h)
+                except ValueError as exc:
+                    return False, f"Invalid resize: {exc}"
+            write_target_geometry_toml(geometry, session_toml)
+
+        try:
+            remap_measurements_csv(output_file, mapping, session_csv)
+        except Exception as exc:
+            return False, f"Remap failed: {exc}"
+
+        print(">> vaila/getpixelvideo: Geo Homog session files written:")
+        print(f">>   TOML: {session_toml}")
+        print(f">>   CSV:  {session_csv}")
+        print(">>   Edit them in a terminal (imagination! / uv venv), then continue.")
+        edit_ok = show_input_dialog(
+            "Edit session TOML/CSV in terminal, then Enter to run (Esc=cancel)",
+            "",
+        )
+        if edit_ok is None:
+            return False, "Geo Homog cancelled at edit step."
+
+        # Re-read — user may have edited metric coords or the measurements CSV.
+        try:
+            geometry = load_target_geometry(session_toml)
+        except Exception as exc:
+            return False, f"Re-read session TOML failed: {exc}"
+        if not os.path.isfile(session_csv):
+            return False, f"Session measurements CSV missing: {session_csv}"
 
         cmd = [
             sys.executable,
             "-m",
             "vaila.planar_geometry_tracker",
             "--config",
-            toml_path,
+            session_toml,
             "--measurements-csv",
-            output_file,
+            session_csv,
             "--video-path",
             video_path,
             "--output-dir",
             output_dir,
+            "--debug-viz",
         ]
         print(">> vaila/getpixelvideo: Geo Homog -- equivalent CLI:")
         print(f">>   {' '.join(cmd)}")
@@ -7888,8 +8156,67 @@ def play_video_with_controls(
         except Exception as exc:
             print(f">> vaila/getpixelvideo: Geo Homog error: {exc}")
             return False, f"Geometry Tracker error: {exc}"
+
+        imputed_path = os.path.join(output_dir, "session_measurements_imputed.csv")
+        npz_path = os.path.join(output_dir, "homographies.npz")
+        debug_video = os.path.join(output_dir, "debug_projected_wireframe.mp4")
+        if not os.path.isfile(imputed_path) or not os.path.isfile(npz_path):
+            return (
+                False,
+                f"Geo Homog finished but outputs missing in {os.path.basename(output_dir)}",
+            )
+
+        try:
+            imputed_df = pd.read_csv(imputed_path)
+            coordinates, labels = load_vaila_p_xy_markers_df(imputed_df, total_frames=total_frames)
+            geom_overlay_H = load_homographies_npz(npz_path)
+            geom_overlay_geometry = geometry
+            geom_overlay_enabled = True
+            geom_overlay_debug_video = debug_video if os.path.isfile(debug_video) else ""
+        except Exception as exc:
+            print(f">> vaila/getpixelvideo: Geo Homog reload/overlay error: {exc}")
+            return False, f"Tracker OK but reload failed: {exc}"
+
         print(f">> vaila/getpixelvideo: Geo Homog DONE. Results in: {output_dir}")
-        return True, f"Geo Homog completed. Results in: {os.path.basename(output_dir)}"
+        if geom_overlay_debug_video:
+            print(f">>   debug video: {geom_overlay_debug_video}")
+
+        stem = os.path.splitext(os.path.basename(video_path))[0]
+        geom_markers_name = f"{stem}_geom_dlt_markers.csv"
+        save_prompt = show_input_dialog(
+            f"Save DLT geometry markers to {geom_markers_name}? (Enter=yes, Esc=memory only)",
+            "yes",
+        )
+        if save_prompt is not None:
+            saved = save_coordinates(
+                video_path,
+                coordinates,
+                total_frames,
+                deleted_positions,
+                is_sequential=sequential_mode,
+                fixed_keypoints_count=(fifa_fixed_keypoints if template_mode != "free" else None),
+                keypoint_start_idx=(fifa_start_keypoint if template_mode != "free" else 0),
+                keypoint_index_base=(fifa_index_base if template_mode != "free" else 0),
+                coord_format=coord_format,
+                output_file=os.path.join(output_dir, geom_markers_name),
+            )
+            try:
+                import shutil
+
+                vid_copy = os.path.join(os.path.dirname(video_path), geom_markers_name)
+                shutil.copyfile(saved, vid_copy)
+            except Exception:
+                pass
+            print(f">> vaila/getpixelvideo: Geo Homog saved markers → {saved}")
+            return True, (
+                f"Geo Homog OK → {os.path.basename(output_dir)}; "
+                f"saved {os.path.basename(saved)} (Shift+G toggles overlay)"
+            )
+
+        return True, (
+            f"Geo Homog OK → {os.path.basename(output_dir)} "
+            f"(in memory only; Shift+G toggles overlay)"
+        )
 
     def _deprecated_show_swap_dialog(current_frame, total_fr):
         """
@@ -9714,14 +10041,10 @@ def play_video_with_controls(
             int(k): [tuple(p) if p is not None else (None, None) for p in v]
             for k, v in state.get("coordinates", {}).items()
         }
-        deleted_positions = {
-            int(k): set(v) for k, v in state.get("deleted_positions", {}).items()
-        }
+        deleted_positions = {int(k): set(v) for k, v in state.get("deleted_positions", {}).items()}
         one_line_markers = [tuple(m) for m in state.get("one_line_markers", [])]
         deleted_markers = set(state.get("deleted_markers", set()))
-        bboxes = {
-            int(k): [dict(box) for box in v] for k, v in state.get("bboxes", {}).items()
-        }
+        bboxes = {int(k): [dict(box) for box in v] for k, v in state.get("bboxes", {}).items()}
         selected_marker_idx = int(state.get("selected_marker_idx", 0))
 
     def _refresh_restore_snapshot() -> None:
@@ -9995,7 +10318,51 @@ def play_video_with_controls(
                 pygame.draw.circle(overlay, dot_color, (sx, sy), 4)
             screen.blit(overlay, (0, 0))
 
-        # Draw persistent markers first (draw in order from oldest to newest)
+        # Geo Homog wireframe from resolved marker pixels (not H @ world).
+        if geom_overlay_enabled and geom_overlay_geometry is not None:
+            try:
+                from vaila.planar_geometry_tracker import wireframe_segments_from_pixels
+            except ImportError:
+                from planar_geometry_tracker import (  # type: ignore[no-redef]
+                    wireframe_segments_from_pixels,
+                )
+            pts_now = coordinates.get(frame_count, []) if isinstance(coordinates, dict) else []
+            resolved_px: dict[int, tuple[float, float]] = {}
+            for pid in geom_overlay_geometry.sorted_ids:
+                if pid < len(pts_now) and pts_now[pid] is not None:
+                    xy = pts_now[pid]
+                    if (
+                        isinstance(xy, (tuple, list))
+                        and len(xy) >= 2
+                        and xy[0] is not None
+                        and xy[1] is not None
+                    ):
+                        resolved_px[pid] = (float(xy[0]), float(xy[1]))
+            if resolved_px:
+                wire_overlay = pygame.Surface((window_width, window_height), pygame.SRCALPHA)
+                wire_color = (0, 220, 180, 200)
+                segments = wireframe_segments_from_pixels(geom_overlay_geometry, resolved_px)
+                for seg in segments:
+                    if len(seg) < 2:
+                        continue
+                    screen_pts = []
+                    for vx, vy in seg:
+                        sx, sy = video_to_screen_coords(
+                            vx,
+                            vy,
+                            zoom_level=zoom_level,
+                            crop_x=crop_x,
+                            crop_y=crop_y,
+                            pad_x=pad_x,
+                            pad_y=pad_y,
+                        )
+                        screen_pts.append((sx, sy))
+                    if len(screen_pts) == 2:
+                        pygame.draw.line(wire_overlay, wire_color, screen_pts[0], screen_pts[1], 2)
+                    else:
+                        pygame.draw.lines(wire_overlay, wire_color, False, screen_pts, 2)
+                screen.blit(wire_overlay, (0, 0))
+
         # Draw persistent markers first (draw in order from oldest to newest)
         font = pygame.font.SysFont("verdana", 14)
         if persistence_enabled:
@@ -10409,6 +10776,8 @@ def play_video_with_controls(
             track_deep_button_rect,  # Deep checkbox (option for AI Track)
             track_shape_button_rect,  # Track AI Shape selector (Point/Circle/Box)
             track_cfg_button_rect,  # Track AI TOML configuration dialog
+            editor_mode_button_rect,  # VISUAL / INSERT (Ctrl+I)
+            restore_button_rect,  # Restore to last Save / open
             export_video_button_rect,  # Add export video button to return
             save_dataset_button_rect,  # Export PNG ML dataset + all_labels
             help_web_button_rect,  # Add help web button to return
@@ -10510,7 +10879,7 @@ def play_video_with_controls(
         pygame.display.flip()
 
         # Auto-marking logic - mark points automatically during playback
-        if auto_marking_mode and not paused and not one_line_mode:
+        if auto_marking_mode and not paused and not one_line_mode and _can_edit_markers():
             mouse_x, mouse_y = pygame.mouse.get_pos()
             if mouse_y < window_height:  # Only mark if mouse is in video area
                 # Convert screen coordinates to video coordinates
@@ -10607,6 +10976,18 @@ def play_video_with_controls(
                     save_message_text = msg_go
                     showing_save_message = True
                     save_message_timer = 60 if ok_go else 45
+                elif event.key == pygame.K_g and (pygame.key.get_mods() & pygame.KMOD_SHIFT):
+                    if geom_overlay_geometry is None:
+                        save_message_text = "No Geo Homog overlay yet — run Geo Homog first"
+                    else:
+                        geom_overlay_enabled = not geom_overlay_enabled
+                        save_message_text = (
+                            "Geo Homog overlay ON"
+                            if geom_overlay_enabled
+                            else "Geo Homog overlay OFF"
+                        )
+                    showing_save_message = True
+                    save_message_timer = 75
                 elif event.key == pygame.K_g:
                     want = not pitch_guide_mode
                     if want:
@@ -10859,7 +11240,10 @@ def play_video_with_controls(
                     save_message_timer = 30
                 elif event.key == pygame.K_d:
                     # Delete all markers
-                    if frame_count in coordinates:
+                    if not _require_insert():
+                        pass
+                    elif frame_count in coordinates:
+                        _push_undo()
                         deleted_positions[frame_count] = set(range(len(coordinates[frame_count])))
                         save_message_text = "All markers from this frame were deleted"
                         showing_save_message = True
@@ -10880,9 +11264,14 @@ def play_video_with_controls(
                         save_message_text = "Labeling mode disabled"
                     showing_save_message = True
                     save_message_timer = 90
+                elif event.key == pygame.K_z and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+                    _undo_last_marker_edit()
                 elif event.key == pygame.K_z and labeling_mode:
                     # Undo last box in current frame
-                    if frame_count in bboxes and bboxes[frame_count]:
+                    if not _require_insert():
+                        pass
+                    elif frame_count in bboxes and bboxes[frame_count]:
+                        _push_undo()
                         bboxes[frame_count].pop()
                         save_message_text = "Removed last bounding box"
                         showing_save_message = True
@@ -11238,6 +11627,9 @@ def play_video_with_controls(
                     webbrowser.open(help_url)
 
                 # Define video frequency manually (Hz); P remains persistence only.
+                # Ctrl+I toggles VISUAL ↔ INSERT (bare I stays FPS dialog).
+                elif event.key == pygame.K_i and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+                    _toggle_editor_mode()
                 elif event.key == pygame.K_i:
                     save_message_text = _prompt_manual_fps()
                     showing_save_message = True
@@ -11261,9 +11653,12 @@ def play_video_with_controls(
 
                 # Add Pose detection hotkey 'J'
                 elif event.key == pygame.K_j:
-                    if MEDIAPIPE_AVAILABLE:
+                    if not _require_insert():
+                        pass
+                    elif MEDIAPIPE_AVAILABLE:
                         landmarks = detect_pose_mediapipe(frame)
                         if landmarks:
+                            _push_undo()
                             # Ensure coordinate list is large enough
                             if frame_count not in coordinates:
                                 coordinates[frame_count] = []
@@ -11423,7 +11818,13 @@ def play_video_with_controls(
                     rel_y = y - window_height
                     if load_button_rect.collidepoint(x, rel_y):
                         # Carregar novo arquivo
+                        if editor_mode == "insert":
+                            _push_undo()
                         reload_coordinates()
+                    elif editor_mode_button_rect.collidepoint(x, rel_y):
+                        _toggle_editor_mode()
+                    elif restore_button_rect.collidepoint(x, rel_y):
+                        _restore_marker_checkpoint()
                     elif template_button_rect.collidepoint(x, rel_y):
                         if labeling_mode:
                             save_message_text = (
@@ -11478,6 +11879,8 @@ def play_video_with_controls(
                         if labeling_mode and bboxes:
                             # New Unified Save Logic
                             save_labeling_project()
+                            _refresh_restore_snapshot()
+                            undo_stack.clear()
                             showing_save_message = True
                             save_message_timer = 60
                         elif csv_loaded and tracking_data and not bbox_converted_to_markers:
@@ -11504,6 +11907,8 @@ def play_video_with_controls(
                             )
                             if dataset_dir:
                                 saved = True
+                                _refresh_restore_snapshot()
+                                undo_stack.clear()
                                 save_message_text = (
                                     f"BBox dataset saved: {os.path.basename(dataset_dir)}"
                                     + (" (appended)" if current_dataset_dir else "")
@@ -11517,6 +11922,8 @@ def play_video_with_controls(
                                 video_path, one_line_markers, deleted_markers
                             )
                             saved = True
+                            _refresh_restore_snapshot()
+                            undo_stack.clear()
                             save_message_text = f"Saved to: {os.path.basename(output_file)}"
                             showing_save_message = True
                             save_message_timer = 90  # Show for about 3 seconds at 30fps
@@ -11554,6 +11961,8 @@ def play_video_with_controls(
                                 coord_decimals=coord_decimals,
                             )
                             saved = True
+                            _refresh_restore_snapshot()
+                            undo_stack.clear()
                             save_message_text = f"Saved to: {os.path.basename(output_file)}"
                             showing_save_message = True
                             save_message_timer = 90  # Show for about 3 seconds at 30fps
@@ -11863,7 +12272,9 @@ def play_video_with_controls(
                             scrolling = True
                             pygame.mouse.get_rel()
                     elif event.button == 1:  # Left click
-                        if labeling_mode:
+                        if not _require_insert():
+                            pass
+                        elif labeling_mode:
                             # Start drawing bounding box
                             drawing_box = True
                             box_start_pos = (video_x, video_y)
@@ -11880,8 +12291,10 @@ def play_video_with_controls(
                             track_shape_drag_current = (float(video_x), float(video_y))
                         elif one_line_mode:
                             # Simply append the new marker
+                            _push_undo()
                             one_line_markers.append((frame_count, video_x, video_y))
                         else:
+                            _push_undo()
                             placed_marker_idx = -1
                             if sequential_mode:
                                 # FIFA fixed-keypoint sequential:
@@ -12096,7 +12509,11 @@ def play_video_with_controls(
                     dragging_marker_timeline = False
                     timeline_drag_mf_snapshot = None
                     # Finalize AI Track shape drag (circle/box size → block_window + centroid marker)
-                    if track_shape_dragging and track_shape_drag_origin is not None:
+                    if (
+                        track_shape_dragging
+                        and track_shape_drag_origin is not None
+                        and _can_edit_markers()
+                    ):
                         x, y = event.pos
                         if y < window_height and frame is not None:
                             video_x, video_y = screen_to_video_coords(
@@ -12164,6 +12581,7 @@ def play_video_with_controls(
                             if target_idx < 0:
                                 target_idx = 0
                             selected_marker_idx = target_idx
+                            _push_undo()
                             if coordinates is None:
                                 coordinates = {i: [] for i in range(total_frames)}
                             while len(coordinates[frame_count]) <= target_idx:
@@ -12221,8 +12639,17 @@ def play_video_with_controls(
                         track_shape_dragging = False
                         track_shape_drag_origin = None
                         track_shape_drag_current = None
+                    elif track_shape_dragging:
+                        track_shape_dragging = False
+                        track_shape_drag_origin = None
+                        track_shape_drag_current = None
                     # Finalize bounding box if drawing
-                    elif labeling_mode and drawing_box and box_start_pos is not None:
+                    elif (
+                        labeling_mode
+                        and drawing_box
+                        and box_start_pos is not None
+                        and _can_edit_markers()
+                    ):
                         x, y = event.pos
                         if y < window_height:  # Only if released in video area
                             video_x, video_y = screen_to_video_coords(
@@ -12253,6 +12680,7 @@ def play_video_with_controls(
                                 box_w = min(box_w, original_width - box_x)
                                 box_h = min(box_h, original_height - box_y)
 
+                                _push_undo()
                                 # Initialize frame list if needed
                                 if frame_count not in bboxes:
                                     bboxes[frame_count] = []
@@ -12269,6 +12697,10 @@ def play_video_with_controls(
                                 )
 
                         # Reset drawing state
+                        drawing_box = False
+                        box_start_pos = None
+                        current_box_rect = None
+                    elif drawing_box:
                         drawing_box = False
                         box_start_pos = None
                         current_box_rect = None
@@ -14255,12 +14687,15 @@ def save_coordinates(
     *,
     coord_format: str = "int",
     coord_decimals: int = 1,
+    output_file: str | None = None,
 ):
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     video_dir = os.path.dirname(video_path)
 
     # Create different filenames based on the mode
-    if is_sequential:
+    if output_file is not None:
+        output_file = str(output_file)
+    elif is_sequential:
         output_file = os.path.join(video_dir, f"{base_name}_markers_sequential.csv")
     else:
         output_file = os.path.join(video_dir, f"{base_name}_markers.csv")

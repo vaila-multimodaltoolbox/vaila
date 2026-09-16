@@ -24,7 +24,7 @@ Each button in the vailá GUI has its own documentation file:
 | B_r1_c1 | IMU | `imu_analysis` | [imu-analysis.md](imu-analysis.md) |
 | B_r1_c2 | Motion Capture Cluster | `cluster_analysis` | [cluster-analysis.md](cluster-analysis.md) |
 | B_r1_c3 | Motion Capture Full Body | `mocap_analysis` | [mocap-analysis.md](mocap-analysis.md) |
-| B_r1_c4 | Markerless 2D | `markerless_2d_analysis` | [markerless-2d-analysis.md](markerless-2d-analysis.md) (coringa: Standard/Advanced/YOLOv26 MediaPipe, Yolo+Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID], Markerless Hands, MP Angles, Face Mesh, Markerless Live) |
+| B_r1_c4 | Markerless 2D | `markerless_2d_analysis` | [markerless-2d-analysis.md](markerless-2d-analysis.md) (coringa: Standard/Advanced/YOLOv26 MediaPipe, Yolo+Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID], Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live) |
 | B_r1_c5 | Markerless 3D | `markerless_3d_analysis` | [markerless-3d-analysis.md](markerless-3d-analysis.md) (coringa: Standard/Advanced YOLO lift, SAM3+DINOv3 3D [+Visualize ID]) |
 | B_r2_c1 | Vector Coding | `vector_coding` | [vector-coding.md](vector-coding.md) |
 | B_r2_c2 | EMG | `emg_analysis` | [emg-analysis.md](emg-analysis.md) |
@@ -38,6 +38,8 @@ Each button in the vailá GUI has its own documentation file:
 | B_r3_c5 | Animal Open Field | `animal_open_field` | [animal-open-field.md](animal-open-field.md) |
 | B_r4_c2 | ML Walkway | `ml_walkway` | [ml-walkway.md](ml-walkway.md) |
 | (in Markerless 2D chooser) | Markerless Hands | `markerless_hands` | [markerless-hands.md](markerless-hands.md) |
+| (in Markerless 2D chooser) | Face Mesh | `face_mesh_analysis` | [face-mesh.md](face-mesh.md) |
+| (in Markerless 2D chooser) | Crop Face | `crop_faces_atletas` | [crop-face.md](crop-face.md) |
 | (in Markerless 2D chooser) | MP Angles | `mp_angles_calculation` | [mp-angles-calculation.md](mp-angles-calculation.md) |
 | (in Markerless 2D chooser) | Markerless Live | `markerless_live` | [markerless-live.md](markerless-live.md) |
 | B_r5_c1 | Ultrasound | `ultrasound` | [ultrasound.md](ultrasound.md) |
@@ -59,6 +61,7 @@ Each button in the vailá GUI has its own documentation file:
 | C_A_r2_c1 | DLT/REC 2D-3D | `dlt_rec_toolkit` | coringa: Make DLT2D ([dlt2d.md](dlt2d.md)), Rec2D 1DLT ([rec2d-one-dlt2d.md](rec2d-one-dlt2d.md)), Rec2D MultiDLT ([rec2d.md](rec2d.md)), Make DLT3D ([dlt3d.md](dlt3d.md)), Rec3D 1DLT ([rec3d-one-dlt3d.md](rec3d-one-dlt3d.md)), Rec3D MultiDLT ([rec3d.md](rec3d.md)) |
 | C_A_r4_c1 | ReID Marker | `reid_marker` | [reid-marker.md](reid-marker.md) |
 | C_B_r1_c1 | Video <--> PNG | `extract_png_from_videos` | [extract-png.md](extract-png.md) |
+| C_B_r1_c2 | Planar Geo | `planar_geometry_tracker` | [planar-geo.md](planar-geo.md) |
 | C_B_r1_c3 | Draw Box | `draw_box` | [draw-box.md](draw-box.md) |
 | C_B_r2_c1 | Compress Video | `compress_videos_gui` | [compress-video.md](compress-video.md) |
 | C_B_r2_c2 | Video Stabilizer | `video_stabilizer` | [video-stabilizer.md](video-stabilizer.md) |
@@ -98,4 +101,4 @@ Each button in the vailá GUI has its own documentation file:
 
 ---
 
-**Last Updated:** 02 August 2026
+**Last Updated:** 15 September 2026

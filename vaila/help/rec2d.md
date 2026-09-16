@@ -6,7 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/rec2d.py` |
-| **Version** | 0.3.94 |
+| **Version** | 0.4.3 |
+| **Updated** | 15 September 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |

@@ -5,8 +5,8 @@ crop_faces_atletas.py
 Creator: Abel Gonçalves Chinaglia
 Project: vailá - Multimodal Toolbox
 Creation Date: 2026
-Update Date: 01 June 2026
-Version: 0.3.46
+Update Date: 15 September 2026
+Version: 0.4.3
 Python Version: 3.12
 
 Description:
@@ -26,7 +26,7 @@ Supported input formats: .jpg, .jpeg, .png, .webp.
 Usage:
 ------
 GUI through vailá:
-    Tools -> Video and Image -> Crop Face
+    Frame B → Markerless 2D → Crop Face
 
 Standalone GUI:
     uv run python vaila/crop_faces_atletas.py
