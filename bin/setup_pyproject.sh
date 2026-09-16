@@ -48,6 +48,7 @@ for arg in "$@"; do
     case "$arg" in
         --target=*)        TARGET="${arg#*=}" ;;
         --extras=*)        EXTRAS_CLI="${arg#*=}" ;;
+        --full|--preset=full) EXTRAS_CLI="all" ;;
         --non-interactive) NON_INTERACTIVE=1 ;;
         -y|--yes)          ACCEPT_DEFAULTS=1 ;;
         --no-lock)         RUN_LOCK=0 ;;
@@ -150,13 +151,32 @@ template_for_target() {
     esac
 }
 
+detect_installed_extras() {
+    local detected=""
+    local py="$ROOT/.venv/bin/python3"
+    if [[ -x "$py" ]]; then
+        if "$py" -c "import sam3" 2>/dev/null; then detected+=" sam"; fi
+        if "$py" -c "import sapiens" 2>/dev/null; then detected+=" sapiens"; fi
+        if "$py" -c "import pytorch_lightning" 2>/dev/null; then detected+=" fifa"; fi
+        if "$py" -c "import diffusers" 2>/dev/null; then detected+=" upscaler"; fi
+        if "$py" -c "import pytest" 2>/dev/null; then detected+=" dev"; fi
+    fi
+    echo "$detected"
+}
+
 suggested_extras_for_target() {
+    local base=""
     case "$1" in
-        cpu)        echo "" ;;                # no gpu extra on this template
-        linux-cuda) echo "gpu" ;;
-        win-cuda)   echo "gpu" ;;
-        macos)      echo "" ;;
+        cpu)        base="" ;;
+        linux-cuda) base="gpu" ;;
+        win-cuda)   base="gpu" ;;
+        macos)      base="" ;;
     esac
+    local installed
+    installed="$(detect_installed_extras)"
+    local combined="$base $installed"
+    # Deduplicate whitespace-separated words
+    echo "$combined" | tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ' | sed 's/ $//'
 }
 
 SRC="$(template_for_target "$TARGET")"
@@ -221,7 +241,9 @@ case "$TARGET" in
     *)                   AVAILABLE_EXTRAS="$AVAILABLE_EXTRAS_CPU" ;;
 esac
 
-if [[ -n "$EXTRAS_CLI" ]]; then
+if [[ "$EXTRAS_CLI" == "all" ]]; then
+    EXTRAS="$AVAILABLE_EXTRAS"
+elif [[ -n "$EXTRAS_CLI" ]]; then
     EXTRAS="$(echo "$EXTRAS_CLI" | tr ',' ' ' | tr -s ' ')"
 elif [[ "$NON_INTERACTIVE" == 1 || "$ACCEPT_DEFAULTS" == 1 ]]; then
     EXTRAS="$SUGGESTED_EXTRAS"

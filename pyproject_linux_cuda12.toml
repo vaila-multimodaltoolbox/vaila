@@ -143,11 +143,16 @@ sam = [
 ]
 fifa = [
     "pytorch-lightning>=2.4,<3",
+    "torchmetrics",
+    "lightning-utilities",
     "timm",
     "yacs",
     "omegaconf",
+    "antlr4-python3-runtime==4.9.3",
     "roma",
     "braceexpand",
+    "mhr",
+    "trimesh",
     "tqdm",
     "termcolor",
 ]

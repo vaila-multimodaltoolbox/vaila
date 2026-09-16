@@ -59,6 +59,16 @@ $missing = 0
 }
 
 if ($missing -eq 0) {
+  Write-Host ">> [4/4] Validating python import of sapiens..."
+  & uv run python -c @"
+import sapiens
+print('   OK:      sapiens imports cleanly')
+"@
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to import sapiens. Run: uv pip install -e '$Sapiens2Dir'"
+    exit 3
+  }
+
   Write-Host ""
   Write-Host ">> Done. Sapiens2 Pose is ready."
   Write-Host "   uv run vaila/vaila_sapiens.py -i tests/markerless_2d_analysis/ -o C:\temp\sapiens_out --model 1b"

@@ -28,6 +28,29 @@
 
 set -e  # Exit on error
 
+# Parse CLI arguments
+CLI_PROFILE=""
+CLI_YES=false
+for arg in "$@"; do
+    case "$arg" in
+        --full|--cuda-full|--profile=full) CLI_PROFILE="full" ;;
+        --standard|--profile=standard)     CLI_PROFILE="standard" ;;
+        --custom|--profile=custom)         CLI_PROFILE="custom" ;;
+        -y|--yes)                          CLI_YES=true ;;
+        -h|--help)
+            echo "Usage: ./install_vaila_linux.sh [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --full, --profile=full     Full Multimodal AI Workstation (CUDA + SAM 3 + Sapiens2 + SAM 3D Body + HF)"
+            echo "  --standard                 Standard Biomechanics (Core + YOLO + IMU + MoCap + Force Plates)"
+            echo "  --custom                   Custom / Interactive Component Selection"
+            echo "  -y, --yes                  Accept recommended defaults without prompting"
+            echo "  -h, --help                 Show this help and exit"
+            exit 0
+            ;;
+    esac
+done
+
 echo "============================================================"
 echo "vaila - Multimodal Toolbox Installation/Update (uv)"
 echo "============================================================"
@@ -77,9 +100,13 @@ echo "Install Location Selection"
 echo "  [1] Current Directory ($(pwd)) - Local/Portable - Recommended"
 echo "  [2] User Profile (~/vaila)"
 echo "---------------------------------------------"
-printf "Choose an option [1-2] (default: 1): "
-read INSTALL_LOC_OPTION
-INSTALL_LOC_OPTION=${INSTALL_LOC_OPTION:-1}
+if [[ "$CLI_YES" == true ]]; then
+    INSTALL_LOC_OPTION=1
+else
+    printf "Choose an option [1-2] (default: 1): "
+    read INSTALL_LOC_OPTION
+    INSTALL_LOC_OPTION=${INSTALL_LOC_OPTION:-1}
+fi
 
 if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
     VAILA_HOME="$USER_HOME/vaila"
@@ -393,57 +420,116 @@ fi
 
 cd "$VAILA_HOME"
 
-# Select appropriate pyproject.toml template based on GPU detection and user choice
+# Select appropriate installation profile and pyproject.toml template
 echo ""
-echo "Selecting pyproject.toml configuration..."
+echo "============================================================"
+echo "Installation Profile & Hardware Configuration"
+echo "============================================================"
 
 HAS_NVIDIA_GPU=false
 if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
     HAS_NVIDIA_GPU=true
+    GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n 1 || echo "NVIDIA GPU")
+    echo "Hardware: $GPU_NAME detected."
+else
+    echo "Hardware: No NVIDIA GPU detected (CPU mode)."
 fi
 
 USE_GPU=false
-if [[ "$HAS_NVIDIA_GPU" == true ]]; then
-    echo "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
-    read -r gpu_choice
-    if [[ "$gpu_choice" != "n" && "$gpu_choice" != "N" ]]; then
-        USE_GPU=true
-    fi
-else
-    echo "No NVIDIA GPU detected. Using CPU-only configuration."
-fi
-
 USE_SAM_EXTRA=false
-echo ""
-if [[ "$USE_GPU" != true ]]; then
-    echo "Note: SAM 3 video in vailá uses NVIDIA CUDA at runtime. On this CPU-only profile you can skip (N)"
-    echo "      or install the extra for later use after switching to a CUDA pyproject (see AGENTS.md)."
-fi
-echo "Install optional SAM 3 (Meta) segmentation stack (extra 'sam', CUDA-oriented)? [y/N]"
-read -r sam_choice
-if [[ "$sam_choice" == "y" || "$sam_choice" == "Y" ]]; then
-    USE_SAM_EXTRA=true
-fi
-
 USE_SAPIENS_EXTRA=false
-if [[ "$USE_GPU" == true ]]; then
+USE_FIFA_EXTRA=false
+AUTOMATED_AI_BOOTSTRAP=false
+
+PROFILE_CHOICE=""
+if [[ -n "$CLI_PROFILE" ]]; then
+    PROFILE_CHOICE="$CLI_PROFILE"
+elif [[ "$CLI_YES" == true ]]; then
+    PROFILE_CHOICE="full"
+else
     echo ""
-    echo "Install optional Sapiens2 Pose (Meta 308-keypoint pose, extra 'sapiens', CUDA)? [y/N]"
-    read -r sapiens_choice
-    if [[ "$sapiens_choice" == "y" || "$sapiens_choice" == "Y" ]]; then
-        USE_SAPIENS_EXTRA=true
+    echo "Select Installation Profile:"
+    if [[ "$HAS_NVIDIA_GPU" == true ]]; then
+        echo "  [1] Full Multimodal AI Workstation (CUDA 12.8 + SAM 3 + Sapiens2 + SAM 3D Body + HuggingFace) [RECOMMENDED]"
+        echo "  [2] Standard Biomechanics & Motion Analysis (CUDA GPU + YOLO + IMU + MoCap + Force Plates)"
+        echo "  [3] Custom / Interactive Component Selection"
+        printf "Choose an option [1-3] (default: 1): "
+        read -r prof_input
+        prof_input=${prof_input:-1}
+        case "$prof_input" in
+            1) PROFILE_CHOICE="full" ;;
+            2) PROFILE_CHOICE="standard" ;;
+            3) PROFILE_CHOICE="custom" ;;
+            *) PROFILE_CHOICE="full" ;;
+        esac
+    else
+        echo "  [1] Standard Biomechanics & Motion Analysis (CPU - YOLO + IMU + MoCap + Force Plates) [RECOMMENDED]"
+        echo "  [2] Full CPU Multimodal Stack (Installs SAM 3 & FIFA extras for cluster/remote prep)"
+        echo "  [3] Custom / Interactive Component Selection"
+        printf "Choose an option [1-3] (default: 1): "
+        read -r prof_input
+        prof_input=${prof_input:-1}
+        case "$prof_input" in
+            1) PROFILE_CHOICE="standard" ;;
+            2) PROFILE_CHOICE="full" ;;
+            3) PROFILE_CHOICE="custom" ;;
+            *) PROFILE_CHOICE="standard" ;;
+        esac
     fi
 fi
 
-USE_FIFA_EXTRA=false
-if [[ "$USE_GPU" == true ]]; then
-    echo ""
-    echo "Install optional FIFA Skeletal Tracking Light / SAM 3D Body stack (markerless 3D mesh, extra 'fifa', CUDA)? [y/N]"
-    read -r fifa_choice
-    if [[ "$fifa_choice" == "y" || "$fifa_choice" == "Y" ]]; then
-        USE_FIFA_EXTRA=true
-    fi
-fi
+case "$PROFILE_CHOICE" in
+    full)
+        echo ">> Profile: Full Multimodal AI Workstation"
+        if [[ "$HAS_NVIDIA_GPU" == true ]]; then
+            USE_GPU=true
+            USE_SAM_EXTRA=true
+            USE_SAPIENS_EXTRA=true
+            USE_FIFA_EXTRA=true
+            AUTOMATED_AI_BOOTSTRAP=true
+        else
+            USE_GPU=false
+            USE_SAM_EXTRA=true
+            USE_FIFA_EXTRA=true
+            USE_SAPIENS_EXTRA=false
+            AUTOMATED_AI_BOOTSTRAP=true
+        fi
+        ;;
+    standard)
+        echo ">> Profile: Standard Biomechanics & Motion Analysis"
+        if [[ "$HAS_NVIDIA_GPU" == true ]]; then
+            USE_GPU=true
+        else
+            USE_GPU=false
+        fi
+        USE_SAM_EXTRA=false
+        USE_SAPIENS_EXTRA=false
+        USE_FIFA_EXTRA=false
+        AUTOMATED_AI_BOOTSTRAP=false
+        ;;
+    custom)
+        echo ">> Profile: Custom Component Selection"
+        if [[ "$HAS_NVIDIA_GPU" == true ]]; then
+            echo "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
+            read -r gpu_choice
+            if [[ "$gpu_choice" != "n" && "$gpu_choice" != "N" ]]; then
+                USE_GPU=true
+            fi
+        fi
+        echo "Install optional SAM 3 segmentation stack (extra 'sam', CUDA)? [y/N]"
+        read -r sam_choice
+        [[ "$sam_choice" =~ ^[Yy]$ ]] && USE_SAM_EXTRA=true
+        if [[ "$USE_GPU" == true ]]; then
+            echo "Install optional Sapiens2 Pose stack (extra 'sapiens', CUDA)? [y/N]"
+            read -r sapiens_choice
+            [[ "$sapiens_choice" =~ ^[Yy]$ ]] && USE_SAPIENS_EXTRA=true
+            echo "Install optional SAM 3D Body (DINOv3) stack (extra 'fifa', CUDA)? [y/N]"
+            read -r fifa_choice
+            [[ "$fifa_choice" =~ ^[Yy]$ ]] && USE_FIFA_EXTRA=true
+        fi
+        AUTOMATED_AI_BOOTSTRAP=false
+        ;;
+esac
 
 # Choose template
 if [[ "$USE_GPU" == true ]]; then
@@ -613,70 +699,111 @@ if [[ "$USE_SAPIENS_EXTRA" == true ]]; then
     fi
 fi
 
+# ============================================================================
+# AI FOUNDATION MODELS SETUP & VERIFICATION
+# ============================================================================
+
+# 1. Hugging Face Authentication
+if [[ "$USE_SAM_EXTRA" == true || "$USE_FIFA_EXTRA" == true || "$USE_SAPIENS_EXTRA" == true ]]; then
+    echo ""
+    echo "============================================================"
+    echo "Hugging Face Authentication Check"
+    echo "============================================================"
+    if uv run python -c "import huggingface_hub; assert huggingface_hub.get_token() is not None" &>/dev/null; then
+        echo "✓ Active Hugging Face authentication detected."
+    else
+        echo "Notice: SAM 3 (facebook/sam3) and SAM 3D Body (facebook/sam-3d-body-dinov3) are gated models."
+        echo "To download their weights, please ensure:"
+        echo "  1) You have accepted the licenses on Hugging Face:"
+        echo "     - https://huggingface.co/facebook/sam3"
+        echo "     - https://huggingface.co/facebook/sam-3d-body-dinov3"
+        echo "  2) You have created a Read token: https://huggingface.co/settings/tokens"
+        echo ""
+        if [[ "$AUTOMATED_AI_BOOTSTRAP" == true || "$CLI_YES" != true ]]; then
+            read -r -p "Log in to Hugging Face now with 'uv run hf auth login'? [Y/n] " do_hf_login
+            if [[ "$do_hf_login" != "n" && "$do_hf_login" != "N" ]]; then
+                (cd "$VAILA_HOME" && uv run hf auth login) || {
+                    echo "Warning: Hugging Face login not completed. You can run it later via: uv run hf auth login"
+                }
+            fi
+        fi
+    fi
+fi
+
+# 2. SAM 3 (optional pre-download)
 if [[ "$USE_SAM_EXTRA" == true ]]; then
     echo ""
     echo "------------------------------------------------------------"
-    echo "SAM 3 (optional): weights are gated on Hugging Face (facebook/sam3)."
-    echo "  1) In a browser, log in and accept the model license:"
-    echo "       https://huggingface.co/facebook/sam3"
-    echo "  2) Store a token on this machine (Read access):"
-    echo "       cd \"$VAILA_HOME\" && uv run hf auth login"
-    echo "     Use --force if a different HF account is already cached."
-    echo "  3) Optional: download weights into the repo"
-    echo "       uv run vaila/vaila_sam.py --download-weights"
+    echo "SAM 3 Video Segmentation setup"
     echo "------------------------------------------------------------"
-    read -r -p "Run 'uv run hf auth login' now from $VAILA_HOME? [y/N] " hf_login_now
-    if [[ "$hf_login_now" == "y" || "$hf_login_now" == "Y" ]]; then
-        (cd "$VAILA_HOME" && uv run hf auth login) || {
-            echo "Warning: hf auth login failed or was cancelled. You can run it later."
+    if [[ "$AUTOMATED_AI_BOOTSTRAP" == true ]]; then
+        (cd "$VAILA_HOME" && uv run vaila/vaila_sam.py --download-weights) || {
+            echo "Note: SAM 3 weights download will be completed on first use or after accepting HF license."
         }
+    else
+        read -r -p "Pre-download SAM 3 weights now? [y/N] " sam_dl_choice
+        if [[ "$sam_dl_choice" =~ ^[Yy]$ ]]; then
+            (cd "$VAILA_HOME" && uv run vaila/vaila_sam.py --download-weights) || true
+        fi
     fi
 fi
 
+# 3. Sapiens2 Pose setup (clone repo + download weights)
 if [[ "$USE_SAPIENS_EXTRA" == true ]]; then
     echo ""
     echo "------------------------------------------------------------"
-    echo "Sapiens2 Pose (optional): clone + weights via bin/setup_sapiens2.sh"
-    echo "  - Clones facebookresearch/sapiens2 into .local/third_party/sapiens2 (editable install)"
-    echo "  - Downloads pose (1B default) + DETR detector to vaila/models/sapiens2/"
-    echo "  - GUI: Frame B -> YOLO + FB -> Sapiens2 Pose"
-    echo "  - Test: uv run vaila/vaila_sapiens.py -i tests/markerless_2d_analysis/ -o /tmp/out --dry-run"
-    echo "  - License: Meta Sapiens2 License (not AGPL) — see vaila/help/vaila_sapiens.md"
+    echo "Sapiens2 Pose setup (Meta 308-keypoint model)"
     echo "------------------------------------------------------------"
-    read -r -p "Run 'bash bin/setup_sapiens2.sh' now from $VAILA_HOME? [y/N] " sapiens_setup_now
-    if [[ "$sapiens_setup_now" == "y" || "$sapiens_setup_now" == "Y" ]]; then
+    DO_SAPIENS_SETUP=false
+    if [[ "$AUTOMATED_AI_BOOTSTRAP" == true ]]; then
+        DO_SAPIENS_SETUP=true
+    else
+        read -r -p "Run 'bash bin/setup_sapiens2.sh' now from $VAILA_HOME? [y/N] " s_choice
+        [[ "$s_choice" =~ ^[Yy]$ ]] && DO_SAPIENS_SETUP=true
+    fi
+    if [[ "$DO_SAPIENS_SETUP" == true ]]; then
         if [[ -x "$VAILA_HOME/bin/setup_sapiens2.sh" ]]; then
             (cd "$VAILA_HOME" && bash bin/setup_sapiens2.sh) || {
-                echo "Warning: setup_sapiens2.sh failed or was cancelled. You can run it later:"
-                echo "  cd \"$VAILA_HOME\" && bash bin/setup_sapiens2.sh"
+                echo "Warning: setup_sapiens2.sh failed or was cancelled. Run manually: bash bin/setup_sapiens2.sh"
             }
         else
-            echo "Warning: bin/setup_sapiens2.sh not found. Run manually after updating the repo."
+            echo "Warning: bin/setup_sapiens2.sh not found."
         fi
     fi
 fi
 
+# 4. SAM 3D Body / FIFA setup (clone repo + runtime deps + weights)
 if [[ "$USE_FIFA_EXTRA" == true ]]; then
     echo ""
     echo "------------------------------------------------------------"
-    echo "FIFA Skeletal Tracking Light / SAM 3D Body (optional): clone + weights via bin/setup_fifa_sam3d.sh"
-    echo "  - Clones facebookresearch/sam-3d-body into sam_3d_body/ (NOT pip-installable; runtime deps only)"
-    echo "  - Downloads gated facebook/sam-3d-body-dinov3 weights into vaila/models/sam-3d-dinov3/"
-    echo "  - GUI: Frame B -> YOLO + FB -> SAM3+DINOv3 3D (markerless 3D mesh + metric joints)"
-    echo "  - Test: uv run python -u vaila/sam3dinov3.py -i tests/markerless_2d_analysis/ -o /tmp/out --dry-run"
-    echo "  - License: SAM 3D Body keeps its Meta license (not AGPL) — see vaila/help/sam3dinov3.md"
+    echo "SAM 3D Body (DINOv3) setup (markerless 3D mesh & joints)"
     echo "------------------------------------------------------------"
-    read -r -p "Run 'bash bin/setup_fifa_sam3d.sh' now from $VAILA_HOME? [y/N] " fifa_setup_now
-    if [[ "$fifa_setup_now" == "y" || "$fifa_setup_now" == "Y" ]]; then
+    DO_FIFA_SETUP=false
+    if [[ "$AUTOMATED_AI_BOOTSTRAP" == true ]]; then
+        DO_FIFA_SETUP=true
+    else
+        read -r -p "Run 'bash bin/setup_fifa_sam3d.sh' now from $VAILA_HOME? [y/N] " f_choice
+        [[ "$f_choice" =~ ^[Yy]$ ]] && DO_FIFA_SETUP=true
+    fi
+    if [[ "$DO_FIFA_SETUP" == true ]]; then
         if [[ -x "$VAILA_HOME/bin/setup_fifa_sam3d.sh" ]]; then
             (cd "$VAILA_HOME" && bash bin/setup_fifa_sam3d.sh) || {
-                echo "Warning: setup_fifa_sam3d.sh failed or was cancelled. You can run it later:"
-                echo "  cd \"$VAILA_HOME\" && bash bin/setup_fifa_sam3d.sh"
+                echo "Warning: setup_fifa_sam3d.sh failed or was cancelled. Run manually: bash bin/setup_fifa_sam3d.sh"
             }
         else
-            echo "Warning: bin/setup_fifa_sam3d.sh not found. Run manually after updating the repo."
+            echo "Warning: bin/setup_fifa_sam3d.sh not found."
         fi
     fi
+fi
+
+# Ensure all editable packages and dependencies remain registered
+if [[ -d "$VAILA_HOME/.local/third_party/sapiens2" ]]; then
+    uv pip install -e "$VAILA_HOME/.local/third_party/sapiens2" 2>/dev/null || true
+fi
+if [[ -d "$VAILA_HOME/sam_3d_body" ]]; then
+    uv pip install --no-deps \
+        mhr yacs omegaconf "antlr4-python3-runtime==4.9.3" roma trimesh braceexpand \
+        pytorch-lightning torchmetrics lightning-utilities termcolor 2>/dev/null || true
 fi
 
 # Verify pycairo installation
@@ -705,6 +832,50 @@ if ! uv run python -c "import PIL; print('PIL OK')" 2>&1 | grep -q "PIL OK"; the
     fi
 else
     echo "Environment verification successful."
+fi
+
+# ============================================================================
+# AI & MULTIMODAL VERIFICATION SUMMARY
+# ============================================================================
+if [[ "$USE_GPU_EXTRA" == true || "$USE_SAM_EXTRA" == true || "$USE_SAPIENS_EXTRA" == true || "$USE_FIFA_EXTRA" == true ]]; then
+    echo ""
+    echo "=================================================================="
+    echo "AI & Multimodal Engines Verification"
+    echo "Verificação dos Motores de IA e Multimodal"
+    echo "=================================================================="
+    uv run python -c "
+def status_icon(ok):
+    return '[ OK ]' if ok else '[FAIL]'
+
+print('------------------------------------------------------------')
+try:
+    import torch
+    cuda_ok = torch.cuda.is_available()
+    dev_name = torch.cuda.get_device_name(0) if cuda_ok else 'CPU only'
+    print(f\"{status_icon(cuda_ok)} PyTorch {torch.__version__} (CUDA: {cuda_ok} - {dev_name})\")
+except Exception as e:
+    print(f\"[FAIL] PyTorch: {e}\")
+
+try:
+    import sam3
+    print(f\"{status_icon(True)} SAM 3 Video Segmentation\")
+except Exception as e:
+    print(f\"[SKIP/FAIL] SAM 3: {e}\")
+
+try:
+    import sapiens
+    print(f\"{status_icon(True)} Sapiens2 Pose (Meta 308-keypoint)\")
+except Exception as e:
+    print(f\"[SKIP/FAIL] Sapiens2 Pose: {e}\")
+
+try:
+    from vaila.sam3dinov3 import ensure_sam3d_ready
+    ckpt, _ = ensure_sam3d_ready()
+    print(f\"{status_icon(True)} SAM 3D Body / DINOv3 (Model: {ckpt.name})\")
+except Exception as e:
+    print(f\"[SKIP/FAIL] SAM 3D Body (DINOv3): {e}\")
+print('------------------------------------------------------------')
+" 2>/dev/null || true
 fi
 
 # Use generic run_vaila.sh from bin/

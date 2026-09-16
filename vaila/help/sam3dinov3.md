@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.3.117
-- **Updated:** 2026-08-27
+- **Version:** 0.4.3
+- **Updated:** 2026-09-16
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
@@ -35,14 +35,15 @@ per-joint 3D trajectories usable for biomechanics.
 ## Requirements
 
 ```bash
-# SAM 3 (CUDA) stack — do this on every machine (weights are not in git)
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,fifa --yes
+# Recommended 1-command installer (installs CUDA, SAM 3, Sapiens2, and SAM 3D Body):
+./install_vaila_linux.sh --full            # Linux
+.\install_vaila_win.ps1 -Full              # Windows
+
+# Or manual template switch:
+bash bin/setup_pyproject.sh --target=linux-cuda --full --yes
 uv run hf auth login
 uv run hf auth whoami   # must exit 0; need huggingface-hub >= 1.22
 uv run vaila/vaila_sam.py --download-weights
-
-# SAM 3D Body: clones facebookresearch/sam-3d-body and downloads gated weights
-# (accept the license on the model card first)
 bash bin/setup_fifa_sam3d.sh
 ```
 

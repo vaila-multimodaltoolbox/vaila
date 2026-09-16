@@ -87,6 +87,18 @@ for f in "${WEIGHTS_DIR}/model.ckpt" "${WEIGHTS_DIR}/assets/mhr_model.pt"; do
 done
 
 if [[ "${missing}" -eq 0 ]]; then
+  echo ">> [4/4] Validating python import of sam_3d_body..."
+  (cd "${REPO_ROOT}" && uv run python -c "
+import sys
+sys.path.insert(0, r'''${SAM3D_DIR}''')
+import sam_3d_body
+from sam_3d_body.sam_3d_body_estimator import SAM3DBodyEstimator
+print('   OK:      sam_3d_body imports cleanly')
+") || {
+    echo "   ERROR:   Failed to import sam_3d_body. Runtime dependencies may be missing."
+    exit 3
+  }
+
   echo ""
   echo ">> Done. SAM 3D Body is ready for the FIFA Skeletal Tracking Light pipeline."
   echo "   Next steps:"

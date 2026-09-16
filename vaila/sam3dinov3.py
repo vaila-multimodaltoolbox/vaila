@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 26 August 2026
-Version: 0.3.116
+Update Date: 16 September 2026
+Version: 0.4.3
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -434,7 +434,26 @@ def ensure_sam3d_assets(weights_dir: Path | None) -> tuple[Path, Path]:
     return resolve_sam3d_assets(weights_dir)
 
 
+def ensure_sam3d_ready(weights_dir: Path | None = None) -> tuple[Path, Path]:
+    """Fail-fast preflight: verify weights AND sam_3d_body import before starting SAM."""
+    assets = ensure_sam3d_assets(weights_dir)
+    ensure_sam3d_importable()
+    try:
+        importlib.import_module(SAM3D_PACKAGE)
+    except Exception as exc:
+        raise _sam3d_import_error(exc) from exc
+    return assets
+
+
 def _sam3d_import_error(exc: Exception) -> RuntimeError:
+    if isinstance(exc, ModuleNotFoundError) and getattr(exc, "name", "") != SAM3D_PACKAGE:
+        return RuntimeError(
+            f"Missing runtime dependency for '{SAM3D_PACKAGE}': {exc}\n\n"
+            "Install all SAM 3D Body runtime dependencies with:\n"
+            "  uv pip install --no-deps mhr yacs omegaconf \"antlr4-python3-runtime==4.9.3\" roma trimesh braceexpand pytorch-lightning torchmetrics lightning-utilities termcolor\n\n"
+            "Or run the complete setup script:\n"
+            "  bash bin/setup_fifa_sam3d.sh (Linux/macOS) or pwsh bin/setup_fifa_sam3d.ps1 (Windows)"
+        )
     searched = "\n".join(f"    {p}" for p in _sam3d_checkout_candidates())
     return RuntimeError(
         "Could not import the 'sam_3d_body' package.\n"
@@ -1467,6 +1486,7 @@ def _process_one_video(
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
+        ensure_sam3d_ready(args.weights_dir)
         sam_dir = _resolve_or_run_sam(
             video_path,
             output_dir,
@@ -1839,6 +1859,7 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                     raise ValueError(f"Existing SAM results path not found: {sam_results}")
                 weights_raw = self.weights_var.get().strip()
                 weights_dir = Path(weights_raw).expanduser() if weights_raw else None
+                ensure_sam3d_ready(weights_dir)
                 focal_raw = self.focal_var.get().strip()
                 focal_px = float(focal_raw) if focal_raw else None
                 if focal_px is not None and focal_px <= 0:
@@ -1861,7 +1882,7 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                     focal_px=focal_px,
                     weights_dir=weights_dir,
                 )
-            except ValueError as exc:
+            except (ValueError, RuntimeError) as exc:
                 messagebox.showerror("SAM3+DINOv3 3D", str(exc), parent=self)
                 return
             _log(
@@ -2023,9 +2044,8 @@ def main() -> None:
         parser.error("--fresh and --resume are mutually exclusive")
 
     if not args.dry_run:
-        # SAM 3D Body / DINOv3 weights only; the SAM3 *video* checkpoint used by the
-        # per-video subprocess is resolved/downloaded by vaila_sam.py's own preflight.
-        ensure_sam3d_assets(args.weights_dir)
+        # Preflight: verify SAM 3D Body weights AND importability before running SAM 3
+        ensure_sam3d_ready(args.weights_dir)
 
     input_path = args.input.expanduser().resolve()
     output_parent = (

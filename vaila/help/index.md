@@ -8,18 +8,20 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 134 | **Categories:** 7 | **Generated on:** 15/09/2026 (v0.4.3)
+**Documented topics:** 134 | **Categories:** 7 | **Generated on:** 16/09/2026 (v0.4.3)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
 ---
 
-## Analysis (27)
+## Analysis (28)
 
 - **animal_open_field** — This script processes movement data of animals in an open field test, performing comprehensive kinematic analyses and generating visualizations to evaluate a...
   - [HTML](animal_open_field.html) · [Markdown](animal_open_field.md)
 - **cluster_analysis** — This Python script processes motion capture data for trunk and pelvis rotations using clusters of anatomical markers. It reads CSV files with marker position...
   - [HTML](cluster_analysis.html) · [Markdown](cluster_analysis.md)
+- **crop_faces_atletas** — crop_faces_atletas.py batch-processes athlete photos and creates square face crops suitable for 5 x 5 cm outputs at 300 DPI. It uses MediaPipe Face Detector...
+  - [HTML](crop_faces_atletas.html) · [Markdown](crop_faces_atletas.md)
 - **cube2d_kinematics** — This module provides functionality for analyzing 2D kinematics data from cube-based movement assessments.
   - [HTML](cube2d_kinematics.html) · [Markdown](cube2d_kinematics.md)
 - **emg_labiocom** — This module analyzes surface EMG (sEMG) signals with time-domain,
@@ -108,7 +110,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **yolov26track** — This script performs object detection and tracking on video files using the YOLO model v26 (latest version), with integrated pose estimation capabilities. It...
   - [HTML](yolov26track.html) · [Markdown](yolov26track.md)
 
-## Processing (24)
+## Processing (23)
 
 - **data_processing** — Determines the number of header lines in a CSV file.
   - [HTML](data_processing.html) · [Markdown](data_processing.md)
@@ -134,8 +136,6 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](modifylabref.html) · [Markdown](modifylabref.md)
 - **monocular_dlt_align** — What problem this solves
   - [HTML](monocular_dlt_align.html) · [Markdown](monocular_dlt_align.md)
-- **planar_geometry_tracker** — Frame C → Video and Image → **Planar Geo**; also **Geo Homog** in getpixelvideo. For stabilized video from fixed pixel markers, see [Video Stabilizer](video_stabilizer.md).
-  - [HTML](planar_geometry_tracker.html) · [Markdown](planar_geometry_tracker.md)
 - **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: calibrate first, then click points on the video and classify the current point set as D...
   - [HTML](quickmeasure.html) · [Markdown](quickmeasure.md)
 - **readc3d_export** — This script processes .c3d files, extracting marker data, analog data, events, and points residuals, and saves them into CSV files. It also allows the option...
@@ -173,8 +173,6 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](compress_videos_h266.html) · [Markdown](compress_videos_h266.md)
 - **cop_calculate** — This script allows users to select six (6) headers for force plate data analysis.
   - [HTML](cop_calculate.html) · [Markdown](cop_calculate.md)
-- **crop_faces_atletas** — Frame B → Markerless 2D → **Crop Face**. Batch athlete photo square crops (5×5 cm @ 300 DPI) via MediaPipe Face Detector.
-  - [HTML](crop_faces_atletas.html) · [Markdown](crop_faces_atletas.md)
 - **cutvideo** — Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with in...
   - [HTML](cutvideo.html) · [Markdown](cutvideo.md)
 - **drawboxe** — drawboxe is a tool for drawing boxes and polygons on videos. It allows you to create rectangular, trapezoidal, and free-form polygons to process videos, fill...
@@ -209,6 +207,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](numberframes.html) · [Markdown](numberframes.md)
 - **numstepsmp** — Opens a dialog to select a CSV file of foot coordinates and calculates the number of steps based on foot position using MediaPipe data. Includes Butterworth...
   - [HTML](numstepsmp.html) · [Markdown](numstepsmp.md)
+- **planar_geometry_tracker** — For a stabilized video from fixed pixel markers, use [Video Stabilizer](video_stabilizer.md).
+  - [HTML](planar_geometry_tracker.html) · [Markdown](planar_geometry_tracker.md)
 - **resize_video** — This script provides tools for improving pose detection in videos: 1. Batch resize videos to higher resolutions (2x-8x) 2. Crop specific regions of interest...
   - [HTML](resize_video.html) · [Markdown](resize_video.md)
 - **rotation** — This Python script provides a comprehensive set of tools for performing 3D rotation and transformation operations using numpy and scipy. It includes methods...

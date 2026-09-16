@@ -53,6 +53,15 @@ for f in \
 done
 
 if [[ "${missing}" -eq 0 ]]; then
+  echo ">> [4/4] Validating python import of sapiens..."
+  (cd "${REPO_ROOT}" && uv run python -c "
+import sapiens
+print('   OK:      sapiens imports cleanly')
+") || {
+    echo "   ERROR:   Failed to import sapiens. Please run: uv pip install -e '${SAPIENS2_DIR}'"
+    exit 3
+  }
+
   echo ""
   echo ">> Done. Sapiens2 Pose is ready."
   echo "   Optional: uv sync --extra sapiens"

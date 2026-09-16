@@ -17,15 +17,15 @@ Repo ships **several `pyproject_*.toml` templates**. Checked-in **`pyproject.tom
 ```bash
 # Linux / macOS / WSL / Git Bash
 bash bin/setup_pyproject.sh                           # interactive, auto-detect
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes
+bash bin/setup_pyproject.sh --target=linux-cuda --full --yes  # all AI extras (gpu,sam,sapiens,fifa)
 bash bin/setup_pyproject.sh --target=cpu --non-interactive
 
 # Windows PowerShell
 pwsh bin/setup_pyproject.ps1                          # interactive, auto-detect
-pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes
+pwsh bin/setup_pyproject.ps1 -Target win-cuda -Full -Yes      # all AI extras
 ```
 
-Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`, `--help`. CI: `--non-interactive --no-sync` swaps template + locks, no install.
+Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`, `--help`. CI: `--non-interactive --no-sync` swaps template + locks, no install.
 
 **Legacy per-platform switchers** (thin wrappers around `setup_pyproject.sh/.ps1`, kept for back-compat):
 

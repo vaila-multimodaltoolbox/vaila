@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.3 (see `vaila.py`). **Package version:** 0.4.3 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-15
+**Last updated:** 2026-09-16
 
 Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
 momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.
@@ -58,6 +58,9 @@ If you **already cloned** the repo, prefer running the local script (keeps `uv.l
 cd path/to/vaila
 chmod +x install_vaila_linux.sh
 ./install_vaila_linux.sh
+
+# Or install the Complete AI Workstation (CUDA + SAM 3 + Sapiens2 + SAM 3D Body + HF) in one step:
+./install_vaila_linux.sh --full
 ```
 
 **🍎 macOS:**
@@ -105,6 +108,9 @@ If you **already cloned** the repo, prefer running the local script (keeps `uv.l
 ```powershell
 cd path\to\vaila
 .\install_vaila_win.ps1
+
+# Or install the Complete AI Workstation (CUDA + SAM 3 + Sapiens2 + SAM 3D Body + HF) in one step:
+.\install_vaila_win.ps1 -Full
 ```
 
 > **Staying up to date:** in a **git clone**, the GUI runs `git fetch origin main`
@@ -320,12 +326,13 @@ _vailá_ uses a **template-based configuration system** that automatically selec
 **Manual template switch (developers / second machine):** prefer the **unified interactive bootstrap** which auto-detects OS + NVIDIA + arch and runs `uv lock` + `uv sync`:
 
 ```bash
-bash bin/setup_pyproject.sh                                       # Linux / macOS / WSL / Git Bash
-pwsh bin/setup_pyproject.ps1                                      # Windows PowerShell
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes   # non-interactive
+bash bin/setup_pyproject.sh                                       # Linux / macOS / WSL / Git Bash (interactive)
+pwsh bin/setup_pyproject.ps1                                      # Windows PowerShell (interactive)
+bash bin/setup_pyproject.sh --target=linux-cuda --full --yes       # Linux CUDA + all AI extras (gpu,sam,sapiens,fifa)
+pwsh bin/setup_pyproject.ps1 -Target win-cuda -Full -Yes          # Windows CUDA + all AI extras
 ```
 
-Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`, `--help`.
+Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`, `--help`.
 
 Legacy per-platform shims (thin wrappers around the bootstrap, kept for backward compatibility): `bin/use_pyproject_linux_cuda.sh`, `bin/use_pyproject_universal_cpu.sh`, `bin/use_pyproject_macos_metal.sh`, plus the Windows PowerShell equivalents. See **[AGENTS.md](AGENTS.md)** for the full hybrid workflow.
 

@@ -37,6 +37,7 @@ param(
     [ValidateSet('auto','cpu','linux-cuda','win-cuda','macos')]
     [string]$Target = 'auto',
     [string]$Extras = '',
+    [switch]$Full,
     [switch]$NonInteractive,
     [switch]$Yes,
     [switch]$NoLock,
@@ -110,13 +111,29 @@ function Template-For($t) {
     }
 }
 
-function Suggested-Extras($t) {
-    switch ($t) {
-        'cpu'        { '' }
-        'linux-cuda' { 'gpu' }
-        'win-cuda'   { 'gpu' }
-        'macos'      { '' }
+function Detect-InstalledExtras {
+    $detected = @()
+    $py = if ($IsWindows) { Join-Path $Root '.venv\Scripts\python.exe' } else { Join-Path $Root '.venv/bin/python3' }
+    if (Test-Path $py) {
+        if (& $py -c "import sam3" 2>$null) { $detected += 'sam' }
+        if (& $py -c "import sapiens" 2>$null) { $detected += 'sapiens' }
+        if (& $py -c "import pytorch_lightning" 2>$null) { $detected += 'fifa' }
+        if (& $py -c "import diffusers" 2>$null) { $detected += 'upscaler' }
+        if (& $py -c "import pytest" 2>$null) { $detected += 'dev' }
     }
+    return $detected
+}
+
+function Suggested-Extras($t) {
+    $base = switch ($t) {
+        'cpu'        { @() }
+        'linux-cuda' { @('gpu') }
+        'win-cuda'   { @('gpu') }
+        'macos'      { @() }
+    }
+    $installed = Detect-InstalledExtras
+    $all = ($base + $installed) | Select-Object -Unique
+    return ($all -join ' ')
 }
 
 $Src = Template-For $Target
@@ -171,7 +188,9 @@ $AvailableExtras = switch ($Target) {
     default      { @('sam','fifa','sapiens','upscaler','dev') }
 }
 
-if ($Extras) {
+if ($Full -or $Extras -eq 'all') {
+    $Chosen = $AvailableExtras
+} elseif ($Extras) {
     $Chosen = $Extras -split '[,\s]+' | Where-Object { $_ }
 } elseif ($NonInteractive -or $Yes) {
     $Chosen = $SuggestedExtras -split '[,\s]+' | Where-Object { $_ }

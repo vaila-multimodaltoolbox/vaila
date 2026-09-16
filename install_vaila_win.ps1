@@ -41,7 +41,10 @@
 
 param(
     [ValidateSet("prompt", "portable", "profile")]
-    [string]$InstallLocation = "prompt"
+    [string]$InstallLocation = "prompt",
+    [switch]$Full,
+    [switch]$Standard,
+    [switch]$Yes
 )
 
 $ErrorActionPreference = "Stop"
@@ -713,46 +716,94 @@ If ($isAdmin -and $vailaProgramPath -like "*Program Files*") {
     }
 }
 
-# Select appropriate pyproject.toml template based on GPU detection and user choice
+# ============================================================================
+# INSTALLATION PROFILE SELECTION
+# ============================================================================
 Write-Host ""
-Write-Host "Selecting pyproject.toml configuration..." -ForegroundColor Yellow
+Write-Host "==================================================================" -ForegroundColor Yellow
+Write-Host "Select Installation Profile / Perfil de Instalação" -ForegroundColor Yellow
+Write-Host "==================================================================" -ForegroundColor Yellow
 
 $hasNvidiaGPU = Get-Command nvidia-smi -ErrorAction SilentlyContinue
 $useGPU = $false
-
-If ($hasNvidiaGPU) {
-    Write-Host "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]" -ForegroundColor Cyan
-    $gpuChoice = Read-Host
-    $useGPU = ($gpuChoice -ne "n" -and $gpuChoice -ne "N")
-} Else {
-    Write-Host "No NVIDIA GPU detected. Using CPU-only configuration." -ForegroundColor Yellow
-}
-
 $useSamExtra = $false
-Write-Host ""
-Write-Host "Install optional SAM 3 (Meta) segmentation stack (extra 'sam')? [y/N]" -ForegroundColor Cyan
-$samChoice = Read-Host
-if ($samChoice -eq "y" -or $samChoice -eq "Y") {
-    $useSamExtra = $true
-}
-
 $useSapiensExtra = $false
-If ($useGPU) {
+$useFifaExtra = $false
+$automatedAiBootstrap = $false
+
+$profileChoice = ""
+if ($Full) {
+    $profileChoice = "1"
+} elseif ($Standard) {
+    $profileChoice = "2"
+} elseif ($Yes) {
+    if ($hasNvidiaGPU) {
+        $profileChoice = "1"
+    } else {
+        $profileChoice = "2"
+    }
+} else {
+    Write-Host "[1] Full Multimodal AI Workstation (Recommended for NVIDIA GPU)" -ForegroundColor Cyan
+    Write-Host "    - PyTorch with CUDA 12.1 GPU acceleration"
+    Write-Host "    - SAM 3 (Meta video segmentation & tracking)"
+    Write-Host "    - Sapiens2 Pose (Meta 308-keypoint markerless pose)"
+    Write-Host "    - SAM 3D Body / DINOv3 (markerless 3D mesh & joints)"
+    Write-Host "    - Automated HuggingFace auth & weight downloads"
     Write-Host ""
-    Write-Host "Install optional Sapiens2 Pose (Meta 308-keypoint pose, extra 'sapiens', CUDA)? [y/N]" -ForegroundColor Cyan
-    $sapiensChoice = Read-Host
-    if ($sapiensChoice -eq "y" -or $sapiensChoice -eq "Y") {
-        $useSapiensExtra = $true
+    Write-Host "[2] Standard Biomechanics & Motion Analysis (CPU / Portable)" -ForegroundColor Cyan
+    Write-Host "    - Core vailá + YOLO + IMU + MoCap + Force Plates + DLT"
+    Write-Host ""
+    Write-Host "[3] Custom / Step-by-Step Selection" -ForegroundColor Cyan
+    Write-Host ""
+    if ($hasNvidiaGPU) {
+        $profileChoice = Read-Host "Select profile [1-3] (Default: 1 - Full AI Workstation)"
+        if ([string]::IsNullOrWhiteSpace($profileChoice)) { $profileChoice = "1" }
+    } else {
+        $profileChoice = Read-Host "Select profile [1-3] (Default: 2 - Standard Biomechanics)"
+        if ([string]::IsNullOrWhiteSpace($profileChoice)) { $profileChoice = "2" }
     }
 }
 
-$useFifaExtra = $false
-If ($useGPU) {
-    Write-Host ""
-    Write-Host "Install optional FIFA Skeletal Tracking Light / SAM 3D Body stack (markerless 3D mesh, extra 'fifa', CUDA)? [y/N]" -ForegroundColor Cyan
-    $fifaChoice = Read-Host
-    if ($fifaChoice -eq "y" -or $fifaChoice -eq "Y") {
+switch ($profileChoice) {
+    "1" {
+        Write-Host "Profile selected: Full Multimodal AI Workstation" -ForegroundColor Green
+        if ($hasNvidiaGPU) {
+            $useGPU = $true
+        } else {
+            Write-Warning "NVIDIA GPU not detected. Proceeding with CPU-compatible AI extras where possible."
+        }
+        $useSamExtra = $true
+        $useSapiensExtra = $true
         $useFifaExtra = $true
+        $automatedAiBootstrap = $true
+    }
+    "2" {
+        Write-Host "Profile selected: Standard Biomechanics & Motion Analysis" -ForegroundColor Green
+        $useGPU = $false
+        $useSamExtra = $false
+        $useSapiensExtra = $false
+        $useFifaExtra = $false
+        $automatedAiBootstrap = $false
+    }
+    default {
+        Write-Host "Custom selection mode." -ForegroundColor Yellow
+        if ($hasNvidiaGPU) {
+            $gpuChoice = Read-Host "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]"
+            $useGPU = ($gpuChoice -ne "n" -and $gpuChoice -ne "N")
+        } else {
+            Write-Host "No NVIDIA GPU detected. Using CPU-only configuration." -ForegroundColor Yellow
+        }
+
+        $samChoice = Read-Host "Install optional SAM 3 (Meta) segmentation stack (extra 'sam')? [y/N]"
+        if ($samChoice -eq "y" -or $samChoice -eq "Y") { $useSamExtra = $true }
+
+        if ($useGPU) {
+            $sapiensChoice = Read-Host "Install optional Sapiens2 Pose (Meta 308-keypoint pose, extra 'sapiens', CUDA)? [y/N]"
+            if ($sapiensChoice -eq "y" -or $sapiensChoice -eq "Y") { $useSapiensExtra = $true }
+
+            $fifaChoice = Read-Host "Install optional FIFA Skeletal Tracking Light / SAM 3D Body stack (markerless 3D mesh, extra 'fifa', CUDA)? [y/N]"
+            if ($fifaChoice -eq "y" -or $fifaChoice -eq "Y") { $useFifaExtra = $true }
+        }
     }
 }
 
@@ -920,34 +971,50 @@ Try {
         }
     }
 
-    if ($useSamExtra) {
+    if ($useSamExtra -or $useFifaExtra) {
         Write-Host ""
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
-        Write-Host "SAM 3: accept https://huggingface.co/facebook/sam3 then run:" -ForegroundColor Cyan
-        Write-Host "  cd `"$vailaProgramPath`" ; uv run hf auth login" -ForegroundColor Cyan
+        Write-Host "Checking Hugging Face authentication..." -ForegroundColor Cyan
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
-        $hfNow = Read-Host "Run 'uv run hf auth login' now? [y/N]"
-        if ($hfNow -eq "y" -or $hfNow -eq "Y") {
-            Set-Location $vailaProgramPath
-            try {
-                & uv run hf auth login
-            } catch {
-                Write-Warning "hf auth login failed or was cancelled."
+        $hfToken = & uv run python -c "from huggingface_hub import HfFolder; print(HfFolder.get_token() or '')" 2>$null
+        if ([string]::IsNullOrWhiteSpace($hfToken)) {
+            Write-Host "Hugging Face authentication required for gated weights (SAM 3, SAM 3D Body)." -ForegroundColor Yellow
+            Write-Host "Please accept the terms at:"
+            Write-Host "  - https://huggingface.co/facebook/sam3"
+            Write-Host "  - https://huggingface.co/facebook/sam-3d-body-dinov3"
+            $doHfLogin = $false
+            if ($automatedAiBootstrap) {
+                $doHfLogin = $true
+            } else {
+                $hfNow = Read-Host "Run 'uv run hf auth login' now? [Y/n]"
+                if ($hfNow -ne "n" -and $hfNow -ne "N") { $doHfLogin = $true }
             }
+            if ($doHfLogin) {
+                Set-Location $vailaProgramPath
+                try {
+                    & uv run hf auth login
+                } catch {
+                    Write-Warning "hf auth login failed or was cancelled."
+                }
+            }
+        } else {
+            Write-Host "Hugging Face authentication token found." -ForegroundColor Green
         }
     }
 
     if ($useSapiensExtra) {
         Write-Host ""
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
-        Write-Host "Sapiens2 Pose (optional): clone + weights via bin/setup_sapiens2.ps1" -ForegroundColor Cyan
-        Write-Host "  - Clones facebookresearch/sapiens2 into .local\third_party\sapiens2 (editable install)" -ForegroundColor Cyan
-        Write-Host "  - Downloads pose (1B default) + DETR detector to vaila\models\sapiens2\" -ForegroundColor Cyan
-        Write-Host "  - GUI: Frame B -> YOLO + FB -> Sapiens2 Pose" -ForegroundColor Cyan
-        Write-Host "  - License: Meta Sapiens2 License (not AGPL) — see vaila\help\vaila_sapiens.md" -ForegroundColor Cyan
+        Write-Host "Sapiens2 Pose (Meta 308-keypoint pose, extra 'sapiens', CUDA)" -ForegroundColor Cyan
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
-        $sapiensSetupNow = Read-Host "Run 'bin/setup_sapiens2.ps1' now from $vailaProgramPath? [y/N]"
-        if ($sapiensSetupNow -eq "y" -or $sapiensSetupNow -eq "Y") {
+        $doSapiens = $false
+        if ($automatedAiBootstrap) {
+            $doSapiens = $true
+        } else {
+            $sapiensSetupNow = Read-Host "Run 'bin/setup_sapiens2.ps1' now from $vailaProgramPath? [y/N]"
+            if ($sapiensSetupNow -eq "y" -or $sapiensSetupNow -eq "Y") { $doSapiens = $true }
+        }
+        if ($doSapiens) {
             $sapiensScript = Join-Path $vailaProgramPath "bin\setup_sapiens2.ps1"
             If (Test-Path $sapiensScript) {
                 Try {
@@ -966,14 +1033,16 @@ Try {
     if ($useFifaExtra) {
         Write-Host ""
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
-        Write-Host "FIFA Skeletal Tracking Light / SAM 3D Body (optional): clone + weights via bin/setup_fifa_sam3d.ps1" -ForegroundColor Cyan
-        Write-Host "  - Clones facebookresearch/sam-3d-body into sam_3d_body/ (NOT pip-installable; runtime deps only)" -ForegroundColor Cyan
-        Write-Host "  - Downloads gated facebook/sam-3d-body-dinov3 weights into vaila\models\sam-3d-dinov3\" -ForegroundColor Cyan
-        Write-Host "  - GUI: Frame B -> YOLO + FB -> SAM3+DINOv3 3D (markerless 3D mesh + metric joints)" -ForegroundColor Cyan
-        Write-Host "  - License: SAM 3D Body keeps its Meta license (not AGPL) — see vaila\help\sam3dinov3.md" -ForegroundColor Cyan
+        Write-Host "FIFA Skeletal Tracking Light / SAM 3D Body (markerless 3D mesh)" -ForegroundColor Cyan
         Write-Host "------------------------------------------------------------" -ForegroundColor Cyan
-        $fifaSetupNow = Read-Host "Run 'bin/setup_fifa_sam3d.ps1' now from $vailaProgramPath? [y/N]"
-        if ($fifaSetupNow -eq "y" -or $fifaSetupNow -eq "Y") {
+        $doFifa = $false
+        if ($automatedAiBootstrap) {
+            $doFifa = $true
+        } else {
+            $fifaSetupNow = Read-Host "Run 'bin/setup_fifa_sam3d.ps1' now from $vailaProgramPath? [y/N]"
+            if ($fifaSetupNow -eq "y" -or $fifaSetupNow -eq "Y") { $doFifa = $true }
+        }
+        if ($doFifa) {
             $fifaScript = Join-Path $vailaProgramPath "bin\setup_fifa_sam3d.ps1"
             If (Test-Path $fifaScript) {
                 Try {
@@ -1031,6 +1100,54 @@ Try {
     }
 } Catch {
     Write-Warning "Could not verify environment. Continuing anyway..."
+}
+
+# ============================================================================
+# AI & MULTIMODAL VERIFICATION SUMMARY
+# ============================================================================
+if ($useGPU -or $useSamExtra -or $useSapiensExtra -or $useFifaExtra) {
+    Write-Host ""
+    Write-Host "==================================================================" -ForegroundColor Yellow
+    Write-Host "AI & Multimodal Engines Verification" -ForegroundColor Yellow
+    Write-Host "Verificacao dos Motores de IA e Multimodal" -ForegroundColor Yellow
+    Write-Host "==================================================================" -ForegroundColor Yellow
+    Try {
+        & uv run python -c "
+def status_icon(ok):
+    return '[ OK ]' if ok else '[FAIL]'
+
+print('------------------------------------------------------------')
+try:
+    import torch
+    cuda_ok = torch.cuda.is_available()
+    dev_name = torch.cuda.get_device_name(0) if cuda_ok else 'CPU only'
+    print(f'{status_icon(cuda_ok)} PyTorch {torch.__version__} (CUDA: {cuda_ok} - {dev_name})')
+except Exception as e:
+    print(f'[FAIL] PyTorch: {e}')
+
+try:
+    import sam3
+    print(f'{status_icon(True)} SAM 3 Video Segmentation')
+except Exception as e:
+    print(f'[SKIP/FAIL] SAM 3: {e}')
+
+try:
+    import sapiens
+    print(f'{status_icon(True)} Sapiens2 Pose (Meta 308-keypoint)')
+except Exception as e:
+    print(f'[SKIP/FAIL] Sapiens2 Pose: {e}')
+
+try:
+    from vaila.sam3dinov3 import ensure_sam3d_ready
+    ckpt, _ = ensure_sam3d_ready()
+    print(f'{status_icon(True)} SAM 3D Body / DINOv3 (Model: {ckpt.name})')
+except Exception as e:
+    print(f'[SKIP/FAIL] SAM 3D Body (DINOv3): {e}')
+print('------------------------------------------------------------')
+"
+    } Catch {
+        Write-Warning "Verification script encountered an issue: $_"
+    }
 }
 
 # Create run_vaila.ps1 script

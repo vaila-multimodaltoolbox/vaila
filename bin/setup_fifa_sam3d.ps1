@@ -92,6 +92,19 @@ foreach ($f in @(
 }
 
 if (-not $missing) {
+  Write-Host ">> [4/4] Validating python import of sam_3d_body..."
+  & uv run python -c @"
+import sys
+sys.path.insert(0, r'$Sam3dDir')
+import sam_3d_body
+from sam_3d_body.sam_3d_body_estimator import SAM3DBodyEstimator
+print('   OK:      sam_3d_body imports cleanly')
+"@
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to import sam_3d_body. Runtime dependencies may be missing."
+    exit 3
+  }
+
   Write-Host ""
   Write-Host ">> Done. SAM 3D Body is ready for the FIFA Skeletal Tracking Light pipeline."
   Write-Host "   Next steps:"
