@@ -122,7 +122,23 @@ Change **any** Python script (`*.py`) anywhere in repo → also update user-faci
   - main index `vaila/help/index.md` + `vaila/help/index.html` ("Generated on")
   - edited module help `vaila/help/<module>.md` + `vaila/help/<module>.html` (Version + Updated)
 
-## External unified pitch dataset (YOLO retrain, outside repo)
+## Releasing a New Version (Tags & Multi-OS Installers)
+
+Releases are triggered by Git tags and compiled automatically in cloud VMs via [`.github/workflows/release-installers.yml`](.github/workflows/release-installers.yml).
+
+1. **Pre-flight**: sync versions in `vaila.py`, `pyproject.toml` (and templates), `README.md`. Commit to `main` and `git push origin main`.
+2. **Tag & Push**: tags matching `v*` (e.g. `v0.4.3`) or `rp*` (e.g. `rp15Sep2026`):
+   ```bash
+   git tag -a v0.4.3 -m "Release v0.4.3"
+   git push origin v0.4.3
+   ```
+   Or use the 1-command helper: `bash bin/create_release.sh --tag=v0.4.3`.
+3. **GitHub Actions VMs**:
+   - `macos-latest` builds `vaila_installer.dmg` ([`create_dmg_installer.sh`](create_dmg_installer.sh)).
+   - `windows-latest` builds `vaila_installer.exe` via Inno Setup ([`vaila_installer.iss`](vaila_installer.iss)).
+   - `ubuntu-latest` publishes the release and attaches both binaries.
+4. **Full Guide**: see **[`docs/github_release_guide.md`](docs/github_release_guide.md)**.
+
 
 Merged **32 pitch keypoint** tree from `vaila.fifa_dataset_builder` designed to live on disk **outside** git clone (large image banks). Ultralytics training points at `<dataset_root>/unified/data.yaml` with **absolute** `data=` path. After QA on flat `check_all_labels/` export, use `vaila.fifa_check_labels_dedupe` and `vaila.fifa_dataset_train_readiness` (`--prune-unified-to-flat`) so `unified/` matches human-validated samples. Narrative: **`docs/fifa_workflow.md` §4.5**; GUI companion help: **`vaila/help/soccerfield_keypoints_ai.md`** (Training → Option B).
 

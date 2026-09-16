@@ -38,14 +38,18 @@ See [AGENTS.md](AGENTS.md) for the full QA pipeline and project layout.
 
 **vailá** uses two related labels: a **package version** (for installers) and an optional **GitHub release codename** (for project milestones).
 
-- **Package version** — Source of truth is [`pyproject.toml`](pyproject.toml) under `[project].version` (PEP 621). This is what **`uv`** and **`pip`** report and what must match **wheels / sdist** metadata. Example form: `0.3.38` (often written as **v0.3.38** in prose).
-- **GitHub release codename** — Human-facing name for a milestone: **`rp`** stands for **Ribeirão Preto**, followed by the date as **day + abbreviated English month + two-digit year**, e.g. **`rp23mar26`** = 23 Mar 2026. This does not replace the package version.
+- **Package version** — Source of truth is [`pyproject.toml`](pyproject.toml) under `[project].version` (PEP 621). This is what **`uv`** and **`pip`** report and what must match **wheels / sdist** metadata. Example form: `0.4.3` (often written as **v0.4.3** in prose).
+- **GitHub release codename** — Human-facing name for a milestone: **`rp`** stands for **Ribeirão Preto**, followed by the date as **day + abbreviated English month + two-digit year**, e.g. **`rp15Sep2026`** = 15 Sep 2026. This does not replace the package version.
 - **Release notes** — Prefer stating **both** so installers and GitHub readers stay aligned, for example:
-  - `Package version: v0.3.38`
-  - `Release codename: rp23mar26 (Ribeirão Preto — 23 Mar 2026)`
-- **Git tags** — Pick **one** convention and use it consistently:
-  - **Option A:** Git tag = **`v0.3.38`** (semver); GitHub **release title** = **`rp23mar26`** or **`rp23mar26 — v0.3.38`**.
-  - **Option B:** Git tag = **`rp23mar26`**; the release description **must** clearly state the **package version** (e.g. **v0.3.38**).
+  - `Package version: v0.4.3`
+  - `Release codename: rp15Sep2026 (Ribeirão Preto — 15 Sep 2026)`
+- **Automated Multi-OS Installers (GitHub Actions VMs)** — Pushing a tag matching `v*` (e.g. `v0.4.3`) or `rp*` (e.g. `rp15Sep2026`) triggers [`.github/workflows/release-installers.yml`](.github/workflows/release-installers.yml), which automatically provisions:
+  - **macOS VM (`macos-latest`):** builds `vaila_installer.dmg` via [`create_dmg_installer.sh`](create_dmg_installer.sh).
+  - **Windows VM (`windows-latest`):** compiles `vaila_installer.exe` via Inno Setup and [`vaila_installer.iss`](vaila_installer.iss).
+  - **Ubuntu VM (`ubuntu-latest`):** collects both installers and publishes the official GitHub Release with download assets.
+- **Step-by-step Release Guide & Helper:**
+  - Read **[docs/github_release_guide.md](docs/github_release_guide.md)** for full instructions, troubleshooting, and manual triggers.
+  - Run **`bash bin/create_release.sh`** for the automated 1-command release tagger and pusher.
 
 ## Security reminders
 
@@ -73,10 +77,11 @@ Obrigado por contribuir para o **vailá**. Este ficheiro complementa [AGENTS.md]
 
 ### Versões e releases no GitHub
 
-- **Versão do pacote:** definida em `pyproject.toml` (`[project].version`); é a versão que **`uv`** / **`pip`** mostram (ex.: `0.3.38`).
-- **Codename de release (GitHub):** formato **`rp` + data** — **rp** = Ribeirão Preto; data = dia + mês abreviado (inglês) + ano com dois dígitos, ex.: **`rp23mar26`** = 23 mar 2026.
+- **Versão do pacote:** definida em `pyproject.toml` (`[project].version`); é a versão que **`uv`** / **`pip`** mostram (ex.: `0.4.3`).
+- **Codename de release (GitHub):** formato **`rp` + data** — **rp** = Ribeirão Preto; data = dia + mês abreviado (inglês) + ano com dois dígitos, ex.: **`rp15Sep2026`** = 15 set 2026.
 - **Notas de release:** indiquem sempre as duas coisas (versão do pacote + codename) quando usarem codenames.
-- **Tags Git:** ou tag semântica **`v0.3.38`** com título da release **`rp...`**, ou tag **`rp...`** com a versão do pacote explícita no texto — ver [Versioning and GitHub releases](#versioning-and-github-releases) (inglês).
+- **Instaladores Multi-OS Automáticos (VMs do GitHub):** Ao enviar uma tag `v*` ou `rp*` para o GitHub, o workflow `.github/workflows/release-installers.yml` compila automaticamente `vaila_installer.dmg` no macOS e `vaila_installer.exe` no Windows via Inno Setup e anexa à Release.
+- **Guia completo e script helper:** Consulte **[docs/github_release_guide.md](docs/github_release_guide.md)** e execute **`bash bin/create_release.sh`**.
 
 - **Licença:** as contribuições são aceites sob [AGPL-3.0](LICENSE).
 - **Segurança:** leia [SECURITY.md](SECURITY.md) — não commite chaves nem credenciais.

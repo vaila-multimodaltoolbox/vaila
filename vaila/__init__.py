@@ -1,6 +1,6 @@
 """Public vailá entry points, imported only when requested.
 
-Version: 0.4.2
+Version: 0.4.3
 Update Date: 15 September 2026
 """
 
