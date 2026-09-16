@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 15 September 2026
+Update Date: 16 September 2026
 Version: 0.4.3
 
 Example of usage:
@@ -2230,7 +2230,7 @@ class Vaila(tk.Tk):
         Visualize ID rerenderer, plus the Sapiens2-guided variant.
         """
         dialog, place_button, place_section = self._build_grid_chooser_dialog(
-            "Markerless 3D — Select Tool", width=640, height=260
+            "Markerless 3D — Select Tool", width=640, height=320
         )
 
         def use_sam3dinov3():
@@ -2272,6 +2272,16 @@ class Vaila(tk.Tk):
             )
             self.monocular_dlt_align()
 
+        def use_monocular_planar_align():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 3D",
+                "Monocular -> Planar world",
+                "uv run python -m vaila.monocular_planar_align",
+                note="place monocular 3D on a metric floor via Planar Geo homographies.npz",
+            )
+            self.monocular_planar_align()
+
         def use_rec3d_mesh_pipeline():
             dialog.destroy()
             _print_chooser_launch(
@@ -2287,8 +2297,9 @@ class Vaila(tk.Tk):
         place_button("SAM3+DINOv3 Visualize ID", use_sam3dinov3_visualize, width=26)
         place_section("Sapiens2-guided (3D)")
         place_button("Sapiens2 3D Pose", use_sapiens2_3d, width=26)
-        place_section("Calibrated world frame (needs .dlt3d)")
+        place_section("Calibrated world frame")
         place_button("Monocular -> DLT world", use_monocular_dlt_align, width=26)
+        place_button("Monocular -> Planar world", use_monocular_planar_align, width=26)
         place_section("Multi-camera pipeline (repeat on other files)")
         place_button("Multi-Camera Mesh Pipeline", use_rec3d_mesh_pipeline, width=26)
 
@@ -4001,6 +4012,22 @@ class Vaila(tk.Tk):
         run_vaila_module(
             "vaila.monocular_dlt_align",
             "vaila/monocular_dlt_align.py",
+            extra_py_flags=("-u",),
+        )
+
+    def monocular_planar_align(self):
+        """Place a single-camera monocular 3D run onto a Planar Geo floor frame."""
+        print("\n" + "=" * 60)
+        print("Launching: vaila.monocular_planar_align")
+        print(">> Equivalent launch CLI: uv run python -m vaila.monocular_planar_align")
+        print("Features: camera-frame -> tatame/floor frame via homographies.npz,")
+        print("          similarity (s, R, T) from foot pixels through H_inv,")
+        print("          writes CSV/.3d/C3D/BVH + optional aligned mesh.")
+        print("Runtime: CPU only; needs Planar Geo H (no .dlt3d required).")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.monocular_planar_align",
+            "vaila/monocular_planar_align.py",
             extra_py_flags=("-u",),
         )
 

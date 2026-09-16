@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 15 September 2026
+Update: 16 September 2026
 Version: 0.4.3
 Python Version: 3.12.14
 
@@ -42,24 +42,26 @@ FIFA mode (``--fifa`` / ``--fifa-dataset DIR`` / **Template:FIFA** toolbar butto
   Default FIFA slot layout uses **48** pitch keypoints (idx **0 = top_left_corner**).
   Save writes a **sparse** matrix (empty cells for unmarked KPs).
 
-Pitch Guide (``G`` or button):
+  **CALIB** toolbar button (``Shift+Q``) builds/loads planar calibration
+  (line / plane DLT2D / REF3D→planar); **MEASURE** (``Q``) is measure-only.
+  Pitch Guide (``G`` or button):
   **Visual only** — field overlay + optional reference image (``V`` toggles).
   Soccer-field Guide loads ``vaila/models/soccerfield_kiki.csv`` (49 pts) so you
   can walk and mark those named points; FIFA-dataset labeling still uses
   ``soccerfield_ref3d_fifa_dataset.csv`` when ``prefer_fifa_dataset=True``.
   Same left/right click, TAB, and **Ctrl+G** (Go KP) behaviour as with the guide off.
-  **QMeas** toolbar button toggles Quick Measure (same as hotkey ``Q``).
 
-Quick Measure (``Q`` or **QMeas**, Kinovea-style, see ``vaila/quickmeasure.py``):
-  **Calibration is the first step.** Choose *Line* (2 clicks + length), *Plane*
-  (4 clicks + width/height → DLT2D), *REF3D* (``.ref3d`` modes 1–3, drop X/Y/Z
-  for planar ``rec2d``, load pixel CSV or guided clicks with scheme overlay),
-  or skip to stay in pixels. After that, digit keys select live measure modes:
+Quick Measure / CALIB + MEASURE (see ``vaila/quickmeasure.py``):
+  **CALIB** first (optional): Line (2 clicks + length), Plane (4 clicks +
+  width/height → DLT2D), REF3D (``.ref3d`` + drop axis → planar ``rec2d``),
+  load file, or skip. Scope: **default** (whole video) or **this frame**.
+  Future DLT3D (11 params) is reserved. **MEASURE** then uses digit keys:
   ``1`` distance, ``2`` area, ``3`` angle, ``4`` velocity, ``5`` acceleration
   (``6``–``0`` reserved); each completed set is drawn on the image with its
-  value. ``Enter`` closes an area polygon or opens the save/calib menu. The first
-  save creates one ``processed_quickmeasure_<timestamp>/`` for the session and
-  later saves update its CSVs and didactic HTML report. Velocity/accel need FPS:
+  value. ``Enter`` closes an area polygon or opens the save menu. Hover shows
+  pixel and real-world coords when calibrated. The first save creates one
+  ``processed_quickmeasure_<timestamp>/`` for the session and later saves
+  update its CSVs and didactic HTML report. Velocity/accel need FPS:
   metadata supplies it automatically; ``I`` or the **FPS … Hz** button overrides it.
   Recompute via
   ``uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure distance``.
@@ -236,7 +238,7 @@ VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
 GETPIXELVIDEO_VERSION = "0.4.2"
-GETPIXELVIDEO_UPDATE_DATE = "15 September 2026"
+GETPIXELVIDEO_UPDATE_DATE = "16 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -2156,17 +2158,16 @@ def play_video_with_controls(
     # Feature: Click & Pass
     click_pass_mode = False
 
-    # Quick Measure mode (vaila/quickmeasure.py): click points, then classify
-    # them as Distance/Area/Velocity/Acceleration. Session persists across
-    # toggling the mode off/on so results stay visible; only Backspace/the
-    # in-menu "Clear" action drops points. Created lazily on first Q press so
-    # it always picks up the video's own `fps`.
-    quick_measure_mode = False
+    # CALIB + MEASURE (vaila/quickmeasure.py): separate modes, shared session.
+    # CALIB builds default or per-frame calibrations; MEASURE is measure-only.
+    # Session persists across toggling so results stay visible.
+    measure_mode = False
+    calib_mode = False
     quickmeasure_session: quickmeasure.QuickMeasureSession | None = None
-    # Calibration-first (Kinovea-style): entering Quick Measure without a
-    # calibration starts by collecting calibration clicks, then asks for the
-    # real-world measurement(s). Free measuring only starts after that.
+    # While True, left-clicks feed the active CalibrationDraft / Ref3d draft.
     quick_measure_calibrating = False
+    # Pending scope for the in-progress calib draft: None = default (all frames).
+    quickmeasure_calib_scope_frame: int | None = None
     quickmeasure_draft: (
         quickmeasure.CalibrationDraft | quickmeasure.Ref3dCalibrationDraft | None
     ) = None
@@ -2396,64 +2397,120 @@ def play_video_with_controls(
         pitch_guide_flip_idx = flips
         return pts, src
 
-    def _start_quickmeasure_calibration() -> str:
-        """Ask which Kinovea-style calibration to build, then start collecting
-        its clicks. Returns the status line to display.
+    def _ensure_quickmeasure_session() -> quickmeasure.QuickMeasureSession:
+        nonlocal quickmeasure_session
+        if quickmeasure_session is None:
+            quickmeasure_session = quickmeasure.QuickMeasureSession(fps=fps)
+        else:
+            quickmeasure_session.fps = fps
+        return quickmeasure_session
+
+    def _ask_calib_scope() -> tuple[int | None, str] | None:
+        """Ask Default (all frames) vs This frame. Returns (frame_or_None, label).
+
+        ``None`` means the user cancelled.
         """
-        nonlocal quick_measure_calibrating, quickmeasure_draft, quickmeasure_session
         answer = show_input_dialog(
-            "CALIBRATION FIRST — 1=Line (2 clicks + length)  "
-            "2=Plane (4 clicks + width/height)  "
-            "3=REF3D file (mode1/2/3 + plane drop)  "
-            "0=Skip (pixels only)",
+            f"CALIB scope — 1=Default (whole video, all frames)  2=This frame only ({frame_count})",
             "1",
         )
         if answer is None:
-            return "Quick Measure: calibration cancelled (still uncalibrated — pixels)."
+            return None
         choice = str(answer).strip().lower()
-        if choice in ("0", "skip", "px", "pixel", "pixels"):
-            if quickmeasure_session is not None:
-                quickmeasure_session.calibration_skipped = True
-            return "Quick Measure: calibration skipped — measurements stay in PIXELS."
+        if choice in ("2", "frame", "this", "f"):
+            return int(frame_count), f"frame {frame_count}"
+        return None, "default (all frames)"
 
-        unit_answer = show_input_dialog("Real-world unit for the calibration (e.g. m, cm)", "m")
+    def _store_and_autosave_calib(
+        calib: quickmeasure.QuickMeasureCalibration, scope_frame: int | None
+    ) -> str:
+        session = _ensure_quickmeasure_session()
+        session.set_calibration(calib, frame=scope_frame)
+        try:
+            paths = session.save_session(
+                os.path.dirname(video_path) or os.getcwd(),
+                stem=os.path.basename(video_path or "quickmeasure"),
+            )
+            print(f">> vaila/quickmeasure: calibration saved in {paths['dir']}")
+        except quickmeasure.QuickMeasureError:
+            pass
+        scope = "default (all frames)" if scope_frame is None else f"frame {scope_frame}"
+        return f"{calib.describe()} — stored as {scope}."
+
+    def _start_quickmeasure_calibration() -> str:
+        """Ask which calibration to build/load, then start collecting clicks."""
+        nonlocal quick_measure_calibrating, quickmeasure_draft
+        nonlocal quickmeasure_calib_scope_frame, quickmeasure_session
+        answer = show_input_dialog(
+            "CALIB — 1=Line (2 clicks + length)  "
+            "2=Plane (4 clicks + width/height → DLT2D)  "
+            "3=REF3D (drop axis → planar DLT2D)  "
+            "4=DLT3D (11 params — coming soon)  "
+            "L=Load .dlt2d / REF2D / REF3D file  "
+            "0=Clear / stay in pixels",
+            "1",
+        )
+        if answer is None:
+            return "Calib: cancelled."
+        choice = str(answer).strip().lower()
+        session = _ensure_quickmeasure_session()
+
+        if choice in ("0", "skip", "px", "pixel", "pixels", "clear"):
+            session.calibration = None
+            session.calibrations_by_frame.clear()
+            session.calibration_skipped = True
+            return "Calib: cleared — MEASURE stays in PIXELS until you calibrate."
+
+        if choice in ("4", "dlt3d", "3d"):
+            return (
+                "Calib: DLT3D (11 parameters) is not available yet. "
+                "When one world axis is held at 0 (e.g. Z), that model will "
+                "also serve planar 2D. Use Line / Plane / REF3D for now."
+            )
+
+        if choice in ("l", "load", "file", "c"):
+            scope = _ask_calib_scope()
+            if scope is None:
+                return "Calib: cancelled."
+            scope_frame, scope_label = scope
+            calib, msg = quickmeasure._ask_calibration_via_dialog(video_path)
+            if calib is None:
+                return f"Calib: {msg}"
+            return _store_and_autosave_calib(calib, scope_frame) + f" ({msg})"
+
+        unit_answer = show_input_dialog("Real-world unit for the calibration (e.g. m, mm, cm)", "m")
         unit = (unit_answer or "m").strip() or "m"
+
+        scope = _ask_calib_scope()
+        if scope is None:
+            return "Calib: cancelled."
+        scope_frame, scope_label = scope
+        quickmeasure_calib_scope_frame = scope_frame
 
         if choice in ("3", "ref3d", "ref", "r"):
             result, msg = quickmeasure.ask_ref3d_calibration_files(
                 video_path=video_path, unit_label=unit
             )
             if isinstance(result, quickmeasure.QuickMeasureCalibration):
-                if quickmeasure_session is not None:
-                    quickmeasure_session.calibration = result
-                # Auto-save calibration next to the video so measures can reuse it.
-                try:
-                    if quickmeasure_session is not None:
-                        paths = quickmeasure_session.save_session(
-                            os.path.dirname(video_path) or os.getcwd(),
-                            stem=os.path.basename(video_path or "quickmeasure"),
-                        )
-                        print(f">> vaila/quickmeasure: calibration saved in {paths['dir']}")
-                except quickmeasure.QuickMeasureError:
-                    pass
-                return f"{msg} — now click freely to measure."
+                return _store_and_autosave_calib(result, scope_frame)
             if isinstance(result, quickmeasure.Ref3dCalibrationDraft):
                 quickmeasure_draft = result
                 quick_measure_calibrating = True
-                return msg
-            return msg
+                return f"{msg} — scope: {scope_label}"
+            return f"Calib: {msg}"
 
         mode = "plane" if choice in ("2", "plane") else "line"
         quickmeasure_draft = quickmeasure.CalibrationDraft(mode=mode, unit_label=unit)
         quick_measure_calibrating = True
-        return quickmeasure_draft.instructions()
+        return f"{quickmeasure_draft.instructions()} — scope: {scope_label}"
 
     def _finish_quickmeasure_calibration() -> str:
         """Prompt for the real measurement(s) and apply the calibration."""
-        nonlocal quick_measure_calibrating, quickmeasure_draft, quickmeasure_session
-        if quickmeasure_draft is None or quickmeasure_session is None:
+        nonlocal quick_measure_calibrating, quickmeasure_draft
+        nonlocal quickmeasure_calib_scope_frame
+        if quickmeasure_draft is None:
             quick_measure_calibrating = False
-            return "Quick Measure: no calibration in progress."
+            return "Calib: no calibration in progress."
         if isinstance(quickmeasure_draft, quickmeasure.Ref3dCalibrationDraft):
             calib, message = quickmeasure.finish_ref3d_calibration_draft(quickmeasure_draft)
         else:
@@ -2461,51 +2518,59 @@ def play_video_with_controls(
                 quickmeasure_draft, show_input_dialog
             )
         if calib is None:
-            # Keep the clicks so the user can retry the measurement entry.
             return message
-        quickmeasure_session.calibration = calib
+        scope_frame = quickmeasure_calib_scope_frame
         quick_measure_calibrating = False
         quickmeasure_draft = None
-        try:
-            paths = quickmeasure_session.save_session(
-                os.path.dirname(video_path) or os.getcwd(),
-                stem=os.path.basename(video_path or "quickmeasure"),
-            )
-            print(f">> vaila/quickmeasure: calibration saved in {paths['dir']}")
-        except quickmeasure.QuickMeasureError:
-            pass
-        return f"{message} — now click freely to measure."
+        quickmeasure_calib_scope_frame = None
+        return _store_and_autosave_calib(calib, scope_frame)
 
-    def _toggle_quick_measure_mode() -> str:
-        """Toggle Quick Measure (same behaviour as hotkey Q / QMeas button).
-
-        Calibration is the FIRST step: turning the mode on without a
-        calibration opens the calibration prompt before any free measuring.
-        """
-        nonlocal quick_measure_mode, quickmeasure_session
-        nonlocal quick_measure_calibrating, quickmeasure_draft
+    def _disable_marker_modes_for_qm() -> None:
         nonlocal labeling_mode, one_line_mode, auto_marking_mode, sequential_mode, pitch_guide_mode
-        quick_measure_mode = not quick_measure_mode
-        if quick_measure_mode:
-            labeling_mode = False
-            one_line_mode = False
-            auto_marking_mode = False
-            sequential_mode = False
-            pitch_guide_mode = False
-            if quickmeasure_session is None:
-                quickmeasure_session = quickmeasure.QuickMeasureSession(fps=fps)
-            if quickmeasure.needs_calibration(quickmeasure_session):
-                return _start_quickmeasure_calibration()
-            unit = quickmeasure_session.unit_label
-            # Keep session FPS in sync with the video (I key can change it).
-            quickmeasure_session.fps = fps
+        labeling_mode = False
+        one_line_mode = False
+        auto_marking_mode = False
+        sequential_mode = False
+        pitch_guide_mode = False
+
+    def _toggle_calib_mode() -> str:
+        """Toggle CALIB mode (Shift+Q / CALIB button)."""
+        nonlocal calib_mode, measure_mode, quick_measure_calibrating, quickmeasure_draft
+        nonlocal quickmeasure_calib_scope_frame
+        calib_mode = not calib_mode
+        if calib_mode:
+            measure_mode = False
+            _disable_marker_modes_for_qm()
+            _ensure_quickmeasure_session()
+            return _start_quickmeasure_calibration()
+        quick_measure_calibrating = False
+        quickmeasure_draft = None
+        quickmeasure_calib_scope_frame = None
+        return "Calib mode OFF"
+
+    def _toggle_measure_mode() -> str:
+        """Toggle MEASURE mode (Q / MEASURE button). No calibration-first gate."""
+        nonlocal measure_mode, calib_mode, quick_measure_calibrating, quickmeasure_draft
+        nonlocal quickmeasure_calib_scope_frame
+        measure_mode = not measure_mode
+        if measure_mode:
+            calib_mode = False
+            quick_measure_calibrating = False
+            quickmeasure_draft = None
+            quickmeasure_calib_scope_frame = None
+            _disable_marker_modes_for_qm()
+            session = _ensure_quickmeasure_session()
+            unit = session.unit_label
+            hint = "" if session.has_any_calibration() else " — pixels (use CALIB for real units)"
             return (
-                f"QUICK MEASURE ON ({unit}) — 1=dist 2=area 3=angle 4=vel 5=accel; "
+                f"MEASURE ON ({unit}){hint} — 1=dist 2=area 3=angle 4=vel 5=accel; "
                 "click to measure; Enter: area close / menu; S in menu: save"
             )
-        quick_measure_calibrating = False
-        quickmeasure_draft = None
-        return "Quick Measure mode OFF"
+        return "Measure mode OFF"
+
+    # Backward-compatible alias used by older help text / tests.
+    def _toggle_quick_measure_mode() -> str:
+        return _toggle_measure_mode()
 
     def _prompt_manual_fps() -> str:
         """Set video FPS in Hz from the I key or toolbar button."""
@@ -5403,11 +5468,13 @@ def play_video_with_controls(
         info_x += frame_info.get_width() + 25
         if hover_pixel_xy is not None:
             _px, _py = hover_pixel_xy
-            mouse_pix_txt = font.render(
-                f"Pix: ({int(round(_px))}, {int(round(_py))})",
-                True,
-                (165, 215, 255),
-            )
+            if (measure_mode or calib_mode) and quickmeasure_session is not None:
+                _hover_label = quickmeasure.format_hover_coords(
+                    quickmeasure_session, _px, _py, frame=frame_count
+                )
+            else:
+                _hover_label = f"Pix: ({int(round(_px))}, {int(round(_py))})"
+            mouse_pix_txt = font.render(_hover_label, True, (165, 215, 255))
         else:
             mouse_pix_txt = font.render("Pix: —", True, (110, 110, 110))
         control_surface.blit(mouse_pix_txt, (info_x, info_row_y))
@@ -5602,7 +5669,8 @@ def play_video_with_controls(
         mouse_play_button_width = 50 if is_compact else 70
         click_pass_button_width = 58 if is_compact else 66
         labeling_button_width = 58 if is_compact else 66
-        measure_button_width = 50 if is_compact else 58  # QMeas — same as hotkey Q
+        calib_button_width = 48 if is_compact else 54  # CALIB — Shift+Q
+        measure_button_width = 50 if is_compact else 58  # MEASURE — hotkey Q
         fps_button_width = 72 if is_compact else 80  # Manual video frequency (same as hotkey I)
         guide_button_width = 56 if is_compact else 66  # Guide button (field / skeleton overlay)
         guide_toggle_size = 10 if is_compact else 12
@@ -5634,6 +5702,7 @@ def play_video_with_controls(
             + mouse_play_button_width
             + click_pass_button_width
             + labeling_button_width
+            + calib_button_width
             + measure_button_width
             + fps_button_width
             + guide_button_width
@@ -5641,7 +5710,7 @@ def play_video_with_controls(
             + guide_toggle_size
             + help_button_width
             + help_web_button_width
-            + (button_gap * 11)
+            + (button_gap * 12)
         )
 
         # Bottom row: Tracking, File I/O (Load/Save), Dataset and Export buttons
@@ -5808,7 +5877,20 @@ def play_video_with_controls(
             labeling_text, labeling_text.get_rect(center=labeling_button_rect.center)
         )
 
-        # 7b. Quick Measure button (same as hotkey Q) — visible next to Labeling/Guide
+        # 7b. CALIB button (Shift+Q) then MEASURE button (Q)
+        calib_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_top,
+            calib_button_width,
+            button_height,
+        )
+        current_x += calib_button_width + button_gap
+        calib_color = (40, 140, 160) if calib_mode else (100, 100, 100)
+        pygame.draw.rect(control_surface, calib_color, calib_button_rect)
+        calib_label = "Calib" if is_compact else "CALIB"
+        calib_text = _top_btn_font.render(calib_label, True, (255, 255, 255))
+        control_surface.blit(calib_text, calib_text.get_rect(center=calib_button_rect.center))
+
         measure_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -5816,9 +5898,10 @@ def play_video_with_controls(
             button_height,
         )
         current_x += measure_button_width + button_gap
-        measure_color = (200, 90, 40) if quick_measure_mode else (100, 100, 100)
+        measure_color = (200, 90, 40) if measure_mode else (100, 100, 100)
         pygame.draw.rect(control_surface, measure_color, measure_button_rect)
-        measure_text = _top_btn_font.render("QMeas", True, (255, 255, 255))
+        measure_label = "Meas" if is_compact else "MEASURE"
+        measure_text = _top_btn_font.render(measure_label, True, (255, 255, 255))
         control_surface.blit(measure_text, measure_text.get_rect(center=measure_button_rect.center))
 
         # 7c. Manual FPS button (same dialog as hotkey I); caption shows current Hz.
@@ -6132,7 +6215,8 @@ def play_video_with_controls(
             mouse_play_button_rect,  # MousePlay tracking button (M key)
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
-            measure_button_rect,  # Quick Measure (same as Q)
+            calib_button_rect,  # CALIB (Shift+Q)
+            measure_button_rect,  # MEASURE (Q)
             fps_button_rect,  # Manual video FPS in Hz (same as I)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
@@ -6742,14 +6826,21 @@ def play_video_with_controls(
             ),
             (
                 "Footer Status Row",
-                "Shows Marked count, active modes, and hover pixel coordinates (x,y)",
+                "Shows Marked count, active modes, and hover pixel coordinates (x,y); "
+                "in MEASURE/CALIB with calibration also shows real-world hover coords",
                 "item",
             ),
             ("", "", "blank"),
-            ("=== QUICK MEASURE (CALIBRATION & KINEMATICS) ===", "", "header"),
+            ("=== CALIB + MEASURE ===", "", "header"),
             (
-                "Q  /  'QMeas' button",
-                "Toggle Quick Measure mode (exclusive calibration and kinematics tool)",
+                "Shift+Q  /  'CALIB' button",
+                "Toggle CALIB mode: Line / Plane DLT2D / REF3D→planar / load file; "
+                "scope = default (whole video) or this frame",
+                "item",
+            ),
+            (
+                "Q  /  'MEASURE' button",
+                "Toggle MEASURE mode (distance / area / angle / velocity / accel)",
                 "item",
             ),
             (
@@ -6767,7 +6858,7 @@ def play_video_with_controls(
                 "Measure: 1 Distance, 2 Area, 3 Angle, 4 Velocity, 5 Acceleration",
                 "item",
             ),
-            ("Enter", "Close Area polygon or open calibration / save report menu", "item"),
+            ("Enter", "Close Area polygon or open MEASURE save / classify menu", "item"),
             ("", "", "blank"),
             ("=== OBJECT LABELING & BOUNDING BOXES ===", "", "header"),
             (
@@ -10725,7 +10816,7 @@ def play_video_with_controls(
             )
 
         # Calibration-first overlay: clicked calibration points + next step.
-        if quick_measure_mode and quick_measure_calibrating and quickmeasure_draft is not None:
+        if calib_mode and quick_measure_calibrating and quickmeasure_draft is not None:
             quickmeasure.draw_calibration_overlay(
                 screen,
                 quickmeasure_draft,
@@ -10765,7 +10856,8 @@ def play_video_with_controls(
             mouse_play_button_rect,  # MousePlay tracking button (M key)
             click_pass_button_rect,  # Add ClickPass button to return
             labeling_button_rect,  # Add labeling button to return
-            measure_button_rect,  # Quick Measure (same as Q)
+            calib_button_rect,  # CALIB (Shift+Q)
+            measure_button_rect,  # MEASURE (Q)
             fps_button_rect,  # Manual video FPS in Hz (same as I)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
@@ -11004,7 +11096,8 @@ def play_video_with_controls(
                             auto_marking_mode = False
                             sequential_mode = False
                             click_pass_mode = False
-                            quick_measure_mode = False
+                            measure_mode = False
+                            calib_mode = False
                             if pitch_guide_points:
                                 pitch_guide_mode = True
                                 save_message_text = _pitch_guide_status_message("GUIDE ON: ")
@@ -11115,7 +11208,10 @@ def play_video_with_controls(
                     showing_save_message = True
                     save_message_timer = 45
                 elif event.key == pygame.K_q:
-                    save_message_text = _toggle_quick_measure_mode()
+                    if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                        save_message_text = _toggle_calib_mode()
+                    else:
+                        save_message_text = _toggle_measure_mode()
                     showing_save_message = True
                     save_message_timer = 90
                 elif event.key == pygame.K_t:
@@ -11128,7 +11224,7 @@ def play_video_with_controls(
                     else:
                         toggle_track_ai()
                 elif (
-                    quick_measure_mode
+                    measure_mode
                     and not quick_measure_calibrating
                     and quickmeasure_session is not None
                     and event.key
@@ -11181,20 +11277,16 @@ def play_video_with_controls(
                     try:
                         save_message_text = quickmeasure_session.set_live_mode(key_map[event.key])
                     except quickmeasure.QuickMeasureError as exc:
-                        save_message_text = f"QMeas: {exc}"
+                        save_message_text = f"Measure: {exc}"
                     showing_save_message = True
                     save_message_timer = 90
-                elif (
-                    event.key == pygame.K_RETURN
-                    and quick_measure_mode
-                    and quick_measure_calibrating
-                ):
+                elif event.key == pygame.K_RETURN and calib_mode and quick_measure_calibrating:
                     save_message_text = _finish_quickmeasure_calibration()
                     showing_save_message = True
                     save_message_timer = 120
                 elif (
                     event.key == pygame.K_RETURN
-                    and quick_measure_mode
+                    and measure_mode
                     and quickmeasure_session is not None
                     and quickmeasure_session.active_mode == "area"
                     and quickmeasure_session.draft_points
@@ -11205,12 +11297,12 @@ def play_video_with_controls(
                             frame_count
                         )
                     except quickmeasure.QuickMeasureError as exc:
-                        save_message_text = f"QMeas: {exc}"
+                        save_message_text = f"Measure: {exc}"
                     showing_save_message = True
                     save_message_timer = 90
                 elif (
                     event.key == pygame.K_RETURN
-                    and quick_measure_mode
+                    and measure_mode
                     and quickmeasure_session is not None
                 ):
                     save_message_text = quickmeasure.show_quickmeasure_menu(
@@ -11230,12 +11322,12 @@ def play_video_with_controls(
                     save_message_timer = 150
                 elif (
                     event.key == pygame.K_BACKSPACE
-                    and quick_measure_mode
+                    and measure_mode
                     and quickmeasure_session is not None
                 ):
                     quickmeasure_session.clear()
                     quickmeasure_session.clear_results()
-                    save_message_text = "Quick Measure: points and results cleared"
+                    save_message_text = "Measure: points and results cleared"
                     showing_save_message = True
                     save_message_timer = 30
                 elif event.key == pygame.K_d:
@@ -11579,21 +11671,21 @@ def play_video_with_controls(
 
                 # Adjust persistence frames with '1', '2', and '3' keys
                 # (disabled while Quick Measure owns digit keys 1–0 as live modes).
-                elif event.key == pygame.K_1 and not quick_measure_mode:  # Decrease persistence
+                elif event.key == pygame.K_1 and not measure_mode:  # Decrease persistence
                     if persistence_enabled:
                         persistence_frames = max(1, persistence_frames - 1)
                         save_message_text = f"Persistence: {persistence_frames} frames"
                         showing_save_message = True
                         save_message_timer = 30
 
-                elif event.key == pygame.K_2 and not quick_measure_mode:  # Increase persistence
+                elif event.key == pygame.K_2 and not measure_mode:  # Increase persistence
                     if persistence_enabled:
                         persistence_frames += 1  # Sem limite máximo
                         save_message_text = f"Persistence: {persistence_frames} frames"
                         showing_save_message = True
                         save_message_timer = 30
 
-                elif event.key == pygame.K_3 and not quick_measure_mode:  # Alternar persistência
+                elif event.key == pygame.K_3 and not measure_mode:  # Alternar persistência
                     if not persistence_enabled:
                         # Modo 1: Ativar com persistência completa
                         persistence_enabled = True
@@ -12001,7 +12093,8 @@ def play_video_with_controls(
                             auto_marking_mode = False
                             sequential_mode = False
                             pitch_guide_mode = False
-                            quick_measure_mode = False
+                            measure_mode = False
+                            calib_mode = False
                             save_message_text = (
                                 "LABELING MODE: Click and DRAG to draw boxes. Press Z to undo."
                             )
@@ -12009,8 +12102,12 @@ def play_video_with_controls(
                             save_message_text = "Labeling mode disabled"
                         showing_save_message = True
                         save_message_timer = 90
+                    elif calib_button_rect.collidepoint(x, rel_y):
+                        save_message_text = _toggle_calib_mode()
+                        showing_save_message = True
+                        save_message_timer = 90
                     elif measure_button_rect.collidepoint(x, rel_y):
-                        save_message_text = _toggle_quick_measure_mode()
+                        save_message_text = _toggle_measure_mode()
                         showing_save_message = True
                         save_message_timer = 90
                     elif fps_button_rect.collidepoint(x, rel_y):
@@ -12035,7 +12132,8 @@ def play_video_with_controls(
                                 auto_marking_mode = False
                                 sequential_mode = False
                                 click_pass_mode = False
-                                quick_measure_mode = False
+                                measure_mode = False
+                                calib_mode = False
                                 if pitch_guide_points:
                                     pitch_guide_mode = True
                                     save_message_text = _pitch_guide_status_message("GUIDE ON: ")
@@ -12203,13 +12301,8 @@ def play_video_with_controls(
                         pad_y=pad_y,
                     )
 
-                    if (
-                        quick_measure_mode
-                        and quick_measure_calibrating
-                        and quickmeasure_draft is not None
-                    ):
-                        # Calibration-first: these clicks build the calibration,
-                        # not a measurement.
+                    if calib_mode and quick_measure_calibrating and quickmeasure_draft is not None:
+                        # CALIB mode: these clicks build the calibration.
                         if event.button == 1:
                             try:
                                 quickmeasure_draft.add_point(video_x, video_y)
@@ -12232,7 +12325,7 @@ def play_video_with_controls(
                         elif event.button == 2:  # Middle click: still allow panning
                             scrolling = True
                             pygame.mouse.get_rel()
-                    elif quick_measure_mode and quickmeasure_session is not None:
+                    elif measure_mode and quickmeasure_session is not None:
                         quickmeasure_session.fps = fps
                         if event.button == 1:  # Left click: live-mode or free point
                             if quickmeasure_session.active_mode is not None:
@@ -12241,7 +12334,7 @@ def play_video_with_controls(
                                         frame_count, video_x, video_y
                                     )
                                 except quickmeasure.QuickMeasureError as exc:
-                                    save_message_text = f"QMeas: {exc}"
+                                    save_message_text = f"Measure: {exc}"
                             else:
                                 n_pts = quickmeasure_session.add_point(
                                     frame_count, video_x, video_y
@@ -12250,7 +12343,7 @@ def play_video_with_controls(
                                     ["x_real", "y_real"]
                                 ]
                                 save_message_text = (
-                                    f"Quick Measure: point {n_pts} @ frame {frame_count + 1} = "
+                                    f"Measure: point {n_pts} @ frame {frame_count + 1} = "
                                     f"({x_real:.3f}, {y_real:.3f}) "
                                     f"{quickmeasure_session.unit_label} "
                                     f"— press 1–5 to choose a measure mode"
@@ -12262,10 +12355,10 @@ def play_video_with_controls(
                                 save_message_text = (
                                     quickmeasure_session.live_mode_status()
                                     if quickmeasure_session.active_mode
-                                    else "Quick Measure: last point removed"
+                                    else "Measure: last point removed"
                                 )
                             else:
-                                save_message_text = "Quick Measure: no points to remove"
+                                save_message_text = "Measure: no points to remove"
                             showing_save_message = True
                             save_message_timer = 45
                         elif event.button == 2:  # Middle click: still allow panning
@@ -12283,7 +12376,8 @@ def play_video_with_controls(
                             track_ai_active
                             and track_ai_shape in ("circle", "box", "rectangle")
                             and not one_line_mode
-                            and not quick_measure_mode
+                            and not measure_mode
+                            and not calib_mode
                         ):
                             # Drag to define circle/box size; marker placed at centroid on release
                             track_shape_dragging = True

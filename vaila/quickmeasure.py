@@ -8,17 +8,23 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.4.0
+Version: 0.4.3
 Created: 06 September 2026
-Last Updated: 14 September 2026
+Last Updated: 16 September 2026
 ================================================================================
 Description:
-    Kinovea-style quick on-image measurements for `getpixelvideo.py`:
-    calibrate first, then pick a live measure mode with digit keys ``1``–``0``
-    and click on the video. Each completed set is drawn on the image with its
-    value (distance / area / angle / velocity / …) and stored for CSV export.
+    Kinovea-style on-image calibration and measurements for `getpixelvideo.py`.
 
-    After ``Q`` turns Quick Measure on (and calibration is done):
+    Host UI splits into **CALIB** (build / load planar calibrations) and
+    **MEASURE** (digit-key distance / area / angle / velocity / accel). A
+    session may hold one **default** (whole-video) calibration plus optional
+    **per-frame** overrides; measures resolve ``frame → override → default``.
+
+    Calibration modes now: ``line``, ``plane`` (DLT2D), ``ref3d`` (drop one
+    world axis → planar DLT2D). Future: ``dlt3d`` (11 params); when one world
+    axis is held at 0 that model is usable as planar 2D — not implemented yet.
+
+    After ``MEASURE`` is on (and optionally calibrated):
       ``1`` distance   — 2 clicks → line + length label (repeat for more pairs)
       ``2`` area       — ≥3 clicks, ``Enter`` closes the polygon → area label
       ``3`` angle      — 3 clicks (vertex in the middle) → angle label
@@ -26,11 +32,12 @@ Description:
       ``5`` acceleration — 3 clicks on distinct frames (needs FPS)
       ``6``–``0``      — reserved
 
-    Calibration-first flow (mirrors Kinovea's "calibrate measure"):
+    Calibration flow (CALIB button / Shift+Q):
       - ``line``  — 2 clicks on a segment of known length + the typed length.
       - ``plane`` — 4 clicks around a rectangle of known width/height.
       - ``ref3d`` — load a ``.ref3d`` (modes 1–3 / dlt3d formats 1–4), drop one
                     world axis for planar ``rec2d``, then pixel CSV or guide clicks.
+      - Scope: default (all frames) or this frame only.
 
     The first save in a session creates ``processed_quickmeasure_<timestamp>/``;
     calibration autosaves and later ``S`` saves update that same directory.
@@ -38,6 +45,7 @@ Description:
     every measurement, metric, result, and exported column. Results use a
     matrix-friendly layout: one result per row and scalar ``point_N_*`` columns,
     never packed coordinate/list strings. Velocity/acceleration require video FPS.
+    Hover status can show pixel and real-world coords via ``format_hover_coords``.
 
 Units:
     - Uncalibrated session: pixel units ("px", "px/s", "px/s^2").
@@ -299,6 +307,9 @@ class QuickMeasureCalibration:
     DLT math is reused from `dlt2d.py` (`dlt2d()`, `process_files()`) and
     applied with `rec2d_one_dlt2d.py`'s `rec2d()`; nothing is reimplemented
     here.
+
+    Future ``kind="dlt3d"`` (11 parameters) is reserved: when one world axis is
+    held at 0 the same coefficients can serve planar 2D work — not solved here yet.
     """
 
     dlt_params: np.ndarray | None = None
@@ -318,6 +329,8 @@ class QuickMeasureCalibration:
     ref3d_path: str = ""
     pixel_csv_path: str = ""
     kept_point_indices: list[int] = field(default_factory=list)
+    # None = video-wide default; int = per-frame override (0-based video frame).
+    source_frame: int | None = None
 
     def pixel_to_real(self, x: float, y: float) -> tuple[float, float]:
         if self.kind == "line":
@@ -333,26 +346,39 @@ class QuickMeasureCalibration:
 
     def describe(self) -> str:
         """One-line human-readable summary for UI status messages."""
+        scope = (
+            "default (all frames)" if self.source_frame is None else f"frame {self.source_frame}"
+        )
         if self.kind == "line" and self.scale is not None:
             length = self.real_measures.get("length", float("nan"))
             return (
-                f"Line calibration: {length:g} {self.unit_label} "
+                f"Line calibration [{scope}]: {length:g} {self.unit_label} "
                 f"({self.scale:.6g} {self.unit_label}/px)"
             )
         if self.kind == "plane":
             width = self.real_measures.get("width", float("nan"))
             height = self.real_measures.get("height", float("nan"))
-            return f"Plane calibration: {width:g} x {height:g} {self.unit_label} (DLT2D homography)"
+            return (
+                f"Plane calibration [{scope}]: {width:g} x {height:g} "
+                f"{self.unit_label} (DLT2D homography)"
+            )
         if self.kind == "ref3d":
             keep = PLANE_KEEP_AXES.get(self.drop_axis or "z", ("x", "y"))
             plane = "".join(a.upper() for a in keep)
             n = len(self.kept_point_indices) or len(self.calibration_real)
             return (
-                f"REF3D→{plane} DLT2D ({self.unit_label}, drop "
+                f"REF3D→{plane} DLT2D [{scope}] ({self.unit_label}, drop "
                 f"{(self.drop_axis or '?').upper()}, {n} pts) "
                 f"from {os.path.basename(self.ref3d_path or self.source)}"
             )
-        return f"DLT2D calibration ({self.unit_label}) from {os.path.basename(self.source)}"
+        if self.kind == "dlt3d":
+            return (
+                f"DLT3D calibration [{scope}] ({self.unit_label}) — "
+                "11 params reserved / not solved in this build"
+            )
+        return (
+            f"DLT2D calibration [{scope}] ({self.unit_label}) from {os.path.basename(self.source)}"
+        )
 
     @classmethod
     def from_line_clicks(
@@ -810,16 +836,21 @@ class QuickMeasureSession:
     `set_live_mode()` / `add_live_point()` for digit-key modes, or
     `add_point()` + `measure()` from the submenu; all geometry/kinematics
     math lives here so the host file stays a thin integration layer.
+
+    Calibrations: ``calibration`` is the video-wide **default**; optional
+    **per-frame** overrides live in ``calibrations_by_frame``. Resolution for
+    a click on frame N: override for N, else default.
     """
 
     fps: float | None = None
-    calibration: QuickMeasureCalibration | None = None
+    calibration: QuickMeasureCalibration | None = None  # video-wide default
+    calibrations_by_frame: dict[int, QuickMeasureCalibration] = field(default_factory=dict)
     points: list[QuickMeasurePoint] = field(default_factory=list)
     results: list[dict] = field(default_factory=list)
     # Set when points are already stored in real-world units (e.g. reloaded
     # from a calibrated points CSV), so no further conversion is applied.
     unit_override: str | None = None
-    # True once the user explicitly declined the calibration-first prompt.
+    # True once the user explicitly declined calibration (MEASURE in pixels).
     calibration_skipped: bool = False
     # Set when menu ``R`` starts a guided REF3D click calibration; host picks it up.
     pending_ref3d_draft: Ref3dCalibrationDraft | None = None
@@ -832,14 +863,64 @@ class QuickMeasureSession:
     export_dir: str | None = field(default=None, init=False, repr=False)
 
     @property
+    def default_calibration(self) -> QuickMeasureCalibration | None:
+        """Alias for the video-wide default calibration."""
+        return self.calibration
+
+    @default_calibration.setter
+    def default_calibration(self, value: QuickMeasureCalibration | None) -> None:
+        if value is not None:
+            value.source_frame = None
+        self.calibration = value
+
+    def calibration_for_frame(self, frame: int) -> QuickMeasureCalibration | None:
+        """Per-frame override if present, otherwise the default calibration."""
+        keyed = self.calibrations_by_frame.get(int(frame))
+        if keyed is not None:
+            return keyed
+        return self.calibration
+
+    def set_calibration(self, calib: QuickMeasureCalibration, *, frame: int | None = None) -> None:
+        """Store ``calib`` as default (``frame is None``) or per-frame override."""
+        if frame is None:
+            calib.source_frame = None
+            self.calibration = calib
+        else:
+            calib.source_frame = int(frame)
+            self.calibrations_by_frame[int(frame)] = calib
+
+    def iter_calibrations(self) -> list[tuple[int | None, QuickMeasureCalibration]]:
+        """Return ``(frame_or_None, calib)`` pairs: default first, then frames sorted."""
+        items: list[tuple[int | None, QuickMeasureCalibration]] = []
+        if self.calibration is not None:
+            items.append((None, self.calibration))
+        for fr in sorted(self.calibrations_by_frame):
+            items.append((fr, self.calibrations_by_frame[fr]))
+        return items
+
+    def has_any_calibration(self) -> bool:
+        return self.calibration is not None or bool(self.calibrations_by_frame)
+
+    def _calib_frame_tag(self, calib: QuickMeasureCalibration | None) -> int:
+        """Export tag: ``-1`` = default / none, else the source video frame."""
+        if calib is None or calib.source_frame is None:
+            return -1
+        return int(calib.source_frame)
+
+    @property
     def unit_label(self) -> str:
         if self.unit_override:
             return self.unit_override
-        return self.calibration.unit_label if self.calibration else "px"
+        if self.calibration is not None:
+            return self.calibration.unit_label
+        if self.calibrations_by_frame:
+            first = next(iter(self.calibrations_by_frame.values()))
+            return first.unit_label
+        return "px"
 
     @property
     def is_calibrated(self) -> bool:
-        return self.calibration is not None or self.unit_override is not None
+        return self.has_any_calibration() or self.unit_override is not None
 
     def add_point(self, frame: int, x: float, y: float) -> int:
         self.points.append(QuickMeasurePoint(int(frame), float(x), float(y)))
@@ -863,9 +944,11 @@ class QuickMeasureSession:
 
     def live_mode_status(self) -> str:
         if self.active_mode is None:
+            unit = self.unit_label
+            hint = "" if self.has_any_calibration() else " (pixels — use CALIB for real units)"
             return (
-                "QMeas: press 1=distance 2=area 3=angle 4=velocity 5=accel "
-                "(6–0 reserved) then click"
+                f"MEASURE ({unit}){hint}: press 1=distance 2=area 3=angle "
+                "4=velocity 5=accel (6–0 reserved) then click"
             )
         n = len(self.draft_points)
         auto = LIVE_MODE_AUTO_POINTS.get(self.active_mode)
@@ -944,12 +1027,14 @@ class QuickMeasureSession:
             self.points = saved
         n_used = int(result["n_points"])
         used = draft[-n_used:] if n_used else draft
+        calib = self.calibration_for_frame(int(result_frame))
         result = {
             **result,
             "frames": [p.frame for p in used],
             "point_ids": list(range(start_id, start_id + len(used))),
             "fps": self.fps,
-            "calibration": self.calibration.kind if self.calibration else "none",
+            "calibration": calib.kind if calib else "none",
+            "calibration_frame": self._calib_frame_tag(calib),
             "result_frame": int(result_frame),
             "pixels": [(p.x, p.y) for p in used],
             "reals": [self._to_units(p) for p in used],
@@ -963,8 +1048,9 @@ class QuickMeasureSession:
         if self.unit_override:
             # Points are already expressed in real-world units.
             return p.x, p.y
-        if self.calibration:
-            return self.calibration.pixel_to_real(p.x, p.y)
+        calib = self.calibration_for_frame(p.frame)
+        if calib is not None:
+            return calib.pixel_to_real(p.x, p.y)
         return p.x, p.y
 
     def _require_fps(self) -> float:
@@ -1091,12 +1177,15 @@ class QuickMeasureSession:
         n_used = int(result["n_points"])
         used = self.points[-n_used:] if n_used else []
         first_id = len(self.points) - n_used + 1
+        result_frame = used[-1].frame if used else 0
+        calib = self.calibration_for_frame(int(result_frame))
         result = {
             **result,
             "frames": [p.frame for p in used],
             "point_ids": list(range(first_id, first_id + n_used)),
             "fps": self.fps,
-            "calibration": self.calibration.kind if self.calibration else "none",
+            "calibration": calib.kind if calib else "none",
+            "calibration_frame": self._calib_frame_tag(calib),
             "result_frame": used[-1].frame if used else None,
             "pixels": [(p.x, p.y) for p in used],
             "reals": [self._to_units(p) for p in used],
@@ -1113,6 +1202,7 @@ class QuickMeasureSession:
         rows = []
         for i, p in enumerate(self.points, start=1):
             x_real, y_real = self._to_units(p)
+            calib = self.calibration_for_frame(p.frame)
             rows.append(
                 {
                     "point_id": i,
@@ -1122,7 +1212,8 @@ class QuickMeasureSession:
                     "x_real": x_real,
                     "y_real": y_real,
                     "unit": self.unit_label,
-                    "calibration_kind": self.calibration.kind if self.calibration else "none",
+                    "calibration_kind": calib.kind if calib else "none",
+                    "calibration_frame": self._calib_frame_tag(calib),
                 }
             )
         columns = [
@@ -1134,11 +1225,13 @@ class QuickMeasureSession:
             "y_real",
             "unit",
             "calibration_kind",
+            "calibration_frame",
         ]
         return pd.DataFrame(rows, columns=pd.Index(columns))
 
     def calibration_dataframe(self) -> pd.DataFrame:
         columns = [
+            "frame",
             "kind",
             "unit",
             "measure_name",
@@ -1154,37 +1247,43 @@ class QuickMeasureSession:
             "dlt_param_index",
             "dlt_param_value",
         ]
-        calib = self.calibration
-        if calib is None:
-            return pd.DataFrame(columns=pd.Index(columns))
-        base = {
-            "kind": calib.kind,
-            "unit": calib.unit_label,
-            "scale_unit_per_px": calib.scale,
-            "origin_x_px": calib.origin_px[0] if calib.origin_px else None,
-            "origin_y_px": calib.origin_px[1] if calib.origin_px else None,
-        }
         rows: list[dict] = []
-        for name, value in calib.real_measures.items():
-            rows.append({**base, "measure_name": name, "measure_value": value})
-        for i, (px, real) in enumerate(
-            zip(calib.calibration_pixels, calib.calibration_real, strict=False)
-        ):
-            rows.append(
-                {
-                    **base,
-                    "point_index": i + 1,
-                    "x_px": px[0],
-                    "y_px": px[1],
-                    "x_real": real[0],
-                    "y_real": real[1],
-                }
-            )
-        if calib.dlt_params is not None:
-            for i, value in enumerate(np.asarray(calib.dlt_params, dtype=float).tolist()):
-                rows.append({**base, "dlt_param_index": i + 1, "dlt_param_value": value})
+        for frame_key, calib in self.iter_calibrations():
+            frame_tag = -1 if frame_key is None else int(frame_key)
+            base = {
+                "frame": frame_tag,
+                "kind": calib.kind,
+                "unit": calib.unit_label,
+                "scale_unit_per_px": calib.scale,
+                "origin_x_px": calib.origin_px[0] if calib.origin_px else None,
+                "origin_y_px": calib.origin_px[1] if calib.origin_px else None,
+            }
+            wrote_detail = False
+            for name, value in calib.real_measures.items():
+                rows.append({**base, "measure_name": name, "measure_value": value})
+                wrote_detail = True
+            for i, (px, real) in enumerate(
+                zip(calib.calibration_pixels, calib.calibration_real, strict=False)
+            ):
+                rows.append(
+                    {
+                        **base,
+                        "point_index": i + 1,
+                        "x_px": px[0],
+                        "y_px": px[1],
+                        "x_real": real[0],
+                        "y_real": real[1],
+                    }
+                )
+                wrote_detail = True
+            if calib.dlt_params is not None:
+                for i, value in enumerate(np.asarray(calib.dlt_params, dtype=float).tolist()):
+                    rows.append({**base, "dlt_param_index": i + 1, "dlt_param_value": value})
+                    wrote_detail = True
+            if not wrote_detail:
+                rows.append(base)
         if not rows:
-            rows.append(base)
+            return pd.DataFrame(columns=pd.Index(columns))
         return pd.DataFrame(rows, columns=pd.Index(columns))
 
     def results_dataframe(self, max_points: int | None = None) -> pd.DataFrame:
@@ -1218,6 +1317,7 @@ class QuickMeasureSession:
             "fps",
             "mode_key",
             "calibration",
+            "calibration_frame",
             "elapsed_time_s",
         ]
         point_fields = ("id", "frame", "x_px", "y_px", "x_real", "y_real")
@@ -1242,6 +1342,7 @@ class QuickMeasureSession:
                 "fps": r.get("fps"),
                 "mode_key": r.get("mode_key", ""),
                 "calibration": r.get("calibration", "none"),
+                "calibration_frame": r.get("calibration_frame", -1),
                 "elapsed_time_s": r.get("dt"),
             }
             for point_index in range(matrix_points):
@@ -1396,7 +1497,14 @@ class QuickMeasureSession:
             )
             for index, result in enumerate(self.results, start=1)
         ]
-        calibration = self.calibration.describe() if self.calibration else "None; pixel units"
+        if self.has_any_calibration():
+            calib_parts = []
+            for frame_key, calib in self.iter_calibrations():
+                scope = "default" if frame_key is None else f"frame {frame_key}"
+                calib_parts.append(f"[{scope}] {calib.describe()}")
+            calibration = " | ".join(calib_parts)
+        else:
+            calibration = "None; pixel units"
         results_section = (
             table(
                 ("ID", "Type", "Value", "Unit", "Result frame", "Source frames", "Point IDs"),
@@ -1459,7 +1567,7 @@ th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:
 
     def save_session(self, output_dir: str, stem: str = "quickmeasure") -> dict[str, str]:
         """Write or refresh this session's files in one timestamped directory."""
-        if not self.points and not self.results and self.calibration is None:
+        if not self.points and not self.results and not self.has_any_calibration():
             raise QuickMeasureError("Nothing to save — no calibration, points or results yet.")
         run_dir = self._resolve_export_dir(output_dir)
         safe_stem = os.path.splitext(os.path.basename(stem))[0] or "quickmeasure"
@@ -1469,28 +1577,46 @@ th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:
         self.points_dataframe().to_csv(points_path, index=False)
         paths["points"] = points_path
 
-        if self.calibration is not None:
+        if self.has_any_calibration():
             calib_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure_calibration.csv")
             self.calibration_dataframe().to_csv(calib_path, index=False)
             paths["calibration"] = calib_path
-            if self.calibration.dlt_params is not None:
+
+            dlt_rows: list[dict] = []
+            for frame_key, calib in self.iter_calibrations():
+                if calib.dlt_params is None:
+                    continue
+                params = np.asarray(calib.dlt_params, dtype=float).tolist()
+                # Export frame: 0 = default (whole video); else 1-based video frame.
+                export_frame = 0 if frame_key is None else int(frame_key) + 1
+                dlt_rows.append(
+                    {
+                        "frame": export_frame,
+                        **{f"dlt_param_{i + 1}": v for i, v in enumerate(params)},
+                    }
+                )
+            if dlt_rows:
                 dlt_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure.dlt2d")
-                params = np.asarray(self.calibration.dlt_params, dtype=float).tolist()
-                pd.DataFrame(
-                    [{"frame": 1, **{f"dlt_param_{i + 1}": v for i, v in enumerate(params)}}]
-                ).to_csv(dlt_path, index=False)
+                pd.DataFrame(dlt_rows).to_csv(dlt_path, index=False)
                 paths["dlt2d"] = dlt_path
-            if self.calibration.kind == "ref3d" and self.calibration.calibration_real:
-                keep = PLANE_KEEP_AXES.get(self.calibration.drop_axis or "z", ("x", "y"))
+
+            # REF3D planar export: prefer default, else first per-frame ref3d.
+            ref3d_calib = None
+            for _fk, calib in self.iter_calibrations():
+                if calib.kind == "ref3d" and calib.calibration_real:
+                    ref3d_calib = calib
+                    break
+            if ref3d_calib is not None:
+                keep = PLANE_KEEP_AXES.get(ref3d_calib.drop_axis or "z", ("x", "y"))
                 ref2d_path = os.path.join(
                     run_dir,
-                    f"{safe_stem}_quickmeasure_drop{(self.calibration.drop_axis or 'z').upper()}.ref2d",
+                    f"{safe_stem}_quickmeasure_drop{(ref3d_calib.drop_axis or 'z').upper()}.ref2d",
                 )
                 data: dict[str, list[float | int]] = {"frame": [0]}
-                labels = self.calibration.kept_point_indices or list(
-                    range(1, len(self.calibration.calibration_real) + 1)
+                labels = ref3d_calib.kept_point_indices or list(
+                    range(1, len(ref3d_calib.calibration_real) + 1)
                 )
-                for label, (u, v) in zip(labels, self.calibration.calibration_real, strict=False):
+                for label, (u, v) in zip(labels, ref3d_calib.calibration_real, strict=False):
                     data[f"p{label}_x"] = [u]
                     data[f"p{label}_y"] = [v]
                 pd.DataFrame(data).to_csv(ref2d_path, index=False)
@@ -1499,13 +1625,16 @@ th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:
                 pd.DataFrame(
                     [
                         {
-                            "ref3d_path": self.calibration.ref3d_path,
-                            "ref3d_format": self.calibration.ref3d_format,
-                            "drop_axis": self.calibration.drop_axis,
+                            "ref3d_path": ref3d_calib.ref3d_path,
+                            "ref3d_format": ref3d_calib.ref3d_format,
+                            "drop_axis": ref3d_calib.drop_axis,
                             "kept_axes": "".join(keep),
-                            "pixel_csv_path": self.calibration.pixel_csv_path,
+                            "pixel_csv_path": ref3d_calib.pixel_csv_path,
                             "kept_point_indices": " ".join(str(i) for i in labels),
-                            "unit": self.calibration.unit_label,
+                            "unit": ref3d_calib.unit_label,
+                            "source_frame": (
+                                -1 if ref3d_calib.source_frame is None else ref3d_calib.source_frame
+                            ),
                         }
                     ]
                 ).to_csv(meta_path, index=False)
@@ -1516,14 +1645,13 @@ th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:
             matrix_points = max(int(result.get("n_points") or 0) for result in self.results)
             self.results_dataframe(max_points=matrix_points).to_csv(results_path, index=False)
             paths["results"] = results_path
-            # One CSV per measure type that has data.
             by_type: dict[str, list[dict]] = {}
             for r in self.results:
                 by_type.setdefault(str(r.get("type")), []).append(r)
             for kind, items in by_type.items():
                 type_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure_results_{kind}.csv")
-                # Reuse dataframe builder via a temporary session slice.
                 tmp = QuickMeasureSession(fps=self.fps, calibration=self.calibration)
+                tmp.calibrations_by_frame = dict(self.calibrations_by_frame)
                 tmp.results = items
                 tmp.results_dataframe(max_points=matrix_points).to_csv(type_path, index=False)
                 paths[f"results_{kind}"] = type_path
@@ -1537,8 +1665,13 @@ th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:
             handle.write("vailá Quick Measure export\n")
             handle.write(f"stem: {safe_stem}\n")
             handle.write(f"unit: {self.unit_label}\n")
-            if self.calibration is not None:
-                handle.write(f"calibration: {self.calibration.describe()}\n")
+            if self.has_any_calibration():
+                handle.write("calibrations:\n")
+                for frame_key, calib in self.iter_calibrations():
+                    scope = "default (all frames)" if frame_key is None else f"frame {frame_key}"
+                    handle.write(f"  - [{scope}] {calib.describe()}\n")
+                handle.write("calibration_frame column: -1 = default; else 0-based video frame\n")
+                handle.write("dlt2d frame column: 0 = default; else 1-based video frame\n")
             handle.write(
                 "results_schema: one result per row; point_N_* scalar columns; no packed lists\n"
             )
@@ -1558,17 +1691,42 @@ def format_result(result: dict) -> str:
     return f"{label}: {result['value']:.4f} {result['unit']}"
 
 
-def needs_calibration(session: QuickMeasureSession | None) -> bool:
-    """True when entering Quick Measure must start with calibration.
+def format_hover_coords(
+    session: QuickMeasureSession | None,
+    x_px: float,
+    y_px: float,
+    frame: int | None = None,
+) -> str:
+    """Status-bar text for mouse hover: pixels always; real when calibrated.
 
-    This is the calibration-first rule the host GUI applies when `Q` / the
-    **QMeas** button turns the mode on: a brand-new session calibrates first,
-    an already-calibrated one (or one where the user explicitly chose to stay
-    in pixels) goes straight to free measuring.
+    Appends ``Real: (X, Y) <unit>`` when a calibration resolves for ``frame``
+    (per-frame override, else default). On conversion failure, falls back to
+    the pixel-only string.
+    """
+    pix = f"Pix: ({int(round(x_px))}, {int(round(y_px))})"
+    if session is None:
+        return pix
+    calib = session.calibration_for_frame(int(frame)) if frame is not None else session.calibration
+    if calib is None:
+        return pix
+    try:
+        rx, ry = calib.pixel_to_real(float(x_px), float(y_px))
+    except QuickMeasureError:
+        return pix
+    unit = calib.unit_label
+    return f"{pix}  Real: ({rx:.3f}, {ry:.3f}) {unit}"
+
+
+def needs_calibration(session: QuickMeasureSession | None) -> bool:
+    """True when the session has no usable calibration yet.
+
+    Kept for callers / tests. MEASURE no longer gates on this — CALIB is a
+    separate mode. Returns True for a brand-new session without default or
+    per-frame calibrations (skipping still counts as "no calib").
     """
     if session is None:
         return True
-    return session.calibration is None and not session.calibration_skipped
+    return not session.has_any_calibration()
 
 
 # -----------------------------------------------------------------------
@@ -2059,19 +2217,22 @@ def show_quickmeasure_menu(
     small_font = pygame.font.Font(None, 20)
 
     n = len(session.points)
-    calib_line = (
-        session.calibration.describe()
-        if session.calibration
-        else "no calibration — values are in pixels"
-    )
+    if session.has_any_calibration():
+        calib_bits = []
+        for frame_key, calib in session.iter_calibrations():
+            scope = "default" if frame_key is None else f"f{frame_key}"
+            calib_bits.append(f"{scope}:{calib.kind}")
+        calib_line = ", ".join(calib_bits)
+    else:
+        calib_line = "no calibration — values are in pixels"
     lines = [
-        "QUICK MEASURE — save / calibrate / classify",
+        "MEASURE — save / classify",
         "",
         f"Points: {n}   Results: {len(session.results)}   Unit: {session.unit_label}",
         f"Live mode: {session.active_mode or '(press 1-5 on video)'}   FPS: {session.fps}",
         f"Calibration: {calib_line}",
         "",
-        "On the VIDEO (after Q):",
+        "On the VIDEO (MEASURE / Q):",
         "  1 distance  2 area  3 angle  4 velocity  5 accel",
         "  6-0 reserved — value drawn on-image per completed set",
         "  Enter closes area polygon; velocity/accel need FPS (I)",
@@ -2079,10 +2240,9 @@ def show_quickmeasure_menu(
         "In this menu:",
         "1-5: classify current free points (legacy)",
         "S: Save points / calibration / results CSV",
-        "C: Load DLT2D / REF2D / REF3D calibration...",
-        "R: Load REF3D calibration (plane drop + CSV or guide)",
         "X: Clear all points (+ draft)",
         "",
+        "Use CALIB (Shift+Q) to build or load calibrations.",
         "Esc: Close menu",
     ]
 
@@ -2136,28 +2296,9 @@ def show_quickmeasure_menu(
                     except QuickMeasureError as e:
                         result_message = f"Error: {e}"
                 elif event.key == pygame.K_c:
-                    video_guess = (
-                        os.path.join(save_dir, save_stem) if save_dir and save_stem else None
-                    )
-                    calib, msg = _ask_calibration_via_dialog(video_guess)
-                    if calib is not None:
-                        session.calibration = calib
-                    result_message = msg
+                    result_message = "Use CALIB (Shift+Q) to load or build calibrations."
                 elif event.key == pygame.K_r:
-                    video_guess = (
-                        os.path.join(save_dir, save_stem) if save_dir and save_stem else None
-                    )
-                    result, msg = ask_ref3d_calibration_files(video_guess)
-                    if isinstance(result, QuickMeasureCalibration):
-                        session.calibration = result
-                        result_message = msg
-                    elif isinstance(result, Ref3dCalibrationDraft):
-                        session.pending_ref3d_draft = result
-                        result_message = (
-                            f"REF3D guide ready — close menu (Esc) then click points. {msg}"
-                        )
-                    else:
-                        result_message = msg
+                    result_message = "Use CALIB (Shift+Q) for REF3D / plane / line calibration."
                 elif event.key == pygame.K_s:
                     try:
                         paths = session.save_session(save_dir or os.getcwd(), save_stem)
@@ -2179,7 +2320,7 @@ def show_quickmeasure_menu(
                     session.active_mode = None
                     result_message = "Points, draft and results cleared."
 
-    return result_message or "Quick Measure menu closed (no measurement taken)."
+    return result_message or "Measure menu closed (no measurement taken)."
 
 
 if __name__ == "__main__":

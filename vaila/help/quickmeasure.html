@@ -30,35 +30,44 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/quickmeasure.py</p>
-            <p><strong>Version:</strong> 0.3.127</p>
-            <p><strong>Updated:</strong> 07 September 2026</p>
+            <p><strong>Version:</strong> 0.4.3</p>
+            <p><strong>Updated:</strong> 16 September 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes (embedded in getpixelvideo.py) &nbsp; <strong>CLI:</strong> Yes (<code>python -m vaila.quickmeasure</code>)</p>
         </div>
 
         <h2>Description</h2>
-        <p>Kinovea-style quick on-image measurement engine for <code>getpixelvideo.py</code>: <strong>calibrate first</strong>, then click points on the video and classify the current point set as <strong>Distance</strong>, <strong>Area</strong>, <strong>Angle</strong>, <strong>Velocity</strong>, or <strong>Acceleration</strong>.</p>
+        <p>Kinovea-style on-image calibration and measurement for <code>getpixelvideo.py</code>.
+        Toolbar splits into <strong>CALIB</strong> (<code>Shift+Q</code>) and <strong>MEASURE</strong> (<code>Q</code>).
+        MEASURE classifies clicks as <strong>Distance</strong>, <strong>Area</strong>, <strong>Angle</strong>,
+        <strong>Velocity</strong>, or <strong>Acceleration</strong>.</p>
 
-        <h2>Calibration first (v0.3.127)</h2>
-        <p>Pressing <code>Q</code> or the <strong>QMeas</strong> button on an uncalibrated session starts with calibration:</p>
+        <h2>CALIB + MEASURE (v0.4.3)</h2>
+        <p><strong>CALIB</strong> builds or loads planar calibrations. Scope:
+        <em>default (whole video)</em> or <em>this frame only</em>. MEASURE on frame N
+        uses the per-frame calib if present, otherwise the default.</p>
         <table>
             <tr><th>Mode</th><th>Input</th><th>Model</th></tr>
             <tr><td><strong>Line</strong> (<code>1</code>)</td><td>2 clicks + typed length</td><td>Isotropic scale; origin at first click.</td></tr>
             <tr><td><strong>Plane</strong> (<code>2</code>)</td><td>4 clicks + width/height</td><td>8-parameter DLT2D homography.</td></tr>
-            <tr><td><strong>REF3D</strong> (<code>3</code>)</td><td><code>.ref3d</code> mode1/2/3 + drop axis (Z→XY, Y→XZ, X→YZ) + pixel CSV or guided clicks with scheme overlay</td><td>Planar DLT2D via <code>rec2d</code> (collapsed duplicates deduped).</td></tr>
-            <tr><td><strong>Skip</strong> (<code>0</code>)</td><td>—</td><td>Stay in pixels (<code>px</code>).</td></tr>
+            <tr><td><strong>REF3D</strong> (<code>3</code>)</td><td><code>.ref3d</code> + drop axis (Z→XY, Y→XZ, X→YZ) + pixel CSV or guided clicks</td><td>Planar DLT2D via <code>rec2d</code>.</td></tr>
+            <tr><td><strong>DLT3D</strong> (<code>4</code>)</td><td>—</td><td>Reserved (coming soon): 11 params; axis held at 0 usable as planar 2D.</td></tr>
+            <tr><td><strong>Load</strong> (<code>L</code>)</td><td><code>.dlt2d</code> / REF2D / REF3D</td><td>Reuse existing files.</td></tr>
+            <tr><td><strong>Clear</strong> (<code>0</code>)</td><td>—</td><td>Stay in pixels (<code>px</code>).</td></tr>
         </table>
-        <h3>Live measure modes (digit keys after Q)</h3>
+        <h3>Live measure modes (digit keys after MEASURE)</h3>
         <table>
             <tr><th>Key</th><th>Mode</th><th>Clicks</th><th>On-image</th></tr>
             <tr><td><strong>1</strong></td><td>distance</td><td>2 (auto)</td><td>Line + length per pair</td></tr>
             <tr><td><strong>2</strong></td><td>area</td><td>≥3, then Enter</td><td>Polygon + area</td></tr>
             <tr><td><strong>3</strong></td><td>angle</td><td>3 (auto)</td><td>Degrees at vertex</td></tr>
-            <tr><td><strong>4</strong></td><td>velocity</td><td>2 different frames</td><td>FPS auto-detected; override with <code>I</code> or <strong>FPS … Hz</strong></td></tr>
-            <tr><td><strong>5</strong></td><td>acceleration</td><td>3 distinct frames</td><td>Uses the same automatic/manual FPS</td></tr>
+            <tr><td><strong>4</strong></td><td>velocity</td><td>2 different frames</td><td>FPS via <code>I</code> or <strong>FPS … Hz</strong></td></tr>
+            <tr><td><strong>5</strong></td><td>acceleration</td><td>3 distinct frames</td><td>Same FPS</td></tr>
             <tr><td><strong>6–0</strong></td><td>reserved</td><td>—</td><td>—</td></tr>
         </table>
-        <p>Menu <code>R</code>/<code>C</code> can load REF3D/REF2D/<code>.dlt2d</code> later. The first calibration/result save creates one <code>processed_quickmeasure_&lt;timestamp&gt;/</code> next to the video. Every later save in that video session updates the same directory, keeping all measurements together. It contains points, calibration, <code>.dlt2d</code>, dropped-plane <code>.ref2d</code>, combined + per-type results, README, and <code>quickmeasure_report.html</code>.</p>
+        <p>The first calibration/result save creates one <code>processed_quickmeasure_&lt;timestamp&gt;/</code>
+        next to the video. Later saves update the same directory. Exports include
+        <code>calibration_frame</code> on points/results (<code>-1</code> = default).</p>
         <p>Single-video sessions stay <strong>DLT2D</strong>. Stereo <strong>DLT3D</strong> remains a batch/CLI workflow via <code>rec3d_one_dlt3d.py</code>.</p>
 
         <h2>Point-set convention</h2>
@@ -76,26 +85,28 @@
         <ul>
             <li><strong>Uncalibrated session:</strong> pixel units (<code>px</code>, <code>px/s</code>, <code>px/s^2</code>).</li>
             <li><strong>Calibrated session</strong> (a DLT2D loaded): whatever unit the <code>.ref2d</code> file used (assumed metres — <code>m</code>, <code>m/s</code>, <code>m/s^2</code> — matching <code>dlt2d.py</code>/<code>rec2d.py</code>'s own convention); the caller may override <code>unit_label</code>.</li>
+            <li><strong>Hover (MEASURE/CALIB):</strong> after calibration, the control-bar status shows <code>Pix: (x, y)</code> and <code>Real: (X, Y) &lt;unit&gt;</code> for the mouse position (<code>format_hover_coords</code>, frame-aware).</li>
         </ul>
 
         <h2>Usage from getpixelvideo.py</h2>
         <table>
             <tr><th>Key</th><th>Action</th></tr>
-            <tr><td><code>Q</code> / <strong>QMeas</strong> button</td><td>Toggle Quick Measure mode — starts with the calibration prompt when the session is not calibrated yet</td></tr>
-            <tr><td>Left-click</td><td>Add a calibration point (while calibrating) or a measure point (after)</td></tr>
+            <tr><td><code>Shift+Q</code> / <strong>CALIB</strong></td><td>Toggle CALIB — Line / Plane / REF3D / Load / Clear + default or this-frame scope</td></tr>
+            <tr><td><code>Q</code> / <strong>MEASURE</strong></td><td>Toggle MEASURE (no calibration-first gate)</td></tr>
+            <tr><td>Left-click</td><td>Add a calibration point (CALIB) or a measure point (MEASURE)</td></tr>
             <tr><td>Right-click</td><td>Undo the last point</td></tr>
             <tr><td>Middle-click</td><td>Pan (unchanged)</td></tr>
-            <tr><td><code>Enter</code></td><td>While calibrating: (re)open the real-measurement prompt. After: open the classification submenu (<code>1</code> Distance, <code>2</code> Area, <code>3</code> Velocity, <code>4</code> Acceleration, <code>S</code> save CSVs, <code>C</code> load calibration from file, <code>X</code> clear points, <code>Esc</code> close menu)</td></tr>
-            <tr><td><code>Backspace</code></td><td>Clear all quick-measure points</td></tr>
+            <tr><td><code>Enter</code></td><td>While calibrating: finish typed measures. In MEASURE: close area or open save menu (<code>S</code> save, <code>X</code> clear)</td></tr>
+            <tr><td><code>Backspace</code></td><td>Clear all measure points/results</td></tr>
         </table>
-        <p><code>Esc</code> in the main tool always means save-and-quit the whole application; it is never repurposed to exit Quick Measure mode — press <code>Q</code> again instead.</p>
+        <p><code>Esc</code> in the main tool always means save-and-quit the whole application — press <code>Q</code> / <code>Shift+Q</code> again to leave MEASURE / CALIB.</p>
 
         <h2>Saved CSVs and recomputation</h2>
         <p><code>S</code> in the submenu updates the session's single timestamped <code>processed_quickmeasure_YYYYMMDD_HHMMSS/</code> folder next to the video. Open <code>quickmeasure_report.html</code> in any browser for a didactic summary of the current results, measurement definitions and formulas, units, file purposes, and CSV column meanings.</p>
         <table>
             <tr><th>File</th><th>Columns</th></tr>
-            <tr><td><code>&lt;stem&gt;_quickmeasure_points.csv</code></td><td><code>point_id, frame, x_px, y_px, x_real, y_real, unit, calibration_kind</code></td></tr>
-            <tr><td><code>&lt;stem&gt;_quickmeasure_calibration.csv</code></td><td>calibration mode, unit, typed measures, calibration clicks (pixel + real), DLT2D parameters</td></tr>
+            <tr><td><code>&lt;stem&gt;_quickmeasure_points.csv</code></td><td><code>point_id, frame, x_px, y_px, x_real, y_real, unit, calibration_kind, calibration_frame</code></td></tr>
+            <tr><td><code>&lt;stem&gt;_quickmeasure_calibration.csv</code></td><td><code>frame</code> (<code>-1</code> = default), kind, unit, typed measures, reference clicks, DLT2D parameters</td></tr>
             <tr><td><code>&lt;stem&gt;_quickmeasure_results.csv</code></td><td>Matrix layout: one result per row; scalar metadata plus repeated <code>point_N_id, point_N_frame, point_N_x_px, point_N_y_px, point_N_x_real, point_N_y_real</code> columns.</td></tr>
             <tr><td><code>&lt;stem&gt;_quickmeasure_results_&lt;type&gt;.csv</code></td><td>Same matrix columns and width as the combined file, filtered to one measurement type.</td></tr>
             <tr><td><code>quickmeasure_report.html</code></td><td>Browser-readable live report explaining all results, measurements, metrics, files, units, and columns.</td></tr>
@@ -112,7 +123,8 @@ uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure area --poi
             <tr><th>Name</th><th>Description</th></tr>
             <tr><td><code>QuickMeasureCalibration</code></td><td>Scale or DLT2D calibration; <code>pixel_to_real()</code>, <code>describe()</code>; <code>from_line_clicks()</code>, <code>from_plane_clicks()</code>, <code>from_point_correspondences()</code>, <code>from_dlt2d_file()</code>, <code>from_calibration_points()</code>.</td></tr>
             <tr><td><code>CalibrationDraft</code></td><td>Calibration-first state machine: <code>required_points</code>, <code>required_measures</code>, <code>add_point</code>, <code>undo_last</code>, <code>instructions()</code>, <code>build(measures)</code>.</td></tr>
-            <tr><td><code>QuickMeasureSession</code></td><td>Click-session state (fps, calibration, points, results); <code>add_point</code>, <code>undo_last</code>, <code>clear</code>, <code>measure(kind)</code>, <code>points_dataframe</code>, <code>calibration_dataframe</code>, <code>results_dataframe</code>, <code>save_session</code>.</td></tr>
+            <tr><td><code>QuickMeasureSession</code></td><td>Click-session state; <code>set_calibration(calib, frame=None)</code>, <code>calibration_for_frame</code>, live modes, <code>save_session</code>.</td></tr>
+            <tr><td><code>format_hover_coords</code></td><td>Status-bar pixel + real-world hover text (frame-aware).</td></tr>
             <tr><td><code>finish_calibration_draft</code></td><td>Prompts for the real measurement(s) through an injected <code>ask_text</code> callback and builds the calibration.</td></tr>
             <tr><td><code>session_from_points_csv</code> / <code>measure_from_points_csv</code></td><td>Rebuild a session and recompute a measurement from a saved points CSV.</td></tr>
             <tr><td><code>main</code></td><td>CLI entry point (<code>python -m vaila.quickmeasure</code>).</td></tr>
@@ -127,7 +139,7 @@ uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure area --poi
             <tr><td><strong>dlt2d</strong></td><td>Compute DLT2D coefficients from calibration (pixel + .ref2d reference).</td></tr>
             <tr><td><strong>rec2d_one_dlt2d</strong></td><td>Apply one fixed set of DLT2D parameters to pixel coordinates (reused directly for pixel_to_real).</td></tr>
             <tr><td><strong>rec3d_one_dlt3d</strong></td><td>Batch stereo DLT3D reconstruction — the intended path for two-video 3D quick measurements (not covered by this module).</td></tr>
-            <tr><td><strong>getpixelvideo</strong></td><td>Host tool; owns only the hotkeys, click handler, overlay draw call, and help text for this feature.</td></tr>
+            <tr><td><strong>getpixelvideo</strong></td><td>Host tool; CALIB + MEASURE buttons/hotkeys, click routing, overlays.</td></tr>
         </table>
 
         <div class="footer">

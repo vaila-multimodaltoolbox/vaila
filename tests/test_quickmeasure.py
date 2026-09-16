@@ -31,6 +31,7 @@ from vaila.quickmeasure import (
     QuickMeasureSession,
     Ref3dCalibrationDraft,
     finish_calibration_draft,
+    format_hover_coords,
     format_result,
     main,
     measure_from_points_csv,
@@ -271,6 +272,41 @@ def test_format_result():
     assert text == "Distance: 5.0000 px"
 
 
+def test_format_hover_coords_pixel_only_without_calibration():
+    session = QuickMeasureSession()
+    text = format_hover_coords(session, 320.4, 240.6)
+    assert text == "Pix: (320, 241)"
+    assert "Real:" not in text
+    assert format_hover_coords(None, 10, 20) == "Pix: (10, 20)"
+
+
+def test_format_hover_coords_includes_real_when_calibrated():
+    # 100 px = 1 m → 0.01 m/px; origin at first click.
+    calib = QuickMeasureCalibration.from_line_clicks((100, 100), (200, 100), 1.0, unit_label="m")
+    session = QuickMeasureSession(calibration=calib)
+    text = format_hover_coords(session, 200, 100)
+    assert text.startswith("Pix: (200, 100)")
+    assert "Real: (1.000, 0.000) m" in text
+
+
+def test_format_hover_coords_respects_mm_unit():
+    calib = QuickMeasureCalibration.from_line_clicks((0, 0), (100, 0), 100.0, unit_label="mm")
+    session = QuickMeasureSession(calibration=calib)
+    text = format_hover_coords(session, 50, 0)
+    assert "Real: (50.000, 0.000) mm" in text
+
+
+def test_format_hover_coords_uses_frame_override():
+    default = QuickMeasureCalibration.from_line_clicks((0, 0), (100, 0), 1.0, unit_label="m")
+    override = QuickMeasureCalibration.from_line_clicks((0, 0), (50, 0), 1.0, unit_label="m")
+    session = QuickMeasureSession(calibration=default)
+    session.set_calibration(override, frame=3)
+    text = format_hover_coords(session, 50, 0, frame=3)
+    assert "Real: (1.000, 0.000) m" in text
+    text0 = format_hover_coords(session, 50, 0, frame=0)
+    assert "Real: (0.500, 0.000) m" in text0
+
+
 # ---------------------------------------------------------------------------
 # Calibration-first: click-built calibrations (Kinovea style)
 # ---------------------------------------------------------------------------
@@ -425,7 +461,9 @@ def test_save_session_writes_points_calibration_and_results(tmp_path):
         "y_real",
         "unit",
         "calibration_kind",
+        "calibration_frame",
     ]
+    assert (points["calibration_frame"] == -1).all()
     assert points.loc[1, "x_real"] == pytest.approx(3.0)
     assert set(points["unit"]) == {"m"}
     calib_df = pd.read_csv(paths["calibration"])
@@ -545,17 +583,56 @@ def test_cli_main_reports_error_exit_code(tmp_path, capsys):
 def test_needs_calibration_rule():
     assert needs_calibration(None) is True
     session = QuickMeasureSession()
-    assert needs_calibration(session) is True  # brand new -> calibrate first
+    assert needs_calibration(session) is True  # brand new — no calib yet
     session.calibration_skipped = True
-    assert needs_calibration(session) is False  # user chose pixels explicitly
+    # Skip alone does not count as calibrated; MEASURE may still run in px.
+    assert needs_calibration(session) is True
     calibrated = QuickMeasureSession(
         calibration=QuickMeasureCalibration.from_line_clicks((0, 0), (10, 0), 1.0)
     )
     assert needs_calibration(calibrated) is False
 
 
+def test_calibration_for_frame_fallback_and_override():
+    default = QuickMeasureCalibration.from_line_clicks((0, 0), (100, 0), 1.0, unit_label="m")
+    override = QuickMeasureCalibration.from_line_clicks((0, 0), (50, 0), 1.0, unit_label="m")
+    session = QuickMeasureSession()
+    session.set_calibration(default)  # default / all frames
+    session.set_calibration(override, frame=10)
+    assert session.calibration_for_frame(0) is default
+    assert session.calibration_for_frame(10) is override
+    # Measure on frame 10 uses override scale (0.02 m/px): 50 px → 1 m.
+    session.add_point(10, 0, 0)
+    session.add_point(10, 50, 0)
+    result = session.measure("distance")
+    assert math.isclose(result["value"], 1.0, abs_tol=1e-9)
+    assert result["calibration_frame"] == 10
+
+
+def test_save_session_writes_per_frame_calibration(tmp_path):
+    default = QuickMeasureCalibration.from_line_clicks((0, 0), (100, 0), 1.0)
+    frame_calib = QuickMeasureCalibration.from_line_clicks((0, 0), (200, 0), 2.0)
+    session = QuickMeasureSession()
+    session.set_calibration(default)
+    session.set_calibration(frame_calib, frame=5)
+    session.add_point(5, 0, 0)
+    session.add_point(5, 200, 0)
+    session.measure("distance")
+    paths = session.save_session(str(tmp_path), stem="clip.mp4")
+    calib_df = pd.read_csv(paths["calibration"])
+    assert set(calib_df["frame"].unique()) == {-1, 5}
+    points = pd.read_csv(paths["points"])
+    assert (points["calibration_frame"] == 5).all()
+    results = pd.read_csv(paths["results"])
+    assert int(results.loc[0, "calibration_frame"]) == 5
+    with open(paths["readme"], encoding="utf-8") as handle:
+        readme = handle.read()
+    assert "default (all frames)" in readme
+    assert "frame 5" in readme
+
+
 def test_calibration_first_then_free_measure_flow(tmp_path):
-    """Simulates what Q / QMeas does: calibrate first, then measure, then save."""
+    """Simulates CALIB then MEASURE: calibrate, then measure, then save."""
     session = QuickMeasureSession(fps=30.0)
     assert needs_calibration(session)
 
@@ -565,7 +642,7 @@ def test_calibration_first_then_free_measure_flow(tmp_path):
     draft.add_point(300, 500)
     calib, message = finish_calibration_draft(draft, lambda prompt, default: "2")
     assert calib is not None and "Line calibration" in message
-    session.calibration = calib
+    session.set_calibration(calib)
     assert not needs_calibration(session)
 
     # Step 2: free measuring in calibrated units (0.01 m/px).
@@ -583,8 +660,8 @@ def test_calibration_first_then_free_measure_flow(tmp_path):
     assert results_df["type"].tolist() == ["distance", "velocity"]
 
 
-def test_getpixelvideo_toggle_is_calibration_first():
-    """The host toggle must route an uncalibrated session into calibration."""
+def test_getpixelvideo_has_calib_and_measure_modes():
+    """Host exposes separate CALIB (Shift+Q) and MEASURE (Q) toggles."""
     source_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "vaila",
@@ -592,10 +669,13 @@ def test_getpixelvideo_toggle_is_calibration_first():
     )
     with open(source_path, encoding="utf-8") as handle:
         source = handle.read()
-    toggle_start = source.index("def _toggle_quick_measure_mode()")
-    toggle_body = source[toggle_start : toggle_start + 2000]
-    assert "quickmeasure.needs_calibration(quickmeasure_session)" in toggle_body
-    assert "_start_quickmeasure_calibration()" in toggle_body
+    assert "def _toggle_calib_mode()" in source
+    assert "def _toggle_measure_mode()" in source
+    assert "_start_quickmeasure_calibration()" in source
+    assert (
+        "needs_calibration(quickmeasure_session)"
+        not in source.split("def _toggle_measure_mode()")[1][:1500]
+    )
     # Calibration clicks must be routed before measure clicks.
     assert "quick_measure_calibrating" in source
     assert "quickmeasure_draft.add_point(video_x, video_y)" in source
@@ -603,9 +683,12 @@ def test_getpixelvideo_toggle_is_calibration_first():
     assert source.index("quickmeasure_draft.add_point(video_x, video_y)") < source.index(
         "quickmeasure_session.add_live_point"
     )
-    assert "3=REF3D" in source or "REF3D file" in source
+    assert "3=REF3D" in source or "REF3D" in source
+    assert "4=DLT3D" in source or "DLT3D (11 params" in source
     assert "set_live_mode" in source
     assert "add_live_point" in source
+    assert 'render("CALIB"' in source or "render(calib_label" in source
+    assert "MEASURE" in source
 
 
 def test_session_angle_three_points_right_angle():
