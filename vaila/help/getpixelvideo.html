@@ -222,7 +222,7 @@
       <div class="version-info">
         <strong>Version:</strong> 0.4.3<br />
         <strong>Date:</strong> 22 July 2025<br />
-        <strong>Updated:</strong> 15 September 2026<br />
+        <strong>Updated:</strong> 16 September 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />
@@ -244,16 +244,16 @@
         <code>debug_projected_wireframe.mp4</code>, and <code>geometry_animation.html</code>.
         See <a href="planar_geometry_tracker.html">planar_geometry_tracker.md</a>.<br />
         <strong>Highlights:</strong>
-        <strong>Template Marker Mode</strong> — toolbar cycles keypoint templates:
-        <strong>FIFA Soccer-Field</strong> (32 pitch KPs, <code>idx 0 = top_left_corner</code>),
-        <strong>MediaPipe Pose</strong> (33), <strong>YOLO Pose</strong> (COCO-17).<br/>
-        <strong>FIFA TOML</strong> — load via <code>K</code> when Template:FIFA.
-        Sets <code>n_keypoints</code> (default <strong>32</strong>),
-        <code>start_keypoint</code>, and <code>base_index</code>. Sparse integer CSV;
-        <strong>F9</strong> appends to a FIFA-style <code>unified/</code> tree when
-        <code>--fifa-dataset DIR</code> (or <strong>F7</strong> Dataset) points at one.
+        <strong>Template Marker Mode (<code>Tpl:</code>)</strong> — column dialog listing
+        <strong>Free</strong>, <strong>Soccer-Kiki</strong> (pitch guide + TOML via <code>K</code>;
+        button shows <code>Soccer-Kiki</code>, not FIFA),
+        and pose/hand presets from <code>vaila/skeletons/</code>
+        (MediaPipe 33, YOLO 17, OpenPose 25, Halpe 26, FIFA Body-15, SAM3+DINOv3 70,
+        Sapiens2 308, Hand/Hands/Holistic, COCO WholeBody 133).<br/>
+        Outside Soccer-Kiki, <strong><code>K</code></strong> opens the same Tpl picker.
         <strong>Guide (<code>G</code>)</strong> is <em>visual only</em>
-        (FIFA field overlay + <code>V</code> image; or pose skeleton in MediaPipe/YOLO templates); marking uses the same
+        (Soccer-Kiki field overlay + <code>V</code> image; stick-figure for MediaPipe/YOLO;
+        name-list reference for other Tpl presets); marking uses the same
         <strong>TAB</strong> / <strong>Ctrl+G</strong> / clicks as with the guide off.
         <strong>Sequential (<code>S</code>/<code>O</code>)</strong> fills the selected
         empty slot first (including kp 0), then advances.
@@ -1790,11 +1790,13 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
       <section id="version-history">
         <h2>11. Version History</h2>
 
-        <h3>Version 0.4.3 (15 September 2026) &mdash; Geo Homog wizard + topology/DLT impute</h3>
+        <h3>Version 0.4.3 (16 September 2026) &mdash; Geo Homog wizard + topology/DLT impute + CALIB dialog layout + Tpl catalog</h3>
         <ul>
           <li><strong>Geo Homog prompts:</strong> TOML profile or rectangle; session edit pause before run.</li>
           <li><strong>Imputation:</strong> measured pixels locked; topology midpoints / line intersections, then per-frame DLT2D on visible points only.</li>
           <li><strong>Always writes</strong> <code>debug_projected_wireframe.mp4</code>; live overlay from resolved coords (<strong>Shift+G</strong>); optional save to <code>*_markers.csv</code>.</li>
+          <li><strong>CALIB dialogs:</strong> option lists (mode + scope) drawn as one option per line so they fit the pygame window.</li>
+          <li><strong>Tpl catalog:</strong> <code>Tpl:</code> opens a column dialog listing Free, Soccer-Kiki, and all pose/hand presets from <code>vaila/skeletons/</code> (SAM3D70, Sapiens308, OpenPose, Halpe, …). Pitch-guide button caption is <code>Soccer-Kiki</code> (no FIFA).</li>
         </ul>
 
         <h3>Version 0.4.2 (15 September 2026) &mdash; VISUAL / INSERT + Undo / Restore</h3>

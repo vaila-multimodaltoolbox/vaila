@@ -27,6 +27,9 @@ This module owns measurement *state*, *math*, and pygame overlays. `getpixelvide
 
 ## CALIB modes (now)
 
+The CALIB chooser dialog lists each mode on its own line (column layout) so the
+options fit the pygame window.
+
 | Mode | Input | Model |
 |------|-------|-------|
 | **Line** (`1`) | 2 clicks + typed length | Isotropic scale; origin at first click. |
@@ -38,7 +41,7 @@ This module owns measurement *state*, *math*, and pygame overlays. `getpixelvide
 
 ### Scope (default vs this frame)
 
-After choosing a mode, pick:
+After choosing a mode, pick (dialog shows one option per line):
 
 1. **Default (whole video)** — used on every frame unless overridden.
 2. **This frame only** — stored under the current video frame index.

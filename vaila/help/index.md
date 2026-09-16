@@ -136,7 +136,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](modifylabref.html) · [Markdown](modifylabref.md)
 - **monocular_dlt_align** — What problem this solves
   - [HTML](monocular_dlt_align.html) · [Markdown](monocular_dlt_align.md)
-- **quickmeasure** — Kinovea-style quick on-image measurement engine for getpixelvideo.py: calibrate first, then click points on the video and classify the current point set as D...
+- **quickmeasure** — Kinovea-style on-image calibration and measurement engine for getpixelvideo.py. The host UI splits into two toolbar modes:
   - [HTML](quickmeasure.html) · [Markdown](quickmeasure.md)
 - **readc3d_export** — This script processes .c3d files, extracting marker data, analog data, events, and points residuals, and saves them into CSV files. It also allows the option...
   - [HTML](readc3d_export.html) · [Markdown](readc3d_export.md)

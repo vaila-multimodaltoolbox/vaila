@@ -12,9 +12,9 @@ from vaila.getpixelvideo import (
 )
 
 
-def test_version_stamp_0_4_2() -> None:
-    assert GETPIXELVIDEO_VERSION == "0.4.2"
-    assert GETPIXELVIDEO_UPDATE_DATE == "15 September 2026"
+def test_version_stamp_0_4_3() -> None:
+    assert GETPIXELVIDEO_VERSION == "0.4.3"
+    assert GETPIXELVIDEO_UPDATE_DATE == "16 September 2026"
 
 
 def test_clone_marker_editor_state_is_deep() -> None:

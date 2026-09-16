@@ -8,6 +8,9 @@ reconstructed `rec3d_*.csv`/`.bvh` uses for that column (`p1_x,p1_y,p1_z`,
 `p2_x,...`, always renumbered 1..N in column order regardless of the
 original tracker's own labels — see `rec3d.load_pixel_csv_positional`).
 
+The same body/hand JSON files (excluding `soccerfield_*`) are listed by
+`vaila.skeleton_catalog` for the getpixelvideo **`Tpl:`** picker.
+
 | File | Keypoint set | Source | Points | Edges |
 |------|-------------|--------|--------|-------|
 | `mediapipe_pose33.json` | MediaPipe BlazePose | MediaPipe pose specification | 33 | 32 |

@@ -6,7 +6,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 **Version:** 0.4.3
 **Date:** 22 July 2025  
-**Updated:** 15 September 2026
+**Updated:** 16 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -28,12 +28,13 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 - **BBox to Coordinates Export:** Convert loaded tracking bounding boxes or SAM3 contours (`sam_contours.json`) into 5 distinct coordinates CSV files (corresponding to `center`, `bottom`, `top`, `left`, and `right` anchors) in the standard vailá format (`frame,p0_x,p0_y,...`). Available via the GUI **BBox→Coords** button or CLI option `--export-bbox-coords PATH`.
 - **Geo Homog (planar homography tracker):** Interactive wizard (TOML profile + marker→geom map + optional W×H, or 4-corner rectangle + dimensions). Writes session files, **pauses so you can edit** TOML/CSV (use **imagination!** terminal), then runs per-frame DLT2D and **reprojects the full metric TOML geometry** (measured markers calibrate only). Reloads imputed markers, draws live wireframe (**Shift+G**), optional save to new `*_geom_dlt_markers.csv`, `debug_projected_wireframe.mp4`, and `geometry_animation.html`. Same module is also available as Frame C → **Video and Image → Planar Geo**. See [planar_geometry_tracker.md](planar_geometry_tracker.md).
 
-- **Template Marker Mode:** Choose fixed keypoint templates in the toolbar:
-  - **FIFA Soccer-Field:** 32 pitch keypoints (`idx 0 = top_left_corner`) + TOML config (`K`)
-  - **MediaPipe Pose:** 33 pose landmarks
-  - **YOLO Pose:** COCO-17 keypoints
+- **Template Marker Mode (`Tpl:`):** Click opens a column dialog (one option per line):
+  - **Free** — variable-length markers
+  - **Soccer-Kiki** — pitch guide + TOML config (`K` while this mode is active; button shows `Soccer-Kiki`, not FIFA)
+  - Pose / hand presets from `vaila/skeletons/`: MediaPipe 33, YOLO COCO-17, OpenPose 25, Halpe 26, FIFA Body-15, SAM3+DINOv3 70, Sapiens2 308, Hand 21, Hands 42, Holistic 75, COCO WholeBody 133
+  - Outside Soccer-Kiki, **`K`** opens the same Tpl picker
 - **Multi-format Support:** Load and visualize MediaPipe, YOLO tracking, vailá standard formats, and markerless 2D named-landmark CSVs (`frame_index,nose_x,nose_y,nose_z,...`)
-- **Advanced Visualization:** Stick figures for MediaPipe, bounding boxes for YOLO/SAM tracking with colored-ID, ID-only, or ID+confidence overlay modes
+- **Advanced Visualization:** Stick figures for MediaPipe/YOLO (and other catalog connections when Guide is on); name-list reference for large presets (Sapiens308, …); bounding boxes for YOLO/SAM tracking with colored-ID, ID-only, or ID+confidence overlay modes
 - **Flexible Marking:** Multiple marker modes for different annotation needs
 - **Del Range:** Button to delete one or more marker/keypoint numbers across an inclusive frame range; use commas (`0,3,7`) and sequential ranges (`1:10`)
 - **Swap Range:** Button to swap marker/keypoint pairs over a frame range; first marker line maps pairwise to the second (`26,28` with `27,29`, or `1:10` with `11:20`)
@@ -41,11 +42,11 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 - **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations; loaded tracking bboxes can be saved directly as a YOLO detection dataset
 - **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8; may write `keypoints.json` when keypoint names are known; terminal output prints the exact `data.yaml` path and a `vaila.yolotrain --dry-run` validation command
 - **Save ML (button / Ctrl+E):** Export a PNG pose dataset with user-selected `train/val/test` split and create `all_labels/` with split-prefixed label copies for didactic review
-- **FIFA Labeling Mode:** Configure via **TOML** (FIFA button or `K` key — no separate Tk config dialog). Default **31** FIFA pitch keypoints (`idx 0 = top_left_corner`); fixed `N`, optional `start` skip, header base `0/1`; sparse CSV with **integer** pixels and empty cells for unmarked KPs. Optional `--fifa-dataset DIR` to append into an existing unified / pose tree.
+- **FIFA Labeling Mode:** Configure via **TOML** (Soccer-Kiki / `K` key — no separate Tk config dialog). Default **31** pitch keypoints (`idx 0 = top_left_corner`); fixed `N`, optional `start` skip, header base `0/1`; sparse CSV with **integer** pixels and empty cells for unmarked KPs. Optional `--fifa-dataset DIR` to append into an existing unified / pose tree.
 - **Guide (`G`):** **Visual only** overlay for active template:
-  - **FIFA / soccerfield:** loads `vaila/models/soccerfield_kiki.csv` (49 landmarks) so you can walk and mark those named points; optional reference map (`V`)
-  - **MediaPipe:** pose skeleton guide (33)
-  - **YOLO:** pose skeleton guide (COCO-17)
+  - **Soccer-Kiki / soccerfield:** loads `vaila/models/soccerfield_kiki.csv` (49 landmarks) so you can walk and mark those named points; optional reference map (`V`)
+  - **MediaPipe / YOLO:** stick-figure pose guide
+  - **Other Tpl presets:** name-list reference (scrolls with selected keypoint) + skeleton lines from the JSON when markers are present
   Marking behaviour is the same as with the guide off (TAB, **Ctrl+G** / Go KP, left/right click).
 - **Quick Measure (`Q` / toolbar `QMeas`):** calibration first (Line / Plane / REF3D mode1–3 with plane drop + CSV or guided clicks), then free measuring; Enter classifies Distance/Area/Angle/Velocity/Acceleration and `S` saves the calibrated points/results CSVs (see `quickmeasure` help).
 - **Zoom & Navigation:** Full zoom capabilities with frame-by-frame navigation
@@ -681,11 +682,13 @@ Built-in backup system for data safety:
 
 ## Version History
 
-### Version 0.4.3 (15 September 2026) — Geo Homog wizard + topology/DLT impute
+### Version 0.4.3 (16 September 2026) — Geo Homog wizard + topology/DLT impute + CALIB dialog layout + Tpl catalog
 
 - **Geo Homog prompts:** mode TOML profile (tatame / soccer / browse + marker→geom map + optional W×H resize) or generic rectangle (4 corner IDs + width/height). Session files go to `processed_geom_<timestamp>/` with an **edit pause** before the tracker runs.
 - **Imputation:** measured pixels locked; missing points from topology midpoints / line intersections, then per-frame DLT2D on visible points only (no RANSAC/PCHIP rewrite of existing markers).
 - **Always writes** `debug_projected_wireframe.mp4` from the GUI (`--debug-viz`); live overlay from resolved marker pixels (**Shift+G**); optional save to `*_markers.csv`.
+- **CALIB dialogs:** option lists (mode + scope) drawn as one option per line so they fit the pygame window.
+- **Tpl catalog:** `Tpl:` opens a column dialog listing Free, Soccer-Kiki, and all pose/hand presets from `vaila/skeletons/` (SAM3D70, Sapiens308, OpenPose, Halpe, …). Pitch-guide button caption is `Soccer-Kiki` (no FIFA).
 
 ### Version 0.4.2 (15 September 2026) — VISUAL / INSERT + Undo / Restore
 

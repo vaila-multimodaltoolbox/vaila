@@ -31,10 +31,13 @@ AI Track & JIT Online Learning (toolbar AI Track button / T key):
   - Shape & Batch: point/circle/box region features, Shift+T batch RTS smoothing.
   - Ground Truth Preservation: existing manual coordinates are never overwritten.
 
-Template Marker Mode (toolbar Template button):
-  - **FIFA Soccer-Field** (48 pitch keypoints: 32 pitch lines + 16 3D goalposts, crossbar, net and corner flags, idx 0 = top_left_corner)
-  - **MediaPipe Pose** (33 landmarks)
-  - **YOLO Pose** (COCO-17 keypoints)
+Template Marker Mode (toolbar Template / ``Tpl:`` button):
+  - **Free** — variable-length markers
+  - **Soccer-Kiki** — pitch guide (``soccerfield_kiki.csv`` / dataset keypoints;
+    internal mode id ``fifa`` kept for TOML/CLI compatibility)
+  - Pose / hand presets from ``vaila/skeletons/`` via dialog (MediaPipe 33,
+    YOLO 17, OpenPose 25, Halpe 26, FIFA Body-15, SAM3+DINOv3 70, Sapiens2 308,
+    Hand 21 / Hands 42 / Holistic 75, COCO WholeBody 133)
 
 FIFA mode (``--fifa`` / ``--fifa-dataset DIR`` / **Template:FIFA** toolbar button or ``K`` / TOML):
   Configure fixed keypoint count, start index, and 0/1-based headers via a
@@ -116,10 +119,18 @@ Key bindings (see in-app **H** help for full list):
   F9                    Export YOLO-pose dataset from markers
   Shift+← / Shift+→     Jump prev/next frame that has markers
   Marker timeline strip Click or drag (above scrub bar) to jump
-  Marker toolbar       Template (FIFA/MediaPipe/YOLO; TOML via ``K`` when FIFA); Mode (Mark/Seq/1-line)
+  Marker toolbar       Template (``Tpl:`` dialog: Free / Soccer-Kiki / skeletons); TOML via ``K`` when Soccer-Kiki; Mode (Mark/Seq/1-line)
   Ctrl+I / EditMode    Toggle VISUAL (safe browse) ↔ INSERT (edit markers)
   Ctrl+Z               Undo last marker edit (INSERT only)
   Restore button       Revert markers to session open / last successful Save
+
+New in 0.4.3:
+  CALIB / CALIB-scope option dialogs use a multi-line column layout (one option
+  per line) so long prompts fit the pygame window; ``show_input_dialog`` renders
+  newline-separated prompts.
+  ``Tpl:`` opens a column dialog listing Free, Soccer-Kiki, and all pose
+  presets from ``vaila/skeletons/`` (SAM3D70, Sapiens308, OpenPose, …).
+  Pitch-guide mode shows button caption ``Soccer-Kiki`` (no FIFA / no Tpl:).
 
 New in 0.4.2:
   VISUAL mode (default on open) blocks marker edits; INSERT enables normal marking.
@@ -172,6 +183,11 @@ try:
     from . import quickmeasure
 except ImportError:
     import quickmeasure  # ty: ignore[unresolved-import]
+
+try:
+    from . import skeleton_catalog
+except ImportError:
+    import skeleton_catalog  # ty: ignore[unresolved-import]
 
 if platform.system() == "Linux":
     os.environ["SDL_VIDEODRIVER"] = "x11"
@@ -237,7 +253,7 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.2"
+GETPIXELVIDEO_VERSION = "0.4.3"
 GETPIXELVIDEO_UPDATE_DATE = "16 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
@@ -291,6 +307,27 @@ def pop_marker_undo(stack: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not stack:
         return None
     return stack.pop()
+
+
+def template_button_caption(
+    template_mode: str,
+    labels: dict[str, str] | None = None,
+) -> str:
+    """Format the toolbar caption for the Template button.
+
+    Pitch-guide mode (``fifa``) displays only ``Soccer-Kiki`` (no ``Tpl:`` prefix,
+    no FIFA mention). All other modes use the standard ``Tpl: <Label>`` format.
+    """
+    mode = str(template_mode or "").strip().lower()
+    if mode == "fifa":
+        return "Soccer-Kiki"
+    if labels is None:
+        try:
+            labels = skeleton_catalog.template_labels()
+        except Exception:
+            labels = {}
+    label = labels.get(template_mode, template_mode)
+    return f"Tpl: {label}"
 
 
 def compute_letterbox_pads(
@@ -2199,18 +2236,13 @@ def play_video_with_controls(
 
     # Template Marker Mode
     # - "free": variable-length markers (no fixed slots)
-    # - "fifa": fixed 32 pitch keypoints + pitch guide (visual)
-    # - "mediapipe": fixed 33 pose landmarks
-    # - "yolo": fixed 17 COCO pose keypoints
+    # - "fifa": Soccer-Kiki pitch guide (visual; UI label Soccer-Kiki)
+    # - other ids: pose/hand presets from vaila/skeletons/ (see skeleton_catalog)
     template_mode = "fifa" if pitch_guide_fifa_mode else "free"
     template_keypoint_names: list[str] | None = None
+    template_connections: frozenset[tuple[int, int]] | None = None
 
-    _TEMPLATE_LABELS: dict[str, str] = {
-        "free": "Free",
-        "fifa": "FIFA Soccer-Field",
-        "mediapipe": "MediaPipe Pose",
-        "yolo": "YOLO Pose",
-    }
+    _TEMPLATE_LABELS: dict[str, str] = skeleton_catalog.template_labels()
 
     # MediaPipe Pose Landmarker (33) names.
     # Ref: https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker
@@ -2336,7 +2368,11 @@ def play_video_with_controls(
         mode: str,
         current_idx: int | None = None,
     ) -> pygame.Surface | None:
-        """Upper-right "map" for pose templates (MediaPipe 33 / COCO-17)."""
+        """Upper-right reference map for pose templates.
+
+        MediaPipe / YOLO keep the stick-figure layout. Other catalog presets
+        show a scrollable name list around the current keypoint (no fake XY).
+        """
         mode = str(mode or "").strip().lower()
         if mode == "mediapipe":
             xy = _POSE_GUIDE_MEDIAPIPE_33_XY
@@ -2347,7 +2383,7 @@ def play_video_with_controls(
             connections = COCO17_CONNECTIONS
             title = "YOLO Pose Reference (COCO-17)"
         else:
-            return None
+            return _pose_guide_name_list_surface(mode, current_idx)
 
         width, height = 340, 360
         margin_x, margin_y = 26, 42
@@ -2386,6 +2422,55 @@ def play_video_with_controls(
         pygame.draw.rect(surface, (230, 230, 230, 165), surface.get_rect(), 2)
         return surface
 
+    def _pose_guide_name_list_surface(
+        mode: str,
+        current_idx: int | None = None,
+    ) -> pygame.Surface | None:
+        """Name-list reference panel for catalog presets without stick XY layout."""
+        names = template_keypoint_names
+        if not names:
+            spec = skeleton_catalog.get_template(mode)
+            names = list(spec.keypoints) if spec is not None else None
+        if not names:
+            return None
+
+        n = len(names)
+        cur = int(current_idx) if current_idx is not None else 0
+        cur = max(0, min(cur, n - 1))
+        short = _TEMPLATE_LABELS.get(mode, mode)
+        title = f"{short} Reference ({n})"
+
+        width, height = 340, 360
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        surface.fill((18, 18, 26, 110))
+        title_font = pygame.font.SysFont("verdana", 12, bold=True)
+        row_font = pygame.font.SysFont("verdana", 11)
+        surface.blit(title_font.render(title, True, (255, 255, 255)), (10, 10))
+
+        row_h = 18
+        top = 36
+        visible = max(1, (height - top - 12) // row_h)
+        half = visible // 2
+        start = max(0, min(cur - half, max(0, n - visible)))
+        end = min(n, start + visible)
+
+        for row_i, idx in enumerate(range(start, end)):
+            y = top + row_i * row_h
+            is_current = idx == cur
+            bg = (50, 70, 120, 200) if is_current else (0, 0, 0, 0)
+            if is_current:
+                pygame.draw.rect(surface, bg, pygame.Rect(8, y - 2, width - 16, row_h))
+            color = (255, 225, 35) if is_current else (230, 230, 230)
+            name = names[idx]
+            text = f"{idx:3d}  {name}"
+            # Truncate long Sapiens names so they fit the panel.
+            while len(text) > 4 and row_font.size(text)[0] > width - 24:
+                text = text[:-2] + "…"
+            surface.blit(row_font.render(text, True, color), (12, y))
+
+        pygame.draw.rect(surface, (230, 230, 230, 165), surface.get_rect(), 2)
+        return surface
+
     def _load_pitch_guide_points(prefer_fifa_dataset: bool = False) -> tuple[list[dict], str]:
         """Load pitch-guide points from models/ (kiki by default; FIFA dataset when asked).
 
@@ -2411,7 +2496,9 @@ def play_video_with_controls(
         ``None`` means the user cancelled.
         """
         answer = show_input_dialog(
-            f"CALIB scope — 1=Default (whole video, all frames)  2=This frame only ({frame_count})",
+            "CALIB scope — choose:\n"
+            "1 = Default (whole video, all frames)\n"
+            f"2 = This frame only ({frame_count})",
             "1",
         )
         if answer is None:
@@ -2442,12 +2529,13 @@ def play_video_with_controls(
         nonlocal quick_measure_calibrating, quickmeasure_draft
         nonlocal quickmeasure_calib_scope_frame, quickmeasure_session
         answer = show_input_dialog(
-            "CALIB — 1=Line (2 clicks + length)  "
-            "2=Plane (4 clicks + width/height → DLT2D)  "
-            "3=REF3D (drop axis → planar DLT2D)  "
-            "4=DLT3D (11 params — coming soon)  "
-            "L=Load .dlt2d / REF2D / REF3D file  "
-            "0=Clear / stay in pixels",
+            "CALIB — choose option:\n"
+            "1 = Line (2 clicks + length)\n"
+            "2 = Plane (4 clicks + width/height → DLT2D)\n"
+            "3 = REF3D (drop axis → planar DLT2D)\n"
+            "4 = DLT3D (11 params — coming soon)\n"
+            "L = Load .dlt2d / REF2D / REF3D file\n"
+            "0 = Clear / stay in pixels",
             "1",
         )
         if answer is None:
@@ -5202,17 +5290,20 @@ def play_video_with_controls(
 
     def _apply_template_mode(mode: str) -> None:
         """Apply Template Marker Mode. May reshape slot count; clears pitch guide unless FIFA."""
-        nonlocal template_mode, template_keypoint_names
+        nonlocal template_mode, template_keypoint_names, template_connections
         nonlocal pitch_guide_fifa_mode, fifa_fixed_keypoints, fifa_start_keypoint, fifa_index_base
         nonlocal current_label, coordinates, deleted_positions, selected_marker_idx
         nonlocal pitch_guide_points, pitch_guide_source, pitch_guide_mode
         nonlocal one_line_mode
+        nonlocal _TEMPLATE_LABELS
 
         if not isinstance(coordinates, dict):
             coordinates = {i: [] for i in range(total_frames)}
 
         mode = mode.strip().lower()
-        if mode not in _TEMPLATE_LABELS:
+        _TEMPLATE_LABELS = skeleton_catalog.template_labels()
+        known = set(_TEMPLATE_LABELS) | set(skeleton_catalog.SPECIAL_TEMPLATE_IDS)
+        if mode not in known:
             mode = "free"
 
         # Back up before destructive reshape.
@@ -5221,16 +5312,18 @@ def play_video_with_controls(
         if mode == "free":
             template_mode = "free"
             template_keypoint_names = None
+            template_connections = None
             _quick_fifa_preset_disable()
             return
 
         if mode == "fifa":
             template_mode = "fifa"
             template_keypoint_names = None  # names come from pitch guide dataset CSV
+            template_connections = None
             _quick_fifa_preset_enable()
             return
 
-        # Fixed slots without pitch guide.
+        # Fixed slots without pitch guide — catalog pose/hand preset.
         one_line_mode = False
         pitch_guide_fifa_mode = False
         pitch_guide_mode = False
@@ -5240,14 +5333,29 @@ def play_video_with_controls(
         fifa_index_base = 0
         current_label = "person"
 
-        if mode == "mediapipe":
-            template_mode = "mediapipe"
-            template_keypoint_names = list(_MEDIAPIPE_33)
-            fifa_fixed_keypoints = len(_MEDIAPIPE_33)
+        spec = skeleton_catalog.get_template(mode)
+        if spec is None:
+            # Fallback for mediapipe/yolo if JSON missing on disk.
+            if mode == "mediapipe":
+                names = list(_MEDIAPIPE_33)
+                conns: frozenset[tuple[int, int]] = POSE_CONNECTIONS
+            elif mode == "yolo":
+                names = list(_YOLO_COCO_17)
+                conns = COCO17_CONNECTIONS
+            else:
+                template_mode = "free"
+                template_keypoint_names = None
+                template_connections = None
+                return
+            template_mode = mode
+            template_keypoint_names = names
+            template_connections = conns
+            fifa_fixed_keypoints = len(names)
         else:
-            template_mode = "yolo"
-            template_keypoint_names = list(_YOLO_COCO_17)
-            fifa_fixed_keypoints = len(_YOLO_COCO_17)
+            template_mode = spec.id
+            template_keypoint_names = list(spec.keypoints)
+            template_connections = frozenset(spec.connections)
+            fifa_fixed_keypoints = int(spec.num_keypoints)
 
         n = max(1, int(fifa_fixed_keypoints))
         new_coords: dict[int, list[tuple[Any, Any]]] = {}
@@ -5265,13 +5373,18 @@ def play_video_with_controls(
         }
         selected_marker_idx = 0
 
-    def _cycle_template_mode() -> None:
-        order = ("free", "fifa", "mediapipe", "yolo")
-        try:
-            idx = order.index(template_mode)
-        except ValueError:
-            idx = 0
-        _apply_template_mode(order[(idx + 1) % len(order)])
+    def _ask_template_mode() -> str | None:
+        """Open column dialog to pick Free / Soccer-Kiki / pose presets."""
+        answer = show_input_dialog(skeleton_catalog.format_template_dialog_prompt(), "0")
+        return skeleton_catalog.resolve_dialog_choice(answer)
+
+    def _cycle_template_mode() -> str | None:
+        """Open the Tpl picker dialog and apply. Returns chosen id, or None if cancelled."""
+        chosen = _ask_template_mode()
+        if chosen is None:
+            return None
+        _apply_template_mode(chosen)
+        return chosen
 
     def draw_controls():
         """
@@ -5284,13 +5397,14 @@ def play_video_with_controls(
         newly selected slot. The strip is clickable / draggable to jump frames (snaps to
         markers inside the column when possible). Green ``M<n>:X · other:Y · click strip``
         count sits in the **top-right** of the control panel (not on the bottom info row).
-        Top button row includes **Template** (FIFA/MediaPipe/YOLO; press ``K`` for TOML when FIFA),
+        Top button row includes **Template** (``Tpl:`` opens skeleton picker dialog;
+        press ``K`` for Soccer-Kiki TOML when that mode is active, else same picker),
         **Mode** (Mark / Sequential / 1-line), **Persist**, **Auto**, **ClickPass**,
         **Labeling**, **Guide** (field or skeleton overlay).
         """
 
         def _template_button_caption() -> str:
-            return f"Tpl: {_TEMPLATE_LABELS.get(template_mode, template_mode)}"
+            return template_button_caption(template_mode, _TEMPLATE_LABELS)
 
         def _marker_mode_button_caption() -> str:
             if one_line_mode:
@@ -5663,7 +5777,7 @@ def play_video_with_controls(
         buttons_band_bottom_y = cluster_y_bottom + button_height
 
         button_width = 44 if is_compact else 50
-        template_button_width = 135 if is_compact else 155  # Tpl: Free/FIFA/MediaPipe/YOLO
+        template_button_width = 135 if is_compact else 155  # Tpl: catalog short labels
         marker_mode_button_width = 95 if is_compact else 108  # Mode: Mark / Seq / 1-line
         persist_button_width = 54 if is_compact else 62
         mouse_play_button_width = 50 if is_compact else 70
@@ -6484,7 +6598,7 @@ def play_video_with_controls(
             return False, f"Failed to apply FIFA TOML config: {e}"
 
     def _quick_fifa_preset_enable() -> None:
-        """Enable FIFA soccer-field slots without opening dialogs (32 kp, 0-based, start at idx 0)."""
+        """Enable Soccer-Kiki slots without opening dialogs (32 kp, 0-based, start at idx 0)."""
         nonlocal pitch_guide_fifa_mode, fifa_fixed_keypoints, fifa_start_keypoint, fifa_index_base
         nonlocal current_label, coordinates, deleted_positions, selected_marker_idx
         nonlocal pitch_guide_points, pitch_guide_source, pitch_guide_mode
@@ -6703,12 +6817,12 @@ def play_video_with_controls(
             ("=== MARKER MODES & TEMPLATES ===", "", "header"),
             (
                 "Template button",
-                "Cycle Template: Free / FIFA (48 kp) / MediaPipe (33 kp) / YOLO (17 kp)",
+                "Open Tpl dialog: Free / Soccer-Kiki / pose presets from vaila/skeletons/",
                 "item",
             ),
             (
                 "Template Right-Click / K",
-                "Load / edit FIFA TOML configuration (fixed keypoints, index base)",
+                "Soccer-Kiki: load/edit TOML. Other modes: same Tpl skeleton picker",
                 "item",
             ),
             (
@@ -6734,7 +6848,7 @@ def play_video_with_controls(
             ),
             (
                 "Guide (G key / button)",
-                "Translucent overlay for active template (FIFA pitch or pose skeleton)",
+                "Translucent overlay for active template (Soccer-Kiki pitch or pose skeleton)",
                 "item",
             ),
             ("V (when Guide ON)", "Toggle reference pitch map in upper-right corner", "item"),
@@ -7214,7 +7328,11 @@ def play_video_with_controls(
                         pygame.display.flip()
 
     def show_input_dialog(prompt, initial_text=""):
-        """Show a dialog to input text"""
+        """Show a dialog to input text.
+
+        ``prompt`` may contain newlines: each line is drawn in a single left-aligned
+        column so long option lists (e.g. CALIB) fit the window.
+        """
         # Get current display size dynamically to support both Main Window and Dialog calls
         current_w, current_h = pygame.display.get_surface().get_size()
 
@@ -7223,10 +7341,21 @@ def play_video_with_controls(
         overlay.set_alpha(200)
         overlay.fill((0, 0, 0))
 
-        # Create UI elements
-        # Dialog font
         font = pygame.font.SysFont("verdana", 14)
-        title = font.render(prompt, True, (255, 255, 255))
+        lines = str(prompt).splitlines() or [""]
+        line_surfaces = [
+            font.render(line if line else " ", True, (255, 255, 255)) for line in lines
+        ]
+        line_h = font.get_linesize()
+        prompt_h = line_h * len(line_surfaces)
+        block_w = max((surf.get_width() for surf in line_surfaces), default=0)
+        margin = 20
+        x0 = max(margin, (current_w - min(block_w, current_w - 2 * margin)) // 2)
+        # Keep prompt + input centred as a block; clamp so tall lists stay on-screen.
+        input_gap = 24
+        block_h = prompt_h + input_gap + line_h
+        prompt_top = max(margin, (current_h - block_h) // 2)
+        input_y = prompt_top + prompt_h + input_gap
 
         input_text = initial_text
 
@@ -7234,15 +7363,15 @@ def play_video_with_controls(
         while waiting_for_input:
             overlay.fill((0, 0, 0))
 
-            # Draw title
             screen.blit(overlay, (0, 0))
-            screen.blit(title, (current_w // 2 - title.get_width() // 2, current_h // 2 - 50))
+            for i, surf in enumerate(line_surfaces):
+                screen.blit(surf, (x0, prompt_top + i * line_h))
 
             # Draw input box
             input_surface = font.render(input_text + "_", True, (255, 255, 0))
             screen.blit(
                 input_surface,
-                (current_w // 2 - input_surface.get_width() // 2, current_h // 2 + 10),
+                (current_w // 2 - input_surface.get_width() // 2, input_y),
             )
 
             pygame.display.flip()
@@ -10342,16 +10471,23 @@ def play_video_with_controls(
         # Center letterboxed media so markers can be placed outside on all sides.
         screen.blit(frame_surface, (pad_x, pad_y))
 
-        # Pose skeleton guide overlay (MediaPipe/YOLO) — translucent lines + dots.
+        # Pose skeleton guide overlay (catalog presets) — translucent lines + dots.
         if (
             pitch_guide_mode
-            and template_mode in ("mediapipe", "yolo")
+            and template_mode not in ("free", "fifa")
             and coordinates is not None
             and not one_line_mode
             and frame_count in coordinates
         ):
             pts = coordinates[frame_count]
-            connections = POSE_CONNECTIONS if template_mode == "mediapipe" else COCO17_CONNECTIONS
+            if template_connections is not None:
+                connections = template_connections
+            elif template_mode == "mediapipe":
+                connections = POSE_CONNECTIONS
+            elif template_mode == "yolo":
+                connections = COCO17_CONNECTIONS
+            else:
+                connections = frozenset()
             guide_alpha = 95
             overlay = pygame.Surface((window_width, window_height), pygame.SRCALPHA)
             line_color = (0, 160, 255, guide_alpha)
@@ -11450,10 +11586,30 @@ def play_video_with_controls(
                 elif event.key == pygame.K_e and (pygame.key.get_mods() & pygame.KMOD_CTRL):
                     save_split_dataset_with_all_labels()
                 elif event.key == pygame.K_k:
-                    ok_cfg, cfg_msg = configure_fifa_from_toml()
-                    save_message_text = cfg_msg
-                    showing_save_message = True
-                    save_message_timer = 180 if ok_cfg else 90
+                    if template_mode == "fifa":
+                        ok_cfg, cfg_msg = configure_fifa_from_toml()
+                        save_message_text = cfg_msg
+                        showing_save_message = True
+                        save_message_timer = 180 if ok_cfg else 90
+                    elif labeling_mode:
+                        save_message_text = "Exit Labeling mode first — Template manages keypoints."
+                        showing_save_message = True
+                        save_message_timer = 90
+                    else:
+                        chosen = _cycle_template_mode()
+                        if chosen is None:
+                            save_message_text = "Template: cancelled"
+                        else:
+                            _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
+                            if template_mode == "free":
+                                save_message_text = "Template: Free — variable-length markers"
+                            elif template_mode == "fifa":
+                                save_message_text = f"Template: {_tpl} — pitch guide. TOML: press K"
+                            else:
+                                _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
+                                save_message_text = f"Template: {_tpl} — fixed slots N={_n}"
+                        showing_save_message = True
+                        save_message_timer = 45
                 elif event.key == pygame.K_TAB:
                     if marker_selection_locked:
                         save_message_text = (
@@ -11925,18 +12081,20 @@ def play_video_with_controls(
                             showing_save_message = True
                             save_message_timer = 90
                         else:
-                            _cycle_template_mode()
-                            _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
-                            if template_mode == "free":
-                                save_message_text = "Template: Free — variable-length markers"
-                            elif template_mode == "fifa":
-                                save_message_text = (
-                                    f"Template: {_tpl} — 32 kp, idx 0; Pitch Guide on. "
-                                    "TOML: press K"
-                                )
+                            chosen = _cycle_template_mode()
+                            if chosen is None:
+                                save_message_text = "Template: cancelled"
                             else:
-                                _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
-                                save_message_text = f"Template: {_tpl} — fixed slots N={_n}"
+                                _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
+                                if template_mode == "free":
+                                    save_message_text = "Template: Free — variable-length markers"
+                                elif template_mode == "fifa":
+                                    save_message_text = (
+                                        f"Template: {_tpl} — pitch guide on. TOML: press K"
+                                    )
+                                else:
+                                    _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
+                                    save_message_text = f"Template: {_tpl} — fixed slots N={_n}"
                             showing_save_message = True
                             save_message_timer = 45
                     elif marker_mode_button_rect.collidepoint(x, rel_y):
