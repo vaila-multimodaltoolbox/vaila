@@ -1582,8 +1582,12 @@ class MokkaLikeViewer:
         self.plotter.reset_camera()
         self._apply_background()
 
-        # Picking: pre-set 'pickpoint' so PyVista's internal left_button_down can assign to it
-        pv.set_new_attribute(self.plotter, "pickpoint", np.zeros((1, 3)))
+        # Picking: PyVista's internal left_button_down assigns to ``pickpoint``.
+        # Recent PyVista releases (>= 0.49) already define that attribute on the
+        # Plotter instance, and ``set_new_attribute`` raises for an attribute
+        # that exists, so only pre-seed it when it is genuinely missing.
+        if not hasattr(self.plotter, "pickpoint"):
+            pv.set_new_attribute(self.plotter, "pickpoint", np.zeros((1, 3)))
         self.plotter.enable_point_picking(
             callback=self.on_pick,
             show_message=False,
