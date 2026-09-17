@@ -44,39 +44,51 @@ File Manager now shares previewed operations between GUI and CLI; YouTube Downlo
 
 Install _vaila_ with a single command!
 
+Linux and macOS use the **same command shape** — only the script name changes
+(`install_vaila_linux.sh` vs `install_vaila_mac.sh`). Pick `curl` **or** `wget`,
+whichever your machine has:
+
 **🐧 Linux:**
 
-One-line installer:
-
 ```bash
-wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh | bash
-```
+# with curl
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh)"
 
-If you **already cloned** the repo, prefer running the local script (keeps `uv.lock` / `git pull` clean):
-
-```bash
-cd path/to/vaila
-chmod +x install_vaila_linux.sh
-./install_vaila_linux.sh
-
-# Or install the Complete AI Workstation (CUDA + SAM 3 + Sapiens2 + SAM 3D Body + HF) in one step:
-./install_vaila_linux.sh --full
+# with wget
+/bin/bash -c "$(wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh)"
 ```
 
 **🍎 macOS:**
 
-One-line installer:
-
 ```bash
+# with curl (preinstalled on macOS)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
+
+# with wget (macOS has no wget by default: brew install wget)
+/bin/bash -c "$(wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
 ```
 
-If you **already cloned** the repo, prefer running the local script (keeps `uv.lock` / `git pull` clean):
+> Use the `/bin/bash -c "$(...)"` form, **not** `... | bash`. When the script is
+> piped into `bash` it also *owns* stdin, so the installer's interactive questions
+> (install location, profile, GPU/SAM 3/Sapiens2 choices) read EOF and silently
+> fall back to the defaults. With `"$(...)"` the terminal stays connected and the
+> prompts work.
+
+**Already cloned the repo?** Prefer the local script (keeps `uv.lock` / `git pull` clean) — again identical on both systems:
 
 ```bash
 cd path/to/vaila
+
+# Linux
+chmod +x install_vaila_linux.sh
+./install_vaila_linux.sh
+
+# macOS
 chmod +x install_vaila_mac.sh
 ./install_vaila_mac.sh
+
+# Linux only: Complete AI Workstation (CUDA + SAM 3 + Sapiens2 + SAM 3D Body + HF) in one step
+./install_vaila_linux.sh --full
 ```
 
 **🪟 Windows:**
@@ -542,6 +554,16 @@ chmod +x install_vaila_linux.sh
 ./install_vaila_linux.sh
 ```
 
+Without a clone, fetch and run it directly — `curl` or `wget`, same command shape as macOS:
+
+```bash
+# with curl
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh)"
+
+# with wget
+/bin/bash -c "$(wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh)"
+```
+
 The script will:
 
 1. Detect if you have an **NVIDIA GPU**.
@@ -637,6 +659,16 @@ If you **already cloned** the repo, prefer running the local script (keeps `uv.l
 cd path/to/vaila
 chmod +x install_vaila_mac.sh
 ./install_vaila_mac.sh
+```
+
+Without a clone, fetch and run it directly — `curl` or `wget`, same command shape as Linux:
+
+```bash
+# with curl (preinstalled on macOS)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
+
+# with wget (brew install wget first)
+/bin/bash -c "$(wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
 ```
 
 The script will:

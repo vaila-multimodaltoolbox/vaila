@@ -27,9 +27,19 @@ nothing tracked by git is rewritten per computer.
 
 ### One-line install
 
+Same command shape as macOS — only the script name differs. Use `curl` or `wget`:
+
 ```bash
-wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh | bash
+# with curl
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh)"
+
+# with wget
+/bin/bash -c "$(wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_linux.sh)"
 ```
+
+> Keep the `/bin/bash -c "$(...)"` form instead of `... | bash`: a piped script owns
+> stdin, so the installer's questions (location, profile, GPU/SAM 3/Sapiens2) read
+> EOF and silently take the defaults.
 
 ### Clone-first install (recommended)
 
@@ -122,8 +132,14 @@ Local/Portable vs profile-install path choice.
 
 ### One-line install
 
+Same command shape as Linux — only the script name differs. Use `curl` or `wget`:
+
 ```bash
+# with curl (preinstalled on macOS)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
+
+# with wget (brew install wget first)
+/bin/bash -c "$(wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
 ```
 
 ### Clone-first install (recommended)
